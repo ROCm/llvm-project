@@ -979,6 +979,77 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
   }
 }
 
+static ParseResult parseMembersIndex(OpAsmParser &parser,
+                                     DenseIntElementsAttr &membersIdx) {
+  SmallVector<APInt> values;
+  int64_t value;
+  int64_t shape[2] = {0, 0};
+  unsigned shapeTmp = 0;
+  auto parseIndices = [&]() -> ParseResult {
+    if (parser.parseInteger(value))
+      return failure();
+    shapeTmp++;
+    values.push_back(APInt(32, value));
+    return success();
+  };
+
+  do {
+    if (failed(parser.parseLSquare()))
+      return failure();
+
+    if (parser.parseCommaSeparatedList(parseIndices))
+      return failure();
+
+    if (failed(parser.parseRSquare()))
+      return failure();
+
+    // Only set once, if any indices are not the same size
+    // we error out in the next check as that's unsupported
+    if (shape[1] == 0)
+      shape[1] = shapeTmp;
+
+    // Verify that the recently parsed list is equal to the
+    // first one we parsed, they must be equal lengths to
+    // keep the rectangular shape DenseIntElementsAttr
+    // requires
+    if (shapeTmp != shape[1])
+      return failure();
+
+    shapeTmp = 0;
+    shape[0]++;
+  } while (succeeded(parser.parseOptionalComma()));
+
+  if (!values.empty()) {
+    ShapedType valueType =
+        VectorType::get(shape, IntegerType::get(parser.getContext(), 32));
+    membersIdx = DenseIntElementsAttr::get(valueType, values);
+  }
+
+  return success();
+}
+
+static void printMembersIndex(OpAsmPrinter &p, MapInfoOp op,
+                              DenseIntElementsAttr membersIdx) {
+  assert(membersIdx.getShapedType().getShape().size() <= 2);
+
+  if (!membersIdx)
+    return;
+
+  for (int i = 0; i < membersIdx.getShapedType().getShape()[0]; ++i) {
+    p << "[";
+    for (int j = 0; j < membersIdx.getShapedType().getShape()[1]; ++j) {
+      p << membersIdx.getValues<
+          int32_t>()[i * membersIdx.getShapedType().getShape()[1] + j];
+      if ((j + 1) < membersIdx.getShapedType().getShape()[1])
+        p << ",";
+    }
+    p << "]";
+
+    if ((i + 1) < membersIdx.getShapedType().getShape()[0])
+      p << ", ";
+  }
+}
+
 static ParseResult
 parseMapEntries(OpAsmParser &parser,
                 SmallVectorImpl<OpAsmParser::UnresolvedOperand> &mapOperands,

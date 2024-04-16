@@ -15,6 +15,7 @@
 
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Parser/tools.h"
+#include "flang/Semantics/expression.h"
 #include "flang/Semantics/tools.h"
 
 namespace Fortran {
@@ -811,9 +812,10 @@ mlir::omp::MapInfoOp
 createMapInfoOp(fir::FirOpBuilder &builder, mlir::Location loc,
                 mlir::Value baseAddr, mlir::Value varPtrPtr, std::string name,
                 llvm::ArrayRef<mlir::Value> bounds,
-                llvm::ArrayRef<mlir::Value> members, uint64_t mapType,
+                llvm::ArrayRef<mlir::Value> members,
+                mlir::DenseIntElementsAttr membersIndex, uint64_t mapType,
                 mlir::omp::VariableCaptureKind mapCaptureType, mlir::Type retTy,
-                bool isVal) {
+                bool partialMap) {
   if (auto boxTy = baseAddr.getType().dyn_cast<fir::BaseBoxType>()) {
     baseAddr = builder.create<fir::BoxAddrOp>(loc, baseAddr);
     retTy = baseAddr.getType();
@@ -823,10 +825,10 @@ createMapInfoOp(fir::FirOpBuilder &builder, mlir::Location loc,
       llvm::cast<mlir::omp::PointerLikeType>(retTy).getElementType());
 
   mlir::omp::MapInfoOp op = builder.create<mlir::omp::MapInfoOp>(
-      loc, retTy, baseAddr, varType, varPtrPtr, members, bounds,
+      loc, retTy, baseAddr, varType, varPtrPtr, members, membersIndex, bounds,
       builder.getIntegerAttr(builder.getIntegerType(64, false), mapType),
       builder.getAttr<mlir::omp::VariableCaptureKindAttr>(mapCaptureType),
-      builder.getStringAttr(name));
+      builder.getStringAttr(name), builder.getBoolAttr(partialMap));
 
   return op;
 }
@@ -835,10 +837,13 @@ bool ClauseProcessor::processMap(
     mlir::Location currentLocation, const llvm::omp::Directive &directive,
     Fortran::lower::StatementContext &stmtCtx, mlir::omp::MapClauseOps &result,
     llvm::SmallVectorImpl<const Fortran::semantics::Symbol *> *mapSyms,
-    llvm::SmallVectorImpl<mlir::Location> *mapSymLocs,
-    llvm::SmallVectorImpl<mlir::Type> *mapSymTypes) const {
+    llvm::SmallVectorImpl<mlir::Type> *mapSymTypes,
+    llvm::SmallVectorImpl<mlir::Location> *mapSymLocs) const {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
-  return findRepeatableClause<omp::clause::Map>(
+  std::map<const Fortran::semantics::Symbol *,
+           llvm::SmallVector<OmpMapMemberIndicesData>>
+      parentMemberIndices;
+  bool clauseFound = findRepeatableClause<omp::clause::Map>(
       [&](const omp::clause::Map &clause,
           const Fortran::parser::CharBlock &source) {
         using Map = omp::clause::Map;
@@ -887,6 +892,7 @@ bool ClauseProcessor::processMap(
         for (const omp::Object &object : std::get<omp::ObjectList>(clause.t)) {
           llvm::SmallVector<mlir::Value> bounds;
           std::stringstream asFortran;
+          const Fortran::semantics::Symbol *parentSym = nullptr;
 
           Fortran::lower::AddrAndBoundsInfo info =
               Fortran::lower::gatherDataOperandAddrAndBounds<
@@ -900,27 +906,63 @@ bool ClauseProcessor::processMap(
           if (origSymbol && fir::isTypeWithDescriptor(origSymbol.getType()))
             symAddr = origSymbol;
 
+          llvm::SmallVector<int> indices;
+          if (object.id()->owner().IsDerivedType()) {
+            if (auto dataRef{ExtractDataRef(object.designator)}) {
+              parentSym = &dataRef->GetFirstSymbol();
+              assert(parentSym &&
+                     "Could not find parent symbol during lower of "
+                     "a component member in OpenMP map clause");
+
+              indices = generateMemberPlacementIndices(object, semaCtx);
+              if (Fortran::semantics::IsAllocatableOrObjectPointer(
+                      object.id())) {
+                llvm::SmallVector<mlir::Value> index;
+                for (auto idx : indices)
+                  index.push_back(firOpBuilder.createIntegerConstant(
+                      clauseLocation, firOpBuilder.getIndexType(), idx));
+
+                auto recordType =
+                    converter.genType(*object.id()->owner().derivedTypeSpec())
+                        .cast<fir::RecordType>();
+                auto fieldName = converter.getRecordTypeFieldName(*object.id());
+                mlir::Type fieldType = recordType.getType(fieldName);
+                mlir::Type designatorType = fir::ReferenceType::get(fieldType);
+                symAddr = firOpBuilder.create<fir::CoordinateOp>(
+                    clauseLocation, designatorType,
+                    converter.getSymbolAddress(*parentSym), index);
+              }
+            }
+          }
+
           // Explicit map captures are captured ByRef by default,
           // optimisation passes may alter this to ByCopy or other capture
           // types to optimise
-          mlir::Value mapOp = createMapInfoOp(
+          mlir::omp::MapInfoOp mapOp = createMapInfoOp(
               firOpBuilder, clauseLocation, symAddr, mlir::Value{},
-              asFortran.str(), bounds, {},
+              asFortran.str(), bounds, {}, mlir::DenseIntElementsAttr{},
               static_cast<
                   std::underlying_type_t<llvm::omp::OpenMPOffloadMappingFlags>>(
                   mapTypeBits),
               mlir::omp::VariableCaptureKind::ByRef, symAddr.getType());
 
-          result.mapVars.push_back(mapOp);
-
-          if (mapSyms)
+          if (parentSym) {
+            parentMemberIndices[parentSym].push_back({indices, mapOp});
+          } else {
+            result.mapVars.push_back(mapOp);
             mapSyms->push_back(object.id());
-          if (mapSymLocs)
-            mapSymLocs->push_back(symAddr.getLoc());
-          if (mapSymTypes)
-            mapSymTypes->push_back(symAddr.getType());
+            if (mapSymTypes)
+              mapSymTypes->push_back(symAddr.getType());
+            if (mapSymLocs)
+              mapSymLocs->push_back(symAddr.getLoc());
+          }
         }
       });
+
+  insertChildMapInfoIntoParent(converter, parentMemberIndices, result.mapVars,
+                               mapSymTypes, mapSymLocs, mapSyms);
+
+  return clauseFound;
 }
 
 bool ClauseProcessor::processReduction(

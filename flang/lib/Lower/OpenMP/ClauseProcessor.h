@@ -113,14 +113,14 @@ public:
   // store the original type, location and Fortran symbol for the map operands.
   // They may be used later on to create the block_arguments for some of the
   // target directives that require it.
-  bool processMap(
-      mlir::Location currentLocation, const llvm::omp::Directive &directive,
-      Fortran::lower::StatementContext &stmtCtx,
-      mlir::omp::MapClauseOps &result,
-      llvm::SmallVectorImpl<const Fortran::semantics::Symbol *> *mapSyms =
-          nullptr,
-      llvm::SmallVectorImpl<mlir::Location> *mapSymLocs = nullptr,
-      llvm::SmallVectorImpl<mlir::Type> *mapSymTypes = nullptr) const;
+  bool
+  processMap(mlir::Location currentLocation,
+             const llvm::omp::Directive &directive,
+             Fortran::lower::StatementContext &stmtCtx,
+             mlir::omp::MapClauseOps &result,
+             llvm::SmallVectorImpl<const Fortran::semantics::Symbol *> *mapSyms,
+             llvm::SmallVectorImpl<mlir::Type> *mapSymTypes = nullptr,
+             llvm::SmallVectorImpl<mlir::Location> *mapSymLocs = nullptr) const;
   bool processReduction(
       mlir::Location currentLocation, mlir::omp::ReductionClauseOps &result,
       llvm::SmallVectorImpl<mlir::Type> *reductionTypes = nullptr,
@@ -190,7 +190,12 @@ template <typename T>
 bool ClauseProcessor::processMotionClauses(
     Fortran::lower::StatementContext &stmtCtx,
     mlir::omp::MapClauseOps &result) {
-  return findRepeatableClause<T>(
+  std::map<const Fortran::semantics::Symbol *,
+           llvm::SmallVector<OmpMapMemberIndicesData>>
+      parentMemberIndices;
+  llvm::SmallVector<const Fortran::semantics::Symbol *> mapSymbols;
+
+  bool clauseFound = findRepeatableClause<T>(
       [&](const T &clause, const Fortran::parser::CharBlock &source) {
         mlir::Location clauseLocation = converter.genLocation(source);
         fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
@@ -208,6 +213,7 @@ bool ClauseProcessor::processMotionClauses(
         for (const omp::Object &object : objects) {
           llvm::SmallVector<mlir::Value> bounds;
           std::stringstream asFortran;
+
           Fortran::lower::AddrAndBoundsInfo info =
               Fortran::lower::gatherDataOperandAddrAndBounds<
                   mlir::omp::MapBoundsOp, mlir::omp::MapBoundsType>(
@@ -223,17 +229,34 @@ bool ClauseProcessor::processMotionClauses(
           // Explicit map captures are captured ByRef by default,
           // optimisation passes may alter this to ByCopy or other capture
           // types to optimise
-          mlir::Value mapOp = createMapInfoOp(
+          mlir::omp::MapInfoOp mapOp = createMapInfoOp(
               firOpBuilder, clauseLocation, symAddr, mlir::Value{},
-              asFortran.str(), bounds, {},
+              asFortran.str(), bounds, {}, mlir::DenseIntElementsAttr{},
               static_cast<
                   std::underlying_type_t<llvm::omp::OpenMPOffloadMappingFlags>>(
                   mapTypeBits),
               mlir::omp::VariableCaptureKind::ByRef, symAddr.getType());
 
-          result.mapVars.push_back(mapOp);
+          if (object.id()->owner().IsDerivedType()) {
+            if (auto dataRef{ExtractDataRef(object.designator)}) {
+              const Fortran::semantics::Symbol *parentSym =
+                  &dataRef->GetFirstSymbol();
+              assert(parentSym &&
+                     "Could not find parent symbol during lower of "
+                     "a component member in OpenMP map clause");
+              parentMemberIndices[parentSym].push_back(
+                  {generateMemberPlacementIndices(object, semaCtx), mapOp});
+            }
+          } else {
+            result.mapVars.push_back(mapOp);
+            mapSymbols.push_back(object.id());
+          }
         }
       });
+
+  insertChildMapInfoIntoParent(converter, parentMemberIndices, result.mapVars,
+                               nullptr, nullptr, &mapSymbols);
+  return clauseFound;
 }
 
 template <typename... Ts>

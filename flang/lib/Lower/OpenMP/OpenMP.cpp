@@ -1232,8 +1232,9 @@ genTargetDataOp(Fortran::lower::AbstractConverter &converter,
   // re-introduce a hard-error rather than a warning in these cases.
   promoteNonCPtrUseDevicePtrArgsToUseDeviceAddr(clauseOps, useDeviceTypes,
                                                 useDeviceLocs, useDeviceSyms);
+  llvm::SmallVector<const Fortran::semantics::Symbol *> mapSyms;
   cp.processMap(currentLocation, llvm::omp::Directive::OMPD_target_data,
-                stmtCtx, clauseOps);
+                stmtCtx, clauseOps, &mapSyms);
 
   auto dataOp = converter.getFirOpBuilder().create<mlir::omp::TargetDataOp>(
       currentLocation, clauseOps);
@@ -1276,7 +1277,8 @@ static OpTy genTargetEnterExitDataUpdateOp(
     cp.processMotionClauses<clause::To>(stmtCtx, clauseOps);
     cp.processMotionClauses<clause::From>(stmtCtx, clauseOps);
   } else {
-    cp.processMap(currentLocation, directive, stmtCtx, clauseOps);
+    llvm::SmallVector<const Fortran::semantics::Symbol *> mapSyms;
+    cp.processMap(currentLocation, directive, stmtCtx, clauseOps, &mapSyms);
   }
 
   return firOpBuilder.create<OpTy>(currentLocation, clauseOps);
@@ -1395,6 +1397,7 @@ genBodyOfTargetOp(Fortran::lower::AbstractConverter &converter,
         mlir::Value mapOp = createMapInfoOp(
             firOpBuilder, copyVal.getLoc(), copyVal, mlir::Value{}, name.str(),
             bounds, llvm::SmallVector<mlir::Value>{},
+            mlir::DenseIntElementsAttr{},
             static_cast<
                 std::underlying_type_t<llvm::omp::OpenMPOffloadMappingFlags>>(
                 llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_IMPLICIT),
@@ -1460,7 +1463,7 @@ genTargetOp(Fortran::lower::AbstractConverter &converter,
   cp.processThreadLimit(stmtCtx, clauseOps);
   cp.processDepend(clauseOps);
   cp.processMap(currentLocation, directive, stmtCtx, clauseOps, &mapSyms,
-                &mapLocs, &mapTypes);
+                &mapTypes, &mapLocs);
   cp.processIsDevicePtr(clauseOps, devicePtrTypes, devicePtrLocs,
                         devicePtrSyms);
   cp.processHasDeviceAddr(clauseOps, deviceAddrTypes, deviceAddrLocs,
@@ -1561,7 +1564,7 @@ genTargetOp(Fortran::lower::AbstractConverter &converter,
 
         mlir::Value mapOp = createMapInfoOp(
             converter.getFirOpBuilder(), baseOp.getLoc(), baseOp, mlir::Value{},
-            name.str(), bounds, {},
+            name.str(), bounds, {}, mlir::DenseIntElementsAttr{},
             static_cast<
                 std::underlying_type_t<llvm::omp::OpenMPOffloadMappingFlags>>(
                 mapFlag),
