@@ -49,11 +49,19 @@ public:
         break;
       }
 
-      // Remove unused host symbols with external linkage
-      // TODO: Add support for declare target global variables
-      if (symbolUnused && !globalOp.getLinkName())
+      // Look for declare target information in case this global is intended to
+      // always exist on the device.
+      auto declareTargetIface =
+          llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
+              globalOp.getOperation());
+      bool hostOnlySymbol = !declareTargetIface ||
+                            !declareTargetIface.isDeclareTarget() ||
+                            declareTargetIface.getDeclareTargetDeviceType() ==
+                                omp::DeclareTargetDeviceType::host;
+
+      // Remove unused host symbols with external linkage.
+      if (symbolUnused && !globalOp.getLinkName() && hostOnlySymbol)
         globalOp.erase();
-      return WalkResult::advance();
     });
   }
 };
