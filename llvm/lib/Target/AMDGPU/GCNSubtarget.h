@@ -259,6 +259,8 @@ protected:
   bool FeatureDisable = false;
 
   SelectionDAGTargetInfo TSInfo;
+  bool ShouldCoerceIllegalTypes = false;
+
 private:
   SIInstrInfo InstrInfo;
   SITargetLowering TLInfo;
@@ -1437,6 +1439,10 @@ public:
   // \returns true if S_GETPC_B64 zero-extends the result from 48 bits instead
   // of sign-extending.
   bool hasGetPCZeroExtension() const { return GFX12Insts; }
+
+  /// \returns whether or not we should coerce illegal types into vectors of
+  // legal types for values that span basic blocks.
+  bool shouldCoerceIllegalTypes() const { return ShouldCoerceIllegalTypes; }
 
   /// \returns SGPR allocation granularity supported by the subtarget.
   unsigned getSGPRAllocGranule() const {
