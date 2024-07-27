@@ -36,7 +36,8 @@ namespace flangomp {
 #include "flang/Optimizer/OpenMP/Passes.h.inc"
 } // namespace flangomp
 
-#define DEBUG_TYPE "fopenmp-do-concurrent-conversion"
+#define DEBUG_TYPE "do-concurrent-conversion"
+#define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE << "]: ")
 
 namespace Fortran {
 namespace lower {
@@ -359,6 +360,81 @@ void collectIndirectConstOpChain(mlir::Operation *link,
   opChain.insert(link);
 }
 
+/// Loop \p innerLoop is considered perfectly-nested inside \p outerLoop iff
+/// there are no operations in \p outerloop's other than:
+///
+/// 1. those operations needed to setup \p innerLoop's LB, UB, and step values,
+/// 2. the operations needed to assing/update \p outerLoop's induction variable.
+/// 3. \p innerLoop itself.
+///
+/// \p return true if \p innerLoop is perfectly nested inside \p outerLoop
+/// according to the above definition.
+bool isPerfectlyNested(fir::DoLoopOp outerLoop, fir::DoLoopOp innerLoop) {
+  mlir::BackwardSliceOptions backwardSliceOptions;
+  backwardSliceOptions.inclusive = true;
+  // We will collect the backward slices for innerLoop's LB, UB, and step.
+  // However, we want to limit the scope of these slices to the scope of
+  // outerLoop's region.
+  backwardSliceOptions.filter = [&](mlir::Operation *op) {
+    return !mlir::areValuesDefinedAbove(op->getResults(),
+                                        outerLoop.getRegion());
+  };
+
+  llvm::SetVector<mlir::Operation *> lbSlice;
+  mlir::getBackwardSlice(innerLoop.getLowerBound(), &lbSlice,
+                         backwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> ubSlice;
+  mlir::getBackwardSlice(innerLoop.getUpperBound(), &ubSlice,
+                         backwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> stepSlice;
+  mlir::getBackwardSlice(innerLoop.getStep(), &stepSlice, backwardSliceOptions);
+
+  mlir::ForwardSliceOptions forwardSliceOptions;
+  forwardSliceOptions.inclusive = true;
+  // We don't care of the outer loop's induction variable's uses within the
+  // inner loop, so we filter out these uses.
+  forwardSliceOptions.filter = [&](mlir::Operation *op) {
+    return mlir::areValuesDefinedAbove(op->getResults(), innerLoop.getRegion());
+  };
+
+  llvm::SetVector<mlir::Operation *> indVarSlice;
+  mlir::getForwardSlice(outerLoop.getInductionVar(), &indVarSlice,
+                        forwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> innerLoopSetupOpsVec;
+  innerLoopSetupOpsVec.set_union(indVarSlice);
+  innerLoopSetupOpsVec.set_union(lbSlice);
+  innerLoopSetupOpsVec.set_union(ubSlice);
+  innerLoopSetupOpsVec.set_union(stepSlice);
+  llvm::DenseSet<mlir::Operation *> innerLoopSetupOpsSet;
+
+  for (mlir::Operation *op : innerLoopSetupOpsVec)
+    innerLoopSetupOpsSet.insert(op);
+
+  llvm::DenseSet<mlir::Operation *> loopBodySet;
+  outerLoop.walk<mlir::WalkOrder::PreOrder>([&](mlir::Operation *op) {
+    if (op == outerLoop)
+      return mlir::WalkResult::advance();
+
+    if (op == innerLoop)
+      return mlir::WalkResult::skip();
+
+    if (op->hasTrait<mlir::OpTrait::IsTerminator>())
+      return mlir::WalkResult::advance();
+
+    loopBodySet.insert(op);
+    return mlir::WalkResult::advance();
+  });
+
+  bool result = (loopBodySet == innerLoopSetupOpsSet);
+  LLVM_DEBUG(DBGS() << "Loop pair starting at location " << outerLoop.getLoc()
+                    << " is" << (result ? "" : " not")
+                    << " perfectly nested\n");
+  return result;
+}
+
 /// Starting with `outerLoop` collect a perfectly nested loop nest, if any. This
 /// function collects as much as possible loops in the nest; it case it fails to
 /// recognize a certain nested loop as part of the nest it just returns the
@@ -399,57 +475,7 @@ mlir::LogicalResult collectLoopNest(fir::DoLoopOp outerLoop,
     llvm::SmallVector<mlir::Value> nestedLiveIns;
     collectLoopLiveIns(nestedUnorderedLoop, nestedLiveIns);
 
-    llvm::DenseSet<mlir::Value> outerLiveInsSet;
-    llvm::DenseSet<mlir::Value> nestedLiveInsSet;
-
-    // Returns a "unified" view of an mlir::Value. This utility checks if the
-    // value is defined by an op, and if so, return the first value defined by
-    // that op (if there are many), otherwise just returns the value.
-    //
-    // This serves the purpose that if, for example, `%op_res#0` is used in the
-    // outer loop and `%op_res#1` is used in the nested loop (or vice versa),
-    // that we detect both as the same value. If we did not do so, we might
-    // falesely detect that the 2 loops are not perfectly nested since they use
-    // "different" sets of values.
-    auto getUnifiedLiveInView = [](mlir::Value liveIn) {
-      return liveIn.getDefiningOp() != nullptr
-                 ? liveIn.getDefiningOp()->getResult(0)
-                 : liveIn;
-    };
-
-    // Re-package both lists of live-ins into sets so that we can use set
-    // equality to compare the values used in the outerloop vs. the nestd one.
-
-    for (auto liveIn : nestedLiveIns)
-      nestedLiveInsSet.insert(getUnifiedLiveInView(liveIn));
-
-    mlir::Value outerLoopIV;
-    for (auto liveIn : outerLoopLiveIns) {
-      outerLiveInsSet.insert(getUnifiedLiveInView(liveIn));
-
-      // Keep track of the IV of the outerloop. See `isPerfectlyNested` for more
-      // info on the reason.
-      if (outerLoopIV == nullptr)
-        outerLoopIV = getUnifiedLiveInView(liveIn);
-    }
-
-    // For the 2 loops to be perfectly nested, either:
-    // * both would have exactly the same set of live-in values or,
-    // * the outer loop would have exactly 1 extra live-in value: the outer
-    //   loop's induction variable; this happens when the outer loop's IV is
-    //   *not* referenced in the nested loop.
-    bool isPerfectlyNested = [&]() {
-      if (outerLiveInsSet == nestedLiveInsSet)
-        return true;
-
-      if ((outerLiveInsSet.size() == nestedLiveIns.size() + 1) &&
-          !nestedLiveInsSet.contains(outerLoopIV))
-        return true;
-
-      return false;
-    }();
-
-    if (!isPerfectlyNested)
+    if (!isPerfectlyNested(outerLoop, nestedUnorderedLoop))
       return mlir::failure();
 
     outerLoop = nestedUnorderedLoop;
