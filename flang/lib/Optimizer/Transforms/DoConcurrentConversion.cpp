@@ -298,8 +298,8 @@ void collectIndirectConstOpChain(mlir::Operation *link,
   opChain.insert(link);
 }
 
-/// Loop \p innerLoop is considered perfectly-nested inside \p outerLoop iff the
-/// only operations in \p outerloop's region are:
+/// Loop \p innerLoop is considered perfectly-nested inside \p outerLoop iff
+/// there are no operations in \p outerloop's other than:
 ///
 /// 1. those operations needed to setup \p innerLoop's LB, UB, and step values,
 /// 2. the operations needed to assing/update \p outerLoop's induction variable.
@@ -342,8 +342,8 @@ bool isPerfectlyNested(fir::DoLoopOp outerLoop, fir::DoLoopOp innerLoop) {
                         forwardSliceOptions);
 
   // If any of the bounds is computed using a somewhat elaborate expression, we
-  // might have to allocate temproaries within the loop-nest. For example,
-  // `foo(m*n, m/n)` would allocate memory for the results of the restuls of
+  // might have to allocate temporaries within the loop-nest. For example,
+  // `foo(m*n, m/n)` would allocate memory for the results of the resutls of
   // `m*n` and `m/n` inside the loop and pass the results to `foo`.
   //
   // The mem alloc ops for these temp values will be part of the backward slices
