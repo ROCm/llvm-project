@@ -256,19 +256,7 @@ mlir::Block *fir::FirOpBuilder::getAllocaBlock() {
   if (auto ompOutlineableIface =
           getRegion()
               .getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>()) {
-    // omp.parallel can work as a block construct but it can also be a loop
-    // wrapper when part of a composite construct. Make sure it's only treated
-    // as a block if it's not a wrapper.
-    auto parallelOp =
-        llvm::dyn_cast<mlir::omp::ParallelOp>(*ompOutlineableIface);
-    if (!parallelOp || !llvm::isa_and_present<mlir::omp::DistributeOp>(
-                           parallelOp->getParentOp()))
-      return ompOutlineableIface.getAllocaBlock();
-
-    if (auto parentOutlineable =
-            parallelOp
-                ->getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>())
-      return parentOutlineable.getAllocaBlock();
+    return ompOutlineableIface.getAllocaBlock();
   }
 
   if (auto recipeIface =
@@ -285,15 +273,9 @@ mlir::Value fir::FirOpBuilder::createTemporaryAlloc(
     llvm::ArrayRef<mlir::NamedAttribute> attrs) {
   assert(!mlir::isa<fir::ReferenceType>(type) && "cannot be a reference");
   // If the alloca is inside an OpenMP Op which will be outlined then pin
-  // the alloca here. Make sure that an omp.parallel operation that is taking
-  // a loop wrapper role is not detected as outlineable here.
-  auto iface =
-      getRegion().getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>();
-  auto parallelOp =
-      iface ? llvm::dyn_cast<mlir::omp::ParallelOp>(*iface) : nullptr;
+  // the alloca here.
   const bool pinned =
-      iface && (!parallelOp || !llvm::isa_and_present<mlir::omp::DistributeOp>(
-                                   parallelOp->getParentOp()));
+      getRegion().getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>();
   mlir::Value temp =
       create<fir::AllocaOp>(loc, type, /*unique_name=*/llvm::StringRef{}, name,
                             pinned, lenParams, shape, attrs);

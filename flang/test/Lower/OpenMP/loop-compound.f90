@@ -14,8 +14,8 @@ program main
   ! ----------------------------------------------------------------------------
   !$omp teams
 
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.simd
   ! CHECK-NEXT: omp.loop_nest
@@ -31,8 +31,8 @@ program main
   ! ----------------------------------------------------------------------------
   !$omp teams
 
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.loop_nest
   !$omp distribute parallel do
@@ -144,8 +144,8 @@ program main
   ! ----------------------------------------------------------------------------
   ! CHECK: omp.target
   ! CHECK: omp.teams
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.simd
   ! CHECK-NEXT: omp.loop_nest
@@ -159,8 +159,8 @@ program main
   ! ----------------------------------------------------------------------------
   ! CHECK: omp.target
   ! CHECK: omp.teams
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.loop_nest
   !$omp target teams distribute parallel do
@@ -196,8 +196,8 @@ program main
   ! TEAMS DISTRIBUTE PARALLEL DO SIMD
   ! ----------------------------------------------------------------------------
   ! CHECK: omp.teams
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.simd
   ! CHECK-NEXT: omp.loop_nest
@@ -210,8 +210,8 @@ program main
   ! TEAMS DISTRIBUTE PARALLEL DO
   ! ----------------------------------------------------------------------------
   ! CHECK: omp.teams
+  ! CHECK: omp.parallel
   ! CHECK: omp.distribute
-  ! CHECK-NEXT: omp.parallel
   ! CHECK-NEXT: omp.wsloop
   ! CHECK-NEXT: omp.loop_nest
   !$omp teams distribute parallel do

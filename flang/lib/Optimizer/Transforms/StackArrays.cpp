@@ -589,31 +589,8 @@ AllocMemConversion::findAllocaInsertionPoint(fir::AllocMemOp &oldAlloc) {
     return {point};
   };
 
-  // Find the first OpenMP outlineable parent region while taking into account
-  // the possibility of finding an omp.parallel region that is taking a loop
-  // wrapper role. These operations must be skipped, as they cannot hold
-  // allocations.
-  const auto findOmpRegion = [](mlir::Operation *op) {
-    auto findOmpRegionImpl =
-        [](mlir::Operation *op,
-           auto &findOmpRegion) -> mlir::omp::OutlineableOpenMPOpInterface {
-      auto ompRegion =
-          op->getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>();
-      if (!ompRegion)
-        return nullptr;
-
-      if (auto parallelOp =
-              mlir::dyn_cast_if_present<mlir::omp::ParallelOp>(*ompRegion)) {
-        mlir::Operation *parentOp = parallelOp->getParentOp();
-        if (mlir::isa_and_present<mlir::omp::DistributeOp>(parentOp))
-          return findOmpRegion(parentOp, findOmpRegion);
-      }
-      return ompRegion;
-    };
-    return findOmpRegionImpl(op, findOmpRegionImpl);
-  };
-
-  auto oldOmpRegion = findOmpRegion(oldAlloc);
+  auto oldOmpRegion =
+      oldAlloc->getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>();
 
   // Find when the last operand value becomes available
   mlir::Block *operandsBlock = nullptr;
@@ -641,7 +618,8 @@ AllocMemConversion::findAllocaInsertionPoint(fir::AllocMemOp &oldAlloc) {
     LLVM_DEBUG(llvm::dbgs()
                << "--Placing after last operand: " << *lastOperand << "\n");
     // check we aren't moving out of an omp region
-    auto lastOpOmpRegion = findOmpRegion(lastOperand);
+    auto lastOpOmpRegion =
+        lastOperand->getParentOfType<mlir::omp::OutlineableOpenMPOpInterface>();
     if (lastOpOmpRegion == oldOmpRegion)
       return checkReturn(lastOperand);
     // Presumably this happened because the operands became ready before the

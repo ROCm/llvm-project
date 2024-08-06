@@ -1862,18 +1862,23 @@ genParallelOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
   return parallelOp;
 }
 
-// TODO: Replace with genWrapperOp calls.
-static mlir::omp::ParallelOp genParallelWrapperOp(
+static mlir::omp::ParallelOp genParallelCompositeOp(
     lower::AbstractConverter &converter, semantics::SemanticsContext &semaCtx,
-    lower::pft::Evaluation &eval, mlir::Location loc,
-    const mlir::omp::ParallelOperands &clauseOps,
+    const List<Clause> &clauses, lower::pft::Evaluation &eval,
+    mlir::Location loc, mlir::omp::ParallelOperands &clauseOps,
     mlir::omp::NumThreadsClauseOps &numThreadsClauseOps,
     llvm::ArrayRef<const semantics::Symbol *> reductionSyms,
     llvm::ArrayRef<mlir::Type> reductionTypes, mlir::omp::TargetOp parentTarget,
     DataSharingProcessor &dsp) {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
-  // Create omp.parallel wrapper.
+  if (enableDelayedPrivatization) {
+    const auto &privateClauseOps = dsp.getPrivateClauseOps();
+    clauseOps.privateVars = privateClauseOps.privateVars;
+    clauseOps.privateSyms = privateClauseOps.privateSyms;
+  }
+
+  // Create omp.parallel operation.
   auto parallelOp = firOpBuilder.create<mlir::omp::ParallelOp>(loc, clauseOps);
 
   if (numThreadsClauseOps.numThreads) {
@@ -1885,21 +1890,59 @@ static mlir::omp::ParallelOp genParallelWrapperOp(
   }
 
   // Populate entry block arguments with reduction and private variables.
-  mlir::OperandRange privateVars = parallelOp.getPrivateVars();
-
   llvm::SmallVector<mlir::Type> blockArgTypes(reductionTypes.begin(),
                                               reductionTypes.end());
-  blockArgTypes.reserve(blockArgTypes.size() + privateVars.size());
-  llvm::transform(privateVars, std::back_inserter(blockArgTypes),
-                  [](mlir::Value v) { return v.getType(); });
-
   llvm::SmallVector<mlir::Location> blockArgLocs(reductionTypes.size(), loc);
-  blockArgLocs.reserve(blockArgLocs.size() + privateVars.size());
-  llvm::transform(privateVars, std::back_inserter(blockArgLocs),
-                  [](mlir::Value v) { return v.getLoc(); });
+  llvm::SmallVector<const semantics::Symbol *> blockSyms(reductionSyms);
 
-  firOpBuilder.createBlock(&parallelOp.getRegion(), {}, blockArgTypes,
+  if (enableDelayedPrivatization) {
+    mlir::OperandRange privateVars = parallelOp.getPrivateVars();
+
+    blockArgTypes.reserve(blockArgTypes.size() + privateVars.size());
+    llvm::transform(privateVars, std::back_inserter(blockArgTypes),
+                    [](mlir::Value v) { return v.getType(); });
+
+    blockArgLocs.reserve(blockArgLocs.size() + privateVars.size());
+    llvm::transform(privateVars, std::back_inserter(blockArgLocs),
+                    [](mlir::Value v) { return v.getLoc(); });
+
+    llvm::append_range(blockSyms, dsp.getDelayedPrivSyms());
+  }
+
+  mlir::Region &region = parallelOp.getRegion();
+  firOpBuilder.createBlock(&region, /*insertPt=*/{}, blockArgTypes,
                            blockArgLocs);
+
+  // Bind syms to block args.
+  unsigned argIdx = 0;
+  for (const semantics::Symbol *arg : blockSyms) {
+    auto bind = [&](const semantics::Symbol *sym) {
+      mlir::BlockArgument blockArg = region.getArgument(argIdx++);
+      converter.bindSymbol(*sym, hlfir::translateToExtendedValue(
+                                     loc, firOpBuilder, hlfir::Entity{blockArg},
+                                     /*contiguousHint=*/
+                                     evaluate::IsSimplyContiguous(
+                                         *sym, converter.getFoldingContext()))
+                                     .first);
+    };
+
+    if (const auto *commonDet =
+            arg->detailsIf<semantics::CommonBlockDetails>()) {
+      for (const auto &mem : commonDet->objects())
+        bind(&*mem);
+    } else
+      bind(arg);
+  }
+
+  // Handle threadprivate and copyin, which would normally be done as part of
+  // `createBodyOfOp()`. However, when generating `omp.parallel` as part of a
+  // composite construct, we can't recursively lower its contents. This prevents
+  // us from being able to rely on the existing `genOpWithBody()` flow.
+  {
+    mlir::OpBuilder::InsertionGuard guard(firOpBuilder);
+    threadPrivatizeVars(converter, eval);
+  }
+  ClauseProcessor(converter, semaCtx, clauses).processCopyin();
 
   firOpBuilder.setInsertionPoint(
       lower::genOpenMPTerminator(firOpBuilder, parallelOp, loc));
@@ -2470,11 +2513,7 @@ static void genCompositeDistributeParallelDo(
   bool evalOutsideTarget =
       targetOp && !offloadModOp.getIsTargetDevice() && !evalHasSiblings(eval);
 
-  // Clause processing.
-  mlir::omp::DistributeOperands distributeClauseOps;
-  genDistributeClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
-                       distributeClauseOps);
-
+  // Create parent omp.parallel first.
   mlir::omp::ParallelOperands parallelClauseOps;
   mlir::omp::NumThreadsClauseOps numThreadsClauseOps;
   llvm::SmallVector<const semantics::Symbol *> parallelReductionSyms;
@@ -2484,9 +2523,15 @@ static void genCompositeDistributeParallelDo(
                      numThreadsClauseOps, parallelReductionTypes,
                      parallelReductionSyms);
 
-  const auto &privateClauseOps = dsp.getPrivateClauseOps();
-  parallelClauseOps.privateVars = privateClauseOps.privateVars;
-  parallelClauseOps.privateSyms = privateClauseOps.privateSyms;
+  genParallelCompositeOp(converter, semaCtx, item->clauses, eval, loc,
+                         parallelClauseOps, numThreadsClauseOps,
+                         parallelReductionSyms, parallelReductionTypes,
+                         evalOutsideTarget ? targetOp : nullptr, dsp);
+
+  // Clause processing.
+  mlir::omp::DistributeOperands distributeClauseOps;
+  genDistributeClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
+                       distributeClauseOps);
 
   mlir::omp::WsloopOperands wsloopClauseOps;
   llvm::SmallVector<const semantics::Symbol *> wsloopReductionSyms;
@@ -2504,11 +2549,6 @@ static void genCompositeDistributeParallelDo(
   auto distributeOp = genWrapperOp<mlir::omp::DistributeOp>(
       converter, loc, distributeClauseOps, /*blockArgTypes=*/{});
 
-  auto parallelOp = genParallelWrapperOp(
-      converter, semaCtx, eval, loc, parallelClauseOps, numThreadsClauseOps,
-      parallelReductionSyms, parallelReductionTypes,
-      evalOutsideTarget ? targetOp : nullptr, dsp);
-
   // TODO: Add private variables to entry block arguments.
   auto wsloopOp = genWrapperOp<mlir::omp::WsloopOp>(
       converter, loc, wsloopClauseOps, wsloopReductionTypes);
@@ -2516,14 +2556,10 @@ static void genCompositeDistributeParallelDo(
   // Construct wrapper entry block list and associated symbols. It is important
   // that the symbol order and the block argument order match, so that the
   // symbol-value bindings created are correct.
-  auto wrapperSyms =
-      llvm::to_vector(llvm::concat<const semantics::Symbol *const>(
-          parallelReductionSyms, dsp.getDelayedPrivSyms(),
-          wsloopReductionSyms));
+  auto &wrapperSyms = wsloopReductionSyms;
 
   auto wrapperArgs = llvm::to_vector(
       llvm::concat<mlir::BlockArgument>(distributeOp.getRegion().getArguments(),
-                                        parallelOp.getRegion().getArguments(),
                                         wsloopOp.getRegion().getArguments()));
 
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, item,
@@ -2545,11 +2581,7 @@ static void genCompositeDistributeParallelDoSimd(
   bool evalOutsideTarget =
       targetOp && !offloadModOp.getIsTargetDevice() && !evalHasSiblings(eval);
 
-  // Clause processing.
-  mlir::omp::DistributeOperands distributeClauseOps;
-  genDistributeClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
-                       distributeClauseOps);
-
+  // Create parent omp.parallel first.
   mlir::omp::ParallelOperands parallelClauseOps;
   mlir::omp::NumThreadsClauseOps numThreadsClauseOps;
   llvm::SmallVector<const semantics::Symbol *> parallelReductionSyms;
@@ -2559,9 +2591,15 @@ static void genCompositeDistributeParallelDoSimd(
                      numThreadsClauseOps, parallelReductionTypes,
                      parallelReductionSyms);
 
-  const auto &privateClauseOps = dsp.getPrivateClauseOps();
-  parallelClauseOps.privateVars = privateClauseOps.privateVars;
-  parallelClauseOps.privateSyms = privateClauseOps.privateSyms;
+  genParallelCompositeOp(converter, semaCtx, item->clauses, eval, loc,
+                         parallelClauseOps, numThreadsClauseOps,
+                         parallelReductionSyms, parallelReductionTypes,
+                         evalOutsideTarget ? targetOp : nullptr, dsp);
+
+  // Clause processing.
+  mlir::omp::DistributeOperands distributeClauseOps;
+  genDistributeClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
+                       distributeClauseOps);
 
   mlir::omp::WsloopOperands wsloopClauseOps;
   llvm::SmallVector<const semantics::Symbol *> wsloopReductionSyms;
@@ -2582,11 +2620,6 @@ static void genCompositeDistributeParallelDoSimd(
   auto distributeOp = genWrapperOp<mlir::omp::DistributeOp>(
       converter, loc, distributeClauseOps, /*blockArgTypes=*/{});
 
-  auto parallelOp = genParallelWrapperOp(
-      converter, semaCtx, eval, loc, parallelClauseOps, numThreadsClauseOps,
-      parallelReductionSyms, parallelReductionTypes,
-      evalOutsideTarget ? targetOp : nullptr, dsp);
-
   // TODO: Add private variables to entry block arguments.
   auto wsloopOp = genWrapperOp<mlir::omp::WsloopOp>(
       converter, loc, wsloopClauseOps, wsloopReductionTypes);
@@ -2598,14 +2631,10 @@ static void genCompositeDistributeParallelDoSimd(
   // Construct wrapper entry block list and associated symbols. It is important
   // that the symbol order and the block argument order match, so that the
   // symbol-value bindings created are correct.
-  auto wrapperSyms =
-      llvm::to_vector(llvm::concat<const semantics::Symbol *const>(
-          parallelReductionSyms, dsp.getDelayedPrivSyms(),
-          wsloopReductionSyms));
+  auto &wrapperSyms = wsloopReductionSyms;
 
   auto wrapperArgs = llvm::to_vector(llvm::concat<mlir::BlockArgument>(
       distributeOp.getRegion().getArguments(),
-      parallelOp.getRegion().getArguments(),
       wsloopOp.getRegion().getArguments(), simdOp.getRegion().getArguments()));
 
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, item,
@@ -2726,10 +2755,12 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
   bool loopLeaf = llvm::omp::getDirectiveAssociation(item->id) ==
                   llvm::omp::Association::Loop;
   if (loopLeaf) {
+    // Used delayed privatization for 'distribute parallel do [simd]'.
+    bool useDelayedPrivatization = llvm::omp::allParallelSet.test(item->id);
     symTable.pushScope();
     loopDsp.emplace(converter, semaCtx, item->clauses, eval,
                     /*shouldCollectPreDeterminedSymbols=*/true,
-                    /*useDelayedPrivatization=*/false, &symTable);
+                    useDelayedPrivatization, &symTable);
     loopDsp->processStep1();
     loopDsp->processStep2();
   }
