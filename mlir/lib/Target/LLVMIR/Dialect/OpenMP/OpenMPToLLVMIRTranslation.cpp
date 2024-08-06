@@ -3190,8 +3190,7 @@ static LogicalResult convertOmpDistribute(
     llvm::OpenMPIRBuilder::InsertPointTy *redAllocaIP,
     SmallVector<llvm::OpenMPIRBuilder::ReductionInfo> &reductionInfos) {
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  // FIXME: This ignores any other nested wrappers (e.g. omp.parallel +
-  // omp.wsloop, omp.simd).
+  // FIXME: This ignores any other nested wrappers (e.g. omp.wsloop, omp.simd).
   auto distributeOp = cast<omp::DistributeOp>(opInst);
   auto loopOp = cast<omp::LoopNestOp>(distributeOp.getWrappedLoop());
 
