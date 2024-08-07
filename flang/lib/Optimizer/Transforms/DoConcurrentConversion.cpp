@@ -599,9 +599,7 @@ public:
 
       targetOp = genTargetOp(doLoop.getLoc(), rewriter, mapper,
                              outermostLoopLives, targetClauseOps);
-      genTeamsOp(doLoop.getLoc(), rewriter, loopNest, mapper,
-                 loopNestClauseOps);
-      genDistributeOp(doLoop.getLoc(), rewriter);
+      genTeamsOp(doLoop.getLoc(), rewriter);
     }
 
     mlir::omp::ParallelOp parallelOp = genParallelOp(
@@ -610,6 +608,9 @@ public:
     for (mlir::Value local : locals)
       looputils::localizeLoopLocalValue(local, parallelOp.getRegion(),
                                         rewriter);
+
+    if (mapToDevice)
+      genDistributeOp(doLoop.getLoc(), rewriter);
 
     mlir::omp::LoopNestOp ompLoopNest =
         genWsLoopOp(rewriter, loopNest.back().first, mapper, loopNestClauseOps);
@@ -800,17 +801,13 @@ private:
   }
 
   mlir::omp::TeamsOp
-  genTeamsOp(mlir::Location loc, mlir::ConversionPatternRewriter &rewriter,
-             looputils::LoopNestToIndVarMap &loopNest, mlir::IRMapping &mapper,
-             mlir::omp::LoopNestOperands &loopNestClauseOps) const {
+  genTeamsOp(mlir::Location loc,
+             mlir::ConversionPatternRewriter &rewriter) const {
     auto teamsOp = rewriter.create<mlir::omp::TeamsOp>(
         loc, /*clauses=*/mlir::omp::TeamsOperands{});
 
     rewriter.createBlock(&teamsOp.getRegion());
     rewriter.setInsertionPoint(rewriter.create<mlir::omp::TerminatorOp>(loc));
-
-    genLoopNestIndVarAllocs(rewriter, loopNest, mapper);
-    genLoopNestClauseOps(loc, rewriter, loopNest, mapper, loopNestClauseOps);
 
     return teamsOp;
   }
@@ -905,12 +902,8 @@ private:
     rewriter.createBlock(&parallelOp.getRegion());
     rewriter.setInsertionPoint(rewriter.create<mlir::omp::TerminatorOp>(loc));
 
-    // If mapping to host, the local induction variable and loop bounds need to
-    // be emitted as part of the `omp.parallel` op.
-    if (!mapToDevice) {
-      genLoopNestIndVarAllocs(rewriter, loopNest, mapper);
-      genLoopNestClauseOps(loc, rewriter, loopNest, mapper, loopNestClauseOps);
-    }
+    genLoopNestIndVarAllocs(rewriter, loopNest, mapper);
+    genLoopNestClauseOps(loc, rewriter, loopNest, mapper, loopNestClauseOps);
 
     return parallelOp;
   }
