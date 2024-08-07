@@ -65,7 +65,7 @@ end
 ! DEVICE: omp.target
 ! DEVICE: omp.teams
 
-! HOST: omp.parallel {
+! COMMON: omp.parallel {
 
 ! COMMON-NEXT: %[[ITER_VAR_I:.*]] = fir.alloca i32 {bindc_name = "i"}
 ! COMMON-NEXT: %[[BINDING_I:.*]]:2 = hlfir.declare %[[ITER_VAR_I]] {uniq_name = "_QFEi"}
@@ -94,8 +94,7 @@ end
 ! COMMON: %[[UB_K:.*]] = fir.convert %[[C30]] : (i32) -> index
 ! COMMON: %[[STEP_K:.*]] = arith.constant 1 : index
 
-! DEVICE:      omp.distribute
-! DEVICE-NEXT: omp.parallel
+! DEVICE: omp.distribute
 
 ! COMMON: omp.wsloop {
 ! COMMON-NEXT: omp.loop_nest

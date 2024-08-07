@@ -43,6 +43,7 @@ program do_concurrent_basic
 
     ! CHECK: %[[A_DEV_DECL:.*]]:2 = hlfir.declare %[[A_ARG]]
     ! CHECK: omp.teams {
+    ! CHECK-NEXT: omp.parallel {
 
     ! CHECK-NEXT: %[[ITER_VAR:.*]] = fir.alloca i32 {bindc_name = "i"}
     ! CHECK-NEXT: %[[BINDING:.*]]:2 = hlfir.declare %[[ITER_VAR]] {uniq_name = "_QFEi"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
@@ -54,8 +55,6 @@ program do_concurrent_basic
     ! CHECK: %[[STEP:.*]] = arith.constant 1 : index
 
     ! CHECK-NEXT: omp.distribute {
-    ! CHECK-NEXT: omp.parallel {
-
     ! CHECK-NEXT: omp.wsloop {
 
     ! CHECK-NEXT: omp.loop_nest (%[[ARG0:.*]]) : index = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]]) {

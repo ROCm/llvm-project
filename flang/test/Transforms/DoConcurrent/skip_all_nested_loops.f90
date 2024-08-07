@@ -39,9 +39,11 @@ end
 ! DEVICE: %[[TARGET_K_DECL:.*]]:2 = hlfir.declare %[[K_ARG]] {uniq_name = "_QFEk"}
 
 ! DEVICE: omp.teams
-! DEVICE: omp.distribute
 
 ! COMMON: omp.parallel {
+
+! DEVICE: omp.distribute
+
 ! COMMON: omp.wsloop {
 ! COMMON: omp.loop_nest ({{[^[:space:]]+}}) {{.*}} {
 ! COMMON:   fir.do_loop {{.*}} iter_args(%[[J_IV:.*]] = {{.*}}) -> {{.*}} {
