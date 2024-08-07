@@ -3945,7 +3945,7 @@ public:
 };
 
 static LogicalResult convertOmpDistributeParallelWsloop(
-    Operation *op, omp::DistributeOp distribute, omp::ParallelOp parallel,
+    omp::ParallelOp parallel, omp::DistributeOp distribute,
     omp::WsloopOp wsloop, llvm::IRBuilderBase &builder,
     LLVM::ModuleTranslation &moduleTranslation,
     ConversionDispatchList &dispatchList);
@@ -4159,14 +4159,13 @@ static LogicalResult
 convertTargetDeviceOp(Operation *op, llvm::IRBuilderBase &builder,
                       LLVM::ModuleTranslation &moduleTranslation,
                       ConversionDispatchList &dispatchList) {
-  omp::DistributeOp distribute;
   omp::ParallelOp parallel;
+  omp::DistributeOp distribute;
   omp::WsloopOp wsloop;
   // Match composite constructs
-  if (matchOpNest(op, distribute, parallel, wsloop)) {
-    return convertOmpDistributeParallelWsloop(op, distribute, parallel, wsloop,
-                                              builder, moduleTranslation,
-                                              dispatchList);
+  if (matchOpNest(op, parallel, distribute, wsloop)) {
+    return convertOmpDistributeParallelWsloop(
+        parallel, distribute, wsloop, builder, moduleTranslation, dispatchList);
   }
 
   return convertHostOrTargetOperation(op, builder, moduleTranslation);
@@ -4203,7 +4202,7 @@ convertTargetOpsInNest(Operation *op, llvm::IRBuilderBase &builder,
 // just overrides the parallel and wsloop dispatches but does the normal
 // lowering for now.
 static LogicalResult convertOmpDistributeParallelWsloop(
-    Operation *op, omp::DistributeOp distribute, omp::ParallelOp parallel,
+    omp::ParallelOp parallel, omp::DistributeOp distribute,
     omp::WsloopOp wsloop, llvm::IRBuilderBase &builder,
     LLVM::ModuleTranslation &moduleTranslation,
     ConversionDispatchList &dispatchList) {
@@ -4229,14 +4228,30 @@ static LogicalResult convertOmpDistributeParallelWsloop(
         return std::make_pair(true, result);
       };
 
+  // Convert distribute alternative implementation
+  ConvertFunctionTy convertDistribute =
+      [&redAllocaIP,
+       &reductionInfos](Operation *op, llvm::IRBuilderBase &builder,
+                        LLVM::ModuleTranslation &moduleTranslation) {
+        if (!isa<omp::DistributeOp>(op)) {
+          return std::make_pair(false, failure());
+        }
+
+        LogicalResult result = convertOmpDistribute(
+            *op, builder, moduleTranslation, &redAllocaIP, reductionInfos);
+        return std::make_pair(true, result);
+      };
+
   // Push the new alternative functions
   dispatchList.pushConversionFunction(convertWsloop);
+  dispatchList.pushConversionFunction(convertDistribute);
 
-  // Lower the current distribute operation
-  LogicalResult result = convertOmpDistribute(*op, builder, moduleTranslation,
-                                              &redAllocaIP, reductionInfos);
+  // Lower the current parallel operation
+  LogicalResult result =
+      convertOmpParallel(parallel, builder, moduleTranslation);
 
   // Pop the alternative functions
+  dispatchList.popConversionFunction();
   dispatchList.popConversionFunction();
 
   return result;
