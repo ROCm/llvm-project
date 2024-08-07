@@ -17,8 +17,6 @@ func.func @_QPfoo() {
   // CHECK: omp.target
   omp.target map_entries(%map_info -> %arg1 : !fir.ref<!fir.array<1xi32>>)  {
   ^bb0(%arg1: !fir.ref<!fir.array<1xi32>>):
-
-    // CHECK: %[[TO_BOX_ALLOC:.*]] = fir.alloca !fir.box<!fir.array<1xi32>> {pinned}
     %c1_2 = arith.constant 1 : index
     %21 = fir.shape %c1_2 : (index) -> !fir.shape<1>
 
@@ -30,10 +28,11 @@ func.func @_QPfoo() {
       %c1_3 = arith.constant 1 : i32
       %c10 = arith.constant 10 : i32
 
-      // CHECK: omp.distribute
-      omp.distribute {
-        // CHECK: omp.parallel
-        omp.parallel {
+      // CHECK: omp.parallel
+      omp.parallel {
+        // CHECK: %[[TO_BOX_ALLOC:.*]] = fir.alloca !fir.box<!fir.array<1xi32>> {pinned}
+        // CHECK: omp.distribute
+        omp.distribute {
           // CHECK: omp.wsloop
           omp.wsloop {
             // CHECK: omp.loop_nest

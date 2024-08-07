@@ -285,16 +285,9 @@ mlir::Value ConvertFIRToLLVMPattern::computeBoxSize(
 // 4. The first ancestor that is one of the above.
 mlir::Block *ConvertFIRToLLVMPattern::getBlockForAllocaInsert(
     mlir::Operation *op, mlir::Region *parentRegion) const {
-  if (auto iface =
-          mlir::dyn_cast<mlir::omp::OutlineableOpenMPOpInterface>(op)) {
-    // omp.parallel can work as a block construct but it can also be a loop
-    // wrapper when it's part of a composite construct. Make sure it's only
-    // treated as a block if it's not a wrapper.
-    auto parallelOp = llvm::dyn_cast<mlir::omp::ParallelOp>(*iface);
-    if (!parallelOp || !llvm::isa_and_present<mlir::omp::DistributeOp>(
-                           parallelOp->getParentOp()))
-      return iface.getAllocaBlock();
-  }
+  if (auto outlineableIface =
+          mlir::dyn_cast<mlir::omp::OutlineableOpenMPOpInterface>(op))
+    return outlineableIface.getAllocaBlock();
   if (auto recipeIface = mlir::dyn_cast<mlir::accomp::RecipeInterface>(op))
     return recipeIface.getAllocaBlock(*parentRegion);
   if (auto llvmFuncOp = mlir::dyn_cast<mlir::LLVM::LLVMFuncOp>(op))

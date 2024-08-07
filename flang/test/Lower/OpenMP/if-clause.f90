@@ -19,10 +19,10 @@ program main
   ! ----------------------------------------------------------------------------
   !$omp teams
 
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -36,11 +36,11 @@ program main
   end do
   !$omp end distribute parallel do simd
 
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -53,11 +53,11 @@ program main
   end do
   !$omp end distribute parallel do simd
 
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -70,11 +70,11 @@ program main
   end do
   !$omp end distribute parallel do simd
 
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -87,10 +87,10 @@ program main
   end do
   !$omp end distribute parallel do simd
 
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -111,10 +111,10 @@ program main
   ! ----------------------------------------------------------------------------
   !$omp teams
 
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -125,11 +125,11 @@ program main
   end do
   !$omp end distribute parallel do
 
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -139,11 +139,11 @@ program main
   end do
   !$omp end distribute parallel do
 
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -823,10 +823,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -843,11 +843,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -863,11 +863,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -883,10 +883,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -903,10 +903,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -923,11 +923,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -946,10 +946,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -966,11 +966,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -986,11 +986,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1006,10 +1006,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1026,10 +1026,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1046,11 +1046,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1066,10 +1066,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1314,10 +1314,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1331,11 +1331,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1348,11 +1348,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1365,10 +1365,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1382,11 +1382,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1402,10 +1402,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1422,11 +1422,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1442,11 +1442,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
-  ! CHECK-NOT:  if({{.*}})
-  ! CHECK-SAME: {
   ! CHECK:      omp.parallel
   ! CHECK-SAME: if({{.*}})
+  ! CHECK-SAME: {
+  ! CHECK:      omp.distribute
+  ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
@@ -1462,10 +1462,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-SAME: if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop
@@ -1482,11 +1482,11 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
+  ! CHECK:      omp.parallel
+  ! CHECK-SAME: if({{.*}})
   ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
-  ! CHECK-SAME: if({{.*}})
   ! CHECK:      omp.wsloop
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
@@ -1501,10 +1501,10 @@ program main
   ! CHECK:      omp.teams
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.distribute
+  ! CHECK:      omp.parallel
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
-  ! CHECK:      omp.parallel
+  ! CHECK:      omp.distribute
   ! CHECK-NOT:  if({{.*}})
   ! CHECK-SAME: {
   ! CHECK:      omp.wsloop

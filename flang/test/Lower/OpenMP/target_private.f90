@@ -45,14 +45,14 @@ subroutine omp_target_target_do_simd()
 !CHECK: %[[IV:.*]] = omp.map.info{{.*}}map_clauses(implicit{{.*}}{name = "iv"}
 !CHECK: %[[VAR:.*]] = omp.map.info{{.*}}map_clauses(implicit{{.*}}{name = "var"}
 !CHECK: omp.target
-!CHECK-SAME: map_entries(%[[IV]] -> %{{.*}}, %[[VAR]] -> %{{.*}}
+!CHECK-SAME: map_entries(%[[IV]] -> %[[MAP_IV:.*]], %[[VAR]] -> %[[MAP_VAR:.*]] : !fir.ref<i64>, !fir.ref<f64>)
+!CHECK:       %[[MAP_IV_DECL:.*]]:2 = hlfir.declare %[[MAP_IV]]
+!CHECK:       %[[MAP_VAR_DECL:.*]]:2 = hlfir.declare %[[MAP_VAR]]
 !CHECK:       omp.teams {
-!CHECK:         %[[IV_PRIV:.*]] = fir.alloca i64 {bindc_name = "iv"
+!CHECK:         omp.parallel private(@{{.*}} %[[MAP_IV_DECL]]#0 -> %[[IV_PRIV:.*]] : !fir.ref<i64>, @{{.*}} %[[MAP_VAR_DECL]]#0 -> %[[VAR_PRIV:.*]] : !fir.ref<f64>) {
 !CHECK:         %[[IV_DECL:.*]]:2 = hlfir.declare %[[IV_PRIV]]
-!CHECK:         %[[VAR_PRIV:.*]] = fir.alloca f64 {bindc_name = "var"
 !CHECK:         %[[VAR_DECL:.*]]:2 = hlfir.declare %[[VAR_PRIV]]
-!CHECK:         omp.distribute {
-!CHECK-NEXT:      omp.parallel {
+!CHECK:           omp.distribute {
 !CHECK-NEXT:        omp.wsloop {
 !CHECK-NEXT:          omp.simd {
 !CHECK-NEXT:            omp.loop_nest
