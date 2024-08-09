@@ -10,58 +10,6 @@ func.func @unknown_clause() {
 
 // -----
 
-func.func @not_wrapper() {
-  // expected-error@+1 {{op must be a loop wrapper}}
-  omp.distribute {
-    omp.parallel {
-      %0 = arith.constant 0 : i32
-      omp.terminator
-    }
-    omp.terminator
-  }
-
-  return
-}
-
-// -----
-
-func.func @invalid_nested_wrapper(%lb : index, %ub : index, %step : index) {
-  omp.distribute {
-    // expected-error@+1 {{only supported nested wrapper is 'omp.wsloop'}}
-    omp.parallel {
-      omp.simd {
-        omp.loop_nest (%iv) : index = (%lb) to (%ub) step (%step) {
-          omp.yield
-        }
-        omp.terminator
-      }
-      omp.terminator
-    }
-    omp.terminator
-  }
-
-  return
-}
-
-// -----
-
-func.func @no_nested_wrapper(%lb : index, %ub : index, %step : index) {
-  omp.distribute {
-    // expected-error@+1 {{op must not wrap an 'omp.loop_nest' directly}}
-    omp.parallel {
-      omp.loop_nest (%iv) : index = (%lb) to (%ub) step (%step) {
-        omp.yield
-      }
-      omp.terminator
-    }
-    omp.terminator
-  }
-
-  return
-}
-
-// -----
-
 func.func @if_once(%n : i1) {
   // expected-error@+1 {{`if` clause can appear at most once in the expansion of the oilist directive}}
   omp.parallel if(%n) if(%n) {
@@ -188,7 +136,7 @@ func.func @iv_number_mismatch(%lb : index, %ub : index, %step : index) {
 // -----
 
 func.func @no_wrapper(%lb : index, %ub : index, %step : index) {
-  // expected-error @below {{op must be a loop wrapper}}
+  // expected-error @below {{op must be a valid loop wrapper}}
   omp.wsloop {
     %0 = arith.constant 0 : i32
     omp.loop_nest (%iv) : index = (%lb) to (%ub) step (%step) {
@@ -374,7 +322,7 @@ llvm.func @test_omp_wsloop_dynamic_wrong_modifier3(%lb : i64, %ub : i64, %step :
 // -----
 
 func.func @omp_simd() -> () {
-  // expected-error @below {{op must be a loop wrapper}}
+  // expected-error @below {{op must be a valid loop wrapper}}
   omp.simd {
     omp.terminator
   }
@@ -1939,7 +1887,7 @@ func.func @taskloop(%lb: i32, %ub: i32, %step: i32) {
 // -----
 
 func.func @taskloop(%lb: i32, %ub: i32, %step: i32) {
-  // expected-error @below {{op must be a loop wrapper}}
+  // expected-error @below {{op must be a valid loop wrapper}}
   omp.taskloop {
     %0 = arith.constant 0 : i32
     omp.terminator
@@ -2148,7 +2096,7 @@ func.func @omp_distribute_allocate(%data_var : memref<i32>) -> () {
 // -----
 
 func.func @omp_distribute_wrapper() -> () {
-  // expected-error @below {{op must be a loop wrapper}}
+  // expected-error @below {{op must be a valid loop wrapper}}
   omp.distribute {
       %0 = arith.constant 0 : i32
       "omp.terminator"() : () -> ()
@@ -2157,10 +2105,25 @@ func.func @omp_distribute_wrapper() -> () {
 
 // -----
 
-func.func @omp_distribute_nested_wrapper(%lb: index, %ub: index, %step: index) -> () {
-  // expected-error @below {{only supported nested wrappers are 'omp.parallel' and 'omp.simd'}}
+func.func @omp_distribute_nested_wrapper1(%lb: index, %ub: index, %step: index) -> () {
+  // expected-error @below {{an 'omp.wsloop' nested wrapper is only allowed when 'omp.parallel' is the direct parent}}
   omp.distribute {
     "omp.wsloop"() ({
+      omp.loop_nest (%iv) : index = (%lb) to (%ub) step (%step) {
+        "omp.yield"() : () -> ()
+      }
+      "omp.terminator"() : () -> ()
+    }) : () -> ()
+    "omp.terminator"() : () -> ()
+  }
+}
+
+// -----
+
+func.func @omp_distribute_nested_wrapper2(%lb: index, %ub: index, %step: index) -> () {
+  // expected-error @below {{only supported nested wrappers are 'omp.simd' and 'omp.wsloop'}}
+  omp.distribute {
+    "omp.taskloop"() ({
       omp.loop_nest (%iv) : index = (%lb) to (%ub) step (%step) {
         "omp.yield"() : () -> ()
       }
