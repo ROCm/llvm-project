@@ -22,6 +22,11 @@ program do_concurrent_basic
     ! CHECK-NOT: fir.do_loop
 
     ! CHECK-DAG: %[[I_MAP_INFO:.*]] = omp.map.info var_ptr(%[[I_ORIG_DECL]]#1
+
+    ! CHECK-DAG: %[[LB_MAP_INFO:.*]] = omp.map.info {{.*}} !fir.ref<index> {name = "loop.0.lb"}
+    ! CHECK-DAG: %[[UB_MAP_INFO:.*]] = omp.map.info {{.*}} !fir.ref<index> {name = "loop.0.ub"}
+    ! CHECK-DAG: %[[STEP_MAP_INFO:.*]] = omp.map.info {{.*}} !fir.ref<index> {name = "loop.0.step"}
+
     ! CHECK: %[[C0:.*]] = arith.constant 0 : index
     ! CHECK: %[[UPPER_BOUND:.*]] = arith.subi %[[A_EXTENT]], %[[C0]] : index
 
@@ -33,31 +38,40 @@ program do_concurrent_basic
     ! CHECK-SAME: map_clauses(implicit, tofrom) capture(ByRef) bounds(%[[A_BOUNDS]])
 
     ! CHECK: %[[TRIP_COUNT:.*]] = arith.muli %{{.*}}, %{{.*}} : i64
-
     ! CHECK: omp.target
-    ! CHECK-SAME: map_entries(%[[I_MAP_INFO]] -> %[[I_ARG:[[:alnum:]]+]],
+    ! CHECK-SAME: map_entries(%[[LB_MAP_INFO]] -> %[[LB_ARG:.[[:alnum:]]+]],
+    ! CHECK-SAME:             %[[UB_MAP_INFO]] -> %[[UB_ARG:.[[:alnum:]]+]],
+    ! CHECK-SAME:             %[[STEP_MAP_INFO]] -> %[[STEP_ARG:.[[:alnum:]]+]],
+    ! CHECK-SAME:             %[[I_MAP_INFO]] -> %[[I_ARG:[[:alnum:]]+]],
     ! CHECK-SAME:             %[[A_MAP_INFO]] -> %[[A_ARG:.[[:alnum:]]+]]
     ! CHECK-SAME: trip_count(%[[TRIP_COUNT]] : i64)
 
-    ! CHECK-NEXT: ^{{.*}}(%[[I_ARG]]: !fir.ref<i32>, %[[A_ARG]]: !fir.ref<!fir.array<10xi32>>):
+    ! CHECK-NEXT: ^{{.*}}(%[[LB_ARG]]: !fir.ref<index>,
+    ! CHECK-SAME:         %[[UB_ARG]]: !fir.ref<index>, %[[STEP_ARG]]: !fir.ref<index>,
+    ! CHECK-SAME:         %[[I_ARG]]: !fir.ref<i32>,
+    ! CHECK-SAME:         %[[A_ARG]]: !fir.ref<!fir.array<10xi32>>, %[[A_EXT_ARG]]: !fir.ref<index>):
+
+    ! CHECK: %[[LB_DEV_DECL:.*]]:2 = hlfir.declare %[[LB_ARG]]
+    ! CHECK: %[[LB_DEV_VAL:.*]] = fir.load %[[LB_DEV_DECL]]#1
+
+    ! CHECK: %[[UB_DEV_DECL:.*]]:2 = hlfir.declare %[[UB_ARG]]
+    ! CHECK: %[[UB_DEV_VAL:.*]] = fir.load %[[UB_DEV_DECL]]#1
+
+    ! CHECK: %[[STEP_DEV_DECL:.*]]:2 = hlfir.declare %[[STEP_ARG]]
+    ! CHECK: %[[STEP_DEV_VAL:.*]] = fir.load %[[STEP_DEV_DECL]]#1
 
     ! CHECK: %[[A_DEV_DECL:.*]]:2 = hlfir.declare %[[A_ARG]]
+
     ! CHECK: omp.teams {
     ! CHECK-NEXT: omp.parallel {
 
     ! CHECK-NEXT: %[[ITER_VAR:.*]] = fir.alloca i32 {bindc_name = "i"}
     ! CHECK-NEXT: %[[BINDING:.*]]:2 = hlfir.declare %[[ITER_VAR]] {uniq_name = "_QFEi"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
 
-    ! CHECK: %[[C1:.*]] = arith.constant 1 : i32
-    ! CHECK: %[[LB:.*]] = fir.convert %[[C1]] : (i32) -> index
-    ! CHECK: %[[C10:.*]] = arith.constant 10 : i32
-    ! CHECK: %[[UB:.*]] = fir.convert %[[C10]] : (i32) -> index
-    ! CHECK: %[[STEP:.*]] = arith.constant 1 : index
-
     ! CHECK-NEXT: omp.distribute {
     ! CHECK-NEXT: omp.wsloop {
 
-    ! CHECK-NEXT: omp.loop_nest (%[[ARG0:.*]]) : index = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]]) {
+    ! CHECK-NEXT: omp.loop_nest (%[[ARG0:.*]]) : index = (%[[LB_DEV_VAL]]) to (%[[UB_DEV_VAL]]) inclusive step (%[[STEP_DEV_VAL]]) {
     ! CHECK-NEXT: %[[IV_IDX:.*]] = fir.convert %[[ARG0]] : (index) -> i32
     ! CHECK-NEXT: fir.store %[[IV_IDX]] to %[[BINDING]]#1 : !fir.ref<i32>
     ! CHECK-NEXT: %[[IV_VAL1:.*]] = fir.load %[[BINDING]]#0 : !fir.ref<i32>
@@ -78,6 +92,7 @@ program do_concurrent_basic
     ! CHECK-NEXT: }
     ! CHECK-NEXT: omp.terminator
     ! CHECK-NEXT: }
+
     do concurrent (i=1:10)
         a(i) = i
     end do

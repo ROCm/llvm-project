@@ -20,6 +20,9 @@
 ! RUN: %flang_fc1 -emit-hlfir -fopenmp -fdo-concurrent-parallel=device %t/partially_nested.f90 -o - \
 ! RUN:   | FileCheck %s --check-prefixes=DEVICE,COMMON
 
+! RUN: %flang_fc1 -emit-hlfir -fopenmp -fdo-concurrent-parallel=device %t/dummy_arg_loop_bounds.f90 -o - \
+! RUN:   | FileCheck %s --check-prefixes=DUMMY_UBS
+
 !--- multi_range.f90
 program main
    integer, parameter :: n = 10
@@ -76,32 +79,14 @@ end
 ! COMMON-NEXT: %[[ITER_VAR_K:.*]] = fir.alloca i32 {bindc_name = "k"}
 ! COMMON-NEXT: %[[BINDING_K:.*]]:2 = hlfir.declare %[[ITER_VAR_K]] {uniq_name = "_QFEk"}
 
-! COMMON: %[[C1_1:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_I:.*]] = fir.convert %[[C1_1]] : (i32) -> index
-! COMMON: %[[C10:.*]] = arith.constant 10 : i32
-! COMMON: %[[UB_I:.*]] = fir.convert %[[C10]] : (i32) -> index
-! COMMON: %[[STEP_I:.*]] = arith.constant 1 : index
-
-! COMMON: %[[C1_2:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_J:.*]] = fir.convert %[[C1_2]] : (i32) -> index
-! COMMON: %[[C20:.*]] = arith.constant 20 : i32
-! COMMON: %[[UB_J:.*]] = fir.convert %[[C20]] : (i32) -> index
-! COMMON: %[[STEP_J:.*]] = arith.constant 1 : index
-
-! COMMON: %[[C1_3:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_K:.*]] = fir.convert %[[C1_3]] : (i32) -> index
-! COMMON: %[[C30:.*]] = arith.constant 30 : i32
-! COMMON: %[[UB_K:.*]] = fir.convert %[[C30]] : (i32) -> index
-! COMMON: %[[STEP_K:.*]] = arith.constant 1 : index
-
 ! DEVICE: omp.distribute
 
 ! COMMON: omp.wsloop {
 ! COMMON-NEXT: omp.loop_nest
 ! COMMON-SAME:   (%[[ARG0:[^[:space:]]+]], %[[ARG1:[^[:space:]]+]], %[[ARG2:[^[:space:]]+]])
-! COMMON-SAME:   : index = (%[[LB_I]], %[[LB_J]], %[[LB_K]])
-! COMMON-SAME:     to (%[[UB_I]], %[[UB_J]], %[[UB_K]]) inclusive
-! COMMON-SAME:     step (%[[STEP_I]], %[[STEP_J]], %[[STEP_K]]) {
+! COMMON-SAME:   : index = (%{{[^[:space:]]+}}, %{{[^[:space:]]+}}, %{{[^[:space:]]+}})
+! COMMON-SAME:     to (%{{[^[:space:]]+}}, %{{[^[:space:]]+}}, %{{[^[:space:]]+}}) inclusive
+! COMMON-SAME:     step (%{{[^[:space:]]+}}, %{{[^[:space:]]+}}, %{{[^[:space:]]+}}) {
 
 ! COMMON-NEXT: %[[IV_IDX_I:.*]] = fir.convert %[[ARG0]]
 ! COMMON-NEXT: fir.store %[[IV_IDX_I]] to %[[BINDING_I]]#1
@@ -119,3 +104,52 @@ end
 
 ! HOST-NEXT: omp.terminator
 ! HOST-NEXT: }
+
+!--- dummy_arg_loop_bounds.f90
+
+subroutine foo(n, m)
+   implicit none
+   integer :: n, m
+   integer :: i, j
+   integer :: a(n, m)
+
+   do concurrent(i=1:n, j=1:m)
+       a(i,j) = i * j
+   end do
+end subroutine
+
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.0.lb"}
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.0.ub"}
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.0.step"}
+
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.1.lb"}
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.1.ub"}
+! DUMMY_UBS-DAG: omp.map.info {{.*}} {name = "loop.1.step"}
+
+
+! DUMMY_UBS: omp.target {{.*}} {
+
+! DUMMY_UBS-DAG:   %[[LOOP0_LB_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.0.lb"}
+! DUMMY_UBS-DAG:   %[[LOOP0_UB_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.0.ub"}
+! DUMMY_UBS-DAG:   %[[LOOP0_STEP_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.0.step"}
+
+! DUMMY_UBS-DAG:   %[[LOOP1_LB_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.1.lb"}
+! DUMMY_UBS-DAG:   %[[LOOP1_UB_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.1.ub"}
+! DUMMY_UBS-DAG:   %[[LOOP1_STEP_DECL:.*]]:2 = hlfir.declare %arg{{.*}} {uniq_name = "loop.1.step"}
+
+! DUMMY_UBS-DAG:   %[[LOOP0_LB:.*]] = fir.load %[[LOOP0_LB_DECL]]#1
+! DUMMY_UBS-DAG:   %[[LOOP0_UB:.*]] = fir.load %[[LOOP0_UB_DECL]]#1
+! DUMMY_UBS-DAG:   %[[LOOP0_STEP:.*]] = fir.load %[[LOOP0_STEP_DECL]]#1
+
+! DUMMY_UBS-DAG:   %[[LOOP1_LB:.*]] = fir.load %[[LOOP1_LB_DECL]]#1
+! DUMMY_UBS-DAG:   %[[LOOP1_UB:.*]] = fir.load %[[LOOP1_UB_DECL]]#1
+! DUMMY_UBS-DAG:   %[[LOOP1_STEP:.*]] = fir.load %[[LOOP1_STEP_DECL]]#1
+
+! DUMMY_UBS:       omp.loop_nest (%{{.*}}, %{{.*}}) : index
+! DUMMY_UBS-SAME:  = (%[[LOOP0_LB]], %[[LOOP1_LB]])
+! DUMMY_UBS-SAME:  to (%[[LOOP0_UB]], %[[LOOP1_UB]])
+! DUMMY_UBS-SAME:  inclusive step (%[[LOOP0_STEP]], %[[LOOP1_STEP]])
+
+! DUMMY_UBS: omp.terminator
+! DUMMY_UBS: }
+

@@ -26,7 +26,10 @@ end subroutine
 ! CHECK-DAG: %[[N_MAP:.*]] = omp.map.info var_ptr(%[[N_ALLOC]] : {{.*}})
 
 ! CHECK: omp.target
-! CHECK-SAME: map_entries(%[[I_MAP]] -> %[[I_ARG:arg[0-9]*]],
+! CHECK-SAME: map_entries(%[[LOOP_LB_MAP]] -> %[[LB_ARG:arg[0-9]*]],
+! CHECK-SAME:             %[[LOOP_UB_MAP]] -> %[[UB_ARG:arg[0-9]*]],
+! CHECK-SAME:             %[[LOOP_STEP_MAP]] -> %[[STEP_ARG:arg[0-9]*]],
+! CHECK-SAME:             %[[I_MAP]] -> %[[I_ARG:arg[0-9]*]],
 ! CHECK-SAME:             %[[A_MAP]] -> %[[A_ARG:arg[0-9]*]],
 ! CHECK-SAME:             %[[N_MAP]] -> %[[N_ARG:arg[0-9]*]] : {{.*}})
 ! CHECK-SAME: {{.*}} {
