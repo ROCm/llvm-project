@@ -6,10 +6,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i32(ptr addrspace(8) %p
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i32:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB0_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -36,8 +36,8 @@ bb2:
 define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i32_const_idx(ptr addrspace(8) %ptr) {
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i32_const_idx:
 ; CHECK:       ; %bb.0: ; %bb
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
-; CHECK-NEXT:    v_dual_mov_b32 v1, 15 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
+; CHECK-NEXT:    v_mov_b32_e32 v1, 15
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB1_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -66,10 +66,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i32_off(ptr addrspace(8
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i32_off:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB2_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -97,10 +97,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i32_soff(ptr addrspace(
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i32_soff:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB3_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -127,10 +127,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i32_dlc(ptr addrspace(8
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i32_dlc:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB4_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -158,10 +158,10 @@ define amdgpu_kernel void @struct_ptr_nonatomic_buffer_load_i32(ptr addrspace(8)
 ; CHECK-LABEL: struct_ptr_nonatomic_buffer_load_i32:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    buffer_load_b32 v1, v1, s[0:3], 0 idxen offset:4 glc
 ; CHECK-NEXT:    s_mov_b32 s0, 0
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -190,11 +190,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_i64(ptr addrspace(8) %p
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_i64:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
-; CHECK-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v2, s4
+; CHECK-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB6_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -223,10 +222,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_v2i16(ptr addrspace(8) 
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_v2i16:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB7_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -255,10 +254,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_v4i16(ptr addrspace(8) 
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_v4i16:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB8_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -291,10 +290,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_v4i32(ptr addrspace(8) 
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_v4i32:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB9_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -323,10 +322,10 @@ define amdgpu_kernel void @struct_ptr_atomic_buffer_load_ptr(ptr addrspace(8) %p
 ; CHECK-LABEL: struct_ptr_atomic_buffer_load_ptr:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_clause 0x1
-; CHECK-NEXT:    s_load_b32 s4, s[2:3], 0x34
-; CHECK-NEXT:    s_load_b128 s[0:3], s[2:3], 0x24
+; CHECK-NEXT:    s_load_b32 s4, s[0:1], 0x34
+; CHECK-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_dual_mov_b32 v1, s4 :: v_dual_and_b32 v0, 0x3ff, v0
+; CHECK-NEXT:    v_mov_b32_e32 v1, s4
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:  .LBB10_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
