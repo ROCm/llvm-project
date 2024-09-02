@@ -31,9 +31,13 @@ end
 
 ! DEVICE: omp.target
 
-! DEVICE:   ^bb0(%[[I_ARG:[^[:space:]]+]]: !fir.ref<i32>,
+! DEVICE:   ^bb0(
+! DEVICE-SAME:   %{{[^[:space:]]+}}: {{[^[:space:]]+}},
+! DEVICE-SAME:   %{{[^[:space:]]+}}: {{[^[:space:]]+}},
+! DEVICE-SAME:   %{{[^[:space:]]+}}: {{[^[:space:]]+}},
+! DEVICE-SAME:   %[[I_ARG:[^[:space:]]+]]: !fir.ref<i32>,
 ! DEVICE-SAME:   %[[J_ARG:[^[:space:]]+]]: !fir.ref<i32>, %[[K_ARG:[^[:space:]]+]]: !fir.ref<i32>,
-! DEVICE-SAME:   %[[A_ARG:[^[:space:]]+]]: !fir.ref<!fir.array<10x20x30xi32>>):
+! DEVICE-SAME:   %[[A_ARG:[^[:space:]]+]]: !fir.ref<!fir.array<10x20x30xi32>>
 
 ! DEVICE: %[[TARGET_J_DECL:.*]]:2 = hlfir.declare %[[J_ARG]] {uniq_name = "_QFEj"}
 ! DEVICE: %[[TARGET_K_DECL:.*]]:2 = hlfir.declare %[[K_ARG]] {uniq_name = "_QFEk"}
