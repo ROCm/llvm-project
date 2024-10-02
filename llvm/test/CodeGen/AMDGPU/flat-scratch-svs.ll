@@ -95,7 +95,6 @@ define amdgpu_kernel void @soff1_voff1(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v1, 1 :: v_dual_mov_b32 v2, 2
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v3, 4
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -221,7 +220,6 @@ define amdgpu_kernel void @soff1_voff2(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v1, 1 :: v_dual_lshlrev_b32 v0, 1, v0
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v2, 2 :: v_dual_mov_b32 v3, 4
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -348,7 +346,6 @@ define amdgpu_kernel void @soff1_voff4(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v1, 1 :: v_dual_lshlrev_b32 v0, 2, v0
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v2, 2 :: v_dual_mov_b32 v3, 4
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -477,8 +474,6 @@ define amdgpu_kernel void @soff2_voff1(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v3, 4
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 1
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -611,8 +606,6 @@ define amdgpu_kernel void @soff2_voff2(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v3, 4 :: v_dual_lshlrev_b32 v0, 1, v0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 1
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -745,8 +738,6 @@ define amdgpu_kernel void @soff2_voff4(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v3, 4 :: v_dual_lshlrev_b32 v0, 2, v0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 1
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -876,8 +867,6 @@ define amdgpu_kernel void @soff4_voff1(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v3, 4
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -1010,8 +999,6 @@ define amdgpu_kernel void @soff4_voff2(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v3, 4 :: v_dual_lshlrev_b32 v0, 1, v0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS
@@ -1142,8 +1129,6 @@ define amdgpu_kernel void @soff4_voff4(i32 %soff) {
 ; GFX12-SDAG-NEXT:    v_dual_mov_b32 v3, 4 :: v_dual_lshlrev_b32 v0, 2, v0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-SDAG-NEXT:    s_add_co_i32 s0, s0, 0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v1, s0 offset:1 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_storecnt 0x0
 ; GFX12-SDAG-NEXT:    scratch_store_b8 v0, v2, s0 offset:2 scope:SCOPE_SYS

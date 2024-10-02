@@ -15,7 +15,7 @@ define void @needs_align16_default_stack_align(i32 %idx) #0 {
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 4, v0
 ; GCN-NEXT:    v_lshrrev_b32_e64 v2, 6, s32
-; GCN-NEXT:    v_add_u32_e32 v0, vcc, v2, v0
+; GCN-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; GCN-NEXT:    v_mov_b32_e32 v2, 1
 ; GCN-NEXT:    v_mov_b32_e32 v1, 4
 ; GCN-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 offen
@@ -47,7 +47,7 @@ define void @needs_align16_stack_align4(i32 %idx) #2 {
 ; GCN-NEXT:    s_and_b32 s33, s33, 0xfffffc00
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 4, v0
 ; GCN-NEXT:    v_lshrrev_b32_e64 v2, 6, s33
-; GCN-NEXT:    v_add_u32_e32 v0, vcc, v2, v0
+; GCN-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; GCN-NEXT:    v_mov_b32_e32 v2, 1
 ; GCN-NEXT:    v_mov_b32_e32 v1, 4
 ; GCN-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 offen
@@ -83,7 +83,7 @@ define void @needs_align32(i32 %idx) #0 {
 ; GCN-NEXT:    s_and_b32 s33, s33, 0xfffff800
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 4, v0
 ; GCN-NEXT:    v_lshrrev_b32_e64 v2, 6, s33
-; GCN-NEXT:    v_add_u32_e32 v0, vcc, v2, v0
+; GCN-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; GCN-NEXT:    v_mov_b32_e32 v2, 1
 ; GCN-NEXT:    v_mov_b32_e32 v1, 4
 ; GCN-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 offen
@@ -119,7 +119,7 @@ define void @force_realign4(i32 %idx) #1 {
 ; GCN-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GCN-NEXT:    v_lshrrev_b32_e64 v1, 6, s33
 ; GCN-NEXT:    s_addk_i32 s32, 0xd00
-; GCN-NEXT:    v_add_u32_e32 v0, vcc, v1, v0
+; GCN-NEXT:    v_add_u32_e32 v0, vcc, v0, v1
 ; GCN-NEXT:    v_mov_b32_e32 v1, 3
 ; GCN-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
