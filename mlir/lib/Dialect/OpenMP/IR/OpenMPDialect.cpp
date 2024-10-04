@@ -1756,55 +1756,29 @@ LogicalResult TargetOp::verify() {
 Operation *TargetOp::getInnermostCapturedOmpOp() {
   Dialect *ompDialect = (*this)->getDialect();
   Operation *capturedOp = nullptr;
-  Region *capturedParentRegion = nullptr;
 
-  walk<WalkOrder::PostOrder>([&](Operation *op) {
+  walk<WalkOrder::PreOrder>([&](Operation *op) {
     if (op == *this)
-      return;
+      return WalkResult::advance();
 
-    // Reset captured op if crossing through an omp.loop_nest, so that the top
-    // level one will be the one captured.
-    if (llvm::isa<LoopNestOp>(op)) {
-      capturedOp = nullptr;
-      capturedParentRegion = nullptr;
-    }
-
+    // Ignore operations of other dialects or omp operations with no regions,
+    // because these will only be checked if they are siblings of an omp
+    // operation that can potentially be captured.
     bool isOmpDialect = op->getDialect() == ompDialect;
     bool hasRegions = op->getNumRegions() > 0;
+    if (!isOmpDialect || !hasRegions)
+      return WalkResult::skip();
 
-    if (capturedOp) {
-      bool isImmediateParent = false;
-      for (Region &region : op->getRegions()) {
-        if (&region == capturedParentRegion) {
-          isImmediateParent = true;
-          capturedParentRegion = op->getParentRegion();
-          break;
-        }
-      }
+    // Don't capture this op if it has a not-allowed sibling, and stop recursing
+    // into nested operations.
+    for (Operation &sibling : op->getParentRegion()->getOps())
+      if (&sibling != op && !siblingAllowedInCapture(&sibling))
+        return WalkResult::interrupt();
 
-      // Make sure the captured op is part of a (possibly multi-level) nest of
-      // OpenMP-only operations containing no unsupported siblings at any level.
-      if ((hasRegions && isOmpDialect != isImmediateParent) ||
-          (!isImmediateParent && !siblingAllowedInCapture(op))) {
-        capturedOp = nullptr;
-        capturedParentRegion = nullptr;
-      }
-    } else {
-      //  The first OpenMP dialect op containing a region found while visiting
-      //  in post-order should be the innermost captured OpenMP operation.
-      if (isOmpDialect && hasRegions) {
-        capturedOp = op;
-        capturedParentRegion = op->getParentRegion();
-
-        // Don't capture this op if it has a not-allowed sibling.
-        for (Operation &sibling : op->getParentRegion()->getOps()) {
-          if (&sibling != op && !siblingAllowedInCapture(&sibling)) {
-            capturedOp = nullptr;
-            capturedParentRegion = nullptr;
-          }
-        }
-      }
-    }
+    // Don't continue capturing nested operations if we reach an omp.loop_nest.
+    capturedOp = op;
+    return llvm::isa<LoopNestOp>(op) ? WalkResult::interrupt()
+                                     : WalkResult::advance();
   });
 
   return capturedOp;
