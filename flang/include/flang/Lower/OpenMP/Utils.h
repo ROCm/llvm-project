@@ -174,15 +174,6 @@ void genObjectList(const ObjectList &objects,
 void lastprivateModifierNotSupported(const omp::clause::Lastprivate &lastp,
                                      mlir::Location loc);
 
-// TODO: consider moving this to the `omp.loop_nest` op. Would be something like
-// this:
-//
-// ```
-// mlir::Value LoopNestOp::calculateTripCount(mlir::OpBuilder &builder,
-// mlir::OpBuilder::InsertPoint ip)
-// ```
-mlir::Value calculateTripCount(fir::FirOpBuilder &builder, mlir::Location loc,
-                               const mlir::omp::LoopRelatedClauseOps &ops);
 } // namespace omp
 } // namespace lower
 } // namespace Fortran

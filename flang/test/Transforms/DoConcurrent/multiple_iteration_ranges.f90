@@ -30,7 +30,7 @@ program main
    do concurrent(i=1:n, j=1:m, k=1:l)
        a(i,j,k) = i * j + k
    end do
-end 
+end
 
 !--- perfectly_nested.f90
 program main
@@ -62,8 +62,47 @@ program main
    end do
 end
 
-! DEVICE: omp.target
+! COMMON: func.func @_QQmain
+
+! DEVICE: %[[DUPLICATED_C1_1:.*]] = arith.constant 1 : i32
+! DEVICE: %[[DUPLICATED_LB_I:.*]] = fir.convert %[[DUPLICATED_C1_1]] : (i32) -> index
+! DEVICE: %[[DUPLICATED_C10:.*]] = arith.constant 10 : i32
+! DEVICE: %[[DUPLICATED_UB_I:.*]] = fir.convert %[[DUPLICATED_C10]] : (i32) -> index
+! DEVICE: %[[DUPLICATED_STEP_I:.*]] = arith.constant 1 : index
+
+! DEVICE: %[[C1_1:.*]] = arith.constant 1 : i32
+! DEVICE: %[[HOST_LB_I:.*]] = fir.convert %[[C1_1]] : (i32) -> index
+! DEVICE: %[[C10:.*]] = arith.constant 10 : i32
+! DEVICE: %[[HOST_UB_I:.*]] = fir.convert %[[C10]] : (i32) -> index
+! DEVICE: %[[HOST_STEP_I:.*]] = arith.constant 1 : index
+
+! DEVICE: %[[C1_2:.*]] = arith.constant 1 : i32
+! DEVICE: %[[HOST_LB_J:.*]] = fir.convert %[[C1_2]] : (i32) -> index
+! DEVICE: %[[C20:.*]] = arith.constant 20 : i32
+! DEVICE: %[[HOST_UB_J:.*]] = fir.convert %[[C20]] : (i32) -> index
+! DEVICE: %[[HOST_STEP_J:.*]] = arith.constant 1 : index
+
+! DEVICE: %[[C1_3:.*]] = arith.constant 1 : i32
+! DEVICE: %[[HOST_LB_K:.*]] = fir.convert %[[C1_3]] : (i32) -> index
+! DEVICE: %[[C30:.*]] = arith.constant 30 : i32
+! DEVICE: %[[HOST_UB_K:.*]] = fir.convert %[[C30]] : (i32) -> index
+! DEVICE: %[[HOST_STEP_K:.*]] = arith.constant 1 : index
+
+! DEVICE: omp.target host_eval(
+! DEVICE-SAME: %[[HOST_LB_I]] -> %[[LB_I:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_UB_I]] -> %[[UB_I:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_STEP_I]] -> %[[STEP_I:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_LB_J]] -> %[[LB_J:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_UB_J]] -> %[[UB_J:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_STEP_J]] -> %[[STEP_J:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_LB_K]] -> %[[LB_K:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_UB_K]] -> %[[UB_K:[[:alnum:]]+]],
+! DEVICE-SAME: %[[HOST_STEP_K]] -> %[[STEP_K:[[:alnum:]]+]] :
+! DEVICE-SAME: index, index, index, index, index, index, index, index, index)
 ! DEVICE: omp.teams
+
+! HOST-NOT: omp.target
+! HOST-NOT: omp.teams
 
 ! COMMON: omp.parallel {
 
@@ -76,23 +115,23 @@ end
 ! COMMON-NEXT: %[[ITER_VAR_K:.*]] = fir.alloca i32 {bindc_name = "k"}
 ! COMMON-NEXT: %[[BINDING_K:.*]]:2 = hlfir.declare %[[ITER_VAR_K]] {uniq_name = "_QFEk"}
 
-! COMMON: %[[C1_1:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_I:.*]] = fir.convert %[[C1_1]] : (i32) -> index
-! COMMON: %[[C10:.*]] = arith.constant 10 : i32
-! COMMON: %[[UB_I:.*]] = fir.convert %[[C10]] : (i32) -> index
-! COMMON: %[[STEP_I:.*]] = arith.constant 1 : index
+! HOST: %[[C1_1:.*]] = arith.constant 1 : i32
+! HOST: %[[LB_I:.*]] = fir.convert %[[C1_1]] : (i32) -> index
+! HOST: %[[C10:.*]] = arith.constant 10 : i32
+! HOST: %[[UB_I:.*]] = fir.convert %[[C10]] : (i32) -> index
+! HOST: %[[STEP_I:.*]] = arith.constant 1 : index
 
-! COMMON: %[[C1_2:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_J:.*]] = fir.convert %[[C1_2]] : (i32) -> index
-! COMMON: %[[C20:.*]] = arith.constant 20 : i32
-! COMMON: %[[UB_J:.*]] = fir.convert %[[C20]] : (i32) -> index
-! COMMON: %[[STEP_J:.*]] = arith.constant 1 : index
+! HOST: %[[C1_2:.*]] = arith.constant 1 : i32
+! HOST: %[[LB_J:.*]] = fir.convert %[[C1_2]] : (i32) -> index
+! HOST: %[[C20:.*]] = arith.constant 20 : i32
+! HOST: %[[UB_J:.*]] = fir.convert %[[C20]] : (i32) -> index
+! HOST: %[[STEP_J:.*]] = arith.constant 1 : index
 
-! COMMON: %[[C1_3:.*]] = arith.constant 1 : i32
-! COMMON: %[[LB_K:.*]] = fir.convert %[[C1_3]] : (i32) -> index
-! COMMON: %[[C30:.*]] = arith.constant 30 : i32
-! COMMON: %[[UB_K:.*]] = fir.convert %[[C30]] : (i32) -> index
-! COMMON: %[[STEP_K:.*]] = arith.constant 1 : index
+! HOST: %[[C1_3:.*]] = arith.constant 1 : i32
+! HOST: %[[LB_K:.*]] = fir.convert %[[C1_3]] : (i32) -> index
+! HOST: %[[C30:.*]] = arith.constant 30 : i32
+! HOST: %[[UB_K:.*]] = fir.convert %[[C30]] : (i32) -> index
+! HOST: %[[STEP_K:.*]] = arith.constant 1 : index
 
 ! DEVICE: omp.distribute
 
