@@ -46,6 +46,25 @@ using namespace Fortran::lower::omp;
 // Code generation helper functions
 //===----------------------------------------------------------------------===//
 
+/// Add to the given target operation a host_eval argument, which must be
+/// defined outside.
+///
+/// \return the entry block argument to represent \c hostVar inside of the
+///         target region.
+static mlir::Value addHostEvalVar(mlir::omp::TargetOp targetOp,
+                                  mlir::Value hostVar) {
+  assert(!targetOp.getRegion().isAncestor(hostVar.getParentRegion()) &&
+         "variable must be defined outside of the target region");
+
+  auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
+  unsigned insertIndex =
+      argIface.getHostEvalBlockArgsStart() + argIface.numHostEvalBlockArgs();
+
+  targetOp.getHostEvalVarsMutable().append(hostVar);
+  return targetOp.getRegion().insertArgument(insertIndex, hostVar.getType(),
+                                             hostVar.getLoc());
+}
+
 namespace {
 /// Structure holding the information needed to create and bind entry block
 /// arguments associated to a single clause.
@@ -64,6 +83,7 @@ struct EntryBlockArgsEntry {
 /// Structure holding the information needed to create and bind entry block
 /// arguments associated to all clauses that can define them.
 struct EntryBlockArgs {
+  EntryBlockArgsEntry hostEval;
   EntryBlockArgsEntry inReduction;
   EntryBlockArgsEntry map;
   EntryBlockArgsEntry priv;
@@ -73,8 +93,8 @@ struct EntryBlockArgs {
   EntryBlockArgsEntry useDevicePtr;
 
   bool isValid() const {
-    return inReduction.isValid() && map.isValid() && priv.isValid() &&
-           reduction.isValid() && taskReduction.isValid() &&
+    return hostEval.isValid() && inReduction.isValid() && map.isValid() &&
+           priv.isValid() && reduction.isValid() && taskReduction.isValid() &&
            useDeviceAddr.isValid() && useDevicePtr.isValid();
   }
 };
@@ -162,6 +182,18 @@ static bool evalHasSiblings(const lower::pft::Evaluation &eval) {
       }});
 }
 
+/// Check whether the given omp.target operation exists and we're compiling for
+/// the host device.
+static bool isHostTarget(mlir::omp::TargetOp targetOp) {
+  if (!targetOp)
+    return false;
+
+  auto offloadModOp = llvm::cast<mlir::omp::OffloadModuleInterface>(
+      *targetOp->getParentOfType<mlir::ModuleOp>());
+
+  return !offloadModOp.getIsTargetDevice();
+}
+
 /// Check whether a given evaluation points to an OpenMP loop construct that
 /// represents a target SPMD kernel. For this to be true, it must be a `target
 /// teams distribute parallel do [simd]` or equivalent construct.
@@ -169,7 +201,7 @@ static bool evalHasSiblings(const lower::pft::Evaluation &eval) {
 /// Currently, this is limited to cases where all relevant OpenMP constructs are
 /// either combined or directly nested within the same function. Also, the
 /// composite `distribute parallel do` is not identified if split into two
-/// explicit nested loops (a `distribute` loop and a `parallel do` loop).
+/// explicit nested loops (i.e. a `distribute` loop and a `parallel do` loop).
 static bool isTargetSPMDLoop(const lower::pft::Evaluation &eval) {
   using namespace llvm::omp;
 
@@ -376,6 +408,8 @@ static void bindEntryBlockArgs(lower::AbstractConverter &converter,
   };
 
   // Process in clause name alphabetical order to match block arguments order.
+  bindPrivateLike(args.hostEval.syms, args.hostEval.vars,
+                  op.getHostEvalBlockArgs());
   bindPrivateLike(args.inReduction.syms, args.inReduction.vars,
                   op.getInReductionBlockArgs());
   bindMapLike(args.map.syms, op.getMapBlockArgs());
@@ -440,20 +474,23 @@ static void genNestedEvaluations(lower::AbstractConverter &converter,
     converter.genEval(e);
 }
 
-static bool
-mustEvalTeamsThreadsOutsideTarget(const lower::pft::Evaluation &eval,
-                                  mlir::omp::TargetOp targetOp) {
-  if (!targetOp)
-    return false;
-
-  auto offloadModOp = llvm::cast<mlir::omp::OffloadModuleInterface>(
-      *targetOp->getParentOfType<mlir::ModuleOp>());
-  if (offloadModOp.getIsTargetDevice())
+static bool mustEvalTeamsOutsideTarget(const lower::pft::Evaluation &eval,
+                                       mlir::omp::TargetOp targetOp) {
+  if (!isHostTarget(targetOp))
     return false;
 
   llvm::omp::Directive dir =
       extractOmpDirective(eval.get<parser::OpenMPConstruct>());
-  return llvm::omp::allTargetSet.test(dir) || !evalHasSiblings(eval);
+  return llvm::omp::allTeamsSet.test(dir) &&
+         (llvm::omp::allTargetSet.test(dir) || !evalHasSiblings(eval));
+}
+
+static bool mustEvalTargetSPMDOutsideTarget(const lower::pft::Evaluation &eval,
+                                            mlir::omp::TargetOp targetOp) {
+  if (!isHostTarget(targetOp))
+    return false;
+
+  return isTargetSPMDLoop(eval);
 }
 
 //===----------------------------------------------------------------------===//
@@ -481,6 +518,8 @@ public:
       builder.restoreInsertionPoint(ip);
     }
   }
+
+  mlir::omp::TargetOp getTargetOp() const { return targetOp; }
 
 private:
   mlir::OpBuilder &builder;
@@ -613,11 +652,11 @@ private:
       return false;
     };
 
-    mlir::OperandRange map = targetOp.getMapVars();
-    for (mlir::BlockArgument arg : targetOp.getRegion().getArguments()) {
-      mlir::Value hostVal = map[arg.getArgNumber()]
-                                .getDefiningOp<mlir::omp::MapInfoOp>()
-                                .getVarPtr();
+    auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
+    for (auto [map, arg] :
+         llvm::zip_equal(targetOp.getMapVars(), argIface.getMapBlockArgs())) {
+      mlir::Value hostVal =
+          map.getDefiningOp<mlir::omp::MapInfoOp>().getVarPtr();
 
       // Replace instances of omp.target block arguments used outside with their
       // corresponding host value.
@@ -980,10 +1019,11 @@ static mlir::Block *genEntryBlock(lower::AbstractConverter &converter,
 
   llvm::SmallVector<mlir::Type> types;
   llvm::SmallVector<mlir::Location> locs;
-  unsigned numVars = args.inReduction.vars.size() + args.map.vars.size() +
-                     args.priv.vars.size() + args.reduction.vars.size() +
-                     args.taskReduction.vars.size() +
-                     args.useDeviceAddr.vars.size();
+  unsigned numVars =
+      args.hostEval.vars.size() + args.inReduction.vars.size() +
+      args.map.vars.size() + args.priv.vars.size() +
+      args.reduction.vars.size() + args.taskReduction.vars.size() +
+      args.useDeviceAddr.vars.size() + args.useDevicePtr.vars.size();
   types.reserve(numVars);
   locs.reserve(numVars);
 
@@ -996,6 +1036,7 @@ static mlir::Block *genEntryBlock(lower::AbstractConverter &converter,
 
   // Populate block arguments in clause name alphabetical order to match
   // expected order by the BlockArgOpenMPOpInterface.
+  extractTypeLoc(args.hostEval.vars);
   extractTypeLoc(args.inReduction.vars);
   extractTypeLoc(args.map.vars);
   extractTypeLoc(args.priv.vars);
@@ -1518,10 +1559,29 @@ static void
 genLoopNestClauses(lower::AbstractConverter &converter,
                    semantics::SemanticsContext &semaCtx,
                    lower::pft::Evaluation &eval, const List<Clause> &clauses,
-                   mlir::Location loc, mlir::omp::LoopNestOperands &clauseOps,
+                   mlir::Location loc, bool evalOutsideTarget,
+                   mlir::omp::LoopNestOperands &clauseOps,
                    llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
   ClauseProcessor cp(converter, semaCtx, clauses);
-  cp.processCollapse(loc, eval, clauseOps, iv);
+
+  // Evaluate loop bounds on the host device, if the operation is defining part
+  // of a target SPMD kernel.
+  if (evalOutsideTarget) {
+    HostClausesInsertionGuard guard(converter.getFirOpBuilder());
+    cp.processCollapse(loc, eval, clauseOps, iv);
+
+    for (unsigned i = 0; i < clauseOps.loopLowerBounds.size(); ++i) {
+      clauseOps.loopLowerBounds[i] =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.loopLowerBounds[i]);
+      clauseOps.loopUpperBounds[i] =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.loopUpperBounds[i]);
+      clauseOps.loopSteps[i] =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.loopSteps[i]);
+    }
+  } else {
+    cp.processCollapse(loc, eval, clauseOps, iv);
+  }
+
   clauseOps.loopInclusive = converter.getFirOpBuilder().getUnitAttr();
 }
 
@@ -1548,20 +1608,20 @@ static void genParallelClauses(
     lower::StatementContext &stmtCtx, const List<Clause> &clauses,
     mlir::Location loc, bool evalOutsideTarget,
     mlir::omp::ParallelOperands &clauseOps,
-    mlir::omp::NumThreadsClauseOps &numThreadsClauseOps,
     llvm::SmallVectorImpl<const semantics::Symbol *> &reductionSyms) {
   ClauseProcessor cp(converter, semaCtx, clauses);
   cp.processAllocate(clauseOps);
   cp.processIf(llvm::omp::Directive::OMPD_parallel, clauseOps);
 
-  // Don't store num_threads clause operators into clauseOps because then they
-  // would always be added to the omp.parallel operation during its creation.
-  // We might need to attach them to the parent omp.target.
+  // Evaluate NUM_THREADS on the host device, if the operation is defining part
+  // of a target SPMD kernel.
   if (evalOutsideTarget) {
     HostClausesInsertionGuard guard(converter.getFirOpBuilder());
-    cp.processNumThreads(stmtCtx, numThreadsClauseOps);
+    if (cp.processNumThreads(stmtCtx, clauseOps))
+      clauseOps.numThreads =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.numThreads);
   } else {
-    cp.processNumThreads(stmtCtx, numThreadsClauseOps);
+    cp.processNumThreads(stmtCtx, clauseOps);
   }
 
   cp.processProcBind(clauseOps);
@@ -1725,8 +1785,6 @@ static void genTeamsClauses(
     lower::StatementContext &stmtCtx, const List<Clause> &clauses,
     mlir::Location loc, bool evalOutsideTarget,
     mlir::omp::TeamsOperands &clauseOps,
-    mlir::omp::NumTeamsClauseOps &numTeamsClauseOps,
-    mlir::omp::ThreadLimitClauseOps &threadLimitClauseOps,
     llvm::SmallVectorImpl<const semantics::Symbol *> &reductionSyms) {
   ClauseProcessor cp(converter, semaCtx, clauses);
   cp.processAllocate(clauseOps);
@@ -1734,16 +1792,18 @@ static void genTeamsClauses(
 
   // Evaluate NUM_TEAMS and THREAD_LIMIT on the host device, if currently inside
   // of an omp.target operation.
-  // Don't store num_teams and thread_limit clause operators into clauseOps
-  // because then they would always be added to the omp.teams operation during
-  // its creation. We might need to attach them to the parent omp.target.
   if (evalOutsideTarget) {
     HostClausesInsertionGuard guard(converter.getFirOpBuilder());
-    cp.processNumTeams(stmtCtx, numTeamsClauseOps);
-    cp.processThreadLimit(stmtCtx, threadLimitClauseOps);
+    if (cp.processNumTeams(stmtCtx, clauseOps))
+      clauseOps.numTeamsUpper =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.numTeamsUpper);
+
+    if (cp.processThreadLimit(stmtCtx, clauseOps))
+      clauseOps.threadLimit =
+          addHostEvalVar(guard.getTargetOp(), clauseOps.threadLimit);
   } else {
-    cp.processNumTeams(stmtCtx, numTeamsClauseOps);
-    cp.processThreadLimit(stmtCtx, threadLimitClauseOps);
+    cp.processNumTeams(stmtCtx, clauseOps);
+    cp.processThreadLimit(stmtCtx, clauseOps);
   }
   cp.processReduction(loc, clauseOps, reductionSyms);
 }
@@ -1830,7 +1890,6 @@ static mlir::omp::LoopNestOp genLoopNestOp(
         std::pair<mlir::omp::BlockArgOpenMPOpInterface, const EntryBlockArgs &>>
         wrapperArgs,
     llvm::omp::Directive directive, DataSharingProcessor &dsp) {
-  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   auto ivCallback = [&](mlir::Operation *op) {
     genLoopVars(op, converter, loc, iv, wrapperArgs);
@@ -1848,26 +1907,6 @@ static mlir::omp::LoopNestOp genLoopNestOp(
           .setGenRegionEntryCb(ivCallback),
       queue, item, clauseOps);
 
-  // Create trip_count if inside of omp.target and this is host compilation.
-  auto offloadMod = llvm::dyn_cast<mlir::omp::OffloadModuleInterface>(
-      firOpBuilder.getModule().getOperation());
-  auto targetOp = loopNestOp->getParentOfType<mlir::omp::TargetOp>();
-
-  if (offloadMod && !offloadMod.getIsTargetDevice() && isTargetSPMDLoop(eval)) {
-    assert(targetOp && "must have omp.target parent");
-
-    // Lower loop bounds and step, and process collapsing again, putting lowered
-    // values outside of omp.target this time. This enables calculating and
-    // accessing the trip count in the host, which is needed when lowering to
-    // LLVM IR via the OMPIRBuilder.
-    HostClausesInsertionGuard guard(firOpBuilder);
-    mlir::omp::LoopRelatedClauseOps loopRelatedOps;
-    llvm::SmallVector<const semantics::Symbol *> iv;
-    ClauseProcessor cp(converter, semaCtx, item->clauses);
-    cp.processCollapse(loc, eval, loopRelatedOps, iv);
-    targetOp.getTripCountMutable().assign(
-        calculateTripCount(firOpBuilder, loc, loopRelatedOps));
-  }
   return loopNestOp;
 }
 
@@ -1926,7 +1965,6 @@ static mlir::omp::ParallelOp genParallelOp(
     semantics::SemanticsContext &semaCtx, lower::pft::Evaluation &eval,
     mlir::Location loc, const ConstructQueue &queue,
     ConstructQueue::const_iterator item, mlir::omp::ParallelOperands &clauseOps,
-    mlir::omp::NumThreadsClauseOps &numThreadsClauseOps,
     const EntryBlockArgs &args, DataSharingProcessor *dsp,
     bool isComposite = false, mlir::omp::TargetOp parentTarget = nullptr) {
   auto genRegionEntryCB = [&](mlir::Operation *op) {
@@ -1950,13 +1988,6 @@ static mlir::omp::ParallelOp genParallelOp(
   auto parallelOp =
       genOpWithBody<mlir::omp::ParallelOp>(genInfo, queue, item, clauseOps);
   parallelOp.setComposite(isComposite);
-  if (numThreadsClauseOps.numThreads) {
-    if (parentTarget)
-      parentTarget.getNumThreadsMutable().assign(
-          numThreadsClauseOps.numThreads);
-    else
-      parallelOp.getNumThreadsMutable().assign(numThreadsClauseOps.numThreads);
-  }
   return parallelOp;
 }
 
@@ -2234,6 +2265,7 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
   extractMappedBaseValues(clauseOps.mapVars, mapBaseValues);
 
   EntryBlockArgs args;
+  // TODO: Fill hostEval in advance rather than adding to it later on.
   // TODO: Add in_reduction syms and vars.
   args.map.syms = mapSyms;
   args.map.vars = mapBaseValues;
@@ -2367,15 +2399,12 @@ genTeamsOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
 
   mlir::omp::TargetOp targetOp =
       findParentTargetOp(converter.getFirOpBuilder());
-  bool evalOutsideTarget = mustEvalTeamsThreadsOutsideTarget(eval, targetOp);
+  bool evalOutsideTarget = mustEvalTeamsOutsideTarget(eval, targetOp);
 
   mlir::omp::TeamsOperands clauseOps;
-  mlir::omp::NumTeamsClauseOps numTeamsClauseOps;
-  mlir::omp::ThreadLimitClauseOps threadLimitClauseOps;
   llvm::SmallVector<const semantics::Symbol *> reductionSyms;
   genTeamsClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
-                  evalOutsideTarget, clauseOps, numTeamsClauseOps,
-                  threadLimitClauseOps, reductionSyms);
+                  evalOutsideTarget, clauseOps, reductionSyms);
 
   EntryBlockArgs args;
   // TODO: Add private syms and vars.
@@ -2396,22 +2425,6 @@ genTeamsOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
           .setClauses(&item->clauses)
           .setGenRegionEntryCb(genRegionEntryCB),
       queue, item, clauseOps);
-
-  if (numTeamsClauseOps.numTeamsUpper) {
-    if (evalOutsideTarget)
-      targetOp.getNumTeamsUpperMutable().assign(
-          numTeamsClauseOps.numTeamsUpper);
-    else
-      teamsOp.getNumTeamsUpperMutable().assign(numTeamsClauseOps.numTeamsUpper);
-  }
-
-  if (threadLimitClauseOps.threadLimit) {
-    if (evalOutsideTarget)
-      targetOp.getTeamsThreadLimitMutable().assign(
-          threadLimitClauseOps.threadLimit);
-    else
-      teamsOp.getThreadLimitMutable().assign(threadLimitClauseOps.threadLimit);
-  }
 
   return teamsOp;
 }
@@ -2443,7 +2456,7 @@ static void genStandaloneDistribute(lower::AbstractConverter &converter,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, item->clauses, loc,
-                     loopNestClauseOps, iv);
+                     /*evalOutsideTarget=*/false, loopNestClauseOps, iv);
 
   EntryBlockArgs distributeArgs;
   distributeArgs.priv.syms = dsp.getDelayedPrivSymbols();
@@ -2478,7 +2491,7 @@ static void genStandaloneDo(lower::AbstractConverter &converter,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, item->clauses, loc,
-                     loopNestClauseOps, iv);
+                     /*evalOutsideTarget=*/false, loopNestClauseOps, iv);
 
   EntryBlockArgs wsloopArgs;
   // TODO: Add private syms and vars.
@@ -2501,15 +2514,10 @@ static void genStandaloneParallel(lower::AbstractConverter &converter,
                                   ConstructQueue::const_iterator item) {
   lower::StatementContext stmtCtx;
 
-  mlir::omp::TargetOp targetOp =
-      findParentTargetOp(converter.getFirOpBuilder());
-  bool evalOutsideTarget = mustEvalTeamsThreadsOutsideTarget(eval, targetOp);
-
   mlir::omp::ParallelOperands parallelClauseOps;
-  mlir::omp::NumThreadsClauseOps numThreadsClauseOps;
   llvm::SmallVector<const semantics::Symbol *> parallelReductionSyms;
   genParallelClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
-                     evalOutsideTarget, parallelClauseOps, numThreadsClauseOps,
+                     /*evalOutsideTarget=*/false, parallelClauseOps,
                      parallelReductionSyms);
 
   std::optional<DataSharingProcessor> dsp;
@@ -2528,9 +2536,9 @@ static void genStandaloneParallel(lower::AbstractConverter &converter,
   parallelArgs.reduction.syms = parallelReductionSyms;
   parallelArgs.reduction.vars = parallelClauseOps.reductionVars;
   genParallelOp(converter, symTable, semaCtx, eval, loc, queue, item,
-                parallelClauseOps, numThreadsClauseOps, parallelArgs,
+                parallelClauseOps, parallelArgs,
                 enableDelayedPrivatization ? &dsp.value() : nullptr,
-                /*isComposite=*/false, evalOutsideTarget ? targetOp : nullptr);
+                /*isComposite=*/false);
 }
 
 static void genStandaloneSimd(lower::AbstractConverter &converter,
@@ -2554,12 +2562,10 @@ static void genStandaloneSimd(lower::AbstractConverter &converter,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, item->clauses, loc,
-                     loopNestClauseOps, iv);
+                     /*evalOutsideTarget=*/false, loopNestClauseOps, iv);
 
   EntryBlockArgs simdArgs;
-  // TODO: Add private syms and vars.
-  simdArgs.reduction.syms = simdReductionSyms;
-  simdArgs.reduction.vars = simdClauseOps.reductionVars;
+  // TODO: Add private, reduction syms and vars.
   auto simdOp =
       genWrapperOp<mlir::omp::SimdOp>(converter, loc, simdClauseOps, simdArgs);
 
@@ -2596,14 +2602,13 @@ static void genCompositeDistributeParallelDo(
 
   mlir::omp::TargetOp targetOp =
       findParentTargetOp(converter.getFirOpBuilder());
-  bool evalOutsideTarget = mustEvalTeamsThreadsOutsideTarget(eval, targetOp);
+  bool evalOutsideTarget = mustEvalTargetSPMDOutsideTarget(eval, targetOp);
 
   // Create parent omp.parallel first.
   mlir::omp::ParallelOperands parallelClauseOps;
-  mlir::omp::NumThreadsClauseOps numThreadsClauseOps;
   llvm::SmallVector<const semantics::Symbol *> parallelReductionSyms;
   genParallelClauses(converter, semaCtx, stmtCtx, parallelItem->clauses, loc,
-                     evalOutsideTarget, parallelClauseOps, numThreadsClauseOps,
+                     evalOutsideTarget, parallelClauseOps,
                      parallelReductionSyms);
 
   DataSharingProcessor dsp(converter, semaCtx, doItem->clauses, eval,
@@ -2618,7 +2623,7 @@ static void genCompositeDistributeParallelDo(
   parallelArgs.reduction.syms = parallelReductionSyms;
   parallelArgs.reduction.vars = parallelClauseOps.reductionVars;
   genParallelOp(converter, symTable, semaCtx, eval, loc, queue, parallelItem,
-                parallelClauseOps, numThreadsClauseOps, parallelArgs, &dsp,
+                parallelClauseOps, parallelArgs, &dsp,
                 /*isComposite=*/true, evalOutsideTarget ? targetOp : nullptr);
 
   // Clause processing.
@@ -2634,7 +2639,7 @@ static void genCompositeDistributeParallelDo(
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, doItem->clauses, loc,
-                     loopNestClauseOps, iv);
+                     evalOutsideTarget, loopNestClauseOps, iv);
 
   // Operation creation.
   EntryBlockArgs distributeArgs;
@@ -2672,14 +2677,13 @@ static void genCompositeDistributeParallelDoSimd(
 
   mlir::omp::TargetOp targetOp =
       findParentTargetOp(converter.getFirOpBuilder());
-  bool evalOutsideTarget = mustEvalTeamsThreadsOutsideTarget(eval, targetOp);
+  bool evalOutsideTarget = mustEvalTargetSPMDOutsideTarget(eval, targetOp);
 
   // Create parent omp.parallel first.
   mlir::omp::ParallelOperands parallelClauseOps;
-  mlir::omp::NumThreadsClauseOps numThreadsClauseOps;
   llvm::SmallVector<const semantics::Symbol *> parallelReductionSyms;
   genParallelClauses(converter, semaCtx, stmtCtx, parallelItem->clauses, loc,
-                     evalOutsideTarget, parallelClauseOps, numThreadsClauseOps,
+                     evalOutsideTarget, parallelClauseOps,
                      parallelReductionSyms);
 
   DataSharingProcessor dsp(converter, semaCtx, simdItem->clauses, eval,
@@ -2694,7 +2698,7 @@ static void genCompositeDistributeParallelDoSimd(
   parallelArgs.reduction.syms = parallelReductionSyms;
   parallelArgs.reduction.vars = parallelClauseOps.reductionVars;
   genParallelOp(converter, symTable, semaCtx, eval, loc, queue, parallelItem,
-                parallelClauseOps, numThreadsClauseOps, parallelArgs, &dsp,
+                parallelClauseOps, parallelArgs, &dsp,
                 /*isComposite=*/true, evalOutsideTarget ? targetOp : nullptr);
 
   // Clause processing.
@@ -2715,7 +2719,7 @@ static void genCompositeDistributeParallelDoSimd(
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
-                     loopNestClauseOps, iv);
+                     evalOutsideTarget, loopNestClauseOps, iv);
 
   // Operation creation.
   EntryBlockArgs distributeArgs;
@@ -2733,9 +2737,7 @@ static void genCompositeDistributeParallelDoSimd(
   wsloopOp.setComposite(/*val=*/true);
 
   EntryBlockArgs simdArgs;
-  // TODO: Add private syms and vars.
-  simdArgs.reduction.syms = simdReductionSyms;
-  simdArgs.reduction.vars = simdClauseOps.reductionVars;
+  // TODO: Add private, reduction syms and vars.
   auto simdOp =
       genWrapperOp<mlir::omp::SimdOp>(converter, loc, simdClauseOps, simdArgs);
   simdOp.setComposite(/*val=*/true);
@@ -2783,7 +2785,7 @@ static void genCompositeDistributeSimd(lower::AbstractConverter &converter,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
-                     loopNestClauseOps, iv);
+                     /*evalOutsideTarget=*/false, loopNestClauseOps, iv);
 
   // Operation creation.
   EntryBlockArgs distributeArgs;
@@ -2793,9 +2795,7 @@ static void genCompositeDistributeSimd(lower::AbstractConverter &converter,
   distributeOp.setComposite(/*val=*/true);
 
   EntryBlockArgs simdArgs;
-  // TODO: Add private syms and vars.
-  simdArgs.reduction.syms = simdReductionSyms;
-  simdArgs.reduction.vars = simdClauseOps.reductionVars;
+  // TODO: Add private, reduction syms and vars.
   auto simdOp =
       genWrapperOp<mlir::omp::SimdOp>(converter, loc, simdClauseOps, simdArgs);
   simdOp.setComposite(/*val=*/true);
@@ -2841,7 +2841,7 @@ static void genCompositeDoSimd(lower::AbstractConverter &converter,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
-                     loopNestClauseOps, iv);
+                     /*evalOutsideTarget=*/false, loopNestClauseOps, iv);
 
   // Operation creation.
   EntryBlockArgs wsloopArgs;
@@ -2853,9 +2853,7 @@ static void genCompositeDoSimd(lower::AbstractConverter &converter,
   wsloopOp.setComposite(/*val=*/true);
 
   EntryBlockArgs simdArgs;
-  // TODO: Add private syms and vars.
-  simdArgs.reduction.syms = simdReductionSyms;
-  simdArgs.reduction.vars = simdClauseOps.reductionVars;
+  // TODO: Add private, reduction syms and vars.
   auto simdOp =
       genWrapperOp<mlir::omp::SimdOp>(converter, loc, simdClauseOps, simdArgs);
   simdOp.setComposite(/*val=*/true);
