@@ -45,14 +45,12 @@ namespace internal {
 // TODO The following 2 functions are copied from "flang/Lower/OpenMP/Utils.h".
 // This duplication is temporary until we find a solution for a shared location
 // for these utils that does not introduce circular CMake deps.
-mlir::omp::MapInfoOp
-createMapInfoOp(mlir::OpBuilder &builder, mlir::Location loc,
-                mlir::Value baseAddr, mlir::Value varPtrPtr, std::string name,
-                llvm::ArrayRef<mlir::Value> bounds,
-                llvm::ArrayRef<mlir::Value> members,
-                mlir::ArrayAttr membersIndex, uint64_t mapType,
-                mlir::omp::VariableCaptureKind mapCaptureType, mlir::Type retTy,
-                bool partialMap = false) {
+mlir::omp::MapInfoOp createMapInfoOp(
+    mlir::OpBuilder &builder, mlir::Location loc, mlir::Value baseAddr,
+    mlir::Value varPtrPtr, std::string name, llvm::ArrayRef<mlir::Value> bounds,
+    llvm::ArrayRef<mlir::Value> members, mlir::ArrayAttr membersIndex,
+    uint64_t mapType, mlir::omp::VariableCaptureKind mapCaptureType,
+    mlir::Type retTy, bool partialMap = false) {
   if (auto boxTy = llvm::dyn_cast<fir::BaseBoxType>(baseAddr.getType())) {
     baseAddr = builder.create<fir::BoxAddrOp>(loc, baseAddr);
     retTy = baseAddr.getType();
@@ -75,84 +73,6 @@ createMapInfoOp(mlir::OpBuilder &builder, mlir::Location loc,
       builder.getStringAttr(name), builder.getBoolAttr(partialMap));
 
   return op;
-}
-
-mlir::Value calculateTripCount(fir::FirOpBuilder &builder, mlir::Location loc,
-                               const mlir::omp::LoopRelatedClauseOps &ops) {
-  using namespace mlir::arith;
-  assert(ops.loopLowerBounds.size() == ops.loopUpperBounds.size() &&
-         ops.loopLowerBounds.size() == ops.loopSteps.size() &&
-         !ops.loopLowerBounds.empty() && "Invalid bounds or step");
-
-  // Get the bit width of an integer-like type.
-  auto widthOf = [](mlir::Type ty) -> unsigned {
-    if (mlir::isa<mlir::IndexType>(ty)) {
-      return mlir::IndexType::kInternalStorageBitWidth;
-    }
-    if (auto tyInt = mlir::dyn_cast<mlir::IntegerType>(ty)) {
-      return tyInt.getWidth();
-    }
-    llvm_unreachable("Unexpected type");
-  };
-
-  // For a type that is either IntegerType or IndexType, return the
-  // equivalent IntegerType. In the former case this is a no-op.
-  auto asIntTy = [&](mlir::Type ty) -> mlir::IntegerType {
-    if (ty.isIndex()) {
-      return mlir::IntegerType::get(ty.getContext(), widthOf(ty));
-    }
-    assert(ty.isIntOrIndex() && "Unexpected type");
-    return mlir::cast<mlir::IntegerType>(ty);
-  };
-
-  // For two given values, establish a common signless IntegerType
-  // that can represent any value of type of x and of type of y,
-  // and return the pair of x, y converted to the new type.
-  auto unifyToSignless =
-      [&](fir::FirOpBuilder &b, mlir::Value x,
-          mlir::Value y) -> std::pair<mlir::Value, mlir::Value> {
-    auto tyX = asIntTy(x.getType()), tyY = asIntTy(y.getType());
-    unsigned width = std::max(widthOf(tyX), widthOf(tyY));
-    auto wideTy = mlir::IntegerType::get(b.getContext(), width,
-                                         mlir::IntegerType::Signless);
-    return std::make_pair(b.createConvert(loc, wideTy, x),
-                          b.createConvert(loc, wideTy, y));
-  };
-
-  // Start with signless i32 by default.
-  auto tripCount = builder.createIntegerConstant(loc, builder.getI32Type(), 1);
-
-  for (auto [origLb, origUb, origStep] :
-       llvm::zip(ops.loopLowerBounds, ops.loopUpperBounds, ops.loopSteps)) {
-    auto tmpS0 = builder.createIntegerConstant(loc, origStep.getType(), 0);
-    auto [step, step0] = unifyToSignless(builder, origStep, tmpS0);
-    auto reverseCond =
-        builder.create<CmpIOp>(loc, CmpIPredicate::slt, step, step0);
-    auto negStep = builder.create<SubIOp>(loc, step0, step);
-    mlir::Value absStep =
-        builder.create<SelectOp>(loc, reverseCond, negStep, step);
-
-    auto [lb, ub] = unifyToSignless(builder, origLb, origUb);
-    auto start = builder.create<SelectOp>(loc, reverseCond, ub, lb);
-    auto end = builder.create<SelectOp>(loc, reverseCond, lb, ub);
-
-    mlir::Value range = builder.create<SubIOp>(loc, end, start);
-    auto rangeCond =
-        builder.create<CmpIOp>(loc, CmpIPredicate::slt, end, start);
-    std::tie(range, absStep) = unifyToSignless(builder, range, absStep);
-    // numSteps = (range /u absStep) + 1
-    auto numSteps = builder.create<AddIOp>(
-        loc, builder.create<DivUIOp>(loc, range, absStep),
-        builder.createIntegerConstant(loc, range.getType(), 1));
-
-    auto trip0 = builder.createIntegerConstant(loc, numSteps.getType(), 0);
-    auto loopTripCount =
-        builder.create<SelectOp>(loc, rangeCond, trip0, numSteps);
-    auto [totalTC, thisTC] = unifyToSignless(builder, tripCount, loopTripCount);
-    tripCount = builder.create<MulIOp>(loc, totalTC, thisTC);
-  }
-
-  return tripCount;
 }
 
 /// Check if cloning the bounds introduced any dependency on the outer region.
@@ -664,7 +584,19 @@ public:
     mlir::IRMapping mapper;
 
     if (mapToDevice) {
+      // TODO: Currently the loop bounds for the outer loop are duplicated.
       mlir::omp::TargetOperands targetClauseOps;
+      genLoopNestClauseOps(doLoop.getLoc(), rewriter, loopNest, mapper,
+                           loopNestClauseOps, &targetClauseOps);
+
+      // Prevent mapping host-evaluated variables.
+      outermostLoopLiveIns.erase(
+          llvm::remove_if(outermostLoopLiveIns,
+                          [&](mlir::Value liveIn) {
+                            return llvm::is_contained(
+                                targetClauseOps.hostEvalVars, liveIn);
+                          }),
+          outermostLoopLiveIns.end());
 
       // The outermost loop will contain all the live-in values in all nested
       // loops since live-in values are collected recursively for all nested
@@ -673,15 +605,20 @@ public:
         targetClauseOps.mapVars.push_back(
             genMapInfoOpForLiveIn(rewriter, liveIn));
 
-      targetOp = genTargetOp(doLoop.getLoc(), rewriter, mapper,
-                             outermostLoopLiveIns, targetClauseOps);
+      targetOp =
+          genTargetOp(doLoop.getLoc(), rewriter, mapper, outermostLoopLiveIns,
+                      targetClauseOps, loopNestClauseOps);
       genTeamsOp(doLoop.getLoc(), rewriter);
     }
 
-    mlir::omp::ParallelOp parallelOp = genParallelOp(
-        doLoop.getLoc(), rewriter, loopNest, mapper, loopNestClauseOps);
+    mlir::omp::ParallelOp parallelOp =
+        genParallelOp(doLoop.getLoc(), rewriter, loopNest, mapper);
     // Only set as composite when part of `distribute parallel do`.
     parallelOp.setComposite(mapToDevice);
+
+    if (!mapToDevice)
+      genLoopNestClauseOps(doLoop.getLoc(), rewriter, loopNest, mapper,
+                           loopNestClauseOps);
 
     for (mlir::Value local : locals)
       looputils::localizeLoopLocalValue(local, parallelOp.getRegion(),
@@ -693,23 +630,6 @@ public:
     mlir::omp::LoopNestOp ompLoopNest =
         genWsLoopOp(rewriter, loopNest.back().first, mapper, loopNestClauseOps,
                     /*isComposite=*/mapToDevice);
-
-    // Now that we created the nested `ws.loop` op, we set can the `target` op's
-    // trip count.
-    if (mapToDevice) {
-      rewriter.setInsertionPoint(targetOp);
-      auto parentModule = doLoop->getParentOfType<mlir::ModuleOp>();
-      fir::FirOpBuilder firBuilder(rewriter, fir::getKindMapping(parentModule));
-
-      mlir::omp::LoopRelatedClauseOps loopClauseOps;
-      loopClauseOps.loopLowerBounds.push_back(lbOp->getResult(0));
-      loopClauseOps.loopUpperBounds.push_back(ubOp->getResult(0));
-      loopClauseOps.loopSteps.push_back(stepOp->getResult(0));
-
-      mlir::cast<mlir::omp::TargetOp>(targetOp).getTripCountMutable().assign(
-          Fortran::lower::omp::internal::calculateTripCount(
-              firBuilder, doLoop.getLoc(), loopClauseOps));
-    }
 
     rewriter.eraseOp(doLoop);
 
@@ -804,27 +724,29 @@ private:
         captureKind, rawAddr.getType());
   }
 
-  mlir::omp::TargetOp genTargetOp(mlir::Location loc,
-                                  mlir::ConversionPatternRewriter &rewriter,
-                                  mlir::IRMapping &mapper,
-                                  llvm::ArrayRef<mlir::Value> liveIns,
-                                  mlir::omp::TargetOperands &clauseOps) const {
+  mlir::omp::TargetOp
+  genTargetOp(mlir::Location loc, mlir::ConversionPatternRewriter &rewriter,
+              mlir::IRMapping &mapper, llvm::ArrayRef<mlir::Value> mappedVars,
+              mlir::omp::TargetOperands &clauseOps,
+              mlir::omp::LoopNestOperands &loopNestClauseOps) const {
     auto targetOp = rewriter.create<mlir::omp::TargetOp>(loc, clauseOps);
+    auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
 
     mlir::Region &region = targetOp.getRegion();
 
-    llvm::SmallVector<mlir::Type> liveInTypes;
-    llvm::SmallVector<mlir::Location> liveInLocs;
+    llvm::SmallVector<mlir::Type> regionArgTypes;
+    llvm::SmallVector<mlir::Location> regionArgLocs;
 
-    for (mlir::Value liveIn : liveIns) {
-      liveInTypes.push_back(liveIn.getType());
-      liveInLocs.push_back(liveIn.getLoc());
+    for (auto var :
+         llvm::concat<const mlir::Value>(clauseOps.hostEvalVars, mappedVars)) {
+      regionArgTypes.push_back(var.getType());
+      regionArgLocs.push_back(var.getLoc());
     }
 
-    rewriter.createBlock(&region, {}, liveInTypes, liveInLocs);
+    rewriter.createBlock(&region, {}, regionArgTypes, regionArgLocs);
 
     for (auto [arg, mapInfoOp] :
-         llvm::zip_equal(region.getArguments(), clauseOps.mapVars)) {
+         llvm::zip_equal(argIface.getMapBlockArgs(), clauseOps.mapVars)) {
       auto miOp = mlir::cast<mlir::omp::MapInfoOp>(mapInfoOp.getDefiningOp());
       hlfir::DeclareOp liveInDeclare = genLiveInDeclare(rewriter, arg, miOp);
       mlir::Value miOperand = miOp.getVariableOperand(0);
@@ -839,6 +761,19 @@ private:
       if (auto origDeclareOp = mlir::dyn_cast_if_present<hlfir::DeclareOp>(
               miOperand.getDefiningOp()))
         mapper.map(origDeclareOp.getBase(), liveInDeclare.getBase());
+    }
+
+    for (auto [arg, hostEval] : llvm::zip_equal(argIface.getHostEvalBlockArgs(),
+                                                clauseOps.hostEvalVars))
+      mapper.map(hostEval, arg);
+
+    for (unsigned i = 0; i < loopNestClauseOps.loopLowerBounds.size(); ++i) {
+      loopNestClauseOps.loopLowerBounds[i] =
+          mapper.lookup(loopNestClauseOps.loopLowerBounds[i]);
+      loopNestClauseOps.loopUpperBounds[i] =
+          mapper.lookup(loopNestClauseOps.loopUpperBounds[i]);
+      loopNestClauseOps.loopSteps[i] =
+          mapper.lookup(loopNestClauseOps.loopSteps[i]);
     }
 
     fir::FirOpBuilder firBuilder(
@@ -909,7 +844,8 @@ private:
   void genLoopNestClauseOps(
       mlir::Location loc, mlir::ConversionPatternRewriter &rewriter,
       looputils::LoopNestToIndVarMap &loopNest, mlir::IRMapping &mapper,
-      mlir::omp::LoopNestOperands &loopNestClauseOps) const {
+      mlir::omp::LoopNestOperands &loopNestClauseOps,
+      mlir::omp::TargetOperands *targetClauseOps = nullptr) const {
     assert(loopNestClauseOps.loopLowerBounds.empty() &&
            "Loop nest bounds were already emitted!");
 
@@ -930,18 +866,21 @@ private:
       return result;
     };
 
+    auto hostEvalCapture = [&](mlir::Value var,
+                               llvm::SmallVectorImpl<mlir::Value> &bounds) {
+      var = cloneBoundOrStepOpChain(var.getDefiningOp())->getResult(0);
+      bounds.push_back(var);
+
+      if (targetClauseOps)
+        targetClauseOps->hostEvalVars.push_back(var);
+    };
+
     for (auto &[doLoop, _] : loopNest) {
-      mlir::Operation *lbOp = doLoop.getLowerBound().getDefiningOp();
-      loopNestClauseOps.loopLowerBounds.push_back(
-          cloneBoundOrStepOpChain(lbOp)->getResult(0));
-
-      mlir::Operation *ubOp = doLoop.getUpperBound().getDefiningOp();
-      loopNestClauseOps.loopUpperBounds.push_back(
-          cloneBoundOrStepOpChain(ubOp)->getResult(0));
-
-      mlir::Operation *stepOp = doLoop.getStep().getDefiningOp();
-      loopNestClauseOps.loopSteps.push_back(
-          cloneBoundOrStepOpChain(stepOp)->getResult(0));
+      hostEvalCapture(doLoop.getLowerBound(),
+                      loopNestClauseOps.loopLowerBounds);
+      hostEvalCapture(doLoop.getUpperBound(),
+                      loopNestClauseOps.loopUpperBounds);
+      hostEvalCapture(doLoop.getStep(), loopNestClauseOps.loopSteps);
     }
 
     loopNestClauseOps.loopInclusive = rewriter.getUnitAttr();
@@ -985,18 +924,15 @@ private:
     return result;
   }
 
-  mlir::omp::ParallelOp
-  genParallelOp(mlir::Location loc, mlir::ConversionPatternRewriter &rewriter,
-                looputils::LoopNestToIndVarMap &loopNest,
-                mlir::IRMapping &mapper,
-                mlir::omp::LoopNestOperands &loopNestClauseOps) const {
+  mlir::omp::ParallelOp genParallelOp(mlir::Location loc,
+                                      mlir::ConversionPatternRewriter &rewriter,
+                                      looputils::LoopNestToIndVarMap &loopNest,
+                                      mlir::IRMapping &mapper) const {
     auto parallelOp = rewriter.create<mlir::omp::ParallelOp>(loc);
     rewriter.createBlock(&parallelOp.getRegion());
     rewriter.setInsertionPoint(rewriter.create<mlir::omp::TerminatorOp>(loc));
 
     genLoopNestIndVarAllocs(rewriter, loopNest, mapper);
-    genLoopNestClauseOps(loc, rewriter, loopNest, mapper, loopNestClauseOps);
-
     return parallelOp;
   }
 

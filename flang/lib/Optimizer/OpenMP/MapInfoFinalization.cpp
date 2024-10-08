@@ -394,45 +394,44 @@ mlir::omp::MapInfoOp genDescriptorMemberMaps(mlir::omp::MapInfoOp op,
     if (!mapClauseOwner)
       return;
 
-    auto addOperands = [&](mlir::OperandRange &mapVarsArr,
-                           mlir::MutableOperandRange &mutableOpRange,
-                           auto directiveOp) {
+    auto addOperands = [&](mlir::MutableOperandRange &mapVarsArr,
+                           mlir::Operation *directiveOp,
+                           unsigned mapArgsStart = 0) {
       llvm::SmallVector<mlir::Value> newMapOps;
-      for (size_t i = 0; i < mapVarsArr.size(); ++i) {
-        if (mapVarsArr[i] == op) {
-          for (auto [j, mapMember] : llvm::enumerate(op.getMembers())) {
-            newMapOps.push_back(mapMember);
-            // for TargetOp's which have IsolatedFromAbove we must align the
-            // new additional map operand with an appropriate BlockArgument,
-            // as the printing and later processing currently requires a 1:1
-            // mapping of BlockArgs to MapInfoOp's at the same placement in
-            // each array (BlockArgs and MapVars).
-            if (directiveOp) {
-              directiveOp.getRegion().insertArgument(i + j, mapMember.getType(),
-                                                     directiveOp->getLoc());
-            }
-          }
+      for (auto [i, mapVar] : llvm::enumerate(mapVarsArr)) {
+        if (mapVar.get() != op) {
+          newMapOps.push_back(mapVar.get());
+          continue;
         }
-        newMapOps.push_back(mapVarsArr[i]);
+
+        for (auto [j, mapMember] : llvm::enumerate(op.getMembers())) {
+          newMapOps.push_back(mapMember);
+          if (directiveOp)
+            directiveOp->getRegion(0).insertArgument(
+                mapArgsStart + i + j, mapMember.getType(), mapMember.getLoc());
+        }
+        newMapOps.push_back(mapVar.get());
       }
-      mutableOpRange.assign(newMapOps);
+      mapVarsArr.assign(newMapOps);
     };
+
+    auto argIface =
+        llvm::dyn_cast<mlir::omp::BlockArgOpenMPOpInterface>(target);
 
     if (auto mapClauseOwner =
             llvm::dyn_cast<mlir::omp::MapClauseOwningOpInterface>(target)) {
-      mlir::OperandRange mapVarsArr = mapClauseOwner.getMapVars();
-      mlir::MutableOperandRange mapMutableOpRange =
-          mapClauseOwner.getMapVarsMutable();
-      mlir::omp::TargetOp targetOp =
-          llvm::dyn_cast<mlir::omp::TargetOp>(target);
-      addOperands(mapVarsArr, mapMutableOpRange, targetOp);
+      mlir::MutableOperandRange mapVarsArr = mapClauseOwner.getMapVarsMutable();
+      unsigned blockArgInsertIndex =
+          argIface ? argIface.getMapBlockArgsStart() : 0;
+      addOperands(mapVarsArr, llvm::dyn_cast<mlir::omp::TargetOp>(target),
+                  blockArgInsertIndex);
     }
 
     if (auto targetDataOp = llvm::dyn_cast<mlir::omp::TargetDataOp>(target)) {
-      mlir::OperandRange useDevAddrArr = targetDataOp.getUseDeviceAddrVars();
-      mlir::MutableOperandRange useDevAddrMutableOpRange =
+      mlir::MutableOperandRange useDevAddrArr =
           targetDataOp.getUseDeviceAddrVarsMutable();
-      addOperands(useDevAddrArr, useDevAddrMutableOpRange, targetDataOp);
+      addOperands(useDevAddrArr, target,
+                  argIface.getUseDeviceAddrBlockArgsStart());
     }
   }
 
