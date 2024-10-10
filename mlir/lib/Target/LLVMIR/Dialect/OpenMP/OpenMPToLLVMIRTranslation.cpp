@@ -32,6 +32,7 @@
 #include "llvm/IR/ReplaceConstant.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/TargetParser/Triple.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 #include <any>
@@ -3715,6 +3716,63 @@ static uint64_t getTeamsReductionDataSize(mlir::omp::TeamsOp &teamsOp) {
   return getReductionDataSize<mlir::omp::TeamsOp>(teamsOp);
 }
 
+static void
+extractHostEvalClauses(OperandRange ops, llvm::ArrayRef<BlockArgument> args,
+                       Value &numThreads, Value &numTeamsLower,
+                       Value &numTeamsUpper, Value &threadLimit,
+                       llvm::SmallVectorImpl<Value> *lowerBounds = nullptr,
+                       llvm::SmallVectorImpl<Value> *upperBounds = nullptr,
+                       llvm::SmallVectorImpl<Value> *steps = nullptr) {
+  for (auto item : llvm::zip_equal(ops, args)) {
+    Value op = std::get<0>(item), arg = std::get<1>(item);
+
+    for (Operation *user : arg.getUsers()) {
+      llvm::TypeSwitch<Operation *>(user)
+          .Case([&](omp::TeamsOp teamsOp) {
+            if (teamsOp.getNumTeamsLower() == arg)
+              numTeamsLower = op;
+            else if (teamsOp.getNumTeamsUpper() == arg)
+              numTeamsUpper = op;
+            else if (teamsOp.getThreadLimit() == arg)
+              threadLimit = op;
+            else
+              llvm_unreachable("unsupported host_eval use");
+          })
+          .Case([&](omp::ParallelOp parallelOp) {
+            if (parallelOp.getNumThreads() == arg)
+              numThreads = op;
+            else
+              llvm_unreachable("unsupported host_eval use");
+          })
+          .Case([&](omp::LoopNestOp loopOp) {
+            auto processBounds =
+                [&](OperandRange opBounds,
+                    llvm::SmallVectorImpl<Value> *outBounds) -> bool {
+              bool found = false;
+              for (auto [i, lb] : llvm::enumerate(opBounds)) {
+                if (lb == arg) {
+                  found = true;
+                  if (outBounds)
+                    (*outBounds)[i] = op;
+                }
+              }
+              return found;
+            };
+            bool found =
+                processBounds(loopOp.getLoopLowerBounds(), lowerBounds);
+            found = processBounds(loopOp.getLoopUpperBounds(), upperBounds) ||
+                    found;
+            found = processBounds(loopOp.getLoopSteps(), steps) || found;
+            if (!found)
+              llvm_unreachable("unsupported host_eval use");
+          })
+          .Default([](Operation *) {
+            llvm_unreachable("unsupported host_eval use");
+          });
+    }
+  }
+}
+
 /// Populate default `MinTeams`, `MaxTeams` and `MaxThreads` to their default
 /// values as stated by the corresponding clauses, if constant.
 ///
@@ -3725,6 +3783,13 @@ static void initTargetDefaultBounds(
     omp::TargetOp targetOp,
     llvm::OpenMPIRBuilder::TargetKernelDefaultBounds &bounds,
     bool isTargetDevice, bool isGPU) {
+  Value hostNumThreads, hostNumTeamsLower, hostNumTeamsUpper, hostThreadLimit;
+  extractHostEvalClauses(targetOp.getHostEvalVars(),
+                         llvm::cast<omp::BlockArgOpenMPOpInterface>(*targetOp)
+                             .getHostEvalBlockArgs(),
+                         hostNumThreads, hostNumTeamsLower, hostNumTeamsUpper,
+                         hostThreadLimit);
+
   // TODO Handle constant IF clauses
   Operation *innermostCapturedOmpOp = targetOp.getInnermostCapturedOmpOp();
 
@@ -3734,8 +3799,8 @@ static void initTargetDefaultBounds(
           castOrGetParentOfType<omp::TeamsOp>(innermostCapturedOmpOp)) {
     // TODO Use teamsOp.getNumTeamsLower() to initialize `minTeamsVal`. For now,
     // just match clang and set min and max to the same value.
-    Value numTeamsClause = isTargetDevice ? teamsOp.getNumTeamsUpper()
-                                          : targetOp.getNumTeamsUpper();
+    Value numTeamsClause =
+        isTargetDevice ? teamsOp.getNumTeamsUpper() : hostNumTeamsUpper;
     if (numTeamsClause) {
       if (auto constOp = dyn_cast_if_present<LLVM::ConstantOp>(
               numTeamsClause.getDefiningOp())) {
@@ -3778,8 +3843,8 @@ static void initTargetDefaultBounds(
 
   if (auto teamsOp =
           castOrGetParentOfType<omp::TeamsOp>(innermostCapturedOmpOp)) {
-    Value threadLimitClause = isTargetDevice ? teamsOp.getThreadLimit()
-                                             : targetOp.getTeamsThreadLimit();
+    Value threadLimitClause =
+        isTargetDevice ? teamsOp.getThreadLimit() : hostThreadLimit;
     setMaxValueFromClause(threadLimitClause, teamsThreadLimitVal);
   }
 
@@ -3787,8 +3852,8 @@ static void initTargetDefaultBounds(
   if (innermostCapturedOmpOp) {
     if (auto parallelOp =
             castOrGetParentOfType<omp::ParallelOp>(innermostCapturedOmpOp)) {
-      Value numThreadsClause = isTargetDevice ? parallelOp.getNumThreads()
-                                              : targetOp.getNumThreads();
+      Value numThreadsClause =
+          isTargetDevice ? parallelOp.getNumThreads() : hostNumThreads;
       setMaxValueFromClause(numThreadsClause, maxThreadsVal);
     } else if (castOrGetParentOfType<omp::SimdOp>(innermostCapturedOmpOp,
                                                   /*immediateParent=*/true)) {
@@ -3834,26 +3899,124 @@ static void initTargetDefaultBounds(
 /// only provide correct results if it's called after the body of \c targetOp
 /// has been fully generated.
 static void initTargetRuntimeBounds(
-    LLVM::ModuleTranslation &moduleTranslation, omp::TargetOp targetOp,
+    llvm::IRBuilderBase &builder, LLVM::ModuleTranslation &moduleTranslation,
+    omp::TargetOp targetOp,
     llvm::OpenMPIRBuilder::TargetKernelRuntimeBounds &bounds) {
+  omp::LoopNestOp loopOp = castOrGetParentOfType<omp::LoopNestOp>(
+      targetOp.getInnermostCapturedOmpOp());
+  unsigned numLoops = loopOp ? loopOp.getNumLoops() : 0;
+
+  Value numThreads, numTeamsLower, numTeamsUpper, teamsThreadLimit;
+  llvm::SmallVector<Value> lowerBounds(numLoops), upperBounds(numLoops),
+      steps(numLoops);
+  extractHostEvalClauses(targetOp.getHostEvalVars(),
+                         llvm::cast<omp::BlockArgOpenMPOpInterface>(*targetOp)
+                             .getHostEvalBlockArgs(),
+                         numThreads, numTeamsLower, numTeamsUpper,
+                         teamsThreadLimit, &lowerBounds, &upperBounds, &steps);
+
   // TODO Handle IF clauses.
-  if (Value numTeamsLower = targetOp.getNumTeamsLower())
+  llvm::Value *&llvmTargetThreadLimit =
+      bounds.TargetThreadLimit.emplace_back(nullptr);
+  if (Value targetThreadLimit = targetOp.getThreadLimit())
+    llvmTargetThreadLimit = moduleTranslation.lookupValue(targetThreadLimit);
+
+  if (numTeamsLower)
     bounds.MinTeams = moduleTranslation.lookupValue(numTeamsLower);
 
   llvm::Value *&llvmMaxTeams = bounds.MaxTeams.emplace_back(nullptr);
-  if (Value numTeamsUpper = targetOp.getNumTeamsUpper())
+  if (numTeamsUpper)
     llvmMaxTeams = moduleTranslation.lookupValue(numTeamsUpper);
 
   llvm::Value *&llvmTeamsThreadLimit =
       bounds.TeamsThreadLimit.emplace_back(nullptr);
-  if (Value teamsThreadLimit = targetOp.getTeamsThreadLimit())
+  if (teamsThreadLimit)
     llvmTeamsThreadLimit = moduleTranslation.lookupValue(teamsThreadLimit);
 
-  if (Value numThreads = targetOp.getNumThreads())
+  if (numThreads)
     bounds.MaxThreads = moduleTranslation.lookupValue(numThreads);
 
-  if (Value tripCount = targetOp.getTripCount())
-    bounds.LoopTripCount = moduleTranslation.lookupValue(tripCount);
+  // To calculate the trip count, we first create a placeholder set of canonical
+  // loops which we then collapse. Then, we skip execution of the collapsed loop
+  // and remove the basic blocks that originally defined it. The trip count
+  // remains available in the entry block.
+  // TODO: Improve implementation by extracting the logic to calculate the trip
+  // count of the collapsed loop nest based on the bounds and steps, rather than
+  // creating and then removing the loop itself.
+  if (targetOp.isTargetSPMDLoop()) {
+    llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+    llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
+
+    SmallVector<llvm::CanonicalLoopInfo *> loopInfos;
+    llvm::OpenMPIRBuilder::InsertPointTy bodyLastInsertPoint;
+    auto bodyGen = [&](llvm::OpenMPIRBuilder::InsertPointTy ip,
+                       llvm::Value *iv) {
+      bodyLastInsertPoint = ip;
+      builder.restoreIP(ip);
+    };
+
+    for (unsigned i = 0, e = numLoops; i < e; ++i) {
+      llvm::Value *lowerBound = moduleTranslation.lookupValue(lowerBounds[i]);
+      llvm::Value *upperBound = moduleTranslation.lookupValue(upperBounds[i]);
+      llvm::Value *step = moduleTranslation.lookupValue(steps[i]);
+
+      llvm::OpenMPIRBuilder::LocationDescription loc = ompLoc;
+      llvm::OpenMPIRBuilder::InsertPointTy computeIP = ompLoc.IP;
+      if (i != 0) {
+        loc = llvm::OpenMPIRBuilder::LocationDescription(bodyLastInsertPoint);
+        computeIP = loopInfos.front()->getPreheaderIP();
+      }
+      loopInfos.push_back(ompBuilder->createCanonicalLoop(
+          loc, bodyGen, lowerBound, upperBound, step,
+          /*IsSigned=*/true, loopOp.getLoopInclusive(), computeIP));
+    }
+
+    // Collapse loops. Store the insertion point because LoopInfos may get
+    // invalidated.
+    llvm::IRBuilderBase::InsertPoint afterIP = loopInfos.front()->getAfterIP();
+    llvm::CanonicalLoopInfo *loopInfo =
+        ompBuilder->collapseLoops(ompLoc.DL, loopInfos, {});
+
+    bounds.LoopTripCount = loopInfo->getTripCount();
+
+    auto removeLoop = [](llvm::BasicBlock &preheader) {
+      assert(preheader.hasNPredecessors(0) &&
+             "loop entry block expected to be unreachable");
+
+      // Collect blocks reachable from the loop entry.
+      llvm::df_iterator_default_set<llvm::BasicBlock *> reachable;
+      for (llvm::BasicBlock *block :
+           llvm::depth_first_ext(&preheader, reachable))
+        (void)block;
+
+      // Mark as dead all blocks that are only reachable from the loop entry.
+      std::vector<llvm::BasicBlock *> deadBlocks;
+      for (llvm::BasicBlock *block : reachable) {
+        auto predecessors = llvm::predecessors(block);
+        bool dead =
+            llvm::find_if(predecessors, [&reachable](llvm::BasicBlock *pred) {
+              return !reachable.count(pred);
+            }) == predecessors.end();
+
+        if (dead)
+          deadBlocks.push_back(block);
+      }
+
+      // Delete the dead blocks.
+      llvm::DeleteDeadBlocks(deadBlocks);
+    };
+
+    // Skip execution of the canonical loop.
+    llvm::Instruction *terminator =
+        loopInfo->getPreheader()->getSinglePredecessor()->getTerminator();
+    builder.SetInsertPoint(terminator);
+    builder.CreateBr(afterIP.getBlock());
+    terminator->eraseFromParent();
+    builder.restoreIP(afterIP);
+
+    // Delete blocks associated to the loop.
+    removeLoop(*loopInfo->getPreheader());
+  }
 }
 
 static LogicalResult
@@ -3869,13 +4032,12 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
 
   auto parentFn = opInst.getParentOfType<LLVM::LLVMFuncOp>();
   auto targetOp = cast<omp::TargetOp>(opInst);
+  auto blockIface = cast<omp::BlockArgOpenMPOpInterface>(opInst);
   auto &targetRegion = targetOp.getRegion();
   DataLayout dl = DataLayout(opInst.getParentOfType<ModuleOp>());
   SmallVector<Value> mapVars = targetOp.getMapVars();
-  ArrayRef<BlockArgument> mapBlockArgs =
-      cast<omp::BlockArgOpenMPOpInterface>(opInst).getMapBlockArgs();
+  ArrayRef<BlockArgument> mapBlockArgs = blockIface.getMapBlockArgs();
   llvm::Function *llvmOutlinedFn = nullptr;
-  llvm::OpenMPIRBuilder::TargetKernelRuntimeBounds runtimeBounds;
 
   // TODO: It can also be false if a compile-time constant `false` IF clause is
   // specified.
@@ -3918,7 +4080,7 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
       OperandRange privateVars = targetOp.getPrivateVars();
       std::optional<ArrayAttr> privateSyms = targetOp.getPrivateSyms();
       MutableArrayRef<BlockArgument> privateBlockArgs =
-          cast<omp::BlockArgOpenMPOpInterface>(opInst).getPrivateBlockArgs();
+          blockIface.getPrivateBlockArgs();
 
       for (auto [privVar, privatizerNameAttr, privBlockArg] :
            llvm::zip_equal(privateVars, *privateSyms, privateBlockArgs)) {
@@ -3957,9 +4119,6 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
     llvm::BasicBlock *exitBlock = convertOmpOpRegions(
         targetRegion, "omp.target", builder, moduleTranslation, bodyGenStatus);
     builder.SetInsertPoint(exitBlock);
-
-    if (!isTargetDevice)
-      initTargetRuntimeBounds(moduleTranslation, targetOp, runtimeBounds);
 
     return builder.saveIP();
   };
@@ -4006,6 +4165,29 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   };
 
   llvm::SmallVector<llvm::Value *, 4> kernelInput;
+  llvm::OpenMPIRBuilder::TargetKernelDefaultBounds defaultBounds;
+  initTargetDefaultBounds(targetOp, defaultBounds, isTargetDevice, isGPU);
+
+  // Collect host-evaluated values needed to properly launch the kernel from the
+  // host.
+  llvm::OpenMPIRBuilder::TargetKernelRuntimeBounds runtimeBounds;
+  if (!isTargetDevice)
+    initTargetRuntimeBounds(builder, moduleTranslation, targetOp,
+                            runtimeBounds);
+
+  // Pass host-evaluated values as parameters to the kernel / host fallback,
+  // except if they are constants. In any case, map the MLIR block argument to
+  // the corresponding LLVM values.
+  SmallVector<Value> hostEvalVars = targetOp.getHostEvalVars();
+  ArrayRef<BlockArgument> hostEvalBlockArgs = blockIface.getHostEvalBlockArgs();
+  for (auto [arg, var] : llvm::zip_equal(hostEvalBlockArgs, hostEvalVars)) {
+    llvm::Value *value = moduleTranslation.lookupValue(var);
+    moduleTranslation.mapValue(arg, value);
+
+    if (!llvm::isa<llvm::Constant>(value))
+      kernelInput.push_back(value);
+  }
+
   for (size_t i = 0; i < mapVars.size(); ++i) {
     // declare target arguments are not passed to kernels as arguments
     // TODO: We currently do not handle cases where a member is explicitly
@@ -4019,14 +4201,6 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   SmallVector<llvm::OpenMPIRBuilder::DependData> dds;
   buildDependData(targetOp.getDependKinds(), targetOp.getDependVars(),
                   moduleTranslation, dds);
-
-  llvm::OpenMPIRBuilder::TargetKernelDefaultBounds defaultBounds;
-  initTargetDefaultBounds(targetOp, defaultBounds, isTargetDevice, isGPU);
-
-  llvm::Value *&llvmTargetThreadLimit =
-      runtimeBounds.TargetThreadLimit.emplace_back(nullptr);
-  if (Value targetThreadLimit = targetOp.getThreadLimit())
-    llvmTargetThreadLimit = moduleTranslation.lookupValue(targetThreadLimit);
 
   llvm::Value *ifCond = nullptr;
   if (Value targetIfCond = targetOp.getIfExpr())
