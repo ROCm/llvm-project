@@ -153,9 +153,7 @@ void insertChildMapInfoIntoParent(
     Fortran::lower::StatementContext &stmtCtx,
     std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
     llvm::SmallVectorImpl<mlir::Value> &mapOperands,
-    llvm::SmallVectorImpl<mlir::Type> *mapSymTypes,
-    llvm::SmallVectorImpl<mlir::Location> *mapSymLocs,
-    llvm::SmallVectorImpl<const Fortran::semantics::Symbol *> *mapSymbols);
+    llvm::SmallVectorImpl<const Fortran::semantics::Symbol *> &mapSymbols);
 
 mlir::Type getLoopVarType(lower::AbstractConverter &converter,
                           std::size_t loopVarTypeSize);

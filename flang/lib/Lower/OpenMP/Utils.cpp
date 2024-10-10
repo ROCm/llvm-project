@@ -454,18 +454,15 @@ void insertChildMapInfoIntoParent(
     lower::StatementContext &stmtCtx,
     std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
     llvm::SmallVectorImpl<mlir::Value> &mapOperands,
-    llvm::SmallVectorImpl<mlir::Type> *mapSymTypes,
-    llvm::SmallVectorImpl<mlir::Location> *mapSymLocs,
-    llvm::SmallVectorImpl<const semantics::Symbol *> *mapSymbols) {
-
+    llvm::SmallVectorImpl<const semantics::Symbol *> &mapSyms) {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   for (auto indices : parentMemberIndices) {
     bool parentExists = false;
     size_t parentIdx;
 
-    for (parentIdx = 0; parentIdx < mapSymbols->size(); ++parentIdx)
-      if ((*mapSymbols)[parentIdx] == indices.first.sym()) {
+    for (parentIdx = 0; parentIdx < mapSyms.size(); ++parentIdx)
+      if (mapSyms[parentIdx] == indices.first.sym()) {
         parentExists = true;
         break;
       }
@@ -524,12 +521,7 @@ void insertChildMapInfoIntoParent(
       extendBoundsFromMultipleSubscripts(converter, stmtCtx, mapOp,
                                          indices.second.parentObjList);
       mapOperands.push_back(mapOp);
-      if (mapSymTypes)
-        mapSymTypes->push_back(mapOp.getType());
-      if (mapSymLocs)
-        mapSymLocs->push_back(mapOp.getLoc());
-      if (mapSymbols)
-        mapSymbols->push_back(indices.first.sym());
+      mapSyms.push_back(indices.first.sym());
     }
   }
 }
