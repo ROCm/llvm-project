@@ -21,6 +21,18 @@ program do_concurrent_basic
 
     ! CHECK-NOT: fir.do_loop
 
+    ! CHECK: %[[DUPLICATED_C1:.*]] = arith.constant 1 : i32
+    ! CHECK: %[[DUPLICATED_LB:.*]] = fir.convert %[[DUPLICATED_C1]] : (i32) -> index
+    ! CHECK: %[[DUPLICATED_C10:.*]] = arith.constant 10 : i32
+    ! CHECK: %[[DUPLICATED_UB:.*]] = fir.convert %[[DUPLICATED_C10]] : (i32) -> index
+    ! CHECK: %[[DUPLICATED_STEP:.*]] = arith.constant 1 : index
+    
+    ! CHECK: %[[C1:.*]] = arith.constant 1 : i32
+    ! CHECK: %[[HOST_LB:.*]] = fir.convert %[[C1]] : (i32) -> index
+    ! CHECK: %[[C10:.*]] = arith.constant 10 : i32
+    ! CHECK: %[[HOST_UB:.*]] = fir.convert %[[C10]] : (i32) -> index
+    ! CHECK: %[[HOST_STEP:.*]] = arith.constant 1 : index
+
     ! CHECK-DAG: %[[I_MAP_INFO:.*]] = omp.map.info var_ptr(%[[I_ORIG_DECL]]#1
     ! CHECK: %[[C0:.*]] = arith.constant 0 : index
     ! CHECK: %[[UPPER_BOUND:.*]] = arith.subi %[[A_EXTENT]], %[[C0]] : index
@@ -32,10 +44,8 @@ program do_concurrent_basic
     ! CHECK-DAG: %[[A_MAP_INFO:.*]] = omp.map.info var_ptr(%[[A_ORIG_DECL]]#1 : {{[^(]+}})
     ! CHECK-SAME: map_clauses(implicit, tofrom) capture(ByRef) bounds(%[[A_BOUNDS]])
 
-    ! CHECK: %[[TRIP_COUNT:.*]] = arith.muli %{{.*}}, %{{.*}} : i64
-
     ! CHECK: omp.target
-    ! CHECK-SAME: trip_count(%[[TRIP_COUNT]] : i64)
+    ! CHECK-SAME: host_eval(%[[HOST_LB]] -> %[[LB:[[:alnum:]]+]], %[[HOST_UB]] -> %[[UB:[[:alnum:]]+]], %[[HOST_STEP]] -> %[[STEP:[[:alnum:]]+]] : index, index, index)
     ! CHECK-SAME: map_entries(%[[I_MAP_INFO]] -> %[[I_ARG:[[:alnum:]]+]],
     ! CHECK-SAME:             %[[A_MAP_INFO]] -> %[[A_ARG:.[[:alnum:]]+]]
 
@@ -45,12 +55,6 @@ program do_concurrent_basic
 
     ! CHECK-NEXT: %[[ITER_VAR:.*]] = fir.alloca i32 {bindc_name = "i"}
     ! CHECK-NEXT: %[[BINDING:.*]]:2 = hlfir.declare %[[ITER_VAR]] {uniq_name = "_QFEi"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
-
-    ! CHECK: %[[C1:.*]] = arith.constant 1 : i32
-    ! CHECK: %[[LB:.*]] = fir.convert %[[C1]] : (i32) -> index
-    ! CHECK: %[[C10:.*]] = arith.constant 10 : i32
-    ! CHECK: %[[UB:.*]] = fir.convert %[[C10]] : (i32) -> index
-    ! CHECK: %[[STEP:.*]] = arith.constant 1 : index
 
     ! CHECK-NEXT: omp.distribute {
     ! CHECK-NEXT: omp.wsloop {

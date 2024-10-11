@@ -6,19 +6,15 @@
 subroutine teams()
   ! BOTH: omp.target
 
-  ! HOST-SAME: num_teams({{.*}}) teams_thread_limit({{.*}})
-
-  ! DEVICE-NOT: num_teams({{.*}})
-  ! DEVICE-NOT: teams_thread_limit({{.*}})
+  ! HOST-SAME: host_eval(%{{.*}} -> %[[NUM_TEAMS:.*]], %{{.*}} -> %[[THREAD_LIMIT:.*]] : i32, i32)
+  
+  ! DEVICE-NOT: host_eval({{.*}})
   ! DEVICE-SAME: {
   !$omp target
 
   ! BOTH: omp.teams
 
-  ! HOST-NOT: num_teams({{.*}})
-  ! HOST-NOT: thread_limit({{.*}})
-  ! HOST-SAME: {
-
+  ! HOST-SAME: num_teams( to %[[NUM_TEAMS]] : i32) thread_limit(%[[THREAD_LIMIT]] : i32)
   ! DEVICE-SAME: num_teams({{.*}}) thread_limit({{.*}})
   !$omp teams num_teams(1) thread_limit(2)
   call foo()
@@ -27,60 +23,19 @@ subroutine teams()
   !$omp end target
 
   ! BOTH: omp.teams
-  ! BOTH-SAME: num_teams({{.*}}) thread_limit({{.*}})
+  ! BOTH-SAME: num_teams({{.*}}) thread_limit({{.*}}) {
   !$omp teams num_teams(1) thread_limit(2)
   call foo()
   !$omp end teams
 end subroutine teams
 
-! BOTH-LABEL: func.func @_QPparallel
-subroutine parallel()
-  ! BOTH: omp.target
-
-  ! HOST-SAME: num_threads({{.*}})
-
-  ! DEVICE-NOT: num_threads({{.*}})
-  ! DEVICE-SAME: {
-  !$omp target
-
-  ! BOTH: omp.parallel
-
-  ! HOST-NOT: num_threads({{.*}})
-  ! HOST-SAME: {
-  
-  ! DEVICE-SAME: num_threads({{.*}})
-  !$omp parallel num_threads(1)
-  call foo()
-  !$omp end parallel
-  !$omp end target
-
-  ! BOTH: omp.target
-  ! BOTH-NOT: num_threads({{.*}})
-  ! BOTH-SAME: {
-  !$omp target
-  call foo()
-
-  ! BOTH: omp.parallel
-  ! BOTH-SAME: num_threads({{.*}})
-  !$omp parallel num_threads(1)
-  call foo()
-  !$omp end parallel
-  !$omp end target
-
-  ! BOTH: omp.parallel
-  ! BOTH-SAME: num_threads({{.*}})
-  !$omp parallel num_threads(1)
-  call foo()
-  !$omp end parallel
-end subroutine parallel
-
 ! BOTH-LABEL: func.func @_QPdistribute_parallel_do
 subroutine distribute_parallel_do()
   ! BOTH: omp.target
   
-  ! HOST-SAME: num_threads({{.*}})
+  ! HOST-SAME: host_eval(%{{.*}} -> %[[NUM_THREADS:.*]], %{{.*}} -> %[[LB:.*]], %{{.*}} -> %[[UB:.*]], %{{.*}} -> %[[STEP:.*]] : i32, i32, i32, i32)
   
-  ! DEVICE-NOT: num_threads({{.*}})
+  ! DEVICE-NOT: host_eval({{.*}})
   ! DEVICE-SAME: {
 
   ! BOTH: omp.teams
@@ -88,13 +43,14 @@ subroutine distribute_parallel_do()
 
   ! BOTH: omp.parallel
 
-  ! HOST-NOT: num_threads({{.*}})
-  ! HOST-SAME: {
-
+  ! HOST-SAME: num_threads(%[[NUM_THREADS]] : i32)
   ! DEVICE-SAME: num_threads({{.*}})
 
   ! BOTH: omp.distribute
   ! BOTH-NEXT: omp.wsloop
+  ! BOTH-NEXT: omp.loop_nest
+
+  ! HOST-SAME: (%{{.*}}) : i32 = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]])
   !$omp distribute parallel do num_threads(1)
   do i=1,10
     call foo()
@@ -103,11 +59,11 @@ subroutine distribute_parallel_do()
   !$omp end target teams
 
   ! BOTH: omp.target
-  ! BOTH-NOT: num_threads({{.*}})
+  ! BOTH-NOT: host_eval({{.*}})
   ! BOTH-SAME: {
   ! BOTH: omp.teams
   !$omp target teams
-  call foo()
+  call foo() !< Prevents this from being SPMD.
 
   ! BOTH: omp.parallel
   ! BOTH-SAME: num_threads({{.*}})
@@ -139,9 +95,9 @@ end subroutine distribute_parallel_do
 subroutine distribute_parallel_do_simd()
   ! BOTH: omp.target
   
-  ! HOST-SAME: num_threads({{.*}})
+  ! HOST-SAME: host_eval(%{{.*}} -> %[[NUM_THREADS:.*]], %{{.*}} -> %[[LB:.*]], %{{.*}} -> %[[UB:.*]], %{{.*}} -> %[[STEP:.*]] : i32, i32, i32, i32)
   
-  ! DEVICE-NOT: num_threads({{.*}})
+  ! DEVICE-NOT: host_eval({{.*}})
   ! DEVICE-SAME: {
 
   ! BOTH: omp.teams
@@ -149,14 +105,15 @@ subroutine distribute_parallel_do_simd()
 
   ! BOTH: omp.parallel
 
-  ! HOST-NOT: num_threads({{.*}})
-  ! HOST-SAME: {
-  
+  ! HOST-SAME: num_threads(%[[NUM_THREADS]] : i32)
   ! DEVICE-SAME: num_threads({{.*}})
 
   ! BOTH: omp.distribute
   ! BOTH-NEXT: omp.wsloop
   ! BOTH-NEXT: omp.simd
+  ! BOTH-NEXT: omp.loop_nest
+
+  ! HOST-SAME: (%{{.*}}) : i32 = (%[[LB]]) to (%[[UB]]) inclusive step (%[[STEP]])
   !$omp distribute parallel do simd num_threads(1)
   do i=1,10
     call foo()
@@ -165,11 +122,11 @@ subroutine distribute_parallel_do_simd()
   !$omp end target teams
 
   ! BOTH: omp.target
-  ! BOTH-NOT: num_threads({{.*}})
+  ! BOTH-NOT: host_eval({{.*}})
   ! BOTH-SAME: {
   ! BOTH: omp.teams
   !$omp target teams
-  call foo()
+  call foo() !< Prevents this from being SPMD.
 
   ! BOTH: omp.parallel
   ! BOTH-SAME: num_threads({{.*}})
