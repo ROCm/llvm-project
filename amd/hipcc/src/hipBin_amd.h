@@ -158,10 +158,17 @@ void HipBinAmd::initializeHipLdFlags() {
   if (!fs::exists(hipCC)) {
     hipLdFlags = "--driver-mode=g++";
   }
+  string hipLib = getHipLibPath();
+  hipLdFlags += " -L \"" + hipLib + "\"" + " -lamdhip64";
   hipLdFlags_ = hipLdFlags;
 }
 
 void HipBinAmd::initializeHipCFlags() {
+  string hipCFlags;
+  string hipIncludePath = getHipInclude();
+  hipCFlags += " -isystem \"" + hipIncludePath + "\"";
+
+  hipCFlags_ = hipCFlags;
 }
 
 const string& HipBinAmd::getHipCXXFlags() const {
@@ -192,6 +199,8 @@ void HipBinAmd::initializeHipCXXFlags() {
     hipCXXFlags +=
     " -Xclang -fallow-half-arguments-and-returns -D__HIP_HCC_COMPAT_MODE__=1";
   }
+  string hipIncludePath = getHipInclude();
+  hipCXXFlags += " -isystem \"" + hipIncludePath + "\"";
 
   hipCXXFlags_ = hipCXXFlags;
 }
@@ -367,16 +376,15 @@ bool HipBinAmd::detectPlatform() {
 }
 
 string HipBinAmd::getHipLibPath() const {
-  string hipLibPath;
-  const EnvVariables& env = getEnvVariables();
-  if (!env.hipLibPathEnv_.empty()) {
-    hipLibPath = env.hipLibPathEnv_;
+  const string& rocclrHomePath = getRocclrHomePath();
+  fs::path hipLibfs = rocclrHomePath;
+  hipLibfs /= "lib";
+  if (hipLibfs.string().empty()) {
+    const string& hipPath = getHipPath();
+    hipLibfs = hipPath;
+    hipLibfs /= "include";
   }
-  else if (!env.hipPathEnv_.empty()) {
-    fs::path p = env.hipLibPathEnv_;
-    p /= "lib";
-    hipLibPath = p.string();
-  }
+  string hipLibPath = hipLibfs.string();
   return hipLibPath;
 }
 
