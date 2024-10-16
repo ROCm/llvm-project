@@ -29,12 +29,15 @@ end
 ! HOST: %[[ORIG_J_ALLOC:.*]] = fir.alloca i32 {bindc_name = "j"}
 ! HOST: %[[ORIG_J_DECL:.*]]:2 = hlfir.declare %[[ORIG_J_ALLOC]]
 
-! DEVICE: omp.target {{.*}}map_entries(%{{[^[:space:]]+}} -> %[[I_ARG:[^,]+]],
-! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[X_ARG:[^,]+]],
-! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[J_ARG:[^,]+]],
-! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[K_ARG:[^,]+]],
-! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[A_ARG:[^:]+]]:
-! DEVICE-SAME:   !fir.ref<i32>, !fir.ref<i32>, !fir.ref<i32>, !fir.ref<i32>, !fir.ref<!fir.array<10x20x30xi32>>) {
+! DEVICE: omp.target {{.*}}map_entries(
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> {{[^[:space:]]+}},
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> {{[^[:space:]]+}},
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> {{[^[:space:]]+}},
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[I_ARG:[^[:space:]]+]],
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[X_ARG:[^[:space:]]+]],
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[J_ARG:[^[:space:]]+]],
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[K_ARG:[^[:space:]]+]],
+! DEVICE-SAME:   %{{[^[:space:]]+}} -> %[[A_ARG:[^[:space:]]+]] : {{.*}})
 
 ! DEVICE: %[[TARGET_J_DECL:.*]]:2 = hlfir.declare %[[J_ARG]] {uniq_name = "_QFEj"}
 ! DEVICE: %[[TARGET_K_DECL:.*]]:2 = hlfir.declare %[[K_ARG]] {uniq_name = "_QFEk"}
