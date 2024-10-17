@@ -23,20 +23,24 @@ end subroutine
 
 ! CHECK-DAG: %[[I_MAP:.*]] = omp.map.info var_ptr(%[[I_DECL]]#1 : {{.*}})
 ! CHECK-DAG: %[[A_MAP:.*]] = omp.map.info var_ptr(%[[A_DECL]]#1 : {{.*}})
-! CHECK-DAG: %[[N_MAP:.*]] = omp.map.info var_ptr(%[[N_ALLOC]] : {{.*}})
+! CHECK-DAG: %[[LOOP_LB_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : {{.*}}) {{.*}} {name = "loop.0.lb"}
+! CHECK-DAG: %[[LOOP_UB_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : {{.*}}) {{.*}} {name = "loop.0.ub"}
+! CHECK-DAG: %[[LOOP_STEP_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : {{.*}}) {{.*}} {name = "loop.0.step"}
+! CHECK-DAG: %[[N_MAP:.*]] = omp.map.info var_ptr(%{{.*}} : {{.*}})
 
 ! CHECK: omp.target
-! CHECK-SAME: map_entries(%[[I_MAP]] -> %[[I_ARG:arg[0-9]*]],
+! CHECK-SAME: map_entries(%{{[^[:space:]]+}} -> %[[LB_ARG:arg[0-9]*]],
+! CHECK-SAME:             %{{[^[:space:]]+}} -> %[[UB_ARG:arg[0-9]*]],
+! CHECK-SAME:             %{{[^[:space:]]+}} -> %[[STEP_ARG:arg[0-9]*]],
+! CHECK-SAME:             %[[I_MAP]] -> %[[I_ARG:arg[0-9]*]],
 ! CHECK-SAME:             %[[A_MAP]] -> %[[A_ARG:arg[0-9]*]],
 ! CHECK-SAME:             %[[N_MAP]] -> %[[N_ARG:arg[0-9]*]] : {{.*}})
-! CHECK-SAME: {{.*}} {
+! CHECK-SAME: {
 
+! CHECK-DAG:  %[[N_VAL:.*]] = fir.load %[[N_ARG]]
+! CHECK-DAG:  %[[A_SHAPE:.*]] = fir.shape %[[N_VAL]] : (index) -> !fir.shape<1>
 ! CHECK-DAG:  %{{.*}} = hlfir.declare %[[I_ARG]]
-! CHECK-DAG:  %{{.*}} = hlfir.declare %[[A_ARG]]
-! CHECK-DAG:  %{{.*}} = fir.load %[[N_ARG]]
+! CHECK-DAG:  %{{.*}} = hlfir.declare %[[A_ARG]](%[[A_SHAPE]])
 
 ! CHECK:   omp.terminator
 ! CHECK: }
-
-
-
