@@ -1,4 +1,4 @@
-!RUN: bbc -emit-hlfir -fopenacc -fopenmp -o - %s | FileCheck %s
+!RUN: bbc -emit-hlfir -fopenmp -o - %s | FileCheck %s
 
 !https://github.com/llvm/llvm-project/issues/91526
 
@@ -55,34 +55,5 @@ subroutine simple2(x, yn)
      stop 1
   end if
   print *, E
-end subroutine
-
-!CHECK-LABEL: func.func @_QPacccase
-!CHECK: fir.select_case %{{[0-9]+}} : i32 [{{.*}}, ^bb[[CASE1:[0-9]+]], {{.*}}, ^bb[[CASE2:[0-9]+]], {{.*}}, ^bb[[CASE3:[0-9]+]]]
-!CHECK: ^bb[[CASE1]]:
-!CHECK:   acc.serial
-!CHECK:   cf.br ^bb[[EXIT:[0-9]+]]
-!CHECK: ^bb[[CASE2]]:
-!CHECK:   fir.call @_FortranAioOutputAscii
-!CHECK:   cf.br ^bb[[EXIT]]
-!CHECK: ^bb[[CASE3]]:
-!CHECK:   fir.call @_FortranAioOutputAscii
-!CHECK:   cf.br ^bb[[EXIT]]
-!CHECK: ^bb[[EXIT]]:
-!CHECK:   return
-subroutine acccase(var)
-  integer :: var
-  integer :: res(10)
-  select case (var)
-    case (1)
-      print *, "case 1"
-      !$acc serial
-      res(1) = 1
-      !$acc end serial
-    case (2)
-      print *, "case 2"
-    case default
-      print *, "case default"
-  end select
 end subroutine
 

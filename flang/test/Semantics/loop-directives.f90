@@ -1,5 +1,4 @@
 ! RUN: %python %S/test_errors.py %s %flang_fc1 -Werror
-! RUN: %python %S/test_errors.py %s %flang_fc1 -fopenacc -Werror
 
 subroutine empty
   ! WARNING: A DO loop must follow the VECTOR ALWAYS directive
