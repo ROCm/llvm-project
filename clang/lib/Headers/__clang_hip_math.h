@@ -81,6 +81,19 @@ __DEVICE__ void __static_assert_equal_size() {
 
 #endif
 
+/// @defgroup DeviceAPI Device APIs
+/// @{
+/// Defines the Device APIs. See the individual sections for more information.
+/// @defgroup Math Math API
+/// @{
+/// Defines the Math API. See the individual sections for more information.
+///
+
+/// @defgroup MathInteger Integer Mathematical Functions
+/// @{
+/// Integer Mathematical Functions
+
+/// @brief Make base 8 (octal) mantissa from char array.
 __DEVICE__
 uint64_t __make_mantissa_base8(const char *__tagp __attribute__((nonnull))) {
   uint64_t __r = 0;
@@ -97,7 +110,7 @@ uint64_t __make_mantissa_base8(const char *__tagp __attribute__((nonnull))) {
 
   return __r;
 }
-
+/// @brief Make base 10 (decimal) mantissa char array.
 __DEVICE__
 uint64_t __make_mantissa_base10(const char *__tagp __attribute__((nonnull))) {
   uint64_t __r = 0;
@@ -114,7 +127,7 @@ uint64_t __make_mantissa_base10(const char *__tagp __attribute__((nonnull))) {
 
   return __r;
 }
-
+/// @brief Make base 16 (hexadecimal) mantissa char array.
 __DEVICE__
 uint64_t __make_mantissa_base16(const char *__tagp __attribute__((nonnull))) {
   uint64_t __r = 0;
@@ -135,7 +148,7 @@ uint64_t __make_mantissa_base16(const char *__tagp __attribute__((nonnull))) {
 
   return __r;
 }
-
+/// @brief Make mantissa based on number format char array.
 __DEVICE__
 uint64_t __make_mantissa(const char *__tagp __attribute__((nonnull))) {
   if (*__tagp == '0') {
@@ -149,20 +162,26 @@ uint64_t __make_mantissa(const char *__tagp __attribute__((nonnull))) {
 
   return __make_mantissa_base10(__tagp);
 }
+/// @}
+
+/// @defgroup MathFloatIntrinsics Single Precision Floating-point Intrinsics
+/// @{
+/// Single Precision Floating-point Intrinsics
 
 // BEGIN FLOAT
 
 // BEGIN INTRINSICS
 
+/// @brief Returns the fast approximate cosine of `x`.
 __DEVICE__
 float __cosf(float __x) { return __ocml_native_cos_f32(__x); }
-
+/// @brief Returns the fast approximate for \f$ 10^x \f$.
 __DEVICE__
 float __exp10f(float __x) {
   const float __log2_10 = 0x1.a934f0p+1f;
   return __builtin_amdgcn_exp2f(__log2_10 * __x);
 }
-
+/// @brief Returns the fast approximate for \f$ e^x \f$.
 __DEVICE__
 float __expf(float __x) {
   const float __log2_e = 0x1.715476p+0;
@@ -170,54 +189,69 @@ float __expf(float __x) {
 }
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Divide two floating-point values in round-down mode.
 __DEVICE__
 float __fadd_rd(float __x, float __y) { return __ocml_add_rtn_f32(__x, __y); }
+/// @brief Add two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fadd_rn(float __x, float __y) { return __ocml_add_rte_f32(__x, __y); }
+/// @brief Add two floating-point values in round-up mode.
 __DEVICE__
 float __fadd_ru(float __x, float __y) { return __ocml_add_rtp_f32(__x, __y); }
+/// @brief Add two floating-point values in round-towards-zero mode.
 __DEVICE__
 float __fadd_rz(float __x, float __y) { return __ocml_add_rtz_f32(__x, __y); }
 #else
+/// @brief Add two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fadd_rn(float __x, float __y) { return __x + __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Divide two floating-point values in round-down mode.
 __DEVICE__
 float __fdiv_rd(float __x, float __y) { return __ocml_div_rtn_f32(__x, __y); }
+/// @brief Divide two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fdiv_rn(float __x, float __y) { return __ocml_div_rte_f32(__x, __y); }
+/// @brief Divide two floating-point values in round-up mode.
 __DEVICE__
 float __fdiv_ru(float __x, float __y) { return __ocml_div_rtp_f32(__x, __y); }
+/// @brief Divide two floating-point values in round-towards-zero mode.
 __DEVICE__
 float __fdiv_rz(float __x, float __y) { return __ocml_div_rtz_f32(__x, __y); }
 #else
+/// @brief Divide two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fdiv_rn(float __x, float __y) { return __x / __y; }
 #endif
-
+/// @brief Returns the fast approximate of `x / y`.
 __DEVICE__
 float __fdividef(float __x, float __y) { return __x / __y; }
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation, in round-down mode.
 __DEVICE__
 float __fmaf_rd(float __x, float __y, float __z) {
   return __ocml_fma_rtn_f32(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation, in round-to-nearest-even mode.
 __DEVICE__
 float __fmaf_rn(float __x, float __y, float __z) {
   return __ocml_fma_rte_f32(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation, in round-up mode.
 __DEVICE__
 float __fmaf_ru(float __x, float __y, float __z) {
   return __ocml_fma_rtp_f32(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation, in round-towards-zero mode.
 __DEVICE__
 float __fmaf_rz(float __x, float __y, float __z) {
   return __ocml_fma_rtz_f32(__x, __y, __z);
 }
 #else
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation, in round-to-nearest-even mode.
 __DEVICE__
 float __fmaf_rn(float __x, float __y, float __z) {
   return __builtin_fmaf(__x, __y, __z);
@@ -225,233 +259,265 @@ float __fmaf_rn(float __x, float __y, float __z) {
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Multiply two floating-point values in round-down mode.
 __DEVICE__
 float __fmul_rd(float __x, float __y) { return __ocml_mul_rtn_f32(__x, __y); }
+/// @brief Multiply two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fmul_rn(float __x, float __y) { return __ocml_mul_rte_f32(__x, __y); }
+/// @brief Multiply two floating-point values in round-up mode.
 __DEVICE__
 float __fmul_ru(float __x, float __y) { return __ocml_mul_rtp_f32(__x, __y); }
+/// @brief Multiply two floating-point values in round-towards-zero mode.
 __DEVICE__
 float __fmul_rz(float __x, float __y) { return __ocml_mul_rtz_f32(__x, __y); }
 #else
+/// @brief Multiply two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fmul_rn(float __x, float __y) { return __x * __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns 1 / x in round-down mode.
 __DEVICE__
 float __frcp_rd(float __x) { return __ocml_div_rtn_f32(1.0f, __x); }
+/// @brief Returns 1 / x in round-to-nearest-even mod
 __DEVICE__
 float __frcp_rn(float __x) { return __ocml_div_rte_f32(1.0f, __x); }
+/// @brief Returns 1 / x in round-up mode.
 __DEVICE__
 float __frcp_ru(float __x) { return __ocml_div_rtp_f32(1.0f, __x); }
+/// @brief Returns 1 / x in round-towards-zero mode.
 __DEVICE__
 float __frcp_rz(float __x) { return __ocml_div_rtz_f32(1.0f, __x); }
 #else
+/// @brief Returns 1 / x in round-to-nearest-even mod
 __DEVICE__
 float __frcp_rn(float __x) { return 1.0f / __x; }
 #endif
 
+/// @brief Returns \f$ 1 / \sqrt{x}\f$ in round-to-nearest-even mode.
 __DEVICE__
 float __frsqrt_rn(float __x) { return __builtin_amdgcn_rsqf(__x); }
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns \f$\sqrt{x}\f$ in round-down mode.
 __DEVICE__
 float __fsqrt_rd(float __x) { return __ocml_sqrt_rtn_f32(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-to-nearest-even mode.
 __DEVICE__
 float __fsqrt_rn(float __x) { return __ocml_sqrt_rte_f32(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-up mode.
 __DEVICE__
 float __fsqrt_ru(float __x) { return __ocml_sqrt_rtp_f32(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-towards-zero mode.
 __DEVICE__
 float __fsqrt_rz(float __x) { return __ocml_sqrt_rtz_f32(__x); }
 #else
+/// @brief Returns \f$\sqrt{x}\f$ in round-to-nearest-even mode.
 __DEVICE__
 float __fsqrt_rn(float __x) { return __ocml_native_sqrt_f32(__x); }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Subtract two floating-point values in round-down mode.
 __DEVICE__
 float __fsub_rd(float __x, float __y) { return __ocml_sub_rtn_f32(__x, __y); }
+/// @brief Subtract two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fsub_rn(float __x, float __y) { return __ocml_sub_rte_f32(__x, __y); }
+/// @brief Subtract two floating-point values in round-up mode.
 __DEVICE__
 float __fsub_ru(float __x, float __y) { return __ocml_sub_rtp_f32(__x, __y); }
+/// @brief Subtract two floating-point values in round-towards-zero mode.
 __DEVICE__
 float __fsub_rz(float __x, float __y) { return __ocml_sub_rtz_f32(__x, __y); }
 #else
+/// @brief Subtract two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 float __fsub_rn(float __x, float __y) { return __x - __y; }
 #endif
 
+/// @brief Returns the fast approximate for base 10 logarithm of `x`.
 __DEVICE__
 float __log10f(float __x) { return __builtin_log10f(__x); }
-
+/// @brief Returns the fast approximate for base 2 logarithm of `x`.
 __DEVICE__
 float __log2f(float __x) { return __builtin_amdgcn_logf(__x); }
-
+/// @brief Returns the fast approximate for natural logarithm of `x`.
 __DEVICE__
 float __logf(float __x) { return __builtin_logf(__x); }
-
+/// @brief Returns the fast approximate of \f$ x^y \f$
 __DEVICE__
 float __powf(float __x, float __y) { return __ocml_pow_f32(__x, __y); }
-
+/// @brief Clamp `x` to [+0.0, 1.0].
 __DEVICE__
 float __saturatef(float __x) { return (__x < 0) ? 0 : ((__x > 1) ? 1 : __x); }
-
+/// @brief Returns the fast approximate of sine and cosine of `x`.
 __DEVICE__
 void __sincosf(float __x, float *__sinptr, float *__cosptr) {
   *__sinptr = __ocml_native_sin_f32(__x);
   *__cosptr = __ocml_native_cos_f32(__x);
 }
-
+/// @brief Returns the fast approximate sine of `x`.
 __DEVICE__
 float __sinf(float __x) { return __ocml_native_sin_f32(__x); }
-
+/// @brief Returns the fast approximate tangent of `x`.
 __DEVICE__
 float __tanf(float __x) {
   return __sinf(__x) * __builtin_amdgcn_rcpf(__cosf(__x));
 }
 // END INTRINSICS
 
+/// @}
+
 #if defined(__cplusplus)
+/// @brief Returns the absolute value of `x`.
 __DEVICE__
 int abs(int __x) {
   return __builtin_abs(__x);
 }
+/// @brief Returns the absolute value of `x`.
 __DEVICE__
 long labs(long __x) {
   return __builtin_labs(__x);
 }
+/// @brief Returns the absolute value of `x`.
 __DEVICE__
 long long llabs(long long __x) {
   return __builtin_llabs(__x);
 }
 #endif
 
+/// @defgroup MathFloat Single Precision Floating-point Mathematical Functions
+/// @{
+/// Single Precision Floating-point Mathematical Functions
+
+/// @brief Returns the arc cosine of `x`.
 __DEVICE__
 float acosf(float __x) { return __ocml_acos_f32(__x); }
-
+/// @brief Returns the nonnegative arc hyperbolic cosine of `x`.
 __DEVICE__
 float acoshf(float __x) { return __ocml_acosh_f32(__x); }
-
+/// @brief Returns the arc sine of `x`.
 __DEVICE__
 float asinf(float __x) { return __ocml_asin_f32(__x); }
-
+/// @brief Returns the arc hyperbolic sine of `x`.
 __DEVICE__
 float asinhf(float __x) { return __ocml_asinh_f32(__x); }
-
+/// @brief Returns the arc tangent of the ratio of `x` and `y`.
 __DEVICE__
 float atan2f(float __x, float __y) { return __ocml_atan2_f32(__x, __y); }
-
+/// @brief Returns the arc tangent of `x`.
 __DEVICE__
 float atanf(float __x) { return __ocml_atan_f32(__x); }
-
+/// @brief Returns the arc hyperbolic tangent of `x`.
 __DEVICE__
 float atanhf(float __x) { return __ocml_atanh_f32(__x); }
-
+/// @brief Returns the cube root of `x`.
 __DEVICE__
 float cbrtf(float __x) { return __ocml_cbrt_f32(__x); }
-
+/// @brief Returns ceiling of `x`.
 __DEVICE__
 float ceilf(float __x) { return __builtin_ceilf(__x); }
-
+/// @brief Create value with given magnitude, copying sign of second value.
 __DEVICE__
 float copysignf(float __x, float __y) { return __builtin_copysignf(__x, __y); }
-
+/// @brief Returns the cosine of `x`.
 __DEVICE__
 float cosf(float __x) { return __FAST_OR_SLOW(__cosf, __ocml_cos_f32)(__x); }
-
+/// @brief Returns the hyperbolic cosine of `x`.
 __DEVICE__
 float coshf(float __x) { return __ocml_cosh_f32(__x); }
-
+/// @brief Returns the cosine of \f$ \pi x\f$.
 __DEVICE__
 float cospif(float __x) { return __ocml_cospi_f32(__x); }
-
+/// @brief Returns the value of the regular modified cylindrical Bessel function of order 0 for `x`.
 __DEVICE__
 float cyl_bessel_i0f(float __x) { return __ocml_i0_f32(__x); }
-
+/// @brief Returns the value of the regular modified cylindrical Bessel function of order 1 for `x`.
 __DEVICE__
 float cyl_bessel_i1f(float __x) { return __ocml_i1_f32(__x); }
-
+/// @brief Returns the complementary error function of `x`.
 __DEVICE__
 float erfcf(float __x) { return __ocml_erfc_f32(__x); }
-
+/// @brief Returns the inverse complementary function of `x`.
 __DEVICE__
 float erfcinvf(float __x) { return __ocml_erfcinv_f32(__x); }
-
+/// @brief Returns the scaled complementary error function of `x`.
 __DEVICE__
 float erfcxf(float __x) { return __ocml_erfcx_f32(__x); }
-
+/// @brief Returns the error function of `x`.
 __DEVICE__
 float erff(float __x) { return __ocml_erf_f32(__x); }
-
+/// @brief Returns the inverse error function of `x`.
 __DEVICE__
 float erfinvf(float __x) { return __ocml_erfinv_f32(__x); }
-
+/// @brief Returns \f$ 10^x \f$.
 __DEVICE__
 float exp10f(float __x) { return __ocml_exp10_f32(__x); }
-
+/// @brief Returns \f$ 2^x \f$.
 __DEVICE__
 float exp2f(float __x) { return __builtin_exp2f(__x); }
-
+/// @brief Returns \f$ e^x \f$.
 __DEVICE__
 float expf(float __x) { return __builtin_expf(__x); }
-
+/// @brief Returns \f$ \ln x - 1 \f$
 __DEVICE__
 float expm1f(float __x) { return __ocml_expm1_f32(__x); }
-
+/// @brief Returns the absolute value of `x`
 __DEVICE__
 float fabsf(float __x) { return __builtin_fabsf(__x); }
-
+/// @brief Returns the positive difference between `x` and `y`.
 __DEVICE__
 float fdimf(float __x, float __y) { return __ocml_fdim_f32(__x, __y); }
-
+/// @brief Divide two floating point values.
 __DEVICE__
 float fdividef(float __x, float __y) { return __x / __y; }
-
+/// @brief Returns the largest integer less than or equal to `x`.
 __DEVICE__
 float floorf(float __x) { return __builtin_floorf(__x); }
-
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation.
 __DEVICE__
 float fmaf(float __x, float __y, float __z) {
   return __builtin_fmaf(__x, __y, __z);
 }
-
+/// @brief Determine the maximum numeric value of `x` and `y`.
 __DEVICE__
 float fmaxf(float __x, float __y) { return __builtin_fmaxf(__x, __y); }
-
+/// @brief Determine the minimum numeric value of `x` and `y`.
 __DEVICE__
 float fminf(float __x, float __y) { return __builtin_fminf(__x, __y); }
-
+/// @brief Returns the floating-point remainder of `x / y`.
 __DEVICE__
 float fmodf(float __x, float __y) { return __ocml_fmod_f32(__x, __y); }
-
+/// @brief Extract mantissa and exponent of `x`.
 __DEVICE__
 float frexpf(float __x, int *__nptr) {
   return __builtin_frexpf(__x, __nptr);
 }
-
+/// @brief Returns the square root of the sum of squares of `x` and `y`.
 __DEVICE__
 float hypotf(float __x, float __y) { return __ocml_hypot_f32(__x, __y); }
-
+/// @brief Returns the unbiased integer exponent of `x`.
 __DEVICE__
 int ilogbf(float __x) { return __ocml_ilogb_f32(__x); }
-
+/// @brief Determine whether `x` is finite.
 __DEVICE__
 __RETURN_TYPE __finitef(float __x) { return __builtin_isfinite(__x); }
-
+/// @brief Determine whether `x` is infinite.
 __DEVICE__
 __RETURN_TYPE __isinff(float __x) { return __builtin_isinf(__x); }
-
+/// @brief Determine whether `x` is a NaN.
 __DEVICE__
 __RETURN_TYPE __isnanf(float __x) { return __builtin_isnan(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order 0 for `x`.
 __DEVICE__
 float j0f(float __x) { return __ocml_j0_f32(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order 1 for `x`.
 __DEVICE__
 float j1f(float __x) { return __ocml_j1_f32(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order n for `x`.
 __DEVICE__
 float jnf(int __n, float __x) { // TODO: we could use Ahmes multiplication
                                 // and the Miller & Brown algorithm
@@ -472,40 +538,40 @@ float jnf(int __n, float __x) { // TODO: we could use Ahmes multiplication
 
   return __x1;
 }
-
+/// @brief Returns the value of \f$x \cdot 2^{e}\f$ for `x` and `e`.
 __DEVICE__
 float ldexpf(float __x, int __e) { return __builtin_amdgcn_ldexpf(__x, __e); }
-
+/// @brief Returns the natural logarithm of the absolute value of the gamma function of `x`.
 __DEVICE__
 float lgammaf(float __x) { return __ocml_lgamma_f32(__x); }
-
+/// @brief Round `x` to nearest integer value.
 __DEVICE__
 long long int llrintf(float __x) { return __builtin_rintf(__x); }
-
+/// @brief Round to nearest integer value.
 __DEVICE__
 long long int llroundf(float __x) { return __builtin_roundf(__x); }
-
+/// @brief Returns the base 10 logarithm of `x`.
 __DEVICE__
 float log10f(float __x) { return __builtin_log10f(__x); }
-
+/// @brief Returns the natural logarithm of `x` + 1.
 __DEVICE__
 float log1pf(float __x) { return __ocml_log1p_f32(__x); }
-
+/// @brief Returns the base 2 logarithm of `x`.
 __DEVICE__
 float log2f(float __x) { return __FAST_OR_SLOW(__log2f, __ocml_log2_f32)(__x); }
-
+/// @brief Returns the floating point representation of the exponent of `x`.
 __DEVICE__
 float logbf(float __x) { return __ocml_logb_f32(__x); }
-
+/// @brief Returns the natural logarithm of `x`.
 __DEVICE__
 float logf(float __x) { return __FAST_OR_SLOW(__logf, __ocml_log_f32)(__x); }
-
+/// @brief Round `x` to nearest integer value.
 __DEVICE__
 long int lrintf(float __x) { return __builtin_rintf(__x); }
-
+/// @brief Round to nearest integer value.
 __DEVICE__
 long int lroundf(float __x) { return __builtin_roundf(__x); }
-
+/// @brief Break down `x` into fractional and integral parts.
 __DEVICE__
 float modff(float __x, float *__iptr) {
   float __tmp;
@@ -517,7 +583,7 @@ float modff(float __x, float *__iptr) {
   *__iptr = __tmp;
   return __r;
 }
-
+/// @brief Returns "Not a Number" value.
 __DEVICE__
 float nanf(const char *__tagp __attribute__((nonnull))) {
   union {
@@ -538,31 +604,31 @@ float nanf(const char *__tagp __attribute__((nonnull))) {
 
   return __tmp.val;
 }
-
+/// @brief Round `x` to the nearest integer.
 __DEVICE__
 float nearbyintf(float __x) { return __builtin_nearbyintf(__x); }
-
+/// @brief Returns next representable single-precision floating-point value after `x`.
 __DEVICE__
 float nextafterf(float __x, float __y) {
   return __ocml_nextafter_f32(__x, __y);
 }
-
+/// @brief Returns the square root of the sum of squares of `x`, `y` and `z`.
 __DEVICE__
 float norm3df(float __x, float __y, float __z) {
   return __ocml_len3_f32(__x, __y, __z);
 }
-
+/// @brief Returns the square root of the sum of squares of `x`, `y`, `z` and `w`.
 __DEVICE__
 float norm4df(float __x, float __y, float __z, float __w) {
   return __ocml_len4_f32(__x, __y, __z, __w);
 }
-
+/// @brief Returns the standard normal cumulative distribution function.
 __DEVICE__
 float normcdff(float __x) { return __ocml_ncdf_f32(__x); }
-
+/// @brief Returns the inverse of the standard normal cumulative distribution function.
 __DEVICE__
 float normcdfinvf(float __x) { return __ocml_ncdfinv_f32(__x); }
-
+/// @brief Returns the square root of the sum of squares of any number of coordinates.
 __DEVICE__
 float normf(int __dim,
             const float *__a) { // TODO: placeholder until OCML adds support.
@@ -574,21 +640,21 @@ float normf(int __dim,
 
   return __builtin_sqrtf(__r);
 }
-
+/// @brief Returns \f$ x^y \f$.
 __DEVICE__
 float powf(float __x, float __y) { return __ocml_pow_f32(__x, __y); }
-
+/// @brief Returns the value of first argument to the power of second argument.
 __DEVICE__
 float powif(float __x, int __y) { return __ocml_pown_f32(__x, __y); }
-
+/// @brief Returns the reciprocal cube root function.
 __DEVICE__
 float rcbrtf(float __x) { return __ocml_rcbrt_f32(__x); }
-
+/// @brief Returns single-precision floating-point remainder.
 __DEVICE__
 float remainderf(float __x, float __y) {
   return __ocml_remainder_f32(__x, __y);
 }
-
+/// @brief Returns single-precision floating-point remainder and part of quotient.
 __DEVICE__
 float remquof(float __x, float __y, int *__quo) {
   int __tmp;
@@ -601,23 +667,23 @@ float remquof(float __x, float __y, int *__quo) {
 
   return __r;
 }
-
+/// @brief Returns one over the square root of the sum of squares of `x` and `y`.
 __DEVICE__
 float rhypotf(float __x, float __y) { return __ocml_rhypot_f32(__x, __y); }
-
+/// @brief Round `x` to nearest integer value in floating-point.
 __DEVICE__
 float rintf(float __x) { return __builtin_rintf(__x); }
-
+/// @brief Returns one over the square root of the sum of squares of `x`, `y` and `z`.
 __DEVICE__
 float rnorm3df(float __x, float __y, float __z) {
   return __ocml_rlen3_f32(__x, __y, __z);
 }
-
+/// @brief Returns one over the square root of the sum of squares of `x`, `y`, `z` and `w`.
 __DEVICE__
 float rnorm4df(float __x, float __y, float __z, float __w) {
   return __ocml_rlen4_f32(__x, __y, __z, __w);
 }
-
+/// @brief Returns the reciprocal of square root of the sum of squares of any number of coordinates.
 __DEVICE__
 float rnormf(int __dim,
              const float *__a) { // TODO: placeholder until OCML adds support.
@@ -629,25 +695,25 @@ float rnormf(int __dim,
 
   return __ocml_rsqrt_f32(__r);
 }
-
+/// @brief Round to nearest integer value in floating-point.
 __DEVICE__
 float roundf(float __x) { return __builtin_roundf(__x); }
-
+/// @brief Returns the reciprocal of the square root of `x`.
 __DEVICE__
 float rsqrtf(float __x) { return __ocml_rsqrt_f32(__x); }
-
+/// @brief Scale `x` by \f$ 2^n \f$.
 __DEVICE__
 float scalblnf(float __x, long int __n) {
   return (__n < INT_MAX) ? __builtin_amdgcn_ldexpf(__x, __n)
                          : __ocml_scalb_f32(__x, __n);
 }
-
+/// @brief Scale `x` by \f$ 2^n \f$.
 __DEVICE__
 float scalbnf(float __x, int __n) { return __builtin_amdgcn_ldexpf(__x, __n); }
-
+/// @brief Return the sign bit of `x`.
 __DEVICE__
 __RETURN_TYPE __signbitf(float __x) { return __builtin_signbitf(__x); }
-
+/// @brief Returns the sine and cosine of `x`.
 __DEVICE__
 void sincosf(float __x, float *__sinptr, float *__cosptr) {
   float __tmp;
@@ -662,7 +728,7 @@ void sincosf(float __x, float *__sinptr, float *__cosptr) {
   *__cosptr = __tmp;
 #endif
 }
-
+/// @brief Returns the sine and cosine of \f$ \pi x\f$.
 __DEVICE__
 void sincospif(float __x, float *__sinptr, float *__cosptr) {
   float __tmp;
@@ -673,37 +739,37 @@ void sincospif(float __x, float *__sinptr, float *__cosptr) {
       __x, (__attribute__((address_space(5))) float *)&__tmp);
   *__cosptr = __tmp;
 }
-
+/// @brief Returns the sine of `x`.
 __DEVICE__
 float sinf(float __x) { return __FAST_OR_SLOW(__sinf, __ocml_sin_f32)(__x); }
-
+/// @brief Returns the hyperbolic sine of `x`.
 __DEVICE__
 float sinhf(float __x) { return __ocml_sinh_f32(__x); }
-
+/// @brief Returns the hyperbolic sine of \f$ \pi x\f$.
 __DEVICE__
 float sinpif(float __x) { return __ocml_sinpi_f32(__x); }
-
+/// @brief Returns the square root of `x`.
 __DEVICE__
 float sqrtf(float __x) { return __builtin_sqrtf(__x); }
-
+/// @brief Returns the tangent of `x`.
 __DEVICE__
 float tanf(float __x) { return __ocml_tan_f32(__x); }
-
+/// @brief Returns the hyperbolic tangent of `x`.
 __DEVICE__
 float tanhf(float __x) { return __ocml_tanh_f32(__x); }
-
+/// @brief Returns the gamma function of `x`.
 __DEVICE__
 float tgammaf(float __x) { return __ocml_tgamma_f32(__x); }
-
+/// @brief Truncate `x` to the integral part.
 __DEVICE__
 float truncf(float __x) { return __builtin_truncf(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order 0 for `x`.
 __DEVICE__
 float y0f(float __x) { return __ocml_y0_f32(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order 1 for `x`.
 __DEVICE__
 float y1f(float __x) { return __ocml_y1_f32(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order n for `x`.
 __DEVICE__
 float ynf(int __n, float __x) { // TODO: we could use Ahmes multiplication
                                 // and the Miller & Brown algorithm
@@ -725,134 +791,140 @@ float ynf(int __n, float __x) { // TODO: we could use Ahmes multiplication
 
   return __x1;
 }
-
-
 // END FLOAT
 
+/// @}
+
+/// @defgroup MathDouble Double Precision Floating-point Mathematical Functions
+/// @{
+/// Double Precision Floating-point Mathematical Functions
+
 // BEGIN DOUBLE
+
+/// @brief Returns the arc cosine of `x`.
 __DEVICE__
 double acos(double __x) { return __ocml_acos_f64(__x); }
-
+/// @brief Returns the nonnegative arc hyperbolic cosine of `x`.
 __DEVICE__
 double acosh(double __x) { return __ocml_acosh_f64(__x); }
-
+/// @brief Returns the arc sine of `x`.
 __DEVICE__
 double asin(double __x) { return __ocml_asin_f64(__x); }
-
+/// @brief Returns the arc hyperbolic sine of `x`.
 __DEVICE__
 double asinh(double __x) { return __ocml_asinh_f64(__x); }
-
+/// @brief Returns the arc tangent of `x`.
 __DEVICE__
 double atan(double __x) { return __ocml_atan_f64(__x); }
-
+/// @brief Returns the arc tangent of the ratio of `x` and `y`.
 __DEVICE__
 double atan2(double __x, double __y) { return __ocml_atan2_f64(__x, __y); }
-
+/// @brief Returns the arc hyperbolic tangent of `x`.
 __DEVICE__
 double atanh(double __x) { return __ocml_atanh_f64(__x); }
-
+/// @brief Returns the cube root of `x`.
 __DEVICE__
 double cbrt(double __x) { return __ocml_cbrt_f64(__x); }
-
+/// @brief Returns ceiling of `x`.
 __DEVICE__
 double ceil(double __x) { return __builtin_ceil(__x); }
-
+/// @brief Create value with given magnitude, copying sign of second value.
 __DEVICE__
 double copysign(double __x, double __y) {
   return __builtin_copysign(__x, __y);
 }
-
+/// @brief Returns the cosine of `x`.
 __DEVICE__
 double cos(double __x) { return __ocml_cos_f64(__x); }
-
+/// @brief Returns the hyperbolic cosine of `x`.
 __DEVICE__
 double cosh(double __x) { return __ocml_cosh_f64(__x); }
-
+/// @brief Returns the cosine of \f$ x\pi\f$.
 __DEVICE__
 double cospi(double __x) { return __ocml_cospi_f64(__x); }
-
+/// @brief Returns the value of the regular modified cylindrical Bessel function of order 0 for `x`.
 __DEVICE__
 double cyl_bessel_i0(double __x) { return __ocml_i0_f64(__x); }
-
+/// @brief Returns the value of the regular modified cylindrical Bessel function of order 1 for `x`.
 __DEVICE__
 double cyl_bessel_i1(double __x) { return __ocml_i1_f64(__x); }
-
+/// @brief Returns the error function of `x`.
 __DEVICE__
 double erf(double __x) { return __ocml_erf_f64(__x); }
-
+/// @brief Returns the complementary error function of `x`.
 __DEVICE__
 double erfc(double __x) { return __ocml_erfc_f64(__x); }
-
+/// @brief Returns the inverse complementary function of `x`.
 __DEVICE__
 double erfcinv(double __x) { return __ocml_erfcinv_f64(__x); }
-
+/// @brief Returns the scaled complementary error function of `x`.
 __DEVICE__
 double erfcx(double __x) { return __ocml_erfcx_f64(__x); }
-
+/// @brief Returns the inverse error function of `x`.
 __DEVICE__
 double erfinv(double __x) { return __ocml_erfinv_f64(__x); }
-
+/// @brief Returns \f$ e^x \f$.
 __DEVICE__
 double exp(double __x) { return __ocml_exp_f64(__x); }
-
+/// @brief Returns \f$ 10^x \f$.
 __DEVICE__
 double exp10(double __x) { return __ocml_exp10_f64(__x); }
-
+/// @brief Returns \f$ 2^x \f$.
 __DEVICE__
 double exp2(double __x) { return __ocml_exp2_f64(__x); }
-
+/// @brief Returns \f$ e^x -1\f$ for `x`.
 __DEVICE__
 double expm1(double __x) { return __ocml_expm1_f64(__x); }
-
+/// @brief Returns the absolute value of `x`.
 __DEVICE__
 double fabs(double __x) { return __builtin_fabs(__x); }
-
+/// @brief Returns the positive difference between `x` and `y`.
 __DEVICE__
 double fdim(double __x, double __y) { return __ocml_fdim_f64(__x, __y); }
-
+/// @brief Returns the largest integer less than or equal to `x`.
 __DEVICE__
 double floor(double __x) { return __builtin_floor(__x); }
-
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation.
 __DEVICE__
 double fma(double __x, double __y, double __z) {
   return __builtin_fma(__x, __y, __z);
 }
-
+/// @brief Determine the maximum numeric value of `x` and `y`.
 __DEVICE__
 double fmax(double __x, double __y) { return __builtin_fmax(__x, __y); }
-
+/// @brief Determine the minimum numeric value of `x` and `y`.
 __DEVICE__
 double fmin(double __x, double __y) { return __builtin_fmin(__x, __y); }
-
+/// @brief Returns the floating-point remainder of `x / y`.
 __DEVICE__
 double fmod(double __x, double __y) { return __ocml_fmod_f64(__x, __y); }
-
+/// @brief Extract mantissa and exponent of `x`.
 __DEVICE__
 double frexp(double __x, int *__nptr) {
   return __builtin_frexp(__x, __nptr);
 }
-
+/// @brief Returns the square root of the sum of squares of `x` and `y`.
 __DEVICE__
 double hypot(double __x, double __y) { return __ocml_hypot_f64(__x, __y); }
-
+/// @brief Returns the unbiased integer exponent of `x`.
 __DEVICE__
 int ilogb(double __x) { return __ocml_ilogb_f64(__x); }
-
+/// @brief Determine whether `x` is finite.
 __DEVICE__
 __RETURN_TYPE __finite(double __x) { return __builtin_isfinite(__x); }
-
+/// @brief Determine whether `x` is infinite.
 __DEVICE__
 __RETURN_TYPE __isinf(double __x) { return __builtin_isinf(__x); }
-
+/// @brief Determine whether `x` is a NaN.
 __DEVICE__
 __RETURN_TYPE __isnan(double __x) { return __builtin_isnan(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order 0 for `x`.
 __DEVICE__
 double j0(double __x) { return __ocml_j0_f64(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order 1 for `x`.
 __DEVICE__
 double j1(double __x) { return __ocml_j1_f64(__x); }
-
+/// @brief Returns the value of the Bessel function of the first kind of order n for `x`.
 __DEVICE__
 double jn(int __n, double __x) { // TODO: we could use Ahmes multiplication
                                  // and the Miller & Brown algorithm
@@ -873,40 +945,40 @@ double jn(int __n, double __x) { // TODO: we could use Ahmes multiplication
   }
   return __x1;
 }
-
+/// @brief Returns the value of \f$x \cdot 2^{e}\f$ for `x` and `e`.
 __DEVICE__
 double ldexp(double __x, int __e) { return __builtin_amdgcn_ldexp(__x, __e); }
-
+/// @brief Returns the natural logarithm of the absolute value of the gamma function of `x`.
 __DEVICE__
 double lgamma(double __x) { return __ocml_lgamma_f64(__x); }
-
+/// @brief Round `x` to nearest integer value.
 __DEVICE__
 long long int llrint(double __x) { return __builtin_rint(__x); }
-
+/// @brief Round to nearest integer value.
 __DEVICE__
 long long int llround(double __x) { return __builtin_round(__x); }
-
+/// @brief Returns the natural logarithm of `x`.
 __DEVICE__
 double log(double __x) { return __ocml_log_f64(__x); }
-
+/// @brief Returns the base 10 logarithm of `x`.
 __DEVICE__
 double log10(double __x) { return __ocml_log10_f64(__x); }
-
+/// @brief Returns the natural logarithm of `x` + 1.
 __DEVICE__
 double log1p(double __x) { return __ocml_log1p_f64(__x); }
-
+/// @brief Returns the base 2 logarithm of `x`.
 __DEVICE__
 double log2(double __x) { return __ocml_log2_f64(__x); }
-
+/// @brief Returns the floating point representation of the exponent of `x`.
 __DEVICE__
 double logb(double __x) { return __ocml_logb_f64(__x); }
-
+/// @brief Round `x` to nearest integer value.
 __DEVICE__
 long int lrint(double __x) { return __builtin_rint(__x); }
-
+/// @brief Round to nearest integer value.
 __DEVICE__
 long int lround(double __x) { return __builtin_round(__x); }
-
+/// @brief Break down `x` into fractional and integral parts.
 __DEVICE__
 double modf(double __x, double *__iptr) {
   double __tmp;
@@ -919,7 +991,7 @@ double modf(double __x, double *__iptr) {
 
   return __r;
 }
-
+/// @brief Returns "Not a Number" value.
 __DEVICE__
 double nan(const char *__tagp) {
 #if !_WIN32
@@ -947,15 +1019,15 @@ double nan(const char *__tagp) {
   return *reinterpret_cast<double *>(&__val);
 #endif
 }
-
+/// @brief Round `x` to the nearest integer.
 __DEVICE__
 double nearbyint(double __x) { return __builtin_nearbyint(__x); }
-
+/// @brief Returns next representable single-precision floating-point value after `x`.
 __DEVICE__
 double nextafter(double __x, double __y) {
   return __ocml_nextafter_f64(__x, __y);
 }
-
+/// @brief Returns the square root of the sum of squares of any number of coordinates.
 __DEVICE__
 double norm(int __dim,
             const double *__a) { // TODO: placeholder until OCML adds support.
@@ -967,37 +1039,37 @@ double norm(int __dim,
 
   return __builtin_sqrt(__r);
 }
-
+/// @brief Returns the square root of the sum of squares of `x`, `y` and `z`.
 __DEVICE__
 double norm3d(double __x, double __y, double __z) {
   return __ocml_len3_f64(__x, __y, __z);
 }
-
+/// @brief Returns the square root of the sum of squares of `x`, `y`, `z` and `w`.
 __DEVICE__
 double norm4d(double __x, double __y, double __z, double __w) {
   return __ocml_len4_f64(__x, __y, __z, __w);
 }
-
+/// @brief Returns the standard normal cumulative distribution function.
 __DEVICE__
 double normcdf(double __x) { return __ocml_ncdf_f64(__x); }
-
+/// @brief Returns the inverse of the standard normal cumulative distribution function.
 __DEVICE__
 double normcdfinv(double __x) { return __ocml_ncdfinv_f64(__x); }
-
+/// @brief Returns \f$ x^y \f$.
 __DEVICE__
 double pow(double __x, double __y) { return __ocml_pow_f64(__x, __y); }
-
+/// @brief Returns the value of first argument to the power of second argument.
 __DEVICE__
 double powi(double __x, int __y) { return __ocml_pown_f64(__x, __y); }
-
+/// @brief Returns the reciprocal cube root function.
 __DEVICE__
 double rcbrt(double __x) { return __ocml_rcbrt_f64(__x); }
-
+/// @brief Returns double-precision floating-point remainder.
 __DEVICE__
 double remainder(double __x, double __y) {
   return __ocml_remainder_f64(__x, __y);
 }
-
+/// @brief Returns double-precision floating-point remainder and part of quotient.
 __DEVICE__
 double remquo(double __x, double __y, int *__quo) {
   int __tmp;
@@ -1010,13 +1082,13 @@ double remquo(double __x, double __y, int *__quo) {
 
   return __r;
 }
-
+/// @brief Returns one over the square root of the sum of squares of `x` and `y`.
 __DEVICE__
 double rhypot(double __x, double __y) { return __ocml_rhypot_f64(__x, __y); }
-
+/// @brief Round `x` to nearest integer value in floating-point.
 __DEVICE__
 double rint(double __x) { return __builtin_rint(__x); }
-
+/// @brief Returns the reciprocal of square root of the sum of squares of any number of coordinates.
 __DEVICE__
 double rnorm(int __dim,
              const double *__a) { // TODO: placeholder until OCML adds support.
@@ -1028,37 +1100,38 @@ double rnorm(int __dim,
 
   return __ocml_rsqrt_f64(__r);
 }
-
+/// @brief Returns one over the square root of the sum of squares of `x`, `y` and `z`.
 __DEVICE__
 double rnorm3d(double __x, double __y, double __z) {
   return __ocml_rlen3_f64(__x, __y, __z);
 }
-
+/// @brief Returns one over the square root of the sum of squares of `x`, `y`, `z` and `w`.
 __DEVICE__
 double rnorm4d(double __x, double __y, double __z, double __w) {
   return __ocml_rlen4_f64(__x, __y, __z, __w);
 }
-
+/// @brief Round to nearest integer value in floating-point.
 __DEVICE__
 double round(double __x) { return __builtin_round(__x); }
-
+/// @brief Returns the reciprocal of the square root of `x`.
 __DEVICE__
 double rsqrt(double __x) { return __ocml_rsqrt_f64(__x); }
-
+/// @brief Scale `x` by \f$ 2^n \f$.
 __DEVICE__
 double scalbln(double __x, long int __n) {
   return (__n < INT_MAX) ? __builtin_amdgcn_ldexp(__x, __n)
                          : __ocml_scalb_f64(__x, __n);
 }
+/// @brief Scale `x` by \f$ 2^n \f$.
 __DEVICE__
 double scalbn(double __x, int __n) { return __builtin_amdgcn_ldexp(__x, __n); }
-
+/// @brief Return the sign bit of `x`.
 __DEVICE__
 __RETURN_TYPE __signbit(double __x) { return __builtin_signbit(__x); }
-
+/// @brief Returns the sine of `x`.
 __DEVICE__
 double sin(double __x) { return __ocml_sin_f64(__x); }
-
+/// @brief Returns the sine and cosine of `x`.
 __DEVICE__
 void sincos(double __x, double *__sinptr, double *__cosptr) {
   double __tmp;
@@ -1069,7 +1142,7 @@ void sincos(double __x, double *__sinptr, double *__cosptr) {
       __x, (__attribute__((address_space(5))) double *)&__tmp);
   *__cosptr = __tmp;
 }
-
+/// @brief Returns the sine and cosine of \f$ \pi x\f$.
 __DEVICE__
 void sincospi(double __x, double *__sinptr, double *__cosptr) {
   double __tmp;
@@ -1080,34 +1153,34 @@ void sincospi(double __x, double *__sinptr, double *__cosptr) {
       __x, (__attribute__((address_space(5))) double *)&__tmp);
   *__cosptr = __tmp;
 }
-
+/// @brief Returns the hyperbolic sine of `x`.
 __DEVICE__
 double sinh(double __x) { return __ocml_sinh_f64(__x); }
-
+/// @brief Returns the hyperbolic sine of \f$ \pi x\f$.
 __DEVICE__
 double sinpi(double __x) { return __ocml_sinpi_f64(__x); }
-
+/// @brief Returns the square root of `x`.
 __DEVICE__
 double sqrt(double __x) { return __builtin_sqrt(__x); }
-
+/// @brief Returns the tangent of `x`.
 __DEVICE__
 double tan(double __x) { return __ocml_tan_f64(__x); }
-
+/// @brief Returns the hyperbolic tangent of `x`.
 __DEVICE__
 double tanh(double __x) { return __ocml_tanh_f64(__x); }
-
+/// @brief Returns the gamma function of `x`.
 __DEVICE__
 double tgamma(double __x) { return __ocml_tgamma_f64(__x); }
-
+/// @brief Truncate `x` to the integral part.
 __DEVICE__
 double trunc(double __x) { return __builtin_trunc(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order 0 for `x`.
 __DEVICE__
 double y0(double __x) { return __ocml_y0_f64(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order 1 for `x`.
 __DEVICE__
 double y1(double __x) { return __ocml_y1_f64(__x); }
-
+/// @brief Returns the value of the Bessel function of the second kind of order n for `x`.
 __DEVICE__
 double yn(int __n, double __x) { // TODO: we could use Ahmes multiplication
                                  // and the Miller & Brown algorithm
@@ -1129,149 +1202,193 @@ double yn(int __n, double __x) { // TODO: we could use Ahmes multiplication
 
   return __x1;
 }
+/// @}
+
+/// @defgroup MathDoubleIntrinsics Double Precision Floating-point Intrinsics
+/// @{
+/// Double Precision Floating-point Intrinsics
 
 // BEGIN INTRINSICS
+
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Add two floating-point values in round-down mode.
 __DEVICE__
 double __dadd_rd(double __x, double __y) {
   return __ocml_add_rtn_f64(__x, __y);
 }
+/// @brief Add two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dadd_rn(double __x, double __y) {
   return __ocml_add_rte_f64(__x, __y);
 }
+/// @brief Add two floating-point values in round-up mode.
 __DEVICE__
 double __dadd_ru(double __x, double __y) {
   return __ocml_add_rtp_f64(__x, __y);
 }
+/// @brief Add two floating-point values in round-towards-zero mode.
 __DEVICE__
 double __dadd_rz(double __x, double __y) {
   return __ocml_add_rtz_f64(__x, __y);
 }
 #else
+/// @brief Add two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dadd_rn(double __x, double __y) { return __x + __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Divide two floating-point values in round-down mode.
 __DEVICE__
 double __ddiv_rd(double __x, double __y) {
   return __ocml_div_rtn_f64(__x, __y);
 }
+/// @brief Divide two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __ddiv_rn(double __x, double __y) {
   return __ocml_div_rte_f64(__x, __y);
 }
+/// @brief Divide two floating-point values in round-up mode.
 __DEVICE__
 double __ddiv_ru(double __x, double __y) {
   return __ocml_div_rtp_f64(__x, __y);
 }
+/// @brief Divide two floating-point values in round-towards-zero mode.
 __DEVICE__
 double __ddiv_rz(double __x, double __y) {
   return __ocml_div_rtz_f64(__x, __y);
 }
 #else
+/// @brief Divide two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __ddiv_rn(double __x, double __y) { return __x / __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Multiply two floating-point values in round-down mode.
 __DEVICE__
 double __dmul_rd(double __x, double __y) {
   return __ocml_mul_rtn_f64(__x, __y);
 }
+/// @brief Multiply two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dmul_rn(double __x, double __y) {
   return __ocml_mul_rte_f64(__x, __y);
 }
+/// @brief Multiply two floating-point values in round-up mode.
 __DEVICE__
 double __dmul_ru(double __x, double __y) {
   return __ocml_mul_rtp_f64(__x, __y);
 }
+/// @brief Multiply two floating-point values in round-towards-zero mode.
 __DEVICE__
 double __dmul_rz(double __x, double __y) {
   return __ocml_mul_rtz_f64(__x, __y);
 }
 #else
+/// @brief Multiply two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dmul_rn(double __x, double __y) { return __x * __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns 1 / x in round-down mode.
 __DEVICE__
 double __drcp_rd(double __x) { return __ocml_div_rtn_f64(1.0, __x); }
+/// @brief Returns 1 / x in round-to-nearest-even mode.
 __DEVICE__
 double __drcp_rn(double __x) { return __ocml_div_rte_f64(1.0, __x); }
+/// @brief Returns 1 / x in round-up mode.
 __DEVICE__
 double __drcp_ru(double __x) { return __ocml_div_rtp_f64(1.0, __x); }
+/// @brief Returns 1 / x in round-towards-zero mode.
 __DEVICE__
 double __drcp_rz(double __x) { return __ocml_div_rtz_f64(1.0, __x); }
 #else
+/// @brief Returns 1 / x in round-to-nearest-even mode.
 __DEVICE__
 double __drcp_rn(double __x) { return 1.0 / __x; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns \f$\sqrt{x}\f$ in round-down mode.
 __DEVICE__
 double __dsqrt_rd(double __x) { return __ocml_sqrt_rtn_f64(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-to-nearest-even mode.
 __DEVICE__
 double __dsqrt_rn(double __x) { return __ocml_sqrt_rte_f64(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-up mode.
 __DEVICE__
 double __dsqrt_ru(double __x) { return __ocml_sqrt_rtp_f64(__x); }
+/// @brief Returns \f$\sqrt{x}\f$ in round-towards-zero mode.
 __DEVICE__
 double __dsqrt_rz(double __x) { return __ocml_sqrt_rtz_f64(__x); }
 #else
+/// @brief Returns \f$\sqrt{x}\f$ in round-to-nearest-even mode.
 __DEVICE__
 double __dsqrt_rn(double __x) { return __builtin_sqrt(__x); }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Subtract two floating-point values in round-down mode.
 __DEVICE__
 double __dsub_rd(double __x, double __y) {
   return __ocml_sub_rtn_f64(__x, __y);
 }
+/// @brief Subtract two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dsub_rn(double __x, double __y) {
   return __ocml_sub_rte_f64(__x, __y);
 }
+/// @brief Subtract two floating-point values in round-up mode.
 __DEVICE__
 double __dsub_ru(double __x, double __y) {
   return __ocml_sub_rtp_f64(__x, __y);
 }
+/// @brief Subtract two floating-point values in round-towards-zero mode.
 __DEVICE__
 double __dsub_rz(double __x, double __y) {
   return __ocml_sub_rtz_f64(__x, __y);
 }
 #else
+/// @brief Subtract two floating-point values in round-to-nearest-even mode.
 __DEVICE__
 double __dsub_rn(double __x, double __y) { return __x - __y; }
 #endif
 
 #if defined OCML_BASIC_ROUNDED_OPERATIONS
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation in round-down mode.
 __DEVICE__
 double __fma_rd(double __x, double __y, double __z) {
   return __ocml_fma_rtn_f64(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation in round-to-nearest-even mode.
 __DEVICE__
 double __fma_rn(double __x, double __y, double __z) {
   return __ocml_fma_rte_f64(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation in round-up mode.
 __DEVICE__
 double __fma_ru(double __x, double __y, double __z) {
   return __ocml_fma_rtp_f64(__x, __y, __z);
 }
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation in round-towards-zero mode.
 __DEVICE__
 double __fma_rz(double __x, double __y, double __z) {
   return __ocml_fma_rtz_f64(__x, __y, __z);
 }
 #else
+/// @brief Returns \f$x \cdot y + z\f$ as a single operation in round-to-nearest-even mode.
 __DEVICE__
 double __fma_rn(double __x, double __y, double __z) {
   return __builtin_fma(__x, __y, __z);
 }
 #endif
 // END INTRINSICS
+
 // END DOUBLE
+
+/// @}
 
 // C only macros
 #if !defined(__cplusplus) && __STDC_VERSION__ >= 201112L
@@ -1283,43 +1400,69 @@ double __fma_rn(double __x, double __y, double __z) {
 #endif // !defined(__cplusplus) && __STDC_VERSION__ >= 201112L
 
 #if defined(__cplusplus)
+/// @defgroup MathTemplate Template Functions
+/// @{
+
+/// @brief Returns the minimum value of the input arguments.
 template <class T> __DEVICE__ T min(T __arg1, T __arg2) {
   return (__arg1 < __arg2) ? __arg1 : __arg2;
 }
-
+/// @brief Returns the maximum value of the input arguments.
 template <class T> __DEVICE__ T max(T __arg1, T __arg2) {
   return (__arg1 > __arg2) ? __arg1 : __arg2;
 }
+/// @}
 
+/// @addtogroup MathInteger
+/// @{
+
+/// @brief Returns the minimum value of the input `int` arguments.
 __DEVICE__ int min(int __arg1, int __arg2) {
   return (__arg1 < __arg2) ? __arg1 : __arg2;
 }
+/// @brief Returns the maximum value of the input `int` arguments.
 __DEVICE__ int max(int __arg1, int __arg2) {
   return (__arg1 > __arg2) ? __arg1 : __arg2;
 }
+/// @}
 
+/// @brief Returns the minimum value of the input `float` arguments.
+/// @ingroup MathFloat
 __DEVICE__
 float max(float __x, float __y) { return __builtin_fmaxf(__x, __y); }
-
+/// @brief Returns the maximum value of the input `double` arguments.
+/// @ingroup MathDouble
 __DEVICE__
 double max(double __x, double __y) { return __builtin_fmax(__x, __y); }
-
+/// @brief Returns the minimum value of the input `float` arguments.
+/// @ingroup MathFloat
 __DEVICE__
 float min(float __x, float __y) { return __builtin_fminf(__x, __y); }
-
+/// @brief Returns the maximum value of the input `double` arguments.
+/// @ingroup MathDouble
 __DEVICE__
 double min(double __x, double __y) { return __builtin_fmin(__x, __y); }
 
 #if !defined(__HIPCC_RTC__) && !defined(__OPENMP_AMDGCN__)
+/// @addtogroup MathInteger
+/// @{
+
+/// @brief Returns the minimum value of the input `int` arguments on host.
 __host__ inline static int min(int __arg1, int __arg2) {
   return __arg1 < __arg2 ? __arg1 : __arg2;
 }
-
+/// @brief Returns the maximum value of the input `int` arguments on host.
 __host__ inline static int max(int __arg1, int __arg2) {
   return __arg1 > __arg2 ? __arg1 : __arg2;
 }
+/// @}
 #endif // !defined(__HIPCC_RTC__) && !defined(__OPENMP_AMDGCN__)
 #endif
+
+// doxygen end Math API
+/// @}
+// doxygen end Device APIs
+/// @}
 
 #pragma pop_macro("__DEVICE__")
 #pragma pop_macro("__RETURN_TYPE")
