@@ -24,11 +24,13 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/LoopInvariantCodeMotionUtils.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace flangomp {
@@ -36,7 +38,8 @@ namespace flangomp {
 #include "flang/Optimizer/OpenMP/Passes.h.inc"
 } // namespace flangomp
 
-#define DEBUG_TYPE "fopenmp-do-concurrent-conversion"
+#define DEBUG_TYPE "do-concurrent-conversion"
+#define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE << "]: ")
 
 namespace Fortran {
 namespace lower {
@@ -255,29 +258,59 @@ bool isIndVarUltimateOperand(mlir::Operation *op, fir::DoLoopOp doLoop) {
   return false;
 }
 
+mlir::Value findLoopIndVar(fir::DoLoopOp doLoop) {
+  mlir::Value result = nullptr;
+  mlir::visitUsedValuesDefinedAbove(
+      doLoop.getRegion(), [&](mlir::OpOperand *operand) {
+        if (isIndVarUltimateOperand(operand->getOwner(), doLoop))
+          result = operand->get();
+      });
+
+  assert(result != nullptr);
+  return result;
+}
+
 /// Collect the list of values used inside the loop but defined outside of it.
 /// The first item in the returned list is always the loop's induction
 /// variable.
-void collectLoopLiveIns(fir::DoLoopOp doLoop,
-                        llvm::SmallVectorImpl<mlir::Value> &liveIns) {
+void collectLoopNestLiveIns(
+    LoopNestToIndVarMap &loopNest, llvm::SmallVectorImpl<mlir::Value> &liveIns,
+    llvm::DenseMap<mlir::Value, std::string> *liveInToName = nullptr) {
   llvm::SmallDenseSet<mlir::Value> seenValues;
   llvm::SmallDenseSet<mlir::Operation *> seenOps;
 
+  auto addValueToLiveIns = [&](mlir::Value liveIn) {
+    if (!seenValues.insert(liveIn).second)
+      return false;
+
+    mlir::Operation *definingOp = liveIn.getDefiningOp();
+    // We want to collect ops corresponding to live-ins only once.
+    if (definingOp && !seenOps.insert(definingOp).second)
+      return false;
+
+    liveIns.push_back(liveIn);
+    return true;
+  };
+
+  size_t nestLevel = 0;
+  for (auto [loop, _] : loopNest) {
+    auto addBoundOrStepToLiveIns = [&](mlir::Value operand, std::string name) {
+      (*liveInToName)[operand] = name;
+      addValueToLiveIns(operand);
+    };
+
+    addBoundOrStepToLiveIns(loop.getLowerBound(),
+                            "loop." + std::to_string(nestLevel) + ".lb");
+    addBoundOrStepToLiveIns(loop.getUpperBound(),
+                            "loop." + std::to_string(nestLevel) + ".ub");
+    addBoundOrStepToLiveIns(loop.getStep(),
+                            "loop." + std::to_string(nestLevel) + ".step");
+    ++nestLevel;
+  }
+
   mlir::visitUsedValuesDefinedAbove(
-      doLoop.getRegion(), [&](mlir::OpOperand *operand) {
-        if (!seenValues.insert(operand->get()).second)
-          return;
-
-        mlir::Operation *definingOp = operand->get().getDefiningOp();
-        // We want to collect ops corresponding to live-ins only once.
-        if (definingOp && !seenOps.insert(definingOp).second)
-          return;
-
-        liveIns.push_back(operand->get());
-
-        if (isIndVarUltimateOperand(operand->getOwner(), doLoop))
-          std::swap(*liveIns.begin(), *liveIns.rbegin());
-      });
+      loopNest.front().first.getRegion(),
+      [&](mlir::OpOperand *operand) { addValueToLiveIns(operand->get()); });
 }
 
 /// Collects the op(s) responsible for updating a loop's iteration variable with
@@ -366,24 +399,96 @@ void collectIndirectConstOpChain(mlir::Operation *link,
   opChain.insert(link);
 }
 
+/// Loop \p innerLoop is considered perfectly-nested inside \p outerLoop iff
+/// there are no operations in \p outerloop's other than:
+///
+/// 1. those operations needed to setup \p innerLoop's LB, UB, and step values,
+/// 2. the operations needed to assing/update \p outerLoop's induction variable.
+/// 3. \p innerLoop itself.
+///
+/// \p return true if \p innerLoop is perfectly nested inside \p outerLoop
+/// according to the above definition.
+bool isPerfectlyNested(fir::DoLoopOp outerLoop, fir::DoLoopOp innerLoop) {
+  mlir::BackwardSliceOptions backwardSliceOptions;
+  backwardSliceOptions.inclusive = true;
+  // We will collect the backward slices for innerLoop's LB, UB, and step.
+  // However, we want to limit the scope of these slices to the scope of
+  // outerLoop's region.
+  backwardSliceOptions.filter = [&](mlir::Operation *op) {
+    return !mlir::areValuesDefinedAbove(op->getResults(),
+                                        outerLoop.getRegion());
+  };
+
+  llvm::SetVector<mlir::Operation *> lbSlice;
+  mlir::getBackwardSlice(innerLoop.getLowerBound(), &lbSlice,
+                         backwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> ubSlice;
+  mlir::getBackwardSlice(innerLoop.getUpperBound(), &ubSlice,
+                         backwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> stepSlice;
+  mlir::getBackwardSlice(innerLoop.getStep(), &stepSlice, backwardSliceOptions);
+
+  mlir::ForwardSliceOptions forwardSliceOptions;
+  forwardSliceOptions.inclusive = true;
+  // We don't care of the outer loop's induction variable's uses within the
+  // inner loop, so we filter out these uses.
+  forwardSliceOptions.filter = [&](mlir::Operation *op) {
+    return mlir::areValuesDefinedAbove(op->getResults(), innerLoop.getRegion());
+  };
+
+  llvm::SetVector<mlir::Operation *> indVarSlice;
+  mlir::getForwardSlice(outerLoop.getInductionVar(), &indVarSlice,
+                        forwardSliceOptions);
+
+  llvm::SetVector<mlir::Operation *> innerLoopSetupOpsVec;
+  innerLoopSetupOpsVec.set_union(indVarSlice);
+  innerLoopSetupOpsVec.set_union(lbSlice);
+  innerLoopSetupOpsVec.set_union(ubSlice);
+  innerLoopSetupOpsVec.set_union(stepSlice);
+  llvm::DenseSet<mlir::Operation *> innerLoopSetupOpsSet;
+
+  for (mlir::Operation *op : innerLoopSetupOpsVec)
+    innerLoopSetupOpsSet.insert(op);
+
+  llvm::DenseSet<mlir::Operation *> loopBodySet;
+  outerLoop.walk<mlir::WalkOrder::PreOrder>([&](mlir::Operation *op) {
+    if (op == outerLoop)
+      return mlir::WalkResult::advance();
+
+    if (op == innerLoop)
+      return mlir::WalkResult::skip();
+
+    if (op->hasTrait<mlir::OpTrait::IsTerminator>())
+      return mlir::WalkResult::advance();
+
+    loopBodySet.insert(op);
+    return mlir::WalkResult::advance();
+  });
+
+  bool result = (loopBodySet == innerLoopSetupOpsSet);
+  mlir::Location loc = outerLoop.getLoc();
+  LLVM_DEBUG(DBGS() << "Loop pair starting at location " << loc << " is"
+                    << (result ? "" : " not") << " perfectly nested\n");
+  return result;
+}
+
 /// Starting with `outerLoop` collect a perfectly nested loop nest, if any. This
 /// function collects as much as possible loops in the nest; it case it fails to
 /// recognize a certain nested loop as part of the nest it just returns the
 /// parent loops it discovered before.
-mlir::LogicalResult collectLoopNest(fir::DoLoopOp outerLoop,
+mlir::LogicalResult collectLoopNest(fir::DoLoopOp currentLoop,
                                     LoopNestToIndVarMap &loopNest) {
-  assert(outerLoop.getUnordered());
-  llvm::SmallVector<mlir::Value> outerLoopLiveIns;
-  collectLoopLiveIns(outerLoop, outerLoopLiveIns);
-
+  assert(currentLoop.getUnordered());
   while (true) {
     loopNest.try_emplace(
-        outerLoop,
+        currentLoop,
         InductionVariableInfo{
-            outerLoopLiveIns.front().getDefiningOp(),
-            std::move(looputils::extractIndVarUpdateOps(outerLoop))});
+            findLoopIndVar(currentLoop).getDefiningOp(),
+            std::move(looputils::extractIndVarUpdateOps(currentLoop))});
 
-    auto directlyNestedLoops = outerLoop.getRegion().getOps<fir::DoLoopOp>();
+    auto directlyNestedLoops = currentLoop.getRegion().getOps<fir::DoLoopOp>();
     llvm::SmallVector<fir::DoLoopOp> unorderedLoops;
 
     for (auto nestedLoop : directlyNestedLoops)
@@ -403,64 +508,10 @@ mlir::LogicalResult collectLoopNest(fir::DoLoopOp outerLoop,
         (nestedUnorderedLoop.getStep().getDefiningOp() == nullptr))
       return mlir::failure();
 
-    llvm::SmallVector<mlir::Value> nestedLiveIns;
-    collectLoopLiveIns(nestedUnorderedLoop, nestedLiveIns);
-
-    llvm::DenseSet<mlir::Value> outerLiveInsSet;
-    llvm::DenseSet<mlir::Value> nestedLiveInsSet;
-
-    // Returns a "unified" view of an mlir::Value. This utility checks if the
-    // value is defined by an op, and if so, return the first value defined by
-    // that op (if there are many), otherwise just returns the value.
-    //
-    // This serves the purpose that if, for example, `%op_res#0` is used in the
-    // outer loop and `%op_res#1` is used in the nested loop (or vice versa),
-    // that we detect both as the same value. If we did not do so, we might
-    // falesely detect that the 2 loops are not perfectly nested since they use
-    // "different" sets of values.
-    auto getUnifiedLiveInView = [](mlir::Value liveIn) {
-      return liveIn.getDefiningOp() != nullptr
-                 ? liveIn.getDefiningOp()->getResult(0)
-                 : liveIn;
-    };
-
-    // Re-package both lists of live-ins into sets so that we can use set
-    // equality to compare the values used in the outerloop vs. the nestd one.
-
-    for (auto liveIn : nestedLiveIns)
-      nestedLiveInsSet.insert(getUnifiedLiveInView(liveIn));
-
-    mlir::Value outerLoopIV;
-    for (auto liveIn : outerLoopLiveIns) {
-      outerLiveInsSet.insert(getUnifiedLiveInView(liveIn));
-
-      // Keep track of the IV of the outerloop. See `isPerfectlyNested` for more
-      // info on the reason.
-      if (outerLoopIV == nullptr)
-        outerLoopIV = getUnifiedLiveInView(liveIn);
-    }
-
-    // For the 2 loops to be perfectly nested, either:
-    // * both would have exactly the same set of live-in values or,
-    // * the outer loop would have exactly 1 extra live-in value: the outer
-    //   loop's induction variable; this happens when the outer loop's IV is
-    //   *not* referenced in the nested loop.
-    bool isPerfectlyNested = [&]() {
-      if (outerLiveInsSet == nestedLiveInsSet)
-        return true;
-
-      if ((outerLiveInsSet.size() == nestedLiveIns.size() + 1) &&
-          !nestedLiveInsSet.contains(outerLoopIV))
-        return true;
-
-      return false;
-    }();
-
-    if (!isPerfectlyNested)
+    if (!isPerfectlyNested(currentLoop, nestedUnorderedLoop))
       return mlir::failure();
 
-    outerLoop = nestedUnorderedLoop;
-    outerLoopLiveIns = std::move(nestedLiveIns);
+    currentLoop = nestedUnorderedLoop;
   }
 
   return mlir::success();
@@ -634,10 +685,6 @@ public:
                   "defining operation.");
     }
 
-    llvm::SmallVector<mlir::Value> outermostLoopLiveIns;
-    looputils::collectLoopLiveIns(doLoop, outermostLoopLiveIns);
-    assert(!outermostLoopLiveIns.empty());
-
     looputils::LoopNestToIndVarMap loopNest;
     bool hasRemainingNestedLoops =
         failed(looputils::collectLoopNest(doLoop, loopNest));
@@ -646,15 +693,57 @@ public:
                         "Some `do concurent` loops are not perfectly-nested. "
                         "These will be serialzied.");
 
+    llvm::DenseMap<mlir::Value, std::string> liveInToName;
+    llvm::SmallVector<mlir::Value> loopNestLiveIns;
+
+    // TODO outline into a separete function. This hoists the ops to compute
+    // bounds of all loops in the entire loop nest outside the outermost loop.
+    // Without this hoisting, values/variables that are required to compute
+    // these bounds will be stuck inside the original `fir.do_loop` ops and
+    // therefore their SSA values won't be visible from within the `target`
+    // region.
+    {
+      fir::DoLoopOp outermostLoop = loopNest.front().first;
+
+      mlir::BackwardSliceOptions backwardSliceOptions;
+      backwardSliceOptions.inclusive = true;
+      // We will collect the backward slices for innerLoop's LB, UB, and step.
+      // However, we want to limit the scope of these slices to the scope of
+      // outerLoop's region.
+      backwardSliceOptions.filter = [&](mlir::Operation *op) {
+        return !mlir::areValuesDefinedAbove(op->getResults(),
+                                            outermostLoop.getRegion());
+      };
+
+      for (auto [loop, _] : loopNest) {
+        auto moveBoundOrStepOutOfLoopNest = [&](mlir::Value operand) {
+          llvm::SetVector<mlir::Operation *> loopOperandSlice;
+          mlir::getBackwardSlice(operand, &loopOperandSlice,
+                                 backwardSliceOptions);
+
+          for (mlir::Operation *sliceOp : loopOperandSlice) {
+            outermostLoop.moveOutOfLoop(sliceOp);
+          }
+        };
+
+        moveBoundOrStepOutOfLoopNest(loop.getLowerBound());
+        moveBoundOrStepOutOfLoopNest(loop.getUpperBound());
+        moveBoundOrStepOutOfLoopNest(loop.getStep());
+      }
+    }
+
+    looputils::collectLoopNestLiveIns(loopNest, loopNestLiveIns, &liveInToName);
+    assert(!loopNestLiveIns.empty());
+
     llvm::SetVector<mlir::Value> locals;
     looputils::collectLoopLocalValues(loopNest.back().first, locals);
     // We do not want to map "loop-local" values to the device through
     // `omp.map.info` ops. Therefore, we remove them from the list of live-ins.
-    outermostLoopLiveIns.erase(llvm::remove_if(outermostLoopLiveIns,
-                                               [&](mlir::Value liveIn) {
-                                                 return locals.contains(liveIn);
-                                               }),
-                               outermostLoopLiveIns.end());
+    loopNestLiveIns.erase(llvm::remove_if(loopNestLiveIns,
+                                          [&](mlir::Value liveIn) {
+                                            return locals.contains(liveIn);
+                                          }),
+                          loopNestLiveIns.end());
 
     looputils::sinkLoopIVArgs(rewriter, loopNest);
 
@@ -669,12 +758,13 @@ public:
       // The outermost loop will contain all the live-in values in all nested
       // loops since live-in values are collected recursively for all nested
       // ops.
-      for (mlir::Value liveIn : outermostLoopLiveIns)
+      for (mlir::Value liveIn : loopNestLiveIns) {
         targetClauseOps.mapVars.push_back(
-            genMapInfoOpForLiveIn(rewriter, liveIn));
+            genMapInfoOpForLiveIn(rewriter, liveIn, liveInToName));
+      }
 
-      targetOp = genTargetOp(doLoop.getLoc(), rewriter, mapper,
-                             outermostLoopLiveIns, targetClauseOps);
+      targetOp = genTargetOp(doLoop.getLoc(), rewriter, mapper, loopNestLiveIns,
+                             targetClauseOps);
       genTeamsOp(doLoop.getLoc(), rewriter);
     }
 
@@ -727,14 +817,14 @@ public:
 
 private:
   void genBoundsOps(mlir::ConversionPatternRewriter &rewriter,
-                    mlir::Location loc, hlfir::DeclareOp declareOp,
+                    mlir::Location loc, mlir::Value shape,
                     llvm::SmallVectorImpl<mlir::Value> &boundsOps) const {
-    if (declareOp.getShape() == nullptr) {
+    if (shape == nullptr) {
       return;
     }
 
-    auto shapeOp = mlir::dyn_cast_if_present<fir::ShapeOp>(
-        declareOp.getShape().getDefiningOp());
+    auto shapeOp =
+        mlir::dyn_cast_if_present<fir::ShapeOp>(shape.getDefiningOp());
 
     if (shapeOp == nullptr)
       TODO(loc, "Shapes not defined by shape op's are not supported yet.");
@@ -759,15 +849,36 @@ private:
       boundsOps.push_back(genBoundsOp(extent));
   }
 
-  mlir::omp::MapInfoOp
-  genMapInfoOpForLiveIn(mlir::ConversionPatternRewriter &rewriter,
-                        mlir::Value liveIn) const {
-    auto declareOp =
-        mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveIn.getDefiningOp());
+  mlir::omp::MapInfoOp genMapInfoOpForLiveIn(
+      mlir::ConversionPatternRewriter &rewriter, mlir::Value liveIn,
+      const llvm::DenseMap<mlir::Value, std::string> &liveInToName) const {
+    mlir::Value rawAddr = liveIn;
+    mlir::Value shape = nullptr;
+    std::string name = "";
 
-    if (declareOp == nullptr)
-      TODO(liveIn.getLoc(),
-           "Values not defined by declare op's are not supported yet.");
+    mlir::Operation *liveInDefiningOp = liveIn.getDefiningOp();
+    auto declareOp =
+        mlir::dyn_cast_if_present<hlfir::DeclareOp>(liveInDefiningOp);
+
+    if (declareOp != nullptr) {
+      // Use the raw address to avoid unboxing `fir.box` values whenever
+      // possible. Put differently, if we have access to the direct value memory
+      // reference/address, we use it.
+      rawAddr = declareOp.getOriginalBase();
+      shape = declareOp.getShape();
+      name = declareOp.getUniqName().str();
+    } else if (liveInToName.contains(liveIn))
+      name = liveInToName.at(liveIn);
+
+    if (!llvm::isa<mlir::omp::PointerLikeType>(rawAddr.getType())) {
+      fir::FirOpBuilder builder(
+          rewriter, fir::getKindMapping(
+                        liveInDefiningOp->getParentOfType<mlir::ModuleOp>()));
+      builder.setInsertionPointAfter(liveInDefiningOp);
+      auto copyVal = builder.createTemporary(liveIn.getLoc(), liveIn.getType());
+      builder.createStoreWithConvert(copyVal.getLoc(), liveIn, copyVal);
+      rawAddr = copyVal;
+    }
 
     mlir::Type liveInType = liveIn.getType();
     mlir::Type eleType = liveInType;
@@ -787,15 +898,11 @@ private:
     }
 
     llvm::SmallVector<mlir::Value> boundsOps;
-    genBoundsOps(rewriter, liveIn.getLoc(), declareOp, boundsOps);
+    genBoundsOps(rewriter, liveIn.getLoc(), shape, boundsOps);
 
-    // Use the raw address to avoid unboxing `fir.box` values whenever possible.
-    // Put differently, if we have access to the direct value memory
-    // reference/address, we use it.
-    mlir::Value rawAddr = declareOp.getOriginalBase();
     return Fortran::lower::omp::internal::createMapInfoOp(
         rewriter, liveIn.getLoc(), rawAddr,
-        /*varPtrPtr=*/{}, declareOp.getUniqName().str(), boundsOps,
+        /*varPtrPtr=*/{}, name, boundsOps,
         /*members=*/{},
         /*membersIndex=*/mlir::ArrayAttr{},
         static_cast<
@@ -816,34 +923,40 @@ private:
     llvm::SmallVector<mlir::Type> liveInTypes;
     llvm::SmallVector<mlir::Location> liveInLocs;
 
-    for (mlir::Value liveIn : liveIns) {
-      liveInTypes.push_back(liveIn.getType());
-      liveInLocs.push_back(liveIn.getLoc());
+    for (mlir::Value mapInfoOp : clauseOps.mapVars) {
+      auto miOp = mlir::cast<mlir::omp::MapInfoOp>(mapInfoOp.getDefiningOp());
+      liveInTypes.push_back(miOp.getVarPtr().getType());
+      liveInLocs.push_back(miOp.getVarPtr().getLoc());
     }
 
     rewriter.createBlock(&region, {}, liveInTypes, liveInLocs);
+    fir::FirOpBuilder firBuilder(
+        rewriter,
+        fir::getKindMapping(targetOp->getParentOfType<mlir::ModuleOp>()));
 
-    for (auto [arg, mapInfoOp] :
-         llvm::zip_equal(region.getArguments(), clauseOps.mapVars)) {
+    for (auto [liveIn, arg, mapInfoOp] :
+         llvm::zip_equal(liveIns, region.getArguments(), clauseOps.mapVars)) {
       auto miOp = mlir::cast<mlir::omp::MapInfoOp>(mapInfoOp.getDefiningOp());
       hlfir::DeclareOp liveInDeclare = genLiveInDeclare(rewriter, arg, miOp);
-      mlir::Value miOperand = miOp.getVariableOperand(0);
 
-      // TODO If `miOperand.getDefiningOp()` is a `fir::BoxAddrOp`, we probably
+      // TODO If `liveIn.getDefiningOp()` is a `fir::BoxAddrOp`, we probably
       // need to "unpack" the box by getting the defining op of it's value.
       // However, we did not hit this case in reality yet so leaving it as a
       // todo for now.
 
-      mapper.map(miOperand, liveInDeclare.getOriginalBase());
+      if (!llvm::isa<mlir::omp::PointerLikeType>(liveIn.getType()))
+        mapper.map(liveIn,
+                   firBuilder.loadIfRef(liveIn.getLoc(),
+                                        liveInDeclare.getOriginalBase()));
+      else
+        mapper.map(liveIn, liveInDeclare.getOriginalBase());
 
       if (auto origDeclareOp = mlir::dyn_cast_if_present<hlfir::DeclareOp>(
-              miOperand.getDefiningOp()))
+              liveIn.getDefiningOp())) {
         mapper.map(origDeclareOp.getBase(), liveInDeclare.getBase());
+      }
     }
 
-    fir::FirOpBuilder firBuilder(
-        rewriter,
-        fir::getKindMapping(targetOp->getParentOfType<mlir::ModuleOp>()));
     Fortran::lower::omp::internal::cloneOrMapRegionOutsiders(firBuilder,
                                                              targetOp);
     rewriter.setInsertionPoint(
@@ -924,24 +1037,31 @@ private:
       looputils::collectIndirectConstOpChain(operation, opChain);
 
       mlir::Operation *result;
-      for (mlir::Operation *link : opChain)
+      for (mlir::Operation *link : opChain) {
         result = rewriter.clone(*link, mapper);
+      }
 
       return result;
     };
 
     for (auto &[doLoop, _] : loopNest) {
-      mlir::Operation *lbOp = doLoop.getLowerBound().getDefiningOp();
-      loopNestClauseOps.loopLowerBounds.push_back(
-          cloneBoundOrStepOpChain(lbOp)->getResult(0));
+      auto addBoundsOrStep =
+          [&](mlir::Value value,
+              llvm::SmallVectorImpl<mlir::Value> &boundsOrStepVec) {
+            if (mapper.contains(value))
+              boundsOrStepVec.push_back(mapper.lookup(value));
+            else {
+              mlir::Operation *definingOp = value.getDefiningOp();
+              boundsOrStepVec.push_back(
+                  cloneBoundOrStepOpChain(definingOp)->getResult(0));
+            }
+          };
 
-      mlir::Operation *ubOp = doLoop.getUpperBound().getDefiningOp();
-      loopNestClauseOps.loopUpperBounds.push_back(
-          cloneBoundOrStepOpChain(ubOp)->getResult(0));
-
-      mlir::Operation *stepOp = doLoop.getStep().getDefiningOp();
-      loopNestClauseOps.loopSteps.push_back(
-          cloneBoundOrStepOpChain(stepOp)->getResult(0));
+      addBoundsOrStep(doLoop.getLowerBound(),
+                      loopNestClauseOps.loopLowerBounds);
+      addBoundsOrStep(doLoop.getUpperBound(),
+                      loopNestClauseOps.loopUpperBounds);
+      addBoundsOrStep(doLoop.getStep(), loopNestClauseOps.loopSteps);
     }
 
     loopNestClauseOps.loopInclusive = rewriter.getUnitAttr();
