@@ -1116,20 +1116,16 @@ def TargetUpdateOp: OpenMP_Op<"target_update", traits = [
 // 2.14.5 target construct
 //===----------------------------------------------------------------------===//
 
-// TODO: Remove num_threads, teams_thread_limit and trip_count and implement the
-// passthrough approach described here:
-// https://discourse.llvm.org/t/rfc-openmp-dialect-representation-of-num-teams-thread-limit-and-target-spmd/81106.
 def TargetOp : OpenMP_Op<"target", traits = [
     AttrSizedOperandSegments, BlockArgOpenMPOpInterface, IsolatedFromAbove,
     OutlineableOpenMPOpInterface
   ], clauses = [
     // TODO: Complete clause list (defaultmap, uses_allocators).
     OpenMP_AllocateClause, OpenMP_DependClause, OpenMP_DeviceClause,
-    OpenMP_HasDeviceAddrClause, OpenMP_IfClause, OpenMP_InReductionClause,
-    OpenMP_IsDevicePtrClause, OpenMP_MapClauseSkip<assemblyFormat = true>,
-    OpenMP_NowaitClause, OpenMP_NumTeamsClauseSkip<description = true>,
-    OpenMP_NumThreadsClauseSkip<description = true>, OpenMP_PrivateClause,
-    OpenMP_ThreadLimitClause
+    OpenMP_HasDeviceAddrClause, OpenMP_HostEvalClause, OpenMP_IfClause,
+    OpenMP_InReductionClause, OpenMP_IsDevicePtrClause,
+    OpenMP_MapClauseSkip<assemblyFormat = true>, OpenMP_NowaitClause,
+    OpenMP_PrivateClause, OpenMP_ThreadLimitClause
   ], singleRegion = true> {
   let summary = "target construct";
   let description = [{
@@ -1156,10 +1152,6 @@ def TargetOp : OpenMP_Op<"target", traits = [
     an `omp.parallel`.
   }] # clausesDescription;
 
-  let arguments = !con(clausesArgs,
-      (ins Optional<AnyInteger>:$trip_count,
-           Optional<AnyInteger>:$teams_thread_limit));
-
   let builders = [
     OpBuilder<(ins CArg<"const TargetOperands &">:$clauses)>
   ];
@@ -1184,15 +1176,12 @@ def TargetOp : OpenMP_Op<"target", traits = [
     bool isTargetSPMDLoop();
   }] # clausesExtraClassDeclaration;
 
-  let assemblyFormat = clausesReqAssemblyFormat #
-    " oilist(" # clausesOptAssemblyFormat # [{
-      | `trip_count` `(` $trip_count `:` type($trip_count) `)`
-      | `teams_thread_limit` `(` $teams_thread_limit `:` type($teams_thread_limit) `)`
-    }] # ")" # [{
-    custom<InReductionMapPrivateRegion>(
-        $region, $in_reduction_vars, type($in_reduction_vars),
-        $in_reduction_byref, $in_reduction_syms, $map_vars, type($map_vars),
-        $private_vars, type($private_vars), $private_syms) attr-dict
+  let assemblyFormat = clausesAssemblyFormat # [{
+    custom<HostEvalInReductionMapPrivateRegion>(
+        $region, $host_eval_vars, type($host_eval_vars), $in_reduction_vars,
+        type($in_reduction_vars), $in_reduction_byref, $in_reduction_syms,
+        $map_vars, type($map_vars), $private_vars, type($private_vars),
+        $private_syms) attr-dict
   }];
 
   let hasVerifier = 1;
