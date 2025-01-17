@@ -30,6 +30,16 @@
 # define _CET_ENDBR
 # endif
 
+# if defined(__ELF__) && defined(__CET__) && defined(__has_include)
+# if __has_include(<cet.h>)
+# include <cet.h>
+# endif
+# endif
+
+# if !defined(_CET_ENDBR)
+# define _CET_ENDBR
+# endif
+
 # if KMP_MIC
 // the 'delay r16/r32/r64' should be used instead of the 'pause'.
 // The delay operation has the effect of removing the current thread from
