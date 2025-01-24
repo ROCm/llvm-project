@@ -555,7 +555,7 @@ define void @callee_need_to_spill_fp_to_memory() #1 {
 ; GFX900-NEXT:    buffer_load_dword v42, off, s[0:3], s33 offset:436 ; 4-byte Folded Reload
 ; GFX900-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:440 ; 4-byte Folded Reload
 ; GFX900-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:444 ; 4-byte Folded Reload
-; GFX900-NEXT:    s_addk_i32 s32, 0x8f00
+; GFX900-NEXT:    s_mov_b32 s32, s33
 ; GFX900-NEXT:    .cfi_def_cfa_register 64
 ; GFX900-NEXT:    s_mov_b32 s33, s40
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
@@ -1085,7 +1085,7 @@ define void @callee_need_to_spill_fp_to_memory() #1 {
 ; GFX90A-V2A-DIS-NEXT:    buffer_load_dword v42, off, s[0:3], s33 offset:436 ; 4-byte Folded Reload
 ; GFX90A-V2A-DIS-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:440 ; 4-byte Folded Reload
 ; GFX90A-V2A-DIS-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:444 ; 4-byte Folded Reload
-; GFX90A-V2A-DIS-NEXT:    s_addk_i32 s32, 0x8f00
+; GFX90A-V2A-DIS-NEXT:    s_mov_b32 s32, s33
 ; GFX90A-V2A-DIS-NEXT:    .cfi_def_cfa_register 64
 ; GFX90A-V2A-DIS-NEXT:    s_mov_b32 s33, s40
 ; GFX90A-V2A-DIS-NEXT:    s_waitcnt vmcnt(0)
@@ -1647,7 +1647,7 @@ define void @callee_need_to_spill_fp_to_memory() #1 {
 ; GFX90A-V2A-EN-NEXT:    v_accvgpr_read_b32 v42, a2 ; Reload Reuse
 ; GFX90A-V2A-EN-NEXT:    v_accvgpr_read_b32 v41, a1 ; Reload Reuse
 ; GFX90A-V2A-EN-NEXT:    v_accvgpr_read_b32 v40, a0 ; Reload Reuse
-; GFX90A-V2A-EN-NEXT:    s_addk_i32 s32, 0xaf00
+; GFX90A-V2A-EN-NEXT:    s_mov_b32 s32, s33
 ; GFX90A-V2A-EN-NEXT:    .cfi_def_cfa_register 64
 ; GFX90A-V2A-EN-NEXT:    s_mov_b32 s33, s40
 ; GFX90A-V2A-EN-NEXT:    s_waitcnt vmcnt(0)
@@ -2179,7 +2179,7 @@ define void @callee_need_to_spill_fp_to_memory() #1 {
 ; WAVE32-NEXT:    buffer_load_dword v42, off, s[0:3], s33 offset:436
 ; WAVE32-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:440
 ; WAVE32-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:444
-; WAVE32-NEXT:    s_addk_i32 s32, 0xc780
+; WAVE32-NEXT:    s_mov_b32 s32, s33
 ; WAVE32-NEXT:    .cfi_def_cfa_register 64
 ; WAVE32-NEXT:    s_waitcnt_depctr 0xffe3
 ; WAVE32-NEXT:    s_mov_b32 s33, s40
@@ -2456,11 +2456,11 @@ define hidden void @func_call_clobber() #0 {
 ; GFX900-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; GFX900-NEXT:    v_readlane_b32 s30, v40, 0
 ; GFX900-NEXT:    v_readlane_b32 s31, v40, 1
+; GFX900-NEXT:    s_mov_b32 s32, s33
 ; GFX900-NEXT:    v_readlane_b32 s4, v40, 2
 ; GFX900-NEXT:    s_or_saveexec_b64 s[6:7], -1
 ; GFX900-NEXT:    buffer_load_dword v40, off, s[0:3], s33 ; 4-byte Folded Reload
 ; GFX900-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX900-NEXT:    s_addk_i32 s32, 0xfc00
 ; GFX900-NEXT:    .cfi_def_cfa_register 64
 ; GFX900-NEXT:    s_mov_b32 s33, s4
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
@@ -2730,11 +2730,11 @@ define hidden void @func_call_clobber() #0 {
 ; GFX90A-V2A-DIS-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; GFX90A-V2A-DIS-NEXT:    v_readlane_b32 s30, v40, 0
 ; GFX90A-V2A-DIS-NEXT:    v_readlane_b32 s31, v40, 1
+; GFX90A-V2A-DIS-NEXT:    s_mov_b32 s32, s33
 ; GFX90A-V2A-DIS-NEXT:    v_readlane_b32 s4, v40, 2
 ; GFX90A-V2A-DIS-NEXT:    s_or_saveexec_b64 s[6:7], -1
 ; GFX90A-V2A-DIS-NEXT:    buffer_load_dword v40, off, s[0:3], s33 ; 4-byte Folded Reload
 ; GFX90A-V2A-DIS-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX90A-V2A-DIS-NEXT:    s_addk_i32 s32, 0xfc00
 ; GFX90A-V2A-DIS-NEXT:    .cfi_def_cfa_register 64
 ; GFX90A-V2A-DIS-NEXT:    s_mov_b32 s33, s4
 ; GFX90A-V2A-DIS-NEXT:    s_waitcnt vmcnt(0)
@@ -3004,11 +3004,11 @@ define hidden void @func_call_clobber() #0 {
 ; GFX90A-V2A-EN-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; GFX90A-V2A-EN-NEXT:    v_readlane_b32 s30, v40, 0
 ; GFX90A-V2A-EN-NEXT:    v_readlane_b32 s31, v40, 1
+; GFX90A-V2A-EN-NEXT:    s_mov_b32 s32, s33
 ; GFX90A-V2A-EN-NEXT:    v_readlane_b32 s4, v40, 2
 ; GFX90A-V2A-EN-NEXT:    s_or_saveexec_b64 s[6:7], -1
 ; GFX90A-V2A-EN-NEXT:    buffer_load_dword v40, off, s[0:3], s33 ; 4-byte Folded Reload
 ; GFX90A-V2A-EN-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX90A-V2A-EN-NEXT:    s_addk_i32 s32, 0xfc00
 ; GFX90A-V2A-EN-NEXT:    .cfi_def_cfa_register 64
 ; GFX90A-V2A-EN-NEXT:    s_mov_b32 s33, s4
 ; GFX90A-V2A-EN-NEXT:    s_waitcnt vmcnt(0)
@@ -3247,12 +3247,12 @@ define hidden void @func_call_clobber() #0 {
 ; WAVE32-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; WAVE32-NEXT:    v_readlane_b32 s30, v40, 0
 ; WAVE32-NEXT:    v_readlane_b32 s31, v40, 1
+; WAVE32-NEXT:    s_mov_b32 s32, s33
 ; WAVE32-NEXT:    v_readlane_b32 s4, v40, 2
 ; WAVE32-NEXT:    s_or_saveexec_b32 s5, -1
 ; WAVE32-NEXT:    buffer_load_dword v40, off, s[0:3], s33 ; 4-byte Folded Reload
 ; WAVE32-NEXT:    s_waitcnt_depctr 0xffe3
 ; WAVE32-NEXT:    s_mov_b32 exec_lo, s5
-; WAVE32-NEXT:    s_addk_i32 s32, 0xfe00
 ; WAVE32-NEXT:    .cfi_def_cfa_register 64
 ; WAVE32-NEXT:    s_mov_b32 s33, s4
 ; WAVE32-NEXT:    s_waitcnt vmcnt(0)
