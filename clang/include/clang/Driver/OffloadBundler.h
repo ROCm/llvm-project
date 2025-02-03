@@ -113,16 +113,17 @@ private:
   static inline const size_t FileSizeFieldSize = sizeof(uint32_t);
   static inline const size_t UncompressedSizeFieldSize = sizeof(uint32_t);
   static inline const size_t HashFieldSize = sizeof(uint64_t);
+  static inline const llvm::StringRef MagicNumber = "CCOB";
+  static inline const uint16_t Version = 2;
+
+public:
   static inline const size_t V1HeaderSize =
       MagicSize + VersionFieldSize + MethodFieldSize +
       UncompressedSizeFieldSize + HashFieldSize;
   static inline const size_t V2HeaderSize =
       MagicSize + VersionFieldSize + FileSizeFieldSize + MethodFieldSize +
       UncompressedSizeFieldSize + HashFieldSize;
-  static inline const llvm::StringRef MagicNumber = "CCOB";
-  static inline const uint16_t Version = 2;
 
-public:
   static llvm::Expected<std::unique_ptr<llvm::MemoryBuffer>>
   compress(llvm::compression::Params P, const llvm::MemoryBuffer &Input,
            bool Verbose = false);
