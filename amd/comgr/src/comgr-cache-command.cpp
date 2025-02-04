@@ -68,14 +68,6 @@ bool hasDebugOrProfileInfo(ArrayRef<const char *> Args) {
   return false;
 }
 
-void addString(CachedCommandAdaptor::HashAlgorithm &H, StringRef S) {
-  // hash size + contents to avoid collisions
-  // for example, we have to ensure that the result of hashing "AA" "BB" is
-  // different from "A" "ABB"
-  H.update(S.size());
-  H.update(S);
-}
-
 Error addFile(CachedCommandAdaptor::HashAlgorithm &H, StringRef Path) {
   auto BufOrError = MemoryBuffer::getFile(Path);
   if (std::error_code EC = BufOrError.getError()) {
@@ -151,6 +143,15 @@ void CachedCommandAdaptor::addFileContents(
   }
 }
 
+void CachedCommandAdaptor::addString(CachedCommandAdaptor::HashAlgorithm &H,
+                                     StringRef S) {
+  // hash size + contents to avoid collisions
+  // for example, we have to ensure that the result of hashing "AA" "BB" is
+  // different from "A" "ABB"
+  H.update(S.size());
+  H.update(S);
+}
+
 Expected<CachedCommandAdaptor::Identifier>
 CachedCommandAdaptor::getIdentifier() const {
   CachedCommandAdaptor::HashAlgorithm H;
@@ -168,6 +169,41 @@ CachedCommandAdaptor::getIdentifier() const {
   CachedCommandAdaptor::Identifier Id;
   toHex(H.final(), true, Id);
   return Id;
+}
+
+llvm::Error
+CachedCommandAdaptor::writeUniqueExecuteOutput(StringRef OutputFilename,
+                                               StringRef CachedBuffer) {
+  std::error_code EC;
+  raw_fd_ostream Out(OutputFilename, EC);
+  if (EC) {
+    Error E = createStringError(EC, Twine("Failed to open ") + OutputFilename +
+                                        " : " + EC.message() + "\n");
+    return E;
+  }
+
+  Out.write(CachedBuffer.data(), CachedBuffer.size());
+  Out.close();
+  if (Out.has_error()) {
+    Error E = createStringError(EC, Twine("Failed to write ") + OutputFilename +
+                                        " : " + EC.message() + "\n");
+    return E;
+  }
+
+  return Error::success();
+}
+
+Expected<std::unique_ptr<MemoryBuffer>>
+CachedCommandAdaptor::readUniqueExecuteOutput(StringRef OutputFilename) {
+  ErrorOr<std::unique_ptr<MemoryBuffer>> MBOrErr =
+      MemoryBuffer::getFile(OutputFilename);
+  if (!MBOrErr) {
+    std::error_code EC = MBOrErr.getError();
+    return createStringError(EC, Twine("Failed to open ") + OutputFilename +
+                                     " : " + EC.message() + "\n");
+  }
+
+  return std::move(*MBOrErr);
 }
 
 CachedCommand::CachedCommand(driver::Command &Command,
@@ -249,35 +285,16 @@ bool CachedCommand::canCache() const {
 
 Error CachedCommand::writeExecuteOutput(StringRef CachedBuffer) {
   StringRef OutputFilename = Command.getOutputFilenames().front();
-  std::error_code EC;
-  raw_fd_ostream Out(OutputFilename, EC);
-  if (EC) {
-    Error E = createStringError(EC, Twine("Failed to open ") + OutputFilename +
-                                        " : " + EC.message() + "\n");
-    return E;
-  }
-
-  Out.write(CachedBuffer.data(), CachedBuffer.size());
-  Out.close();
-  if (Out.has_error()) {
-    Error E = createStringError(EC, Twine("Failed to write ") + OutputFilename +
-                                        " : " + EC.message() + "\n");
-    return E;
-  }
-
-  return Error::success();
+  return CachedCommandAdaptor::writeUniqueExecuteOutput(OutputFilename,
+                                                        CachedBuffer);
 }
 
 Expected<StringRef> CachedCommand::readExecuteOutput() {
-  StringRef OutputFilename = Command.getOutputFilenames().front();
-  ErrorOr<std::unique_ptr<MemoryBuffer>> MBOrErr =
-      MemoryBuffer::getFile(OutputFilename);
-  if (!MBOrErr) {
-    std::error_code EC = MBOrErr.getError();
-    return createStringError(EC, Twine("Failed to open ") + OutputFilename +
-                                     " : " + EC.message() + "\n");
-  }
-  Output = std::move(*MBOrErr);
+  auto MaybeBuffer = CachedCommandAdaptor::readUniqueExecuteOutput(
+      Command.getOutputFilenames().front());
+  if (!MaybeBuffer)
+    return MaybeBuffer.takeError();
+  Output = std::move(*MaybeBuffer);
   return Output->getBuffer();
 }
 
