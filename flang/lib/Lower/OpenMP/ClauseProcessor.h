@@ -12,12 +12,11 @@
 #ifndef FORTRAN_LOWER_CLAUSEPROCESSOR_H
 #define FORTRAN_LOWER_CLAUSEPROCESSOR_H
 
-
 #include "ReductionProcessor.h"
 #include "flang/Lower/AbstractConverter.h"
 #include "flang/Lower/Bridge.h"
-#include "flang/Lower/OpenMP/Clauses.h"
 #include "flang/Lower/DirectivesCommon.h"
+#include "flang/Lower/OpenMP/Clauses.h"
 #include "flang/Lower/OpenMP/Utils.h"
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Parser/dump-parse-tree.h"
@@ -72,8 +71,9 @@ public:
   bool processFinal(lower::StatementContext &stmtCtx,
                     mlir::omp::FinalClauseOps &result) const;
   bool processHasDeviceAddr(
+      lower::StatementContext &stmtCtx,
       mlir::omp::HasDeviceAddrClauseOps &result,
-      llvm::SmallVectorImpl<const semantics::Symbol *> &isDeviceSyms) const;
+      llvm::SmallVectorImpl<const semantics::Symbol *> &hasDeviceSyms) const;
   bool processHint(mlir::omp::HintClauseOps &result) const;
   bool processInclusive(mlir::Location currentLocation,
                         mlir::omp::InclusiveClauseOps &result) const;

@@ -25,6 +25,10 @@ def BlockArgOpenMPOpInterface : OpInterface<"BlockArgOpenMPOpInterface"> {
 
   let methods = [
     // Default-implemented methods to be overriden by the corresponding clauses.
+    InterfaceMethod<"Get number of block arguments defined by `has_device_addr`.",
+                    "unsigned", "numHasDeviceAddrBlockArgs", (ins), [{}], [{
+      return 0;
+    }]>,
     InterfaceMethod<"Get number of block arguments defined by `host_eval`.",
                     "unsigned", "numHostEvalBlockArgs", (ins), [{}], [{
       return 0;
@@ -60,9 +64,14 @@ def BlockArgOpenMPOpInterface : OpInterface<"BlockArgOpenMPOpInterface"> {
 
     // Unified access methods for start indices of clause-associated entry block
     // arguments.
+    InterfaceMethod<"Get start index of block arguments defined by `has_device_addr`.",
+                    "unsigned", "getHasDeviceAddrBlockArgsStart", (ins), [{
+      return 0;
+    }]>,
     InterfaceMethod<"Get start index of block arguments defined by `host_eval`.",
                     "unsigned", "getHostEvalBlockArgsStart", (ins), [{
-      return 0;
+      auto iface = ::llvm::cast<BlockArgOpenMPOpInterface>(*$_op);
+      return iface.getHasDeviceAddrBlockArgsStart() + $_op.numHasDeviceAddrBlockArgs();
     }]>,
     InterfaceMethod<"Get start index of block arguments defined by `in_reduction`.",
                     "unsigned", "getInReductionBlockArgsStart", (ins), [{
@@ -102,6 +111,14 @@ def BlockArgOpenMPOpInterface : OpInterface<"BlockArgOpenMPOpInterface"> {
     }]>,
 
     // Unified access methods for clause-associated entry block arguments.
+    InterfaceMethod<"Get block arguments defined by `has_device_addr`.",
+                    "::llvm::MutableArrayRef<::mlir::BlockArgument>",
+                    "getHasDeviceAddrBlockArgs", (ins), [{
+      auto iface = ::llvm::cast<BlockArgOpenMPOpInterface>(*$_op);
+      return $_op->getRegion(0).getArguments().slice(
+          iface.getHasDeviceAddrBlockArgsStart(),
+          $_op.numHasDeviceAddrBlockArgs());
+    }]>,
     InterfaceMethod<"Get block arguments defined by `host_eval`.",
                     "::llvm::MutableArrayRef<::mlir::BlockArgument>",
                     "getHostEvalBlockArgs", (ins), [{
@@ -165,11 +182,11 @@ def BlockArgOpenMPOpInterface : OpInterface<"BlockArgOpenMPOpInterface"> {
 
   let verify = [{
     auto iface = ::llvm::cast<BlockArgOpenMPOpInterface>($_op);
-    unsigned expectedArgs = iface.numHostEvalBlockArgs() +
-        iface.numInReductionBlockArgs() + iface.numMapBlockArgs() +
-        iface.numPrivateBlockArgs() + iface.numReductionBlockArgs() +
-        iface.numTaskReductionBlockArgs() + iface.numUseDeviceAddrBlockArgs() +
-        iface.numUseDevicePtrBlockArgs();
+    unsigned expectedArgs = iface.numHasDeviceAddrBlockArgs() +
+        iface.numHostEvalBlockArgs() + iface.numInReductionBlockArgs() +
+        iface.numMapBlockArgs() + iface.numPrivateBlockArgs() +
+        iface.numReductionBlockArgs() + iface.numTaskReductionBlockArgs() +
+        iface.numUseDeviceAddrBlockArgs() + iface.numUseDevicePtrBlockArgs();
     if ($_op->getRegion(0).getNumArguments() < expectedArgs)
       return $_op->emitOpError() << "expected at least " << expectedArgs
                                  << " entry block argument(s)";

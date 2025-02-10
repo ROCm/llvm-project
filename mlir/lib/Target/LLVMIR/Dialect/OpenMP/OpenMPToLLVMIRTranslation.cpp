@@ -167,10 +167,6 @@ static LogicalResult checkImplementationStatus(Operation &op) {
     if (op.getDistScheduleChunkSize())
       result = todo("dist_schedule with chunk_size");
   };
-  auto checkHasDeviceAddr = [&todo](auto op, LogicalResult &result) {
-    if (!op.getHasDeviceAddrVars().empty())
-      result = todo("has_device_addr");
-  };
   auto checkHint = [](auto op, LogicalResult &) {
     if (op.getHint())
       op.emitWarning("hint clause discarded");
@@ -314,7 +310,6 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkAllocate(op, result);
         checkBare(op, result);
         checkDevice(op, result);
-        checkHasDeviceAddr(op, result);
         checkInReduction(op, result);
         checkIsDevicePtr(op, result);
         checkPrivate(op, result);
@@ -3120,8 +3115,9 @@ llvm::Value *getSizeInBytes(DataLayout &dl, const mlir::Type &type,
 static void collectMapDataFromMapOperands(
     MapInfoData &mapData, SmallVectorImpl<Value> &mapVars,
     LLVM::ModuleTranslation &moduleTranslation, DataLayout &dl,
-    llvm::IRBuilderBase &builder, const ArrayRef<Value> &useDevPtrOperands = {},
-    const ArrayRef<Value> &useDevAddrOperands = {}) {
+    llvm::IRBuilderBase &builder, ArrayRef<Value> useDevPtrOperands = {},
+    ArrayRef<Value> useDevAddrOperands = {},
+    ArrayRef<Value> hasDevAddrOperands = {}) {
   auto checkIsAMember = [](const auto &mapVars, auto mapOp) {
     // Check if this is a member mapping and correctly assign that it is, if
     // it is a member of a larger object.
@@ -3230,6 +3226,41 @@ static void collectMapDataFromMapOperands(
 
   addDevInfos(useDevAddrOperands, llvm::OpenMPIRBuilder::DeviceInfoTy::Address);
   addDevInfos(useDevPtrOperands, llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer);
+
+  for (Value mapValue : hasDevAddrOperands) {
+    auto mapOp = cast<omp::MapInfoOp>(mapValue.getDefiningOp());
+    Value offloadPtr =
+        mapOp.getVarPtrPtr() ? mapOp.getVarPtrPtr() : mapOp.getVarPtr();
+    llvm::Value *origValue = moduleTranslation.lookupValue(offloadPtr);
+    auto mapType = static_cast<llvm::omp::OpenMPOffloadMappingFlags>(
+        mapOp.getMapType().value());
+    auto mapTypeDescriptor =
+        llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR;
+
+    mapData.OriginalValue.push_back(origValue);
+    mapData.BasePointers.push_back(origValue);
+    mapData.Pointers.push_back(origValue);
+    mapData.IsDeclareTarget.push_back(false);
+    mapData.BaseType.push_back(
+        moduleTranslation.convertType(mapOp.getVarType()));
+    mapData.Sizes.push_back(
+        builder.getInt64(dl.getTypeSize(mapOp.getVarType())));
+    mapData.MapClause.push_back(mapOp.getOperation());
+    if (llvm::to_underlying(mapType & mapTypeDescriptor)) {
+      // Descriptors can get rematerialized, so don't use the address
+      // of the decriptor, just copy the descriptor.
+      mapData.Types.push_back(mapType);
+    } else {
+      mapData.Types.push_back(
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL);
+    }
+    mapData.Names.push_back(LLVM::createMappingInformation(
+        mapOp.getLoc(), *moduleTranslation.getOpenMPBuilder()));
+    mapData.DevicePointers.push_back(
+        llvm::OpenMPIRBuilder::DeviceInfoTy::Address);
+    mapData.IsAMapping.push_back(false);
+    mapData.IsAMember.push_back(checkIsAMember(hasDevAddrOperands, mapOp));
+  }
 }
 
 static int getMapDataMemberIdx(MapInfoData &mapData, omp::MapInfoOp memberOp) {
@@ -3571,6 +3602,7 @@ mapParentWithMembers(LLVM::ModuleTranslation &moduleTranslation,
     // further case specific flag modifications). For the moment, it handles
     // what we support as expected.
     llvm::omp::OpenMPOffloadMappingFlags mapFlag = mapData.Types[mapDataIndex];
+    mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR;
     ompBuilder.setCorrectMemberOfFlag(mapFlag, memberOfFlag);
 
     if (targetDirective == TargetDirective::TargetUpdate) {
@@ -3676,7 +3708,8 @@ static void processMapMembersWithParent(
     if (checkIfPointerMap(memberClause)) {
       auto mapFlag = llvm::omp::OpenMPOffloadMappingFlags(
           memberClause.getMapType().value());
-      mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
+      mapFlag &= (~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM &
+                  ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR);
       mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_MEMBER_OF;
       ompBuilder.setCorrectMemberOfFlag(mapFlag, memberOfFlag);
       combinedInfo.Types.emplace_back(mapFlag);
@@ -3696,7 +3729,8 @@ static void processMapMembersWithParent(
     // of.
     auto mapFlag =
         llvm::omp::OpenMPOffloadMappingFlags(memberClause.getMapType().value());
-    mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
+    mapFlag &= (~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM &
+                ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR);
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_MEMBER_OF;
     ompBuilder.setCorrectMemberOfFlag(mapFlag, memberOfFlag);
     bool isDeclTarTo = isDeclareTargetTo(parentClause.getVarPtr()
@@ -4102,7 +4136,6 @@ convertOmpTargetData(Operation *op, llvm::IRBuilderBase &builder,
     return failure();
 
   using InsertPointTy = llvm::OpenMPIRBuilder::InsertPointTy;
-
   MapInfoData mapData;
   collectMapDataFromMapOperands(mapData, mapVars, moduleTranslation, DL,
                                 builder, useDevicePtrVars, useDeviceAddrVars);
@@ -4903,7 +4936,9 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   llvm::DenseMap<Value, Value> mappedPrivateVars;
   DataLayout dl = DataLayout(opInst.getParentOfType<ModuleOp>());
   SmallVector<Value> mapVars = targetOp.getMapVars();
+  SmallVector<Value> hdaVars = targetOp.getHasDeviceAddrVars();
   ArrayRef<BlockArgument> mapBlockArgs = argIface.getMapBlockArgs();
+  ArrayRef<BlockArgument> hdaBlockArgs = argIface.getHasDeviceAddrBlockArgs();
   llvm::Function *llvmOutlinedFn = nullptr;
   TargetDirective targetDirective = getTargetDirectiveFromOp(&opInst);
 
@@ -4989,6 +5024,12 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
           moduleTranslation.lookupValue(mapInfoOp.getVarPtr());
       moduleTranslation.mapValue(arg, mapOpValue);
     }
+    for (auto [arg, mapOp] : llvm::zip_equal(hdaBlockArgs, hdaVars)) {
+      auto mapInfoOp = cast<omp::MapInfoOp>(mapOp.getDefiningOp());
+      llvm::Value *mapOpValue =
+          moduleTranslation.lookupValue(mapInfoOp.getVarPtr());
+      moduleTranslation.mapValue(arg, mapOpValue);
+    }
 
     // Do privatization after moduleTranslation has already recorded
     // mapped values.
@@ -5055,7 +5096,8 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
 
   MapInfoData mapData;
   collectMapDataFromMapOperands(mapData, mapVars, moduleTranslation, dl,
-                                builder);
+                                builder, /*useDevPtrOperands=*/{},
+                                /*useDevAddrOperands=*/{}, hdaVars);
 
   MapInfosTy combinedInfos;
   auto genMapInfoCB =
@@ -5110,7 +5152,7 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
       kernelInput.push_back(value);
   }
 
-  for (size_t i = 0; i < mapVars.size(); ++i) {
+  for (size_t i = 0, e = mapData.OriginalValue.size(); i != e; ++i) {
     // declare target arguments are not passed to kernels as arguments
     // TODO: We currently do not handle cases where a member is explicitly
     // passed in as an argument, this will likley need to be handled in

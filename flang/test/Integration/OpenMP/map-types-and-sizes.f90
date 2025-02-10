@@ -31,7 +31,7 @@ subroutine mapType_array
 end subroutine mapType_array
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976711173, i64 281474976711173, i64 281474976711171, i64 281474976711187]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 16416, i64 281474976711173, i64 281474976711173, i64 281474976711171, i64 281474976711187]
 subroutine mapType_ptr
   integer, pointer :: a
   !$omp target
@@ -40,7 +40,7 @@ subroutine mapType_ptr
 end subroutine mapType_ptr
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976711173, i64 281474976711173, i64 281474976711171, i64 281474976711187]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 16416, i64 281474976711173, i64 281474976711173, i64 281474976711171, i64 281474976711187]
 subroutine mapType_allocatable
   integer, allocatable :: a
   allocate(a)
@@ -51,7 +51,7 @@ subroutine mapType_allocatable
 end subroutine mapType_allocatable
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 16416, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675]
 subroutine mapType_ptr_explicit
   integer, pointer :: a
   !$omp target map(tofrom: a)
@@ -60,7 +60,7 @@ subroutine mapType_ptr_explicit
 end subroutine mapType_ptr_explicit
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 16416, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675]
 subroutine mapType_allocatable_explicit
   integer, allocatable :: a
   allocate(a)
@@ -233,7 +233,7 @@ subroutine mapType_derived_type_alloca()
 end subroutine
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [9 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 32, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710659]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 16416, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710659]
 subroutine mapType_alloca_derived_type()
   type :: one_layer
   real(4) :: i
@@ -256,7 +256,7 @@ subroutine mapType_alloca_derived_type()
 end subroutine
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [9 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 32, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710659]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 16416, i64 281474976710661, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710661, i64 281474976710659, i64 281474976710675, i64 281474976710659]
 subroutine mapType_alloca_nested_derived_type()
   type :: middle_layer
   real(4) :: i
