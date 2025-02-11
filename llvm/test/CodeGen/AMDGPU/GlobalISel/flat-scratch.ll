@@ -90,8 +90,9 @@ define amdgpu_kernel void @store_load_sindex_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX12-NEXT:    scratch_store_b32 v0, v1, off scope:SCOPE_SYS
 ; GFX12-NEXT:    s_wait_storecnt 0x0
@@ -177,8 +178,9 @@ define amdgpu_kernel void @store_load_sindex_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; UNALIGNED_GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; UNALIGNED_GFX12-NEXT:    scratch_store_b32 v0, v1, off scope:SCOPE_SYS
 ; UNALIGNED_GFX12-NEXT:    s_wait_storecnt 0x0
@@ -688,8 +690,9 @@ define amdgpu_kernel void @store_load_sindex_small_offset_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX12-NEXT:    scratch_store_b32 v0, v1, off offset:256 scope:SCOPE_SYS
 ; GFX12-NEXT:    s_wait_storecnt 0x0
@@ -784,8 +787,9 @@ define amdgpu_kernel void @store_load_sindex_small_offset_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; UNALIGNED_GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; UNALIGNED_GFX12-NEXT:    scratch_store_b32 v0, v1, off offset:256 scope:SCOPE_SYS
 ; UNALIGNED_GFX12-NEXT:    s_wait_storecnt 0x0
@@ -1267,8 +1271,9 @@ define amdgpu_kernel void @store_load_sindex_large_offset_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX12-NEXT:    scratch_store_b32 v0, v1, off offset:16384 scope:SCOPE_SYS
 ; GFX12-NEXT:    s_wait_storecnt 0x0
@@ -1365,8 +1370,9 @@ define amdgpu_kernel void @store_load_sindex_large_offset_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
-; UNALIGNED_GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
+; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0
 ; UNALIGNED_GFX12-NEXT:    scratch_store_b32 v0, v1, off offset:16384 scope:SCOPE_SYS
 ; UNALIGNED_GFX12-NEXT:    s_wait_storecnt 0x0
@@ -2736,6 +2742,7 @@ define void @store_load_v3i32_unaligned(ptr addrspace(5) nocapture %arg) {
 ; GFX12-NEXT:    s_mov_b32 s2, 3
 ; GFX12-NEXT:    s_mov_b32 s1, 2
 ; GFX12-NEXT:    s_mov_b32 s0, 1
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_dual_mov_b32 v3, s2 :: v_dual_mov_b32 v2, s1
 ; GFX12-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX12-NEXT:    s_wait_storecnt 0x0
@@ -3180,6 +3187,7 @@ define void @store_load_v4i32_unaligned(ptr addrspace(5) nocapture %arg) {
 ; GFX12-NEXT:    s_mov_b32 s2, 3
 ; GFX12-NEXT:    s_mov_b32 s1, 2
 ; GFX12-NEXT:    s_mov_b32 s0, 1
+; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s3 :: v_dual_mov_b32 v3, s2
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s1 :: v_dual_mov_b32 v1, s0
 ; GFX12-NEXT:    s_wait_storecnt 0x0
