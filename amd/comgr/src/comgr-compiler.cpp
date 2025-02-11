@@ -37,6 +37,7 @@
  ******************************************************************************/
 
 #include "comgr-compiler.h"
+#include "comgr-cache-bundler-command.h"
 #include "comgr-cache.h"
 #include "comgr-device-libs.h"
 #include "comgr-diagnostic-handler.h"
@@ -1245,9 +1246,10 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
   }
 
   // Collect bitcode memory buffers from bitcodes, bundles, and archives
+  auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
 
-    std::string FileExtension;
+    const char *FileExtension;
     amd_comgr_data_kind_t UnbundledDataKind;
     switch (Input->DataKind) {
     case AMD_COMGR_DATA_KIND_BC_BUNDLE:
@@ -1278,76 +1280,60 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       const size_t BufSize = sizeof(char) * 30;
       char *Buf = (char *)malloc(BufSize);
       snprintf(Buf, BufSize, "comgr-bundle-%d.%s", std::rand() % 10000,
-               FileExtension.c_str());
+               FileExtension);
       Input->Name = Buf;
     }
 
     // Write input file system so that OffloadBundler API can process
     // TODO: Switch write to VFS
-    std::string InputFilePath = getFilePath(Input, InputDir).str().str();
+    SmallString<128> InputFilePath = getFilePath(Input, InputDir);
     if (auto Status = outputToFile(Input, InputFilePath)) {
       return Status;
     }
 
     // Bundler input name
-    BundlerConfig.InputFileNames.push_back(InputFilePath);
+    BundlerConfig.InputFileNames.emplace_back(InputFilePath);
 
     // Generate prefix for output files
-    std::string OutputPrefix = std::string(Input->Name);
+    StringRef OutputPrefix = Input->Name;
     size_t Index = OutputPrefix.find_last_of(".");
     OutputPrefix = OutputPrefix.substr(0, Index);
 
     // Bundler target and output names
-    for (auto Entry : ActionInfo->BundleEntryIDs) {
-      BundlerConfig.TargetNames.push_back(Entry);
+    for (StringRef Entry : ActionInfo->BundleEntryIDs) {
+      BundlerConfig.TargetNames.emplace_back(Entry);
 
-      // Add an output file for each target
-      std::string OutputFileName =
-          OutputPrefix + '-' + Entry + "." + FileExtension;
-
-      // TODO: Switch this to LLVM path APIs
-      std::string OutputFilePath = OutputDir.str().str() + "/" + OutputFileName;
-      BundlerConfig.OutputFileNames.push_back(OutputFilePath);
+      SmallString<128> OutputFilePath = OutputDir;
+      sys::path::append(OutputFilePath,
+                        OutputPrefix + "-" + Entry + "." + FileExtension);
+      BundlerConfig.OutputFileNames.emplace_back(OutputFilePath);
     }
 
-    OffloadBundler Bundler(BundlerConfig);
-
-    // TODO: log vectors, build clang command
     if (env::shouldEmitVerboseLogs()) {
       LogS << "Extracting Bundle:\n"
            << "\t  Unbundled Files Extension: ." << FileExtension << "\n"
            << "\t  Bundle Entry ID: " << BundlerConfig.TargetNames[0] << "\n"
            << "\t   Input Filename: " << BundlerConfig.InputFileNames[0] << "\n"
-           << "\t  Output Filename: " << BundlerConfig.OutputFileNames[0]
-           << "\n";
+           << "\t  Output Filenames: ";
+      for (StringRef OutputFileName : BundlerConfig.OutputFileNames)
+        LogS << OutputFileName << " ";
+      LogS << "\n";
       LogS.flush();
     }
 
-    switch (Input->DataKind) {
-    case AMD_COMGR_DATA_KIND_BC_BUNDLE: {
-      llvm::Error Err = Bundler.UnbundleFiles();
-      llvm::logAllUnhandledErrors(std::move(Err), llvm::errs(),
-                                  "Unbundle Bitcodes Error: ");
-      break;
-    }
-    case AMD_COMGR_DATA_KIND_AR_BUNDLE: {
-      llvm::Error Err = Bundler.UnbundleArchive();
-      llvm::logAllUnhandledErrors(std::move(Err), llvm::errs(),
-                                  "Unbundle Archives Error: ");
-      break;
-    }
-    case AMD_COMGR_DATA_KIND_OBJ_BUNDLE: {
-      llvm::Error Err = Bundler.UnbundleFiles();
-      llvm::logAllUnhandledErrors(std::move(Err), llvm::errs(),
-                                  "Unbundle Objects Error: ");
-      break;
-    }
-    default:
-      llvm_unreachable("invalid bundle type");
+    UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
+    if (Cache) {
+      if (auto Status = Cache->execute(Unbundle, LogS)) {
+        return Status;
+      }
+    } else {
+      if (auto Status = Unbundle.execute(LogS)) {
+        return Status;
+      }
     }
 
     // Add new bitcodes to OutSetT
-    for (auto OutputFilePath : BundlerConfig.OutputFileNames) {
+    for (StringRef OutputFilePath : BundlerConfig.OutputFileNames) {
 
       amd_comgr_data_t ResultT;
 
@@ -1358,21 +1344,14 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, StringRef(OutputFilePath)))
+      if (auto Status = inputFromFile(Result, OutputFilePath))
         return Status;
 
-      StringRef OutputFileName =
-          llvm::sys::path::filename(StringRef(OutputFilePath));
+      StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
 
       if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
         return Status;
-      }
-
-      // Remove input and output file after reading back into Comgr data
-      if (!env::shouldEmitVerboseLogs()) {
-        sys::fs::remove(InputFilePath);
-        sys::fs::remove(OutputFilePath);
       }
     }
   }
