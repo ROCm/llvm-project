@@ -158,18 +158,15 @@ define amdgpu_kernel void @caller() {
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    s_mov_b64 s[10:11], s[4:5]
 ; GFX12-NEXT:    s_getpc_b64 s[4:5]
-; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_sext_i32_i16 s5, s5
-; GFX12-NEXT:    s_add_co_u32 s4, s4, callee@gotpcrel32@lo+12
-; GFX12-NEXT:    s_wait_alu 0xfffe
-; GFX12-NEXT:    s_add_co_ci_u32 s5, s5, callee@gotpcrel32@hi+24
+; GFX12-NEXT:    s_add_co_u32 s4, s4, callee@gotpcrel32@lo+8
+; GFX12-NEXT:    s_add_co_ci_u32 s5, s5, callee@gotpcrel32@hi+16
 ; GFX12-NEXT:    v_dual_mov_b32 v31, v0 :: v_dual_mov_b32 v0, ttmp9
 ; GFX12-NEXT:    s_load_b64 s[6:7], s[4:5], 0x0
 ; GFX12-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-NEXT:    s_mov_b64 s[8:9], s[2:3]
 ; GFX12-NEXT:    s_mov_b32 s32, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_swappc_b64 s[30:31], s[6:7]
 ; GFX12-NEXT:    s_endpgm
   %idx = call i32 @llvm.amdgcn.workgroup.id.x()

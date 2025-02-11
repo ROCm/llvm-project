@@ -90,7 +90,6 @@ define amdgpu_kernel void @store_load_sindex_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
@@ -178,7 +177,6 @@ define amdgpu_kernel void @store_load_sindex_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0
@@ -690,7 +688,6 @@ define amdgpu_kernel void @store_load_sindex_small_offset_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
@@ -787,7 +784,6 @@ define amdgpu_kernel void @store_load_sindex_small_offset_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0
@@ -1271,7 +1267,6 @@ define amdgpu_kernel void @store_load_sindex_large_offset_kernel(i32 %idx) {
 ; GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; GFX12-NEXT:    s_wait_alu 0xfffe
 ; GFX12-NEXT:    v_mov_b32_e32 v2, s0
@@ -1370,7 +1365,6 @@ define amdgpu_kernel void @store_load_sindex_large_offset_kernel(i32 %idx) {
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s1, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_and_b32 s0, s0, 15
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v0, s1
-; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    s_lshl_b32 s0, s0, 2
 ; UNALIGNED_GFX12-NEXT:    s_wait_alu 0xfffe
 ; UNALIGNED_GFX12-NEXT:    v_mov_b32_e32 v2, s0

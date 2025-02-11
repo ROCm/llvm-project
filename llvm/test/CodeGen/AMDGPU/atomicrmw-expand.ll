@@ -116,7 +116,6 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX1200-NEXT:  ; %bb.2: ; %atomicrmw.end
 ; GFX1200-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1200-NEXT:    v_mov_b32_e32 v0, v3
-; GFX1200-NEXT:    s_wait_alu 0xfffe
 ; GFX1200-NEXT:    s_setpc_b64 s[30:31]
   %res = atomicrmw fadd ptr %addr, float %val seq_cst
   ret float %res
@@ -465,7 +464,6 @@ define float @no_unsafe(ptr %addr, float %val) {
 ; GFX1200-NEXT:  ; %bb.2: ; %atomicrmw.end
 ; GFX1200-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1200-NEXT:    v_mov_b32_e32 v0, v3
-; GFX1200-NEXT:    s_wait_alu 0xfffe
 ; GFX1200-NEXT:    s_setpc_b64 s[30:31]
   %res = atomicrmw fadd ptr %addr, float %val syncscope("workgroup") seq_cst
   ret float %res

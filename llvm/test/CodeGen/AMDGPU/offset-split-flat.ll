@@ -620,9 +620,11 @@ define i8 @flat_inst_valu_offset_2x_24bit_max(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:8388606
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_2x_24bit_max:
@@ -651,9 +653,11 @@ define i8 @flat_inst_valu_offset_2x_24bit_max(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-GISEL-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, 0xfffffe, v0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0, v1, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 16777214
   %load = load i8, ptr %gep, align 4
@@ -825,9 +829,11 @@ define i8 @flat_inst_valu_offset_2x_neg_24bit_max(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0xff800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, -1, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8388607
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-GISEL-LABEL: flat_inst_valu_offset_2x_neg_24bit_max:
@@ -838,9 +844,11 @@ define i8 @flat_inst_valu_offset_2x_neg_24bit_max(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-GISEL-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, 0xff000001, v0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, -1, v1, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -16777215
   %load = load i8, ptr %gep, align 4
@@ -884,9 +892,11 @@ define i8 @flat_inst_valu_offset_64bit_11bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:2047
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_11bit_split0:
@@ -940,11 +950,13 @@ define i8 @flat_inst_valu_offset_64bit_11bit_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589936639
   %load = load i8, ptr %gep, align 4
@@ -988,9 +1000,11 @@ define i8 @flat_inst_valu_offset_64bit_11bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:2048
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_11bit_split1:
@@ -1044,11 +1058,13 @@ define i8 @flat_inst_valu_offset_64bit_11bit_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589936640
   %load = load i8, ptr %gep, align 4
@@ -1092,9 +1108,11 @@ define i8 @flat_inst_valu_offset_64bit_12bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:4095
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_12bit_split0:
@@ -1148,11 +1166,13 @@ define i8 @flat_inst_valu_offset_64bit_12bit_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589938687
   %load = load i8, ptr %gep, align 4
@@ -1196,9 +1216,11 @@ define i8 @flat_inst_valu_offset_64bit_12bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:4096
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_12bit_split1:
@@ -1252,11 +1274,13 @@ define i8 @flat_inst_valu_offset_64bit_12bit_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589938688
   %load = load i8, ptr %gep, align 4
@@ -1300,9 +1324,11 @@ define i8 @flat_inst_valu_offset_64bit_13bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:8191
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_13bit_split0:
@@ -1356,11 +1382,13 @@ define i8 @flat_inst_valu_offset_64bit_13bit_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589942783
   %load = load i8, ptr %gep, align 4
@@ -1404,9 +1432,11 @@ define i8 @flat_inst_valu_offset_64bit_13bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 2, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:8192
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_13bit_split1:
@@ -1460,11 +1490,13 @@ define i8 @flat_inst_valu_offset_64bit_13bit_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, 2
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 8589942784
   %load = load i8, ptr %gep, align 4
@@ -1509,9 +1541,11 @@ define i8 @flat_inst_valu_offset_64bit_11bit_neg_high_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8386561
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_11bit_neg_high_split0:
@@ -1565,11 +1599,13 @@ define i8 @flat_inst_valu_offset_64bit_11bit_neg_high_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854773761
   %load = load i8, ptr %gep, align 4
@@ -1614,9 +1650,11 @@ define i8 @flat_inst_valu_offset_64bit_11bit_neg_high_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8386560
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_11bit_neg_high_split1:
@@ -1670,11 +1708,13 @@ define i8 @flat_inst_valu_offset_64bit_11bit_neg_high_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854773760
   %load = load i8, ptr %gep, align 4
@@ -1719,9 +1759,11 @@ define i8 @flat_inst_valu_offset_64bit_12bit_neg_high_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8384513
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_12bit_neg_high_split0:
@@ -1775,11 +1817,13 @@ define i8 @flat_inst_valu_offset_64bit_12bit_neg_high_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854771713
   %load = load i8, ptr %gep, align 4
@@ -1824,9 +1868,11 @@ define i8 @flat_inst_valu_offset_64bit_12bit_neg_high_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8384512
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_12bit_neg_high_split1:
@@ -1880,11 +1926,13 @@ define i8 @flat_inst_valu_offset_64bit_12bit_neg_high_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854771712
   %load = load i8, ptr %gep, align 4
@@ -1929,9 +1977,11 @@ define i8 @flat_inst_valu_offset_64bit_13bit_neg_high_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8380417
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_13bit_neg_high_split0:
@@ -1985,11 +2035,13 @@ define i8 @flat_inst_valu_offset_64bit_13bit_neg_high_split0(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854767617
   %load = load i8, ptr %gep, align 4
@@ -2034,9 +2086,11 @@ define i8 @flat_inst_valu_offset_64bit_13bit_neg_high_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, vcc_lo, 0x800000, v0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, 0x80000000, v1, vcc_lo
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:-8380416
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-SDAG-NEXT:    s_wait_alu 0xfffd
 ; GFX12-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-GISEL-LABEL: flat_inst_valu_offset_64bit_13bit_neg_high_split1:
@@ -2090,11 +2144,13 @@ define i8 @flat_inst_valu_offset_64bit_13bit_neg_high_split1(ptr %p) {
 ; GFX12-GISEL-NEXT:    s_brev_b32 s1, 1
 ; GFX12-GISEL-NEXT:    s_wait_alu 0xfffe
 ; GFX12-GISEL-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_2)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_2)
 ; GFX12-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v0, v2
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v1, v3, vcc_lo
 ; GFX12-GISEL-NEXT:    flat_load_u8 v0, v[0:1]
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-GISEL-NEXT:    s_wait_alu 0xfffd
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
   %gep = getelementptr i8, ptr %p, i64 -9223372036854767616
   %load = load i8, ptr %gep, align 4
@@ -3065,7 +3121,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_11bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:2047 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -3160,7 +3216,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_11bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:2048 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -3255,7 +3311,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_12bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:4095 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -3351,7 +3407,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_12bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:4096 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -3447,7 +3503,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_13bit_split0(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:8191 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -3543,7 +3599,7 @@ define amdgpu_kernel void @flat_inst_salu_offset_64bit_13bit_split1(ptr %p) {
 ; GFX12-SDAG-NEXT:    s_load_b64 s[0:1], s[0:1], 0x24
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    v_add_co_u32 v0, s0, 0, s0
-; GFX12-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-SDAG-NEXT:    s_wait_alu 0xf1ff
 ; GFX12-SDAG-NEXT:    v_add_co_ci_u32_e64 v1, null, 2, s1, s0
 ; GFX12-SDAG-NEXT:    flat_load_u8 v0, v[0:1] offset:8192 scope:SCOPE_SYS
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
