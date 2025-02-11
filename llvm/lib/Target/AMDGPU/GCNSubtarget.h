@@ -1323,6 +1323,8 @@ public:
 
   bool hasRestrictedSOffset() const { return HasRestrictedSOffset; }
 
+  bool hasRequiredExportPriority() const { return HasRequiredExportPriority; }
+
   /// \returns true if the target uses LOADcnt/SAMPLEcnt/BVHcnt, DScnt/KMcnt
   /// and STOREcnt rather than VMcnt, LGKMcnt and VScnt respectively.
   bool hasExtendedWaitCounts() const { return getGeneration() >= GFX12; }
