@@ -26,6 +26,15 @@ entry:
   ; CHECK: #dbg_declare(i8 poison, ![[#]], !DIExpression(DIOpArg(0, i32)), ![[#]])
   #dbg_declare(i8 poison, !24, !DIExpression(DIOpArg(0, i32)), !22)
 
+  ; CHECK: #dbg_declare(ptr %i, ![[#]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(%struct.type), DIOpConstant(i32 64), DIOpBitOffset(ptr)), ![[#]])
+  #dbg_declare(ptr %i, !26, !DIExpression(DIOpArg(0, ptr), DIOpDeref(%struct.type), DIOpConstant(i32 64), DIOpBitOffset(ptr)), !22)
+
+  ; CHECK: #dbg_declare(ptr %i, ![[#]], !DIExpression(DIOpArg(0, ptr), DIOpDeref(%struct.type), DIOpConstant(i32 8), DIOpByteOffset(ptr)), ![[#]])
+  #dbg_declare(ptr %i, !27, !DIExpression(DIOpArg(0, ptr), DIOpDeref(%struct.type), DIOpConstant(i32 8), DIOpByteOffset(ptr)), !22)
+
+  ; CHECK: #dbg_declare(i32 3, ![[#]], !DIExpression(DIOpArg(0, i32), DIOpConstant(<2 x i32> <i32 1, i32 2>), DIOpConstant(<2 x i32> <i32 3, i32 4>), DIOpSelect()), ![[#]])
+  #dbg_declare(i32 3, !28, !DIExpression(DIOpArg(0, i32), DIOpConstant(<2 x i32> <i32 1, i32 2>), DIOpConstant(<2 x i32> <i32 3, i32 4>), DIOpSelect()), !22)
+
   ret void
 }
 
@@ -55,6 +64,10 @@ entry:
 !22 = !DILocation(line: 12, column: 7, scope: !17)
 !23 = !DILocation(line: 13, column: 1, scope: !17)
 !24 = !DILocalVariable(name: "j", scope: !17, file: !1, line: 12, type: !10)
+!25 = !DIBasicType(name: "int64", size: 64, encoding: DW_ATE_unsigned)
+!26 = !DILocalVariable(name: "k", scope: !17, file: !1, line: 12, type: !25)
+!27 = !DILocalVariable(name: "l", scope: !17, file: !1, line: 12, type: !25)
+!28 = !DILocalVariable(name: "m", scope: !17, file: !1, line: 12, type: !25)
 
 ;--- invalid.ll
 ; RUN: opt invalid.ll -S -passes=verify 2>&1 | FileCheck invalid.ll
@@ -81,10 +94,10 @@ entry:
   ; CHECK: DIOpReinterpret must not alter bitsize of child
   #dbg_declare(ptr %x, !18, !DIExpression(DIOpArg(0, ptr), DIOpReinterpret(i32)), !20)
 
-  ; CHECK: DIOpBitOffset requires first input be integer typed
+  ; CHECK: DIOpBitOffset requires an integer typed offset
   #dbg_declare(ptr %x, !18, !DIExpression(DIOpConstant(float 0.0), DIOpArg(0, ptr), DIOpBitOffset(ptr)), !20)
 
-  ; CHECK: DIOpByteOffset requires first input be integer typed
+  ; CHECK: DIOpByteOffset requires an integer typed offset
   #dbg_declare(ptr %x, !18, !DIExpression(DIOpConstant(ptr undef), DIOpArg(0, ptr), DIOpByteOffset(ptr)), !20)
 
   ; CHECK: DIOpComposite bitsize does not match sum of child bitsizes
