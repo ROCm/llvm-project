@@ -4,9 +4,9 @@
 #
 #    pip-compile requirements.in
 #
-accessible-pygments==0.0.3
+accessible-pygments==0.0.5
     # via pydata-sphinx-theme
-alabaster==0.7.13
+alabaster==1.0.0
     # via sphinx
 appnope==0.1.4
     # via ipykernel
@@ -17,37 +17,37 @@ attrs==25.1.0
     #   jsonschema
     #   jupyter-cache
     #   referencing
-babel==2.12.1
+babel==2.17.0
     # via
     #   pydata-sphinx-theme
     #   sphinx
-beautifulsoup4==4.11.2
+beautifulsoup4==4.13.3
     # via pydata-sphinx-theme
-breathe==4.34.0
+breathe==4.35.0
     # via rocm-docs-core
-certifi==2022.12.7
+certifi==2025.1.31
     # via requests
-cffi==1.15.1
+cffi==1.17.1
     # via
     #   cryptography
     #   pynacl
-charset-normalizer==3.1.0
+charset-normalizer==3.4.1
     # via requests
-click==8.1.3
+click==8.1.8
     # via
     #   jupyter-cache
     #   sphinx-external-toc
 comm==0.2.2
     # via ipykernel
-cryptography==40.0.2
+cryptography==44.0.1
     # via pyjwt
 debugpy==1.8.12
     # via ipykernel
 decorator==5.1.1
     # via ipython
-deprecated==1.2.13
+deprecated==1.2.18
     # via pygithub
-docutils==0.19
+docutils==0.21.2
     # via
     #   breathe
     #   myst-parser
@@ -55,31 +55,31 @@ docutils==0.19
     #   sphinx
 executing==2.2.0
     # via stack-data
-fastjsonschema==2.17.1
+fastjsonschema==2.21.1
     # via
     #   nbformat
     #   rocm-docs-core
-gitdb==4.0.10
+gitdb==4.0.12
     # via gitpython
-gitpython==3.1.31
+gitpython==3.1.44
     # via rocm-docs-core
-idna==3.4
+idna==3.10
     # via requests
 imagesize==1.4.1
     # via sphinx
-importlib-metadata==8.5.0
+importlib-metadata==8.6.1
     # via
     #   jupyter-cache
     #   myst-nb
 ipykernel==6.29.5
     # via myst-nb
-ipython==8.23.0
+ipython==8.32.0
     # via
     #   ipykernel
     #   myst-nb
 jedi==0.19.2
     # via ipython
-jinja2==3.1.2
+jinja2==3.1.5
     # via
     #   myst-parser
     #   sphinx
@@ -99,23 +99,23 @@ jupyter-core==5.7.2
     #   jupyter-client
     #   nbclient
     #   nbformat
-markdown-it-py==2.2.0
+markdown-it-py==3.0.0
     # via
     #   mdit-py-plugins
     #   myst-parser
-markupsafe==2.1.2
+markupsafe==3.0.2
     # via jinja2
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
     #   ipython
-mdit-py-plugins==0.3.5
+mdit-py-plugins==0.4.2
     # via myst-parser
 mdurl==0.1.2
     # via markdown-it-py
 myst-nb==1.2.0
     # via rocm-docs-core
-myst-parser==1.0.0
+myst-parser==4.0.1
     # via myst-nb
 nbclient==0.10.2
     # via
@@ -128,10 +128,9 @@ nbformat==5.10.4
     #   nbclient
 nest-asyncio==1.6.0
     # via ipykernel
-packaging==23.0
+packaging==24.2
     # via
     #   ipykernel
-    #   pydata-sphinx-theme
     #   sphinx
 parso==0.8.4
     # via jedi
@@ -147,27 +146,27 @@ ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
     # via stack-data
-pycparser==2.21
+pycparser==2.22
     # via cffi
-pydata-sphinx-theme==0.13.3
+pydata-sphinx-theme==0.16.1
     # via
     #   rocm-docs-core
     #   sphinx-book-theme
-pygithub==1.58.1
+pygithub==2.6.0
     # via rocm-docs-core
-pygments==2.14.0
+pygments==2.19.1
     # via
     #   accessible-pygments
     #   ipython
     #   pydata-sphinx-theme
     #   sphinx
-pyjwt[crypto]==2.6.0
+pyjwt[crypto]==2.10.1
     # via pygithub
 pynacl==1.5.0
     # via pygithub
 python-dateutil==2.9.0.post0
     # via jupyter-client
-pyyaml==6.0
+pyyaml==6.0.2
     # via
     #   jupyter-cache
     #   myst-nb
@@ -182,25 +181,27 @@ referencing==0.36.2
     # via
     #   jsonschema
     #   jsonschema-specifications
-requests==2.28.2
+requests==2.32.3
     # via
     #   pygithub
     #   sphinx
 rocm-docs-core==1.17.0
     # via -r requirements.in
+roman-numerals-py==3.0.0
+    # via sphinx
 rpds-py==0.22.3
     # via
     #   jsonschema
     #   referencing
 six==1.17.0
     # via python-dateutil
-smmap==5.0.0
+smmap==5.0.2
     # via gitdb
 snowballstemmer==2.2.0
     # via sphinx
-soupsieve==2.4
+soupsieve==2.6
     # via beautifulsoup4
-sphinx==5.3.0
+sphinx==8.2.0
     # via
     #   breathe
     #   myst-nb
@@ -212,29 +213,29 @@ sphinx==5.3.0
     #   sphinx-design
     #   sphinx-external-toc
     #   sphinx-notfound-page
-sphinx-book-theme==1.0.1
+sphinx-book-theme==1.1.3
     # via rocm-docs-core
-sphinx-copybutton==0.5.1
+sphinx-copybutton==0.5.2
     # via rocm-docs-core
-sphinx-design==0.4.1
+sphinx-design==0.6.1
     # via rocm-docs-core
-sphinx-external-toc==0.3.1
+sphinx-external-toc==1.0.1
     # via rocm-docs-core
-sphinx-notfound-page==0.8.3
+sphinx-notfound-page==1.1.0
     # via rocm-docs-core
-sphinxcontrib-applehelp==1.0.4
+sphinxcontrib-applehelp==2.0.0
     # via sphinx
-sphinxcontrib-devhelp==1.0.2
+sphinxcontrib-devhelp==2.0.0
     # via sphinx
-sphinxcontrib-htmlhelp==2.0.1
+sphinxcontrib-htmlhelp==2.1.0
     # via sphinx
 sphinxcontrib-jsmath==1.0.1
     # via sphinx
-sphinxcontrib-qthelp==1.0.3
+sphinxcontrib-qthelp==2.0.0
     # via sphinx
-sphinxcontrib-serializinghtml==1.1.5
+sphinxcontrib-serializinghtml==2.0.0
     # via sphinx
-sqlalchemy==2.0.24
+sqlalchemy==2.0.38
     # via jupyter-cache
 stack-data==0.6.3
     # via ipython
@@ -254,18 +255,22 @@ traitlets==5.14.3
     #   matplotlib-inline
     #   nbclient
     #   nbformat
-typing-extensions==4.5.0
+typing-extensions==4.12.2
     # via
+    #   beautifulsoup4
     #   ipython
     #   myst-nb
     #   pydata-sphinx-theme
+    #   pygithub
     #   referencing
     #   sqlalchemy
-urllib3==1.26.15
-    # via requests
+urllib3==2.3.0
+    # via
+    #   pygithub
+    #   requests
 wcwidth==0.2.13
     # via prompt-toolkit
-wrapt==1.15.0
+wrapt==1.17.2
     # via deprecated
 zipp==3.21.0
     # via importlib-metadata
