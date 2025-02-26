@@ -206,13 +206,13 @@ CachedCommandAdaptor::readUniqueExecuteOutput(StringRef OutputFilename) {
   return std::move(*MBOrErr);
 }
 
-CachedCommand::CachedCommand(driver::Command &Command,
-                             DiagnosticOptions &DiagOpts,
-                             ExecuteFnTy &&ExecuteImpl)
+ClangCommand::ClangCommand(driver::Command &Command,
+                           DiagnosticOptions &DiagOpts,
+                           ExecuteFnTy &&ExecuteImpl)
     : Command(Command), DiagOpts(DiagOpts),
       ExecuteImpl(std::move(ExecuteImpl)) {}
 
-Error CachedCommand::addInputIdentifier(HashAlgorithm &H) const {
+Error ClangCommand::addInputIdentifier(HashAlgorithm &H) const {
   auto Inputs(getInputFiles(Command));
   for (StringRef Input : Inputs) {
     if (Error E = addFile(H, Input)) {
@@ -223,7 +223,7 @@ Error CachedCommand::addInputIdentifier(HashAlgorithm &H) const {
   return Error::success();
 }
 
-void CachedCommand::addOptionsIdentifier(HashAlgorithm &H) const {
+void ClangCommand::addOptionsIdentifier(HashAlgorithm &H) const {
   auto Inputs(getInputFiles(Command));
   StringRef Output = Command.getOutputFilenames().front();
   ArrayRef<const char *> Arguments = Command.getArguments();
@@ -265,11 +265,11 @@ void CachedCommand::addOptionsIdentifier(HashAlgorithm &H) const {
   }
 }
 
-CachedCommand::ActionClass CachedCommand::getClass() const {
+ClangCommand::ActionClass ClangCommand::getClass() const {
   return Command.getSource().getKind();
 }
 
-bool CachedCommand::canCache() const {
+bool ClangCommand::canCache() const {
   bool HasOneOutput = Command.getOutputFilenames().size() == 1;
   bool IsPreprocessorCommand = getClass() == driver::Action::PreprocessJobClass;
 
@@ -283,13 +283,13 @@ bool CachedCommand::canCache() const {
          !hasDebugOrProfileInfo(Command.getArguments());
 }
 
-Error CachedCommand::writeExecuteOutput(StringRef CachedBuffer) {
+Error ClangCommand::writeExecuteOutput(StringRef CachedBuffer) {
   StringRef OutputFilename = Command.getOutputFilenames().front();
   return CachedCommandAdaptor::writeUniqueExecuteOutput(OutputFilename,
                                                         CachedBuffer);
 }
 
-Expected<StringRef> CachedCommand::readExecuteOutput() {
+Expected<StringRef> ClangCommand::readExecuteOutput() {
   auto MaybeBuffer = CachedCommandAdaptor::readUniqueExecuteOutput(
       Command.getOutputFilenames().front());
   if (!MaybeBuffer)
@@ -298,7 +298,7 @@ Expected<StringRef> CachedCommand::readExecuteOutput() {
   return Output->getBuffer();
 }
 
-amd_comgr_status_t CachedCommand::execute(llvm::raw_ostream &LogS) {
+amd_comgr_status_t ClangCommand::execute(llvm::raw_ostream &LogS) {
   return ExecuteImpl(Command, LogS, DiagOpts);
 }
 } // namespace COMGR
