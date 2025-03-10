@@ -1341,32 +1341,22 @@ define <16 x float> @test_smfmac_f32_32x32x32_bf16__sgpr(<8 x bfloat> inreg %arg
 ; GISEL-LABEL: test_smfmac_f32_32x32x32_bf16__sgpr:
 ; GISEL:       ; %bb.0:
 ; GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GISEL-NEXT:    s_xor_saveexec_b64 vcc, -1
-; GISEL-NEXT:    scratch_store_dword off, v29, s32 ; 4-byte Folded Spill
-; GISEL-NEXT:    s_mov_b64 exec, vcc
-; GISEL-NEXT:    v_writelane_b32 v29, s36, 0
-; GISEL-NEXT:    v_writelane_b32 v29, s37, 1
-; GISEL-NEXT:    v_writelane_b32 v29, s38, 2
-; GISEL-NEXT:    v_writelane_b32 v29, s39, 3
-; GISEL-NEXT:    v_writelane_b32 v29, s30, 4
-; GISEL-NEXT:    s_nop 1
-; GISEL-NEXT:    v_writelane_b32 v29, s31, 5
 ; GISEL-NEXT:    s_lshr_b32 s29, s0, 16
-; GISEL-NEXT:    s_lshr_b32 vcc_lo, s1, 16
+; GISEL-NEXT:    s_lshr_b32 s41, s1, 16
 ; GISEL-NEXT:    s_lshl_b32 s29, s29, 16
 ; GISEL-NEXT:    s_and_b32 s0, s0, 0xffff
-; GISEL-NEXT:    s_lshr_b32 vcc_hi, s2, 16
-; GISEL-NEXT:    s_or_b32 s36, s29, s0
-; GISEL-NEXT:    s_lshl_b32 s0, vcc_lo, 16
+; GISEL-NEXT:    s_lshr_b32 s42, s2, 16
+; GISEL-NEXT:    s_or_b32 s40, s29, s0
+; GISEL-NEXT:    s_lshl_b32 s0, s41, 16
 ; GISEL-NEXT:    s_and_b32 s1, s1, 0xffff
-; GISEL-NEXT:    s_lshr_b32 s30, s3, 16
-; GISEL-NEXT:    s_or_b32 s37, s0, s1
-; GISEL-NEXT:    s_lshl_b32 s0, vcc_hi, 16
+; GISEL-NEXT:    s_lshr_b32 s43, s3, 16
+; GISEL-NEXT:    s_or_b32 s41, s0, s1
+; GISEL-NEXT:    s_lshl_b32 s0, s42, 16
 ; GISEL-NEXT:    s_and_b32 s1, s2, 0xffff
-; GISEL-NEXT:    s_or_b32 s38, s0, s1
-; GISEL-NEXT:    s_lshl_b32 s0, s30, 16
+; GISEL-NEXT:    s_or_b32 s42, s0, s1
+; GISEL-NEXT:    s_lshl_b32 s0, s43, 16
 ; GISEL-NEXT:    s_and_b32 s1, s3, 0xffff
-; GISEL-NEXT:    s_or_b32 s39, s0, s1
+; GISEL-NEXT:    s_or_b32 s43, s0, s1
 ; GISEL-NEXT:    s_lshr_b32 s0, s4, 16
 ; GISEL-NEXT:    s_lshr_b32 s1, s5, 16
 ; GISEL-NEXT:    s_lshl_b32 s0, s0, 16
@@ -1383,22 +1373,22 @@ define <16 x float> @test_smfmac_f32_32x32x32_bf16__sgpr(<8 x bfloat> inreg %arg
 ; GISEL-NEXT:    s_or_b32 s2, s2, s4
 ; GISEL-NEXT:    s_lshl_b32 s3, s3, 16
 ; GISEL-NEXT:    s_and_b32 s4, s7, 0xffff
-; GISEL-NEXT:    s_lshr_b32 vcc_lo, s9, 16
+; GISEL-NEXT:    s_lshr_b32 s44, s9, 16
 ; GISEL-NEXT:    s_or_b32 s3, s3, s4
 ; GISEL-NEXT:    s_lshl_b32 s4, s29, 16
 ; GISEL-NEXT:    s_and_b32 s5, s8, 0xffff
-; GISEL-NEXT:    s_lshr_b32 vcc_hi, s10, 16
+; GISEL-NEXT:    s_lshr_b32 s45, s10, 16
 ; GISEL-NEXT:    s_or_b32 s4, s4, s5
-; GISEL-NEXT:    s_lshl_b32 s5, vcc_lo, 16
+; GISEL-NEXT:    s_lshl_b32 s5, s44, 16
 ; GISEL-NEXT:    s_and_b32 s6, s9, 0xffff
-; GISEL-NEXT:    v_mov_b64_e32 v[24:25], s[36:37]
-; GISEL-NEXT:    s_lshr_b32 s30, s11, 16
+; GISEL-NEXT:    v_mov_b64_e32 v[24:25], s[40:41]
+; GISEL-NEXT:    s_lshr_b32 s46, s11, 16
 ; GISEL-NEXT:    s_or_b32 s5, s5, s6
-; GISEL-NEXT:    s_lshl_b32 s6, vcc_hi, 16
+; GISEL-NEXT:    s_lshl_b32 s6, s45, 16
 ; GISEL-NEXT:    s_and_b32 s7, s10, 0xffff
-; GISEL-NEXT:    v_mov_b64_e32 v[26:27], s[38:39]
+; GISEL-NEXT:    v_mov_b64_e32 v[26:27], s[42:43]
 ; GISEL-NEXT:    s_or_b32 s6, s6, s7
-; GISEL-NEXT:    s_lshl_b32 s7, s30, 16
+; GISEL-NEXT:    s_lshl_b32 s7, s46, 16
 ; GISEL-NEXT:    s_and_b32 s8, s11, 0xffff
 ; GISEL-NEXT:    s_or_b32 s7, s7, s8
 ; GISEL-NEXT:    v_mov_b64_e32 v[22:23], s[6:7]
@@ -1414,17 +1404,8 @@ define <16 x float> @test_smfmac_f32_32x32x32_bf16__sgpr(<8 x bfloat> inreg %arg
 ; GISEL-NEXT:    v_mov_b64_e32 v[12:13], s[24:25]
 ; GISEL-NEXT:    v_mov_b64_e32 v[14:15], s[26:27]
 ; GISEL-NEXT:    v_mov_b32_e32 v28, s28
-; GISEL-NEXT:    v_readlane_b32 s30, v29, 4
-; GISEL-NEXT:    v_readlane_b32 s31, v29, 5
+; GISEL-NEXT:    s_nop 1
 ; GISEL-NEXT:    v_smfmac_f32_32x32x32_bf16 v[0:15], v[24:27], v[16:23], v28
-; GISEL-NEXT:    v_readlane_b32 s39, v29, 3
-; GISEL-NEXT:    v_readlane_b32 s38, v29, 2
-; GISEL-NEXT:    v_readlane_b32 s37, v29, 1
-; GISEL-NEXT:    v_readlane_b32 s36, v29, 0
-; GISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
-; GISEL-NEXT:    scratch_load_dword v29, off, s32 ; 4-byte Folded Reload
-; GISEL-NEXT:    s_mov_b64 exec, s[0:1]
-; GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GISEL-NEXT:    s_setpc_b64 s[30:31]
   %result = call <16 x float> @llvm.amdgcn.smfmac.f32.32x32x32.bf16(<8 x bfloat> %arg0, <16 x bfloat> %arg1, <16 x float> %arg2, i32 %arg3, i32 immarg 0, i32 immarg 0)
   ret <16 x float> %result

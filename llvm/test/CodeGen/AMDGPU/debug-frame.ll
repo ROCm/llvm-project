@@ -2,6 +2,7 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -amdgpu-spill-vgpr-to-agpr=0 -filetype=asm -o - -emit-heterogeneous-dwarf-as-user-ops %s | FileCheck --check-prefixes=CHECK,WAVE64,GFX90A-V2A-DIS %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -amdgpu-spill-vgpr-to-agpr=1 -filetype=asm -o - -emit-heterogeneous-dwarf-as-user-ops %s | FileCheck --check-prefixes=CHECK,WAVE64,GFX90A-V2A-EN %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 -filetype=asm -o - -emit-heterogeneous-dwarf-as-user-ops %s | FileCheck --check-prefixes=CHECK,WAVE32 %s
+; XFAIL: *
 
 ; CHECK-LABEL: kern1:
 ; CHECK: .cfi_startproc

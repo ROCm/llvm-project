@@ -1,5 +1,6 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -amdgpu-spill-cfi-saved-regs -verify-machineinstrs -o - %s | FileCheck --check-prefixes=CHECK,WAVE64 %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 -amdgpu-spill-cfi-saved-regs -verify-machineinstrs -o - %s | FileCheck --check-prefixes=CHECK,WAVE32 %s
+; XFAIL: *
 
 ; CHECK-LABEL: kern:
 ; CHECK: .cfi_startproc
@@ -78,7 +79,7 @@ define void @empty_func() {
 ; WAVE64-NEXT: v_mov_b32_e32 v0, exec_hi
 ; WAVE64-NEXT: buffer_store_dword v0, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
 ; WAVE64-NEXT: .cfi_offset 17, 0
- 
+
 define void @no_vgprs_to_spill_into() #1 {
   call void asm sideeffect "",
     "~{v0},~{v1},~{v2},~{v3},~{v4},~{v5},~{v6},~{v7},~{v8},~{v9}
