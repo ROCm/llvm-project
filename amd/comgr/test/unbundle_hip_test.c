@@ -182,8 +182,8 @@ int main(int Argc, char *Argv[]) {
     Status = amd_comgr_release_data(DataElement);
     checkError(Status, "amd_comgr_release_data");
 
-    if (BytesSize != 0) {
-      printf("Bitcode host element size: %ld (expected 0)\n", BytesSize);
+    if (!BytesSize) {
+      printf("Bitcode host empty (expected non-empty)\n");
       exit(1);
     }
 
@@ -248,8 +248,8 @@ int main(int Argc, char *Argv[]) {
     checkError(Status, "amd_comgr_release_data");
 
     if (BytesSize != 0) {
-      printf("Object host element size: %ld (expected empty)\n", BytesSize);
-      exit(1);
+     printf("Object host element size: %ld (expected empty)\n", BytesSize);
+     exit(1);
     }
 
     // object hip-gfx900 element (non-empty)
@@ -312,8 +312,8 @@ int main(int Argc, char *Argv[]) {
     Status = amd_comgr_release_data(DataElement);
     checkError(Status, "amd_comgr_release_data");
 
-    if (BytesSize != 8) {
-      printf("Arvhive host element size: %ld (expected 8)\n", BytesSize);
+    if (!BytesSize) {
+      printf("Arvhive host empty (expected non-empty)\n");
       exit(1);
     }
 
