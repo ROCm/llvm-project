@@ -10,13 +10,16 @@ cannonicalize_cmake_boolean(COMGR_DISABLE_SPIRV)
 
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
-# Comgr source build
-if (EXISTS "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-  set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-# LLVM external projects build
-else()
-  set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
+if (NOT DEFINED LLVM_LIT_PATH)
+  # Comgr source build
+  if (EXISTS "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
+    set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
+  # LLVM external projects build
+  else()
+    set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
+  endif()
 endif()
+message("--LLVM_LIT_PATH: ${LLVM_LIT_PATH}")
 
 add_custom_target(test-lit COMMAND "${LLVM_LIT_PATH}"
                   "${CMAKE_CURRENT_BINARY_DIR}" -v)
