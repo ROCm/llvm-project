@@ -356,6 +356,15 @@ int main(int argc, const char **argv) {
     }
     ParsedTargets.insert(Target);
 
+    if (!checkOffloadBundleID(Target)) {
+      return reportError(createStringError(
+          errc::invalid_argument,
+          "Targets need to follow the format '<offload kind>-<target triple>', "
+          "where '<target triple>' follows the format "
+          "'<kind>-<arch>-<vendor>-<os>-<env>[-<target id>[:target "
+          "features]]'."));
+    }
+
     auto OffloadInfo = OffloadTargetInfo(Target, BundlerConfig);
     bool KindIsValid = OffloadInfo.isOffloadKindValid();
     bool TripleIsValid = OffloadInfo.isTripleValid();
