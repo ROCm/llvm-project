@@ -704,10 +704,10 @@ define void @callee_need_to_spill_fp_exec_to_memory() #2 {
 ; WAVE64-NEXT:    v_readlane_b32 s36, v39, 2
 ; WAVE64-NEXT:    v_readlane_b32 s35, v39, 1
 ; WAVE64-NEXT:    v_readlane_b32 s34, v39, 0
+; WAVE64-NEXT:    s_mov_b32 s32, s33
 ; WAVE64-NEXT:    s_xor_saveexec_b64 s[4:5], -1
 ; WAVE64-NEXT:    buffer_load_dword v39, off, s[0:3], s33 offset:192 ; 4-byte Folded Reload
 ; WAVE64-NEXT:    s_mov_b64 exec, s[4:5]
-; WAVE64-NEXT:    s_addk_i32 s32, 0xce00
 ; WAVE64-NEXT:    .cfi_def_cfa_register 64
 ; WAVE64-NEXT:    s_mov_b32 s33, s40
 ; WAVE64-NEXT:    s_waitcnt vmcnt(0)
@@ -1088,11 +1088,11 @@ define void @callee_need_to_spill_fp_exec_to_memory() #2 {
 ; WAVE32-NEXT:    v_readlane_b32 s36, v39, 2
 ; WAVE32-NEXT:    v_readlane_b32 s35, v39, 1
 ; WAVE32-NEXT:    v_readlane_b32 s34, v39, 0
+; WAVE32-NEXT:    s_mov_b32 s32, s33
 ; WAVE32-NEXT:    s_xor_saveexec_b32 s4, -1
 ; WAVE32-NEXT:    buffer_load_dword v39, off, s[0:3], s33 offset:192 ; 4-byte Folded Reload
 ; WAVE32-NEXT:    s_waitcnt_depctr 0xffe3
 ; WAVE32-NEXT:    s_mov_b32 exec_lo, s4
-; WAVE32-NEXT:    s_addk_i32 s32, 0xe680
 ; WAVE32-NEXT:    .cfi_def_cfa_register 64
 ; WAVE32-NEXT:    s_mov_b32 s33, s40
 ; WAVE32-NEXT:    s_waitcnt vmcnt(0)
@@ -1999,7 +1999,7 @@ define void @need_to_spill_pc_to_mem() #3 {
 ; WAVE64-NEXT:    buffer_load_dword v42, off, s[0:3], s33 offset:436 ; 4-byte Folded Reload
 ; WAVE64-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:440 ; 4-byte Folded Reload
 ; WAVE64-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:444 ; 4-byte Folded Reload
-; WAVE64-NEXT:    s_addk_i32 s32, 0x8800
+; WAVE64-NEXT:    s_mov_b32 s32, s33
 ; WAVE64-NEXT:    .cfi_def_cfa_register 64
 ; WAVE64-NEXT:    s_mov_b32 s33, s6
 ; WAVE64-NEXT:    s_waitcnt vmcnt(0)
@@ -2531,7 +2531,7 @@ define void @need_to_spill_pc_to_mem() #3 {
 ; WAVE32-NEXT:    buffer_load_dword v42, off, s[0:3], s33 offset:436
 ; WAVE32-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:440
 ; WAVE32-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:444
-; WAVE32-NEXT:    s_addk_i32 s32, 0xc600
+; WAVE32-NEXT:    s_mov_b32 s32, s33
 ; WAVE32-NEXT:    .cfi_def_cfa_register 64
 ; WAVE32-NEXT:    s_waitcnt_depctr 0xffe3
 ; WAVE32-NEXT:    s_mov_b32 s33, s6

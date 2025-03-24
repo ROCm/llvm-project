@@ -1177,8 +1177,8 @@ bool AMDGPURegisterBankInfo::applyMappingDynStackAlloc(
 
   // Guard in case the stack growth direction ever changes with scratch
   // instructions.
-  if (TFI.getStackGrowthDirection() == TargetFrameLowering::StackGrowsDown)
-    return false;
+  assert(TFI.getStackGrowthDirection() == TargetFrameLowering::StackGrowsUp &&
+         "Stack grows upwards for AMDGPU");
 
   Register Dst = MI.getOperand(0).getReg();
   Register AllocSize = MI.getOperand(1).getReg();
@@ -1186,9 +1186,13 @@ bool AMDGPURegisterBankInfo::applyMappingDynStackAlloc(
 
   const RegisterBank *SizeBank = getRegBank(AllocSize, MRI, *TRI);
 
-  // TODO: Need to emit a wave reduction to get the maximum size.
-  if (SizeBank != &AMDGPU::SGPRRegBank)
-    return false;
+  if (SizeBank != &AMDGPU::SGPRRegBank) {
+    auto WaveReduction =
+        B.buildIntrinsic(Intrinsic::amdgcn_wave_reduce_umax, {LLT::scalar(32)})
+            .addUse(AllocSize)
+            .addImm(0);
+    AllocSize = WaveReduction.getReg(0);
+  }
 
   LLT PtrTy = MRI.getType(Dst);
   LLT IntPtrTy = LLT::scalar(PtrTy.getSizeInBits());
@@ -1200,15 +1204,18 @@ bool AMDGPURegisterBankInfo::applyMappingDynStackAlloc(
   auto WaveSize = B.buildConstant(LLT::scalar(32), ST.getWavefrontSizeLog2());
   auto ScaledSize = B.buildShl(IntPtrTy, AllocSize, WaveSize);
 
-  auto SPCopy = B.buildCopy(PtrTy, SPReg);
+  auto OldSP = B.buildCopy(PtrTy, SPReg);
   if (Alignment > TFI.getStackAlign()) {
-    auto PtrAdd = B.buildPtrAdd(PtrTy, SPCopy, ScaledSize);
-    B.buildMaskLowPtrBits(Dst, PtrAdd,
+    auto StackAlignMask = (Alignment.value() << ST.getWavefrontSizeLog2()) - 1;
+    auto Tmp1 = B.buildPtrAdd(PtrTy, OldSP,
+                              B.buildConstant(LLT::scalar(32), StackAlignMask));
+    B.buildMaskLowPtrBits(Dst, Tmp1,
                           Log2(Alignment) + ST.getWavefrontSizeLog2());
   } else {
-    B.buildPtrAdd(Dst, SPCopy, ScaledSize);
+    B.buildCopy(Dst, OldSP);
   }
-
+  auto PtrAdd = B.buildPtrAdd(PtrTy, Dst, ScaledSize);
+  B.buildCopy(SPReg, PtrAdd);
   MI.eraseFromParent();
   return true;
 }
@@ -5134,7 +5141,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
     case Intrinsic::amdgcn_struct_buffer_load:
     case Intrinsic::amdgcn_struct_ptr_buffer_load:
     case Intrinsic::amdgcn_struct_tbuffer_load:
-    case Intrinsic::amdgcn_struct_ptr_tbuffer_load: {
+    case Intrinsic::amdgcn_struct_ptr_tbuffer_load:
+    case Intrinsic::amdgcn_struct_atomic_buffer_load:
+    case Intrinsic::amdgcn_struct_ptr_atomic_buffer_load: {
       OpdsMapping[0] = getVGPROpMapping(MI.getOperand(0).getReg(), MRI, *TRI);
       OpdsMapping[2] = getSGPROpMapping(MI.getOperand(2).getReg(), MRI, *TRI);
       OpdsMapping[3] = getVGPROpMapping(MI.getOperand(3).getReg(), MRI, *TRI);
