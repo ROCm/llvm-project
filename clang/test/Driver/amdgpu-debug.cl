@@ -7,7 +7,7 @@
 // CHECK-SIMPLE-NOT: "-disable-O0-optnone"
 // CHECK-SIMPLE-NOT: "-debug-info-kind=line-tables-only"
 // CHECK-SIMPLE-DAG: "-mllvm" "-amdgpu-spill-cfi-saved-regs"
-// CHECK-SIMPLE-DAG: "-gheterogeneous-dwarf=diexpr"
+// CHECK-SIMPLE-DAG: "-gheterogeneous-dwarf=diexpression"
 // CHECK-SIMPLE-DAG: "-debugger-tuning=gdb"
 // CHECK-SIMPLE-NOT: "-disable-O0-optnone"
 // CHECK-SIMPLE-NOT: "-debug-info-kind=line-tables-only"
@@ -21,7 +21,7 @@
 // Check that -gheterogeneous-dwarf can be enabled for non-AMDGCN
 // RUN: %clang -### -target x86_64-linux-gnu -x cl -c -nogpuinc -nogpulib  -emit-llvm -gheterogeneous-dwarf %s 2>&1 | FileCheck -check-prefix=CHECK-EXPLICIT-HETEROGENEOUS %s
 // CHECK-EXPLICIT-HETEROGENEOUS: "-cc1"
-// CHECK-EXPLICIT-HETEROGENEOUS: "-gheterogeneous-dwarf=diexpr"
+// CHECK-EXPLICIT-HETEROGENEOUS: "-gheterogeneous-dwarf=diexpression"
 
 // Check that -gheterogeneous-dwarf can be disabled for AMDGCN
 // RUN: %clang -### -target amdgcn-amd-amdhsa -x cl -c -nogpuinc -nogpulib  -emit-llvm -g -gno-heterogeneous-dwarf %s 2>&1 | FileCheck -check-prefix=CHECK-NO-HETEROGENEOUS %s
@@ -46,3 +46,14 @@
 // Check that -gheterogeneous-dwarf= fails for unknown option
 // RUN: not %clang -target amdgcn-amd-amdhsa -x cl -c -nogpuinc -nogpulib  -emit-llvm -g -gheterogeneous-dwarf=unknown %s 2>&1 | FileCheck -check-prefix=CHECK-UNKNOWN %s
 // CHECK-UNKNOWN: error: invalid value
+
+// Check that =diexpression is implied by -g + spirv
+// RUN: %clang -### -target spirv64-amd-amdhsa -x cl -c -nogpuinc -nogpulib  -emit-llvm -g %s 2>&1 | FileCheck -check-prefix=CHECK-SPIRV %s
+// CHECK-SPIRV: "-cc1"
+// CHECK-SPIRV-DAG: "-mllvm" "-amdgpu-spill-cfi-saved-regs"
+// CHECK-SPIRV-DAG: "-gheterogeneous-dwarf=diexpression"
+// CHECK-SPIRV-DAG: "-debugger-tuning=gdb"
+
+// Check that =diexpr produces an error on spirv.
+// RUN: not %clang -### -target spirv64-amd-amdhsa -x cl -c -nogpuinc -nogpulib  -emit-llvm -g -gheterogeneous-dwarf=diexpr %s 2>&1 | FileCheck -check-prefix=CHECK-SPIRV-ERR %s
+// CHECK-SPIRV-ERR: error: unsupported option '-gheterogeneous-dwarf=diexpr'; did you mean '-gheterogeneous-dwarf=diexpression'?
