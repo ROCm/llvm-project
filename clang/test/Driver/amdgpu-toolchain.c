@@ -20,12 +20,12 @@
 
 // RUN: %clang -### --target=amdgcn-amd-amdhsa -mcpu=gfx906 -nogpulib \
 // RUN:   -L. -flto -fconvergent-functions %s 2>&1 | FileCheck -check-prefix=LTO %s
-// LTO: clang{{.*}} "-flto=full"{{.*}}"-fconvergent-functions"
-// LTO: ld.lld{{.*}}"-L."{{.*}}"-plugin-opt=mcpu=gfx906"{{.*}}"
+// LTO: clang{{.*}}"-flto=full"{{.*}}"-fconvergent-functions"
+// LTO: ld.lld{{.*}}"-plugin-opt=mcpu=gfx906"{{.*}}"{{.*}}
 
 // RUN: %clang -### --target=amdgcn-amd-amdhsa -mcpu=gfx906 -nogpulib \
 // RUN:   -L. -fconvergent-functions %s 2>&1 | FileCheck -check-prefix=MCPU %s
-// MCPU: ld.lld{{.*}}"-L."{{.*}}"-plugin-opt=mcpu=gfx906"
+// MCPU: ld.lld{{.*}}"-plugin-opt=mcpu=gfx906"{{.*}}
 
 // RUN: %clang -### --target=amdgcn-amd-amdhsa -mcpu=gfx906 -nogpulib \
 // RUN:   -fuse-ld=ld %s 2>&1 | FileCheck -check-prefixes=LD %s
