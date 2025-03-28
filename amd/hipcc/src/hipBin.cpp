@@ -127,26 +127,26 @@ void HipBin::executeHipConfig(int argc, char* argv[]) {
       switch (cmd) {
       case help: platformPtrs.at(j)->printUsage();
         break;
-      case path: cout << platformPtrs.at(j)->getHipPath();
+      case path: cout << platformPtrs.at(j)->getHipPath() << endl;
         break;
-      case roccmpath: cout << platformPtrs.at(j)->getRoccmPath();
+      case roccmpath: cout << platformPtrs.at(j)->getRoccmPath() << endl;
         break;
-      case cpp_config: cout << platformPtrs.at(j)->getCppConfig();
+      case cpp_config: cout << platformPtrs.at(j)->getCppConfig() << endl;
         break;
       case compiler: cout << CompilerTypeStr((
-                             platformPtrs.at(j)->getPlatformInfo()).compiler);
+                             platformPtrs.at(j)->getPlatformInfo()).compiler) << endl;
         break;
       case platform: cout << PlatformTypeStr((
-                             platformPtrs.at(j)->getPlatformInfo()).platform);
+                             platformPtrs.at(j)->getPlatformInfo()).platform) << endl;
         break;
       case runtime: cout << RuntimeTypeStr((
-                            platformPtrs.at(j)->getPlatformInfo()).runtime);
+                            platformPtrs.at(j)->getPlatformInfo()).runtime) << endl;
         break;
-      case hipclangpath: cout << platformPtrs.at(j)->getCompilerPath();
+      case hipclangpath: cout << platformPtrs.at(j)->getCompilerPath() << endl;
         break;
       case full: platformPtrs.at(j)->printFull();
         break;
-      case version: cout << platformPtrs.at(j)->getHipVersion();
+      case version: cout << platformPtrs.at(j)->getHipVersion() << endl;
         break;
       case check: platformPtrs.at(j)->checkHipconfig();
         break;
