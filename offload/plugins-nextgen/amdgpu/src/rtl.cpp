@@ -2688,6 +2688,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         OMPX_APUPrefaultMemcopySize("LIBOMPTARGET_APU_PREFAULT_MEMCOPY_SIZE",
                                     1 * 1024 * 1024), // 1MB
         OMPX_DGPUMaps("OMPX_DGPU_MAPS", false),
+        OMPX_EnableDevice2DeviceMemAccess(
+            "OMPX_ENABLE_DEVICE_TO_DEVICE_MEM_ACCESS", false),
         AMDGPUStreamManager(*this, Agent), AMDGPUEventManager(*this),
         AMDGPUSignalManager(*this), Agent(Agent), HostDevice(HostDevice) {}
 
@@ -4274,6 +4276,11 @@ private:
   /// copy on APUs regardless of the setting of HSA_XNACK.
   BoolEnvar OMPX_DGPUMaps;
 
+  // Determines whether we call HSA API, upon device memory allocation,
+  // for making the memory acceccible from other agents.
+  // Default is disabled
+  BoolEnvar OMPX_EnableDevice2DeviceMemAccess;
+
   /// Stream manager for AMDGPU streams.
   AMDGPUStreamManagerTy AMDGPUStreamManager;
 
@@ -5031,7 +5038,8 @@ void *AMDGPUDeviceTy::allocate(size_t Size, void *, TargetAllocTy Kind) {
     }
   }
 
-  if (Alloc) {
+  if (Alloc && (Kind == TARGET_ALLOC_HOST || Kind == TARGET_ALLOC_SHARED ||
+                OMPX_EnableDevice2DeviceMemAccess)) {
     // Get a list of agents that can access this memory pool. Inherently
     // necessary for host or shared allocations Also enabled for device memory
     // to allow device to device memcpy
