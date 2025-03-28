@@ -1458,6 +1458,8 @@ def fhip_emit_relocatable : Flag<["-"], "fhip-emit-relocatable">,
   HelpText<"Compile HIP source to relocatable">;
 def fno_hip_emit_relocatable : Flag<["-"], "fno-hip-emit-relocatable">,
   HelpText<"Do not override toolchain to compile HIP source to relocatable">;
+def flto_partitions_EQ : Joined<["--"], "flto-partitions=">, Group<hip_Group>,
+  HelpText<"Number of partitions to use for parallel full LTO codegen. Use 1 to disable partitioning.">;
 }
 
 // Clang specific/exclusive options for OpenACC.
@@ -3581,43 +3583,43 @@ def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fopenmp_target_fast : Flag<["-"], "fopenmp-target-fast">, Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fno_openmp_target_fast : Flag<["-"], "fno-openmp-target-fast">, Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
-def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
+def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Assert that device related environment variables can be ignored while generating code">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
-def fno_openmp_target_ignore_env_vars : Flag<["-"], "fno-openmp-target-ignore-env-vars">, Group<f_Group>, 
+def fno_openmp_target_ignore_env_vars : Flag<["-"], "fno-openmp-target-ignore-env-vars">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Assert that device related environment variables cannot be ignored while generating code">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
-def fopenmp_target_big_jump_loop : Flag<["-"], "fopenmp-target-big-jump-loop">, Group<f_Group>, 
+def fopenmp_target_big_jump_loop : Flag<["-"], "fopenmp-target-big-jump-loop">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Use the big-jump-loop code generation technique if possible">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetBigJumpLoop">>;
-def fno_openmp_target_big_jump_loop : Flag<["-"], "fno-openmp-target-big-jump-loop">, Group<f_Group>, 
+def fno_openmp_target_big_jump_loop : Flag<["-"], "fno-openmp-target-big-jump-loop">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Do not use the big-jump-loop code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetBigJumpLoop">>;
-def fopenmp_target_no_loop : Flag<["-"], "fopenmp-target-no-loop">, Group<f_Group>, 
+def fopenmp_target_no_loop : Flag<["-"], "fopenmp-target-no-loop">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Use the no-loop code generation technique if possible">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
-def fno_openmp_target_no_loop : Flag<["-"], "fno-openmp-target-no-loop">, Group<f_Group>, 
+def fno_openmp_target_no_loop : Flag<["-"], "fno-openmp-target-no-loop">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Do not use the no-loop code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetNoLoop">>;
-def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>, 
+def fopenmp_target_xteam_reduction : Flag<["-"], "fopenmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Use the cross-team code generation technique if possible">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>, 
+def fno_openmp_target_xteam_reduction : Flag<["-"], "fno-openmp-target-xteam-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Do not use the cross-team reduction code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetXteamReduction">>;
-def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">, Group<f_Group>, 
+def fopenmp_target_fast_reduction : Flag<["-"], "fopenmp-target-fast-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Use the fast reduction code generation technique if possible">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
-def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">, Group<f_Group>, 
+def fno_openmp_target_fast_reduction : Flag<["-"], "fno-openmp-target-fast-reduction">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Do not use the fast reduction code generation technique">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetFastReduction">>;
