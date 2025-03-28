@@ -131,6 +131,10 @@ public:
   decompress(const llvm::MemoryBuffer &Input, bool Verbose = false);
 };
 
+/// Check whether the bundle id is in the following format:
+/// <kind>-<triple>[-<target id>[:target features]]
+/// <triple> := <arch>-<vendor>-<os>-<env>
+bool checkOffloadBundleID(const llvm::StringRef Str);
 } // namespace clang
 
 #endif // LLVM_CLANG_DRIVER_OFFLOADBUNDLER_H
