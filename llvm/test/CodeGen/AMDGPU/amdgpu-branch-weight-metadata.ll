@@ -50,8 +50,8 @@ if.end:
   ret void
 }
 
-define void @uniform_br_unprofitable(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef inreg %flag) {
-; GFX9-LABEL: uniform_br_unprofitable:
+define void @uniform_br_same_weight(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef inreg %flag) {
+; GFX9-LABEL: uniform_br_same_weight:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_cmp_lt_i32 s11, 1
@@ -68,7 +68,7 @@ define void @uniform_br_unprofitable(i32 noundef inreg %value, ptr addrspace(8) 
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX10-LABEL: uniform_br_unprofitable:
+; GFX10-LABEL: uniform_br_same_weight:
 ; GFX10:       ; %bb.0: ; %entry
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    s_cmp_lt_i32 s11, 1
@@ -97,8 +97,8 @@ if.end:
   ret void
 }
 
-define void @uniform_br_profitable(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef inreg %flag) {
-; GFX9-LABEL: uniform_br_profitable:
+define void @uniform_br_then_likely(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef inreg %flag) {
+; GFX9-LABEL: uniform_br_then_likely:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_cmp_lt_i32 s11, 1
@@ -115,7 +115,7 @@ define void @uniform_br_profitable(i32 noundef inreg %value, ptr addrspace(8) no
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX10-LABEL: uniform_br_profitable:
+; GFX10-LABEL: uniform_br_then_likely:
 ; GFX10:       ; %bb.0: ; %entry
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    s_cmp_lt_i32 s11, 1
@@ -215,8 +215,8 @@ if.end:
   ret void
 }
 
-define void @divergent_br_unprofitable(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef %flag) {
-; GFX9-LABEL: divergent_br_unprofitable:
+define void @divergent_br_same_weight(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef %flag) {
+; GFX9-LABEL: divergent_br_same_weight:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_mov_b32 s14, s7
@@ -235,7 +235,7 @@ define void @divergent_br_unprofitable(i32 noundef inreg %value, ptr addrspace(8
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1010-LABEL: divergent_br_unprofitable:
+; GFX1010-LABEL: divergent_br_same_weight:
 ; GFX1010:       ; %bb.0: ; %entry
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    v_cmp_lt_i32_e32 vcc_lo, 0, v0
@@ -255,7 +255,7 @@ define void @divergent_br_unprofitable(i32 noundef inreg %value, ptr addrspace(8
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1030-LABEL: divergent_br_unprofitable:
+; GFX1030-LABEL: divergent_br_same_weight:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_mov_b32 s12, s5
@@ -286,33 +286,31 @@ if.end:
   ret void
 }
 
-define void @divergent_br_profitable(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef %flag) {
-; GFX9-LABEL: divergent_br_profitable:
+define void @divergent_br_then_likely(i32 noundef inreg %value, ptr addrspace(8) nocapture writeonly inreg %res, i32 noundef inreg %v_offset, i32 noundef inreg %0, i32 noundef %flag) {
+; GFX9-LABEL: divergent_br_then_likely:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_mov_b32 s14, s7
 ; GFX9-NEXT:    s_mov_b32 s13, s6
 ; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, 0, v0
 ; GFX9-NEXT:    s_and_saveexec_b64 s[6:7], vcc
-; GFX9-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX9-NEXT:  ; %bb.1: ; %if.then
 ; GFX9-NEXT:    s_mov_b32 s15, s8
 ; GFX9-NEXT:    s_mov_b32 s12, s5
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX9-NEXT:    buffer_store_dword v0, v1, s[12:15], 0 offen
-; GFX9-NEXT:  .LBB5_2: ; %if.end
+; GFX9-NEXT:  ; %bb.2: ; %if.end
 ; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1010-LABEL: divergent_br_profitable:
+; GFX1010-LABEL: divergent_br_then_likely:
 ; GFX1010:       ; %bb.0: ; %entry
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    v_cmp_lt_i32_e32 vcc_lo, 0, v0
 ; GFX1010-NEXT:    s_mov_b32 s12, s5
 ; GFX1010-NEXT:    s_and_saveexec_b32 s5, vcc_lo
-; GFX1010-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX1010-NEXT:  ; %bb.1: ; %if.then
 ; GFX1010-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX1010-NEXT:    v_mov_b32_e32 v1, s9
@@ -320,19 +318,18 @@ define void @divergent_br_profitable(i32 noundef inreg %value, ptr addrspace(8) 
 ; GFX1010-NEXT:    s_mov_b32 s14, s7
 ; GFX1010-NEXT:    s_mov_b32 s13, s6
 ; GFX1010-NEXT:    buffer_store_dword v0, v1, s[12:15], 0 offen
-; GFX1010-NEXT:  .LBB5_2: ; %if.end
+; GFX1010-NEXT:  ; %bb.2: ; %if.end
 ; GFX1010-NEXT:    s_waitcnt_depctr 0xffe3
 ; GFX1010-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX1010-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1010-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1030-LABEL: divergent_br_profitable:
+; GFX1030-LABEL: divergent_br_then_likely:
 ; GFX1030:       ; %bb.0: ; %entry
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_mov_b32 s12, s5
 ; GFX1030-NEXT:    s_mov_b32 s5, exec_lo
 ; GFX1030-NEXT:    v_cmpx_lt_i32_e32 0, v0
-; GFX1030-NEXT:    s_cbranch_execz .LBB5_2
 ; GFX1030-NEXT:  ; %bb.1: ; %if.then
 ; GFX1030-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX1030-NEXT:    v_mov_b32_e32 v1, s9
@@ -340,7 +337,7 @@ define void @divergent_br_profitable(i32 noundef inreg %value, ptr addrspace(8) 
 ; GFX1030-NEXT:    s_mov_b32 s14, s7
 ; GFX1030-NEXT:    s_mov_b32 s13, s6
 ; GFX1030-NEXT:    buffer_store_dword v0, v1, s[12:15], 0 offen
-; GFX1030-NEXT:  .LBB5_2: ; %if.end
+; GFX1030-NEXT:  ; %bb.2: ; %if.end
 ; GFX1030-NEXT:    s_or_b32 exec_lo, exec_lo, s5
 ; GFX1030-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1030-NEXT:    s_setpc_b64 s[30:31]
@@ -359,7 +356,6 @@ if.end:
 
 declare void @llvm.amdgcn.raw.ptr.buffer.store.i32(i32, ptr addrspace(8) nocapture writeonly, i32, i32, i32 immarg)
 declare void @llvm.amdgcn.s.waitcnt(i32)
-declare i32 @llvm.amdgcn.workitem.id.x()
 
 !0 = !{!"branch_weights", i32 1000, i32 1000}
 !1 = !{!"branch_weights", i32 2000, i32 1}
