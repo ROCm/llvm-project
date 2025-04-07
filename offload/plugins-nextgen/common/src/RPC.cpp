@@ -115,7 +115,11 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     void *Args[NumLanes] = {nullptr};
     Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
       Args[ID] = reinterpret_cast<void *>(buffer->data[0]);
-      Results[ID] = Emissary((char *)Args[ID]);
+      llvm::outs() << "DeviceID: " << Device.getDeviceId() << "\n";
+      llvm::outs() << "LaneID: " << ID << "\n";
+      llvm::outs() << "Args[ID]:" << Args[ID] << "\n";
+      llvm::outs() << "NumLanes:" << NumLanes << "\n";
+      Results[ID] = Emissary((char *)Args[ID], NumLanes, Device.getDeviceId());
     });
     Port.send([&](rpc::Buffer *Buffer, uint32_t ID) {
       Device.moveBusyToFree_ArgBuf(Args[ID]);

@@ -15,17 +15,22 @@
 #define OFFLOAD_EMISSARY_H
 
 #include "../../../../openmp/device/include/EmissaryIds.h"
-
+#include <cstdint>
 extern "C" {
 
 /// Called by rpc after receiving emissary argument buffer
-emis_return_t Emissary(char *data);
+emis_return_t Emissary(char *data, int NumLanes, int DeviceID);
 
 /// Called by Emissary for all Fortrt emissary functions
 emis_return_t EmissaryFortrt(char *data, emisArgBuf_t *ab);
 
 /// Called by Emissary for all misc print functions
 emis_return_t EmissaryPrint(char *data, emisArgBuf_t *ab);
+
+/// Called by Emissary for all Sanitizer categories for reporting illegal
+/// access.
+emis_return_t EmissarySanitizer(emisArgBuf_t *ab, emis_argptr_t *arg[MAXVARGS],
+                                int NumLanes, int DeviceID);
 
 /// Called by Emissary for all MPI emissary API functions
 __attribute((weak)) emis_return_t EmissaryMPI(char *data, emisArgBuf_t *ab,

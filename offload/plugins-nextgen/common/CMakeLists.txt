@@ -12,6 +12,7 @@ if(OFFLOAD_ENABLE_EMISSARY_APIS)
     src/Emissary.cpp
     src/EmissaryFortrt.cpp
     src/EmissaryPrint.cpp
+    src/EmissarySanitizer.cpp
   )
 endif()
 
@@ -103,6 +104,7 @@ target_include_directories(PluginCommon PUBLIC
   ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
   ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}
+  /home/ampandey/aomp-toolchain/rocm/aomp/include/hsa
 )
 
 set_target_properties(PluginCommon PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -38,12 +38,6 @@ extern "C" emis_return_t EmissaryPrint(char *data, emisArgBuf_t *ab) {
     rc = emissary_fprintf(&return_value, ab);
     break;
   }
-  case _ockl_asan_report_idx: {
-    fprintf(stderr, " asan_report not yet implemented\n");
-    return_value = 0;
-    rc = _RC_STATUS_ERROR;
-    break;
-  }
   case _print_INVALID:
   default: {
     fprintf(stderr, " INVALID emissary function id (%d) for PRINT API \n",

@@ -72,8 +72,6 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
   else()
     list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc}")
   endif()
-  list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ocml_bc}")
-endif()
 
 list(APPEND compile_options -flto)
 list(APPEND compile_options -fvisibility=hidden)

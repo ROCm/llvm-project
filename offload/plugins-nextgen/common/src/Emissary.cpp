@@ -18,7 +18,7 @@
 
 #include "Emissary.h"
 
-extern "C" emis_return_t Emissary(char *data) {
+extern "C" emis_return_t Emissary(char *data, int NumLanes, int DeviceID) {
   emisArgBuf_t ab;
   emisExtractArgBuf(data, &ab);
   emis_return_t result = 0;
@@ -57,6 +57,13 @@ extern "C" emis_return_t Emissary(char *data) {
                            &ab.data_not_used, &args[0]) != _RC_SUCCESS)
       return (emis_return_t)0;
     result = EmissaryReserve(data, &ab, args);
+    break;
+  }
+  case EMIS_ID_SANITIZER: {
+    if (EmissaryBuildVargs(ab.NumArgs, ab.keyptr, ab.argptr, ab.strptr,
+                           &ab.data_not_used, &args[0]) != _RC_SUCCESS)
+      return (emis_return_t)0;
+    result = EmissarySanitizer(&ab, args, NumLanes, DeviceID);
     break;
   }
   default:

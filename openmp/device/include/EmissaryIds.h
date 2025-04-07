@@ -21,13 +21,13 @@ typedef enum {
   EMIS_ID_MPI,
   EMIS_ID_HDF5,
   EMIS_ID_RESERVE,
+  EMIS_ID_SANITIZER,
 } offload_emis_id_t;
 
 typedef enum {
   _print_INVALID,
   _printf_idx,
   _fprintf_idx,
-  _ockl_asan_report_idx,
 } offload_emis_print_t;
 
 /// The vargs function used by emissary API device stubs
@@ -55,6 +55,11 @@ typedef enum {
   _FortranAioBeginExternalFormattedOutput_idx,
   _FortranAStopStatement_idx,
 } offload_emis_fortrt_idx;
+
+typedef enum {
+  _unsupported_SANITIZER,
+  _asan_report_idx,
+} offload_emis_sanitizer_idx;
 
 /// This structure is created by emisExtractArgBuf to make it easier
 /// to get values from the data buffer passed by rpc.
