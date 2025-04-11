@@ -1161,6 +1161,10 @@ AMDGPU Support
   CUDA, HIP, OpenCL, and C/C++.
 
 - Bump the default code object version to 6.
+- Introduced a new target specific builtin ``__builtin_amdgcn_processor_is``,
+  a late / deferred query for the current target processor
+- Introduced a new target specific builtin ``__builtin_amdgcn_is_invocable``,
+  which enables fine-grained, per-builtin, feature availability
 
 NVPTX Support
 ^^^^^^^^^^^^^^
