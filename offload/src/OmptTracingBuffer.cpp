@@ -374,7 +374,7 @@ void OmptTracingBufferMgr::dispatchCallback(int64_t DeviceId, void *buffer,
   // There is a small window when the buffer-completion callback may
   // be invoked even after tracing has been disabled.
   // Note that we don't want to hold a lock when dispatching the callback.
-  if (llvm::omp::target::ompt::TracingActive) {
+  if (llvm::omp::target::ompt::isTracedDevice(DeviceId)) {
     DP("Dispatch callback w/ range (inclusive) to be flushed: %p -> %p\n",
        first_cursor, last_cursor);
     llvm::omp::target::ompt::ompt_callback_buffer_complete(
@@ -395,7 +395,7 @@ void OmptTracingBufferMgr::dispatchBufferOwnedCallback(
   // There is a small window when the buffer-completion callback may
   // be invoked even after tracing has been disabled.
   // Note that we don't want to hold a lock when dispatching the callback.
-  if (llvm::omp::target::ompt::TracingActive) {
+  if (llvm::omp::target::ompt::isTracedDevice(flush_info.FlushBuf->DeviceId)) {
     DP("Dispatch callback with buffer %p owned\n", flush_info.FlushBuf->Start);
     llvm::omp::target::ompt::ompt_callback_buffer_complete(
         flush_info.FlushBuf->DeviceId, flush_info.FlushBuf->Start, 0,
@@ -508,6 +508,11 @@ OmptTracingBufferMgr::findAndReserveFlushedBuf(uint64_t flush_id) {
   }
   assert(flush_itr->second.FlushStatus == Flush_waiting);
   flush_itr->second.FlushStatus = Flush_processing;
+  // Update the metadata cursor since more trace records may have been
+  // generated.
+  flush_itr->second.FlushCursor =
+      flush_itr->second.FlushBuf->Cursor.load(std::memory_order_acquire);
+
   FlushInfo flush_info(flush_itr->first, flush_itr->second.FlushCursor,
                        flush_itr->second.FlushBuf);
   DP("Reserved buffer: flush_id:%lu, cursor:%p, buf:%p\n", flush_itr->first,
@@ -575,7 +580,7 @@ uint64_t OmptTracingBufferMgr::addNewFlushEntry(BufPtr buf, void *cursor) {
  * existing buffers in creation order and flush all the ready TRs
  */
 int OmptTracingBufferMgr::flushAllBuffers(int DeviceId) {
-  DP("Flushing buffers for device %d\n", DeviceId);
+  DP("Flushing buffers for device %d :: START\n", DeviceId);
   // Overloading MAX_NUM_DEVICES to mean all devices.
   if (DeviceId < 0 || DeviceId > MAX_NUM_DEVICES)
     return 0; // failed to flush
@@ -635,9 +640,13 @@ int OmptTracingBufferMgr::flushAllBuffers(int DeviceId) {
     ++curr_buf_id;
   }
 
+  DP("Flushing buffers for device %d :: WAIT\n", DeviceId);
+
   // This is best effort. It is possible that some trace records are
   // not flushed when the wait is done.
   waitForFlushCompletion();
+
+  DP("Flushing buffers for device %d :: STOP\n", DeviceId);
 
   return 1; // success
 }

@@ -191,7 +191,7 @@ define amdgpu_ps void @global_atomic_fadd_f32_saddr_no_rtn_atomicrmw(ptr addrspa
   ; GFX90A_GFX940-NEXT:   [[V_MOV_B32_dpp5:%[0-9]+]]:vgpr_32 = V_MOV_B32_dpp [[COPY17]], [[V_ADD_F32_e64_4]], 323, 12, 15, 0, implicit $exec
   ; GFX90A_GFX940-NEXT:   [[V_ADD_F32_e64_5:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, [[V_ADD_F32_e64_4]], 0, [[V_MOV_B32_dpp5]], 0, 0, implicit $mode, implicit $exec
   ; GFX90A_GFX940-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 63
-  ; GFX90A_GFX940-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[V_ADD_F32_e64_5]], [[S_MOV_B32_3]]
+  ; GFX90A_GFX940-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[V_ADD_F32_e64_5]], [[S_MOV_B32_3]]
   ; GFX90A_GFX940-NEXT:   [[COPY18:%[0-9]+]]:vgpr_32 = COPY [[V_READLANE_B32_]]
   ; GFX90A_GFX940-NEXT:   [[STRICT_WWM:%[0-9]+]]:vgpr_32 = STRICT_WWM [[COPY18]], implicit $exec
   ; GFX90A_GFX940-NEXT:   [[COPY19:%[0-9]+]]:vgpr_32 = COPY [[S_MOV_B32_1]]
