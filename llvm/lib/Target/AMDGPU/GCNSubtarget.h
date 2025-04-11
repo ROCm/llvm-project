@@ -188,6 +188,7 @@ protected:
   /// indicates a lack of S_CLAUSE support.
   unsigned MaxHardClauseLength = 0;
   bool SupportsSRAMECC = false;
+  bool HasVMemToLDSLoad = false;
 
   // This should not be used directly. 'TargetID' tracks the dynamic settings
   // for SRAMECC.
@@ -1316,6 +1317,8 @@ public:
   bool hasLDSLoadB96_B128() const {
     return hasGFX950Insts();
   }
+
+  bool hasVMemToLDSLoad() const { return HasVMemToLDSLoad; }
 
   bool hasSALUFloatInsts() const { return HasSALUFloatInsts; }
 

@@ -533,9 +533,8 @@ define amdgpu_kernel void @test1_s_barrier_init(ptr addrspace(1) %out, i32 %mbrC
 ; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GCN-NEXT:    v_sub_nc_u32_e32 v0, v1, v0
 ; GCN-NEXT:    s_wait_kmcnt 0x0
-; GCN-NEXT:    s_lshl_b32 s2, s2, 16
+; GCN-NEXT:    s_lshl_b32 m0, s2, 16
 ; GCN-NEXT:    global_store_b32 v3, v2, s[0:1]
-; GCN-NEXT:    s_mov_b32 m0, s2
 ; GCN-NEXT:    s_barrier_init -1
 ; GCN-NEXT:    global_store_b32 v3, v0, s[0:1]
 ; GCN-NEXT:    s_nop 0
@@ -577,9 +576,8 @@ define amdgpu_kernel void @test2_s_barrier_init(ptr addrspace(1) %out, i32 %mbrC
 ; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GCN-NEXT:    v_sub_nc_u32_e32 v0, v1, v0
 ; GCN-NEXT:    s_wait_kmcnt 0x0
-; GCN-NEXT:    s_lshl_b32 s2, s2, 16
+; GCN-NEXT:    s_lshl_b32 m0, s2, 16
 ; GCN-NEXT:    global_store_b32 v3, v2, s[0:1]
-; GCN-NEXT:    s_mov_b32 m0, s2
 ; GCN-NEXT:    s_barrier_init 1
 ; GCN-NEXT:    global_store_b32 v3, v0, s[0:1]
 ; GCN-NEXT:    s_nop 0
@@ -621,9 +619,8 @@ define amdgpu_kernel void @test3_s_barrier_init(ptr addrspace(1) %out, i32 %mbrC
 ; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GCN-NEXT:    v_sub_nc_u32_e32 v0, v1, v0
 ; GCN-NEXT:    s_wait_kmcnt 0x0
-; GCN-NEXT:    s_lshl_b32 s2, s2, 16
+; GCN-NEXT:    s_lshl_b32 m0, s2, 16
 ; GCN-NEXT:    global_store_b32 v3, v2, s[0:1]
-; GCN-NEXT:    s_mov_b32 m0, s2
 ; GCN-NEXT:    s_barrier_init 0
 ; GCN-NEXT:    global_store_b32 v3, v0, s[0:1]
 ; GCN-NEXT:    s_nop 0
@@ -662,13 +659,12 @@ define amdgpu_kernel void @test4_s_barrier_init(ptr addrspace(1) %out, i32 %bar,
 ; GCN-NEXT:    s_load_b128 s[0:3], s[0:1], 0x24
 ; GCN-NEXT:    v_mul_u32_u24_e32 v1, v0, v0
 ; GCN-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_lshlrev_b32 v3, 2, v0
-; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_4) | instid1(SALU_CYCLE_1)
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; GCN-NEXT:    v_sub_nc_u32_e32 v0, v1, v0
 ; GCN-NEXT:    s_wait_kmcnt 0x0
 ; GCN-NEXT:    s_lshl_b32 s3, s3, 16
 ; GCN-NEXT:    global_store_b32 v3, v2, s[0:1]
-; GCN-NEXT:    s_or_b32 s2, s2, s3
-; GCN-NEXT:    s_mov_b32 m0, s2
+; GCN-NEXT:    s_or_b32 m0, s2, s3
 ; GCN-NEXT:    s_barrier_init m0
 ; GCN-NEXT:    global_store_b32 v3, v0, s[0:1]
 ; GCN-NEXT:    s_nop 0
