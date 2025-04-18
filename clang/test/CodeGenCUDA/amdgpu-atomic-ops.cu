@@ -21,8 +21,8 @@ __global__ void ffp1(float *p) {
   // CHECK: atomicrmw fadd ptr {{.*}} monotonic
   // CHECK: atomicrmw fmax ptr {{.*}} monotonic
   // CHECK: atomicrmw fmin ptr {{.*}} monotonic
-  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent-one-as") monotonic
-  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup-one-as") monotonic
+  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent") monotonic
+  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup") monotonic
   // SAFE: _Z4ffp1Pf
   // SAFE: global_atomic_cmpswap
   // SAFE: global_atomic_cmpswap
@@ -47,8 +47,8 @@ __global__ void ffp2(double *p) {
   // CHECK: atomicrmw fsub ptr {{.*}} monotonic
   // CHECK: atomicrmw fmax ptr {{.*}} monotonic
   // CHECK: atomicrmw fmin ptr {{.*}} monotonic
-  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent-one-as") monotonic
-  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup-one-as") monotonic
+  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent") monotonic
+  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup") monotonic
   // SAFE-LABEL: @_Z4ffp2Pd
   // SAFE: global_atomic_cmpswap_b64
   // SAFE: global_atomic_cmpswap_b64
@@ -74,8 +74,8 @@ __global__ void ffp3(long double *p) {
   // CHECK: atomicrmw fsub ptr {{.*}} monotonic
   // CHECK: atomicrmw fmax ptr {{.*}} monotonic
   // CHECK: atomicrmw fmin ptr {{.*}} monotonic
-  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent-one-as") monotonic
-  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup-one-as") monotonic
+  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent") monotonic
+  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup") monotonic
   // SAFE-LABEL: @_Z4ffp3Pe
   // SAFE: global_atomic_cmpswap_b64
   // SAFE: global_atomic_cmpswap_b64
@@ -114,8 +114,8 @@ __global__ void ffp6(_Float16 *p) {
   // CHECK: atomicrmw fadd ptr {{.*}} monotonic
   // CHECK: atomicrmw fmax ptr {{.*}} monotonic
   // CHECK: atomicrmw fmin ptr {{.*}} monotonic
-  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent-one-as") monotonic
-  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup-one-as") monotonic
+  // CHECK: atomicrmw fmax ptr {{.*}} syncscope("agent") monotonic
+  // CHECK: atomicrmw fmin ptr {{.*}} syncscope("workgroup") monotonic
   // SAFE: _Z4ffp6PDF16
   // SAFE: global_atomic_cmpswap
   // SAFE: global_atomic_cmpswap
