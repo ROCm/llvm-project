@@ -14270,6 +14270,8 @@ ExprResult Sema::BuildOverloadedCallExpr(Scope *S, Expr *Fn,
   // the UnresolvedLookupExpr was type-dependent.
   if (OverloadResult == OR_Success) {
     const FunctionDecl *FDecl = Best->Function;
+    if (LangOpts.CUDA)
+      CUDA().recordPotentialODRUsedVariable(Args, CandidateSet);
     if (FDecl && FDecl->isTemplateInstantiation() &&
         FDecl->getReturnType()->isUndeducedType()) {
       if (const auto *TP =
