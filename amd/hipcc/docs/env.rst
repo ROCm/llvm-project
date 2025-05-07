@@ -10,7 +10,7 @@ HIPCC environment variables
 
 This topic provides descriptions of the HIPCC environment
 variables. For more information about other ROCm environment variables, see 
-:ref:`ROCm environment variables page <env-variables-reference>`. 
+`HIP environment variables <https://rocm.docs.amd.com/projects/HIP/en/latest/reference/env_variables.html>`_. 
 
 .. list-table::
     :header-rows: 1
