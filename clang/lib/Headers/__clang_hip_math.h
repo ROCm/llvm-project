@@ -51,6 +51,9 @@
 #define __DEVICE_NOCE__ __DEVICE__
 #endif
 
+#pragma push_macro("__PRIVATE_AS")
+
+#define __PRIVATE_AS __attribute__((opencl_private))
 // Device library provides fast low precision and slow full-recision
 // implementations for some functions. Which one gets selected depends on
 // __CLANG_GPU_APPROX_TRANSCENDENTALS__ which gets defined by clang if
@@ -535,8 +538,7 @@ float modff(float __x, float *__iptr) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  float __r =
-      __ocml_modf_f32(__x, (__attribute__((address_space(5))) float *)&__tmp);
+  float __r = __ocml_modf_f32(__x, (__PRIVATE_AS float *)&__tmp);
   *__iptr = __tmp;
   return __r;
 }
@@ -621,8 +623,7 @@ float remquof(float __x, float __y, int *__quo) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  float __r = __ocml_remquo_f32(
-      __x, __y, (__attribute__((address_space(5))) int *)&__tmp);
+  float __r = __ocml_remquo_f32(__x, __y, (__PRIVATE_AS int *)&__tmp);
   *__quo = __tmp;
 
   return __r;
@@ -683,8 +684,7 @@ void sincosf(float __x, float *__sinptr, float *__cosptr) {
 #ifdef __CLANG_CUDA_APPROX_TRANSCENDENTALS__
   __sincosf(__x, __sinptr, __cosptr);
 #else
-  *__sinptr =
-      __ocml_sincos_f32(__x, (__attribute__((address_space(5))) float *)&__tmp);
+  *__sinptr = __ocml_sincos_f32(__x, (__PRIVATE_AS float *)&__tmp);
   *__cosptr = __tmp;
 #endif
 }
@@ -695,8 +695,7 @@ void sincospif(float __x, float *__sinptr, float *__cosptr) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  *__sinptr = __ocml_sincospi_f32(
-      __x, (__attribute__((address_space(5))) float *)&__tmp);
+  *__sinptr = __ocml_sincospi_f32(__x, (__PRIVATE_AS float *)&__tmp);
   *__cosptr = __tmp;
 }
 
@@ -939,8 +938,7 @@ double modf(double __x, double *__iptr) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  double __r =
-      __ocml_modf_f64(__x, (__attribute__((address_space(5))) double *)&__tmp);
+  double __r = __ocml_modf_f64(__x, (__PRIVATE_AS double *)&__tmp);
   *__iptr = __tmp;
 
   return __r;
@@ -1033,8 +1031,7 @@ double remquo(double __x, double __y, int *__quo) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  double __r = __ocml_remquo_f64(
-      __x, __y, (__attribute__((address_space(5))) int *)&__tmp);
+  double __r = __ocml_remquo_f64(__x, __y, (__PRIVATE_AS int *)&__tmp);
   *__quo = __tmp;
 
   return __r;
@@ -1094,8 +1091,7 @@ void sincos(double __x, double *__sinptr, double *__cosptr) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  *__sinptr = __ocml_sincos_f64(
-      __x, (__attribute__((address_space(5))) double *)&__tmp);
+  *__sinptr = __ocml_sincos_f64(__x, (__PRIVATE_AS double *)&__tmp);
   *__cosptr = __tmp;
 }
 
@@ -1105,8 +1101,7 @@ void sincospi(double __x, double *__sinptr, double *__cosptr) {
 #ifdef __OPENMP_AMDGCN__
 #pragma omp allocate(__tmp) allocator(omp_thread_mem_alloc)
 #endif
-  *__sinptr = __ocml_sincospi_f64(
-      __x, (__attribute__((address_space(5))) double *)&__tmp);
+  *__sinptr = __ocml_sincospi_f64(__x, (__PRIVATE_AS double *)&__tmp);
   *__cosptr = __tmp;
 }
 
@@ -1354,6 +1349,7 @@ __host__ inline static int max(int __arg1, int __arg2) {
 
 #pragma pop_macro("__DEVICE_NOCE__")
 #pragma pop_macro("__DEVICE__")
+#pragma pop_macro("__PRIVATE_AS")
 #pragma pop_macro("__RETURN_TYPE")
 #pragma pop_macro("__FAST_OR_SLOW")
 
