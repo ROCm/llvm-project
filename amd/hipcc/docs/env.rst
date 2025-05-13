@@ -8,7 +8,9 @@
 HIPCC environment variables
 ******************************************
 
-The environment variable ``HIP_PLATFORM`` can be used to specify ``amd`` or ``nvidia`` depending on the available backend tool flows:
+This topic provides descriptions of the HIPCC environment
+variables. For more information about other ROCm environment variables, see
+`HIP environment variables <https://rocm.docs.amd.com/projects/HIP/en/latest/reference/env_variables.html>`_.
 
 * ``HIP_PLATFORM`` = ``amd`` or ``HIP_PLATFORM`` = ``nvidia``
 
