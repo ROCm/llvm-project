@@ -2126,6 +2126,8 @@ bool SIRegisterInfo::spillEmergencySGPR(MachineBasicBlock::iterator MI,
     // Don't need to write VGPR out.
   }
 
+  MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
+
   // Restore clobbered registers in the specified restore block.
   MI = RestoreMBB.end();
   SB.setMI(&RestoreMBB, MI);
@@ -2140,6 +2142,7 @@ bool SIRegisterInfo::spillEmergencySGPR(MachineBasicBlock::iterator MI,
           SB.NumSubRegs == 1
               ? SB.SuperReg
               : Register(getSubReg(SB.SuperReg, SB.SplitParts[i]));
+      MRI.constrainRegClass(SubReg, &AMDGPU::SReg_32_XM0RegClass);
       bool LastSubReg = (i + 1 == e);
       auto MIB = BuildMI(*SB.MBB, MI, SB.DL, SB.TII.get(AMDGPU::V_READLANE_B32),
                          SubReg)
@@ -2662,12 +2665,16 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
           if (IsSALU && !LiveSCC)
             Shift.getInstr()->getOperand(3).setIsDead(); // Mark SCC as dead.
           if (IsSALU && LiveSCC) {
-            Register NewDest =
-                IsCopy ? ResultReg
-                       : RS->scavengeRegisterBackwards(AMDGPU::SReg_32RegClass,
-                                                       Shift, false, 0);
-            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::V_READFIRSTLANE_B32),
-                    NewDest)
+            Register NewDest;
+            if (IsCopy) {
+              MF->getRegInfo().constrainRegClass(ResultReg,
+                                                 &AMDGPU::SReg_32_XM0RegClass);
+              NewDest = ResultReg;
+            } else {
+              NewDest = RS->scavengeRegisterBackwards(AMDGPU::SReg_32_XM0RegClass,
+                                                      Shift, false, 0);
+            }
+            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::V_READFIRSTLANE_B32), NewDest)
                 .addReg(TmpResultReg);
             ResultReg = NewDest;
           }
@@ -2781,10 +2788,17 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
                     .addReg(TmpResultReg);
               }
 
-              Register NewDest = IsCopy ? ResultReg
-                                        : RS->scavengeRegisterBackwards(
-                                              AMDGPU::SReg_32RegClass, *Add,
-                                              false, 0, /*AllowSpill=*/true);
+              Register NewDest;
+              if (IsCopy) {
+                MF->getRegInfo().constrainRegClass(ResultReg,
+                                                   &AMDGPU::SReg_32_XM0RegClass);
+                NewDest = ResultReg;
+              } else {
+                NewDest = RS->scavengeRegisterBackwards(
+                    AMDGPU::SReg_32_XM0RegClass, *Add, false, 0,
+                    /*AllowSpill=*/true);
+              }
+
               BuildMI(*MBB, MI, DL, TII->get(AMDGPU::V_READFIRSTLANE_B32),
                       NewDest)
                   .addReg(TmpResultReg);

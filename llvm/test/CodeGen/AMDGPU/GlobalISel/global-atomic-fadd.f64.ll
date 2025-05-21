@@ -48,9 +48,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_intrinsic(ptr addrspace(1) %
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX90A-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -67,9 +67,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_intrinsic(ptr addrspace(1) %
   ; GFX940-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX940-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX940-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX940-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX940-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX940-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = call double @llvm.amdgcn.global.atomic.fadd.f64.p1.f64(ptr addrspace(1) %ptr, double %data)
@@ -123,9 +123,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_intrinsic(ptr addrspac
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_SADDR_RTN [[V_MOV_B32_e32_]], [[REG_SEQUENCE1]], [[REG_SEQUENCE]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub0
   ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub1
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX90A-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -143,9 +143,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_intrinsic(ptr addrspac
   ; GFX940-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_SADDR_RTN [[V_MOV_B32_e32_]], [[REG_SEQUENCE1]], [[REG_SEQUENCE]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX940-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub0
   ; GFX940-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub1
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX940-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX940-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX940-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = call double @llvm.amdgcn.global.atomic.fadd.f64.p1.f64(ptr addrspace(1) %ptr, double %data)
@@ -196,9 +196,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_flat_intrinsic(ptr addrspace
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX90A-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -215,9 +215,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_flat_intrinsic(ptr addrspace
   ; GFX940-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX940-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX940-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX940-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX940-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX940-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = call double @llvm.amdgcn.flat.atomic.fadd.f64.p1.f64(ptr addrspace(1) %ptr, double %data)
@@ -271,9 +271,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_flat_intrinsic(ptr add
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_SADDR_RTN [[V_MOV_B32_e32_]], [[REG_SEQUENCE1]], [[REG_SEQUENCE]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub0
   ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub1
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX90A-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -291,9 +291,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_flat_intrinsic(ptr add
   ; GFX940-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_SADDR_RTN [[V_MOV_B32_e32_]], [[REG_SEQUENCE1]], [[REG_SEQUENCE]], 0, 1, implicit $exec :: (volatile dereferenceable load store (s64) on %ir.ptr, addrspace 1)
   ; GFX940-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub0
   ; GFX940-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_SADDR_RTN]].sub1
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX940-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX940-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX940-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = call double @llvm.amdgcn.flat.atomic.fadd.f64.p1.f64(ptr addrspace(1) %ptr, double %data)
@@ -344,9 +344,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_atomicrmw(ptr addrspace(1) %
   ; GFX90A-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (load store syncscope("wavefront") monotonic (s64) on %ir.ptr, addrspace 1)
   ; GFX90A-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX90A-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX90A-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX90A-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX90A-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -363,9 +363,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_rtn_atomicrmw(ptr addrspace(1) %
   ; GFX940-NEXT:   [[GLOBAL_ATOMIC_ADD_F64_RTN:%[0-9]+]]:vreg_64_align2 = GLOBAL_ATOMIC_ADD_F64_RTN [[REG_SEQUENCE]], [[REG_SEQUENCE1]], 0, 1, implicit $exec :: (load store syncscope("wavefront") monotonic (s64) on %ir.ptr, addrspace 1)
   ; GFX940-NEXT:   [[COPY4:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub0
   ; GFX940-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[GLOBAL_ATOMIC_ADD_F64_RTN]].sub1
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY4]], implicit $exec
   ; GFX940-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_]]
-  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
   ; GFX940-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_1]]
   ; GFX940-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = atomicrmw fadd ptr addrspace(1) %ptr, double %data syncscope("wavefront") monotonic
@@ -427,10 +427,10 @@ define amdgpu_ps void @global_atomic_fadd_f64_saddr_no_rtn_atomicrmw(ptr addrspa
   ; GFX90A_ITERATIVE-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 32, implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_FFBL_B32_e64_1]], [[V_MOV_B32_e32_1]], 0, implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_MIN_U32_e64_:%[0-9]+]]:vgpr_32 = V_MIN_U32_e64 [[V_FFBL_B32_e64_]], [[V_ADD_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_]]
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_1]]
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_]]
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_1]]
   ; GFX90A_ITERATIVE-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX90A_ITERATIVE-NEXT:   [[COPY7:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE1]]
   ; GFX90A_ITERATIVE-NEXT:   [[V_ADD_F64_e64_:%[0-9]+]]:vreg_64_align2 = nofpexcept V_ADD_F64_e64 0, [[PHI]], 0, [[COPY7]], 0, 0, implicit $mode, implicit $exec
@@ -529,8 +529,8 @@ define amdgpu_ps void @global_atomic_fadd_f64_saddr_no_rtn_atomicrmw(ptr addrspa
   ; GFX90A_DPP-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 63
   ; GFX90A_DPP-NEXT:   [[COPY19:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub0
   ; GFX90A_DPP-NEXT:   [[COPY20:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub1
-  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY19]], [[S_MOV_B32_2]]
-  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
+  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY19]], [[S_MOV_B32_2]]
+  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
   ; GFX90A_DPP-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX90A_DPP-NEXT:   [[COPY21:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE3]]
   ; GFX90A_DPP-NEXT:   [[STRICT_WWM:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[COPY21]], implicit $exec
@@ -608,10 +608,10 @@ define amdgpu_ps void @global_atomic_fadd_f64_saddr_no_rtn_atomicrmw(ptr addrspa
   ; GFX940_ITERATIVE-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 32, implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_FFBL_B32_e64_1]], [[V_MOV_B32_e32_1]], 0, implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_MIN_U32_e64_:%[0-9]+]]:vgpr_32 = V_MIN_U32_e64 [[V_FFBL_B32_e64_]], [[V_ADD_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_]]
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_1]]
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_]]
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_1]]
   ; GFX940_ITERATIVE-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX940_ITERATIVE-NEXT:   [[COPY7:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE1]]
   ; GFX940_ITERATIVE-NEXT:   [[V_ADD_F64_e64_:%[0-9]+]]:vreg_64_align2 = nofpexcept V_ADD_F64_e64 0, [[PHI]], 0, [[COPY7]], 0, 0, implicit $mode, implicit $exec
@@ -710,8 +710,8 @@ define amdgpu_ps void @global_atomic_fadd_f64_saddr_no_rtn_atomicrmw(ptr addrspa
   ; GFX940_DPP-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 63
   ; GFX940_DPP-NEXT:   [[COPY19:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub0
   ; GFX940_DPP-NEXT:   [[COPY20:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub1
-  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY19]], [[S_MOV_B32_2]]
-  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
+  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY19]], [[S_MOV_B32_2]]
+  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
   ; GFX940_DPP-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX940_DPP-NEXT:   [[COPY21:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE3]]
   ; GFX940_DPP-NEXT:   [[STRICT_WWM:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[COPY21]], implicit $exec
@@ -774,8 +774,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_ITERATIVE-NEXT:   SI_END_CF %38, implicit-def $exec, implicit-def $scc, implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
   ; GFX90A_ITERATIVE-NEXT:   [[COPY6:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY6]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY6]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READFIRSTLANE_B32_]], %subreg.sub0, [[V_READFIRSTLANE_B32_1]], %subreg.sub1
   ; GFX90A_ITERATIVE-NEXT:   [[COPY7:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE1]]
   ; GFX90A_ITERATIVE-NEXT:   [[V_ADD_F64_e64_:%[0-9]+]]:vreg_64_align2 = nofpexcept V_ADD_F64_e64 0, [[COPY7]], 0, %27, 0, 0, implicit $mode, implicit $exec
@@ -791,9 +791,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_ITERATIVE-NEXT: bb.5 (%ir-block.14):
   ; GFX90A_ITERATIVE-NEXT:   [[COPY12:%[0-9]+]]:vgpr_32 = COPY %44.sub0
   ; GFX90A_ITERATIVE-NEXT:   [[COPY13:%[0-9]+]]:vgpr_32 = COPY %44.sub1
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY12]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY12]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY13]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY13]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_3]]
   ; GFX90A_ITERATIVE-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ; GFX90A_ITERATIVE-NEXT: {{  $}}
@@ -817,20 +817,20 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_ITERATIVE-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 32, implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_FFBL_B32_e64_1]], [[V_MOV_B32_e32_1]], 0, implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_MIN_U32_e64_:%[0-9]+]]:vgpr_32 = V_MIN_U32_e64 [[V_FFBL_B32_e64_]], [[V_ADD_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_4:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_4]]
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_5:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_5]]
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_4:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_4]]
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_5:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_5]]
   ; GFX90A_ITERATIVE-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX90A_ITERATIVE-NEXT:   [[COPY16:%[0-9]+]]:vgpr_32 = COPY [[PHI2]].sub0
   ; GFX90A_ITERATIVE-NEXT:   [[COPY17:%[0-9]+]]:vgpr_32 = COPY [[PHI2]].sub1
   ; GFX90A_ITERATIVE-NEXT:   [[COPY18:%[0-9]+]]:vgpr_32 = COPY [[PHI3]].sub0
   ; GFX90A_ITERATIVE-NEXT:   [[COPY19:%[0-9]+]]:vgpr_32 = COPY [[PHI3]].sub1
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_6:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY16]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_6:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY16]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_7:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   $m0 = COPY [[V_READFIRSTLANE_B32_7]]
   ; GFX90A_ITERATIVE-NEXT:   [[V_WRITELANE_B32_:%[0-9]+]]:vgpr_32 = V_WRITELANE_B32 [[V_READFIRSTLANE_B32_6]], $m0, [[COPY18]]
-  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_8:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY17]], implicit $exec
+  ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_8:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY17]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_9:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
   ; GFX90A_ITERATIVE-NEXT:   $m0 = COPY [[V_READFIRSTLANE_B32_9]]
   ; GFX90A_ITERATIVE-NEXT:   [[V_WRITELANE_B32_1:%[0-9]+]]:vgpr_32 = V_WRITELANE_B32 [[V_READFIRSTLANE_B32_8]], $m0, [[COPY19]]
@@ -936,8 +936,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_DPP-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 63
   ; GFX90A_DPP-NEXT:   [[COPY20:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub0
   ; GFX90A_DPP-NEXT:   [[COPY21:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub1
-  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
-  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY21]], [[S_MOV_B32_2]]
+  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
+  ; GFX90A_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY21]], [[S_MOV_B32_2]]
   ; GFX90A_DPP-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX90A_DPP-NEXT:   [[COPY22:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE3]]
   ; GFX90A_DPP-NEXT:   [[STRICT_WWM:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[COPY22]], implicit $exec
@@ -967,8 +967,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_DPP-NEXT:   SI_END_CF [[SI_IF1]], implicit-def $exec, implicit-def $scc, implicit $exec
   ; GFX90A_DPP-NEXT:   [[COPY24:%[0-9]+]]:vgpr_32 = COPY [[PHI1]].sub0
   ; GFX90A_DPP-NEXT:   [[COPY25:%[0-9]+]]:vgpr_32 = COPY [[PHI1]].sub1
-  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY24]], implicit $exec
-  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY25]], implicit $exec
+  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY24]], implicit $exec
+  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY25]], implicit $exec
   ; GFX90A_DPP-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READFIRSTLANE_B32_]], %subreg.sub0, [[V_READFIRSTLANE_B32_1]], %subreg.sub1
   ; GFX90A_DPP-NEXT:   [[STRICT_WWM1:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[V_MOV_B6]], implicit $exec
   ; GFX90A_DPP-NEXT:   [[COPY26:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE4]]
@@ -985,9 +985,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX90A_DPP-NEXT: bb.6 (%ir-block.41):
   ; GFX90A_DPP-NEXT:   [[COPY31:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
   ; GFX90A_DPP-NEXT:   [[COPY32:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
-  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY31]], implicit $exec
+  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY31]], implicit $exec
   ; GFX90A_DPP-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY32]], implicit $exec
+  ; GFX90A_DPP-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY32]], implicit $exec
   ; GFX90A_DPP-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_3]]
   ; GFX90A_DPP-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ;
@@ -1026,8 +1026,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_ITERATIVE-NEXT:   SI_END_CF %37, implicit-def $exec, implicit-def $scc, implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[COPY5:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
   ; GFX940_ITERATIVE-NEXT:   [[COPY6:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY6]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY5]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY6]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[REG_SEQUENCE1:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READFIRSTLANE_B32_]], %subreg.sub0, [[V_READFIRSTLANE_B32_1]], %subreg.sub1
   ; GFX940_ITERATIVE-NEXT:   [[COPY7:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE1]]
   ; GFX940_ITERATIVE-NEXT:   [[V_ADD_F64_e64_:%[0-9]+]]:vreg_64_align2 = nofpexcept V_ADD_F64_e64 0, [[COPY7]], 0, %26, 0, 0, implicit $mode, implicit $exec
@@ -1043,9 +1043,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_ITERATIVE-NEXT: bb.5 (%ir-block.14):
   ; GFX940_ITERATIVE-NEXT:   [[COPY12:%[0-9]+]]:vgpr_32 = COPY %43.sub0
   ; GFX940_ITERATIVE-NEXT:   [[COPY13:%[0-9]+]]:vgpr_32 = COPY %43.sub1
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY12]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY12]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY13]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY13]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_3]]
   ; GFX940_ITERATIVE-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   ; GFX940_ITERATIVE-NEXT: {{  $}}
@@ -1069,20 +1069,20 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_ITERATIVE-NEXT:   [[V_MOV_B32_e32_1:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 32, implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 [[V_FFBL_B32_e64_1]], [[V_MOV_B32_e32_1]], 0, implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_MIN_U32_e64_:%[0-9]+]]:vgpr_32 = V_MIN_U32_e64 [[V_FFBL_B32_e64_]], [[V_ADD_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_4:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_4]]
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_5:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
-  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_5]]
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_4:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY2]], [[V_READFIRSTLANE_B32_4]]
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_5:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY3]], [[V_READFIRSTLANE_B32_5]]
   ; GFX940_ITERATIVE-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX940_ITERATIVE-NEXT:   [[COPY16:%[0-9]+]]:vgpr_32 = COPY [[PHI2]].sub0
   ; GFX940_ITERATIVE-NEXT:   [[COPY17:%[0-9]+]]:vgpr_32 = COPY [[PHI2]].sub1
   ; GFX940_ITERATIVE-NEXT:   [[COPY18:%[0-9]+]]:vgpr_32 = COPY [[PHI3]].sub0
   ; GFX940_ITERATIVE-NEXT:   [[COPY19:%[0-9]+]]:vgpr_32 = COPY [[PHI3]].sub1
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_6:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY16]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_6:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY16]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_7:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   $m0 = COPY [[V_READFIRSTLANE_B32_7]]
   ; GFX940_ITERATIVE-NEXT:   [[V_WRITELANE_B32_:%[0-9]+]]:vgpr_32 = V_WRITELANE_B32 [[V_READFIRSTLANE_B32_6]], $m0, [[COPY18]]
-  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_8:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY17]], implicit $exec
+  ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_8:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY17]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   [[V_READFIRSTLANE_B32_9:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[V_MIN_U32_e64_]], implicit $exec
   ; GFX940_ITERATIVE-NEXT:   $m0 = COPY [[V_READFIRSTLANE_B32_9]]
   ; GFX940_ITERATIVE-NEXT:   [[V_WRITELANE_B32_1:%[0-9]+]]:vgpr_32 = V_WRITELANE_B32 [[V_READFIRSTLANE_B32_8]], $m0, [[COPY19]]
@@ -1188,8 +1188,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_DPP-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 63
   ; GFX940_DPP-NEXT:   [[COPY20:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub0
   ; GFX940_DPP-NEXT:   [[COPY21:%[0-9]+]]:vgpr_32 = COPY [[V_ADD_F64_e64_5]].sub1
-  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
-  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32 = V_READLANE_B32 [[COPY21]], [[S_MOV_B32_2]]
+  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY20]], [[S_MOV_B32_2]]
+  ; GFX940_DPP-NEXT:   [[V_READLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READLANE_B32 [[COPY21]], [[S_MOV_B32_2]]
   ; GFX940_DPP-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READLANE_B32_]], %subreg.sub0, [[V_READLANE_B32_1]], %subreg.sub1
   ; GFX940_DPP-NEXT:   [[COPY22:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE3]]
   ; GFX940_DPP-NEXT:   [[STRICT_WWM:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[COPY22]], implicit $exec
@@ -1219,8 +1219,8 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_DPP-NEXT:   SI_END_CF [[SI_IF1]], implicit-def $exec, implicit-def $scc, implicit $exec
   ; GFX940_DPP-NEXT:   [[COPY24:%[0-9]+]]:vgpr_32 = COPY [[PHI1]].sub0
   ; GFX940_DPP-NEXT:   [[COPY25:%[0-9]+]]:vgpr_32 = COPY [[PHI1]].sub1
-  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY24]], implicit $exec
-  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY25]], implicit $exec
+  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY24]], implicit $exec
+  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY25]], implicit $exec
   ; GFX940_DPP-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:sreg_64 = REG_SEQUENCE [[V_READFIRSTLANE_B32_]], %subreg.sub0, [[V_READFIRSTLANE_B32_1]], %subreg.sub1
   ; GFX940_DPP-NEXT:   [[STRICT_WWM1:%[0-9]+]]:vreg_64_align2 = STRICT_WWM [[V_MOV_B6]], implicit $exec
   ; GFX940_DPP-NEXT:   [[COPY26:%[0-9]+]]:vreg_64_align2 = COPY [[REG_SEQUENCE4]]
@@ -1237,9 +1237,9 @@ define amdgpu_ps double @global_atomic_fadd_f64_saddr_rtn_atomicrmw(ptr addrspac
   ; GFX940_DPP-NEXT: bb.6 (%ir-block.41):
   ; GFX940_DPP-NEXT:   [[COPY31:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub0
   ; GFX940_DPP-NEXT:   [[COPY32:%[0-9]+]]:vgpr_32 = COPY [[PHI]].sub1
-  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY31]], implicit $exec
+  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY31]], implicit $exec
   ; GFX940_DPP-NEXT:   $sgpr0 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32 = V_READFIRSTLANE_B32 [[COPY32]], implicit $exec
+  ; GFX940_DPP-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[COPY32]], implicit $exec
   ; GFX940_DPP-NEXT:   $sgpr1 = COPY [[V_READFIRSTLANE_B32_3]]
   ; GFX940_DPP-NEXT:   SI_RETURN_TO_EPILOG implicit $sgpr0, implicit $sgpr1
   %ret = atomicrmw fadd ptr addrspace(1) %ptr, double %data syncscope("wavefront") monotonic

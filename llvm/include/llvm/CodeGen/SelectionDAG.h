@@ -680,7 +680,11 @@ public:
                       bool isTarget = false, bool isOpaque = false);
   SDValue getConstant(const APInt &Val, const SDLoc &DL, EVT VT,
                       bool isTarget = false, bool isOpaque = false);
-
+  SDValue getSignedConstant(int64_t Val, const SDLoc &DL, EVT VT, bool isT,
+                            bool isO) {
+    unsigned Size = VT.getScalarSizeInBits();
+    return getConstant(APInt(Size, Val, /*isSigned=*/true), DL, VT, isT, isO);
+  }
   SDValue getAllOnesConstant(const SDLoc &DL, EVT VT, bool IsTarget = false,
                              bool IsOpaque = false) {
     return getConstant(APInt::getAllOnes(VT.getScalarSizeInBits()), DL, VT,
@@ -707,6 +711,10 @@ public:
   SDValue getTargetConstant(const ConstantInt &Val, const SDLoc &DL, EVT VT,
                             bool isOpaque = false) {
     return getConstant(Val, DL, VT, true, isOpaque);
+  }
+  SDValue getSignedTargetConstant(int64_t Val, const SDLoc &DL, EVT VT,
+                                  bool isOpaque = false) {
+    return getSignedConstant(Val, DL, VT, true, isOpaque);
   }
 
   /// Create a true or false constant of type \p VT using the target's
