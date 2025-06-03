@@ -60,6 +60,13 @@ namespace {
 class MapInfoFinalizationPass
     : public flangomp::impl::MapInfoFinalizationPassBase<
           MapInfoFinalizationPass> {
+public:
+  MapInfoFinalizationPass() = default;
+
+  MapInfoFinalizationPass(
+      const flangomp::MapInfoFinalizationPassOptions &options)
+      : MapInfoFinalizationPassBase(options) {}
+
   /// Helper class tracking a members parent and its
   /// placement in the parents member list
   struct ParentAndPlacement {
@@ -1276,13 +1283,15 @@ class MapInfoFinalizationPass
       // within a target region. At which point we map the relevant descriptor
       // data and the runtime should correctly associate the data with the
       // descriptor and bind together and allow clean mapping and execution.
-      for (auto *op : deferrableDesc) {
-        auto mapOp = llvm::dyn_cast<mlir::omp::MapInfoOp>(op);
-        mlir::Operation *targetUser = getFirstTargetUser(mapOp);
-        assert(targetUser && "expected user of map operation was not found");
-        builder.setInsertionPoint(mapOp);
-        removeTopLevelDescriptor(mapOp, builder, targetUser);
-        addImplicitDescriptorMapToTargetDataOp(mapOp, builder, *targetUser);
+      if (deferDescMapping) {
+        for (auto *op : deferrableDesc) {
+          auto mapOp = llvm::dyn_cast<mlir::omp::MapInfoOp>(op);
+          mlir::Operation *targetUser = getFirstTargetUser(mapOp);
+          assert(targetUser && "expected user of map operation was not found");
+          builder.setInsertionPoint(mapOp);
+          removeTopLevelDescriptor(mapOp, builder, targetUser);
+          addImplicitDescriptorMapToTargetDataOp(mapOp, builder, *targetUser);
+        }
       }
 
       // Wait until after we have generated all of our maps to add them onto
@@ -1296,5 +1305,11 @@ class MapInfoFinalizationPass
     });
   }
 };
-
 } // namespace
+
+std::unique_ptr<mlir::Pass>
+flangomp::createMapInfoFinalizationPass(bool deferDescMap) {
+  MapInfoFinalizationPassOptions options;
+  options.deferDescMapping = deferDescMap;
+  return std::make_unique<MapInfoFinalizationPass>(options);
+}

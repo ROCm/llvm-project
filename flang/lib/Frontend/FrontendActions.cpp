@@ -316,6 +316,8 @@ bool CodeGenAction::beginSourceFileAction() {
       Fortran::frontend::CodeGenOptions::DoConcurrentMappingKind;
   opts.doConcurrentMappingKind =
       ci.getInvocation().getCodeGenOpts().getDoConcurrentMapping();
+  opts.deferDescMap =
+      ci.getInvocation().getCodeGenOpts().DeferDescriptorMapping;
 
   if (opts.doConcurrentMappingKind != DoConcurrentMappingKind::DCMK_None &&
       !isOpenMPEnabled) {
