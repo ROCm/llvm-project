@@ -106,6 +106,14 @@ define void @test_noop_convert(ptr addrspace(1) %p1) #0 !dbg !34 {
   ret void, !dbg !37
 }
 
+define void @test_noassert(ptr addrspace(1) %p1) #0 !dbg !44 {
+  ; Verify that this doesn't assert.
+    #dbg_value(ptr addrspace(1) %p1, !46, !DIExpression(DIOpArg(0, ptr addrspace(1)), DIOpConvert(ptr), DIOpReinterpret(i64), DIOpConstant(i64 1), DIOpAdd(), DIOpFragment(0, 32)), !47)
+    #dbg_value(i32 0, !46, !DIExpression(DIOpArg(0, i32), DIOpFragment(32, 16)), !47)
+    #dbg_value(i32 0, !46, !DIExpression(DW_OP_LLVM_poisoned, DW_OP_LLVM_fragment, 48, 16), !47)
+  ret void, !dbg !47
+}
+
 attributes #0 = { "frame-pointer"="all" }
 
 ; CHECK-LABEL: DW_AT_name ("GlobMutable")
@@ -114,14 +122,14 @@ attributes #0 = { "frame-pointer"="all" }
 ; CHECK-NEXT:  DW_AT_decl_file
 ; CHECK-NEXT:  DW_AT_decl_line
 ; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_global)
-; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x5, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x6, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 
 ; CHECK-LABEL: DW_AT_name ("GlobConst")
 ; CHECK-NEXT:  DW_AT_type
 ; CHECK-NEXT:  DW_AT_decl_file
 ; CHECK-NEXT:  DW_AT_decl_line
 ; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_constant)
-; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x6, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x7, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 
 ; CHECK: [[PTR_AS_3]]: DW_TAG_pointer_type
 ; CHECK-NEXT: DW_AT_type
@@ -183,3 +191,7 @@ attributes #0 = { "frame-pointer"="all" }
 !41 = !DIGlobalVariableExpression(var: !42, expr: !DIExpression(DIOpArg(0, ptr addrspace(4)), DIOpDeref(i32)))
 !42 = distinct !DIGlobalVariable(name: "GlobConst", linkageName: "GlobConst", scope: !0, file: !1, line: 1, type: !15, isLocal: true, isDefinition: true, memorySpace: DW_MSPACE_LLVM_constant)
 !43 = !{!31, !32}
+!44 = distinct !DISubprogram(name: "test_noassert", linkageName: "test_noassert", scope: !1, file: !1, line: 1, type: !10, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !45)
+!45 = !{!46}
+!46 = !DILocalVariable(name: "frags", scope: !44, file: !1, line: 1, type: !14)
+!47 = !DILocation(line: 1, column: 1, scope: !44)
