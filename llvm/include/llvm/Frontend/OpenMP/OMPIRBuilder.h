@@ -2573,8 +2573,7 @@ public:
   struct OutlineInfo {
     using PostOutlineCBTy = std::function<void(Function &)>;
     PostOutlineCBTy PostOutlineCB;
-    BasicBlock *EntryBB, *ExitBB, *OuterAllocBB;
-    SmallVector<BasicBlock *> OuterDeallocBBs;
+    BasicBlock *EntryBB, *ExitBB, *OuterAllocaBB;
     SmallVector<Value *, 2> ExcludeArgsFromAggregate;
     SetVector<Value *> Inputs, Outputs;
     // TODO: this should be safe to enable by default

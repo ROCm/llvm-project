@@ -263,11 +263,11 @@ CodeExtractor::CodeExtractor(ArrayRef<BasicBlock *> BBs, DominatorTree *DT,
                              BranchProbabilityInfo *BPI, AssumptionCache *AC,
                              bool AllowVarArgs, bool AllowAlloca,
                              BasicBlock *AllocationBlock,
-                             ArrayRef<BasicBlock *> DeallocationBlocks,
-                             std::string Suffix, bool ArgsInZeroAddressSpace)
+                             BasicBlock *DeallocationBlock, std::string Suffix,
+                             bool ArgsInZeroAddressSpace)
     : DT(DT), AggregateArgs(AggregateArgs || AggregateArgsOpt), BFI(BFI),
       BPI(BPI), AC(AC), AllocationBlock(AllocationBlock),
-      DeallocationBlocks(DeallocationBlocks), AllowVarArgs(AllowVarArgs),
+      DeallocationBlock(DeallocationBlock), AllowVarArgs(AllowVarArgs),
       Blocks(buildExtractionBlockSet(BBs, DT, AllowVarArgs, AllowAlloca)),
       Suffix(Suffix), ArgsInZeroAddressSpace(ArgsInZeroAddressSpace) {}
 
@@ -461,6 +461,7 @@ Instruction *CodeExtractor::allocateVar(BasicBlock *BB,
 
 Instruction *CodeExtractor::deallocateVar(BasicBlock *, BasicBlock::iterator,
                                           Value *, Type *) {
+  // Default alloca instructions created by allocateVar are released implicitly.
   return nullptr;
 }
 
@@ -2035,25 +2036,22 @@ CallInst *CodeExtractor::emitReplacerCall(
                                        {}, call);
 
   // Deallocate intermediate variables if they need explicit deallocation.
-  auto deallocVars = [&](BasicBlock *DeallocBlock,
-                         BasicBlock::iterator DeallocIP) {
-    int Index = 0;
-    for (Value *Output : outputs) {
-      if (!StructValues.contains(Output))
-        deallocateVar(DeallocBlock, DeallocIP, ReloadOutputs[Index++],
-                      Output->getType());
-    }
-
-    if (Struct)
-      deallocateVar(DeallocBlock, DeallocIP, Struct, StructArgTy);
-  };
-
-  if (DeallocationBlocks.empty()) {
-    deallocVars(codeReplacer, codeReplacer->end());
-  } else {
-    for (BasicBlock *DeallocationBlock : DeallocationBlocks)
-      deallocVars(DeallocationBlock, DeallocationBlock->getFirstInsertionPt());
+  BasicBlock *DeallocBlock = codeReplacer;
+  BasicBlock::iterator DeallocIP = codeReplacer->end();
+  if (DeallocationBlock) {
+    DeallocBlock = DeallocationBlock;
+    DeallocIP = DeallocationBlock->getFirstInsertionPt();
   }
+
+  int Index = 0;
+  for (Value *Output : outputs) {
+    if (!StructValues.contains(Output))
+      deallocateVar(DeallocBlock, DeallocIP, ReloadOutputs[Index++],
+                    Output->getType());
+  }
+
+  if (Struct)
+    deallocateVar(DeallocBlock, DeallocIP, Struct, StructArgTy);
 
   return call;
 }

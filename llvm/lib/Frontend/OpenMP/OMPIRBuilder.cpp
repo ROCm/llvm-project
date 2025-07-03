@@ -326,12 +326,6 @@ getTargetKernelExecMode(Function &Kernel) {
   return static_cast<OMPTgtExecModeFlags>(KernelMode->getZExtValue());
 }
 
-static bool isGenericKernel(Function &Fn) {
-  std::optional<omp::OMPTgtExecModeFlags> ExecMode =
-      getTargetKernelExecMode(Fn);
-  return !ExecMode || (*ExecMode & OMP_TGT_EXEC_MODE_GENERIC);
-}
-
 /// Make \p Source branch to \p Target.
 ///
 /// Handles two situations:
@@ -514,10 +508,10 @@ public:
                    AssumptionCache *AC = nullptr, bool AllowVarArgs = false,
                    bool AllowAlloca = false,
                    BasicBlock *AllocationBlock = nullptr,
-                   ArrayRef<BasicBlock *> DeallocationBlocks = {},
+                   BasicBlock *DeallocationBlock = nullptr,
                    std::string Suffix = "", bool ArgsInZeroAddressSpace = false)
       : CodeExtractor(BBs, DT, AggregateArgs, BFI, BPI, AC, AllowVarArgs,
-                      AllowAlloca, AllocationBlock, DeallocationBlocks, Suffix,
+                      AllowAlloca, AllocationBlock, DeallocationBlock, Suffix,
                       ArgsInZeroAddressSpace),
         OMPBuilder(OMPBuilder) {}
 
@@ -529,16 +523,32 @@ protected:
 
 class DeviceSharedMemCodeExtractor : public OMPCodeExtractor {
 public:
-  using OMPCodeExtractor::OMPCodeExtractor;
+  DeviceSharedMemCodeExtractor(
+      OpenMPIRBuilder &OMPBuilder, BasicBlock *AllocBlockOverride,
+      ArrayRef<BasicBlock *> BBs, DominatorTree *DT = nullptr,
+      bool AggregateArgs = false, BlockFrequencyInfo *BFI = nullptr,
+      BranchProbabilityInfo *BPI = nullptr, AssumptionCache *AC = nullptr,
+      bool AllowVarArgs = false, bool AllowAlloca = false,
+      BasicBlock *AllocationBlock = nullptr,
+      BasicBlock *DeallocationBlock = nullptr, std::string Suffix = "",
+      bool ArgsInZeroAddressSpace = false)
+      : OMPCodeExtractor(OMPBuilder, BBs, DT, AggregateArgs, BFI, BPI, AC,
+                         AllowVarArgs, AllowAlloca, AllocationBlock,
+                         DeallocationBlock, Suffix, ArgsInZeroAddressSpace),
+        AllocBlockOverride(AllocBlockOverride) {}
   virtual ~DeviceSharedMemCodeExtractor() = default;
 
 protected:
   virtual Instruction *
-  allocateVar(BasicBlock *BB, BasicBlock::iterator AllocIP, Type *VarType,
+  allocateVar(BasicBlock *, BasicBlock::iterator, Type *VarType,
               const Twine &Name = Twine(""),
               AddrSpaceCastInst **CastedAlloc = nullptr) override {
+    // Ignore the CastedAlloc pointer, if requested, because shared memory
+    // should not be casted to address space 0 to be passed around.
     return OMPBuilder.createOMPAllocShared(
-        OpenMPIRBuilder::InsertPointTy(BB, AllocIP), VarType, Name);
+        OpenMPIRBuilder::InsertPointTy(
+            AllocBlockOverride, AllocBlockOverride->getFirstInsertionPt()),
+        VarType, Name);
   }
 
   virtual Instruction *deallocateVar(BasicBlock *BB,
@@ -547,12 +557,19 @@ protected:
     return OMPBuilder.createOMPFreeShared(
         OpenMPIRBuilder::InsertPointTy(BB, DeallocIP), Var, VarType);
   }
+
+private:
+  // TODO: Remove the need for this override and instead get the CodeExtractor
+  // to provide a valid insert point for explicit deallocations by correctly
+  // populating its DeallocationBlock.
+  BasicBlock *AllocBlockOverride;
 };
 
 /// Helper storing information about regions to outline using device shared
 /// memory for intermediate allocations.
 struct DeviceSharedMemOutlineInfo : public OpenMPIRBuilder::OutlineInfo {
   OpenMPIRBuilder &OMPBuilder;
+  BasicBlock *AllocBlockOverride = nullptr;
 
   DeviceSharedMemOutlineInfo(OpenMPIRBuilder &OMPBuilder)
       : OMPBuilder(OMPBuilder) {}
@@ -1935,24 +1952,55 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createParallel(
 
   LLVM_DEBUG(dbgs() << "After  body codegen: " << *OuterFn << "\n");
 
-  // If OuterFn is a Generic kernel, we need to use device shared memory to
-  // allocate argument structures. Otherwise, we use stack allocations as usual.
-  bool UsesDeviceSharedMemory =
-      Config.isTargetDevice() && isGenericKernel(*OuterFn);
-  std::unique_ptr<OutlineInfo> OI =
-      UsesDeviceSharedMemory
-          ? std::make_unique<DeviceSharedMemOutlineInfo>(*this)
-          : std::make_unique<OutlineInfo>();
+  auto OI = [&]() -> std::unique_ptr<OutlineInfo> {
+    if (Config.isTargetDevice()) {
+      std::optional<omp::OMPTgtExecModeFlags> ExecMode =
+          getTargetKernelExecMode(*OuterFn);
+
+      // If OuterFn is not a Generic kernel, skip custom allocation. This causes
+      // the CodeExtractor to follow its default behavior. Otherwise, we need to
+      // use device shared memory to allocate argument structures.
+      if (ExecMode && *ExecMode & OMP_TGT_EXEC_MODE_GENERIC) {
+        auto Info = std::make_unique<DeviceSharedMemOutlineInfo>(*this);
+
+        // Instead of using the insertion point provided by the CodeExtractor,
+        // here we need to use the block that eventually calls the outlined
+        // function for the `parallel` construct.
+        //
+        // The reason is that the explicit deallocation call will be inserted
+        // within the outlined function, whereas the alloca insertion point
+        // might actually be located somewhere else in the caller. This becomes
+        // a problem when e.g. `parallel` is inside of a `distribute` construct,
+        // because the deallocation would be executed multiple times and the
+        // allocation just once (outside of the loop).
+        //
+        // TODO: Ideally, we'd want to do the allocation and deallocation
+        // outside of the `parallel` outlined function, hence using here the
+        // insertion point provided by the CodeExtractor. We can't do this at
+        // the moment because there is currently no way of passing an eligible
+        // insertion point for the explicit deallocation to the CodeExtractor,
+        // as that block is created (at least when nested inside of
+        // `distribute`) sometime after createParallel() completed, so it can't
+        // be stored in the OutlineInfo structure here.
+        //
+        // The current approach results in an explicit allocation and
+        // deallocation pair for each `distribute` loop iteration in that case,
+        // which is suboptimal.
+        Info->AllocBlockOverride = EntryBB;
+        return Info;
+      }
+    }
+    return std::make_unique<OutlineInfo>();
+  }();
 
   if (Config.isTargetDevice()) {
     // Generate OpenMP target specific runtime call
     OI->PostOutlineCB = [=, ToBeDeletedVec =
-                               std::move(ToBeDeleted)](Function &OutlinedFn) {
+                                std::move(ToBeDeleted)](Function &OutlinedFn) {
       targetParallelCallback(this, OutlinedFn, OuterFn, OuterAllocaBlock, Ident,
-                             IfCondition, NumThreads, PrivTID, PrivTIDAddrAcast,
+                             IfCondition, NumThreads, PrivTID, PrivTIDAddr,
                              ThreadID, ToBeDeletedVec);
     };
-    OI->FixUpNonEntryAllocas = true;
   } else {
     // Generate OpenMP host runtime call
     OI->PostOutlineCB = [=, ToBeDeletedVec =
@@ -1960,15 +2008,12 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createParallel(
       hostParallelCallback(this, OutlinedFn, OuterFn, Ident, IfCondition,
                            PrivTID, PrivTIDAddrAcast, ToBeDeletedVec);
     };
-    OI->FixUpNonEntryAllocas = true;
   }
 
-  OI->OuterAllocBB = OuterAllocaBlock;
+  OI->FixUpNonEntryAllocas = true;
+  OI->OuterAllocaBB = OuterAllocaBlock;
   OI->EntryBB = PRegEntryBB;
   OI->ExitBB = PRegExitBB;
-  OI->OuterDeallocBBs.reserve(OuterDeallocIPs.size());
-  for (InsertPointTy DeallocIP : OuterDeallocIPs)
-    OI->OuterDeallocBBs.push_back(DeallocIP.getBlock());
 
   SmallPtrSet<BasicBlock *, 32> ParallelRegionBlockSet;
   SmallVector<BasicBlock *, 32> Blocks;
@@ -1983,7 +2028,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createParallel(
                           /* AllowVarArgs */ true,
                           /* AllowAlloca */ true,
                           /* AllocationBlock */ OuterAllocaBlock,
-                          /* DeallocationBlocks */ {},
+                          /* DeallocationBlock */ nullptr,
                           /* Suffix */ ".omp_par", ArgsInZeroAddressSpace);
 
   // Find inputs to, outputs from the code region.
@@ -2379,9 +2424,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
   // Add the thread ID argument.
   SmallVector<Instruction *> ToBeDeleted;
   // dummy instruction to be used as a fake argument
-  OI->ExcludeArgsFromAggregate.push_back(
-      createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted, TaskloopAllocaIP,
-                       "global.tid", false));
+  OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
+      Builder, M, AllocaIP, ToBeDeleted, TaskloopAllocaIP, "global.tid", false));
   Value *FakeLB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
                                    TaskloopAllocaIP, "lb", false, true);
   Value *FakeUB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
@@ -2416,11 +2460,11 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
   }
   Value *TaskDupFn = *TaskDupFnOrErr;
 
-    OI->PostOutlineCB = [this, Ident, LBVal, UBVal, StepVal, Untied,
-                      TaskloopAllocaBB, CLI, Loc, TaskDupFn, ToBeDeleted,
-                      IfCond, GrainSize, NoGroup, Sched, FakeLB, FakeUB,
-                      FakeStep, FakeSharedsTy, Final, Mergeable, Priority,
-                      NumOfCollapseLoops](Function &OutlinedFn) mutable {
+  OI->PostOutlineCB = [this, Ident, LBVal, UBVal, StepVal, Untied,
+                       TaskloopAllocaBB, CLI, Loc, TaskDupFn, ToBeDeleted,
+                       IfCond, GrainSize, NoGroup, Sched, FakeLB, FakeUB,
+                       FakeStep, FakeSharedsTy, Final, Mergeable, Priority,
+                       NumOfCollapseLoops](Function &OutlinedFn) mutable {
     // Replace the Stale CI by appropriate RTL function call.
     assert(OutlinedFn.hasOneUse() &&
            "there must be a single user for the outlined function");
@@ -2726,11 +2770,8 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
 
   auto OI = std::make_unique<OutlineInfo>();
   OI->EntryBB = TaskAllocaBB;
-  OI->OuterAllocBB = AllocIP.getBlock();
+  OI->OuterAllocaBB = AllocIP.getBlock();
   OI->ExitBB = TaskExitBB;
-  OI->OuterDeallocBBs.reserve(DeallocIPs.size());
-  for (InsertPointTy DeallocIP : DeallocIPs)
-    OI->OuterDeallocBBs.push_back(DeallocIP.getBlock());
 
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
@@ -2738,8 +2779,9 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
       Builder, M, AllocIP, ToBeDeleted, TaskAllocaIP, "global.tid", false));
 
   OI->PostOutlineCB = [this, Ident, Tied, Final, IfCondition, Dependencies,
-                       Mergeable, Priority, EventHandle, TaskAllocaBB,
-                       Affinities, ToBeDeleted](Function &OutlinedFn) mutable {
+                       Affinities, Mergeable, Priority, EventHandle,
+                       TaskAllocaBB,
+                       ToBeDeleted](Function &OutlinedFn) mutable {
     // Replace the Stale CI by appropriate RTL function call.
     assert(OutlinedFn.hasOneUse() &&
            "there must be a single user for the outlined function");
@@ -6228,13 +6270,13 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::applyWorkshareLoopTarget(
   Value *Ident = getOrCreateIdent(SrcLocStr, SrcLocStrSize, Flag);
 
   auto OI = std::make_unique<OutlineInfo>();
-  OI->OuterAllocBB = CLI->getPreheader();
+  OI->OuterAllocaBB = CLI->getPreheader();
   Function *OuterFn = CLI->getPreheader()->getParent();
 
   // Instructions which need to be deleted at the end of code generation
   SmallVector<Instruction *, 4> ToBeDeleted;
 
-  OI->OuterAllocBB = AllocaIP.getBlock();
+  OI->OuterAllocaBB = AllocaIP.getBlock();
 
   // Mark the body loop as region which needs to be extracted
   OI->EntryBB = CLI->getBody();
@@ -6271,7 +6313,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::applyWorkshareLoopTarget(
                           /* AllowVarArgs */ true,
                           /* AllowAlloca */ true,
                           /* AllocationBlock */ CLI->getPreheader(),
-                          /* DeallocationBlocks */ {},
+                          /* DeallocationBlock */ nullptr,
                           /* Suffix */ ".omp_wsloop",
                           /* AggrArgsIn0AddrSpace */ true);
 
@@ -9364,13 +9406,12 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::emitTargetTask(
 
   auto OI = std::make_unique<OutlineInfo>();
   OI->EntryBB = TargetTaskAllocaBB;
-  OI->OuterAllocBB = AllocaIP.getBlock();
+  OI->OuterAllocaBB = AllocaIP.getBlock();
 
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
-  OI->ExcludeArgsFromAggregate.push_back(
-      createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted, TargetTaskAllocaIP,
-                       "global.tid", false));
+  OI->ExcludeArgsFromAggregate.push_back(createFakeIntVal(
+      Builder, M, AllocaIP, ToBeDeleted, TargetTaskAllocaIP, "global.tid", false));
 
   // Generate the task body which will subsequently be outlined.
   Builder.restoreIP(TargetTaskBodyIP);
@@ -11405,7 +11446,7 @@ OpenMPIRBuilder::createTeams(const LocationDescription &Loc,
   auto OI = std::make_unique<OutlineInfo>();
   OI->EntryBB = AllocaBB;
   OI->ExitBB = ExitBB;
-  OI->OuterAllocBB = &OuterAllocaBB;
+  OI->OuterAllocaBB = &OuterAllocaBB;
 
   // Insert fake values for global tid and bound tid.
   SmallVector<Instruction *, 8> ToBeDeleted;
@@ -11493,13 +11534,9 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createDistribute(
   // callback.
   if (Config.isTargetDevice()) {
     auto OI = std::make_unique<OutlineInfo>();
-    OI->OuterAllocBB = OuterAllocIP.getBlock();
+    OI->OuterAllocaBB = OuterAllocaIP.getBlock();
     OI->EntryBB = AllocaBB;
     OI->ExitBB = ExitBB;
-    OI->OuterDeallocBBs.reserve(OuterDeallocIPs.size());
-    for (InsertPointTy DeallocIP : OuterDeallocIPs)
-      OI->OuterDeallocBBs.push_back(DeallocIP.getBlock());
-
     addOutlineInfo(std::move(OI));
   }
   Builder.SetInsertPoint(ExitBB);
@@ -11565,33 +11602,32 @@ std::unique_ptr<CodeExtractor>
 OpenMPIRBuilder::OutlineInfo::createCodeExtractor(ArrayRef<BasicBlock *> Blocks,
                                                   bool ArgsInZeroAddressSpace,
                                                   Twine Suffix) {
-  return std::make_unique<CodeExtractor>(
-      Blocks, /* DominatorTree */ nullptr,
-      /* AggregateArgs */ true,
-      /* BlockFrequencyInfo */ nullptr,
-      /* BranchProbabilityInfo */ nullptr,
-      /* AssumptionCache */ nullptr,
-      /* AllowVarArgs */ true,
-      /* AllowAlloca */ true,
-      /* AllocationBlock*/ OuterAllocBB,
-      /* DeallocationBlocks */ ArrayRef<BasicBlock *>(),
-      /* Suffix */ Suffix.str(), ArgsInZeroAddressSpace);
+  return std::make_unique<CodeExtractor>(Blocks, /* DominatorTree */ nullptr,
+                                         /* AggregateArgs */ true,
+                                         /* BlockFrequencyInfo */ nullptr,
+                                         /* BranchProbabilityInfo */ nullptr,
+                                         /* AssumptionCache */ nullptr,
+                                         /* AllowVarArgs */ true,
+                                         /* AllowAlloca */ true,
+                                         /* AllocationBlock*/ OuterAllocaBB,
+                                         /* DeallocationBlock */ nullptr,
+                                         /* Suffix */ Suffix.str(),
+                                         ArgsInZeroAddressSpace);
 }
 
 std::unique_ptr<CodeExtractor> DeviceSharedMemOutlineInfo::createCodeExtractor(
     ArrayRef<BasicBlock *> Blocks, bool ArgsInZeroAddressSpace, Twine Suffix) {
+  // TODO: Initialize the DeallocationBlock with a proper pair to OuterAllocaBB.
   return std::make_unique<DeviceSharedMemCodeExtractor>(
-      OMPBuilder, Blocks, /* DominatorTree */ nullptr,
+      OMPBuilder, AllocBlockOverride, Blocks, /* DominatorTree */ nullptr,
       /* AggregateArgs */ true,
       /* BlockFrequencyInfo */ nullptr,
       /* BranchProbabilityInfo */ nullptr,
       /* AssumptionCache */ nullptr,
       /* AllowVarArgs */ true,
       /* AllowAlloca */ true,
-      /* AllocationBlock*/ OuterAllocBB,
-      /* DeallocationBlocks */ OuterDeallocBBs.empty()
-          ? SmallVector<BasicBlock *>{ExitBB}
-          : OuterDeallocBBs,
+      /* AllocationBlock*/ OuterAllocaBB,
+      /* DeallocationBlock */ ExitBB,
       /* Suffix */ Suffix.str(), ArgsInZeroAddressSpace);
 }
 
