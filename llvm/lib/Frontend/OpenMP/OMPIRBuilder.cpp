@@ -1674,9 +1674,11 @@ static void targetParallelCallback(
       IfCondition ? Builder.CreateSExtOrTrunc(IfCondition, OMPIRBuilder->Int32)
                   : Builder.getInt32(1);
 
-  // If this is a Generic kernel, we can generate the wrapper.
+  // If this is not a Generic kernel, we can skip generating the wrapper.
+  std::optional<omp::OMPTgtExecModeFlags> ExecMode =
+      getTargetKernelExecMode(*OuterFn);
   Value *WrapperFn;
-  if (isGenericKernel(*OuterFn))
+  if (ExecMode && (*ExecMode & OMP_TGT_EXEC_MODE_GENERIC))
     WrapperFn = createTargetParallelWrapper(OMPIRBuilder, OutlinedFn);
   else
     WrapperFn = Constant::getNullValue(PtrTy);
