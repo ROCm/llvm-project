@@ -178,11 +178,13 @@ using GemmPipelineProblem = GemmPipelineProblemBase<ADataType_,
                                                     VectorSizeA_,
                                                     VectorSizeB_>;
 
+
 template <typename ADataType_,
           typename BDataType_,
           typename CDataType_,
           typename BlockGemmShape_,
           typename Traits_,
+          GemmPipelineScheduler Scheduler_ = GemmPipelineScheduler::Intrawave,
           bool HasHotLoop_                 = true,
           TailNumber TailNum_              = TailNumber::Full,
           typename ComputeDataType_        = ADataType_>
@@ -202,7 +204,7 @@ struct FlatmmPipelineProblem
     using CLayout = remove_cvref_t<typename Traits::CLayout>;
 
     static constexpr bool TransposeC = Traits::TransposeC;
-
+    static constexpr index_t NumWaveGroups      = Traits::NumWaveGroups;
     static constexpr bool UseStructuredSparsity = Traits::UseStructuredSparsity;
 
     static constexpr index_t kBlockSize = BlockGemmShape::NumWarps * get_warp_size();
@@ -318,7 +320,7 @@ struct FlatmmPipelineProblem
             return kPadM ? 1 : GetAlignmentC();
         }
     }();               
-};                              
+};                                
 
 template <typename ADataType_,
           typename BDataType_,

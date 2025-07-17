@@ -83,7 +83,10 @@ struct FlatmmConfig16
 template <typename DataType>
 struct FlatmmConfig16_950 : public FlatmmConfig16<DataType>
 {
+    static constexpr ck_tile::index_t N_Tile = 256;
+    static constexpr ck_tile::index_t K_Tile = 256 / sizeof(DataType);
     static constexpr ck_tile::index_t K_Warp_Tile = sizeof(DataType) == 2 ? 32 : 128;
+    static constexpr int kBlockPerCu                = 1;
 };
 
 template <typename ADataType>

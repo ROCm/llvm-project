@@ -25,9 +25,19 @@ struct BaseFlatmmPipelineAGmemBGmemCRegV1
         return num_loop % 2 == 0 ? TailNumber::Even : TailNumber::Odd;
     }
     template <typename RunFunction>
-    CK_TILE_HOST_DEVICE static auto TailHandler(const RunFunction& run_func, bool, TailNumber)
+    CK_TILE_HOST_DEVICE static auto TailHandler(const RunFunction& run_func, bool, TailNumber tail_num)
     {
+        if (TailNumber::Even == tail_num) 
+        {
+            return run_func(bool_constant<true>{}, integral_constant<TailNumber, TailNumber::Even>{});
+        }
+        else if (TailNumber::Odd == tail_num)
+        {
+            return run_func(bool_constant<true>{}, integral_constant<TailNumber, TailNumber::Odd>{});
+        }
+        // assert(false);
         return run_func(bool_constant<true>{}, integral_constant<TailNumber, TailNumber::Empty>{});
+        // return run_func(bool_constant<true>{}, integral_constant<TailNumber, TailNumber::Empty>{});
     }
 };
 
