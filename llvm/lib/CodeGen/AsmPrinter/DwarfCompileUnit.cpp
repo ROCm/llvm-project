@@ -963,6 +963,8 @@ void DwarfCompileUnit::applyConcreteDbgVariableAttributes(
 
   if (Expr) {
     if (auto NewElementsRef = Expr->getNewElementsRef()) {
+      if (DV.isDivergentAddrSpaceCompatible())
+        DwarfExpr.permitDivergentAddrSpace();
       DwarfExpr.addExpression(*NewElementsRef, DVal->getLocEntries(), &TRI);
       addBlock(VariableDie, dwarf::DW_AT_location, DwarfExpr.finalize());
       return;
@@ -1045,6 +1047,8 @@ void DwarfCompileUnit::applyConcreteDbgVariableAttributes(const Loc::MMI &MMI,
     addBlock(VariableDie, dwarf::DW_AT_location, DwarfExpr.finalize());
     return;
   }
+  if (DV.isDivergentAddrSpaceCompatible())
+    DwarfExpr.permitDivergentAddrSpace();
   for (const auto &Fragment : MMI.getFrameIndexExprs()) {
     Register FrameReg;
     const DIExpression *Expr = Fragment.Expr;
@@ -1840,7 +1844,19 @@ void DwarfCompileUnit::applyCommonDbgVariableAttributes(const DbgVariable &Var,
   }
 
   addSourceLine(VariableDie, DIVar);
-  addType(VariableDie, Var.getType());
+
+  const DIType *VarTy = Var.getType();
+  if (Var.isDivergentAddrSpaceCompatible()) {
+    if (std::optional<unsigned> EntityAS = Var.getCommonDivergentAddrSpace()) {
+      if (auto DwarfAS = getAsmPrinter()->TM.mapToDWARFAddrSpace(*EntityAS)) {
+        TempDIDerivedType Tmp =
+            cast<DIDerivedType>(VarTy)->cloneWithAddressSpace(*DwarfAS);
+        VarTy = MDNode::replaceWithUniqued(std::move(Tmp));
+      }
+    }
+  }
+
+  addType(VariableDie, VarTy);
   if (Var.isArtificial())
     addFlag(VariableDie, dwarf::DW_AT_artificial);
 }

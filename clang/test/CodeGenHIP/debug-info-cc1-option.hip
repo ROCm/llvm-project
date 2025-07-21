@@ -5,8 +5,7 @@
 // and aliases the new default. This is needed for transitioning flang-legacy
 // as it depends on the -cc1 interface.
 
-// CHECK: call void @llvm.dbg.def
-// CHECK: !DIExpr(
+// CHECK: #dbg_declare{{.*}}DIExpression{{.*}}DIOp
 __attribute__((device)) void kernel1(int Arg) {
   int FuncVar;
 }

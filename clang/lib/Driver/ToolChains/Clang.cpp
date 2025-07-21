@@ -4840,11 +4840,12 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
     assert(Aliased.isValid() && "gheterogeneous-dwarf must be an alias");
     assert(Aliased.getName() == "gheterogeneous-dwarf=" &&
            "gheterogeneous-dwarf must alias gheterogeneous-dwarf=");
-    assert(StringRef(GHeterogeneousDwarf.getAliasArgs()) == "diexpr" &&
-           GHeterogeneousDwarf.getAliasArgs()[strlen("diexpr") + 1] == '\0' &&
-           "gheterogeneous-dwarf must alias gheterogeneous-dwarf=diexpr");
+    assert(StringRef(GHeterogeneousDwarf.getAliasArgs()) == "diexpression" &&
+           GHeterogeneousDwarf.getAliasArgs()[strlen("diexpression") + 1] ==
+               '\0' &&
+           "gheterogeneous-dwarf must alias gheterogeneous-dwarf=diexpression");
 #endif
-    CmdArgs.push_back("-gheterogeneous-dwarf=diexpr");
+    CmdArgs.push_back("-gheterogeneous-dwarf=diexpression");
   }
 
   // This controls whether or not we perform JustMyCode instrumentation.
