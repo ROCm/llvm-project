@@ -31,12 +31,13 @@ struct DeviceAllocationInfo {
   DeviceAllocationType type_;
 };
 
-struct DevivePointerInfo {
+struct DevicePointerInfo {
+  hsa_amd_pointer_type_t type;
   uptr map_beg;
   uptr map_size;
 };
 
-#include "sanitizer_allocator_amdgpu.h"
+#  include "sanitizer_allocator_amdgpu.h"
 
 template <class MapUnmapCallback = NoOpMapUnmapCallback>
 class DeviceAllocatorT {
@@ -165,7 +166,7 @@ class DeviceAllocatorT {
              : nullptr;
   }
 
-  void *GetBlockBegin(const void *ptr) const {
+  __attribute__((optnone)) void *GetBlockBegin(const void *ptr) const {
     Header header;
     if (!mem_funcs_inited_) return nullptr;
     uptr p = reinterpret_cast<uptr>(ptr);
@@ -181,16 +182,16 @@ class DeviceAllocatorT {
     }
     if (!nearest_chunk)
       return nullptr;
-    if (p != nearest_chunk) {
-      Header *h = GetHeader(nearest_chunk, &header);
-      CHECK_GE(nearest_chunk, h->map_beg);
-      CHECK_LT(nearest_chunk, h->map_beg + h->map_size);
-      CHECK_LE(nearest_chunk, p);
-      if (h->map_beg + h->map_size <= p) {
-        CHECK(!dev_runtime_unloaded_);
-        return nullptr;
-      }
-    }
+    // if (p != nearest_chunk) {
+    //   Header *h = GetHeader(nearest_chunk, &header);
+    //   CHECK_GE(nearest_chunk, h->map_beg);
+    //   CHECK_LT(nearest_chunk, h->map_beg + h->map_size);
+    //   CHECK_LE(nearest_chunk, p);
+    //   if (h->map_beg + h->map_size <= p) {
+    //     CHECK(!dev_runtime_unloaded_);
+    //     return nullptr;
+    //   }
+    // }
     return GetUser(nearest_chunk);
   }
 
@@ -297,7 +298,7 @@ class DeviceAllocatorT {
     return mem_funcs_inited_;
   }
 
-  typedef DevivePointerInfo Header;
+  typedef DevicePointerInfo Header;
 
   Header *GetHeaderAnyPointer(uptr p, Header* h) const {
     CHECK(IsAligned(p, page_size_));

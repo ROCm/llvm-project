@@ -32,6 +32,8 @@ set(ASAN_SOURCES
   asan_win.cpp
   )
 
+add_compile_options( -O0 -g )
+
 if(WIN32)
   set(ASAN_DYNAMIC_RUNTIME_THUNK_SOURCES
     asan_globals_win.cpp

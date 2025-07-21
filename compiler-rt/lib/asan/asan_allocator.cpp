@@ -535,9 +535,10 @@ struct Allocator {
   }
 
   // -------------------- Allocation/Deallocation routines ---------------
-  void *Allocate(uptr size, uptr alignment, BufferedStackTrace *stack,
-                 AllocType alloc_type, bool can_fill,
-                 DeviceAllocationInfo *da_info = nullptr) {
+  __attribute__((optnone)) void *Allocate(
+      uptr size, uptr alignment, BufferedStackTrace *stack,
+      AllocType alloc_type, bool can_fill,
+      DeviceAllocationInfo *da_info = nullptr) {
     if (UNLIKELY(!AsanInited()))
       AsanInitFromRtl();
     if (UNLIKELY(IsRssLimitExceeded())) {
@@ -1304,6 +1305,9 @@ DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_attach,
   const hsa_amd_ipc_memory_t *handle, size_t len, uint32_t num_agents,
   const hsa_agent_t *mapping_agents, void **mapped_ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_detach, void *mapped_ptr)
+DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_reserve_align, void **ptr,
+             size_t size, uint64_t address, uint64_t alignment, uint32_t flags)
+DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void *ptr, size_t size);
 
 namespace __asan {
 
@@ -1393,6 +1397,51 @@ hsa_status_t asan_hsa_amd_ipc_memory_detach(void *mapped_ptr) {
   void *mapped_ptr_ =
       reinterpret_cast<void *>(reinterpret_cast<uptr>(mapped_ptr) - kPageSize_);
   return REAL(hsa_amd_ipc_memory_detach)(mapped_ptr_);
+}
+
+hsa_status_t asan_hsa_amd_vmem_address_reserve_align(
+    void **ptr, size_t size, uint64_t address, uint64_t alignment,
+    uint64_t flags, BufferedStackTrace *stack) {
+  if (alignment < kPageSize_) {
+    alignment = kPageSize_;
+  }
+  if (UNLIKELY(!IsPowerOfTwo(alignment))) {
+    errno = errno_EINVAL;
+    return HSA_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  AmdgpuAllocationInfo aa_info;
+  aa_info.alloc_func =
+      reinterpret_cast<void *>(asan_hsa_amd_vmem_address_reserve_align);
+  aa_info.memory_pool = {0};
+  aa_info.size = size;
+  aa_info.flags64 = flags;
+  aa_info.address = address;
+  aa_info.alignment = alignment;
+  aa_info.ptr = nullptr;
+  SetErrnoOnNull(*ptr = instance.Allocate(size, alignment, stack, FROM_MALLOC,
+                                          false, &aa_info));
+
+  return aa_info.status;
+}
+
+hsa_status_t asan_hsa_amd_vmem_address_free(void *ptr, size_t size,
+                                            BufferedStackTrace *stack) {
+  if (UNLIKELY(!IsAligned(reinterpret_cast<uptr>(ptr), kPageSize_))) {
+    errno = errno_EINVAL;
+    return HSA_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+  if (size == 0) {
+    size = kPageSize_;
+  }
+
+  void *p = get_allocator().GetBlockBegin(ptr);
+  if (ptr) {
+    instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC);
+    return HSA_STATUS_SUCCESS;
+  } else {
+    return REAL(hsa_amd_vmem_address_free)(ptr, size);
+  }
 }
 }  // namespace __asan
 #endif

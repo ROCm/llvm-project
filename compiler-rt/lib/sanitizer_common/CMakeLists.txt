@@ -48,6 +48,8 @@ set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_win_interception.cpp
   )
 
+add_compile_options( -O0 -g )
+
 set(SANITIZER_SOURCES
   ${SANITIZER_SOURCES_NOTERMINATION}
   sanitizer_termination.cpp
