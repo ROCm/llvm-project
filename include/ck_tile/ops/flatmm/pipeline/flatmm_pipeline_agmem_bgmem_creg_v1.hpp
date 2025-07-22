@@ -118,6 +118,9 @@ struct FlatmmPipelineAGmemBGmemCRegV1 : public BaseFlatmmPipelineAGmemBGmemCRegV
     static constexpr bool HasHotLoop = Problem::HasHotLoop;
     static constexpr auto TailNum    = Problem::TailNum;
 
+    static constexpr auto warp_m = WarpTile::at(idxM);
+    static constexpr auto warp_n = WarpTile::at(idxN);
+    static constexpr auto warp_k = WarpTile::at(idxK);
     /*
     defined(USING_MFMA_16x16x32) && defined(ENABLE_FP8) // mi300 fp8 16c 0.5*K1
     defined(USING_MFMA_32x32x16) && defined(ENABLE_FP8) // mi300 fp8 32c 0.5*K1
@@ -132,24 +135,74 @@ struct FlatmmPipelineAGmemBGmemCRegV1 : public BaseFlatmmPipelineAGmemBGmemCRegV
     defined(USING_MFMA_16x16x128) && defined(ENABLE_FP4) // mi350 fp4 16c 1*K1
     defined(USING_MFMA_32x32x64) && defined(ENABLE_FP4) // mi350 fp4 32c 1*K1
     */
+    struct MfmaConfig
+    {
+        int mfma_per_wg;
+        int dsread_per_wg;
+    };
+    static constexpr MfmaConfig GetMfmaConfig()
+    {
 
-    #if (defined(USING_MFMA_16x16x32_F8) ||  \
-        defined(USING_MFMA_32x32x16_F8) ||  \
-        defined(USING_MFMA_16x16x16_F16) || \
-        defined(USING_MFMA_32x32x8_F16)) // K1 per Mfma = 0.5
-        static constexpr auto mfma_per_wg = 2;
-        static constexpr auto dsread_per_wg = 1;
-    #elif (defined(USING_MFMA_16x16x32_F16) || \
-        defined(USING_MFMA_32x32x16_F16) ||   \
-        defined(USING_MFMA_16x16x128_F4) ||   \
-        defined(USING_MFMA_32x32x64_F4)) // K1 per Mfma = 1
-        static constexpr auto mfma_per_wg = 1;
-        static constexpr auto dsread_per_wg = 1;
-    #elif (defined(USING_MFMA_16x16x128_F8) || \
-        defined(USING_MFMA_32x32x64_F8)) // K1 per Mfma = 2
-        static constexpr auto mfma_per_wg = 1;
-        static constexpr auto dsread_per_wg = 2;
-    #endif
+        // K1 per Mfma = 0.5 cases: mfma_per_wg = 2, dsread_per_wg = 1
+        if constexpr((warp_m == 16 && warp_n == 16 && warp_k == 32 &&
+                        std::is_same_v<ADataType, fp8_t>) ||
+                        (warp_m == 32 && warp_n == 32 && warp_k == 16 &&
+                        std::is_same_v<ADataType, fp8_t>) ||
+                        (warp_m == 16 && warp_n == 16 && warp_k == 16 &&
+                        std::is_same_v<ADataType, fp16_t>) ||
+                        (warp_m == 32 && warp_n == 32 && warp_k == 8 &&
+                        std::is_same_v<ADataType, fp16_t>))
+        {
+            return {2, 1};
+        }
+        // K1 per Mfma = 2 cases: mfma_per_wg = 1, dsread_per_wg = 2
+        else if constexpr((warp_m == 16 && warp_n == 16 && warp_k == 128 &&
+                            std::is_same_v<ADataType, fp8_t>) ||
+                            (warp_m == 32 && warp_n == 32 && warp_k == 64 &&
+                            std::is_same_v<ADataType, fp8_t>))
+        {
+            return {1, 2};
+        }
+        // K1 per Mfma = 1 cases: mfma_per_wg = 1, dsread_per_wg = 1
+        else if constexpr((warp_m == 16 && warp_n == 16 && warp_k == 32 &&
+                            std::is_same_v<ADataType, fp16_t>) ||
+                            (warp_m == 32 && warp_n == 32 && warp_k == 16 &&
+                            std::is_same_v<ADataType, fp16_t>) ||
+                            (warp_m == 16 && warp_n == 16 && warp_k == 128 /*&&
+                            std::is_same_v<ADataType, fp4_t> */) ||
+                            (warp_m == 32 && warp_n == 32 && warp_k == 64  /*&&
+                            std::is_same_v<ADataType, fp4_t> */))
+        {
+            return {1, 1};
+        }
+        // Default configuration
+        else
+        {
+            return {1, 1};
+        }
+    }
+
+    static constexpr auto mfma_config   = GetMfmaConfig();
+    static constexpr auto mfma_per_wg   = mfma_config.mfma_per_wg;
+    static constexpr auto dsread_per_wg = mfma_config.dsread_per_wg;
+
+    // #if (defined(USING_MFMA_16x16x32_F8) ||  \
+    //     defined(USING_MFMA_32x32x16_F8) ||  \
+    //     defined(USING_MFMA_16x16x16_F16) || \
+    //     defined(USING_MFMA_32x32x8_F16)) // K1 per Mfma = 0.5
+    //     static constexpr auto mfma_per_wg = 2;
+    //     static constexpr auto dsread_per_wg = 1;
+    // #elif (defined(USING_MFMA_16x16x32_F16) || \
+    //     defined(USING_MFMA_32x32x16_F16) ||   \
+    //     defined(USING_MFMA_16x16x128_F4) ||   \
+    //     defined(USING_MFMA_32x32x64_F4)) // K1 per Mfma = 1
+    //     static constexpr auto mfma_per_wg = 1;
+    //     static constexpr auto dsread_per_wg = 1;
+    // #elif (defined(USING_MFMA_16x16x128_F8) || \
+    //     defined(USING_MFMA_32x32x64_F8)) // K1 per Mfma = 2
+    //     static constexpr auto mfma_per_wg = 1;
+    //     static constexpr auto dsread_per_wg = 2;
+    // #endif
 
     [[nodiscard]] CK_TILE_HOST static const std::string GetName()
     {
@@ -242,251 +295,259 @@ struct FlatmmPipelineAGmemBGmemCRegV1 : public BaseFlatmmPipelineAGmemBGmemCRegV
         //  0   M7N1:   62      -       -           -       -    
         //  0   M7N2:   63      -       -           8       -    
         //  0   M7N3:   64      4       -           -       -
+        if constexpr(warp_m == 16 && warp_n == 16)
+        {
+#if defined(__gfx950__) // MI350 FP8 16X16 128*256*256
+            if constexpr(kMPerBlock == 128 && kNPerBlock == 256 && kKPerBlock == 256)
+            {
+                static_for<0, 2, 1>{}([&](auto j) {
+                    ignore = j;
+                    static_for<0, 3, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
 
-        #if 0 // MI350 FP8 16X16 128*256*256
-            static_for<0, 2, 1>{}([&](auto j) {
-                ignore = j;
-                static_for<0, 3, 1>{}([&](auto i) {
+                    static_for<0, 3, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                });
+
+                __builtin_amdgcn_sched_barrier(0);
+            }
+            else
+            {
+                static_for<0, 2, 1>{}([&](auto j) {
+                    ignore = j;
+                    static_for<0, 3, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+
+                    static_for<0, 3, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                    });
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                });
+
+                __builtin_amdgcn_sched_barrier(0);
+            }
+#else
+            if constexpr(kMPerBlock == 128 && kNPerBlock == 128 && kKPerBlock == 128)
+            {
+                static_for<0, 2, 1>{}([&](auto j) {
+                    ignore = j;
+                    static_for<0, 2, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 2, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                });
+
+                __builtin_amdgcn_sched_barrier(0);
+            }
+            else if(kMPerBlock == 128 && kNPerBlock == 256 && kKPerBlock == 128)
+            {
+                static_for<0, 2, 1>{}([&](auto j) {
+                    ignore = j;
+                    static_for<0, 4, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+    
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                    static_for<0, 1, 1>{}([&](auto i) {
+                        ignore = i;
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                        __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                    });
+                });
+                __builtin_amdgcn_sched_barrier(0);
+            }
+            else if(kMPerBlock == 16 && kNPerBlock == 64 && kKPerBlock == 256)
+            {
+                static_for<0, 1, 1>{}([&](auto i) {
                     ignore = i;
                     __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                     __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
                     __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                     __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                     __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
                 });
+                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
+                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
+                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
+                
                 __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                 __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
                 __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                 __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
 
-                static_for<0, 3, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
                 __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                 __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
                 __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
                 __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-            });
 
-            __builtin_amdgcn_sched_barrier(0);
-        #endif
-        #if 0 // MI350 FP8 16X16 
-            static_for<0, 2, 1>{}([&](auto j) {
-                ignore = j;
-                static_for<0, 3, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
                 __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-
-                static_for<0, 3, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                });
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-            });
-
-            __builtin_amdgcn_sched_barrier(0);
-        #endif
-        #if 0 // MI300 FP8 16X16 128*128*128
-            static_for<0, 2, 1>{}([&](auto j) {
-                ignore = j;
-                static_for<0, 2, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 2, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-            });
-
-            __builtin_amdgcn_sched_barrier(0);
-        #endif
-        #if 0 // MI300 FP8 16X16 128*256*128
-            static_for<0, 2, 1>{}([&](auto j) {
-                ignore = j;
-                static_for<0, 4, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-                static_for<0, 1, 1>{}([&](auto i) {
-                    ignore = i;
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                    __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-                });
-            });
-
-            __builtin_amdgcn_sched_barrier(0);
-        #endif
-        #if 0 //MI300 FP8 16X16 16*64*256
-            static_for<0, 1, 1>{}([&](auto i) {
-                ignore = i;
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-                __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-                __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-            });
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-            
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x200, 1, 0); // DS write
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-            __builtin_amdgcn_sched_group_barrier(0x008, 1, 0); // MFMA
-            __builtin_amdgcn_sched_group_barrier(0x100, 1, 0); // DS read
-
-            __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
-            __builtin_amdgcn_sched_barrier(0);
-        #endif
+                __builtin_amdgcn_sched_barrier(0);
+            }
+        }
+#endif
     }
-
 
     CK_TILE_HOST_DEVICE static constexpr auto TailHotLoopScheduler()
     {
