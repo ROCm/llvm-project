@@ -97,8 +97,6 @@ template <typename FlatmmConfig,
           typename BLayout,
           typename DsLayout,
           typename CLayout,
-          typename ScaleM,
-          typename ScaleN,
           typename CDEElementWise = ck_tile::element_wise::PassThrough>
 float invoke_flatmm(ck_tile::DeviceMem& a_dev_buf,
                     ck_tile::DeviceMem& b_shuffle_dev_buf,
