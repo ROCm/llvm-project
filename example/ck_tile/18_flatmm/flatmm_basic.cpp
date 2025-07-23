@@ -23,9 +23,12 @@ template <typename FlatmmConfig,
           typename BLayout,
           typename DsLayout,
           typename ELayout,
+          typename ScaleM,
+          typename ScaleN,
           bool persistent,
           typename CDEElementWise>
-float flatmm_calc(const ck_tile::FlatmmHostArgs<>& args, const ck_tile::stream_config& s)
+float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
+                  const ck_tile::stream_config& s)
 {
     using CodegenFlatmmShape = ck_tile::TileGemmShape<
         ck_tile::sequence<FlatmmConfig::M_Tile, FlatmmConfig::N_Tile, FlatmmConfig::K_Tile>,
@@ -81,13 +84,13 @@ float flatmm_calc(const ck_tile::FlatmmHostArgs<>& args, const ck_tile::stream_c
         constexpr auto memory_operation = memory_operation_.value;
 
         using CodegenPipelineProblem = ck_tile::FlatmmPipelineProblem<ADataType,
-                                                                             BDataType,
-                                                                             AccDataType,
-                                                                             CodegenFlatmmShape,
-                                                                             CodegenGemmTraits,
-                                                                             scheduler,
-                                                                             has_hot_loop_v,
-                                                                             tail_number_v>;
+                                                                      BDataType,
+                                                                      AccDataType,
+                                                                      CodegenFlatmmShape,
+                                                                      CodegenGemmTraits,
+                                                                      scheduler,
+                                                                      has_hot_loop_v,
+                                                                      tail_number_v>;
 
         using CodegenFlatmmPipeline =
             ck_tile::FlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>;
@@ -217,6 +220,7 @@ int run_flatmm_example(int argc, char* argv[])
     std::string data_type = arg_parser.get_str("prec");
     std::string a_layout  = arg_parser.get_str("a_layout");
     std::string b_layout  = arg_parser.get_str("b_layout");
+    int scale_opt         = arg_parser.get_int("scale");
     if(a_layout == "R" && b_layout == "C")
     {
         if(data_type == "fp16")
@@ -231,13 +235,29 @@ int run_flatmm_example(int argc, char* argv[])
         }
         else if(data_type == "fp8")
         {
-            run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>>(
-                argc, argv, Row{}, Col{}, Row{});
+            if(scale_opt == 0)
+            {
+                run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>>(
+                    argc, argv, Row{}, Col{}, Row{});
+            }
+            else
+            {
+                run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>, 1, 1>(
+                    argc, argv, Row{}, Col{}, Row{});
+            }
         }
         else if(data_type == "bf8")
         {
-            run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
-                argc, argv, Row{}, Col{}, Row{});
+            if(scale_opt == 0)
+            {
+                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
+                    argc, argv, Row{}, Col{}, Row{});
+            }
+            else
+            {
+                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>, 1, 1>(
+                    argc, argv, Row{}, Col{}, Row{});
+            }
         }
         else
         {

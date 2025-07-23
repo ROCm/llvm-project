@@ -83,10 +83,10 @@ struct FlatmmConfig16
 template <typename DataType>
 struct FlatmmConfig16_950 : public FlatmmConfig16<DataType>
 {
-    static constexpr ck_tile::index_t N_Tile = 256;
-    static constexpr ck_tile::index_t K_Tile = 256 / sizeof(DataType);
+    static constexpr ck_tile::index_t N_Tile      = 256;
+    static constexpr ck_tile::index_t K_Tile      = 256 / sizeof(DataType);
     static constexpr ck_tile::index_t K_Warp_Tile = sizeof(DataType) == 2 ? 32 : 128;
-    static constexpr int kBlockPerCu                = 1;
+    static constexpr int kBlockPerCu              = 1;
 };
 
 template <typename ADataType>
@@ -167,120 +167,6 @@ struct is_8bit_type
 {
 };
 
-template <typename DataType>
-struct GemmConfig
-{
-#if defined(USING_MFMA_16x16x128_F8) //MI350 FP8 16X16
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 256;
-    static constexpr ck_tile::index_t K_Tile = 256;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 16;
-    static constexpr ck_tile::index_t N_Warp_Tile = 16;
-    static constexpr ck_tile::index_t K_Warp_Tile = 128;
-#elif defined(USING_MFMA_32x32x64_F8) //MI350 FP8 32X32 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 32;
-    static constexpr ck_tile::index_t N_Warp_Tile = 32;
-    static constexpr ck_tile::index_t K_Warp_Tile = 64;
-#elif defined(USING_MFMA_16x16x32_F16) //MI350 FP16 16X16 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 16;
-    static constexpr ck_tile::index_t N_Warp_Tile = 16;
-    static constexpr ck_tile::index_t K_Warp_Tile = 32;
-#elif defined(USING_MFMA_32x32x16_F16) //MI350 FP16 32X32 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 32;
-    static constexpr ck_tile::index_t N_Warp_Tile = 32;
-    static constexpr ck_tile::index_t K_Warp_Tile = 16;
-#elif defined(USING_MFMA_16x16x32_F8) //MI300 FP8 16X16
-    static constexpr ck_tile::index_t M_Tile = 16;
-    static constexpr ck_tile::index_t N_Tile = 64;
-    static constexpr ck_tile::index_t K_Tile = 256;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 16;
-    static constexpr ck_tile::index_t N_Warp_Tile = 16;
-    static constexpr ck_tile::index_t K_Warp_Tile = 64;
-#elif defined(USING_MFMA_32x32x16_F8) //MI300 FP8 32X32 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 256;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 8;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 32;
-    static constexpr ck_tile::index_t N_Warp_Tile = 32;
-    static constexpr ck_tile::index_t K_Warp_Tile = 32;
-#elif defined(USING_MFMA_16x16x16_F16) //MI300 FP16 16X16 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 16;
-    static constexpr ck_tile::index_t N_Warp_Tile = 16;
-    static constexpr ck_tile::index_t K_Warp_Tile = 32;
-#elif defined(USING_MFMA_32x32x8_F16) //MI300 FP16 32X32 (need tune)
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 128;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 32;
-    static constexpr ck_tile::index_t N_Warp_Tile = 32;
-    static constexpr ck_tile::index_t K_Warp_Tile = 16;
-#else    
-    static constexpr ck_tile::index_t M_Tile = 128;
-    static constexpr ck_tile::index_t N_Tile = 256;
-    static constexpr ck_tile::index_t K_Tile = 256;
-
-    static constexpr ck_tile::index_t M_Warp = 1;
-    static constexpr ck_tile::index_t N_Warp = 4;
-    static constexpr ck_tile::index_t K_Warp = 1;
-
-    static constexpr ck_tile::index_t M_Warp_Tile = 16;
-    static constexpr ck_tile::index_t N_Warp_Tile = 16;
-    static constexpr ck_tile::index_t K_Warp_Tile = 128;
-#endif
-};
-
 auto create_args(int argc, char* argv[])
 {
     ck_tile::ArgParser arg_parser;
@@ -301,6 +187,7 @@ auto create_args(int argc, char* argv[])
         .insert("timer", "gpu", "gpu:gpu timer, cpu:cpu timer")
         .insert("split_k", "1", "splitK value")
         .insert("init", "0", "0:random, 1:linear, 2:constant(1)")
+        .insert("scale", "0", "0:without scale, 1:per-token/channel scale, only for fp8/bf8")
         .insert("warp_tile",
                 "0",
                 "0: 16x16, 1: 32x32, 2: 16x16x128 (950 only), 3: 32x32x64 (950 only)");

@@ -102,17 +102,17 @@ struct BaseFlatmmHostArgs
 {
     CK_TILE_HOST BaseFlatmmHostArgs() = default;
     CK_TILE_HOST BaseFlatmmHostArgs(const void* a_ptr_,
-                                const void* b_ptr_,
-                                const std::array<const void*, NumDTensor>& ds_ptr_,
-                                void* e_ptr_,
-                                index_t k_batch_,
-                                index_t M_,
-                                index_t N_,
-                                index_t K_,
-                                index_t stride_A_,
-                                index_t stride_B_,
-                                const std::array<index_t, NumDTensor>& stride_Ds_,
-                                index_t stride_E_)
+                                    const void* b_ptr_,
+                                    const std::array<const void*, NumDTensor>& ds_ptr_,
+                                    void* e_ptr_,
+                                    index_t k_batch_,
+                                    index_t M_,
+                                    index_t N_,
+                                    index_t K_,
+                                    index_t stride_A_,
+                                    index_t stride_B_,
+                                    const std::array<index_t, NumDTensor>& stride_Ds_,
+                                    index_t stride_E_)
         : a_ptr(a_ptr_),
           b_ptr(b_ptr_),
           ds_ptr(ds_ptr_),
@@ -151,35 +151,49 @@ struct BaseFlatmmHostArgs
     index_t k_batch;
 };
 
-template <class ScaleM = FlatmmScalePointer<-1>, class ScaleN = FlatmmScalePointer<-1>, index_t NumDTensor = 0>
+template <class ScaleM       = FlatmmScalePointer<-1>,
+          class ScaleN       = FlatmmScalePointer<-1>,
+          index_t NumDTensor = 0>
 struct ScaleFlatmmHostArgs : public BaseFlatmmHostArgs<>
 {
     CK_TILE_HOST ScaleFlatmmHostArgs() = default;
     CK_TILE_HOST ScaleFlatmmHostArgs(const void* a_ptr_,
-                                        const void* b_shuffle_ptr_,
-                                        const std::array<const void*, NumDTensor>& ds_ptr_,
-                                        void* c_ptr_,
-                                        index_t k_batch_,
-                                        index_t M_,
-                                        index_t N_,
-                                        index_t K_,
-                                        index_t stride_A_,
-                                        index_t stride_B_,
-                                        const std::array<index_t, NumDTensor>& stride_Ds_,
-                                        index_t stride_C_,
-                                        ScaleM scale_m_ = nullptr,
-                                        ScaleN scale_n_ = nullptr)
-        : BaseFlatmmHostArgs(a_ptr_, b_shuffle_ptr_, ds_ptr_, c_ptr_, k_batch_, M_, N_, K_, stride_A_, stride_B_, stride_Ds_, stride_C_),
-            scale_m(scale_m_),
-            scale_n(scale_n_)
+                                     const void* b_shuffle_ptr_,
+                                     const std::array<const void*, NumDTensor>& ds_ptr_,
+                                     void* c_ptr_,
+                                     index_t k_batch_,
+                                     index_t M_,
+                                     index_t N_,
+                                     index_t K_,
+                                     index_t stride_A_,
+                                     index_t stride_B_,
+                                     const std::array<index_t, NumDTensor>& stride_Ds_,
+                                     index_t stride_C_,
+                                     ScaleM scale_m_ = nullptr,
+                                     ScaleN scale_n_ = nullptr)
+        : BaseFlatmmHostArgs(a_ptr_,
+                             b_shuffle_ptr_,
+                             ds_ptr_,
+                             c_ptr_,
+                             k_batch_,
+                             M_,
+                             N_,
+                             K_,
+                             stride_A_,
+                             stride_B_,
+                             stride_Ds_,
+                             stride_C_),
+          scale_m(scale_m_),
+          scale_n(scale_n_)
     {
     }
     ScaleM scale_m = nullptr;
     ScaleN scale_n = nullptr;
 };
 
-template <int NumberTensor=0>
-using FlatmmHostArgs = ScaleFlatmmHostArgs<FlatmmScalePointer<-1>, FlatmmScalePointer<-1>, NumberTensor>;
+template <int NumberTensor = 0>
+using FlatmmHostArgs =
+    ScaleFlatmmHostArgs<FlatmmScalePointer<-1>, FlatmmScalePointer<-1>, NumberTensor>;
 
 template <class ScaleM, class ScaleN, index_t NumDTensor = 0>
 struct FlatmmKernelArgs
@@ -278,7 +292,8 @@ struct FlatmmKernel
     struct SplitKBatchOffset
     {
         template <class KernelArgs>
-        __device__ SplitKBatchOffset(const KernelArgs& kargs, const std::size_t k_id = blockIdx.z)        {
+        __device__ SplitKBatchOffset(const KernelArgs& kargs, const std::size_t k_id = blockIdx.z)
+        {
             constexpr auto K1   = TilePartitioner::BlockGemmShape::WarpTile::at(number<2>{});
             const index_t K_t   = kargs.k_batch * K1;
             const index_t KRead = (kargs.K + K_t - 1) / K_t * K1;
@@ -681,16 +696,17 @@ struct FlatmmKernel
     }
 
     template <class ScaleM, class ScaleN, bool UseDefaultScheduler = true>
-    CK_TILE_DEVICE static void RunFlatmm(const ADataType* a_ptr,
-                                         const BDataType* b_flat_ptr,
-                                         const std::array<const void*, NumDTensor>& ds_ptr,
-                                         EDataType* e_ptr,
-                                         void* smem_ptr_ping,
-                                         void* smem_ptr_pong,
-                                         const FlatmmKernelArgs<ScaleM, ScaleN, DsDataType::size()>& kargs,
-                                         const SplitKBatchOffset& splitk_batch_offset,
-                                         const index_t block_idx_m,
-                                         const index_t block_idx_n)
+    CK_TILE_DEVICE static void
+    RunFlatmm(const ADataType* a_ptr,
+              const BDataType* b_flat_ptr,
+              const std::array<const void*, NumDTensor>& ds_ptr,
+              EDataType* e_ptr,
+              void* smem_ptr_ping,
+              void* smem_ptr_pong,
+              const FlatmmKernelArgs<ScaleM, ScaleN, DsDataType::size()>& kargs,
+              const SplitKBatchOffset& splitk_batch_offset,
+              const index_t block_idx_m,
+              const index_t block_idx_n)
     {
         // Create Gemm tensor views, pad views and tile windows
         const auto& gemm_tensor_views_tuple =
@@ -712,19 +728,21 @@ struct FlatmmKernel
         if constexpr(ScaleM::granularity != -1 || ScaleN::granularity != -1)
         {
             auto& c_block_window = gemm_tile_windows.at(I3);
-            EpiloguePipeline{}.template operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
-                    c_block_window,
-                    c_block_tile,
-                    d_block_window,
-                    smem_ptr_ping,
-                    kargs.scale_m_ptr + block_idx_m,
-                    kargs.scale_n_ptr + block_idx_n);
+            EpiloguePipeline{}.template
+            operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
+                c_block_window,
+                c_block_tile,
+                d_block_window,
+                smem_ptr_ping,
+                kargs.scale_m_ptr + block_idx_m,
+                kargs.scale_n_ptr + block_idx_n);
         }
         else if(UseDefaultScheduler || (get_warp_id() == 0))
         {
             // Run Epilogue Pipeline
             auto& c_block_window = gemm_tile_windows.at(I3);
-            EpiloguePipeline{}.template operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
+            EpiloguePipeline{}.template
+            operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
                 c_block_window, c_block_tile, d_block_window, smem_ptr_ping);
         }
     }
@@ -755,15 +773,15 @@ struct FlatmmKernel
         {
             constexpr auto scheduler_type = (FlatmmPipeline::NumWaveGroups == 1);
             RunFlatmm<ScaleM, ScaleN, scheduler_type>(a_ptr,
-                                      b_flat_ptr,
-                                      kargs.ds_ptr,
-                                      e_ptr,
-                                      smem_ptr_ping,
-                                      smem_ptr_pong,
-                                      kargs,
-                                      splitk_batch_offset,
-                                      i_m,
-                                      i_n);
+                                                      b_flat_ptr,
+                                                      kargs.ds_ptr,
+                                                      e_ptr,
+                                                      smem_ptr_ping,
+                                                      smem_ptr_pong,
+                                                      kargs,
+                                                      splitk_batch_offset,
+                                                      i_m,
+                                                      i_n);
         }
     }
 };
