@@ -545,9 +545,10 @@ struct FlatmmPipelineAGmemBGmemCRegV1 : public BaseFlatmmPipelineAGmemBGmemCRegV
                 __builtin_amdgcn_sched_group_barrier(0x020, 1, 0); // VMEM read
                 __builtin_amdgcn_sched_barrier(0);
             }
-        }
 #endif
+        }
     }
+
 
     CK_TILE_HOST_DEVICE static constexpr auto TailHotLoopScheduler()
     {
