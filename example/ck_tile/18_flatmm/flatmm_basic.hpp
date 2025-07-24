@@ -281,40 +281,16 @@ struct is_8bit_type
 // #endif
 // };
 
-auto create_args(int argc, char* argv[])
-{
-    ck_tile::ArgParser arg_parser;
-    arg_parser.insert("m", "256", "m dimension")
-        .insert("n", "256", "n dimension")
-        .insert("k", "128", "k dimension")
-        .insert("a_layout", "R", "A tensor data layout - Row by default")
-        .insert("b_layout", "C", "B tensor data layout - Row by default")
-        .insert("c_layout", "R", "C tensor data layout - Row by default")
-        .insert("stride_a", "0", "Tensor A stride")
-        .insert("stride_b", "0", "Tensor B stride")
-        .insert("stride_c", "0", "Tensor C stride")
-        .insert("v", "1", "0. No validation, 1. Validation on CPU, 2. Validation on GPU")
-        .insert("prec", "fp8", "data type. fp16/bf16/fp8/bf8")
-        .insert("wave_tile", "16", "only support 16(16x16) or 32(32x32)")
-        .insert("warmup", "50", "number of iterations before benchmark the kernel")
-        .insert("repeat", "100", "number of iterations to benchmark the kernel")
-        .insert("timer", "gpu", "gpu:gpu timer, cpu:cpu timer")
-        .insert("split_k", "1", "splitK value")
-        .insert("init", "0", "0:random, 1:linear, 2:constant(1)")
-        .insert("warp_tile",
-                "0",
-                "0: 16x16, 1: 32x32, 2: 16x16x128 (950 only), 3: 32x32x64 (950 only)");
-    bool result = arg_parser.parse(argc, argv);
-    return std::make_tuple(result, arg_parser);
-}
-
-// host API
-template <typename ADataType,
+template <typename FlatmmConfig,
+          typename ADataType,
           typename BDataType,
+          typename DsDatatype,
           typename AccDataType,
           typename CDataType,
-          typename FlatmmConfig,
           typename ALayout,
           typename BLayout,
-          typename CLayout>
+          typename DsLayout,
+          typename ELayout,
+          bool persistent,
+          typename CDEElementWise>
 float flatmm_calc(const ck_tile::FlatmmHostArgs<>& args, const ck_tile::stream_config& s);
