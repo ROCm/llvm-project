@@ -93,7 +93,7 @@ int run_flatmm_example_with_layouts(int argc,
     per_channel_scale_dev_buf.ToDevice(per_channel_scale.data());
 
     // do pre-shuffle
-    ck_tile::HostTensor<BDataType> b_shuffle_host = shuffle_b<FlatmmConfig>(b_origin_host);
+    ck_tile::HostTensor<BDataType> b_shuffle_host = shuffle_b_v1<FlatmmConfig>(b_origin_host);
     ck_tile::DeviceMem b_shuffle_dev_buf(b_shuffle_host.get_element_space_size_in_bytes());
     b_shuffle_dev_buf.ToDevice(b_shuffle_host.data());
 
@@ -133,7 +133,7 @@ int run_flatmm_example_with_layouts(int argc,
 
     if(arg_parser.get_int("v") == 1)
     {
-        if (ScaleGranularityM == -1 || ScaleGranularityN == -1)
+        if(ScaleGranularityM == -1 || ScaleGranularityN == -1)
             throw std::runtime_error("ScaleAB is not supported for CPU verification!\n");
         ck_tile::HostTensor<CDataType> c_ref_host(
             ck_tile::host_tensor_descriptor(M, N, stride_C, is_row_major(CLayout{})));
