@@ -271,10 +271,10 @@ float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
         }
         else
         {
-            ave_time =
-                ck_tile::launch_kernel(s,
-                                       ck_tile::make_kernel<blocks.x, FlatmmConfig::kBlockPerCu>(
-                                           Kernel{}, grids, blocks, 0, kargs));
+            // ave_time =
+            //     ck_tile::launch_kernel(s,
+            //                            ck_tile::make_kernel<blocks.x, FlatmmConfig::kBlockPerCu>(
+            //                                Kernel{}, grids, blocks, 0, kargs));
         }
         return ave_time;
     };
@@ -289,10 +289,10 @@ float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
         }
         else
         {
-            Run(has_hot_loop_,
-                tail_number_,
-                ck_tile::integral_constant<ck_tile::memory_operation_enum,
-                                           ck_tile::memory_operation_enum::atomic_add>{});
+            // Run(has_hot_loop_,
+            //     tail_number_,
+            //     ck_tile::integral_constant<ck_tile::memory_operation_enum,
+            //                                ck_tile::memory_operation_enum::atomic_add>{});
         }
     };
     BaseGemmPipeline::TailHandler(RunSplitk, has_hot_loop, tail_num);
@@ -420,14 +420,14 @@ int run_flatmm_example(int argc, char* argv[])
     {
         if(data_type == "fp16")
         {
-            run_flatmm_example_with_layouts<ck_tile::half_t, FlatmmConfig<ck_tile::half_t>>(
-                argc, argv, Row{}, Col{}, Row{});
+            // run_flatmm_example_with_layouts<ck_tile::half_t, FlatmmConfig<ck_tile::half_t>>(
+            //     argc, argv, Row{}, Col{}, Row{});
         }
-        else if(data_type == "bf16")
-        {
-            run_flatmm_example_with_layouts<ck_tile::bf16_t, FlatmmConfig<ck_tile::bf16_t>>(
-                argc, argv, Row{}, Col{}, Row{});
-        }
+        // else if(data_type == "bf16")
+        // {
+        //     run_flatmm_example_with_layouts<ck_tile::bf16_t, FlatmmConfig<ck_tile::bf16_t>>(
+        //         argc, argv, Row{}, Col{}, Row{});
+        // }
         else if(data_type == "fp8")
         {
             if(scale_opt == 0)
@@ -441,19 +441,20 @@ int run_flatmm_example(int argc, char* argv[])
                     argc, argv, Row{}, Col{}, Row{});
             }
         }
-        else if(data_type == "bf8")
-        {
-            if(scale_opt == 0)
-            {
-                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
-                    argc, argv, Row{}, Col{}, Row{});
-            }
-            else
-            {
-                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>, 1, 1>(
-                    argc, argv, Row{}, Col{}, Row{});
-            }
-        }
+        // else if(data_type == "bf8")
+        // {
+        //     if(scale_opt == 0)
+        //     {
+        //         run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
+        //             argc, argv, Row{}, Col{}, Row{});
+        //     }
+        //     else
+        //     {
+        //         run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>, 1,
+        //         1>(
+        //             argc, argv, Row{}, Col{}, Row{});
+        //     }
+        // }
         else
         {
             throw std::runtime_error("Unsupported data_type!");
@@ -479,18 +480,18 @@ int main(int argc, char* argv[])
         {
             return !run_flatmm_example<FlatmmConfig16>(argc, argv);
         }
-        else if(warp_tile == 1)
-        {
-            return !run_flatmm_example<FlatmmConfig32>(argc, argv);
-        }
-        else if(warp_tile == 2)
-        {
-            return !run_flatmm_example<FlatmmConfig16_950>(argc, argv);
-        }
-        else
-        {
-            return !run_flatmm_example<FlatmmConfig32_950>(argc, argv);
-        }
+        // else if(warp_tile == 1)
+        // {
+        //     return !run_flatmm_example<FlatmmConfig32>(argc, argv);
+        // }
+        // else if(warp_tile == 2)
+        // {
+        //     return !run_flatmm_example<FlatmmConfig16_950>(argc, argv);
+        // }
+        // else
+        // {
+        //     return !run_flatmm_example<FlatmmConfig32_950>(argc, argv);
+        // }
     }
     catch(const std::runtime_error& e)
     {
