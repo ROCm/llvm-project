@@ -214,7 +214,7 @@ float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
 
         auto kargs = Kernel::MakeKernelArgs(args);
 
-        const dim3 grids      = Kernel::GridSize(args.M, args.N, args.k_batch);
+        const dim3 grids      = Kernel::GridSize(kargs);
         constexpr dim3 blocks = Kernel::BlockSize();
 
         if(!Kernel::IsSupportedArgument(kargs))
@@ -271,10 +271,10 @@ float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
         }
         else
         {
-            // ave_time =
-            //     ck_tile::launch_kernel(s,
-            //                            ck_tile::make_kernel<blocks.x, FlatmmConfig::kBlockPerCu>(
-            //                                Kernel{}, grids, blocks, 0, kargs));
+            ave_time =
+                ck_tile::launch_kernel(s,
+                                       ck_tile::make_kernel<blocks.x, FlatmmConfig::kBlockPerCu>(
+                                           Kernel{}, grids, blocks, 0, kargs));
         }
         return ave_time;
     };
@@ -289,10 +289,10 @@ float flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>& args,
         }
         else
         {
-            // Run(has_hot_loop_,
-            //     tail_number_,
-            //     ck_tile::integral_constant<ck_tile::memory_operation_enum,
-            //                                ck_tile::memory_operation_enum::atomic_add>{});
+            Run(has_hot_loop_,
+                tail_number_,
+                ck_tile::integral_constant<ck_tile::memory_operation_enum,
+                                           ck_tile::memory_operation_enum::atomic_add>{});
         }
     };
     BaseGemmPipeline::TailHandler(RunSplitk, has_hot_loop, tail_num);
@@ -311,7 +311,8 @@ template <typename FlatmmConfig,
           typename CLayout,
           typename ScaleM,
           typename ScaleN,
-          typename CDEElementWise = ck_tile::element_wise::PassThrough>
+          bool UsePersistentKernel = false,
+          typename CDEElementWise  = ck_tile::element_wise::PassThrough>
 float invoke_flatmm(ck_tile::DeviceMem& a_dev_buf,
                     ck_tile::DeviceMem& b_shuffle_dev_buf,
                     ck_tile::DeviceMem& c_dev_buf,
@@ -354,7 +355,7 @@ float invoke_flatmm(ck_tile::DeviceMem& a_dev_buf,
                                  CLayout,
                                  ScaleM,
                                  ScaleN,
-                                 false,
+                                 UsePersistentKernel,
                                  CDEElementWise>(
         args, ck_tile::stream_config{nullptr, true, 1, n_warmup, n_repeat, true, true, 50});
 
@@ -393,6 +394,7 @@ auto create_args(int argc, char* argv[])
         .insert("split_k", "1", "splitK value")
         .insert("init", "0", "0:random, 1:linear, 2:constant(1)")
         .insert("scale", "0", "0:without scale, 1:per-token/channel scale, only for fp8/bf8")
+        .insert("persistent", "0", "0: no persistent, 1: persistent kernel")
         .insert("warp_tile",
                 "0",
                 "0: 16x16, 1: 32x32, 2: 16x16x128 (950 only), 3: 32x32x64 (950 only)");
@@ -416,45 +418,67 @@ int run_flatmm_example(int argc, char* argv[])
     std::string a_layout  = arg_parser.get_str("a_layout");
     std::string b_layout  = arg_parser.get_str("b_layout");
     int scale_opt         = arg_parser.get_int("scale");
+    int persistent_opt    = arg_parser.get_int("persistent");
     if(a_layout == "R" && b_layout == "C")
     {
         if(data_type == "fp16")
         {
-            // run_flatmm_example_with_layouts<ck_tile::half_t, FlatmmConfig<ck_tile::half_t>>(
-            //     argc, argv, Row{}, Col{}, Row{});
+            run_flatmm_example_with_layouts<ck_tile::half_t, FlatmmConfig<ck_tile::half_t>>(
+                argc, argv, Row{}, Col{}, Row{});
         }
-        // else if(data_type == "bf16")
-        // {
-        //     run_flatmm_example_with_layouts<ck_tile::bf16_t, FlatmmConfig<ck_tile::bf16_t>>(
-        //         argc, argv, Row{}, Col{}, Row{});
-        // }
+        else if(data_type == "bf16")
+        {
+            run_flatmm_example_with_layouts<ck_tile::bf16_t, FlatmmConfig<ck_tile::bf16_t>>(
+                argc, argv, Row{}, Col{}, Row{});
+        }
         else if(data_type == "fp8")
         {
             if(scale_opt == 0)
             {
-                run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>>(
+                if(persistent_opt == 0)
+                {
+                    run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>>(
+                        argc, argv, Row{}, Col{}, Row{});
+                }
+                else
+                {
+                    run_flatmm_example_with_layouts<ck_tile::fp8_t,
+                                                    FlatmmConfig<ck_tile::fp8_t>,
+                                                    -1,
+                                                    -1,
+                                                    true>(argc, argv, Row{}, Col{}, Row{});
+                }
+            }
+            else
+            {
+                if(persistent_opt == 0)
+                {
+                    run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>>(
+                        argc, argv, Row{}, Col{}, Row{});
+                }
+                else
+                {
+                    run_flatmm_example_with_layouts<ck_tile::fp8_t,
+                                                    FlatmmConfig<ck_tile::fp8_t>,
+                                                    1,
+                                                    1,
+                                                    true>(argc, argv, Row{}, Col{}, Row{});
+                }
+            }
+        }
+        else if(data_type == "bf8")
+        {
+            if(scale_opt == 0)
+            {
+                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
                     argc, argv, Row{}, Col{}, Row{});
             }
             else
             {
-                run_flatmm_example_with_layouts<ck_tile::fp8_t, FlatmmConfig<ck_tile::fp8_t>, 1, 1>(
+                run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>, 1, 1>(
                     argc, argv, Row{}, Col{}, Row{});
             }
         }
-        // else if(data_type == "bf8")
-        // {
-        //     if(scale_opt == 0)
-        //     {
-        //         run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>>(
-        //             argc, argv, Row{}, Col{}, Row{});
-        //     }
-        //     else
-        //     {
-        //         run_flatmm_example_with_layouts<ck_tile::bf8_t, FlatmmConfig<ck_tile::bf8_t>, 1,
-        //         1>(
-        //             argc, argv, Row{}, Col{}, Row{});
-        //     }
-        // }
         else
         {
             throw std::runtime_error("Unsupported data_type!");
@@ -480,18 +504,18 @@ int main(int argc, char* argv[])
         {
             return !run_flatmm_example<FlatmmConfig16>(argc, argv);
         }
-        // else if(warp_tile == 1)
-        // {
-        //     return !run_flatmm_example<FlatmmConfig32>(argc, argv);
-        // }
-        // else if(warp_tile == 2)
-        // {
-        //     return !run_flatmm_example<FlatmmConfig16_950>(argc, argv);
-        // }
-        // else
-        // {
-        //     return !run_flatmm_example<FlatmmConfig32_950>(argc, argv);
-        // }
+        else if(warp_tile == 1)
+        {
+            return !run_flatmm_example<FlatmmConfig32>(argc, argv);
+        }
+        else if(warp_tile == 2)
+        {
+            return !run_flatmm_example<FlatmmConfig16_950>(argc, argv);
+        }
+        else
+        {
+            return !run_flatmm_example<FlatmmConfig32_950>(argc, argv);
+        }
     }
     catch(const std::runtime_error& e)
     {

@@ -80,6 +80,7 @@ struct FlatmmPipelineAGmemBGmemCRegV1
 
     static constexpr index_t kLdsAlignmentInBytes = 16;
     static constexpr index_t NumWaveGroups        = Problem::NumWaveGroups;
+    static constexpr bool UsePersistentKernel     = Problem::Traits::UsePersistentKernel;
 
     static constexpr auto I0   = number<0>();
     static constexpr auto I1   = number<1>();
