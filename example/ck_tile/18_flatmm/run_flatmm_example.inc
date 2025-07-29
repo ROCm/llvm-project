@@ -55,8 +55,9 @@ int run_flatmm_example_with_layouts(int argc,
     // TODO: add different init types
     if(init_method == 0)
     {
-        ck_tile::FillUniformDistribution<ADataType>{-.5f, .5f}(a_host);
-        memset(a_host.data(), 0, 4);
+        // ck_tile::FillUniformDistribution<ADataType>{-.5f, .5f}(a_host);
+        // ck_tile::FillUniformDistribution<BDataType>{-.5f, .5f}(b_origin_host);
+        ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_host);
         ck_tile::FillUniformDistribution<BDataType>{-.5f, .5f}(b_origin_host);
         ck_tile::FillUniformDistribution<AccDataType>{-1.f, 1.f}(per_token_scale);
         ck_tile::FillUniformDistribution<AccDataType>{-1.f, 1.f}(per_channel_scale);

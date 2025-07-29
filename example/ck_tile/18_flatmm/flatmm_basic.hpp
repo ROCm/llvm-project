@@ -35,7 +35,7 @@ struct FlatmmConfig32
     static constexpr bool TransposeC            = false;
     static constexpr bool UseStructuredSparsity = false;
 
-    static constexpr int kBlockPerCu                = 2;
+    static constexpr int kBlockPerCu                = 1;
     static constexpr int TileParitionerGroupNum     = 8;
     static constexpr int TileParitionerM01          = 4;
     static constexpr auto Scheduler                 = ck_tile::GemmPipelineScheduler::Default;
@@ -73,7 +73,7 @@ struct FlatmmConfig16
     static constexpr bool TransposeC            = false;
     static constexpr bool UseStructuredSparsity = false;
 
-    static constexpr int kBlockPerCu                = 2;
+    static constexpr int kBlockPerCu                = 1;
     static constexpr int TileParitionerGroupNum     = 8;
     static constexpr int TileParitionerM01          = 4;
     static constexpr auto Scheduler                 = ck_tile::GemmPipelineScheduler::Default;
