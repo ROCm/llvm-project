@@ -287,9 +287,9 @@ struct FlatmmKernel
             const int persistent_block_size = prop.multiProcessorCount * maxActiveBlocksPerCU;
             const int total_work_tile_cnt   = TilePartitioner::GridSize(kargs.M, kargs.N);
 
-            std::cout << "maxActiveBlocksPerCU: " << maxActiveBlocksPerCU
-                      << ", persistent_block_size: " << persistent_block_size
-                      << ", total_work_tile_cnt: " << total_work_tile_cnt << std::endl;
+            // std::cout << "maxActiveBlocksPerCU: " << maxActiveBlocksPerCU
+            //           << ", persistent_block_size: " << persistent_block_size
+            //           << ", total_work_tile_cnt: " << total_work_tile_cnt << std::endl;
 
             assert(kargs.k_batch == 1);
             return dim3(min(persistent_block_size, total_work_tile_cnt), 1, kargs.k_batch);

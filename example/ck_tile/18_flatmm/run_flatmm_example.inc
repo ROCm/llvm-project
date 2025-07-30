@@ -114,6 +114,35 @@ int run_flatmm_example_with_layouts(int argc,
     auto per_channel_scale_dev_ptr = ck_tile::FlatmmScalePointer<ScaleGranularityN>{
         static_cast<float*>(per_channel_scale_dev_buf.GetDeviceBuffer())};
 
+    invoke_flatmm<FlatmmConfig,
+                  ADataType,
+                  BDataType,
+                  ck_tile::tuple<>,
+                  AccDataType,
+                  CDataType,
+                  ALayout,
+                  BLayout,
+                  ck_tile::tuple<>,
+                  CLayout,
+                  decltype(per_token_scale_dev_ptr),
+                  decltype(per_channel_scale_dev_ptr),
+                  UsePersistentKernel>(a_dev_buf,
+                                       b_shuffle_dev_buf,
+                                       c_dev_buf,
+                                       M,
+                                       N,
+                                       K,
+                                       stride_A,
+                                       stride_B,
+                                       stride_C,
+                                       kbatch,
+                                       per_token_scale_dev_ptr,
+                                       per_channel_scale_dev_ptr,
+                                       n_warmup,
+                                       n_repeat);
+
+    c_dev_buf.FromDevice(c_rslt_host.data());
+
     bool pass = true;
 
     if(arg_parser.get_int("v") == 1)
@@ -211,35 +240,6 @@ int run_flatmm_example_with_layouts(int argc,
         ck_tile::hip_check_error(hipFree(d_A));
         ck_tile::hip_check_error(hipFree(d_B));
         ck_tile::hip_check_error(hipFree(d_C));
-
-        invoke_flatmm<FlatmmConfig,
-                      ADataType,
-                      BDataType,
-                      ck_tile::tuple<>,
-                      AccDataType,
-                      CDataType,
-                      ALayout,
-                      BLayout,
-                      ck_tile::tuple<>,
-                      CLayout,
-                      decltype(per_token_scale_dev_ptr),
-                      decltype(per_channel_scale_dev_ptr),
-                      UsePersistentKernel>(a_dev_buf,
-                                           b_shuffle_dev_buf,
-                                           c_dev_buf,
-                                           M,
-                                           N,
-                                           K,
-                                           stride_A,
-                                           stride_B,
-                                           stride_C,
-                                           kbatch,
-                                           per_token_scale_dev_ptr,
-                                           per_channel_scale_dev_ptr,
-                                           n_warmup,
-                                           n_repeat);
-
-        c_dev_buf.FromDevice(c_rslt_host.data());
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
         const float max_accumulated_value =
