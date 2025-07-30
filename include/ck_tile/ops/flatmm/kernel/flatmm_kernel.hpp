@@ -291,7 +291,7 @@ struct FlatmmKernel
                       << ", persistent_block_size: " << persistent_block_size
                       << ", total_work_tile_cnt: " << total_work_tile_cnt << std::endl;
 
-            assert(KBatch == 1);
+            assert(kargs.k_batch == 1);
             return dim3(min(persistent_block_size, total_work_tile_cnt), 1, kargs.k_batch);
         }
         else
