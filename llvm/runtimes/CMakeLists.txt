@@ -522,6 +522,9 @@ if(build_runtimes)
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
     # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
     # No need to provide a separate path for ROCt.
+    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+      list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>${CMAKE_PREFIX_PATH}")
+    endif()
     if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
       if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
         message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
