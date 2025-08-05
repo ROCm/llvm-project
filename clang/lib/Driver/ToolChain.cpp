@@ -483,7 +483,23 @@ ParsedClangName
 ToolChain::getTargetAndModeFromProgramName(StringRef PN) {
   std::string ProgName = normalizeProgramName(PN);
   size_t SuffixPos;
+  bool FlangNew = false;
   const DriverSuffix *DS = parseDriverSuffix(ProgName, SuffixPos);
+
+  // Part II: Warn if invocation happens with flang-new (for Flang); this is for
+  // the time being and should be removed once AMD Classic Flang has been
+  // removed from ROCm.
+  if (FlangNew) {
+    // flang-new warning is overwarning, disabling until fixed.
+    if (false && !::getenv("AMD_NOWARN_FLANG_NEW")) {
+      // The solution with "llvm::errs()" is not ideal, but the driver object
+      // is not been constructed yet, so we cannot use the Diag() infrastructure
+      // for this.
+      llvm::errs() << "warning: the 'amdflang-new' and 'flang-new' commmands "
+                      "have been deprecated; please use 'amdflang' instead\n";
+    }
+  }
+
   if (!DS)
     return {};
   size_t SuffixEnd = SuffixPos + strlen(DS->Suffix);
