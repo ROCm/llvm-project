@@ -1119,7 +1119,7 @@ static void AddAliasScopeMetadata(CallBase &CB, ValueToValueMapTy &VMap,
                                   ClonedCodeInfo &InlinedFunctionInfo) {
   if (!EnableNoAliasConversion)
     return;
-
+	LLVM_DEBUG(dbgs() << __func__ << "\n");
   const Function *CalledFunc = CB.getCalledFunction();
   SmallVector<const Argument *, 4> NoAliasArgs;
 
@@ -1247,8 +1247,12 @@ static void AddAliasScopeMetadata(CallBase &CB, ValueToValueMapTy &VMap,
 
       for (const Value *V : PtrArgs) {
         SmallVector<const Value *, 4> Objects;
+        LLVM_DEBUG(dbgs() << "Getting objects for V: " << *V << "\n");
         getUnderlyingObjects(V, Objects, /* LI = */ nullptr);
-
+        LLVM_DEBUG(
+        for (const auto *O : Objects) {
+          dbgs() << "  Obj: " << *O << "\n";
+        });
         ObjSet.insert_range(Objects);
       }
 
@@ -2603,6 +2607,12 @@ void llvm::InlineFunctionImpl(CallBase &CB, InlineFunctionInfo &IFI,
   Function *CalledFunc = CB.getCalledFunction();
   assert(CalledFunc && !CalledFunc->isDeclaration() &&
          "CanInlineCallSite should have verified direct call to definition");
+
+  LLVM_DEBUG(
+	dbgs() << "Caller: " << Caller->getName() << "\n";
+  dbgs() << "<-- Callee: " << CalledFunc->getName() << "\n";
+  dbgs() << "Callee body:\n" << *CalledFunc << "\n";
+  );
 
   // Determine if we are dealing with a call in an EHPad which does not unwind
   // to caller.
