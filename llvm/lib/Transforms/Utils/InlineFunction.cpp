@@ -1112,31 +1112,31 @@ static void getUnderlyingObjectsFromPtr(const Value *V,
   SmallPtrSet<const Value *, 4> Visited;
   SmallVector<const Value *, 4> Worklist;
 
-  dbgs() << "getUnderlyingObjectsFromPtr\n";
+  LLVM_DEBUG(dbgs() << "getUnderlyingObjectsFromPtr\n");
   Worklist.push_back(V);
   while (!Worklist.empty()) {
     if (Visited.size() > LookupSize) {
-      dbgs() << "Too large of tree, giving up\n";
+      LLVM_DEBUG(dbgs() << "Too large of tree, giving up\n");
       return;
     }
     const Value *P = Worklist.pop_back_val();
-    dbgs() << "Pop: " << *P << "\n";
+    LLVM_DEBUG(dbgs() << "Pop: " << *P << "\n");
 
     if (!Visited.insert(P).second) {
-      dbgs() << "Visited already\n";
+      LLVM_DEBUG(dbgs() << "Visited already\n");
       continue;
     }
 
     if (auto *SI = dyn_cast<SelectInst>(P)) {
       Worklist.push_back(SI->getTrueValue());
       Worklist.push_back(SI->getFalseValue());
-      dbgs() << "Pushed select ops\n";
+      LLVM_DEBUG(dbgs() << "Pushed select ops\n");
       continue;
     }
 
     if (auto *PN = dyn_cast<PHINode>(P)) {
       append_range(Worklist, PN->incoming_values());
-      dbgs() << "Pushed PHI ops\n";
+      LLVM_DEBUG(dbgs() << "Pushed PHI ops\n");
       continue;
     }
 
@@ -1155,7 +1155,7 @@ static void getUnderlyingObjectsFromPtr(const Value *V,
     } else {
       // Add leaf nodes
       Objects.push_back(P);
-      dbgs() << "Pushed: " << *P << "\n";
+      LLVM_DEBUG(dbgs() << "Obj Pushed: " << *P << "\n");
     }
   }
 }
