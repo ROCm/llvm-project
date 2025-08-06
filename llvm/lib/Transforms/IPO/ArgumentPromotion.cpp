@@ -858,6 +858,12 @@ static Function *promoteArguments(Function *F, FunctionAnalysisManager &FAM,
   DenseMap<Argument *, SmallVector<OffsetAndArgPart, 4>> ArgsToPromote;
   unsigned NumArgsAfterPromote = F->getFunctionType()->getNumParams();
   for (Argument *PtrArg : PointerArgs) {
+
+    // FIXME: InlineFunction handles noalias to MD conversion
+    // remove me when ArgPromotion supports proper conversion
+    if (PtrArg->hasNoAliasAttr())
+      continue;
+
     // Replace sret attribute with noalias. This reduces register pressure by
     // avoiding a register copy.
     if (PtrArg->hasStructRetAttr()) {
