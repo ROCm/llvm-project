@@ -732,6 +732,12 @@ void Verifier::visit(Instruction &I) {
   visitDbgRecords(I);
   for (unsigned i = 0, e = I.getNumOperands(); i != e; ++i)
     Check(I.getOperand(i) != nullptr, "Operand is null", &I);
+  
+  //if (auto NoAliasMD = I.getMetadata(LLVMContext::MD_noalias)) {
+  //  Check(I.getMetadata(LLVMContext::MD_alias_scope) != nullptr,
+  //    "dangling !noalias without !alias.scope", &I);
+  //}
+
   InstVisitor<Verifier>::visit(I);
 }
 
