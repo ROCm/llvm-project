@@ -351,28 +351,28 @@ struct UniversalFlatmmPipelineAgBgCrPolicy
         // constexpr index_t MPerBlock = Problem::BlockGemmShape::kM;
         constexpr index_t KPerBlock = Problem::BlockGemmShape::kK;
 
-            constexpr index_t K1 = 16 / sizeof(ADataType);
-            constexpr index_t K0 = KPerBlock / K1;
-            constexpr index_t M2 = get_warp_size() / K0;
-            constexpr index_t M1 = BlockSize / get_warp_size();
-            static_assert(M2 != 0, "M2 is zero, which will lead to a division by zero error.");
-            static_assert(M1 != 0, "M1 is zero, which will lead to a division by zero error.");
-            // constexpr index_t M0 = MPerBlock / (M2 * M1);
-            // static_assert(M0 * M1 * M2 == MPerBlock,
-            //                 "Incorrect M0, M2, M1 configuration! "
-            //                 "M0, M1, M2 must cover whole MPerBlock!");
+        constexpr index_t K1 = 16 / sizeof(ADataType);
+        constexpr index_t K0 = KPerBlock / K1;
+        constexpr index_t M2 = get_warp_size() / K0;
+        constexpr index_t M1 = BlockSize / get_warp_size();
+        static_assert(M2 != 0, "M2 is zero, which will lead to a division by zero error.");
+        static_assert(M1 != 0, "M1 is zero, which will lead to a division by zero error.");
+        // constexpr index_t M0 = MPerBlock / (M2 * M1);
+        // static_assert(M0 * M1 * M2 == MPerBlock,
+        //                 "Incorrect M0, M2, M1 configuration! "
+        //                 "M0, M1, M2 must cover whole MPerBlock!");
 
-            return make_static_tile_distribution(
-                tile_distribution_encoding<sequence<1>,
-                                            tuple<sequence<M1, M2>, sequence<K0, K1>>,
-                                            tuple<sequence<1>, sequence<1, 2>>,
-                                            tuple<sequence<0>, sequence<1, 0>>,
-                                            sequence<2>,
-                                            sequence<1>>{});
+        return make_static_tile_distribution(
+            tile_distribution_encoding<sequence<1>,
+                                       tuple<sequence<M1, M2>, sequence<K0, K1>>,
+                                       tuple<sequence<1>, sequence<1, 2>>,
+                                       tuple<sequence<0>, sequence<1, 0>>,
+                                       sequence<2>,
+                                       sequence<1>>{});
     }
 
-    template <typename Problem>
-    CK_TILE_HOST_DEVICE static constexpr auto MakeBFlatDramTileDistribution()
+    template <typename Problem, int PackSize = 1>
+    CK_TILE_HOST_DEVICE static constexpr auto MakeBFlatDramTileDistribution(number<PackSize> = {})
     {
         using TileShape = typename Problem::BlockGemmShape; // ck_tile::TileFlatmmShape
 
@@ -380,7 +380,7 @@ struct UniversalFlatmmPipelineAgBgCrPolicy
         constexpr index_t WaveSize  = get_warp_size();
         constexpr index_t WaveNum   = BlockSize / WaveSize;
 
-        constexpr index_t KBPerLoad   = GetKBPerLoad<Problem>();
+        constexpr index_t KBPerLoad   = GetKBPerLoad<Problem>() / PackSize;
         constexpr index_t KThdPerWave = WaveSize; // threads cnt in K dim
         constexpr index_t KWavePerBlk = 1;
         constexpr index_t KRepeat     = 1;
@@ -462,12 +462,12 @@ struct UniversalFlatmmPipelineAgBgCrPolicy
         using BlockWarps = typename Problem::BlockGemmShape::BlockWarps;
         using WarpTile   = typename Problem::BlockGemmShape::WarpTile;
         using WarpGemm   = WarpGemmMfmaDispatcher<typename Problem::ADataType,
-                                                typename Problem::BDataType,
-                                                typename Problem::CDataType,
-                                                WarpTile::at(I0),
-                                                WarpTile::at(I1),
-                                                WarpTile::at(I2),
-                                                Problem::TransposeC>;
+                                                  typename Problem::BDataType,
+                                                  typename Problem::CDataType,
+                                                  WarpTile::at(I0),
+                                                  WarpTile::at(I1),
+                                                  WarpTile::at(I2),
+                                                  Problem::TransposeC>;
 
         using BlockFlatmmPolicy = BlockFlatmmASmemBSmemCRegV1CustomPolicy<
             typename Problem::ADataType,
