@@ -1147,7 +1147,6 @@ static void getUnderlyingObjectsFromPtr(const Value *V,
           U->getOpcode() == Instruction::Add ||
           U->getOpcode() == Instruction::Mul ||
           U->getOpcode() == Instruction::Sub ||
-          U->getOpcode() == Instruction::Load ||
           U->getOpcode() == Instruction::GetElementPtr ||
           U->isCast()) {
         append_range(Worklist, U->operands());
