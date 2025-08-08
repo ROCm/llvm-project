@@ -107,7 +107,7 @@ float mixed_prec_flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>&
                                                                                tail_number_v>;
 
         using CodegenFlatmmPipeline =
-            ck_tile::FlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>;
+            ck_tile::MixedPrecFlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>;
 
         using GemmEpilogue = ck_tile::CShuffleEpilogue<
             ck_tile::CShuffleEpilogueProblem<ComputeDataType,
@@ -160,10 +160,8 @@ float mixed_prec_flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>&
         if(s.flush_cache_)
         {
             std::cout << "Flushing cache..." << std::endl;
-            static constexpr ck_tile::index_t APackedSize =
-                std::is_same_v<BDataType, ck_tile::pk_int4_t> ? 2 : 1;
-            static constexpr ck_tile::index_t BPackedSize =
-                std::is_same_v<BDataType, ck_tile::pk_int4_t> ? 2 : 1;
+            constexpr ck_tile::index_t APackedSize = ck_tile::numeric_traits<ADataType>::PackedSize;
+            constexpr ck_tile::index_t BPackedSize = ck_tile::numeric_traits<BDataType>::PackedSize;
 
             ck_tile::HostTensor<ADataType> a_m(ck_tile::host_tensor_descriptor(
                 args.M, args.K, args.stride_A, is_row_major(ALayout{})));
@@ -329,23 +327,40 @@ auto create_args(int argc, char* argv[])
     return std::make_tuple(result, arg_parser);
 }
 
-template <typename FlatmmConfig, typename T>
-auto shuffle_subbyte_b(const ck_tile::HostTensor<T>& t)
+template <class IterSrc, class IterDst>
+void preShuffleWeight(const IterSrc src, IterDst dst, int N, int K, int NXdl)
 {
-    constexpr int PackSize = 2;
+    int KPack = 16;
+    int NLane = NXdl;
+    int KLane = 64 / NLane;
+    int K_pk  = K / 2;
+    int K0    = K_pk / (KLane * KPack);
+    // K -> K0 KLane KPack
+    // N -> N0 NLane
+    // N, K -> N0 K0 KLane NLane KPack
+    int tempk;
+    for(int n = 0; n < N; ++n)
+    {
+        for(int k = 0; k < K_pk; ++k)
+        {
+            int n0 = n / NLane;
+            int n1 = n % NLane;
 
-    assert(t.get_lengths().size() == 2);
-    int n_                = t.get_lengths()[1];
-    int k_                = t.get_lengths()[0] / 2;
-    constexpr int divisor = FlatmmConfig::N_Warp_Tile == 32 ? 2 : 4;
-    ck_tile::HostTensor<T> t_view({n_ / FlatmmConfig::N_Warp_Tile,
-                                   FlatmmConfig::N_Warp_Tile,
-                                   k_ / FlatmmConfig::K_Warp_Tile,
-                                   divisor,
-                                   FlatmmConfig::K_Warp_Tile / divisor / 2});
-    std::copy(t.begin(), t.end(), t_view.begin());
-    return ck_tile::reference_permute(t_view, {0, 2, 3, 1, 4});
+            int k0 = k / (KLane * KPack);
+            tempk  = k % (KLane * KPack);
+            int k1 = tempk / KPack;
+            int k2 = tempk % KPack;
+
+            int outputIndex = n0 * KPack * NLane * KLane * K0 + k0 * KPack * NLane * KLane +
+                              k1 * KPack * NLane + n1 * KPack + k2;
+
+            dst[outputIndex] = src[n * K_pk + k];
+        }
+    }
 }
+
+template <class IterSrc, class IterDst>
+void preShuffleScale(const IterSrc src, IterDst dst, int N, int K, int NXdl);
 
 #include "run_mixed_prec_flatmm.inc"
 

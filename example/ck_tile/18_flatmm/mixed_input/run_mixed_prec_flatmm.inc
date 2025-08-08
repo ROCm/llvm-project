@@ -51,13 +51,13 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
         ck_tile::host_tensor_descriptor(M, N, stride_C, is_row_major(CLayout{})));
 
     ck_tile::HostTensor<AccDataType> weight_dequant_scale(ck_tile::HostTensorDescriptor(
-        {N / DequantGranularityN, K / DequantGranularityK}, {1, N / DequantGranularityN}));
+        {K / DequantGranularityK, N / DequantGranularityN}, {N / DequantGranularityN, 1}));
 
     if(init_method == 0)
     {
         ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_host);
         ck_tile::FillUniformDistribution<BDataType>{-4.f, 4.f}(b_origin_host);
-        ck_tile::FillUniformDistribution<AccDataType>{-1.f, 1.f}(weight_dequant_scale);
+        ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(weight_dequant_scale);
     }
     else if(init_method == 1)
     {
@@ -66,7 +66,10 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
         ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(weight_dequant_scale);
     }
 
-    ck_tile::HostTensor<BDataType> b_shuffle_host = shuffle_subbyte_b<FlatmmConfig>(b_origin_host);
+    ck_tile::HostTensor<BDataType> b_shuffle_host(
+        ck_tile::host_tensor_descriptor(K, N, stride_B, is_row_major(b_layout)));
+    preShuffleWeight(
+        b_origin_host.begin(), b_shuffle_host.begin(), N, K, FlatmmConfig::N_Warp_Tile);
 
     ck_tile::DeviceMem a_dev_buf(a_host.get_element_space_size_in_bytes());
     ck_tile::DeviceMem b_shuffle_dev_buf(b_shuffle_host.get_element_space_size_in_bytes());
@@ -153,9 +156,6 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
             static_cast<float*>(weight_dequant_scale_dev_buf.GetDeviceBuffer()));
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
-
-        const float max_accumulated_value =
-            *std::max_element(c_gpu_ref_host.mData.begin(), c_gpu_ref_host.mData.end());
 
         const float rtol = 1e-3;
         const float atol = 1e-3;

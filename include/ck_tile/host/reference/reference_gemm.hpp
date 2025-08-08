@@ -169,6 +169,14 @@ __global__ void naive_gemm_kernel(ADataType* A,
                 else
                     v_a = fp32_val.lo;
             }
+            else if constexpr(std::is_same_v<ADataType, pk_fp4_t>)
+            {
+                const fp32x2_t fp32_val = pk_fp4_to_fp32x2(A[a_index / packed_size_a]);
+                if(k % 2 == 1)
+                    v_a = fp32_val.hi;
+                else
+                    v_a = fp32_val.lo;
+            }
             else
             {
                 v_a = ck_tile::type_convert<AccDataType>(A[a_index]);
@@ -176,6 +184,14 @@ __global__ void naive_gemm_kernel(ADataType* A,
             if constexpr(std::is_same_v<BDataType, pk_int4_t>)
             {
                 const fp32x2_t fp32_val = pk_int4_t_to_fp32x2_t(B[b_index / packed_size_b]);
+                if(k % 2 == 1)
+                    v_b = fp32_val.hi;
+                else
+                    v_b = fp32_val.lo;
+            }
+            else if constexpr(std::is_same_v<BDataType, pk_fp4_t>)
+            {
+                const fp32x2_t fp32_val = pk_fp4_to_fp32x2(B[b_index / packed_size_b]);
                 if(k % 2 == 1)
                     v_b = fp32_val.hi;
                 else
@@ -265,13 +281,30 @@ __global__ void blockwise_gemm_kernel(ADataType* A,
                 else
                     v_a = fp32_val.lo;
             }
+            else if constexpr(std::is_same_v<ADataType, pk_fp4_t>)
+            {
+                const fp32x2_t fp32_val = pk_fp4_to_fp32x2(A[a_index / packed_size_a]);
+                if(k % 2 == 1)
+                    v_a = fp32_val.hi;
+                else
+                    v_a = fp32_val.lo;
+            }
             else
             {
                 v_a = ck_tile::type_convert<AccDataType>(A[a_index]);
             }
+
             if constexpr(std::is_same_v<BDataType, pk_int4_t>)
             {
                 const fp32x2_t fp32_val = pk_int4_t_to_fp32x2_t(B[b_index / packed_size_b]);
+                if(k % 2 == 1)
+                    v_b = fp32_val.hi;
+                else
+                    v_b = fp32_val.lo;
+            }
+            else if constexpr(std::is_same_v<BDataType, pk_fp4_t>)
+            {
+                const fp32x2_t fp32_val = pk_fp4_to_fp32x2(B[b_index / packed_size_b]);
                 if(k % 2 == 1)
                     v_b = fp32_val.hi;
                 else

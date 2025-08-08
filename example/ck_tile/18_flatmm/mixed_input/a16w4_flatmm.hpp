@@ -6,7 +6,6 @@
 
 #include "ck_tile/core.hpp"
 
-template <typename DataType>
 struct A16W4_FlatmmConfig32
 {
     static constexpr ck_tile::index_t M_Tile = 128;
@@ -37,18 +36,16 @@ struct A16W4_FlatmmConfig32
     static constexpr bool TiledMMAPermuteN = false; // disable PermuteN when NWarpTile != 16
 };
 
-template <typename DataType>
-struct A16W4_FlatmmConfig32_950 : public A16W4_FlatmmConfig32<DataType>
+struct A16W4_FlatmmConfig32_950 : A16W4_FlatmmConfig32
 {
 };
 
 // GEMM config with 16x16 warp tile
-template <typename DataType>
 struct A16W4_FlatmmConfig16
 {
-    static constexpr ck_tile::index_t M_Tile = 128;
+    static constexpr ck_tile::index_t M_Tile = 64;
     static constexpr ck_tile::index_t N_Tile = 128;
-    static constexpr ck_tile::index_t K_Tile = 64;
+    static constexpr ck_tile::index_t K_Tile = 128;
 
     static constexpr ck_tile::index_t M_Warp = 1;
     static constexpr ck_tile::index_t N_Warp = 4;
@@ -73,17 +70,16 @@ struct A16W4_FlatmmConfig16
     static constexpr bool DoubleSmemBuffer          = false;
 
     static constexpr int N_Repeat          = N_Tile / N_Warp_Tile / N_Warp;
-    static constexpr bool TiledMMAPermuteN = N_Repeat % 2 == 0;
+    static constexpr bool TiledMMAPermuteN = false;
 };
 
-template <typename DataType>
-struct A16W4_FlatmmConfig16_950 : public A16W4_FlatmmConfig16<DataType>
+struct A16W4_FlatmmConfig16_950 : public A16W4_FlatmmConfig16
 {
     static constexpr ck_tile::index_t N_Tile = 256;
     static constexpr ck_tile::index_t K_Tile = 128;
     static constexpr int kBlockPerCu         = 1;
 
-    static constexpr int N_Repeat = N_Tile / A16W4_FlatmmConfig16<DataType>::N_Warp_Tile /
-                                    A16W4_FlatmmConfig16<DataType>::N_Warp;
-    static constexpr bool TiledMMAPermuteN = N_Repeat % 2 == 0;
+    static constexpr int N_Repeat =
+        N_Tile / A16W4_FlatmmConfig16::N_Warp_Tile / A16W4_FlatmmConfig16::N_Warp;
+    static constexpr bool TiledMMAPermuteN = false;
 };
