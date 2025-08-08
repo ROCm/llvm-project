@@ -136,7 +136,7 @@ public:
 
   static inline const llvm::StringRef MagicNumber = "CCOB";
 
-  static inline const uint16_t DefaultVersion = 2;
+  static inline const uint16_t DefaultVersion = 3;
 
   // Helper method to get header size based on version
   static size_t getHeaderSize(uint16_t Version) {
