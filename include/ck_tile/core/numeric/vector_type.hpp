@@ -11,6 +11,7 @@
 #include "ck_tile/core/numeric/half.hpp"
 #include "ck_tile/core/numeric/bfloat16.hpp"
 #include "ck_tile/core/numeric/pk_int4.hpp"
+#include "ck_tile/core/numeric/e8m0.hpp"
 #include "ck_tile/core/utility/type_traits.hpp"
 
 namespace ck_tile {
@@ -90,7 +91,8 @@ struct vector_traits
     using scalar_type =
         std::conditional_t<std::is_same_v<remove_cvref_t<T>, pk_int4_t>,
                            int8_t,
-                           std::conditional_t<std::is_same_v<remove_cvref_t<T>, pk_fp4_t>,
+                           std::conditional_t<std::is_same_v<remove_cvref_t<T>, pk_fp4_t> ||
+                                                  std::is_same_v<remove_cvref_t<T>, e8m0_t>,
                                               uint8_t,
                                               remove_cvref_t<T>>>;
 
@@ -101,10 +103,12 @@ struct vector_traits
 template <typename T, index_t N>
 struct vector_traits<T __attribute__((ext_vector_type(N)))>
 {
-    using scalar_type =
-        std::conditional_t<std::is_same_v<T, pk_int4_t>,
-                           int8_t,
-                           std::conditional_t<std::is_same_v<T, pk_fp4_t>, uint8_t, T>>;
+    using scalar_type = std::conditional_t<
+        std::is_same_v<T, pk_int4_t>,
+        int8_t,
+        std::conditional_t<std::is_same_v<T, pk_fp4_t> || std::is_same_v<remove_cvref_t<T>, e8m0_t>,
+                           uint8_t,
+                           T>>;
 
     static constexpr index_t vector_size = N;
 };

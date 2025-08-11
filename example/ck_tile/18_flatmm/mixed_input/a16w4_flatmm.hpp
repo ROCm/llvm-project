@@ -41,7 +41,7 @@ struct A16W4_FlatmmConfig16
 
 struct A16W4_FlatmmConfig16_950 : public A16W4_FlatmmConfig16
 {
-    static constexpr ck_tile::index_t N_Tile = 256;
+    static constexpr ck_tile::index_t N_Tile = 128;
     static constexpr int kBlockPerCu         = 1;
 
     static constexpr int N_Repeat =
