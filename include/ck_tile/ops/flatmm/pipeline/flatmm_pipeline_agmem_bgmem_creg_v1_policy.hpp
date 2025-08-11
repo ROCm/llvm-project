@@ -372,37 +372,6 @@ struct UniversalFlatmmPipelineAgBgCrPolicy
     }
 
     template <typename Problem>
-    CK_TILE_HOST_DEVICE static constexpr auto MakeF16xF4_ADramDistribution()
-    {
-        using ADataType = remove_cvref_t<typename Problem::ADataType>;
-        using ALayout   = remove_cvref_t<typename Problem::ALayout>;
-
-        constexpr index_t BlockSize = Problem::kBlockSize;
-
-        // constexpr index_t MPerBlock = Problem::BlockGemmShape::kM;
-        constexpr index_t KPerBlock = Problem::BlockGemmShape::kK;
-
-        constexpr index_t K1 = 16 / sizeof(ADataType);
-        constexpr index_t K0 = KPerBlock / K1;
-        constexpr index_t M2 = get_warp_size() / K0;
-        constexpr index_t M1 = BlockSize / get_warp_size();
-        static_assert(M2 != 0, "M2 is zero, which will lead to a division by zero error.");
-        static_assert(M1 != 0, "M1 is zero, which will lead to a division by zero error.");
-        // constexpr index_t M0 = MPerBlock / (M2 * M1);
-        // static_assert(M0 * M1 * M2 == MPerBlock,
-        //                 "Incorrect M0, M2, M1 configuration! "
-        //                 "M0, M1, M2 must cover whole MPerBlock!");
-
-        return make_static_tile_distribution(
-            tile_distribution_encoding<sequence<4>,
-                                       tuple<sequence<16>, sequence<4, 4, 8>>,
-                                       tuple<sequence<0>, sequence<2, 1>>,
-                                       tuple<sequence<0>, sequence<0, 0>>,
-                                       sequence<2>,
-                                       sequence<2>>{});
-    }
-
-    template <typename Problem>
     CK_TILE_HOST_DEVICE static constexpr auto MakeBFlatDramTileDistribution()
     {
         using TileShape = typename Problem::BlockGemmShape; // ck_tile::TileFlatmmShape
@@ -416,42 +385,6 @@ struct UniversalFlatmmPipelineAgBgCrPolicy
         constexpr index_t KWavePerBlk = 1;
         constexpr index_t KRepeat     = 1;
         static_assert(TileShape::flatKPerWarp == KThdPerWave * KBPerLoad, "wrong");
-
-        constexpr index_t NBPerLoad   = 1;
-        constexpr index_t NThdPerWave = 1;
-        constexpr index_t NWavePerBlk = TileShape::BlockWarps::at(number<1>{}); // N_Warp
-        constexpr index_t NRepeat     = 1;
-
-        constexpr index_t WaveRepeat = WaveNum / TileShape::flatNPerWarp;
-
-        return make_static_tile_distribution(
-            tile_distribution_encoding<
-                sequence<WaveRepeat>,                                          // ?
-                tuple<sequence<NRepeat, NWavePerBlk, NThdPerWave, NBPerLoad>,  // second direction
-                      sequence<KRepeat, KWavePerBlk, KThdPerWave, KBPerLoad>>, // first  direction
-                // wave in blk,     // thd in wave
-                // <M, K>           // <M, K>
-                tuple<sequence<0, 1, 2>, sequence<1, 2>>, // which direction
-                tuple<sequence<0, 1, 1>, sequence<2, 2>>, // which index
-                // <repeat, vec_load>
-                sequence<1, 1, 2, 2>,
-                sequence<0, 3, 0, 3>>{});
-    }
-
-    template <typename Problem>
-    CK_TILE_HOST_DEVICE static constexpr auto MakeFp4BFlatDramTileDistribution()
-    {
-        using TileShape = typename Problem::BlockGemmShape; // ck_tile::TileFlatmmShape
-
-        constexpr index_t BlockSize = Problem::kBlockSize;
-        constexpr index_t WaveSize  = get_warp_size();
-        constexpr index_t WaveNum   = BlockSize / WaveSize;
-
-        constexpr index_t KBPerLoad   = 32;
-        constexpr index_t KThdPerWave = WaveSize; // threads cnt in K dim
-        constexpr index_t KWavePerBlk = 1;
-        constexpr index_t KRepeat     = 1;
-        // static_assert(TileShape::flatKPerWarp == KThdPerWave * KBPerLoad, "wrong");
 
         constexpr index_t NBPerLoad   = 1;
         constexpr index_t NThdPerWave = 1;

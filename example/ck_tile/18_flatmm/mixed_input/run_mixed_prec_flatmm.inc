@@ -23,6 +23,8 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
     using CDataType   = PrecActType;
     using AccDataType = float;
 
+    using ScaleType = ck_tile::e8m0_t;
+
     constexpr int DequantGranularityN = 1;
     constexpr int DequantGranularityK = 32;
 
@@ -50,42 +52,42 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
     ck_tile::HostTensor<CDataType> c_rslt_host(
         ck_tile::host_tensor_descriptor(M, N, stride_C, is_row_major(CLayout{})));
 
-    ck_tile::HostTensor<AccDataType> weight_dequant_scale(ck_tile::HostTensorDescriptor(
+    ck_tile::HostTensor<ScaleType> scale_b(ck_tile::HostTensorDescriptor(
         {K / DequantGranularityK, N / DequantGranularityN}, {N / DequantGranularityN, 1}));
 
     if(init_method == 0)
     {
         ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_host);
         ck_tile::FillUniformDistribution<BDataType>{-4.f, 4.f}(b_origin_host);
-        ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(weight_dequant_scale);
+        // ck_tile::FillUniformDistribution<ScaleType>{-8.f, 8.f}(scale_b);
+        ck_tile::FillUniformDistribution<ScaleType>{1.f, 1.f}(scale_b);
     }
     else if(init_method == 1)
     {
         ck_tile::FillUniformDistribution<ADataType>{1.f, 1.f}(a_host);
         ck_tile::FillUniformDistribution<BDataType>{1.f, 1.f}(b_origin_host);
-        ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(weight_dequant_scale);
+        ck_tile::FillUniformDistribution<ScaleType>{1.f, 1.f}(scale_b);
     }
 
     ck_tile::HostTensor<BDataType> b_shuffle_host(
         ck_tile::host_tensor_descriptor(K, N, stride_B, is_row_major(b_layout)));
-    preShuffleWeight(
-        b_origin_host.begin(), b_shuffle_host.begin(), N, K, FlatmmConfig::N_Warp_Tile);
+    preShuffleWeight<FlatmmConfig>(b_origin_host.begin(), b_shuffle_host.begin(), N, K);
+
+    ck_tile::HostTensor<ScaleType> scale_b_shuffle = preShuffleScale<FlatmmConfig>(scale_b);
 
     ck_tile::DeviceMem a_dev_buf(a_host.get_element_space_size_in_bytes());
     ck_tile::DeviceMem b_shuffle_dev_buf(b_shuffle_host.get_element_space_size_in_bytes());
     ck_tile::DeviceMem c_dev_buf(c_rslt_host.get_element_space_size_in_bytes());
-    ck_tile::DeviceMem weight_dequant_scale_dev_buf(
-        weight_dequant_scale.get_element_space_size_in_bytes());
+
+    ck_tile::DeviceMem scale_b_dev_buf(scale_b_shuffle.get_element_space_size_in_bytes());
 
     a_dev_buf.ToDevice(a_host.data());
     b_shuffle_dev_buf.ToDevice(b_shuffle_host.data());
     c_rslt_host.SetZero();
-    weight_dequant_scale_dev_buf.ToDevice(weight_dequant_scale.data());
+    scale_b_dev_buf.ToDevice(scale_b_shuffle.data());
 
-    auto weight_dequant_scale_dev_ptr =
-        ck_tile::FlatmmScalePointer<DequantGranularityN, DequantGranularityK>{
-            static_cast<float*>(weight_dequant_scale_dev_buf.GetDeviceBuffer()),
-            N / DequantGranularityN};
+    auto scale_b_dev_ptr = ck_tile::FlatmmScalePointer<DequantGranularityN, DequantGranularityK>{
+        static_cast<float*>(scale_b_dev_buf.GetDeviceBuffer()), N / DequantGranularityN};
 
     invoke_mixed_prec_flatmm<FlatmmConfig,
                              ADataType,
@@ -97,7 +99,7 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
                              BLayout,
                              ck_tile::tuple<>,
                              CLayout,
-                             decltype(weight_dequant_scale_dev_ptr),
+                             decltype(scale_b_dev_ptr),
                              UsePersistentKernel>(a_dev_buf,
                                                   b_shuffle_dev_buf,
                                                   c_dev_buf,
@@ -108,7 +110,7 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
                                                   stride_B,
                                                   stride_C,
                                                   kbatch,
-                                                  weight_dequant_scale_dev_ptr,
+                                                  scale_b_dev_ptr,
                                                   n_warmup,
                                                   n_repeat);
 
@@ -126,11 +128,18 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
 
         ck_tile::HostTensor<AccDataType> scale_A(
             ck_tile::HostTensorDescriptor({1, K / DequantGranularityK}, {1, 1}));
+
         // scaleA = 1 has no effect on the result
         ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(scale_A);
-
         ck_tile::DeviceMem scale_A_dev_buf(scale_A.get_element_space_size_in_bytes());
         scale_A_dev_buf.ToDevice(scale_A.data());
+
+        // convert scale_b from e8m0 to float
+        ck_tile::HostTensor<AccDataType> scale_b_float(ck_tile::HostTensorDescriptor(
+            {K / DequantGranularityK, N / DequantGranularityN}, {N / DequantGranularityN, 1}));
+        std::copy(scale_b.begin(), scale_b.end(), scale_b_float.begin());
+        ck_tile::DeviceMem scale_b_float_dev_buf(scale_b_float.get_element_space_size_in_bytes());
+        scale_b_float_dev_buf.ToDevice(scale_b_float.data());
 
         c_gpu_ref_dev_buf.SetZero();
         ck_tile::reference_blockwise_gemm_gpu<ADataType,
@@ -153,7 +162,7 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
             DequantGranularityN,
             DequantGranularityK,
             static_cast<float*>(scale_A_dev_buf.GetDeviceBuffer()),
-            static_cast<float*>(weight_dequant_scale_dev_buf.GetDeviceBuffer()));
+            static_cast<float*>(scale_b_float_dev_buf.GetDeviceBuffer()));
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
 

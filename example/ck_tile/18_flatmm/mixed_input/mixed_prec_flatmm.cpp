@@ -211,10 +211,10 @@ float mixed_prec_flatmm_calc(const ck_tile::ScaleFlatmmHostArgs<ScaleM, ScaleN>&
         }
         else
         {
-            Run(has_hot_loop_,
-                tail_number_,
-                ck_tile::integral_constant<ck_tile::memory_operation_enum,
-                                           ck_tile::memory_operation_enum::atomic_add>{});
+            // Run(has_hot_loop_,
+            //     tail_number_,
+            //     ck_tile::integral_constant<ck_tile::memory_operation_enum,
+            //                                ck_tile::memory_operation_enum::atomic_add>{});
         }
     };
     BaseGemmPipeline::TailHandler(RunSplitk, has_hot_loop, tail_num);
@@ -327,11 +327,11 @@ auto create_args(int argc, char* argv[])
     return std::make_tuple(result, arg_parser);
 }
 
-template <class IterSrc, class IterDst>
-void preShuffleWeight(const IterSrc src, IterDst dst, int N, int K, int NXdl)
+template <class FlatmmConfig, class IterSrc, class IterDst>
+void preShuffleWeight(const IterSrc src, IterDst dst, int N, int K)
 {
     int KPack = 16;
-    int NLane = NXdl;
+    int NLane = FlatmmConfig::N_Warp_Tile;
     int KLane = 64 / NLane;
     int K_pk  = K / 2;
     int K0    = K_pk / (KLane * KPack);
@@ -359,12 +359,33 @@ void preShuffleWeight(const IterSrc src, IterDst dst, int N, int K, int NXdl)
     }
 }
 
-template <class IterSrc, class IterDst>
-void preShuffleScale(const IterSrc src, IterDst dst, int N, int K, int NXdl);
+template <class FlatmmConfig, class T>
+auto preShuffleScale(const ck_tile::HostTensor<T>& scale)
+{
+    assert(scale.get_lengths().size() == 2);
+    int n_ = scale.get_lengths()[1];
+    int k_ = scale.get_lengths()[0];
+
+    constexpr int K_Lane = 64 / FlatmmConfig::N_Warp_Tile; // 4
+    constexpr int K_Pack = FlatmmConfig::K_Tile / FlatmmConfig::K_Warp_Tile / K_Lane;
+
+    static_assert(sizeof(T) * K_Pack * FlatmmConfig::N_Repeat <= 16, "inefficient pack policy");
+
+    ck_tile::HostTensor<T> shfl_scale({
+        n_ / FlatmmConfig::N_Repeat / FlatmmConfig::N_Warp_Tile,
+        FlatmmConfig::N_Repeat,
+        FlatmmConfig::N_Warp_Tile,
+        k_ / K_Pack / K_Lane,
+        K_Pack,
+        K_Lane,
+    });
+    std::copy(scale.begin(), scale.end(), shfl_scale.begin());
+    return ck_tile::reference_permute(shfl_scale, {0, 3, 5, 2, 4, 1});
+}
 
 #include "run_mixed_prec_flatmm.inc"
 
-template <template <typename PrecType> typename FlatmmConfig>
+template <typename FlatmmConfig>
 int run_mixed_prec_flatmm_example(int argc, char* argv[])
 {
     auto [result, arg_parser] = create_args(argc, argv);
@@ -385,33 +406,33 @@ int run_mixed_prec_flatmm_example(int argc, char* argv[])
         {
             if(persistent_opt == 0)
             {
-                run_mixed_prec_flatmm_with_layouts<ck_tile::bf16_t,
-                                                   ck_tile::pk_fp4_t,
-                                                   FlatmmConfig<ck_tile::bf16_t>,
-                                                   false>(argc, argv, Row{}, Col{}, Row{});
+                // run_mixed_prec_flatmm_with_layouts<ck_tile::bf16_t,
+                //                                    ck_tile::pk_fp4_t,
+                //                                    FlatmmConfig,
+                //                                    false>(argc, argv, Row{}, Col{}, Row{});
             }
             else
             {
                 // run_mixed_prec_flatmm_with_layouts<ck_tile::bf16_t,
                 //                                    ck_tile::pk_fp4_t,
-                //                                    FlatmmConfig<ck_tile::bf16_t>,
+                //                                    FlatmmConfig,
                 //                                    true>(argc, argv, Row{}, Col{}, Row{});
             }
         }
         else if(mixed_prec == "fp16xfp4")
         {
-            // if(persistent_opt == 0)
-            // {
-            //     run_mixed_prec_flatmm_with_layouts<ck_tile::fp16_t,
-            //                                        ck_tile::pk_fp4_t,
-            //                                        FlatmmConfig<ck_tile::fp16_t>,
-            //                                        false>(argc, argv, Row{}, Col{}, Row{});
-            // }
+            if(persistent_opt == 0)
+            {
+                run_mixed_prec_flatmm_with_layouts<ck_tile::fp16_t,
+                                                   ck_tile::pk_fp4_t,
+                                                   FlatmmConfig,
+                                                   false>(argc, argv, Row{}, Col{}, Row{});
+            }
             // else
             // {
             //     run_mixed_prec_flatmm_with_layouts<ck_tile::fp16_t,
             //                                        ck_tile::pk_fp4_t,
-            //                                        FlatmmConfig<ck_tile::fp16_t>,
+            //                                        FlatmmConfig,
             //                                        true>(argc, argv, Row{}, Col{}, Row{});
             // }
         }
@@ -437,11 +458,11 @@ int main(int argc, char* argv[])
         int warp_tile = arg_parser.get_int("warp_tile");
         if(warp_tile == 0)
         {
-            return !run_mixed_prec_flatmm_example<A16W4_FlatmmConfig16_950>(argc, argv);
+            return !run_mixed_prec_flatmm_example<A16W4_FlatmmConfig16>(argc, argv);
         }
         // else if(warp_tile == 1)
         // {
-        //     return !run_mixed_prec_flatmm_example<A16W4_FlatmmConfig32_950>(argc, argv);
+        //     return !run_mixed_prec_flatmm_example<A16W4_FlatmmConfig16_950>(argc, argv);
         // }
         else
         {
