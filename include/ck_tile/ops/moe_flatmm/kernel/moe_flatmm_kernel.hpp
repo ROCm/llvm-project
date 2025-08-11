@@ -693,13 +693,14 @@ struct MoeFlatmmKernel
                           "Currently, the CShuffle EpiloguePipeline only supports the Row Major "
                           "Output layout");
 
-            using TileEncodingPattern =
-                TileDistributionEncodingPattern2D<kBlockSize,
-                                                  MPerIterationShuffle,
-                                                  NPerIterationShuffle,
-                                                  EpiloguePipeline::GetVectorSizeC(),
-                                                  tile_distribution_pattern::thread_raked,
-                                                  EpiProblem::kNumWaveGroups>;
+            using TileEncodingPattern = TileDistributionEncodingPattern2D<
+                kBlockSize,
+                MPerIterationShuffle,
+                NPerIterationShuffle,
+                kind == MoeFlatmmKind::kFFN_gemm2 ? 2 : EpiloguePipeline::GetVectorSizeC(),
+                tile_distribution_pattern::thread_raked,
+                EpiProblem::kNumWaveGroups>;
+
             constexpr auto dram_tile_distribution =
                 TileEncodingPattern::Make2DStaticTileDistribution();
 
