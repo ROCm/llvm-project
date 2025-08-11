@@ -234,7 +234,8 @@ int run_moe_gemm_example_with_layouts(int argc,
         static_cast<AccDataType*>(expert_weight_dev.GetDeviceBuffer());
 
     using MoeFlatmmArgs =
-        ck_tile::MoeFlatmmHostArgs<ck_tile::FlatmmScalePointer<1>, ck_tile::FlatmmScalePointer<1>>;
+        ck_tile::MoeFlatmmHostArgs<ck_tile::FlatmmScalePointer<ScaleGranularityM>,
+                                   ck_tile::FlatmmScalePointer<ScaleGranularityN>>;
 
     auto per_token_scale_dev_ptr = ck_tile::FlatmmScalePointer<ScaleGranularityM>{
         static_cast<float*>(per_token_scale_dev_buf.GetDeviceBuffer())};
