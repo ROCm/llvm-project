@@ -330,18 +330,21 @@ int run_moe_flatmm_example(int argc, char* argv[])
             {
                 return run_moe_gemm_example_with_layouts<
                     ck_tile::bf8_t,
+                    FlatmmConfig<ck_tile::bf8_t>,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "bf16")
             {
                 return run_moe_gemm_example_with_layouts<
                     ck_tile::bfloat16_t,
+                    FlatmmConfig<ck_tile::bfloat16_t>,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "fp16")
             {
                 return run_moe_gemm_example_with_layouts<
                     ck_tile::half_t,
+                    FlatmmConfig<ck_tile::half_t>,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
             }
             else
@@ -362,12 +365,14 @@ int run_moe_flatmm_example(int argc, char* argv[])
             {
                 return run_moe_gemm_example_with_layouts<
                     ck_tile::bf8_t,
+                    FlatmmConfig<ck_tile::bf8_t>,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "bf16")
             {
                 return run_moe_gemm_example_with_layouts<
                     ck_tile::bfloat16_t,
+                    FlatmmConfig<ck_tile::bfloat16_t>,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "fp16")
@@ -394,18 +399,21 @@ int run_moe_flatmm_example(int argc, char* argv[])
             else if(prec_type == "bf8")
             {
                 return run_moe_gemm_example_with_layouts<ck_tile::bf8_t,
+                                                         FlatmmConfig<ck_tile::bf8_t>,
                                                          ck_tile::MoeFlatmmKind::kFFN_gemm2>(
                     argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "bf16")
             {
                 return run_moe_gemm_example_with_layouts<ck_tile::bfloat16_t,
+                                                         FlatmmConfig<ck_tile::bfloat16_t>,
                                                          ck_tile::MoeFlatmmKind::kFFN_gemm2>(
                     argc, argv, Row{}, Col{}, Row{});
             }
             else if(prec_type == "fp16")
             {
                 return run_moe_gemm_example_with_layouts<ck_tile::half_t,
+                                                         FlatmmConfig<ck_tile::half_t>,
                                                          ck_tile::MoeFlatmmKind::kFFN_gemm2>(
                     argc, argv, Row{}, Col{}, Row{});
             }
