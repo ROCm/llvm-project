@@ -13,11 +13,8 @@
 
 namespace ck_tile {
 
-template <typename TilePartitioner_,
-          typename FlatmmPipeline_,
-          typename EpiloguePipeline_,
-          int SupportArch = 0> // 0 means no arch restriction
-struct MixedPrecFlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, EpiloguePipeline_>
+template <typename TilePartitioner_, typename FlatmmPipeline_, typename EpiloguePipeline_>
+struct F16xMXF4FlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, EpiloguePipeline_>
 {
     using Underlying = FlatmmKernel<TilePartitioner_, FlatmmPipeline_, EpiloguePipeline_>;
 

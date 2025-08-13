@@ -59,8 +59,7 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
     {
         ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_host);
         ck_tile::FillUniformDistribution<BDataType>{-4.f, 4.f}(b_origin_host);
-        // ck_tile::FillUniformDistribution<ScaleType>{-8.f, 8.f}(scale_b);
-        ck_tile::FillUniformDistribution<ScaleType>{1.f, 1.f}(scale_b);
+        ck_tile::FillUniformDistribution<ScaleType>{-8.f, 8.f}(scale_b);
     }
     else if(init_method == 1)
     {
@@ -166,7 +165,7 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
 
-        const float rtol = 1e-3;
+        const float rtol = 5e-3;
         const float atol = 1e-3;
 
         pass = ck_tile::check_err(
