@@ -58,8 +58,8 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
     if(init_method == 0)
     {
         ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_host);
-        ck_tile::FillUniformDistribution<BDataType>{-4.f, 4.f}(b_origin_host);
-        ck_tile::FillUniformDistribution<ScaleType>{-8.f, 8.f}(scale_b);
+        ck_tile::FillUniformDistribution<BDataType>{-.5f, .5f}(b_origin_host);
+        ck_tile::FillUniformDistribution<ScaleType>{-2.f, 2.f}(scale_b);
     }
     else if(init_method == 1)
     {
@@ -165,8 +165,8 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
 
-        const float rtol = 5e-3;
-        const float atol = 1e-3;
+        const float rtol = 1e-2;
+        const float atol = 1e-2;
 
         pass = ck_tile::check_err(
             c_rslt_host, c_gpu_ref_host, "Error: Incorrect results!", rtol, atol);

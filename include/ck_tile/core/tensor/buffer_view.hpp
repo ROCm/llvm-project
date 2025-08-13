@@ -256,7 +256,7 @@ struct buffer_view<address_space_enum::global,
     T* p_data_ = nullptr;
     BufferSizeType buffer_size_;
     int32x4_t cached_buf_res_;
-    remove_cvref_t<T> invalid_element_value_ = T{0.f};
+    remove_cvref_t<T> invalid_element_value_ = T{0};
 
     static constexpr index_t PackedSize = ck_tile::numeric_traits<remove_cvref_t<T>>::PackedSize;
 
@@ -269,7 +269,7 @@ struct buffer_view<address_space_enum::global,
         : p_data_{p_data},
           buffer_size_{buffer_size / PackedSize},
           cached_buf_res_{0},
-          invalid_element_value_{0.f}
+          invalid_element_value_{0}
     {
     }
 
