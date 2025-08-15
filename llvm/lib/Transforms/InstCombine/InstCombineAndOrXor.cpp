@@ -3800,6 +3800,109 @@ static Instruction *foldIntegerPackFromVector(Instruction &I,
   return CastInst::Create(Instruction::BitCast, MaskedVec, I.getType());
 }
 
+/// Match \p V as "lshr -> mask -> zext -> shl".
+///
+/// \p Int is the underlying integer being extracted from.
+/// \p Mask is a bitmask identifying which bits of the integer are being
+/// extracted. \p Offset identifies which bit of the result \p V corresponds to
+/// the least significant bit of \p Int
+static bool matchZExtedSubInteger(Value *V, Value *&Int, APInt &Mask,
+                                  uint64_t &Offset, bool &IsShlNUW,
+                                  bool &IsShlNSW) {
+  Value *ShlOp0;
+  uint64_t ShlAmt = 0;
+  if (!match(V, m_OneUse(m_Shl(m_Value(ShlOp0), m_ConstantInt(ShlAmt)))))
+    return false;
+
+  IsShlNUW = cast<BinaryOperator>(V)->hasNoUnsignedWrap();
+  IsShlNSW = cast<BinaryOperator>(V)->hasNoSignedWrap();
+
+  Value *ZExtOp0;
+  if (!match(ShlOp0, m_OneUse(m_ZExt(m_Value(ZExtOp0)))))
+    return false;
+
+  Value *MaskedOp0;
+  const APInt *ShiftedMaskConst = nullptr;
+  if (!match(ZExtOp0, m_CombineOr(m_OneUse(m_And(m_Value(MaskedOp0),
+                                                 m_APInt(ShiftedMaskConst))),
+                                  m_Value(MaskedOp0))))
+    return false;
+
+  uint64_t LShrAmt = 0;
+  if (!match(MaskedOp0,
+             m_CombineOr(m_OneUse(m_LShr(m_Value(Int), m_ConstantInt(LShrAmt))),
+                         m_Value(Int))))
+    return false;
+
+  if (LShrAmt > ShlAmt)
+    return false;
+  Offset = ShlAmt - LShrAmt;
+
+  Mask = ShiftedMaskConst ? ShiftedMaskConst->shl(LShrAmt)
+                          : APInt::getBitsSetFrom(
+                                Int->getType()->getScalarSizeInBits(), LShrAmt);
+
+  return true;
+}
+
+/// Try to fold the join of two scalar integers whose bits are unpacked and
+/// zexted from the same source integer.
+static Value *foldIntegerRepackThroughZExt(Value *Lhs, Value *Rhs,
+                                           InstCombiner::BuilderTy &Builder) {
+
+  Value *LhsInt, *RhsInt;
+  APInt LhsMask, RhsMask;
+  uint64_t LhsOffset, RhsOffset;
+  bool IsLhsShlNUW, IsLhsShlNSW, IsRhsShlNUW, IsRhsShlNSW;
+  if (!matchZExtedSubInteger(Lhs, LhsInt, LhsMask, LhsOffset, IsLhsShlNUW,
+                             IsLhsShlNSW))
+    return nullptr;
+  if (!matchZExtedSubInteger(Rhs, RhsInt, RhsMask, RhsOffset, IsRhsShlNUW,
+                             IsRhsShlNSW))
+    return nullptr;
+  if (LhsInt != RhsInt || LhsOffset != RhsOffset)
+    return nullptr;
+
+  APInt Mask = LhsMask | RhsMask;
+
+  Type *DestTy = Lhs->getType();
+  Value *Res = Builder.CreateShl(
+      Builder.CreateZExt(
+          Builder.CreateAnd(LhsInt, Mask, LhsInt->getName() + ".mask"), DestTy,
+          LhsInt->getName() + ".zext"),
+      ConstantInt::get(DestTy, LhsOffset), "", IsLhsShlNUW && IsRhsShlNUW,
+      IsLhsShlNSW && IsRhsShlNSW);
+  Res->takeName(Lhs);
+  return Res;
+}
+
+Value *InstCombinerImpl::foldDisjointOr(Value *LHS, Value *RHS) {
+  if (Value *Res = foldIntegerRepackThroughZExt(LHS, RHS, Builder))
+    return Res;
+
+  return nullptr;
+}
+
+Value *InstCombinerImpl::reassociateDisjointOr(Value *LHS, Value *RHS) {
+
+  Value *X, *Y;
+  if (match(RHS, m_OneUse(m_DisjointOr(m_Value(X), m_Value(Y))))) {
+    if (Value *Res = foldDisjointOr(LHS, X))
+      return Builder.CreateOr(Res, Y, "", /*IsDisjoint=*/true);
+    if (Value *Res = foldDisjointOr(LHS, Y))
+      return Builder.CreateOr(Res, X, "", /*IsDisjoint=*/true);
+  }
+
+  if (match(LHS, m_OneUse(m_DisjointOr(m_Value(X), m_Value(Y))))) {
+    if (Value *Res = foldDisjointOr(X, RHS))
+      return Builder.CreateOr(Res, Y, "", /*IsDisjoint=*/true);
+    if (Value *Res = foldDisjointOr(Y, RHS))
+      return Builder.CreateOr(Res, X, "", /*IsDisjoint=*/true);
+  }
+
+  return nullptr;
+}
+
 // FIXME: We use commutative matchers (m_c_*) for some, but not all, matches
 // here. We should standardize that construct where it is needed or choose some
 // other way to ensure that commutated variants of patterns are not missed.
