@@ -134,6 +134,13 @@ public:
   unsigned emitPtrauthDiscriminator(uint16_t Disc, unsigned AddrDisc,
                                     unsigned &InstsEmitted);
 
+  // Emit the sequence for LOADauthptrstatic
+  void LowerLOADauthptrstatic(const MachineInstr &MI);
+
+  // Emit the sequence for LOADgotPAC/MOVaddrPAC (either GOT adrp-ldr or
+  // adrp-add followed by PAC sign)
+  void LowerMOVaddrPAC(const MachineInstr &MI);
+
   /// tblgen'erated driver function for lowering simple MI->MC
   /// pseudo instructions.
   bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
@@ -2049,6 +2056,15 @@ void AArch64AsmPrinter::emitInstruction(const MachineInstr *MI) {
       OutStreamer->emitCFIMTETaggedFrame();
     return;
   }
+
+  case AArch64::LOADauthptrstatic:
+    LowerLOADauthptrstatic(*MI);
+    return;
+
+  case AArch64::LOADgotPAC:
+  case AArch64::MOVaddrPAC:
+    LowerMOVaddrPAC(*MI);
+    return;
 
   case AArch64::BLRA:
     emitPtrauthBranch(MI);
