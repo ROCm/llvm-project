@@ -165,8 +165,8 @@ int run_mixed_prec_flatmm_with_layouts(int argc,
 
         c_gpu_ref_dev_buf.FromDevice(c_gpu_ref_host.data());
 
-        const float rtol = 1e-2;
-        const float atol = 1e-2;
+        const float rtol = std::is_same_v<ADataType, ck_tile::half_t> ? 1e-3 : 1e-2;
+        const float atol = std::is_same_v<ADataType, ck_tile::half_t> ? 1e-3 : 1e-2;
 
         pass = ck_tile::check_err(
             c_rslt_host, c_gpu_ref_host, "Error: Incorrect results!", rtol, atol);

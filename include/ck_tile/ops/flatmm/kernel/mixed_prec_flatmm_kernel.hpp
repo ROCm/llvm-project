@@ -134,11 +134,12 @@ struct F16xMXF4FlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, Ep
         index_t kFlatN = kargs.N * kargs.K / kFlatK;
 
         const auto& b_flat_tensor_view = [&]() {
-            return make_naive_tensor_view<address_space_enum::global>(b_flat_ptr,
-                                                                      make_tuple(kFlatN, kFlatK),
-                                                                      make_tuple(kFlatK, 1),
-                                                                      number<32>{},
-                                                                      number<1>{});
+            return make_naive_tensor_view<address_space_enum::global>(
+                b_flat_ptr,
+                make_tuple(kFlatN, kFlatK),
+                make_tuple(kFlatK, 1),
+                number<FlatmmPipeline::GetVectorSizeB()>{},
+                number<1>{});
         }();
 
         const auto& ds_tensor_view = generate_tuple(
@@ -368,12 +369,18 @@ struct F16xMXF4FlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, Ep
         const auto& b_flat_block_window = gemm_tile_windows.at(I1);
         const auto& d_block_window      = gemm_tile_windows.at(I2);
         const auto& scale_block_window  = gemm_tile_windows.at(I4);
-        const auto& c_block_tile        = FlatmmPipeline{}.template operator()(a_block_window,
-                                                                        b_flat_block_window,
-                                                                        scale_block_window,
-                                                                        num_loop,
-                                                                        smem_ptr_ping,
-                                                                        smem_ptr_pong);
+
+        auto a_block_window_with_distr =
+            ck_tile::make_tile_window(a_block_window.get_bottom_tensor_view(),
+                                      a_block_window.get_window_lengths(),
+                                      a_block_window.get_window_origin(),
+                                      FlatmmPipeline::GetADramTileDistribution());
+        const auto& c_block_tile = FlatmmPipeline{}(a_block_window_with_distr,
+                                                    b_flat_block_window,
+                                                    scale_block_window,
+                                                    num_loop,
+                                                    smem_ptr_ping,
+                                                    smem_ptr_pong);
 
         // Run Epilogue Pipeline
         if constexpr(false && (ScaleM::GranularityMN != -1 && ScaleM::GranularityK == 0) ||

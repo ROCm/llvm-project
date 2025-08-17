@@ -314,10 +314,9 @@ auto create_args(int argc, char* argv[])
         .insert("stride_b", "0", "Tensor B stride")
         .insert("stride_c", "0", "Tensor C stride")
         .insert("v", "1", "0. No validation, 1. Validation on GPU")
-        .insert(
-            "mixed_prec",
-            "bf16xfp4",
-            "data type for activation and weight, support: bf16xbf4, bf16xfp4, fp16xfp4, fp16xbf4")
+        .insert("mixed_prec",
+                "bf16xfp4",
+                "data type for activation and weight, support: bf16xfp4, fp16xfp4")
         .insert("warmup", "50", "number of iterations before benchmark the kernel")
         .insert("repeat", "100", "number of iterations to benchmark the kernel")
         .insert("timer", "gpu", "gpu:gpu timer, cpu:cpu timer")

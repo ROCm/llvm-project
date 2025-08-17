@@ -1,5 +1,5 @@
 add_executable(tile_example_flatmm_basic EXCLUDE_FROM_ALL flatmm_basic.cpp)
-add_executable(tile_example_mixed_prec_flatmm EXCLUDE_FROM_ALL mixed_input/mixed_prec_flatmm.cpp)
+add_executable(tile_example_mixed_prec_flatmm EXCLUDE_FROM_ALL mixed_prec/mixed_prec_flatmm.cpp)
 
 set(EXAMPLE_FLATMM_COMPILE_OPTIONS)
 
