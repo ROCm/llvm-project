@@ -370,6 +370,14 @@ struct F16xMXF4FlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, Ep
         const auto& d_block_window      = gemm_tile_windows.at(I2);
         const auto& scale_block_window  = gemm_tile_windows.at(I4);
 
+        static_assert(ScaleM::GranularityK == ScaleN::GranularityK // have the same granK
+                          || ScaleM::GranularityMN == -1           // or ScaleA is disable
+                          || ScaleN::GranularityMN == -1,          // or ScaleB is disable
+                      "ScaleM and ScaleN should have the same GranularityK");
+        constexpr bool DoEpiScale =
+            (ScaleM::GranularityMN != -1 && ScaleM::GranularityK == 0) || // per token
+            (ScaleN::GranularityMN != -1 && ScaleN::GranularityK == 0);   // per channel
+
         auto a_block_window_with_distr =
             ck_tile::make_tile_window(a_block_window.get_bottom_tensor_view(),
                                       a_block_window.get_window_lengths(),
@@ -383,26 +391,21 @@ struct F16xMXF4FlatmmKernel : FlatmmKernel<TilePartitioner_, FlatmmPipeline_, Ep
                                                     smem_ptr_pong);
 
         // Run Epilogue Pipeline
-        if constexpr(false && (ScaleM::GranularityMN != -1 && ScaleM::GranularityK == 0) ||
-                     (ScaleN::GranularityMN != -1 && ScaleN::GranularityK == 0))
+        if constexpr(DoEpiScale)
         {
             auto& c_block_window = gemm_tile_windows.at(I3);
-            EpiloguePipeline{}.template
-            operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
-                c_block_window,
-                c_block_tile,
-                d_block_window,
-                smem_ptr_ping,
-                kargs.scale_m_ptr + block_idx_m,
-                kargs.scale_n_ptr + block_idx_n);
+            EpiloguePipeline{}(c_block_window,
+                               c_block_tile,
+                               d_block_window,
+                               smem_ptr_ping,
+                               kargs.scale_m_ptr + block_idx_m,
+                               kargs.scale_n_ptr + block_idx_n);
         }
         else if(UseDefaultScheduler || (get_warp_id() == 0))
         {
             // Run Epilogue Pipeline
             auto& c_block_window = gemm_tile_windows.at(I3);
-            EpiloguePipeline{}.template
-            operator()<decltype(c_block_window), decltype(c_block_tile), decltype(d_block_window)>(
-                c_block_window, c_block_tile, d_block_window, smem_ptr_ping);
+            EpiloguePipeline{}(c_block_window, c_block_tile, d_block_window, smem_ptr_ping);
         }
     }
 

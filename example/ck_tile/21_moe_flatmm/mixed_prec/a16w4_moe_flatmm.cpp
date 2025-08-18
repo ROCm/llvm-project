@@ -11,7 +11,7 @@
 #include <tuple>
 #include <memory>
 
-#include "moe_flatmm.hpp"
+#include "a16w4_moe_flatmm.hpp"
 
 #include "ck_tile/core.hpp"
 #include "ck_tile/ops/epilogue.hpp"
@@ -26,47 +26,6 @@ static constexpr inline auto is_row_major(Layout layout_)
 {
     return ck_tile::bool_constant<std::is_same_v<ck_tile::remove_cvref_t<decltype(layout_)>,
                                                  ck_tile::tensor_layout::gemm::RowMajor>>{};
-}
-
-template <typename FlatmmConfig, typename T>
-auto shuffle_b(const ck_tile::HostTensor<T>& t)
-{
-    assert(t.get_lengths().size() == 2);
-    int n_ = t.get_lengths()[1];
-    int k_ = t.get_lengths()[0];
-
-    constexpr int N_Warp_Tile = FlatmmConfig::N_Warp_Tile;
-    constexpr int N_Warp      = FlatmmConfig::N_Warp;
-    constexpr int KPerLane    = FlatmmConfig::K_Warp_Tile / (64 / N_Warp_Tile);
-
-    ck_tile::HostTensor<T> t_view({n_ / N_Warp_Tile,
-                                   N_Warp_Tile,
-                                   k_ / (64 * KPerLane / N_Warp_Tile),
-                                   64 / N_Warp_Tile,
-                                   KPerLane});
-    std::copy(t.begin(), t.end(), t_view.begin());
-    return ck_tile::reference_permute(t_view, {0, 2, 3, 1, 4});
-}
-
-template <typename ADataType, typename BDataType, typename AccDataType, typename CDataType>
-auto calculate_rtol_atol(const ck_tile::index_t K,
-                         const ck_tile::index_t kbatch,
-                         const float max_accumulated_value)
-{
-    using ComputeType =
-        std::conditional_t<sizeof(ADataType) < sizeof(BDataType), ADataType, BDataType>;
-    // Calculate thresholds
-    const auto rtol = ck_tile::get_relative_threshold<ComputeType, CDataType, AccDataType>(
-        ck_tile::integer_divide_ceil(K, kbatch));
-    const auto atol = ck_tile::get_absolute_threshold<ComputeType, CDataType, AccDataType>(
-        max_accumulated_value / kbatch, ck_tile::integer_divide_ceil(K, kbatch));
-    // Calculate error due to split_k accumulation
-    const auto rtol_split_k =
-        ck_tile::get_relative_threshold<CDataType, CDataType, CDataType>(kbatch);
-    const auto atol_split_k = ck_tile::get_absolute_threshold<CDataType, CDataType, CDataType>(
-        max_accumulated_value, kbatch);
-    // Use higher threshold
-    return ck_tile::make_tuple(std::max(rtol, rtol_split_k), std::max(atol, atol_split_k));
 }
 
 // gemm1
@@ -93,8 +52,8 @@ template <typename FlatmmConfig,
           typename CDEElementWise         = ck_tile::element_wise::PassThrough,
           typename ScaleM,
           typename ScaleN>
-float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
-               const ck_tile::stream_config& s)
+float a16w4_moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
+                     const ck_tile::stream_config& s)
 {
     using CodegenFlatmmShape = ck_tile::TileGemmShape<
         ck_tile::sequence<FlatmmConfig::M_Tile, FlatmmConfig::N_Tile, FlatmmConfig::K_Tile>,
@@ -129,15 +88,24 @@ float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
                                                                FlatmmConfig::NumWaveGroups,
                                                                true>; // Preshuffle_
 
-    if constexpr(moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up)
+    constexpr bool MXFP4_Pipeline = std::is_same_v<BDataType, ck_tile::pk_fp4_t>;
+
+    if constexpr(!MXFP4_Pipeline && moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up)
     {
         static_assert(
             FlatmmConfig::N_Tile % (FlatmmConfig::N_Warp * FlatmmConfig::N_Warp_Tile * 2) == 0,
             "requires NRepeat is multiple of 2 for FFN_gemm1_gate_up");
     }
 
-    using GemmPipelineProblem =
-        ck_tile::GemmPipelineProblem<ADataType, BDataType, AccDataType, CodegenFlatmmShape, Traits>;
+    using ComputeDataType = ADataType;
+    static_assert(sizeof(ComputeDataType) >= sizeof(BDataType),
+                  "mixed_prec_flatmm requires ADataType is a wider type than BDataType");
+
+    using GemmPipelineProblem = ck_tile::GemmPipelineProblem<ComputeDataType,
+                                                             ComputeDataType,
+                                                             AccDataType,
+                                                             CodegenFlatmmShape,
+                                                             Traits>;
 
     using BaseGemmPipeline = ck_tile::BaseFlatmmPipelineAGmemBGmemCRegV1<GemmPipelineProblem>;
 
@@ -156,22 +124,30 @@ float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
         constexpr auto scheduler        = FlatmmConfig::Scheduler;
         constexpr auto memory_operation = memory_operation_.value;
 
-        using CodegenPipelineProblem = ck_tile::FlatmmPipelineProblem<ADataType,
+        using CodegenPipelineProblem =
+            std::conditional_t<MXFP4_Pipeline,
+                               ck_tile::F16xMXF4FlatmmPipelineProblem<ADataType,
                                                                       BDataType,
                                                                       AccDataType,
                                                                       CodegenFlatmmShape,
                                                                       CodegenGemmTraits,
                                                                       scheduler,
                                                                       has_hot_loop_v,
-                                                                      tail_number_v>;
+                                                                      tail_number_v>,
+                               ck_tile::FlatmmPipelineProblem<ADataType,
+                                                              BDataType,
+                                                              AccDataType,
+                                                              CodegenFlatmmShape,
+                                                              CodegenGemmTraits,
+                                                              scheduler,
+                                                              has_hot_loop_v,
+                                                              tail_number_v>>;
 
-        constexpr int BlockedXDLN_PerWarp = moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up
-                                                ? 2
-                                                : 1; // determined by scale shuffle pattern
+        constexpr int BlockedXDLN_PerWarp = 2; // determined by scale shuffle pattern
 
         using GemmEpilogue = ck_tile::CShuffleEpilogue<
-            ck_tile::CShuffleEpilogueProblem<ADataType,
-                                             BDataType,
+            ck_tile::CShuffleEpilogueProblem<ComputeDataType,
+                                             ComputeDataType,
                                              DsDatatype,
                                              AccDataType,
                                              CDataType,
@@ -194,8 +170,10 @@ float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
                                              FlatmmConfig::TiledMMAPermuteN,
                                              BlockedXDLN_PerWarp>>;
 
-        using CodegenFlatmmPipeline =
-            ck_tile::MoeFlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>;
+        using CodegenFlatmmPipeline = std::conditional_t<
+            MXFP4_Pipeline,
+            ck_tile::F16xMXF4FlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>,
+            ck_tile::MoeFlatmmPipelineAGmemBGmemCRegV1<CodegenPipelineProblem>>;
 
         using Kernel = ck_tile::
             MoeFlatmmKernel<TilePartitioner, CodegenFlatmmPipeline, GemmEpilogue, moe_kind>;
@@ -225,9 +203,15 @@ float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
         {
             std::cout << "Flushing cache..." << std::endl;
             static constexpr ck_tile::index_t APackedSize =
-                std::is_same_v<BDataType, ck_tile::pk_int4_t> ? 2 : 1;
+                std::is_same_v<BDataType, ck_tile::pk_int4_t> ||
+                        std::is_same_v<BDataType, ck_tile::pk_fp4_t>
+                    ? 2
+                    : 1;
             static constexpr ck_tile::index_t BPackedSize =
-                std::is_same_v<BDataType, ck_tile::pk_int4_t> ? 2 : 1;
+                std::is_same_v<BDataType, ck_tile::pk_int4_t> ||
+                        std::is_same_v<BDataType, ck_tile::pk_fp4_t>
+                    ? 2
+                    : 1;
 
             ck_tile::HostTensor<ADataType> a_m(ck_tile::host_tensor_descriptor(
                 moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm2 ? args.NumTokens * args.TopK
@@ -300,10 +284,130 @@ float moe_gemm(const ck_tile::MoeFlatmmHostArgs<ScaleM, ScaleN>& args,
     return ave_time;
 }
 
-#include "run_moe_flatmm_example.inc"
+template <class FlatmmConfig, ck_tile::MoeFlatmmKind moe_kind, class IterSrc, class IterDst>
+void shuffle_mxfp4_weight(const IterSrc src, IterDst dst, int experts_cnt, int N, int K)
+{
+    int KPack = 16;
+    int NLane = FlatmmConfig::N_Warp_Tile;
+    int KLane = 64 / NLane;
+    int K_pk  = K / 2;
+    int K0    = K_pk / (KLane * KPack);
+    // K -> K0 KLane KPack
+    // N -> N0 NLane
+    // N, K -> N0 K0 KLane NLane KPack
+    int tempk;
 
-template <template <typename PreType> typename FlatmmConfig>
-int run_moe_flatmm_example(int argc, char* argv[])
+    if constexpr(moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up)
+    {
+        int up_stride = N / 2 / NLane;
+
+        for(int eid = 0; eid < experts_cnt; ++eid)
+        {
+            for(int n = 0; n < N; ++n)
+            {
+                for(int k = 0; k < K_pk; ++k)
+                {
+                    int n0 = n / NLane;
+                    int n1 = n % NLane;
+
+                    // interleave gate and up part with granularity is 16.
+                    int n0_interleave = n >= N / 2 ? (n0 - up_stride) * 2 + 1 : // up part
+                                            n0 * 2;                             // gate part
+
+                    int k0 = k / (KLane * KPack);
+                    tempk  = k % (KLane * KPack);
+                    int k1 = tempk / KPack;
+                    int k2 = tempk % KPack;
+
+                    int outputIndex = eid * N * K_pk + n0_interleave * KPack * NLane * KLane * K0 +
+                                      k0 * KPack * NLane * KLane + k1 * KPack * NLane + n1 * KPack +
+                                      k2;
+
+                    dst[outputIndex] = src[eid * N * K_pk + n * K_pk + k];
+                }
+            }
+        }
+    }
+    else
+    {
+        for(int eid = 0; eid < experts_cnt; ++eid)
+        {
+            for(int n = 0; n < N; ++n)
+            {
+                for(int k = 0; k < K_pk; ++k)
+                {
+                    int n0 = n / NLane;
+                    int n1 = n % NLane;
+
+                    int k0 = k / (KLane * KPack);
+                    tempk  = k % (KLane * KPack);
+                    int k1 = tempk / KPack;
+                    int k2 = tempk % KPack;
+
+                    int outputIndex = eid * N * K_pk + n0 * KPack * NLane * KLane * K0 +
+                                      k0 * KPack * NLane * KLane + k1 * KPack * NLane + n1 * KPack +
+                                      k2;
+
+                    dst[outputIndex] = src[eid * N * K_pk + n * K_pk + k];
+                }
+            }
+        }
+    }
+}
+
+template <typename FlatmmConfig, ck_tile::MoeFlatmmKind moe_kind, typename T>
+auto shuffle_mxfp4_scale(const ck_tile::HostTensor<T>& scale, int experts_cnt)
+{
+    assert(scale.get_lengths().size() == 2);
+    int n_ = scale.get_lengths()[1];
+    int k_ = scale.get_lengths()[0];
+
+    int k_per_expert = k_ / experts_cnt;
+
+    constexpr int K_Pack       = 2;  // fixed for mxfp4
+    constexpr int N_Pack       = 2;  // fixed for mxfp4
+    constexpr int GranularityK = 32; // fixed for mxfp4
+
+    constexpr int K_Lane = 64 / FlatmmConfig::N_Warp_Tile; // 4
+
+    static_assert(FlatmmConfig::N_Warp_Tile == 16, "only support XDL_N == 16");
+    static_assert(FlatmmConfig::N_Repeat % N_Pack == 0);
+    static_assert(FlatmmConfig::K_Tile % (K_Pack * K_Lane * GranularityK) == 0);
+
+    if constexpr(moe_kind == ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up)
+    {
+        ck_tile::HostTensor<T> shfl_scale({
+            experts_cnt,
+            k_per_expert / K_Pack / K_Lane,
+            K_Pack,
+            K_Lane,
+            N_Pack, // N_Pack = 2 is composed of Gate + Up.
+            n_ / FlatmmConfig::N_Warp_Tile / N_Pack,
+            FlatmmConfig::N_Warp_Tile,
+        });
+        std::copy(scale.begin(), scale.end(), shfl_scale.begin());
+        return ck_tile::reference_permute(shfl_scale, {0, 5, 1, 3, 6, 2, 4});
+    }
+    else
+    {
+        ck_tile::HostTensor<T> shfl_scale({
+            experts_cnt,
+            k_per_expert / K_Pack / K_Lane,
+            K_Pack,
+            K_Lane,
+            n_ / FlatmmConfig::N_Warp_Tile / N_Pack,
+            N_Pack,
+            FlatmmConfig::N_Warp_Tile,
+        });
+        std::copy(scale.begin(), scale.end(), shfl_scale.begin());
+        return ck_tile::reference_permute(shfl_scale, {0, 4, 1, 3, 6, 2, 5});
+    }
+}
+
+#include "run_a16w4_moe_flatmm_example.inc"
+
+template <typename FlatmmConfig>
+int run_a16w4_moe_flatmm_example(int argc, char* argv[])
 {
     auto [result, arg_parser] = create_args(argc, argv);
     if(!result)
@@ -314,7 +418,7 @@ int run_moe_flatmm_example(int argc, char* argv[])
     const std::string a_layout = arg_parser.get_str("a_layout");
     const std::string b_layout = arg_parser.get_str("b_layout");
 
-    const std::string prec_type = arg_parser.get_str("prec");
+    const std::string mixed_prec = arg_parser.get_str("mixed_prec");
 
     using Row = ck_tile::tensor_layout::gemm::RowMajor;
     using Col = ck_tile::tensor_layout::gemm::ColumnMajor;
@@ -324,32 +428,20 @@ int run_moe_flatmm_example(int argc, char* argv[])
         const std::string gemm_kind = arg_parser.get_str("gemm_kind");
         if(gemm_kind == "gemm1_gate_up")
         {
-            if(prec_type == "fp8")
+            if(mixed_prec == "fp16xfp4")
             {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::fp8_t,
-                    FlatmmConfig<ck_tile::fp8_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "bf8")
-            {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::bf8_t,
-                    FlatmmConfig<ck_tile::bf8_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "bf16")
-            {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::bfloat16_t,
-                    FlatmmConfig<ck_tile::bfloat16_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "fp16")
-            {
-                return run_moe_gemm_example_with_layouts<
+                return run_a16w4_moe_gemm_example_with_layouts<
                     ck_tile::half_t,
-                    FlatmmConfig<ck_tile::half_t>,
+                    ck_tile::pk_fp4_t,
+                    FlatmmConfig,
+                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
+            }
+            else if(mixed_prec == "bf16xfp4")
+            {
+                return run_a16w4_moe_gemm_example_with_layouts<
+                    ck_tile::bfloat16_t,
+                    ck_tile::pk_fp4_t,
+                    FlatmmConfig,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_up>(argc, argv, Row{}, Col{}, Row{});
             }
             else
@@ -359,72 +451,48 @@ int run_moe_flatmm_example(int argc, char* argv[])
         }
         else if(gemm_kind == "gemm1_gate_only")
         {
-            if(prec_type == "fp8")
+            if(mixed_prec == "fp16xfp4")
             {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::fp8_t,
-                    FlatmmConfig<ck_tile::fp8_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "bf8")
-            {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::bf8_t,
-                    FlatmmConfig<ck_tile::bf8_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "bf16")
-            {
-                return run_moe_gemm_example_with_layouts<
-                    ck_tile::bfloat16_t,
-                    FlatmmConfig<ck_tile::bfloat16_t>,
-                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "fp16")
-            {
-                return run_moe_gemm_example_with_layouts<
+                return run_a16w4_moe_gemm_example_with_layouts<
                     ck_tile::half_t,
-                    FlatmmConfig<ck_tile::half_t>,
+                    ck_tile::pk_fp4_t,
+                    FlatmmConfig,
+                    ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
+            }
+            else if(mixed_prec == "bf16xfp4")
+            {
+                return run_a16w4_moe_gemm_example_with_layouts<
+                    ck_tile::bfloat16_t,
+                    ck_tile::pk_fp4_t,
+                    FlatmmConfig,
                     ck_tile::MoeFlatmmKind::kFFN_gemm1_gate_only>(argc, argv, Row{}, Col{}, Row{});
             }
             else
             {
-                throw std::runtime_error("Unsupported precision type for gemm1_gate_up!");
+                throw std::runtime_error("Unsupported precision type for gemm1_gate_only!");
             }
         }
         else if(gemm_kind == "gemm2")
         {
-            if(prec_type == "fp8")
+            if(mixed_prec == "fp16xfp4")
             {
-                return run_moe_gemm_example_with_layouts<ck_tile::fp8_t,
-                                                         FlatmmConfig<ck_tile::fp8_t>,
-                                                         ck_tile::MoeFlatmmKind::kFFN_gemm2>(
+                return run_a16w4_moe_gemm_example_with_layouts<ck_tile::half_t,
+                                                               ck_tile::pk_fp4_t,
+                                                               FlatmmConfig,
+                                                               ck_tile::MoeFlatmmKind::kFFN_gemm2>(
                     argc, argv, Row{}, Col{}, Row{});
             }
-            else if(prec_type == "bf8")
+            else if(mixed_prec == "bf16xfp4")
             {
-                return run_moe_gemm_example_with_layouts<ck_tile::bf8_t,
-                                                         FlatmmConfig<ck_tile::bf8_t>,
-                                                         ck_tile::MoeFlatmmKind::kFFN_gemm2>(
-                    argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "bf16")
-            {
-                return run_moe_gemm_example_with_layouts<ck_tile::bfloat16_t,
-                                                         FlatmmConfig<ck_tile::bfloat16_t>,
-                                                         ck_tile::MoeFlatmmKind::kFFN_gemm2>(
-                    argc, argv, Row{}, Col{}, Row{});
-            }
-            else if(prec_type == "fp16")
-            {
-                return run_moe_gemm_example_with_layouts<ck_tile::half_t,
-                                                         FlatmmConfig<ck_tile::half_t>,
-                                                         ck_tile::MoeFlatmmKind::kFFN_gemm2>(
+                return run_a16w4_moe_gemm_example_with_layouts<ck_tile::bfloat16_t,
+                                                               ck_tile::pk_fp4_t,
+                                                               FlatmmConfig,
+                                                               ck_tile::MoeFlatmmKind::kFFN_gemm2>(
                     argc, argv, Row{}, Col{}, Row{});
             }
             else
             {
-                throw std::runtime_error("Unsupported precision type for gemm1_gate_up!");
+                throw std::runtime_error("Unsupported precision type for gemm2!");
             }
         }
         else
@@ -451,20 +519,12 @@ int main(int argc, char* argv[])
         int warp_tile = arg_parser.get_int("warp_tile");
         if(warp_tile == 0)
         {
-            return !run_moe_flatmm_example<FlatmmConfig16>(argc, argv);
+            return !run_a16w4_moe_flatmm_example<A16W4_FlatmmConfig16>(argc, argv);
         }
-        else if(warp_tile == 1)
-        {
-            return !run_moe_flatmm_example<FlatmmConfig32>(argc, argv);
-        }
-        else if(warp_tile == 2)
-        {
-            return !run_moe_flatmm_example<FlatmmConfig16_950>(argc, argv);
-        }
-        else
-        {
-            return !run_moe_flatmm_example<FlatmmConfig32_950>(argc, argv);
-        }
+        // else if(warp_tile == 1)
+        // {
+        //     return !run_a16w4_moe_flatmm_example<A16W4_FlatmmConfig16_950>(argc, argv);
+        // }
     }
     catch(const std::runtime_error& e)
     {

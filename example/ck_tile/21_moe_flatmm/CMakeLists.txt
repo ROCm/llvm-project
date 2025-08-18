@@ -1,4 +1,6 @@
 add_executable(tile_example_moe_flatmm EXCLUDE_FROM_ALL moe_flatmm.cpp)
+add_executable(tile_example_a16w4_moe_flatmm EXCLUDE_FROM_ALL mixed_prec/a16w4_moe_flatmm.cpp)
+
 
 set(EXAMPLE_MOE_FLATMM_COMPILE_OPTIONS)
 
@@ -9,3 +11,4 @@ endif()
 
 list(APPEND EXAMPLE_MOE_FLATMM_COMPILE_OPTIONS --save-temps)
 target_compile_options(tile_example_moe_flatmm PRIVATE ${EXAMPLE_MOE_FLATMM_COMPILE_OPTIONS})
+target_compile_options(tile_example_a16w4_moe_flatmm PRIVATE ${EXAMPLE_MOE_FLATMM_COMPILE_OPTIONS})

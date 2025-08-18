@@ -14,27 +14,29 @@ template <typename FlatmmConfig,
           ck_tile::MoeFlatmmKind kind,
           typename CDEElementWise = ck_tile::element_wise::PassThrough,
           typename MoeHostArgs>
-float invoke_moe_gemm(int n_warmup, int n_repeat, const MoeHostArgs& args)
+float invoke_a16w4_moe_gemm(int n_warmup, int n_repeat, const MoeHostArgs& args)
 {
-    float ave_time = moe_gemm<FlatmmConfig,
-                              ADataType,
-                              BDataType,
-                              DsDatatype,
-                              AccDataType,
-                              CDataType,
-                              ALayout,
-                              BLayout,
-                              DsLayout,
-                              ELayout,
-                              kind,
-                              CDEElementWise>(
+    float ave_time = a16w4_moe_gemm<FlatmmConfig,
+                                    ADataType,
+                                    BDataType,
+                                    DsDatatype,
+                                    AccDataType,
+                                    CDataType,
+                                    ALayout,
+                                    BLayout,
+                                    DsLayout,
+                                    ELayout,
+                                    kind,
+                                    CDEElementWise>(
         args, ck_tile::stream_config{nullptr, true, 1, n_warmup, n_repeat, true, true, 50});
 
     std::string op_name{"Moe Gemm"};
 
+    constexpr int PackedSize = ck_tile::numeric_traits<BDataType>::PackedSize;
+
     std::size_t flop     = std::size_t(2) * args.M * args.N * args.K;
     std::size_t num_byte = sizeof(ADataType) * args.M * args.K +
-                           sizeof(BDataType) * args.N * args.K +
+                           sizeof(BDataType) * args.N * args.K / PackedSize +
                            sizeof(CDataType) * args.M * args.N;
     float tflops     = static_cast<float>(flop) / 1.E9 / ave_time;
     float gb_per_sec = num_byte / 1.E6 / ave_time;
@@ -60,17 +62,18 @@ struct LocalSilu
 
 } // namespace
 
-template <typename PrecType,
+template <typename PrecActType,
+          typename PrecWeightType,
           typename FlatmmConfig,
           ck_tile::MoeFlatmmKind kind,
           typename ALayout,
           typename BLayout,
           typename CLayout>
-int run_moe_gemm_example_with_layouts(int argc,
-                                      char* argv[],
-                                      const ALayout a_layout                  = ALayout{},
-                                      const BLayout b_layout                  = BLayout{},
-                                      [[maybe_unused]] const CLayout c_layout = CLayout{})
+int run_a16w4_moe_gemm_example_with_layouts(int argc,
+                                            char* argv[],
+                                            const ALayout a_layout                  = ALayout{},
+                                            const BLayout b_layout                  = BLayout{},
+                                            [[maybe_unused]] const CLayout c_layout = CLayout{})
 {
     auto [result, arg_parser] = create_args(argc, argv);
 
@@ -79,19 +82,22 @@ int run_moe_gemm_example_with_layouts(int argc,
         return -1;
     };
 
-    using ADataType   = typename GemmBasicTypeConfig<PrecType>::ADataType;
-    using BDataType   = typename GemmBasicTypeConfig<PrecType>::BDataType;
-    using CDataType   = typename GemmBasicTypeConfig<PrecType>::CDataType;
-    using AccDataType = typename GemmBasicTypeConfig<PrecType>::AccDataType;
+    using ADataType   = PrecActType;
+    using BDataType   = PrecWeightType;
+    using CDataType   = PrecActType;
+    using AccDataType = float;
 
-    constexpr int ScaleGranularityM = 1;
+    using ScaleType = ck_tile::e8m0_t;
+
     constexpr int ScaleGranularityN = 1;
+    constexpr int ScaleGranularityK = 32;
 
     const ck_tile::index_t N          = arg_parser.get_int("N");
     const ck_tile::index_t K          = arg_parser.get_int("K");
     ck_tile::index_t stride_A         = arg_parser.get_int("stride_A");
     ck_tile::index_t stride_B         = arg_parser.get_int("stride_B");
     ck_tile::index_t stride_C         = arg_parser.get_int("stride_C");
+    ck_tile::index_t init_method      = arg_parser.get_int("init");
     const ck_tile::index_t num_tokens = arg_parser.get_int("NumTokens");
     const ck_tile::index_t topk       = arg_parser.get_int("TopK");
     const ck_tile::index_t warmup     = arg_parser.get_int("warmup");
@@ -126,35 +132,38 @@ int run_moe_gemm_example_with_layouts(int argc,
     auto c_m_n_tensor = ck_tile::HostTensor<CDataType>(ck_tile::host_tensor_descriptor(
         IsInputGemm ? num_tokens * topk : num_tokens, outputN, stride_C, is_row_major(CLayout{})));
 
-    ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_m_k_tensor);
-    ck_tile::FillUniformDistribution<BDataType>{-.5f, .5f}(b_k_n_tensor);
+    ck_tile::HostTensor<ScaleType> scale_b(ck_tile::HostTensorDescriptor(
+        {K * experts / ScaleGranularityK, N / ScaleGranularityN}, {N / ScaleGranularityN, 1}));
 
-    auto b_shuffle_host = shuffle_b<FlatmmConfig>(b_k_n_tensor);
+    if(init_method == 0)
+    {
+        ck_tile::FillUniformDistribution<ADataType>{0.0f, 1.0f}(a_m_k_tensor);
+        ck_tile::FillUniformDistribution<BDataType>{-.5f, .5f}(b_k_n_tensor);
+        ck_tile::FillUniformDistribution<ScaleType>{0.f, 1.f}(scale_b);
+    }
+    else
+    {
+        ck_tile::FillUniformDistribution<ADataType>{1.0f, 1.0f}(a_m_k_tensor);
+        ck_tile::FillUniformDistribution<BDataType>{1.0f, 1.0f}(b_k_n_tensor);
+        ck_tile::FillUniformDistribution<ScaleType>{1.0f, 1.0f}(scale_b);
+    }
+
+    ck_tile::HostTensor<BDataType> b_shuffle_host(
+        ck_tile::host_tensor_descriptor(K, experts * N, stride_B, is_row_major(b_layout)));
+    shuffle_mxfp4_weight<FlatmmConfig, kind>(
+        b_k_n_tensor.begin(), b_shuffle_host.begin(), experts, N, K);
+
+    ck_tile::HostTensor<ScaleType> scale_b_shuffle =
+        shuffle_mxfp4_scale<FlatmmConfig, kind>(scale_b, experts);
+    ck_tile::DeviceMem scale_b_shuffle_dev_buf(scale_b_shuffle.get_element_space_size_in_bytes());
 
     std::cout << "moe_flatmm:"
               << "\n  num_experts: " << experts << "\n  num_tokens: " << num_tokens
               << "\n  topk: " << topk << "\n  sorted_tile_num: " << sorted_tile_num
+              << "\n  problem_n: " << N << "\n  problem_k: " << K
               << "\n  a_m_k: " << a_m_k_tensor.mDesc << "\n  b_k_n: " << b_k_n_tensor.mDesc
               << "\n  b_shuffle: " << b_shuffle_host.mDesc << "\n  c_m_n: " << c_m_n_tensor.mDesc
               << std::endl;
-
-    ck_tile::DeviceMem a_m_k_dev_buf{a_m_k_tensor.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem b_origin_dev_buf{b_k_n_tensor.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem b_shuffle_dev_buf{b_shuffle_host.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem c_m_n_dev_buf{c_m_n_tensor.get_element_space_size_in_bytes()};
-
-    a_m_k_dev_buf.ToDevice(a_m_k_tensor.data());
-    b_origin_dev_buf.ToDevice(b_k_n_tensor.data());
-    b_shuffle_dev_buf.ToDevice(b_shuffle_host.data());
-    c_m_n_dev_buf.SetZero();
-    c_m_n_tensor.SetZero();
-
-    const void* p_a         = a_m_k_dev_buf.GetDeviceBuffer();
-    const void* p_b_origin  = b_origin_dev_buf.GetDeviceBuffer();
-    const void* p_b_shuffle = b_shuffle_dev_buf.GetDeviceBuffer();
-    void* p_c               = c_m_n_dev_buf.GetDeviceBuffer();
-
-    // TODO: malloc and init sorted tokens and max tokens buffer
 
     ck_tile::HostTensor<ck_tile::index_t> expert_ids(
         ck_tile::HostTensorDescriptor({sorted_tile_num}, {1}));
@@ -165,29 +174,15 @@ int run_moe_gemm_example_with_layouts(int argc,
     ck_tile::HostTensor<ck_tile::index_t> max_token_id(
         ck_tile::HostTensorDescriptor({1 + sorted_tile_num}));
 
-    ck_tile::HostTensor<AccDataType> per_token_scale(
-        ck_tile::HostTensorDescriptor({IsInputGemm ? num_tokens : M}, {1}));
-    ck_tile::HostTensor<AccDataType> per_channel_scale(
-        ck_tile::HostTensorDescriptor({N * experts}, {1}));
-
-    ck_tile::FillUniformDistribution<AccDataType>{0.f, 1.f}(per_token_scale);
-    ck_tile::FillUniformDistribution<AccDataType>{0.f, 1.f}(per_channel_scale);
-
-    // for verification only, no need to satify weight normalization
-    ck_tile::FillUniformDistribution<AccDataType>{0.0f, 1.0f}(expert_weight);
-
-    ck_tile::DeviceMem sorted_token_ids_dev{sizeof(ck_tile::index_t) *
-                                            sorted_token_ids.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem expert_ids_dev{sizeof(ck_tile::index_t) *
-                                      expert_ids.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem max_token_id_dev{sizeof(ck_tile::index_t) *
-                                        max_token_id.get_element_space_size_in_bytes()};
-    ck_tile::DeviceMem expert_weight_dev{sizeof(AccDataType) *
-                                         expert_weight.get_element_space_size_in_bytes()};
-
-    ck_tile::DeviceMem per_token_scale_dev_buf(per_token_scale.get_element_space_size_in_bytes());
-    ck_tile::DeviceMem per_channel_scale_dev_buf(
-        per_channel_scale.get_element_space_size_in_bytes());
+    if(init_method == 0)
+    {
+        // for verification only, no need to satify weight normalization
+        ck_tile::FillUniformDistribution<AccDataType>{0.0f, 1.0f}(expert_weight);
+    }
+    else
+    {
+        ck_tile::FillUniformDistribution<AccDataType>{1.0f, 1.0f}(expert_weight);
+    }
 
     max_token_id.mData = {valid_tile_num * MPerBlock, 0, 1, 2, 3, 4, 6, 7, 8, 8};
     // int eids[]         = {0, 1, 2, 3, 4, 4, 5, 6, 3, 3, 3, 3}; // {2, 1, 1, 2, 2, 2, 1, 2}
@@ -215,12 +210,31 @@ int run_moe_gemm_example_with_layouts(int argc,
         }
     }
 
+    ck_tile::DeviceMem a_m_k_dev_buf{a_m_k_tensor.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem b_origin_dev_buf{b_k_n_tensor.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem b_shuffle_dev_buf{b_shuffle_host.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem c_m_n_dev_buf{c_m_n_tensor.get_element_space_size_in_bytes()};
+
+    a_m_k_dev_buf.ToDevice(a_m_k_tensor.data());
+    b_origin_dev_buf.ToDevice(b_k_n_tensor.data());
+    b_shuffle_dev_buf.ToDevice(b_shuffle_host.data());
+    c_m_n_dev_buf.SetZero();
+    c_m_n_tensor.SetZero();
+
+    ck_tile::DeviceMem sorted_token_ids_dev{sizeof(ck_tile::index_t) *
+                                            sorted_token_ids.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem expert_ids_dev{sizeof(ck_tile::index_t) *
+                                      expert_ids.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem max_token_id_dev{sizeof(ck_tile::index_t) *
+                                        max_token_id.get_element_space_size_in_bytes()};
+    ck_tile::DeviceMem expert_weight_dev{sizeof(AccDataType) *
+                                         expert_weight.get_element_space_size_in_bytes()};
+
     sorted_token_ids_dev.ToDevice(sorted_token_ids.data());
     expert_ids_dev.ToDevice(expert_ids.data());
     max_token_id_dev.ToDevice(max_token_id.data());
     expert_weight_dev.ToDevice(expert_weight.data());
-    per_token_scale_dev_buf.ToDevice(per_token_scale.data());
-    per_channel_scale_dev_buf.ToDevice(per_channel_scale.data());
+    scale_b_shuffle_dev_buf.ToDevice(scale_b_shuffle.data());
 
     const ck_tile::index_t* p_sorted_token_ids_dev =
         static_cast<ck_tile::index_t*>(sorted_token_ids_dev.GetDeviceBuffer());
@@ -230,23 +244,20 @@ int run_moe_gemm_example_with_layouts(int argc,
         static_cast<ck_tile::index_t*>(max_token_id_dev.GetDeviceBuffer());
     const AccDataType* p_sorted_expert_weight_dev =
         static_cast<AccDataType*>(expert_weight_dev.GetDeviceBuffer());
+    auto scale_b_shuffle_dev_ptr =
+        ck_tile::FlatmmScalePointer<ScaleGranularityN, ScaleGranularityK>{
+            static_cast<float*>(scale_b_shuffle_dev_buf.GetDeviceBuffer()), N / ScaleGranularityN};
 
-    using MoeFlatmmArgs =
-        ck_tile::MoeFlatmmHostArgs<ck_tile::FlatmmScalePointer<ScaleGranularityM>,
-                                   ck_tile::FlatmmScalePointer<ScaleGranularityN>>;
-
-    auto per_token_scale_dev_ptr = ck_tile::FlatmmScalePointer<ScaleGranularityM>{
-        static_cast<float*>(per_token_scale_dev_buf.GetDeviceBuffer())};
-    auto per_channel_scale_dev_ptr = ck_tile::FlatmmScalePointer<ScaleGranularityN>{
-        static_cast<float*>(per_channel_scale_dev_buf.GetDeviceBuffer())};
-
+    using MoeFlatmmArgs = ck_tile::MoeFlatmmHostArgs<
+        ck_tile::FlatmmScalePointer<-1>,
+        ck_tile::FlatmmScalePointer<ScaleGranularityN, ScaleGranularityK>>;
     MoeFlatmmArgs gemm_desc{p_sorted_token_ids_dev,
                             p_sorted_expert_weight_dev,
                             p_expert_ids_dev,
                             p_max_token_id_dev,
-                            p_a,
-                            p_b_shuffle,
-                            p_c,
+                            a_m_k_dev_buf.GetDeviceBuffer(),
+                            b_shuffle_dev_buf.GetDeviceBuffer(),
+                            c_m_n_dev_buf.GetDeviceBuffer(),
                             num_tokens,
                             experts,
                             topk,
@@ -257,20 +268,20 @@ int run_moe_gemm_example_with_layouts(int argc,
                             stride_A,
                             stride_B,
                             stride_C,
-                            per_token_scale_dev_ptr,
-                            per_channel_scale_dev_ptr};
+                            nullptr,
+                            scale_b_shuffle_dev_ptr};
 
-    invoke_moe_gemm<FlatmmConfig,
-                    ADataType,
-                    BDataType,
-                    ck_tile::tuple<>,
-                    AccDataType,
-                    CDataType,
-                    ALayout,
-                    BLayout,
-                    ck_tile::tuple<>,
-                    CLayout,
-                    kind>(warmup, repeat, gemm_desc);
+    invoke_a16w4_moe_gemm<FlatmmConfig,
+                          ADataType,
+                          BDataType,
+                          ck_tile::tuple<>,
+                          AccDataType,
+                          CDataType,
+                          ALayout,
+                          BLayout,
+                          ck_tile::tuple<>,
+                          CLayout,
+                          kind>(warmup, repeat, gemm_desc);
 
     c_m_n_dev_buf.FromDevice(c_m_n_tensor.data());
 
@@ -282,12 +293,25 @@ int run_moe_gemm_example_with_layouts(int argc,
                                             outputN,
                                             stride_C,
                                             is_row_major(CLayout{})));
-
         c_m_n_host_ref.SetZero();
+
+        ck_tile::HostTensor<AccDataType> scale_A(
+            ck_tile::HostTensorDescriptor({1, K / ScaleGranularityK}, {1, 1}));
+
+        // scaleA = 1 has no effect on the result
+        ck_tile::FillUniformDistribution<AccDataType>{1.f, 1.f}(scale_A);
+        ck_tile::DeviceMem scale_A_dev_buf(scale_A.get_element_space_size_in_bytes());
+        scale_A_dev_buf.ToDevice(scale_A.data());
+
+        // convert scale_b from e8m0 to float
+        ck_tile::HostTensor<AccDataType> scale_b_float(ck_tile::HostTensorDescriptor(
+            {K * experts / ScaleGranularityK, N / ScaleGranularityN}, {N / ScaleGranularityN, 1}));
+        std::copy(scale_b.begin(), scale_b.end(), scale_b_float.begin());
+        ck_tile::DeviceMem scale_b_float_dev_buf(scale_b_float.get_element_space_size_in_bytes());
+        scale_b_float_dev_buf.ToDevice(scale_b_float.data());
 
         std::unique_ptr<ck_tile::DeviceMem> c_m_n_ref_buf =
             std::make_unique<ck_tile::DeviceMem>(c_m_n_tensor.get_element_space_size_in_bytes());
-
         c_m_n_ref_buf->SetZero();
 
         ck_tile::reference_moe_gemm_gpu<
@@ -303,8 +327,8 @@ int run_moe_gemm_example_with_layouts(int argc,
             p_sorted_token_ids_dev,
             p_expert_ids_dev,
             p_max_token_id_dev,
-            static_cast<const ADataType*>(p_a),
-            static_cast<const BDataType*>(p_b_origin),
+            static_cast<const ADataType*>(a_m_k_dev_buf.GetDeviceBuffer()),
+            static_cast<const BDataType*>(b_origin_dev_buf.GetDeviceBuffer()),
             static_cast<CDataType*>(c_m_n_ref_buf->GetDeviceBuffer()),
             p_sorted_expert_weight_dev,
             num_tokens,
@@ -316,16 +340,14 @@ int run_moe_gemm_example_with_layouts(int argc,
             stride_A,
             stride_B,
             stride_C,
+            M,
             1,
-            1,
-            K,
-            static_cast<float*>(per_token_scale_dev_buf.GetDeviceBuffer()),
-            static_cast<float*>(per_channel_scale_dev_buf.GetDeviceBuffer()));
+            ScaleGranularityK,
+            static_cast<float*>(scale_A_dev_buf.GetDeviceBuffer()),
+            static_cast<float*>(scale_b_float_dev_buf.GetDeviceBuffer()));
 
         const float max_accumulated_value =
             *std::max_element(c_m_n_host_ref.mData.begin(), c_m_n_host_ref.mData.end());
-        const auto rtol_atol = calculate_rtol_atol<ADataType, BDataType, AccDataType, CDataType>(
-            K, 1 /*kbatch*/, max_accumulated_value);
         c_m_n_ref_buf->FromDevice(c_m_n_host_ref.data());
 
         const float rtol = std::is_same_v<ADataType, ck_tile::half_t> && IsInputGemm ? 1e-3 : 1e-2;
