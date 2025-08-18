@@ -227,6 +227,10 @@ public:
 
   std::optional<Instruction *> instCombineIntrinsic(InstCombiner &IC,
                                                     IntrinsicInst &II) const;
+
+  Instruction *hoistLaneIntrinsicThroughOperand(InstCombiner &IC,
+                                                IntrinsicInst &II) const;
+
   std::optional<Value *> simplifyDemandedVectorEltsIntrinsic(
       InstCombiner &IC, IntrinsicInst &II, APInt DemandedElts, APInt &UndefElts,
       APInt &UndefElts2, APInt &UndefElts3,
