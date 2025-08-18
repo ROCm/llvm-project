@@ -1117,7 +1117,8 @@ struct MoeFlatmmKernel
                 {
                     constexpr auto step = SFC::get_forward_step(iAccess);
                     // row_offset of out windows has been included in scatter offset
-                    move_tile_window(c_block_window, {0, step.at(number<1>{})});
+                    move_tile_window(c_block_window,
+                                     {0, step.at(number<1>{}) / number<IsGateUp ? 2 : 1>{}});
                 }
             });
         }
