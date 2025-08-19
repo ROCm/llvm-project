@@ -18,6 +18,57 @@ struct F16xMXF4FlatmmPipelineAgBgCrPolicy : UniversalFlatmmPipelineAgBgCrPolicy
     static constexpr index_t K_Pack    = 2; // it's fixed for fp4
 
     template <typename Problem>
+    CK_TILE_HOST_DEVICE static constexpr auto MakeF16xF4_ALdsBlockDescriptor()
+    {
+        using namespace ck_tile;
+
+        constexpr index_t MPerXdl = Problem::BlockGemmShape::WarpTile::at(I0);
+        constexpr index_t NPerXdl = Problem::BlockGemmShape::WarpTile::at(I1);
+
+        static_assert(MPerXdl == 16 && NPerXdl == 16);
+
+        /*reduce transform layers,compare with old ck*/
+        constexpr index_t MPerBlock = Problem::BlockGemmShape::kM;
+        constexpr index_t KPerBlock = Problem::BlockGemmShape::kK;
+        constexpr index_t KPack     = GetSmemPackA<Problem>();
+
+        constexpr index_t XDL_PerWeightK = 4;
+
+        constexpr auto a_lds_block_desc_0 =
+            make_naive_tensor_descriptor(make_tuple(number<KPerBlock / KPack / XDL_PerWeightK>{},
+                                                    number<MPerBlock>{},
+                                                    number<XDL_PerWeightK>{},
+                                                    number<KPack>{}),
+                                         make_tuple(number<KPack * XDL_PerWeightK>{},
+                                                    number<KPerBlock>{},
+                                                    number<KPack>{},
+                                                    number<1>{}),
+                                         number<KPack>{},
+                                         number<1>{});
+
+        constexpr auto a_lds_block_desc_permuted = transform_tensor_descriptor(
+            a_lds_block_desc_0,
+            make_tuple(make_xor_transform(make_tuple(number<MPerBlock>{},
+                                                     number<KPerBlock / KPack / XDL_PerWeightK>{})),
+                       make_pass_through_transform(number<XDL_PerWeightK>{}),
+                       make_pass_through_transform(number<KPack>{})),
+            make_tuple(sequence<1, 0>{}, sequence<2>{}, sequence<3>{}),
+            make_tuple(sequence<1, 0>{}, sequence<2>{}, sequence<3>{}));
+
+        constexpr auto a_lds_block_desc =
+            transform_tensor_descriptor(a_lds_block_desc_permuted,
+                                        make_tuple(make_pass_through_transform(number<MPerBlock>{}),
+                                                   make_merge_transform_v3_division_mod(make_tuple(
+                                                       number<KPerBlock / KPack / XDL_PerWeightK>{},
+                                                       number<XDL_PerWeightK>{},
+                                                       number<KPack>{}))),
+                                        make_tuple(sequence<1>{}, sequence<0, 2, 3>{}),
+                                        make_tuple(sequence<0>{}, sequence<1>{}));
+
+        return a_lds_block_desc;
+    }
+
+    template <typename Problem>
     CK_TILE_HOST_DEVICE static constexpr auto MakeFp16xF4_ADramTileDistribution()
     {
         using ADataType = remove_cvref_t<typename Problem::ADataType>;
@@ -47,46 +98,6 @@ struct F16xMXF4FlatmmPipelineAgBgCrPolicy : UniversalFlatmmPipelineAgBgCrPolicy
                                        tuple<sequence<1>, sequence<2, 0>>,
                                        sequence<1, 2>,
                                        sequence<0, 1>>{});
-    }
-
-    template <typename Problem>
-    CK_TILE_HOST_DEVICE static constexpr auto MakeFp16xF4_DS_WRITE_ATileDistribution()
-    {
-        using ADataType = remove_cvref_t<typename Problem::ADataType>;
-        using ALayout   = remove_cvref_t<typename Problem::ALayout>;
-
-        static_assert(std::is_same_v<ALayout, tensor_layout::gemm::RowMajor>);
-
-        constexpr index_t BlockSize = Problem::kBlockSize;
-
-        constexpr index_t MPerBlock = Problem::BlockGemmShape::kM;
-        constexpr index_t KPerBlock = Problem::BlockGemmShape::kK;
-
-        constexpr index_t K1 = Problem::VectorLoadSize / sizeof(ADataType);
-        constexpr index_t K0 = KPerBlock / K1;
-        constexpr index_t M2 = get_warp_size() / K0;
-
-        constexpr index_t M1 = BlockSize / get_warp_size();
-        static_assert(M2 != 0, "M2 is zero, which will lead to a division by zero error.");
-        static_assert(M1 != 0, "M1 is zero, which will lead to a division by zero error.");
-        constexpr index_t M0 = MPerBlock / (M2 * M1);
-        static_assert(M0 * M1 * M2 == MPerBlock,
-                      "Incorrect M0, M2, M1 configuration! "
-                      "M0, M1, M2 must cover whole MPerBlock!");
-
-        // unmerge K0 to K16_i x K4_1 x K4_2
-        // then exchange the order of K4_1 and K4_2
-        constexpr index_t XDL_PerKBLoad = 4;
-        constexpr index_t K128_Cnt      = K0 / XDL_PerKBLoad / XDL_PerKBLoad;
-
-        return make_static_tile_distribution(
-            tile_distribution_encoding<
-                sequence<1>,
-                tuple<sequence<M0, M1, M2>, sequence<K128_Cnt, XDL_PerKBLoad, XDL_PerKBLoad, K1>>,
-                tuple<sequence<1>, sequence<1, 2, 2, 2>>,
-                tuple<sequence<1>, sequence<2, 0, 2, 1>>,
-                sequence<1, 2>,
-                sequence<0, 3>>{});
     }
 
     template <typename Problem>

@@ -513,44 +513,35 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
         ADataType* p_a_lds_pong = static_cast<ADataType*>(p_smem_pong);
 
         constexpr auto a_lds_block_desc =
-            PipelinePolicy::template MakeALdsBlockDescriptor<Problem>();
+            PipelinePolicy::template MakeF16xF4_ALdsBlockDescriptor<Problem>();
 
         auto a_lds_block_ping =
             make_tensor_view<address_space_enum::lds>(p_a_lds_ping, a_lds_block_desc);
         auto a_lds_block_pong =
             make_tensor_view<address_space_enum::lds>(p_a_lds_pong, a_lds_block_desc);
 
-        auto A_XDL_TileDist = make_static_tile_distribution(typename WG::AWarpDstrEncoding{});
-        auto A_Lds_TileDist =
-            PipelinePolicy::template MakeFp16xF4_DS_WRITE_ATileDistribution<Problem>();
-        auto A_Lds_Stride = WG::kK;
-
-        // auto A_XDL_TileDist = PipelinePolicy::template
-        // MakeF16xF4_ALDS_TileDistribution<Problem>(); auto A_Lds_TileDist =
-        // PipelinePolicy::template MakeADramTileDistribution<Problem>(); auto A_Lds_Stride   = 8;
-
         auto a_copy_lds_window_ping =
             make_tile_window(a_lds_block_ping,
                              make_tuple(number<kMPerBlock>{}, number<kKPerBlock>{}),
                              {0, 0},
-                             A_Lds_TileDist);
+                             PipelinePolicy::template MakeADramTileDistribution<Problem>());
         auto a_copy_lds_window_pong =
             make_tile_window(a_lds_block_pong,
                              make_tuple(number<kMPerBlock>{}, number<kKPerBlock>{}),
                              {0, 0},
-                             A_Lds_TileDist);
+                             PipelinePolicy::template MakeADramTileDistribution<Problem>());
 
         // ping-pong window for A LDS
         auto a_warp_window_ping_tmp =
             make_tile_window(a_lds_block_ping,
                              make_tuple(number<WG::kM>{}, number<WG::kK>{}),
                              {iMWarp * WG::kM, 0},
-                             A_XDL_TileDist);
+                             PipelinePolicy::template MakeF16xF4_ALDS_TileDistribution<Problem>());
         auto a_warp_window_pong_tmp =
             make_tile_window(a_lds_block_pong,
                              make_tuple(number<WG::kM>{}, number<WG::kK>{}),
                              {iMWarp * WG::kM, 0},
-                             A_XDL_TileDist);
+                             PipelinePolicy::template MakeF16xF4_ALDS_TileDistribution<Problem>());
 
         statically_indexed_array<
             statically_indexed_array<decltype(a_warp_window_ping_tmp), KIterPerWarp>,
@@ -562,26 +553,22 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
             MIterPerWarp>
             a_warp_windows_pong;
 
+        auto A_Lds_Stride = 8;
         static_for<0, MIterPerWarp, 1>{}([&](auto mIter) {
             static_for<0, KIterPerWarp, 1>{}([&](auto kIter) {
                 a_warp_windows_ping(mIter)(kIter) = a_warp_window_ping_tmp;
                 a_warp_windows_pong(mIter)(kIter) = a_warp_window_pong_tmp;
 
-                // auto weight_k_idx  = kIter / number<XDL_PerWeightK>{};
-                // auto weight_k_rank = kIter % number<XDL_PerWeightK>{};
-                // move_tile_window(
-                //     a_warp_windows_ping(mIter)(kIter),
-                //     {mIter * MPerBlockPerIter,
-                //      weight_k_rank * A_Lds_Stride + weight_k_idx * XDL_PerWeightK * WG::kK});
-                // move_tile_window(
-                //     a_warp_windows_pong(mIter)(kIter),
-                //     {mIter * MPerBlockPerIter,
-                //      weight_k_rank * A_Lds_Stride + weight_k_idx * XDL_PerWeightK * WG::kK});
-
-                move_tile_window(a_warp_windows_ping(mIter)(kIter),
-                                 {mIter * MPerBlockPerIter, kIter * KPerBlockPerIter});
-                move_tile_window(a_warp_windows_pong(mIter)(kIter),
-                                 {mIter * MPerBlockPerIter, kIter * KPerBlockPerIter});
+                auto weight_k_idx  = kIter / number<XDL_PerWeightK>{};
+                auto weight_k_rank = kIter % number<XDL_PerWeightK>{};
+                move_tile_window(
+                    a_warp_windows_ping(mIter)(kIter),
+                    {mIter * MPerBlockPerIter,
+                     weight_k_rank * A_Lds_Stride + weight_k_idx * XDL_PerWeightK * WG::kK});
+                move_tile_window(
+                    a_warp_windows_pong(mIter)(kIter),
+                    {mIter * MPerBlockPerIter,
+                     weight_k_rank * A_Lds_Stride + weight_k_idx * XDL_PerWeightK * WG::kK});
             });
         });
 
@@ -673,10 +660,8 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
         move_tile_window(scale_b_flat_dram_window, {0, ScaleKPerWarp * ScaleKFlatPerWarp});
 
         // A_Lds_TileDist may differ with ADramTileDistribution
-        auto a_block_tile_transformed = make_static_distributed_tensor<ComputeType>(A_Lds_TileDist);
 
-        a_block_tile_transformed.get_thread_buffer() =
-            tile_elementwise_in(a_element_func, a_block_tile).get_thread_buffer();
+        auto a_block_tile_transformed = tile_elementwise_in(a_element_func, a_block_tile);
         store_tile(a_copy_lds_window_ping, a_block_tile_transformed);
 
         __builtin_amdgcn_sched_barrier(0);
@@ -789,8 +774,7 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
             });
 
             // Prefill A(2i+1)
-            a_block_tile_transformed.get_thread_buffer() =
-                tile_elementwise_in(a_element_func, a_block_tile).get_thread_buffer();
+            a_block_tile_transformed = tile_elementwise_in(a_element_func, a_block_tile);
             store_tile(a_copy_lds_window_pong, a_block_tile_transformed);
 
             // Prefetch A(2i+2)
@@ -893,8 +877,7 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
             });
 
             // Prefill A(2i+2)
-            a_block_tile_transformed.get_thread_buffer() =
-                tile_elementwise_in(a_element_func, a_block_tile).get_thread_buffer();
+            a_block_tile_transformed = tile_elementwise_in(a_element_func, a_block_tile);
             store_tile(a_copy_lds_window_ping, a_block_tile_transformed);
 
             // Prefetch A(2i+3)
@@ -1001,8 +984,7 @@ struct F16xMXF4FlatmmPipelineAGmemBGmemCRegV1
             });
 
             // Prefill A(loopK)
-            a_block_tile_transformed.get_thread_buffer() =
-                tile_elementwise_in(a_element_func, a_block_tile).get_thread_buffer();
+            a_block_tile_transformed = tile_elementwise_in(a_element_func, a_block_tile);
             store_tile(a_copy_lds_window_pong, a_block_tile_transformed);
 
             // GEMM loopK-1
