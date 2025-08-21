@@ -644,7 +644,8 @@ struct MoeFlatmmKernel
         });
 
         const SplitKBatchOffset splitk_batch_offset(kargs);
-        const index_t expert_stride = __builtin_amdgcn_readfirstlane(kargs.N * kargs.K);
+        const long_index_t expert_stride =
+            __builtin_amdgcn_readfirstlane(long_index_t(kargs.N) * kargs.K);
 
         const ADataType* a_ptr =
             static_cast<const ADataType*>(kargs.a_ptr) + splitk_batch_offset.a_k_split_offset;
