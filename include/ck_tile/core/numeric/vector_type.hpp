@@ -151,6 +151,9 @@ using bf16x16_t = bf16_raw_t __attribute__((ext_vector_type(16)));
 using bf16x32_t = bf16_raw_t __attribute__((ext_vector_type(32)));
 using bf16x64_t = bf16_raw_t __attribute__((ext_vector_type(64)));
 
+using cktile_llvm_bf16x2_t = __bf16 __attribute__((ext_vector_type(2)));
+using cktile_llvm_bf16x4_t = __bf16 __attribute__((ext_vector_type(4)));
+
 // i32
 // using int32_t = ...
 using int32x2_t  = int32_t __attribute__((ext_vector_type(2)));

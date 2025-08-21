@@ -1246,6 +1246,14 @@ CK_TILE_DEVICE_EXTERN fp16x2_t llvm_amdgcn_raw_buffer_atomic_add_fp16x2(
     index_t soffset,
     index_t glc_slc) __asm("llvm.amdgcn.raw.buffer.atomic.fadd.v2f16");
 
+// buffer atomic-add bf16
+CK_TILE_DEVICE_EXTERN cktile_llvm_bf16x2_t llvm_amdgcn_raw_buffer_atomic_add_bf16x2(
+    cktile_llvm_bf16x2_t vdata,
+    int32x4_t rsrc,
+    index_t voffset,
+    index_t soffset,
+    index_t glc_slc) __asm("llvm.amdgcn.raw.buffer.atomic.fadd.v2bf16");
+
 // buffer atomic-add i32
 CK_TILE_DEVICE_EXTERN int32_t llvm_amdgcn_raw_buffer_atomic_add_i32(
     int32_t vdata,
@@ -2197,6 +2205,7 @@ CK_TILE_DEVICE void amd_buffer_atomic_add_impl(const thread_buffer<T, N>& src_th
 {
     static_assert((std::is_same<T, float>::value && (N == 1 || N == 2 || N == 4)) ||
                       (std::is_same<T, fp16_t>::value && (N == 2 || N == 4 || N == 8)) ||
+                      (std::is_same<T, bf16_t>::value && (N == 2 || N == 4 || N == 8)) ||
                       (std::is_same<T, int32_t>::value && (N == 1 || N == 2 || N == 4)),
                   "wrong! not implemented");
 
@@ -2286,6 +2295,40 @@ CK_TILE_DEVICE void amd_buffer_atomic_add_impl(const thread_buffer<T, N>& src_th
                     dst_wave_buffer_resource,
                     dst_thread_addr_offset,
                     dst_wave_addr_offset + i * sizeof(fp16x2_t),
+                    0);
+            });
+        }
+    }
+    else if constexpr(std::is_same<T, bf16_t>::value)
+    {
+        if constexpr(N == 2)
+        {
+            llvm_amdgcn_raw_buffer_atomic_add_bf16x2(
+                bit_cast<cktile_llvm_bf16x2_t>(src_thread_data),
+                dst_wave_buffer_resource,
+                dst_thread_addr_offset,
+                dst_wave_addr_offset,
+                0);
+        }
+        else if constexpr(N == 4)
+        {
+            static_for<0, 2, 1>{}([&](auto i) {
+                llvm_amdgcn_raw_buffer_atomic_add_bf16x2(
+                    src_thread_data.template get_as<cktile_llvm_bf16x2_t>()[i],
+                    dst_wave_buffer_resource,
+                    dst_thread_addr_offset,
+                    dst_wave_addr_offset + i * sizeof(bf16x2_t),
+                    0);
+            });
+        }
+        else if constexpr(N == 8)
+        {
+            static_for<0, 4, 1>{}([&](auto i) {
+                llvm_amdgcn_raw_buffer_atomic_add_bf16x2(
+                    src_thread_data.template get_as<cktile_llvm_bf16x2_t>()[i],
+                    dst_wave_buffer_resource,
+                    dst_thread_addr_offset,
+                    dst_wave_addr_offset + i * sizeof(bf16x2_t),
                     0);
             });
         }
@@ -2838,9 +2881,8 @@ __device__ auto amd_transpose_load_to_vgpr(const T* in_ptr)
     }
     else if constexpr(std::is_same_v<remove_cvref_t<T>, ck_tile::bf16_t>)
     {
-        typedef __attribute__((__vector_size__(4 * sizeof(__bf16)))) __bf16 llvm_bf16x4_t;
-        __attribute__((address_space(3))) llvm_bf16x4_t* lds_ptr =
-            reinterpret_cast<__attribute__((address_space(3))) llvm_bf16x4_t*>(
+        __attribute__((address_space(3))) cktile_llvm_bf16x4_t* lds_ptr =
+            reinterpret_cast<__attribute__((address_space(3))) cktile_llvm_bf16x4_t*>(
                 reinterpret_cast<uintptr_t>(in_ptr));
         return bit_cast<thread_buffer<T, N>>(__builtin_amdgcn_ds_read_tr16_b64_v4bf16(lds_ptr));
     }
