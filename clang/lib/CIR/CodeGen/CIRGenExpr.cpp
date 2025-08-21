@@ -369,9 +369,10 @@ Address CIRGenFunction::getAddrOfBitFieldStorage(LValue base,
                                                  unsigned index) {
   mlir::Location loc = getLoc(field->getLocation());
   cir::PointerType fieldPtr = cir::PointerType::get(fieldType);
-  cir::GetMemberOp sea = getBuilder().createGetMember(
-      loc, fieldPtr, base.getPointer(), field->getName(), index);
   auto rec = cast<cir::RecordType>(base.getAddress().getElementType());
+  cir::GetMemberOp sea = getBuilder().createGetMember(
+      loc, fieldPtr, base.getPointer(), field->getName(),
+      rec.isUnion() ? field->getFieldIndex() : index);
   CharUnits offset = CharUnits::fromQuantity(
       rec.getElementOffset(cgm.getDataLayout().layout, index));
   return Address(sea, base.getAlignment().alignmentAtOffset(offset));
@@ -1045,10 +1046,22 @@ LValue CIRGenFunction::emitCastLValue(const CastExpr *e) {
   llvm_unreachable("Invalid cast kind");
 }
 
+static DeclRefExpr *tryToConvertMemberExprToDeclRefExpr(CIRGenFunction &cgf,
+                                                        const MemberExpr *me) {
+  if (auto *vd = dyn_cast<VarDecl>(me->getMemberDecl())) {
+    // Try to emit static variable member expressions as DREs.
+    return DeclRefExpr::Create(
+        cgf.getContext(), NestedNameSpecifierLoc(), SourceLocation(), vd,
+        /*RefersToEnclosingVariableOrCapture=*/false, me->getExprLoc(),
+        me->getType(), me->getValueKind(), nullptr, nullptr, me->isNonOdrUse());
+  }
+  return nullptr;
+}
+
 LValue CIRGenFunction::emitMemberExpr(const MemberExpr *e) {
-  if (isa<VarDecl>(e->getMemberDecl())) {
-    cgm.errorNYI(e->getSourceRange(), "emitMemberExpr: VarDecl");
-    return LValue();
+  if (DeclRefExpr *dre = tryToConvertMemberExprToDeclRefExpr(*this, e)) {
+    emitIgnoredExpr(e->getBase());
+    return emitDeclRefLValue(dre);
   }
 
   Expr *baseExpr = e->getBase();
@@ -1170,28 +1183,33 @@ static void pushTemporaryCleanup(CIRGenFunction &cgf,
     return;
   }
 
-  CXXDestructorDecl *referenceTemporaryDtor = nullptr;
-  if (const clang::RecordType *rt = e->getType()
-                                        ->getBaseElementTypeUnsafe()
-                                        ->getAs<clang::RecordType>()) {
-    // Get the destructor for the reference temporary.
-    auto *classDecl =
-        cast<CXXRecordDecl>(rt->getOriginalDecl()->getDefinitionOrSelf());
-    if (!classDecl->hasTrivialDestructor())
-      referenceTemporaryDtor =
-          classDecl->getDefinitionOrSelf()->getDestructor();
-  }
-
-  if (!referenceTemporaryDtor)
+  const QualType::DestructionKind dk = e->getType().isDestructedType();
+  if (dk == QualType::DK_none)
     return;
 
-  // Call the destructor for the temporary.
   switch (m->getStorageDuration()) {
   case SD_Static:
-  case SD_Thread:
-    cgf.cgm.errorNYI(e->getSourceRange(),
-                     "pushTemporaryCleanup: static/thread storage duration");
-    return;
+  case SD_Thread: {
+    CXXDestructorDecl *referenceTemporaryDtor = nullptr;
+    if (const clang::RecordType *rt = e->getType()
+                                          ->getBaseElementTypeUnsafe()
+                                          ->getAs<clang::RecordType>()) {
+      // Get the destructor for the reference temporary.
+      if (const auto *classDecl = dyn_cast<CXXRecordDecl>(
+              rt->getOriginalDecl()->getDefinitionOrSelf())) {
+        if (!classDecl->hasTrivialDestructor())
+          referenceTemporaryDtor =
+              classDecl->getDefinitionOrSelf()->getDestructor();
+      }
+    }
+
+    if (!referenceTemporaryDtor)
+      return;
+
+    cgf.cgm.errorNYI(e->getSourceRange(), "pushTemporaryCleanup: static/thread "
+                                          "storage duration with destructors");
+    break;
+  }
 
   case SD_FullExpression:
     cgf.pushDestroy(NormalAndEHCleanup, referenceTemporary, e->getType(),
@@ -2062,8 +2080,8 @@ cir::AllocaOp CIRGenFunction::createTempAlloca(mlir::Type ty,
 ///
 /// For named members of enums, this is the only way they are emitted.
 CIRGenFunction::ConstantEmission
-CIRGenFunction::tryEmitAsConstant(DeclRefExpr *refExpr) {
-  ValueDecl *value = refExpr->getDecl();
+CIRGenFunction::tryEmitAsConstant(const DeclRefExpr *refExpr) {
+  const ValueDecl *value = refExpr->getDecl();
 
   // There is a lot more to do here, but for now only EnumConstantDecl is
   // supported.
@@ -2094,6 +2112,13 @@ CIRGenFunction::tryEmitAsConstant(DeclRefExpr *refExpr) {
   assert(!cir::MissingFeatures::generateDebugInfo());
 
   return ConstantEmission::forValue(cstToEmit);
+}
+
+CIRGenFunction::ConstantEmission
+CIRGenFunction::tryEmitAsConstant(const MemberExpr *me) {
+  if (DeclRefExpr *dre = tryToConvertMemberExprToDeclRefExpr(*this, me))
+    return tryEmitAsConstant(dre);
+  return ConstantEmission();
 }
 
 mlir::Value CIRGenFunction::emitScalarConstant(
