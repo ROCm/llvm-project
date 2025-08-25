@@ -2561,6 +2561,15 @@ public:
     case llvm::omp::Directive::OMPD_workshare:
       Word("WORKSHARE ");
       break;
+    case llvm::omp::Directive::OMPD_workdistribute:
+      Word("WORKDISTRIBUTE ");
+      break;
+    case llvm::omp::Directive::OMPD_teams_workdistribute:
+      Word("TEAMS WORKDISTRIBUTE ");
+      break;
+    case llvm::omp::Directive::OMPD_target_teams_workdistribute:
+      Word("TARGET TEAMS WORKDISTRIBUTE ");
+      break;
     default:
       // Nothing to be done
       break;

@@ -1567,11 +1567,16 @@ TYPE_PARSER(
         "TARGET DATA" >> pure(llvm::omp::Directive::OMPD_target_data),
         "TARGET_DATA" >> pure(llvm::omp::Directive::OMPD_target_data),
         "TARGET PARALLEL" >> pure(llvm::omp::Directive::OMPD_target_parallel),
+        "TARGET TEAMS WORKDISTRIBUTE" >>
+            pure(llvm::omp::Directive::OMPD_target_teams_workdistribute),
         "TARGET TEAMS" >> pure(llvm::omp::Directive::OMPD_target_teams),
         "TARGET" >> pure(llvm::omp::Directive::OMPD_target),
         "TASK"_id >> pure(llvm::omp::Directive::OMPD_task),
         "TASKGROUP" >> pure(llvm::omp::Directive::OMPD_taskgroup),
+        "TEAMS WORKDISTRIBUTE" >>
+            pure(llvm::omp::Directive::OMPD_teams_workdistribute),
         "TEAMS" >> pure(llvm::omp::Directive::OMPD_teams),
+        "WORKDISTRIBUTE" >> pure(llvm::omp::Directive::OMPD_workdistribute),
         "WORKSHARE" >> pure(llvm::omp::Directive::OMPD_workshare))))
 
 TYPE_PARSER(sourced(construct<OmpBeginBlockDirective>(
@@ -1729,6 +1734,8 @@ TYPE_PARSER(sourced(
 TYPE_PARSER(construct<OpenMPBlockConstruct>(
     Parser<OmpBeginBlockDirective>{} / endOmpLine, block,
     Parser<OmpEndBlockDirective>{} / endOmpLine))
+#define MakeBlockConstruct(dir) \
+  construct<OpenMPBlockConstruct>(OmpBlockConstructParser{dir})
 
 // OMP SECTIONS Directive
 TYPE_PARSER(construct<OmpSectionsDirective>(first(
