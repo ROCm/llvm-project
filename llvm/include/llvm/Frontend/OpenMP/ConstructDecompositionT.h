@@ -211,6 +211,7 @@ private:
                    const ClauseTy *);
   bool applyClause(const tomp::clause::SizesT<TypeTy, IdTy, ExprTy> &clause,
                    const ClauseTy *);
+  bool applyClause(const tomp::clause::PermutationT<TypeTy, IdTy, ExprTy> &clause,const ClauseTy *);
   bool applyClause(const tomp::clause::PrivateT<TypeTy, IdTy, ExprTy> &clause,
                    const ClauseTy *);
   bool
@@ -484,6 +485,7 @@ bool ConstructDecompositionT<C, H>::applyClause(
 
   return false;
 }
+
 // FIXME(JAN): Do the correct thing, but for now we'll do the same as collapse
 template <typename C, typename H>
 bool ConstructDecompositionT<C, H>::applyClause(
@@ -502,6 +504,24 @@ bool ConstructDecompositionT<C, H>::applyClause(
 
   return false;
 }
+
+#if 1
+template <typename C, typename H>
+bool ConstructDecompositionT<C, H>::applyClause(const tomp::clause::PermutationT<TypeTy, IdTy, ExprTy> &clause,const ClauseTy *node) {
+  // Apply "permutation" to the innermost directive. If it's not one that
+  // allows it flag an error.
+  if (!leafs.empty()) {
+    auto &last = leafs.back();
+
+    if (llvm::omp::isAllowedClauseForDirective(last.id, node->id, version)) {
+      last.clauses.push_back(node);
+      return true;
+    }
+  }
+
+  return false;
+}
+#endif 
 
 // PRIVATE
 // [5.2:111:5-7]

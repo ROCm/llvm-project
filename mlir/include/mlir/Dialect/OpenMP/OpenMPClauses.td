@@ -349,6 +349,26 @@ class OpenMP_TileSizesClauseSkip<
 
 def OpenMP_TileSizesClause : OpenMP_TileSizesClauseSkip<>;
 
+
+
+//===----------------------------------------------------------------------===//
+// V6.0: [xx.x] `permutation` clause
+//===----------------------------------------------------------------------===//
+
+class OpenMP_PermutationClauseSkip<
+    bit traits = false, bit arguments = false, bit assemblyFormat = false,
+    bit description = false, bit extraClassDeclaration = false
+  > : OpenMP_Clause<traits, arguments, assemblyFormat, description,
+                    extraClassDeclaration> {
+  let arguments = (ins
+      BoolAttr:$interchangeEnabled,
+      OptionalAttr<DenseI64ArrayAttr>:$permutation
+  );
+}
+
+def OpenMP_PermutationClause : OpenMP_PermutationClauseSkip<>;
+
+
 //===----------------------------------------------------------------------===//
 // V5.2: [11.6.1] `dist_schedule` clause
 //===----------------------------------------------------------------------===//

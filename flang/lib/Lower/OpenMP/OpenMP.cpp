@@ -441,6 +441,10 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
                   middleClauseList =
                       &std::get<parser::OmpClauseList>(innerBegin.t);
                 }
+     				if (innerDirective.v == llvm::omp::Directive::OMPD_interchange) {
+			llvm_unreachable("MK: Handle this");
+                  middleClauseList =    &std::get<parser::OmpClauseList>(innerBegin.t);
+                }
               }
               if (auto &endDirective =
                       std::get<std::optional<parser::OmpEndLoopDirective>>(
@@ -1191,7 +1195,10 @@ struct OpWithBodyGenInfo {
 /// \param [in] item  - item in the queue to generate body for.
 static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
                            const ConstructQueue &queue,
-                           ConstructQueue::const_iterator item) {
+                           ConstructQueue::const_iterator item) { int a = 0;
+  if (a) {
+    op.dump();
+    }
   fir::FirOpBuilder &firOpBuilder = info.converter.getFirOpBuilder();
 
   auto insertMarker = [](fir::FirOpBuilder &builder) {
@@ -1330,7 +1337,10 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
       // present). Otherwise, these operations will be inserted within a
       // wrapper region.
       mlir::Operation *privatizationBottomLevelOp = &op;
-      if (auto loopNest = llvm::dyn_cast<mlir::omp::LoopNestOp>(op)) {
+      if (auto loopNest = llvm::dyn_cast<mlir::omp::LoopNestOp>(op)) { int b = 0;
+        if (b)  {
+                    loopNest.dump();
+                  }
         llvm::SmallVector<mlir::omp::LoopWrapperInterface> wrappers;
         loopNest.gatherWrappers(wrappers);
         if (!wrappers.empty())
@@ -1679,7 +1689,7 @@ genLoopNestClauses(lower::AbstractConverter &converter,
                    semantics::SemanticsContext &semaCtx,
                    lower::pft::Evaluation &eval, const List<Clause> &clauses,
                    mlir::Location loc, mlir::omp::LoopNestOperands &clauseOps,
-                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
+                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv, bool enableInterchange = false) {
   ClauseProcessor cp(converter, semaCtx, clauses);
 
   HostEvalInfo *hostEvalInfo = getHostEvalInfoStackTop(converter);
@@ -1703,7 +1713,9 @@ genLoopNestClauses(lower::AbstractConverter &converter,
         sizeValues.push_back(sizeValue);
       }
       clauseOps.tileSizes = sizeValues;
-    }
+    } else if (clause.id == llvm::omp::Clause::OMPC_permutation) {
+llvm_unreachable("MK: To handle standalone interchange construct");
+	}
   }
 
   llvm::SmallVector<int64_t> sizeValues;
@@ -1711,6 +1723,13 @@ genLoopNestClauses(lower::AbstractConverter &converter,
   collectTileSizesFromOpenMPConstruct(ompCons, sizeValues, semaCtx);
   if (sizeValues.size() > 0)
     clauseOps.tileSizes = sizeValues;
+
+  llvm::SmallVector<int64_t> permutationValues; collectPermutationFromOpenMPConstruct(ompCons, permutationValues, semaCtx);
+  if (enableInterchange) {
+      permutationValues.append({2,1});
+  }
+  clauseOps.interchangeEnabled = mlir:: BoolAttr::get( firOpBuilder.getContext() , enableInterchange);
+  clauseOps.permutation = permutationValues;
 }
 
 static void genLoopClauses(
@@ -2103,7 +2122,7 @@ static mlir::omp::LoopOp
 genLoopOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
           semantics::SemanticsContext &semaCtx, lower::pft::Evaluation &eval,
           mlir::Location loc, const ConstructQueue &queue,
-          ConstructQueue::const_iterator item) {
+          ConstructQueue::const_iterator item,      llvm::omp::Directive  dir =  llvm::omp::Directive::OMPD_loop ,  bool enableInterchange = false) {
   mlir::omp::LoopOperands loopClauseOps;
   llvm::SmallVector<const semantics::Symbol *> loopReductionSyms;
   genLoopClauses(converter, semaCtx, item->clauses, loc, loopClauseOps,
@@ -2117,7 +2136,7 @@ genLoopOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
   mlir::omp::LoopNestOperands loopNestClauseOps;
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, item->clauses, loc,
-                     loopNestClauseOps, iv);
+                     loopNestClauseOps, iv, enableInterchange);
 
   EntryBlockArgs loopArgs;
   loopArgs.priv.syms = dsp.getDelayedPrivSymbols();
@@ -2125,11 +2144,35 @@ genLoopOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
   loopArgs.reduction.syms = loopReductionSyms;
   loopArgs.reduction.vars = loopClauseOps.reductionVars;
 
+  // Applying interchange clause 
+  // tiling assumed to be applied after interchange
+  if (loopNestClauseOps.permutation.size() >=1) {
+    assert(loopNestClauseOps.permutation.size() == iv.size() && "TODO: if permutation is smaller than number of associated loops, permute only the first loops");
+      llvm::SmallVector<const semantics::Symbol *> newIVs;
+      llvm::SmallVector<mlir::Value> newLBs;
+      llvm::SmallVector<mlir::Value> newUBs;
+      llvm::SmallVector<mlir::Value> newINCs;      llvm::SmallVector<int64_t> newSizes;
+
+      // TODO: Assert this is a valid permution
+      for (auto perm :loopNestClauseOps.permutation)  {
+          newIVs.push_back(iv[perm-1]);
+      newLBs.push_back( loopNestClauseOps.loopLowerBounds[perm-1] );
+          newUBs.push_back( loopNestClauseOps.loopUpperBounds[perm-1] );
+                  newINCs.push_back( loopNestClauseOps.loopSteps [perm-1] ); if (! loopNestClauseOps.tileSizes.empty()) newSizes.push_back( loopNestClauseOps.tileSizes[perm-1]);
+      }
+
+      iv = newIVs;
+      loopNestClauseOps.loopLowerBounds = newLBs;
+          loopNestClauseOps.loopUpperBounds = newUBs;
+              loopNestClauseOps.loopSteps = newINCs;      loopNestClauseOps.tileSizes = newSizes;
+  }
+
+  //if (dir == llvm::omp::Directive::OMPD_loop) {
   auto loopOp =
       genWrapperOp<mlir::omp::LoopOp>(converter, loc, loopClauseOps, loopArgs);
+ // }
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, item,
-                loopNestClauseOps, iv, {{loopOp, loopArgs}},
-                llvm::omp::Directive::OMPD_loop, dsp);
+                loopNestClauseOps, iv, {{loopOp, loopArgs}}, dir, dsp);
   return loopOp;
 }
 
@@ -3506,6 +3549,11 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
   case llvm::omp::Directive::OMPD_unroll:
     genUnrollOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
     break;
+  case llvm::omp::Directive::OMPD_interchange:
+    newOp = genLoopOp(converter, symTable, semaCtx, eval, loc, queue, item ,   llvm::omp::Directive::OMPD_interchange, /*Interchange=*/true);
+//llvm_unreachable("MK: implement interchange");
+//genInterchangeOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
+	break;
   // case llvm::omp::Directive::OMPD_workdistribute:
   case llvm::omp::Directive::OMPD_workshare:
     newOp = genWorkshareOp(converter, symTable, stmtCtx, semaCtx, eval, loc,
@@ -3967,6 +4015,10 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
         // Emit the omp.loop_nest with annotation for tiling
         genOMP(converter, symTable, semaCtx, eval, ompNestedLoopCons->value());
         break;
+      case llvm::omp::Directive::OMPD_interchange:
+                genOMP(converter, symTable, semaCtx, eval, ompNestedLoopCons->value());
+                // llvm_unreachable("MK: implement nested interchange");
+                break;
       default: {
         unsigned version = semaCtx.langOptions().OpenMPVersion;
         TODO(currentLocation,
@@ -3978,7 +4030,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
     }
   }
 
-  llvm::omp::Directive directive =
+  llvm::omp::Directive directive  =
       parser::omp::GetOmpDirectiveName(beginLoopDirective).v;
   const parser::CharBlock &source =
       std::get<parser::OmpLoopDirective>(beginLoopDirective.t).source;

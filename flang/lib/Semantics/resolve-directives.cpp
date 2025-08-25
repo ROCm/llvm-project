@@ -828,14 +828,14 @@ private:
       llvm::SmallVector<const parser::OmpClause *> &);
   std::int64_t GetNumAffectedLoopsFromLoopConstruct(
       const parser::OpenMPLoopConstruct &);
-  std::int64_t GetNumAffectedLoopsFromClauses(const parser::OmpClauseList &);
+  std::int64_t GetNumAffectedLoopsFromClauses(    const parser::OpenMPLoopConstruct &y, const parser::OmpClauseList &);
   void CollectNumAffectedLoopsFromLoopConstruct(
       const parser::OpenMPLoopConstruct &, llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
   void CollectNumAffectedLoopsFromInnerLoopContruct(
       const parser::OpenMPLoopConstruct &, llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
-  void CollectNumAffectedLoopsFromClauses(const parser::OmpClauseList &,
+  void CollectNumAffectedLoopsFromClauses( const parser::OpenMPLoopConstruct &x, const parser::OmpClauseList &,
       llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
 
@@ -1880,6 +1880,7 @@ bool OmpAttributeVisitor::Pre(const parser::OpenMPLoopConstruct &x) {
   case llvm::omp::Directive::OMPD_teams_distribute_simd:
   case llvm::omp::Directive::OMPD_teams_loop:
   case llvm::omp::Directive::OMPD_tile:
+      case llvm::omp::Directive::OMPD_interchange:
   case llvm::omp::Directive::OMPD_unroll:
     PushContext(beginDir.source, beginDir.v);
     break;
@@ -1996,7 +1997,7 @@ bool OmpAttributeVisitor::Pre(const parser::DoConstruct &x) {
 }
 
 static bool isSizesClause(const parser::OmpClause *clause) {
-  return std::holds_alternative<parser::OmpClause::Sizes>(clause->u);
+  return clause && std::holds_alternative<parser::OmpClause::Sizes>(clause->u);
 }
 
 std::int64_t OmpAttributeVisitor::SetAssociatedMaxClause(
@@ -2041,14 +2042,20 @@ std::int64_t OmpAttributeVisitor::GetNumAffectedLoopsFromLoopConstruct(
   return SetAssociatedMaxClause(levels, clauses);
 }
 
-std::int64_t OmpAttributeVisitor::GetNumAffectedLoopsFromClauses(
+
+
+
+std::int64_t OmpAttributeVisitor::GetNumAffectedLoopsFromClauses(    const parser::OpenMPLoopConstruct &y,
     const parser::OmpClauseList &x) {
   llvm::SmallVector<std::int64_t> levels;
   llvm::SmallVector<const parser::OmpClause *> clauses;
 
-  CollectNumAffectedLoopsFromClauses(x, levels, clauses);
+  CollectNumAffectedLoopsFromClauses( y, x, levels, clauses);
   return SetAssociatedMaxClause(levels, clauses);
 }
+
+
+
 
 void OmpAttributeVisitor::CollectNumAffectedLoopsFromLoopConstruct(
     const parser::OpenMPLoopConstruct &x,
@@ -2057,7 +2064,8 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromLoopConstruct(
   const auto &beginLoopDir{std::get<parser::OmpBeginLoopDirective>(x.t)};
   const auto &clauseList{std::get<parser::OmpClauseList>(beginLoopDir.t)};
 
-  CollectNumAffectedLoopsFromClauses(clauseList, levels, clauses);
+
+  CollectNumAffectedLoopsFromClauses( x, clauseList, levels, clauses);
   CollectNumAffectedLoopsFromInnerLoopContruct(x, levels, clauses);
 }
 
@@ -2080,9 +2088,19 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromInnerLoopContruct(
   }
 }
 
-void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
+void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(    const parser::OpenMPLoopConstruct &y,
     const parser::OmpClauseList &x, llvm::SmallVector<std::int64_t> &levels,
     llvm::SmallVector<const parser::OmpClause *> &clauses) {
+    const auto &beginLoopDir{std::get<parser::OmpBeginLoopDirective>(y.t)};
+    auto&& yt = std::get<0>(beginLoopDir.t);
+
+
+
+
+    const auto &beginDir{std::get<parser::OmpLoopDirective>(beginLoopDir.t)};
+        const auto &dirClauses{std::get<parser::OmpClauseList>(beginLoopDir.t)};
+   auto ytv  =  beginDir.v;
+
   for (const auto &clause : x.v) {
     if (const auto oclause{
             std::get_if<parser::OmpClause::Ordered>(&clause.u)}) {
@@ -2108,7 +2126,25 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
       levels.push_back(tclause->v.size());
       clauses.push_back(&clause);
     }
+
+
   }
+
+
+      if (ytv == llvm::omp::OMPD_interchange) {
+          for (const auto &clause : dirClauses.v) {
+              if (const auto tclause{std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+          levels.push_back(tclause->v.size());
+          clauses.push_back(&clause);
+          llvm_unreachable("MK: fetch permute depth");
+          return ;
+        } 
+          }
+
+   
+          levels.push_back(2);
+             clauses.push_back(nullptr);
+    }
 }
 
 // 2.15.1.1 Data-sharing Attribute Rules - Predetermined
@@ -2566,7 +2602,7 @@ static bool IsTargetCaptureImplicitlyFirstprivatizeable(const Symbol &symbol,
     // It is default firstprivatizeable as far as the OpenMP specification is
     // concerned if it is a non-array scalar type that has been implicitly
     // captured in a target region
-    const auto *type{checkSym.GetType()};
+    const auto *type{checkSym.GetType() };
     if ((!checkSym.GetShape() || checkSym.GetShape()->empty()) &&
         (type->category() ==
                 Fortran::semantics::DeclTypeSpec::Category::Numeric ||

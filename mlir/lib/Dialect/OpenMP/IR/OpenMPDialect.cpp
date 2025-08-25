@@ -91,7 +91,7 @@ void OpenMPDialect::initialize() {
 #include "mlir/Dialect/OpenMP/OpenMPOpsTypes.cpp.inc"
       >();
 
-  declarePromisedInterface<ConvertToLLVMPatternInterface, OpenMPDialect>();
+  declarePromisedInterface<ConvertToLLVMPatternInterface,   OpenMPDialect>();
 
   MemRefType::attachInterface<MemRefPointerLikeModel>(*getContext());
   LLVM::LLVMPointerType::attachInterface<LLVMPointerPointerLikeModel>(
@@ -3037,10 +3037,13 @@ void LoopNestOp::print(OpAsmPrinter &p) {
 void LoopNestOp::build(OpBuilder &builder, OperationState &state,
                        const LoopNestOperands &clauses) {
   MLIRContext *ctx = builder.getContext();
+
+  auto perm =  makeDenseI64ArrayAttr(ctx, clauses.permutation);
   LoopNestOp::build(builder, state, clauses.loopLowerBounds,
                     clauses.loopUpperBounds, clauses.loopSteps,
-                    clauses.loopInclusive, clauses.numCollapse,
-                    makeDenseI64ArrayAttr(ctx, clauses.tileSizes));
+                    clauses.loopInclusive, clauses.numCollapse,       
+                    makeDenseI64ArrayAttr(ctx, clauses.tileSizes), 
+         clauses.interchangeEnabled , perm );
 }
 
 LogicalResult LoopNestOp::verify() {

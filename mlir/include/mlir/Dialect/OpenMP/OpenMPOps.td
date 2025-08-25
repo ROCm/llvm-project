@@ -616,7 +616,8 @@ def LoopNestOp : OpenMP_Op<"loop_nest", traits = [
   ], clauses = [
     OpenMP_LoopRelatedClause,
     OpenMP_CollapseClause,
-    OpenMP_TileSizesClause
+    OpenMP_TileSizesClause,
+    OpenMP_PermutationClause
   ], singleRegion = true> {
   let summary = "rectangular loop nest";
   let description = [{
