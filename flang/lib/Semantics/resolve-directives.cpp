@@ -828,8 +828,6 @@ private:
       llvm::SmallVector<const parser::OmpClause *> &);
   std::int64_t GetNumAffectedLoopsFromLoopConstruct(
       const parser::OpenMPLoopConstruct &);
-  std::int64_t GetNumAffectedLoopsFromClauses(
-      const parser::OpenMPLoopConstruct &y, const parser::OmpClauseList &);
   void CollectNumAffectedLoopsFromLoopConstruct(
       const parser::OpenMPLoopConstruct &, llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
@@ -2046,15 +2044,6 @@ std::int64_t OmpAttributeVisitor::GetNumAffectedLoopsFromLoopConstruct(
   llvm::SmallVector<const parser::OmpClause *> clauses;
 
   CollectNumAffectedLoopsFromLoopConstruct(x, levels, clauses);
-  return SetAssociatedMaxClause(levels, clauses);
-}
-
-std::int64_t OmpAttributeVisitor::GetNumAffectedLoopsFromClauses(
-    const parser::OpenMPLoopConstruct &y, const parser::OmpClauseList &x) {
-  llvm::SmallVector<std::int64_t> levels;
-  llvm::SmallVector<const parser::OmpClause *> clauses;
-
-  CollectNumAffectedLoopsFromClauses(y, x, levels, clauses);
   return SetAssociatedMaxClause(levels, clauses);
 }
 
