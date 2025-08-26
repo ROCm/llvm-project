@@ -669,7 +669,6 @@ void collectTileSizesFromOpenMPConstruct(
   }
 }
 
-
 /// Populates the sizes vector with values if the given OpenMPConstruct
 /// Contains a loop construct with an inner tiling construct.
 void collectPermutationFromOpenMPConstruct(
@@ -733,7 +732,7 @@ bool collectLoopRelatedInfo(
 
   // Collect sizes from tile directive if present
   std::int64_t sizesLengthValue = 0l;
-   std::int64_t permutationLengthValue = 0l;
+  std::int64_t permutationLengthValue = 0l;
   if (auto *ompCons{eval.getIf<parser::OpenMPConstruct>()}) {
     if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
       const auto &nestedOptional =
@@ -764,29 +763,28 @@ bool collectLoopRelatedInfo(
 
         if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
           // Get the size values from parse tree and convert to a vector
-          const auto &innerClauseList{std::get<parser::OmpClauseList>(innerBegin.t)};
-          for (const auto &clause : innerClauseList.v){
-            if (const auto tclause{  std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+          const auto &innerClauseList{
+              std::get<parser::OmpClauseList>(innerBegin.t)};
+          for (const auto &clause : innerClauseList.v) {
+            if (const auto tclause{
+                    std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
               permutationLengthValue = tclause->v.size();
               found = true;
             }
-            }
+          }
           // default: permution(2,1)
           if (permutationLengthValue == 0)
-            permutationLengthValue = 2; 
+            permutationLengthValue = 2;
         }
       }
     }
   }
 
-
-
-collapseValue = collapseValue - sizesLengthValue;
-if (sizesLengthValue > collapseValue)
-  collapseValue = sizesLengthValue;
-if (permutationLengthValue > collapseValue)
-  collapseValue = permutationLengthValue;
-
+  collapseValue = collapseValue - sizesLengthValue;
+  if (sizesLengthValue > collapseValue)
+    collapseValue = sizesLengthValue;
+  if (permutationLengthValue > collapseValue)
+    collapseValue = permutationLengthValue;
 
   std::size_t loopVarTypeSize = 0;
   do {
