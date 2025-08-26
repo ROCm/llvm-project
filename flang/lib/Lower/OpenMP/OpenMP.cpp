@@ -1734,15 +1734,6 @@ genLoopNestClauses(lower::AbstractConverter &converter,
   collectTileSizesFromOpenMPConstruct(ompCons, sizeValues, semaCtx);
   if (sizeValues.size() > 0)
     clauseOps.tileSizes = sizeValues;
-
-  llvm::SmallVector<int64_t> permutationValues;
-  collectPermutationFromOpenMPConstruct(ompCons, permutationValues, semaCtx);
-  if (enableInterchange) {
-    permutationValues.append({2, 1});
-  }
-  clauseOps.interchangeEnabled =
-      mlir::BoolAttr::get(firOpBuilder.getContext(), enableInterchange);
-  clauseOps.permutation = permutationValues;
 }
 
 static void genLoopClauses(
