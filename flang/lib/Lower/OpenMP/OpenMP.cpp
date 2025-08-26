@@ -437,13 +437,9 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
                         innerLoopConstruct.t);
                 const auto &innerDirective =
                     std::get<parser::OmpLoopDirective>(innerBegin.t);
-                if (innerDirective.v == llvm::omp::Directive::OMPD_tile) {
-                  middleClauseList =
-                      &std::get<parser::OmpClauseList>(innerBegin.t);
-                }
-                if (innerDirective.v ==
-                    llvm::omp::Directive::OMPD_interchange) {
-                  llvm_unreachable("MK: Handle this");
+                if (innerDirective.v == llvm::omp::Directive::OMPD_tile ||
+                    innerDirective.v ==
+                        llvm::omp::Directive::OMPD_interchange) {
                   middleClauseList =
                       &std::get<parser::OmpClauseList>(innerBegin.t);
                 }
