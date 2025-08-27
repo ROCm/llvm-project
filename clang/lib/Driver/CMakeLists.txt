@@ -5,6 +5,7 @@ set(LLVM_LINK_COMPONENTS
   Option
   ProfileData
   Support
+  Object
   TargetParser
   WindowsDriver
   )
@@ -47,6 +48,7 @@ add_clang_library(clangDriver
   ToolChains/AVR.cpp
   ToolChains/BareMetal.cpp
   ToolChains/Clang.cpp
+  ToolChains/OpaqueOffloadLinker.cpp
   ToolChains/CommonArgs.cpp
   ToolChains/CrossWindows.cpp
   ToolChains/CSKYToolChain.cpp
@@ -100,4 +102,5 @@ add_clang_library(clangDriver
   clangBasic
   clangLex
   ${system_libs}
+  ${LLVM_PTHREAD_LIB}
   )

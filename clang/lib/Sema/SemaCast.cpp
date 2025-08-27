@@ -23,6 +23,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Initialization.h"
+#include "clang/Sema/SemaAMDGPU.h"
 #include "clang/Sema/SemaHLSL.h"
 #include "clang/Sema/SemaObjC.h"
 #include "clang/Sema/SemaRISCV.h"
@@ -863,7 +864,7 @@ void CastOperation::CheckDynamicCast() {
     return;
   }
 
-  const RecordType *DestRecord = DestPointee->getAs<RecordType>();
+  const auto *DestRecord = DestPointee->getAsCanonical<RecordType>();
   if (DestPointee->isVoidType()) {
     assert(DestPointer && "Reference to void is not possible");
   } else if (DestRecord) {
@@ -910,7 +911,7 @@ void CastOperation::CheckDynamicCast() {
     SrcPointee = SrcType;
   }
 
-  const RecordType *SrcRecord = SrcPointee->getAs<RecordType>();
+  const auto *SrcRecord = SrcPointee->getAsCanonical<RecordType>();
   if (SrcRecord) {
     if (Self.RequireCompleteType(OpRange.getBegin(), SrcPointee,
                                  diag::err_bad_cast_incomplete,
@@ -1484,8 +1485,7 @@ static TryCastResult TryStaticCast(Sema &Self, ExprResult &SrcExpr,
     if (SrcType->isIntegralOrEnumerationType()) {
       // [expr.static.cast]p10 If the enumeration type has a fixed underlying
       // type, the value is first converted to that type by integral conversion
-      const EnumType *Enum = DestType->castAs<EnumType>();
-      const EnumDecl *ED = Enum->getOriginalDecl()->getDefinitionOrSelf();
+      const auto *ED = DestType->castAsEnumDecl();
       Kind = ED->isFixed() && ED->getIntegerType()->isBooleanType()
                  ? CK_IntegralToBoolean
                  : CK_IntegralCast;
@@ -1590,6 +1590,22 @@ static TryCastResult TryStaticCast(Sema &Self, ExprResult &SrcExpr,
       SrcExpr = ExprError();
       return TC_Failed;
     }
+    return TC_Success;
+  }
+
+  if (SrcType == Self.Context.AMDGPUFeaturePredicateTy &&
+      DestType == Self.Context.getLogicalOperationType()) {
+    SrcExpr = Self.AMDGPU().ExpandAMDGPUPredicateBI(
+        dyn_cast<CallExpr>(SrcExpr.get()));
+    Kind = CK_NoOp;
+    return TC_Success;
+  }
+
+  if (SrcType == Self.Context.AMDGPUFeaturePredicateTy &&
+      DestType == Self.Context.getLogicalOperationType()) {
+    SrcExpr = Self.AMDGPU().ExpandAMDGPUPredicateBI(
+        dyn_cast<CallExpr>(SrcExpr.get()));
+    Kind = CK_NoOp;
     return TC_Success;
   }
 
@@ -3095,7 +3111,8 @@ void CastOperation::CheckCStyleCast() {
 
   if (!DestType->isScalarType() && !DestType->isVectorType() &&
       !DestType->isMatrixType()) {
-    if (const RecordType *DestRecordTy = DestType->getAs<RecordType>()) {
+    if (const RecordType *DestRecordTy =
+            DestType->getAsCanonical<RecordType>()) {
       if (Self.Context.hasSameUnqualifiedType(DestType, SrcType)) {
         // GCC struct/union extension: allow cast to self.
         Self.Diag(OpRange.getBegin(), diag::ext_typecheck_cast_nonscalar)

@@ -6,6 +6,7 @@ llvm_canonicalize_cmake_booleans(
   CLANG_BUILD_EXAMPLES
   CLANG_BUILT_STANDALONE
   CLANG_DEFAULT_PIE_ON_LINUX
+  CLANG_ENABLE_AMDCLANG
   CLANG_ENABLE_STATIC_ANALYZER
   CLANG_PLUGIN_SUPPORT
   CLANG_SPAWN_CC1
@@ -90,7 +91,6 @@ list(APPEND CLANG_TEST_DEPS
   apinotes-test
   c-index-test
   clang
-  clang-fuzzer-dictionary
   clang-resource-headers
   clang-format
   clang-tblgen

@@ -484,8 +484,7 @@ void Sema::handleLambdaNumbering(
   ContextRAII ManglingContext(*this, Class->getDeclContext());
 
   auto getMangleNumberingContext =
-      [this](CXXRecordDecl *Class,
-             Decl *ManglingContextDecl) -> MangleNumberingContext * {
+      [this](CXXRecordDecl *Class, Decl *ManglingContextDecl) -> MangleNumberingContext * {
     // Get mangle numbering context if there's any extra decl context.
     if (ManglingContextDecl)
       return &Context.getManglingNumberContext(
@@ -641,9 +640,8 @@ static EnumDecl *findEnumForBlockReturn(Expr *E) {
   }
 
   //   - it is an expression of that formal enum type.
-  if (const EnumType *ET = E->getType()->getAs<EnumType>()) {
-    return ET->getOriginalDecl()->getDefinitionOrSelf();
-  }
+  if (auto *ED = E->getType()->getAsEnumDecl())
+    return ED;
 
   // Otherwise, nope.
   return nullptr;

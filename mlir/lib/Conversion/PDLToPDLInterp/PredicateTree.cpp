@@ -50,7 +50,7 @@ static void getTreePredicates(std::vector<PositionalPredicate> &predList,
   assert(isa<pdl::AttributeType>(val.getType()) && "expected attribute type");
   predList.emplace_back(pos, builder.getIsNotNull());
 
-  if (auto attr = val.getDefiningOp<pdl::AttributeOp>()) {
+  if (auto attr = dyn_cast<pdl::AttributeOp>(val.getDefiningOp())) {
     // If the attribute has a type or value, add a constraint.
     if (Value type = attr.getValueType())
       getTreePredicates(predList, type, builder, inputs, builder.getType(pos));
@@ -800,9 +800,9 @@ static bool isSamePredicate(MatcherNode *node, OrderedPredicate *predicate) {
 
 /// Get or insert a child matcher for the given parent switch node, given a
 /// predicate and parent pattern.
-std::unique_ptr<MatcherNode> &getOrCreateChild(SwitchNode *node,
-                                               OrderedPredicate *predicate,
-                                               pdl::PatternOp pattern) {
+static std::unique_ptr<MatcherNode> &
+getOrCreateChild(SwitchNode *node, OrderedPredicate *predicate,
+                 pdl::PatternOp pattern) {
   assert(isSamePredicate(node, predicate) &&
          "expected matcher to equal the given predicate");
 

@@ -127,8 +127,15 @@ void Flang::addOtherOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
                    options::OPT_std_EQ, options::OPT_W_Joined,
                    options::OPT_fconvert_EQ, options::OPT_fpass_plugin_EQ,
                    options::OPT_funderscoring, options::OPT_fno_underscoring,
+                   options::OPT_foffload_global_filtering,
+                   options::OPT_fno_offload_global_filtering,
                    options::OPT_funsigned, options::OPT_fno_unsigned,
                    options::OPT_finstrument_functions});
+
+  if (Args.hasArg(options::OPT_fopenacc)) {
+     const Driver &D = getToolChain().getDriver();
+     D.Diag(diag::warn_openacc_experimental);
+  }
 
   llvm::codegenoptions::DebugInfoKind DebugInfoKind;
   if (Args.hasArg(options::OPT_gN_Group)) {
@@ -177,7 +184,8 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_frepack_arrays_contiguity_EQ,
        options::OPT_fstack_repack_arrays, options::OPT_fno_stack_repack_arrays,
        options::OPT_ftime_report, options::OPT_ftime_report_EQ,
-       options::OPT_funroll_loops, options::OPT_fno_unroll_loops});
+       options::OPT_funroll_loops, options::OPT_fno_unroll_loops,
+       options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map});
   if (Args.hasArg(clang::driver::options::OPT_fcoarray))
     CmdArgs.push_back("-fcoarray");
 }
@@ -869,6 +877,12 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
     addPreprocessingOptions(Args, CmdArgs);
 
   addFortranDialectOptions(Args, CmdArgs);
+
+  if (Args.hasArg(options::OPT_ffast_amd_memory_allocator)) {
+    CmdArgs.push_back("-ffast-amd-memory-allocator");
+    CmdArgs.push_back("-mmlir");
+    CmdArgs.push_back("-use-alloc-runtime");
+  }
 
   // 'flang -E' always produces output that is suitable for use as fixed form
   // Fortran. However it is only valid free form source if the original is also

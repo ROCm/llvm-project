@@ -169,7 +169,7 @@ static cl::opt<bool> EnableModuleInliner("enable-module-inliner",
                                          cl::desc("Enable module inliner"));
 
 static cl::opt<bool> PerformMandatoryInliningsFirst(
-    "mandatory-inlining-first", cl::init(false), cl::Hidden,
+    "mandatory-inlining-first", cl::init(true), cl::Hidden,
     cl::desc("Perform mandatory inlinings module-wide, before performing "
              "inlining"));
 
@@ -303,6 +303,11 @@ static cl::opt<std::string> InstrumentColdFuncOnlyPath(
 extern cl::opt<std::string> UseCtxProfile;
 extern cl::opt<bool> PGOInstrumentColdFunctionOnly;
 
+static cl::opt<bool> EnableEarlyOpenMPOpt(
+    "enable-early-openmp-opt", cl::init(false), cl::Hidden,
+    cl::desc("Enable early execution of the OpenMP optimization pass"
+             " (default = off)"));
+
 namespace llvm {
 extern cl::opt<bool> EnableMemProfContextDisambiguation;
 } // namespace llvm
@@ -409,7 +414,8 @@ static bool isLTOPreLink(ThinOrFullLTOPhase Phase) {
 // Helper to check if the current compilation phase is LTO backend
 static bool isLTOPostLink(ThinOrFullLTOPhase Phase) {
   return Phase == ThinOrFullLTOPhase::ThinLTOPostLink ||
-         Phase == ThinOrFullLTOPhase::FullLTOPostLink;
+         Phase == ThinOrFullLTOPhase::FullLTOPostLink ||
+         Phase == ThinOrFullLTOPhase::CustomLTOPostLink;
 }
 
 // Helper to wrap conditionally Coro passes.
@@ -1107,6 +1113,10 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   // frontend. Not necessary with LTO post link pipelines since the pre link
   // pipeline already cleaned up the frontend output.
   if (Phase != ThinOrFullLTOPhase::ThinLTOPostLink) {
+
+    if (EnableEarlyOpenMPOpt)
+      MPM.addPass(OpenMPOptPass());
+
     // Do basic inference of function attributes from known properties of system
     // libraries and other oracles.
     MPM.addPass(InferFunctionAttrsPass());
@@ -1270,8 +1280,6 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
   if (PGOOpt && (PGOOpt->Action == PGOOptions::IRUse ||
                  PGOOpt->Action == PGOOptions::SampleUse))
     MPM.addPass(PGOForceFunctionAttrsPass(PGOOpt->ColdOptType));
-
-  MPM.addPass(AlwaysInlinerPass(/*InsertLifetimeIntrinsics=*/true));
 
   if (EnableModuleInliner)
     MPM.addPass(buildModuleInlinerPipeline(Level, Phase));

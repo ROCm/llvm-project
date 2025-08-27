@@ -1219,7 +1219,9 @@ struct FunctionStackPoisoner : public InstVisitor<FunctionStackPoisoner> {
 
     std::optional<TypeSize> Size = AI->getAllocationSize(AI->getDataLayout());
     // Check that size is known and can be stored in IntptrTy.
-    if (!Size || !ConstantInt::isValueValidForType(IntptrTy, *Size))
+    // TODO: Add support for scalable vectors if possible.
+    if (!Size || Size->isScalable() ||
+        !ConstantInt::isValueValidForType(IntptrTy, *Size))
       return;
 
     bool DoPoison = (ID == Intrinsic::lifetime_end);
@@ -2619,6 +2621,9 @@ void ModuleAddressSanitizer::instrumentGlobals(IRBuilder<> &IRB,
     // Transfer the debug info and type metadata.  The payload starts at offset
     // zero so we can copy the metadata over as is.
     NewGlobal->copyMetadata(G, 0);
+
+    // Attach "SanitizedPaddedGlobal" attribute to the new global.
+    NewGlobal->addAttribute(Attribute::SanitizedPaddedGlobal);
 
     Value *Indices2[2];
     Indices2[0] = IRB.getInt32(0);

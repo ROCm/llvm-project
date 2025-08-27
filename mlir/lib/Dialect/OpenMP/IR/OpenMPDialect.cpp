@@ -1547,6 +1547,13 @@ static ParseResult parseMapClause(OpAsmParser &parser, IntegerAttr &mapType) {
     if (mapTypeMod == "present")
       mapTypeBits |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_PRESENT;
 
+    if (mapTypeMod == "descriptor")
+      mapTypeBits |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR;
+
+    if (mapTypeMod == "descriptor_base_addr")
+      mapTypeBits |=
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR_BASE_ADDR;
+
     if (mapTypeMod == "to")
       mapTypeBits |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TO;
 
@@ -1602,6 +1609,16 @@ static void printMapClause(OpAsmPrinter &p, Operation *op,
   if (mapTypeToBitFlag(mapTypeBits,
                        llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_PRESENT))
     mapTypeStrs.push_back("present");
+
+  if (mapTypeToBitFlag(
+          mapTypeBits,
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR))
+    mapTypeStrs.push_back("descriptor");
+
+  if (mapTypeToBitFlag(
+          mapTypeBits,
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_DESCRIPTOR_BASE_ADDR))
+    mapTypeStrs.push_back("descriptor_base_addr");
 
   // special handling of to/from/tofrom/delete and release/alloc, release +
   // alloc are the abscense of one of the other flags, whereas tofrom requires
@@ -1735,7 +1752,8 @@ static LogicalResult verifyMapClause(Operation *op, OperandRange mapVars) {
     if (!mapOp.getDefiningOp())
       return emitError(op->getLoc(), "missing map operation");
 
-    if (auto mapInfoOp = mapOp.getDefiningOp<mlir::omp::MapInfoOp>()) {
+    if (auto mapInfoOp =
+            mlir::dyn_cast<mlir::omp::MapInfoOp>(mapOp.getDefiningOp())) {
       uint64_t mapTypeBits = mapInfoOp.getMapType();
 
       bool to = mapTypeToBitFlag(
@@ -2025,7 +2043,7 @@ LogicalResult TargetOp::verifyRegions() {
 }
 
 static Operation *
-findCapturedOmpOp(Operation *rootOp, bool checkSingleMandatoryExec,
+findCapturedOmpOp(Operation *rootOp,
                   llvm::function_ref<bool(Operation *)> siblingAllowedFn) {
   assert(rootOp && "expected valid operation");
 
@@ -2053,19 +2071,17 @@ findCapturedOmpOp(Operation *rootOp, bool checkSingleMandatoryExec,
     // (i.e. its block's successors can reach it) or if it's not guaranteed to
     // be executed before all exits of the region (i.e. it doesn't dominate all
     // blocks with no successors reachable from the entry block).
-    if (checkSingleMandatoryExec) {
-      Region *parentRegion = op->getParentRegion();
-      Block *parentBlock = op->getBlock();
+    Region *parentRegion = op->getParentRegion();
+    Block *parentBlock = op->getBlock();
 
-      for (Block *successor : parentBlock->getSuccessors())
-        if (successor->isReachable(parentBlock))
-          return WalkResult::interrupt();
+    for (Block *successor : parentBlock->getSuccessors())
+      if (successor->isReachable(parentBlock))
+        return WalkResult::interrupt();
 
-      for (Block &block : *parentRegion)
-        if (domInfo.isReachableFromEntry(&block) && block.hasNoSuccessors() &&
-            !domInfo.dominates(parentBlock, &block))
-          return WalkResult::interrupt();
-    }
+    for (Block &block : *parentRegion)
+      if (domInfo.isReachableFromEntry(&block) && block.hasNoSuccessors() &&
+          !domInfo.dominates(parentBlock, &block))
+        return WalkResult::interrupt();
 
     // Don't capture this op if it has a not-allowed sibling, and stop recursing
     // into nested operations.
@@ -2088,27 +2104,25 @@ Operation *TargetOp::getInnermostCapturedOmpOp() {
 
   // Only allow OpenMP terminators and non-OpenMP ops that have known memory
   // effects, but don't include a memory write effect.
-  return findCapturedOmpOp(
-      *this, /*checkSingleMandatoryExec=*/true, [&](Operation *sibling) {
-        if (!sibling)
-          return false;
+  return findCapturedOmpOp(*this, [&](Operation *sibling) {
+    if (!sibling)
+      return false;
 
-        if (ompDialect == sibling->getDialect())
-          return sibling->hasTrait<OpTrait::IsTerminator>();
+    if (ompDialect == sibling->getDialect())
+      return sibling->hasTrait<OpTrait::IsTerminator>();
 
-        if (auto memOp = dyn_cast<MemoryEffectOpInterface>(sibling)) {
-          SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4>
-              effects;
-          memOp.getEffects(effects);
-          return !llvm::any_of(
-              effects, [&](MemoryEffects::EffectInstance &effect) {
-                return isa<MemoryEffects::Write>(effect.getEffect()) &&
-                       isa<SideEffects::AutomaticAllocationScopeResource>(
-                           effect.getResource());
-              });
-        }
-        return true;
+    if (auto memOp = dyn_cast<MemoryEffectOpInterface>(sibling)) {
+      SmallVector<SideEffects::EffectInstance<MemoryEffects::Effect>, 4>
+          effects;
+      memOp.getEffects(effects);
+      return !llvm::any_of(effects, [&](MemoryEffects::EffectInstance &effect) {
+        return isa<MemoryEffects::Write>(effect.getEffect()) &&
+               isa<SideEffects::AutomaticAllocationScopeResource>(
+                   effect.getResource());
       });
+    }
+    return true;
+  });
 }
 
 TargetRegionFlags TargetOp::getKernelExecFlags(Operation *capturedOp) {
@@ -2169,33 +2183,23 @@ TargetRegionFlags TargetOp::getKernelExecFlags(Operation *capturedOp) {
     if (isa<LoopOp>(innermostWrapper))
       return TargetRegionFlags::spmd | TargetRegionFlags::trip_count;
 
-    // Find single immediately nested captured omp.parallel and add spmd flag
-    // (generic-spmd case).
+    // Add spmd flag if there's a nested omp.parallel (generic-spmd case).
     //
     // TODO: This shouldn't have to be done here, as it is too easy to break.
     // The openmp-opt pass should be updated to be able to promote kernels like
     // this from "Generic" to "Generic-SPMD". However, the use of the
     // `kmpc_distribute_static_loop` family of functions produced by the
     // OMPIRBuilder for these kernels prevents that from working.
-    Dialect *ompDialect = targetOp->getDialect();
-    Operation *nestedCapture = findCapturedOmpOp(
-        capturedOp, /*checkSingleMandatoryExec=*/false,
-        [&](Operation *sibling) {
-          return sibling && (ompDialect != sibling->getDialect() ||
-                             sibling->hasTrait<OpTrait::IsTerminator>());
-        });
+    bool hasParallel = capturedOp
+                           ->walk<WalkOrder::PreOrder>([](ParallelOp) {
+                             return WalkResult::interrupt();
+                           })
+                           .wasInterrupted();
 
     TargetRegionFlags result =
         TargetRegionFlags::generic | TargetRegionFlags::trip_count;
 
-    if (!nestedCapture)
-      return result;
-
-    while (nestedCapture->getParentOp() != capturedOp)
-      nestedCapture = nestedCapture->getParentOp();
-
-    return isa<ParallelOp>(nestedCapture) ? result | TargetRegionFlags::spmd
-                                          : result;
+    return hasParallel ? result | TargetRegionFlags::spmd : result;
   }
   // Detect target-parallel-wsloop[-simd].
   else if (isa<WsloopOp>(innermostWrapper)) {
@@ -2354,9 +2358,9 @@ LogicalResult TeamsOp::verify() {
   // contain any statements, declarations or directives other than this
   // omp.teams construct. The issue is how to support the initialization of
   // this operation's own arguments (allow SSA values across omp.target?).
-  Operation *op = getOperation();
-  if (!isa<TargetOp>(op->getParentOp()) &&
-      !opInGlobalImplicitParallelRegion(op))
+  auto targetOp = dyn_cast_if_present<TargetOp>((*this)->getParentOp());
+
+  if (!targetOp && !opInGlobalImplicitParallelRegion(*this))
     return emitError("expected to be nested inside of omp.target or not nested "
                      "in any OpenMP dialect operations");
 

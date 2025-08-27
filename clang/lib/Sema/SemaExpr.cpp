@@ -52,6 +52,7 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
+#include "clang/Sema/SemaAMDGPU.h"
 #include "clang/Sema/SemaARM.h"
 #include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaFixItUtils.h"
@@ -1529,8 +1530,12 @@ void Sema::checkEnumArithmeticConversions(Expr *LHS, Expr *RHS,
     // are ill-formed.
     if (getLangOpts().CPlusPlus26)
       DiagID = diag::warn_conv_mixed_enum_types_cxx26;
-    else if (!L->castAs<EnumType>()->getOriginalDecl()->hasNameForLinkage() ||
-             !R->castAs<EnumType>()->getOriginalDecl()->hasNameForLinkage()) {
+    else if (!L->castAsCanonical<EnumType>()
+                  ->getOriginalDecl()
+                  ->hasNameForLinkage() ||
+             !R->castAsCanonical<EnumType>()
+                  ->getOriginalDecl()
+                  ->hasNameForLinkage()) {
       // If either enumeration type is unnamed, it's less likely that the
       // user cares about this, but this situation is still deprecated in
       // C++2a. Use a different warning group.
@@ -6574,6 +6579,22 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
   if (Result.isInvalid()) return ExprError();
   Fn = Result.get();
 
+  // The __builtin_amdgcn_is_invocable builtin is special, and will be resolved
+  // later, when we check boolean conditions, for now we merely forward it
+  // without any additional checking.
+  if (Fn->getType() == Context.BuiltinFnTy && ArgExprs.size() == 1 &&
+      ArgExprs[0]->getType() == Context.BuiltinFnTy) {
+    const auto *FD = cast<FunctionDecl>(Fn->getReferencedDeclOfCallee());
+
+    if (FD->getName() == "__builtin_amdgcn_is_invocable") {
+      QualType FnPtrTy = Context.getPointerType(FD->getType());
+      Expr *R = ImpCastExprToType(Fn, FnPtrTy, CK_BuiltinFnToFnPtr).get();
+      return CallExpr::Create(
+          Context, R, ArgExprs, Context.AMDGPUFeaturePredicateTy,
+          ExprValueKind::VK_PRValue, RParenLoc, FPOptionsOverride());
+    }
+  }
+
   if (CheckArgsForPlaceholders(ArgExprs))
     return ExprError();
 
@@ -7836,7 +7857,7 @@ static void CheckSufficientAllocSize(Sema &S, QualType DestType,
   if (!CE->getCalleeAllocSizeAttr())
     return;
   std::optional<llvm::APInt> AllocSize =
-      CE->getBytesReturnedByAllocSizeCall(S.Context);
+      CE->evaluateBytesReturnedByAllocSizeCall(S.Context);
   if (!AllocSize)
     return;
   auto Size = CharUnits::fromQuantity(AllocSize->getZExtValue());
@@ -11495,7 +11516,7 @@ QualType Sema::CheckSubtractionOperands(ExprResult &LHS, ExprResult &RHS,
 }
 
 static bool isScopedEnumerationType(QualType T) {
-  if (const EnumType *ET = T->getAs<EnumType>())
+  if (const EnumType *ET = T->getAsCanonical<EnumType>())
     return ET->getOriginalDecl()->isScoped();
   return false;
 }
@@ -12382,10 +12403,7 @@ static QualType checkArithmeticOrEnumeralThreeWayCompare(Sema &S,
       S.InvalidOperands(Loc, LHS, RHS);
       return QualType();
     }
-    QualType IntType = LHSStrippedType->castAs<EnumType>()
-                           ->getOriginalDecl()
-                           ->getDefinitionOrSelf()
-                           ->getIntegerType();
+    QualType IntType = LHSStrippedType->castAsEnumDecl()->getIntegerType();
     assert(IntType->isArithmeticType());
 
     // We can't use `CK_IntegralCast` when the underlying type is 'bool', so we
@@ -13460,6 +13478,20 @@ inline QualType Sema::CheckBitwiseOperands(ExprResult &LHS, ExprResult &RHS,
   return ResultTy;
 }
 
+static inline bool IsAMDGPUPredicateBI(Expr *E) {
+  if (!E->getType()->isVoidType())
+    return false;
+
+  if (auto *CE = dyn_cast<CallExpr>(E)) {
+    if (auto *BI = CE->getDirectCallee())
+      if (BI->getName() == "__builtin_amdgcn_processor_is" ||
+          BI->getName() == "__builtin_amdgcn_is_invocable")
+        return true;
+  }
+
+  return false;
+}
+
 // C99 6.5.[13,14]
 inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
                                            SourceLocation Loc,
@@ -13554,6 +13586,9 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
 
   // The following is safe because we only use this method for
   // non-overloadable operands.
+
+  if (IsAMDGPUPredicateBI(LHS.get()) && IsAMDGPUPredicateBI(RHS.get()))
+    return Context.VoidTy;
 
   // C++ [expr.log.and]p1
   // C++ [expr.log.or]p1
@@ -13822,7 +13857,7 @@ static void DiagnoseRecursiveConstFields(Sema &S, const ValueDecl *VD,
 
       // Then we append it to the list to check next in order.
       FieldTy = FieldTy.getCanonicalType();
-      if (const auto *FieldRecTy = FieldTy->getAs<RecordType>()) {
+      if (const auto *FieldRecTy = FieldTy->getAsCanonical<RecordType>()) {
         if (!llvm::is_contained(RecordTypeList, FieldRecTy))
           RecordTypeList.push_back(FieldRecTy);
       }
@@ -13838,7 +13873,7 @@ static void DiagnoseRecursiveConstFields(Sema &S, const Expr *E,
   QualType Ty = E->getType();
   assert(Ty->isRecordType() && "lvalue was not record?");
   SourceRange Range = E->getSourceRange();
-  const RecordType *RTy = Ty.getCanonicalType()->getAs<RecordType>();
+  const auto *RTy = Ty->getAsCanonical<RecordType>();
   bool DiagEmitted = false;
 
   if (const MemberExpr *ME = dyn_cast<MemberExpr>(E))
@@ -15751,6 +15786,38 @@ static bool isOverflowingIntegerType(ASTContext &Ctx, QualType T) {
   return Ctx.getIntWidth(T) >= Ctx.getIntWidth(Ctx.IntTy);
 }
 
+static Expr *ExpandAMDGPUPredicateBI(ASTContext &Ctx, CallExpr *CE) {
+  if (!CE->getBuiltinCallee())
+    return CXXBoolLiteralExpr::Create(Ctx, false, Ctx.BoolTy, CE->getExprLoc());
+
+  if (Ctx.getTargetInfo().getTriple().isSPIRV()) {
+    CE->setType(Ctx.getLogicalOperationType());
+    return CE;
+  }
+
+  bool P = false;
+  auto &TI = Ctx.getTargetInfo();
+
+  if (CE->getDirectCallee()->getName() == "__builtin_amdgcn_processor_is") {
+    auto *GFX = dyn_cast<StringLiteral>(CE->getArg(0)->IgnoreParenCasts());
+    auto TID = TI.getTargetID();
+    if (GFX && TID) {
+      auto N = GFX->getString();
+      P = TI.isValidCPUName(GFX->getString()) && TID->find(N) == 0;
+    }
+  } else {
+    auto *FD = cast<FunctionDecl>(CE->getArg(0)->getReferencedDeclOfCallee());
+
+    StringRef RF = Ctx.BuiltinInfo.getRequiredFeatures(FD->getBuiltinID());
+    llvm::StringMap<bool> CF;
+    Ctx.getFunctionFeatureMap(CF, FD);
+
+    P = Builtin::evaluateRequiredTargetFeatures(RF, CF);
+  }
+
+  return CXXBoolLiteralExpr::Create(Ctx, P, Ctx.BoolTy, CE->getExprLoc());
+}
+
 ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
                                       UnaryOperatorKind Opc, Expr *InputExpr,
                                       bool IsAfterAmp) {
@@ -15927,6 +15994,10 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
 
         // Vector logical not returns the signed variant of the operand type.
         resultType = GetSignedVectorType(resultType);
+        break;
+      } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
+        resultType = Context.getLogicalOperationType();
+        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -16882,9 +16953,8 @@ ExprResult Sema::BuildVAArgExpr(SourceLocation BuiltinLoc,
       // va_arg. Instead, get the underlying type of the enumeration and pass
       // that.
       QualType UnderlyingType = TInfo->getType();
-      if (const auto *ET = UnderlyingType->getAs<EnumType>())
-        UnderlyingType =
-            ET->getOriginalDecl()->getDefinitionOrSelf()->getIntegerType();
+      if (const auto *ED = UnderlyingType->getAsEnumDecl())
+        UnderlyingType = ED->getIntegerType();
       if (Context.typesAreCompatible(PromoteType, UnderlyingType,
                                      /*CompareUnqualified*/ true))
         PromoteType = QualType();
@@ -20723,6 +20793,88 @@ void Sema::DiagnoseEqualityWithExtraParens(ParenExpr *ParenE) {
     }
 }
 
+static bool ValidateAMDGPUPredicateBI(Sema &Sema, CallExpr *CE) {
+  if (CE->getDirectCallee()->getName() == "__builtin_amdgcn_processor_is") {
+    auto *GFX = dyn_cast<StringLiteral>(CE->getArg(0)->IgnoreParenCasts());
+    if (!GFX) {
+      Sema.Diag(CE->getExprLoc(),
+                diag::err_amdgcn_processor_is_arg_not_literal);
+      return false;
+    }
+    auto N = GFX->getString();
+    if (!Sema.getASTContext().getTargetInfo().isValidCPUName(N) &&
+        (!Sema.getASTContext().getAuxTargetInfo() ||
+         !Sema.getASTContext().getAuxTargetInfo()->isValidCPUName(N))) {
+      Sema.Diag(CE->getExprLoc(),
+                diag::err_amdgcn_processor_is_arg_invalid_value)
+          << N;
+      return false;
+    }
+  } else {
+    auto *Arg = CE->getArg(0);
+    if (!Arg || Arg->getType() != Sema.getASTContext().BuiltinFnTy) {
+      Sema.Diag(CE->getExprLoc(),
+                diag::err_amdgcn_is_invocable_arg_invalid_value)
+          << Arg;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static Expr *MaybeHandleAMDGPUPredicateBI(Sema &Sema, Expr *E, bool &Invalid) {
+  if (auto *UO = dyn_cast<UnaryOperator>(E)) {
+    auto *SE = dyn_cast<CallExpr>(UO->getSubExpr());
+    if (IsAMDGPUPredicateBI(SE)) {
+      assert(UO->getOpcode() == UnaryOperator::Opcode::UO_LNot &&
+             "__builtin_amdgcn_processor_is and __builtin_amdgcn_is_invocable "
+             "can only be used as operands of logical ops!");
+
+      if (!ValidateAMDGPUPredicateBI(Sema, SE)) {
+        Invalid = true;
+        return nullptr;
+      }
+
+      UO->setSubExpr(ExpandAMDGPUPredicateBI(Sema.getASTContext(), SE));
+      UO->setType(Sema.getASTContext().getLogicalOperationType());
+
+      return UO;
+    }
+  }
+  if (auto *BO = dyn_cast<BinaryOperator>(E)) {
+    auto *LHS = dyn_cast<CallExpr>(BO->getLHS());
+    auto *RHS = dyn_cast<CallExpr>(BO->getRHS());
+    if (IsAMDGPUPredicateBI(LHS) && IsAMDGPUPredicateBI(RHS)) {
+      assert(BO->isLogicalOp() &&
+             "__builtin_amdgcn_processor_is and __builtin_amdgcn_is_invocable "
+             "can only be used as operands of logical ops!");
+
+      if (!ValidateAMDGPUPredicateBI(Sema, LHS) ||
+          !ValidateAMDGPUPredicateBI(Sema, RHS)) {
+        Invalid = true;
+        return nullptr;
+      }
+
+      BO->setLHS(ExpandAMDGPUPredicateBI(Sema.getASTContext(), LHS));
+      BO->setRHS(ExpandAMDGPUPredicateBI(Sema.getASTContext(), RHS));
+      BO->setType(Sema.getASTContext().getLogicalOperationType());
+
+      return BO;
+    }
+  }
+  if (auto *CE = dyn_cast<CallExpr>(E))
+    if (IsAMDGPUPredicateBI(CE)) {
+      if (!ValidateAMDGPUPredicateBI(Sema, CE)) {
+        Invalid = true;
+        return nullptr;
+      }
+      return ExpandAMDGPUPredicateBI(Sema.getASTContext(), CE);
+    }
+
+  return nullptr;
+}
+
 ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
                                        bool IsConstexpr) {
   DiagnoseAssignmentAsCondition(E);
@@ -20734,6 +20886,9 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
   E = result.get();
 
   if (!E->isTypeDependent()) {
+    if (E->getType() == Context.AMDGPUFeaturePredicateTy)
+      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
+
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4
 

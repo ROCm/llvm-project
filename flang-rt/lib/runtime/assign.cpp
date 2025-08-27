@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Runtime/assign.h"
+#include "flang/Runtime/stop.h"
 #include "flang-rt/runtime/assign-impl.h"
 #include "flang-rt/runtime/derived.h"
 #include "flang-rt/runtime/descriptor.h"
@@ -288,7 +289,7 @@ RT_API_ATTRS int AssignTicket::Begin(WorkQueue &workQueue) {
     if (mustDeallocateLHS) {
       // Convert the LHS into a temporary, then make it look deallocated.
       toDeallocate_ = &tempDescriptor_.descriptor();
-      std::memcpy(
+      Fortran::runtime::memcpy(
           reinterpret_cast<void *>(toDeallocate_), &to_, to_.SizeInBytes());
       to_.set_base_addr(nullptr);
       if (toDerived_ && (flags_ & NeedFinalization)) {
@@ -307,7 +308,7 @@ RT_API_ATTRS int AssignTicket::Begin(WorkQueue &workQueue) {
       auto descBytes{from_->SizeInBytes()};
       Descriptor &newFrom{tempDescriptor_.descriptor()};
       persist_ = true; // tempDescriptor_ state must outlive child tickets
-      std::memcpy(reinterpret_cast<void *>(&newFrom), from_, descBytes);
+      Fortran::runtime::memcpy(reinterpret_cast<void *>(&newFrom), from_, descBytes);
       // Pretend the temporary descriptor is for an ALLOCATABLE
       // entity, otherwise, the Deallocate() below will not
       // free the descriptor memory.
@@ -845,6 +846,17 @@ void RTDEF(AssignPolymorphic)(Descriptor &to, const Descriptor &from,
       MaybeReallocate | NeedFinalization | ComponentCanBeDefinedAssignment |
           PolymorphicLHS);
 }
+
+#if defined(OMP_OFFLOAD_BUILD)
+// To support a recently added use of variant in the OpenMP offload build,
+// added an abort wrapper which calls the flang-rt FortranAAbort.
+// Avoids the following linker error:
+//   ld.lld: error: undefined symbol: abort
+//   >>> referenced by /tmp/device_aassign.amdgcn.gfx90a-34a7ed.img.lto.o:(std::__throw_bad_variant_access(char const*))
+extern "C" void abort(void) {
+  RTNAME(Abort)();
+}
+#endif
 
 RT_EXT_API_GROUP_END
 } // extern "C"

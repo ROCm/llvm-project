@@ -1103,12 +1103,12 @@ void InstrInfoEmitter::run(raw_ostream &OS) {
     OS << "extern const MCInstrInfo::ComplexDeprecationPredicate " << TargetName
        << "InstrComplexDeprecationInfos[];\n";
   OS << ClassName << "::" << ClassName
-     << "(unsigned CFSetupOpcode, unsigned CFDestroyOpcode, unsigned "
+      << "(unsigned CFSetupOpcode, unsigned CFDestroyOpcode, unsigned "
         "CatchRetOpcode, unsigned ReturnOpcode)\n"
-     << "  : TargetInstrInfo(CFSetupOpcode, CFDestroyOpcode, CatchRetOpcode, "
+      << "  : TargetInstrInfo(CFSetupOpcode, CFDestroyOpcode, CatchRetOpcode, "
         "ReturnOpcode) {\n"
-     << "  InitMCInstrInfo(" << TargetName << "Descs.Insts, " << TargetName
-     << "InstrNameIndices, " << TargetName << "InstrNameData, ";
+      << "  InitMCInstrInfo(" << TargetName << "Descs.Insts, " << TargetName
+    << "InstrNameIndices, " << TargetName << "InstrNameData, ";
   if (HasDeprecationFeatures)
     OS << TargetName << "InstrDeprecationFeatures, ";
   else

@@ -439,9 +439,6 @@ static const DriverSuffix *FindDriverSuffix(StringRef ProgName, size_t &Pos) {
       {"cl", "--driver-mode=cl"},
       {"++", "--driver-mode=g++"},
       {"flang", "--driver-mode=flang"},
-      // For backwards compatibility, we create a symlink for `flang` called
-      // `flang-new`. This will be removed in the future.
-      {"flang-new", "--driver-mode=flang"},
       {"clang-dxc", "--driver-mode=dxc"},
   };
 
@@ -549,6 +546,12 @@ StringRef ToolChain::getDefaultUniversalArchName() const {
   }
 }
 
+Tool *ToolChain::getFlang() const {
+  if (!Flang)
+    Flang.reset(new tools::Flang(*this));
+  return Flang.get();
+}
+
 std::string ToolChain::getInputFilename(const InputInfo &Input) const {
   return Input.getFilename();
 }
@@ -562,12 +565,6 @@ Tool *ToolChain::getClang() const {
   if (!Clang)
     Clang.reset(new tools::Clang(*this, useIntegratedBackend()));
   return Clang.get();
-}
-
-Tool *ToolChain::getFlang() const {
-  if (!Flang)
-    Flang.reset(new tools::Flang(*this));
-  return Flang.get();
 }
 
 Tool *ToolChain::buildAssembler() const {
@@ -655,6 +652,9 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::ObjcopyJobClass:
     llvm_unreachable("Invalid tool kind.");
 
+  case Action::FortranFrontendJobClass:
+    llvm::report_fatal_error("fortranfrontend is invalid tool kind here.");
+
   case Action::CompileJobClass:
   case Action::PrecompileJobClass:
   case Action::PreprocessJobClass:
@@ -667,7 +667,6 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::OffloadBundlingJobClass:
   case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
-
   case Action::OffloadPackagerJobClass:
     return getOffloadPackager();
   case Action::LinkerWrapperJobClass:
@@ -1298,6 +1297,14 @@ void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   // Each toolchain should provide the appropriate include flags.
 }
 
+void ToolChain::addActionsFromClangTargetOptions(
+    const ArgList &DriverArgs,
+    ArgStringList &CC1Args,
+    const JobAction &JA,
+    Compilation &C,
+    const InputInfoList &Inputs) const
+{}
+
 void ToolChain::addClangTargetOptions(
     const ArgList &DriverArgs, ArgStringList &CC1Args,
     Action::OffloadKind DeviceOffloadKind) const {}
@@ -1718,6 +1725,10 @@ llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
 
   // Handle -Xopenmp-target flags
   for (auto *A : Args) {
+    // -munsafe-fp-atomics applies to device toolchain
+    if (A->getOption().matches(options::OPT_munsafe_fp_atomics))
+      DAL->append(A);
+
     // Exclude flags which may only apply to the host toolchain.
     // Do not exclude flags when the host triple (AuxTriple)
     // matches the current toolchain triple. If it is not present

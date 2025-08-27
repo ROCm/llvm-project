@@ -29,9 +29,15 @@ set(devicertl_base_directory ${CMAKE_CURRENT_SOURCE_DIR})
 set(include_directory ${devicertl_base_directory}/include)
 set(source_directory ${devicertl_base_directory}/src)
 
+if(OFFLOAD_ENABLE_EMISSARY_APIS)
+  set(emissary_includes ${include_directory}/EmissaryIds.h)
+  set(emissary_sources src/EmissaryFortrt.cpp src/EmissaryPrint.cpp)
+endif()
+
 set(include_files
   ${include_directory}/Allocator.h
   ${include_directory}/Configuration.h
+  ${include_directory}/Platform.h
   ${include_directory}/Debug.h
   ${include_directory}/Interface.h
   ${include_directory}/LibC.h
@@ -41,7 +47,10 @@ set(include_files
   ${include_directory}/Synchronization.h
   ${include_directory}/DeviceTypes.h
   ${include_directory}/DeviceUtils.h
+  ${include_directory}/Xteamr.h
+  ${include_directory}/Xteams.h
   ${include_directory}/Workshare.h
+  ${emissary_includes}
 )
 
 set(src_files
@@ -50,6 +59,7 @@ set(src_files
   ${source_directory}/Debug.cpp
   ${source_directory}/Kernel.cpp
   ${source_directory}/LibC.cpp
+  ${source_directory}/LibM.cpp
   ${source_directory}/Mapping.cpp
   ${source_directory}/Misc.cpp
   ${source_directory}/Parallelism.cpp
@@ -60,6 +70,11 @@ set(src_files
   ${source_directory}/Tasking.cpp
   ${source_directory}/DeviceUtils.cpp
   ${source_directory}/Workshare.cpp
+  ${source_directory}/ExtraMapping.cpp
+  ${source_directory}/Xteamr.cpp
+  ${source_directory}/Memory.cpp
+  ${source_directory}/Xteams.cpp
+  ${emissary_sources}
 )
 
 # We disable the slp vectorizer during the runtime optimization to avoid
@@ -86,9 +101,39 @@ set(bc_flags -c -flto -std=c++17 -fvisibility=hidden
              -I${devicertl_base_directory}/../../libc
 )
 
+if(${LIBOMPTARGET_DEVICE_DEBUG})
+  list(APPEND bc_flags -DOMPTARGET_DEBUG=-1)
+else()
+  list(APPEND bc_flags -DOMPTARGET_DEBUG=0)
+endif()
+
 # first create an object target
+add_library(omptarget.devicertl.all_objs OBJECT IMPORTED)
 function(compileDeviceRTLLibrary target_name target_triple)
   set(target_bc_flags ${ARGN})
+
+  if(${target_name} MATCHES "amdgpu")
+    set(amdbc_dirs
+      "${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build/lib/llvm/lib/clang/${LLVM_VERSION_MAJOR}/lib/amdgcn/bitcode"
+      "${CMAKE_INSTALL_PREFIX}/../../amdgcn/bitcode"
+      "/opt/rocm/amdgcn/bitcode")
+    foreach(amdbc_dir ${amdbc_dirs})
+      if(EXISTS "${amdbc_dir}/ockl.bc" AND NOT _ockl_bc)
+        set(_ockl_bc ${amdbc_dir}/ockl.bc)
+      endif()
+      if(EXISTS "${amdbc_dir}/ocml.bc" AND NOT _ocml_bc)
+        set(_ocml_bc ${amdbc_dir}/ocml.bc)
+      endif()
+    endforeach()
+    if(NOT _ockl_bc)
+      message(FATAL_ERROR "Could not find ockl.bc")
+    endif()
+    if(NOT _ocml_bc)
+      message(FATAL_ERROR "Could not find ocml.bc")
+    endif()
+    list(APPEND target_bc_flags -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc})
+    list(APPEND target_bc_flags -Xclang -mlink-builtin-bitcode -Xclang ${_ocml_bc})
+  endif()
 
   foreach(src ${src_files})
     get_filename_component(infile ${src} ABSOLUTE)
@@ -125,7 +170,8 @@ function(compileDeviceRTLLibrary target_name target_triple)
   # Trick to combine these into a bitcode file via the linker's LTO pass. This
   # is used to provide the legacy `libomptarget-<name>.bc` files. Hack this
   # through as an executable to get it to use the relocatable link.
-  add_executable(libomptarget-${target_name} ${obj_files})
+  add_executable(libomptarget-${target_name})
+  target_sources(libomptarget-${target_name} PRIVATE ${obj_files})
   set_target_properties(libomptarget-${target_name} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${LIBOMPTARGET_LLVM_LIBRARY_INTDIR}
     LINKER_LANGUAGE CXX
@@ -135,9 +181,11 @@ function(compileDeviceRTLLibrary target_name target_triple)
   target_compile_options(libomptarget-${target_name} PRIVATE
     "--target=${target_triple}" "-fuse-ld=lld" "-march=" "-mcpu="
     "-Wno-unused-command-line-argument")
-  target_link_options(libomptarget-${target_name} PRIVATE "--target=${target_triple}"
-                      "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm"
-                      "-fuse-ld=lld" "-march=" "-mcpu=")
+  target_link_options(libomptarget-${target_name} PRIVATE
+    "--target=${target_triple}" "-r" "-nostdlib" "-flto" "-Wl,--lto-emit-llvm"
+    "-Wl,--lto-newpm-passes=default<O3>" "-Wl,-plugin-opt=-openmp-opt-disable"
+    "-Wl,-plugin-opt=-attributor-enable=module"
+    "-Wl,-plugin-opt=-vectorize-slp=false" "-fuse-ld=lld" "-march=" "-mcpu=")
   install(TARGETS libomptarget-${target_name}
           PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ
           DESTINATION "lib${LLVM_LIBDIR_SUFFIX}/${target_triple}")
@@ -154,6 +202,7 @@ function(compileDeviceRTLLibrary target_name target_triple)
     ARCHIVE_OUTPUT_NAME ompdevice
     LINKER_LANGUAGE CXX
   )
+  add_dependencies(omptarget.${target_name} libomptarget-${target_name})
   target_link_libraries(omptarget.${target_name} PRIVATE omptarget.${target_name}.all_objs)
   target_link_options(omptarget.${target_name} PRIVATE "--target=${target_triple}"
                       "-Wno-unused-command-line-argument" "-r" "-nostdlib" "-flto"

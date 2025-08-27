@@ -332,7 +332,6 @@ module _Builtin_unwind [system] {
 module opencl_c {
   requires opencl
   header "opencl-c.h"
-  header "opencl-c-base.h"
 }
 
 module ptrauth {

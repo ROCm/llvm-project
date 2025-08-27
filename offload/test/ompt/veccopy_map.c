@@ -51,7 +51,6 @@ int main() {
   return rc;
 }
 
-
 /// CHECK: 0: Could not register callback 'ompt_callback_target_map'
 /// CHECK: Callback Init:
 /// CHECK: Callback Load:

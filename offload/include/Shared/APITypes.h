@@ -21,6 +21,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <variant>
+
+#ifdef OMPT_SUPPORT
+#include <omp-tools.h>
+#endif
 #include <mutex>
 
 extern "C" {
@@ -84,6 +90,14 @@ struct __tgt_async_info {
   /// ensure it is a valid location while the transfer to the device is
   /// happening.
   KernelLaunchEnvironmentTy KernelLaunchEnvironment;
+
+  /// Use for sync interface. When false => synchronous execution
+  bool ExecAsync = true;
+  /// Maintain the actal data for OMPT.
+  /// TODO: Moving forward, this should become a void* to not expose OMPT data
+  /// type in general types
+  // llvm::omp::target::ompt::OmptEventInfoTy *OmptEventInfo = nullptr;
+  void *ProfilerData = nullptr;
 };
 
 /// This struct contains all of the arguments to a target kernel region launch.

@@ -11,7 +11,6 @@ add_clang_library(clangTidyLLVMModule STATIC
   PreferRegisterOverUnsignedCheck.cpp
   PreferStaticOverAnonymousNamespaceCheck.cpp
   TwineLocalCheck.cpp
-  UseNewMLIROpBuilderCheck.cpp
 
   LINK_LIBS
   clangTidy

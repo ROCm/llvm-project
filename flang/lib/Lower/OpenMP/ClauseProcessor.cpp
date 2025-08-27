@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClauseProcessor.h"
-#include "Utils.h"
+#include "flang/Lower/OpenMP/Utils.h"
 
 #include "flang/Lower/ConvertExprToHLFIR.h"
 #include "flang/Lower/OpenMP/Clauses.h"
@@ -19,6 +19,7 @@
 #include "flang/Lower/Support/ReductionProcessor.h"
 #include "flang/Parser/tools.h"
 #include "flang/Semantics/tools.h"
+#include "flang/Utils/OpenMP.h"
 #include "llvm/Frontend/OpenMP/OMP.h.inc"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
 
@@ -1144,40 +1145,6 @@ bool ClauseProcessor::processIsDevicePtr(
       });
 }
 
-bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
-  lower::StatementContext stmtCtx;
-  return findRepeatableClause<
-      omp::clause::Linear>([&](const omp::clause::Linear &clause,
-                               const parser::CharBlock &) {
-    auto &objects = std::get<omp::ObjectList>(clause.t);
-    for (const omp::Object &object : objects) {
-      semantics::Symbol *sym = object.sym();
-      const mlir::Value variable = converter.getSymbolAddress(*sym);
-      result.linearVars.push_back(variable);
-    }
-    if (objects.size()) {
-      if (auto &mod =
-              std::get<std::optional<omp::clause::Linear::StepComplexModifier>>(
-                  clause.t)) {
-        mlir::Value operand =
-            fir::getBase(converter.genExprValue(toEvExpr(*mod), stmtCtx));
-        result.linearStepVars.append(objects.size(), operand);
-      } else if (std::get<std::optional<omp::clause::Linear::LinearModifier>>(
-                     clause.t)) {
-        mlir::Location currentLocation = converter.getCurrentLocation();
-        TODO(currentLocation, "Linear modifiers not yet implemented");
-      } else {
-        // If nothing is present, add the default step of 1.
-        fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
-        mlir::Location currentLocation = converter.getCurrentLocation();
-        mlir::Value operand = firOpBuilder.createIntegerConstant(
-            currentLocation, firOpBuilder.getI32Type(), 1);
-        result.linearStepVars.append(objects.size(), operand);
-      }
-    }
-  });
-}
-
 bool ClauseProcessor::processLink(
     llvm::SmallVectorImpl<DeclareTargetCaptureInfo> &result) const {
   return findRepeatableClause<omp::clause::Link>(
@@ -1196,7 +1163,7 @@ void ClauseProcessor::processMapObjects(
     std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
     llvm::SmallVectorImpl<mlir::Value> &mapVars,
     llvm::SmallVectorImpl<const semantics::Symbol *> &mapSyms,
-    llvm::StringRef mapperIdNameRef) const {
+    llvm::StringRef mapperIdNameRef, bool isMotionModifier) const {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   auto getDefaultMapperID = [&](const omp::Object &object,
@@ -1248,7 +1215,7 @@ void ClauseProcessor::processMapObjects(
             treatIndexAsSection);
 
     mlir::Value baseOp = info.rawInput;
-    if (object.sym()->owner().IsDerivedType()) {
+    if (object.sym()->owner().IsDerivedType() && !isMotionModifier) {
       omp::ObjectList objectList = gatherObjectsOf(object, semaCtx);
       assert(!objectList.empty() &&
              "could not find parent objects of derived type member");
@@ -1281,7 +1248,7 @@ void ClauseProcessor::processMapObjects(
     auto location = mlir::NameLoc::get(
         mlir::StringAttr::get(firOpBuilder.getContext(), asFortran.str()),
         baseOp.getLoc());
-    mlir::omp::MapInfoOp mapOp = createMapInfoOp(
+    mlir::omp::MapInfoOp mapOp = utils::openmp::createMapInfoOp(
         firOpBuilder, location, baseOp,
         /*varPtrPtr=*/mlir::Value{}, asFortran.str(), bounds,
         /*members=*/{}, /*membersIndex=*/mlir::ArrayAttr{},
@@ -1416,7 +1383,8 @@ bool ClauseProcessor::processMotionClauses(lower::StatementContext &stmtCtx,
     if (expectation && *expectation == omp::clause::To::Expectation::Present)
       mapTypeBits |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_PRESENT;
     processMapObjects(stmtCtx, clauseLocation, objects, mapTypeBits,
-                      parentMemberIndices, result.mapVars, mapSymbols);
+                      parentMemberIndices, result.mapVars, mapSymbols, "",
+                      true);
   };
 
   bool clauseFound = findRepeatableClause<omp::clause::To>(callbackFn);

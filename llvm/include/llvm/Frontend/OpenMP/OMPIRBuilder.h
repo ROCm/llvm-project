@@ -121,7 +121,8 @@ public:
 
   /// First separator used between the initial two parts of a name.
   std::optional<StringRef> FirstSeparator;
-  /// Separator used between all of the rest consecutive parts of s name
+
+  /// Separator used between all of the rest consecutive parts of a name
   std::optional<StringRef> Separator;
 
   // Grid Value for the GPU target
@@ -2116,6 +2117,17 @@ public:
   LLVM_ABI FunctionCallee getOrCreateRuntimeFunction(Module &M,
                                                      omp::RuntimeFunction FnID);
 
+  /// Return the function declaration for atomic CAS runtime function
+  /// with name \p FunName. Used for unsigned types as basic .def machinery
+  /// does not support unsigned integer types in the API.
+  /// \param FunName Name of the function to get or create
+  /// \param RetType Type of function return parameter
+  /// \param AddrTy Type of atomic target pointer
+  /// \param UpdateTy Type of atomic update expression
+  LLVM_ABI FunctionCallee unsignedGetOrCreateAtomicCASRuntimeFunction(
+      Module &M, const StringRef &FunName, Type *RetType, Type *AddrTy,
+      Type *UpdateTy);
+
   LLVM_ABI Function *getOrCreateRuntimeFunctionPtr(omp::RuntimeFunction FnID);
 
   /// Return the (LLVM-IR) string describing the source location \p LocStr.
@@ -2426,7 +2438,7 @@ public:
     /// Arguments passed to the runtime library
     TargetDataRTArgs RTArgs;
     /// The number of iterations
-    Value *NumIterations = nullptr;
+    Value *TripCount = nullptr;
     /// The number of teams.
     ArrayRef<Value *> NumTeams;
     /// The number of threads.
@@ -2439,13 +2451,12 @@ public:
     // Constructors for TargetKernelArgs.
     TargetKernelArgs() {}
     TargetKernelArgs(unsigned NumTargetItems, TargetDataRTArgs RTArgs,
-                     Value *NumIterations, ArrayRef<Value *> NumTeams,
+                     Value *TripCount, ArrayRef<Value *> NumTeams,
                      ArrayRef<Value *> NumThreads, Value *DynCGGroupMem,
                      bool HasNoWait)
-        : NumTargetItems(NumTargetItems), RTArgs(RTArgs),
-          NumIterations(NumIterations), NumTeams(NumTeams),
-          NumThreads(NumThreads), DynCGGroupMem(DynCGGroupMem),
-          HasNoWait(HasNoWait) {}
+        : NumTargetItems(NumTargetItems), RTArgs(RTArgs), TripCount(TripCount),
+          NumTeams(NumTeams), NumThreads(NumThreads),
+          DynCGGroupMem(DynCGGroupMem), HasNoWait(HasNoWait) {}
   };
 
   /// Create the kernel args vector used by emitTargetKernel. This function
@@ -2976,7 +2987,7 @@ public:
   /// The `omp target` interface
   ///
   /// For more information about the usage of this interface,
-  /// \see openmp/libomptarget/deviceRTLs/common/include/target.h
+  /// \see offload/deviceRTLs/common/include/target.h
   ///
   ///{
 
@@ -3249,6 +3260,10 @@ public:
   LLVM_ABI FunctionCallee createForStaticInitFunction(unsigned IVSize,
                                                       bool IVSigned,
                                                       bool IsGPUDistribute);
+
+  /// Return the __kmpc_distribute_static_init_multi_device* function.
+  FunctionCallee createMDDistributeForStaticInitFunction(unsigned IVSize,
+                                                         bool IVSigned);
 
   /// Returns __kmpc_dispatch_init_* runtime function for the specified
   /// size \a IVSize and sign \a IVSigned.
@@ -3749,9 +3764,6 @@ private:
   BasicBlock *Latch = nullptr;
   BasicBlock *Exit = nullptr;
 
-  // Hold the MLIR value for the `lastiter` of the canonical loop.
-  Value *LastIter = nullptr;
-
   /// Add the control blocks of this loop to \p BBs.
   ///
   /// This does not include any block from the body, including the one returned
@@ -3784,18 +3796,6 @@ private:
   void mapIndVar(llvm::function_ref<Value *(Instruction *)> Updater);
 
 public:
-  /// Sets the last iteration variable for this loop.
-  void setLastIter(Value *IterVar) { LastIter = std::move(IterVar); }
-
-  /// Returns the last iteration variable for this loop.
-  /// Certain use-cases (like translation of linear clause) may access
-  /// this variable even after a loop transformation. Hence, do not guard
-  /// this getter function by `isValid`. It is the responsibility of the
-  /// callee to ensure this functionality is not invoked by a non-outlined
-  /// CanonicalLoopInfo object (in which case, `setLastIter` will never be
-  /// invoked and `LastIter` will be by default `nullptr`).
-  Value *getLastIter() { return LastIter; }
-
   /// Returns whether this object currently represents the IR of a loop. If
   /// returning false, it may have been consumed by a loop transformation or not
   /// been intialized. Do not use in this case;
