@@ -29,8 +29,8 @@
 #include <flang/Parser/parse-tree.h>
 #include <flang/Parser/tools.h>
 #include <flang/Semantics/tools.h>
-#include <flang/Utils/OpenMP.h>
 #include <flang/Semantics/type.h>
+#include <flang/Utils/OpenMP.h>
 #include <llvm/Support/CommandLine.h>
 #include <mlir/Analysis/TopologicalSortUtils.h>
 #include <mlir/Dialect/Arith/IR/Arith.h>
