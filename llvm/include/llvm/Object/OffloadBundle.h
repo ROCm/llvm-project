@@ -126,8 +126,8 @@ public:
 
   OffloadBundleFatBin(MemoryBufferRef Source, StringRef File,
                       bool Decompress = false)
-      : FileName(File), Decompressed(Decompress), NumberOfEntries(0),
-        Entries(SmallVector<OffloadBundleEntry>()) {
+      : FileName(File), NumberOfEntries(0),
+        Entries(SmallVector<OffloadBundleEntry>()), Decompressed(Decompress) {
     if (Decompress) {
       DecompressedBuffer =
           MemoryBuffer::getMemBufferCopy(Source.getBuffer(), File);
