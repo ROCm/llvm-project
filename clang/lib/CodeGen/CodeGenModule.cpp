@@ -586,6 +586,11 @@ void CodeGenModule::createOpenCLRuntime() {
 }
 
 void CodeGenModule::createOpenMPRuntime() {
+  if (!LangOpts.OMPHostIRFile.empty() &&
+      !llvm::sys::fs::exists(LangOpts.OMPHostIRFile))
+    Diags.Report(diag::err_omp_host_ir_file_not_found)
+        << LangOpts.OMPHostIRFile;
+
   // Select a specialized code generation class based on the target, if any.
   // If it does not exist use the default implementation.
   switch (getTriple().getArch()) {
@@ -6928,8 +6933,8 @@ CodeGenModule::GetAddrOfConstantStringFromObjCEncode(const ObjCEncodeExpr *E) {
 /// GetAddrOfConstantCString - Returns a pointer to a character array containing
 /// the literal and a terminating '\0' character.
 /// The result has pointer to array type.
-ConstantAddress CodeGenModule::GetAddrOfConstantCString(
-    const std::string &Str, const char *GlobalName) {
+ConstantAddress CodeGenModule::GetAddrOfConstantCString(const std::string &Str,
+                                                        StringRef GlobalName) {
   StringRef StrWithNull(Str.c_str(), Str.size() + 1);
   CharUnits Alignment = getContext().getAlignOfGlobalVarInChars(
       getContext().CharTy, /*VD=*/nullptr);
@@ -6949,9 +6954,6 @@ ConstantAddress CodeGenModule::GetAddrOfConstantCString(
     }
   }
 
-  // Get the default prefix if a name wasn't specified.
-  if (!GlobalName)
-    GlobalName = ".str";
   // Create a global variable for this.
   auto GV = GenerateStringLiteral(C, llvm::GlobalValue::PrivateLinkage, *this,
                                   GlobalName, Alignment);
@@ -8222,10 +8224,23 @@ public:
 
   // Reject if there is a nested OpenMP parallel directive
   void VisitOMPExecutableDirective(const OMPExecutableDirective *D) {
-    if (D->getDirectiveKind() == llvm::omp::Directive::OMPD_parallel) {
+    switch (D->getDirectiveKind()) {
+    case llvm::omp::Directive::OMPD_parallel:
+    case llvm::omp::Directive::OMPD_parallel_do:
+    case llvm::omp::Directive::OMPD_parallel_do_simd:
+    case llvm::omp::Directive::OMPD_parallel_for:
+    case llvm::omp::Directive::OMPD_parallel_for_simd:
+    case llvm::omp::Directive::OMPD_parallel_master:
+    case llvm::omp::Directive::OMPD_parallel_master_taskloop:
+    case llvm::omp::Directive::OMPD_parallel_master_taskloop_simd:
+    case llvm::omp::Directive::OMPD_parallel_sections:
+    case llvm::omp::Directive::OMPD_parallel_workshare: {
       NoLoopCheckStatus = CodeGenModule::NxNestedOmpParallelDirective;
       // No need to continue visiting any more
       return;
+    }
+    default:
+      break;
     }
     for (const Stmt *Child : D->children())
       if (Child)
