@@ -17,7 +17,7 @@
 /* The number of commits in the linear history from the
  * start of the universe up to the latest llvm main commit
  * that has been merged */
-#define LLVM_MAIN_REVISION 545255
+#define LLVM_MAIN_REVISION 551331
 
 /* Define if LLVM_ENABLE_DUMP is enabled */
 #cmakedefine LLVM_ENABLE_DUMP
@@ -105,6 +105,9 @@
 
 /* Define if LLVM is using tflite */
 #cmakedefine LLVM_HAVE_TFLITE
+
+/* Define if we want to check profile consistency in lit tests */
+#cmakedefine LLVM_ENABLE_PROFCHECK
 
 /* Define to 1 if you have the <sysexits.h> header file. */
 #cmakedefine HAVE_SYSEXITS_H ${HAVE_SYSEXITS_H}

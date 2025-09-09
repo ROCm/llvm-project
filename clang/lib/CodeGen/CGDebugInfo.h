@@ -158,7 +158,6 @@ class CGDebugInfo {
   /// This is a storage for names that are constructed on demand. For
   /// example, C++ destructors, C++ operators etc..
   llvm::BumpPtrAllocator DebugInfoNames;
-  StringRef CWDName;
 
   llvm::DenseMap<const char *, llvm::TrackingMDRef> DIFileCache;
   llvm::DenseMap<const FunctionDecl *, llvm::TrackingMDRef> SPCache;
@@ -1014,6 +1013,8 @@ public:
   ApplyInlineDebugLocation(CodeGenFunction &CGF, GlobalDecl InlinedFn);
   /// Restore everything back to the original state.
   ~ApplyInlineDebugLocation();
+  ApplyInlineDebugLocation(const ApplyInlineDebugLocation &) = delete;
+  ApplyInlineDebugLocation &operator=(ApplyInlineDebugLocation &) = delete;
 };
 
 class SanitizerDebugLocation {
@@ -1025,6 +1026,8 @@ public:
                          ArrayRef<SanitizerKind::SanitizerOrdinal> Ordinals,
                          SanitizerHandler Handler);
   ~SanitizerDebugLocation();
+  SanitizerDebugLocation(const SanitizerDebugLocation &) = delete;
+  SanitizerDebugLocation &operator=(SanitizerDebugLocation &) = delete;
 };
 
 } // namespace CodeGen

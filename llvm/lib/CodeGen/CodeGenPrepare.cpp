@@ -19,6 +19,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -377,7 +378,7 @@ public:
   /// to be optimized again.
   /// Note: Consider building time in this pass, when a BB updated, we need
   /// to insert such BB into FreshBBs for huge function.
-  SmallSet<BasicBlock *, 32> FreshBBs;
+  SmallPtrSet<BasicBlock *, 32> FreshBBs;
 
   void releaseMemory() {
     // Clear per function information.
@@ -1105,7 +1106,7 @@ bool CodeGenPrepare::canMergeBlocks(const BasicBlock *BB,
 
 /// Replace all old uses with new ones, and push the updated BBs into FreshBBs.
 static void replaceAllUsesWith(Value *Old, Value *New,
-                               SmallSet<BasicBlock *, 32> &FreshBBs,
+                               SmallPtrSet<BasicBlock *, 32> &FreshBBs,
                                bool IsHuge) {
   auto *OldI = dyn_cast<Instruction>(Old);
   if (OldI) {
@@ -1834,7 +1835,7 @@ bool CodeGenPrepare::unfoldPowerOf2Test(CmpInst *Cmp) {
 ///
 /// Return true if any changes are made.
 static bool sinkCmpExpression(CmpInst *Cmp, const TargetLowering &TLI) {
-  if (TLI.hasMultipleConditionRegisters())
+  if (TLI.hasMultipleConditionRegisters(EVT::getEVT(Cmp->getType())))
     return false;
 
   // Avoid sinking soft-FP comparisons, since this can move them into a loop.
@@ -2095,6 +2096,10 @@ static bool isRemOfLoopIncrementWithLoopInvariant(
   if (!L->isLoopInvariant(RemAmt))
     return false;
 
+  // Only works if the AddOffset is a loop invaraint
+  if (AddOffset && !L->isLoopInvariant(AddOffset))
+    return false;
+
   // Is the PHI a loop increment?
   auto LoopIncrInfo = getIVIncrement(PN, LI);
   if (!LoopIncrInfo)
@@ -2131,7 +2136,7 @@ static bool isRemOfLoopIncrementWithLoopInvariant(
 //    Rem = rem == RemAmtLoopInvariant ? 0 : Rem;
 static bool foldURemOfLoopIncrement(Instruction *Rem, const DataLayout *DL,
                                     const LoopInfo *LI,
-                                    SmallSet<BasicBlock *, 32> &FreshBBs,
+                                    SmallPtrSet<BasicBlock *, 32> &FreshBBs,
                                     bool IsHuge) {
   Value *AddOffset, *RemAmt, *AddInst;
   PHINode *LoopIncrPN;
@@ -2530,11 +2535,10 @@ static bool OptimizeExtractBits(BinaryOperator *ShiftI, ConstantInt *CI,
 ///     %ctz = phi i64 [ 64, %entry ], [ %z, %cond.false ]
 ///
 /// If the transform is performed, return true and set ModifiedDT to true.
-static bool despeculateCountZeros(IntrinsicInst *CountZeros,
-                                  LoopInfo &LI,
+static bool despeculateCountZeros(IntrinsicInst *CountZeros, LoopInfo &LI,
                                   const TargetLowering *TLI,
                                   const DataLayout *DL, ModifyDT &ModifiedDT,
-                                  SmallSet<BasicBlock *, 32> &FreshBBs,
+                                  SmallPtrSet<BasicBlock *, 32> &FreshBBs,
                                   bool IsHugeFunc) {
   // If a zero input is undefined, it doesn't make sense to despeculate that.
   if (match(CountZeros->getOperand(1), m_One()))
@@ -2615,22 +2619,9 @@ static bool despeculateCountZeros(IntrinsicInst *CountZeros,
 bool CodeGenPrepare::optimizeCallInst(CallInst *CI, ModifyDT &ModifiedDT) {
   BasicBlock *BB = CI->getParent();
 
-  // Lower inline assembly if we can.
-  // If we found an inline asm expession, and if the target knows how to
-  // lower it to normal LLVM code, do so now.
-  if (CI->isInlineAsm()) {
-    if (TLI->ExpandInlineAsm(CI)) {
-      // Avoid invalidating the iterator.
-      CurInstIterator = BB->begin();
-      // Avoid processing instructions out of order, which could cause
-      // reuse before a value is defined.
-      SunkAddrs.clear();
-      return true;
-    }
-    // Sink address computing for memory operands into the block.
-    if (optimizeInlineAsmInst(CI))
-      return true;
-  }
+  // Sink address computing for memory operands into the block.
+  if (CI->isInlineAsm() && optimizeInlineAsmInst(CI))
+    return true;
 
   // Align the pointer arguments to this call if the target thinks it's a good
   // idea
@@ -2765,6 +2756,29 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, ModifyDT &ModifiedDT) {
       return optimizeGatherScatterInst(II, II->getArgOperand(0));
     case Intrinsic::masked_scatter:
       return optimizeGatherScatterInst(II, II->getArgOperand(1));
+    case Intrinsic::masked_load:
+      // Treat v1X masked load as load X type.
+      if (auto *VT = dyn_cast<FixedVectorType>(II->getType())) {
+        if (VT->getNumElements() == 1) {
+          Value *PtrVal = II->getArgOperand(0);
+          unsigned AS = PtrVal->getType()->getPointerAddressSpace();
+          if (optimizeMemoryInst(II, PtrVal, VT->getElementType(), AS))
+            return true;
+        }
+      }
+      return false;
+    case Intrinsic::masked_store:
+      // Treat v1X masked store as store X type.
+      if (auto *VT =
+              dyn_cast<FixedVectorType>(II->getArgOperand(0)->getType())) {
+        if (VT->getNumElements() == 1) {
+          Value *PtrVal = II->getArgOperand(1);
+          unsigned AS = PtrVal->getType()->getPointerAddressSpace();
+          if (optimizeMemoryInst(II, PtrVal, VT->getElementType(), AS))
+            return true;
+        }
+      }
+      return false;
     }
 
     SmallVector<Value *, 2> PtrOps;
@@ -3523,6 +3537,49 @@ class TypePromotionTransaction {
       LLVM_DEBUG(dbgs() << "Do: MutateType: " << *Inst << " with " << *NewTy
                         << "\n");
       Inst->mutateType(NewTy);
+      // Handle debug Info
+      mutateDgbInfo(Inst, NewTy);
+    }
+
+    void mutateDgbInfo(Instruction *I, Type *Ty) {
+      SmallVector<DbgVariableRecord *> Dbgs;
+      findDbgUsers(I, Dbgs);
+      for (DbgVariableRecord *Dbg : Dbgs) {
+        DIExpression *Expr = Dbg->getExpression();
+        if (!Expr)
+          continue;
+        std::optional<DIExpression::NewElementsRef> Elems =
+            Expr->getNewElementsRef();
+        if (!Elems.has_value())
+          continue;
+        // Collect arg of Inst
+        uint32_t Idx = 0;
+        SmallBitVector Idxs(Dbg->getNumVariableLocationOps());
+        for (auto *VMD : Dbg->location_ops()) {
+          if (VMD == I) {
+            Idxs.set(Idx);
+          }
+          Idx++;
+        }
+        // Replace types
+        DIExprBuilder Builder(Expr->getContext());
+        unsigned long ArgI = 0;
+        for (auto [I, Op] : enumerate(*Elems)) {
+          const DIOp::Arg *AsArg = std::get_if<DIOp::Arg>(&Op);
+          const DIOp::Convert *CvtArg = std::get_if<DIOp::Convert>(&Op);
+          if (AsArg && Idxs[AsArg->getIndex()]) {
+            ArgI = I;
+            Builder.append<DIOp::Arg>(AsArg->getIndex(), Ty);
+            if (Ty != OrigTy)
+              Builder.append<DIOp::Convert>(OrigTy);
+          } else if (!(CvtArg && I == ArgI + 1 &&
+                       CvtArg->getResultType() == Ty)) {
+            Builder.append(Op);
+          }
+          I++;
+        }
+        Dbg->setExpression(Builder.intoExpression());
+      }
     }
 
     /// Mutate the instruction back to its original type.
@@ -3530,6 +3587,8 @@ class TypePromotionTransaction {
       LLVM_DEBUG(dbgs() << "Undo: MutateType: " << *Inst << " with " << *OrigTy
                         << "\n");
       Inst->mutateType(OrigTy);
+      // Handle debug Info
+      mutateDgbInfo(Inst, OrigTy);
     }
   };
 
@@ -4324,7 +4383,7 @@ private:
                     PhiNodeSet &PhiNodesToMatch) {
     SmallVector<PHIPair, 8> WorkList;
     Matcher.insert({PHI, Candidate});
-    SmallSet<PHINode *, 8> MatchedPHIs;
+    SmallPtrSet<PHINode *, 8> MatchedPHIs;
     MatchedPHIs.insert(PHI);
     WorkList.push_back({PHI, Candidate});
     SmallSet<PHIPair, 8> Visited;
@@ -8608,7 +8667,7 @@ static bool tryUnmergingGEPsAcrossIndirectBr(GetElementPtrInst *GEPI,
 }
 
 static bool optimizeBranch(BranchInst *Branch, const TargetLowering &TLI,
-                           SmallSet<BasicBlock *, 32> &FreshBBs,
+                           SmallPtrSet<BasicBlock *, 32> &FreshBBs,
                            bool IsHugeFunc) {
   // Try and convert
   //  %c = icmp ult %x, 8

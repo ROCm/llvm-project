@@ -388,8 +388,8 @@ Cookie IODEF(BeginEndfile)(
   Terminator terminator{sourceFile, sourceLine};
   Cookie errorCookie{nullptr};
   if (ExternalFileUnit *
-      unit{GetOrCreateUnit(unitNumber, Direction::Output,
-          Fortran::common::nullopt, terminator, errorCookie)}) {
+      unit{GetOrCreateUnit(unitNumber, Direction::Output, common::nullopt,
+          terminator, errorCookie)}) {
     if (ChildIo * child{unit->GetChildIo()}) {
       return &child->BeginIoStatement<ErroneousIoStatementState>(
           IostatBadOpOnChildUnit, nullptr /* no unit */, sourceFile,
@@ -408,8 +408,8 @@ Cookie IODEF(BeginRewind)(
   Terminator terminator{sourceFile, sourceLine};
   Cookie errorCookie{nullptr};
   if (ExternalFileUnit *
-      unit{GetOrCreateUnit(unitNumber, Direction::Input,
-          Fortran::common::nullopt, terminator, errorCookie)}) {
+      unit{GetOrCreateUnit(unitNumber, Direction::Input, common::nullopt,
+          terminator, errorCookie)}) {
     if (ChildIo * child{unit->GetChildIo()}) {
       return &child->BeginIoStatement<ErroneousIoStatementState>(
           IostatBadOpOnChildUnit, nullptr /* no unit */, sourceFile,
@@ -530,6 +530,9 @@ bool IODEF(SetAdvance)(Cookie cookie, const char *keyword, std::size_t length) {
 
 bool IODEF(SetBlank)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   static const char *keywords[]{"NULL", "ZERO", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
   case 0:
@@ -547,6 +550,9 @@ bool IODEF(SetBlank)(Cookie cookie, const char *keyword, std::size_t length) {
 
 bool IODEF(SetDecimal)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   static const char *keywords[]{"COMMA", "POINT", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
   case 0:
@@ -564,6 +570,9 @@ bool IODEF(SetDecimal)(Cookie cookie, const char *keyword, std::size_t length) {
 
 bool IODEF(SetDelim)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   static const char *keywords[]{"APOSTROPHE", "QUOTE", "NONE", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
   case 0:
@@ -585,6 +594,9 @@ bool IODEF(SetDelim)(Cookie cookie, const char *keyword, std::size_t length) {
 bool IODEF(SetPad)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
   IoErrorHandler &handler{io.GetIoErrorHandler()};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   io.mutableModes().pad = YesOrNo(keyword, length, "PAD", handler);
   return !handler.InError();
 }
@@ -619,6 +631,9 @@ bool IODEF(SetRec)(Cookie cookie, std::int64_t rec) {
 
 bool IODEF(SetRound)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   static const char *keywords[]{"UP", "DOWN", "ZERO", "NEAREST", "COMPATIBLE",
       "PROCESSOR_DEFINED", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
@@ -649,6 +664,9 @@ bool IODEF(SetRound)(Cookie cookie, const char *keyword, std::size_t length) {
 
 bool IODEF(SetSign)(Cookie cookie, const char *keyword, std::size_t length) {
   IoStatementState &io{*cookie};
+  if (auto *open{io.get_if<OpenStatementState>()}) {
+    open->set_mustBeFormatted();
+  }
   static const char *keywords[]{
       "PLUS", "SUPPRESS", "PROCESSOR_DEFINED", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
@@ -716,7 +734,7 @@ bool IODEF(SetAction)(Cookie cookie, const char *keyword, std::size_t length) {
     io.GetIoErrorHandler().Crash(
         "SetAction() called after GetNewUnit() for an OPEN statement");
   }
-  Fortran::common::optional<Action> action;
+  common::optional<Action> action;
   static const char *keywords[]{"READ", "WRITE", "READWRITE", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
   case 0:
@@ -786,6 +804,7 @@ bool IODEF(SetCarriagecontrol)(
     io.GetIoErrorHandler().Crash(
         "SetCarriageControl() called after GetNewUnit() for an OPEN statement");
   }
+  open->set_mustBeFormatted();
   static const char *keywords[]{"LIST", "FORTRAN", "NONE", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
   case 0:
@@ -842,6 +861,7 @@ bool IODEF(SetEncoding)(
     io.GetIoErrorHandler().Crash(
         "SetEncoding() called after GetNewUnit() for an OPEN statement");
   }
+  open->set_mustBeFormatted();
   // Allow the encoding to be changed on an open unit -- it's
   // useful and safe.
   static const char *keywords[]{"UTF-8", "DEFAULT", nullptr};
@@ -874,10 +894,10 @@ bool IODEF(SetForm)(Cookie cookie, const char *keyword, std::size_t length) {
   }
   static const char *keywords[]{"FORMATTED", "UNFORMATTED", "BINARY", nullptr};
   switch (IdentifyValue(keyword, length, keywords)) {
-  case 0:
+  case 0: // FORM='FORMATTED'
     open->set_isUnformatted(false);
     break;
-  case 1:
+  case 1: // FORM='UNFORMATTED'
     open->set_isUnformatted(true);
     break;
   case 2: // legacy FORM='BINARY' means an unformatted stream

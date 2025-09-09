@@ -48,6 +48,15 @@ static MCRegister findUnusedRegister(MachineRegisterInfo &MRI,
   return MCRegister();
 }
 
+static bool needsFrameMoves(const MachineFunction &MF) {
+  // FIXME: There are some places in the compiler which are sensitive to the CFI
+  // pseudos and so using MachineFunction::needsFrameMoves has the unintended
+  // effect of making enabling debug info affect codegen. Once we have
+  // identified and fixed those cases this should be replaced with
+  // MF.needsFrameMoves()
+  return true;
+}
+
 static void encodeDwarfRegisterLocation(int DwarfReg, raw_ostream &OS) {
   assert(DwarfReg >= 0);
   if (DwarfReg < 32) {
@@ -485,8 +494,7 @@ public:
     SplitParts = TRI.getRegSplitParts(RC, EltSize);
     NumSubRegs = SplitParts.empty() ? 1 : SplitParts.size();
 
-    // FIXME: Switch to using MF.needsFrameMoves() later.
-    NeedsFrameMoves = true;
+    NeedsFrameMoves = needsFrameMoves(MF);
 
     assert(SuperReg != AMDGPU::M0 && "m0 should never spill");
   }
@@ -769,8 +777,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
   DebugLoc DL;
   MachineBasicBlock::iterator I = MBB.begin();
 
-  // FIXME: Switch to using MF.needsFrameMoves() later
-  const bool NeedsFrameMoves = true;
+  const bool NeedsFrameMoves = needsFrameMoves(MF);
 
   if (NeedsFrameMoves) {
     // On entry the SP/FP are not set up, so we need to define the CFA in terms
@@ -1201,6 +1208,7 @@ void SIFrameLowering::emitCSRSpillStores(MachineFunction &MF,
   const SIInstrInfo *TII = ST.getInstrInfo();
   const SIRegisterInfo &TRI = TII->getRegisterInfo();
   const MCRegisterInfo *MCRI = MF.getContext().getRegisterInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
 
   // Spill Whole-Wave Mode VGPRs. Save only the inactive lanes of the scratch
   // registers. However, save all lanes of callee-saved VGPRs. Due to this, we
@@ -1229,6 +1237,12 @@ void SIFrameLowering::emitCSRSpillStores(MachineFunction &MF,
         }
       };
 
+  for (const Register Reg : make_first_range(WWMScratchRegs)) {
+    if (!MRI.isReserved(Reg)) {
+      MRI.addLiveIn(Reg);
+      MBB.addLiveIn(Reg);
+    }
+  }
   StoreWWMRegisters(WWMScratchRegs);
 
   auto EnableAllLanes = [&]() {
@@ -1354,9 +1368,18 @@ void SIFrameLowering::emitCSRSpillRestores(
     RestoreWWMRegisters(WWMCalleeSavedRegs);
 
     // The original EXEC is the first operand of the return instruction.
-    const MachineInstr &Return = MBB.instr_back();
-    assert(Return.getOpcode() == AMDGPU::SI_WHOLE_WAVE_FUNC_RETURN &&
-           "Unexpected return inst");
+    MachineInstr &Return = MBB.instr_back();
+    unsigned Opcode = Return.getOpcode();
+    switch (Opcode) {
+    case AMDGPU::SI_WHOLE_WAVE_FUNC_RETURN:
+      Opcode = AMDGPU::SI_RETURN;
+      break;
+    case AMDGPU::SI_TCRETURN_GFX_WholeWave:
+      Opcode = AMDGPU::SI_TCRETURN_GFX;
+      break;
+    default:
+      llvm_unreachable("Unexpected return inst");
+    }
     Register OrigExec = Return.getOperand(0).getReg();
 
     if (!WWMScratchRegs.empty()) {
@@ -1370,6 +1393,11 @@ void SIFrameLowering::emitCSRSpillRestores(
     // Restore original EXEC.
     unsigned MovOpc = ST.isWave32() ? AMDGPU::S_MOV_B32 : AMDGPU::S_MOV_B64;
     BuildMI(MBB, MBBI, DL, TII->get(MovOpc), TRI.getExec()).addReg(OrigExec);
+
+    // Drop the first operand and update the opcode.
+    Return.removeOperand(0);
+    Return.setDesc(TII->get(Opcode));
+
     return;
   }
 
@@ -1441,8 +1469,7 @@ void SIFrameLowering::emitPrologue(MachineFunction &MF,
   uint32_t NumBytes = MFI.getStackSize();
   uint32_t RoundedSize = NumBytes;
 
-  // FIXME: Switch to using MF.needsFrameMoves() later
-  const bool NeedsFrameMoves = true;
+  const bool NeedsFrameMoves = needsFrameMoves(MF);
 
   if (NeedsFrameMoves)
     emitPrologueEntryCFI(MBB, MBBI, DL);
@@ -1630,8 +1657,7 @@ void SIFrameLowering::emitEpilogue(MachineFunction &MF,
                          FramePtrRegScratchCopy);
   }
 
-  // FIXME: Switch to using MF.needsFrameMoves() later
-  const bool NeedsFrameMoves = true;
+  const bool NeedsFrameMoves = needsFrameMoves(MF);
   if (hasFP(MF)) {
     if (NeedsFrameMoves)
       emitDefCFA(MBB, MBBI, DL, StackPtrReg, /*AspaceAlreadyDefined=*/false,
@@ -1980,7 +2006,9 @@ void SIFrameLowering::determineCalleeSaves(MachineFunction &MF,
            "Whole wave functions can use the reg mapped for their i1 argument");
 
     // FIXME: Be more efficient!
-    for (MCRegister Reg : AMDGPU::VGPR_32RegClass)
+    unsigned NumArchVGPRs = ST.has1024AddressableVGPRs() ? 1024 : 256;
+    for (MCRegister Reg :
+         AMDGPU::VGPR_32RegClass.getRegisters().take_front(NumArchVGPRs))
       if (MF.getRegInfo().isPhysRegModified(Reg)) {
         MFI->reserveWWMRegister(Reg);
         MF.begin()->addLiveIn(Reg);

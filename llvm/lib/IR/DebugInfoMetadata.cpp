@@ -57,15 +57,9 @@ DebugVariable::DebugVariable(const DbgVariableRecord *DVR)
 DILocation::DILocation(LLVMContext &C, StorageType Storage, unsigned Line,
                        unsigned Column, uint64_t AtomGroup, uint8_t AtomRank,
                        ArrayRef<Metadata *> MDs, bool ImplicitCode)
-    : MDNode(C, DILocationKind, Storage, MDs)
-#ifdef EXPERIMENTAL_KEY_INSTRUCTIONS
-      ,
-      AtomGroup(AtomGroup), AtomRank(AtomRank)
-#endif
-{
-#ifdef EXPERIMENTAL_KEY_INSTRUCTIONS
+    : MDNode(C, DILocationKind, Storage, MDs), AtomGroup(AtomGroup),
+      AtomRank(AtomRank) {
   assert(AtomRank <= 7 && "AtomRank number should fit in 3 bits");
-#endif
   if (AtomGroup)
     C.updateDILocationAtomGroupWaterline(AtomGroup + 1);
 
@@ -1012,7 +1006,7 @@ DIDerivedType *DIDerivedType::getImpl(
 std::optional<DIDerivedType::PtrAuthData>
 DIDerivedType::getPtrAuthData() const {
   return getTag() == dwarf::DW_TAG_LLVM_ptrauth_type
-             ? std::optional<PtrAuthData>(PtrAuthData(SubclassData32))
+             ? std::make_optional<PtrAuthData>(SubclassData32)
              : std::nullopt;
 }
 
@@ -2440,6 +2434,48 @@ DIExpression *DIExpression::appendNewOpsToArg(const DIExpression *Expr,
   }
 
   return Builder.intoExpression();
+}
+
+const DIExpression *DIExpression::spillArgs(const DIExpression *Expr,
+                                            SmallBitVector SpilledOpIndexes,
+                                            unsigned SpillAddrSpace) {
+  if (auto ExprOps = Expr->getNewElementsRef()) {
+    DIExprBuilder Builder(Expr->getContext());
+    auto *AllocaPtrTy = PointerType::get(Expr->getContext(), SpillAddrSpace);
+    for (auto Op : *ExprOps) {
+      DIOp::Arg *AsArg = std::get_if<DIOp::Arg>(&Op);
+      if (AsArg && SpilledOpIndexes.test(AsArg->getIndex())) {
+        Builder.append<DIOp::Arg>(AsArg->getIndex(), AllocaPtrTy);
+        Builder.append<DIOp::Deref>(AsArg->getResultType());
+      } else {
+        Builder.append(Op);
+      }
+    }
+    return Builder.intoExpression();
+  }
+
+  std::array<uint64_t, 1> Ops{{dwarf::DW_OP_deref}};
+  for (unsigned OpIdx : SpilledOpIndexes.set_bits())
+    Expr = DIExpression::appendOpsToArg(Expr, Ops, OpIdx);
+  return Expr;
+}
+
+const DIExpression *
+DIExpression::foldIntrinsicIndirection(const DIExpression *Expr,
+                                       bool IsIndirect) {
+  if (!IsIndirect || Expr->holdsNewElements())
+    return Expr;
+  return DIExpression::append(Expr, dwarf::DW_OP_deref);
+}
+
+const DIExpression *DIExpression::convertForInstrRef(const DIExpression *Expr,
+                                                     bool IsIndirect) {
+  // Immediately fold any indirectness from the LLVM-IR intrinsic into the
+  // expression:
+  Expr = DIExpression::foldIntrinsicIndirection(Expr, IsIndirect);
+  // If this is not already a variadic expression, it must be modified to become
+  // one.
+  return DIExpression::convertToVariadicExpression(Expr);
 }
 
 DIExpression *DIExpression::replaceArg(const DIExpression *Expr,

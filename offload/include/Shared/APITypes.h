@@ -27,6 +27,7 @@
 #ifdef OMPT_SUPPORT
 #include <omp-tools.h>
 #endif
+#include <mutex>
 
 extern "C" {
 
@@ -42,6 +43,7 @@ struct __tgt_device_image {
 struct __tgt_device_info {
   void *Context = nullptr;
   void *Device = nullptr;
+  void *Platform = nullptr;
 };
 
 /// This struct is a record of all the host code that may be offloaded to a
@@ -69,11 +71,6 @@ struct __tgt_device_binary {
 
 // clang-format on
 
-// OMPT: Forward declare for function pointer type
-namespace llvm::omp::target::ompt {
-struct OmptEventInfoTy;
-} // namespace llvm::omp::target::ompt
-
 /// This struct contains information exchanged between different asynchronous
 /// operations for device-dependent optimization and potential synchronization
 struct __tgt_async_info {
@@ -86,6 +83,9 @@ struct __tgt_async_info {
   /// should be freed after finalization.
   llvm::SmallVector<void *, 2> AssociatedAllocations;
 
+  /// Mutex to guard access to AssociatedAllocations and the Queue.
+  std::mutex Mutex;
+
   /// The kernel launch environment used to issue a kernel. Stored here to
   /// ensure it is a valid location while the transfer to the device is
   /// happening.
@@ -93,8 +93,11 @@ struct __tgt_async_info {
 
   /// Use for sync interface. When false => synchronous execution
   bool ExecAsync = true;
-  /// Maintain the actal data for the OMPT stuff
-  llvm::omp::target::ompt::OmptEventInfoTy *OmptEventInfo = nullptr;
+  /// Maintain the actal data for OMPT.
+  /// TODO: Moving forward, this should become a void* to not expose OMPT data
+  /// type in general types
+  // llvm::omp::target::ompt::OmptEventInfoTy *OmptEventInfo = nullptr;
+  void *ProfilerData = nullptr;
 };
 
 /// This struct contains all of the arguments to a target kernel region launch.

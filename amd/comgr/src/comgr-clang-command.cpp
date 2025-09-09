@@ -68,7 +68,10 @@ bool skipProblematicFlag(IteratorTy &It, const IteratorTy &End) {
   // Clang always appends the debug compilation dir,
   // even without debug info (in comgr it matches the current directory). We
   // only consider it if the user specified debug information
-  bool IsFlagWithSingleArg = Arg.starts_with("-fdebug-compilation-dir=");
+  const char *FlagsWithEqArg[] = {"-fcoverage-compilation-dir=",
+                                  "-fdebug-compilation-dir="};
+  bool IsFlagWithSingleArg = any_of(
+      FlagsWithEqArg, [&](const char *Flag) { return Arg.starts_with(Flag); });
   if (IsFlagWithSingleArg) {
     return true;
   }
@@ -91,9 +94,6 @@ SmallVector<StringRef, 1> getInputFiles(driver::Command &Command) {
   return Paths;
 }
 
-bool isSourceCodeInput(const driver::InputInfo &II) {
-  return driver::types::isSrcFile(II.getType());
-}
 } // namespace
 ClangCommand::ClangCommand(driver::Command &Command,
                            DiagnosticOptions &DiagOpts, vfs::FileSystem &VFS,
@@ -150,13 +150,7 @@ bool ClangCommand::canCache() const {
   bool HasOneOutput = Command.getOutputFilenames().size() == 1;
   bool IsPreprocessorCommand = getClass() == driver::Action::PreprocessJobClass;
 
-  // This reduces the applicability of the cache, but it helps us deliver
-  // something now and deal with the PCH issues later. The cache would still
-  // help for spirv compilation (e.g. bitcode->asm) and for intermediate
-  // compilation steps
-  bool HasSourceCodeInput = any_of(Command.getInputInfos(), isSourceCodeInput);
-
-  return HasOneOutput && !IsPreprocessorCommand && !HasSourceCodeInput &&
+  return HasOneOutput && !IsPreprocessorCommand &&
          !hasDebugOrProfileInfo(Command.getArguments());
 }
 

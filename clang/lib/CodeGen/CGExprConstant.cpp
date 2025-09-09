@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ABIInfoImpl.h"
 #include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
@@ -713,7 +714,7 @@ static bool EmitDesignatedInitUpdater(ConstantEmitter &Emitter,
 }
 
 bool ConstStructBuilder::Build(const InitListExpr *ILE, bool AllowOverwrite) {
-  RecordDecl *RD = ILE->getType()->castAs<RecordType>()->getDecl();
+  auto *RD = ILE->getType()->castAsRecordDecl();
   const ASTRecordLayout &Layout = CGM.getContext().getASTRecordLayout(RD);
 
   unsigned FieldNo = -1;
@@ -757,7 +758,7 @@ bool ConstStructBuilder::Build(const InitListExpr *ILE, bool AllowOverwrite) {
 
     // Zero-sized fields are not emitted, but their initializers may still
     // prevent emission of this struct as a constant.
-    if (Field->isZeroSize(CGM.getContext())) {
+    if (isEmptyFieldForLayout(CGM.getContext(), Field)) {
       if (Init && Init->HasSideEffects(CGM.getContext()))
         return false;
       continue;
@@ -872,8 +873,9 @@ bool ConstStructBuilder::Build(const APValue &Val, const RecordDecl *RD,
 
     for (const BaseInfo &Base : Bases) {
       bool IsPrimaryBase = Layout.getPrimaryBase() == Base.Decl;
-      Build(Val.getStructBase(Base.Index), Base.Decl, IsPrimaryBase,
-            VTableClass, Offset + Base.Offset);
+      if (!Build(Val.getStructBase(Base.Index), Base.Decl, IsPrimaryBase,
+                 VTableClass, Offset + Base.Offset))
+        return false;
     }
   }
 
@@ -891,7 +893,8 @@ bool ConstStructBuilder::Build(const APValue &Val, const RecordDecl *RD,
       continue;
 
     // Don't emit anonymous bitfields or zero-sized fields.
-    if (Field->isUnnamedBitField() || Field->isZeroSize(CGM.getContext()))
+    if (Field->isUnnamedBitField() ||
+        isEmptyFieldForLayout(CGM.getContext(), *Field))
       continue;
 
     // Emit the value of the initializer.
@@ -975,7 +978,7 @@ bool ConstStructBuilder::DoZeroInitPadding(const ASTRecordLayout &Layout,
 
 llvm::Constant *ConstStructBuilder::Finalize(QualType Type) {
   Type = Type.getNonReferenceType();
-  RecordDecl *RD = Type->castAs<RecordType>()->getDecl();
+  auto *RD = Type->castAsRecordDecl();
   llvm::Type *ValTy = CGM.getTypes().ConvertType(Type);
   return Builder.build(ValTy, RD->hasFlexibleArrayMember());
 }
@@ -998,7 +1001,7 @@ llvm::Constant *ConstStructBuilder::BuildStruct(ConstantEmitter &Emitter,
   ConstantAggregateBuilder Const(Emitter.CGM);
   ConstStructBuilder Builder(Emitter, Const, CharUnits::Zero());
 
-  const RecordDecl *RD = ValTy->castAs<RecordType>()->getDecl();
+  const auto *RD = ValTy->castAsRecordDecl();
   const CXXRecordDecl *CD = dyn_cast<CXXRecordDecl>(RD);
   if (!Builder.Build(Val, RD, false, CD, CharUnits::Zero()))
     return nullptr;
@@ -1503,8 +1506,8 @@ public:
 
     llvm::Type *ValTy = CGM.getTypes().ConvertType(destType);
     bool HasFlexibleArray = false;
-    if (const auto *RT = destType->getAs<RecordType>())
-      HasFlexibleArray = RT->getDecl()->hasFlexibleArrayMember();
+    if (const auto *RD = destType->getAsRecordDecl())
+      HasFlexibleArray = RD->hasFlexibleArrayMember();
     return Const.build(ValTy, HasFlexibleArray);
   }
 
@@ -1618,7 +1621,7 @@ llvm::Constant *ConstantEmitter::tryEmitConstantExpr(const ConstantExpr *CE) {
   if (CE->isGLValue())
     RetType = CGM.getContext().getLValueReferenceType(RetType);
 
-  return emitAbstract(CE->getBeginLoc(), CE->getAPValueResult(), RetType);
+  return tryEmitAbstract(CE->getAPValueResult(), RetType);
 }
 
 llvm::Constant *
@@ -2637,12 +2640,12 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
         continue;
       }
 
-      const CXXRecordDecl *base =
-        cast<CXXRecordDecl>(I.getType()->castAs<RecordType>()->getDecl());
-
+      const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty() ||
-          CGM.getContext().getASTRecordLayout(base).getNonVirtualSize()
+      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()) ||
+          CGM.getContext()
+              .getASTRecordLayout(base)
+              .getNonVirtualSize()
               .isZero())
         continue;
 
@@ -2656,7 +2659,8 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   for (const auto *Field : record->fields()) {
     // Fill in non-bitfields. (Bitfields always use a zero pattern, which we
     // will fill in later.)
-    if (!Field->isBitField() && !Field->isZeroSize(CGM.getContext())) {
+    if (!Field->isBitField() &&
+        !isEmptyFieldForLayout(CGM.getContext(), Field)) {
       unsigned fieldIndex = layout.getLLVMFieldNo(Field);
       elements[fieldIndex] = CGM.EmitNullConstant(Field->getType());
     }
@@ -2674,11 +2678,9 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   // Fill in the virtual bases, if we're working with the complete object.
   if (CXXR && asCompleteObject) {
     for (const auto &I : CXXR->vbases()) {
-      const CXXRecordDecl *base =
-        cast<CXXRecordDecl>(I.getType()->castAs<RecordType>()->getDecl());
-
+      const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty())
+      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()))
         continue;
 
       unsigned fieldIndex = layout.getVirtualBaseIndex(base);
@@ -2740,8 +2742,9 @@ llvm::Constant *CodeGenModule::EmitNullConstant(QualType T) {
     return llvm::ConstantArray::get(ATy, Array);
   }
 
-  if (const RecordType *RT = T->getAs<RecordType>())
-    return ::EmitNullConstant(*this, RT->getDecl(), /*complete object*/ true);
+  if (const auto *RD = T->getAsRecordDecl())
+    return ::EmitNullConstant(*this, RD,
+                              /*asCompleteObject=*/true);
 
   assert(T->isMemberDataPointerType() &&
          "Should only see pointers to data members here!");

@@ -27,7 +27,7 @@ RT_OFFLOAD_API_GROUP_BEGIN
 RT_API_ATTRS Descriptor::Descriptor(const Descriptor &that) { *this = that; }
 
 RT_API_ATTRS Descriptor &Descriptor::operator=(const Descriptor &that) {
-  Fortran::runtime::memcpy(this, &that, that.SizeInBytes());
+  runtime::memcpy(this, &that, that.SizeInBytes());
   return *this;
 }
 
@@ -97,6 +97,15 @@ RT_API_ATTRS void Descriptor::Establish(const typeInfo::DerivedType &dt,
       GetDimension(j).SetByteStride(0);
     }
   }
+  SetHasAddendum();
+  new (Addendum()) DescriptorAddendum{&dt};
+}
+
+RT_API_ATTRS void Descriptor::UncheckedScalarEstablish(
+    const typeInfo::DerivedType &dt, void *p) {
+  auto elementBytes{static_cast<std::size_t>(dt.sizeInBytes())};
+  ISO::EstablishDescriptor(
+      &raw_, p, CFI_attribute_other, CFI_type_struct, elementBytes, 0, nullptr);
   SetHasAddendum();
   new (Addendum()) DescriptorAddendum{&dt};
 }
@@ -232,6 +241,7 @@ RT_API_ATTRS bool Descriptor::EstablishPointerSection(const Descriptor &source,
     const SubscriptValue *stride) {
   *this = source;
   raw_.attribute = CFI_attribute_pointer;
+  SetAllocIdx(source.GetAllocIdx());
   int newRank{raw_.rank};
   for (int j{0}; j < raw_.rank; ++j) {
     if (!stride || stride[j] == 0) {
@@ -243,6 +253,9 @@ RT_API_ATTRS bool Descriptor::EstablishPointerSection(const Descriptor &source,
     }
   }
   raw_.rank = newRank;
+  if (CFI_section(&raw_, &source.raw_, lower, upper, stride) != CFI_SUCCESS) {
+    return false;
+  }
   if (const auto *sourceAddendum = source.Addendum()) {
     if (auto *addendum{Addendum()}) {
       *addendum = *sourceAddendum;
@@ -250,7 +263,7 @@ RT_API_ATTRS bool Descriptor::EstablishPointerSection(const Descriptor &source,
       return false;
     }
   }
-  return CFI_section(&raw_, &source.raw_, lower, upper, stride) == CFI_SUCCESS;
+  return true;
 }
 
 RT_API_ATTRS void Descriptor::ApplyMold(

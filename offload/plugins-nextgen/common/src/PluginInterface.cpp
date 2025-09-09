@@ -456,7 +456,7 @@ AsyncInfoWrapperTy::AsyncInfoWrapperTy(GenericDeviceTy &Device,
                                        __tgt_async_info *AsyncInfoPtr)
     : Device(Device),
       AsyncInfoPtr(AsyncInfoPtr ? AsyncInfoPtr : &LocalAsyncInfo) {
-  LocalAsyncInfo.OmptEventInfo = nullptr;
+  LocalAsyncInfo.ProfilerData = nullptr;
 }
 
 void AsyncInfoWrapperTy::finalize(Error &Err) {
@@ -525,7 +525,7 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
   } else {
     // Check that the retrieved execution mode is valid.
     if (!GenericKernelTy::isValidExecutionMode(ExecModeGlobal.getValue()))
-      return Plugin::error(ErrorCode::UNKNOWN, 
+      return Plugin::error(ErrorCode::UNKNOWN,
                            "Invalid execution mode %d for '%s'",
                            ExecModeGlobal.getValue(), getName());
     ExecutionMode = ExecModeGlobal.getValue();
@@ -613,22 +613,22 @@ GenericKernelTy::getKernelLaunchEnvironment(
        DPxPTR(&LocalKLE), DPxPTR(*AllocOrErr),
        sizeof(KernelLaunchEnvironmentTy));
 
-  // The OmptEventInfo at this point will have a callback for a kernel launch,
+  // The ProfilerData at this point will have a callback for a kernel launch,
   // not a data-op. This is due to the "external" operation being a kernel
   // launch and the data submit here being an implementation detail. We
-  // temporarily set the OmptEventInfo to nullptr, such that we disable the
+  // temporarily set the ProfilerData to nullptr, such that we disable the
   // timing etc further down to not trigger assertions or report implementation
   // detail.
   __tgt_async_info *AI = AsyncInfoWrapper;
-  if (AI && AI->OmptEventInfo) {
-    auto LocalOEI = AI->OmptEventInfo;
-    AI->OmptEventInfo = nullptr;
+  if (AI && AI->ProfilerData) {
+    auto LocalOEI = AI->ProfilerData;
+    AI->ProfilerData = nullptr;
     auto Err = GenericDevice.dataSubmit(*AllocOrErr, &LocalKLE,
                                         sizeof(KernelLaunchEnvironmentTy),
                                         AsyncInfoWrapper);
     if (Err)
       return Err;
-    AI->OmptEventInfo = LocalOEI;
+    AI->ProfilerData = LocalOEI;
     return static_cast<KernelLaunchEnvironmentTy *>(*AllocOrErr);
   }
 
@@ -783,10 +783,11 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
   OMPT_IF_TRACING_ENABLED(if (llvm::omp::target::ompt::isTracedDevice(
                                   getDeviceId(&GenericDevice))) {
     __tgt_async_info *AI = AsyncInfoWrapper;
-    if (AI->OmptEventInfo != nullptr) {
+    if (AI->ProfilerData != nullptr) {
       // Set number of granted teams for OMPT
       setOmptGrantedNumTeams(NumBlocks[0]);
-      AI->OmptEventInfo->NumTeams = NumBlocks[0];
+      reinterpret_cast<OmptEventInfoTy *>(AI->ProfilerData)->NumTeams =
+          NumBlocks[0];
     }
   });
 
@@ -856,6 +857,10 @@ uint32_t GenericKernelTy::getNumBlocks(GenericDeviceTy &GenericDevice,
     // blocks start again until the requested number has been started.
     return std::min(NumTeamsClause[0], GenericDevice.getBlockLimit());
   }
+
+  // Return the number of teams required to cover the loop iterations.
+  if (isNoLoopMode())
+    return LoopTripCount > 0 ? (((LoopTripCount - 1) / NumThreads) + 1) : 1;
 
   uint64_t DefaultNumBlocks = GenericDevice.getDefaultNumBlocks();
   uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
@@ -1072,6 +1077,9 @@ Error GenericDeviceTy::unloadBinary(DeviceImageTy *Image) {
     if (auto Err = ProfOrErr->write())
       return Err;
   }
+
+  if (Image->getTgtImageBitcode())
+    Plugin.getJIT().erase(*Image->getTgtImageBitcode(), Image->getDevice());
 
   return unloadBinaryImpl(Image);
 }
@@ -1568,18 +1576,28 @@ Error PinnedAllocationMapTy::unlockUnmappedHostBuffer(void *HstPtr) {
   return eraseEntry(*Entry);
 }
 
-Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo) {
-  if (!AsyncInfo || !AsyncInfo->Queue)
+Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo,
+                                   bool ReleaseQueue) {
+  if (!AsyncInfo)
     return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                          "invalid async info queue");
 
-  if (auto Err = synchronizeImpl(*AsyncInfo))
-    return Err;
+  SmallVector<void *> AllocsToDelete{};
+  {
+    std::lock_guard<std::mutex> AllocationGuard{AsyncInfo->Mutex};
 
-  for (auto *Ptr : AsyncInfo->AssociatedAllocations)
+    // This can be false when no work has been added to the AsyncInfo. In which
+    // case, the device has nothing to synchronize.
+    if (AsyncInfo->Queue)
+      if (auto Err = synchronizeImpl(*AsyncInfo, ReleaseQueue))
+        return Err;
+
+    std::swap(AllocsToDelete, AsyncInfo->AssociatedAllocations);
+  }
+
+  for (auto *Ptr : AllocsToDelete)
     if (auto Err = dataDelete(Ptr, TargetAllocTy::TARGET_ALLOC_DEVICE))
       return Err;
-  AsyncInfo->AssociatedAllocations.clear();
 
   return Plugin::success();
 }
@@ -1766,6 +1784,16 @@ Error GenericDeviceTy::dataExchange(const void *SrcPtr, GenericDeviceTy &DstDev,
   return Err;
 }
 
+Error GenericDeviceTy::dataFill(void *TgtPtr, const void *PatternPtr,
+                                int64_t PatternSize, int64_t Size,
+                                __tgt_async_info *AsyncInfo) {
+  AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
+  auto Err =
+      dataFillImpl(TgtPtr, PatternPtr, PatternSize, Size, AsyncInfoWrapper);
+  AsyncInfoWrapper.finalize(Err);
+  return Err;
+}
+
 Error GenericDeviceTy::launchKernel(void *EntryPtr, void **ArgPtrs,
                                     ptrdiff_t *ArgOffsets,
                                     KernelArgsTy &KernelArgs,
@@ -1811,6 +1839,15 @@ Error GenericDeviceTy::initAsyncInfo(__tgt_async_info **AsyncInfoPtr) {
   AsyncInfoWrapperTy AsyncInfoWrapper(*this, *AsyncInfoPtr);
 
   auto Err = initAsyncInfoImpl(AsyncInfoWrapper);
+  AsyncInfoWrapper.finalize(Err);
+  return Err;
+}
+
+Error GenericDeviceTy::enqueueHostCall(void (*Callback)(void *), void *UserData,
+                                       __tgt_async_info *AsyncInfo) {
+  AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
+
+  auto Err = enqueueHostCallImpl(Callback, UserData, AsyncInfoWrapper);
   AsyncInfoWrapper.finalize(Err);
   return Err;
 }
@@ -1891,6 +1928,37 @@ Error GenericDeviceTy::waitEvent(void *EventPtr, __tgt_async_info *AsyncInfo) {
   auto Err = waitEventImpl(EventPtr, AsyncInfoWrapper);
   AsyncInfoWrapper.finalize(Err);
   return Err;
+}
+
+Expected<bool> GenericDeviceTy::hasPendingWork(__tgt_async_info *AsyncInfo) {
+  AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
+  auto Res = hasPendingWorkImpl(AsyncInfoWrapper);
+  if (auto Err = Res.takeError()) {
+    AsyncInfoWrapper.finalize(Err);
+    return Err;
+  }
+
+  auto Err = Plugin::success();
+  AsyncInfoWrapper.finalize(Err);
+  if (Err)
+    return Err;
+  return Res;
+}
+
+Expected<bool> GenericDeviceTy::isEventComplete(void *Event,
+                                                __tgt_async_info *AsyncInfo) {
+  AsyncInfoWrapperTy AsyncInfoWrapper(*this, AsyncInfo);
+  auto Res = isEventCompleteImpl(Event, AsyncInfoWrapper);
+  if (auto Err = Res.takeError()) {
+    AsyncInfoWrapper.finalize(Err);
+    return Err;
+  }
+
+  auto Err = Plugin::success();
+  AsyncInfoWrapper.finalize(Err);
+  if (Err)
+    return Err;
+  return Res;
 }
 
 Error GenericDeviceTy::syncEvent(void *EventPtr) {
@@ -2927,4 +2995,84 @@ bool GenericPluginTy::use_shared_mem_for_descriptor(int32_t DeviceId,
   }();
   T.res(R);
   return R;
+}
+
+/// Create OpenMP interop with the given interop context
+omp_interop_val_t *
+GenericPluginTy::create_interop(int32_t ID, int32_t InteropContext,
+                                interop_spec_t *InteropSpec) {
+  assert(InteropSpec && "Interop spec is null");
+  auto &Device = getDevice(ID);
+  auto InteropOrErr = Device.createInterop(InteropContext, *InteropSpec);
+  if (!InteropOrErr) {
+    REPORT("Failure to create interop object for device " DPxMOD ": %s\n",
+           DPxPTR(InteropSpec), toString(InteropOrErr.takeError()).c_str());
+    return nullptr;
+  }
+  return *InteropOrErr;
+}
+
+/// Release OpenMP interop object
+int32_t GenericPluginTy::release_interop(int32_t ID,
+                                         omp_interop_val_t *Interop) {
+  assert(Interop && "Interop is null");
+  assert(Interop->device_id == ID && "Interop does not match device id");
+  auto &Device = getDevice(ID);
+  auto Err = Device.releaseInterop(Interop);
+  if (Err) {
+    REPORT("Failure to release interop object " DPxMOD ": %s\n",
+           DPxPTR(Interop), toString(std::move(Err)).c_str());
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
+}
+
+/// Flush the queue associated with the interop object if necessary
+int32_t GenericPluginTy::flush_queue(omp_interop_val_t *Interop) {
+  assert(Interop && "Interop is null");
+  auto Err = flushQueueImpl(Interop);
+  if (Err) {
+    REPORT("Failure to flush interop object " DPxMOD " queue: %s\n",
+           DPxPTR(Interop), toString(std::move(Err)).c_str());
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
+}
+
+/// Perform a host synchronization with the queue associated with the interop
+/// object and wait for it to complete.
+int32_t GenericPluginTy::sync_barrier(omp_interop_val_t *Interop) {
+  assert(Interop && "Interop is null");
+  auto Err = syncBarrierImpl(Interop);
+  if (Err) {
+    REPORT("Failure to synchronize interop object " DPxMOD ": %s\n",
+           DPxPTR(Interop), toString(std::move(Err)).c_str());
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
+}
+
+/// Queue an asynchronous barrier in the queue associated with the interop
+/// object and return immediately.
+int32_t GenericPluginTy::async_barrier(omp_interop_val_t *Interop) {
+  assert(Interop && "Interop is null");
+  auto Err = asyncBarrierImpl(Interop);
+  if (Err) {
+    REPORT("Failure to queue barrier in interop object " DPxMOD ": %s\n",
+           DPxPTR(Interop), toString(std::move(Err)).c_str());
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
+}
+
+int32_t GenericPluginTy::data_fence(int32_t DeviceId,
+                                    __tgt_async_info *AsyncInfo) {
+  auto Err = getDevice(DeviceId).dataFence(AsyncInfo);
+  if (Err) {
+    REPORT("failure to place data fence on device %d: %s\n", DeviceId,
+           toString(std::move(Err)).data());
+    return OFFLOAD_FAIL;
+  }
+
+  return OFFLOAD_SUCCESS;
 }

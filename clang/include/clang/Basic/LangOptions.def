@@ -136,6 +136,8 @@ LANGOPT(PointerAuthObjcInterfaceSel, 1, 0, NotCompatible, "authentication of SEL
 LANGOPT(PointerAuthObjcInterfaceSelKey, 16, 0, NotCompatible, "authentication key for SEL fields of ObjC interfaces")
 LANGOPT(PointerAuthObjcClassROPointers, 1, 0, Benign, "class_ro_t pointer authentication")
 
+LANGOPT(PointerAuthBlockDescriptorPointers, 1, 0, NotCompatible, "enable signed block descriptors")
+
 LANGOPT(DoubleSquareBracketAttributes, 1, 0, NotCompatible, "'[[]]' attributes extension for all language standard modes")
 LANGOPT(ExperimentalLateParseAttributes, 1, 0, NotCompatible, "experimental late parsing of attributes")
 
@@ -191,6 +193,7 @@ LANGOPT(NoHonorInfs       , 1, 0, Benign, "Permit Floating Point optimization wi
 LANGOPT(NoSignedZero      , 1, 0, Benign, "Permit Floating Point optimization without regard to signed zeros")
 LANGOPT(AllowRecip        , 1, 0, Benign, "Permit Floating Point reciprocal")
 LANGOPT(ApproxFunc        , 1, 0, Benign, "Permit Floating Point approximation")
+LANGOPT(NamedLoops        , 1, 0, Benign, "Permit named break/continue")
 
 ENUM_LANGOPT(ComplexRange, ComplexRangeKind, 3, CX_None, NotCompatible, "Enable use of range reduction for complex arithmetics.")
 
@@ -227,7 +230,7 @@ LANGOPT(OpenMPCUDANumSMs  , 32, 0, NotCompatible, "Number of SMs for CUDA device
 LANGOPT(OpenMPCUDABlocksPerSM  , 32, 0, NotCompatible, "Number of blocks per SM for CUDA devices.")
 LANGOPT(OpenMPCUDAReductionBufNum , 32, 1024, NotCompatible, "Number of the reduction records in the intermediate reduction buffer used for the teams reductions.")
 LANGOPT(OpenMPGPUThreadsPerTeam, 32, 256, NotCompatible, "Number of threads per team for GPUs.")
-LANGOPT(OpenMPTargetXteamReductionBlockSize, 32, 1024, NotCompatible, "Number of threads in a block used by cross-team reduction.")
+LANGOPT(OpenMPTargetXteamReductionBlockSize, 32, 512, NotCompatible, "Number of threads in a block used by cross-team reduction.")
 LANGOPT(OpenMPTargetDebug , 32, 0, NotCompatible, "Enable debugging in the OpenMP offloading device RTL")
 LANGOPT(OpenMPTargetIgnoreEnvVars , 1, 0, NotCompatible, "Generate code assuming that device related environment variables can be ignored.")
 LANGOPT(OpenMPTargetBigJumpLoop , 1, 1, NotCompatible, "Use big jump loop code generation technique.")
@@ -254,6 +257,7 @@ LANGOPT(HLSL, 1, 0, NotCompatible, "HLSL")
 ENUM_LANGOPT(HLSLVersion, HLSLLangStd, 16, HLSL_Unset, NotCompatible, "HLSL Version")
 LANGOPT(HLSLStrictAvailability, 1, 0, NotCompatible,
         "Strict availability diagnostic mode for HLSL built-in functions.")
+LANGOPT(HLSLSpvUseUnknownImageFormat, 1, 0, NotCompatible, "For storage images and texel buffers, sets the default format to 'Unknown' when not specified via the `vk::image_format` attribute. If this option is not used, the format is inferred from the resource's data type.")
 
 LANGOPT(CUDAIsDevice      , 1, 0, NotCompatible, "compiling for CUDA device")
 LANGOPT(CUDAAllowVariadicFunctions, 1, 0, NotCompatible, "allowing variadic functions in CUDA device code")

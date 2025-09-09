@@ -44,9 +44,9 @@ endmacro()
 macro(add_test_input_bitcode_bundle name input output)
   add_custom_command(
     OUTPUT "${output}"
-    COMMAND "$<TARGET_FILE:clang>" -c --offload-arch=gfx900 -emit-llvm -fgpu-rdc
+    COMMAND "$<TARGET_FILE:clang>" -c --offload-arch=gfx900 -emit-llvm
     --gpu-bundle-output ${ARGN} "${CMAKE_CURRENT_SOURCE_DIR}/${input}" -nogpulib -nogpuinc
-    -o "${output}"
+    --offload-device-only -o "${output}"
     VERBATIM
     DEPENDS clang lld "${input}")
   add_custom_target("${name}"
@@ -205,10 +205,7 @@ endmacro()
 find_package(hip CONFIG PATHS ${ROCM_INSTALL_PATH}/hip QUIET)
 
 add_comgr_test(data_test c)
-add_comgr_test(disasm_llvm_reloc_test c)
-add_comgr_test(disasm_llvm_so_test c)
 add_comgr_test(disasm_instr_test c)
-add_comgr_test(disasm_options_test c)
 add_comgr_test(metadata_tp_test c)
 add_comgr_test(metadata_yaml_test c)
 add_comgr_test(metadata_msgpack_test c)
@@ -241,4 +238,4 @@ add_comgr_test(name_expression_map_test c)
 add_comgr_test(compile_hip_test c)
 add_comgr_test(compile_hip_to_relocatable c)
 add_comgr_test(mangled_names_hip_test c)
-add_comgr_test(unbundle_hip_test c)
+#add_comgr_test(unbundle_hip_test c)

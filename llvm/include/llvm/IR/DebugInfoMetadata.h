@@ -18,6 +18,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator_range.h"
@@ -2519,10 +2520,8 @@ public:
 class DILocation : public MDNode {
   friend class LLVMContextImpl;
   friend class MDNode;
-#ifdef EXPERIMENTAL_KEY_INSTRUCTIONS
   uint64_t AtomGroup : 61;
   uint64_t AtomRank : 3;
-#endif
 
   DILocation(LLVMContext &C, StorageType Storage, unsigned Line,
              unsigned Column, uint64_t AtomGroup, uint8_t AtomRank,
@@ -2552,20 +2551,8 @@ class DILocation : public MDNode {
   }
 
 public:
-  uint64_t getAtomGroup() const {
-#ifdef EXPERIMENTAL_KEY_INSTRUCTIONS
-    return AtomGroup;
-#else
-    return 0;
-#endif
-  }
-  uint8_t getAtomRank() const {
-#ifdef EXPERIMENTAL_KEY_INSTRUCTIONS
-    return AtomRank;
-#else
-    return 0;
-#endif
-  }
+  uint64_t getAtomGroup() const { return AtomGroup; }
+  uint8_t getAtomRank() const { return AtomRank; }
 
   const DILocation *getWithoutAtom() const {
     if (!getAtomGroup() && !getAtomRank())
@@ -4208,6 +4195,29 @@ public:
                                          ArrayRef<DIOp::Variant> Ops,
                                          unsigned ArgNo,
                                          Type *NewArgType = nullptr);
+
+  /// Create a copy of \p Expr updated to reflect that the debug operands
+  /// whose indexes are set in \p SpilledOpIndexes were spilled to the stack,
+  /// which is in the \p SpillAddrSpace address space.
+  ///
+  /// Handles both New and Old expressions, including Old expressions without
+  /// an explicit DW_OP_LLVM_arg.
+  static const DIExpression *spillArgs(const DIExpression *Expr,
+                                       SmallBitVector SpilledOpIndexes,
+                                       unsigned SpillAddrSpace);
+
+  /// Create a copy of \p Expr with an explicit indirection if \p IsIndirect, in
+  /// preparation for changing the referring intrinsic from one with the concept
+  /// of "IsIndirect" to one without it.
+  ///
+  /// Handles both Old and New expressions, being a no-op for New expressions
+  /// which always include indirection explicitly.
+  static const DIExpression *foldIntrinsicIndirection(const DIExpression *Expr,
+                                                      bool IsIndirect);
+
+  /// Create a copy of \p Expr updated to be suitable for use by DBG_INSTR_REF.
+  static const DIExpression *convertForInstrRef(const DIExpression *Expr,
+                                                bool IsIndirect);
 
   /// Create a copy of \p Expr with each instance of
   /// `DW_OP_LLVM_arg, \p OldArg` replaced with `DW_OP_LLVM_arg, \p NewArg`,

@@ -146,7 +146,7 @@ static llvm::cl::opt<bool>
     deferDescMap("fdefer-desc-map",
                  llvm::cl::desc("disable or enable OpenMP deference of mapping "
                                 "for top-level descriptors"),
-                 llvm::cl::init(false));
+                 llvm::cl::init(true));
 
 static llvm::cl::opt<std::string> enableDoConcurrentToOpenMPConversion(
     "fdo-concurrent-to-openmp",
@@ -527,7 +527,9 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
 
     if (emitFIR && useHLFIR) {
       // lower HLFIR to FIR
-      fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP,
+      fir::EnableOpenMP enableOmp =
+          enableOpenMP ? fir::EnableOpenMP::Full : fir::EnableOpenMP::None;
+      fir::createHLFIRToFIRPassPipeline(pm, enableOmp,
                                         llvm::OptimizationLevel::O2);
       if (mlir::failed(pm.run(mlirModule))) {
         llvm::errs() << "FATAL: lowering from HLFIR to FIR failed";
