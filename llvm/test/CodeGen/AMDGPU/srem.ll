@@ -6135,6 +6135,13 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    s_addc_u32 s1, s7, 0
 ; TONGA-NEXT:    v_mov_b32_e32 v5, s1
 ; TONGA-NEXT:    v_mov_b32_e32 v4, s0
+; TONGA-NEXT:    s_add_u32 s0, s6, 32
+; TONGA-NEXT:    s_addc_u32 s1, s7, 0
+; TONGA-NEXT:    v_mov_b32_e32 v0, s6
+; TONGA-NEXT:    v_mov_b32_e32 v9, s1
+; TONGA-NEXT:    v_mov_b32_e32 v1, s7
+; TONGA-NEXT:    v_mov_b32_e32 v8, s0
+; TONGA-NEXT:    s_add_u32 s0, s6, 16
 ; TONGA-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
 ; TONGA-NEXT:    flat_load_dwordx4 v[4:7], v[4:5]
 ; TONGA-NEXT:    s_waitcnt vmcnt(3)
@@ -6573,27 +6580,28 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_subb_u32_e32 v18, vcc, 0, v16, vcc
 ; TONGA-NEXT:    v_madmk_f32 v0, v1, 0x4f800000, v0
 ; TONGA-NEXT:    v_rcp_f32_e32 v0, v0
+; TONGA-NEXT:    s_mov_b32 s27, s26
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x5f7ffffc, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v1, 0x2f800000, v0
 ; TONGA-NEXT:    v_trunc_f32_e32 v1, v1
 ; TONGA-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
-; TONGA-NEXT:    v_cvt_u32_f32_e32 v14, v1
-; TONGA-NEXT:    v_cvt_u32_f32_e32 v15, v0
-; TONGA-NEXT:    v_mul_lo_u32 v3, v17, v14
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], v17, v15, 0
-; TONGA-NEXT:    v_mul_lo_u32 v4, v18, v15
-; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v1, v3
-; TONGA-NEXT:    v_add_u32_e32 v19, vcc, v1, v4
-; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[0:1], v15, v19, 0
-; TONGA-NEXT:    v_mul_hi_u32 v1, v15, v0
-; TONGA-NEXT:    v_add_u32_e32 v20, vcc, v1, v3
-; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], v14, v0, 0
-; TONGA-NEXT:    v_addc_u32_e32 v21, vcc, 0, v4, vcc
-; TONGA-NEXT:    v_mad_u64_u32 v[3:4], s[0:1], v14, v19, 0
-; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v20, v0
-; TONGA-NEXT:    v_addc_u32_e32 v0, vcc, v21, v1, vcc
-; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
-; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v0, v3
+; TONGA-NEXT:    v_cvt_u32_f32_e32 v4, v1
+; TONGA-NEXT:    v_cvt_u32_f32_e32 v5, v0
+; TONGA-NEXT:    v_mul_lo_u32 v2, s2, v4
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], s2, v5, 0
+; TONGA-NEXT:    v_mul_lo_u32 v3, s3, v5
+; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v1, v2
+; TONGA-NEXT:    v_add_u32_e32 v3, vcc, v1, v3
+; TONGA-NEXT:    v_mul_hi_u32 v6, v5, v0
+; TONGA-NEXT:    v_mad_u64_u32 v[1:2], s[0:1], v5, v3, 0
+; TONGA-NEXT:    v_add_u32_e32 v6, vcc, v6, v1
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], v4, v0, 0
+; TONGA-NEXT:    v_addc_u32_e32 v7, vcc, 0, v2, vcc
+; TONGA-NEXT:    v_mad_u64_u32 v[2:3], s[0:1], v4, v3, 0
+; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v6, v0
+; TONGA-NEXT:    v_addc_u32_e32 v0, vcc, v7, v1, vcc
+; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; TONGA-NEXT:    v_add_u32_e32 v19, vcc, v15, v0
 ; TONGA-NEXT:    v_addc_u32_e32 v20, vcc, v14, v1, vcc
@@ -6635,25 +6643,60 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], v5, v3, 0
 ; TONGA-NEXT:    v_mul_lo_u32 v3, v16, v3
 ; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v4, v1
+; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v1, v5
+; TONGA-NEXT:    v_mad_u64_u32 v[4:5], s[0:1], v6, v1, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], v7, v1, 0
+; TONGA-NEXT:    v_add_u32_e32 v4, vcc, v8, v4
+; TONGA-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
+; TONGA-NEXT:    v_add_u32_e32 v2, vcc, v4, v2
+; TONGA-NEXT:    v_addc_u32_e32 v2, vcc, v5, v3, vcc
+; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
+; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v2, v0
+; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
+; TONGA-NEXT:    s_add_u32 s0, s18, s26
+; TONGA-NEXT:    v_add_u32_e32 v2, vcc, v6, v0
+; TONGA-NEXT:    s_addc_u32 s1, s19, s26
+; TONGA-NEXT:    v_addc_u32_e32 v3, vcc, v7, v1, vcc
+; TONGA-NEXT:    s_xor_b64 s[28:29], s[0:1], s[26:27]
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], s28, v3, 0
+; TONGA-NEXT:    v_mul_hi_u32 v4, s28, v2
+; TONGA-NEXT:    v_add_u32_e32 v4, vcc, v4, v0
+; TONGA-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], s29, v2, 0
+; TONGA-NEXT:    v_mad_u64_u32 v[2:3], s[0:1], s29, v3, 0
+; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v4, v0
+; TONGA-NEXT:    v_addc_u32_e32 v0, vcc, v5, v1, vcc
+; TONGA-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; TONGA-NEXT:    v_add_u32_e32 v2, vcc, v0, v2
+; TONGA-NEXT:    v_addc_u32_e32 v0, vcc, 0, v1, vcc
+; TONGA-NEXT:    v_mul_lo_u32 v3, s22, v0
+; TONGA-NEXT:    v_mad_u64_u32 v[0:1], s[0:1], s22, v2, 0
+; TONGA-NEXT:    v_mul_lo_u32 v2, s23, v2
 ; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v3, v1
-; TONGA-NEXT:    v_sub_u32_e32 v3, vcc, v7, v1
-; TONGA-NEXT:    v_sub_u32_e32 v0, vcc, v14, v0
-; TONGA-NEXT:    v_subb_u32_e64 v3, s[0:1], v3, v16, vcc
-; TONGA-NEXT:    v_sub_u32_e64 v4, s[0:1], v0, v5
-; TONGA-NEXT:    v_subbrev_u32_e64 v14, s[2:3], 0, v3, s[0:1]
-; TONGA-NEXT:    v_cmp_ge_u32_e64 s[2:3], v14, v16
-; TONGA-NEXT:    v_cndmask_b32_e64 v17, 0, -1, s[2:3]
-; TONGA-NEXT:    v_cmp_ge_u32_e64 s[2:3], v4, v5
-; TONGA-NEXT:    v_subb_u32_e32 v1, vcc, v7, v1, vcc
-; TONGA-NEXT:    v_cndmask_b32_e64 v18, 0, -1, s[2:3]
-; TONGA-NEXT:    v_cmp_eq_u32_e64 s[2:3], v14, v16
-; TONGA-NEXT:    v_subb_u32_e64 v3, s[0:1], v3, v16, s[0:1]
-; TONGA-NEXT:    v_cmp_ge_u32_e32 vcc, v1, v16
-; TONGA-NEXT:    v_cndmask_b32_e64 v17, v17, v18, s[2:3]
-; TONGA-NEXT:    v_sub_u32_e64 v18, s[0:1], v4, v5
-; TONGA-NEXT:    v_cndmask_b32_e64 v7, 0, -1, vcc
-; TONGA-NEXT:    v_cmp_ge_u32_e32 vcc, v0, v5
-; TONGA-NEXT:    v_subbrev_u32_e64 v3, s[0:1], 0, v3, s[0:1]
+; TONGA-NEXT:    v_add_u32_e32 v1, vcc, v2, v1
+; TONGA-NEXT:    v_sub_u32_e32 v2, vcc, s29, v1
+; TONGA-NEXT:    v_mov_b32_e32 v3, s23
+; TONGA-NEXT:    v_sub_u32_e32 v0, vcc, s28, v0
+; TONGA-NEXT:    v_subb_u32_e64 v2, s[0:1], v2, v3, vcc
+; TONGA-NEXT:    v_subrev_u32_e64 v4, s[0:1], s22, v0
+; TONGA-NEXT:    v_subbrev_u32_e64 v5, s[2:3], 0, v2, s[0:1]
+; TONGA-NEXT:    v_cmp_le_u32_e64 s[2:3], s23, v5
+; TONGA-NEXT:    v_cndmask_b32_e64 v6, 0, -1, s[2:3]
+; TONGA-NEXT:    v_cmp_le_u32_e64 s[2:3], s22, v4
+; TONGA-NEXT:    v_subb_u32_e64 v2, s[0:1], v2, v3, s[0:1]
+; TONGA-NEXT:    v_cndmask_b32_e64 v7, 0, -1, s[2:3]
+; TONGA-NEXT:    v_cmp_eq_u32_e64 s[2:3], s23, v5
+; TONGA-NEXT:    v_subrev_u32_e64 v3, s[0:1], s22, v4
+; TONGA-NEXT:    v_cndmask_b32_e64 v6, v6, v7, s[2:3]
+; TONGA-NEXT:    v_subbrev_u32_e64 v2, s[0:1], 0, v2, s[0:1]
+; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v6
+; TONGA-NEXT:    v_cndmask_b32_e64 v3, v4, v3, s[0:1]
+; TONGA-NEXT:    v_mov_b32_e32 v4, s29
+; TONGA-NEXT:    v_subb_u32_e32 v1, vcc, v4, v1, vcc
+; TONGA-NEXT:    v_cmp_le_u32_e32 vcc, s23, v1
+; TONGA-NEXT:    v_cndmask_b32_e64 v4, 0, -1, vcc
+; TONGA-NEXT:    v_cmp_le_u32_e32 vcc, s22, v0
+; TONGA-NEXT:    v_cndmask_b32_e64 v2, v5, v2, s[0:1]
 ; TONGA-NEXT:    v_cndmask_b32_e64 v5, 0, -1, vcc
 ; TONGA-NEXT:    v_cmp_eq_u32_e32 vcc, v1, v16
 ; TONGA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v17
@@ -6675,14 +6718,14 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_rcp_iflag_f32_e32 v0, v0
 ; TONGA-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; TONGA-NEXT:    v_cvt_u32_f32_e32 v0, v0
-; TONGA-NEXT:    v_mul_lo_u32 v1, v1, v0
+; TONGA-NEXT:    v_mul_lo_u32 v1, s0, v0
 ; TONGA-NEXT:    v_mul_hi_u32 v1, v0, v1
 ; TONGA-NEXT:    v_add_u32_e32 v0, vcc, v0, v1
-; TONGA-NEXT:    v_mul_hi_u32 v0, v6, v0
-; TONGA-NEXT:    v_mul_lo_u32 v0, v0, v2
-; TONGA-NEXT:    v_sub_u32_e32 v0, vcc, v6, v0
-; TONGA-NEXT:    v_subrev_u32_e32 v1, vcc, v2, v0
-; TONGA-NEXT:    v_cmp_ge_u32_e32 vcc, v0, v2
+; TONGA-NEXT:    v_mul_hi_u32 v0, s18, v0
+; TONGA-NEXT:    v_mul_lo_u32 v0, v0, s20
+; TONGA-NEXT:    v_sub_u32_e32 v0, vcc, s18, v0
+; TONGA-NEXT:    v_subrev_u32_e32 v1, vcc, s20, v0
+; TONGA-NEXT:    v_cmp_le_u32_e32 vcc, s20, v0
 ; TONGA-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; TONGA-NEXT:    v_subrev_u32_e32 v1, vcc, v2, v0
 ; TONGA-NEXT:    v_cmp_ge_u32_e32 vcc, v0, v2
@@ -6691,11 +6734,11 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; TONGA-NEXT:    v_mov_b32_e32 v0, s4
 ; TONGA-NEXT:    v_mov_b32_e32 v1, s5
 ; TONGA-NEXT:    s_add_u32 s0, s4, 16
-; TONGA-NEXT:    flat_store_dwordx4 v[0:1], v[8:11]
+; TONGA-NEXT:    flat_store_dwordx4 v[8:9], v[0:3]
 ; TONGA-NEXT:    s_addc_u32 s1, s5, 0
 ; TONGA-NEXT:    v_mov_b32_e32 v0, s0
 ; TONGA-NEXT:    v_mov_b32_e32 v1, s1
-; TONGA-NEXT:    flat_store_dwordx4 v[0:1], v[12:15]
+; TONGA-NEXT:    flat_store_dwordx4 v[0:1], v[4:7]
 ; TONGA-NEXT:    s_endpgm
 ; TONGA-NEXT:  .LBB12_15:
 ; TONGA-NEXT:    s_branch .LBB12_7
