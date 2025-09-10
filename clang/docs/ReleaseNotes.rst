@@ -1274,6 +1274,8 @@ CUDA/HIP Language Changes
 - Fixed a bug about overriding a constexpr pure-virtual member function with a non-constexpr virtual member function which causes compilation failure when including standard C++ header `format`.
 - Added initial support for version 3 of the compressed offload bundle format, which uses 64-bit fields for Total File Size and Uncompressed Binary Size. This enables support for files larger than 4GB. The support is currently experimental and can be enabled by setting the environment variable `COMPRESSED_BUNDLE_FORMAT_VERSION=3`.
 
+* Provide a __device__ version of std::__glibcxx_assert_fail() in a header wrapper.
+
 CUDA Support
 ^^^^^^^^^^^^
 - Clang now supports CUDA SDK up to 12.6
