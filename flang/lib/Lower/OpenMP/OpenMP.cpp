@@ -406,7 +406,6 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       return;
 
     const parser::OmpClauseList *beginClauseList = nullptr;
-    const parser::OmpClauseList *middleClauseList = nullptr;
     const parser::OmpClauseList *endClauseList = nullptr;
     common::visit(
         common::visitors{
@@ -421,30 +420,6 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
               beginClauseList =
                   &std::get<parser::OmpClauseList>(beginDirective.t);
 
-              // For now we check if there is an inner OpenMPLoopConstruct, and
-              // extract the size clause from there
-              const auto &nestedOptional =
-                  std::get<std::optional<parser::NestedConstruct>>(
-                      ompConstruct.t);
-              assert(nestedOptional.has_value() &&
-                     "Expected a DoConstruct or OpenMPLoopConstruct");
-              const auto *innerConstruct =
-                  std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
-                      &(nestedOptional.value()));
-              if (innerConstruct) {
-                const auto &innerLoopConstruct = innerConstruct->value();
-                const auto &innerBegin =
-                    std::get<parser::OmpBeginLoopDirective>(
-                        innerLoopConstruct.t);
-                const auto &innerDirective =
-                    std::get<parser::OmpLoopDirective>(innerBegin.t);
-                if (innerDirective.v == llvm::omp::Directive::OMPD_tile ||
-                    innerDirective.v ==
-                        llvm::omp::Directive::OMPD_interchange) {
-                  middleClauseList =
-                      &std::get<parser::OmpClauseList>(innerBegin.t);
-                }
-              }
               if (auto &endDirective =
                       std::get<std::optional<parser::OmpEndLoopDirective>>(
                           ompConstruct.t)) {
@@ -457,9 +432,6 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
 
     assert(beginClauseList && "expected begin directive");
     clauses.append(makeClauses(*beginClauseList, semaCtx));
-
-    if (middleClauseList)
-      clauses.append(makeClauses(*middleClauseList, semaCtx));
 
     if (endClauseList)
       clauses.append(makeClauses(*endClauseList, semaCtx));
@@ -1626,11 +1598,7 @@ genLoopNestClauses(lower::AbstractConverter &converter,
     }
   }
 
-  llvm::SmallVector<int64_t> sizeValues;
-  auto *ompCons{eval.getIf<parser::OpenMPConstruct>()};
-  collectTileSizesFromOpenMPConstruct(ompCons, sizeValues, semaCtx);
-  if (sizeValues.size() > 0)
-    clauseOps.tileSizes = sizeValues;
+  cp.processTileSizes(eval, clauseOps);
 }
 
 static void genLoopClauses(
@@ -2009,8 +1977,7 @@ static mlir::omp::LoopNestOp genLoopNestOp(
     return llvm::SmallVector<const semantics::Symbol *>(iv);
   };
 
-  uint64_t nestValue = getCollapseValue(
-      item->clauses); // MK: Should be number of affected loops?
+  uint64_t nestValue = getCollapseValue(item->clauses);
   nestValue = nestValue < iv.size() ? iv.size() : nestValue;
   auto *nestedEval = getCollapsedLoopEval(eval, nestValue);
 
@@ -4065,7 +4032,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
       switch (nestedDirective) {
       case llvm::omp::Directive::OMPD_tile:
         // Skip OMPD_tile since the tile sizes will be retrieved when
-        // generating the omp.looop_nest op.
+        // generating the omp.loop_nest op.
         break;
       case llvm::omp::Directive::OMPD_interchange: {
         ConstructQueue nestedQueue{buildConstructQueue(

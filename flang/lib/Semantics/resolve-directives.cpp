@@ -2157,7 +2157,6 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
               std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
         levels.push_back(tclause->v.size());
         clauses.push_back(&clause);
-        // llvm_unreachable("MK: fetch permute depth");
         return;
       }
     }

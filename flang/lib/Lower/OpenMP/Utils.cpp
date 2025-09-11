@@ -626,7 +626,7 @@ void collectTileSizesFromOpenMPConstruct(
         // Get the size values from parse tree and convert to a vector
         const auto &innerClauseList{
             std::get<parser::OmpClauseList>(innerBegin.t)};
-        for (const auto &clause : innerClauseList.v)
+        for (const auto &clause : innerClauseList.v) {
           if (const auto tclause{
                   std::get_if<parser::OmpClause::Sizes>(&clause.u)}) {
             for (auto &tval : tclause->v) {
@@ -634,6 +634,7 @@ void collectTileSizesFromOpenMPConstruct(
                 tileSizes.push_back(*v);
             }
           }
+        }
       }
     }
   }
