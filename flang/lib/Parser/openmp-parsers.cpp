@@ -1392,6 +1392,7 @@ TYPE_PARSER(sourced(construct<OmpLoopDirective>(first(
     "TEAMS DISTRIBUTE" >> pure(llvm::omp::Directive::OMPD_teams_distribute),
     "TEAMS LOOP" >> pure(llvm::omp::Directive::OMPD_teams_loop),
     "TILE" >> pure(llvm::omp::Directive::OMPD_tile),
+    "INTERCHANGE" >> pure(llvm::omp::Directive::OMPD_interchange),
     "UNROLL" >> pure(llvm::omp::Directive::OMPD_unroll)))))
 
 TYPE_PARSER(sourced(construct<OmpBeginLoopDirective>(

@@ -2510,6 +2510,9 @@ public:
     case llvm::omp::Directive::OMPD_tile:
       Word("TILE ");
       break;
+    case llvm::omp::Directive::OMPD_interchange:
+      Word("INTERCHANGE ");
+      break;
     case llvm::omp::Directive::OMPD_unroll:
       Word("UNROLL ");
       break;

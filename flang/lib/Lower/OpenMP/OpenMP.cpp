@@ -49,6 +49,7 @@
 using namespace Fortran::lower::omp;
 using namespace Fortran::common::openmp;
 using namespace Fortran::utils::openmp;
+using namespace Fortran::semantics;
 
 //===----------------------------------------------------------------------===//
 // Code generation helper functions
@@ -406,6 +407,7 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       return;
 
     const parser::OmpClauseList *beginClauseList = nullptr;
+    const parser::OmpClauseList *middleClauseList = nullptr;
     const parser::OmpClauseList *endClauseList = nullptr;
     common::visit(
         common::visitors{
@@ -420,6 +422,30 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
               beginClauseList =
                   &std::get<parser::OmpClauseList>(beginDirective.t);
 
+              // For now we check if there is an inner OpenMPLoopConstruct, and
+              // extract the size clause from there
+              const auto &nestedOptional =
+                  std::get<std::optional<parser::NestedConstruct>>(
+                      ompConstruct.t);
+              assert(nestedOptional.has_value() &&
+                     "Expected a DoConstruct or OpenMPLoopConstruct");
+              const auto *innerConstruct =
+                  std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
+                      &(nestedOptional.value()));
+              if (innerConstruct) {
+                const auto &innerLoopConstruct = innerConstruct->value();
+                const auto &innerBegin =
+                    std::get<parser::OmpBeginLoopDirective>(
+                        innerLoopConstruct.t);
+                const auto &innerDirective =
+                    std::get<parser::OmpLoopDirective>(innerBegin.t);
+                if (innerDirective.v == llvm::omp::Directive::OMPD_tile ||
+                    innerDirective.v ==
+                        llvm::omp::Directive::OMPD_interchange) {
+                  middleClauseList =
+                      &std::get<parser::OmpClauseList>(innerBegin.t);
+                }
+              }
               if (auto &endDirective =
                       std::get<std::optional<parser::OmpEndLoopDirective>>(
                           ompConstruct.t)) {
@@ -432,6 +458,9 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
 
     assert(beginClauseList && "expected begin directive");
     clauses.append(makeClauses(*beginClauseList, semaCtx));
+
+    if (middleClauseList)
+      clauses.append(makeClauses(*middleClauseList, semaCtx));
 
     if (endClauseList)
       clauses.append(makeClauses(*endClauseList, semaCtx));
@@ -1174,6 +1203,10 @@ struct OpWithBodyGenInfo {
 static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
                            const ConstructQueue &queue,
                            ConstructQueue::const_iterator item) {
+  int a = 0;
+  if (a) {
+    op.dump();
+  }
   fir::FirOpBuilder &firOpBuilder = info.converter.getFirOpBuilder();
 
   auto insertMarker = [](fir::FirOpBuilder &builder) {
@@ -1244,8 +1277,11 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
   }
 
   if (!info.genSkeletonOnly) {
+    // Transforms already processed by getLoopNestOp
+    auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+    auto transforms = llvm::make_range(q.end(), queue.end());
     if (ConstructQueue::const_iterator next = std::next(item);
-        next != queue.end()) {
+        next != transforms.begin() && next != queue.end()) {
       genOMPDispatch(info.converter, info.symTable, info.semaCtx, info.eval,
                      info.loc, queue, next);
     } else {
@@ -1313,6 +1349,10 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
       // wrapper region.
       mlir::Operation *privatizationBottomLevelOp = &op;
       if (auto loopNest = llvm::dyn_cast<mlir::omp::LoopNestOp>(op)) {
+        int b = 0;
+        if (b) {
+          loopNest.dump();
+        }
         llvm::SmallVector<mlir::omp::LoopWrapperInterface> wrappers;
         loopNest.gatherWrappers(wrappers);
         if (!wrappers.empty())
@@ -1564,7 +1604,8 @@ genLoopNestClauses(lower::AbstractConverter &converter,
                    semantics::SemanticsContext &semaCtx,
                    lower::pft::Evaluation &eval, const List<Clause> &clauses,
                    mlir::Location loc, mlir::omp::LoopNestOperands &clauseOps,
-                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
+                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv,
+                   bool enableInterchange = false) {
   ClauseProcessor cp(converter, semaCtx, clauses);
 
   HostEvalInfo *hostEvalInfo = getHostEvalInfoStackTop(converter);
@@ -1572,6 +1613,32 @@ genLoopNestClauses(lower::AbstractConverter &converter,
     cp.processCollapse(loc, eval, clauseOps, iv);
 
   clauseOps.loopInclusive = converter.getFirOpBuilder().getUnitAttr();
+
+  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+  for (auto &clause : clauses) {
+    if (clause.id == llvm::omp::Clause::OMPC_collapse) {
+      const auto &collapse = std::get<clause::Collapse>(clause.u);
+      int64_t collapseValue = evaluate::ToInt64(collapse.v).value();
+      clauseOps.numCollapse = firOpBuilder.getI64IntegerAttr(collapseValue);
+    } else if (clause.id == llvm::omp::Clause::OMPC_sizes) {
+      // This case handles the stand-alone tiling construct
+      const auto &sizes = std::get<clause::Sizes>(clause.u);
+      llvm::SmallVector<int64_t> sizeValues;
+      for (auto &size : sizes.v) {
+        int64_t sizeValue = evaluate::ToInt64(size).value();
+        sizeValues.push_back(sizeValue);
+      }
+      clauseOps.tileSizes = sizeValues;
+    } else if (clause.id == llvm::omp::Clause::OMPC_permutation) {
+      llvm_unreachable("MK: To handle standalone interchange construct");
+    }
+  }
+
+  llvm::SmallVector<int64_t> sizeValues;
+  auto *ompCons{eval.getIf<parser::OpenMPConstruct>()};
+  collectTileSizesFromOpenMPConstruct(ompCons, sizeValues, semaCtx);
+  if (sizeValues.size() > 0)
+    clauseOps.tileSizes = sizeValues;
 }
 
 static void genLoopClauses(
@@ -1942,14 +2009,77 @@ static mlir::omp::LoopNestOp genLoopNestOp(
     llvm::ArrayRef<
         std::pair<mlir::omp::BlockArgOpenMPOpInterface, const EntryBlockArgs &>>
         wrapperArgs,
-    llvm::omp::Directive directive, DataSharingProcessor &dsp) {
+    llvm::omp::Directive directive, DataSharingProcessor &dsp,
+    std::optional<llvm::iterator_range<ConstructQueue::const_iterator>>
+        transforms = std::nullopt) {
   auto ivCallback = [&](mlir::Operation *op) {
     genLoopVars(op, converter, loc, iv, wrapperArgs);
     return llvm::SmallVector<const semantics::Symbol *>(iv);
   };
 
-  auto *nestedEval =
-      getCollapsedLoopEval(eval, getCollapseValue(item->clauses));
+  uint64_t nestValue = getCollapseValue(
+      item->clauses); // MK: Should be number of affected loops?
+  nestValue = nestValue < iv.size() ? iv.size() : nestValue;
+  auto *nestedEval = getCollapsedLoopEval(eval, nestValue);
+
+  if (!transforms.has_value()) {
+    // This must be a standalone construct, assume all following actions are
+    // transformations
+    transforms = llvm::make_range(std::next(item), queue.end());
+  }
+
+  for (auto &&transform : llvm::reverse(*transforms)) {
+    auto d = transform.id;
+    auto clauses = transform.clauses;
+
+    switch (d) {
+    case llvm::omp::OMPD_interchange: {
+      bool hasPermutationClause = false;
+      llvm::SmallVector<int64_t> permutation;
+
+      auto &&permutationClause = ClauseFinder::findUniqueClause<
+          Fortran::lower::omp::clause::Permutation>(clauses);
+      if (permutationClause) {
+        permutation.reserve(permutationClause->v.size());
+        for (auto &&ts : permutationClause->v) {
+          permutation.push_back(evaluate::ToInt64(ts).value());
+        }
+        //   llvm::append_range( permutation, permutationClause->v);
+
+      } else {
+        permutation = {2, 1};
+      }
+
+      assert(permutation.size() == iv.size() &&
+             "TODO: if permutation is smaller than number of associated loops, "
+             "permute only the first loops");
+      llvm::SmallVector<const semantics::Symbol *> newIVs;
+      llvm::SmallVector<mlir::Value> newLBs;
+      llvm::SmallVector<mlir::Value> newUBs;
+      llvm::SmallVector<mlir::Value> newINCs;
+      llvm::SmallVector<int64_t> newSizes;
+
+      // TODO: Assert this is a valid permution
+      for (auto perm : permutation) {
+        newIVs.push_back(iv[perm - 1]);
+        newLBs.push_back(clauseOps.loopLowerBounds[perm - 1]);
+        newUBs.push_back(clauseOps.loopUpperBounds[perm - 1]);
+        newINCs.push_back(clauseOps.loopSteps[perm - 1]);
+        if (!clauseOps.tileSizes.empty())
+          newSizes.push_back(clauseOps.tileSizes[perm - 1]);
+      }
+
+      iv = newIVs;
+      clauseOps.loopLowerBounds = newLBs;
+      clauseOps.loopUpperBounds = newUBs;
+      clauseOps.loopSteps = newINCs;
+      clauseOps.tileSizes = newSizes;
+
+    } break;
+    default:
+      llvm_unreachable("MK: loop transformation not yet implemented");
+    }
+  }
 
   return genOpWithBody<mlir::omp::LoopNestOp>(
       OpWithBodyGenInfo(converter, symTable, semaCtx, loc, *nestedEval,
@@ -2918,7 +3048,10 @@ static mlir::omp::DistributeOp genCompositeDistributeParallelDo(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  assert(std::distance(item, queue.end()) == 3 && "Invalid leaf constructs");
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
+  assert(llvm::range_size(q) == 3 && "Invalid leaf constructs");
   ConstructQueue::const_iterator distributeItem = item;
   ConstructQueue::const_iterator parallelItem = std::next(distributeItem);
   ConstructQueue::const_iterator doItem = std::next(parallelItem);
@@ -2972,10 +3105,10 @@ static mlir::omp::DistributeOp genCompositeDistributeParallelDo(
       converter, loc, wsloopClauseOps, wsloopArgs);
   wsloopOp.setComposite(/*val=*/true);
 
-  genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, doItem,
-                loopNestClauseOps, iv,
-                {{distributeOp, distributeArgs}, {wsloopOp, wsloopArgs}},
-                llvm::omp::Directive::OMPD_distribute_parallel_do, dsp);
+  genLoopNestOp(
+      converter, symTable, semaCtx, eval, loc, queue, doItem, loopNestClauseOps,
+      iv, {{distributeOp, distributeArgs}, {wsloopOp, wsloopArgs}},
+      llvm::omp::Directive::OMPD_distribute_parallel_do, dsp, transforms);
   return distributeOp;
 }
 
@@ -2984,7 +3117,11 @@ static mlir::omp::DistributeOp genCompositeDistributeParallelDoSimd(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  assert(std::distance(item, queue.end()) == 4 && "Invalid leaf constructs");
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
+  assert(llvm::range_size(q) == 4 && "Invalid leaf constructs");
+
   ConstructQueue::const_iterator distributeItem = item;
   ConstructQueue::const_iterator parallelItem = std::next(distributeItem);
   ConstructQueue::const_iterator doItem = std::next(parallelItem);
@@ -3066,7 +3203,7 @@ static mlir::omp::DistributeOp genCompositeDistributeParallelDoSimd(
                  {wsloopOp, wsloopArgs},
                  {simdOp, simdArgs}},
                 llvm::omp::Directive::OMPD_distribute_parallel_do_simd,
-                simdItemDSP);
+                simdItemDSP, transforms);
   return distributeOp;
 }
 
@@ -3075,7 +3212,11 @@ static mlir::omp::DistributeOp genCompositeDistributeSimd(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  assert(std::distance(item, queue.end()) == 2 && "Invalid leaf constructs");
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
+  assert(llvm::range_size(q) == 2 && "Invalid leaf constructs");
+
   ConstructQueue::const_iterator distributeItem = item;
   ConstructQueue::const_iterator simdItem = std::next(distributeItem);
 
@@ -3127,7 +3268,8 @@ static mlir::omp::DistributeOp genCompositeDistributeSimd(
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, simdItem,
                 loopNestClauseOps, iv,
                 {{distributeOp, distributeArgs}, {simdOp, simdArgs}},
-                llvm::omp::Directive::OMPD_distribute_simd, simdItemDSP);
+                llvm::omp::Directive::OMPD_distribute_simd, simdItemDSP,
+                transforms);
   return distributeOp;
 }
 
@@ -3136,7 +3278,11 @@ static mlir::omp::WsloopOp genCompositeDoSimd(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  assert(std::distance(item, queue.end()) == 2 && "Invalid leaf constructs");
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
+  assert(llvm::range_size(q) == 2 && "Invalid leaf constructs");
+
   ConstructQueue::const_iterator doItem = item;
   ConstructQueue::const_iterator simdItem = std::next(doItem);
 
@@ -3191,7 +3337,7 @@ static mlir::omp::WsloopOp genCompositeDoSimd(
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, simdItem,
                 loopNestClauseOps, iv,
                 {{wsloopOp, wsloopArgs}, {simdOp, simdArgs}},
-                llvm::omp::Directive::OMPD_do_simd, simdItemDSP);
+                llvm::omp::Directive::OMPD_do_simd, simdItemDSP, transforms);
   return wsloopOp;
 }
 
@@ -3200,7 +3346,11 @@ static mlir::omp::TaskloopOp genCompositeTaskloopSimd(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  assert(std::distance(item, queue.end()) == 2 && "Invalid leaf constructs");
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
+  assert(llvm::range_size(q) == 2 && "Invalid leaf constructs");
+
   if (!semaCtx.langOptions().OpenMPSimd)
     TODO(loc, "Composite TASKLOOP SIMD");
   return nullptr;
@@ -3381,6 +3531,9 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
   }
   case llvm::omp::Directive::OMPD_unroll:
     genUnrollOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
+    break;
+  case llvm::omp::Directive::OMPD_interchange:
+    llvm_unreachable("MK: standalone interchange not implemented");
     break;
   case llvm::omp::Directive::OMPD_workdistribute:
     newOp = genWorkdistributeOp(converter, symTable, semaCtx, eval, loc, queue,
@@ -3833,19 +3986,42 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
   mlir::Location currentLocation =
       converter.genLocation(beginLoopDirective.source);
 
+  llvm::omp::Directive directive =
+      parser::omp::GetOmpDirectiveName(beginLoopDirective).v;
+  const parser::CharBlock &source =
+      std::get<parser::OmpLoopDirective>(beginLoopDirective.t).source;
+  ConstructQueue queue{
+      buildConstructQueue(converter.getFirOpBuilder().getModule(), semaCtx,
+                          eval, source, directive, clauses)};
+
   auto &optLoopCons =
       std::get<std::optional<parser::NestedConstruct>>(loopConstruct.t);
   if (optLoopCons.has_value()) {
     if (auto *ompNestedLoopCons{
             std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
                 &*optLoopCons)}) {
+      const Fortran::parser::OpenMPLoopConstruct &x =
+          ompNestedLoopCons->value();
+      const Fortran::parser::OmpBeginLoopDirective &y = std::get<0>(x.t);
+      const Fortran::parser::OmpClauseList &clauseList = std::get<1>(y.t);
       llvm::omp::Directive nestedDirective =
           parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
+      List<Clause> nestedClauses =
+          makeClauses(std::get<parser::OmpClauseList>(y.t), semaCtx);
+
       switch (nestedDirective) {
       case llvm::omp::Directive::OMPD_tile:
-        // Emit the omp.loop_nest with annotation for tiling
-        genOMP(converter, symTable, semaCtx, eval, ompNestedLoopCons->value());
+        // Skip OMPD_tile since the tile sizes will be retrieved when
+        // generating the omp.looop_nest op.
         break;
+      case llvm::omp::Directive::OMPD_interchange: {
+        ConstructQueue nestedQueue{buildConstructQueue(
+            converter.getFirOpBuilder().getModule(), semaCtx, eval, source,
+            nestedDirective, nestedClauses)};
+        for (auto nl : nestedQueue) {
+          queue.push_back(nl);
+        }
+      } break;
       default: {
         unsigned version = semaCtx.langOptions().OpenMPVersion;
         TODO(currentLocation,
@@ -3857,13 +4033,6 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
     }
   }
 
-  llvm::omp::Directive directive =
-      parser::omp::GetOmpDirectiveName(beginLoopDirective).v;
-  const parser::CharBlock &source =
-      std::get<parser::OmpLoopDirective>(beginLoopDirective.t).source;
-  ConstructQueue queue{
-      buildConstructQueue(converter.getFirOpBuilder().getModule(), semaCtx,
-                          eval, source, directive, clauses)};
   genOMPDispatch(converter, symTable, semaCtx, eval, currentLocation, queue,
                  queue.begin());
 }
@@ -3955,18 +4124,6 @@ void Fortran::lower::genOpenMPSymbolProperties(
 
   if (sym.test(semantics::Symbol::Flag::OmpDeclareTarget))
     lower::genDeclareTargetIntGlobal(converter, var);
-}
-
-int64_t
-Fortran::lower::getCollapseValue(const parser::OmpClauseList &clauseList) {
-  for (const parser::OmpClause &clause : clauseList.v) {
-    if (const auto &collapseClause =
-            std::get_if<parser::OmpClause::Collapse>(&clause.u)) {
-      const auto *expr = semantics::GetExpr(collapseClause->v);
-      return evaluate::ToInt64(*expr).value();
-    }
-  }
-  return 1;
 }
 
 void Fortran::lower::genThreadprivateOp(lower::AbstractConverter &converter,

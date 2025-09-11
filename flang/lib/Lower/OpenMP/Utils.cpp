@@ -13,6 +13,7 @@
 #include "Utils.h"
 
 #include "ClauseFinder.h"
+#include "flang/Evaluate/fold.h"
 #include "flang/Lower/OpenMP/Clauses.h"
 #include <flang/Lower/AbstractConverter.h>
 #include <flang/Lower/ConvertType.h>
@@ -25,9 +26,29 @@
 #include <flang/Parser/tools.h>
 #include <flang/Semantics/tools.h>
 #include <flang/Utils/OpenMP.h>
+#include <flang/Semantics/type.h>
 #include <llvm/Support/CommandLine.h>
 
 #include <iterator>
+
+using namespace Fortran::semantics;
+
+template <typename T>
+MaybeIntExpr EvaluateIntExpr(SemanticsContext &context, const T &expr) {
+  if (MaybeExpr maybeExpr{
+          Fold(context.foldingContext(), AnalyzeExpr(context, expr))}) {
+    if (auto *intExpr{Fortran::evaluate::UnwrapExpr<SomeIntExpr>(*maybeExpr)}) {
+      return std::move(*intExpr);
+    }
+  }
+  return std::nullopt;
+}
+
+template <typename T>
+std::optional<std::int64_t> EvaluateInt64(SemanticsContext &context,
+                                          const T &expr) {
+  return Fortran::evaluate::ToInt64(EvaluateIntExpr(context, expr));
+}
 
 llvm::cl::opt<bool> treatIndexAsSection(
     "openmp-treat-index-as-section",
@@ -577,6 +598,86 @@ static void convertLoopBounds(lower::AbstractConverter &converter,
   }
 }
 
+/// Populates the sizes vector with values if the given OpenMPConstruct
+/// Contains a loop construct with an inner tiling construct.
+void collectTileSizesFromOpenMPConstruct(
+    const parser::OpenMPConstruct *ompCons,
+    llvm::SmallVectorImpl<int64_t> &tileSizes, SemanticsContext &semaCtx) {
+  if (!ompCons)
+    return;
+
+  if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
+    const auto &nestedOptional =
+        std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+    assert(nestedOptional.has_value() &&
+           "Expected a DoConstruct or OpenMPLoopConstruct");
+    const auto *innerConstruct =
+        std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
+            &(nestedOptional.value()));
+    if (innerConstruct) {
+      const auto &innerLoopDirective = innerConstruct->value();
+      const auto &innerBegin =
+          std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+      const auto &innerDirective =
+          std::get<parser::OmpLoopDirective>(innerBegin.t).v;
+
+      if (innerDirective == llvm::omp::Directive::OMPD_tile) {
+        // Get the size values from parse tree and convert to a vector
+        const auto &innerClauseList{
+            std::get<parser::OmpClauseList>(innerBegin.t)};
+        for (const auto &clause : innerClauseList.v)
+          if (const auto tclause{
+                  std::get_if<parser::OmpClause::Sizes>(&clause.u)}) {
+            for (auto &tval : tclause->v) {
+              if (const auto v{EvaluateInt64(semaCtx, tval)})
+                tileSizes.push_back(*v);
+            }
+          }
+      }
+    }
+  }
+}
+
+/// Populates the sizes vector with values if the given OpenMPConstruct
+/// Contains a loop construct with an inner tiling construct.
+void collectPermutationFromOpenMPConstruct(
+    const parser::OpenMPConstruct *ompCons,
+    llvm::SmallVectorImpl<int64_t> &permutation, SemanticsContext &semaCtx) {
+  if (!ompCons)
+    return;
+
+  if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
+    const auto &nestedOptional =
+        std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+    assert(nestedOptional.has_value() &&
+           "Expected a DoConstruct or OpenMPLoopConstruct");
+    const auto *innerConstruct =
+        std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
+            &(nestedOptional.value()));
+    if (innerConstruct) {
+      const auto &innerLoopDirective = innerConstruct->value();
+      const auto &innerBegin =
+          std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+      const auto &innerDirective =
+          std::get<parser::OmpLoopDirective>(innerBegin.t).v;
+
+      if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
+        // Get the size values from parse tree and convert to a vector
+        const auto &innerClauseList{
+            std::get<parser::OmpClauseList>(innerBegin.t)};
+        for (const auto &clause : innerClauseList.v)
+          if (const auto tclause{
+                  std::get_if<parser::OmpClause::Sizes>(&clause.u)}) {
+            for (auto &tval : tclause->v) {
+              if (const auto v{EvaluateInt64(semaCtx, tval)})
+                permutation.push_back(*v);
+            }
+          }
+      }
+    }
+  }
+}
+
 bool collectLoopRelatedInfo(
     lower::AbstractConverter &converter, mlir::Location currentLocation,
     lower::pft::Evaluation &eval, const omp::List<omp::Clause> &clauses,
@@ -597,6 +698,62 @@ bool collectLoopRelatedInfo(
     collapseValue = evaluate::ToInt64(clause->v).value();
     found = true;
   }
+
+  // Collect sizes from tile directive if present
+  std::int64_t sizesLengthValue = 0l;
+  std::int64_t permutationLengthValue = 0l;
+  if (auto *ompCons{eval.getIf<parser::OpenMPConstruct>()}) {
+    if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
+      const auto &nestedOptional =
+          std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+      assert(nestedOptional.has_value() &&
+             "Expected a DoConstruct or OpenMPLoopConstruct");
+      const auto *innerConstruct =
+          std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
+              &(nestedOptional.value()));
+      if (innerConstruct) {
+        const auto &innerLoopDirective = innerConstruct->value();
+        const auto &innerBegin =
+            std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+        const auto &innerDirective =
+            std::get<parser::OmpLoopDirective>(innerBegin.t).v;
+
+        if (innerDirective == llvm::omp::Directive::OMPD_tile) {
+          // Get the size values from parse tree and convert to a vector
+          const auto &innerClauseList{
+              std::get<parser::OmpClauseList>(innerBegin.t)};
+          for (const auto &clause : innerClauseList.v)
+            if (const auto tclause{
+                    std::get_if<parser::OmpClause::Sizes>(&clause.u)}) {
+              sizesLengthValue = tclause->v.size();
+              found = true;
+            }
+        }
+
+        if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
+          // Get the size values from parse tree and convert to a vector
+          const auto &innerClauseList{
+              std::get<parser::OmpClauseList>(innerBegin.t)};
+          for (const auto &clause : innerClauseList.v) {
+            if (const auto tclause{
+                    std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+              permutationLengthValue = tclause->v.size();
+              found = true;
+            }
+          }
+          // default: permution(2,1)
+          if (permutationLengthValue == 0)
+            permutationLengthValue = 2;
+        }
+      }
+    }
+  }
+
+  collapseValue = collapseValue - sizesLengthValue;
+  if (sizesLengthValue > collapseValue)
+    collapseValue = sizesLengthValue;
+  if (permutationLengthValue > collapseValue)
+    collapseValue = permutationLengthValue;
 
   std::size_t loopVarTypeSize = 0;
   do {
