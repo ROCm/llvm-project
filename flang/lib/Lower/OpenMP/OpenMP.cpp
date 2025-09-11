@@ -1619,7 +1619,8 @@ genLoopNestClauses(lower::AbstractConverter &converter,
     if (clause.id == llvm::omp::Clause::OMPC_collapse) {
       const auto &collapse = std::get<clause::Collapse>(clause.u);
       int64_t collapseValue = evaluate::ToInt64(collapse.v).value();
-      clauseOps.numCollapse = firOpBuilder.getI64IntegerAttr(collapseValue);
+      clauseOps.collapseNumLoops =
+          firOpBuilder.getI64IntegerAttr(collapseValue);
     } else if (clause.id == llvm::omp::Clause::OMPC_sizes) {
       // This case handles the stand-alone tiling construct
       const auto &sizes = std::get<clause::Sizes>(clause.u);

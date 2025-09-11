@@ -3073,7 +3073,7 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
   } // Tiling done
 
   // Do collapse
-  if (const auto &numCollapse = loopOp.getNumCollapse()) {
+  if (const auto &numCollapse = loopOp.getCollapseNumLoops()) {
     SmallVector<llvm::CanonicalLoopInfo *> collapseLoopInfos(
         loopInfos.begin(), loopInfos.begin() + (numCollapse));
 
