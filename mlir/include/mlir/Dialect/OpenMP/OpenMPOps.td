@@ -614,18 +614,13 @@ def WorkshareLoopWrapperOp : OpenMP_Op<"workshare.loop_wrapper", traits = [
 def LoopNestOp : OpenMP_Op<"loop_nest", traits = [
     RecursiveMemoryEffects, SameVariadicOperandSize
   ], clauses = [
-    OpenMP_CollapseClause,
-    OpenMP_LoopRelatedClause,
-    OpenMP_TileSizesClause
+    OpenMP_LoopRelatedClause
   ], singleRegion = true> {
   let summary = "rectangular loop nest";
   let description = [{
-    This operation represents a rectangular loop nest which may be collapsed
-    and/or tiled. For each rectangular loop of the nest represented by an
-    instance of this operation, lower and upper bounds, as well as a step
-    variable, must be defined. The collapse clause specifies how many loops
-    that should be collapsed (1 if no collapse is done) after any tiling is
-    performed. The tiling sizes is represented by the tile sizes clause.
+    This operation represents a collapsed rectangular loop nest. For each
+    rectangular loop of the nest represented by an instance of this operation,
+    lower and upper bounds, as well as a step variable, must be defined.
 
     The lower and upper bounds specify a half-open range: the range includes the
     lower bound but does not include the upper bound. If the `loop_inclusive`
@@ -638,7 +633,7 @@ def LoopNestOp : OpenMP_Op<"loop_nest", traits = [
     `loop_steps` arguments.
 
     ```mlir
-    omp.loop_nest (%i1, %i2) : i32 = (%c0, %c0) to (%c10, %c10) step (%c1, %c1) collapse(2) tiles(5,5) {
+    omp.loop_nest (%i1, %i2) : i32 = (%c0, %c0) to (%c10, %c10) step (%c1, %c1) {
       %a = load %arrA[%i1, %i2] : memref<?x?xf32>
       %b = load %arrB[%i1, %i2] : memref<?x?xf32>
       %sum = arith.addf %a, %b : f32

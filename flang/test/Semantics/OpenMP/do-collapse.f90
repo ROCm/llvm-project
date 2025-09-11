@@ -31,7 +31,6 @@ program omp_doCollapse
       end do
     end do
 
-  !ERROR: The value of the parameter in the COLLAPSE or ORDERED clause must not be larger than the number of nested loops following the construct.
   !ERROR: At most one COLLAPSE clause can appear on the SIMD directive
   !$omp simd collapse(2) collapse(1)
   do i = 1, 4

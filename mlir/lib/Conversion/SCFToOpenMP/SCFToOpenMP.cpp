@@ -492,10 +492,8 @@ struct ParallelOpLowering : public OpRewritePattern<scf::ParallelOp> {
 
         // Create loop nest and populate region with contents of scf.parallel.
         auto loopOp = omp::LoopNestOp::create(
-            rewriter, parallelOp.getLoc(), parallelOp.getLowerBound().size(),
-            parallelOp.getLowerBound(), parallelOp.getUpperBound(),
-            parallelOp.getStep(), /*loop_inclusive=*/false,
-            /*tile_sizes=*/nullptr);
+            rewriter, parallelOp.getLoc(), parallelOp.getLowerBound(),
+            parallelOp.getUpperBound(), parallelOp.getStep());
 
         rewriter.inlineRegionBefore(parallelOp.getRegion(), loopOp.getRegion(),
                                     loopOp.getRegion().begin());
