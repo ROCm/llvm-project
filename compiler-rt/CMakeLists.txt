@@ -506,6 +506,18 @@ elseif(COMPILER_RT_HAS_G_FLAG)
   list(APPEND SANITIZER_COMMON_CFLAGS -g)
 endif()
 
+if(SANITIZER_AMDGPU)
+  list(APPEND SANITIZER_COMMON_CFLAGS -DSANITIZER_AMDGPU=1)
+  find_path(HSA_INCLUDE hsa.h HINTS ${SANITIZER_HSA_INCLUDE_PATH} ${CMAKE_INSTALL_PREFIX}/include/hsa ${CMAKE_INSTALL_PREFIX}/../include/hsa /opt/rocm/include/hsa PATH_SUFFIXES hsa)
+  include_directories(${HSA_INCLUDE})
+  find_path(COMgr_INCLUDE amd_comgr.h.in HINTS ${SANITIZER_COMGR_INCLUDE_PATH} ${CMAKE_INSTALL_PREFIX}/../include ${CMAKE_INSTALL_PREFIX}/include)
+  if (NOT COMgr_INCLUDE)
+    add_compile_definitions(AMD_COMGR)
+    find_path(COMgr_INCLUDE amd_comgr.h HINTS ${CMAKE_INSTALL_PREFIX}/../include ${CMAKE_INSTALL_PREFIX}/include /opt/rocm/include)
+  endif()
+  include_directories(${COMgr_INCLUDE})
+endif()
+
 if(LLVM_ENABLE_MODULES)
   # Sanitizers cannot be built with -fmodules. The interceptors intentionally
   # don't include system headers, which is incompatible with modules.

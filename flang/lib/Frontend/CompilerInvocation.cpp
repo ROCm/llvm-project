@@ -485,7 +485,17 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
     opts.Underscoring = 0;
   }
 
+  if (args.hasFlag(clang::driver::options::OPT_foffload_global_filtering,
+                   clang::driver::options::OPT_fno_offload_global_filtering,
+                   false)) {
+    opts.OffloadGlobalFiltering = 1;
+  }
+
   parseDoConcurrentMapping(opts, args, diags);
+
+  opts.DeferDescriptorMapping =
+      args.hasFlag(clang::driver::options::OPT_fdefer_desc_map,
+                   clang::driver::options::OPT_fno_defer_desc_map, true);
 
   if (const llvm::opt::Arg *arg =
           args.getLastArg(clang::driver::options::OPT_complex_range_EQ)) {
@@ -872,6 +882,12 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
       args.hasFlag(clang::driver::options::OPT_fsave_main_program,
                    clang::driver::options::OPT_fno_save_main_program, false));
 
+  // -ffast-amd-memory-allocator
+  if (args.hasArg(clang::driver::options::OPT_ffast_amd_memory_allocator)) {
+    opts.features.Enable(
+        (Fortran::common::LanguageFeature::AmdMemoryAllocator));
+  }
+
   if (args.hasArg(
           clang::driver::options::OPT_falternative_parameter_statement)) {
     opts.features.Enable(Fortran::common::LanguageFeature::OldStyleParameter);
@@ -1187,7 +1203,8 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   unsigned numErrorsBefore = diags.getNumErrors();
   llvm::Triple t(res.getTargetOpts().triple);
 
-  constexpr unsigned newestFullySupported = 31;
+  constexpr unsigned newestFullySupported = 52;
+  // By default OpenMP is set to 5.2 version
   constexpr unsigned latestFinalized = 60;
   // By default OpenMP is set to the most recent fully supported version
   res.getLangOpts().OpenMPVersion = newestFullySupported;
@@ -1228,10 +1245,12 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
       if (llvm::is_contained(ompVersions, version)) {
         res.getLangOpts().OpenMPVersion = version;
 
+#if ENABLED_FOR_STAGING
         if (version > latestFinalized)
           reportFutureVersion(value);
         else if (version > newestFullySupported)
           diags.Report(clang::diag::warn_openmp_incomplete) << version;
+#endif
       } else if (llvm::is_contained(oldVersions, version)) {
         const unsigned diagID =
             diags.getCustomDiagID(clang::DiagnosticsEngine::Warning,
@@ -1722,6 +1741,7 @@ void CompilerInvocation::setDefaultPredefinitions() {
   auto &fortranOptions = getFortranOpts();
   const auto &frontendOptions = getFrontendOpts();
   // Populate the macro list with version numbers and other predefinitions.
+  fortranOptions.predefinitions.emplace_back("__amdflang__", "1");
   fortranOptions.predefinitions.emplace_back("__flang__", "1");
   fortranOptions.predefinitions.emplace_back("__flang_major__",
                                              FLANG_VERSION_MAJOR_STRING);

@@ -16553,8 +16553,10 @@ SDValue DAGCombiner::visitBITCAST(SDNode *N) {
   }
 
   // (conv (conv x, t1), t2) -> (conv x, t2)
-  if (N0.getOpcode() == ISD::BITCAST)
+  if (N0.getOpcode() == ISD::BITCAST) {
+    DAG.salvageDebugInfo(*N0.getNode());
     return DAG.getBitcast(VT, N0.getOperand(0));
+  }
 
   // fold (conv (logicop (conv x), (c))) -> (logicop x, (conv c))
   // iff the current bitwise logicop type isn't legal
@@ -23933,7 +23935,8 @@ SDValue DAGCombiner::visitEXTRACT_VECTOR_ELT(SDNode *N) {
     // scalar_to_vector here as well.
 
     if (!LegalOperations ||
-        TLI.isOperationLegalOrCustom(ISD::EXTRACT_VECTOR_ELT, VecVT) ||
+        // FIXME: Should really be just isOperationLegalOrCustom.
+        TLI.isOperationLegal(ISD::EXTRACT_VECTOR_ELT, VecVT) ||
         TLI.isOperationExpand(ISD::VECTOR_SHUFFLE, VecVT)) {
       return DAG.getNode(ISD::EXTRACT_VECTOR_ELT, DL, ScalarVT, SVInVec,
                          DAG.getVectorIdxConstant(OrigElt, DL));

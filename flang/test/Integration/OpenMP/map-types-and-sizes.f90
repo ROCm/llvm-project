@@ -6,7 +6,8 @@
 ! added to this directory and sub-directories.
 !===----------------------------------------------------------------------===!
 
-!RUN: %flang_fc1 -emit-llvm -fopenmp -mmlir --enable-delayed-privatization-staging=false -fopenmp-version=51 -fopenmp-targets=amdgcn-amd-amdhsa %s -o - | FileCheck %s --check-prefixes=CHECK,CHECK-NO-FPRIV
+! NOTE: Do not check for false delayed privatization flag until all enable-delayed-privatization flags are switched on in amd-staging
+!RUN %flang_fc1 -emit-llvm -fopenmp -mmlir --enable-delayed-privatization-staging=false -fopenmp-version=51 -fopenmp-targets=amdgcn-amd-amdhsa %s -o - | FileCheck %s --check-prefixes=CHECK,CHECK-NO-FPRIV
 !RUN: %flang_fc1 -emit-llvm -fopenmp -mmlir --enable-delayed-privatization-staging=true -fopenmp-version=51 -fopenmp-targets=amdgcn-amd-amdhsa %s -o - | FileCheck %s --check-prefixes=CHECK,CHECK-FPRIV
 
 
@@ -33,8 +34,8 @@ subroutine mapType_array
   !$omp end target
 end subroutine mapType_array
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 24, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976711169, i64 281474976711171, i64 281474976711187]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727557, i64 281474976727557, i64 281474976711171, i64 281474976711187]
 subroutine mapType_ptr
   integer, pointer :: a
   !$omp target
@@ -73,8 +74,8 @@ subroutine map_ompx_hold
 !$omp end target data
 end subroutine
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 24, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976711169, i64 281474976711171, i64 281474976711187]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727557, i64 281474976727557, i64 281474976711171, i64 281474976711187]
 subroutine mapType_allocatable
   integer, allocatable :: a
   allocate(a)
@@ -84,8 +85,8 @@ subroutine mapType_allocatable
   deallocate(a)
 end subroutine mapType_allocatable
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 24, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727045, i64 281474976727045, i64 281474976710659, i64 281474976710675]
 subroutine mapType_ptr_explicit
   integer, pointer :: a
   !$omp target map(tofrom: a)
@@ -93,8 +94,8 @@ subroutine mapType_ptr_explicit
   !$omp end target
 end subroutine mapType_ptr_explicit
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 24, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727045, i64 281474976727045, i64 281474976710659, i64 281474976710675]
 subroutine mapType_allocatable_explicit
   integer, allocatable :: a
   allocate(a)
@@ -246,7 +247,7 @@ subroutine mapType_derived_explicit_nested_member_with_bounds
 end subroutine mapType_derived_explicit_nested_member_with_bounds
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 48, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976727045, i64 281474976710659, i64 281474976710675]
 subroutine mapType_derived_type_alloca()
   type :: one_layer
   real(4) :: i
@@ -266,8 +267,8 @@ subroutine mapType_derived_type_alloca()
   !$omp end target
 end subroutine
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [8 x i64] [i64 0, i64 40, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [8 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675, i64 281474976710657, i64 281474976710659, i64 281474976710675, i64 281474976710659]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [9 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 32, i64 281474976727045, i64 281474976727045, i64 281474976710656, i64 281474976710672, i64 281474976727045, i64 281474976710659, i64 281474976710675, i64 281474976710659]
 subroutine mapType_alloca_derived_type()
   type :: one_layer
   real(4) :: i
@@ -289,8 +290,8 @@ subroutine mapType_alloca_derived_type()
   !$omp end target
 end subroutine
 
-!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [8 x i64] [i64 0, i64 40, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [8 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675, i64 281474976710657, i64 281474976710659, i64 281474976710675, i64 281474976710659]
+!CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [9 x i64] [i64 0, i64 0, i64 0, i64 8, i64 0, i64 48, i64 8, i64 0, i64 4]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [9 x i64] [i64 32, i64 281474976727045, i64 281474976727045, i64 281474976710656, i64 281474976710672, i64 281474976727045, i64 281474976710659, i64 281474976710675, i64 281474976710659]
 subroutine mapType_alloca_nested_derived_type()
   type :: middle_layer
   real(4) :: i
@@ -321,7 +322,7 @@ subroutine mapType_alloca_nested_derived_type()
 end subroutine
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [4 x i64] [i64 0, i64 48, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976710657, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [4 x i64] [i64 32, i64 281474976727045, i64 281474976710659, i64 281474976710675]
 subroutine mapType_nested_derived_type_alloca()
   type :: middle_layer
   real(4) :: i
@@ -350,7 +351,7 @@ subroutine mapType_nested_derived_type_alloca()
 end subroutine
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [7 x i64] [i64 0, i64 64, i64 8, i64 0, i64 48, i64 8, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [7 x i64] [i64 32, i64 281474976710657, i64 281474976710656, i64 281474976710672, i64 281474976710657, i64 281474976710659, i64 281474976710675]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [7 x i64] [i64 32, i64 281474976727045, i64 281474976710656, i64 281474976710672, i64 281474976727045, i64 281474976710659, i64 281474976710675]
 subroutine mapType_nested_derived_type_member_idx()
 type :: vertexes
   integer :: test
@@ -428,7 +429,7 @@ end subroutine mapType_common_block_members
 !CHECK: %[[ALLOCA_INT:.*]] = ptrtoint ptr %[[ALLOCA]] to i64
 !CHECK: %[[SIZE_DIFF:.*]] = sub i64 %[[ALLOCA_GEP_INT]], %[[ALLOCA_INT]]
 !CHECK: %[[DIV:.*]] = sdiv exact i64 %[[SIZE_DIFF]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [4 x i64], ptr %.offload_sizes, i32 0, i32 0
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [5 x i64], ptr %.offload_sizes, i32 0, i32 0
 !CHECK: store i64 %[[DIV]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
 
 !CHECK-LABEL: define {{.*}} @{{.*}}maptype_allocatable_explicit_{{.*}}
@@ -438,7 +439,7 @@ end subroutine mapType_common_block_members
 !CHECK: %[[ALLOCA_INT:.*]] = ptrtoint ptr %[[ALLOCA]] to i64
 !CHECK: %[[SIZE_DIFF:.*]] = sub i64 %[[ALLOCA_GEP_INT]], %[[ALLOCA_INT]]
 !CHECK: %[[DIV:.*]] = sdiv exact i64 %[[SIZE_DIFF]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [4 x i64], ptr %.offload_sizes, i32 0, i32 0
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [5 x i64], ptr %.offload_sizes, i32 0, i32 0
 !CHECK: store i64 %[[DIV]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
 
 !CHECK-LABEL: define {{.*}} @{{.*}}maptype_derived_implicit_{{.*}}
@@ -554,7 +555,7 @@ end subroutine mapType_common_block_members
 !CHECK: %[[MEMBER_BASE_ADDR_SIZE:.*]] = mul i64 1, %[[RESTORE_OFFSET]]
 !CHECK: %[[DESC_BASE_ADDR_DATA_SIZE:.*]] = mul i64 %[[MEMBER_BASE_ADDR_SIZE]], 4
 !CHECK: %[[LOAD_ADDR_DATA:.*]] = load ptr, ptr %[[MEMBER_DESCRIPTOR_BASE_ADDR]], align 8
-!CHECK: %[[GEP_ADDR_DATA:.*]] = getelementptr inbounds i32, ptr %[[LOAD_ADDR_DATA]], i64 0
+!CHECK: %[[GEP_ADDR_DATA:.*]] = getelementptr inbounds i32, ptr %[[LOAD_ADDR_DATA]]
 !CHECK: %[[MEMBER_ACCESS_ADDR_END:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[MEMBER_ACCESS]], i64 1
 !CHECK: %[[MEMBER_ACCESS_ADDR_INT:.*]] = ptrtoint ptr %[[MEMBER_ACCESS_ADDR_END]] to i64
 !CHECK: %[[MEMBER_ACCESS_ADDR_BEGIN:.*]] = ptrtoint ptr %[[MEMBER_ACCESS]] to i64
@@ -603,7 +604,6 @@ end subroutine mapType_common_block_members
 !CHECK: %[[DTYPE_BASE_ADDR_LOAD:.*]] = load ptr, ptr %[[DTYPE_BASE_ADDR_ACCESS]], align 8
 !CHECK: %[[DTYPE_ALLOCA_MEMBER_ACCESS:.*]] = getelementptr %_QFmaptype_alloca_derived_typeTone_layer, ptr %[[DTYPE_BASE_ADDR_LOAD]], i32 0, i32 4
 !CHECK: %[[DTYPE_ALLOCA_MEMBER_BASE_ADDR_ACCESS:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[DTYPE_ALLOCA_MEMBER_ACCESS]], i32 0, i32 0
-
 !CHECK: %[[DTYPE_BASE_ADDR_ACCESS_2:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, ptr, [1 x i64] }, ptr %[[DTYPE_DESC_ALLOCA]], i32 0, i32 0
 !CHECK: %[[DTYPE_BASE_ADDR_LOAD_2:.*]] = load ptr, ptr %[[DTYPE_BASE_ADDR_ACCESS_2]], align 8
 !CHECK: %[[DTYPE_NONALLOCA_MEMBER_ACCESS:.*]] = getelementptr %_QFmaptype_alloca_derived_typeTone_layer, ptr %[[DTYPE_BASE_ADDR_LOAD_2]], i32 0, i32 5
@@ -620,43 +620,48 @@ end subroutine mapType_common_block_members
 !CHECK: %[[DTYPE_BEGIN:.*]] = ptrtoint ptr %[[DTYPE_DESC_ALLOCA_3]] to i64
 !CHECK: %[[DTYPE_DESC_SZ_CALC:.*]] = sub i64 %[[DTYPE_END]], %[[DTYPE_BEGIN]]
 !CHECK: %[[DTYPE_DESC_SZ:.*]] = sdiv exact i64 %[[DTYPE_DESC_SZ_CALC]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+!CHECK: %[[DTYPE_BASE_ADDR_ACCESS_4:.*]] = getelementptr ptr, ptr %[[DTYPE_BASE_ADDR_ACCESS_3]], i32 1
 !CHECK: %[[SIZE_CMP:.*]] = icmp eq ptr %[[MEMBER_ARRAY_OFFSET]], null
 !CHECK: %[[SIZE_SEL:.*]] = select i1 %[[SIZE_CMP]], i64 0, i64 %[[MEMBER_SIZE_CALC_4]]
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 0
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [8 x i64], ptr %.offload_sizes, i32 0, i32 0
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [9 x i64], ptr %.offload_sizes, i32 0, i32 0
 !CHECK: store i64 %[[DTYPE_DESC_SZ]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 1
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 1
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 2
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 2
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 2
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 2
+!CHECK: store ptr %[[DTYPE_BASE_ADDR_ACCESS_4]], ptr %[[OFFLOAD_PTR_ARR]], align 8
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 3
+!CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 3
 !CHECK: store ptr %[[DTYPE_BASE_ADDR_ACCESS_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 3
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
 !CHECK: store ptr %[[DTYPE_BASE_ADDR_ACCESS_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 3
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 4
 !CHECK: store ptr %[[DTYPE_BASE_ADDR_LOAD_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 5
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 4
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 5
 !CHECK: store ptr %[[DTYPE_ALLOCA_MEMBER_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 5
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 5
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 6
 !CHECK: store ptr %[[DTYPE_ALLOCA_MEMBER_BASE_ADDR_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
 !CHECK: store ptr %[[DTYPE_ALLOCA_MEMBER_BASE_ADDR_ACCESS]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 6
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 7
 !CHECK: store ptr %[[MEMBER_ARRAY_OFFSET]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [8 x i64], ptr %.offload_sizes, i32 0, i32 6
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [9 x i64], ptr %.offload_sizes, i32 0, i32 7
 !CHECK: store i64 %[[SIZE_SEL]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 8
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 7
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 8
 !CHECK: store ptr %[[DTYPE_NONALLOCA_MEMBER_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
 
 !CHECK-LABEL: define {{.*}} @{{.*}}maptype_alloca_nested_derived_type{{.*}}
@@ -690,43 +695,48 @@ end subroutine mapType_common_block_members
 !CHECK: %[[DTYPE_DESC_SIZE_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_DESC_ALLOCA_3]] to i64
 !CHECK: %[[DTYPE_DESC_SIZE_CALC_4:.*]] = sub i64 %[[DTYPE_DESC_SIZE_CALC_2]], %[[DTYPE_DESC_SIZE_CALC_3]]
 !CHECK: %[[DTYPE_DESC_SIZE_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_DESC_SIZE_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+!CHECK: %[[DTYPE_END_ADDR:.*]] = getelementptr ptr, ptr %[[DTYPE_DESC_BASE_ADDR]], i32 1
 !CHECK: %[[DATA_CMP:.*]] = icmp eq ptr %[[ARRAY_OFFSET]], null
 !CHECK: %[[DATA_SEL:.*]] = select i1 %[[DATA_CMP]], i64 0, i64 %[[ALLOCATABLE_MEMBER_SIZE_CALC_5]]
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 0
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [8 x i64], ptr %.offload_sizes, i32 0, i32 0
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [9 x i64], ptr %.offload_sizes, i32 0, i32 0
 !CHECK: store i64 %[[DTYPE_DESC_SIZE_CALC_5]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 1
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 1
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 2
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 2
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 2
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 2
+!CHECK: store ptr %[[DTYPE_END_ADDR]], ptr %[[OFFLOAD_PTR_ARR]], align 8
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 3
+!CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 3
 !CHECK: store ptr %[[DTYPE_DESC_BASE_ADDR]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 3
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
 !CHECK: store ptr %[[DTYPE_DESC_BASE_ADDR]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 3
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 4
 !CHECK: store ptr %[[LOAD_BASE_ADDR]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 5
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 4
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 5
 !CHECK: store ptr %[[MAPPED_MEMBER_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 5
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 5
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 6
 !CHECK: store ptr %[[MAPPED_MEMBER_BASE_ADDR_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
 !CHECK: store ptr %[[MAPPED_MEMBER_BASE_ADDR_ACCESS]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 6
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 7
 !CHECK: store ptr %[[ARRAY_OFFSET]], ptr %[[OFFLOAD_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [8 x i64], ptr %.offload_sizes, i32 0, i32 6
+!CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [9 x i64], ptr %.offload_sizes, i32 0, i32 7
 !CHECK: store i64 %[[DATA_SEL]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
-!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
+!CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 8
 !CHECK: store ptr %[[DTYPE_DESC_ALLOCA_3]], ptr %[[BASE_PTR_ARR]], align 8
-!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [8 x ptr], ptr %.offload_ptrs, i32 0, i32 7
+!CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 8
 !CHECK: store ptr %[[NESTED_NONALLOCA_MEMBER_ACCESS]], ptr %[[OFFLOAD_PTR_ARR]], align 8
 
 !CHECK-LABEL: define {{.*}} @{{.*}}maptype_nested_derived_type_alloca{{.*}}
@@ -785,15 +795,20 @@ end subroutine mapType_common_block_members
 !CHECK: %[[BOUNDS_CALC:.*]] = sub i64 %[[BOUNDS_LD_2]], 1
 !CHECK: %[[OFF_PTR_CALC_0:.*]] = sub i64 %[[BOUNDS_LD]], 1
 !CHECK: %[[OFF_PTR_2:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]], ptr, [1 x i64] }, ptr %[[OFF_PTR_1]], i32 0, i32 0
+!CHECK: %[[GEP_LB:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]], ptr, [1 x i64] }, ptr %[[ALLOCA_0]], i32 0, i32 7, i64 0, i32 0
+!CHECK: %[[LOAD_LB:.*]] = load i64, ptr %[[GEP_LB]], align 8
+!CHECK: %[[GEP_UB:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]], ptr, [1 x i64] }, ptr %[[ALLOCA_0]], i32 0, i32 7, i64 0, i32 1
+!CHECK: %[[LOAD_UB:.*]] = load i64, ptr %[[GEP_UB]], align 8
 !CHECK: %[[GEP_DESC_PTR:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]], ptr, [1 x i64] }, ptr %[[ALLOCA_0]], i32 0, i32 0
-!CHECK: %[[LOAD_DESC_PTR:.*]] = load ptr, ptr %[[GEP_DESC_PTR]], align 8
-!CHECK: %[[SZ_CALC_1:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]], ptr, [1 x i64] }, ptr %[[ALLOCA_0]], i32 0, i32 7, i32 0, i32 2
-!CHECK: %[[SZ_CALC_2:.*]] = load i64, ptr %[[SZ_CALC_1]], align 8
-!CHECK: %[[SZ_CALC_3:.*]] = mul nsw i64 1, %[[SZ_CALC_2]]
-!CHECK: %[[SZ_CALC_4:.*]] = add nsw i64 %[[SZ_CALC_3]], 0
-!CHECK: %[[SZ_CALC_5:.*]] = getelementptr i8, ptr %[[LOAD_DESC_PTR]], i64 %[[SZ_CALC_4]]
-!CHECK: %[[SZ_CALC_6:.*]] = getelementptr %_QFmaptype_nested_derived_type_member_idxTvertexes, ptr %[[SZ_CALC_5]], i32 0, i32 2
-!CHECK: %[[OFF_PTR_4:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[SZ_CALC_6]], i32 0, i32 0
+!CHECK: %[[SZ_CALC_1:.*]] = load ptr, ptr %[[GEP_DESC_PTR]], align 8
+!CHECK: %[[SZ_CALC_2:.*]] = sub nsw i64 2, %[[LOAD_LB]]
+!CHECK: %[[SZ_CALC_3:.*]] = mul nsw i64 %[[SZ_CALC_2]], 1
+!CHECK: %[[SZ_CALC_4:.*]] = mul nsw i64 %[[SZ_CALC_3]], 1
+!CHECK: %[[SZ_CALC_5:.*]] = add nsw i64 %[[SZ_CALC_4]], 0
+!CHECK: %[[SZ_CALC_6:.*]] = mul nsw i64 1, %[[LOAD_UB]]
+!CHECK: %[[SZ_CALC_7:.*]] = getelementptr %_QFmaptype_nested_derived_type_member_idxTvertexes, ptr %[[SZ_CALC_1]], i64 %[[SZ_CALC_5]]
+!CHECK: %[[SZ_CALC_8:.*]] = getelementptr %_QFmaptype_nested_derived_type_member_idxTvertexes, ptr %[[SZ_CALC_7]], i32 0, i32 2
+!CHECK: %[[OFF_PTR_4:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[SZ_CALC_8]], i32 0, i32 0
 !CHECK: %[[OFF_PTR_CALC_1:.*]] = sub i64 %[[OFF_PTR_CALC_0]], 0
 !CHECK: %[[OFF_PTR_CALC_2:.*]] = add i64 %[[OFF_PTR_CALC_1]], 1
 !CHECK: %[[OFF_PTR_CALC_3:.*]] = mul i64 1, %[[OFF_PTR_CALC_2]]
@@ -838,7 +853,7 @@ end subroutine mapType_common_block_members
 !CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [7 x ptr], ptr %.offload_baseptrs, i32 0, i32 4
 !CHECK: store ptr %[[BASE_PTR_1]], ptr %[[BASE_PTR_ARR]], align 8
 !CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [7 x ptr], ptr %.offload_ptrs, i32 0, i32 4
-!CHECK: store ptr %[[SZ_CALC_6]], ptr %[[OFFLOAD_PTR_ARR]], align 8
+!CHECK: store ptr %[[SZ_CALC_8]], ptr %[[OFFLOAD_PTR_ARR]], align 8
 !CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [7 x ptr], ptr %.offload_baseptrs, i32 0, i32 5
 !CHECK: store ptr %[[BASE_PTR_1]], ptr %[[BASE_PTR_ARR]], align 8
 !CHECK: %[[OFFLOAD_PTR_ARR:.*]] = getelementptr inbounds [7 x ptr], ptr %.offload_ptrs, i32 0, i32 5
@@ -849,6 +864,7 @@ end subroutine mapType_common_block_members
 !CHECK: store ptr %[[ARR_OFFS_1]], ptr %[[OFFLOAD_PTR_ARR]], align 8
 !CHECK: %[[OFFLOAD_SIZE_ARR:.*]] = getelementptr inbounds [7 x i64], ptr %.offload_sizes, i32 0, i32 6
 !CHECK: store i64 %[[SIZE_SEL2]], ptr %[[OFFLOAD_SIZE_ARR]], align 8
+
 !CHECK-LABEL: define {{.*}} @{{.*}}maptype_common_block_{{.*}}
 !CHECK: %[[BASE_PTR_ARR:.*]] = getelementptr inbounds [1 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 !CHECK: store ptr @var_common_, ptr %[[BASE_PTR_ARR]], align 8

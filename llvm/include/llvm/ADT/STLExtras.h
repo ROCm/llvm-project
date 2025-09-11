@@ -58,26 +58,6 @@ template <typename T> struct make_const_ref {
   using type = std::add_lvalue_reference_t<std::add_const_t<T>>;
 };
 
-namespace detail {
-template <class, template <class...> class Op, class... Args> struct detector {
-  using value_t = std::false_type;
-};
-template <template <class...> class Op, class... Args>
-struct detector<std::void_t<Op<Args...>>, Op, Args...> {
-  using value_t = std::true_type;
-};
-} // end namespace detail
-
-/// Detects if a given trait holds for some set of arguments 'Args'.
-/// For example, the given trait could be used to detect if a given type
-/// has a copy assignment operator:
-///   template<class T>
-///   using has_copy_assign_t = decltype(std::declval<T&>()
-///                                                 = std::declval<const T&>());
-///   bool fooHasCopyAssign = is_detected<has_copy_assign_t, FooClass>::value;
-template <template <class...> class Op, class... Args>
-using is_detected = typename detail::detector<void, Op, Args...>::value_t;
-
 /// This class provides various trait information about a callable object.
 ///   * To access the number of arguments: Traits::num_args
 ///   * To access the type of an argument: Traits::arg_t<Index>
@@ -2340,7 +2320,8 @@ template <typename... Refs> struct enumerator_result<std::size_t, Refs...> {
   /// Returns the value at index `I`. This case covers references to the
   /// iteratees.
   template <std::size_t I, typename = std::enable_if_t<I != 0>>
-  friend decltype(auto) get(const enumerator_result &Result) {
+  friend decltype(auto)
+  get(const enumerator_result &Result) {
     // Note: This is a separate function from the other `get`, instead of an
     // `if constexpr` case, to work around an MSVC 19.31.31XXX compiler
     // (Visual Studio 2022 17.1) return type deduction bug.
@@ -2476,7 +2457,9 @@ auto enumerate(FirstRange &&First, RestRanges &&...Rest) {
 #ifndef NDEBUG
     // Note: Create an array instead of an initializer list to work around an
     // Apple clang 14 compiler bug.
-    size_t sizes[] = {range_size(First), range_size(Rest)...};
+    size_t sizes[] = {
+        static_cast<size_t>(std::distance(adl_begin(First), adl_end(First))),
+        static_cast<size_t>(std::distance(adl_begin(Rest), adl_end(Rest)))...};
     assert(all_equal(sizes) && "Ranges have different length");
 #endif
   }

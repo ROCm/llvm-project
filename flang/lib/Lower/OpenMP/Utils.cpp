@@ -10,15 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Utils.h"
+#include <flang/Lower/OpenMP/Utils.h>
 
 #include "ClauseFinder.h"
 #include "flang/Evaluate/fold.h"
 #include "flang/Lower/OpenMP/Clauses.h"
 #include <flang/Lower/AbstractConverter.h>
+#include <flang/Lower/ConvertExprToHLFIR.h>
 #include <flang/Lower/ConvertType.h>
 #include <flang/Lower/DirectivesCommon.h>
+#include <flang/Lower/OpenMP/Clauses.h>
 #include <flang/Lower/PFTBuilder.h>
+#include <flang/Lower/StatementContext.h>
+#include <flang/Lower/Support/PrivateReductionUtils.h>
+#include <flang/Lower/SymbolMap.h>
 #include <flang/Optimizer/Builder/FIRBuilder.h>
 #include <flang/Optimizer/Builder/Todo.h>
 #include <flang/Parser/openmp-utils.h>
@@ -28,6 +33,8 @@
 #include <flang/Semantics/type.h>
 #include <flang/Utils/OpenMP.h>
 #include <llvm/Support/CommandLine.h>
+#include <mlir/Analysis/TopologicalSortUtils.h>
+#include <mlir/Dialect/Arith/IR/Arith.h>
 
 #include <iterator>
 
@@ -180,16 +187,11 @@ static void generateArrayIndices(lower::AbstractConverter &converter,
   for (auto v : arr->subscript()) {
     if (std::holds_alternative<Triplet>(v.u))
       TODO(clauseLocation, "Triplet indexing in map clause is unsupported");
-
     auto expr = std::get<Fortran::evaluate::IndirectSubscriptIntegerExpr>(v.u);
     mlir::Value subscript =
         fir::getBase(converter.genExprValue(toEvExpr(expr.value()), stmtCtx));
-    mlir::Value one = firOpBuilder.createIntegerConstant(
-        clauseLocation, firOpBuilder.getIndexType(), 1);
-    subscript = firOpBuilder.createConvert(
-        clauseLocation, firOpBuilder.getIndexType(), subscript);
-    indices.push_back(mlir::arith::SubIOp::create(firOpBuilder, clauseLocation,
-                                                  subscript, one));
+    indices.push_back(firOpBuilder.createConvert(
+        clauseLocation, firOpBuilder.getIndexType(), subscript));
   }
 }
 
@@ -322,10 +324,42 @@ mlir::Value createParentSymAndGenIntermediateMaps(
                              subscriptIndices, objectList[i]);
         assert(!subscriptIndices.empty() &&
                "missing expected indices for map clause");
-        curValue = fir::CoordinateOp::create(
-            firOpBuilder, clauseLocation,
-            firOpBuilder.getRefType(arrType.getEleTy()), curValue,
-            subscriptIndices);
+        if (auto boxTy = llvm::dyn_cast<fir::BaseBoxType>(curValue.getType())) {
+          // To accommodate indexing into box types of all dimensions including
+          // negative dimensions we have to take into consideration the lower
+          // bounds and extents of the data (stored in the box) and convey it
+          // to the ArrayCoorOp so that it can appropriately access the element
+          // utilising the subscript we provide and the runtime sizes stored in
+          // the Box. To do so we need to generate a ShapeShiftOp which combines
+          // both the lb (ShiftOp) and extent (ShapeOp) of the Box, giving the
+          // ArrayCoorOp the spatial information it needs to calculate the
+          // underlying address.
+          mlir::Value shapeShift = Fortran::lower::getShapeShift(
+              firOpBuilder, clauseLocation, curValue);
+          auto addrOp =
+              fir::BoxAddrOp::create(firOpBuilder, clauseLocation, curValue);
+          curValue = fir::ArrayCoorOp::create(
+              firOpBuilder, clauseLocation,
+              firOpBuilder.getRefType(arrType.getEleTy()), addrOp, shapeShift,
+              /*slice=*/mlir::Value{}, subscriptIndices,
+              /*typeparms=*/mlir::ValueRange{});
+        } else {
+          // We're required to negate by one in the non-Box case as I believe
+          // we do not have the shape generated from the dimensions to help
+          // adjust the indexing.
+          // TODO/FIXME: This may need adjusted to support bounds of unusual
+          // dimensions, if that's the case then it is likely best to fold this
+          // branch into the above.
+          mlir::Value one = firOpBuilder.createIntegerConstant(
+              clauseLocation, firOpBuilder.getIndexType(), 1);
+          for (auto &v : subscriptIndices)
+            v = mlir::arith::SubIOp::create(firOpBuilder, clauseLocation, v,
+                                            one);
+          curValue = fir::CoordinateOp::create(
+              firOpBuilder, clauseLocation,
+              firOpBuilder.getRefType(arrType.getEleTy()), curValue,
+              subscriptIndices);
+        }
       }
     }
 
@@ -415,7 +449,6 @@ mlir::Value createParentSymAndGenIntermediateMaps(
       currentIndicesIdx++;
     }
   }
-
   return curValue;
 }
 
@@ -531,12 +564,12 @@ void insertChildMapInfoIntoParent(
       mapOp.setMembersIndexAttr(firOpBuilder.create2DI64ArrayAttr(
           indices.second.memberPlacementIndices));
     } else {
-      // NOTE: We take the map type of the first child, this may not
-      // be the correct thing to do, however, we shall see. For the moment
-      // it allows this to work with enter and exit without causing MLIR
-      // verification issues. The more appropriate thing may be to take
-      // the "main" map type clause from the directive being used.
-      uint64_t mapType = indices.second.memberMap[0].getMapType();
+      // NOTE: We do not assign default mapped parents a map type, as
+      // selecting a childs can result in the incorrect map type being
+      // applied to the parent and data being incorrectly moved to or
+      // from device.
+      uint64_t mapType = llvm::to_underlying(
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_NONE);
 
       llvm::SmallVector<mlir::Value> members;
       members.reserve(indices.second.memberMap.size());

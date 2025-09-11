@@ -1109,8 +1109,8 @@ void InstrInfoEmitter::run(raw_ostream &OS) {
         "CFDestroyOpcode, unsigned CatchRetOpcode, unsigned ReturnOpcode)\n"
      << "  : TargetInstrInfo(CFSetupOpcode, CFDestroyOpcode, CatchRetOpcode, "
         "ReturnOpcode) {\n"
-     << "  InitMCInstrInfo(" << TargetName << "Descs.Insts, " << TargetName
-     << "InstrNameIndices, " << TargetName << "InstrNameData, ";
+      << "  InitMCInstrInfo(" << TargetName << "Descs.Insts, " << TargetName
+    << "InstrNameIndices, " << TargetName << "InstrNameData, ";
   if (HasDeprecationFeatures)
     OS << TargetName << "InstrDeprecationFeatures, ";
   else

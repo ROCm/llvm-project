@@ -842,7 +842,8 @@ void Fortran::lower::defaultInitializeAtRuntime(
             Fortran::semantics::DeclTypeSpec::Category::TypeDerived &&
         !mlir::isa<fir::SequenceType>(symTy) &&
         !sym.test(Fortran::semantics::Symbol::Flag::OmpPrivate) &&
-        !sym.test(Fortran::semantics::Symbol::Flag::OmpFirstPrivate)) {
+        !sym.test(Fortran::semantics::Symbol::Flag::OmpFirstPrivate) &&
+        !Fortran::semantics::HasCUDAComponent(sym)) {
       std::string globalName = fir::NameUniquer::doGenerated(
           (converter.mangleName(*declTy->AsDerived()) + fir::kNameSeparator +
            fir::kDerivedTypeInitSuffix)
@@ -1354,7 +1355,6 @@ static void instantiateAlias(Fortran::lower::AbstractConverter &converter,
   mlir::Value bytePtr = fir::CoordinateOp::create(
       builder, loc, i8Ptr, storeAddr, mlir::ValueRange{offset});
   mlir::Value typedPtr = castAliasToPointer(builder, loc, symType, bytePtr);
-  converter.bindSymbolStorage(sym, {storeAddr, off});
   Fortran::lower::StatementContext stmtCtx;
   mapSymbolAttributes(converter, var, symMap, stmtCtx, typedPtr);
   // Default initialization is possible for equivalence members: see
@@ -1594,15 +1594,13 @@ void Fortran::lower::defineCommonBlocks(
 
 mlir::Value Fortran::lower::genCommonBlockMember(
     Fortran::lower::AbstractConverter &converter, mlir::Location loc,
-    const Fortran::semantics::Symbol &sym, mlir::Value commonValue,
-    std::size_t commonSize) {
+    const Fortran::semantics::Symbol &sym, mlir::Value commonValue) {
   fir::FirOpBuilder &builder = converter.getFirOpBuilder();
 
   std::size_t byteOffset = sym.GetUltimate().offset();
   mlir::IntegerType i8Ty = builder.getIntegerType(8);
   mlir::Type i8Ptr = builder.getRefType(i8Ty);
-  fir::SequenceType::Shape shape(1, commonSize);
-  mlir::Type seqTy = builder.getRefType(fir::SequenceType::get(shape, i8Ty));
+  mlir::Type seqTy = builder.getRefType(builder.getVarLenSeqTy(i8Ty));
   mlir::Value base = builder.createConvert(loc, seqTy, commonValue);
 
   mlir::Value offs =
@@ -1610,8 +1608,6 @@ mlir::Value Fortran::lower::genCommonBlockMember(
   mlir::Value varAddr = fir::CoordinateOp::create(builder, loc, i8Ptr, base,
                                                   mlir::ValueRange{offs});
   mlir::Type symType = converter.genType(sym);
-
-  converter.bindSymbolStorage(sym, {base, byteOffset});
 
   return Fortran::semantics::FindEquivalenceSet(sym) != nullptr
              ? castAliasToPointer(builder, loc, symType, varAddr)
@@ -1641,8 +1637,7 @@ static void instantiateCommon(Fortran::lower::AbstractConverter &converter,
     symMap.addSymbol(common, commonAddr);
   }
 
-  mlir::Value local =
-      genCommonBlockMember(converter, loc, varSym, commonAddr, common.size());
+  mlir::Value local = genCommonBlockMember(converter, loc, varSym, commonAddr);
   Fortran::lower::StatementContext stmtCtx;
   mapSymbolAttributes(converter, var, symMap, stmtCtx, local);
 }
@@ -1914,8 +1909,7 @@ static void genDeclareSymbol(Fortran::lower::AbstractConverter &converter,
       // Declare a local pointer variable.
       auto newBase = hlfir::DeclareOp::create(
           builder, loc, boxAlloc, name, /*shape=*/nullptr, lenParams,
-          /*dummy_scope=*/nullptr, /*storage=*/nullptr,
-          /*storage_offset=*/0, attributes);
+          /*dummy_scope=*/nullptr, attributes);
       mlir::Value nullAddr = builder.createNullConstant(
           loc, llvm::cast<fir::BaseBoxType>(ptrBoxType).getEleTy());
 
@@ -1945,10 +1939,9 @@ static void genDeclareSymbol(Fortran::lower::AbstractConverter &converter,
     mlir::Value dummyScope;
     if (converter.isRegisteredDummySymbol(sym))
       dummyScope = converter.dummyArgsScopeValue();
-    auto [storage, storageOffset] = converter.getSymbolStorage(sym);
-    auto newBase = hlfir::DeclareOp::create(
-        builder, loc, base, name, shapeOrShift, lenParams, dummyScope, storage,
-        storageOffset, attributes, dataAttr);
+    auto newBase =
+        hlfir::DeclareOp::create(builder, loc, base, name, shapeOrShift,
+                                 lenParams, dummyScope, attributes, dataAttr);
     symMap.addVariableDefinition(sym, newBase, force);
     return;
   }
@@ -2006,10 +1999,8 @@ void Fortran::lower::genDeclareSymbol(
       base = genPackArray(converter, sym, exv);
       dummyScope = converter.dummyArgsScopeValue();
     }
-    auto [storage, storageOffset] = converter.getSymbolStorage(sym);
-    hlfir::EntityWithAttributes declare =
-        hlfir::genDeclare(loc, builder, base, name, attributes, dummyScope,
-                          storage, storageOffset, dataAttr);
+    hlfir::EntityWithAttributes declare = hlfir::genDeclare(
+        loc, builder, base, name, attributes, dummyScope, dataAttr);
     symMap.addVariableDefinition(sym, declare.getIfVariableInterface(), force);
     return;
   }

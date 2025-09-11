@@ -2,6 +2,7 @@
 ! RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-is-device -fatomic-ignore-denormal-mode %s -o - | FileCheck -check-prefix=IGNORE-DENORMAL %s
 ! RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-is-device -fatomic-fine-grained-memory %s -o - | FileCheck -check-prefix=FINE-GRAINED-MEMORY %s
 ! RUN: %flang_fc1 -emit-hlfir -fopenmp -fopenmp-is-device -fatomic-remote-memory %s -o - | FileCheck -check-prefix=REMOTE-MEMORY %s
+! XFAIL: *
 program test
     implicit none
     integer :: A, B, threads

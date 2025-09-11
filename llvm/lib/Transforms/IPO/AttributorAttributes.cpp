@@ -8561,7 +8561,8 @@ protected:
   /// Mapping from *single* memory location kinds, e.g., LOCAL_MEM with the
   /// value of NO_LOCAL_MEM, to the accesses encountered for this memory kind.
   using AccessSet = SmallSet<AccessInfo, 2, AccessInfo>;
-  std::array<AccessSet *, llvm::CTLog2<VALID_STATE>()> AccessKind2Accesses;
+  std::array<AccessSet *, llvm::ConstantLog2<VALID_STATE>()>
+      AccessKind2Accesses;
 
   /// Categorize the pointer arguments of CB that might access memory in
   /// AccessedLoc and update the state and access map accordingly.
@@ -10626,14 +10627,24 @@ struct AACallEdgesCallSite : public AACallEdgesImpl {
       }
       return Change;
     }
-
+#ifndef  AAIndirectCallInfo_nolonger_breaks_snap_miteams
+    // Process callee metadata if available.
+    if (auto *MD = getCtxI()->getMetadata(LLVMContext::MD_callees)) {
+      for (const auto &Op : MD->operands()) {
+        Function *Callee = mdconst::dyn_extract_or_null<Function>(Op);
+        if (Callee)
+          addCalledFunction(Callee, Change);
+      }
+      return Change;
+    }
+#else
     if (CB->isIndirectCall())
       if (auto *IndirectCallAA = A.getAAFor<AAIndirectCallInfo>(
               *this, getIRPosition(), DepClassTy::OPTIONAL))
         if (IndirectCallAA->foreachCallee(
                 [&](Function *Fn) { return VisitValue(*Fn, CB); }))
           return Change;
-
+#endif
     // The most simple case.
     ProcessCalledOperand(CB->getCalledOperand(), CB);
 

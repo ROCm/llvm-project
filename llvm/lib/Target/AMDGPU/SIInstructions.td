@@ -369,6 +369,9 @@ defvar Operations = [
   WaveReduceOp<"max", "I64", i64, SGPR_64, VSrc_b64>,
   WaveReduceOp<"add", "U64", i64, SGPR_64, VSrc_b64>,
   WaveReduceOp<"sub", "U64", i64, SGPR_64, VSrc_b64>,
+  WaveReduceOp<"and", "B64", i64, SGPR_64, VSrc_b64>,
+  WaveReduceOp<"or", "B64", i64, SGPR_64, VSrc_b64>,
+  WaveReduceOp<"xor", "B64", i64, SGPR_64, VSrc_b64>,
 ];
 
 foreach Op = Operations in {
@@ -1084,6 +1087,13 @@ multiclass SI_SPILL_SGPR <RegisterClass sgpr_class> {
       let mayLoad = 0;
     }
 
+    def _CFI_SAVE : PseudoInstSI <
+      (outs),
+      (ins sgpr_class:$data, i32imm:$addr)> {
+      let mayStore = 1;
+      let mayLoad = 0;
+    }
+
     def _RESTORE : PseudoInstSI <
       (outs sgpr_class:$data),
       (ins i32imm:$addr)> {
@@ -1121,6 +1131,7 @@ def SI_SPILL_S32_TO_VGPR : PseudoInstSI <(outs VGPR_32:$vdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
+  let VALU = 1;
   let hasExtraDefRegAllocReq = 1;
   let Constraints = "$vdst = $vdst_in";
 }
@@ -1132,6 +1143,7 @@ def SI_RESTORE_S32_FROM_VGPR : PseudoInstSI <(outs SReg_32:$sdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
+  let VALU = 1;
   let hasExtraSrcRegAllocReq = 1;
 }
 } // End Spill = 1, VALU = 1, isConvergent = 1
@@ -1144,6 +1156,20 @@ multiclass SI_SPILL_VGPR <RegisterClass vgpr_class,
   let UseNamedOperandTable = 1, Spill = 1, VALU = 1,
        SchedRW = [WriteVMEM] in {
     def _SAVE : VPseudoInstSI <
+      (outs),
+      !con(
+        (ins vgpr_class:$vdata, i32imm:$vaddr,
+             SReg_32:$soffset, i32imm:$offset),
+        !if(HasMask, (ins SReg_32:$mask), (ins)))> {
+      let mayStore = 1;
+      let mayLoad = 0;
+      // (2 * 4) + (8 * num_subregs) bytes maximum
+      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), !add(UsesTmp, 3)), 8);
+      // Size field is unsigned char and cannot fit more.
+      let Size = !if(!le(MaxSize, 256), MaxSize, 252);
+    }
+
+    def _CFI_SAVE : VPseudoInstSI <
       (outs),
       !con(
         (ins vgpr_class:$vdata, i32imm:$vaddr,
@@ -2611,9 +2637,9 @@ def : AMDGPUPatIgnoreCopies <
                 (COPY_TO_REGCLASS VSrc_b32:$z, VGPR_32))
 >;
 
-// 64-bit version
+foreach vt = [i64, v2i32] in {
 def : AMDGPUPatIgnoreCopies <
-  (DivergentBinFrag<xor> i64:$z, (and i64:$x, (xor i64:$y, i64:$z))),
+  (DivergentBinFrag<xor> vt:$z, (and vt:$x, (xor vt:$y, vt:$z))),
   (REG_SEQUENCE VReg_64,
     (V_BFI_B32_e64 (i32 (EXTRACT_SUBREG VReg_64:$x, sub0)),
               (i32 (EXTRACT_SUBREG VReg_64:$y, sub0)),
@@ -2622,6 +2648,7 @@ def : AMDGPUPatIgnoreCopies <
               (i32 (EXTRACT_SUBREG VReg_64:$y, sub1)),
               (i32 (EXTRACT_SUBREG VReg_64:$z, sub1))), sub1)
 >;
+}
 
 def : AMDGPUPat <
   (fcopysign f32:$src0, f32:$src1),
@@ -4398,6 +4425,21 @@ def G_AMDGPU_BUFFER_LOAD_FORMAT_TFE : BufferLoadGenericInstruction;
 def G_AMDGPU_BUFFER_LOAD_FORMAT_D16 : BufferLoadGenericInstruction;
 def G_AMDGPU_TBUFFER_LOAD_FORMAT : TBufferLoadGenericInstruction;
 def G_AMDGPU_TBUFFER_LOAD_FORMAT_D16 : TBufferLoadGenericInstruction;
+
+class D16LoadGenericInstruction : AMDGPUGenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins ptype1:$addr, type0:$src);
+  let hasSideEffects = 0;
+  let mayLoad = 1;
+}
+
+def G_AMDGPU_LOAD_D16_LO : D16LoadGenericInstruction;
+def G_AMDGPU_LOAD_D16_LO_U8 : D16LoadGenericInstruction;
+def G_AMDGPU_LOAD_D16_LO_I8 : D16LoadGenericInstruction;
+def G_AMDGPU_LOAD_D16_HI : D16LoadGenericInstruction;
+def G_AMDGPU_LOAD_D16_HI_U8 : D16LoadGenericInstruction;
+def G_AMDGPU_LOAD_D16_HI_I8 : D16LoadGenericInstruction;
+
 
 class BufferStoreGenericInstruction : AMDGPUGenericInstruction {
   let OutOperandList = (outs);

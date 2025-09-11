@@ -13,6 +13,7 @@
 #include "llvm/Support/Format.h"
 #include <cassert>
 #include <cstdint>
+#include <vector>
 
 using namespace llvm;
 using namespace dwarf;
@@ -53,6 +54,8 @@ static bool printOp(const DWARFExpression::Operation *Op, raw_ostream &OS,
     return false;
   }
 
+  std::optional<unsigned> SubOpcode = Op->getSubCode();
+
   // In "register-only" mode, still show simple constant-valued locations.
   // This lets clients print annotations like "i = 0" when the location is
   // a constant (e.g. DW_OP_constu/consts ... DW_OP_stack_value).
@@ -63,7 +66,11 @@ static bool printOp(const DWARFExpression::Operation *Op, raw_ostream &OS,
     if ((Op->getCode() >= DW_OP_breg0 && Op->getCode() <= DW_OP_breg31) ||
         (Op->getCode() >= DW_OP_reg0 && Op->getCode() <= DW_OP_reg31) ||
         Op->getCode() == DW_OP_bregx || Op->getCode() == DW_OP_regx ||
-        Op->getCode() == DW_OP_regval_type) {
+        Op->getCode() == DW_OP_regval_type ||
+        Op->getCode() == DW_OP_LLVM_call_frame_entry_reg ||
+        Op->getCode() == DW_OP_LLVM_aspace_bregx ||
+        (SubOpcode && (*SubOpcode == DW_OP_LLVM_call_frame_entry_reg ||
+                       *SubOpcode == DW_OP_LLVM_aspace_bregx))) {
       if (prettyPrintRegisterOp(U, OS, DumpOpts, Op->getCode(),
                                 Op->getRawOperands()))
         return true;
@@ -95,10 +102,20 @@ static bool printOp(const DWARFExpression::Operation *Op, raw_ostream &OS,
     OS << Name;
   }
 
+  if (SubOpcode) {
+    StringRef SubName = SubOperationEncodingString(Op->getCode(), *SubOpcode);
+    assert(!SubName.empty() && "DW_OP SubOp has no name!");
+    OS << " " << SubName;
+  }
+
   if ((Op->getCode() >= DW_OP_breg0 && Op->getCode() <= DW_OP_breg31) ||
       (Op->getCode() >= DW_OP_reg0 && Op->getCode() <= DW_OP_reg31) ||
       Op->getCode() == DW_OP_bregx || Op->getCode() == DW_OP_regx ||
-      Op->getCode() == DW_OP_regval_type)
+      Op->getCode() == DW_OP_regval_type ||
+      Op->getCode() == DW_OP_LLVM_call_frame_entry_reg ||
+      Op->getCode() == DW_OP_LLVM_aspace_bregx ||
+      (SubOpcode && (*SubOpcode == DW_OP_LLVM_call_frame_entry_reg ||
+                     *SubOpcode == DW_OP_LLVM_aspace_bregx)))
     if (prettyPrintRegisterOp(U, OS, DumpOpts, Op->getCode(),
                               Op->getRawOperands()))
       return true;
@@ -110,10 +127,8 @@ static bool printOp(const DWARFExpression::Operation *Op, raw_ostream &OS,
       unsigned Signed = Size & DWARFExpression::Operation::SignBit;
 
       if (Size == DWARFExpression::Operation::SizeSubOpLEB) {
-        StringRef SubName = SubOperationEncodingString(
-            Op->getCode(), Op->getRawOperand(Operand));
-        assert(!SubName.empty() && "DW_OP SubOp has no name!");
-        OS << " " << SubName;
+        assert(Operand == 0);
+        assert(SubOpcode);
       } else if (Size == DWARFExpression::Operation::BaseTypeRef && U) {
         // For DW_OP_convert the operand may be 0 to indicate that conversion to
         // the generic type should be done. The same holds for
@@ -262,7 +277,7 @@ static bool printCompactDWARFExpr(
       break;
     }
     case dwarf::DW_OP_LLVM_user: {
-      assert(Op.getSubCode() == dwarf::DW_OP_LLVM_nop);
+      assert(Op.getSubCode());
       break;
     }
     default:
@@ -326,9 +341,17 @@ bool prettyPrintRegisterOp(DWARFUnit *U, raw_ostream &OS,
   uint64_t DwarfRegNum;
   unsigned OpNum = 0;
 
+  std::optional<unsigned> SubOpcode;
+  if (Opcode == DW_OP_LLVM_user)
+    SubOpcode = Operands[OpNum++];
+
   if (Opcode == DW_OP_bregx || Opcode == DW_OP_regx ||
-      Opcode == DW_OP_regval_type)
+      Opcode == DW_OP_regval_type ||
+      (SubOpcode && *SubOpcode == DW_OP_LLVM_aspace_bregx))
     DwarfRegNum = Operands[OpNum++];
+  else if (Opcode == DW_OP_LLVM_call_frame_entry_reg ||
+           (SubOpcode && *SubOpcode == DW_OP_LLVM_call_frame_entry_reg))
+    DwarfRegNum = Operands[OpNum];
   else if (Opcode >= DW_OP_breg0 && Opcode < DW_OP_bregx)
     DwarfRegNum = Opcode - DW_OP_breg0;
   else
@@ -337,7 +360,9 @@ bool prettyPrintRegisterOp(DWARFUnit *U, raw_ostream &OS,
   auto RegName = DumpOpts.GetNameForDWARFReg(DwarfRegNum, DumpOpts.IsEH);
   if (!RegName.empty()) {
     if ((Opcode >= DW_OP_breg0 && Opcode <= DW_OP_breg31) ||
-        Opcode == DW_OP_bregx)
+        Opcode == DW_OP_bregx ||
+        (Opcode == DW_OP_LLVM_aspace_bregx ||
+         (SubOpcode && *SubOpcode == DW_OP_LLVM_aspace_bregx)))
       OS << ' ' << RegName << format("%+" PRId64, Operands[OpNum]);
     else
       OS << ' ' << RegName.data();

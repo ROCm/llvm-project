@@ -34,12 +34,13 @@ typedef void (*CUhostFn)(void *userData);
 typedef struct CUstream_st *CUstream;
 typedef struct CUevent_st *CUevent;
 
-#define CU_DEVICE_INVALID ((CUdevice)(-2))
+// Required by NextGen plugin
+#define CU_DEVICE_INVALID ((CUdevice)-2)
 
 typedef unsigned long long CUmemGenericAllocationHandle_v1;
 typedef CUmemGenericAllocationHandle_v1 CUmemGenericAllocationHandle;
 
-#define CU_DEVICE_INVALID ((CUdevice)(-2))
+#define CU_DEVICE_INVALID ((CUdevice)-2)
 
 typedef enum CUmemAllocationGranularity_flags_enum {
   CU_MEM_ALLOC_GRANULARITY_MINIMUM = 0x0,

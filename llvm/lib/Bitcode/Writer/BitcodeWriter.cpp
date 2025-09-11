@@ -396,6 +396,11 @@ private:
                             SmallVectorImpl<uint64_t> &Record, unsigned Abbrev);
   void writeDILabel(const DILabel *N,
                     SmallVectorImpl<uint64_t> &Record, unsigned Abbrev);
+
+  void writeOneDIOpToRecord(SmallVectorImpl<uint64_t> &Record,
+                            DIOp::Variant Op);
+  void writeNewDIExpression(const DIExpression *N,
+                            SmallVectorImpl<uint64_t> &Record, unsigned Abbrev);
   void writeDIExpression(const DIExpression *N,
                          SmallVectorImpl<uint64_t> &Record, unsigned Abbrev);
   void writeDIGlobalVariableExpression(const DIGlobalVariableExpression *N,
@@ -891,6 +896,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_SANITIZE_TYPE;
   case Attribute::SanitizeMemory:
     return bitc::ATTR_KIND_SANITIZE_MEMORY;
+  case Attribute::SanitizedPaddedGlobal:
+    return bitc::ATTR_KIND_SANITIZED_PADDED_GLOBAL;
   case Attribute::SanitizeNumericalStability:
     return bitc::ATTR_KIND_SANITIZE_NUMERICAL_STABILITY;
   case Attribute::SanitizeRealtime:
@@ -1907,11 +1914,10 @@ void ModuleBitcodeWriter::writeDIEnumerator(const DIEnumerator *N,
 void ModuleBitcodeWriter::writeDIBasicType(const DIBasicType *N,
                                            SmallVectorImpl<uint64_t> &Record,
                                            unsigned Abbrev) {
-  const unsigned SizeIsMetadata = 0x2;
-  Record.push_back(SizeIsMetadata | (unsigned)N->isDistinct());
+  Record.push_back(N->isDistinct());
   Record.push_back(N->getTag());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
   Record.push_back(N->getEncoding());
   Record.push_back(N->getFlags());
@@ -1924,11 +1930,10 @@ void ModuleBitcodeWriter::writeDIBasicType(const DIBasicType *N,
 void ModuleBitcodeWriter::writeDIFixedPointType(
     const DIFixedPointType *N, SmallVectorImpl<uint64_t> &Record,
     unsigned Abbrev) {
-  const unsigned SizeIsMetadata = 0x2;
-  Record.push_back(SizeIsMetadata | (unsigned)N->isDistinct());
+  Record.push_back(N->isDistinct());
   Record.push_back(N->getTag());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
   Record.push_back(N->getEncoding());
   Record.push_back(N->getFlags());
@@ -1954,14 +1959,13 @@ void ModuleBitcodeWriter::writeDIFixedPointType(
 void ModuleBitcodeWriter::writeDIStringType(const DIStringType *N,
                                             SmallVectorImpl<uint64_t> &Record,
                                             unsigned Abbrev) {
-  const unsigned SizeIsMetadata = 0x2;
-  Record.push_back(SizeIsMetadata | (unsigned)N->isDistinct());
+  Record.push_back(N->isDistinct());
   Record.push_back(N->getTag());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
   Record.push_back(VE.getMetadataOrNullID(N->getStringLength()));
   Record.push_back(VE.getMetadataOrNullID(N->getStringLengthExp()));
   Record.push_back(VE.getMetadataOrNullID(N->getStringLocationExp()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
   Record.push_back(N->getEncoding());
 
@@ -1972,17 +1976,16 @@ void ModuleBitcodeWriter::writeDIStringType(const DIStringType *N,
 void ModuleBitcodeWriter::writeDIDerivedType(const DIDerivedType *N,
                                              SmallVectorImpl<uint64_t> &Record,
                                              unsigned Abbrev) {
-  const unsigned SizeIsMetadata = 0x2;
-  Record.push_back(SizeIsMetadata | (unsigned)N->isDistinct());
+  Record.push_back(N->isDistinct());
   Record.push_back(N->getTag());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
   Record.push_back(VE.getMetadataOrNullID(N->getFile()));
   Record.push_back(N->getLine());
   Record.push_back(VE.getMetadataOrNullID(N->getScope()));
   Record.push_back(VE.getMetadataOrNullID(N->getBaseType()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
-  Record.push_back(VE.getMetadataOrNullID(N->getRawOffsetInBits()));
+  Record.push_back(N->getOffsetInBits());
   Record.push_back(N->getFlags());
   Record.push_back(VE.getMetadataOrNullID(N->getExtraData()));
 
@@ -1994,6 +1997,7 @@ void ModuleBitcodeWriter::writeDIDerivedType(const DIDerivedType *N,
     Record.push_back(0);
 
   Record.push_back(VE.getMetadataOrNullID(N->getAnnotations().get()));
+  Record.push_back(static_cast<uint64_t>(N->getDWARFMemorySpace()));
 
   if (auto PtrAuthData = N->getPtrAuthData())
     Record.push_back(PtrAuthData->RawData);
@@ -2007,13 +2011,12 @@ void ModuleBitcodeWriter::writeDIDerivedType(const DIDerivedType *N,
 void ModuleBitcodeWriter::writeDISubrangeType(const DISubrangeType *N,
                                               SmallVectorImpl<uint64_t> &Record,
                                               unsigned Abbrev) {
-  const unsigned SizeIsMetadata = 0x2;
-  Record.push_back(SizeIsMetadata | (unsigned)N->isDistinct());
+  Record.push_back(N->isDistinct());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
   Record.push_back(VE.getMetadataOrNullID(N->getFile()));
   Record.push_back(N->getLine());
   Record.push_back(VE.getMetadataOrNullID(N->getScope()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
   Record.push_back(N->getFlags());
   Record.push_back(VE.getMetadataOrNullID(N->getBaseType()));
@@ -2030,18 +2033,16 @@ void ModuleBitcodeWriter::writeDICompositeType(
     const DICompositeType *N, SmallVectorImpl<uint64_t> &Record,
     unsigned Abbrev) {
   const unsigned IsNotUsedInOldTypeRef = 0x2;
-  const unsigned SizeIsMetadata = 0x4;
-  Record.push_back(SizeIsMetadata | IsNotUsedInOldTypeRef |
-                   (unsigned)N->isDistinct());
+  Record.push_back(IsNotUsedInOldTypeRef | (unsigned)N->isDistinct());
   Record.push_back(N->getTag());
   Record.push_back(VE.getMetadataOrNullID(N->getRawName()));
   Record.push_back(VE.getMetadataOrNullID(N->getFile()));
   Record.push_back(N->getLine());
   Record.push_back(VE.getMetadataOrNullID(N->getScope()));
   Record.push_back(VE.getMetadataOrNullID(N->getBaseType()));
-  Record.push_back(VE.getMetadataOrNullID(N->getRawSizeInBits()));
+  Record.push_back(N->getSizeInBits());
   Record.push_back(N->getAlignInBits());
-  Record.push_back(VE.getMetadataOrNullID(N->getRawOffsetInBits()));
+  Record.push_back(N->getOffsetInBits());
   Record.push_back(N->getFlags());
   Record.push_back(VE.getMetadataOrNullID(N->getElements().get()));
   Record.push_back(N->getRuntimeLang());
@@ -2313,6 +2314,7 @@ void ModuleBitcodeWriter::writeDIGlobalVariable(
   Record.push_back(VE.getMetadataOrNullID(N->getTemplateParams()));
   Record.push_back(N->getAlignInBits());
   Record.push_back(VE.getMetadataOrNullID(N->getAnnotations().get()));
+  Record.push_back(N->getDWARFMemorySpace());
 
   Stream.EmitRecord(bitc::METADATA_GLOBAL_VAR, Record, Abbrev);
   Record.clear();
@@ -2345,6 +2347,7 @@ void ModuleBitcodeWriter::writeDILocalVariable(
   Record.push_back(N->getFlags());
   Record.push_back(N->getAlignInBits());
   Record.push_back(VE.getMetadataOrNullID(N->getAnnotations().get()));
+  Record.push_back(N->getDWARFMemorySpace());
 
   Stream.EmitRecord(bitc::METADATA_LOCAL_VAR, Record, Abbrev);
   Record.clear();
@@ -2368,9 +2371,90 @@ void ModuleBitcodeWriter::writeDILabel(
   Record.clear();
 }
 
+void ModuleBitcodeWriter::writeOneDIOpToRecord(
+    SmallVectorImpl<uint64_t> &Record, DIOp::Variant Op) {
+  Record.push_back(DIOp::getBitcodeID(Op));
+  std::visit(
+      makeVisitor(
+#define HANDLE_OP0(NAME) [](DIOp::NAME) {},
+#include "llvm/IR/DIExprOps.def"
+#undef HANDLE_OP0
+          [&](DIOp::Referrer Referrer) {
+            Record.push_back(VE.getTypeID(Referrer.getResultType()));
+          },
+          [&](DIOp::Arg Arg) {
+            Record.push_back(VE.getTypeID(Arg.getResultType()));
+            Record.push_back(Arg.getIndex());
+          },
+          [&](DIOp::TypeObject TypeObject) {
+            Record.push_back(VE.getTypeID(TypeObject.getResultType()));
+          },
+          [&](DIOp::Constant Constant) {
+            Record.push_back(
+                VE.getTypeID(Constant.getLiteralValue()->getType()));
+            Record.push_back(VE.getValueID(Constant.getLiteralValue()));
+          },
+          [&](DIOp::Convert Convert) {
+            Record.push_back(VE.getTypeID(Convert.getResultType()));
+          },
+          [&](DIOp::ZExt ZExt) {
+            Record.push_back(VE.getTypeID(ZExt.getResultType()));
+          },
+          [&](DIOp::SExt SExt) {
+            Record.push_back(VE.getTypeID(SExt.getResultType()));
+          },
+          [&](DIOp::Reinterpret Reinterpret) {
+            Record.push_back(VE.getTypeID(Reinterpret.getResultType()));
+          },
+          [&](DIOp::BitOffset BitOffset) {
+            Record.push_back(VE.getTypeID(BitOffset.getResultType()));
+          },
+          [&](DIOp::ByteOffset ByteOffset) {
+            Record.push_back(VE.getTypeID(ByteOffset.getResultType()));
+          },
+          [&](DIOp::Composite Composite) {
+            Record.push_back(VE.getTypeID(Composite.getResultType()));
+            Record.push_back(Composite.getCount());
+          },
+          [&](DIOp::Extend Extend) { Record.push_back(Extend.getCount()); },
+          [&](DIOp::AddrOf AddrOf) {
+            Record.push_back(AddrOf.getAddressSpace());
+          },
+          [&](DIOp::Deref Deref) {
+            Record.push_back(VE.getTypeID(Deref.getResultType()));
+          },
+          [&](DIOp::PushLane PushLane) {
+            Record.push_back(VE.getTypeID(PushLane.getResultType()));
+          },
+          [&](DIOp::Fragment Fragment) {
+            Record.push_back(Fragment.getBitOffset());
+            Record.push_back(Fragment.getBitSize());
+          }),
+      Op);
+}
+
+void ModuleBitcodeWriter::writeNewDIExpression(
+    const DIExpression *N, SmallVectorImpl<uint64_t> &Record, unsigned Abbrev) {
+  assert(N->holdsNewElements());
+
+  // Use version 16 for DIOp DIExpressions. This is just an arbitrary large
+  // number to avoid any merge issues if the upstream version increases from 3.
+  const uint64_t Version = 16 << 1;
+  Record.push_back((uint64_t)N->isDistinct() | Version);
+  auto Elements = N->getNewElementsRef();
+  for (auto &Elem : *Elements)
+    writeOneDIOpToRecord(Record, Elem);
+
+  Stream.EmitRecord(bitc::METADATA_EXPRESSION, Record, Abbrev);
+  Record.clear();
+}
+
 void ModuleBitcodeWriter::writeDIExpression(const DIExpression *N,
                                             SmallVectorImpl<uint64_t> &Record,
                                             unsigned Abbrev) {
+  if (N->holdsNewElements())
+    return writeNewDIExpression(N, Record, Abbrev);
+
   Record.reserve(N->getElements().size() + 1);
   const uint64_t Version = 3 << 1;
   Record.push_back((uint64_t)N->isDistinct() | Version);

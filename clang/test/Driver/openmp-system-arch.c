@@ -1,5 +1,4 @@
 // REQUIRES: shell
-// XFAIL: target={{.*}}-zos{{.*}}
 
 // RUN: mkdir -p %t
 // RUN: cp %S/Inputs/amdgpu-arch/amdgpu_arch_fail %t/
@@ -27,10 +26,7 @@
 // NO-OUTPUT-ERROR: error: cannot determine openmp architecture
 
 // case when amdgpu-arch succeeds.
-// RUN:   %clang -### --target=x86_64-unknown-linux-gnu -nogpulib -fopenmp=libomp --offload-arch=native \
-// RUN:     --nvptx-arch-tool=%t/nvptx_arch_fail --amdgpu-arch-tool=%t/amdgpu_arch_gfx906 %s 2>&1 \
-// RUN:   | FileCheck %s --check-prefix=ARCH-GFX906
-// RUN:   %clang -### --target=x86_64-unknown-linux-gnu -nogpulib -fopenmp=libomp -fopenmp-targets=amdgcn-amd-amdhsa \
+// RUN:   %clang -### --target=x86_64-unknown-linux-gnu -nogpulib -fopenmp=libomp --offload-new-driver --offload-arch=native \
 // RUN:     --nvptx-arch-tool=%t/nvptx_arch_fail --amdgpu-arch-tool=%t/amdgpu_arch_gfx906 %s 2>&1 \
 // RUN:   | FileCheck %s --check-prefix=ARCH-GFX906
 // ARCH-GFX906: "-cc1" "-triple" "amdgcn-amd-amdhsa"{{.*}}"-target-cpu" "gfx906"

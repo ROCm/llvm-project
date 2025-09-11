@@ -1478,7 +1478,12 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
   }
 
   if (Target.getTriple().isAMDGPU() ||
-      (AuxTarget && AuxTarget->getTriple().isAMDGPU())) {
+      (Target.getTriple().isSPIRV() &&
+       Target.getTriple().getVendor() == llvm::Triple::AMD) ||
+      (AuxTarget &&
+       (AuxTarget->getTriple().isAMDGPU() ||
+        ((AuxTarget->getTriple().isSPIRV() &&
+          AuxTarget->getTriple().getVendor() == llvm::Triple::AMD))))) {
 #define AMDGPU_TYPE(Name, Id, SingletonId, Width, Align)                       \
   InitBuiltinType(SingletonId, BuiltinType::Id);
 #include "clang/Basic/AMDGPUTypes.def"
@@ -12658,6 +12663,10 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
       Type = Context.AMDGPUBufferRsrcTy;
       break;
     }
+    case 'c': {
+      Type = Context.AMDGPUFeaturePredicateTy;
+      break;
+    }
     default:
       llvm_unreachable("Unexpected target builtin type");
     }
@@ -14195,7 +14204,11 @@ static QualType getCommonNonSugarTypeNode(const ASTContext &Ctx, const Type *X,
     FunctionProtoType::ExtProtoInfo EPIX = FX->getExtProtoInfo(),
                                     EPIY = FY->getExtProtoInfo();
     assert(EPIX.ExtInfo == EPIY.ExtInfo);
-    assert(EPIX.ExtParameterInfos == EPIY.ExtParameterInfos);
+    assert(!EPIX.ExtParameterInfos == !EPIY.ExtParameterInfos);
+    assert(!EPIX.ExtParameterInfos ||
+           llvm::equal(
+               llvm::ArrayRef(EPIX.ExtParameterInfos, FX->getNumParams()),
+               llvm::ArrayRef(EPIY.ExtParameterInfos, FY->getNumParams())));
     assert(EPIX.RefQualifier == EPIY.RefQualifier);
     assert(EPIX.TypeQuals == EPIY.TypeQuals);
     assert(EPIX.Variadic == EPIY.Variadic);

@@ -1,11 +1,13 @@
 // Make sure that __cpuidex in cpuid.h doesn't conflict with the MS
-// extensions built in by ensuring compilation succeeds:
 // RUN: %clang_cc1 %s -DIS_STATIC="" -ffreestanding -fms-extensions -fms-compatibility -fms-compatibility-version=19.00 -triple x86_64-pc-windows-msvc -emit-llvm -o -
 // RUN: %clang_cc1 %s -DIS_STATIC="" -ffreestanding -triple x86_64-w64-windows-gnu -fms-extensions -emit-llvm -o -
 
 // Ensure that we do not run into conflicts when offloading.
 // RUN: %clang_cc1 %s -DIS_STATIC=static -ffreestanding -fopenmp -fopenmp-is-target-device -aux-triple x86_64-unknown-linux-gnu
 // RUN: %clang_cc1 -DIS_STATIC="" -triple nvptx64-nvidia-cuda -aux-triple x86_64-unknown-linux-gnu -aux-target-cpu x86-64 -fcuda-is-device -x cuda %s -o -
+// RUN: %clang_cc1 -DIS_STATIC="" -triple amdgcn-amd-amdhsa -aux-triple x86_64-unknown-linux-gnu -aux-target-cpu x86-64 -fcuda-is-device -x cuda %s -o -
+// RUN: %clang_cc1 -DIS_STATIC="" -triple spirv64 -aux-triple x86_64-unknown-linux-gnu -aux-target-cpu x86-64 -fcuda-is-device -x cuda %s -o -
+// RUN: %clang_cc1 -DIS_STATIC="" -triple spirv64 -aux-triple x86_64-unknown-linux-gnu -aux-target-cpu x86-64 -fsycl-is-device %s -o -
 
 typedef __SIZE_TYPE__ size_t;
 

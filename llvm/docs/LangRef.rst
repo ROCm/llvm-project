@@ -3388,6 +3388,10 @@ the object's lifetime. A stack object's lifetime can be explicitly specified
 using :ref:`llvm.lifetime.start <int_lifestart>` and
 :ref:`llvm.lifetime.end <int_lifeend>` intrinsic function calls.
 
+As an exception to the above, loading from a stack object outside its lifetime
+is not undefined behavior and returns a poison value instead. Storing to it is
+still undefined behavior.
+
 .. _pointeraliasing:
 
 Pointer Aliasing Rules
@@ -6238,21 +6242,22 @@ metadata nodes are related to debug info.
 DICompileUnit
 """""""""""""
 
-``DICompileUnit`` nodes represent a compile unit. The ``enums:``,
-``retainedTypes:``, ``globals:``, ``imports:`` and ``macros:`` fields are tuples
-containing the debug info to be emitted along with the compile unit, regardless
-of code optimizations (some nodes are only emitted if there are references to
-them from instructions). The ``debugInfoForProfiling:`` field is a boolean
-indicating whether or not line-table discriminators are updated to provide
-more-accurate debug info for profiling results.
+``DICompileUnit`` nodes represent a compile unit. ``DICompileUnit`` nodes must
+be ``distinct``. The ``enums:``, ``retainedTypes:``, ``globals:``, ``imports:``
+and ``macros:`` fields are tuples containing the debug info to be emitted along
+with the compile unit, regardless of code optimizations (some nodes are only
+emitted if there are references to them from instructions). The
+``debugInfoForProfiling:`` field is a boolean indicating whether or not
+line-table discriminators are updated to provide more-accurate debug info for
+profiling results.
 
 .. code-block:: text
 
-    !0 = !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang",
-                        isOptimized: true, flags: "-O2", runtimeVersion: 2,
-                        splitDebugFilename: "abc.debug", emissionKind: FullDebug,
-                        enums: !2, retainedTypes: !3, globals: !4, imports: !5,
-                        macros: !6, dwoId: 0x0abcd)
+    !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang",
+                                 isOptimized: true, flags: "-O2", runtimeVersion: 2,
+                                 splitDebugFilename: "abc.debug", emissionKind: FullDebug,
+                                 enums: !2, retainedTypes: !3, globals: !4, imports: !5,
+                                 macros: !6, dwoId: 0x0abcd)
 
 Compile unit descriptors provide the root scope for objects declared in a
 specific compilation unit. File descriptors are defined using this scope.  These
@@ -14631,6 +14636,8 @@ Semantics:
       The return value type of :ref:`llvm.get.dynamic.area.offset <int_get_dynamic_area_offset>`
       must match the target's :ref:`alloca address space <alloca_addrspace>` type.
 
+.. _int_prefetch:
+
 '``llvm.prefetch``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -16652,7 +16659,7 @@ using a less accurate calculation.
 
 
 '``llvm.ldexp.*``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""
@@ -24033,8 +24040,7 @@ indexed by ``i``,  and ``%base``, ``%n`` are the two arguments to
 ``llvm.get.active.lane.mask.*``, ``%icmp`` is an integer compare and ``ult``
 the unsigned less-than comparison operator.  Overflow cannot occur in
 ``(%base + i)`` and its comparison against ``%n`` as it is performed in integer
-numbers and not in machine numbers.  If ``%n`` is ``0``, then the result is a
-poison value. The above is equivalent to:
+numbers and not in machine numbers.  The above is equivalent to:
 
 ::
 
@@ -27919,7 +27925,7 @@ unspecified sequence of rounding operations.
 
 
 '``llvm.experimental.constrained.ldexp``' Intrinsic
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Syntax:
 """""""

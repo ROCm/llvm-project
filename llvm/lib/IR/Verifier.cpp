@@ -631,7 +631,7 @@ private:
   void verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
                            const Value *V, bool IsIntrinsic, bool IsInlineAsm);
   void verifyFunctionMetadata(ArrayRef<std::pair<unsigned, MDNode *>> MDs);
-
+  void verifyUnknownProfileMetadata(MDNode *MD);
   void visitConstantExprsRecursively(const Constant *EntryC);
   void visitConstantExpr(const ConstantExpr *CE);
   void visitConstantPtrAuth(const ConstantPtrAuth *CPA);
@@ -907,6 +907,14 @@ void Verifier::visitGlobalVariable(const GlobalVariable &GV) {
   SmallVector<MDNode *, 1> MDs;
   GV.getMetadata(LLVMContext::MD_dbg, MDs);
   for (auto *MD : MDs) {
+    if (auto *GVE = dyn_cast<DIGlobalVariableExpression>(MD)) {
+      if (auto *E = dyn_cast_or_null<DIExpression>(GVE->getRawExpression())) {
+        SmallVector<const Value *> Arguments{&GV};
+        DIExpressionEnv Env{GVE->getVariable(), Arguments, DL};
+        CheckDI(E->isValid(Env, dbgs()),
+                "invalid DIExpression in DIGlobalVariableExpression", &GV);
+      }
+    }
     if (auto *GVE = dyn_cast<DIGlobalVariableExpression>(MD))
       visitDIGlobalVariableExpression(*GVE);
     else
@@ -1331,6 +1339,14 @@ void Verifier::visitDIDerivedType(const DIDerivedType &N) {
   CheckDI(!Size || isa<ConstantAsMetadata>(Size) || isa<DIVariable>(Size) ||
               isa<DIExpression>(Size),
           "SizeInBits must be a constant or DIVariable or DIExpression");
+
+  if (N.getDWARFMemorySpace() != dwarf::DW_MSPACE_LLVM_none) {
+    CheckDI(N.getTag() == dwarf::DW_TAG_pointer_type ||
+                N.getTag() == dwarf::DW_TAG_reference_type ||
+                N.getTag() == dwarf::DW_TAG_rvalue_reference_type,
+            "DWARF memory space only applies to pointer or reference types",
+            &N);
+  }
 }
 
 /// Detect mutually exclusive flags.
@@ -2515,19 +2531,31 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
                   V);
   }
 }
+void Verifier::verifyUnknownProfileMetadata(MDNode *MD) {
+  Check(MD->getNumOperands() == 2,
+        "'unknown' !prof should have a single additional operand", MD);
+  auto *PassName = dyn_cast<MDString>(MD->getOperand(1));
+  Check(PassName != nullptr,
+        "'unknown' !prof should have an additional operand of type "
+        "string");
+  Check(!PassName->getString().empty(),
+        "the 'unknown' !prof operand should not be an empty string");
+}
 
 void Verifier::verifyFunctionMetadata(
     ArrayRef<std::pair<unsigned, MDNode *>> MDs) {
   for (const auto &Pair : MDs) {
     if (Pair.first == LLVMContext::MD_prof) {
       MDNode *MD = Pair.second;
-      // We may have functions that are synthesized by the compiler, e.g. in
-      // WPD, that we can't currently determine the entry count.
-      if (isExplicitlyUnknownProfileMetadata(*MD))
-        continue;
-
       Check(MD->getNumOperands() >= 2,
             "!prof annotations should have no less than 2 operands", MD);
+      // We may have functions that are synthesized by the compiler, e.g. in
+      // WPD, that we can't currently determine the entry count.
+      if (MD->getOperand(0).equalsStr(
+              MDProfLabels::UnknownBranchWeightsMarker)) {
+        verifyUnknownProfileMetadata(MD);
+        continue;
+      }
 
       // Check first operand.
       Check(MD->getOperand(0) != nullptr, "first operand should not be null",
@@ -5054,8 +5082,7 @@ void Verifier::visitProfMetadata(Instruction &I, MDNode *MD) {
           "'unknown' !prof should only appear on instructions on which "
           "'branch_weights' would",
           MD);
-    Check(MD->getNumOperands() == 1,
-          "'unknown' !prof should have no additional operands", MD);
+    verifyUnknownProfileMetadata(MD);
     return;
   }
 
@@ -6982,6 +7009,13 @@ void Verifier::visit(DbgVariableRecord &DVR) {
           F);
   visitMDNode(*DVR.getExpression(), AreDebugLocsAllowed::No);
 
+  // This is redundant with the visitMDNode check above, but here we can include
+  // arguments for DIOp-based expression checking.
+  SmallVector<const Value *> Arguments{DVR.location_ops()};
+  DIExpressionEnv ExprEnv{DVR.getVariable(), Arguments, DL};
+  CheckDI(DVR.getExpression()->isValid(ExprEnv, dbgs()),
+          "invalid #dbg record expression", &DVR, DVR.getRawExpression());
+
   if (DVR.isDbgAssign()) {
     CheckDI(isa_and_nonnull<DIAssignID>(DVR.getRawAssignID()),
             "invalid #dbg_assign DIAssignID", &DVR, DVR.getRawAssignID(), BB,
@@ -7335,6 +7369,9 @@ void Verifier::verifyFragmentExpression(const DIVariable &V,
   CheckDI(FragSize + FragOffset <= *VarSize,
           "fragment is larger than or outside of variable", Desc, &V);
   CheckDI(FragSize != *VarSize, "fragment covers entire variable", Desc, &V);
+
+  auto MSpace = V.getDWARFMemorySpace();
+  CheckDI(MSpace <= dwarf::DW_MSPACE_LLVM_hi_user, "invalid memory space", &V);
 }
 
 void Verifier::verifyFnArgs(const DbgVariableRecord &DVR) {

@@ -3,6 +3,7 @@ set(LLVM_LINK_COMPONENTS
   DebugInfoDWARFLowLevel
   AllTargetsDescs
   AllTargetsInfos
+  BinaryFormat
   MC
   Object
   Support

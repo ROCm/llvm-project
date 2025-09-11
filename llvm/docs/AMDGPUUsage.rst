@@ -27,6 +27,7 @@ User Guide for AMDGPU Backend
    AMDGPUInstructionSyntax
    AMDGPUInstructionNotation
    AMDGPUDwarfExtensionsForHeterogeneousDebugging
+   AMDGPULLVMExtensionsForHeterogeneousDebugging
    AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack/AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack
 
 Introduction
@@ -1455,7 +1456,6 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
                                                    Returns a pair for the swapped registers. The first element of the return corresponds
                                                    to the swapped element of the first argument.
 
-
   llvm.amdgcn.permlane32.swap                      Provide direct access to `v_permlane32_swap_b32` instruction on supported targets.
                                                    Swaps the values across lanes of first 2 operands. Rows 2 and 3 of the first operand are
                                                    swapped with rows 0 and 1 of the second operand (one row is 16 lanes).
@@ -1476,6 +1476,25 @@ The AMDGPU backend implements the following LLVM IR intrinsics.
                                                    - `v_mov_b32 <dest> <old>`
                                                    - `v_mov_b32 <dest> <src> <dpp_ctrl> <row_mask> <bank_mask> <bound_ctrl>`
 
+  :ref:`llvm.prefetch <int_prefetch>`              Implemented on gfx1250, ignored on earlier targets.
+                                                   First argument is flat, global, or constant address space pointer.
+                                                   Any other address space is not supported.
+                                                   On gfx125x generates flat_prefetch_b8 or global_prefetch_b8 and brings data to GL2.
+                                                   Second argument is rw and currently ignored. Can be 0 or 1.
+                                                   Third argument is locality, 0-3. Translates to memory scope:
+
+                                                   * 0 - SCOPE_SYS
+                                                   * 1 - SCOPE_DEV
+                                                   * 2 - SCOPE_SE
+                                                   * 3 - SCOPE_SE
+
+                                                   Note that SCOPE_CU is not generated and not safe on an invalid address.
+                                                   Fourth argument is cache type:
+
+                                                   * 0 - Instruction cache, currently ignored and no code is generated.
+                                                   * 1 - Data cache.
+
+                                                   Instruction cache prefetches are unsafe on invalid address.
   ==============================================   ==========================================================
 
 .. TODO::
@@ -2838,6 +2857,10 @@ used by tools such as debuggers and profilers. It uses features defined in
 :doc:`AMDGPUDwarfExtensionsForHeterogeneousDebugging` that are made available in
 DWARF Version 4 and DWARF Version 5 as an LLVM vendor extension.
 
+AMDGPU uses LLVM features defined in
+:doc:`AMDGPULLVMExtensionsForHeterogeneousDebugging` to implement the generation
+of DWARF.
+
 This section defines the AMDGPU target architecture specific DWARF mappings.
 
 .. _amdgpu-dwarf-register-identifier:
@@ -3487,20 +3510,6 @@ temporarily updated. The location list expression created for this artificial
 variable is used to define the value of the ``DW_AT_LLVM_active_lane``
 attribute.
 
-``DW_AT_LLVM_augmentation``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For AMDGPU, the ``DW_AT_LLVM_augmentation`` attribute of a compilation unit
-debugger information entry has the following value for the augmentation string:
-
-::
-
-  [amdgpu:v0.0]
-
-The "vX.Y" specifies the major X and minor Y version number of the AMDGPU
-extensions used in the DWARF of the compilation unit. The version number
-conforms to [SEMVER]_.
-
 Call Frame Information
 ----------------------
 
@@ -3556,37 +3565,6 @@ Accelerated Access
 ------------------
 
 See DWARF Version 5 section 6.1.
-
-Lookup By Name Section Header
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-See DWARF Version 5 section 6.1.1.4.1 and :ref:`amdgpu-dwarf-lookup-by-name`.
-
-For AMDGPU the lookup by name section header table:
-
-``augmentation_string_size`` (uword)
-
-  Set to the length of the ``augmentation_string`` value which is always a
-  multiple of 4.
-
-``augmentation_string`` (sequence of UTF-8 characters)
-
-  Contains the following UTF-8 string null padded to a multiple of 4 bytes:
-
-  ::
-
-    [amdgpu:v0.0]
-
-  The "vX.Y" specifies the major X and minor Y version number of the AMDGPU
-  extensions used in the DWARF of this index. The version number conforms to
-  [SEMVER]_.
-
-  .. note::
-
-    This is different to the DWARF Version 5 definition that requires the first
-    4 characters to be the vendor ID. But this is consistent with the other
-    augmentation strings and does allow multiple vendor contributions. However,
-    backwards compatibility may be more desirable.
 
 Lookup By Address Section Header
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

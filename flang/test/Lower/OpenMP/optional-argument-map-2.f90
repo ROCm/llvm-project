@@ -1,4 +1,5 @@
-!RUN: %flang_fc1 -emit-hlfir -fopenmp -mmlir --enable-delayed-privatization-staging=false %s -o - | FileCheck %s  --check-prefixes=CHECK,CHECK-NO-FPRIV
+! NOTE: Do not check for false delayed privatization flag until all enable-delayed-privatization flags are switched on in amd-staging
+!RUN %flang_fc1 -emit-hlfir -fopenmp -mmlir --enable-delayed-privatization-staging=false %s -o - | FileCheck %s  --check-prefixes=CHECK,CHECK-NO-FPRIV
 !RUN: %flang_fc1 -emit-hlfir -fopenmp -mmlir --enable-delayed-privatization-staging=true %s -o - | FileCheck %s  --check-prefixes=CHECK,CHECK-FPRIV
 
 module mod

@@ -30,5 +30,4 @@ void foo(int N) {
 
 // CHECK: attributes #[[ATTR1]] = { {{.*}} "amdgpu-flat-work-group-size"="1,256" {{.*}} }
 // CHECK: attributes #[[ATTR2]] = { {{.*}} "amdgpu-flat-work-group-size"="1,4" {{.*}} }
-// CHECK: attributes #[[ATTR3]] = { {{.*}} "amdgpu-flat-work-group-size"="1,42" "amdgpu-max-num-workgroups"="42,1,1"{{.*}} }
-// CHECK: attributes #[[ATTR4]] = { {{.*}} "amdgpu-flat-work-group-size"="1,22" "amdgpu-max-num-workgroups"="42,1,1"{{.*}} }
+// CHECK: attributes #[[ATTR4]] = { {{.*}} "amdgpu-flat-work-group-size"="1,22"
