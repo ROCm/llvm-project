@@ -45,16 +45,10 @@
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
 
 using namespace Fortran::lower::omp;
 using namespace Fortran::common::openmp;
 using namespace Fortran::utils::openmp;
-using namespace Fortran::semantics;
 
 //===----------------------------------------------------------------------===//
 // Code generation helper functions
