@@ -2279,566 +2279,73 @@ static void genUnrollOp(Fortran::lower::AbstractConverter &converter,
   mlir::omp::UnrollHeuristicOp::create(firOpBuilder, loc, cli);
 }
 
-static 
-void  collectLoops(    lower::pft::Evaluation &eval, 
-      llvm::SmallVectorImpl< lower::pft::Evaluation* > &result,
-   int numLoops) {
-
-
-
-
+static void
+collectLoops(lower::pft::Evaluation &eval,
+             llvm::SmallVectorImpl<lower::pft::Evaluation *> &result,
+             int numLoops) {
 
   std::size_t loopVarTypeSize = 0;
-    lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
+  lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
   for (auto i : llvm::seq<int>(numLoops)) {
-    lower::pft::Evaluation *doLoop = &doConstructEval->getFirstNestedEvaluation();
+    lower::pft::Evaluation *doLoop =
+        &doConstructEval->getFirstNestedEvaluation();
     auto *doStmt = doLoop->getIf<parser::NonLabelDoStmt>();
     assert(doStmt && "Expected do loop to be in the nested evaluation");
-    const auto &loopControl = std::get<std::optional<parser::LoopControl>>(doStmt->t);
-    const parser::LoopControl::Bounds *bounds =  std::get_if<parser::LoopControl::Bounds>(&loopControl->u);
+    const auto &loopControl =
+        std::get<std::optional<parser::LoopControl>>(doStmt->t);
+    const parser::LoopControl::Bounds *bounds =
+        std::get_if<parser::LoopControl::Bounds>(&loopControl->u);
     assert(bounds && "Expected bounds for worksharing do loop");
     lower::StatementContext stmtCtx;
 
-
     result.push_back(doConstructEval);
 
-
-    doConstructEval =  &*std::next(doConstructEval->getNestedEvaluations().begin());
+    doConstructEval =
+        &*std::next(doConstructEval->getNestedEvaluations().begin());
   };
 }
 
-
-static void enterDoLoop( lower::pft::Evaluation * doStmt) {
-}
-
-
-
-static void leaveDoLoop( lower::pft::Evaluation *doStmt) {
-}
-
-
-  #if 0
-
-// copied from Bridge.cpp
-namespace {
-struct IncrementLoopInfo {
-  template <typename T>
-  explicit IncrementLoopInfo(Fortran::semantics::Symbol &sym, const T &lower,
-                             const T &upper, const std::optional<T> &step,
-                             bool isConcurrent = false)
-      : loopVariableSym{&sym}, lowerExpr{Fortran::semantics::GetExpr(lower)},
-        upperExpr{Fortran::semantics::GetExpr(upper)},
-        stepExpr{Fortran::semantics::GetExpr(step)},
-        isConcurrent{isConcurrent} {}
-
-  IncrementLoopInfo(IncrementLoopInfo &&) = default;
-  IncrementLoopInfo &operator=(IncrementLoopInfo &&x) = default;
-
-  bool isStructured() const { return !headerBlock; }
-
-  mlir::Type getLoopVariableType() const {
-    assert(loopVariable && "must be set");
-    return fir::unwrapRefType(loopVariable.getType());
-  }
-
-  bool hasLocalitySpecs() const {
-    return !localSymList.empty() || !localInitSymList.empty() ||
-           !reduceSymList.empty() || !sharedSymList.empty();
-  }
-
-  // Data members common to both structured and unstructured loops.
-  const Fortran::semantics::Symbol *loopVariableSym;
-  const Fortran::lower::SomeExpr *lowerExpr;
-  const Fortran::lower::SomeExpr *upperExpr;
-  const Fortran::lower::SomeExpr *stepExpr;
-  const Fortran::lower::SomeExpr *maskExpr = nullptr;
-  bool isConcurrent;
-  llvm::SmallVector<const Fortran::semantics::Symbol *> localSymList;
-  llvm::SmallVector<const Fortran::semantics::Symbol *> localInitSymList;
-  llvm::SmallVector<const Fortran::semantics::Symbol *> reduceSymList;
-  llvm::SmallVector<fir::ReduceOperationEnum> reduceOperatorList;
-  llvm::SmallVector<const Fortran::semantics::Symbol *> sharedSymList;
-  mlir::Value loopVariable = nullptr;
-
-  // Data members for structured loops.
-  mlir::Operation *loopOp = nullptr;
-
-  // Data members for unstructured loops.
-  bool hasRealControl = false;
-  mlir::Value tripVariable = nullptr;
-  mlir::Value stepVariable = nullptr;
-  mlir::Block *headerBlock = nullptr; // loop entry and test block
-  mlir::Block *maskBlock = nullptr;   // concurrent loop mask block
-  mlir::Block *bodyBlock = nullptr;   // first loop body block
-  mlir::Block *exitBlock = nullptr;   // loop exit target block
-};
-
-using IncrementLoopNestInfo = llvm::SmallVector<IncrementLoopInfo, 8>;
-
-struct MyFirConverter  : public Fortran::lower::AbstractConverter  {
-    fir::FirOpBuilder *builder = nullptr;
-      Fortran::parser::CharBlock currentPosition;
-
-    /// Return the predicate: "current block does not have a terminator branch".
-  bool blockIsUnterminated() {
-    mlir::Block *currentBlock = builder->getBlock();
-    return currentBlock->empty() || !currentBlock->back().hasTrait<mlir::OpTrait::IsTerminator>();
-  }
-
-      /// Convert a parser CharBlock to a Location
-  mlir::Location toLocation(const Fortran::parser::CharBlock &cb) {
-    return genLocation(cb);
-  }
-
-  mlir::Location toLocation() { return toLocation(currentPosition); }
-
-
-#if 0
-  static mlir::Location genLocation(Fortran::parser::SourcePosition pos, mlir::MLIRContext &ctx) {
-    llvm::SmallString<256> path(*pos.path);
-    llvm::sys::fs::make_absolute(path);
-    llvm::sys::path::remove_dots(path);
-    return mlir::FileLineColLoc::get(&ctx, path.str(), pos.line, pos.column); 
-  }
-#endif 
-
-
-  void genBranch(mlir::Block *targetBlock) {
-    assert(targetBlock && "missing unconditional target block");
-    mlir::cf::BranchOp::create(*builder, toLocation(), targetBlock);
-  }
-
-  /// Unconditionally switch code insertion to a new block.
-  void startBlock(mlir::Block *newBlock) {
-    assert(newBlock && "missing block");
-    // Default termination for the current block is a fallthrough branch to
-    // the new block.
-    if (blockIsUnterminated())
-      genBranch(newBlock);
-    // Some blocks may be re/started more than once, and might not be empty.
-    // If the new block already has (only) a terminator, set the insertion
-    // point to the start of the block. Otherwise set it to the end.
-    builder->setInsertionPointToStart(newBlock);
-    if (blockIsUnterminated())
-      builder->setInsertionPointToEnd(newBlock);
-  }
-
-
-  /// Conditionally switch code insertion to a new block.
-  void maybeStartBlock(mlir::Block *newBlock) {
-    if (newBlock)
-      startBlock(newBlock);
-  }
-
- 
-   void genConditionalBranch(mlir::Value cond, mlir::Block *trueTarget,
-                            mlir::Block *falseTarget) {
-    assert(trueTarget && "missing conditional branch true block");
-    assert(falseTarget && "missing conditional branch false block");
-    mlir::Location loc = toLocation();
-    mlir::Value bcc = builder->createConvert(loc, builder->getI1Type(), cond);
-    mlir::cf::CondBranchOp::create(*builder, loc, bcc, trueTarget,
-                                   mlir::ValueRange{}, falseTarget,
-                                   mlir::ValueRange{});
-  }
-
- 
-  void genConditionalBranch(mlir::Value cond,
-                            Fortran::lower::pft::Evaluation *trueTarget,
-                            Fortran::lower::pft::Evaluation *falseTarget) {
-    genConditionalBranch(cond, trueTarget->block, falseTarget->block);
-  }
-
-   mlir::Value createFIRExpr(mlir::Location loc,
-                            const Fortran::lower::SomeExpr *expr,
-                            Fortran::lower::StatementContext &stmtCtx) {
-    return fir::getBase(genExprValue(*expr, stmtCtx, &loc));
-  }
-
-
-  void genConditionalBranch(const Fortran::parser::ScalarLogicalExpr &expr,
-                            mlir::Block *trueTarget, mlir::Block *falseTarget) {
-    Fortran::lower::StatementContext stmtCtx;
-    mlir::Value cond = createFIRExpr(toLocation(), Fortran::semantics::GetExpr(expr), stmtCtx);
-    stmtCtx.finalizeAndReset();
-    genConditionalBranch(cond, trueTarget, falseTarget);
-  }
-
- 
-  void genConditionalBranch(const Fortran::parser::ScalarLogicalExpr &expr,
-                            Fortran::lower::pft::Evaluation *trueTarget,
-                            Fortran::lower::pft::Evaluation *falseTarget) {
-    Fortran::lower::StatementContext stmtCtx;
-    mlir::Value cond = createFIRExpr(toLocation(), Fortran::semantics::GetExpr(expr), stmtCtx);
-    stmtCtx.finalizeAndReset();
-    genConditionalBranch(cond, trueTarget->block, falseTarget->block);
-  }
-
-    /// Generate the address of loop variable \p sym.
-  /// If \p sym is not mapped yet, allocate local storage for it.
-  mlir::Value genLoopVariableAddress(mlir::Location loc,
-                                     const Fortran::semantics::Symbol &sym,
-                                     bool isUnordered) {
-    if (!shallowLookupSymbol(sym) &&
-        (isUnordered ||
-         GetSymbolDSA(sym).test(Fortran::semantics::Symbol::Flag::OmpPrivate) ||
-         GetSymbolDSA(sym).test(
-             Fortran::semantics::Symbol::Flag::OmpFirstPrivate) ||
-         GetSymbolDSA(sym).test(
-             Fortran::semantics::Symbol::Flag::OmpLastPrivate) ||
-         GetSymbolDSA(sym).test(Fortran::semantics::Symbol::Flag::OmpLinear))) {
-      // Do concurrent loop variables are not mapped yet since they are
-      // local to the Do concurrent scope (same for OpenMP loops).
-      mlir::OpBuilder::InsertPoint insPt = builder->saveInsertionPoint();
-      builder->setInsertionPointToStart(builder->getAllocaBlock());
-      mlir::Type tempTy = genType(sym);
-      mlir::Value temp =
-          builder->createTemporaryAlloc(loc, tempTy, toStringRef(sym.name()));
-      bindIfNewSymbol(sym, temp);
-      builder->restoreInsertionPoint(insPt);
-    }
-    auto entry = lookupSymbol(sym);
-    (void)entry;
-    assert(entry && "loop control variable must already be in map");
-    Fortran::lower::StatementContext stmtCtx;
-    return fir::getBase(
-        genExprAddr(Fortran::evaluate::AsGenericExpr(sym).value(), stmtCtx));
-  }
-
-    /// Generate FIR to begin a structured or unstructured increment loop nest.
-  void genFIRIncrementLoopBegin(
-      IncrementLoopNestInfo &incrementLoopNestInfo,
-      llvm::SmallVectorImpl<const Fortran::parser::CompilerDirective *> &dirs) {
-    assert(!incrementLoopNestInfo.empty() && "empty loop nest");
-    mlir::Location loc = toLocation();
-    mlir::arith::IntegerOverflowFlags iofBackup{};
-
-    llvm::SmallVector<mlir::Value> nestLBs;
-    llvm::SmallVector<mlir::Value> nestUBs;
-    llvm::SmallVector<mlir::Value> nestSts;
-    llvm::SmallVector<mlir::Value> nestReduceOperands;
-    llvm::SmallVector<mlir::Attribute> nestReduceAttrs;
-    bool genDoConcurrent = false;
-
-    for (IncrementLoopInfo &info : incrementLoopNestInfo) {
-      genDoConcurrent = info.isStructured() && info.isConcurrent;
-
-      if (!genDoConcurrent)
-        info.loopVariable = genLoopVariableAddress(loc, *info.loopVariableSym,   info.isConcurrent);
-
-      if (!getLoweringOptions().getIntegerWrapAround()) {
-        iofBackup = builder->getIntegerOverflowFlags();
-        builder->setIntegerOverflowFlags(
-            mlir::arith::IntegerOverflowFlags::nsw);
-      }
-
-      nestLBs.push_back(genControlValue(info.lowerExpr, info));
-      nestUBs.push_back(genControlValue(info.upperExpr, info));
-      bool isConst = true;
-      nestSts.push_back(genControlValue(
-          info.stepExpr, info, info.isStructured() ? nullptr : &isConst));
-
-      if (!getLoweringOptions().getIntegerWrapAround())
-        builder->setIntegerOverflowFlags(iofBackup);
-
-      // Use a temp variable for unstructured loops with non-const step.
-      if (!isConst) {
-        mlir::Value stepValue = nestSts.back();
-        info.stepVariable = builder->createTemporary(loc, stepValue.getType());
-        fir::StoreOp::create(*builder, loc, stepValue, info.stepVariable);
-      }
-    }
-
-    for (auto [info, lowerValue, upperValue, stepValue] :
-         llvm::zip_equal(incrementLoopNestInfo, nestLBs, nestUBs, nestSts)) {
-      // Structured loop - generate fir.do_loop.
-      if (info.isStructured()) {
-        if (genDoConcurrent)
-          continue;
-
-        // The loop variable is a doLoop op argument.
-        mlir::Type loopVarType = info.getLoopVariableType();
-        auto loopOp = fir::DoLoopOp::create(
-            *builder, loc, lowerValue, upperValue, stepValue,
-            /*unordered=*/false,
-            /*finalCountValue=*/true,
-            builder->createConvert(loc, loopVarType, lowerValue));
-        info.loopOp = loopOp;
-        builder->setInsertionPointToStart(loopOp.getBody());
-        mlir::Value loopValue = loopOp.getRegionIterArgs()[0];
-
-        // Update the loop variable value in case it has non-index references.
-        fir::StoreOp::create(*builder, loc, loopValue, info.loopVariable);
-        addLoopAnnotationAttr(info, dirs);
-        continue;
-      }
-
-      // Unstructured loop preheader - initialize tripVariable and loopVariable.
-      mlir::Value tripCount;
-      if (info.hasRealControl) {
-        auto diff1 =
-            mlir::arith::SubFOp::create(*builder, loc, upperValue, lowerValue);
-        auto diff2 =
-            mlir::arith::AddFOp::create(*builder, loc, diff1, stepValue);
-        tripCount =
-            mlir::arith::DivFOp::create(*builder, loc, diff2, stepValue);
-        tripCount =
-            builder->createConvert(loc, builder->getIndexType(), tripCount);
-      } else {
-        auto diff1 =
-            mlir::arith::SubIOp::create(*builder, loc, upperValue, lowerValue);
-        auto diff2 =
-            mlir::arith::AddIOp::create(*builder, loc, diff1, stepValue);
-        tripCount =
-            mlir::arith::DivSIOp::create(*builder, loc, diff2, stepValue);
-      }
-      if (forceLoopToExecuteOnce) { // minimum tripCount is 1
-        mlir::Value one =
-            builder->createIntegerConstant(loc, tripCount.getType(), 1);
-        auto cond = mlir::arith::CmpIOp::create(
-            *builder, loc, mlir::arith::CmpIPredicate::slt, tripCount, one);
-        tripCount =
-            mlir::arith::SelectOp::create(*builder, loc, cond, one, tripCount);
-      }
-      info.tripVariable = builder->createTemporary(loc, tripCount.getType());
-      fir::StoreOp::create(*builder, loc, tripCount, info.tripVariable);
-      fir::StoreOp::create(*builder, loc, lowerValue, info.loopVariable);
-
-      // Unstructured loop header - generate loop condition and mask.
-      // Note - Currently there is no way to tag a loop as a concurrent loop.
-      startBlock(info.headerBlock);
-      tripCount = fir::LoadOp::create(*builder, loc, info.tripVariable);
-      mlir::Value zero =
-          builder->createIntegerConstant(loc, tripCount.getType(), 0);
-      auto cond = mlir::arith::CmpIOp::create(
-          *builder, loc, mlir::arith::CmpIPredicate::sgt, tripCount, zero);
-      if (info.maskExpr) {
-        genConditionalBranch(cond, info.maskBlock, info.exitBlock);
-        startBlock(info.maskBlock);
-        mlir::Block *latchBlock = getEval().getLastNestedEvaluation().block;
-        assert(latchBlock && "missing masked concurrent loop latch block");
-        Fortran::lower::StatementContext stmtCtx;
-        mlir::Value maskCond = createFIRExpr(loc, info.maskExpr, stmtCtx);
-        stmtCtx.finalizeAndReset();
-        genConditionalBranch(maskCond, info.bodyBlock, latchBlock);
-      } else {
-        genConditionalBranch(cond, info.bodyBlock, info.exitBlock);
-        if (&info != &incrementLoopNestInfo.back()) // not innermost
-          startBlock(info.bodyBlock); // preheader block of enclosed dimension
-      }
-      if (info.hasLocalitySpecs()) {
-        mlir::OpBuilder::InsertPoint insertPt = builder->saveInsertionPoint();
-        builder->setInsertionPointToStart(info.bodyBlock);
-        handleLocalitySpecs(info);
-        builder->restoreInsertionPoint(insertPt);
-      }
-    }
-
-    if (genDoConcurrent) {
-      auto loopWrapperOp = fir::DoConcurrentOp::create(*builder, loc);
-      builder->setInsertionPointToStart(
-          builder->createBlock(&loopWrapperOp.getRegion()));
-
-      for (IncrementLoopInfo &info : llvm::reverse(incrementLoopNestInfo)) {
-        info.loopVariable = genLoopVariableAddress(loc, *info.loopVariableSym,
-                                                   info.isConcurrent);
-      }
-
-      builder->setInsertionPointToEnd(loopWrapperOp.getBody());
-      auto loopOp = fir::DoConcurrentLoopOp::create(
-          *builder, loc, nestLBs, nestUBs, nestSts, /*loopAnnotation=*/nullptr,
-          /*local_vars=*/mlir::ValueRange{},
-          /*local_syms=*/nullptr, /*reduce_vars=*/mlir::ValueRange{},
-          /*reduce_byref=*/nullptr, /*reduce_syms=*/nullptr,
-          /*reduce_attrs=*/nullptr);
-
-      llvm::SmallVector<mlir::Type> loopBlockArgTypes(
-          incrementLoopNestInfo.size(), builder->getIndexType());
-      llvm::SmallVector<mlir::Location> loopBlockArgLocs(
-          incrementLoopNestInfo.size(), loc);
-      mlir::Region &loopRegion = loopOp.getRegion();
-      mlir::Block *loopBlock = builder->createBlock(
-          &loopRegion, loopRegion.begin(), loopBlockArgTypes, loopBlockArgLocs);
-      builder->setInsertionPointToStart(loopBlock);
-
-      for (auto [info, blockArg] :
-           llvm::zip_equal(incrementLoopNestInfo, loopBlock->getArguments())) {
-        info.loopOp = loopOp;
-        mlir::Value loopValue =
-            builder->createConvert(loc, info.getLoopVariableType(), blockArg);
-        fir::StoreOp::create(*builder, loc, loopValue, info.loopVariable);
-
-        if (info.maskExpr) {
-          Fortran::lower::StatementContext stmtCtx;
-          mlir::Value maskCond = createFIRExpr(loc, info.maskExpr, stmtCtx);
-          stmtCtx.finalizeAndReset();
-          mlir::Value maskCondCast =
-              builder->createConvert(loc, builder->getI1Type(), maskCond);
-          auto ifOp = fir::IfOp::create(*builder, loc, maskCondCast,
-                                        /*withElseRegion=*/false);
-          builder->setInsertionPointToStart(&ifOp.getThenRegion().front());
-        }
-      }
-
-      IncrementLoopInfo &innermostInfo = incrementLoopNestInfo.back();
-
-      if (innermostInfo.hasLocalitySpecs())
-        handleLocalitySpecs(innermostInfo);
-
-      addLoopAnnotationAttr(innermostInfo, dirs);
-    }
-  }
-
-
-
- void genFIR(  fir::FirOpBuilder *builder ,   lower::pft::Evaluation &eval,  llvm:: ArrayRef< lower::pft::Evaluation *> doStmts) {
-  //  setCurrentPositionAt(doConstruct);
-  //  Fortran::lower::pft::Evaluation &eval = getEval();
-    bool unstructuredContext = eval.lowerAsUnstructured();
-
-
-    // Collect loop nest information.
-    // Generate begin loop code directly for infinite and while loops.
-    Fortran::lower::pft::Evaluation &doStmtEval = eval.getFirstNestedEvaluation();
-    auto *doStmt = doStmtEval.getIf<Fortran::parser::NonLabelDoStmt>();
-    const auto &loopControl =
-        std::get<std::optional<Fortran::parser::LoopControl>>(doStmt->t);
-    mlir::Block *preheaderBlock = doStmtEval.block;
-    mlir::Block *beginBlock = preheaderBlock ? preheaderBlock : builder->getBlock();
-    auto createNextBeginBlock = [&]() {
-      // Step beginBlock through unstructured preheader, header, and mask
-      // blocks, created in outermost to innermost order.
-      return beginBlock = beginBlock->splitBlock(beginBlock->end());
-    };
-    mlir::Block *headerBlock =  unstructuredContext ? createNextBeginBlock() : nullptr;
-    mlir::Block *bodyBlock = doStmtEval.lexicalSuccessor->block;
-    mlir::Block *exitBlock = doStmtEval.parentConstruct->constructExit->block;
-    IncrementLoopNestInfo incrementLoopNestInfo;
-    const Fortran::parser::ScalarLogicalExpr *whileCondition = nullptr;
-    bool infiniteLoop = !loopControl.has_value();
-    if (infiniteLoop) {
-      assert(unstructuredContext && "infinite loop must be unstructured");
-      startBlock(headerBlock);
-    } else if ((whileCondition =
-                    std::get_if<Fortran::parser::ScalarLogicalExpr>(
-                        &loopControl->u))) {
-      assert(unstructuredContext && "while loop must be unstructured");
-      maybeStartBlock(preheaderBlock); // no block or empty block
-      startBlock(headerBlock);
-      genConditionalBranch(*whileCondition, bodyBlock, exitBlock);
-    } else if (const auto *bounds =
-                   std::get_if<Fortran::parser::LoopControl::Bounds>(
-                       &loopControl->u)) {
-      // Non-concurrent increment loop.
-      IncrementLoopInfo &info = incrementLoopNestInfo.emplace_back(
-          *bounds->name.thing.symbol, bounds->lower, bounds->upper,
-          bounds->step);
-      if (unstructuredContext) {
-        maybeStartBlock(preheaderBlock);
-        info.hasRealControl = info.loopVariableSym->GetType()->IsNumeric(
-            Fortran::common::TypeCategory::Real);
-        info.headerBlock = headerBlock;
-        info.bodyBlock = bodyBlock;
-        info.exitBlock = exitBlock;
-      }
-    } else {
-      llvm_unreachable("DO CONCURRENT unsupported");
-    }
-
-
-
-    // Increment loop begin code. (Infinite/while code was already generated.)
-    if (!infiniteLoop && !whileCondition)
-      genFIRIncrementLoopBegin(incrementLoopNestInfo, doStmtEval.dirs);
-
-    // Loop body code.
-    auto iter = eval.getNestedEvaluations().begin();
-    for (auto end = --eval.getNestedEvaluations().end(); iter != end; ++iter)
-      genFIR(*iter, unstructuredContext);
-
-    // An EndDoStmt in unstructured code may start a new block.
-    Fortran::lower::pft::Evaluation &endDoEval = *iter;
-    assert(endDoEval.getIf<Fortran::parser::EndDoStmt>() && "no enddo stmt");
-    if (unstructuredContext)
-      maybeStartBlock(endDoEval.block);
-
-    // Loop end code.
-    if (infiniteLoop || whileCondition)
-      genBranch(headerBlock);
-    else
-      genFIRIncrementLoopEnd(incrementLoopNestInfo);
-
-    // This call may generate a branch in some contexts.
-    genFIR(endDoEval, unstructuredContext);
-
-
-  }
-
-  
-  };
-  }
-
-  #endif 
-
-
-
-static void genStandaloneInterchangeOp(Fortran::lower::AbstractConverter &converter,
-                        Fortran::lower::SymMap &symTable,
-                        lower::StatementContext &stmtCtx,
-                        Fortran::semantics::SemanticsContext &semaCtx,
-                        Fortran::lower::pft::Evaluation &eval,
-                        mlir::Location loc, const ConstructQueue &queue,
-                        ConstructQueue::const_iterator item) {
+static void genStandaloneInterchangeOp(
+    Fortran::lower::AbstractConverter &converter,
+    Fortran::lower::SymMap &symTable, lower::StatementContext &stmtCtx,
+    Fortran::semantics::SemanticsContext &semaCtx,
+    Fortran::lower::pft::Evaluation &eval, mlir::Location loc,
+    const ConstructQueue &queue, ConstructQueue::const_iterator item) {
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
-   auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
-   auto transforms = llvm::make_range(q.end(), queue.end());
-   assert(llvm::range_size(transforms)==1 );
-   auto &&transform = *transforms.begin();
-        auto d = transform.id;
-        assert(transform.id == llvm::omp::OMPD_interchange);
-            auto clauses = transform.clauses;
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+  assert(llvm::range_size(transforms) == 1);
+  auto &&transform = *transforms.begin();
+  auto d = transform.id;
+  assert(transform.id == llvm::omp::OMPD_interchange);
+  auto clauses = transform.clauses;
 
   bool hasPermutationClause = false;
-      llvm::SmallVector<int64_t> permutation;
-      auto &&permutationClause = ClauseFinder::findUniqueClause< Fortran::lower::omp::clause::Permutation>(clauses);
-      if (permutationClause) {
-        permutation.reserve(permutationClause->v.size());
-        for (auto &&ts : permutationClause->v) {
-          permutation.push_back(evaluate::ToInt64(ts).value());
-        }
-      } else {
-        permutation = {2, 1};
-      }
+  llvm::SmallVector<int64_t> permutation;
+  auto &&permutationClause =
+      ClauseFinder::findUniqueClause<Fortran::lower::omp::clause::Permutation>(
+          clauses);
+  if (permutationClause) {
+    permutation.reserve(permutationClause->v.size());
+    for (auto &&ts : permutationClause->v) {
+      permutation.push_back(evaluate::ToInt64(ts).value());
+    }
+  } else {
+    permutation = {2, 1};
+  }
 
-      llvm::SmallVector< lower::pft::Evaluation* > loops;
-      collectLoops(eval,loops,  permutation.size());
-    //  auto innermostDo = loops.back();
-     // auto innermostBody = &*std::next(innermostDo->getNestedEvaluations().begin());
-      
-      // TODO: Assert this is a valid permution
-            llvm::SmallVector< lower::pft::Evaluation* > newLoops;
-      for (auto perm : permutation) {
-        newLoops.push_back(loops[perm - 1]);
-      }
+  llvm::SmallVector<lower::pft::Evaluation *> loops;
+  collectLoops(eval, loops, permutation.size());
 
-      converter.genPermutatedLoops(newLoops, loops.back());
+  // TODO: Assert this is a valid permution
+  llvm::SmallVector<lower::pft::Evaluation *> newLoops;
+  for (auto perm : permutation) {
+    newLoops.push_back(loops[perm - 1]);
+  }
 
-#if 0
-MyFirConverter converter;
-converter.builder = &firOpBuilder;
-converter.genFir(eval, newLoops);
-#endif 
-
-
-
-#if 0
-  mlir::omp::LoopRelatedClauseOps loopInfo;
-  llvm::SmallVector<const semantics::Symbol *> iv;
-  collectLoopRelatedInfo(converter, loc, eval, item->clauses, loopInfo, iv);
-#endif 
+  converter.genPermutatedLoops(newLoops, loops.back());
 }
-
 
 static mlir::omp::MaskedOp
 genMaskedOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
@@ -4100,7 +3607,8 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
     genUnrollOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
     break;
   case llvm::omp::Directive::OMPD_interchange:
-    genStandaloneInterchangeOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
+    genStandaloneInterchangeOp(converter, symTable, stmtCtx, semaCtx, eval, loc,
+                               queue, item);
     break;
   case llvm::omp::Directive::OMPD_workdistribute:
     newOp = genWorkdistributeOp(converter, symTable, semaCtx, eval, loc, queue,
