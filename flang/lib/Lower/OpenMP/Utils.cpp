@@ -14,7 +14,6 @@
 
 #include "ClauseFinder.h"
 #include "flang/Evaluate/fold.h"
-#include "flang/Lower/OpenMP/Clauses.h"
 #include <flang/Lower/AbstractConverter.h>
 #include <flang/Lower/ConvertExprToHLFIR.h>
 #include <flang/Lower/ConvertType.h>
