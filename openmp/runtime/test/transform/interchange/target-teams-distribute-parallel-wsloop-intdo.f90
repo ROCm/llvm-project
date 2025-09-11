@@ -1,13 +1,12 @@
 
 ! RUN: %flang %flags %openmp_flags -fopenmp-version=60 %s -o %t.exe
 ! RUN: %t.exe | FileCheck %s --match-full-lines
-! XFAIL: *
 
-program interchange_wsloop_intdo
+program target_teams_distribute_parallel_do
   integer :: i, j
   print *, 'do'
 
-  !$OMP TASKLOOP SIMD
+  !$OMP TARGET TEAMS DISTRIBUTE PARALLEL DO SCHEDULE(static,2) NUM_TEAMS(1) NUM_THREADS(1)
   !$OMP INTERCHANGE
   do i = 7, 15, 3
     do j = -1, 1
@@ -15,7 +14,7 @@ program interchange_wsloop_intdo
     end do
   end do
   !$OMP END INTERCHANGE
-  !$OMP END TASKLOOP SIMD
+  !$OMP END TARGET TEAMS DISTRIBUTE PARALLEL DO
 
   print *, 'done'
 end program

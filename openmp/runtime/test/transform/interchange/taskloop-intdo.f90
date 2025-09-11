@@ -1,13 +1,14 @@
 
+! XFAIL: *
 ! RUN: %flang %flags %openmp_flags -fopenmp-version=60 %s -o %t.exe
 ! RUN: %t.exe | FileCheck %s --match-full-lines
-! XFAIL: *
+
 
 program interchange_wsloop_intdo
   integer :: i, j
   print *, 'do'
 
-  !$OMP TASKLOOP SIMD
+  !$OMP TASKLOOP
   !$OMP INTERCHANGE
   do i = 7, 15, 3
     do j = -1, 1
@@ -15,7 +16,7 @@ program interchange_wsloop_intdo
     end do
   end do
   !$OMP END INTERCHANGE
-  !$OMP END TASKLOOP SIMD
+  !$OMP END TASKLOOP
 
   print *, 'done'
 end program

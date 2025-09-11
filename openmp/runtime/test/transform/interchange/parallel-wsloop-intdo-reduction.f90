@@ -1,34 +1,27 @@
 
 ! RUN: %flang %flags %openmp_flags -fopenmp-version=60 %s -o %t.exe
 ! RUN: %t.exe | FileCheck %s --match-full-lines
-! XFAIL: *
 
 program interchange_wsloop_intdo
-  integer :: i, j
+  integer :: i, j, k
   print *, 'do'
 
-  !$OMP TASKLOOP SIMD
+  k = 1
+  !$OMP PARALLEL DO REDUCTION(+:k)
   !$OMP INTERCHANGE
   do i = 7, 15, 3
     do j = -1, 1
-      print '("i=", I0, " j=", I0)', i, j
+      k = k + 1
     end do
   end do
   !$OMP END INTERCHANGE
-  !$OMP END TASKLOOP SIMD
+  !$OMP END PARALLEL DO
 
   print *, 'done'
+  print '("k=", I0)', k
 end program
 
 
 ! CHECK:      do
-! CHECK-NEXT: i=7 j=-1
-! CHECK-NEXT: i=10 j=-1
-! CHECK-NEXT: i=13 j=-1
-! CHECK-NEXT: i=7 j=0
-! CHECK-NEXT: i=10 j=0
-! CHECK-NEXT: i=13 j=0
-! CHECK-NEXT: i=7 j=1
-! CHECK-NEXT: i=10 j=1
-! CHECK-NEXT: i=13 j=1
 ! CHECK-NEXT: done
+! CHECK-NEXT: k=10
