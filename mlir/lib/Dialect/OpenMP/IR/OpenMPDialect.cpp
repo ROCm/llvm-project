@@ -33,11 +33,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
 #include <cstddef>
 #include <iterator>
 #include <optional>
@@ -2985,7 +2980,7 @@ ParseResult LoopNestOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   if (value > 1)
     result.addAttribute(
-        "num_collapse",
+        "collapse_num_loops",
         IntegerAttr::get(parser.getBuilder().getI64Type(), value));
 
   // Parse tiles

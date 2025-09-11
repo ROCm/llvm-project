@@ -1202,10 +1202,6 @@ struct OpWithBodyGenInfo {
 static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
                            const ConstructQueue &queue,
                            ConstructQueue::const_iterator item) {
-  int a = 0;
-  if (a) {
-    op.dump();
-  }
   fir::FirOpBuilder &firOpBuilder = info.converter.getFirOpBuilder();
 
   auto insertMarker = [](fir::FirOpBuilder &builder) {
@@ -1348,10 +1344,6 @@ static void createBodyOfOp(mlir::Operation &op, const OpWithBodyGenInfo &info,
       // wrapper region.
       mlir::Operation *privatizationBottomLevelOp = &op;
       if (auto loopNest = llvm::dyn_cast<mlir::omp::LoopNestOp>(op)) {
-        int b = 0;
-        if (b) {
-          loopNest.dump();
-        }
         llvm::SmallVector<mlir::omp::LoopWrapperInterface> wrappers;
         loopNest.gatherWrappers(wrappers);
         if (!wrappers.empty())
@@ -2034,7 +2026,6 @@ static mlir::omp::LoopNestOp genLoopNestOp(
 
     switch (d) {
     case llvm::omp::OMPD_interchange: {
-      bool hasPermutationClause = false;
       llvm::SmallVector<int64_t> permutation;
 
       auto &&permutationClause = ClauseFinder::findUniqueClause<
@@ -2277,10 +2268,8 @@ static void
 collectLoops(lower::pft::Evaluation &eval,
              llvm::SmallVectorImpl<lower::pft::Evaluation *> &result,
              int numLoops) {
-
-  std::size_t loopVarTypeSize = 0;
   lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
-  for (auto i : llvm::seq<int>(numLoops)) {
+  for ([[maybe_unused]] auto i : llvm::seq<int>(numLoops)) {
     lower::pft::Evaluation *doLoop =
         &doConstructEval->getFirstNestedEvaluation();
     auto *doStmt = doLoop->getIf<parser::NonLabelDoStmt>();
@@ -2305,17 +2294,13 @@ static void genStandaloneInterchangeOp(
     Fortran::semantics::SemanticsContext &semaCtx,
     Fortran::lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
-  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
-
   auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
   auto transforms = llvm::make_range(q.end(), queue.end());
   assert(llvm::range_size(transforms) == 1);
   auto &&transform = *transforms.begin();
-  auto d = transform.id;
   assert(transform.id == llvm::omp::OMPD_interchange);
   auto clauses = transform.clauses;
 
-  bool hasPermutationClause = false;
   llvm::SmallVector<int64_t> permutation;
   auto &&permutationClause =
       ClauseFinder::findUniqueClause<Fortran::lower::omp::clause::Permutation>(
@@ -3415,7 +3400,6 @@ static mlir::omp::TaskloopOp genCompositeTaskloopSimd(
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
   auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
-  auto transforms = llvm::make_range(q.end(), queue.end());
 
   assert(llvm::range_size(q) == 2 && "Invalid leaf constructs");
 
@@ -4072,7 +4056,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
       const Fortran::parser::OpenMPLoopConstruct &x =
           ompNestedLoopCons->value();
       const Fortran::parser::OmpBeginLoopDirective &y = std::get<0>(x.t);
-      const Fortran::parser::OmpClauseList &clauseList = std::get<1>(y.t);
+      // const Fortran::parser::OmpClauseList &clauseList = std::get<1>(y.t);
       llvm::omp::Directive nestedDirective =
           parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
       List<Clause> nestedClauses =

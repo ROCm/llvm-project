@@ -32,10 +32,13 @@
 #include <iterator>
 
 template <typename T>
-Fortran::semantics::MaybeIntExpr EvaluateIntExpr(Fortran::semantics::SemanticsContext &context, const T &expr) {
+Fortran::semantics::MaybeIntExpr
+EvaluateIntExpr(Fortran::semantics::SemanticsContext &context, const T &expr) {
   if (Fortran::semantics::MaybeExpr maybeExpr{
           Fold(context.foldingContext(), AnalyzeExpr(context, expr))}) {
-    if (auto *intExpr{Fortran::evaluate::UnwrapExpr<Fortran::semantics::SomeIntExpr>(*maybeExpr)}) {
+    if (auto *intExpr{
+            Fortran::evaluate::UnwrapExpr<Fortran::semantics::SomeIntExpr>(
+                *maybeExpr)}) {
       return std::move(*intExpr);
     }
   }
@@ -43,8 +46,8 @@ Fortran::semantics::MaybeIntExpr EvaluateIntExpr(Fortran::semantics::SemanticsCo
 }
 
 template <typename T>
-std::optional<std::int64_t> EvaluateInt64(Fortran::semantics::SemanticsContext &context,
-                                          const T &expr) {
+std::optional<std::int64_t>
+EvaluateInt64(Fortran::semantics::SemanticsContext &context, const T &expr) {
   return Fortran::evaluate::ToInt64(EvaluateIntExpr(context, expr));
 }
 
@@ -600,7 +603,8 @@ static void convertLoopBounds(lower::AbstractConverter &converter,
 /// Contains a loop construct with an inner tiling construct.
 void collectTileSizesFromOpenMPConstruct(
     const parser::OpenMPConstruct *ompCons,
-    llvm::SmallVectorImpl<int64_t> &tileSizes,Fortran::semantics:: SemanticsContext &semaCtx) {
+    llvm::SmallVectorImpl<int64_t> &tileSizes,
+    Fortran::semantics::SemanticsContext &semaCtx) {
   if (!ompCons)
     return;
 
@@ -640,7 +644,8 @@ void collectTileSizesFromOpenMPConstruct(
 /// Contains a loop construct with an inner tiling construct.
 void collectPermutationFromOpenMPConstruct(
     const parser::OpenMPConstruct *ompCons,
-    llvm::SmallVectorImpl<int64_t> &permutation,Fortran::semantics:: SemanticsContext &semaCtx) {
+    llvm::SmallVectorImpl<int64_t> &permutation,
+    Fortran::semantics::SemanticsContext &semaCtx) {
   if (!ompCons)
     return;
 

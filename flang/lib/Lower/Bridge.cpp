@@ -2197,7 +2197,6 @@ private:
     llvm::SmallVector<IncrementLoopNestInfo, 1> loopInfos;
 
     auto enterLoop = [&](Fortran::lower::pft::Evaluation &eval) {
-      eval.dump();
       bool unstructuredContext = eval.lowerAsUnstructured();
 
       // Collect loop nest information.
@@ -2260,7 +2259,6 @@ private:
     auto leaveLoop = [&](Fortran::lower::pft::Evaluation &eval,
                          mlir::Block *headerBlock,
                          IncrementLoopNestInfo &incrementLoopNestInfo) {
-      eval.dump();
       bool unstructuredContext = eval.lowerAsUnstructured();
 
       Fortran::lower::pft::Evaluation &doStmtEval =
@@ -2295,8 +2293,6 @@ private:
       enterLoop(*l);
 
     // Loop body code.
-    // Fortran:: lower::pft::Evaluation *innermostEval = doStmts.back();
-    // innermostEval->dump();
     bool innermostUnstructuredContext = innermostDo->lowerAsUnstructured();
 
     auto iter = innermostDo->getNestedEvaluations().begin();
