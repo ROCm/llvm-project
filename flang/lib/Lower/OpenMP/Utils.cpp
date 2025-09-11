@@ -699,7 +699,7 @@ bool collectLoopRelatedInfo(
     found = true;
   }
 
-  // Collect sizes from tile directive if presentOpenMPToLLVMIRTranslation.cpp:
+  // Collect sizes from tile directive if present
   std::int64_t sizesLengthValue = 0l;
   std::int64_t permutationLengthValue = 0l;
   if (auto *ompCons{eval.getIf<parser::OpenMPConstruct>()}) {
