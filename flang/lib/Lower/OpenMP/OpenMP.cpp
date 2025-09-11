@@ -503,7 +503,7 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       [[fallthrough]];
     case OMPD_distribute:
     case OMPD_distribute_simd:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->iv);
+      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
       break;
 
     case OMPD_teams:
@@ -522,7 +522,7 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       [[fallthrough]];
     case OMPD_target_teams_distribute:
     case OMPD_target_teams_distribute_simd:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->iv);
+      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
       cp.processNumTeams(stmtCtx, hostInfo->ops);
       break;
 
@@ -533,7 +533,7 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
       cp.processNumTeams(stmtCtx, hostInfo->ops);
       [[fallthrough]];
     case OMPD_loop:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->iv);
+      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
       break;
 
     case OMPD_teams_workdistribute:
@@ -1573,7 +1573,7 @@ genLoopNestClauses(lower::AbstractConverter &converter,
 
   HostEvalInfo *hostEvalInfo = getHostEvalInfoStackTop(converter);
   if (!hostEvalInfo || !hostEvalInfo->apply(clauseOps, iv))
-    cp.processCollapse(loc, eval, clauseOps, iv);
+    cp.processCollapse(loc, eval, clauseOps, clauseOps, iv);
 
   clauseOps.loopInclusive = converter.getFirOpBuilder().getUnitAttr();
 
