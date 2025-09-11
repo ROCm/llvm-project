@@ -607,7 +607,6 @@ void collectTileSizesFromOpenMPConstruct(
     Fortran::semantics::SemanticsContext &semaCtx) {
   if (!ompCons)
     return;
-
   if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
     const auto &nestedOptional =
         std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
