@@ -4721,6 +4721,22 @@ LogicalResult AllocateDirOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// AllocSharedMemOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult AllocSharedMemOp::verify() {
+  return verifyAlignment(*getOperation(), getMemAlignment());
+}
+
+//===----------------------------------------------------------------------===//
+// FreeSharedMemOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FreeSharedMemOp::verify() {
+  return verifyAlignment(*getOperation(), getMemAlignment());
+}
+
+//===----------------------------------------------------------------------===//
 // WorkdistributeOp
 //===----------------------------------------------------------------------===//
 
