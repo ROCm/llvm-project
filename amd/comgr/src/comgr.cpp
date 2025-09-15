@@ -2142,6 +2142,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     if (!RelaRangeOrError) {
       llvm::logAllUnhandledErrors(RelaRangeOrError.takeError(), llvm::errs(),
                                   "RelaRange creation error: ");
+      for (auto *Ptr : NameExpDataVec)
+        delete Ptr;
       return AMD_COMGR_STATUS_ERROR;
     }
     auto RelaRange = std::move(RelaRangeOrError.get());
@@ -2162,6 +2164,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     if (!RodataOrError) {
       llvm::logAllUnhandledErrors(RodataOrError.takeError(), llvm::errs(),
                                   "Rodata creation error: ");
+      for (auto *Ptr : NameExpDataVec)
+        delete Ptr;
       return AMD_COMGR_STATUS_ERROR;
     }
     auto Rodata = std::move(RodataOrError.get());
@@ -2192,6 +2196,8 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
       }
     }
 
+    for (auto *Ptr : NameExpDataVec)
+      delete Ptr;
   } // end AMD_COMGR_DATA_KIND_EXECUTABLE conditional
 
   *Count = DataP->NameExpressionMap.size();
