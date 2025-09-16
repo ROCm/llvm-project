@@ -364,7 +364,7 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   // extracts them.
   pm.addPass(flangomp::createDeleteUnreachableTargetsPass());
   pm.addPass(flangomp::createGenericLoopConversionPass());
-  if (opts.isTargetDevice) {
+  if (opts.isTargetDevice)
     pm.addPass(flangomp::createFunctionFilteringPass());
 
     if (opts.enableOffloadGlobalFiltering)
@@ -435,6 +435,9 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
 
   fir::addFIRToLLVMPass(pm, config);
 
+  // Convert applicable OpenMP stack allocations to shared memory allocations
+  // for GPU targets. This pass must run after any alloca-generating passes to
+  // ensure all are adequately accounted for.
   if (config.EnableOpenMP && !config.EnableOpenMPSimd)
     pm.addPass(mlir::omp::createStackToSharedPass());
 }
