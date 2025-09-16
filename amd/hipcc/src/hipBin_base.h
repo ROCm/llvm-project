@@ -392,8 +392,8 @@ void HipBinBase::getSystemInfo() const {
     cout << "Hostname      :";
     system("hostname");
     system("powershell -c \"Get-CIMInstance -query 'SELECT * FROM win32_VideoController' | "
-           "ft AdapterCompatibility,InstalledDisplayDrivers,Name\" | "
-           "Out-String -Width 1000 | findstr /B /C:\"Advanced Micro Devices\"");
+           "ft AdapterCompatibility,InstalledDisplayDrivers,Name | "
+           "Out-String -Width 1000 | findstr /B /C:'Advanced Micro Devices'\"");
   } else {
     assert(os == lnx);
     cout << endl << "== Linux Kernel" << endl;
