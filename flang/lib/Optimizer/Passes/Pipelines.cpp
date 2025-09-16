@@ -338,6 +338,7 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   pm.addPass(flangomp::createMarkDeclareTargetPass());
   pm.addPass(flangomp::createGenericLoopConversionPass());
   if (opts.isTargetDevice) {
+    pm.addPass(flangomp::createStackToSharedPass());
     pm.addPass(flangomp::createFunctionFilteringPass());
 
     if (opts.enableOffloadGlobalFiltering)
