@@ -3936,10 +3936,26 @@ let Visibility = [ClangOption, CC1Option, FC1Option, FlangOption] in {
 let Group = f_Group in {
 
 def fopenmp_target_debug_EQ : Joined<["-"], "fopenmp-target-debug=">;
-def fopenmp_assume_teams_oversubscription : Flag<["-"], "fopenmp-assume-teams-oversubscription">;
-def fopenmp_assume_threads_oversubscription : Flag<["-"], "fopenmp-assume-threads-oversubscription">;
-def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-teams-oversubscription">;
-def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">;
+def fopenmp_assume_teams_oversubscription : Flag<["-"], "fopenmp-assume-teams-oversubscription">,
+  HelpText<"Allow the optimizer to discretely increase the number of "
+           "teams. May cause ignore environment variables that set "
+           "the number of teams to be ignored. The combination of "
+           "-fopenmp-assume-teams-oversubscription "
+           "and -fopenmp-assume-threads-oversubscription "
+           "may allow the conversion of loops into sequential code by "
+           "ensuring that each team/thread executes at most one iteration.">;
+def fopenmp_assume_threads_oversubscription : Flag<["-"], "fopenmp-assume-threads-oversubscription">,
+  HelpText<"Allow the optimizer to discretely increase the number of "
+           "threads. May cause ignore environment variables that set "
+           "the number of threads to be ignored. The combination of "
+           "-fopenmp-assume-teams-oversubscription "
+           "and -fopenmp-assume-threads-oversubscription "
+           "may allow the conversion of loops into sequential code by "
+           "ensuring that each team/thread executes at most one iteration.">;
+def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-teams-oversubscription">,
+  HelpText<"Do not assume teams oversubscription.">;
+def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">,
+  HelpText<"Do not assume threads oversubscription.">;
 def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
   HelpText<"Assert that a thread in a parallel region may modify an ICV">,
@@ -4797,8 +4813,10 @@ def gdbx : Flag<["-"], "gdbx">, Group<gTune_Group>;
 // Equivalent to our default dwarf version. Forces usual dwarf emission when
 // CodeView is enabled.
 def gdwarf : Flag<["-"], "gdwarf">, Group<g_Group>,
-  Visibility<[ClangOption, CLOption, DXCOption]>,
+  Visibility<[ClangOption, CLOption, DXCOption, FlangOption]>,
   HelpText<"Generate source-level debug information with the default dwarf version">;
+
+let Visibility = [ClangOption, FlangOption] in {
 def gdwarf_2 : Flag<["-"], "gdwarf-2">, Group<g_Group>,
   HelpText<"Generate source-level debug information with dwarf version 2">;
 def gdwarf_3 : Flag<["-"], "gdwarf-3">, Group<g_Group>,
@@ -4807,6 +4825,7 @@ def gdwarf_4 : Flag<["-"], "gdwarf-4">, Group<g_Group>,
   HelpText<"Generate source-level debug information with dwarf version 4">;
 def gdwarf_5 : Flag<["-"], "gdwarf-5">, Group<g_Group>,
   HelpText<"Generate source-level debug information with dwarf version 5">;
+}
 def gdwarf64 : Flag<["-"], "gdwarf64">, Group<g_Group>,
   Visibility<[ClangOption, CC1Option, CC1AsOption]>,
   HelpText<"Enables DWARF64 format for ELF binaries, if debug information emission is enabled.">,
@@ -7807,6 +7826,8 @@ def debug_info_kind_EQ : Joined<["-"], "debug-info-kind=">;
 def record_command_line : Separate<["-"], "record-command-line">,
   HelpText<"The string to embed in the .LLVM.command.line section.">,
   MarshallingInfoString<CodeGenOpts<"RecordCommandLine">>;
+def dwarf_version_EQ : Joined<["-"], "dwarf-version=">,
+  MarshallingInfoInt<CodeGenOpts<"DwarfVersion">>;
 
 } // let Visibility = [CC1Option, CC1AsOption, FC1Option]
 
@@ -7818,8 +7839,6 @@ def debug_info_macro : Flag<["-"], "debug-info-macro">,
 def default_function_attr : Separate<["-"], "default-function-attr">,
   HelpText<"Apply given attribute to all functions">,
   MarshallingInfoStringVector<CodeGenOpts<"DefaultFunctionAttrs">>;
-def dwarf_version_EQ : Joined<["-"], "dwarf-version=">,
-  MarshallingInfoInt<CodeGenOpts<"DwarfVersion">>;
 def debugger_tuning_EQ : Joined<["-"], "debugger-tuning=">,
   Values<"gdb,lldb,sce,dbx">,
   NormalizedValuesScope<"llvm::DebuggerKind">, NormalizedValues<["GDB", "LLDB", "SCE", "DBX"]>,
