@@ -935,13 +935,14 @@ struct bind_const_intval_ty {
 
   bind_const_intval_ty(uint64_t &V) : VR(V) {}
 
-  template <typename ITy> bool match(ITy *V) {
-    if (const auto *CV = dyn_cast<ConstantInt>(V))
-      if (CV->getValue().ule(UINT64_MAX)) {
-        VR = CV->getZExtValue();
-        return true;
-      }
-    return false;
+  template <typename ITy> bool match(ITy *V) const {
+    const APInt *ConstInt;
+    if (!apint_match(ConstInt, /*AllowPoison=*/false).match(V))
+      return false;
+    if (ConstInt->getActiveBits() > 64)
+      return false;
+    VR = ConstInt->getZExtValue();
+    return true;
   }
 };
 
