@@ -243,28 +243,6 @@ static double getTimeOfDay() {
   return TimeVal;
 }
 
-/// Get the first timepoints on host and device.
-void startH2DTimeRate(double *HTime, uint64_t *DTime) {
-  *HTime = getTimeOfDay();
-  *DTime = getSystemTimestampInNs();
-}
-
-/// Get the second timepoints on host and device and compute the rate
-/// required for translating device time to host time.
-void completeH2DTimeRate(double HostRef1, uint64_t DeviceRef1) {
-  double HostRef2 = getTimeOfDay();
-  uint64_t DeviceRef2 = getSystemTimestampInNs();
-  // Assume host (h) timing is related to device (d) timing as
-  // h = m.d + o, where m is the slope and o is the offset.
-  // Calculate slope and offset from the two host and device timepoints.
-  double HostDiff = HostRef2 - HostRef1;
-  uint64_t DeviceDiff = DeviceRef2 - DeviceRef1;
-  double Slope = DeviceDiff != 0 ? (HostDiff / DeviceDiff) : HostDiff;
-  double Offset = HostRef1 - Slope * DeviceRef1;
-  ompt::setOmptHostToDeviceRate(Slope, Offset);
-  DP("Translate time Slope: %f Offset: %f\n", Slope, Offset);
-}
-
 #else // OMPT_SUPPORT
 namespace llvm::omp::target::ompt {
 struct OmptEventInfoTy {};
@@ -692,8 +670,8 @@ private:
 struct AMDGPUDeviceImageTy : public DeviceImageTy {
   /// Create the AMDGPU image with the id and the target image pointer.
   AMDGPUDeviceImageTy(int32_t ImageId, GenericDeviceTy &Device,
-                      const __tgt_device_image *TgtImage)
-      : DeviceImageTy(ImageId, Device, TgtImage) {}
+                      std::unique_ptr<MemoryBuffer> &&TgtImage)
+      : DeviceImageTy(ImageId, Device, std::move(TgtImage)) {}
 
   /// Prepare and load the executable corresponding to the image.
   Error loadExecutable(const AMDGPUDeviceTy &Device);
@@ -745,6 +723,8 @@ struct AMDGPUKernelTy : public GenericKernelTy {
   AMDGPUKernelTy(const char *Name, GenericGlobalHandlerTy &Handler)
       : GenericKernelTy(Name),
         OMPX_SPMDOccupancyBasedOpt("OMPX_SPMD_OCCUPANCY_BASED_OPT", false),
+        OMPX_GenericSPMDOccupancyBasedOpt(
+            "OMPX_GENERIC_SPMD_OCCUPANCY_BASED_OPT", false),
         OMPX_BigJumpLoopOccupancyBasedOpt(
             "OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT", false),
         OMPX_XTeamReductionOccupancyBasedOpt(
@@ -887,6 +867,9 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Envar to enable occupancy-based optimization for SPMD kernel.
   BoolEnvar OMPX_SPMDOccupancyBasedOpt;
+
+  /// Envar to enable occupancy-based optimization for generic SPMD kernel.
+  BoolEnvar OMPX_GenericSPMDOccupancyBasedOpt;
 
   /// Envar to enable occupancy-based optimization for big jump loop.
   BoolEnvar OMPX_BigJumpLoopOccupancyBasedOpt;
@@ -1060,14 +1043,6 @@ private:
 
     if (isBigJumpLoopMode()) {
       int32_t NumTeamsEnvVar = GenericDevice.getOMPNumTeams();
-
-      // If envar OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT is set and no
-      // OMP_NUM_TEAMS is specified, optimize the num of teams based on
-      // occupancy value.
-      if (OMPX_BigJumpLoopOccupancyBasedOpt && NumTeamsEnvVar == 0) {
-        return OptimizeNumTeamsBaseOccupancy(GenericDevice, NumThreads);
-      }
-
       uint64_t NumGroups = 1;
       // Cannot assert a non-zero tripcount. Instead, launch with 1 team if the
       // tripcount is indeed zero.
@@ -1111,6 +1086,14 @@ private:
           NumGroups = LowTripCountBlocks;
         }
       }
+      // If envar OMPX_BIGJUMPLOOP_OCCUPANCY_BASED_OPT is set and no num_teams
+      // clause or OMP_NUM_TEAMS is specified, optimize the number of teams
+      // based on occupancy value.
+      if (OMPX_BigJumpLoopOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
+          NumTeamsClause[0] == 0) {
+        return std::min(NumGroups, OptimizeNumTeamsBaseOccupancy(GenericDevice,
+                                                                 NumThreads));
+      }
       return std::min(NumGroups,
                       static_cast<uint64_t>(GenericDevice.getBlockLimit()));
     }
@@ -1144,12 +1127,12 @@ private:
       }
 
       // If envar OMPX_XTEAMREDUCTION_OCCUPANCY_BASED_OPT is set and no
-      // OMP_NUM_TEAMS is specified, optimize the num of teams based on
-      // occupancy value.
-      if (OMPX_XTeamReductionOccupancyBasedOpt && NumTeamsEnvVar == 0) {
+      // OMP_NUM_TEAMS or num_teams clause is specified, optimize the num of
+      // teams based on occupancy value.
+      if (OMPX_XTeamReductionOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
+          NumTeamsClause[0] == 0) {
         uint64_t newNumTeams =
             OptimizeNumTeamsBaseOccupancy(GenericDevice, NumThreads);
-
         return std::min(newNumTeams, MaxNumGroups);
       }
 
@@ -1222,10 +1205,6 @@ private:
     // If envar OMPX_SPMD_OCCUPANCY_BASED_OPT is set and no OMP_NUM_TEAMS is
     // specified, optimize the num of teams based on occupancy value.
     int32_t NumTeamsEnvVar = GenericDevice.getOMPNumTeams();
-    if (isSPMDMode() && OMPX_SPMDOccupancyBasedOpt && NumTeamsEnvVar == 0) {
-      return OptimizeNumTeamsBaseOccupancy(GenericDevice, NumThreads);
-    }
-
     uint64_t TripCountNumBlocks = std::numeric_limits<uint64_t>::max();
     if (LoopTripCount > 0) {
       if (isSPMDMode()) {
@@ -1251,6 +1230,12 @@ private:
         // loop.
         TripCountNumBlocks = LoopTripCount;
       }
+    }
+
+    if (isSPMDMode() && OMPX_SPMDOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
+        NumTeamsClause[0] == 0) {
+      return std::min(TripCountNumBlocks,
+                      OptimizeNumTeamsBaseOccupancy(GenericDevice, NumThreads));
     }
 
     auto getAdjustedDefaultNumBlocks =
@@ -1286,9 +1271,17 @@ private:
     }
 
     uint64_t PreferredNumBlocks = TripCountNumBlocks;
-    // If the loops are long running we rather reuse blocks than spawn too many.
-    if (GenericDevice.getReuseBlocksForHighTripCount())
+    // Occupancy-based setting overrides block reuse.
+    if (OMPX_GenericSPMDOccupancyBasedOpt && NumTeamsEnvVar == 0 && NumTeamsClause[0] == 0) {
+      PreferredNumBlocks =
+          std::min(PreferredNumBlocks,
+                   OptimizeNumTeamsBaseOccupancy(GenericDevice, NumThreads));
+    } else if (GenericDevice.getReuseBlocksForHighTripCount()) {
+      // If the loops are long running we rather reuse blocks than spawn too
+      // many.
       PreferredNumBlocks = std::min(TripCountNumBlocks, AdjustedNumBlocks);
+    }
+
     return std::min(PreferredNumBlocks,
                     (uint64_t)GenericDevice.getBlockLimit());
   }
@@ -3279,7 +3272,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     setHSATicksToTimeConstant();
 
-#ifdef OMPT_SUPPORT
     // At init we capture two time points for host and device. The two
     // timepoints are spaced out to help smooth out their accuracy
     // differences.
@@ -3287,11 +3279,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     // the value for omp_get_wtime. So we use the same clock here to calculate
     // the slope/offset and convert device time to omp_get_wtime via
     // translate_time.
-    double HostRef1 = 0;
-    uint64_t DeviceRef1 = 0;
-#endif
-    // Take the first timepoints.
-    OMPT_IF_ENABLED(startH2DTimeRate(&HostRef1, &DeviceRef1););
+    auto StartTime = getDHTime();
 
     if (auto Err = preAllocateDeviceMemoryPool())
       return Err;
@@ -3400,7 +3388,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       return Err;
 
     // Take the second timepoints and compute the required metadata.
-    OMPT_IF_ENABLED(completeH2DTimeRate(HostRef1, DeviceRef1););
+    auto EndTime = getDHTime();
+    deriveHostToDeviceClockOffset(StartTime, EndTime);
 
     uint32_t NumSdmaEngines = 0;
     if (auto Err =
@@ -3452,7 +3441,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     AMDGPUDeviceImageTy &AMDImage = static_cast<AMDGPUDeviceImageTy &>(*Image);
 
     // Unload the executable of the image.
-    return AMDImage.unloadExecutable();
+    if (auto Err = AMDImage.unloadExecutable())
+      return Err;
+
+    // Destroy the associated memory and invalidate the object.
+    Plugin.free(Image);
+    return Error::success();
   }
 
   /// Deinitialize the device and release its resources.
@@ -3477,18 +3471,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   virtual Error callGlobalConstructors(GenericPluginTy &Plugin,
                                        DeviceImageTy &Image) override {
-    GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
-    if (Handler.isSymbolInImage(*this, Image, "amdgcn.device.fini"))
-      Image.setPendingGlobalDtors();
-
     return callGlobalCtorDtorCommon(Plugin, Image, /*IsCtor=*/true);
   }
 
   virtual Error callGlobalDestructors(GenericPluginTy &Plugin,
                                       DeviceImageTy &Image) override {
-    if (Image.hasPendingGlobalDtors())
-      return callGlobalCtorDtorCommon(Plugin, Image, /*IsCtor=*/false);
-    return Plugin::success();
+    return callGlobalCtorDtorCommon(Plugin, Image, /*IsCtor=*/false);
   }
 
   uint64_t getStreamBusyWaitMicroseconds() const { return OMPX_StreamBusyWait; }
@@ -3617,11 +3605,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   }
 
   /// Load the binary image into the device and allocate an image object.
-  Expected<DeviceImageTy *> loadBinaryImpl(const __tgt_device_image *TgtImage,
-                                           int32_t ImageId) override {
+  Expected<DeviceImageTy *>
+  loadBinaryImpl(std::unique_ptr<MemoryBuffer> &&TgtImage,
+                 int32_t ImageId) override {
     // Allocate and initialize the image object.
     AMDGPUDeviceImageTy *AMDImage = Plugin.allocate<AMDGPUDeviceImageTy>();
-    new (AMDImage) AMDGPUDeviceImageTy(ImageId, *this, TgtImage);
+    new (AMDImage) AMDGPUDeviceImageTy(ImageId, *this, std::move(TgtImage));
 
     // Load the HSA executable.
     if (Error Err = AMDImage->loadExecutable(*this))
@@ -4646,7 +4635,7 @@ private:
     // Perform a quick check for the named kernel in the image. The kernel
     // should be created by the 'amdgpu-lower-ctor-dtor' pass.
     GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
-    if (IsCtor && !Handler.isSymbolInImage(*this, Image, KernelName))
+    if (!Handler.isSymbolInImage(*this, Image, KernelName))
       return Plugin::success();
 
     // Allocate and construct the AMDGPU kernel.
@@ -5015,6 +5004,35 @@ private:
 
   /// True if in multi-device mode.
   bool IsMultiDeviceEnabled = false;
+
+  /// Struct holding time in ns at a point in time for both host and device
+  /// This is used to compute a device-to-host offset and skew. Required for
+  /// OMPT function translate_time.
+  struct DevHostTimePair {
+    uint64_t Device;
+    double Host;
+  };
+
+  /// Get a DHTimepoint
+  DevHostTimePair getDHTime() const {
+    return DevHostTimePair{getSystemTimestampInNs(), getTimeOfDay()};
+  }
+
+  /// Compute time differences for host and device between Start and End
+  /// Assume host (h) timing is related to device (d) timing as
+  /// h = m.d + o, where m is the slope and o is the offset.
+  /// Calculate slope and offset from the two host and device timepoints.
+  void deriveHostToDeviceClockOffset(DevHostTimePair Start, DevHostTimePair End) {
+    double HostDiff = End.Host - Start.Host;
+    uint64_t DeviceDiff = End.Device - Start.Device;
+    double Slope = DeviceDiff != 0 ? (HostDiff / DeviceDiff) : HostDiff;
+    double Offset = Start.Host - Slope * Start.Device;
+    DP("Translate time Slope: %f Offset: %f\n", Slope, Offset);
+#ifdef OMPT_SUPPORT
+    // TODO: This will eventually move into the ProfilerInterface
+    ompt::setOmptHostToDeviceRate(Slope, Offset);
+#endif
+  }
 
   /// Representing all the runtime envar configs for a device.
   struct DeviceEnvarConfigTy {

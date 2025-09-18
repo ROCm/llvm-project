@@ -36,6 +36,7 @@
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/ReplaceConstant.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
@@ -2592,13 +2593,34 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
   }
 
   builder.SetInsertPoint(*regionBlock, (*regionBlock)->begin());
+
+  // Check if we can generate no-loop kernel
+  bool noLoopMode = false;
+  omp::TargetOp targetOp = wsloopOp->getParentOfType<mlir::omp::TargetOp>();
+  if (targetOp) {
+    Operation *targetCapturedOp = targetOp.getInnermostCapturedOmpOp();
+    // We need this check because, without it, noLoopMode would be set to true
+    // for every omp.wsloop nested inside a no-loop SPMD target region, even if
+    // that loop is not the top-level SPMD one.
+    if (loopOp == targetCapturedOp) {
+      omp::TargetRegionFlags kernelFlags =
+          targetOp.getKernelExecFlags(targetCapturedOp);
+      if (omp::bitEnumContainsAll(kernelFlags,
+                                  omp::TargetRegionFlags::spmd |
+                                      omp::TargetRegionFlags::no_loop) &&
+          !omp::bitEnumContainsAny(kernelFlags,
+                                   omp::TargetRegionFlags::generic))
+        noLoopMode = true;
+    }
+  }
+
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy wsloopIP =
       ompBuilder->applyWorkshareLoop(
           ompLoc.DL, loopInfo, allocaIP, loopNeedsBarrier,
           convertToScheduleKind(schedule), chunk, isSimd,
           scheduleMod == omp::ScheduleModifier::monotonic,
           scheduleMod == omp::ScheduleModifier::nonmonotonic, isOrdered,
-          workshareLoopType);
+          workshareLoopType, noLoopMode);
 
   if (failed(handleError(wsloopIP, opInst)))
     return failure();
@@ -3042,16 +3064,46 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
     loopInfos.push_back(*loopResult);
   }
 
-  // Collapse loops. Store the insertion point because LoopInfos may get
-  // invalidated.
   llvm::OpenMPIRBuilder::InsertPointTy afterIP =
       loopInfos.front()->getAfterIP();
 
-  // Update the stack frame created for this loop to point to the resulting loop
-  // after applying transformations.
+  // Do tiling.
+  if (const auto &tiles = loopOp.getTileSizes()) {
+    llvm::Type *ivType = loopInfos.front()->getIndVarType();
+    SmallVector<llvm::Value *> tileSizes;
+
+    for (auto tile : tiles.value()) {
+      llvm::Value *tileVal = llvm::ConstantInt::get(ivType, tile);
+      tileSizes.push_back(tileVal);
+    }
+
+    std::vector<llvm::CanonicalLoopInfo *> newLoops =
+        ompBuilder->tileLoops(ompLoc.DL, loopInfos, tileSizes);
+
+    // Update afterIP to get the correct insertion point after
+    // tiling.
+    llvm::BasicBlock *afterBB = newLoops.front()->getAfter();
+    llvm::BasicBlock *afterAfterBB = afterBB->getSingleSuccessor();
+    afterIP = {afterAfterBB, afterAfterBB->begin()};
+
+    // Update the loop infos.
+    loopInfos.clear();
+    for (const auto &newLoop : newLoops)
+      loopInfos.push_back(newLoop);
+  } // Tiling done.
+
+  // Do collapse.
+  const auto &numCollapse = loopOp.getCollapseNumLoops();
+  SmallVector<llvm::CanonicalLoopInfo *> collapseLoopInfos(
+      loopInfos.begin(), loopInfos.begin() + (numCollapse));
+
+  auto newTopLoopInfo =
+      ompBuilder->collapseLoops(ompLoc.DL, collapseLoopInfos, {});
+
+  assert(newTopLoopInfo && "New top loop information is missing");
   moduleTranslation.stackWalk<OpenMPLoopInfoStackFrame>(
       [&](OpenMPLoopInfoStackFrame &frame) {
-        frame.loopInfo = ompBuilder->collapseLoops(ompLoc.DL, loopInfos, {});
+        frame.loopInfo = newTopLoopInfo;
         return WalkResult::interrupt();
       });
 
@@ -5652,6 +5704,12 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
                 ? llvm::omp::OMP_TGT_EXEC_MODE_GENERIC_SPMD
                 : llvm::omp::OMP_TGT_EXEC_MODE_GENERIC
           : llvm::omp::OMP_TGT_EXEC_MODE_SPMD;
+  if (omp::bitEnumContainsAll(kernelFlags,
+                              omp::TargetRegionFlags::spmd |
+                                  omp::TargetRegionFlags::no_loop) &&
+      !omp::bitEnumContainsAny(kernelFlags, omp::TargetRegionFlags::generic))
+    attrs.ExecFlags = llvm::omp::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+
   attrs.MinTeams = minTeamsVal;
   attrs.MaxTeams.front() = maxTeamsVal;
   attrs.MinThreads = 1;
@@ -6271,7 +6329,8 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::amendOperation(
               if (auto filepathAttr = dyn_cast<StringAttr>(attr)) {
                 llvm::OpenMPIRBuilder *ompBuilder =
                     moduleTranslation.getOpenMPBuilder();
-                ompBuilder->loadOffloadInfoMetadata(filepathAttr.getValue());
+                auto VFS = llvm::vfs::getRealFileSystem();
+                ompBuilder->loadOffloadInfoMetadata(*VFS, filepathAttr.getValue());
                 return success();
               }
               return failure();

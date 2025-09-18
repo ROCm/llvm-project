@@ -65,10 +65,9 @@ bool vputils::isHeaderMask(const VPValue *V, VPlan &Plan) {
   VPValue *A, *B;
   using namespace VPlanPatternMatch;
 
-  if (match(V, m_ActiveLaneMask(m_VPValue(A), m_VPValue(B), m_SpecificInt(1))))
+  if (match(V, m_ActiveLaneMask(m_VPValue(A), m_VPValue(B), m_One())))
     return B == Plan.getTripCount() &&
-           (match(A, m_ScalarIVSteps(m_Specific(Plan.getCanonicalIV()),
-                                     m_SpecificInt(1),
+           (match(A, m_ScalarIVSteps(m_Specific(Plan.getCanonicalIV()), m_One(),
                                      m_Specific(&Plan.getVF()))) ||
             IsWideCanonicalIV(A));
 
@@ -99,8 +98,7 @@ bool vputils::isUniformAcrossVFsAndUFs(VPValue *V) {
   VPRecipeBase *R = V->getDefiningRecipe();
   if (R && V->isDefinedOutsideLoopRegions()) {
     if (match(V->getDefiningRecipe(),
-              m_VPInstruction<VPInstruction::CanonicalIVIncrementForPart>(
-                  m_VPValue())))
+              m_VPInstruction<VPInstruction::CanonicalIVIncrementForPart>()))
       return false;
     return all_of(R->operands(), isUniformAcrossVFsAndUFs);
   }

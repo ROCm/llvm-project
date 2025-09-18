@@ -632,6 +632,17 @@ public:
     addSymbol(sym, exval, /*forced=*/true);
   }
 
+  void bindSymbolStorage(
+      Fortran::lower::SymbolRef sym,
+      Fortran::lower::SymMap::StorageDesc storage) override final {
+    localSymbols.registerStorage(sym, std::move(storage));
+  }
+
+  Fortran::lower::SymMap::StorageDesc
+  getSymbolStorage(Fortran::lower::SymbolRef sym) override final {
+    return localSymbols.lookupStorage(sym);
+  }
+
   void
   overrideExprValues(const Fortran::lower::ExprToValueMap *map) override final {
     exprValueOverrides = map;
@@ -1118,6 +1129,16 @@ public:
   const Fortran::lower::pft::FunctionLikeUnit *
   getCurrentFunctionUnit() const override final {
     return currentFunctionUnit;
+  }
+
+  void checkCoarrayEnabled() override final {
+    if (!getFoldingContext().languageFeatures().IsEnabled(
+            Fortran::common::LanguageFeature::Coarray))
+      fir::emitFatalError(
+          getCurrentLocation(),
+          "Not yet implemented: Multi-image features are experimental and are "
+          "disabled by default, use '-fcoarray' to enable.",
+          false);
   }
 
   void registerTypeInfo(mlir::Location loc,
