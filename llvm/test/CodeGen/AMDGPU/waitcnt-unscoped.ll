@@ -8,28 +8,46 @@ define amdgpu_kernel void @test_waitcnt(ptr addrspace(1) %global_buffer, ptr add
 ; This test checks if SIInsertWaitcnts pass inserts S_WAITCNT VMCNT(0) before DS_READ
 ; CHECK-LABEL: test_waitcnt:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
-; CHECK-NEXT:    v_mov_b32_e32 v0, 0
+; CHECK-NEXT:    s_load_dwordx4 s[36:39], s[4:5], 0x0
+; CHECK-NEXT:    s_mov_b32 s12, s8
+; CHECK-NEXT:    s_mov_b32 s13, s9
+; CHECK-NEXT:    s_mov_b32 s14, s10
+; CHECK-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_add_u32 s4, s0, 64
-; CHECK-NEXT:    s_addc_u32 s5, s1, 0
-; CHECK-NEXT:    s_mov_b32 m0, s2
-; CHECK-NEXT:    s_nop 0
-; CHECK-NEXT:    global_load_lds_dword v0, s[4:5] offset:4
-; CHECK-NEXT:    s_load_dword s4, s[0:1], 0x0
+; CHECK-NEXT:    s_add_u32 s15, s36, 64
+; CHECK-NEXT:    s_addc_u32 s18, s37, 0
+; CHECK-NEXT:    s_add_u32 s8, s4, 16
+; CHECK-NEXT:    s_addc_u32 s9, s5, 0
+; CHECK-NEXT:    s_load_dword s6, s[36:37], 0x0
+; CHECK-NEXT:    s_getpc_b64 s[4:5]
+; CHECK-NEXT:    s_add_u32 s4, s4, llvm.amdgcn.load.to.lds@gotpcrel32@lo+4
+; CHECK-NEXT:    s_addc_u32 s5, s5, llvm.amdgcn.load.to.lds@gotpcrel32@hi+12
+; CHECK-NEXT:    s_load_dwordx2 s[16:17], s[4:5], 0x0
+; CHECK-NEXT:    v_mov_b32_e32 v40, 0
+; CHECK-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    v_mov_b32_e32 v3, s4
-; CHECK-NEXT:    global_store_dword v0, v3, s[0:1] offset:64
+; CHECK-NEXT:    v_mov_b32_e32 v41, s6
+; CHECK-NEXT:    s_mov_b64 s[6:7], s[2:3]
+; CHECK-NEXT:    v_mov_b32_e32 v31, v0
+; CHECK-NEXT:    v_mov_b32_e32 v0, s15
+; CHECK-NEXT:    v_mov_b32_e32 v1, s18
+; CHECK-NEXT:    v_mov_b32_e32 v2, s38
+; CHECK-NEXT:    v_mov_b32_e32 v3, 4
+; CHECK-NEXT:    v_mov_b32_e32 v4, 4
+; CHECK-NEXT:    v_mov_b32_e32 v5, 0
+; CHECK-NEXT:    s_mov_b32 s32, 0
+; CHECK-NEXT:    global_store_dword v40, v41, s[36:37] offset:64
+; CHECK-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; CHECK-NEXT:    ; sched_barrier mask(0x00000000)
-; CHECK-NEXT:    v_mov_b32_e32 v1, s2
-; CHECK-NEXT:    v_mov_b32_e32 v2, s3
-; CHECK-NEXT:    ds_write_b32 v1, v3
-; CHECK-NEXT:    ds_write_b32 v2, v3
+; CHECK-NEXT:    v_mov_b32_e32 v0, s38
+; CHECK-NEXT:    v_mov_b32_e32 v1, s39
+; CHECK-NEXT:    ds_write_b32 v0, v41
+; CHECK-NEXT:    ds_write_b32 v1, v41
 ; CHECK-NEXT:    ; sched_barrier mask(0x00000000)
-; CHECK-NEXT:    ds_read_b32 v1, v1
+; CHECK-NEXT:    ds_read_b32 v0, v0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    global_store_dword v0, v1, s[0:1] offset:16
-; CHECK-NEXT:    global_store_dword v0, v3, s[0:1] offset:32
+; CHECK-NEXT:    global_store_dword v40, v0, s[36:37] offset:16
+; CHECK-NEXT:    global_store_dword v40, v41, s[36:37] offset:32
 ; CHECK-NEXT:    s_endpgm
 entry:
   ; VMEM accesses with alias.scope
