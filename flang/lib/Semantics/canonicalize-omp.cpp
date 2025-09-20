@@ -177,8 +177,11 @@ private:
         // OpenMP Loop Construct and the DO loop itself
         auto &nestedBeginDirective = ompLoopCons->BeginDir();
         auto &nestedBeginName = nestedBeginDirective.DirName();
-        if ((nestedBeginName.v == llvm::omp::Directive::OMPD_unroll ||  nestedBeginName.v == llvm::omp::Directive::OMPD_tile ||   nestedBeginName.v == llvm::omp::Directive::OMPD_interchange) &&
-            !(nestedBeginName.v == llvm::omp::Directive::OMPD_unroll &&beginName.v == llvm::omp::Directive::OMPD_tile)) {
+        if ((nestedBeginName.v == llvm::omp::Directive::OMPD_unroll ||
+                nestedBeginName.v == llvm::omp::Directive::OMPD_tile ||
+                nestedBeginName.v == llvm::omp::Directive::OMPD_interchange) &&
+            !(nestedBeginName.v == llvm::omp::Directive::OMPD_unroll &&
+                beginName.v == llvm::omp::Directive::OMPD_tile)) {
           // iterate through the remaining block items to find the end directive
           // for the unroll/tile directive.
           parser::Block::iterator endIt;
@@ -203,7 +206,7 @@ private:
                   common::Indirection{std::move(*ompLoopCons)}}};
           nextIt = block.erase(nextIt);
         } else if (nestedBeginName.v == llvm::omp::Directive::OMPD_unroll &&
-            beginName.v == llvm::omp::Directive::OMPD_tile ) {
+            beginName.v == llvm::omp::Directive::OMPD_tile) {
           // if a loop has been unrolled, the user can not then tile that loop
           // as it has been unrolled
           const parser::OmpClauseList &unrollClauseList{

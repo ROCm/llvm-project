@@ -1,4 +1,10 @@
-add_flang_library(FortranSemanticsChecks PARTIAL_SOURCES_INTENDED
+add_flang_library(FortranSemantics
+  assignment.cpp
+  attr.cpp
+  canonicalize-acc.cpp
+  canonicalize-directives.cpp
+  canonicalize-do.cpp
+  canonicalize-omp.cpp
   check-acc-structure.cpp
   check-allocate.cpp
   check-arithmeticif.cpp
@@ -23,30 +29,6 @@ add_flang_library(FortranSemanticsChecks PARTIAL_SOURCES_INTENDED
   check-select-rank.cpp
   check-select-type.cpp
   check-stop.cpp
-
-  DEPENDS
-  acc_gen
-  omp_gen
-
-  LINK_LIBS
-  FortranSupport
-  FortranParser
-  FortranEvaluate
-
-  LINK_COMPONENTS
-  Support
-  FrontendOpenMP
-  FrontendOpenACC
-  TargetParser
-)
-
-add_flang_library(FortranSemantics PARTIAL_SOURCES_INTENDED
-  assignment.cpp
-  attr.cpp
-  canonicalize-acc.cpp
-  canonicalize-directives.cpp
-  canonicalize-do.cpp
-  canonicalize-omp.cpp
   compute-offsets.cpp
   data-to-inits.cpp
   definable.cpp
@@ -79,11 +61,19 @@ add_flang_library(FortranSemantics PARTIAL_SOURCES_INTENDED
   FortranSupport
   FortranParser
   FortranEvaluate
-  FortranSemanticsChecks
 
   LINK_COMPONENTS
   Support
   FrontendOpenMP
   FrontendOpenACC
   TargetParser
+)
+
+target_precompile_headers(FortranSemantics PRIVATE
+  [["flang/Semantics/semantics.h"]]
+  [["flang/Semantics/type.h"]]
+  [["flang/Semantics/openmp-modifiers.h"]]
+  [["flang/Semantics/expression.h"]]
+  [["flang/Semantics/tools.h"]]
+  [["flang/Semantics/symbol.h"]]
 )
