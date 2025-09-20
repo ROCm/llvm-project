@@ -3770,6 +3770,7 @@ getMapClauseKindFromModifier(OpenMPDefaultmapClauseModifier M,
     Kind = OMPC_MAP_alloc;
     break;
   case OMPC_DEFAULTMAP_MODIFIER_firstprivate:
+  case OMPC_DEFAULTMAP_MODIFIER_private:
   case OMPC_DEFAULTMAP_MODIFIER_last:
     llvm_unreachable("Unexpected defaultmap implicit behavior");
   case OMPC_DEFAULTMAP_MODIFIER_none:
@@ -4006,9 +4007,13 @@ public:
           } else {
             OpenMPDefaultmapClauseModifier M =
                 Stack->getDefaultmapModifier(ClauseKind);
-            OpenMPMapClauseKind Kind = getMapClauseKindFromModifier(
-                M, ClauseKind == OMPC_DEFAULTMAP_aggregate || Res);
-            ImpInfo.Mappings[ClauseKind][Kind].insert(E);
+            if (M == OMPC_DEFAULTMAP_MODIFIER_private) {
+              ImpInfo.Privates.insert(E);
+            } else {
+              OpenMPMapClauseKind Kind = getMapClauseKindFromModifier(
+                  M, ClauseKind == OMPC_DEFAULTMAP_aggregate || Res);
+              ImpInfo.Mappings[ClauseKind][Kind].insert(E);
+            }
           }
           return;
         }
@@ -15426,12 +15431,13 @@ StmtResult SemaOpenMP::ActOnOpenMPUnrollDirective(ArrayRef<OMPClause *> Clauses,
                                   Body, OriginalInits))
     return StmtError();
 
-  unsigned NumGeneratedLoops = PartialClause ? 1 : 0;
+  unsigned NumGeneratedTopLevelLoops = PartialClause ? 1 : 0;
 
   // Delay unrolling to when template is completely instantiated.
   if (SemaRef.CurContext->isDependentContext())
     return OMPUnrollDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                      NumGeneratedLoops, nullptr, nullptr);
+                                      NumGeneratedTopLevelLoops, nullptr,
+                                      nullptr);
 
   assert(LoopHelpers.size() == NumLoops &&
          "Expecting a single-dimensional loop iteration space");
@@ -15454,9 +15460,10 @@ StmtResult SemaOpenMP::ActOnOpenMPUnrollDirective(ArrayRef<OMPClause *> Clauses,
   // The generated loop may only be passed to other loop-associated directive
   // when a partial clause is specified. Without the requirement it is
   // sufficient to generate loop unroll metadata at code-generation.
-  if (NumGeneratedLoops == 0)
+  if (NumGeneratedTopLevelLoops == 0)
     return OMPUnrollDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                      NumGeneratedLoops, nullptr, nullptr);
+                                      NumGeneratedTopLevelLoops, nullptr,
+                                      nullptr);
 
   // Otherwise, we need to provide a de-sugared/transformed AST that can be
   // associated with another loop directive.
@@ -15671,7 +15678,7 @@ StmtResult SemaOpenMP::ActOnOpenMPUnrollDirective(ArrayRef<OMPClause *> Clauses,
               LoopHelper.Init->getBeginLoc(), LoopHelper.Inc->getEndLoc());
 
   return OMPUnrollDirective::Create(Context, StartLoc, EndLoc, Clauses, AStmt,
-                                    NumGeneratedLoops, OuterFor,
+                                    NumGeneratedTopLevelLoops, OuterFor,
                                     buildPreInits(Context, PreInits));
 }
 
@@ -23563,7 +23570,7 @@ OMPClause *SemaOpenMP::ActOnOpenMPDefaultmapClause(
                 ? "'alloc', 'from', 'to', 'tofrom', "
                   "'firstprivate', 'none', 'default', 'present'"
                 : "'storage', 'from', 'to', 'tofrom', "
-                  "'firstprivate', 'none', 'default', 'present'";
+                  "'firstprivate', 'private', 'none', 'default', 'present'";
         if (!isDefaultmapKind && isDefaultmapModifier) {
           Diag(KindLoc, diag::err_omp_unexpected_clause_value)
               << KindValue << getOpenMPClauseNameForDiag(OMPC_defaultmap);

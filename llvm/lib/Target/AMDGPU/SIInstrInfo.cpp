@@ -913,7 +913,7 @@ void SIInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       return;
     }
 
-    if (!AMDGPU::SReg_64RegClass.contains(SrcReg)) {
+    if (!AMDGPU::SReg_64_EncodableRegClass.contains(SrcReg)) {
       reportIllegalCopy(this, MBB, MI, DL, DestReg, SrcReg, KillSrc);
       return;
     }
@@ -1976,8 +1976,9 @@ void SIInstrInfo::insertNoops(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MI,
                               unsigned Quantity) const {
   DebugLoc DL = MBB.findDebugLoc(MI);
+  unsigned MaxSNopCount = 1u << ST.getSNopBits();
   while (Quantity > 0) {
-    unsigned Arg = std::min(Quantity, 8u);
+    unsigned Arg = std::min(Quantity, MaxSNopCount);
     Quantity -= Arg;
     BuildMI(MBB, MI, DL, get(AMDGPU::S_NOP)).addImm(Arg - 1);
   }
