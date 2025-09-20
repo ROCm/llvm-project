@@ -2403,9 +2403,6 @@ public:
   }
 #define GEN_FLANG_CLAUSE_UNPARSE
 #include "llvm/Frontend/OpenMP/OMP.inc"
-    case llvm::omp::Directive::OMPD_interchange:
-      Word("INTERCHANGE ");
-      break;
   void Unparse(const OmpObjectList &x) { Walk(x.v, ","); }
 
   void Unparse(const common::OmpMemoryOrderType &x) {

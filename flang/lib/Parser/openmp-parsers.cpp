@@ -1366,7 +1366,6 @@ TYPE_PARSER(sourced(construct<OpenMPUtilityConstruct>(
 TYPE_PARSER(sourced(construct<OmpMetadirectiveDirective>(
     verbatim("METADIRECTIVE"_tok), Parser<OmpClauseList>{})))
 
-    "INTERCHANGE" >> pure(llvm::omp::Directive::OMPD_interchange),
 static inline constexpr auto IsDirective(llvm::omp::Directive dir) {
   return [dir](const OmpDirectiveName &name) -> bool { return dir == name.v; };
 }
@@ -1954,7 +1953,8 @@ static constexpr DirectiveSet GetLoopDirectives() {
       unsigned(Directive::OMPD_teams_distribute_simd),
       unsigned(Directive::OMPD_teams_loop),
       unsigned(Directive::OMPD_tile),
-      unsigned(Directive::OMPD_unroll),
+      unsigned(Directive::OMPD_unroll),   
+      unsigned(Directive::OMPD_interchange),
   };
   return loopDirectives;
 }
