@@ -118,7 +118,6 @@ public:
     return TTI::PSK_FastHardware;
   }
 
-  unsigned getNumberOfParts(Type *Tp);
   unsigned getNumberOfRegisters(unsigned RCID) const;
   TypeSize getRegisterBitWidth(TargetTransformInfo::RegisterKind Vector) const;
   unsigned getMinVectorRegisterBitWidth() const;
@@ -278,6 +277,20 @@ public:
 
   /// \return if target want to issue a prefetch in address space \p AS.
   bool shouldPrefetchAddressSpace(unsigned AS) const override;
+
+  /// Account for loads of i8 vector types to have reduced cost. For
+  /// example the cost of load 4 i8s values is one is the cost of loading
+  /// a single i32 value.
+  InstructionCost getMemoryOpCost(
+      unsigned Opcode, Type *Src, Align Alignment, unsigned AddressSpace,
+      TTI::TargetCostKind CostKind,
+      TTI::OperandValueInfo OpInfo = {TTI::OK_AnyValue, TTI::OP_None},
+      const Instruction *I = nullptr);
+
+  /// When counting parts on AMD GPUs, account for i8s being grouped
+  /// together under a single i32 value. Otherwise fall back to base
+  /// implementation.
+  unsigned getNumberOfParts(Type *Tp);
 };
 
 } // end namespace llvm
