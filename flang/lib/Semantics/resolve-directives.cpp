@@ -2128,8 +2128,6 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
     llvm::SmallVector<const parser::OmpClause *> &clauses) {
   const auto &beginLoopDir{y.BeginDir()};
   const auto &dirClauses{beginLoopDir.Clauses()};
-  //  const auto &beginLoopDir{std::get<parser::OmpBeginLoopDirective>(y.t)};
-  // const auto &dirClauses{std::get<parser::OmpClauseList>(beginLoopDir.t)};
   auto ytv = Fortran::parser::omp::GetOmpDirectiveName(y).v;
 
   for (const auto &clause : x.v) {
