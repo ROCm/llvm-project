@@ -721,12 +721,11 @@ int64_t collectLoopRelatedInfo(
         const auto &innerBegin =
             std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
         const auto &innerDirective =
-            std::get<parser::OmpLoopDirective>(innerBegin.t).v;
+            Fortran::parser::omp::GetOmpDirectiveName(innerBegin).v;
 
         if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
           // Get the size values from parse tree and convert to a vector
-          const auto &innerClauseList{
-              std::get<parser::OmpClauseList>(innerBegin.t)};
+          const auto &innerClauseList{innerBegin.Clauses()};
           for (const auto &clause : innerClauseList.v) {
             if (const auto tclause{
                     std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
@@ -800,15 +799,14 @@ void collectPermutationFromOpenMPConstruct(
             &(nestedOptional.value()));
     if (innerConstruct) {
       const auto &innerLoopDirective = innerConstruct->value();
-      const auto &innerBegin =
-          std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+      const auto &innerBegin = innerLoopDirective.BeginDir();
       const auto &innerDirective =
-          std::get<parser::OmpLoopDirective>(innerBegin.t).v;
+          Fortran::parser::omp::GetOmpDirectiveName(innerLoopDirective).v;
 
       if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
         // Get the size values from parse tree and convert to a vector
-        const auto &innerClauseList{
-            std::get<parser::OmpClauseList>(innerBegin.t)};
+        const auto &innerClauseList{innerBegin.Clauses()};
+        // std::get<parser::OmpClauseList>(innerBegin.t)};
         for (const auto &clause : innerClauseList.v)
           if (const auto tclause{
                   std::get_if<parser::OmpClause::Sizes>(&clause.u)}) {
