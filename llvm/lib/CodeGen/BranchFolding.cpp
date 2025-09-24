@@ -61,7 +61,8 @@
 #include <cstddef>
 #include <iterator>
 #include <numeric>
-
+#include "llvm/CodeGen/MachineDominators.h"
+#include "llvm/CodeGen/MachinePostDominators.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "branch-folder"
@@ -135,12 +136,17 @@ PreservedAnalyses BranchFolderPass::run(MachineFunction &MF,
         "ProfileSummaryAnalysis is required for BranchFoldingPass", false);
 
   auto &MBFI = MFAM.getResult<MachineBlockFrequencyAnalysis>(MF);
+auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+auto &MPDT = MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   MBFIWrapper MBBFreqInfo(MBFI);
   BranchFolder Folder(EnableTailMerge, /*CommonHoist=*/true, MBBFreqInfo, MBPI,
                       PSI);
   if (!Folder.OptimizeFunction(MF, MF.getSubtarget().getInstrInfo(),
-                               MF.getSubtarget().getRegisterInfo()))
+                               MF.getSubtarget().getRegisterInfo())){
+    MDT.updateBlockNumbers();
+    MPDT.updateBlockNumbers();
     return PreservedAnalyses::all();
+  }
   return getMachineFunctionPassPreservedAnalyses();
 }
 
