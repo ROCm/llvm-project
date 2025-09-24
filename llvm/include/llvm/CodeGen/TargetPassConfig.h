@@ -20,6 +20,7 @@
 #include <cassert>
 #include <string>
 
+
 namespace llvm {
 
 class TargetMachine;
@@ -477,6 +478,9 @@ protected:
 
 LLVM_ABI void registerCodeGenCallback(PassInstrumentationCallbacks &PIC,
                                       TargetMachine &);
+
+enum class SelectorType { SelectionDAG, FastISel, GlobalISel };
+SelectorType getSelectorType(TargetMachine& TM);
 
 } // end namespace llvm
 
