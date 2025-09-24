@@ -101,6 +101,15 @@ int llvm::compileModuleWithNewPM(
 
   raw_pwrite_stream *OS = &Out->os();
 
+  // Manually do the buffering rather than using buffer_ostream,
+  // so we can memcmp the contents in CompileTwice mode
+  SmallVector<char, 0> Buffer;
+  std::unique_ptr<raw_svector_ostream> BOS;
+  if ((codegen::getFileType() != CodeGenFileType::AssemblyFile &&
+       !Out->os().supportsSeeking())) {
+    BOS = std::make_unique<raw_svector_ostream>(Buffer);
+    OS = BOS.get();
+  }
   // Fetch options from TargetPassConfig
   CGPassBuilderOption Opt = getCGPassBuilderOption();
   Opt.DisableVerify = VK != VerifierKind::InputOutput;
@@ -181,6 +190,10 @@ int llvm::compileModuleWithNewPM(
 
   if (Context.getDiagHandlerPtr()->HasErrors)
     exit(1);
+
+  if (BOS) {
+    Out->os() << Buffer;
+  }
 
   // Declare success.
   Out->keep();
