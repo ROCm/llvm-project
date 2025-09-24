@@ -56,7 +56,7 @@ class R600CodeGenPassBuilder
     : public CodeGenPassBuilder<R600CodeGenPassBuilder, R600TargetMachine> {
 public:
   R600CodeGenPassBuilder(R600TargetMachine &TM, const CGPassBuilderOption &Opts,
-                         PassInstrumentationCallbacks *PIC);
+                         PassInstrumentationCallbacks *PIC,  PassBuilder &PB);
 
   void addPreISel(AddIRPass &addPass) const;
   void addAsmPrinter(AddMachinePass &, CreateMCStreamer) const;
@@ -166,8 +166,8 @@ TargetPassConfig *R600TargetMachine::createPassConfig(PassManagerBase &PM) {
 Error R600TargetMachine::buildCodeGenPipeline(
     ModulePassManager &MPM, raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,
     CodeGenFileType FileType, const CGPassBuilderOption &Opts, MCContext &Ctx,
-    PassInstrumentationCallbacks *PIC) {
-  R600CodeGenPassBuilder CGPB(*this, Opts, PIC);
+    PassInstrumentationCallbacks *PIC, PassBuilder &PB) {
+  R600CodeGenPassBuilder CGPB(*this, Opts, PIC, PB);
   return CGPB.buildPipeline(MPM, Out, DwoOut, FileType, Ctx);
 }
 
@@ -184,8 +184,8 @@ MachineFunctionInfo *R600TargetMachine::createMachineFunctionInfo(
 
 R600CodeGenPassBuilder::R600CodeGenPassBuilder(
     R600TargetMachine &TM, const CGPassBuilderOption &Opts,
-    PassInstrumentationCallbacks *PIC)
-    : CodeGenPassBuilder(TM, Opts, PIC) {
+    PassInstrumentationCallbacks *PIC, PassBuilder &PB)
+    : CodeGenPassBuilder(TM, Opts, PIC, PB) {
   Opt.RequiresCodeGenSCCOrder = true;
 }
 

@@ -104,7 +104,8 @@ public:
                              raw_pwrite_stream *DwoOut,
                              CodeGenFileType FileType,
                              const CGPassBuilderOption &Opts, MCContext &Ctx,
-                             PassInstrumentationCallbacks *PIC) override;
+                             PassInstrumentationCallbacks *PIC,
+                             PassBuilder &) override;
 
   void registerMachineRegisterInfoCallback(MachineFunction &MF) const override;
 
