@@ -23,7 +23,6 @@ public:
       : AllowTailMerge(AllowTailMerge) {}
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
-  static bool isRequired() { return true; }
 
   void
   printPipeline(raw_ostream &OS,

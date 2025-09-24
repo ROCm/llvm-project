@@ -338,6 +338,7 @@ private:
 public:
   AMDGPULowerKernelArgumentsPass(TargetMachine &TM) : TM(TM){};
   PreservedAnalyses run(Function &, FunctionAnalysisManager &);
+  static bool isRequired() { return true; }
 };
 
 struct AMDGPUAttributorOptions {

@@ -16,7 +16,7 @@ class RegisterCoalescerPass : public PassInfoMixin<RegisterCoalescerPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
-
+  static bool isRequired() { return true; }
   MachineFunctionProperties getClearedProperties() const {
     return MachineFunctionProperties().setIsSSA();
   }

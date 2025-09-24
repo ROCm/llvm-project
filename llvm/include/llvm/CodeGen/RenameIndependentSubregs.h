@@ -16,6 +16,7 @@ namespace llvm {
 class RenameIndependentSubregsPass
     : public PassInfoMixin<RenameIndependentSubregsPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
 };
