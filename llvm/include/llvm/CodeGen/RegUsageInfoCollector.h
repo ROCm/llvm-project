@@ -16,6 +16,7 @@ namespace llvm {
 class RegUsageInfoCollectorPass
     : public AnalysisInfoMixin<RegUsageInfoCollectorPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
 };

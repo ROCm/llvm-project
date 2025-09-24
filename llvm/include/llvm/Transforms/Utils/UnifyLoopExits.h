@@ -15,6 +15,7 @@ namespace llvm {
 
 class UnifyLoopExitsPass : public PassInfoMixin<UnifyLoopExitsPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 } // namespace llvm
