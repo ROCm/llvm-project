@@ -34,6 +34,7 @@
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/IR/DiagnosticInfo.h"
@@ -443,9 +444,14 @@ void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
         RI.getSymbol(FnSym->getName(), RIK::RIK_NumAGPR, OutContext, IsLocal);
     uint64_t NumVgpr, NumAgpr;
 
-    MachineModuleInfo &MMI =
-        getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
-    MachineFunction *MF = MMI.getMachineFunction(F);
+    MachineFunction *MF =
+        !MAM ? MMI->getMachineFunction(F) : [&]() -> MachineFunction * {
+      auto *MFA =
+          MAM->getResult<FunctionAnalysisManagerModuleProxy>(*F.getParent())
+              .getManager()
+              .getCachedResult<MachineFunctionAnalysis>(F);
+      return MFA ? &MFA->getMF() : nullptr;
+    }();
     if (MF && NumVgprSymbol->isVariable() && NumAgprSymbol->isVariable() &&
         TryGetMCExprValue(NumVgprSymbol->getVariableValue(), NumVgpr) &&
         TryGetMCExprValue(NumAgprSymbol->getVariableValue(), NumAgpr)) {
@@ -651,8 +657,9 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   if (!IsTargetStreamerInitialized)
     initTargetStreamer(*MF.getFunction().getParent());
 
-  ResourceUsage =
-      &getAnalysis<AMDGPUResourceUsageAnalysisWrapperPass>().getResourceInfo();
+  ResourceUsage = inNewPassManager() ? &MFAM->getResult<AMDGPUResourceUsageAnalysis>(MF)
+                                     : &getAnalysis<AMDGPUResourceUsageAnalysisWrapperPass>().getResourceInfo();
+
   CurrentProgramInfo.reset(MF);
 
   const AMDGPUMachineFunction *MFI = MF.getInfo<AMDGPUMachineFunction>();
