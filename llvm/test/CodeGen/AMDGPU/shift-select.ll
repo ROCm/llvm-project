@@ -1,7 +1,8 @@
-; RUN: llc -mtriple=amdgcn -mcpu=tahiti -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX6 %s
-; RUN: llc -mtriple=amdgcn -mcpu=fiji -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-enable-vopd=0 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; FIXME: use npm when GIsel passes have been ported
+; RUN: llc -enable-new-pm=0 -mtriple=amdgcn -mcpu=tahiti -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX6 %s
+; RUN: llc -enable-new-pm=0 -mtriple=amdgcn -mcpu=fiji -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; RUN: llc -enable-new-pm=0 -mtriple=amdgcn -mcpu=gfx1010 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
+; RUN: llc -enable-new-pm=0 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-enable-vopd=0 -stop-after=instruction-select < %s | FileCheck -check-prefixes=GCN,GFX8PLUS %s
 
 ; GCN-LABEL: name:            s_shl_i32
 ; GCN: S_LSHL_B32
