@@ -134,6 +134,8 @@ public:
 
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
 
+  void run(MachineFunction &MF, MachineFunctionAnalysisManager &) override;
+
   void emitGlobalVariable(const GlobalVariable *GV) override;
 
   void emitStartOfAsmFile(Module &M) override;
