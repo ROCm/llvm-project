@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/BranchRelaxation.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -769,8 +769,11 @@ bool BranchRelaxation::relaxBranchInstructions() {
 PreservedAnalyses
 BranchRelaxationPass::run(MachineFunction &MF,
                           MachineFunctionAnalysisManager &MFAM) {
-  if (!BranchRelaxation().run(MF))
+  auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  if (!BranchRelaxation().run(MF)){
+    MDT.updateBlockNumbers();
     return PreservedAnalyses::all();
+  }
 
   return getMachineFunctionPassPreservedAnalyses();
 }
