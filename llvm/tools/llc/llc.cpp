@@ -749,7 +749,8 @@ static int compileModule(char **argv, SmallVectorImpl<PassPlugin> &PluginList,
   else if (VerifyEach)
     VK = VerifierKind::EachPass;
 
-  if (EnableNewPassManager || !PassPipeline.empty()) {
+  if (EnableNewPassManager || !PassPipeline.empty() ||
+      Target->EnableNewPMForBackend()) {
     return compileModuleWithNewPM(argv[0], std::move(M), std::move(MIR),
                                   std::move(Target), std::move(Out),
                                   std::move(DwoOut), Context, TLII, VK,
