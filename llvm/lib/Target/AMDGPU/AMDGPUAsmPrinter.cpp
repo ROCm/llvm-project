@@ -266,6 +266,11 @@ void AMDGPUAsmPrinter::emitImplicitDef(const MachineInstr *MI) const {
   OutStreamer->addBlankLine();
 }
 
+void AMDGPUAsmPrinter::run(MachineFunction &MF, MachineFunctionAnalysisManager &MFAM) {
+  this->MFAM = &MFAM;
+  (void) this->runOnMachineFunction(MF);
+}
+
 void AMDGPUAsmPrinter::emitFunctionEntryLabel() {
   if (TM.getTargetTriple().getOS() == Triple::AMDHSA) {
     AsmPrinter::emitFunctionEntryLabel();
