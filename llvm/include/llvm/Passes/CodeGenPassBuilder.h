@@ -679,7 +679,7 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
       addPass(PrintMIRPass(Out), /*Force=*/true);
   }
 
-  {
+  if (PrintAsm) {
     AddIRPass addIRPass(MPM, derived());
     addIRPass(AsmPrinterFinalizePass(PrinterImpl));
   }

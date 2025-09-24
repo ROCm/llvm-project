@@ -760,6 +760,7 @@ AMDGPUTargetMachine::AMDGPUTargetMachine(const Target &T, const Triple &TT,
           OptLevel),
       TLOF(createTLOF(getTargetTriple())) {
   initAsmInfo();
+  setNewPMForBackend(true);
   if (TT.isAMDGCN()) {
     if (getMCSubtargetInfo()->checkFeatures("+wavefrontsize64"))
       MRI.reset(llvm::createGCNMCRegisterInfo(AMDGPUDwarfFlavour::Wave64));
