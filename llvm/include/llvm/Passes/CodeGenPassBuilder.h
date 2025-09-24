@@ -937,21 +937,7 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::addCoreISelPasses(
   TM.setO0WantsFastISel(Opt.EnableFastISelOption.value_or(true));
 
   // Determine an instruction selector.
-  enum class SelectorType { SelectionDAG, FastISel, GlobalISel };
-  SelectorType Selector;
-
-  if (Opt.EnableFastISelOption && *Opt.EnableFastISelOption == true)
-    Selector = SelectorType::FastISel;
-  else if ((Opt.EnableGlobalISelOption &&
-            *Opt.EnableGlobalISelOption == true) ||
-           (TM.Options.EnableGlobalISel &&
-            (!Opt.EnableGlobalISelOption ||
-             *Opt.EnableGlobalISelOption == false)))
-    Selector = SelectorType::GlobalISel;
-  else if (TM.getOptLevel() == CodeGenOptLevel::None && TM.getO0WantsFastISel())
-    Selector = SelectorType::FastISel;
-  else
-    Selector = SelectorType::SelectionDAG;
+  SelectorType Selector = getSelectorType(TM);
 
   // Set consistently TM.Options.EnableFastISel and EnableGlobalISel.
   if (Selector == SelectorType::FastISel) {
