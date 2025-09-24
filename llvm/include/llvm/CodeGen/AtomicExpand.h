@@ -22,6 +22,7 @@ private:
 
 public:
   AtomicExpandPass(const TargetMachine &TM) : TM(&TM) {}
+  static bool isRequired() { return true; }
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 

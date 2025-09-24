@@ -38,6 +38,7 @@ namespace llvm {
 class LCSSAPass : public PassInfoMixin<LCSSAPass> {
 public:
   LLVM_ABI PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 } // end namespace llvm
 
