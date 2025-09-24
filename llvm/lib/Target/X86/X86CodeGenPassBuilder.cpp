@@ -11,9 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "X86.h"
+#include "X86AsmPrinter.h"
 #include "X86ISelDAGToDAG.h"
 #include "X86TargetMachine.h"
 
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Passes/CodeGenPassBuilder.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -63,8 +65,8 @@ void X86TargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
 
 Error X86TargetMachine::buildCodeGenPipeline(
     ModulePassManager &MPM, raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,
-    CodeGenFileType FileType, const CGPassBuilderOption &Opt,
+    CodeGenFileType FileType, const CGPassBuilderOption &Opt, MCContext &Ctx,
     PassInstrumentationCallbacks *PIC) {
   auto CGPB = X86CodeGenPassBuilder(*this, Opt, PIC);
-  return CGPB.buildPipeline(MPM, Out, DwoOut, FileType);
+  return CGPB.buildPipeline(MPM, Out, DwoOut, FileType, Ctx);
 }

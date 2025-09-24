@@ -23,6 +23,8 @@
 #include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
+#include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/AssignmentTrackingAnalysis.h"
 #include "llvm/CodeGen/BranchFoldingPass.h"
 #include "llvm/CodeGen/CallBrPrepare.h"
 #include "llvm/CodeGen/CodeGenPrepare.h"
@@ -103,6 +105,8 @@
 #include "llvm/IRPrinter/IRPrintingPasses.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
@@ -196,8 +200,8 @@ public:
   }
 
   Error buildPipeline(ModulePassManager &MPM, raw_pwrite_stream &Out,
-                      raw_pwrite_stream *DwoOut,
-                      CodeGenFileType FileType) const;
+                      raw_pwrite_stream *DwoOut, CodeGenFileType FileType,
+                      MCContext &Ctx) const;
 
   PassInstrumentationCallbacks *getPassInstrumentationCallbacks() const {
     return PIC;
@@ -294,6 +298,7 @@ protected:
   TargetMachineT &TM;
   CGPassBuilderOption Opt;
   PassInstrumentationCallbacks *PIC;
+  mutable IntrusiveRefCntPtr<AsmPrinter> PrinterImpl;
 
   template <typename TMC> TMC &getTM() const { return static_cast<TMC &>(TM); }
   CodeGenOptLevel getOptLevel() const { return TM.getOptLevel(); }
@@ -562,7 +567,7 @@ private:
 template <typename Derived, typename TargetMachineT>
 Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
     ModulePassManager &MPM, raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,
-    CodeGenFileType FileType) const {
+    CodeGenFileType FileType, MCContext &Ctx) const {
   auto StartStopInfo = TargetPassConfig::getStartStopInfo(*PIC);
   if (!StartStopInfo)
     return StartStopInfo.takeError();
@@ -571,7 +576,17 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
   bool PrintAsm = TargetPassConfig::willCompleteCodeGenPipeline();
   bool PrintMIR = !PrintAsm && FileType != CodeGenFileType::Null;
 
+  Expected<std::unique_ptr<MCStreamer>> MCStreamerOrErr =
+    TM.createMCStreamer(Out, DwoOut, FileType, Ctx);
+  if (auto Err = MCStreamerOrErr.takeError())
+    return Err;
+  PrinterImpl =
+      TM.getTarget().createAsmPrinter(TM, std::move(*MCStreamerOrErr));
+
   PassManagerWrapper PMW(MPM);
+
+  if (PrintAsm)
+    addModulePass(AsmPrinterInitializePass(PrinterImpl), PMW, /*Force=*/true);
 
   addModulePass(RequireAnalysisPass<MachineModuleAnalysis, Module>(), PMW,
                 /*Force=*/true);
@@ -596,18 +611,18 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
   if (!Opt.DisableVerify)
     addMachineFunctionPass(MachineVerifierPass(), PMW);
 
-  if (PrintAsm) {
-    derived().addAsmPrinter(
-        PMW, [this, &Out, DwoOut, FileType](MCContext &Ctx) {
-          return this->TM.createMCStreamer(Out, DwoOut, FileType, Ctx);
-        });
-  }
+  if (PrintAsm) 
+      addMachineFunctionPass(AsmPrinterPass(PrinterImpl), PMW, /*Force=*/true);
 
   if (PrintMIR)
     addMachineFunctionPass(PrintMIRPass(Out), PMW, /*Force=*/true);
 
   flushFPMsToMPM(PMW, /*FreeMachineFunctions=*/true);
 
+  if (PrintAsm)
+    addModulePass(AsmPrinterFinalizePass(PrinterImpl), PMW, /*Force=*/true);
+
+  PrinterImpl.reset();
   return verifyStartStop(*StartStopInfo);
 }
 
@@ -718,6 +733,10 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addIRPasses(
       addFunctionPass(MergeICmpsPass(), PMW);
     addFunctionPass(ExpandMemCmpPass(TM), PMW);
   }
+
+  // This should be the last IR module pass.
+  // if (TargetPassConfig::willCompleteCodeGenPipeline())
+  //   addPass(AsmPrinterInitializePass(PrinterImpl));
 
   // Run GC lowering passes for builtin collectors
   // TODO: add a pass insertion point here
