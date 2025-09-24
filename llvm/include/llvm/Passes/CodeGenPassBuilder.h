@@ -644,7 +644,7 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
       return Err;
     PrinterImpl =
         TM.getTarget().createAsmPrinter(TM, std::move(*MCStreamerOrErr));
-    addIRPass(AsmPrinterInitializePass(PrinterImpl));
+    addIRPass(AsmPrinterInitializePass(PrinterImpl), true);
   }
 
   {
@@ -1091,10 +1091,12 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::addMachinePasses(
 
   derived().addPreEmitPass(addPass);
 
-  if (TM.Options.EnableIPRA)
+  if (TM.Options.EnableIPRA) {
     // Collect register usage information and produce a register mask of
     // clobbered registers, to be used to optimize call sites.
+    addPass(RequireAnalysisPass<PhysicalRegisterUsageAnalysis, Module>());
     addPass(RegUsageInfoCollectorPass());
+  }
 
   addPass(FuncletLayoutPass());
 
