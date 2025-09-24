@@ -25,7 +25,8 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/Support/BranchProbability.h"
-
+#include "llvm/CodeGen/MachineDominators.h"
+#include "llvm/CodeGen/MachinePostDominators.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "si-pre-emit-peephole"
@@ -705,8 +706,13 @@ MachineInstrBuilder SIPreEmitPeephole::createUnpackedMI(MachineInstr &I,
 PreservedAnalyses
 llvm::SIPreEmitPeepholePass::run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM) {
-  if (!SIPreEmitPeephole().run(MF))
+  auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  auto &MPDT = MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
+  if (!SIPreEmitPeephole().run(MF)) {
+    MDT.updateBlockNumbers();
+    MPDT.updateBlockNumbers();
     return PreservedAnalyses::all();
+  }
 
   return getMachineFunctionPassPreservedAnalyses();
 }

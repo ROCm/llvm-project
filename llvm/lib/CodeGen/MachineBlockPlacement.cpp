@@ -414,6 +414,8 @@ class MachineBlockPlacement {
   /// A handle to the post dominator tree.
   MachinePostDominatorTree *MPDT = nullptr;
 
+  MachineDominatorTree *MDT = nullptr;
+
   ProfileSummaryInfo *PSI = nullptr;
 
   // Tail merging is also determined based on
@@ -623,8 +625,8 @@ public:
   MachineBlockPlacement(const MachineBranchProbabilityInfo *MBPI,
                         MachineLoopInfo *MLI, ProfileSummaryInfo *PSI,
                         std::unique_ptr<MBFIWrapper> MBFI,
-                        MachinePostDominatorTree *MPDT, bool AllowTailMerge)
-      : MBPI(MBPI), MBFI(std::move(MBFI)), MLI(MLI), MPDT(MPDT), PSI(PSI),
+                        MachinePostDominatorTree *MPDT, MachineDominatorTree *MDT, bool AllowTailMerge)
+      : MBPI(MBPI), MBFI(std::move(MBFI)), MLI(MLI), MPDT(MPDT), MDT(MDT), PSI(PSI),
         AllowTailMerge(AllowTailMerge) {};
 
   bool run(MachineFunction &F);
@@ -658,7 +660,7 @@ public:
     auto *PSI = &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
     auto *PassConfig = &getAnalysis<TargetPassConfig>();
     bool AllowTailMerge = PassConfig->getEnableTailMerge();
-    return MachineBlockPlacement(MBPI, MLI, PSI, std::move(MBFI), MPDT,
+    return MachineBlockPlacement(MBPI, MLI, PSI, std::move(MBFI), MPDT, nullptr,
                                  AllowTailMerge)
         .run(MF);
   }
@@ -3547,13 +3549,11 @@ MachineBlockPlacementPass::run(MachineFunction &MF,
   if (!PSI)
     report_fatal_error("MachineBlockPlacement requires ProfileSummaryAnalysis",
                        false);
-
-  MachineBlockPlacement MBP(MBPI, MLI, PSI, std::move(MBFI), MPDT,
+  auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  MachineBlockPlacement MBP(MBPI, MLI, PSI, std::move(MBFI), MPDT, &MDT,
                             AllowTailMerge);
-
   if (!MBP.run(MF))
     return PreservedAnalyses::all();
-
   return getMachineFunctionPassPreservedAnalyses();
 }
 
@@ -3667,8 +3667,12 @@ bool MachineBlockPlacement::run(MachineFunction &MF) {
   if (ViewBlockLayoutWithBFI != GVDT_None &&
       (ViewBlockFreqFuncName.empty() ||
        F->getFunction().getName() == ViewBlockFreqFuncName)) {
-    if (RenumberBlocksBeforeView)
+    if (RenumberBlocksBeforeView) {
       MF.RenumberBlocks();
+      if (MDT)
+        MDT->updateBlockNumbers();
+      MPDT->updateBlockNumbers();
+    }
     MBFI->view("MBP." + MF.getName(), false);
   }
 
@@ -3771,6 +3775,9 @@ void MachineBlockPlacement::assignBlockOrder(
     const std::vector<const MachineBasicBlock *> &NewBlockOrder) {
   assert(F->size() == NewBlockOrder.size() && "Incorrect size of block order");
   F->RenumberBlocks();
+  if (MDT)
+    MDT->updateBlockNumbers();
+  MPDT->updateBlockNumbers();
   // At this point, we possibly removed blocks from the function, so we can't
   // renumber the domtree. At this point, we don't need it anymore, though.
   // TODO: move this to the point where the dominator tree is actually
