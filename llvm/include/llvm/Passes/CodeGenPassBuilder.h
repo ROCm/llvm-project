@@ -130,6 +130,7 @@
 #include "llvm/Transforms/Utils/EntryExitInstrumenter.h"
 #include "llvm/Transforms/Utils/LowerInvoke.h"
 #include <cassert>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -171,8 +172,9 @@ template <typename DerivedT, typename TargetMachineT> class CodeGenPassBuilder {
 public:
   explicit CodeGenPassBuilder(TargetMachineT &TM,
                               const CGPassBuilderOption &Opts,
-                              PassInstrumentationCallbacks *PIC)
-      : TM(TM), Opt(Opts), PIC(PIC) {
+                              PassInstrumentationCallbacks *PIC,
+                              PassBuilder &PB)
+      : TM(TM), Opt(Opts), PIC(PIC), PB(PB) {
     // Target could set CGPassBuilderOption::MISchedPostRA to true to achieve
     //     substitutePass(&PostRASchedulerID, &PostMachineSchedulerID)
 
@@ -359,6 +361,7 @@ protected:
   TargetMachineT &TM;
   CGPassBuilderOption Opt;
   PassInstrumentationCallbacks *PIC;
+  PassBuilder &PB;
   mutable IntrusiveRefCntPtr<AsmPrinter> PrinterImpl;
 
   template <typename TMC> TMC &getTM() const { return static_cast<TMC &>(TM); }
@@ -569,6 +572,15 @@ protected:
   /// addMachinePasses helper to create the target-selected or overriden
   /// regalloc pass.
   void addRegAllocPass(AddMachinePass &, bool Optimized) const;
+  /// Read the --regalloc-npm option to add the next pass in line.
+  /// Returns false if no pass is left in the option.
+  bool addRegAllocPassFromOpt(AddMachinePass &,
+                              StringRef MatchPassTo = StringRef{}) const;
+  /// Add the next pass in the cli option or the pass specified if no pass is
+  /// left in the option.
+  template <typename RegAllocPassBuilderT>
+  void addRegAllocPassOrOpt(AddMachinePass &,
+                            RegAllocPassBuilderT PassBuilder) const;
 
   /// Add core register alloator passes which do the actual register assignment
   /// and rewriting. \returns true if any passes were added.
@@ -687,6 +699,11 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
   }
 
   PrinterImpl.reset();
+
+  if (!Opt.RegAllocPipeline.empty())
+    return make_error<StringError>(
+        "extra passes in regalloc pipeline: " + Opt.RegAllocPipeline,
+        std::make_error_code(std::errc::invalid_argument));
 
   return verifyStartStop(*StartStopInfo);
 }
@@ -1187,6 +1204,48 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addTargetRegisterAllocator(
     addPass(RegAllocFastPass());
 }
 
+template <typename Derived, typename TargetMachineT>
+template <typename RegAllocPassBuilderT>
+void CodeGenPassBuilder<Derived, TargetMachineT>::addRegAllocPassOrOpt(
+    AddMachinePass &addPass, RegAllocPassBuilderT PassBuilder) const {
+  if (!addRegAllocPassFromOpt(addPass))
+    addPass(std::move(PassBuilder()));
+}
+
+template <typename Derived, typename TargetMachineT>
+bool CodeGenPassBuilder<Derived, TargetMachineT>::addRegAllocPassFromOpt(
+    AddMachinePass &addPass, StringRef MatchPassTo) const {
+  if (!Opt.RegAllocPipeline.empty()) {
+    StringRef PassOpt;
+    std::tie(PassOpt, Opt.RegAllocPipeline) = Opt.RegAllocPipeline.split(',');
+    // Reuse the registered parser to parse the pass name.
+#define RA_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER, PARAMS)          \
+  if (PB.checkParametrizedPassName(PassOpt, NAME)) {                           \
+    auto Params = PB.parsePassParameters(PARSER, PassOpt, NAME,                \
+                                         const_cast<const PassBuilder &>(PB)); \
+    if (!Params) {                                                             \
+      auto Err = Params.takeError();                                           \
+      ExitOnError()(std::move(Err));                                           \
+    }                                                                          \
+    if (!MatchPassTo.empty()) {                                                \
+      if (MatchPassTo != CLASS)                                                \
+        report_fatal_error("expected " +                                       \
+                               PIC->getPassNameForClassName(MatchPassTo) +     \
+                               " in option --regalloc-npm",                    \
+                           false);                                             \
+    }                                                                          \
+    addPass(CREATE_PASS(Params.get()));                                        \
+    return true;                                                               \
+  }
+#include "llvm/Passes/MachinePassRegistry.def"
+    if (PassOpt != "default") {
+      report_fatal_error("unknown register allocator pass: " + PassOpt, false);
+    }
+  }
+  // If user did not give a specific pass, use the default provided.
+  return false;
+}
+
 /// Find and instantiate the register allocation pass requested by this target
 /// at the current optimization level.  Different register allocators are
 /// defined as separate passes because they may require different analysis.
@@ -1197,22 +1256,13 @@ template <typename Derived, typename TargetMachineT>
 void CodeGenPassBuilder<Derived, TargetMachineT>::addRegAllocPass(
     AddMachinePass &addPass, bool Optimized) const {
   // Use the specified -regalloc-npm={basic|greedy|fast|pbqp}
-  if (Opt.RegAlloc > RegAllocType::Default) {
-    switch (Opt.RegAlloc) {
-    case RegAllocType::Fast:
-      addPass(RegAllocFastPass());
-      break;
-    case RegAllocType::Greedy:
-      addPass(RAGreedyPass());
-      break;
-    default:
-      reportFatalUsageError("register allocator not supported yet");
-    }
-    return;
+  StringRef RegAllocPassName;
+  if (!Optimized)
+    RegAllocPassName = RegAllocFastPass::name();
+
+  if (!addRegAllocPassFromOpt(addPass, RegAllocPassName)) {
+    derived().addTargetRegisterAllocator(addPass, Optimized);
   }
-  // -regalloc=default or unspecified, so pick based on the optimization level
-  // or ask the target for the regalloc pass.
-  derived().addTargetRegisterAllocator(addPass, Optimized);
 }
 
 template <typename Derived, typename TargetMachineT>

@@ -1547,39 +1547,6 @@ Expected<SmallVector<std::string, 0>> parseInternalizeGVs(StringRef Params) {
   return Expected<SmallVector<std::string, 0>>(std::move(PreservedGVs));
 }
 
-Expected<RegAllocFastPass::Options>
-parseRegAllocFastPassOptions(PassBuilder &PB, StringRef Params) {
-  RegAllocFastPass::Options Opts;
-  while (!Params.empty()) {
-    StringRef ParamName;
-    std::tie(ParamName, Params) = Params.split(';');
-
-    if (ParamName.consume_front("filter=")) {
-      std::optional<RegAllocFilterFunc> Filter =
-          PB.parseRegAllocFilter(ParamName);
-      if (!Filter) {
-        return make_error<StringError>(
-            formatv("invalid regallocfast register filter '{}'", ParamName)
-                .str(),
-            inconvertibleErrorCode());
-      }
-      Opts.Filter = *Filter;
-      Opts.FilterName = ParamName;
-      continue;
-    }
-
-    if (ParamName == "no-clear-vregs") {
-      Opts.ClearVRegs = false;
-      continue;
-    }
-
-    return make_error<StringError>(
-        formatv("invalid regallocfast pass parameter '{}'", ParamName).str(),
-        inconvertibleErrorCode());
-  }
-  return Opts;
-}
-
 Expected<BoundsCheckingPass::Options>
 parseBoundsCheckingOptions(StringRef Params) {
   BoundsCheckingPass::Options Options;
@@ -1627,6 +1594,7 @@ parseBoundsCheckingOptions(StringRef Params) {
   }
   return Options;
 }
+} // namespace
 
 Expected<CodeGenOptLevel> parseExpandFpOptions(StringRef Param) {
   if (Param.empty())
@@ -1663,12 +1631,15 @@ parseRegAllocGreedyFilterFunc(PassBuilder &PB, StringRef Params) {
       inconvertibleErrorCode());
 }
 
-Expected<bool> parseMachineSinkingPassOptions(StringRef Params) {
+Expected<bool> llvm::parseMachineSinkingPassOptions(StringRef Params,
+                                              const PassBuilder &) {
   return PassBuilder::parseSinglePassOption(Params, "enable-sink-fold",
                                             "MachineSinkingPass");
 }
 
-Expected<bool> parseMachineBlockPlacementPassOptions(StringRef Params) {
+Expected<bool>
+llvm::parseMachineBlockPlacementPassOptions(StringRef Params,
+                                            const PassBuilder &) {
   bool AllowTailMerge = true;
   if (!Params.empty()) {
     AllowTailMerge = !Params.consume_front("no-");
@@ -1681,7 +1652,8 @@ Expected<bool> parseMachineBlockPlacementPassOptions(StringRef Params) {
   return AllowTailMerge;
 }
 
-Expected<bool> parseVirtRegRewriterPassOptions(StringRef Params) {
+Expected<bool> llvm::parseVirtRegRewriterPassOptions(StringRef Params,
+                                                     const PassBuilder &) {
   bool ClearVirtRegs = true;
   if (!Params.empty()) {
     ClearVirtRegs = !Params.consume_front("no-");
@@ -1691,6 +1663,53 @@ Expected<bool> parseVirtRegRewriterPassOptions(StringRef Params) {
           inconvertibleErrorCode());
   }
   return ClearVirtRegs;
+}
+
+Expected<RegAllocFastPass::Options>
+llvm::parseRegAllocFastPassOptions(const PassBuilder &PB, StringRef Params) {
+  RegAllocFastPass::Options Opts;
+  while (!Params.empty()) {
+    StringRef ParamName;
+    std::tie(ParamName, Params) = Params.split(';');
+
+    if (ParamName.consume_front("filter=")) {
+      std::optional<RegAllocFilterFunc> Filter =
+          PB.parseRegAllocFilter(ParamName);
+      if (!Filter) {
+        return make_error<StringError>(
+            formatv("invalid regallocfast register filter '{0}' ", ParamName)
+                .str(),
+            inconvertibleErrorCode());
+      }
+      Opts.Filter = *Filter;
+      Opts.FilterName = ParamName;
+      continue;
+    }
+
+    if (ParamName == "no-clear-vregs") {
+      Opts.ClearVRegs = false;
+      continue;
+    }
+
+    return make_error<StringError>(
+        formatv("invalid regallocfast pass parameter '{0}' ", ParamName).str(),
+        inconvertibleErrorCode());
+  }
+  return Opts;
+}
+
+Expected<RAGreedyPass::Options>
+llvm::parseRegAllocGreedyFilterFunc(const PassBuilder &PB, StringRef Params) {
+  if (Params.empty() || Params == "all")
+    return RAGreedyPass::Options();
+
+  std::optional<RegAllocFilterFunc> Filter = PB.parseRegAllocFilter(Params);
+  if (Filter)
+    return RAGreedyPass::Options{*Filter, Params};
+
+  return make_error<StringError>(
+      formatv("invalid regallocgreedy register filter '{0}' ", Params).str(),
+      inconvertibleErrorCode());
 }
 
 struct FatLTOOptions {
@@ -1727,8 +1746,6 @@ Expected<FatLTOOptions> parseFatLTOOptions(StringRef Params) {
         inconvertibleErrorCode());
   return Result;
 }
-
-} // namespace
 
 /// Tests whether registered callbacks will accept a given pass name.
 ///
@@ -2473,7 +2490,8 @@ Error PassBuilder::parseMachinePass(MachineFunctionPassManager &MFPM,
 #define MACHINE_FUNCTION_PASS_WITH_PARAMS(NAME, CLASS, CREATE_PASS, PARSER,    \
                                           PARAMS)                              \
   if (checkParametrizedPassName(Name, NAME)) {                                 \
-    auto Params = parsePassParameters(PARSER, Name, NAME);                     \
+    auto Params = parsePassParameters(PARSER, Name, NAME,                      \
+                                      const_cast<const PassBuilder &>(*this)); \
     if (!Params)                                                               \
       return Params.takeError();                                               \
     MFPM.addPass(CREATE_PASS(Params.get()));                                   \
@@ -2739,7 +2757,7 @@ Error PassBuilder::parseAAPipeline(AAManager &AA, StringRef PipelineText) {
 }
 
 std::optional<RegAllocFilterFunc>
-PassBuilder::parseRegAllocFilter(StringRef FilterName) {
+PassBuilder::parseRegAllocFilter(StringRef FilterName) const {
   if (FilterName == "all")
     return nullptr;
   for (auto &C : RegClassFilterParsingCallbacks)

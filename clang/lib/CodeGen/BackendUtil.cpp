@@ -1342,7 +1342,7 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
   FunctionPassManager FPM;
 
   if (!TM.buildCodeGenPipeline(MPM, *OS, DwoOS ? &DwoOS->os() : nullptr,
-                                     getCodeGenFileType(Action), Opt, MMI.getContext(), &PIC)) {
+                                     getCodeGenFileType(Action), Opt, MMI.getContext(), &PIC, PB)) {
     Diags.Report(diag::err_fe_unable_to_interface_with_target);
     return;
   }
