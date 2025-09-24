@@ -11,11 +11,11 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx1100 -asm-verbose=0 < %s | FileCheck -check-prefixes=GCN,NOLOOP,GFX10 %s
 ; RUN: llc -global-isel=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx1100 -asm-verbose=0 < %s | FileCheck -check-prefixes=GCN,NOLOOP,GFX10 %s
 
-; Make sure the op is emitted bundled with a waitcnt with and without the retry loop, and the bundle is not removed by ExpandPostRAPseudos.
-; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=tahiti -stop-after=postrapseudos < %s | FileCheck -check-prefix=MIR %s
-; RUN: llc -global-isel=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=tahiti -stop-after=postrapseudos < %s | FileCheck -check-prefix=MIR %s
-; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 -stop-after=postrapseudos < %s | FileCheck -check-prefix=MIR %s
-; RUN: llc -global-isel=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 -stop-after=postrapseudos < %s | FileCheck -check-prefix=MIR %s
+; Make sure the op is emitted bundled with a waitcnt with and without the retry loop, and the bundle is not removed by Expandpost-ra-pseudos.
+; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=tahiti -stop-after=post-ra-pseudos < %s | FileCheck -check-prefix=MIR %s
+; RUN: llc -global-isel=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=tahiti -stop-after=post-ra-pseudos < %s | FileCheck -check-prefix=MIR %s
+; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 -stop-after=post-ra-pseudos < %s | FileCheck -check-prefix=MIR %s
+; RUN: llc -global-isel=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 -stop-after=post-ra-pseudos < %s | FileCheck -check-prefix=MIR %s
 
 
 ; Minimum offset
