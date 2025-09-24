@@ -1155,7 +1155,8 @@ GCNTargetMachine::GCNTargetMachine(const Target &T, const Triple &TT,
                                    std::optional<CodeModel::Model> CM,
                                    CodeGenOptLevel OL, bool JIT)
     : AMDGPUTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
-    if (getSelectorType(*this) != SelectorType::GlobalISel)
+    if (getSelectorType(*this) != SelectorType::GlobalISel &&
+        OL > CodeGenOptLevel::None)
         setNewPMForBackend(true);
    }
 
