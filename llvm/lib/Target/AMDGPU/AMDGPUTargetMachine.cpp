@@ -74,6 +74,7 @@
 #include "llvm/CodeGen/AtomicExpand.h"
 #include "llvm/CodeGen/BranchRelaxation.h"
 #include "llvm/CodeGen/DeadMachineInstructionElim.h"
+#include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GlobalISel/CSEInfo.h"
 #include "llvm/CodeGen/GlobalISel/IRTranslator.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
@@ -157,6 +158,7 @@ public:
   void addPreRegAlloc(AddMachinePass &) const;
   void addOptimizedRegAlloc(AddMachinePass &) const;
   void addPreSched2(AddMachinePass &) const;
+  void addPostBBSections(AddMachinePass &) const;
 
   /// Check if a pass is enabled given \p Opt option. The option always
   /// overrides defaults if explicitly used. Otherwise its default will be used
@@ -2087,8 +2089,8 @@ AMDGPUCodeGenPassBuilder::AMDGPUCodeGenPassBuilder(
   // Exceptions and StackMaps are not supported, so these passes will never do
   // anything.
   // Garbage collection is not supported.
-  disablePass<StackMapLivenessPass, FuncletLayoutPass,
-              ShadowStackGCLoweringPass>();
+  disablePass<StackMapLivenessPass, FuncletLayoutPass, PatchableFunctionPass,
+              ShadowStackGCLoweringPass, GCLoweringPass>();
 }
 
 void AMDGPUCodeGenPassBuilder::addIRPasses(AddIRPass &addPass) const {
@@ -2371,6 +2373,13 @@ void AMDGPUCodeGenPassBuilder::addPreSched2(AddMachinePass &addPass) const {
   if (TM.getOptLevel() > CodeGenOptLevel::None)
     addPass(SIShrinkInstructionsPass());
   addPass(SIPostRABundlerPass());
+}
+
+void AMDGPUCodeGenPassBuilder::addPostBBSections(
+    AddMachinePass &addPass) const {
+  // We run this later to avoid passes like livedebugvalues and BBSections
+  // having to deal with the apparent multi-entry functions we may generate.
+  addPass(AMDGPUPreloadKernArgPrologPass());
 }
 
 void AMDGPUCodeGenPassBuilder::addPreEmitPass(AddMachinePass &addPass) const {

@@ -551,6 +551,8 @@ protected:
   /// Add standard basic block placement passes.
   void addBlockPlacement(AddMachinePass &) const;
 
+  void addPostBBSections(AddMachinePass &) const {}
+
   using CreateMCStreamer =
       std::function<Expected<std::unique_ptr<MCStreamer>>(MCContext &)>;
   void addAsmPrinter(AddMachinePass &, CreateMCStreamer) const {
@@ -805,7 +807,6 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addIRPasses(
   // TODO: add a pass insertion point here
   addPass(GCLoweringPass());
   addPass(ShadowStackGCLoweringPass());
-  addPass(LowerConstantIntrinsicsPass());
 
   // Make sure that no unreachable blocks are instruction selected.
   addPass(UnreachableBlockElimPass());
@@ -1111,6 +1112,8 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::addMachinePasses(
       addPass(MachineOutlinerPass(Opt.EnableMachineOutliner));
   }
 
+  derived().addPostBBSections(addPass);
+
   addPass(StackFrameLayoutAnalysisPass());
 
   // Add passes that directly emit MI after all other MI passes.
@@ -1297,6 +1300,7 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addOptimizedRegAlloc(
     // addRegAssignmentOptimized did not add a reg alloc pass, so do nothing.
     return;
   }
+  addPass(StackSlotColoringPass());
   // Allow targets to expand pseudo instructions depending on the choice of
   // registers before MachineCopyPropagation.
   derived().addPostRewrite(addPass);
@@ -1319,6 +1323,7 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addOptimizedRegAlloc(
 template <typename Derived, typename TargetMachineT>
 void CodeGenPassBuilder<Derived, TargetMachineT>::addMachineLateOptimization(
     AddMachinePass &addPass) const {
+  addPass(MachineLateInstrsCleanupPass());
   // Branch folding must be run after regalloc and prolog/epilog insertion.
   addPass(BranchFolderPass(Opt.EnableTailMerge));
 
@@ -1328,9 +1333,6 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addMachineLateOptimization(
   // In addition it can also make CFG irreducible. Thus we disable it.
   if (!TM.requiresStructuredCFG())
     addPass(TailDuplicatePass());
-
-  // Cleanup of redundant (identical) address/immediate loads.
-  addPass(MachineLateInstrsCleanupPass());
 
   // Copy propagation.
   addPass(MachineCopyPropagationPass());
