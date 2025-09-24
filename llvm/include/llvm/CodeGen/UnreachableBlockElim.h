@@ -36,6 +36,7 @@ public:
 class UnreachableMachineBlockElimPass
     : public PassInfoMixin<UnreachableMachineBlockElimPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(MachineFunction &F, MachineFunctionAnalysisManager &AM);
 };
 

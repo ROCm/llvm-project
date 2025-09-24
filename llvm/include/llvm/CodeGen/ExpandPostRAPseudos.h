@@ -15,6 +15,7 @@ namespace llvm {
 
 class ExpandPostRAPseudosPass : public PassInfoMixin<ExpandPostRAPseudosPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
 };

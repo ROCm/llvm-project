@@ -16,6 +16,7 @@ namespace llvm {
 class AMDGPUWaitSGPRHazardsPass
     : public PassInfoMixin<AMDGPUWaitSGPRHazardsPass> {
 public:
+  static bool isRequired() { return true; }
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
 };
