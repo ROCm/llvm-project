@@ -136,8 +136,8 @@ PreservedAnalyses BranchFolderPass::run(MachineFunction &MF,
         "ProfileSummaryAnalysis is required for BranchFoldingPass", false);
 
   auto &MBFI = MFAM.getResult<MachineBlockFrequencyAnalysis>(MF);
-auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
-auto &MPDT = MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
+  auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
+  auto &MPDT = MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   MBFIWrapper MBBFreqInfo(MBFI);
   BranchFolder Folder(EnableTailMerge, /*CommonHoist=*/true, MBBFreqInfo, MBPI,
                       PSI);

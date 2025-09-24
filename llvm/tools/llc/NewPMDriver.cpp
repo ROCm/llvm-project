@@ -104,7 +104,7 @@ int llvm::compileModuleWithNewPM(
         << "--passes and --regalloc-npm cannot be used together.\n";
     return 1;
   }
-
+  
   raw_pwrite_stream *OS = &Out->os();
 
   // Manually do the buffering rather than using buffer_ostream,
@@ -195,7 +195,7 @@ int llvm::compileModuleWithNewPM(
   MPM.run(*M, MAM);
 
   if (Context.getDiagHandlerPtr()->HasErrors)
-    exit(1);
+    return 1;
 
   if (BOS) {
     Out->os() << Buffer;
