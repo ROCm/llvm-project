@@ -6756,6 +6756,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (Args.hasArg(options::OPT_fexperimental_new_constant_interpreter))
     CmdArgs.push_back("-fexperimental-new-constant-interpreter");
+  
+  if (Args.hasArg(options::OPT_disable_new_pm_forbackend))
+    CmdArgs.push_back("-disable-new-pm-for-backend");
 
   if (Arg *A = Args.getLastArg(options::OPT_fbracket_depth_EQ)) {
     CmdArgs.push_back("-fbracket-depth");

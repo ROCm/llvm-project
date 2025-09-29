@@ -8702,6 +8702,11 @@ def split_dwarf_output : Separate<["-"], "split-dwarf-output">,
   Visibility<[CC1Option, CC1AsOption, FC1Option]>,
   MarshallingInfoString<CodeGenOpts<"SplitDwarfOutput">>;
 
+def disable_new_pm_forbackend : Flag<["-"], "disable-new-pm-for-backend">,
+  HelpText<"Use new pass manager for codegen pipeline">,
+  Visibility<[CC1Option, ClangOption]>,
+  MarshallingInfoFlag<CodeGenOpts<"DisableNPMForBackend">>;
+
 let Visibility = [CC1Option, FC1Option] in {
 
 def mreassociate : Flag<["-"], "mreassociate">,
