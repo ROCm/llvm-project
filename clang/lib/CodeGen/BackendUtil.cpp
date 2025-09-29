@@ -1255,7 +1255,8 @@ void EmitAssemblyHelper::RunCodegenPipeline(
   // does not work with the codegen pipeline.
   // FIXME: make the new PM work with the codegen pipeline.
 
-  if (TM.EnableNewPMForBackend()) {
+  if (!CodeGenOpts.DisableNPMForBackend &&
+      TM.ShouldUseNPMForBackend()) {
       RunCodegenPipelineWithNewPM(Action, OS, DwoOS, TM);
       return;
   }
@@ -1340,10 +1341,23 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
 
   ModulePassManager MPM;
   FunctionPassManager FPM;
-
-  if (!TM.buildCodeGenPipeline(MPM, *OS, DwoOS ? &DwoOS->os() : nullptr,
+  
+  switch (Action) {
+  case Backend_EmitAssembly:
+  case Backend_EmitMCNull:
+  case Backend_EmitObj:
+    if (!CodeGenOpts.SplitDwarfOutput.empty()) {
+      DwoOS = openOutputFile(CodeGenOpts.SplitDwarfOutput);
+      if (!DwoOS)
+        return;
+    }
+    if (TM.buildCodeGenPipeline(MPM, *OS, DwoOS ? &DwoOS->os() : nullptr,
                                      getCodeGenFileType(Action), Opt, MMI.getContext(), &PIC, PB)) {
-    Diags.Report(diag::err_fe_unable_to_interface_with_target);
+      Diags.Report(diag::err_fe_unable_to_interface_with_target);
+      return;
+    }
+    break;
+  default:
     return;
   }
   
@@ -1369,7 +1383,7 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
     MPM.run(*TheModule, MAM);
     if (CI.getCodeGenOpts().TimePasses)
       timer.yieldTo(CI.getFrontendTimer());
-  }  
+  }
 }
 
 void EmitAssemblyHelper::emitAssembly(BackendAction Action,

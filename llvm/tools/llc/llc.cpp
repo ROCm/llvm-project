@@ -709,7 +709,7 @@ static int compileModule(char **argv, LLVMContext &Context) {
     RunNewPM = true;
   else if (RunPass.getNumOccurrences())
     RunNewPM = false;
-  else if (Target->EnableNewPMForBackend() && !EnableNewPassManager.getNumOccurrences())
+  else if (Target->ShouldUseNPMForBackend() && !EnableNewPassManager.getNumOccurrences())
     RunNewPM = true;
 
   if (RunNewPM) {
