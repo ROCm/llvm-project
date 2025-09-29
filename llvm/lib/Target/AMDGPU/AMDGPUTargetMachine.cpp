@@ -155,8 +155,10 @@ public:
   void addPostRegAlloc(AddMachinePass &) const;
   void addPreEmitPass(AddMachinePass &) const;
   void addPreEmitRegAlloc(AddMachinePass &) const;
+  Error addRegAssignmentFast(AddMachinePass &) const;
   Error addRegAssignmentOptimized(AddMachinePass &) const;
   void addPreRegAlloc(AddMachinePass &) const;
+  Error addFastRegAlloc(AddMachinePass &) const;
   void addOptimizedRegAlloc(AddMachinePass &) const;
   void addPreSched2(AddMachinePass &) const;
   void addPostBBSections(AddMachinePass &) const;
@@ -1157,8 +1159,7 @@ GCNTargetMachine::GCNTargetMachine(const Target &T, const Triple &TT,
                                    std::optional<CodeModel::Model> CM,
                                    CodeGenOptLevel OL, bool JIT)
     : AMDGPUTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
-    if (getSelectorType(*this) != SelectorType::GlobalISel &&
-        OL > CodeGenOptLevel::None)
+    if (getSelectorType(*this) != SelectorType::GlobalISel)
         setUseNPMForBackend(true);
    }
 
@@ -2279,6 +2280,44 @@ void AMDGPUCodeGenPassBuilder::addMachineSSAOptimization(
   }
   addPass(DeadMachineInstructionElimPass());
   addPass(SIShrinkInstructionsPass());
+}
+
+Error AMDGPUCodeGenPassBuilder::addFastRegAlloc(
+     AddMachinePass &addPass) const {
+    insertPass<PHIEliminationPass>(SILowerControlFlowPass());
+
+    insertPass<TwoAddressInstructionPass>(SIWholeQuadModePass());
+
+    return Base::addFastRegAlloc(addPass);
+}
+
+Error AMDGPUCodeGenPassBuilder::addRegAssignmentFast(
+    AddMachinePass &addPass) const {
+    // TODO: handle default regalloc override error (with regalloc-npm)
+
+    addPass(GCNPreRALongBranchRegPass());
+    
+    addRegAllocPassOrOpt(
+      addPass, []() { return RegAllocFastPass({onlyAllocateSGPRs, "sgpr", false}); });
+    
+   // Equivalent of PEI for SGPRs.
+   addPass(SILowerSGPRSpillsPass());
+   
+   // To Allocate wwm registers used in whole quad mode operations (for shaders).
+   addPass(SIPreAllocateWWMRegsPass());
+   
+   // For allocating other wwm register operands.
+   addRegAllocPassOrOpt(
+      addPass, []() { return RegAllocFastPass({onlyAllocateWWMRegs, "wwm", false}); });
+  
+   addPass(SILowerWWMCopiesPass());
+   addPass(AMDGPUReserveWWMRegsPass());
+    
+   // For allocating per-thread VGPRs.
+  addRegAllocPassOrOpt(
+      addPass, []() { return RegAllocFastPass({onlyAllocateVGPRs, "vgpr"}); });
+   
+   return Error::success();
 }
 
 void AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
