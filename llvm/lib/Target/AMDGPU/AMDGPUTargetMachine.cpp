@@ -1278,7 +1278,7 @@ GCNTargetMachine::GCNTargetMachine(const Target &T, const Triple &TT,
                                    CodeGenOptLevel OL, bool JIT)
     : AMDGPUTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
     if (getSelectorType(*this) != SelectorType::GlobalISel)
-        setNewPMForBackend(true);
+       setUseNPMForBackend(true);
    }
 
 const TargetSubtargetInfo *
