@@ -194,12 +194,10 @@ class EmitAssemblyHelper {
       std::unique_ptr<llvm::ToolOutputFile> &ThinLinkOS, BackendConsumer *BC);
   void RunCodegenPipeline(BackendAction Action,
                           std::unique_ptr<raw_pwrite_stream> &OS,
-                          std::unique_ptr<llvm::ToolOutputFile> &DwoOS, 
-                          TargetMachine &TM);
+                          std::unique_ptr<llvm::ToolOutputFile> &DwoOS);
   void RunCodegenPipelineWithNewPM(BackendAction Action,
                                   std::unique_ptr<raw_pwrite_stream> &OS,
-                                  std::unique_ptr<llvm::ToolOutputFile> &DwoOS, 
-                                  TargetMachine &TM);
+                                  std::unique_ptr<llvm::ToolOutputFile> &DwoOS);
 
   /// Check whether we should emit a module summary for regular LTO.
   /// The module summary should be emitted by default for regular LTO
@@ -1250,14 +1248,14 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
 
 void EmitAssemblyHelper::RunCodegenPipeline(
     BackendAction Action, std::unique_ptr<raw_pwrite_stream> &OS,
-    std::unique_ptr<llvm::ToolOutputFile> &DwoOS, TargetMachine &TM) {
+    std::unique_ptr<llvm::ToolOutputFile> &DwoOS) {
   // We still use the legacy PM to run the codegen pipeline since the new PM
   // does not work with the codegen pipeline.
   // FIXME: make the new PM work with the codegen pipeline.
 
-  if (!CodeGenOpts.DisableNPMForBackend &&
-      TM.ShouldUseNPMForBackend()) {
-      RunCodegenPipelineWithNewPM(Action, OS, DwoOS, TM);
+  if (TM && TM->ShouldUseNPMForBackend()
+      && !CodeGenOpts.DisableNPMForBackend) {
+      RunCodegenPipelineWithNewPM(Action, OS, DwoOS);
       return;
   }
       
@@ -1307,8 +1305,8 @@ void EmitAssemblyHelper::RunCodegenPipeline(
 
 void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action, 
     std::unique_ptr<raw_pwrite_stream> &OS,
-    std::unique_ptr<llvm::ToolOutputFile> &DwoOS, TargetMachine &TM) {
-  MachineModuleInfo MMI(&TM);
+    std::unique_ptr<llvm::ToolOutputFile> &DwoOS) {
+  MachineModuleInfo MMI(TM.get());
   CGPassBuilderOption Opt = getCGPassBuilderOption();
 
   Opt.DisableVerify = !CodeGenOpts.VerifyModule;
@@ -1317,14 +1315,14 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
   PassInstrumentationCallbacks PIC;
   StandardInstrumentations SI(TheModule->getContext(), CodeGenOpts.DebugPassManager, 
                               CodeGenOpts.VerifyEach);
-  registerCodeGenCallback(PIC, TM);
+  registerCodeGenCallback(PIC, *TM);
 
   MachineFunctionAnalysisManager MFAM;
   LoopAnalysisManager LAM;
   FunctionAnalysisManager FAM;
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
-  PassBuilder PB(&TM, PipelineTuningOptions(), std::nullopt, &PIC);
+  PassBuilder PB(TM.get(), PipelineTuningOptions(), std::nullopt, &PIC);
   
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
@@ -1351,7 +1349,7 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
       if (!DwoOS)
         return;
     }
-    if (TM.buildCodeGenPipeline(MPM, *OS, DwoOS ? &DwoOS->os() : nullptr,
+    if (TM->buildCodeGenPipeline(MPM, *OS, DwoOS ? &DwoOS->os() : nullptr,
                                      getCodeGenFileType(Action), Opt, MMI.getContext(), &PIC, PB)) {
       Diags.Report(diag::err_fe_unable_to_interface_with_target);
       return;
@@ -1404,7 +1402,7 @@ void EmitAssemblyHelper::emitAssembly(BackendAction Action,
 
   std::unique_ptr<llvm::ToolOutputFile> ThinLinkOS, DwoOS;
   RunOptimizationPipeline(Action, OS, ThinLinkOS, BC);
-  RunCodegenPipeline(Action, OS, DwoOS, *TM);
+  RunCodegenPipeline(Action, OS, DwoOS);
 
   if (ThinLinkOS)
     ThinLinkOS->keep();
