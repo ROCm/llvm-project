@@ -623,7 +623,11 @@ struct AMDGPUMemoryManagerTy : public DeviceAllocatorTy {
     assert(MemoryManager && "Invalid memory manager");
     assert(PtrStorage && "Invalid pointer storage");
 
-    *PtrStorage = MemoryManager->allocate(Size, nullptr);
+    auto PtrStorageOrErr = MemoryManager->allocate(Size, nullptr);
+    if (!PtrStorageOrErr)
+      return PtrStorageOrErr.takeError();
+
+    *PtrStorage = *PtrStorageOrErr;
     if (Size && *PtrStorage == nullptr)
       return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
                            "failure to allocate from AMDGPU memory manager");
@@ -643,15 +647,12 @@ struct AMDGPUMemoryManagerTy : public DeviceAllocatorTy {
 private:
   /// Allocation callback that will be called once the memory manager does not
   /// have more previously allocated buffers.
-  void *allocate(size_t Size, void *HstPtr, TargetAllocTy Kind) override;
+  Expected<void *> allocate(size_t Size, void *HstPtr,
+                            TargetAllocTy Kind) override;
 
   /// Deallocation callback that will be called by the memory manager.
-  int free(void *TgtPtr, TargetAllocTy Kind) override {
-    if (auto Err = MemoryPool->deallocate(TgtPtr)) {
-      consumeError(std::move(Err));
-      return OFFLOAD_FAIL;
-    }
-    return OFFLOAD_SUCCESS;
+  Error free(void *TgtPtr, TargetAllocTy Kind) override {
+    return MemoryPool->deallocate(TgtPtr);
   }
 
   /// The underlying plugin that owns this memory manager.
@@ -1286,6 +1287,29 @@ private:
       PreferredNumBlocks = std::min(TripCountNumBlocks, AdjustedNumBlocks);
     }
 
+    // For most generic-SPMD kernels, the tripcount of the outer distribute-loop
+    // determines the number of teams launched. The tripcounts of the inner
+    // parallel loops should determine the number of threads launched. However,
+    // the inner loop tripcounts are unknown, so the runtime just launches 256
+    // threads by default. But if the inner loop tripcount is lower than 256,
+    // many of the threads in every workgroup are idle and just waste resources.
+    // In order to reduce this wastage, we reduce the blocksize upto the
+    // wavefront size if the tripcount is large enough to proportionally
+    // increase the number of teams. The increase in the number of teams is
+    // required to preserve the occupancy in case the inner loop tripcounts are
+    // larger than the blocksize. This change is done only when the user has not
+    // specified the number of teams or threads.
+    if (isGenericSPMDMode() && !IsNumThreadsFromUser &&
+        NumTeamsClause[0] == 0 && NumTeamsEnvVar == 0 &&
+        GenericDevice.getOMPXGenericSpmdUseSmallBlockSize()) {
+      uint64_t TmpPreferredNumBlocks = PreferredNumBlocks << 1;
+      while (TmpPreferredNumBlocks <= LoopTripCount &&
+             NumThreads > GenericDevice.getWarpSize()) {
+        NumThreads >>= 1;
+        PreferredNumBlocks = TmpPreferredNumBlocks;
+        TmpPreferredNumBlocks <<= 1;
+      }
+    }
     return std::min(PreferredNumBlocks,
                     (uint64_t)GenericDevice.getBlockLimit());
   }
@@ -3135,6 +3159,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                                              0),
         OMPX_AdjustNumTeamsForXteamRedSmallBlockSize(
             "LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS", 1),
+        OMPX_GenericSpmdUseSmallBlockSize(
+            "LIBOMPTARGET_AMDGPU_GENERIC_SPMD_USE_SMALL_BLOCKSIZE", 0),
         OMPX_MaxAsyncCopyBytes("LIBOMPTARGET_AMDGPU_MAX_ASYNC_COPY_BYTES",
                                64 * 1024),
         OMPX_InitialNumSignals("LIBOMPTARGET_AMDGPU_NUM_INITIAL_HSA_SIGNALS",
@@ -3266,6 +3292,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   virtual uint32_t
   getOMPXAdjustNumTeamsForXteamRedSmallBlockSize() const override {
     return OMPX_AdjustNumTeamsForXteamRedSmallBlockSize;
+  }
+  virtual bool getOMPXGenericSpmdUseSmallBlockSize() const override {
+    return OMPX_GenericSpmdUseSmallBlockSize;
   }
 
   /// Initialize the device, its resources and get its properties.
@@ -3623,12 +3652,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   }
 
   /// Allocate memory on the device or related to the device.
-  void *allocate(size_t Size, void *, TargetAllocTy Kind) override;
+  Expected<void *> allocate(size_t Size, void *, TargetAllocTy Kind) override;
 
   /// Deallocate memory on the device or related to the device.
-  int free(void *TgtPtr, TargetAllocTy Kind) override {
+  Error free(void *TgtPtr, TargetAllocTy Kind) override {
     if (TgtPtr == nullptr)
-      return OFFLOAD_SUCCESS;
+      return Plugin::success();
 
     AMDGPUMemoryPoolTy *MemoryPool = nullptr;
     switch (Kind) {
@@ -3644,17 +3673,14 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       break;
     }
 
-    if (!MemoryPool) {
-      REPORT("No memory pool for the specified allocation kind\n");
-      return OFFLOAD_FAIL;
-    }
+    if (!MemoryPool)
+      return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
+                           "no memory pool for the specified allocation kind");
 
-    if (Error Err = MemoryPool->deallocate(TgtPtr)) {
-      REPORT("%s\n", toString(std::move(Err)).data());
-      return OFFLOAD_FAIL;
-    }
+    if (auto Err = MemoryPool->deallocate(TgtPtr))
+      return Err;
 
-    return OFFLOAD_SUCCESS;
+    return Plugin::success();
   }
 
   /// Synchronize current thread with the pending operations on the async info.
@@ -4862,6 +4888,10 @@ private:
   /// value should be used as the scaling factor for the number of teams.
   UInt32Envar OMPX_AdjustNumTeamsForXteamRedSmallBlockSize;
 
+  /// Envar indicating whether, for generic-SPMD kernels, the blocksize should
+  /// be reduced and the corresponding number of teams adjusted.
+  BoolEnvar OMPX_GenericSpmdUseSmallBlockSize;
+
   /// Envar specifying the maximum size in bytes where the memory copies are
   /// asynchronous operations. Up to this transfer size, the memory copies are
   /// asynchronous operations pushed to the corresponding stream. For larger
@@ -5741,14 +5771,13 @@ static Error Plugin::check(int32_t Code, const char *ErrFmt, ArgsTy... Args) {
   return Plugin::error(OffloadErrCode, ErrFmt, Args..., Desc);
 }
 
-void *AMDGPUMemoryManagerTy::allocate(size_t Size, void *HstPtr,
-                                      TargetAllocTy Kind) {
+Expected<void *> AMDGPUMemoryManagerTy::allocate(size_t Size, void *HstPtr,
+                                                 TargetAllocTy Kind) {
   // Allocate memory from the pool.
   void *Ptr = nullptr;
-  if (auto Err = MemoryPool->allocate(Size, &Ptr)) {
-    consumeError(std::move(Err));
-    return nullptr;
-  }
+  if (auto Err = MemoryPool->allocate(Size, &Ptr))
+    return std::move(Err);
+
   assert(Ptr && "Invalid pointer");
 
   // Get a list of agents that can access this memory pool.
@@ -5758,14 +5787,13 @@ void *AMDGPUMemoryManagerTy::allocate(size_t Size, void *HstPtr,
       [&](hsa_agent_t Agent) { return MemoryPool->canAccess(Agent); });
 
   // Allow all valid kernel agents to access the allocation.
-  if (auto Err = MemoryPool->enableAccess(Ptr, Size, Agents)) {
-    REPORT("%s\n", toString(std::move(Err)).data());
-    return nullptr;
-  }
+  if (auto Err = MemoryPool->enableAccess(Ptr, Size, Agents))
+    return std::move(Err);
   return Ptr;
 }
 
-void *AMDGPUDeviceTy::allocate(size_t Size, void *, TargetAllocTy Kind) {
+Expected<void *> AMDGPUDeviceTy::allocate(size_t Size, void *,
+                                          TargetAllocTy Kind) {
   if (Size == 0)
     return nullptr;
 
@@ -5789,17 +5817,15 @@ void *AMDGPUDeviceTy::allocate(size_t Size, void *, TargetAllocTy Kind) {
     MemoryPool = CoarseGrainedMemoryPools[0];
   }
 
-  if (!MemoryPool) {
-    REPORT("No memory pool for the specified allocation kind\n");
-    return nullptr;
-  }
+  if (!MemoryPool)
+    return Plugin::error(ErrorCode::UNSUPPORTED,
+                         "no memory pool for the specified allocation kind");
 
   // Allocate from the corresponding memory pool.
   void *Alloc = nullptr;
-  if (Error Err = MemoryPool->allocate(Size, &Alloc)) {
-    REPORT("%s\n", toString(std::move(Err)).data());
-    return nullptr;
-  }
+  if (auto Err = MemoryPool->allocate(Size, &Alloc))
+    return std::move(Err);
+  
   if (MemoryPool == CoarseGrainedMemoryPools[0] && IsEquippedWithGFX90A &&
       EnableGFX90ACoarseGrainUsmMaps) {
     // Need to register in the coarse grain usm map table
@@ -5822,10 +5848,8 @@ void *AMDGPUDeviceTy::allocate(size_t Size, void *, TargetAllocTy Kind) {
                   });
 
     // Enable all valid kernel agents to access the buffer.
-    if (auto Err = MemoryPool->enableAccess(Alloc, Size, Agents)) {
-      REPORT("%s\n", toString(std::move(Err)).data());
-      return nullptr;
-    }
+    if (auto Err = MemoryPool->enableAccess(Alloc, Size, Agents))
+      return std::move(Err);
   }
 
   return Alloc;
