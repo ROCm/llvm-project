@@ -726,12 +726,7 @@ void collectLoopRelatedInfo(
     }
   }
 
-  int64_t collapseValue = collapseValue - sizesLengthValue;
-  if (sizesLengthValue > collapseValue)
-    collapseValue = sizesLengthValue;
-  if (permutationLengthValue > collapseValue)
-    collapseValue = permutationLengthValue;
-
+std::int64_t collapseValue = std::max({numCollapse, sizesLengthValue, permutationLengthValue});
   std::size_t loopVarTypeSize = 0;
   do {
     lower::pft::Evaluation *doLoop =
