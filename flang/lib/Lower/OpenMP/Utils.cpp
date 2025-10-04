@@ -652,7 +652,6 @@ int64_t collectLoopRelatedInfo(
     mlir::omp::LoopRelatedClauseOps &result,
     llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
   int64_t numCollapse = 1;
-  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   // Collect the loops to collapse.
   lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
@@ -665,6 +664,25 @@ int64_t collectLoopRelatedInfo(
           ClauseFinder::findUniqueClause<omp::clause::Collapse>(clauses)) {
     collapseValue = evaluate::ToInt64(clause->v).value();
     numCollapse = collapseValue;
+  }
+
+  collectLoopRelatedInfo(converter, currentLocation, eval, numCollapse, result,
+                         iv);
+  return numCollapse;
+}
+
+void collectLoopRelatedInfo(
+    lower::AbstractConverter &converter, mlir::Location currentLocation,
+    lower::pft::Evaluation &eval, int64_t numCollapse,
+    mlir::omp::LoopRelatedClauseOps &result,
+    llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
+
+  fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
+
+  // Collect the loops to collapse.
+  lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
+  if (doConstructEval->getIf<parser::DoConstruct>()->IsDoConcurrent()) {
+    TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }
 
   // Collect sizes from tile directive if present.
@@ -708,12 +726,7 @@ int64_t collectLoopRelatedInfo(
     }
   }
 
-  collapseValue = collapseValue - sizesLengthValue;
-  if (sizesLengthValue > collapseValue)
-    collapseValue = sizesLengthValue;
-  if (permutationLengthValue > collapseValue)
-    collapseValue = permutationLengthValue;
-
+  std::int64_t collapseValue = std::max({numCollapse, sizesLengthValue,permutationLengthValue});
   std::size_t loopVarTypeSize = 0;
   do {
     lower::pft::Evaluation *doLoop =
@@ -746,8 +759,6 @@ int64_t collectLoopRelatedInfo(
   } while (collapseValue > 0);
 
   convertLoopBounds(converter, currentLocation, result, loopVarTypeSize);
-
-  return numCollapse;
 }
 
 void collectPermutationFromOpenMPConstruct(
