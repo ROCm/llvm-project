@@ -1574,3 +1574,30 @@ unsigned GCNTTIImpl::getNumberOfParts(Type *Tp) const {
   }
   return BaseT::getNumberOfParts(Tp);
 }
+
+bool GCNTTIImpl::isLSRCostLess(const TTI::LSRCost &A,
+                               const TTI::LSRCost &B) const {
+  // For AMDGPU (no powerful addressing modes), per-iter base adds are expensive.
+  auto key = [](const TTI::LSRCost &C) {
+    // Lexicographic priority: minimize per-iter adds first.
+    return std::tuple<unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned>{
+      C.NumBaseAdds,   // dominate
+      C.Insns,         // rough per-iter body cost
+      C.SetupCost,     // preheader cost (cheaper for us)
+      C.AddRecCost,
+      C.ImmCost,
+      C.ScaleCost,
+      C.NumIVMuls,
+      C.NumRegs
+    };
+  };
+  return key(A) < key(B);
+}
+
+bool GCNTTIImpl::isNumRegsMajorCostOfLSR() {
+  return false;
+}
+
+bool GCNTTIImpl::shouldDropLSRSolutionIfLessProfitable() const {
+  return true;
+}
