@@ -302,6 +302,11 @@ public:
   /// together under a single i32 value. Otherwise fall back to base
   /// implementation.
   unsigned getNumberOfParts(Type *Tp) const override;
+
+  bool isLSRCostLess(const TTI::LSRCost &A,
+                     const TTI::LSRCost &B) const;
+  bool isNumRegsMajorCostOfLSR();
+  bool shouldDropLSRSolutionIfLessProfitable() const;
 };
 
 } // end namespace llvm
