@@ -16,6 +16,7 @@
 
 #include "AMDGPUTargetTransformInfo.h"
 #include "AMDGPUTargetMachine.h"
+#include "AMDGPUSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIModeRegisterDefaults.h"
 #include "llvm/Analysis/InlineCost.h"
@@ -1578,20 +1579,30 @@ unsigned GCNTTIImpl::getNumberOfParts(Type *Tp) const {
 bool GCNTTIImpl::isLSRCostLess(const TTI::LSRCost &A,
                                const TTI::LSRCost &B) const {
   // For AMDGPU (no powerful addressing modes), per-iter base adds are expensive.
-  auto key = [](const TTI::LSRCost &C) {
-    // Lexicographic priority: minimize per-iter adds first.
-    return std::tuple<unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned>{
-      C.NumBaseAdds,   // dominate
-      C.Insns,         // rough per-iter body cost
-      C.SetupCost,     // preheader cost (cheaper for us)
-      C.AddRecCost,
-      C.ImmCost,
-      C.ScaleCost,
-      C.NumIVMuls,
-      C.NumRegs
-    };
-  };
-  return key(A) < key(B);
+  const GCNSubtarget &ST = *static_cast<const GCNSubtarget*>(getST());
+
+  // Limit the aggressive GPU-centric ordering to GFX9+ only.
+  if (ST.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS + 1 /* GFX9 */) {
+    // GFX9+ (gfx90/940/942,...): prioritize per-iter work over preheader.
+    if (A.NumBaseAdds != B.NumBaseAdds)
+      return A.NumBaseAdds < B.NumBaseAdds;
+    if (A.Insns != B.Insns)
+      return A.Insns < B.Insns;
+    // Only if per-iter ties, consider preheader-related costs.
+    if (A.AddRecCost != B.AddRecCost)
+      return A.AddRecCost < B.AddRecCost;
+    if (A.SetupCost != B.SetupCost)
+      return A.SetupCost < B.SetupCost;
+    // Fall back to minor keys to keep total order stable.
+    if (A.ScaleCost != B.ScaleCost)
+      return A.ScaleCost < B.ScaleCost;
+    if (A.NumIVMuls != B.NumIVMuls)
+      return A.NumIVMuls < B.NumIVMuls;
+    return A.NumRegs < B.NumRegs;
+  }
+
+  // Pre-GFX9: keep the default behavior (don’t perturb bonaire/VI tests).
+  return BaseT::isLSRCostLess(A, B);
 }
 
 bool GCNTTIImpl::isNumRegsMajorCostOfLSR() {
