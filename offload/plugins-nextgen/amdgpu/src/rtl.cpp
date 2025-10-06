@@ -160,6 +160,13 @@ static Error timeDataTransferInNsAsync(void *Data) {
 
   return Plugin::success();
 }
+
+static void *
+getOrNullProfilerSpecificData(AsyncInfoWrapperTy &AsyncInfoWrapper) {
+  __tgt_async_info *AI = AsyncInfoWrapper;
+  return AI ? AI->ProfilerData : nullptr;
+}
+
 } // namespace plugin
 } // namespace target
 } // namespace omp
@@ -196,40 +203,6 @@ static double getTimeOfDay() {
   }
   return TimeVal;
 }
-
-#ifdef OMPT_SUPPORT
-namespace llvm::omp::target::plugin {
-/// Returns a pointer to an OmptEventInfoTy object to be used for OMPT tracing
-/// or nullptr. It is the caller's duty to free the returned pointer when no
-/// longer needed.
-static ompt::OmptEventInfoTy *
-getOrNullOmptEventInfo(AsyncInfoWrapperTy &AsyncInfoWrapper) {
-  __tgt_async_info *AI = AsyncInfoWrapper;
-  if (!AI || !AI->ProfilerData)
-    return nullptr;
-
-  // The profiler data is allocated in the profiler for each individual event.
-  return reinterpret_cast<ompt::OmptEventInfoTy *>(AI->ProfilerData);
-}
-
-} // namespace llvm::omp::target::plugin
-
-#else // OMPT_SUPPORT
-namespace llvm::omp::target::ompt {
-
-struct OmptEventInfoTy {};
-} // namespace llvm::omp::target::ompt
-
-namespace llvm::omp::target::plugin {
-
-/// When no OMPT is enabled, return nullptr to de-facto disable the profiling
-static ompt::OmptEventInfoTy *
-getOrNullOmptEventInfo(AsyncInfoWrapperTy &AsyncInfoWrapper) {
-  return nullptr;
-}
-
-} // namespace llvm::omp::target::plugin
-#endif
 
 namespace llvm {
 namespace omp {
@@ -1444,7 +1417,7 @@ struct AMDGPUQueueTy {
     hsa_status_t Status =
         hsa_queue_create(Agent, QueueSize, HSA_QUEUE_TYPE_MULTI, callbackError,
                          &Device, UINT32_MAX, UINT32_MAX, &Queue);
-    if (Device.Plugin.getProfiler()->shouldEnableProfiling() ||
+    if (Device.Plugin.getProfiler()->isProfilingEnabled() ||
         OMPX_EnableQueueProfiling)
       hsa_amd_profiling_set_profiler_enabled(Queue, /*Enable=*/1);
 
@@ -1806,10 +1779,11 @@ private:
     Error schedProfilerKernelTiming(GenericDeviceTy *Device, hsa_agent_t Agent,
                                     AMDGPUSignalTy *OutputSignal,
                                     double TicksToTime,
-                                    ompt::OmptEventInfoTy *OmptData) {
+                                    void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeKernelInNsAsync);
-      ActionArgs.emplace_back().ProfilerArgs = ProfilingInfoTy{
-          &(Device->Plugin), Agent, OutputSignal, TicksToTime, OmptData};
+      ActionArgs.emplace_back().ProfilerArgs =
+          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
+                          ProfilerSpecificData};
       return Plugin::success();
     }
 
@@ -1818,10 +1792,11 @@ private:
                                           hsa_agent_t Agent,
                                           AMDGPUSignalTy *OutputSignal,
                                           double TicksToTime,
-                                          ompt::OmptEventInfoTy *OmptData) {
+                                          void *ProfilerSpecificData) {
       Callbacks.emplace_back(timeDataTransferInNsAsync);
-      ActionArgs.emplace_back().ProfilerArgs = ProfilingInfoTy{
-          &(Device->Plugin), Agent, OutputSignal, TicksToTime, OmptData};
+      ActionArgs.emplace_back().ProfilerArgs =
+          ProfilingInfoTy{&(Device->Plugin), Agent, OutputSignal, TicksToTime,
+                          ProfilerSpecificData};
       return Plugin::success();
     }
 
@@ -2195,7 +2170,7 @@ public:
                          uint32_t NumThreads[3], uint32_t NumBlocks[3],
                          uint32_t GroupSize, uint32_t StackSize,
                          AMDGPUMemoryManagerTy &MemoryManager,
-                         ompt::OmptEventInfoTy *OmptInfo = nullptr) {
+                         void *ProfilerSpecificData = nullptr) {
     if (Queue == nullptr)
       return Plugin::error(ErrorCode::INVALID_NULL_POINTER,
                            "target queue was nullptr");
@@ -2218,13 +2193,12 @@ public:
 
       // TODO: Technically this conditional compilation is not needed anymore
 #ifdef OMPT_SUPPORT
-    if (OmptInfo) {
-      DP("OMPT-Async: Info in KernelTy >> TR ptr: %p\n", OmptInfo->TraceRecord);
+    if (ProfilerSpecificData) {
 
-      // OmptInfo holds function pointer to finish trace record once the kernel
-      // completed.
+      // ProfilerSpecificData holds function pointer to finish trace record once
+      // the kernel completed.
       if (auto Err = Slots[Curr].schedProfilerKernelTiming(
-              &Device, Agent, OutputSignal, TicksToTime, OmptInfo))
+              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
         return Err;
     }
 #endif
@@ -2297,7 +2271,7 @@ public:
 
   /// Push an asynchronous memory copy between pinned memory buffers.
   Error pushPinnedMemoryCopyAsync(void *Dst, const void *Src, uint64_t CopySize,
-                                  ompt::OmptEventInfoTy *OmptInfo = nullptr) {
+                                  void *ProfilerSpecificData = nullptr) {
     // Retrieve an available signal for the operation's output.
     AMDGPUSignalTy *OutputSignal = nullptr;
     if (auto Err = SignalManager.getResource(OutputSignal))
@@ -2312,11 +2286,10 @@ public:
 
     // TODO: Technically this conditional compilation is not needed anymore
 #ifdef OMPT_SUPPORT
-    if (OmptInfo) {
-      DP("OMPT-Async: Registering data timing in pushPinnedMemoryCopyAsync\n");
+    if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignal, TicksToTime, OmptInfo))
+              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
         return Err;
     }
 #endif
@@ -2343,7 +2316,7 @@ public:
   Error pushMemoryCopyD2HAsync(void *Dst, const void *Src, void *Inter,
                                uint64_t CopySize,
                                AMDGPUMemoryManagerTy &MemoryManager,
-                               ompt::OmptEventInfoTy *OmptInfo = nullptr) {
+                               void *ProfilerSpecificData = nullptr) {
     // Retrieve available signals for the operation's outputs.
     AMDGPUSignalTy *OutputSignals[2] = {};
     if (auto Err = SignalManager.getResources(/*Num=*/2, OutputSignals))
@@ -2369,11 +2342,11 @@ public:
 
         // TODO: Technically this conditional compilation is not needed anymore
 #ifdef OMPT_SUPPORT
-    if (OmptInfo) {
-      DP("OMPT-Async: Registering data timing in pushMemoryCopyD2HAsync\n");
+    if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignals[0], TicksToTime, OmptInfo))
+              &Device, Agent, OutputSignals[0], TicksToTime,
+              ProfilerSpecificData))
         return Err;
     }
 #endif
@@ -2430,7 +2403,7 @@ public:
   Error pushMemoryCopyH2DAsync(void *Dst, const void *Src, void *Inter,
                                uint64_t CopySize,
                                AMDGPUMemoryManagerTy &MemoryManager,
-                               ompt::OmptEventInfoTy *OmptInfo = nullptr,
+                               void *ProfilerSpecificData = nullptr,
                                size_t NumTimes = 1) {
     // Retrieve available signals for the operation's outputs.
     AMDGPUSignalTy *OutputSignals[2] = {};
@@ -2493,11 +2466,11 @@ public:
 
       // TODO: Technically, this conditional compilation is not needed anymore
 #ifdef OMPT_SUPPORT
-    if (OmptInfo) {
-      DP("OMPT-Async: Registering data timing in pushMemoryCopyH2DAsync\n");
+    if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignals[0], TicksToTime, OmptInfo))
+              &Device, Agent, OutputSignals[0], TicksToTime,
+              ProfilerSpecificData))
         return Err;
     }
 #endif
@@ -2518,7 +2491,7 @@ public:
   // AMDGPUDeviceTy is incomplete here, passing the underlying agent instead
   Error pushMemoryCopyD2DAsync(void *Dst, hsa_agent_t DstAgent, const void *Src,
                                hsa_agent_t SrcAgent, uint64_t CopySize,
-                               ompt::OmptEventInfoTy *OmptInfo = nullptr) {
+                               void *ProfilerSpecificData = nullptr) {
     AMDGPUSignalTy *OutputSignal;
     if (auto Err = SignalManager.getResources(/*Num=*/1, &OutputSignal))
       return Err;
@@ -2532,11 +2505,10 @@ public:
 
     // TODO: Technically, this conditional compilation is not needed anymore
 #ifdef OMPT_SUPPORT
-    if (OmptInfo) {
-      DP("OMPT-Async: Registering data timing in pushMemoryCopyD2DAsync\n");
+    if (ProfilerSpecificData) {
       // Capture the time the data transfer required for the d2h transfer.
       if (auto Err = Slots[Curr].schedProfilerDataTransferTiming(
-              &Device, Agent, OutputSignal, TicksToTime, OmptInfo))
+              &Device, Agent, OutputSignal, TicksToTime, ProfilerSpecificData))
         return Err;
     }
 #endif
@@ -3732,8 +3704,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     void *PinnedPtr = nullptr;
 
     // Obtain the OMPT-related callback data
-    DP("OMPT-Async: dataSubmitImpl\n");
-    auto LocalOmptEventInfo = getOrNullOmptEventInfo(AsyncInfoWrapper);
+    auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
     // Prefault GPU page table in XNACK-Enabled case, on APUs,
     // under the assumption that explicitly allocated memory
@@ -3749,9 +3720,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
             PinnedAllocs.getDeviceAccessiblePtrFromPinnedBuffer(HstPtr)) {
       if (auto Err = getStream(AsyncInfoWrapper, Stream))
         return Err;
-      DP("OMPT-Async: Pinned Copy\n");
       return Stream->pushPinnedMemoryCopyAsync(TgtPtr, PinnedPtr, Size,
-                                               LocalOmptEventInfo);
+                                               ProfilerSpecificData);
     }
 
     // For large transfers use synchronous behavior.
@@ -3779,7 +3749,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       if (auto Err = Signal.init())
         return Err;
 
-      DP("OMPT-Async: Sync Copy\n");
       if (auto Err = hsa_utils::asyncMemCopy(useMultipleSdmaEngines(), TgtPtr,
                                          Agent, PinnedPtr, Agent, Size, 0,
                                          nullptr, Signal.get()))
@@ -3789,9 +3758,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         return Err;
 
 #ifdef OMPT_SUPPORT
-      if (LocalOmptEventInfo) {
+      if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, LocalOmptEventInfo};
+            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -3814,10 +3783,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = getStream(AsyncInfoWrapper, Stream))
       return Err;
 
-    DP("OMPT-Async: ASync Copy\n");
     return Stream->pushMemoryCopyH2DAsync(TgtPtr, HstPtr, PinnedPtr, Size,
                                           PinnedMemoryManager,
-                                          LocalOmptEventInfo);
+                                          ProfilerSpecificData);
   }
 
   /// Retrieve data from the device (device to host transfer).
@@ -3827,8 +3795,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     void *PinnedPtr = nullptr;
 
     // Obtain the OMPT-related callback data
-    DP("OMPT-Async: dataRetrieveImpl\n");
-    auto LocalOmptEventInfo = getOrNullOmptEventInfo(AsyncInfoWrapper);
+    auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
     // Prefault GPU page table in XNACK-Enabled case, on APUs,
     // under the assumption that explicitly allocated memory
@@ -3844,9 +3811,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
             PinnedAllocs.getDeviceAccessiblePtrFromPinnedBuffer(HstPtr)) {
       if (auto Err = getStream(AsyncInfoWrapper, Stream))
         return Err;
-      DP("OMPT-Async: Pinned Copy\n");
       return Stream->pushPinnedMemoryCopyAsync(PinnedPtr, TgtPtr, Size,
-                                               LocalOmptEventInfo);
+                                               ProfilerSpecificData);
     }
 
     // For large transfers use synchronous behavior.
@@ -3884,9 +3850,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         return Err;
 
 #ifdef OMPT_SUPPORT
-      if (LocalOmptEventInfo) {
+      if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, LocalOmptEventInfo};
+            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -3911,7 +3877,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return Stream->pushMemoryCopyD2HAsync(HstPtr, TgtPtr, PinnedPtr, Size,
                                           PinnedMemoryManager,
-                                          LocalOmptEventInfo);
+                                          ProfilerSpecificData);
   }
 
   /// Exchange data between two devices within the plugin.
@@ -3920,8 +3886,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
                          AsyncInfoWrapperTy &AsyncInfoWrapper) override {
     AMDGPUDeviceTy &DstDevice = static_cast<AMDGPUDeviceTy &>(DstGenericDevice);
 
-    DP("OMPT-Async: dataExchangeImpl\n");
-    auto LocalOmptEventInfo = getOrNullOmptEventInfo(AsyncInfoWrapper);
+    auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
     // For large transfers use synchronous behavior.
     // If OMPT is enabled or synchronous behavior is explicitly requested:
@@ -3943,9 +3908,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
         return Err;
 
 #ifdef OMPT_SUPPORT
-      if (LocalOmptEventInfo) {
+      if (Plugin.getProfiler()->isProfilingEnabled()) {
         ProfilingInfoTy OmptKernelTimingArgsAsync{
-            &Plugin, Agent, &Signal, TicksToTime, LocalOmptEventInfo};
+            &Plugin, Agent, &Signal, TicksToTime, ProfilerSpecificData};
 
         if (auto Err = timeDataTransferInNsAsync(&OmptKernelTimingArgsAsync))
           return Err;
@@ -3963,7 +3928,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     return Stream->pushMemoryCopyD2DAsync(DstPtr, DstDevice.getAgent(), SrcPtr,
                                           getAgent(), (uint64_t)Size,
-                                          LocalOmptEventInfo);
+                                          ProfilerSpecificData);
   }
 
   /// Insert a data fence between previous data operations and the following
@@ -5587,12 +5552,12 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   }
 
   // Get required OMPT-related data
-  auto LocalOmptEventInfo = getOrNullOmptEventInfo(AsyncInfoWrapper);
+  auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
   // Push the kernel launch into the stream.
   return Stream->pushKernelLaunch(*this, AllArgs, NumThreads, NumBlocks,
                                   GroupSize, static_cast<uint32_t>(StackSize),
-                                  ArgsMemoryManager, LocalOmptEventInfo);
+                                  ArgsMemoryManager, ProfilerSpecificData);
 }
 
 void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
@@ -5833,8 +5798,8 @@ static ProfilingInfoTy *getProfilingInfo(void *Data) {
 
 static std::pair<uint64_t, uint64_t>
 getKernelStartAndEndTime(const ProfilingInfoTy *Args) {
-  assert(Args->Plugin && "Invalid GenericPlugin pointer in OMPT profiling");
-  assert(Args->Signal && "Invalid AMDGPUSignal pointer in OMPT profiling");
+  assert(Args->Plugin && "Invalid GenericPlugin pointer in profiling");
+  assert(Args->Signal && "Invalid AMDGPUSignal pointer in profiling");
 
   hsa_amd_profiling_dispatch_time_t TimeRec{0, 0};
   hsa_status_t Status = hsa_amd_profiling_get_dispatch_time(
@@ -5858,7 +5823,7 @@ getKernelStartAndEndTime(const ProfilingInfoTy *Args) {
 
 static std::pair<uint64_t, uint64_t>
 getCopyStartAndEndTime(const ProfilingInfoTy *Args) {
-  assert(Args->Signal && "Invalid AMDGPUSignal Pointer in OMPT profiling");
+  assert(Args->Signal && "Invalid AMDGPUSignal Pointer in profiling");
 
   hsa_amd_profiling_async_copy_time_t TimeRec{0, 0};
   hsa_status_t Status =
