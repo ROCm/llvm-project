@@ -1578,30 +1578,41 @@ unsigned GCNTTIImpl::getNumberOfParts(Type *Tp) const {
 
 bool GCNTTIImpl::isLSRCostLess(const TTI::LSRCost &A,
                                const TTI::LSRCost &B) const {
-  // For AMDGPU (no powerful addressing modes), per-iter base adds are expensive.
   const GCNSubtarget &ST = *static_cast<const GCNSubtarget*>(getST());
 
-  // Limit the aggressive GPU-centric ordering to GFX9+ only.
-  if (ST.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS + 1 /* GFX9 */) {
-    // GFX9+ (gfx90/940/942,...): prioritize per-iter work over preheader.
-    if (A.NumBaseAdds != B.NumBaseAdds)
-      return A.NumBaseAdds < B.NumBaseAdds;
-    if (A.Insns != B.Insns)
+  // GFX9+: favor lower per-iteration work first; preheader/setup only as tie-breakers.
+  if (ST.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS + 1) {
+    // 1) Total per-iteration instructions. This already includes base-adds, IV muls, etc.
+    if (A.Insns != B.Insns) {
+      // dbgs() << "MS: Insns different, A.Insns = " << A.Insns << ", B.Insns == " << B.Insns << "\n";
       return A.Insns < B.Insns;
-    // Only if per-iter ties, consider preheader-related costs.
+    }
+
+    // 2) Prefer fewer per-iteration base adds as a tie-breaker to Insns.
+    if (A.NumBaseAdds != B.NumBaseAdds) {
+      // dbgs() << "MS: NumBaseAdds different, A.NumBaseAdds = " << A.NumBaseAdds << ", B.NumBaseAdds == " << B.NumBaseAdds << "\n";
+      return A.NumBaseAdds < B.NumBaseAdds;
+    }
+
+    // 3) Strongly prefer fewer IV multiplications (mul/mul_hi/addc chains are costly on AMDGPU).
+    if (A.NumIVMuls != B.NumIVMuls) {
+      // dbgs() << "MS: NumIVMuls different, A.NumIVMuls = " << A.NumIVMuls << ", B.NumIVMuls == " << B.NumIVMuls << "\n";
+      return A.NumIVMuls < B.NumIVMuls;
+    }
+
+    // 4) Only if per-iteration work ties, consider preheader-related costs.
     if (A.AddRecCost != B.AddRecCost)
       return A.AddRecCost < B.AddRecCost;
     if (A.SetupCost != B.SetupCost)
       return A.SetupCost < B.SetupCost;
-    // Fall back to minor keys to keep total order stable.
+
+    // 5) Minor keys to stabilize ordering.
     if (A.ScaleCost != B.ScaleCost)
       return A.ScaleCost < B.ScaleCost;
-    if (A.NumIVMuls != B.NumIVMuls)
-      return A.NumIVMuls < B.NumIVMuls;
     return A.NumRegs < B.NumRegs;
   }
 
-  // Pre-GFX9: keep the default behavior (don’t perturb bonaire/VI tests).
+  // Pre-GFX9: keep the default behavior.
   return BaseT::isLSRCostLess(A, B);
 }
 
