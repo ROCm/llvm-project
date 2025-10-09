@@ -1584,31 +1584,40 @@ bool GCNTTIImpl::isLSRCostLess(const TTI::LSRCost &A,
   if (ST.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS + 1) {
     // 1) Total per-iteration instructions. This already includes base-adds, IV muls, etc.
     if (A.Insns != B.Insns) {
-      // dbgs() << "MS: Insns different, A.Insns = " << A.Insns << ", B.Insns == " << B.Insns << "\n";
+      dbgs() << "MS: Insns different, A.Insns = " << A.Insns << ", B.Insns == " << B.Insns << "\n";
       return A.Insns < B.Insns;
     }
 
-    // 2) Prefer fewer per-iteration base adds as a tie-breaker to Insns.
-    if (A.NumBaseAdds != B.NumBaseAdds) {
-      // dbgs() << "MS: NumBaseAdds different, A.NumBaseAdds = " << A.NumBaseAdds << ", B.NumBaseAdds == " << B.NumBaseAdds << "\n";
-      return A.NumBaseAdds < B.NumBaseAdds;
-    }
-
-    // 3) Strongly prefer fewer IV multiplications (mul/mul_hi/addc chains are costly on AMDGPU).
+    // 2) Strongly prefer fewer IV multiplications (mul/mul_hi/addc chains are costly on AMDGPU).
     if (A.NumIVMuls != B.NumIVMuls) {
-      // dbgs() << "MS: NumIVMuls different, A.NumIVMuls = " << A.NumIVMuls << ", B.NumIVMuls == " << B.NumIVMuls << "\n";
+      dbgs() << "MS: NumIVMuls different, A.NumIVMuls = " << A.NumIVMuls << ", B.NumIVMuls == " << B.NumIVMuls << "\n";
       return A.NumIVMuls < B.NumIVMuls;
     }
 
-    // 4) Only if per-iteration work ties, consider preheader-related costs.
-    if (A.AddRecCost != B.AddRecCost)
+    // 3) AddRecCost: per-iteration cost of IV updates (fewer IVs = lower cost).
+    if (A.AddRecCost != B.AddRecCost) {
+      dbgs() << "MS: AddRecCost different, A.AddRecCost = " << A.AddRecCost << ", B.AddRecCost == " << B.AddRecCost << "\n";
       return A.AddRecCost < B.AddRecCost;
-    if (A.SetupCost != B.SetupCost)
-      return A.SetupCost < B.SetupCost;
+    }
 
-    // 5) Minor keys to stabilize ordering.
-    if (A.ScaleCost != B.ScaleCost)
+    // 4) Prefer fewer per-iteration base adds as a tie-breaker.
+    if (A.NumBaseAdds != B.NumBaseAdds) {
+      dbgs() << "MS: NumBaseAdds different, A.NumBaseAdds = " << A.NumBaseAdds << ", B.NumBaseAdds == " << B.NumBaseAdds << "\n";
+      return A.NumBaseAdds < B.NumBaseAdds;
+    }
+
+    // 5) Preheader-related costs.
+    if (A.SetupCost != B.SetupCost) {
+      dbgs() << "MS: SetupCost different, A.SetupCost = " << A.SetupCost << ", B.SetupCost == " << B.SetupCost << "\n";
+      return A.SetupCost < B.SetupCost;
+    }
+
+    // 6) Minor keys to stabilize ordering.
+    if (A.ScaleCost != B.ScaleCost) {
+      dbgs() << "MS: ScaleCost different, A.ScaleCost = " << A.ScaleCost << ", B.ScaleCost == " << B.ScaleCost << "\n";
       return A.ScaleCost < B.ScaleCost;
+    }
+
     return A.NumRegs < B.NumRegs;
   }
 
