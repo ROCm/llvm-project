@@ -187,6 +187,8 @@ install(TARGETS ${HIPCONFIG_BIN}
         COMPONENT NVIDIA
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_custom_target(link_target ALL COMMAND ${CMAKE_COMMAND} -E create_symlink \"amdclang++\" ${HIPCC_BIN})
+
 # TODO: WIN32 check need to be removed if backward
 # compatibility is required for WIN32.
 option(HIPCC_BACKWARD_COMPATIBILITY "Enable HIPCC backward compatibility" ON)
