@@ -1576,46 +1576,66 @@ unsigned GCNTTIImpl::getNumberOfParts(Type *Tp) const {
   return BaseT::getNumberOfParts(Tp);
 }
 
+InstructionCost GCNTTIImpl::getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
+                                                  StackOffset BaseOffset,
+                                                  bool HasBaseReg, int64_t Scale,
+                                                  unsigned AddrSpace) const {
+  // AMDGPU has limited addressing modes. base+scale*index requires an extra
+  // ADD instruction, unlike architectures with rich addressing modes.
+  if (HasBaseReg && Scale != 0)
+    return 1;
+  return BaseT::getScalingFactorCost(Ty, BaseGV, BaseOffset, HasBaseReg, Scale,
+                                     AddrSpace);
+}
+
 bool GCNTTIImpl::isLSRCostLess(const TTI::LSRCost &A,
                                const TTI::LSRCost &B) const {
   const GCNSubtarget &ST = *static_cast<const GCNSubtarget*>(getST());
 
   // GFX9+: favor lower per-iteration work first; preheader/setup only as tie-breakers.
   if (ST.getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS + 1) {
-    // 1) Total per-iteration instructions. This already includes base-adds, IV muls, etc.
-    if (A.Insns != B.Insns) {
-      dbgs() << "MS: Insns different, A.Insns = " << A.Insns << ", B.Insns == " << B.Insns << "\n";
-      return A.Insns < B.Insns;
+    // AMDGPU lacks rich addressing modes; base+scale*index requires separate ADD.
+    // Include ScaleCost in effective per-iteration instruction count.
+    unsigned EffInsnsA = A.Insns + A.ScaleCost;
+    unsigned EffInsnsB = B.Insns + B.ScaleCost;
+
+    // 1) Effective per-iteration instructions (includes addressing complexity).
+    if (EffInsnsA != EffInsnsB) {
+      // dbgs() << "MS: EffInsns different, A=" << EffInsnsA << " (Insns=" << A.Insns 
+      //        << "+ScaleCost=" << A.ScaleCost << "), B=" << EffInsnsB 
+      //        << " (Insns=" << B.Insns << "+ScaleCost=" << B.ScaleCost << ")\n";
+      return EffInsnsA < EffInsnsB;
     }
 
     // 2) Strongly prefer fewer IV multiplications (mul/mul_hi/addc chains are costly on AMDGPU).
     if (A.NumIVMuls != B.NumIVMuls) {
-      dbgs() << "MS: NumIVMuls different, A.NumIVMuls = " << A.NumIVMuls << ", B.NumIVMuls == " << B.NumIVMuls << "\n";
+      // dbgs() << "MS: NumIVMuls different, A.NumIVMuls = " << A.NumIVMuls << ", B.NumIVMuls == " << B.NumIVMuls << "\n";
       return A.NumIVMuls < B.NumIVMuls;
     }
 
     // 3) AddRecCost: per-iteration cost of IV updates (fewer IVs = lower cost).
     if (A.AddRecCost != B.AddRecCost) {
-      dbgs() << "MS: AddRecCost different, A.AddRecCost = " << A.AddRecCost << ", B.AddRecCost == " << B.AddRecCost << "\n";
+      // dbgs() << "MS: AddRecCost different, A.AddRecCost = " << A.AddRecCost << ", B.AddRecCost == " << B.AddRecCost << "\n";
       return A.AddRecCost < B.AddRecCost;
     }
 
     // 4) Prefer fewer per-iteration base adds as a tie-breaker.
     if (A.NumBaseAdds != B.NumBaseAdds) {
-      dbgs() << "MS: NumBaseAdds different, A.NumBaseAdds = " << A.NumBaseAdds << ", B.NumBaseAdds == " << B.NumBaseAdds << "\n";
+      // dbgs() << "MS: NumBaseAdds different, A.NumBaseAdds = " << A.NumBaseAdds << ", B.NumBaseAdds == " << B.NumBaseAdds << "\n";
       return A.NumBaseAdds < B.NumBaseAdds;
     }
 
     // 5) Preheader-related costs.
     if (A.SetupCost != B.SetupCost) {
-      dbgs() << "MS: SetupCost different, A.SetupCost = " << A.SetupCost << ", B.SetupCost == " << B.SetupCost << "\n";
+      // dbgs() << "MS: SetupCost different, A.SetupCost = " << A.SetupCost << ", B.SetupCost == " << B.SetupCost << "\n";
       return A.SetupCost < B.SetupCost;
     }
 
-    // 6) Minor keys to stabilize ordering.
-    if (A.ScaleCost != B.ScaleCost) {
-      dbgs() << "MS: ScaleCost different, A.ScaleCost = " << A.ScaleCost << ", B.ScaleCost == " << B.ScaleCost << "\n";
-      return A.ScaleCost < B.ScaleCost;
+    // 6) Minor keys to stabilize ordering (ImmCost, NumRegs).
+    // ScaleCost already accounted for in EffInsns, so not compared separately.
+    if (A.ImmCost != B.ImmCost) {
+      // dbgs() << "MS: ImmCost different, A.ImmCost = " << A.ImmCost << ", B.ImmCost == " << B.ImmCost << "\n";
+      return A.ImmCost < B.ImmCost;
     }
 
     return A.NumRegs < B.NumRegs;
