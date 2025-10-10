@@ -303,6 +303,11 @@ public:
   /// implementation.
   unsigned getNumberOfParts(Type *Tp) const override;
 
+  InstructionCost getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
+                                       StackOffset BaseOffset,
+                                       bool HasBaseReg, int64_t Scale,
+                                       unsigned AddrSpace) const;
+
   bool isLSRCostLess(const TTI::LSRCost &A,
                      const TTI::LSRCost &B) const;
   bool isNumRegsMajorCostOfLSR();
