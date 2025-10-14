@@ -983,7 +983,7 @@ void Linux::AddHIPRuntimeLibArgs(const ArgList &Args,
     CmdArgs.append({"-rpath", Args.MakeArgString(p)});
   }
 
-  CmdArgs.push_back("-lamdhip64");
+  CmdArgs.push_back("-l:libamdhip64.so.7");
 }
 
 void Linux::AddIAMCUIncludeArgs(const ArgList &DriverArgs,
