@@ -1874,10 +1874,16 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
   if (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS ||
       AddrSpace == AMDGPUAS::FLAT_ADDRESS) {
     bool AlignedBy4 = Alignment >= Align(4);
+    if (Subtarget->hasUnalignedScratchAccessEnabled()) {
+      if (IsFast)
+        *IsFast = AlignedBy4 ? Size : 1;
+      return true;
+    }
+
     if (IsFast)
       *IsFast = AlignedBy4;
 
-    return AlignedBy4 || Subtarget->hasUnalignedScratchAccessEnabled();
+    return AlignedBy4;
   }
 
   // So long as they are correct, wide global memory operations perform better
@@ -3193,7 +3199,7 @@ bool SITargetLowering::CanLowerReturn(
 
   // We must use the stack if return would require unavailable registers.
   unsigned MaxNumVGPRs = Subtarget->getMaxNumVGPRs(MF);
-  unsigned TotalNumVGPRs = AMDGPU::VGPR_32RegClass.getNumRegs();
+  unsigned TotalNumVGPRs = Subtarget->getAddressableNumArchVGPRs();
   for (unsigned i = MaxNumVGPRs; i < TotalNumVGPRs; ++i)
     if (CCInfo.isAllocated(AMDGPU::VGPR_32RegClass.getRegister(i)))
       return false;

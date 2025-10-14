@@ -648,7 +648,8 @@ public:
           ModuleScopeVariables.insert(GV);
         } else if (K.second.size() == 1) {
           KernelAccessVariables.insert(GV);
-        } else if (set_is_subset(K.second, HybridModuleRootKernels)) {
+        } else if (K.second == HybridModuleRootKernels &&
+                   set_is_subset(K.second, HybridModuleRootKernels)) {
           ModuleScopeVariables.insert(GV);
         } else {
           TableLookupVariables.insert(GV);
