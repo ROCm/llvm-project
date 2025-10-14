@@ -158,7 +158,7 @@ static bool compareVersions(StringRef A, StringRef B) {
 // amdhip64_n.dll but we do not know what n is since this program may be used
 // with a future version of HIP runtime.
 //
-// On Linux, always use default libamdhip64.so.
+// On Linux, always use default libamdhip64.so.7.
 static std::pair<std::string, bool> findNewestHIPDLL() {
 #ifdef _WIN32
   StringRef HipDLLPrefix = "amdhip64_";
@@ -185,7 +185,7 @@ static std::pair<std::string, bool> findNewestHIPDLL() {
   return {DLLNames[0], false};
 #else
   // On Linux, fallback to default shared object
-  return {"libamdhip64.so", true};
+  return {"libamdhip64.so.7", true};
 #endif
 }
 
