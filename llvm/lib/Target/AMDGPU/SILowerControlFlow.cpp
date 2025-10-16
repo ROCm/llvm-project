@@ -742,6 +742,9 @@ bool SILowerControlFlow::removeMBBifRedundant(MachineBasicBlock &MBB) {
   if (PDT)
     PDT->applyUpdates(DTUpdates);
 
+  if (MDT && MDT->getNode(&MBB)) MDT->eraseNode(&MBB);
+  if (PDT && PDT->getNode(&MBB)) PDT->eraseNode(&MBB);
+  
   MBB.clear();
   MBB.eraseFromParent();
   if (FallThrough && !FallThrough->isLayoutSuccessor(Succ)) {
