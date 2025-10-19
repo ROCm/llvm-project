@@ -1,0 +1,146 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -amdgpu-enable-hot-block-reg-renaming -verify-machineinstrs -run-pass=greedy,amdgpu-hot-block-reg-renaming,virtregrewriter -o - %s | FileCheck %s
+
+--- |
+  define amdgpu_kernel void @test_basic_move() { ret void }
+  define amdgpu_kernel void @test_tied_operand() { ret void }
+  define amdgpu_kernel void @test_no_free_registers() #0 { ret void }
+  
+  attributes #0 = { "amdgpu-num-vgpr"="8" }
+...
+
+---
+# Test 1: Verify that we correctly move a value when it's safe to do so
+# Multiple values allocated to vgpr3, one should be moved to a free register
+# CHECK-LABEL: name: test_basic_move
+# CHECK: bb.1:
+# CHECK-NOT: renamable $vgpr3 = V_ADD_F32_e64 0, renamable $vgpr0, 0, renamable $vgpr1
+# CHECK-NOT: renamable $vgpr3 = V_MUL_F32_e64 0, killed renamable $vgpr3, 0, renamable $vgpr2
+# CHECK: renamable $vgpr{{[4-9]|[1-5][0-9]}} = V_MUL_F32_e64
+name:            test_basic_move
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg:  '$sgpr96_sgpr97_sgpr98_sgpr99'
+  stackPtrOffsetReg: '$sgpr32'
+registers:
+  - { id: 0, class: vgpr_32, preferred-register: '$vgpr0' }
+  - { id: 1, class: vgpr_32, preferred-register: '$vgpr1' }
+  - { id: 2, class: vgpr_32, preferred-register: '$vgpr2' }
+  - { id: 3, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 4, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 5, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 6, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 7, class: vgpr_32, preferred-register: '$vgpr3' }
+body: |
+  bb.0:
+    successors: %bb.1
+    liveins: $vgpr0, $vgpr1, $vgpr2
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vgpr_32 = COPY $vgpr1
+    %2:vgpr_32 = COPY $vgpr2
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    ; High value density: %3, %4, %5, %6, %7 all prefer vgpr3
+    ; Some should be moved to free registers
+    %3:vgpr_32 = V_ADD_F32_e64 0, %0, 0, %1, 0, 0, implicit $mode, implicit $exec
+    %4:vgpr_32 = V_ADD_F32_e64 0, %3, 0, %2, 0, 0, implicit $mode, implicit $exec
+    %5:vgpr_32 = V_MUL_F32_e64 0, %3, 0, %2, 0, 0, implicit $mode, implicit $exec
+    %6:vgpr_32 = V_MUL_F32_e64 0, %3, 0, %1, 0, 0, implicit $mode, implicit $exec
+    %7:vgpr_32 = V_FMA_F32_e64 0, %3, 0, %2, 0, %4, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_EXECNZ %bb.1, implicit $exec
+
+  bb.2:
+    S_ENDPGM 0, implicit %7
+
+...
+---
+# Test 2: Verify that we do NOT move values with tied operands
+# V_MAC_F32 has tied def-use, should not be moved
+# CHECK-LABEL: name: test_tied_operand
+# CHECK: bb.1:
+# CHECK: renamable $vgpr3 = V_ADD_F32_e32
+# CHECK-NEXT: renamable $vgpr3 = V_MAC_F32_e32
+# CHECK-NEXT: renamable $vgpr3 = V_MUL_F32_e64
+name:            test_tied_operand
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg:  '$sgpr96_sgpr97_sgpr98_sgpr99'
+  stackPtrOffsetReg: '$sgpr32'
+registers:
+  - { id: 0, class: vgpr_32, preferred-register: '$vgpr0' }
+  - { id: 1, class: vgpr_32, preferred-register: '$vgpr1' }
+  - { id: 2, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 3, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 4, class: vgpr_32, preferred-register: '$vgpr3' }
+body: |
+  bb.0:
+    successors: %bb.1
+    liveins: $vgpr0, $vgpr1
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vgpr_32 = COPY $vgpr1
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    ; %2 and %3 both prefer vgpr3, but %3 has tied operand
+    %2:vgpr_32 = V_ADD_F32_e32 %1, %0, implicit $mode, implicit $exec
+    %3:vgpr_32 = V_MAC_F32_e32 %0, %1, %2, implicit $mode, implicit $exec
+    ; The pass should NOT move %3 because it has a tied def operand
+    %4:vgpr_32 = V_MUL_F32_e64 0, %3, 0, %0, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_EXECNZ %bb.1, implicit $exec
+
+  bb.2:
+    S_ENDPGM 0, implicit %4
+
+...
+---
+# Test 3: Verify that we do NOT move when there are no free registers
+# With only 8 VGPRs available and all in use, no moves should happen
+# CHECK-LABEL: name: test_no_free_registers
+# CHECK: bb.1:
+# CHECK: renamable $vgpr3 = V_ADD_F32_e64
+# CHECK: renamable $vgpr3 = V_MUL_F32_e64
+name:            test_no_free_registers
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg:  '$sgpr96_sgpr97_sgpr98_sgpr99'
+  stackPtrOffsetReg: '$sgpr32'
+registers:
+  - { id: 0, class: vgpr_32, preferred-register: '$vgpr0' }
+  - { id: 1, class: vgpr_32, preferred-register: '$vgpr1' }
+  - { id: 2, class: vgpr_32, preferred-register: '$vgpr2' }
+  - { id: 3, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 4, class: vgpr_32, preferred-register: '$vgpr4' }
+  - { id: 5, class: vgpr_32, preferred-register: '$vgpr5' }
+  - { id: 6, class: vgpr_32, preferred-register: '$vgpr6' }
+  - { id: 7, class: vgpr_32, preferred-register: '$vgpr7' }
+  - { id: 8, class: vgpr_32, preferred-register: '$vgpr3' }
+  - { id: 9, class: vgpr_32, preferred-register: '$vgpr3' }
+body: |
+  bb.0:
+    successors: %bb.1
+    liveins: $vgpr0, $vgpr1
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vgpr_32 = COPY $vgpr1
+    ; Fill up vgpr2-7 to leave no free registers
+    %2:vgpr_32 = V_MOV_B32_e32 0, implicit $exec
+    %3:vgpr_32 = V_MOV_B32_e32 1, implicit $exec
+    %4:vgpr_32 = V_MOV_B32_e32 2, implicit $exec
+    %5:vgpr_32 = V_MOV_B32_e32 3, implicit $exec
+    %6:vgpr_32 = V_MOV_B32_e32 4, implicit $exec
+    %7:vgpr_32 = V_MOV_B32_e32 5, implicit $exec
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    ; With all registers occupied, pass should not move values
+    %8:vgpr_32 = V_ADD_F32_e64 0, %0, 0, %1, 0, 0, implicit $mode, implicit $exec
+    %9:vgpr_32 = V_MUL_F32_e64 0, %8, 0, %1, 0, 0, implicit $mode, implicit $exec
+    S_CBRANCH_EXECNZ %bb.1, implicit $exec
+
+  bb.2:
+    S_ENDPGM 0, implicit %2, implicit %3, implicit %4, implicit %5, implicit %6, implicit %7, implicit %9
+
+...
+
