@@ -1858,8 +1858,8 @@ static bool hoistPreviousBeforeFORUsers(VPFirstOrderRecurrencePHIRecipe *FOR,
       return nullptr;
     VPRegionBlock *EnclosingLoopRegion =
         HoistCandidate->getParent()->getEnclosingLoopRegion();
-    assert((!HoistCandidate->getParent()->getParent() ||
-            HoistCandidate->getParent()->getParent() == EnclosingLoopRegion) &&
+    assert((!HoistCandidate->getRegion() ||
+            HoistCandidate->getRegion() == EnclosingLoopRegion) &&
            "CFG in VPlan should still be flat, without replicate regions");
     // Hoist candidate was already visited, no need to hoist.
     if (!Visited.insert(HoistCandidate).second)
@@ -2122,9 +2122,18 @@ static void licm(VPlan &Plan) {
   VPBasicBlock *Preheader = Plan.getVectorPreheader();
 
   // Return true if we do not know how to (mechanically) hoist a given recipe
-  // out of a loop region. Does not address legality concerns such as aliasing
-  // or speculation safety.
+  // out of a loop region.
   auto CannotHoistRecipe = [](VPRecipeBase &R) {
+    // Assumes don't alias anything or throw; as long as they're guaranteed to
+    // execute, they're safe to hoist.
+    if (match(&R, m_Intrinsic<Intrinsic::assume>()))
+      return false;
+
+    // TODO: Relax checks in the future, e.g. we could also hoist reads, if
+    // their memory location is not modified in the vector loop.
+    if (R.mayHaveSideEffects() || R.mayReadFromMemory() || R.isPhi())
+      return true;
+
     // Allocas cannot be hoisted.
     auto *RepR = dyn_cast<VPReplicateRecipe>(&R);
     return RepR && RepR->getOpcode() == Instruction::Alloca;
@@ -2132,17 +2141,18 @@ static void licm(VPlan &Plan) {
 
   // Hoist any loop invariant recipes from the vector loop region to the
   // preheader. Preform a shallow traversal of the vector loop region, to
-  // exclude recipes in replicate regions.
+  // exclude recipes in replicate regions. Since the top-level blocks in the
+  // vector loop region are guaranteed to execute if the vector pre-header is,
+  // we don't need to check speculation safety.
   VPRegionBlock *LoopRegion = Plan.getVectorLoopRegion();
+  assert(Preheader->getSingleSuccessor() == LoopRegion &&
+         "Expected vector prehader's successor to be the vector loop region");
   for (VPBasicBlock *VPBB : VPBlockUtils::blocksOnly<VPBasicBlock>(
            vp_depth_first_shallow(LoopRegion->getEntry()))) {
     for (VPRecipeBase &R : make_early_inc_range(*VPBB)) {
       if (CannotHoistRecipe(R))
         continue;
-      // TODO: Relax checks in the future, e.g. we could also hoist reads, if
-      // their memory location is not modified in the vector loop.
-      if (R.mayHaveSideEffects() || R.mayReadFromMemory() || R.isPhi() ||
-          any_of(R.operands(), [](VPValue *Op) {
+      if (any_of(R.operands(), [](VPValue *Op) {
             return !Op->isDefinedOutsideLoopRegions();
           }))
         continue;
@@ -2888,7 +2898,7 @@ void VPlanTransforms::replaceSymbolicStrides(
   // evolution.
   auto CanUseVersionedStride = [&Plan](VPUser &U, unsigned) {
     auto *R = cast<VPRecipeBase>(&U);
-    return R->getParent()->getParent() ||
+    return R->getRegion() ||
            R->getParent() == Plan.getVectorLoopRegion()->getSinglePredecessor();
   };
   ValueToSCEVMapTy RewriteMap;
@@ -3793,8 +3803,7 @@ void VPlanTransforms::materializeBuildVectors(VPlan &Plan) {
         continue;
       auto *DefR = cast<VPRecipeWithIRFlags>(&R);
       auto UsesVectorOrInsideReplicateRegion = [DefR, LoopRegion](VPUser *U) {
-        VPRegionBlock *ParentRegion =
-            cast<VPRecipeBase>(U)->getParent()->getParent();
+        VPRegionBlock *ParentRegion = cast<VPRecipeBase>(U)->getRegion();
         return !U->usesScalars(DefR) || ParentRegion != LoopRegion;
       };
       if ((isa<VPReplicateRecipe>(DefR) &&
