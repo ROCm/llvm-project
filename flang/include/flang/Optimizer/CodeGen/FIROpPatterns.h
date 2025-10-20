@@ -163,10 +163,16 @@ protected:
   // program address space we perform a cast. In the case of most architectures
   // the program and allocation address space will be the default of 0 and no
   // cast will be emitted.
+  //
+  // If `useDeviceSharedMem = true`, an `omp.alloc_shared_mem` operation for the
+  // same type will be used instead, with no address space cast. This is only
+  // intended for allocations on an OpenMP application when compiling for a
+  // target device.
   mlir::Value
   genAllocaAndAddrCastWithType(mlir::Location loc, mlir::Type llvmObjectTy,
                                unsigned alignment,
-                               mlir::ConversionPatternRewriter &rewriter) const;
+                               mlir::ConversionPatternRewriter &rewriter,
+                               bool useDeviceSharedMem = false) const;
 
   const fir::LLVMTypeConverter &lowerTy() const {
     return *static_cast<const fir::LLVMTypeConverter *>(

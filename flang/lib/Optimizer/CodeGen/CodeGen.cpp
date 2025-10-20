@@ -31,6 +31,7 @@
 #include "flang/Runtime/allocator-registry-consts.h"
 #include "flang/Runtime/descriptor-consts.h"
 #include "flang/Semantics/runtime-type-info.h"
+#include "flang/Utils/OpenMP.h"
 #include "mlir/Conversion/ArithCommon/AttrToLLVMConverter.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h"
@@ -1834,15 +1835,21 @@ struct EmboxCommonConversion : public fir::FIROpConversion<OP> {
   }
 
   /// If the embox is not in a globalOp body, allocate storage for the box;
-  /// store the value inside and return the generated alloca. Return the input
-  /// value otherwise.
-  mlir::Value
+  /// store the value inside and replace the original embox with the generated
+  /// alloca. Replace it with the input value otherwise.
+  ///
+  /// The allocated storage might be OpenMP device shared memory, if required by
+  /// the context and uses of the operation. In that case, the corresponding
+  /// explicit deallocation is also introduced at the applicable block(s).
+  void
   placeInMemoryIfNotGlobalInit(mlir::ConversionPatternRewriter &rewriter,
-                               mlir::Location loc, mlir::Type boxTy,
-                               mlir::Value boxValue,
+                               mlir::Operation *embox, mlir::Location loc,
+                               mlir::Type boxTy, mlir::Value boxValue,
                                bool needDeviceAllocation = false) const {
-    if (isInGlobalOp(rewriter))
-      return boxValue;
+    if (isInGlobalOp(rewriter)) {
+      rewriter.replaceOp(embox, boxValue);
+      return;
+    }
     mlir::Type llvmBoxTy = boxValue.getType();
     mlir::Value storage;
     if (needDeviceAllocation) {
@@ -1851,13 +1858,19 @@ struct EmboxCommonConversion : public fir::FIROpConversion<OP> {
       storage =
           genCUFAllocDescriptor(loc, rewriter, mod, baseBoxTy, this->lowerTy());
     } else {
-      storage = this->genAllocaAndAddrCastWithType(loc, llvmBoxTy, defaultAlign,
-                                                   rewriter);
+      storage = this->genAllocaAndAddrCastWithType(
+          loc, llvmBoxTy, defaultAlign, rewriter,
+          Fortran::utils::openmp::shouldReplaceAllocaWithDeviceSharedMem(
+              *embox));
     }
     auto storeOp =
         mlir::LLVM::StoreOp::create(rewriter, loc, boxValue, storage);
     this->attachTBAATag(storeOp, boxTy, boxTy, nullptr);
-    return storage;
+
+    rewriter.replaceOp(embox, storage);
+    if (mlir::isa<mlir::omp::AllocSharedMemOp>(storage.getDefiningOp()))
+      Fortran::utils::openmp::insertDeviceSharedMemDeallocation(rewriter,
+                                                                storage);
   }
 
   /// Compute the extent of a triplet slice (lb:ub:step).
@@ -1906,9 +1919,8 @@ struct EmboxOpConversion : public EmboxCommonConversion<fir::EmboxOp> {
            "fir.embox codegen of derived with length parameters");
       return mlir::failure();
     }
-    auto result =
-        placeInMemoryIfNotGlobalInit(rewriter, embox.getLoc(), boxTy, dest);
-    rewriter.replaceOp(embox, result);
+    placeInMemoryIfNotGlobalInit(rewriter, embox, embox.getLoc(),
+                                               boxTy, dest);
     return mlir::success();
   }
 };
@@ -2154,10 +2166,9 @@ struct XEmboxOpConversion : public EmboxCommonConversion<fir::cg::XEmboxOp> {
     dest = insertBaseAddress(rewriter, loc, dest, base);
     if (fir::isDerivedTypeWithLenParams(boxTy))
       TODO(loc, "fir.embox codegen of derived with length parameters");
-    mlir::Value result = placeInMemoryIfNotGlobalInit(
-        rewriter, loc, boxTy, dest,
+    placeInMemoryIfNotGlobalInit(
+        rewriter, xbox, loc, boxTy, dest,
         isDeviceAllocation(xbox.getMemref(), adaptor.getMemref()));
-    rewriter.replaceOp(xbox, result);
     return mlir::success();
   }
 
@@ -2272,10 +2283,9 @@ private:
       dest = insertStride(rewriter, loc, dest, dim, std::get<1>(iter.value()));
     }
     dest = insertBaseAddress(rewriter, loc, dest, base);
-    mlir::Value result = placeInMemoryIfNotGlobalInit(
-        rewriter, rebox.getLoc(), destBoxTy, dest,
+    placeInMemoryIfNotGlobalInit(
+        rewriter, rebox, rebox.getLoc(), destBoxTy, dest,
         isDeviceAllocation(rebox.getBox(), adaptor.getBox()));
-    rewriter.replaceOp(rebox, result);
     return mlir::success();
   }
 

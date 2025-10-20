@@ -17,12 +17,11 @@
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Transforms/RegionUtils.h"
 
-namespace Fortran::utils::openmp {
-mlir::omp::MapInfoOp createMapInfoOp(mlir::OpBuilder &builder,
-    mlir::Location loc, mlir::Value baseAddr, mlir::Value varPtrPtr,
-    llvm::StringRef name, llvm::ArrayRef<mlir::Value> bounds,
-    llvm::ArrayRef<mlir::Value> members, mlir::ArrayAttr membersIndex,
-    mlir::omp::ClauseMapFlags mapType,
+mlir::omp::MapInfoOp Fortran::utils::openmp::createMapInfoOp(
+    mlir::OpBuilder &builder, mlir::Location loc, mlir::Value baseAddr,
+    mlir::Value varPtrPtr, llvm::StringRef name,
+    llvm::ArrayRef<mlir::Value> bounds, llvm::ArrayRef<mlir::Value> members,
+    mlir::ArrayAttr membersIndex, mlir::omp::ClauseMapFlags mapType,
     mlir::omp::VariableCaptureKind mapCaptureType, mlir::Type retTy,
     bool partialMap, mlir::FlatSymbolRefAttr mapperId) {
 
@@ -50,8 +49,9 @@ mlir::omp::MapInfoOp createMapInfoOp(mlir::OpBuilder &builder,
   return op;
 }
 
-mlir::Value mapTemporaryValue(fir::FirOpBuilder &firOpBuilder,
-    mlir::omp::TargetOp targetOp, mlir::Value val, llvm::StringRef name) {
+mlir::Value Fortran::utils::openmp::mapTemporaryValue(
+    fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp,
+    mlir::Value val, llvm::StringRef name) {
   mlir::OpBuilder::InsertionGuard guard(firOpBuilder);
   mlir::Operation *valOp = val.getDefiningOp();
 
@@ -116,7 +116,7 @@ mlir::Value mapTemporaryValue(fir::FirOpBuilder &firOpBuilder,
   return loadOp.getResult();
 }
 
-void cloneOrMapRegionOutsiders(
+void Fortran::utils::openmp::cloneOrMapRegionOutsiders(
     fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp) {
   mlir::Region &region = targetOp.getRegion();
   mlir::Block *entryBlock = &region.getBlocks().front();
@@ -156,4 +156,107 @@ void cloneOrMapRegionOutsiders(
   }
 }
 
-} // namespace Fortran::utils::openmp
+/// When a use takes place inside an omp.parallel region and it's not as a
+/// private clause argument, or when it is a reduction argument passed to
+/// omp.parallel or a function call argument, then the defining allocation is
+/// eligible for replacement with shared memory.
+static bool allocaUseRequiresDeviceSharedMem(const mlir::OpOperand &use) {
+  mlir::Operation *owner = use.getOwner();
+  if (auto parallelOp = llvm::dyn_cast<mlir::omp::ParallelOp>(owner)) {
+    if (llvm::is_contained(parallelOp.getReductionVars(), use.get()))
+      return true;
+  } else if (auto callOp = llvm::dyn_cast<mlir::CallOpInterface>(owner)) {
+    if (llvm::is_contained(callOp.getArgOperands(), use.get()))
+      return true;
+  }
+
+  // If it is used directly inside of a parallel region, it has to be replaced
+  // unless the use is a private clause.
+  if (owner->getParentOfType<mlir::omp::ParallelOp>()) {
+    if (auto argIface =
+            llvm::dyn_cast<mlir::omp::BlockArgOpenMPOpInterface>(owner)) {
+      if (auto privateSyms = llvm::cast_or_null<mlir::ArrayAttr>(
+              owner->getAttr("private_syms"))) {
+        for (auto [var, sym] :
+            llvm::zip_equal(argIface.getPrivateVars(), privateSyms)) {
+          if (var != use.get())
+            continue;
+
+          auto moduleOp = owner->getParentOfType<mlir::ModuleOp>();
+          auto privateOp = llvm::cast<mlir::omp::PrivateClauseOp>(
+              moduleOp.lookupSymbol(llvm::cast<mlir::SymbolRefAttr>(sym)));
+          return privateOp.getDataSharingType() !=
+              mlir::omp::DataSharingClauseType::Private;
+        }
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+static bool shouldReplaceAllocaWithUses(
+    const mlir::Operation::use_range &uses) {
+  // Check direct uses and also follow hlfir.declare/fir.convert uses.
+  for (const mlir::OpOperand &use : uses) {
+    if (llvm::isa<hlfir::DeclareOp, fir::ConvertOp>(use.getOwner())) {
+      if (shouldReplaceAllocaWithUses(use.getOwner()->getUses()))
+        return true;
+    } else if (allocaUseRequiresDeviceSharedMem(use)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// TODO: Refactor the logic in `shouldReplaceAllocaWithDeviceSharedMem`,
+// `shouldReplaceAllocaWithUses` and `allocaUseRequiresDeviceSharedMem` to
+// be reusable by the MLIR to LLVM IR translation stage, as something very
+// similar is also implemented there to choose between allocas and device
+// shared memory allocations when processing OpenMP reductions, mapping and
+// privatization.
+bool Fortran::utils::openmp::shouldReplaceAllocaWithDeviceSharedMem(
+    mlir::Operation &op) {
+  auto offloadIface = op.getParentOfType<mlir::omp::OffloadModuleInterface>();
+  if (!offloadIface || !offloadIface.getIsTargetDevice())
+    return false;
+
+  auto targetOp = op.getParentOfType<mlir::omp::TargetOp>();
+
+  // It must be inside of a generic omp.target or in a target device function,
+  // and not inside of omp.parallel.
+  if (auto parallelOp = op.getParentOfType<mlir::omp::ParallelOp>()) {
+    if (!targetOp || !targetOp->isProperAncestor(parallelOp))
+      return false;
+  }
+
+  if (targetOp) {
+    if (targetOp.getKernelExecFlags(targetOp.getInnermostCapturedOmpOp()) !=
+        mlir::omp::TargetExecMode::generic)
+      return false;
+  } else {
+    auto declTargetIface =
+        op.getParentOfType<mlir::omp::DeclareTargetInterface>();
+    if (!declTargetIface || !declTargetIface.isDeclareTarget() ||
+        declTargetIface.getDeclareTargetDeviceType() ==
+            mlir::omp::DeclareTargetDeviceType::host)
+      return false;
+  }
+
+  return shouldReplaceAllocaWithUses(op.getUses());
+}
+
+void Fortran::utils::openmp::insertDeviceSharedMemDeallocation(
+    mlir::OpBuilder &builder, mlir::Value allocVal) {
+  mlir::Block *allocaBlock = allocVal.getParentBlock();
+  mlir::DominanceInfo domInfo;
+  for (mlir::Block &block : allocVal.getParentRegion()->getBlocks()) {
+    mlir::Operation *terminator = block.getTerminator();
+    if (!terminator->hasSuccessors() &&
+        domInfo.dominates(allocaBlock, &block)) {
+      builder.setInsertionPoint(terminator);
+      mlir::omp::FreeSharedMemOp::create(builder, allocVal.getLoc(), allocVal);
+    }
+  }
+}

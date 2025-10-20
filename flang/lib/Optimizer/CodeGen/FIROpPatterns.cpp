@@ -12,6 +12,7 @@
 
 #include "flang/Optimizer/CodeGen/FIROpPatterns.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
+#include "flang/Utils/OpenMP.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "llvm/Support/Debug.h"
 
@@ -313,9 +314,14 @@ mlir::Block *ConvertFIRToLLVMPattern::getBlockForAllocaInsert(
 // program address space we perform a cast. In the case of most architectures
 // the program and allocation address space will be the default of 0 and no
 // cast will be emitted.
+//
+// If `useDeviceSharedMem = true`, an `omp.alloc_shared_mem` operation for the
+// same type will be used instead, with no address space cast. This is only
+// intended for allocations on an OpenMP application when compiling for a
+// target device.
 mlir::Value ConvertFIRToLLVMPattern::genAllocaAndAddrCastWithType(
     mlir::Location loc, mlir::Type llvmObjectTy, unsigned alignment,
-    mlir::ConversionPatternRewriter &rewriter) const {
+    mlir::ConversionPatternRewriter &rewriter, bool useDeviceSharedMem) const {
   auto thisPt = rewriter.saveInsertionPoint();
   mlir::Operation *parentOp = rewriter.getInsertionBlock()->getParentOp();
   mlir::Region *parentRegion = rewriter.getInsertionBlock()->getParent();
@@ -325,16 +331,24 @@ mlir::Value ConvertFIRToLLVMPattern::genAllocaAndAddrCastWithType(
   unsigned allocaAs = getAllocaAddressSpace(rewriter);
   unsigned programAs = getProgramAddressSpace(rewriter);
 
-  mlir::Value al = mlir::LLVM::AllocaOp::create(
-      rewriter, loc, ::getLlvmPtrType(llvmObjectTy.getContext(), allocaAs),
-      llvmObjectTy, size, alignment);
+  mlir::Value al;
+  if (useDeviceSharedMem) {
+    al = mlir::omp::AllocSharedMemOp::create(
+        rewriter, loc, ::getLlvmPtrType(llvmObjectTy.getContext()),
+        llvmObjectTy, /*uniq_name=*/nullptr, /*bindc_name=*/nullptr,
+        /*typeparams=*/{}, /*shape=*/{size});
+  } else {
+    al = mlir::LLVM::AllocaOp::create(
+        rewriter, loc, ::getLlvmPtrType(llvmObjectTy.getContext(), allocaAs),
+        llvmObjectTy, size, alignment);
+  }
 
   // if our allocation address space, is not the same as the program address
   // space, then we must emit a cast to the program address space before use.
   // An example case would be on AMDGPU, where the allocation address space is
   // the numeric value 5 (private), and the program address space is 0
   // (generic).
-  if (allocaAs != programAs) {
+  if (!useDeviceSharedMem && allocaAs != programAs) {
     al = mlir::LLVM::AddrSpaceCastOp::create(
         rewriter, loc, ::getLlvmPtrType(llvmObjectTy.getContext(), programAs),
         al);

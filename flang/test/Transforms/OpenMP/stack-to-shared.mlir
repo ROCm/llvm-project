@@ -17,13 +17,16 @@ module attributes {omp.is_target_device = true} {
     omp.yield(%arg0 : i32)
   }
 
+  func.func private @foo(%b : !fir.ref<i32>)
+
   // Verify that target device functions are searched for allocas shared across
   // threads of a parallel region.
   //
   // Also ensure that all fir.alloca information is adequately forwarded to the
   // new allocation, that uses of the allocation through hlfir.declare are
-  // detected and that only the expected types of uses (parallel reduction and
-  // non-private uses inside of a parallel region) are replaced.
+  // detected and that only the expected types of uses (parallel reduction,
+  // non-private uses inside of a parallel region and function calls) are
+  // replaced.
   // CHECK-LABEL: func.func @standalone_func
   func.func @standalone_func(%lb: i32, %ub: i32, %step: i32) attributes {omp.declare_target = #omp.declaretarget<device_type = (nohost), capture_clause = (to)>} {
     // CHECK: %[[ALLOC_0:.*]] = omp.alloc_shared_mem i32 {uniq_name = "x"} : !fir.ref<i32>
@@ -39,22 +42,26 @@ module attributes {omp.is_target_device = true} {
     %3 = fir.alloca i32 {uniq_name = "a"}
     // CHECK: %{{.*}} = fir.alloca i32 {uniq_name = "b"}
     %4 = fir.alloca i32 {uniq_name = "b"}
+    // CHECK: %[[ALLOC_3:.*]] = omp.alloc_shared_mem i32 {uniq_name = "c"} : !fir.ref<i32>
+    %5 = fir.alloca i32 {uniq_name = "c"}
+    fir.call @foo(%5) : (!fir.ref<i32>) -> ()
     omp.parallel reduction(@add_reduction_i32 %0 -> %arg0 : !fir.ref<i32>) {
-      // CHECK: %{{.*}} = fir.alloca i32 {uniq_name = "c"}
-      %5 = fir.alloca i32 {uniq_name = "c"}
-      %6:2 = fir.unboxchar %decl#0 : (!fir.boxchar<1>) -> (!fir.ref<!fir.char<1,?>>, index)
+      // CHECK: %{{.*}} = fir.alloca i32 {uniq_name = "d"}
+      %6 = fir.alloca i32 {uniq_name = "d"}
+      %7:2 = fir.unboxchar %decl#0 : (!fir.boxchar<1>) -> (!fir.ref<!fir.char<1,?>>, index)
       omp.wsloop private(@privatizer_i32 %2 -> %arg1, @firstprivatizer_i32 %3 -> %arg2 : !fir.ref<i32>, !fir.ref<i32>) {
         omp.loop_nest (%arg3) : i32 = (%lb) to (%ub) inclusive step (%step) {
-          %7 = fir.load %5 : !fir.ref<i32>
+          %8 = fir.load %6 : !fir.ref<i32>
           omp.yield
         }
       }
       omp.terminator
     }
-    %5 = fir.load %4 : !fir.ref<i32>
+    %9 = fir.load %4 : !fir.ref<i32>
     // CHECK: omp.free_shared_mem %[[ALLOC_0]] : !fir.ref<i32>
     // CHECK-NEXT: omp.free_shared_mem %[[ALLOC_1]] : !fir.ref<!fir.char<1,?>>
     // CHECK-NEXT: omp.free_shared_mem %[[ALLOC_2]] : !fir.ref<i32>
+    // CHECK-NEXT: omp.free_shared_mem %[[ALLOC_3]] : !fir.ref<i32>
     // CHECK-NEXT: return
     return
   }
