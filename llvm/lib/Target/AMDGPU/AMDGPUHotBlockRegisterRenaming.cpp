@@ -104,9 +104,9 @@ private:
   bool isSuitableRegister(MCRegister PhysReg) const;
 
   /// Check if a virtual register can be safely moved
-  bool canMoveValue(Register VirtReg, MCRegister CurrentPhysReg,
-                    MCRegister TargetPhysReg, SlotIndex BBStart,
-                    SlotIndex BBEnd);
+  bool isVirtRegMovable(Register VirtReg, MCRegister CurrentPhysReg,
+                        MCRegister TargetPhysReg, SlotIndex BBStart,
+                        SlotIndex BBEnd);
 
   /// Try to move a value from DenseReg to FreeReg
   bool tryMoveValue(MCRegister DenseReg, MCRegister FreeReg,
@@ -363,18 +363,29 @@ void AMDGPUHotBlockRegisterRenamingImpl::findFreeRegisters(
   }
 }
 
-bool AMDGPUHotBlockRegisterRenamingImpl::canMoveValue(Register VirtReg,
-                                                      MCRegister CurrentPhysReg,
-                                                      MCRegister TargetPhysReg,
-                                                      SlotIndex BBStart,
-                                                      SlotIndex BBEnd) {
+bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
+                                                          MCRegister CurrentPhysReg,
+                                                          MCRegister TargetPhysReg,
+                                                          SlotIndex BBStart,
+                                                          SlotIndex BBEnd) {
+
+  LiveInterval &VirtRegLI = LIS->getInterval(VirtReg);
+
+  // Verify precondition: single value with single segment in BB
+  unsigned SegmentCount = 0;
+  for (const LiveRange::Segment &S : VirtRegLI) {
+    if (S.start >= BBStart && S.end <= BBEnd)
+      SegmentCount++;
+  }
+  assert(SegmentCount == 1 &&
+         "isVirtRegMovable expects VirtReg with single segment in BB");
+  assert(VirtRegLI.getNumValNums() == 1 &&
+         "isVirtRegMovable expects VirtReg with single value");
 
   // Check for tied operands
   // A tied operand means the instruction requires source and destination to be
   // the same physical register. Moving such a value would break this
   // constraint.
-
-  LiveInterval &VirtRegLI = LIS->getInterval(VirtReg);
 
   for (const LiveRange::Segment &S : VirtRegLI) {
     // Only check segments within this BB
@@ -387,8 +398,31 @@ bool AMDGPUHotBlockRegisterRenamingImpl::canMoveValue(Register VirtReg,
     if (!DefMI)
       continue;
 
-    for (const MachineOperand &MO : DefMI->operands()) {
+    for (unsigned OpIdx = 0, E = DefMI->getNumOperands(); OpIdx < E; ++OpIdx) {
+      const MachineOperand &MO = DefMI->getOperand(OpIdx);
       if (MO.isReg() && MO.getReg() == VirtReg && MO.isDef() && MO.isTied()) {
+        // Found a tied def - need to check the source operand it's tied to
+        unsigned TiedIdx = DefMI->findTiedOperandIdx(OpIdx);
+        const MachineOperand &TiedMO = DefMI->getOperand(TiedIdx);
+        
+        // If the tied source is a register, verify it won't conflict
+        if (TiedMO.isReg()) {
+          Register TiedReg = TiedMO.getReg();
+          if (TiedReg.isVirtual()) {
+            MCRegister TiedPhysReg = VRM->getPhys(TiedReg);
+            // Cannot move if it would violate the tied constraint
+            // (source and dest must be in same physical register)
+            if (TiedPhysReg != CurrentPhysReg) {
+              LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
+                                << ": tied to " << printReg(TiedReg, TRI)
+                                << " which is in different PhysReg "
+                                << printReg(TiedPhysReg, TRI) << " at " << S.start
+                                << " in " << *DefMI);
+              return false;
+            }
+          }
+        }
+        
         LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
                           << ": has tied def at " << S.start << " in "
                           << *DefMI);
@@ -418,6 +452,9 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(MCRegister DenseReg,
       Register VirtReg = SI.value()->reg();
 
       // Check if this VirtReg is mapped to DenseReg
+      // NOTE: This is NOT redundant! We iterate per register unit, and units
+      // can be shared between aliased registers (e.g., VGPR0 and VGPR0_VGPR1).
+      // This check filters out VirtRegs mapped to aliased registers.
       if (VRM->getPhys(VirtReg) != DenseReg)
         continue;
 
@@ -450,7 +487,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(MCRegister DenseReg,
       }
 
       // Check: Can this value be safely moved?
-      if (!canMoveValue(VirtReg, DenseReg, FreeReg, BBStart, BBEnd)) {
+      if (!isVirtRegMovable(VirtReg, DenseReg, FreeReg, BBStart, BBEnd)) {
         // Cache the result to avoid checking again
         UnmovableVRegs.insert(VirtReg);
         continue;
