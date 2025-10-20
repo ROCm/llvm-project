@@ -2035,6 +2035,17 @@ void addInstrRequirements(const MachineInstr &MI,
     // TODO: Add UntypedPointersKHR when implemented.
     break;
   }
+  case SPIRV::OpPredicatedLoadINTEL:
+  case SPIRV::OpPredicatedStoreINTEL: {
+    if (!ST.canUseExtension(SPIRV::Extension::SPV_INTEL_predicated_io))
+      report_fatal_error(
+          "OpPredicated[Load/Store]INTEL instructions require "
+          "the following SPIR-V extension: SPV_INTEL_predicated_io",
+          false);
+    Reqs.addExtension(SPIRV::Extension::SPV_INTEL_predicated_io);
+    Reqs.addCapability(SPIRV::Capability::PredicatedIOINTEL);
+    break;
+  }
 
   default:
     break;
@@ -2143,6 +2154,9 @@ static void collectReqs(const Module &M, SPIRV::ModuleAnalysisInfo &MAI,
       MAI.Reqs.getAndAddRequirements(
           SPIRV::OperandCategory::ExecutionModeOperand,
           SPIRV::ExecutionMode::LocalSize, ST);
+    }
+    if (F.getFnAttribute("enable-maximal-reconvergence").getValueAsBool()) {
+      MAI.Reqs.addExtension(SPIRV::Extension::SPV_KHR_maximal_reconvergence);
     }
     if (F.getMetadata("work_group_size_hint"))
       MAI.Reqs.getAndAddRequirements(
