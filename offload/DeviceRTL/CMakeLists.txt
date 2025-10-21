@@ -113,18 +113,13 @@ function(compileDeviceRTLLibrary target_name target_triple)
   set(target_bc_flags ${ARGN})
 
   if(${target_name} MATCHES "amdgpu")
-    set(amdbc_dirs
-      "${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build/lib/llvm/lib/clang/${LLVM_VERSION_MAJOR}/lib/amdgcn/bitcode"
-      "${CMAKE_INSTALL_PREFIX}/../../amdgcn/bitcode"
-      "/opt/rocm/amdgcn/bitcode")
-    foreach(amdbc_dir ${amdbc_dirs})
-      if(EXISTS "${amdbc_dir}/ockl.bc" AND NOT _ockl_bc)
-        set(_ockl_bc ${amdbc_dir}/ockl.bc)
-      endif()
-      if(EXISTS "${amdbc_dir}/ocml.bc" AND NOT _ocml_bc)
-        set(_ocml_bc ${amdbc_dir}/ocml.bc)
-      endif()
-    endforeach()
+    find_package(AMDDeviceLibs REQUIRED CONFIG
+                 HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
+                       ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
+                       ${CMAKE_INSTALL_PREFIX}
+    )
+    get_target_property(_ocml_bc ocml IMPORTED_LOCATION)
+    get_target_property(_ockl_bc ockl IMPORTED_LOCATION)
     if(NOT _ockl_bc)
       message(FATAL_ERROR "Could not find ockl.bc")
     endif()
