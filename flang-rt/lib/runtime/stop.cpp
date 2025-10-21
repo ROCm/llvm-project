@@ -13,11 +13,15 @@
 #include "flang-rt/runtime/file.h"
 #include "flang-rt/runtime/io-error.h"
 #include "flang-rt/runtime/terminator.h"
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 #include "flang/Runtime/main.h"
+#endif
 #include <cfenv>
 #include <cstdio>
 #include <cstdlib>
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 #include <thread>
+#endif
 
 #ifdef HAVE_BACKTRACE
 #include BACKTRACE_HEADER
@@ -26,6 +30,7 @@
 extern "C" {
 
 [[maybe_unused]] static void DescribeIEEESignaledExceptions() {
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 #ifdef fetestexcept // a macro in some environments; omit std::
   auto excepts{fetestexcept(FE_ALL_EXCEPT)};
 #else
@@ -60,6 +65,7 @@ extern "C" {
 #endif
     std::fputc('\n', stderr);
   }
+#endif
 }
 
 static void CloseAllExternalUnits(const char *why) {
@@ -85,6 +91,22 @@ static void CloseAllExternalUnits(const char *why) {
     std::printf("\n");
   }
   Fortran::runtime::DeviceTrap();
+#elif defined(__AMDGPU__) || defined(__NVPTX__)
+  if (Fortran::runtime::executionEnvironment.noStopMessage && code == 0) {
+    quiet = true;
+  }
+  if (!quiet) {
+    if (isErrorStop) {
+      std::fprintf(stderr, "Fortran ERROR STOP");
+    } else {
+      std::fprintf(stderr, "Fortran STOP");
+    }
+    if (code != EXIT_SUCCESS) {
+      std::fprintf(stderr, ": code %d\n", code);
+    }
+    std::fprintf(stderr, "\n");
+  }
+  std::exit(code);
 #else
   CloseAllExternalUnits("STOP statement");
   if (Fortran::runtime::executionEnvironment.noStopMessage && code == 0) {
@@ -116,6 +138,20 @@ static void CloseAllExternalUnits(const char *why) {
     }
   }
   Fortran::runtime::DeviceTrap();
+#elif defined(__AMDGPU__) || defined(__NVPTX__)
+  if (!quiet) {
+    if (Fortran::runtime::executionEnvironment.noStopMessage && !isErrorStop) {
+      std::fprintf(stderr, "%s\n", code);
+    } else {
+      std::fprintf(stderr,
+          "Fortran %s: %s\n", isErrorStop ? "ERROR STOP" : "STOP", code);
+    }
+  }
+  if (isErrorStop) {
+    std::exit(EXIT_FAILURE);
+  } else {
+    std::exit(EXIT_SUCCESS);
+  }
 #else
   CloseAllExternalUnits("STOP statement");
   if (!quiet) {

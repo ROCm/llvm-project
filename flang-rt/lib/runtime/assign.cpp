@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Runtime/assign.h"
-#include "flang/Runtime/stop.h"
 #include "flang-rt/runtime/assign-impl.h"
 #include "flang-rt/runtime/derived.h"
 #include "flang-rt/runtime/descriptor.h"

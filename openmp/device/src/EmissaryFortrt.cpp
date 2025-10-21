@@ -119,23 +119,5 @@ bool _FortranAioOutputLogical(void *cookie, bool barg) {
       _PACK_EMIS_IDS(EMIS_ID_FORTRT, _FortranAioOutputLogical_idx), _EXTRA_ARGS,
       cookie, barg);
 }
-void _FortranAAbort() {
-  _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_FORTRT, _FortranAAbort_idx),
-                 _EXTRA_ARGS);
-  // When  host service _FortranAAbort finishes, we must die from the device.
-  __builtin_trap();
-}
-void _FortranAStopStatement(int32_t a1, bool a2, bool a3) {
-  _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_FORTRT, _FortranAStopStatement_idx),
-                 _EXTRA_ARGS, a1, a2, a3);
-  __builtin_trap();
-}
-void _FortranAStopStatementText(char *errmsg, int64_t a1, bool a2, bool a3) {
-  errmsg[a1 - 1] = (char)0;
-  _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_FORTRT, _FortranAStopStatementText_idx),
-                 _EXTRA_ARGS, errmsg, a1, a2, a3);
-  __builtin_trap();
-}
-
 } // end extern "C"
 #undef _EXTRA_ARGS

@@ -18,8 +18,11 @@
 
 #define FORTRAN_PROCEDURE_NAME(name) name##_
 
-#ifdef _WIN32
+#if defined (_WIN32) || defined(__AMDGPU__) || defined(__NVPTX__)
 // UID and GID don't exist on Windows, these exist to avoid errors.
+typedef std::uint32_t uid_t;
+typedef std::uint32_t gid_t;
+#elif defined(__AMDGPU__) || defined(__NVPTX__)
 typedef std::uint32_t uid_t;
 typedef std::uint32_t gid_t;
 #else
