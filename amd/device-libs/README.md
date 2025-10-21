@@ -2,6 +2,8 @@
 
 ROCm Device libraries.
 
+Ignore this!!
+
 This subdirectory contains the sources and CMake build system for a
 set of AMD specific device-side language runtime libraries.  Specifically:
 
