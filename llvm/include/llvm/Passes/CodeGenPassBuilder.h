@@ -797,8 +797,11 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addIRPasses(
 
   // Run loop strength reduction before anything else.
   if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableLSR) {
+    addPass(createFunctionToLoopPassAdaptor(
+            CanonicalizeFreezeInLoopsPass(),
+            /*UseMemorySSA=*/false));
+
     LoopPassManager LPM;
-    LPM.addPass(CanonicalizeFreezeInLoopsPass());
     LPM.addPass(LoopStrengthReducePass());
     if (Opt.EnableLoopTermFold)
       LPM.addPass(LoopTermFoldPass());
