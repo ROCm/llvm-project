@@ -60,25 +60,6 @@ mlir::Value mapTemporaryValue(fir::FirOpBuilder &firOpBuilder,
 void cloneOrMapRegionOutsiders(
     fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp);
 
-/// Tell whether to replace an operation representing a stack allocation with a
-/// device shared memory allocation/deallocation pair based on the location of
-/// the allocation and its uses.
-///
-/// For it to be replaced, an allocation must be:
-///   - located in an OpenMP module for a target device;
-///   - located outside of any parallel regions;
-///   - located inside of a generic target region or a device function; and
-///   - used as a parallel reduction variable, passed as function argument or
-///   used inside of a parallel region in any way except as argument to an
-///   OpenMP private clause.
-bool shouldReplaceAllocaWithDeviceSharedMem(mlir::Operation &op);
-
-/// Based on the location of the definition of the given value representing the
-/// result of a device shared memory allocation, find the corresponding points
-/// where its deallocation should be placed and introduce `omp.free_shared_mem`
-/// ops at those points.
-void insertDeviceSharedMemDeallocation(
-    mlir::OpBuilder &builder, mlir::Value allocVal);
 } // namespace Fortran::utils::openmp
 
 #endif // FORTRAN_UTILS_OPENMP_H_

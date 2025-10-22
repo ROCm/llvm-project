@@ -10,6 +10,7 @@
 /// common to flang and the test tools.
 
 #include "flang/Optimizer/Passes/Pipelines.h"
+#include "mlir/Dialect/OpenMP/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 
 /// Force setting the no-alias attribute on fuction arguments when possible.
@@ -338,7 +339,6 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   pm.addPass(flangomp::createMarkDeclareTargetPass());
   pm.addPass(flangomp::createGenericLoopConversionPass());
   if (opts.isTargetDevice) {
-    // pm.addPass(flangomp::createStackToSharedPass());
     pm.addPass(flangomp::createFunctionFilteringPass());
 
     if (opts.enableOffloadGlobalFiltering)
@@ -411,7 +411,7 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
   fir::addFIRToLLVMPass(pm, config);
 
   if (config.EnableOpenMP && !config.EnableOpenMPSimd)
-    pm.addPass(flangomp::createStackToSharedPass());
+    pm.addPass(mlir::omp::createStackToSharedPass());
 }
 
 /// Create a pass pipeline for lowering from MLIR to LLVM IR
