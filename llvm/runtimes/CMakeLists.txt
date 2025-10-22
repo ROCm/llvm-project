@@ -543,7 +543,8 @@ if(build_runtimes)
         CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
                    -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
                    -DIMAGE_SUPPORT=OFF
-                   -DLLVM_RUNTIME_OPENMP=ON)
+                   -DLLVM_RUNTIME_OPENMP=ON
+                   ${extra_cmake_args})
       set(HSA_DEP rocr-runtime)
     endif()
 
@@ -559,7 +560,8 @@ if(build_runtimes)
           CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH}
                      -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
+                     ${extra_cmake_args})
       else()
         ExternalProject_Add(rocm-device-libs
           SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
@@ -567,7 +569,8 @@ if(build_runtimes)
           INSTALL_COMMAND ""
           CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
                      -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
+                     ${extra_cmake_args})
       endif()
     endif()
 
