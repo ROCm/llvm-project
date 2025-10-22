@@ -73,6 +73,7 @@ static void CloseAllExternalUnits(const char *why) {
   Fortran::runtime::io::ExternalFileUnit::CloseAll(handler);
 }
 
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatement)(
     int code, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -91,22 +92,6 @@ static void CloseAllExternalUnits(const char *why) {
     std::printf("\n");
   }
   Fortran::runtime::DeviceTrap();
-#elif defined(__AMDGPU__) || defined(__NVPTX__)
-  if (Fortran::runtime::executionEnvironment.noStopMessage && code == 0) {
-    quiet = true;
-  }
-  if (!quiet) {
-    if (isErrorStop) {
-      std::fprintf(stderr, "Fortran ERROR STOP");
-    } else {
-      std::fprintf(stderr, "Fortran STOP");
-    }
-    if (code != EXIT_SUCCESS) {
-      std::fprintf(stderr, ": code %d\n", code);
-    }
-    std::fprintf(stderr, "\n");
-  }
-  std::exit(code);
 #else
   CloseAllExternalUnits("STOP statement");
   if (Fortran::runtime::executionEnvironment.noStopMessage && code == 0) {
@@ -125,7 +110,9 @@ static void CloseAllExternalUnits(const char *why) {
   std::exit(code);
 #endif
 }
+#endif
 
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatementText)(
     const char *code, std::size_t length, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -138,20 +125,6 @@ static void CloseAllExternalUnits(const char *why) {
     }
   }
   Fortran::runtime::DeviceTrap();
-#elif defined(__AMDGPU__) || defined(__NVPTX__)
-  if (!quiet) {
-    if (Fortran::runtime::executionEnvironment.noStopMessage && !isErrorStop) {
-      std::fprintf(stderr, "%s\n", code);
-    } else {
-      std::fprintf(stderr,
-          "Fortran %s: %s\n", isErrorStop ? "ERROR STOP" : "STOP", code);
-    }
-  }
-  if (isErrorStop) {
-    std::exit(EXIT_FAILURE);
-  } else {
-    std::exit(EXIT_SUCCESS);
-  }
 #else
   CloseAllExternalUnits("STOP statement");
   if (!quiet) {
@@ -172,6 +145,7 @@ static void CloseAllExternalUnits(const char *why) {
   }
 #endif
 }
+#endif
 
 static bool StartPause() {
   if (Fortran::runtime::io::IsATerminal(0)) {
@@ -255,12 +229,14 @@ static RT_NOINLINE_ATTR void PrintBacktrace() {
 #endif
 }
 
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 [[noreturn]] RT_OPTNONE_ATTR void RTNAME(Abort)() {
 #ifdef HAVE_BACKTRACE
   PrintBacktrace();
 #endif
   std::abort();
 }
+#endif
 
 RT_OPTNONE_ATTR void FORTRAN_PROCEDURE_NAME(backtrace)() { PrintBacktrace(); }
 
