@@ -14,6 +14,7 @@
 #include "flang/Optimizer/Dialect/FIROps.h"
 #include "flang/Optimizer/Dialect/FIRType.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Transforms/RegionUtils.h"
 
@@ -199,8 +200,9 @@ static bool shouldReplaceAllocaWithUses(
     const mlir::Operation::use_range &uses) {
   // Check direct uses and also follow hlfir.declare/fir.convert uses.
   for (const mlir::OpOperand &use : uses) {
-    if (llvm::isa<hlfir::DeclareOp, fir::ConvertOp>(use.getOwner())) {
-      if (shouldReplaceAllocaWithUses(use.getOwner()->getUses()))
+    mlir::Operation *owner = use.getOwner();
+    if (llvm::isa<mlir::LLVM::AddrSpaceCastOp, mlir::LLVM::GEPOp>(owner)) {
+      if (shouldReplaceAllocaWithUses(owner->getUses()))
         return true;
     } else if (allocaUseRequiresDeviceSharedMem(use)) {
       return true;

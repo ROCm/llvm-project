@@ -6884,9 +6884,13 @@ getAllocationSize(llvm::IRBuilderBase &builder,
   llvm::Type *llvmHeapTy = moduleTranslation.convertType(allocatedTy);
   llvm::TypeSize typeSize = dataLayout.getTypeStoreSize(llvmHeapTy);
   llvm::Value *allocSize = builder.getInt64(typeSize.getFixedValue());
-  for (auto typeParam : typeparams)
-    allocSize =
-        builder.CreateMul(allocSize, moduleTranslation.lookupValue(typeParam));
+  for (auto typeParam : typeparams) {
+    allocSize = builder.CreateMul(
+        allocSize,
+        builder.CreateIntCast(moduleTranslation.lookupValue(typeParam),
+                              builder.getInt64Ty(),
+                              /*isSigned=*/false));
+  }
   return allocSize;
 }
 
@@ -6917,6 +6921,8 @@ convertTargetAllocMemOp(Operation &opInst, llvm::IRBuilderBase &builder,
   return success();
 }
 
+// TODO: Update after changing op. Currently shape will be ignored, which holds
+// the original array size.
 static LogicalResult
 convertAllocSharedMemOp(omp::AllocSharedMemOp allocMemOp,
                         llvm::IRBuilderBase &builder,

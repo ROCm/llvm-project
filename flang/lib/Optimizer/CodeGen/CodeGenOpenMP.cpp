@@ -277,6 +277,8 @@ void fir::populateOpenMPFIRToLLVMConversionPatterns(
     const LLVMTypeConverter &converter, mlir::RewritePatternSet &patterns) {
   patterns.add<MapInfoOpConversion>(converter);
   patterns.add<PrivateClauseOpConversion>(converter);
-  patterns.add<AllocMemOpConversion<mlir::omp::TargetAllocMemOp>,
-               AllocMemOpConversion<mlir::omp::AllocSharedMemOp>>(converter);
+  // TODO: Undo refactoring in previous commit here.
+  patterns.add<AllocMemOpConversion<mlir::omp::TargetAllocMemOp>/*,
+               AllocMemOpConversion<mlir::omp::AllocSharedMemOp>*/>(
+      converter);
 }

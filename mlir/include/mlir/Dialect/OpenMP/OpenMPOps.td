@@ -2196,6 +2196,7 @@ def TargetFreeMemOp : OpenMP_Op<"target_freemem",
 // AllocSharedMemOp
 //===----------------------------------------------------------------------===//
 
+// TODO: Update design to be used in place of llvm.alloca.
 def AllocSharedMemOp : OpenMP_Op<"alloc_shared_mem", traits = [
     AttrSizedOperandSegments
   ], clauses = [

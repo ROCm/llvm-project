@@ -149,14 +149,15 @@ def AutomapToTargetDataPass
   let dependentDialects = ["mlir::omp::OpenMPDialect"];
 }
 
-def StackToSharedPass : Pass<"omp-stack-to-shared", "mlir::func::FuncOp"> {
+// TODO: Move pass to the omp dialect.
+def StackToSharedPass : Pass<"omp-stack-to-shared", "mlir::LLVM::LLVMFuncOp"> {
   let summary = "Replaces stack allocations with shared memory.";
   let description = [{
-    `fir.alloca` operations defining values in a target region and then used
-    inside of an `omp.parallel` region are replaced by this pass with
-    `omp.alloc_shared_mem` and `omp.free_shared_mem`. This is also done for
-    top-level function `fir.alloca`s used in the same way when the parent
-    function is a target device function.
+    `llvm.mlir.alloca` operations defining values in a target region and then
+    potentially used inside of an `omp.parallel` region are replaced by this
+    pass with `omp.alloc_shared_mem` and `omp.free_shared_mem`. This is also
+    done for top-level function `llvm.mlir.alloca`s used in the same way when
+    the parent function is a target device function.
 
     This ensures that explicit private allocations, intended to be shared across
     threads, use the proper memory space on a target device while supporting the
