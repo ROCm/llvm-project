@@ -76,7 +76,7 @@ bool mlir::omp::opInSharedDeviceContext(Operation &op) {
   // It must be inside of a generic omp.target or in a target device function,
   // and not inside of omp.parallel.
   if (auto parallelOp = op.getParentOfType<omp::ParallelOp>()) {
-    if (!targetOp || !targetOp->isProperAncestor(parallelOp))
+    if (!targetOp || targetOp->isProperAncestor(parallelOp))
       return false;
   }
 
