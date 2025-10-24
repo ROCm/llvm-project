@@ -6801,14 +6801,14 @@ static llvm::Function *getOmpTargetAlloc(llvm::IRBuilderBase &builder,
 
 static llvm::Value *
 getAllocationSize(llvm::IRBuilderBase &builder,
-                  LLVM::ModuleTranslation &moduleTranslation, Type allocatedTy,
-                  OperandRange typeparams, OperandRange shape) {
+                  LLVM::ModuleTranslation &moduleTranslation,
+                  omp::TargetAllocMemOp op) {
   llvm::DataLayout dataLayout =
       moduleTranslation.getLLVMModule()->getDataLayout();
-  llvm::Type *llvmHeapTy = moduleTranslation.convertType(allocatedTy);
-  llvm::TypeSize typeSize = dataLayout.getTypeStoreSize(llvmHeapTy);
+  llvm::Type *llvmHeapTy = moduleTranslation.convertType(op.getAllocatedType());
+  llvm::TypeSize typeSize = dataLayout.getTypeAllocSize(llvmHeapTy);
   llvm::Value *allocSize = builder.getInt64(typeSize.getFixedValue());
-  for (auto typeParam : typeparams) {
+  for (auto typeParam : op.getTypeparams()) {
     allocSize = builder.CreateMul(
         allocSize,
         builder.CreateIntCast(moduleTranslation.lookupValue(typeParam),
@@ -6816,6 +6816,27 @@ getAllocationSize(llvm::IRBuilderBase &builder,
                               /*isSigned=*/false));
   }
   return allocSize;
+}
+
+static llvm::Value *
+getAllocationSize(llvm::IRBuilderBase &builder,
+                  LLVM::ModuleTranslation &moduleTranslation,
+                  omp::AllocSharedMemOp op) {
+  llvm::DataLayout dataLayout =
+      moduleTranslation.getLLVMModule()->getDataLayout();
+  llvm::Type *llvmHeapTy = moduleTranslation.convertType(op.getAllocatedType());
+
+  auto alignment = op.getAlignment();
+  llvm::TypeSize typeSize = llvm::alignTo(
+      dataLayout.getTypeStoreSize(llvmHeapTy),
+      alignment ? *alignment : dataLayout.getABITypeAlign(llvmHeapTy).value());
+
+  llvm::Value *allocSize = builder.getInt64(typeSize.getFixedValue());
+  return builder.CreateMul(
+      allocSize,
+      builder.CreateIntCast(moduleTranslation.lookupValue(op.getArraySize()),
+                            builder.getInt64Ty(),
+                            /*isSigned=*/false));
 }
 
 static LogicalResult
@@ -6832,9 +6853,8 @@ convertTargetAllocMemOp(Operation &opInst, llvm::IRBuilderBase &builder,
   mlir::Value deviceNum = allocMemOp.getDevice();
   llvm::Value *llvmDeviceNum = moduleTranslation.lookupValue(deviceNum);
   // Get the allocation size.
-  llvm::Value *allocSize = getAllocationSize(
-      builder, moduleTranslation, allocMemOp.getAllocatedType(),
-      allocMemOp.getTypeparams(), allocMemOp.getShape());
+  llvm::Value *allocSize =
+      getAllocationSize(builder, moduleTranslation, allocMemOp);
   // Create call to "omp_target_alloc" with the args as translated llvm values.
   llvm::CallInst *call =
       builder.CreateCall(ompTargetAllocFunc, {allocSize, llvmDeviceNum});
@@ -6845,16 +6865,12 @@ convertTargetAllocMemOp(Operation &opInst, llvm::IRBuilderBase &builder,
   return success();
 }
 
-// TODO: Update after changing op. Currently shape will be ignored, which holds
-// the original array size.
 static LogicalResult
 convertAllocSharedMemOp(omp::AllocSharedMemOp allocMemOp,
                         llvm::IRBuilderBase &builder,
                         LLVM::ModuleTranslation &moduleTranslation) {
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  llvm::Value *size = getAllocationSize(
-      builder, moduleTranslation, allocMemOp.getAllocatedType(),
-      allocMemOp.getTypeparams(), allocMemOp.getShape());
+  llvm::Value *size = getAllocationSize(builder, moduleTranslation, allocMemOp);
   moduleTranslation.mapValue(allocMemOp.getResult(),
                              ompBuilder->createOMPAllocShared(builder, size));
   return success();
@@ -6902,9 +6918,7 @@ convertFreeSharedMemOp(omp::FreeSharedMemOp freeMemOp,
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
   auto allocMemOp =
       freeMemOp.getHeapref().getDefiningOp<omp::AllocSharedMemOp>();
-  llvm::Value *size = getAllocationSize(
-      builder, moduleTranslation, allocMemOp.getAllocatedType(),
-      allocMemOp.getTypeparams(), allocMemOp.getShape());
+  llvm::Value *size = getAllocationSize(builder, moduleTranslation, allocMemOp);
   ompBuilder->createOMPFreeShared(
       builder, moduleTranslation.lookupValue(freeMemOp.getHeapref()), size);
   return success();

@@ -89,10 +89,8 @@ public:
       builder.setInsertionPoint(allocaOp);
       auto sharedAllocOp = omp::AllocSharedMemOp::create(
           builder, allocaOp->getLoc(), LLVM::LLVMPointerType::get(context),
-          allocaOp.getElemType(),
-          /*uniq_name=*/nullptr,
-          /*bindc_name=*/nullptr, /*typeparams=*/{allocaOp.getArraySize()},
-          /*shape=*/{});
+          allocaOp.getElemTypeAttr(), allocaOp.getArraySize(),
+          allocaOp.getAlignmentAttr());
       if (nonDefaultAddrSpace) {
         assert(allocaOp->hasOneUse() && "alloca must have only one use");
         auto asCastOp =
