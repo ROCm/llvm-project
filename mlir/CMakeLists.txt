@@ -14,6 +14,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(MLIR_STANDALONE_BUILD TRUE)
 endif()
 
+set(MLIR_SUPPRESS_LIB_INSTALL OFF CACHE BOOL "prevent installation of libMLIR*.a and related .o's")
+if(MLIR_SUPPRESS_LIB_INSTALL)
+  message(WARNING "MLIR_SUPPRESS_LIB_INSTALL is "${MLIR_SUPPRESS_LIB_INSTALL})
+endif()
+
 # Must go below project(..)
 include(GNUInstallDirs)
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
