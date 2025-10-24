@@ -416,7 +416,7 @@ static cl::opt<bool> EnableRegReassign(
 static cl::opt<bool> EnableHotBlockRegRenaming(
     "amdgpu-enable-hot-block-reg-renaming",
     cl::desc("Enable hot block register renaming to reduce value density"),
-    cl::init(false), cl::Hidden);
+    cl::init(true), cl::Hidden);
 
 static cl::opt<bool> OptVGPRLiveRange(
     "amdgpu-opt-vgpr-liverange",
