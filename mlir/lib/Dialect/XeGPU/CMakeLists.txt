@@ -1,3 +1,3 @@
-add_subdirectory(IR)
-add_subdirectory(Transforms)
-add_subdirectory(Utils)
+add_subdirectory_optional_install(IR)
+add_subdirectory_optional_install(Transforms)
+add_subdirectory_optional_install(Utils)
