@@ -10769,6 +10769,9 @@ bool SIInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, Register SrcReg,
       KillsSCC->clearRegisterKills(AMDGPU::SCC, /*TRI=*/nullptr);
     SCCRedefine->eraseFromParent();
 
+    if (SCCRedefine->getOpcode() == AMDGPU::S_OR_B32) {
+      dbgs() << "TTTTTTTTTTTTTTTTTTTTTTTTTT S_OR_B32\n";
+    }
     return true;
   };
 
