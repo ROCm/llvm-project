@@ -483,6 +483,26 @@ static int performPointerAttachment(DeviceTy &Device, AsyncInfoTy &AsyncInfo,
   return HandleSubmitResult(SubmitResult);
 }
 
+/// Reorder the mapper indices such that the mappers that are of the specified
+/// map type occur last.
+/// Important: aside from this reordering, the order of the mappers must be
+/// maintained to not violate other ordering requirements.
+static SmallVector<int32_t> reorderMapType(int32_t ArgNum, int64_t *ArgTypes,
+                                           tgt_map_type MapType) {
+  SmallVector<int32_t> Mappers(ArgNum);
+  auto *Front = Mappers.begin();
+  auto *Back = Mappers.end() - 1;
+
+  for (int32_t I = 0; I < ArgNum; ++I) {
+    if (ArgTypes[I] & MapType)
+      *Back-- = I;
+    else
+      *Front++ = I;
+  }
+
+  return Mappers;
+}
+
 /// Internal function to do the mapping and transfer the data to the device
 int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
                     void **ArgsBase, void **Args, int64_t *ArgSizes,
@@ -492,7 +512,9 @@ int targetDataBegin(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
   assert(AttachInfo && "AttachInfo must be available for targetDataBegin for "
                        "handling ATTACH map-types.");
   // process each input.
-  for (int32_t I = 0; I < ArgNum; ++I) {
+  SmallVector<int32_t> Mappers =
+      reorderMapType(ArgNum, ArgTypes, OMP_TGT_MAPTYPE_FROM);
+  for (int32_t I : Mappers) {
     // Ignore private variables and arrays - there is no mapping for them.
     if ((ArgTypes[I] & OMP_TGT_MAPTYPE_LITERAL) ||
         (ArgTypes[I] & OMP_TGT_MAPTYPE_PRIVATE))
@@ -1008,7 +1030,9 @@ int targetDataEnd(ident_t *Loc, DeviceTy &Device, int32_t ArgNum,
   int Ret = OFFLOAD_SUCCESS;
   auto *PostProcessingPtrs = new SmallVector<PostProcessingInfo>();
   // process each input.
-  for (int32_t I = ArgNum - 1; I >= 0; --I) {
+  SmallVector<int32_t> Mappers =
+      reorderMapType(ArgNum, ArgTypes, OMP_TGT_MAPTYPE_TO);
+  for (int32_t I : llvm::reverse(Mappers)) {
     // Ignore private variables and arrays - there is no mapping for them.
     // Also, ignore the use_device_ptr directive, it has no effect here.
     if ((ArgTypes[I] & OMP_TGT_MAPTYPE_LITERAL) ||
