@@ -10830,7 +10830,8 @@ bool SIInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, Register SrcReg,
         auto *Def1 = getVRegSubRegDef(getRegSubRegPair(OrOpnd1), *MRI);
         auto *Def2 = getVRegSubRegDef(getRegSubRegPair(OrOpnd2), *MRI);
         if (Def1 == Def2 && foldableSelect(Def1))
-          optimizeSCC(Def1, Def);
+          if (optimizeSCC(Def1, Def))
+	    dbgs() << "BBBBBBBBBBBBBBBBBBINGOOOOO!\n";
       }
     }
     return true;
