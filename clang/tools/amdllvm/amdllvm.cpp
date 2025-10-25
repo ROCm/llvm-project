@@ -11,10 +11,10 @@ int main(int argc, char *argv[]) {
 
   llvm::ExitOnError Exit((Alias + ": ").str());
 
-  if (!Alias.consume_front("amd")) {
+/*  if (!Alias.consume_front("amd")) {
     Exit(createStringError("binary '" + Alias + "' not prefixed by 'amd'."));
   }
-
+*/
   void *MainAddr = reinterpret_cast<void *>(main);
   std::string AMDLlvmPath = fs::getMainExecutable(argv[0], MainAddr);
   if (AMDLlvmPath.empty()) {
