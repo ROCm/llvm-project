@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if not defined (__AMDGPU__) && not defined(__NVPTX__)
 #include "flang-rt/runtime/environment.h"
 #include "environment-default-list.h"
 #include "memory.h"
@@ -314,3 +315,4 @@ bool RTNAME(RegisterConfigureEnv)(
 } // extern "C"
 
 } // namespace Fortran::runtime
+#endif

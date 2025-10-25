@@ -178,7 +178,7 @@ else ()
 endif ()
 
 if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-  set(sources ${gpu_sources})
+  set(sources ${supported_sources} ${gpu_sources})
 elseif(FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   set(sources ${supported_sources})
 else ()

@@ -8,7 +8,9 @@
 
 #include "flang-rt/runtime/descriptor.h"
 #include "ISO_Fortran_util.h"
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 #include "memory.h"
+#endif
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/derived.h"
 #include "flang-rt/runtime/stat.h"
