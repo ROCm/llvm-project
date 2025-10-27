@@ -1885,7 +1885,7 @@ multiclass GlobalFLATStoreIntrinPats<FLAT_Pseudo inst, SDPatternOperator node, V
   }
 }
 
-let SubtargetPredicate = isGFX940Plus in {
+let SubtargetPredicate = HasFlatGlobalInsts in {
 defm : GlobalFLATLoadIntrinPats <GLOBAL_LOAD_DWORDX4, wrapped_global_load_b128_intrin, v4i32>;
 defm : GlobalFLATStoreIntrinPats <GLOBAL_STORE_DWORDX4, wrapped_global_store_b128_intrin, v4i32>;
 }
