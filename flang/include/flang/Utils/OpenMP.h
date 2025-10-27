@@ -59,7 +59,6 @@ mlir::Value mapTemporaryValue(fir::FirOpBuilder &firOpBuilder,
 /// maps.
 void cloneOrMapRegionOutsiders(
     fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp);
-
 } // namespace Fortran::utils::openmp
 
 #endif // FORTRAN_UTILS_OPENMP_H_

@@ -67,6 +67,9 @@ bool mlir::omp::allocaUsesRequireSharedMem(Value alloc) {
 }
 
 bool mlir::omp::opInSharedDeviceContext(Operation &op) {
+  if (isa<omp::ParallelOp>(op))
+    return false;
+
   auto offloadIface = op.getParentOfType<omp::OffloadModuleInterface>();
   if (!offloadIface || !offloadIface.getIsTargetDevice())
     return false;

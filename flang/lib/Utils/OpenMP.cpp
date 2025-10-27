@@ -17,11 +17,12 @@
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Transforms/RegionUtils.h"
 
-mlir::omp::MapInfoOp Fortran::utils::openmp::createMapInfoOp(
-    mlir::OpBuilder &builder, mlir::Location loc, mlir::Value baseAddr,
-    mlir::Value varPtrPtr, llvm::StringRef name,
-    llvm::ArrayRef<mlir::Value> bounds, llvm::ArrayRef<mlir::Value> members,
-    mlir::ArrayAttr membersIndex, mlir::omp::ClauseMapFlags mapType,
+namespace Fortran::utils::openmp {
+mlir::omp::MapInfoOp createMapInfoOp(mlir::OpBuilder &builder,
+    mlir::Location loc, mlir::Value baseAddr, mlir::Value varPtrPtr,
+    llvm::StringRef name, llvm::ArrayRef<mlir::Value> bounds,
+    llvm::ArrayRef<mlir::Value> members, mlir::ArrayAttr membersIndex,
+    mlir::omp::ClauseMapFlags mapType,
     mlir::omp::VariableCaptureKind mapCaptureType, mlir::Type retTy,
     bool partialMap, mlir::FlatSymbolRefAttr mapperId) {
 
@@ -49,9 +50,8 @@ mlir::omp::MapInfoOp Fortran::utils::openmp::createMapInfoOp(
   return op;
 }
 
-mlir::Value Fortran::utils::openmp::mapTemporaryValue(
-    fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp,
-    mlir::Value val, llvm::StringRef name) {
+mlir::Value mapTemporaryValue(fir::FirOpBuilder &firOpBuilder,
+    mlir::omp::TargetOp targetOp, mlir::Value val, llvm::StringRef name) {
   mlir::OpBuilder::InsertionGuard guard(firOpBuilder);
   mlir::Operation *valOp = val.getDefiningOp();
 
@@ -116,7 +116,7 @@ mlir::Value Fortran::utils::openmp::mapTemporaryValue(
   return loadOp.getResult();
 }
 
-void Fortran::utils::openmp::cloneOrMapRegionOutsiders(
+void cloneOrMapRegionOutsiders(
     fir::FirOpBuilder &firOpBuilder, mlir::omp::TargetOp targetOp) {
   mlir::Region &region = targetOp.getRegion();
   mlir::Block *entryBlock = &region.getBlocks().front();
@@ -155,3 +155,5 @@ void Fortran::utils::openmp::cloneOrMapRegionOutsiders(
     mlir::getUsedValuesDefinedAbove(region, valuesDefinedAbove);
   }
 }
+
+} // namespace Fortran::utils::openmp

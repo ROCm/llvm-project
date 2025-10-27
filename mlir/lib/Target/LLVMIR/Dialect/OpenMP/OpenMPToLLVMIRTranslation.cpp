@@ -1148,8 +1148,7 @@ allocReductionVars(T op, ArrayRef<BlockArgument> reductionArgs,
   builder.SetInsertPoint(allocaIP.getBlock()->getTerminator());
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  bool useDeviceSharedMem =
-      isa<omp::TeamsOp>(*op) && omp::opInSharedDeviceContext(*op);
+  bool useDeviceSharedMem = omp::opInSharedDeviceContext(*op);
 
   // delay creating stores until after all allocas
   deferredStores.reserve(op.getNumReductionVars());
@@ -1270,8 +1269,7 @@ initReductionVars(OP op, ArrayRef<BlockArgument> reductionArgs,
     return success();
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  bool useDeviceSharedMem =
-      isa<omp::TeamsOp>(*op) && omp::opInSharedDeviceContext(*op);
+  bool useDeviceSharedMem = omp::opInSharedDeviceContext(*op);
 
   llvm::BasicBlock *initBlock = splitBB(builder, true, "omp.reduction.init");
   auto allocaIP = llvm::IRBuilderBase::InsertPoint(
@@ -1487,8 +1485,7 @@ static LogicalResult createReductionsAndCleanup(
       reductionRegions, privateReductionVariables, moduleTranslation, builder,
       "omp.reduction.cleanup");
 
-  bool useDeviceSharedMem =
-      isa<omp::TeamsOp>(*op) && omp::opInSharedDeviceContext(*op);
+  bool useDeviceSharedMem = omp::opInSharedDeviceContext(*op);
   if (useDeviceSharedMem) {
     for (auto [var, reductionDecl] :
          llvm::zip_equal(privateReductionVariables, reductionDecls))
@@ -1667,9 +1664,7 @@ allocatePrivateVars(T op, llvm::IRBuilderBase &builder,
   llvm::BasicBlock *afterAllocas = allocaTerminator->getSuccessor(0);
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  bool mightUseDeviceSharedMem =
-      isa<omp::TargetOp, omp::TeamsOp, omp::DistributeOp>(*op) &&
-      omp::opInSharedDeviceContext(*op);
+  bool mightUseDeviceSharedMem = omp::opInSharedDeviceContext(*op);
   unsigned int allocaAS =
       moduleTranslation.getLLVMModule()->getDataLayout().getAllocaAddrSpace();
   unsigned int defaultAS = moduleTranslation.getLLVMModule()
@@ -1784,9 +1779,7 @@ cleanupPrivateVars(T op, llvm::IRBuilderBase &builder,
                                 "`omp.private` op in");
 
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
-  bool mightUseDeviceSharedMem =
-      isa<omp::TargetOp, omp::TeamsOp, omp::DistributeOp>(*op) &&
-      omp::opInSharedDeviceContext(*op);
+  bool mightUseDeviceSharedMem = omp::opInSharedDeviceContext(*op);
   for (auto [privDecl, llvmPrivVar, blockArg] :
        llvm::zip_equal(privateVarsInfo.privatizers, privateVarsInfo.llvmVars,
                        privateVarsInfo.blockArgs)) {
