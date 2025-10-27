@@ -377,10 +377,21 @@ bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
     if (S.start >= BBStart && S.end <= BBEnd)
       SegmentCount++;
   }
-  assert(SegmentCount == 1 &&
-         "isVirtRegMovable expects VirtReg with single segment in BB");
-  assert(VirtRegLI.getNumValNums() == 1 &&
-         "isVirtRegMovable expects VirtReg with single value");
+  
+  // Cannot move registers with multiple segments in BB (e.g., PHI nodes)
+  if (SegmentCount != 1) {
+    LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
+                      << ": has " << SegmentCount << " segments in BB\n");
+    return false;
+  }
+  
+  // Cannot move registers with multiple definitions (e.g., from PHI merge)
+  if (VirtRegLI.getNumValNums() != 1) {
+    LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
+                      << ": has " << VirtRegLI.getNumValNums() 
+                      << " value definitions\n");
+    return false;
+  }
 
   // Check for tied operands
   // A tied operand means the instruction requires source and destination to be
@@ -450,6 +461,14 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(MCRegister DenseReg,
 
     for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid(); ++SI) {
       Register VirtReg = SI.value()->reg();
+
+      // Skip physical registers (LiveIntervalUnion can contain both)
+      if (!VirtReg.isVirtual())
+        continue;
+
+      // Skip virtual registers that haven't been allocated yet
+      if (!VRM->hasPhys(VirtReg))
+        continue;
 
       // Check if this VirtReg is mapped to DenseReg
       // NOTE: This is NOT redundant! We iterate per register unit, and units
