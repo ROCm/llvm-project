@@ -2901,6 +2901,7 @@ bool SIFoldOperandsImpl::tryOptimizeVcndVcmpPair(MachineInstr &MI) {
       }
       Itr++;
     }
+
     if (UsedByAndOnly)
       Cmp.eraseFromParent();
   } else if ((CmpReg.isVirtual() && MRI->hasOneNonDBGUse(CmpReg))) {
