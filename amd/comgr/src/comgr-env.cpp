@@ -47,11 +47,7 @@ std::optional<bool> shouldUseVFS() {
 }
 
 std::optional<StringRef> getRedirectLogs() {
-  static char *RedirectLogs = getenv("AMD_COMGR_REDIRECT_LOGS");
-  if (!RedirectLogs || StringRef(RedirectLogs) == "0") {
-    return std::nullopt;
-  }
-  return StringRef(RedirectLogs);
+  return "stderr";
 }
 
 bool needTimeStatistics() {
@@ -60,8 +56,7 @@ bool needTimeStatistics() {
 }
 
 bool shouldEmitVerboseLogs() {
-  static char *VerboseLogs = getenv("AMD_COMGR_EMIT_VERBOSE_LOGS");
-  return VerboseLogs && StringRef(VerboseLogs) != "0";
+  return true;
 }
 
 llvm::StringRef getLLVMPath() {
