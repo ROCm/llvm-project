@@ -2189,7 +2189,6 @@ def TargetFreeMemOp : OpenMP_Op<"target_freemem",
   Arg<I64, "", [MemFree]>:$heapref
   );
   let assemblyFormat = "$device `,` $heapref attr-dict `:` type($device) `,` qualified(type($heapref))";
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

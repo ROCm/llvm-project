@@ -3149,13 +3149,6 @@ func.func @target_allocmem_invalid_bindc_name(%device : i32) -> () {
 }
 
 // -----
-func.func @target_freemem_invalid_ptr(%device : i32, %ptr : i64) -> () {
-  // expected-error @below {{op 'heapref' operand must be defined by an 'omp.target_allocmem' op}}
-  omp.target_freemem %device, %ptr : i32, i64
-  return
-}
-
-// -----
 func.func @alloc_shared_mem_invalid_alignment1(%n: i32) -> () {
   // expected-error @below {{op attribute 'alignment' failed to satisfy constraint: 64-bit signless integer attribute whose value is positive}}
   %0 = omp.alloc_shared_mem %n x i64 {alignment=-2} : (i32) -> !llvm.ptr

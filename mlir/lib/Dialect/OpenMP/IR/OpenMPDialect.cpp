@@ -4338,17 +4338,6 @@ LogicalResult AllocateDirOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// TargetFreeMemOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult TargetFreeMemOp::verify() {
-  return getHeapref().getDefiningOp<TargetAllocMemOp>()
-             ? success()
-             : emitOpError() << "'heapref' operand must be defined by an "
-                                "'omp.target_allocmem' op";
-}
-
-//===----------------------------------------------------------------------===//
 // AllocSharedMemOp
 //===----------------------------------------------------------------------===//
 
