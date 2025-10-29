@@ -1856,13 +1856,13 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // allocations.
     //    addPass(&AMDGPUUpdateAllocatedVGPRLiveRangesID);
 
-    // Now we can perform register-coalescing on remaining copies,
-    // mainly sgpr copies and wwm-vgpr copies.
-    addPass(&RegisterCoalescerID);
-
     // Optimize EXEC-mask related instructions around SGPR register class.
     if (OptExecMaskPreRA)
       addPass(&SIOptimizeExecMaskingPreRAID);
+
+    // Now we can perform register-coalescing on remaining copies,
+    // mainly sgpr copies and wwm-vgpr copies.
+    addPass(&RegisterCoalescerID);
   }
   
   addPass(createSGPRAllocPass(true));
