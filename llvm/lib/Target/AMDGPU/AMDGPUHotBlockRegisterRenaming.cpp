@@ -44,6 +44,7 @@
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/VirtRegMap.h"
+#include "llvm/IR/CallingConv.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -57,6 +58,8 @@ STATISTIC(NumBlocksProcessed, "Number of hot blocks processed");
 STATISTIC(NumValuesRemapped, "Number of values remapped to reduce density");
 STATISTIC(NumBlocksSkipped,
           "Number of blocks skipped (no dense regs or no free regs)");
+STATISTIC(NumNonKernelsSkipped,
+          "Number of non-kernel functions skipped for safety");
 
 namespace {
 
@@ -110,7 +113,8 @@ private:
 
   /// Try to move a value from DenseReg to FreeReg
   bool tryMoveValue(MCRegister DenseReg, MCRegister FreeReg,
-                    MachineBasicBlock *MBB, SlotIndex BBStart, SlotIndex BBEnd);
+                    MachineBasicBlock *MBB, SlotIndex BBStart, SlotIndex BBEnd,
+                    const DenseMap<MCRegister, SmallVector<SlotIndex, 4>> &PhysRegDefs);
 };
 
 class AMDGPUHotBlockRegisterRenamingLegacy : public MachineFunctionPass {
@@ -172,6 +176,17 @@ bool AMDGPUHotBlockRegisterRenamingLegacy::runOnMachineFunction(
 bool AMDGPUHotBlockRegisterRenamingImpl::run(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "AMDGPUHotBlockRegisterRenaming: Processing "
                     << MF.getName() << "\n");
+
+  // Fix #0: Skip non-kernel functions to avoid RegMask corruption issues.
+  // Post-RA pass cannot update RegMask operands in caller's call instructions,
+  // which would lead to incorrect assumptions about clobbered registers.
+  CallingConv::ID CC = MF.getFunction().getCallingConv();
+  if (CC != CallingConv::AMDGPU_KERNEL) {
+    LLVM_DEBUG(dbgs() << "  Skipping non-kernel function (CC=" << CC
+                      << "): Post-RA pass cannot safely modify callees\n");
+    ++NumNonKernelsSkipped;
+    return false;
+  }
 
   TRI = ST->getRegisterInfo();
   MRI = &MF.getRegInfo();
@@ -236,6 +251,33 @@ bool AMDGPUHotBlockRegisterRenamingImpl::processBasicBlock(
                     << " registers with values, " << FreeRegs.size()
                     << " free registers\n");
 
+  // Step 2a: Build PhysReg definitions cache (Fix #1a)
+  // Track all SlotIndexes where each physical register is defined
+  const TargetRegisterClass *VGPR_32_RC =
+      TRI->getRegClass(AMDGPU::VGPR_32RegClassID);
+  DenseMap<MCRegister, SmallVector<SlotIndex, 4>> PhysRegDefs;
+  
+  for (MachineInstr &MI : *MBB) {
+    SlotIndex Idx = LIS->getInstructionIndex(MI);
+    for (const MachineOperand &MO : MI.operands()) {
+      if (MO.isReg() && MO.isDef() && MO.getReg().isPhysical()) {
+        MCRegister PhysReg = MO.getReg();
+        if (VGPR_32_RC->contains(PhysReg)) {
+          PhysRegDefs[PhysReg].push_back(Idx);
+          // Also track superregs for aliasing
+          for (MCRegister Super : TRI->superregs(PhysReg)) {
+            PhysRegDefs[Super].push_back(Idx);
+          }
+        }
+      }
+    }
+  }
+
+  LLVM_DEBUG({
+    dbgs() << "    Built PhysRegDefs cache: " << PhysRegDefs.size() 
+           << " registers have definitions in this BB\n";
+  });
+
   // Step 3: Create max heap of dense registers
   auto Comparator = [&ValueDensity](MCRegister A, MCRegister B) {
     return ValueDensity[A] < ValueDensity[B]; // max heap
@@ -266,7 +308,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::processBasicBlock(
 
     MCRegister FreeReg = FreeRegs[FreeRegIdx++];
 
-    if (tryMoveValue(DenseReg, FreeReg, MBB, BBStart, BBEnd)) {
+    if (tryMoveValue(DenseReg, FreeReg, MBB, BBStart, BBEnd, PhysRegDefs)) {
       Changed = true;
       ++NumValuesRemapped;
 
@@ -450,11 +492,10 @@ bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
   return true;
 }
 
-bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(MCRegister DenseReg,
-                                                      MCRegister FreeReg,
-                                                      MachineBasicBlock *MBB,
-                                                      SlotIndex BBStart,
-                                                      SlotIndex BBEnd) {
+bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(
+    MCRegister DenseReg, MCRegister FreeReg, MachineBasicBlock *MBB,
+    SlotIndex BBStart, SlotIndex BBEnd,
+    const DenseMap<MCRegister, SmallVector<SlotIndex, 4>> &PhysRegDefs) {
   // Find a movable local value in DenseReg
   for (MCRegUnit Unit : TRI->regunits(DenseReg)) {
     LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
@@ -510,6 +551,36 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(MCRegister DenseReg,
         // Cache the result to avoid checking again
         UnmovableVRegs.insert(VirtReg);
         continue;
+      }
+
+      // Fix #1a: Check that FreeReg is not redefined in VirtReg's live range
+      auto DefIt = PhysRegDefs.find(FreeReg);
+      if (DefIt != PhysRegDefs.end()) {
+        bool HasConflict = false;
+        for (SlotIndex DefIdx : DefIt->second) {
+          // Check if definition is strictly inside the live range (not at endpoints)
+          if (DefIdx > SegStart && DefIdx < SegEnd) {
+            LLVM_DEBUG(dbgs() << "        Cannot move to " << printReg(FreeReg, TRI)
+                              << ": redefined at " << DefIdx << " inside live range ["
+                              << SegStart << ", " << SegEnd << ")\n");
+            HasConflict = true;
+            break;
+          }
+        }
+        if (HasConflict)
+          continue;  // Try next VirtReg
+      }
+
+      // Fix #1b: Check that FreeReg is not clobbered by any call in the live range
+      BitVector UsableRegs;
+      if (LIS->checkRegMaskInterference(VirtRegLI, UsableRegs)) {
+        // checkRegMaskInterference returns true if LI crosses RegMask instructions
+        // UsableRegs now contains registers NOT clobbered by any RegMask
+        if (!UsableRegs.test(FreeReg)) {
+          LLVM_DEBUG(dbgs() << "        Cannot move to " << printReg(FreeReg, TRI)
+                            << ": clobbered by call RegMask in live range\n");
+          continue;  // Try next VirtReg
+        }
       }
 
       // This VirtReg is movable! Perform the remap
