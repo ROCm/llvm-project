@@ -4901,6 +4901,52 @@ for a concrete target, and shall reflect the latter's identity and features.
 Thus, it is possible to author high-level code, in e.g. HIP, that is target
 adaptive in a dynamic fashion, contrary to macro based mechanisms.
 
+__builtin_amdgcn_global_load_b128 and __builtin_amdgcn_global_store_b128
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Signature:
+
+.. code-block:: c
+
+    typedef __attribute__((__vector_size__(4 * sizeof(unsigned int)))) unsigned int v4u;
+    typedef v4u __attribute__((address_space(1))) *global_ptr_to_v4u;
+
+    v4u __builtin_amdgcn_global_load_b128(
+       v4u __attribute__((address_space(1))) *src,
+       const char                            *scope);
+
+    void __builtin_amdgcn_global_store_b128(
+       v4u __attribute__((address_space(1))) *dst,
+       v4u                                    data,
+       const char                            *scope);
+
+Load or store a vector of 4 unsigned integers from or to global memory with
+cache behavior specified by `scope` which must be a string literal.
+
+Valid values for `scope` are:
+
+===================== ==========================================================
+scope                 architecture name
+===================== ==========================================================
+``"wavefront"``       wave
+
+``"workgroup"``       group
+
+``"agent"``           device
+
+``""`` (empty string) system
+===================== ==========================================================
+
+These builtins are only supported on gfx942 and gfx950 devices.
+
+For semantics on gfx942, see Tables 47 and 48 in section 9.1.10 "Memory Scope
+and Temporal Controls" of the "AMD Instinct MI300" Instruction Set Architecture
+Reference.
+
+For semantics on gfx950, see Tables 49 and 50 in section 9.1.10 "Memory Scope
+and Temporal Controls" of the CDNA4 Instruction Set Architecture Reference.
+
+
 ARM/AArch64 Language Extensions
 -------------------------------
 
