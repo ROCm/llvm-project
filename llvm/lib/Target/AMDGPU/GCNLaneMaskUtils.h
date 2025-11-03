@@ -15,6 +15,8 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_GCNLANEMASKUTILS_H
 #define LLVM_LIB_TARGET_AMDGPU_GCNLANEMASKUTILS_H
 
+#include "AMDGPULaneMaskUtils.h"
+
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -25,30 +27,14 @@ namespace llvm {
 class GCNLaneMaskAnalysis;
 class MachineFunction;
 
-/// \brief Wavefront-size dependent constants.
-struct GCNLaneMaskConstants {
-  Register RegExec;                    // EXEC / EXEC_LO
-  Register RegVcc;                     // VCC / VCC_LO
-  const TargetRegisterClass *RegClass; // SReg_nnRegClass
-  unsigned OpMov;                      // S_MOV_Bnn
-  unsigned OpMovTerm;                  // S_MOV_Bnn_term
-  unsigned OpAnd;                      // S_AND_Bnn
-  unsigned OpOr;                       // S_OR_Bnn
-  unsigned OpXor;                      // S_XOR_Bnn
-  unsigned OpAndN2;                    // S_ANDN2_Bnn
-  unsigned OpOrN2;                     // S_ORN2_Bnn
-  unsigned OpCSelect;                  // S_CSELECT_Bnn
-};
-
 /// \brief Helper class for lane-mask related tasks.
 class GCNLaneMaskUtils {
 private:
   MachineFunction *MF = nullptr;
-  const GCNLaneMaskConstants *Constants = nullptr;
+  const AMDGPU::LaneMaskConstants *Constants = nullptr;
 
 public:
-  static const GCNLaneMaskConstants *getConsts(unsigned WavefrontSize);
-  static const GCNLaneMaskConstants *getConsts(MachineFunction &MF);
+  static const AMDGPU::LaneMaskConstants &getConsts(MachineFunction &MF);
 
   GCNLaneMaskUtils() = default;
   explicit GCNLaneMaskUtils(MachineFunction &MF) { setFunction(MF); }
@@ -56,10 +42,10 @@ public:
   MachineFunction *function() const { return MF; }
   void setFunction(MachineFunction &Func) {
     MF = &Func;
-    Constants = getConsts(Func);
+    Constants = &getConsts(Func);
   }
 
-  const GCNLaneMaskConstants &consts() const {
+  const AMDGPU::LaneMaskConstants &consts() const {
     assert(Constants);
     return *Constants;
   }
