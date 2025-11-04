@@ -102,7 +102,7 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const Function &F,
                                MaxKernArgAlign);
 
     if (ST.hasGFX90AInsts() &&
-        ST.getMaxNumVGPRs(F) <= AMDGPU::VGPR_32RegClass.getNumRegs() &&
+        ST.getMaxNumVGPRs(F) <= ST.getAddressableNumArchVGPRs() &&
         !mayUseAGPRs(F))
       MayNeedAGPRs = false; // We will select all MAI with VGPR operands.
   }
