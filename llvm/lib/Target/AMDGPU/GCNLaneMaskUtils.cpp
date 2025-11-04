@@ -63,7 +63,7 @@ bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val) const {
       return false;
   }
 
-  if (MI->getOpcode() != Constants->MovOpc)
+  if (MI->getOpcode() != LMC->MovOpc)
     return false;
 
   if (!MI->getOperand(1).isImm())
@@ -85,7 +85,7 @@ bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val) const {
 /// Create a virtual lanemask register.
 Register GCNLaneMaskUtils::createLaneMaskReg() const {
   MachineRegisterInfo &MRI = MF->getRegInfo();
-  return MRI.createVirtualRegister(Constants->SRegClass);
+  return MRI.createVirtualRegister(LMC->SRegClass);
 }
 
 /// Insert the moral equivalent of
@@ -128,10 +128,10 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
     } else if (CurVal) {
       // If PrevReg is undef, prefer to propagate a full constant.
       BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg)
-          .addReg(PrevReg ? Constants->ExecReg : CurReg);
+          .addReg(PrevReg ? LMC->ExecReg : CurReg);
     } else {
-      BuildMI(MBB, I, DL, TII->get(Constants->XorOpc), DstReg)
-          .addReg(Constants->ExecReg)
+      BuildMI(MBB, I, DL, TII->get(LMC->XorOpc), DstReg)
+          .addReg(LMC->ExecReg)
           .addImm(-1);
     }
     return;
@@ -147,9 +147,9 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
     } else {
       PrevMaskedReg = createLaneMaskReg();
       PrevMaskedBuilt =
-          BuildMI(MBB, I, DL, TII->get(Constants->AndN2Opc), PrevMaskedReg)
+          BuildMI(MBB, I, DL, TII->get(LMC->AndN2Opc), PrevMaskedReg)
               .addReg(PrevReg)
-              .addReg(Constants->ExecReg);
+              .addReg(LMC->ExecReg);
     }
   }
   if (!CurConstant) {
@@ -159,9 +159,9 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
     } else {
       CurMaskedReg = createLaneMaskReg();
       CurMaskedBuilt =
-          BuildMI(MBB, I, DL, TII->get(Constants->AndOpc), CurMaskedReg)
+          BuildMI(MBB, I, DL, TII->get(LMC->AndOpc), CurMaskedReg)
               .addReg(CurReg)
-              .addReg(Constants->ExecReg);
+              .addReg(LMC->ExecReg);
     }
   }
 
@@ -181,13 +181,13 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
       BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(PrevMaskedReg);
     }
   } else if (PrevConstant && PrevVal) {
-    BuildMI(MBB, I, DL, TII->get(Constants->OrN2Opc), DstReg)
+    BuildMI(MBB, I, DL, TII->get(LMC->OrN2Opc), DstReg)
         .addReg(CurMaskedReg)
-        .addReg(Constants->ExecReg);
+        .addReg(LMC->ExecReg);
   } else {
-    BuildMI(MBB, I, DL, TII->get(Constants->OrOpc), DstReg)
+    BuildMI(MBB, I, DL, TII->get(LMC->OrOpc), DstReg)
         .addReg(PrevMaskedReg)
-        .addReg(CurMaskedReg ? CurMaskedReg : Constants->ExecReg);
+        .addReg(CurMaskedReg ? CurMaskedReg : LMC->ExecReg);
   }
 }
 
@@ -199,10 +199,11 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
                                          unsigned RemainingDepth) {
   MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   MachineInstr *DefInstr = nullptr;
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
   for (;;) {
     if (!Register::isVirtualRegister(Reg)) {
-      if (Reg == LMU.consts().ExecReg &&
+      if (Reg == LMC.ExecReg &&
           (!DefInstr || DefInstr->getParent() == &UseBlock))
         return true;
       return false;
@@ -214,7 +215,7 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
       continue;
     }
 
-    if (DefInstr->getOpcode() == LMU.consts().MovOpc) {
+    if (DefInstr->getOpcode() == LMC.MovOpc) {
       if (DefInstr->getOperand(1).isImm() &&
           DefInstr->getOperand(1).getImm() == 0)
         return true;
@@ -241,11 +242,11 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
   if (!RemainingDepth--)
     return false;
 
-  bool LikeOr = DefInstr->getOpcode() == LMU.consts().OrOpc ||
-                DefInstr->getOpcode() == LMU.consts().XorOpc ||
-                DefInstr->getOpcode() == LMU.consts().CSelectOpc;
-  bool IsAnd = DefInstr->getOpcode() == LMU.consts().AndOpc;
-  bool IsAndN2 = DefInstr->getOpcode() == LMU.consts().AndN2Opc;
+  bool LikeOr = DefInstr->getOpcode() == LMC.OrOpc ||
+                DefInstr->getOpcode() == LMC.XorOpc ||
+                DefInstr->getOpcode() == LMC.CSelectOpc;
+  bool IsAnd = DefInstr->getOpcode() == LMC.AndOpc;
+  bool IsAndN2 = DefInstr->getOpcode() == LMC.AndN2Opc;
   if ((LikeOr || IsAnd || IsAndN2) &&
       (DefInstr->getOperand(1).isReg() && DefInstr->getOperand(2).isReg())) {
     bool FirstIsSubset = isSubsetOfExec(DefInstr->getOperand(1).getReg(),
@@ -274,7 +275,7 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
 void GCNLaneMaskUpdater::init(Register Reg) {
   Processed = false;
   Blocks.clear();
-  //SSAUpdater.Initialize(LMU.consts().SRegClass);
+  //SSAUpdater.Initialize(LMU.getLaneMaskConsts().SRegClass);
   SSAUpdater.Initialize(Reg);
 }
 
@@ -424,7 +425,7 @@ void GCNLaneMaskUpdater::process() {
   // Prepare an all-zero value for the default and reset in accumulating mode.
   if (Accumulating && !ZeroReg) {
     ZeroReg = LMU.createLaneMaskReg();
-    BuildMI(Entry, Entry.getFirstTerminator(), {}, TII->get(LMU.consts().MovOpc),
+    BuildMI(Entry, Entry.getFirstTerminator(), {}, TII->get(LMU.getLaneMaskConsts().MovOpc),
             ZeroReg)
         .addImm(0);
   }

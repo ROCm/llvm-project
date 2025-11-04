@@ -1785,13 +1785,14 @@ void ControlFlowRewriter::prepareWaveCfg() {
 /// manipulation.
 void ControlFlowRewriter::rewrite() {
   GCNLaneMaskAnalysis LMA(Function);
+  const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
   Register RegAllOnes;
   auto getAllOnes = [&]() {
     if (!RegAllOnes) {
       RegAllOnes = LMU.createLaneMaskReg();
       BuildMI(Function.front(), Function.front().getFirstTerminator(), {},
-              TII.get(LMU.consts().MovOpc), RegAllOnes)
+              TII.get(LMC.MovOpc), RegAllOnes)
           .addImm(-1);
     }
     return RegAllOnes;
@@ -1841,12 +1842,12 @@ void ControlFlowRewriter::rewrite() {
         if (!LMA.isSubsetOfExec(CondReg, *Node->Block)) {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*Node->Block, Node->Block->end(), {},
-                  TII.get(LMU.consts().AndOpc), CondReg)
-              .addReg(LMU.consts().ExecReg)
+                  TII.get(LMC.AndOpc), CondReg)
+              .addReg(LMC.ExecReg)
               .addReg(Info.OrigCondition);
         }
         BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::COPY),
-                LMU.consts().VccReg)
+                LMC.VccReg)
             .addReg(CondReg);
 
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
@@ -1924,15 +1925,15 @@ void ControlFlowRewriter::rewrite() {
         if (!LaneOrigin.InvertCondition) {
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
-                  TII.get(LMU.consts().CSelectOpc), CondReg)
-              .addReg(LMU.consts().ExecReg)
+                  TII.get(LMC.CSelectOpc), CondReg)
+              .addReg(LMC.ExecReg)
               .addImm(0);
         } else {
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
-                  TII.get(LMU.consts().CSelectOpc), CondReg)
+                  TII.get(LMC.CSelectOpc), CondReg)
               .addImm(0)
-              .addReg(LMU.consts().ExecReg);
+              .addReg(LMC.ExecReg);
         }
       } else {
         CondReg = LaneOrigin.CondReg;
@@ -1941,8 +1942,8 @@ void ControlFlowRewriter::rewrite() {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
-                  TII.get(LMU.consts().AndOpc), CondReg)
-              .addReg(LMU.consts().ExecReg)
+                  TII.get(LMC.AndOpc), CondReg)
+              .addReg(LMC.ExecReg)
               .addReg(Prev);
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
@@ -1962,7 +1963,7 @@ void ControlFlowRewriter::rewrite() {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
-                  TII.get(LMU.consts().XorOpc), CondReg)
+                  TII.get(LMC.XorOpc), CondReg)
               .addReg(LaneOrigin.CondReg)
               .addImm(-1);
 
@@ -1999,7 +2000,7 @@ void ControlFlowRewriter::rewrite() {
                         << '\n');
 
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
-              TII.get(LMU.consts().MovTermOpc), LMU.consts().ExecReg)
+              TII.get(LMC.MovTermOpc), LMC.ExecReg)
           .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
               TII.get(AMDGPU::SI_WAVE_CF_EDGE));
@@ -2046,12 +2047,12 @@ void ControlFlowRewriter::rewrite() {
       Register Rejoin;
 
       if (PrimaryExecDef->getParent() == Pred->Block &&
-          PrimaryExecDef->getOpcode() == LMU.consts().XorOpc &&
+          PrimaryExecDef->getOpcode() == LMC.XorOpc &&
           PrimaryExecDef->getOperand(1).isReg() &&
           PrimaryExecDef->getOperand(2).isReg()) {
-        if (PrimaryExecDef->getOperand(1).getReg() == LMU.consts().ExecReg)
+        if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
           Rejoin = PrimaryExecDef->getOperand(2).getReg();
-        else if (PrimaryExecDef->getOperand(2).getReg() == LMU.consts().ExecReg)
+        else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
           Rejoin = PrimaryExecDef->getOperand(1).getReg();
       }
 
@@ -2069,8 +2070,8 @@ void ControlFlowRewriter::rewrite() {
       if (!Rejoin) {
         Rejoin = LMU.createLaneMaskReg();
         BuildMI(*Pred->Block, Pred->Block->getFirstTerminator(), {},
-                TII.get(LMU.consts().XorOpc), Rejoin)
-            .addReg(LMU.consts().ExecReg)
+                TII.get(LMC.XorOpc), Rejoin)
+            .addReg(LMC.ExecReg)
             .addReg(PrimaryExec);
       }
 
@@ -2084,8 +2085,8 @@ void ControlFlowRewriter::rewrite() {
 
     Register Rejoin = Updater.getValueInMiddleOfBlock(*Secondary->Block);
     BuildMI(*Secondary->Block, Secondary->Block->getFirstNonPHI(), {},
-            TII.get(LMU.consts().OrOpc), LMU.consts().ExecReg)
-        .addReg(LMU.consts().ExecReg)
+            TII.get(LMC.OrOpc), LMC.ExecReg)
+        .addReg(LMC.ExecReg)
         .addReg(Rejoin);
 
     LLVM_DEBUG(Function.dump());

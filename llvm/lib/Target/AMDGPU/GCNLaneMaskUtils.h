@@ -31,7 +31,7 @@ class MachineFunction;
 class GCNLaneMaskUtils {
 private:
   MachineFunction *MF = nullptr;
-  const AMDGPU::LaneMaskConstants *Constants = nullptr;
+  const AMDGPU::LaneMaskConstants *LMC = nullptr;
 
 public:
   static const AMDGPU::LaneMaskConstants &getConsts(MachineFunction &MF);
@@ -42,12 +42,12 @@ public:
   MachineFunction *function() const { return MF; }
   void setFunction(MachineFunction &Func) {
     MF = &Func;
-    Constants = &getConsts(Func);
+    LMC = &getConsts(Func);
   }
 
-  const AMDGPU::LaneMaskConstants &consts() const {
-    assert(Constants);
-    return *Constants;
+  const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const {
+    assert(LMC);
+    return *LMC;
   }
 
   bool maybeLaneMask(Register Reg) const;
