@@ -41,7 +41,7 @@ public:
   const unsigned XorOpc;
   const unsigned XorTermOpc;
   const unsigned WQMOpc;
-  const TargetRegisterClass *SRegClass;
+  const TargetRegisterClass *LaneMaskRC;
 
   constexpr LaneMaskConstants(bool IsWave32)
       : ExecReg(IsWave32 ? AMDGPU::EXEC_LO : AMDGPU::EXEC),
@@ -70,7 +70,7 @@ public:
         XorOpc(IsWave32 ? AMDGPU::S_XOR_B32 : AMDGPU::S_XOR_B64),
         XorTermOpc(IsWave32 ? AMDGPU::S_XOR_B32_term : AMDGPU::S_XOR_B64_term),
         WQMOpc(IsWave32 ? AMDGPU::S_WQM_B32 : AMDGPU::S_WQM_B64),
-        SRegClass(IsWave32 ? &AMDGPU::SReg_32RegClass : &AMDGPU::SReg_64RegClass) {}
+        LaneMaskRC(IsWave32 ? &AMDGPU::SReg_32RegClass : &AMDGPU::SReg_64RegClass) {}
 
   static inline const LaneMaskConstants &get(const GCNSubtarget &ST);
 };

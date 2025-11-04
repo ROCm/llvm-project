@@ -30,24 +30,17 @@ class MachineFunction;
 /// \brief Helper class for lane-mask related tasks.
 class GCNLaneMaskUtils {
 private:
-  MachineFunction *MF = nullptr;
-  const AMDGPU::LaneMaskConstants *LMC = nullptr;
+  MachineFunction &MF;
+  const AMDGPU::LaneMaskConstants &LMC;
 
 public:
-  static const AMDGPU::LaneMaskConstants &getConsts(MachineFunction &MF);
+  GCNLaneMaskUtils() = delete;
+  explicit GCNLaneMaskUtils(MachineFunction &MF) : MF(MF),  
+    LMC(AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>())) {}
 
-  GCNLaneMaskUtils() = default;
-  explicit GCNLaneMaskUtils(MachineFunction &MF) { setFunction(MF); }
-
-  MachineFunction *function() const { return MF; }
-  void setFunction(MachineFunction &Func) {
-    MF = &Func;
-    LMC = &getConsts(Func);
-  }
-
+  MachineFunction *function() const { return &MF; }
   const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const {
-    assert(LMC);
-    return *LMC;
+    return LMC;
   }
 
   bool maybeLaneMask(Register Reg) const;

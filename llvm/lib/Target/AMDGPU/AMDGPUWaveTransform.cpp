@@ -2137,7 +2137,6 @@ private:
   MachineDominatorTree *DomTree = nullptr;
   // MachineConvergenceInfo ConvergenceInfo;
   MachineCycleInfo *CycleInfo;
-  GCNLaneMaskUtils LMU;
   const SIInstrInfo *TII;
 };
 
@@ -2164,7 +2163,6 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "AMDGPU Wave Transformnsform: " << MF.getName() << '\n');
 
   DomTree = &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
-  LMU.setFunction(MF);
   TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
 
   // ConvergenceInfo = computeMachineConvergenceInfo(MF, *DomTree);
