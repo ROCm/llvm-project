@@ -66,7 +66,7 @@
 // CUDA-SAME: -m64
 // CUDA: fatbinary
 
-// HIP: llvm-offload-binary
+// HIP: clang-offload-packager
 
 // SM20:--image3=kind=elf,sm=20{{.*}}
 // SM21:--image3=kind=elf,sm=21{{.*}}
