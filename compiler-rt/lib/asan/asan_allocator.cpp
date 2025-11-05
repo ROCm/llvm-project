@@ -1400,9 +1400,6 @@ DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_detach, void *mapped_ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_reserve_align, void** ptr,
              size_t size, uint64_t address, uint64_t alignment, uint64_t flags)
 DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size)
-DECLARE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
-             hsa_amd_pointer_info_t* info, void* (*alloc)(size_t),
-             uint32_t* num_agents_accessible, hsa_agent_t** accessible)
 
 namespace __asan {
 
@@ -1457,16 +1454,23 @@ static struct AP32<LocalAddressSpaceView> AP_;
 
 hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
                                             hsa_amd_ipc_memory_t* handle) {
-  void *ptr_;
+  static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+  void* ptr_ = get_allocator().GetBlockBegin(ptr);
   size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr);
-  if (len_ && len_ != len) {
-    static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
-    ptr_ = reinterpret_cast<void *>(reinterpret_cast<uptr>(ptr) - kPageSize_);
-  } else {
-    ptr_ = ptr;
-    len_ = len;
+
+  uptr p = reinterpret_cast<uptr>(ptr);
+  uptr p_ = reinterpret_cast<uptr>(ptr_);
+
+  if (p == p_)
+    return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
+
+  if (p == p_ + kPageSize_) {
+    AsanChunk* m = instance.GetAsanChunkByAddr(p_);
+    if (m && len == m->UsedSize())
+      return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
+    return REAL(hsa_amd_ipc_memory_create)(ptr_, len, handle);
   }
-  return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
+  return REAL(hsa_amd_ipc_memory_create)(ptr, len, handle);
 }
 
 hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t *handle,
@@ -1542,16 +1546,6 @@ hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
     return HSA_STATUS_SUCCESS;
   }
   return REAL(hsa_amd_vmem_address_free)(ptr, size);
-}
-
-hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
-                                       hsa_amd_pointer_info_t* info,
-                                       void* (*alloc)(size_t),
-                                       uint32_t* num_agents_accessible,
-                                       hsa_agent_t** accessible) {
-  void* p = get_allocator().GetBlockBegin(ptr);
-  return REAL(hsa_amd_pointer_info)(p ? p : ptr, info, alloc,
-                                    num_agents_accessible, accessible);
 }
 }  // namespace __asan
 #endif
