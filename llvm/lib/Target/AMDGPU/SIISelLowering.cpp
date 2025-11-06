@@ -16295,17 +16295,90 @@ SITargetLowering::performAddCarrySubCarryCombine(SDNode *N,
   return SDValue();
 }
 
+/// This function converts patterns like:
+///   %correction = select %cond, -1.0, 0.0
+///   %result = a + correction * c
+/// into:
+///   %result = fma(correction, c, a)
+static SDValue createConditionalSubToFMA(SelectionDAG &DAG, SDLoc SL, EVT VT,
+                                         SDValue Cond, SDValue C, SDValue A) {
+  // Constants processed differently.
+  if (isa<ConstantFPSDNode>(C) || isa<ConstantSDNode>(C))
+    return SDValue();
+  const SDValue MinusOne = DAG.getConstantFP(-1.0, SL, VT);
+  const SDValue Zero = DAG.getConstantFP(0.0, SL, VT); 
+  SDValue Correction = DAG.getNode(ISD::SELECT, SL, VT, Cond, MinusOne, Zero);  
+  return DAG.getNode(ISD::FMA, SL, VT, Correction, C, A);
+}
+
 SDValue SITargetLowering::performFAddCombine(SDNode *N,
                                              DAGCombinerInfo &DCI) const {
-  if (DCI.getDAGCombineLevel() < AfterLegalizeDAG)
-    return SDValue();
-
   SelectionDAG &DAG = DCI.DAG;
   EVT VT = N->getValueType(0);
 
   SDLoc SL(N);
   SDValue LHS = N->getOperand(0);
   SDValue RHS = N->getOperand(1);
+
+  // Optimize conditional subtraction patterns that have been transformed to
+  // fadd during IR canonicalization. These patterns arise from code like:
+  //   result = a - (cond ? c : 0.0)
+  // which is often rewritten by early optimizations as:
+  //   result = a + (cond ? -c : 0.0)
+  //
+  // The optimization converts these patterns to use hardware FMA instructions:
+  //   correction = select %cond, -1.0, 0.0
+  //   result = fma(correction, c, a)
+  //
+  // This is beneficial because:
+  // 1. FMA is a single instruction vs multiple (select + fadd)
+  // 2. FMA has better precision than separate operations
+  // 3. Avoids the overhead of loading the conditional value 'c'
+  // 4. Works efficiently on AMDGPU which has native FMA support
+  //
+  // Only enabled for f64 when hardware FMA is available (FMAC instruction).
+  // Also check that VOPD is not enabled or we're in wave64 mode, as VOPD
+  // dual-issue (wave32 only) might be more beneficial than FMA.
+  if (Subtarget->shouldUseConditionalSubToFMAF64() &&
+      VT == MVT::f64) { // Only optimize if FMA is available
+    // Pattern 1: fadd %a, (fneg (select %cond, %c, 0.0))
+    if (RHS.getOpcode() == ISD::FNEG &&
+        RHS.getOperand(0).getOpcode() == ISD::SELECT) {
+      SDValue SelNode = RHS.getOperand(0);
+      SDValue Cond = SelNode.getOperand(0);     // condition
+      SDValue TrueVal = SelNode.getOperand(1);  // c
+      SDValue FalseVal = SelNode.getOperand(2); // should be 0.0
+
+      // Verify the false branch is exactly 0.0 (not -0.0 or NaN)
+      if (ConstantFPSDNode *FPConst = dyn_cast<ConstantFPSDNode>(FalseVal)) {
+        if (FPConst->isExactlyValue(0.0)) {
+          if (SDValue Result =
+                  createConditionalSubToFMA(DAG, SL, VT, Cond, TrueVal, LHS))
+            return Result;
+        }
+      }
+    }
+
+    // Pattern 2: fadd %a, (select %cond, (fneg %c), 0.0)
+    if (RHS.getOpcode() == ISD::SELECT) {
+      SDValue Cond = RHS.getOperand(0);     // condition
+      SDValue TrueVal = RHS.getOperand(1);  // should be fneg %c
+      SDValue FalseVal = RHS.getOperand(2); // should be 0.0
+
+      // Verify the false branch is exactly 0.0, and true branch is negated value
+      if (ConstantFPSDNode *FPConst = dyn_cast<ConstantFPSDNode>(FalseVal)) {
+        if (FPConst->isExactlyValue(0.0) && TrueVal.getOpcode() == ISD::FNEG) {
+          SDValue ActualC = TrueVal.getOperand(0);
+          if (SDValue Result =
+                  createConditionalSubToFMA(DAG, SL, VT, Cond, ActualC, LHS))
+            return Result;
+        }
+      }
+    }
+  }
+
+  if (DCI.getDAGCombineLevel() < AfterLegalizeDAG)
+    return SDValue();
 
   // These should really be instruction patterns, but writing patterns with
   // source modifiers is a pain.
@@ -16339,12 +16412,53 @@ SDValue SITargetLowering::performFAddCombine(SDNode *N,
 
 SDValue SITargetLowering::performFSubCombine(SDNode *N,
                                              DAGCombinerInfo &DCI) const {
-  if (DCI.getDAGCombineLevel() < AfterLegalizeDAG)
-    return SDValue();
-
   SelectionDAG &DAG = DCI.DAG;
   SDLoc SL(N);
   EVT VT = N->getValueType(0);
+
+  // Optimize conditional subtraction pattern directly from fsub:
+  //   result = a - (cond ? c : 0.0)
+  //
+  // This pattern commonly appears in source code and should be converted to:
+  //   correction = select %cond, -1.0, 0.0
+  //   result = fma(correction, c, a)
+  //
+  // This is the most direct form of the conditional subtraction pattern,
+  // before any IR canonicalization transforms it to an fadd form.
+  //
+  // Benefits of the FMA transformation:
+  // - Single FMA instruction instead of select + fsub
+  // - Better numerical precision (no intermediate rounding)
+  // - More efficient on AMDGPU hardware with native FMA support
+  //
+  // Only enabled for f64 when hardware FMA is available (FMAC instruction).
+  // Also check that VOPD is not enabled or we're in wave64 mode, as VOPD
+  // dual-issue (wave32 only) might be more beneficial than FMA.
+  if (VT == MVT::f64 &&
+      Subtarget->shouldUseConditionalSubToFMAF64()) { // Only optimize if FMA is available
+    SDValue LHS = N->getOperand(0);  // a
+    SDValue RHS = N->getOperand(1);  // sel
+
+    // Match the pattern: fsub %a, (select %cond, %c, 0.0)
+    if (RHS.getOpcode() == ISD::SELECT) {
+      SDValue Cond = RHS.getOperand(0);     // condition
+      SDValue TrueVal = RHS.getOperand(1);  // c
+      SDValue FalseVal = RHS.getOperand(2); // should be 0.0
+
+      // Verify false branch is exactly zero (handles IEEE-correct zero check)
+      if (ConstantFPSDNode *Zero = dyn_cast<ConstantFPSDNode>(FalseVal)) {
+        if (Zero->isZero()) {
+          if (SDValue Result =
+                  createConditionalSubToFMA(DAG, SL, VT, Cond, TrueVal, LHS))
+            return Result;
+        }
+      }
+    }
+  }
+
+  if (DCI.getDAGCombineLevel() < AfterLegalizeDAG)
+    return SDValue();
+
   assert(!VT.isVector());
 
   // Try to get the fneg to fold into the source modifier. This undoes generic
