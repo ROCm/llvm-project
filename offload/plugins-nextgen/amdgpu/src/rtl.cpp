@@ -3150,7 +3150,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       OMPX_XTeamReductionOccupancyBasedOpt =
           EnvarConfig.OMPX_XTeamReductionOccupancyBasedOpt;
     }
-
   }
 
   ~AMDGPUDeviceTy() {}
@@ -5106,7 +5105,7 @@ private:
                                  .OMPX_XTeamReductionOccupancyBasedOpt = true,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI250X",{.OMPX_UseMultipleSdmaEngines = true,
-                                  .OMPX_XteamBlockSize = 256,
+                                 .OMPX_XteamBlockSize = 256,
                                  .OMPX_XTeamReductionOccupancyBasedOpt = true,
                                  .OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=0}},
                       {"MI250X/MI250",{
