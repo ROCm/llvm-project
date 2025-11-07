@@ -1553,13 +1553,13 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
                                        void* (*alloc)(size_t),
                                        uint32_t* num_agents_accessible,
                                        hsa_agent_t** accessible) {
-  void* p = get_allocator().GetBlockBegin(ptr);
-  AsanChunk* m = instance.GetAsanChunkByAddr(reinterpret_cast<uptr>(p));
+  void* ptr_ = get_allocator().GetBlockBegin(ptr);
+  AsanChunk* m = instance.GetAsanChunkByAddr(reinterpret_cast<uptr>(ptr_));
   hsa_status_t status;
-  if (p && m)
+  if (ptr_ && m)
     status = REAL(hsa_amd_pointer_info)(ptr, info, alloc, num_agents_accessible,
                                         accessible);
-  if (status == HSA_STATUS_SUCCESS && info && p && m) {
+  if (status == HSA_STATUS_SUCCESS && info && ptr_ && m) {
     static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
     info->agentBaseAddress = reinterpret_cast<void*>(
         reinterpret_cast<uptr>(info->agentBaseAddress) + kPageSize_);
