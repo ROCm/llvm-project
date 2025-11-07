@@ -144,6 +144,21 @@ void LiveRegMatrix::unassign(const LiveInterval &VirtReg) {
   LLVM_DEBUG(dbgs() << '\n');
 }
 
+void LiveRegMatrix::unassign(Register VirtReg) {
+  Register PhysReg = VRM->getPhys(VirtReg);
+  LLVM_DEBUG(dbgs() << "unassigning " << printReg(VirtReg, TRI)
+                    << " from " << printReg(PhysReg, TRI) << ':');
+  VRM->clearVirt(VirtReg);
+
+  assert(LIS->hasInterval(VirtReg));
+  const LiveInterval &LI = LIS->getInterval(VirtReg);
+  for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
+    Matrix[Unit].clear_all_segments_referencing(LI);
+  }
+  ++NumUnassigned;
+  LLVM_DEBUG(dbgs() << '\n');
+}
+
 bool LiveRegMatrix::isPhysRegUsed(MCRegister PhysReg) const {
   for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
     if (!Matrix[Unit].empty())
