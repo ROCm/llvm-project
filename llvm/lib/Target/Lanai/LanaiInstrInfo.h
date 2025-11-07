@@ -64,7 +64,7 @@ public:
   void loadRegFromStackSlot(
       MachineBasicBlock &MBB, MachineBasicBlock::iterator Position,
       Register DestinationRegister, int FrameIndex,
-      const TargetRegisterClass *RegisterClass, Register VReg,
+      const TargetRegisterClass *RegisterClass, Register VReg, unsigned SubReg,
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;

@@ -1921,13 +1921,29 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MI,
                                        Register DestReg, int FrameIndex,
                                        const TargetRegisterClass *RC,
-                                       Register VReg,
+                                       Register VReg, unsigned SubReg,
                                        MachineInstr::MIFlag Flags) const {
   MachineFunction *MF = MBB.getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
   const DebugLoc &DL = MBB.findDebugLoc(MI);
   unsigned SpillSize = RI.getSpillSize(*RC);
+
+  assert(SubReg != AMDGPU::lo16 && SubReg != AMDGPU::hi16 &&
+         "unhandled 16-bit subregister spilling");
+
+  // For subreg reload, identify the start offset.
+  unsigned SubRegIdx =
+      SubReg
+          ? llvm::countr_zero(RI.getSubRegIndexLaneMask(SubReg).getAsInteger())
+          : 0;
+  // Each subreg consists of two bits in the RegMask. The SubRegIdx should be
+  // either zero or an even number. This assert is to ensure we will not have
+  // any 16-bit subreg access at this point.
+  assert(SubRegIdx % 2 == 0 && "expected an even number for the subreg index");
+
+  // Now get the actual subreg index.
+  SubRegIdx /= 2;
 
   MachinePointerInfo PtrInfo
     = MachinePointerInfo::getFixedStack(*MF, FrameIndex);
@@ -1953,19 +1969,23 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     if (RI.spillSGPRToVGPR())
       FrameInfo.setStackID(FrameIndex, TargetStackID::SGPRSpill);
     BuildMI(MBB, MI, DL, OpDesc, DestReg)
-      .addFrameIndex(FrameIndex) // addr
-      .addMemOperand(MMO)
-      .addReg(MFI->getStackPtrOffsetReg(), RegState::Implicit);
+        .addFrameIndex(FrameIndex) // addr
+        .addImm(SubRegIdx)         // offset
+        .addMemOperand(MMO)
+        .addReg(MFI->getStackPtrOffsetReg(), RegState::Implicit);
 
     return;
   }
+
+  // Convert the subreg index to stack offset.
+  SubRegIdx *= 4;
 
   unsigned Opcode = getVectorRegSpillRestoreOpcode(VReg ? VReg : DestReg, RC,
                                                    SpillSize, *MFI);
   BuildMI(MBB, MI, DL, get(Opcode), DestReg)
       .addFrameIndex(FrameIndex)           // vaddr
       .addReg(MFI->getStackPtrOffsetReg()) // scratch_offset
-      .addImm(0)                           // offset
+      .addImm(SubRegIdx)                   // offset
       .addMemOperand(MMO);
 }
 

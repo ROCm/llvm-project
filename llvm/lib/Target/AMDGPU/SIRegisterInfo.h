@@ -358,6 +358,8 @@ public:
   ArrayRef<int16_t> getRegSplitParts(const TargetRegisterClass *RC,
                                      unsigned EltSize) const;
 
+  bool shouldEnableSubRegSpillRestore() const override;
+
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
 

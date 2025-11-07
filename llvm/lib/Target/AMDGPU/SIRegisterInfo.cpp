@@ -2274,6 +2274,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
   if (OnlyToVGPR && !SpillToVGPR)
     return false;
 
+  int SubRegIdx = MI->getOperand(2).getImm();
   if (SpillToVGPR) {
     for (unsigned i = 0, e = SB.NumSubRegs; i < e; ++i) {
       Register SubReg =
@@ -2281,7 +2282,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
               ? SB.SuperReg
               : Register(getSubReg(SB.SuperReg, SB.SplitParts[i]));
 
-      SpilledReg Spill = VGPRSpills[i];
+      SpilledReg Spill = VGPRSpills[i + SubRegIdx];
       auto MIB = BuildMI(*SB.MBB, MI, SB.DL,
                          SB.TII.get(AMDGPU::SI_RESTORE_S32_FROM_VGPR), SubReg)
                      .addReg(Spill.VGPR)
@@ -2318,7 +2319,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
         auto MIB = BuildMI(*SB.MBB, MI, SB.DL,
                            SB.TII.get(AMDGPU::SI_RESTORE_S32_FROM_VGPR), SubReg)
                        .addReg(SB.TmpVGPR, getKillRegState(LastSubReg))
-                       .addImm(i);
+                       .addImm(i + SubRegIdx);
         if (SB.NumSubRegs > 1 && i == 0)
           MIB.addReg(SB.SuperReg, RegState::ImplicitDefine);
         if (Indexes) {
@@ -3982,6 +3983,8 @@ bool SIRegisterInfo::isAGPR(const MachineRegisterInfo &MRI,
   // Registers without classes are unaddressable, SGPR-like registers.
   return RC && isAGPRClass(RC);
 }
+
+bool SIRegisterInfo::shouldEnableSubRegSpillRestore() const { return true; }
 
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
                                              MachineFunction &MF) const {
