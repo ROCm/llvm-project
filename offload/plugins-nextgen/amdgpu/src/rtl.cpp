@@ -3160,7 +3160,6 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
        EnvarConfig.OMPX_AdjustNumTeamsForXteamRedSmallBlockSize,
        EnvarConfig.OMPX_XteamBlockSize,
        EnvarConfig.OMPX_XTeamReductionOccupancyBasedOpt);
-       
   }
 
   ~AMDGPUDeviceTy() {}
