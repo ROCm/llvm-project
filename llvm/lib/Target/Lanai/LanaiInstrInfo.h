@@ -66,7 +66,7 @@ public:
       MachineBasicBlock &MBB, MachineBasicBlock::iterator Position,
       Register DestinationRegister, int FrameIndex,
       const TargetRegisterClass *RegisterClass,
-      const TargetRegisterInfo *RegisterInfo, Register VReg,
+      const TargetRegisterInfo *RegisterInfo, Register VReg, unsigned SubReg,
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;

@@ -52,8 +52,10 @@ LiveInterval &LiveRangeEdit::createEmptyIntervalFrom(Register OldReg,
   return LI;
 }
 
-Register LiveRangeEdit::createFrom(Register OldReg) {
-  Register VReg = MRI.cloneVirtualRegister(OldReg);
+Register LiveRangeEdit::createFrom(Register OldReg,
+                                   const TargetRegisterClass *RC) {
+  Register VReg =
+      RC ? MRI.createVirtualRegister(RC) : MRI.cloneVirtualRegister(OldReg);
   if (VRM) {
     VRM->setIsSplitFromReg(VReg, VRM->getOriginal(OldReg));
   }

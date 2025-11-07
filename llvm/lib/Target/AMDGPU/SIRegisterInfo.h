@@ -358,6 +358,8 @@ public:
                       const TargetRegisterClass *NewRC,
                       LiveIntervals &LIS) const override;
 
+  bool shouldEnableSubRegReload(unsigned SubReg) const override;
+
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
 

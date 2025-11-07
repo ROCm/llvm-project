@@ -154,8 +154,10 @@ public:
 
   ArrayRef<Register> regs() const { return ArrayRef(NewRegs).slice(FirstNew); }
 
-  /// createFrom - Create a new virtual register based on OldReg.
-  Register createFrom(Register OldReg);
+  /// createFrom - Create a new virtual register based on OldReg. If \p RC is
+  /// non-null, create the new virtual register from it instead. Subreg spills
+  /// will feed-in a subregclass derived from the regclass of OldReg.
+  Register createFrom(Register OldReg, const TargetRegisterClass *RC = nullptr);
 
   /// create - Create a new register with the same class and original slot as
   /// parent.

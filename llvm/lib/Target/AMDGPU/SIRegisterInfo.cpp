@@ -2251,6 +2251,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
   if (OnlyToVGPR && !SpillToVGPR)
     return false;
 
+  int SubRegIdx = MI->getOperand(2).getImm();
   if (SpillToVGPR) {
     for (unsigned i = 0, e = SB.NumSubRegs; i < e; ++i) {
       Register SubReg =
@@ -2258,7 +2259,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
               ? SB.SuperReg
               : Register(getSubReg(SB.SuperReg, SB.SplitParts[i]));
 
-      SpilledReg Spill = VGPRSpills[i];
+      SpilledReg Spill = VGPRSpills[i + SubRegIdx];
       auto MIB = BuildMI(*SB.MBB, MI, SB.DL,
                          SB.TII.get(AMDGPU::SI_RESTORE_S32_FROM_VGPR), SubReg)
                      .addReg(Spill.VGPR)
@@ -2295,7 +2296,7 @@ bool SIRegisterInfo::restoreSGPR(MachineBasicBlock::iterator MI, int Index,
         auto MIB = BuildMI(*SB.MBB, MI, SB.DL,
                            SB.TII.get(AMDGPU::SI_RESTORE_S32_FROM_VGPR), SubReg)
                        .addReg(SB.TmpVGPR, getKillRegState(LastSubReg))
-                       .addImm(i);
+                       .addImm(i + SubRegIdx);
         if (SB.NumSubRegs > 1 && i == 0)
           MIB.addReg(SB.SuperReg, RegState::ImplicitDefine);
         if (Indexes) {
@@ -3932,6 +3933,16 @@ bool SIRegisterInfo::shouldCoalesce(MachineInstr *MI,
     return true;
 
   return NewSize <= DstSize || NewSize <= SrcSize;
+}
+
+bool SIRegisterInfo::shouldEnableSubRegReload(unsigned SubReg) const {
+  // Disable lo16 and hi16 (16-bit) accesses as they are subreg views of the
+  // same 32-bit register and don't represent independent storage.
+  if (SubReg == AMDGPU::lo16 || SubReg == AMDGPU::hi16)
+    return false;
+
+  // Enable for other tuple sub-registers.
+  return true;
 }
 
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,

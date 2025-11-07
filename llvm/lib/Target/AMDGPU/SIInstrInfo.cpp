@@ -1907,13 +1907,24 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
                                        Register DestReg, int FrameIndex,
                                        const TargetRegisterClass *RC,
                                        const TargetRegisterInfo *TRI,
-                                       Register VReg,
+                                       Register VReg, unsigned SubReg,
                                        MachineInstr::MIFlag Flags) const {
   MachineFunction *MF = MBB.getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
   const DebugLoc &DL = MBB.findDebugLoc(MI);
   unsigned SpillSize = TRI->getSpillSize(*RC);
+
+  unsigned SubRegIdx = 0;
+  if (SubReg) {
+    uint64_t Mask = RI.getSubRegIndexLaneMask(SubReg).getAsInteger();
+    assert(llvm::popcount(Mask) % 2 == 0 &&
+           "expected only 32-bit subreg access");
+
+    // For subreg reload, identify the start offset. Each 32-bit register
+    // consists of two regunits and eventually two bits in the Lanemask.
+    SubRegIdx = llvm::countr_zero(Mask) / 2;
+  }
 
   MachinePointerInfo PtrInfo
     = MachinePointerInfo::getFixedStack(*MF, FrameIndex);
@@ -1939,19 +1950,23 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     if (RI.spillSGPRToVGPR())
       FrameInfo.setStackID(FrameIndex, TargetStackID::SGPRSpill);
     BuildMI(MBB, MI, DL, OpDesc, DestReg)
-      .addFrameIndex(FrameIndex) // addr
-      .addMemOperand(MMO)
-      .addReg(MFI->getStackPtrOffsetReg(), RegState::Implicit);
+        .addFrameIndex(FrameIndex) // addr
+        .addImm(SubRegIdx)         // offset
+        .addMemOperand(MMO)
+        .addReg(MFI->getStackPtrOffsetReg(), RegState::Implicit);
 
     return;
   }
+
+  // Convert the subreg index to stack offset.
+  SubRegIdx *= 4;
 
   unsigned Opcode = getVectorRegSpillRestoreOpcode(VReg ? VReg : DestReg, RC,
                                                    SpillSize, *MFI);
   BuildMI(MBB, MI, DL, get(Opcode), DestReg)
       .addFrameIndex(FrameIndex)           // vaddr
       .addReg(MFI->getStackPtrOffsetReg()) // scratch_offset
-      .addImm(0)                           // offset
+      .addImm(SubRegIdx)                   // offset
       .addMemOperand(MMO);
 }
 

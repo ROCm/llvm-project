@@ -71,7 +71,7 @@ void LanaiInstrInfo::loadRegFromStackSlot(
     Register DestinationRegister, int FrameIndex,
     const TargetRegisterClass *RegisterClass,
     const TargetRegisterInfo * /*RegisterInfo*/, Register /*VReg*/,
-    MachineInstr::MIFlag /*Flags*/) const {
+    unsigned /*SubReg*/, MachineInstr::MIFlag /*Flags*/) const {
   DebugLoc DL;
   if (Position != MBB.end()) {
     DL = Position->getDebugLoc();

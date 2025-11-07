@@ -3330,6 +3330,7 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    scratch_load_b128 v[16:19], off, s33 offset:512
 ; GFX11-NEXT:    s_waitcnt vmcnt(2)
 ; GFX11-NEXT:    v_dual_mov_b32 v14, v1 :: v_dual_mov_b32 v1, v4
+; GFX11-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-NEXT:    scratch_store_b128 off, v[16:19], s33 offset:1584 ; 16-byte Folded Spill
 ; GFX11-NEXT:    s_clause 0x3
@@ -3337,9 +3338,8 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    scratch_load_b128 v[20:23], off, s33 offset:544
 ; GFX11-NEXT:    scratch_load_b128 v[24:27], off, s33 offset:560
 ; GFX11-NEXT:    scratch_load_b128 v[28:31], off, s33 offset:576
-; GFX11-NEXT:    v_dual_mov_b32 v4, v7 :: v_dual_mov_b32 v7, v10
 ; GFX11-NEXT:    s_waitcnt vmcnt(2)
-; GFX11-NEXT:    v_mov_b32_e32 v10, v21
+; GFX11-NEXT:    v_dual_mov_b32 v7, v10 :: v_dual_mov_b32 v10, v21
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-NEXT:    scratch_store_b128 off, v[28:31], s33 offset:1568 ; 16-byte Folded Spill
 ; GFX11-NEXT:    scratch_load_b128 v[28:31], off, s33 offset:592
@@ -3364,10 +3364,10 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    v_dual_mov_b32 v15, v2 :: v_dual_mov_b32 v0, v3
 ; GFX11-NEXT:    v_dual_mov_b32 v2, v5 :: v_dual_mov_b32 v3, v6
 ; GFX11-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v6, v9
-; GFX11-NEXT:    v_mov_b32_e32 v9, v20
 ; GFX11-NEXT:    scratch_store_b32 off, v11, s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 0x90
-; GFX11-NEXT:    v_mov_b32_e32 v11, v22
+; GFX11-NEXT:    v_dual_mov_b32 v9, v20 :: v_dual_mov_b32 v8, v19
+; GFX11-NEXT:    v_mov_b32_e32 v29, v45
 ; GFX11-NEXT:    scratch_store_b128 off, v[4:7], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 0x80
 ; GFX11-NEXT:    v_mov_b32_e32 v5, v16
@@ -3380,33 +3380,35 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX11-NEXT:    v_mov_b32_e32 v7, v18
 ; GFX11-NEXT:    scratch_store_b32 off, v0, s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 0x60
-; GFX11-NEXT:    v_dual_mov_b32 v8, v19 :: v_dual_mov_b32 v15, v26
+; GFX11-NEXT:    v_mov_b32_e32 v12, v23
 ; GFX11-NEXT:    scratch_store_b96 off, v[56:58], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 0x50
-; GFX11-NEXT:    v_dual_mov_b32 v12, v23 :: v_dual_mov_b32 v29, v45
+; GFX11-NEXT:    v_mov_b32_e32 v14, v25
 ; GFX11-NEXT:    scratch_store_b128 off, v[40:43], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 64
-; GFX11-NEXT:    v_mov_b32_e32 v13, v24
+; GFX11-NEXT:    v_mov_b32_e32 v15, v26
 ; GFX11-NEXT:    scratch_store_b128 off, v[52:55], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 48
-; GFX11-NEXT:    v_mov_b32_e32 v14, v25
+; GFX11-NEXT:    v_mov_b32_e32 v16, v27
 ; GFX11-NEXT:    scratch_store_b128 off, v[36:39], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 32
-; GFX11-NEXT:    v_mov_b32_e32 v16, v27
+; GFX11-NEXT:    v_mov_b32_e32 v30, v46
 ; GFX11-NEXT:    scratch_store_b128 off, v[48:51], s2
 ; GFX11-NEXT:    s_add_i32 s2, s32, 16
-; GFX11-NEXT:    v_mov_b32_e32 v30, v46
+; GFX11-NEXT:    v_mov_b32_e32 v31, v47
 ; GFX11-NEXT:    scratch_store_b128 off, v[32:35], s2
-; GFX11-NEXT:    s_clause 0x3
-; GFX11-NEXT:    scratch_load_b128 v[1:4], off, s33 offset:1584
+; GFX11-NEXT:    scratch_load_b96 v[0:2], off, s33 offset:1588 ; 12-byte Folded Reload
+; GFX11-NEXT:    s_add_i32 s2, s33, 0x400
+; GFX11-NEXT:    v_mov_b32_e32 v13, v24
+; GFX11-NEXT:    v_mov_b32_e32 v11, v22
+; GFX11-NEXT:    s_clause 0x2
 ; GFX11-NEXT:    scratch_load_b128 v[17:20], off, s33 offset:1568
 ; GFX11-NEXT:    scratch_load_b128 v[21:24], off, s33 offset:1552
 ; GFX11-NEXT:    scratch_load_b128 v[25:28], off, s33 offset:1536
-; GFX11-NEXT:    s_add_i32 s2, s33, 0x400
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    v_dual_mov_b32 v31, v47 :: v_dual_mov_b32 v0, s2
 ; GFX11-NEXT:    s_waitcnt vmcnt(3)
-; GFX11-NEXT:    v_mov_b32_e32 v1, 42
+; GFX11-NEXT:    v_mov_b32_e32 v4, v2
+; GFX11-NEXT:    v_dual_mov_b32 v3, v1 :: v_dual_mov_b32 v2, v0
+; GFX11-NEXT:    v_dual_mov_b32 v0, s2 :: v_dual_mov_b32 v1, 42
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_clause 0xb
 ; GFX11-NEXT:    scratch_load_b32 v59, off, s33
