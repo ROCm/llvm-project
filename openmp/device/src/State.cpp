@@ -246,13 +246,13 @@ void memory::freeShared(void *Ptr, uint64_t Bytes, const char *Reason) {
 }
 
 void *memory::allocGlobal(uint64_t Bytes, const char *Reason) {
-  void *Ptr = malloc(Bytes);
+  void *Ptr = allocator::alloc(Bytes);
   if (config::isDebugMode(DeviceDebugKind::CommonIssues) && Ptr == nullptr)
     printf("nullptr returned by malloc!\n");
   return Ptr;
 }
 
-void memory::freeGlobal(void *Ptr, const char *Reason) { free(Ptr); }
+void memory::freeGlobal(void *Ptr, const char *Reason) { allocator::free(Ptr); }
 
 ///}
 
