@@ -3142,6 +3142,12 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
       OMPX_AdjustNumTeamsForXteamRedSmallBlockSize =
           EnvarConfig.OMPX_AdjustNumTeamsForXteamRedSmallBlockSize;
     }
+
+    // Print loaded envars.
+    DP("Loaded envar: OMPX_UseMultipleSdmaEngines=%d, "
+       "OMPX_AdjustNumTeamsForXteamRedSmallBlockSize=%d\n",
+       EnvarConfig.OMPX_UseMultipleSdmaEngines,
+       EnvarConfig.OMPX_AdjustNumTeamsForXteamRedSmallBlockSize);
   }
 
   ~AMDGPUDeviceTy() {}
