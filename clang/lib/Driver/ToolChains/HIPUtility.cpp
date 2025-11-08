@@ -241,14 +241,18 @@ private:
 
       bool isUndefined =
           FlagOrErr.get() & llvm::object::SymbolRef::SF_Undefined;
+      bool isHidden =
+          FlagOrErr.get() & llvm::object::SymbolRef::SF_Hidden;
       bool isFatBinSymbol = Name.starts_with(FatBinPrefix);
       bool isGPUBinHandleSymbol = Name.starts_with(GPUBinHandlePrefix);
 
       // Handling for defined symbols
       if (!isUndefined) {
         if (isFatBinSymbol) {
+          DefinedFatBinSymbols.insert(Name.str());
           FatBinSymbols.erase(Name.str());
-        } else if (isGPUBinHandleSymbol) {
+        } else if (isGPUBinHandleSymbol && (!isHidden) ) {
+          DefinedGPUBinHandleSymbols.insert(Name.str());
           GPUBinHandleSymbols.erase(Name.str());
         }
         continue;
