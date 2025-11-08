@@ -248,7 +248,7 @@ private:
 
       // Handling for defined symbols
       if (!isUndefined) {
-        if (isFatBinSymbol) {
+        if (isFatBinSymbol && (!isHidden)) {
           DefinedFatBinSymbols.insert(Name.str());
           FatBinSymbols.erase(Name.str());
         } else if (isGPUBinHandleSymbol && (!isHidden) ) {
