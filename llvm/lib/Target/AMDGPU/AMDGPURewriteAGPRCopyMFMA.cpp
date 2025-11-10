@@ -33,6 +33,7 @@
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/InitializePasses.h"
 
@@ -746,6 +747,7 @@ AMDGPURewriteAGPRCopyMFMAPass::run(MachineFunction &MF,
   PA.preserveSet<CFGAnalyses>()
     .preserve<LiveStacksAnalysis>()
     .preserve<VirtRegMapAnalysis>()
+    .preserve<SlotIndexesAnalysis>()
     .preserve<LiveIntervalsAnalysis>()
     .preserve<LiveRegMatrixAnalysis>();
   return PA;
