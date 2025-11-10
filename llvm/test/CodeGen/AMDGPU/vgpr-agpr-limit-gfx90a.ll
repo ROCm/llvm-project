@@ -1,6 +1,6 @@
 ; -enable-misched=false makes the register usage more predictable
 ; -regalloc=fast just makes the test run faster
-; RUN: llc -mtriple=amdgcn -mcpu=gfx90a -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX90A
+; RUN: llc -mtriple=amdgcn -mcpu=gfx90a -amdgpu-function-calls=false -enable-misched=false --regalloc-npm='regallocfast<filter=sgpr;no-clear-vregs>,default,regallocfast<filter=vgpr;no-clear-vregs>' < %s | FileCheck %s --check-prefixes=GCN,GFX90A
 
 define internal void @use256vgprs() {
   %v0 = call i32 asm sideeffect "; def $0", "=v"()

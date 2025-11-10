@@ -1,10 +1,19 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 < %s | FileCheck %s
 
-; CallGraphAnalysis, which CodeGenSCC order depends on, does not look
+; LazyCallGraph, which CodeGenSCC order depends on, does not look
 ; through aliases. If GlobalOpt is never run, we do not see direct
 ; calls,
 
 @alias0 = hidden alias void (), ptr @aliasee_default_vgpr64_sgpr102
+
+; CHECK:      .set .Laliasee_default_vgpr64_sgpr102.num_vgpr, 53
+; CHECK-NEXT: .set .Laliasee_default_vgpr64_sgpr102.num_agpr, 0
+; CHECK-NEXT: .set .Laliasee_default_vgpr64_sgpr102.numbered_sgpr, 32
+define internal void @aliasee_default_vgpr64_sgpr102() #1 {
+bb:
+  call void asm sideeffect "; clobber v52 ", "~{v52}"()
+  ret void
+}
 
 ; CHECK-LABEL: {{^}}kernel0:
 ; CHECK:      .set kernel0.num_vgpr, max(41, .Laliasee_default_vgpr64_sgpr102.num_vgpr)
@@ -13,15 +22,6 @@
 define amdgpu_kernel void @kernel0() #0 {
 bb:
   call void @alias0() #2
-  ret void
-}
-
-; CHECK:      .set .Laliasee_default_vgpr64_sgpr102.num_vgpr, 53
-; CHECK-NEXT: .set .Laliasee_default_vgpr64_sgpr102.num_agpr, 0
-; CHECK-NEXT: .set .Laliasee_default_vgpr64_sgpr102.numbered_sgpr, 32
-define internal void @aliasee_default_vgpr64_sgpr102() #1 {
-bb:
-  call void asm sideeffect "; clobber v52 ", "~{v52}"()
   ret void
 }
 

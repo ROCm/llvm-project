@@ -195,10 +195,6 @@ int llvm::compileModuleWithNewPM(
   if (Context.getDiagHandlerPtr()->HasErrors)
     return 1;
 
-  if (BOS) {
-    Out->os() << Buffer;
-  }
-
   // Declare success.
   Out->keep();
   if (DwoOut)
