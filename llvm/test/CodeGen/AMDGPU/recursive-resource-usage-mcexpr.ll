@@ -2,27 +2,16 @@
 
 ; Recursion: foo -> bar -> baz -> qux -> foo
 
-; CHECK-LABEL: {{^}}qux
-; CHECK: .set qux.num_vgpr, max(71, foo.num_vgpr)
-; CHECK: .set qux.num_agpr, max(0, foo.num_agpr)
-; CHECK: .set qux.numbered_sgpr, max(46, foo.numbered_sgpr)
-; CHECK: .set qux.private_seg_size, 16
-; CHECK: .set qux.uses_vcc, or(1, foo.uses_vcc)
-; CHECK: .set qux.uses_flat_scratch, or(0, foo.uses_flat_scratch)
-; CHECK: .set qux.has_dyn_sized_stack, or(0, foo.has_dyn_sized_stack)
-; CHECK: .set qux.has_recursion, or(1, foo.has_recursion)
-; CHECK: .set qux.has_indirect_call, or(0, foo.has_indirect_call)
-
-; CHECK-LABEL: {{^}}baz
-; CHECK: .set baz.num_vgpr, max(61, qux.num_vgpr)
-; CHECK: .set baz.num_agpr, max(0, qux.num_agpr)
-; CHECK: .set baz.numbered_sgpr, max(51, qux.numbered_sgpr)
-; CHECK: .set baz.private_seg_size, 16+max(qux.private_seg_size)
-; CHECK: .set baz.uses_vcc, or(1, qux.uses_vcc)
-; CHECK: .set baz.uses_flat_scratch, or(0, qux.uses_flat_scratch)
-; CHECK: .set baz.has_dyn_sized_stack, or(0, qux.has_dyn_sized_stack)
-; CHECK: .set baz.has_recursion, or(1, qux.has_recursion)
-; CHECK: .set baz.has_indirect_call, or(0, qux.has_indirect_call)
+; CHECK-LABEL: {{^}}foo
+; CHECK: .set foo.num_vgpr, max(46, bar.num_vgpr)
+; CHECK: .set foo.num_agpr, max(0, bar.num_agpr)
+; CHECK: .set foo.numbered_sgpr, max(71, bar.numbered_sgpr)
+; CHECK: .set foo.private_seg_size, 16+max(bar.private_seg_size)
+; CHECK: .set foo.uses_vcc, or(1, bar.uses_vcc)
+; CHECK: .set foo.uses_flat_scratch, or(0, bar.uses_flat_scratch)
+; CHECK: .set foo.has_dyn_sized_stack, or(0, bar.has_dyn_sized_stack)
+; CHECK: .set foo.has_recursion, or(1, bar.has_recursion)
+; CHECK: .set foo.has_indirect_call, or(0, bar.has_indirect_call)
 
 ; CHECK-LABEL: {{^}}bar
 ; CHECK: .set bar.num_vgpr, max(51, baz.num_vgpr)
@@ -35,16 +24,27 @@
 ; CHECK: .set bar.has_recursion, or(1, baz.has_recursion)
 ; CHECK: .set bar.has_indirect_call, or(0, baz.has_indirect_call)
 
-; CHECK-LABEL: {{^}}foo
-; CHECK: .set foo.num_vgpr, max(46, 71)
-; CHECK: .set foo.num_agpr, max(0, 0)
-; CHECK: .set foo.numbered_sgpr, max(71, 61)
-; CHECK: .set foo.private_seg_size, 16
-; CHECK: .set foo.uses_vcc, 1
-; CHECK: .set foo.uses_flat_scratch, 0
-; CHECK: .set foo.has_dyn_sized_stack, 0
-; CHECK: .set foo.has_recursion, 1
-; CHECK: .set foo.has_indirect_call, 0
+; CHECK-LABEL: {{^}}baz
+; CHECK: .set baz.num_vgpr, max(61, qux.num_vgpr)
+; CHECK: .set baz.num_agpr, max(0, qux.num_agpr)
+; CHECK: .set baz.numbered_sgpr, max(51, qux.numbered_sgpr)
+; CHECK: .set baz.private_seg_size, 16+max(qux.private_seg_size)
+; CHECK: .set baz.uses_vcc, or(1, qux.uses_vcc)
+; CHECK: .set baz.uses_flat_scratch, or(0, qux.uses_flat_scratch)
+; CHECK: .set baz.has_dyn_sized_stack, or(0, qux.has_dyn_sized_stack)
+; CHECK: .set baz.has_recursion, or(1, qux.has_recursion)
+; CHECK: .set baz.has_indirect_call, or(0, qux.has_indirect_call)
+
+; CHECK-LABEL: {{^}}qux
+; CHECK: .set qux.num_vgpr, max(71, 61)
+; CHECK: .set qux.num_agpr, max(0, 0)
+; CHECK: .set qux.numbered_sgpr, max(71, 71)
+; CHECK: .set qux.private_seg_size, 16
+; CHECK: .set qux.uses_vcc, 1
+; CHECK: .set qux.uses_flat_scratch, 0
+; CHECK: .set qux.has_dyn_sized_stack, 0
+; CHECK: .set qux.has_recursion, 1
+; CHECK: .set qux.has_indirect_call, 0
 
 define void @foo() {
 entry:
@@ -95,32 +95,21 @@ define amdgpu_kernel void @usefoo() {
 
 ; Recursion: A -> B -> C -> A && C -> D -> C
 
-; CHECK-LABEL: {{^}}D
-; CHECK: .set D.num_vgpr, max(71, C.num_vgpr)
-; CHECK: .set D.num_agpr, max(0, C.num_agpr)
-; CHECK: .set D.numbered_sgpr, max(71, C.numbered_sgpr)
-; CHECK: .set D.private_seg_size, 16+max(C.private_seg_size)
-; CHECK: .set D.uses_vcc, or(1, C.uses_vcc)
-; CHECK: .set D.uses_flat_scratch, or(0, C.uses_flat_scratch)
-; CHECK: .set D.has_dyn_sized_stack, or(0, C.has_dyn_sized_stack)
-; CHECK: .set D.has_recursion, or(1, C.has_recursion)
-; CHECK: .set D.has_indirect_call, or(0, C.has_indirect_call)
-
-; CHECK-LABEL: {{^}}C
-; CHECK: .set C.num_vgpr, max(42, A.num_vgpr, 71)
-; CHECK: .set C.num_agpr, max(0, A.num_agpr, 0)
-; CHECK: .set C.numbered_sgpr, max(71, A.numbered_sgpr, 71)
-; CHECK: .set C.private_seg_size, 16+max(A.private_seg_size)
-; CHECK: .set C.uses_vcc, or(1, A.uses_vcc)
-; CHECK: .set C.uses_flat_scratch, or(0, A.uses_flat_scratch)
-; CHECK: .set C.has_dyn_sized_stack, or(0, A.has_dyn_sized_stack)
-; CHECK: .set C.has_recursion, or(1, A.has_recursion)
-; CHECK: .set C.has_indirect_call, or(0, A.has_indirect_call)
+; CHECK-LABEL: {{^}}A
+; CHECK: .set A.num_vgpr, max(41, B.num_vgpr)
+; CHECK: .set A.num_agpr, max(0, B.num_agpr)
+; CHECK: .set A.numbered_sgpr, max(51, B.numbered_sgpr)
+; CHECK: .set A.private_seg_size, 16+max(B.private_seg_size)
+; CHECK: .set A.uses_vcc, or(1, B.uses_vcc)
+; CHECK: .set A.uses_flat_scratch, or(0, B.uses_flat_scratch)
+; CHECK: .set A.has_dyn_sized_stack, or(0, B.has_dyn_sized_stack)
+; CHECK: .set A.has_recursion, or(1, B.has_recursion)
+; CHECK: .set A.has_indirect_call, or(0, B.has_indirect_call)
 
 ; CHECK-LABEL: {{^}}B
-; CHECK: .set B.num_vgpr, max(42, C.num_vgpr)
+; CHECK: .set B.num_vgpr, max(41, C.num_vgpr)
 ; CHECK: .set B.num_agpr, max(0, C.num_agpr)
-; CHECK: .set B.numbered_sgpr, max(71, C.numbered_sgpr)
+; CHECK: .set B.numbered_sgpr, max(34, C.numbered_sgpr)
 ; CHECK: .set B.private_seg_size, 16+max(C.private_seg_size)
 ; CHECK: .set B.uses_vcc, or(1, C.uses_vcc)
 ; CHECK: .set B.uses_flat_scratch, or(0, C.uses_flat_scratch)
@@ -128,16 +117,27 @@ define amdgpu_kernel void @usefoo() {
 ; CHECK: .set B.has_recursion, or(1, C.has_recursion)
 ; CHECK: .set B.has_indirect_call, or(0, C.has_indirect_call)
 
-; CHECK-LABEL: {{^}}A
-; CHECK: .set A.num_vgpr, max(42, 71)
-; CHECK: .set A.num_agpr, max(0, 0)
-; CHECK: .set A.numbered_sgpr, max(71, 71)
-; CHECK: .set A.private_seg_size, 16
-; CHECK: .set A.uses_vcc, 1
-; CHECK: .set A.uses_flat_scratch, 0
-; CHECK: .set A.has_dyn_sized_stack, 0
-; CHECK: .set A.has_recursion, 1
-; CHECK: .set A.has_indirect_call, 0
+; CHECK-LABEL: {{^}}C
+; CHECK: .set C.num_vgpr, max(43, 41, D.num_vgpr)
+; CHECK: .set C.num_agpr, max(0, 0, D.num_agpr)
+; CHECK: .set C.numbered_sgpr, max(55, 51, D.numbered_sgpr)
+; CHECK: .set C.private_seg_size, 16+max(D.private_seg_size)
+; CHECK: .set C.uses_vcc, or(1, D.uses_vcc)
+; CHECK: .set C.uses_flat_scratch, or(0, D.uses_flat_scratch)
+; CHECK: .set C.has_dyn_sized_stack, or(0, D.has_dyn_sized_stack)
+; CHECK: .set C.has_recursion, or(1, D.has_recursion)
+; CHECK: .set C.has_indirect_call, or(0, D.has_indirect_call)
+
+; CHECK-LABEL: {{^}}D
+; CHECK: .set D.num_vgpr, max(71, 43)
+; CHECK: .set D.num_agpr, max(0, 0)
+; CHECK: .set D.numbered_sgpr, max(71, 55)
+; CHECK: .set D.private_seg_size, 16
+; CHECK: .set D.uses_vcc, 1
+; CHECK: .set D.uses_flat_scratch, 0
+; CHECK: .set D.has_dyn_sized_stack, 0
+; CHECK: .set D.has_recursion, 1
+; CHECK: .set D.has_indirect_call, 0
 
 define void @A() {
   call void @B()
