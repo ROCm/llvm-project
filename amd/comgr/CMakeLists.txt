@@ -256,6 +256,11 @@ list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS AMD_COMGR_EXPORT)
 include(bc2h)
 include(opencl_header)
 include(DeviceLibs)
+include(utils)
+
+# Set Lintian Support Flags
+set( BUILD_ENABLE_LINTIAN_OVERRIDES ON CACHE BOOL "Enable/Disable Lintian Overrides" )
+set( BUILD_DEBIAN_PKGING_FLAG ON CACHE BOOL "Internal Status Flag to indicate Debian Packaging Build" )
 
 # Add major version to the name on windows, including Win64
 if (WIN32)
@@ -341,11 +346,13 @@ write_basic_package_version_file("${AMD_COMGR_VERSION_PATH}"
   COMPATIBILITY SameMajorVersion)
 
 if(ENABLE_ASAN_PACKAGING)
+  set( COMP_TYPE "asan" )
   install(TARGETS amd_comgr
     EXPORT amd_comgr_export
     COMPONENT asan
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
 else()
+  set( COMP_TYPE "amd-comgr" )
   install(TARGETS amd_comgr
     EXPORT amd_comgr_export
     COMPONENT amd-comgr
@@ -520,7 +527,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(CPACK_PACKAGE_VERSION_MAJOR "${amd-comgr_VERSION_MAJOR}")
   set(CPACK_PACKAGE_VERSION_MINOR "${amd-comgr_VERSION_MINOR}")
   set(CPACK_PACKAGE_VERSION_PATCH "${amd-comgr_VERSION_PATCH}")
-  set(CPACK_PACKAGE_CONTACT "ROCm Compiler Support <rocm.compiler.support@amd.com>")
+  set(PKG_MAINTAINER_NM     "ROCm Compiler Support")
+  set(PKG_MAINTAINER_EMAIL  "rocm.compiler.support@amd.com")
+  set(CPACK_PACKAGE_CONTACT "${PKG_MAINTAINER_NM} <${PKG_MAINTAINER_EMAIL}>")
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
 
   # ASAN Specific variables
@@ -635,5 +644,21 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
       string(REGEX REPLACE ",? ?rocm-core-asan" "" CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS ${CPACK_DEBIAN_ASAN_PACKAGE_DEPENDS})
   endif()
 
+  # Configure Lintian Specific Package Data
+  configure_pkg( ${CPACK_PACKAGE_NAME} ${COMP_TYPE} ${CPACK_PACKAGE_VERSION} ${PKG_MAINTAINER_NM} ${PKG_MAINTAINER_EMAIL} )
+  # Custom installation for Debian Lintian File
+  if( BUILD_ENABLE_LINTIAN_OVERRIDES STREQUAL "ON" AND BUILD_DEBIAN_PKGING_FLAG STREQUAL "ON")
+    if(COMGR_BUILD_SHARED_LIBS)
+        set( OVERRIDE_FILE "${CMAKE_BINARY_DIR}/DEBIAN/${DEB_OVERRIDES_INSTALL_FILENM}" )
+	set( OVERRIDE_TEMP_INSTALL_LOC "/_CPack_Packages/Linux/DEB/${CORE_TARGET}-${CPACK_PACKAGE_VERSION}-Linux/${COMP_TYPE}" )
+    else
+        set( OVERRIDE_FILE "${CMAKE_BINARY_DIR}/DEBIAN/${DEB_OVERRIDES_INSTALL_FILENM}-static-dev" )
+	set( OVERRIDE_TEMP_INSTALL_LOC "/_CPack_Packages/Linux/DEB/${CORE_TARGET}-${CPACK_PACKAGE_VERSION}-Linux/${STATIC_COMP_TYPE}" )
+    endif()
+    set(CPACK_INSTALL_COMMANDS
+	  "${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}${OVERRIDE_TEMP_INSTALL_LOC}${DEB_OVERRIDES_INSTALL_PATH}"
+	  "${CMAKE_COMMAND} -E copy ${OVERRIDE_FILE} ${CMAKE_BINARY_DIR}${OVERRIDE_TEMP_INSTALL_LOC}${DEB_OVERRIDES_INSTALL_PATH}"
+	  )
+  endif()
   include(CPack)
 endif()
