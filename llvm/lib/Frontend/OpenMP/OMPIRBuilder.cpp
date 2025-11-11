@@ -538,13 +538,7 @@ void OpenMPIRBuilder::getKernelArgsVector(TargetKernelArgs &KernelArgs,
   auto Int32Ty = Type::getInt32Ty(Builder.getContext());
   constexpr size_t MaxDim = 3;
   Value *ZeroArray = Constant::getNullValue(ArrayType::get(Int32Ty, MaxDim));
-
-  Value *HasNoWaitFlag = Builder.getInt64(KernelArgs.HasNoWait);
-
-  Value *DynCGroupMemFallbackFlag =
-      Builder.getInt64(static_cast<uint64_t>(KernelArgs.DynCGroupMemFallback));
-  DynCGroupMemFallbackFlag = Builder.CreateShl(DynCGroupMemFallbackFlag, 2);
-  Value *Flags = Builder.CreateOr(HasNoWaitFlag, DynCGroupMemFallbackFlag);
+  Value *Flags = Builder.getInt64(KernelArgs.HasNoWait);
 
   assert(!KernelArgs.NumTeams.empty() && !KernelArgs.NumThreads.empty());
 
@@ -573,7 +567,7 @@ void OpenMPIRBuilder::getKernelArgsVector(TargetKernelArgs &KernelArgs,
                 Flags,
                 NumTeams3D,
                 NumThreads3D,
-                KernelArgs.DynCGroupMem};
+                KernelArgs.DynCGGroupMem};
 }
 
 void OpenMPIRBuilder::addAttributes(omp::RuntimeFunction FnID, Function &Fn) {
@@ -8337,8 +8331,7 @@ static void emitTargetCall(
     OpenMPIRBuilder::GenMapInfoCallbackTy GenMapInfoCB,
     OpenMPIRBuilder::CustomMapperCallbackTy CustomMapperCB,
     const SmallVector<llvm::OpenMPIRBuilder::DependData> &Dependencies,
-    bool HasNoWait, Value *DynCGroupMem,
-    OMPDynGroupprivateFallbackType DynCGroupMemFallback) {
+    bool HasNoWait) {
   // Generate a function call to the host fallback implementation of the target
   // region. This is called by the host when no offload entry was generated for
   // the target region and when the offloading call fails at runtime.
@@ -8474,13 +8467,12 @@ static void emitTargetCall(
                                                    /*isSigned=*/false)
                            : Builder.getInt64(0);
 
-    // Request zero groupprivate bytes by default.
-    if (!DynCGroupMem)
-      DynCGroupMem = Builder.getInt32(0);
+    // TODO: Use correct DynCGGroupMem
+    Value *DynCGGroupMem = Builder.getInt32(0);
 
-    KArgs = OpenMPIRBuilder::TargetKernelArgs(
-        NumTargetItems, RTArgs, TripCount, NumTeamsC, NumThreadsC, DynCGroupMem,
-        HasNoWait, DynCGroupMemFallback);
+    KArgs = OpenMPIRBuilder::TargetKernelArgs(NumTargetItems, RTArgs, TripCount,
+                                              NumTeamsC, NumThreadsC,
+                                              DynCGGroupMem, HasNoWait);
 
     // Assume no error was returned because TaskBodyCB and
     // EmitTargetCallFallbackCB don't produce any.
@@ -8529,8 +8521,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTarget(
     OpenMPIRBuilder::TargetBodyGenCallbackTy CBFunc,
     OpenMPIRBuilder::TargetGenArgAccessorsCallbackTy ArgAccessorFuncCB,
     CustomMapperCallbackTy CustomMapperCB,
-    const SmallVector<DependData> &Dependencies, bool HasNowait,
-    Value *DynCGroupMem, OMPDynGroupprivateFallbackType DynCGroupMemFallback) {
+    const SmallVector<DependData> &Dependencies, bool HasNowait) {
 
   if (!updateToLocation(Loc))
     return InsertPointTy();
@@ -8553,8 +8544,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTarget(
   if (!Config.isTargetDevice())
     emitTargetCall(*this, Builder, AllocaIP, Info, DefaultAttrs, RuntimeAttrs,
                    IfCond, OutlinedFn, OutlinedFnID, Inputs, GenMapInfoCB,
-                   CustomMapperCB, Dependencies, HasNowait, DynCGroupMem,
-                   DynCGroupMemFallback);
+                   CustomMapperCB, Dependencies, HasNowait);
   return Builder.saveIP();
 }
 
