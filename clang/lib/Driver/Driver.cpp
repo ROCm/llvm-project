@@ -60,8 +60,7 @@
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/Job.h"
-#include "clang/Driver/Options.h"
-#include "clang/Driver/OptionUtils.h"
+#include "clang/Options/Options.h"
 #include "clang/Driver/Phases.h"
 #include "clang/Driver/SanitizerArgs.h"
 #include "clang/Driver/Tool.h"
@@ -69,6 +68,7 @@
 #include "clang/Driver/ToolChain.h"
 #include "clang/Driver/Util.h"
 #include "clang/Lex/DependencyDirectivesScanner.h"
+#include "clang/Options/Options.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -113,6 +113,7 @@
 using namespace clang::driver;
 using namespace clang;
 using namespace llvm::opt;
+using namespace clang::options;
 
 template <typename F> static bool usesInput(const ArgList &Args, F &&Fn) {
   return llvm::any_of(Args, [&](Arg *A) {
@@ -1704,10 +1705,11 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   // Force -parallel-jobs=1 when verbose is set to avoid corrupted output
   if (Args.hasArg(options::OPT_v))
     setNumberOfParallelJobs(1);
+#if FIXME
   else
     setNumberOfParallelJobs(
-        getLastArgIntValue(Args, options::OPT_parallel_jobs_EQ, 1, Diags));
-
+        getLastArgIntValue(Args, clang::options::OPT_parallel_jobs_EQ, 1, Diags));
+#endif
   // Remove existing compilation database so that each job can append to it.
   if (Arg *A = Args.getLastArg(options::OPT_MJ))
     llvm::sys::fs::remove(A->getValue());
