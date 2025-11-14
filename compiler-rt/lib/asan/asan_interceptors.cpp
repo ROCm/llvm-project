@@ -959,6 +959,7 @@ INTERCEPTOR(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
 
 INTERCEPTOR(hsa_status_t, hsa_init) {
   AsanInitFromRtl();
+  ENSURE_HSA_INITED();
   return asan_hsa_init();
 }
 

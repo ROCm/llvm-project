@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 #if SANITIZER_AMDGPU
 #  include <dlfcn.h>  // For dlsym
-
 #  include "sanitizer_allocator.h"
 #  include "sanitizer_atomic.h"
 
@@ -19,21 +18,21 @@ namespace __sanitizer {
 struct HsaFunctions {
   // ---------------- Memory Functions ----------------
   hsa_status_t (*memory_pool_allocate)(hsa_amd_memory_pool_t memory_pool,
-                                       size_t size, uint32_t flags, void** ptr);
-  hsa_status_t (*memory_pool_free)(void* ptr);
-  hsa_status_t (*pointer_info)(void* ptr, hsa_amd_pointer_info_t* info,
-                               void* (*alloc)(size_t),
-                               uint32_t* num_agents_accessible,
-                               hsa_agent_t** accessible);
+                                       size_t size, uint32_t flags, void **ptr);
+  hsa_status_t (*memory_pool_free)(void *ptr);
+  hsa_status_t (*pointer_info)(void *ptr, hsa_amd_pointer_info_t *info,
+                               void *(*alloc)(size_t),
+                               uint32_t *num_agents_accessible,
+                               hsa_agent_t **accessible);
   hsa_status_t (*vmem_address_reserve_align)(void** ptr, size_t size,
                                              uint64_t address,
                                              uint64_t alignment,
                                              uint64_t flags);
-  hsa_status_t (*vmem_address_free)(void* ptr, size_t size);
+  hsa_status_t (*vmem_address_free)(void *ptr, size_t size);
 
   // ----------------Event Functions ----------------
   hsa_status_t (*register_system_event_handler)(
-      hsa_amd_system_event_callback_t callback, void* data);
+      hsa_amd_system_event_callback_t callback, void *data);
 };
 
 static HsaFunctions hsa_amd;

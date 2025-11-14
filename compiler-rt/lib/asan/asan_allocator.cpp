@@ -1400,41 +1400,36 @@ DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_attach,
 DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_detach, void *mapped_ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_reserve_align, void** ptr,
              size_t size, uint64_t address, uint64_t alignment, uint64_t flags)
-<<<<<<< HEAD
 DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size)
 DECLARE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
              hsa_amd_pointer_info_t* info, void* (*alloc)(size_t),
              uint32_t* num_agents_accessible, hsa_agent_t** accessible)
-||||||| parent of f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
-DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size);
-=======
-DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size);
 DECLARE_REAL(hsa_status_t, hsa_amd_register_system_event_handler,
              hsa_amd_system_event_callback_t, void*)
->>>>>>> f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
 
 namespace __asan {
 // Always align to page boundary to match current ROCr behavior
 static const size_t kPageSize_ = 4096;
 
 hsa_status_t asan_hsa_amd_memory_pool_allocate(
-    hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void** ptr,
-    BufferedStackTrace* stack) {
+  hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void **ptr,
+  BufferedStackTrace *stack) {
   AmdgpuAllocationInfo aa_info;
   aa_info.alloc_func =
-      reinterpret_cast<void*>(asan_hsa_amd_memory_pool_allocate);
+    reinterpret_cast<void *>(asan_hsa_amd_memory_pool_allocate);
   aa_info.memory_pool = memory_pool;
   aa_info.size = size;
   aa_info.flags = flags;
   aa_info.ptr = nullptr;
-  SetErrnoOnNull(*ptr = instance.Allocate(size, kPageSize_, stack, FROM_MALLOC,
-                                          false, &aa_info));
+  SetErrnoOnNull(*ptr = instance.Allocate(size, kPageSize_, stack,
+                                          FROM_MALLOC, false, &aa_info));
   return aa_info.status;
 }
 
-hsa_status_t asan_hsa_amd_memory_pool_free(void* ptr,
-                                           BufferedStackTrace* stack) {
-  void* p = get_allocator().GetBlockBegin(ptr);
+hsa_status_t asan_hsa_amd_memory_pool_free(
+  void *ptr,
+  BufferedStackTrace *stack) {
+  void *p = get_allocator().GetBlockBegin(ptr);
   if (p) {
     instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC);
     return HSA_STATUS_SUCCESS;
@@ -1442,12 +1437,11 @@ hsa_status_t asan_hsa_amd_memory_pool_free(void* ptr,
   return REAL(hsa_amd_memory_pool_free)(ptr);
 }
 
-hsa_status_t asan_hsa_amd_agents_allow_access(uint32_t num_agents,
-                                              const hsa_agent_t* agents,
-                                              const uint32_t* flags,
-                                              const void* ptr,
-                                              BufferedStackTrace* stack) {
-  void* p = get_allocator().GetBlockBegin(ptr);
+hsa_status_t asan_hsa_amd_agents_allow_access(
+  uint32_t num_agents, const hsa_agent_t *agents, const uint32_t *flags,
+  const void *ptr,
+  BufferedStackTrace *stack) {
+  void *p = get_allocator().GetBlockBegin(ptr);
   return REAL(hsa_amd_agents_allow_access)(num_agents, agents, flags,
                                            p ? p : ptr);
 }
@@ -1457,12 +1451,13 @@ hsa_status_t asan_hsa_amd_agents_allow_access(uint32_t num_agents,
 // is always one kPageSize_
 // IPC calls use static_assert to make sure kMetadataSize = 0
 //
-#  if SANITIZER_CAN_USE_ALLOCATOR64
+#if SANITIZER_CAN_USE_ALLOCATOR64
 static struct AP64<LocalAddressSpaceView> AP_;
-#  else
+#else
 static struct AP32<LocalAddressSpaceView> AP_;
-#  endif
+#endif
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
                                             hsa_amd_ipc_memory_t* handle) {
@@ -1481,10 +1476,20 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void *ptr, size_t len,
 hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
                                             hsa_amd_ipc_memory_t* handle) {
   void* ptr_;
+||||||| parent of b03bb8d0297e (Fix clang-format noise.)
+hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
+                                            hsa_amd_ipc_memory_t* handle) {
+  void* ptr_;
+=======
+hsa_status_t asan_hsa_amd_ipc_memory_create(void *ptr, size_t len,
+  hsa_amd_ipc_memory_t * handle) {
+  void *ptr_;
+>>>>>>> b03bb8d0297e (Fix clang-format noise.)
   size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr);
   if (len_) {
 >>>>>>> f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
     static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+<<<<<<< HEAD
 <<<<<<< HEAD
     uptr p = reinterpret_cast<uptr>(ptr);
     uptr p_ = reinterpret_cast<uptr>(ptr_);
@@ -1499,6 +1504,11 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
     len_ = len;
 =======
     ptr_ = reinterpret_cast<void*>(reinterpret_cast<uptr>(ptr) - kPageSize_);
+||||||| parent of b03bb8d0297e (Fix clang-format noise.)
+    ptr_ = reinterpret_cast<void*>(reinterpret_cast<uptr>(ptr) - kPageSize_);
+=======
+    ptr_ = reinterpret_cast<void *>(reinterpret_cast<uptr>(ptr) - kPageSize_);
+>>>>>>> b03bb8d0297e (Fix clang-format noise.)
   } else {
     ptr_ = ptr;
     len_ = len;
@@ -1507,25 +1517,24 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
   return REAL(hsa_amd_ipc_memory_create)(ptr, len, handle);
 }
 
-hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t* handle,
-                                            size_t len, uint32_t num_agents,
-                                            const hsa_agent_t* mapping_agents,
-                                            void** mapped_ptr) {
+hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t *handle,
+  size_t len, uint32_t num_agents, const hsa_agent_t *mapping_agents,
+  void **mapped_ptr) {
   static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
   size_t len_ = len + kPageSize_;
   hsa_status_t status = REAL(hsa_amd_ipc_memory_attach)(
-      handle, len_, num_agents, mapping_agents, mapped_ptr);
+    handle, len_, num_agents, mapping_agents, mapped_ptr);
   if (status == HSA_STATUS_SUCCESS && mapped_ptr) {
-    *mapped_ptr = reinterpret_cast<void*>(reinterpret_cast<uptr>(*mapped_ptr) +
-                                          kPageSize_);
+    *mapped_ptr = reinterpret_cast<void *>(reinterpret_cast<uptr>(*mapped_ptr) +
+                                           kPageSize_);
   }
   return status;
 }
 
-hsa_status_t asan_hsa_amd_ipc_memory_detach(void* mapped_ptr) {
+hsa_status_t asan_hsa_amd_ipc_memory_detach(void *mapped_ptr) {
   static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
-  void* mapped_ptr_ =
-      reinterpret_cast<void*>(reinterpret_cast<uptr>(mapped_ptr) - kPageSize_);
+  void *mapped_ptr_ =
+      reinterpret_cast<void *>(reinterpret_cast<uptr>(mapped_ptr) - kPageSize_);
   return REAL(hsa_amd_ipc_memory_detach)(mapped_ptr_);
 }
 
