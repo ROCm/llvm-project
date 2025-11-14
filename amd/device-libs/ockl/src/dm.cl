@@ -578,10 +578,29 @@ obtain_new_slab(__global heap_t *hp)
     ulong se = hp->initial_slabs_end;
     if (is < se) {
         is = AFA(&hp->initial_slabs, 1UL << 21, memory_order_relaxed);
-        if (is < se)
+        if (is < se) {
+            // Verify 2MB alignment for pre-allocated slabs
+            // This is critical because __ockl_dm_dealloc relies on address masking
+            // to find the slab base address: addr & ~0x1fffffUL
+            if ((is & 0x1fffffUL) != 0) {
+                // Fatal error: pre-allocated slab not 2MB aligned
+                // This will cause memory corruption in dealloc
+                return 0;
+            }
             return is;
+        }
     }
     ulong ret = __ockl_devmem_request(0, 1UL << 21);
+    
+    // Verify 2MB alignment for dynamically allocated slabs
+    // The hostcall implementation must guarantee this alignment
+    if (ret && (ret & 0x1fffffUL) != 0) {
+        // Fatal error: dynamically allocated slab not 2MB aligned
+        // Release the misaligned memory and return failure
+        __ockl_devmem_request(ret, 0);
+        return 0;
+    }
+    
     return ret;
 }
 
