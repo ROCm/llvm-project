@@ -1554,18 +1554,21 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
                                        uint32_t* num_agents_accessible,
                                        hsa_agent_t** accessible) {
   void* ptr_ = get_allocator().GetBlockBegin(ptr);
-  AsanChunk* m = instance.GetAsanChunkByAddr(reinterpret_cast<uptr>(ptr_));
-  hsa_status_t status;
-  if (ptr_ && m)
+  AsanChunk* m = ptr_
+                     ? instance.GetAsanChunkByAddr(reinterpret_cast<uptr>(ptr_))
+                     : nullptr;
+  hsa_status_t status = HSA_STATUS_ERROR_NOT_INITIALIZED;
+  if (ptr_ && m) {
     status = REAL(hsa_amd_pointer_info)(ptr, info, alloc, num_agents_accessible,
                                         accessible);
-  if (status == HSA_STATUS_SUCCESS && info && ptr_ && m) {
-    static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
-    info->agentBaseAddress = reinterpret_cast<void*>(
-        reinterpret_cast<uptr>(info->agentBaseAddress) + kPageSize_);
-    info->hostBaseAddress = reinterpret_cast<void*>(
-        reinterpret_cast<uptr>(info->hostBaseAddress) + kPageSize_);
-    info->sizeInBytes = m->UsedSize();
+    if (status == HSA_STATUS_SUCCESS && info) {
+      static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+      info->agentBaseAddress = reinterpret_cast<void*>(
+          reinterpret_cast<uptr>(info->agentBaseAddress) + kPageSize_);
+      info->hostBaseAddress = reinterpret_cast<void*>(
+          reinterpret_cast<uptr>(info->hostBaseAddress) + kPageSize_);
+      info->sizeInBytes = m->UsedSize();
+    }
   }
   return status;
 }
