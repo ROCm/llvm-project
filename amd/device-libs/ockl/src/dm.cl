@@ -947,9 +947,24 @@ __ockl_dm_init_v1(ulong hp, ulong sp, uint hb, uint nis)
 
     if (lid == 0) {
         __global heap_t *thp = (__global heap_t *)hp;
-        AS(&thp->initial_slabs, sp, memory_order_relaxed);
-        thp->initial_slabs_end = sp + ((ulong)nis << 21);
-        thp->initial_slabs_start = sp;
+        
+        // CRITICAL: Verify that initial_slabs pointer is 2MB aligned
+        // The deallocation code assumes all slabs are 2MB aligned and uses
+        // address masking (addr & ~0x1fffffUL) to find slab metadata.
+        // Misaligned slabs will cause memory corruption and crashes.
+        if ((sp & 0x1fffffUL) != 0) {
+            // Fatal error: initial slabs base address not 2MB aligned
+            // Set initial_slabs to end to prevent use of misaligned slabs
+            // This forces allocation to fall back to devmem_request which
+            // should provide properly aligned memory
+            AS(&thp->initial_slabs, sp + ((ulong)nis << 21), memory_order_relaxed);
+            thp->initial_slabs_end = sp + ((ulong)nis << 21);
+            thp->initial_slabs_start = sp + ((ulong)nis << 21);
+        } else {
+            AS(&thp->initial_slabs, sp, memory_order_relaxed);
+            thp->initial_slabs_end = sp + ((ulong)nis << 21);
+            thp->initial_slabs_start = sp;
+        }
     }
 }
 
