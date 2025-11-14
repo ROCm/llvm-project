@@ -18792,11 +18792,8 @@ SITargetLowering::getRegClassFor(MVT VT, bool isDivergent) const {
                                  : &AMDGPU::SReg_32RegClass;
   if (!TRI->isSGPRClass(RC) && !isDivergent)
     return TRI->getEquivalentSGPRClass(RC);
-  if (TRI->isSGPRClass(RC) && isDivergent) {
-    if (Subtarget->hasGFX90AInsts())
-      return TRI->getEquivalentAVClass(RC);
+  if (TRI->isSGPRClass(RC) && isDivergent)
     return TRI->getEquivalentVGPRClass(RC);
-  }
 
   return RC;
 }
