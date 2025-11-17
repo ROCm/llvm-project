@@ -135,6 +135,9 @@ public:
   /// the assignment and updates VirtRegMap accordingly.
   void unassign(const LiveInterval &VirtReg);
 
+  /// Remove any assignments for \p VirtReg.
+  void purge(const LiveInterval &VirtReg);
+
   /// Returns true if the given \p PhysReg has any live intervals assigned.
   bool isPhysRegUsed(MCRegister PhysReg) const;
 

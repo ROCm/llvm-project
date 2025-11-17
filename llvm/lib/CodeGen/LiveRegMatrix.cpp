@@ -142,6 +142,20 @@ void LiveRegMatrix::unassign(const LiveInterval &VirtReg) {
   LLVM_DEBUG(dbgs() << '\n');
 }
 
+void LiveRegMatrix::purge(const LiveInterval &VirtReg) {
+  VRM->clearVirt(VirtReg.reg());
+
+  for (unsigned i = 0; i < Matrix.size(); ++i) {
+    LiveIntervalUnion &LIU = Matrix[static_cast<MCRegUnit>(i)];
+    for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid();) {
+      if (SI.value() == &VirtReg) {
+        SI.erase();
+      } else
+        ++SI;
+    }
+  }
+}
+
 bool LiveRegMatrix::isPhysRegUsed(MCRegister PhysReg) const {
   for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
     if (!Matrix[Unit].empty())
