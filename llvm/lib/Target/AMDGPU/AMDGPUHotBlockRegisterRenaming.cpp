@@ -256,7 +256,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::processBasicBlock(
   const TargetRegisterClass *VGPR_32_RC =
       TRI->getRegClass(AMDGPU::VGPR_32RegClassID);
   DenseMap<MCRegister, SmallVector<SlotIndex, 4>> PhysRegDefs;
-  
+
   for (MachineInstr &MI : *MBB) {
     SlotIndex Idx = LIS->getInstructionIndex(MI);
     for (const MachineOperand &MO : MI.operands()) {
@@ -274,7 +274,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::processBasicBlock(
   }
 
   LLVM_DEBUG({
-    dbgs() << "    Built PhysRegDefs cache: " << PhysRegDefs.size() 
+    dbgs() << "    Built PhysRegDefs cache: " << PhysRegDefs.size()
            << " registers have definitions in this BB\n";
   });
 
@@ -348,7 +348,8 @@ void AMDGPUHotBlockRegisterRenamingImpl::calculateValueDensity(
 
     // Access LiveIntervalUnion for this PhysReg
     for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
-      LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+      LiveIntervalUnion &LIU =
+          LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
       for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid(); ++SI) {
         SlotIndex SegStart = SI.start();
@@ -389,7 +390,8 @@ void AMDGPUHotBlockRegisterRenamingImpl::findFreeRegisters(
 
     // Check all register units
     for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
-      LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+      LiveIntervalUnion &LIU =
+          LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
       // Check if anything is live in this BB
       LiveIntervalUnion::SegmentIter SI = LIU.find(BBStart);
@@ -419,18 +421,18 @@ bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
     if (S.start >= BBStart && S.end <= BBEnd)
       SegmentCount++;
   }
-  
+
   // Cannot move registers with multiple segments in BB (e.g., PHI nodes)
   if (SegmentCount != 1) {
     LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
                       << ": has " << SegmentCount << " segments in BB\n");
     return false;
   }
-  
+
   // Cannot move registers with multiple definitions (e.g., from PHI merge)
   if (VirtRegLI.getNumValNums() != 1) {
     LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
-                      << ": has " << VirtRegLI.getNumValNums() 
+                      << ": has " << VirtRegLI.getNumValNums()
                       << " value definitions\n");
     return false;
   }
@@ -457,7 +459,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
         // Found a tied def - need to check the source operand it's tied to
         unsigned TiedIdx = DefMI->findTiedOperandIdx(OpIdx);
         const MachineOperand &TiedMO = DefMI->getOperand(TiedIdx);
-        
+
         // If the tied source is a register, verify it won't conflict
         if (TiedMO.isReg()) {
           Register TiedReg = TiedMO.getReg();
@@ -475,7 +477,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::isVirtRegMovable(Register VirtReg,
             }
           }
         }
-        
+
         LLVM_DEBUG(dbgs() << "        Cannot move " << printReg(VirtReg, TRI)
                           << ": has tied def at " << S.start << " in "
                           << *DefMI);
@@ -498,7 +500,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(
     const DenseMap<MCRegister, SmallVector<SlotIndex, 4>> &PhysRegDefs) {
   // Find a movable local value in DenseReg
   for (MCRegUnit Unit : TRI->regunits(DenseReg)) {
-    LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+    LiveIntervalUnion &LIU = LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
     for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid(); ++SI) {
       Register VirtReg = SI.value()->reg();
