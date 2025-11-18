@@ -35,6 +35,7 @@
 #include "llvm/IR/MatrixBuilder.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
+#include <llvm-14/llvm/IR/Intrinsics.h>
 #include <optional>
 #include <utility>
 
@@ -590,6 +591,7 @@ static bool isUnsafeToContract(unsigned IntrinsicID, CodeGenFunction &CGF) {
     // would allow FMA formation that recomputes products, breaking the
     // refinement algorithm.
   case Intrinsic::log:
+  case Intrinsic::log10:
     if ((CGF.getTarget().getTriple().isAMDGCN() ||
          CGF.getTarget().getTriple().isSPIRV()) &&
          CGF.getLangOpts().HIP)
