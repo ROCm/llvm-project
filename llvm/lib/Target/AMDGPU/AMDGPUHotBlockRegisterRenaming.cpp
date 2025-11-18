@@ -348,7 +348,8 @@ void AMDGPUHotBlockRegisterRenamingImpl::calculateValueDensity(
 
     // Access LiveIntervalUnion for this PhysReg
     for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
-      LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+      LiveIntervalUnion &LIU =
+          LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
       for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid(); ++SI) {
         SlotIndex SegStart = SI.start();
@@ -389,7 +390,8 @@ void AMDGPUHotBlockRegisterRenamingImpl::findFreeRegisters(
 
     // Check all register units
     for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
-      LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+      LiveIntervalUnion &LIU =
+          LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
       // Check if anything is live in this BB
       LiveIntervalUnion::SegmentIter SI = LIU.find(BBStart);
@@ -498,7 +500,7 @@ bool AMDGPUHotBlockRegisterRenamingImpl::tryMoveValue(
     const DenseMap<MCRegister, SmallVector<SlotIndex, 4>> &PhysRegDefs) {
   // Find a movable local value in DenseReg
   for (MCRegUnit Unit : TRI->regunits(DenseReg)) {
-    LiveIntervalUnion &LIU = LRM->getLiveUnions()[Unit];
+    LiveIntervalUnion &LIU = LRM->getLiveUnions()[static_cast<unsigned>(Unit)];
 
     for (LiveIntervalUnion::SegmentIter SI = LIU.begin(); SI.valid(); ++SI) {
       Register VirtReg = SI.value()->reg();

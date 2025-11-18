@@ -321,11 +321,12 @@ bool LiveRegMatrix::isValid() const {
   // Now scan all LiveIntervalUnions in the matrix and verify each pointer
   unsigned NumDanglingPointers = 0;
   for (unsigned Unit = 0, NumUnits = Matrix.size(); Unit != NumUnits; ++Unit) {
-    for (const LiveInterval *LI : Matrix[Unit]) {
+    MCRegUnit RegUnit = static_cast<MCRegUnit>(Unit);
+    for (const LiveInterval *LI : Matrix[RegUnit]) {
       if (!ValidIntervals.contains(LI)) {
         ++NumDanglingPointers;
         dbgs() << "ERROR: LiveInterval pointer is not found in LiveIntervals:\n"
-               << "  Register Unit: " << printRegUnit(Unit, TRI) << "\n"
+               << "  Register Unit: " << printRegUnit(RegUnit, TRI) << "\n"
                << "  LiveInterval pointer: " << LI << "\n";
       }
     }
