@@ -45,7 +45,7 @@
 // RUN:   -D__HIPCC_RTC__ | FileCheck -check-prefixes=AMDGCNSPIRV %s
 
 #define BOOL_TYPE int
-// typedef unsigned long long uint64_t;
+typedef unsigned long long uint64_t;
 
 // CHECK-LABEL: define dso_local i64 @test___make_mantissa_base8(
 // CHECK-SAME: ptr noundef readonly captures(none) [[P:%.*]]) local_unnamed_addr #[[ATTR2:[0-9]+]] {
