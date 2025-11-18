@@ -582,24 +582,18 @@ static Value *EmitISOVolatileStore(CodeGenFunction &CGF, const CallExpr *E) {
   return Store;
 }
 
-// Check if an intrinsic is a transcendental function that uses polynomial
-// refinement and should not have the contract flag (which would allow
-// incorrect FMA contraction of error compensation terms).
-static bool isTranscendentalIntrinsic(unsigned IntrinsicID) {
+// Check if an intrinsic is a transcendental function that is unsafe to contract.
+static bool isUnsafeToContract(unsigned IntrinsicID, CodeGenFunction &CGF) {
   switch (IntrinsicID) {
+    // The implementation for log in the AMDGCN backend uses a refinement algorithm
+    // that requires intermediate rounding. The contract flag
+    // would allow FMA formation that recomputes products, breaking the
+    // refinement algorithm.
   case Intrinsic::log:
-  case Intrinsic::log2:
-  case Intrinsic::log10:
-  case Intrinsic::exp:
-  case Intrinsic::exp2:
-  case Intrinsic::sin:
-  case Intrinsic::cos:
-  case Intrinsic::sinh:
-  case Intrinsic::cosh:
-  case Intrinsic::tan:
-  case Intrinsic::tanh:
-  case Intrinsic::pow:
-    return true;
+    if ((CGF.getTarget().getTriple().isAMDGCN() ||
+         CGF.getTarget().getTriple().isSPIRV()) &&
+         CGF.getLangOpts().HIP)
+      return true;
   default:
     return false;
   }
@@ -620,12 +614,8 @@ Value *emitUnaryMaybeConstrainedFPBuiltin(CodeGenFunction &CGF,
     Function *F = CGF.CGM.getIntrinsic(IntrinsicID, Src0->getType());
     CallInst *Call = CGF.Builder.CreateCall(F, Src0);
     
-    llvm::errs() << "Contract: " << Call->hasAllowContract() << "\n";
-    // Transcendental intrinsics often expand to polynomial approximations with
-    // error compensation that require intermediate rounding. The contract flag
-    // would allow FMA formation that recomputes products, breaking the
-    // refinement algorithm. See SWDEV-561934 for details.
-    if (isTranscendentalIntrinsic(IntrinsicID)) {
+    // Check if the intrinsic is unsafe to contract
+    if (isUnsafeToContract(IntrinsicID, CGF)) {
       Call->setHasAllowContract(false);
     }
     
@@ -648,12 +638,6 @@ static Value *emitBinaryMaybeConstrainedFPBuiltin(CodeGenFunction &CGF,
   } else {
     Function *F = CGF.CGM.getIntrinsic(IntrinsicID, Src0->getType());
     CallInst *Call = CGF.Builder.CreateCall(F, { Src0, Src1 });
-    
-    // Transcendental intrinsics should not have contract flag
-    if (isTranscendentalIntrinsic(IntrinsicID)) {
-      Call->setHasAllowContract(false);
-    }
-    
     return Call;  
   }
 }
@@ -676,12 +660,6 @@ emitBinaryExpMaybeConstrainedFPBuiltin(CodeGenFunction &CGF, const CallExpr *E,
   Function *F =
       CGF.CGM.getIntrinsic(IntrinsicID, {Src0->getType(), Src1->getType()});
   CallInst *Call = CGF.Builder.CreateCall(F, {Src0, Src1});
-  
-  // Transcendental intrinsics should not have contract flag
-  if (isTranscendentalIntrinsic(IntrinsicID)) {
-    Call->setHasAllowContract(false);
-  }
-  
   return Call;
 }
 
