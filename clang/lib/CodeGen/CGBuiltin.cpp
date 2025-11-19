@@ -35,7 +35,6 @@
 #include "llvm/IR/MatrixBuilder.h"
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/ScopedPrinter.h"
-#include <llvm-14/llvm/IR/Intrinsics.h>
 #include <optional>
 #include <utility>
 
@@ -639,8 +638,7 @@ static Value *emitBinaryMaybeConstrainedFPBuiltin(CodeGenFunction &CGF,
     return CGF.Builder.CreateConstrainedFPCall(F, { Src0, Src1 });
   } else {
     Function *F = CGF.CGM.getIntrinsic(IntrinsicID, Src0->getType());
-    CallInst *Call = CGF.Builder.CreateCall(F, { Src0, Src1 });
-    return Call;  
+    return CGF.Builder.CreateCall(F, { Src0, Src1 });
   }
 }
 
@@ -661,8 +659,7 @@ emitBinaryExpMaybeConstrainedFPBuiltin(CodeGenFunction &CGF, const CallExpr *E,
 
   Function *F =
       CGF.CGM.getIntrinsic(IntrinsicID, {Src0->getType(), Src1->getType()});
-  CallInst *Call = CGF.Builder.CreateCall(F, {Src0, Src1});
-  return Call;
+  return CGF.Builder.CreateCall(F, {Src0, Src1});
 }
 
 // Emit an intrinsic that has 3 operands of the same type as its result.
