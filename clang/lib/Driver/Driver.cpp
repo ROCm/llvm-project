@@ -5340,9 +5340,7 @@ Action *Driver::ConstructPhaseAction(
     // assembling and linking. With -save-temps, these steps must be explicitly
     // disabled, as done here. We also force skipping these steps regardless of
     // -save-temps to avoid relying on optimizations (unless -S is set).
-    bool IsBinarySPIRVOutput =
-        UseSPIRVBackendForHipDeviceOnlyNoRDC && !Args.hasArg(options::OPT_S);
-    if (IsBinarySPIRVOutput) {
+    if (UseSPIRVBackendForHipDeviceOnlyNoRDC && !Args.hasArg(options::OPT_S)) {
       // The current HIP bundling expects the type to be types::TY_Image
       return C.MakeAction<BackendJobAction>(Input, types::TY_Image);
     }
