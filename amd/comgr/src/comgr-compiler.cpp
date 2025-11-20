@@ -1448,10 +1448,10 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
   auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
-    llvm::SmallVector<OffloadFile> Files;
+    llvm::SmallVector<llvm::Object::OffloadFile> Files;
 
     llvm::MemoryBufferRef dataBufferRef(Input->Data, "package_data");
-    llvm::object::extractOffloadBinaries(dataBufferRef, &Files);
+    llvm::object::extractOffloadFiles(dataBufferRef, &Files);
 
     // Generate random name if none provided
     if (!strcmp(Input->Name, "")) {
@@ -1482,8 +1482,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     SmallVector<std::string> OutputFileNames;
     SmallVector<std::string> TargetNames;
-    for (const OffloadFile &File : Files) {
-      const OffloadBinary &Binary = File.getBinary();
+    for (const llvm::object::OffloadFile &File : Files) {
+      const llvm::object::OffloadBinary &Binary = File.getBinary();
       StringRef Triple = Binary->getTriple();
 
       const char *FileExtension;
@@ -1527,7 +1527,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     UnpackageCommand Unpackage(Files, OutputFileNames, TargetNames);
     if (Cache) {
-      if (auto Status = Cache->execute(Unbundle, LogS)) {
+      if (auto Status = Cache->execute(Unpackage, LogS)) {
         return Status;
       }
     } else {
