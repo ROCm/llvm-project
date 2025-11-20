@@ -1428,7 +1428,17 @@ def no_gpu_bundle_output : Flag<["--"], "no-gpu-bundle-output">,
 def fhip_emit_relocatable : Flag<["-"], "fhip-emit-relocatable">,
   HelpText<"Compile HIP source to relocatable">;
 def fno_hip_emit_relocatable : Flag<["-"], "fno-hip-emit-relocatable">,
-  HelpText<"Do not override toolchain to compile HIP source to relocatable">;
+HelpText<"Do not override toolchain to compile HIP source to relocatable">;
+def use_spirv_backend
+: Flag<["-"], "use-spirv-backend">,
+Group<hip_Group>,
+Flags<[HelpHidden]>,
+HelpText<"Use the SPIRV backend for compilation ">;
+def no_use_spirv_backend
+: Flag<["-"], "no-use-spirv-backend">,
+Group<hip_Group>,
+Flags<[HelpHidden]>,
+HelpText<"Do not use the SPIRV backend for compilation ">;
 }
 
 // Clang specific/exclusive options for OpenACC.
