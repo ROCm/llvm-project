@@ -1342,8 +1342,6 @@ struct AAAMDGPUMinAGPRAlloc
         // external function that requires AGPRs, but ignore that.
         unsigned NumRegs = inlineAsmGetNumRequiredAGPRs(IA, CB);
         Maximum.takeAssumedMaximum(NumRegs);
-        dbgs() << "NumRegs = " << NumRegs << "\n";
-        dbgs() << *IA << "\n";
         return true;
       }
       switch (CB.getIntrinsicID()) {
