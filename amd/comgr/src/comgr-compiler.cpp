@@ -1451,7 +1451,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     llvm::SmallVector<llvm::Object::OffloadFile> Files;
 
     llvm::MemoryBufferRef dataBufferRef(Input->Data, "package_data");
-    llvm::object::extractOffloadFiles(dataBufferRef, &Files);
+    llvm::object::extractOffloadBinaries(dataBufferRef, &Files);
 
     // Generate random name if none provided
     if (!strcmp(Input->Name, "")) {
@@ -1484,26 +1484,26 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     SmallVector<std::string> TargetNames;
     for (const llvm::object::OffloadFile &File : Files) {
       const llvm::object::OffloadBinary &Binary = File.getBinary();
-      StringRef Triple = Binary->getTriple();
+      StringRef Triple = Binary.getTriple();
 
       const char *FileExtension;
-      switch (Binary->getImageKind()) {
-      case IMG_Object:
+      switch (Binary.getImageKind()) {
+      case llvm::object::IMG_Object:
         FileExtension = "o";
         break;
-      case IMG_Bitcode:
+      case llvm::object::IMG_Bitcode:
         FileExtension = "bc";
         break;
-      case IMG_Cubin:
+      case llvm::object::IMG_Cubin:
         FileExtension = "cubin";
         break;
-      case IMG_Fatbinary:
+      case llvm::object::IMG_Fatbinary:
         FileExtension = "fatbin";
         break;
-      case IMG_PTX:
+      case llvm::object::IMG_PTX:
         FileExtension = "ptx";
         break;
-      case IMG_SPIRV:
+      case llvm::object::IMG_SPIRV:
         FileExtension = "spv";
         break;
       default:
