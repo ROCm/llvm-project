@@ -3,10 +3,13 @@ function( configure_pkg PACKAGE_NAME_T COMPONENT_NAME_T PACKAGE_VERSION_T MAINTA
     # Check If Debian Platform
     find_file (DEBIAN debian_version debconf.conf PATHS /etc)
     if(DEBIAN)
+      set( BUILD_ENABLE_LINTIAN_OVERRIDES ON CACHE BOOL "Enable/Disable Lintian Overrides" FORCE )
       set( BUILD_DEBIAN_PKGING_FLAG ON CACHE BOOL "Internal Status Flag to indicate Debian Packaging Build" FORCE )
       set_debian_pkg_cmake_flags( ${PACKAGE_NAME_T} ${PACKAGE_VERSION_T}
                                   ${MAINTAINER_NM_T} ${MAINTAINER_EMAIL_T} )
 
+      # Create debian directory in build tree
+      file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/DEBIAN")
       # Configure the copyright file
       configure_file(
         "${CMAKE_SOURCE_DIR}/DEBIAN/copyright.in"
@@ -26,26 +29,11 @@ function( configure_pkg PACKAGE_NAME_T COMPONENT_NAME_T PACKAGE_VERSION_T MAINTA
         @ONLY
       )
 
-      if( BUILD_ENABLE_LINTIAN_OVERRIDES )
-          if(ENABLE_ASAN_PACKAGING)
-	    string( FIND ${DEB_OVERRIDES_INSTALL_FILENM} "asan" OUT_VAR2)
-	    if(OUT_VAR2 EQUAL -1)
-	      set( DEB_OVERRIDES_INSTALL_FILENM "${DEB_OVERRIDES_INSTALL_FILENM}-asan" )
-	    endif()
-          endif()
-	set( DEB_OVERRIDES_INSTALL_FILENM
-		"${DEB_OVERRIDES_INSTALL_FILENM}" CACHE STRING "Debian Package Lintian Override File Name" FORCE)
-        # Configure the changelog file
-        configure_file(
-          "${CMAKE_SOURCE_DIR}/DEBIAN/overrides.in"
-          "${CMAKE_BINARY_DIR}/DEBIAN/${DEB_OVERRIDES_INSTALL_FILENM}"
-	   FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-          @ONLY
-        )
-      endif()
-
       # Install Change Log
       find_program ( DEB_GZIP_EXEC gzip )
+      if( NOT DEB_GZIP_EXEC )
+        message(FATAL_ERROR "gzip command not found: Failed to compress the changelog")
+      endif()
       if(EXISTS "${CMAKE_BINARY_DIR}/DEBIAN/changelog.Debian" )
         execute_process(
           COMMAND ${DEB_GZIP_EXEC} -f -n -9 "${CMAKE_BINARY_DIR}/DEBIAN/changelog.Debian"
@@ -62,6 +50,22 @@ function( configure_pkg PACKAGE_NAME_T COMPONENT_NAME_T PACKAGE_VERSION_T MAINTA
                   COMPONENT ${COMPONENT_NAME_T})
       endif()
 
+      if( BUILD_ENABLE_LINTIAN_OVERRIDES )
+        if(ENABLE_ASAN_PACKAGING)
+          string( FIND ${DEB_OVERRIDES_INSTALL_FILENM} "asan" OUT_VAR2)
+          if(OUT_VAR2 EQUAL -1)
+            set( DEB_OVERRIDES_INSTALL_FILENM
+                 "${DEB_OVERRIDES_INSTALL_FILENM}-asan" CACHE STRING "Debian Package Lintian Override File Name" FORCE)
+          endif()
+        endif()
+        # Configure the Lintian Overrides file
+        configure_file(
+          "${CMAKE_SOURCE_DIR}/DEBIAN/overrides.in"
+          "${CMAKE_BINARY_DIR}/DEBIAN/${DEB_OVERRIDES_INSTALL_FILENM}"
+          FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+          @ONLY
+        )
+      endif()
     endif()
 endfunction()
 
@@ -79,17 +83,21 @@ function( set_debian_pkg_cmake_flags DEB_PACKAGE_NAME_T DEB_PACKAGE_VERSION_T DE
 
     if( BUILD_ENABLE_LINTIAN_OVERRIDES )
       set( DEB_OVERRIDES_INSTALL_FILENM "${DEB_PACKAGE_NAME}" CACHE STRING "Debian Package Lintian Override File Name" )
-      set( DEB_OVERRIDES_INSTALL_PATH   "/usr/share/lintian/overrides/" CACHE STRING "Deb Pkg Lintian Override Install Loc" )
+      set( DEB_OVERRIDES_INSTALL_PATH   "/usr/share/lintian/overrides/" CACHE STRING "Deb Pkg Lintian Override Install Location" )
     endif()
 
     # Get TimeStamp
     find_program( DEB_DATE_TIMESTAMP_EXEC date )
+    if( NOT DEB_DATE_TIMESTAMP_EXEC )
+      message(FATAL_ERROR "date command not found: Failed to Configure the timestamp for Copyright/Changelog.")
+    endif()
     set ( DEB_TIMESTAMP_FORMAT_OPTION "-R" )
     execute_process (
         COMMAND ${DEB_DATE_TIMESTAMP_EXEC} ${DEB_TIMESTAMP_FORMAT_OPTION}
         OUTPUT_VARIABLE TIMESTAMP_T
+	OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    set( DEB_TIMESTAMP                "${TIMESTAMP_T}" CACHE STRING "Current Time Stamp for Copyright/Changelog" )
+    set( DEB_TIMESTAMP "${TIMESTAMP_T}" CACHE STRING "Current Time Stamp for Copyright/Changelog" )
 
     message(STATUS "DEB_PACKAGE_NAME             : ${DEB_PACKAGE_NAME}" )
     message(STATUS "DEB_PACKAGE_VERSION          : ${DEB_PACKAGE_VERSION}" )
