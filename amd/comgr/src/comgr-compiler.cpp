@@ -1457,8 +1457,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     if (!strcmp(Input->Name, "")) {
       const size_t BufSize = sizeof(char) * 30;
       char *Buf = (char *)malloc(BufSize);
-      snprintf(Buf, BufSize, "comgr-package-%d.%s", std::rand() % 10000,
-               FileExtension);
+      snprintf(Buf, BufSize, "comgr-package-%d", std::rand() % 10000);
       Input->Name = Buf;
     }
 
@@ -1482,8 +1481,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     SmallVector<std::string> OutputFileNames;
     SmallVector<std::string> TargetNames;
-    for (const llvm::object::OffloadFile &File : Files) {
-      const llvm::object::OffloadBinary &Binary = File.getBinary();
+    for (llvm::object::OffloadFile &File : Files) {
+      llvm::object::OffloadBinary &Binary = File.getBinary();
       StringRef Triple = Binary.getTriple();
 
       const char *FileExtension;
