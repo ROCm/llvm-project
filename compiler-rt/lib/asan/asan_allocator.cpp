@@ -1466,7 +1466,7 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
     uptr p = reinterpret_cast<uptr>(ptr);
     uptr p_ = reinterpret_cast<uptr>(ptr_);
     if (p == p_ + kPageSize_ && len == m->UsedSize()) {
-      size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr);
+      size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr_);
       return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
     }
   }
