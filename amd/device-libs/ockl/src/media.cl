@@ -10,7 +10,7 @@
 
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
-#define CATTR __attribute__((const))
+#define CATTR __attribute__((const, target("lerp-inst, qsad-insts, sad-insts")))
 #define AS_UCHAR4(X) __builtin_astype(X, uchar4)
 
 CATTR uint

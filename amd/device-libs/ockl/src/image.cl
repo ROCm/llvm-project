@@ -12,7 +12,7 @@
 
 #define EII() __oclc_ISA_version != 9010
 
-#define RATTR __attribute__((pure))
+#define RATTR __attribute__((pure, target("cube-insts")))
 #define ERATTR __attribute__((pure, target("extended-image-insts")))
 #define WATTR
 #define GATTR __attribute__((const))
