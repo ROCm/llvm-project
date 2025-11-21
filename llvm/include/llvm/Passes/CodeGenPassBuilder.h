@@ -683,8 +683,8 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::buildPipeline(
     if (auto Err = derived().addMachinePasses(addPass))
       return std::move(Err);
 
-    if (!Opt.DisableVerify)
-      addPass(MachineVerifierPass());
+    //if (!Opt.DisableVerify)
+      //addPass(MachineVerifierPass());
 
     if (PrintAsm)
       addPass(AsmPrinterPass(PrinterImpl));
