@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr.h"
+#include "amd_comgr.h"
 #include "comgr-compiler.h"
 #include "comgr-device-libs.h"
 #include "comgr-disassembly.h"
@@ -80,6 +81,8 @@ amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
     return Compiler.compileToBitcode();
   case AMD_COMGR_ACTION_UNBUNDLE:
     return Compiler.unbundle();
+  case AMD_COMGR_ACTION_UNPACKAGE:
+    return Compiler.unpackage();
   case AMD_COMGR_ACTION_LINK_BC_TO_BC:
     return Compiler.linkBitcodeToBitcode();
   case AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE:
@@ -197,6 +200,8 @@ StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
     return "AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC";
   case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV:
     return "AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV";
+  case AMD_COMGR_ACTION_UNPACKAGE:
+    return "AMD_COMGR_ACTION_UNPACKAGE";
   }
 
   llvm_unreachable("invalid action");
@@ -413,6 +418,16 @@ DataAction::setBundleEntryIDs(ArrayRef<const char *> EntryIDs) {
 }
 
 ArrayRef<std::string> DataAction::getBundleEntryIDs() { return BundleEntryIDs; }
+
+amd_comgr_status_t DataAction::setPackageEntryIDs(llvm::ArrayRef<const char *> EntryIDs) {
+  PackageEntryIDs.clear();
+  for (auto &ID : EntryIDs) {
+    PackageEntryIDs.push_back(ID);
+  }
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+llvm::ArrayRef<std::string> DataAction::getPackageEntryIDs() { return PackageEntryIDs; }
 
 amd_comgr_metadata_kind_t DataMeta::getMetadataKind() {
   if (DocNode.isScalar()) {
@@ -1106,6 +1121,66 @@ amd_comgr_status_t AMD_COMGR_API
 
 amd_comgr_status_t AMD_COMGR_API
     // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_get_package_entry_id_count
+    //
+    (amd_comgr_action_info_t ActionInfo, size_t *Count) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  *Count = ActionP->getPackageEntryIDs().size();
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_get_package_entry_id
+    //
+    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
+     char *PackageEntryID) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP || !Size) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  ArrayRef<std::string> ActionPackageEntryIDs = ActionP->getPackageEntryIDs();
+
+  if (Index >= ActionPackageEntryIDs.size()) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  // First return the size of the PackageEntryID
+  if (PackageEntryID == NULL)
+    *Size = ActionPackageEntryIDs[Index].size() + 1;
+
+  // Now that the calling API has had a chance to allocate memory, copy the
+  // bundle entry ID at Index to PackageEntryID
+  else
+    memcpy(PackageEntryID, ActionPackageEntryIDs[Index].c_str(), *Size);
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    amd_comgr_action_info_set_package_entry_ids
+    //
+    (amd_comgr_action_info_t ActionInfo, const char *EntryIDs[], size_t Count) {
+  DataAction *ActionP = DataAction::convert(ActionInfo);
+
+  if (!ActionP || (!EntryIDs && Count)) {
+    return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+  }
+
+  return ActionP->setPackageEntryIDs(ArrayRef<const char *>(EntryIDs, Count));
+}
+
+amd_comgr_status_t AMD_COMGR_API
+    // NOLINTNEXTLINE(readability-identifier-naming)
     amd_comgr_action_info_set_vfs
     //
     (amd_comgr_action_info_t ActionInfo, bool ShouldUseVFS) {
@@ -1295,6 +1370,7 @@ amd_comgr_status_t AMD_COMGR_API
     case AMD_COMGR_ACTION_SOURCE_TO_PREPROCESSOR:
     case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC:
     case AMD_COMGR_ACTION_UNBUNDLE:
+    case AMD_COMGR_ACTION_UNPACKAGE:
     case AMD_COMGR_ACTION_LINK_BC_TO_BC:
     case AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE:
     case AMD_COMGR_ACTION_CODEGEN_BC_TO_ASSEMBLY:

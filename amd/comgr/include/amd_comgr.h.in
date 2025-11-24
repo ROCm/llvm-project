@@ -400,9 +400,13 @@ typedef enum amd_comgr_data_kind_s {
    */
   AMD_COMGR_DATA_KIND_SPIRV = 0x15,
   /**
+   * The data is an llvm-offload-binary package.
+   */
+  AMD_COMGR_DATA_KIND_PACKAGE = 0x16,
+  /**
    * Marker for last valid data kind.
    */
-  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_SPIRV
+  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_PACKAGE
 } amd_comgr_data_kind_t;
 
 /**
@@ -1433,6 +1437,93 @@ amd_comgr_action_info_get_bundle_entry_id(
   char *bundle_entry_id) AMD_COMGR_VERSION_2_8;
 
 /**
+ * @brief Set the package entry IDs of an action info object.
+ *
+ * When an action info object is created it has no package entry IDs. Some
+ * actions require that the action info object has package entry IDs
+ * defined.
+ *
+ * @param[in] action_info A handle to the action info object to be
+ * updated.
+ *
+ * @param[in] package_entry_ids An array of strings containing one or more
+ * package entry ID strings. If NULL then the package entry ID strings are
+ * cleared. These IDs are described at
+ *
+ *
+ * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
+ * been executed successfully.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p
+ * action_info is an invalid action info object. @p contains an invalid
+ * package ID not supported by this version of the code object manager
+ * library.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
+ * Unable to update action info object as out of resources.
+ */
+amd_comgr_status_t AMD_COMGR_API
+amd_comgr_action_info_set_package_entry_ids(
+  amd_comgr_action_info_t action_info,
+  const char *package_entry_ids[],
+  size_t count) AMD_COMGR_VERSION_3_1;
+
+/**
+ * @brief Get number of package entry IDs
+ *
+ * @param[in] action_info The action info object to query.
+ *
+ * @param[out] count The number of package entry IDs availible. This value
+ * can be used as an upper bound to the Index provided to the corresponding
+ * amd_comgr_get_package_entry_id() call.
+ *
+ * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
+ * been executed successfully.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p
+ * action_info is an invalid action info object. @p size is NULL.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
+ * Unable to update the data object as out of resources.
+ */
+amd_comgr_status_t AMD_COMGR_API
+amd_comgr_action_info_get_package_entry_id_count(
+  amd_comgr_action_info_t action_info,
+  size_t *count) AMD_COMGR_VERSION_3_1;
+
+/**
+ * @brief Fetch the Nth specific package entry ID or that ID's length.
+ *
+ * @param[in] action_info The action info object to query.
+ *
+ * @param[in] index The index of the package entry ID to be returned.
+ *
+ * @param[in, out] size For out, the size of @p package_entry_id. For in,
+ * if @package_entry_id is NULL, set to the size of the Nth ID string including
+ * the terminating null character.
+ *
+ * @param[out] package_entry_id If not NULL, then the first @p size characters of
+ * the Nth bundle entry ID string are copied into @p package_entry_id. If NULL,
+ * no package entry ID is copied, and only @p size is updated (useful in order
+ * to find the size of the buffer requried to copy the package_entry_id string).
+ *
+ * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
+ * been executed successfully.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p
+ * action_info is an invalid action info object. @p size is NULL.
+ *
+ * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
+ * Unable to update the data object as out of resources.
+ */
+amd_comgr_status_t AMD_COMGR_API
+amd_comgr_action_info_get_package_entry_id(
+  amd_comgr_action_info_t action_info,
+  size_t index,
+  size_t *size,
+  char *package_entry_id) AMD_COMGR_VERSION_3_1;
+
+/**
  * @brief Set whether the specified action should use an 
  * in-memory virtual file system (VFS).
  *
@@ -1839,9 +1930,22 @@ typedef enum amd_comgr_action_kind_s {
   AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV = 0x14,
 
   /**
+   * Unpackage each source data object in @p input. For each successful
+   * unbundling, add a bc object or archive object to @p result, depending on
+   * the corresponding input.
+   *
+   * Return @p AMD_COMGR_STATUS_ERROR if any unpackaging
+   * fails.
+   *
+   * Return @p AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT
+   * if @p is not a package.
+   */
+  AMD_COMGR_ACTION_UNPACKAGE = 0x15,
+
+  /**
    * Marker for last valid action kind.
    */
-  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV
+  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_UNPACKAGE
 } amd_comgr_action_kind_t;
 
 /**

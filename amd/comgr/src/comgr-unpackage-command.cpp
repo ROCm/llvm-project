@@ -37,27 +37,31 @@ bool UnpackageCommand::canCache() const {
 Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
   for (StringRef OutputFilename : OutputFileNames) {
     SizeFieldType OutputFileSize;
-    if (CachedBuffer.size() < sizeof(OutputFileSize))
+    if (CachedBuffer.size() < sizeof(OutputFileSize)) {
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output file size");
+    }
     memcpy(&OutputFileSize, CachedBuffer.data(), sizeof(OutputFileSize));
     CachedBuffer = CachedBuffer.drop_front(sizeof(OutputFileSize));
 
-    if (CachedBuffer.size() < OutputFileSize)
+    if (CachedBuffer.size() < OutputFileSize) {
       return createStringError(std::errc::invalid_argument,
                                "Not enough bytes to read output file contents");
+    }
 
     StringRef OutputFileContents = CachedBuffer.substr(0, OutputFileSize);
     CachedBuffer = CachedBuffer.drop_front(OutputFileSize);
 
     if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
-            OutputFilename, OutputFileContents))
+            OutputFilename, OutputFileContents)) {
       return Err;
+    }
   }
 
-  if (!CachedBuffer.empty())
+  if (!CachedBuffer.empty()) {
     return createStringError(std::errc::invalid_argument,
                              "Bytes in cache entry not used for the output");
+  }
   return Error::success();
 }
 
@@ -66,8 +70,9 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
   for (StringRef OutputFilename : OutputFileNames) {
     auto MaybeOneOutput =
         CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
-    if (!MaybeOneOutput)
+    if (!MaybeOneOutput) {
       return MaybeOneOutput.takeError();
+    }
 
     const MemoryBuffer &OneOutputBuffer = **MaybeOneOutput;
     SizeFieldType OneOutputFileSize = OneOutputBuffer.getBufferSize();
@@ -87,15 +92,15 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
 
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   StringMap<StringRef> Worklist;
-  auto Output = OutputFileNames.begin();
+  const auto *Output = OutputFileNames.begin();
   for (auto &Triple : TargetNames) {
-    // TODO: check that triples are valid for a package
+    // TODO: check that triples are valid for a package?
     Worklist[Triple] = *Output;
     ++Output;
   }
 
-  for (const OffloadFile &File : Files) {
-    const OffloadBinary &Binary = File.getBinary();
+  for (const llvm::object::OffloadFile &File : Files) {
+    const llvm::object::OffloadBinary *Binary = File.getBinary();
     StringRef Triple = Binary->getTriple();
 
     // TODO: does this instead need to check that the triples are compatible?
@@ -106,9 +111,10 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
       // create an output file descriptor
       auto OutputName = Worklist[Triple];
       std::error_code EC;
-      raw_fd_ostream OutputFile((*OutputName).second, EC, sys::fs::OF_None);
-      if (EC)
+      raw_fd_ostream OutputFile(OutputName, EC, sys::fs::OF_None);
+      if (EC) {
         return AMD_COMGR_STATUS_ERROR;
+      }
 
       // write the packaged image into the output
       OutputFile << Image;
@@ -120,11 +126,13 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
     }
   }
 
-  // if not all expected files were unpackaged, throw an error
-  // TODO: should this have an option associated with it? unbundler doesn't seem
-  // to
+  // if not all expected files were unpackaged, possibly throw an error
+  // TODO: should this have an option associated with it? unbundler doesn't
   if (!Worklist.empty()) {
-    return AMD_COMGR_STATUS_ERROR;
+    // the unbundler is invoked to ignore missing bundles, so, in matching that
+    // behavior, the following error shouldn't be thrown:
+
+    // return AMD_COMGR_STATUS_ERROR;
   }
 
   return AMD_COMGR_STATUS_SUCCESS;

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-compiler.h"
+#include "amd_comgr.h"
 #include "comgr-cache.h"
 #include "comgr-clang-command.h"
 #include "comgr-device-libs.h"
@@ -1448,10 +1449,17 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
   auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
-    llvm::SmallVector<llvm::Object::OffloadFile> Files;
+    // if supplied file isn't a package, return an error
+    if (Input->DataKind != AMD_COMGR_DATA_KIND_PACKAGE) {
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    }
 
-    llvm::MemoryBufferRef dataBufferRef(Input->Data, "package_data");
-    llvm::object::extractOffloadBinaries(dataBufferRef, &Files);
+    llvm::SmallVector<llvm::object::OffloadFile> Files;
+
+    llvm::MemoryBufferRef DataBufferRef(Input->Data, "package_data");
+    if (llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
+      return AMD_COMGR_STATUS_ERROR;
+    }
 
     // Generate random name if none provided
     if (!strcmp(Input->Name, "")) {
@@ -1481,12 +1489,12 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     SmallVector<std::string> OutputFileNames;
     SmallVector<std::string> TargetNames;
-    for (llvm::object::OffloadFile &File : Files) {
-      llvm::object::OffloadBinary &Binary = File.getBinary();
-      StringRef Triple = Binary.getTriple();
+    for (const llvm::object::OffloadFile &File : Files) {
+      const llvm::object::OffloadBinary *Binary = File.getBinary();
+      StringRef Triple = Binary->getTriple();
 
       const char *FileExtension;
-      switch (Binary.getImageKind()) {
+      switch (Binary->getImageKind()) {
       case llvm::object::IMG_Object:
         FileExtension = "o";
         break;
@@ -1510,17 +1518,22 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
         break;
       }
 
-      SmallString<128> OutputFilePath = OutputDir;
-      sys::path::append(OutputFilePath,
-                        OutputPrefix + "-" + Triple + "." + FileExtension);
+      for (StringRef Entry : ActionInfo->BundleEntryIDs) {
+        // TODO: this should probably check compatability, not strict equivalence
+        if (Entry == Triple) {
+          SmallString<128> OutputFilePath = OutputDir;
+          sys::path::append(OutputFilePath,
+                            OutputPrefix + "-" + Triple + "." + FileExtension);
 
-      OutputFileNames.emplace_back(OutputFilePath);
-      TargetNames.emplace_back(Triple);
+          OutputFileNames.emplace_back(OutputFilePath);
+          TargetNames.emplace_back(Triple);
 
-      if (env::shouldEmitVerboseLogs()) {
-        LogS << "\tPackage Entry Target: " << Triple << "\n"
-             << "\tOutput Filename: " << OutputFilePath << "\n";
-        LogS.flush();
+          if (env::shouldEmitVerboseLogs()) {
+            LogS << "\tPackage Entry Target: " << Triple << "\n"
+                << "\tOutput Filename: " << OutputFilePath << "\n";
+            LogS.flush();
+          }
+        }
       }
     }
 
