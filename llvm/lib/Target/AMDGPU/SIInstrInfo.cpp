@@ -1929,21 +1929,16 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   const DebugLoc &DL = MBB.findDebugLoc(MI);
   unsigned SpillSize = RI.getSpillSize(*RC);
 
-  assert(SubReg != AMDGPU::lo16 && SubReg != AMDGPU::hi16 &&
-         "unhandled 16-bit subregister spilling");
+  unsigned SubRegIdx = 0;
+  if (SubReg) {
+    uint64_t Mask = RI.getSubRegIndexLaneMask(SubReg).getAsInteger();
+    assert(llvm::popcount(Mask) % 2 == 0 &&
+           "expected only 32-bit subreg access");
 
-  // For subreg reload, identify the start offset.
-  unsigned SubRegIdx =
-      SubReg
-          ? llvm::countr_zero(RI.getSubRegIndexLaneMask(SubReg).getAsInteger())
-          : 0;
-  // Each subreg consists of two bits in the RegMask. The SubRegIdx should be
-  // either zero or an even number. This assert is to ensure we will not have
-  // any 16-bit subreg access at this point.
-  assert(SubRegIdx % 2 == 0 && "expected an even number for the subreg index");
-
-  // Now get the actual subreg index.
-  SubRegIdx /= 2;
+    // For subreg reload, identify the start offset. Each 32-bit register
+    // consists of two regunits and eventually two bits in the Lanemask.
+    SubRegIdx = llvm::countr_zero(Mask) / 2;
+  }
 
   MachinePointerInfo PtrInfo
     = MachinePointerInfo::getFixedStack(*MF, FrameIndex);

@@ -1252,30 +1252,36 @@ void InlineSpiller::spillAroundUses(Register Reg) {
 
     unsigned SubReg = 0;
     LaneBitmask CoveringLanes = LaneBitmask::getNone();
-    // Identify the subreg use(s). Skip if the instruction defines the register.
+    // If the subreg liveness is enabled, identify the subreg use(s) to try
+    // subreg reload. Skip if the instruction defines the register.
     // For copy bundles, get the covering lane masks.
-    if (TRI.shouldEnableSubRegSpillRestore() && !RI.Writes) {
+    if (MRI.subRegLivenessEnabled() && !RI.Writes) {
       for (auto [MI, OpIdx] : Ops) {
         const MachineOperand &MO = MI->getOperand(OpIdx);
         assert(MO.isReg() && MO.getReg() == Reg);
         if (MO.isUse()) {
           SubReg = MO.getSubReg();
-          CoveringLanes |= TRI.getSubRegIndexLaneMask(SubReg);
+          if (SubReg)
+            CoveringLanes |= TRI.getSubRegIndexLaneMask(SubReg);
         }
       }
     }
 
-    const TargetRegisterClass *OrigRC = MRI.getRegClass(Reg);
     if (MI.isBundled() && CoveringLanes.any()) {
       CoveringLanes = LaneBitmask(bit_ceil(CoveringLanes.getAsInteger()) - 1);
       // Get the covering subreg index including the missing indices in the
       // identified small range. Even if this is suboptimal, it is advantageous
-      // when the higher subreg components are not really involved in the bundle
-      // copy as we emit the subreg reload rather than the one for the entire
-      // tuple.
+      // when the higher subreg components are not really involved in the copy
+      // bundle.
       SubReg = TRI.getSubRegIdxFromLaneMask(CoveringLanes);
     }
 
+    // If the target doesn't support subreg reload, fallback to restoring the
+    // full tuple.
+    if (SubReg && !TRI.shouldEnableSubRegReload(SubReg))
+      SubReg = 0;
+
+    const TargetRegisterClass *OrigRC = MRI.getRegClass(Reg);
     const TargetRegisterClass *NewRC =
         SubReg ? TRI.getSubRegisterClass(OrigRC, SubReg) : nullptr;
     Register NewVReg = Edit->createFrom(Reg, NewRC);

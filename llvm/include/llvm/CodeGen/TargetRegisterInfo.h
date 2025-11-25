@@ -1230,7 +1230,7 @@ public:
   /// To enable the spill-restore of sub registers during RA. This would
   /// eventually improve the register allocation for the functions that involve
   /// subreg uses of register tuples.
-  virtual bool shouldEnableSubRegSpillRestore() const { return false; }
+  virtual bool shouldEnableSubRegReload(unsigned SubReg) const { return false; }
 
   /// When prioritizing live ranges in register allocation, if this hook returns
   /// true then the AllocationPriority of the register class will be treated as

@@ -3984,7 +3984,15 @@ bool SIRegisterInfo::isAGPR(const MachineRegisterInfo &MRI,
   return RC && isAGPRClass(RC);
 }
 
-bool SIRegisterInfo::shouldEnableSubRegSpillRestore() const { return true; }
+bool SIRegisterInfo::shouldEnableSubRegReload(unsigned SubReg) const {
+  // Disable lo16 and hi16 (16-bit) accesses as they are subreg views of the
+  // same 32-bit register and don't represent independent storage.
+  if (SubReg == AMDGPU::lo16 || SubReg == AMDGPU::hi16)
+    return false;
+
+  // Enable for other tuple sub-registers.
+  return true;
+}
 
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
                                              MachineFunction &MF) const {

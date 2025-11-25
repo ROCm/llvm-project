@@ -56,6 +56,9 @@ Register LiveRangeEdit::createFrom(Register OldReg,
                                    const TargetRegisterClass *RC) {
   Register VReg =
       RC ? MRI.createVirtualRegister(RC) : MRI.cloneVirtualRegister(OldReg);
+  if (RC)
+    MRI.setType(VReg, LLT{});
+
   if (VRM) {
     VRM->setIsSplitFromReg(VReg, VRM->getOriginal(OldReg));
   }
