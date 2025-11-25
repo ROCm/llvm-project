@@ -13,6 +13,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -33,6 +34,7 @@ bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
 /// If so, the value is stored in \p Val.
 bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val) const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
+  LLVM_DEBUG(dbgs() << "isConstantLaneMask(" << printReg(Reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ") : \n");
 
   const MachineInstr *MI;
   for (;;) {
@@ -40,38 +42,55 @@ bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val) const {
     if (!MI) {
       // This can happen when called from GCNLaneMaskUpdater, where Reg can
       // be a placeholder that has not yet been filled in.
+      LLVM_DEBUG(dbgs() << "MI == MBB.end(), return false\n");
       return false;
     }
 
-    if (MI->getOpcode() == AMDGPU::IMPLICIT_DEF)
+    LLVM_DEBUG(dbgs() << "MI:");
+    MI->dump();
+    LLVM_DEBUG(dbgs() << "\n");
+    
+    if (MI->getOpcode() == AMDGPU::IMPLICIT_DEF){
+      LLVM_DEBUG(dbgs() << "MI->getOpcode() == AMDGPU::IMPLICIT_DEF, return true;\n");
       return true;
-
+    }
     if (MI->getOpcode() != AMDGPU::COPY)
       break;
 
     Reg = MI->getOperand(1).getReg();
-    if (!Register::isVirtualRegister(Reg))
-      return false;
-    if (!maybeLaneMask(Reg))
-      return false;
+    if (!Register::isVirtualRegister(Reg)){
+      LLVM_DEBUG(dbgs() << "!Register::isVirtualRegister(Reg), return false\n");
+      return false;}
+    if (!maybeLaneMask(Reg)){
+      LLVM_DEBUG(dbgs() << "!maybeLaneMask(Reg), return false\n");
+      return false;}
   }
 
-  if (MI->getOpcode() != LMC.MovOpc)
-    return false;
+  LLVM_DEBUG(dbgs() << "MI after loop:");
+  if(!MI) MI->dump();
+  LLVM_DEBUG(dbgs() << "\n");
 
-  if (!MI->getOperand(1).isImm())
-    return false;
+  if (MI->getOpcode() != LMC.MovOpc){
+    LLVM_DEBUG(dbgs() << "MI->getOpcode() != LMC.MovOpc, return false\n");
+    return false;}
+
+    if (!MI->getOperand(1).isImm()){
+      LLVM_DEBUG(dbgs() << "!MI->getOperand(1).isImm(), return false\n");
+      return false;}
 
   int64_t Imm = MI->getOperand(1).getImm();
   if (Imm == 0) {
+    LLVM_DEBUG(dbgs() << "Imm == 0, Val = false, return true\n");
     Val = false;
     return true;
   }
   if (Imm == -1) {
+    LLVM_DEBUG(dbgs() << "Imm == -1, Val = true, return true\n");
     Val = true;
     return true;
   }
 
+  LLVM_DEBUG(dbgs() << "End of isConstantLaneMask, return false\n");
   return false;
 }
 
@@ -112,20 +131,40 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
   bool PrevConstant = !PrevReg || isConstantLaneMask(PrevReg, PrevVal);
   bool CurVal = false;
   bool CurConstant = isConstantLaneMask(CurReg, CurVal);
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+
+  Printable destRegPrintable = printReg(DstReg , MRI.getTargetRegisterInfo(), 0, &MRI);
+  Printable curRegPrintable = printReg(CurReg , MRI.getTargetRegisterInfo(), 0, &MRI);
+  Printable prevRegPrintable = printReg(PrevReg , MRI.getTargetRegisterInfo(), 0, &MRI);
+
+  LLVM_DEBUG(dbgs() << "\t\tGCNLaneMaskUtils::buildMergeLaneMasks(" << MBB.name() << ",...):\n");
+  LLVM_DEBUG(dbgs() << "\t\t DstReg : BlockInfo.Merged : " << destRegPrintable << "\n");
+  LLVM_DEBUG(dbgs() << "\t\t PrevReg : Previous : " << prevRegPrintable << "\n");
+  LLVM_DEBUG(dbgs() << "\t\t CurReg : BlockInfo.Value : " << curRegPrintable << "\n");
+  LLVM_DEBUG(dbgs() << "\t\t Create instr : " << destRegPrintable << " = (" << prevRegPrintable << " & ~EXEC) | (" << curRegPrintable << " & EXEC) : \n");
+  LLVM_DEBUG(dbgs() << "\t\tPrevConstant:" << PrevConstant << " CurConstant:" << CurConstant << "\n");
+  LLVM_DEBUG(dbgs() << "\t\tPrevVal:" << PrevVal << " CurVal:" << CurVal << "\n");
+  LLVM_DEBUG(dbgs() << "\t\tIterator I:");
+  if(I != MBB.end()) I->dump();
+  else LLVM_DEBUG(dbgs() << "end of block");
+  LLVM_DEBUG(dbgs() << "\n");
 
   assert(PrevReg || !accumulating);
 
-  if (PrevConstant && CurConstant) {
+  if (PrevConstant && CurConstant) {// is wave wide constant?
     if (PrevVal == CurVal) {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurReg);
+      LLVM_DEBUG(dbgs() << "\t ");
+      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurReg)->dump();
     } else if (CurVal) {
       // If PrevReg is undef, prefer to propagate a full constant.
+      LLVM_DEBUG(dbgs() << "\t ");
       BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg)
-          .addReg(PrevReg ? LMC.ExecReg : CurReg);
+          .addReg(PrevReg ? LMC.ExecReg : CurReg)->dump();
     } else {
+      LLVM_DEBUG(dbgs() << "\t ");
       BuildMI(MBB, I, DL, TII->get(LMC.XorOpc), DstReg)
           .addReg(LMC.ExecReg)
-          .addImm(-1);
+          .addImm(-1)->dump();
     }
     return;
   }
@@ -139,21 +178,26 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
       PrevMaskedReg = PrevReg;
     } else {
       PrevMaskedReg = createLaneMaskReg();
+      dbgs() << "\t ";
       PrevMaskedBuilt =
           BuildMI(MBB, I, DL, TII->get(LMC.AndN2Opc), PrevMaskedReg)
               .addReg(PrevReg)
               .addReg(LMC.ExecReg);
+      PrevMaskedBuilt->dump();
     }
   }
   if (!CurConstant) {
-    if ((PrevConstant && PrevVal) ||
-        (LMA && LMA->isSubsetOfExec(CurReg, MBB))) {
+    bool isCurRegSubsetOfExec = LMA && LMA->isSubsetOfExec(CurReg, MBB);
+    LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(CurReg, MRI.getTargetRegisterInfo(), 0, &MRI) << ") : " << isCurRegSubsetOfExec << "\n");
+    if ((PrevConstant && PrevVal) || isCurRegSubsetOfExec) {
       CurMaskedReg = CurReg;
     } else {
       CurMaskedReg = createLaneMaskReg();
+      LLVM_DEBUG(dbgs() << "\t ");
       CurMaskedBuilt = BuildMI(MBB, I, DL, TII->get(LMC.AndOpc), CurMaskedReg)
                            .addReg(CurReg)
                            .addReg(LMC.ExecReg);
+      CurMaskedBuilt->dump();
     }
   }
 
@@ -163,24 +207,33 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
   if (PrevConstant && !PrevVal) {
     if (CurMaskedBuilt) {
       CurMaskedBuilt->getOperand(0).setReg(DstReg);
+      LLVM_DEBUG(dbgs() << "\t ");
+      CurMaskedBuilt->dump();
     } else {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurMaskedReg);
+      LLVM_DEBUG(dbgs() << "\t ");
+      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(CurMaskedReg)->dump();
     }
   } else if (CurConstant && !CurVal) {
     if (PrevMaskedBuilt) {
       PrevMaskedBuilt->getOperand(0).setReg(DstReg);
+      LLVM_DEBUG(dbgs() << "\t ");
+      PrevMaskedBuilt->dump();
     } else {
-      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(PrevMaskedReg);
+      LLVM_DEBUG(dbgs() << "\t ");
+      BuildMI(MBB, I, DL, TII->get(AMDGPU::COPY), DstReg).addReg(PrevMaskedReg)->dump();
     }
   } else if (PrevConstant && PrevVal) {
+    LLVM_DEBUG(dbgs() << "\t ");
     BuildMI(MBB, I, DL, TII->get(LMC.OrN2Opc), DstReg)
         .addReg(CurMaskedReg)
-        .addReg(LMC.ExecReg);
+        .addReg(LMC.ExecReg)->dump();
   } else {
+    LLVM_DEBUG(dbgs() << "\t ");
     BuildMI(MBB, I, DL, TII->get(LMC.OrOpc), DstReg)
         .addReg(PrevMaskedReg)
-        .addReg(CurMaskedReg ? CurMaskedReg : LMC.ExecReg);
+        .addReg(CurMaskedReg ? CurMaskedReg : LMC.ExecReg)->dump();
   }
+  LLVM_DEBUG(dbgs() << "\t\tGCNLaneMaskUtils::buildMergeLaneMasks() ends\n");
 }
 
 /// Conservatively determine whether the \p Reg is a subset of EXEC for
@@ -192,12 +245,16 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
   MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   MachineInstr *DefInstr = nullptr;
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
+  LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(Reg, MRI.getTargetRegisterInfo(), 0, &MRI) << "," << UseBlock.name() << ") : \n");
 
   for (;;) {
     if (!Register::isVirtualRegister(Reg)) {
       if (Reg == LMC.ExecReg &&
-          (!DefInstr || DefInstr->getParent() == &UseBlock))
-        return true;
+          (!DefInstr || DefInstr->getParent() == &UseBlock)){
+            LLVM_DEBUG(dbgs() << "Reg is EXEC in same BB, return true\n");
+            return true;
+        }
+        LLVM_DEBUG(dbgs() << "Reg is not EXEC or is in other BB, return false\n");
       return false;
     }
 
@@ -209,57 +266,80 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
 
     if (DefInstr->getOpcode() == LMC.MovOpc) {
       if (DefInstr->getOperand(1).isImm() &&
-          DefInstr->getOperand(1).getImm() == 0)
-        return true;
+          DefInstr->getOperand(1).getImm() == 0){
+            LLVM_DEBUG(dbgs() << "MOV 0, return true\n");
+        return true;}
+        LLVM_DEBUG(dbgs() << "MOV is not imm or not 0, return false\n");
       return false;
     }
 
     break;
   }
 
-  if (DefInstr->getParent() != &UseBlock)
-    return false;
+  LLVM_DEBUG(dbgs() << "DefInstr:");
+  if(DefInstr) DefInstr->dump();
+  LLVM_DEBUG(dbgs() << "\n");
+
+  if (DefInstr->getParent() != &UseBlock){
+    LLVM_DEBUG(dbgs() << "DefInstr->getParent() != &UseBlock, return false\n");
+    return false;}
 
   auto CacheIt = SubsetOfExec.find(Reg);
-  if (CacheIt != SubsetOfExec.end())
+  if (CacheIt != SubsetOfExec.end()){
+    LLVM_DEBUG(dbgs() << "CacheIt != SubsetOfExec.end(), return CacheIt->second: " << CacheIt->second << " \n");
     return CacheIt->second;
-
+  }
   // V_CMP_xx always return a subset of EXEC.
   if (DefInstr->isCompare() &&
       (SIInstrInfo::isVOPC(*DefInstr) || SIInstrInfo::isVOP3(*DefInstr))) {
     SubsetOfExec[Reg] = true;
+    LLVM_DEBUG(dbgs() << "DefInstr is VOPC or VOP3, return true\n");
     return true;
   }
 
-  if (!RemainingDepth--)
+  if (!RemainingDepth--){
+    LLVM_DEBUG(dbgs() << "RemainingDepth-- is 0, return false\n");
     return false;
+  }
 
   bool LikeOr = DefInstr->getOpcode() == LMC.OrOpc ||
                 DefInstr->getOpcode() == LMC.XorOpc ||
                 DefInstr->getOpcode() == LMC.CSelectOpc;
   bool IsAnd = DefInstr->getOpcode() == LMC.AndOpc;
   bool IsAndN2 = DefInstr->getOpcode() == LMC.AndN2Opc;
+  LLVM_DEBUG(dbgs() << "LikeOr: " << LikeOr << " IsAnd: " << IsAnd << " IsAndN2: " << IsAndN2 << "\n");
   if ((LikeOr || IsAnd || IsAndN2) &&
       (DefInstr->getOperand(1).isReg() && DefInstr->getOperand(2).isReg())) {
     bool FirstIsSubset = isSubsetOfExec(DefInstr->getOperand(1).getReg(),
                                         UseBlock, RemainingDepth);
-    if (!FirstIsSubset && (LikeOr || IsAndN2))
-      return SubsetOfExec.try_emplace(Reg, false).first->second;
+
+    LLVM_DEBUG(dbgs() << "FirstIsSubset: " << FirstIsSubset << "\n");
+    
+    if (!FirstIsSubset && (LikeOr || IsAndN2)){
+      bool res = SubsetOfExec.try_emplace(Reg, false).first->second;
+      LLVM_DEBUG(dbgs() << "FirstIsSubset is false and (LikeOr || IsAndN2), return res: " << res << "\n");
+      return res;}
 
     if (FirstIsSubset && (IsAnd || IsAndN2)) {
       SubsetOfExec[Reg] = true;
+      LLVM_DEBUG(dbgs() << "FirstIsSubset is true and (IsAnd || IsAndN2), return true\n");
       return true;
     }
 
     bool SecondIsSubset = isSubsetOfExec(DefInstr->getOperand(2).getReg(),
                                          UseBlock, RemainingDepth);
-    if (!SecondIsSubset)
-      return SubsetOfExec.try_emplace(Reg, false).first->second;
+    LLVM_DEBUG(dbgs() << "SecondIsSubset: " << SecondIsSubset << "\n");
+    if (!SecondIsSubset){
+      bool res = SubsetOfExec.try_emplace(Reg, false).first->second;
+      LLVM_DEBUG(dbgs() << "SecondIsSubset is false, return res: " << res << "\n");
+      return res;}
 
     SubsetOfExec[Reg] = true;
+    LLVM_DEBUG(dbgs() << "SecondIsSubset is true, return true\n");
     return true;
   }
 
+  LLVM_DEBUG(dbgs() << "End of function ,return false\n");
   return false;
 }
 
@@ -321,6 +401,7 @@ void GCNLaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
     BlockIt = Blocks.end() - 1;
   }
   assert(!BlockIt->Value);
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::addAvailable(" << Block.name() << "," << printReg(Value, MRI.getTargetRegisterInfo(), 0, &MRI) << ")\n");
 
   BlockIt->Value = Value;
 }
@@ -328,9 +409,12 @@ void GCNLaneMaskUpdater::addAvailable(MachineBasicBlock &Block,
 /// Return the value in the middle of the block, i.e. before any change that
 /// was registered via \ref addAvailable.
 Register GCNLaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueInMiddleOfBlock(" << Block.name() << ")\n");
   if (!Processed)
     process();
-  return SSAUpdater.GetValueInMiddleOfBlock(&Block);
+  Register reg = SSAUpdater.GetValueInMiddleOfBlock(&Block);
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueInMiddleOfBlock(" << Block.name() << "," << printReg(reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ")\n");
+  return reg;
 }
 
 /// Return the value at the end of the given block, i.e. after any change that
@@ -340,27 +424,39 @@ Register GCNLaneMaskUpdater::getValueInMiddleOfBlock(MachineBasicBlock &Block) {
 ///       reset mode, then this value will be 0. You likely want
 ///       \ref getPreReset instead.
 Register GCNLaneMaskUpdater::getValueAtEndOfBlock(MachineBasicBlock &Block) {
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAtEndOfBlock(" << Block.name() << ")\n");
   if (!Processed)
     process();
-  return SSAUpdater.GetValueAtEndOfBlock(&Block);
+  Register reg = SSAUpdater.GetValueAtEndOfBlock(&Block);
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAtEndOfBlock(" << Block.name() << "," << printReg(reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ")\n");
+  return reg;
 }
 
 /// Return the value in \p Block after the value merge (if any).
 Register GCNLaneMaskUpdater::getValueAfterMerge(MachineBasicBlock &Block) {
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAfterMerge(" << Block.name() << ")\n");
   if (!Processed)
     process();
-
+  Register reg = {};
   auto BlockIt = findBlockInfo(Block);
   if (BlockIt != Blocks.end()) {
-    if (BlockIt->Merged)
-      return BlockIt->Merged;
-    if (BlockIt->Flags & ResetInMiddle)
-      return ZeroReg;
+    if (BlockIt->Merged){
+      reg = BlockIt->Merged;
+      LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAfterMerge(" << Block.name() << "," << printReg(reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ") returning Merged.\n");
+      return reg;
+    }
+    if (BlockIt->Flags & ResetInMiddle){
+      reg = ZeroReg;
+      LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAfterMerge(" << Block.name() << "," << printReg(reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ") returning ZeroReg.\n");
+      return reg;
+    }
   }
 
   // We didn't merge anything in the block, but the block may still be
   // ResetAtEnd, in which case we need the pre-reset value.
-  return SSAUpdater.GetValueInMiddleOfBlock(&Block);
+  reg = SSAUpdater.GetValueInMiddleOfBlock(&Block);
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::getValueAfterMerge(" << Block.name() << "," << printReg(reg, MRI.getTargetRegisterInfo(), 0, &MRI) << ")\n");
+  return reg;
 }
 
 /// Determine whether \p MI defines and/or uses SCC.
@@ -409,6 +505,7 @@ getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
 
 /// Internal method to insert merge instructions.
 void GCNLaneMaskUpdater::process() {
+  LLVM_DEBUG(dbgs() << "\n\tGCNLaneMaskUpdater::process() begins\n");
   MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
@@ -421,29 +518,50 @@ void GCNLaneMaskUpdater::process() {
             TII->get(LMU.getLaneMaskConsts().MovOpc), ZeroReg)
         .addImm(0);
   }
+  LLVM_DEBUG(dbgs() << "\tZeroReg:" << printReg(ZeroReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "\n");
+  LLVM_DEBUG(dbgs() << "\n\tAdding available values:\n");
 
   // Add available values.
   for (BlockInfo &Info : Blocks) {
+    LLVM_DEBUG(dbgs() << "\tAdd avail value for BlockInfo:" << Info.Block->name() << "\n\t");
     assert(Accumulating || !Info.Flags);
     assert(Info.Flags || Info.Value);
 
-    if (Info.Value)
+    if (Info.Value){
       Info.Merged = LMU.createLaneMaskReg();
+      LLVM_DEBUG(dbgs() << "creating Info.Merged:" << printReg(Info.Merged, MRI.getTargetRegisterInfo(), 0, &MRI) << " for block " << Info.Block->name() << "\n\t");
+    }
 
-    SSAUpdater.AddAvailableValue(
-        Info.Block,
-        (Info.Value && !(Info.Flags & ResetAtEnd)) ? Info.Merged : ZeroReg);
+    Info.dump(MRI);
+    //Info.Value and not ResetAtEnd, then Info.Merged, else ZeroReg
+    Register val = (Info.Value && !(Info.Flags & ResetAtEnd)) ? Info.Merged : ZeroReg;
+    LLVM_DEBUG(dbgs() << "\t\t(Info.Value && !(Info.Flags & ResetAtEnd)) : " << (Info.Value && !(Info.Flags & ResetAtEnd)) << " => ");
+    if((Info.Value && !(Info.Flags & ResetAtEnd)))
+      LLVM_DEBUG(dbgs() << "Info.Merged\n");
+    else
+      LLVM_DEBUG(dbgs() << "ZeroReg\n");
+    SSAUpdater.AddAvailableValue(Info.Block,val);
+    LLVM_DEBUG(dbgs() << "\n");
+
   }
 
-  if (Accumulating && !SSAUpdater.HasValueForBlock(&Entry))
+  if (Accumulating && !SSAUpdater.HasValueForBlock(&Entry)){
+    LLVM_DEBUG(dbgs() << "\tAdd avail value for Entry block : ZeroReg\n");
     SSAUpdater.AddAvailableValue(&Entry, ZeroReg);
+  }
+
+  LLVM_DEBUG(dbgs() << "\n\tMachineSSAUpdater ready, begin merging\n");
+
 
   // Once the SSA updater is ready, we can fill in all merge code, relying
   // on the SSA updater to insert required PHIs.
   for (BlockInfo &Info : Blocks) {
     if (!Info.Value)
       continue;
-
+    
+    LLVM_DEBUG(dbgs() << "\tmerge ");
+    Info.dump(MRI);
+    LLVM_DEBUG(dbgs() << "\n");
     // Determine the "previous" value, if any.
     Register Previous;
     if (Info.Block != &LMU.function()->front() &&
@@ -460,8 +578,13 @@ void GCNLaneMaskUpdater::process() {
         }
       }
     } else {
-      if (Accumulating)
+      LLVM_DEBUG(dbgs() << "\tEither one of the following 2 conds are true:\n");
+      LLVM_DEBUG(dbgs() << "\tInfo.Block == &LMU.function()->front():" << (Info.Block == &LMU.function()->front()) << "\n");
+      LLVM_DEBUG(dbgs() << "\tInfo.Flags & ResetInMiddle:" << (Info.Flags & ResetInMiddle) << "\n");
+      if (Accumulating){
         Previous = ZeroReg;
+        LLVM_DEBUG(dbgs() << "\tBlock:" << Info.Block->name() << " Previous is ZeroReg:" << printReg(Previous , MRI.getTargetRegisterInfo(), 0, &MRI) << "\n");
+      }
     }
 
     // Insert merge logic.
@@ -471,16 +594,23 @@ void GCNLaneMaskUpdater::process() {
 
     if (Info.Flags & ResetAtEnd) {
       MachineInstr *mergeInstr = MRI.getVRegDef(Info.Merged);
+      LLVM_DEBUG(dbgs() << "\tmergeInstr:");
+      mergeInstr->dump();
+      LLVM_DEBUG(dbgs() << "\n");
       if (mergeInstr->getOpcode() == AMDGPU::COPY &&
           mergeInstr->getOperand(1).getReg().isVirtual()) {
         assert(MRI.use_empty(Info.Merged));
         Info.Merged = mergeInstr->getOperand(1).getReg();
+        LLVM_DEBUG(dbgs() << "\tset Merged:" << printReg(Info.Merged , MRI.getTargetRegisterInfo(), 0, &MRI) << " for block " << Info.Block->name() << "\n");
+        LLVM_DEBUG(dbgs() << "\tErase mergeInstr\n");
         mergeInstr->eraseFromParent();
       }
     }
   }
 
   Processed = true;
+  LLVM_DEBUG(dbgs() << "GCNLaneMaskUpdater::process() ends\n");
+
 }
 
 /// Find a block in the \ref Blocks structure.

@@ -21,6 +21,9 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineSSAUpdater.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "gcn-lane-mask-utils"
 
 namespace llvm {
 
@@ -106,7 +109,7 @@ private:
   GCNLaneMaskUtils LMU;
   GCNLaneMaskAnalysis *LMA = nullptr;
   MachineSSAUpdater SSAUpdater;
-
+  MachineRegisterInfo &MRI;
   bool Accumulating = false;
 
   bool Processed = false;
@@ -118,6 +121,16 @@ private:
     Register Merged;
 
     explicit BlockInfo(MachineBasicBlock *Block) : Block(Block) {}
+
+    void dump(MachineRegisterInfo &MRI) {
+      LLVM_DEBUG(dbgs() << "BlockInfo{");
+      LLVM_DEBUG(dbgs() << " Block:" << Block->name() << ",");
+      LLVM_DEBUG(dbgs() << " Value:" << printReg(Value, MRI.getTargetRegisterInfo(), 0, &MRI) << ",");
+      LLVM_DEBUG(dbgs() << " Flags:");
+      if(Flags & ResetAtEnd) LLVM_DEBUG(dbgs() << "ResetAtEnd,");
+      if(Flags & ResetInMiddle) LLVM_DEBUG(dbgs() << "ResetInMiddle,");
+      LLVM_DEBUG(dbgs() << "}\n");
+    }
   };
 
   SmallVector<BlockInfo, 4> Blocks;
@@ -126,7 +139,7 @@ private:
   DenseSet<MachineInstr *> PotentiallyDead;
 
 public:
-  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), SSAUpdater(MF) {}
+  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), SSAUpdater(MF), MRI(MF.getRegInfo()) {}
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
 

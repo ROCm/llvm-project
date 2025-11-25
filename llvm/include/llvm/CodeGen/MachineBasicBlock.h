@@ -263,6 +263,7 @@ public:
 
   /// Return the name of the corresponding LLVM basic block, or an empty string.
   LLVM_ABI StringRef getName() const;
+  LLVM_ABI std::string name() const;
 
   /// Return a formatted string to identify this block and its parent function.
   LLVM_ABI std::string getFullName() const;
