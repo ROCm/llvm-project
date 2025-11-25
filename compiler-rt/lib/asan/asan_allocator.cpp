@@ -1559,10 +1559,13 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
                      : nullptr;
   hsa_status_t status = HSA_STATUS_ERROR_NOT_INITIALIZED;
   if (ptr_ && m) {
-    status = REAL(hsa_amd_pointer_info)(ptr, info, alloc, num_agents_accessible,
+    status = REAL(hsa_amd_pointer_info)(ptr_, info, alloc, num_agents_accessible,
                                         accessible);
     if (status == HSA_STATUS_SUCCESS && info) {
       static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
+      // Adjust base address of agent,host and sizeInBytes so as to return
+      // the actual pointer information of user allocation rather than asan allocation.
+      // Asan allocation pointer info can be acquired using internal 'GetPointerInfo'
       info->agentBaseAddress = reinterpret_cast<void*>(
           reinterpret_cast<uptr>(info->agentBaseAddress) + kPageSize_);
       info->hostBaseAddress = reinterpret_cast<void*>(
