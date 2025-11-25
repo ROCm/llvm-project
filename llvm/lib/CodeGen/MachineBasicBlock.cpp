@@ -328,6 +328,13 @@ StringRef MachineBasicBlock::getName() const {
     return StringRef("", 0);
 }
 
+std::string MachineBasicBlock::name() const {
+  std::string Name = ("BB." + Twine(getNumber()) + ".").str();
+  if (getBasicBlock())
+    Name += getBasicBlock()->getName();
+  return Name;
+}
+
 /// Return a hopefully unique identifier for this block.
 std::string MachineBasicBlock::getFullName() const {
   std::string Name;

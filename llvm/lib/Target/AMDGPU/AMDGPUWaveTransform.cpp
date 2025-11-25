@@ -153,6 +153,42 @@ struct WaveNode {
         Out << "<flow-" << FlowNum << '>';
     });
   }
+
+  std::string getName(){
+    std::string str;
+    if (Block) 
+      str = Block->name();
+    if (Block && FlowNum)
+      str = str + ".";
+    if (FlowNum)
+      str = str + "<flow-" + std::to_string(FlowNum) + ">";
+    return str;
+  }
+  void dump() const {
+    dbgs() << "--------------------------------" << '\n';
+    dbgs() << "WaveNode: " << printableName() << '\n';
+    dbgs() << "  OrderIndex: " << OrderIndex << '\n';
+    dbgs() << "  Predecessors: ";
+    for (WaveNode *Pred : Predecessors)
+      dbgs() << Pred->printableName() << ' ';
+    dbgs() << '\n';
+    dbgs() << "  Successors: ";
+    for (WaveNode *Succ : Successors)
+      dbgs() << Succ->printableName() << ' ';
+    dbgs() << '\n';
+    dbgs() << "  LanePredecessors: ";
+    for (const LaneEdge &LanePred : LanePredecessors)
+      dbgs() << "(lane=" << LanePred.Lane->printableName() 
+             << ", wave=" << LanePred.Wave->printableName() << ") ";
+    dbgs() << '\n';
+    dbgs() << "  LaneSuccessors: ";
+    for (const LaneEdge &LaneSucc : LaneSuccessors)
+      dbgs() << "(lane=" << LaneSucc.Lane->printableName() 
+             << ", wave=" << LaneSucc.Wave->printableName() << ") ";
+    if(LatestPostDom != nullptr)  dbgs() << "\nlatestPostDom:" << LatestPostDom->printableName();
+    else  dbgs() << "latestPostDom:NULL";
+    dbgs() << "\n--------------------------------\n\n";
+  }
 };
 
 /// \brief Helper class for making a CFG reconverging.
@@ -1545,6 +1581,16 @@ private:
     explicit LaneOriginInfo(WaveNode *Node, Register CondReg = {},
                             bool InvertCondition = false)
         : Node(Node), CondReg(CondReg), InvertCondition(InvertCondition) {}
+
+    friend llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const LaneOriginInfo& loi) {
+      if(loi.Node == nullptr)
+        os << "{WaveNode=nullptr";
+      else
+        os << "{WaveNode="<<  loi.Node->printableName();
+      os << ", CondReg=" << loi.CondReg.id() << ", InvertCond:" << loi.InvertCondition << "}";
+      return os;
+    }
+
   };
 
   struct CFGNodeInfo {
@@ -1574,6 +1620,29 @@ private:
     Register PrimarySuccessorExec;
 
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
+    
+    friend llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const CFGNodeInfo& ni) {
+      os << "CFGNodeInfo{\nOrigExit=" << ni.OrigExit << ", \nOrigCondition=" << ni.OrigCondition.id();
+      if(ni.OrigSuccCond == nullptr)
+        os << ", \nOrigSuccCond=nullptr";
+      else
+        os << ", \nOrigSuccCond=" << ni.OrigSuccCond->printableName();
+      if(ni.OrigSuccFinal == nullptr)
+        os << ", \nOrigSuccFinal=nullptr";
+      else
+        os << ", \nOrigSuccFinal=" << ni.OrigSuccFinal->printableName();
+      os << ", \nPrimarySuccessorExec=" << ni.PrimarySuccessorExec.id();
+      os << ", \nOriginBranch(Ri)={";
+      for (const auto &E : ni.OriginBranch) {
+        os << "(" << E.getPointer()->printableName() << "," << E.getInt() << "),";
+      }
+      os << "}, \norigins(Ti):{";
+      for (const auto &E : ni.origins) {
+        os << E << ",";
+      }
+      return os << "}\n}\n";
+    }
+
   };
 
   /// Information required to synthesize divergent terminators with a common
@@ -1784,6 +1853,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
 void ControlFlowRewriter::rewrite() {
+  LLVM_DEBUG(dbgs() << "\nrewrite() begins\n");
   GCNLaneMaskAnalysis LMA(Function);
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
@@ -1839,7 +1909,10 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_SCC1;
       } else {
         Register CondReg = Info.OrigCondition;
-        if (!LMA.isSubsetOfExec(CondReg, *Node->Block)) {
+        bool isCondRegSubsetOfExec = LMA.isSubsetOfExec(CondReg, *Node->Block);
+        LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(CondReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "," << Node->Block->name() << ") : " << isCondRegSubsetOfExec << "\n");
+    
+        if (!isCondRegSubsetOfExec) {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(LMC.AndOpc),
                   CondReg)
@@ -1867,7 +1940,9 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(Other->Block);
     }
   }
-
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
@@ -1879,16 +1954,20 @@ void ControlFlowRewriter::rewrite() {
   Updater.setAccumulating(true);
 
   for (WaveNode *LaneTarget : NodeOrder) {
+    LLVM_DEBUG(dbgs() << "\nPROCESSING NODE:" << LaneTarget->printableName() << "\n\n");
+    LaneTarget->dump();
     CFGNodeInfo &LaneTargetInfo = NodeInfo.find(LaneTarget)->second;
+    LLVM_DEBUG(dbgs() << LaneTargetInfo << '\n');
 
     if (!llvm::any_of(
             LaneTargetInfo.OriginBranch,
             [](const auto &OriginBranch) { return OriginBranch.getInt(); })) {
       // No divergent branches towards this node, nothing to be done.
+      LLVM_DEBUG(dbgs() << "No divergent branches towards this node, nothing to be done.\n");
       continue;
     }
 
-    LLVM_DEBUG(dbgs() << "\nDivergent branches for "
+    LLVM_DEBUG(dbgs() << "Divergent branches for "
                       << LaneTarget->printableName() << '\n');
 
     // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
@@ -1896,13 +1975,20 @@ void ControlFlowRewriter::rewrite() {
     // FIXME: we are creating a register here only to initialize the updater
     Updater.init(LMU.createLaneMaskReg());
     Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
+    LLVM_DEBUG(dbgs() << "\nMark ResetInMiddle(X): " << LaneTarget->printableName() << '\n');
     for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
+      LLVM_DEBUG(dbgs() << "Mark ResetAtEnd(Ri): " << NodeDivergentPair.getPointer()->printableName() << '\n');
       Updater.addReset(*NodeDivergentPair.getPointer()->Block,
                        GCNLaneMaskUpdater::ResetAtEnd);
     }
-
+    LLVM_DEBUG(dbgs() << "Iterating over Ti\n\n");
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
       Register CondReg;
+
+      LLVM_DEBUG(dbgs() << "\nOrigin(Ti): " << LaneOrigin << '\n');
+      if(LaneOrigin.CondReg){
+        dbgs() << "LaneOrigin.CondReg:" << printReg(LaneOrigin.CondReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "\n";
+      }
 
       if (!LaneOrigin.CondReg) {
         assert(!LaneOrigin.InvertCondition);
@@ -1927,29 +2013,30 @@ void ControlFlowRewriter::rewrite() {
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addReg(LMC.ExecReg)
-              .addImm(0);
+              .addImm(0)->dump();
         } else {
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addImm(0)
-              .addReg(LMC.ExecReg);
+              .addReg(LMC.ExecReg)->dump();
         }
       } else {
         CondReg = LaneOrigin.CondReg;
-        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block)) {
+        bool isCondRegSubsetOfExec = LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block);
+        LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(LaneOrigin.CondReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "," << LaneOrigin.Node->Block->name() << ") : " << isCondRegSubsetOfExec << "\n");
+        if (!isCondRegSubsetOfExec) {
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*LaneOrigin.Node->Block,
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
                   TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
-              .addReg(Prev);
+              .addReg(Prev)->dump();
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .first = CondReg;
         }
-
         if (LaneOrigin.InvertCondition) {
           // CondReg = EXEC ^ origCond;
           //
@@ -1965,7 +2052,7 @@ void ControlFlowRewriter::rewrite() {
                   LaneOrigin.Node->Block->getFirstTerminator(), {},
                   TII.get(LMC.XorOpc), CondReg)
               .addReg(LaneOrigin.CondReg)
-              .addImm(-1);
+              .addImm(-1)->dump();
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .second = CondReg;
@@ -1975,20 +2062,23 @@ void ControlFlowRewriter::rewrite() {
       }
 
       LLVM_DEBUG(
-          dbgs() << "  available @ " << LaneOrigin.Node->printableName() << ": "
+          dbgs() << "  Contributions @ " << LaneOrigin.Node->printableName() << ": "
                  << printReg(CondReg, MRI.getTargetRegisterInfo(), 0, &MRI)
                  << '\n');
 
       Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
     }
 
+    LLVM_DEBUG(dbgs() << "Iterating over Ri\n\n");
     // Step 2.2: Synthesize EXEC updates and branch instructions.
     for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
       if (!NodeDivergentPair.getInt())
         continue; // not a divergent branch
-
+      LLVM_DEBUG(dbgs() << "Synthesize EXEC updates and branch instructions for " << NodeDivergentPair.getPointer()->printableName() << "\n");
       WaveNode *OriginNode = NodeDivergentPair.getPointer();
       CFGNodeInfo &OriginCFGNodeInfo = NodeInfo.find(OriginNode)->second;
+      LLVM_DEBUG(dbgs() << OriginCFGNodeInfo << '\n');
+
       OriginCFGNodeInfo.PrimarySuccessorExec =
           Updater.getValueAfterMerge(*OriginNode->Block);
 
@@ -2001,37 +2091,46 @@ void ControlFlowRewriter::rewrite() {
 
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
               TII.get(LMC.MovTermOpc), LMC.ExecReg)
-          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
+          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec)->dump();
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
-              TII.get(AMDGPU::SI_WAVE_CF_EDGE));
+              TII.get(AMDGPU::SI_WAVE_CF_EDGE))->dump();
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
               TII.get(AMDGPU::S_CBRANCH_EXECZ))
-          .addMBB(OriginNode->Successors[1]->Block);
+          .addMBB(OriginNode->Successors[1]->Block)->dump();
       BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
               TII.get(AMDGPU::S_BRANCH))
-          .addMBB(OriginNode->Successors[0]->Block);
+          .addMBB(OriginNode->Successors[0]->Block)->dump();
+
+      LLVM_DEBUG(dbgs() << "\nNodeDivergentPair:" << NodeDivergentPair.getPointer()->printableName() << "," << NodeDivergentPair.getInt() << " complete...\n");
     }
 
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_" << LaneTarget->getName() << "\n");
     LLVM_DEBUG(Function.dump());
+    LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_" << LaneTarget->getName() << "\n");
+
   }
+  LLVM_DEBUG(dbgs() << "\nInsert rejoin masks\n");
 
   // Step 3: Insert rejoin masks.
+  LLVM_DEBUG(dbgs() << "Iterate over secondary nodes\n");
   for (WaveNode *Secondary : ReconvergeCfg.nodes()) {
     if (!Secondary->IsSecondary)
       continue;
 
     LLVM_DEBUG(dbgs() << "\nRejoin @ " << Secondary->printableName() << '\n');
-
+    Secondary->dump();
     // FIXME: we are creating a register here only to initialize the updater
     Updater.init(LMU.createLaneMaskReg());
     Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetInMiddle);
+    LLVM_DEBUG(dbgs() << "\nMark ResetInMiddle(X): " << Secondary->printableName() << '\n');
 
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
 
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
-      Register PrimaryExec = PredInfo.PrimarySuccessorExec;
+      Register PrimaryExec = PredInfo.PrimarySuccessorExec; 
+      LLVM_DEBUG(dbgs() << "Pred:" << Pred->Block->name() << "\nPrimaryExec:" << printReg(PrimaryExec,MRI.getTargetRegisterInfo(), 0, &MRI) << "\n");
 
       MachineInstr *PrimaryExecDef;
       for (;;) {
@@ -2040,6 +2139,10 @@ void ControlFlowRewriter::rewrite() {
           break;
         PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
       }
+
+      LLVM_DEBUG(dbgs() << "PrimaryExecDef:");
+      LLVM_DEBUG(PrimaryExecDef->dump());
+      LLVM_DEBUG(dbgs() << "\n");
 
       // Rejoin = EXEC ^ PrimaryExec
       //
@@ -2072,11 +2175,11 @@ void ControlFlowRewriter::rewrite() {
         BuildMI(*Pred->Block, Pred->Block->getFirstTerminator(), {},
                 TII.get(LMC.XorOpc), Rejoin)
             .addReg(LMC.ExecReg)
-            .addReg(PrimaryExec);
+            .addReg(PrimaryExec)->dump();
       }
 
       LLVM_DEBUG(
-          dbgs() << "  available @ " << Pred->printableName() << ": "
+          dbgs() << " Rejoin available @ " << Pred->printableName() << ": "
                  << printReg(Rejoin, MRI.getTargetRegisterInfo(), 0, &MRI)
                  << '\n');
 
@@ -2087,12 +2190,20 @@ void ControlFlowRewriter::rewrite() {
     BuildMI(*Secondary->Block, Secondary->Block->getFirstNonPHI(), {},
             TII.get(LMC.OrOpc), LMC.ExecReg)
         .addReg(LMC.ExecReg)
-        .addReg(Rejoin);
+        .addReg(Rejoin)->dump();
 
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_" << Secondary->Block->name() << ".rejoin\n");
     LLVM_DEBUG(Function.dump());
+    LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_" << Secondary->Block->name() << ".rejoin\n");
+
+
   }
 
   Updater.cleanup();
+
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_clean\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_clean\n");
 }
 
 namespace {
