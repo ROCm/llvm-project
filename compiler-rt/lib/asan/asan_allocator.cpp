@@ -1572,7 +1572,9 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
           reinterpret_cast<uptr>(info->hostBaseAddress) + kPageSize_);
       info->sizeInBytes = m->UsedSize();
     }
-  }
+  } else
+    status = REAL(hsa_amd_pointer_info)(ptr, info, alloc, num_agents_accessible,
+                                        accessible);
   return status;
 }
 
