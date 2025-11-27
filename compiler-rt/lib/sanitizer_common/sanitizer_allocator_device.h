@@ -316,7 +316,7 @@ class DeviceAllocatorT {
       // If GetPointerInfo() fails, we don't assume the runtime is unloaded yet.
       // We just return a conservative single-page header. Here mark/check the
       // runtime shutdown state
-      dev_runtime_unloaded_ = DeviceMemFuncs::GetAmdgpuRuntimeShutdown();
+      dev_runtime_unloaded_ = DeviceMemFuncs::IsAmdgpuRuntimeShutdown();
     }
     // If we reach here, device runtime is unloaded.
     // Fallback: conservative single-page header

@@ -23,7 +23,10 @@ class AmdgpuMemFuncs {
   static bool GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info);
   static uptr GetPageSize();
   static void RegisterSystemEventHandlers();
-  static bool GetAmdgpuRuntimeShutdown();
+  static bool IsAmdgpuRuntimeShutdown();
+
+ private:
+  static void NotifyAmdgpuRuntimeShutdown();
 };
 
 struct AmdgpuAllocationInfo : public DeviceAllocationInfo {
