@@ -2421,13 +2421,7 @@ llvm::DISubprogram *CGDebugInfo::CreateCXXMemberFunction(
       // Emit MS ABI vftable information.  There is only one entry for the
       // deleting dtor.
       const auto *DD = dyn_cast<CXXDestructorDecl>(Method);
-      GlobalDecl GD =
-          DD ? GlobalDecl(
-                   DD, CGM.getContext().getTargetInfo().emitVectorDeletingDtors(
-                           CGM.getContext().getLangOpts())
-                           ? Dtor_VectorDeleting
-                           : Dtor_Deleting)
-             : GlobalDecl(Method);
+      GlobalDecl GD = DD ? GlobalDecl(DD, Dtor_Deleting) : GlobalDecl(Method);
       MethodVFTableLocation ML =
           CGM.getMicrosoftVTableContext().getMethodVFTableLocation(GD);
       VIndex = ML.Index;
@@ -5598,7 +5592,7 @@ llvm::DILocalVariable *CGDebugInfo::EmitDeclareForHeterogeneousDwarf(
   } else if (const auto *RT = dyn_cast<RecordType>(VD->getType())) {
     // If VD is an anonymous union then Storage represents value for
     // all union fields.
-    const RecordDecl *RD = RT->getOriginalDecl()->getDefinitionOrSelf();
+    const RecordDecl *RD = RT->getDecl()->getDefinitionOrSelf();
     if (RD->isUnion() && RD->isAnonymousStructOrUnion()) {
       llvm::DIExprBuilder UnionExprBuilder{ExprBuilder};
       llvm::DIExpression *UnionDIExpression = UnionExprBuilder.intoExpression();
@@ -6161,8 +6155,9 @@ llvm::DIGlobalVariableExpression *CGDebugInfo::CollectAnonRecordDecls(
     // Ignore unnamed fields, but recurse into anonymous records.
     if (FieldName.empty()) {
       if (const auto *RT = dyn_cast<RecordType>(Field->getType()))
-        GVE = CollectAnonRecordDecls(RT->getDecl()->getDefinitionOrSelf(), Unit,
-                     LineNo, LinkageName, MS, Var, DContext);
+        GVE = CollectAnonRecordDecls(
+            RT->getDecl()->getDefinitionOrSelf(), Unit, LineNo,
+            LinkageName, MS, Var, DContext);
       continue;
     }
     // Use VarDecl's Tag, Scope and Line number.
@@ -6191,7 +6186,7 @@ CGDebugInfo::CollectAnonRecordDeclsForHeterogeneousDwarf(
     if (FieldName.empty()) {
       if (const auto *RT = dyn_cast<RecordType>(Field->getType()))
         GVE = CollectAnonRecordDeclsForHeterogeneousDwarf(
-            RT->getOriginalDecl()->getDefinitionOrSelf(), Unit, LineNo,
+            RT->getDecl()->getDefinitionOrSelf(), Unit, LineNo,
             LinkageName, MS, Var, DContext);
       continue;
     }
@@ -6547,7 +6542,7 @@ void CGDebugInfo::EmitGlobalVariableForHeterogeneousDwarf(
   llvm::dwarf::MemorySpace MS = getDWARFMemorySpace(D);
   if (T->isUnionType() && DeclName.empty()) {
     const RecordDecl *RD =
-        T->castAs<RecordType>()->getOriginalDecl()->getDefinitionOrSelf();
+        T->castAs<RecordType>()->getDecl()->getDefinitionOrSelf();
     assert(RD->isAnonymousStructOrUnion() &&
            "unnamed non-anonymous struct or union?");
     // FIXME(KZHURAVL): No tests for this path.
@@ -7099,7 +7094,8 @@ llvm::DINode::DIFlags CGDebugInfo::getCallSiteRelatedAttrs() const {
   // when there's a possibility of debugging backtraces.
   if (CGM.getCodeGenOpts().OptimizationLevel == 0 ||
       DebugKind == llvm::codegenoptions::NoDebugInfo ||
-      DebugKind == llvm::codegenoptions::LocTrackingOnly)
+      DebugKind == llvm::codegenoptions::LocTrackingOnly ||
+      !CGM.getCodeGenOpts().DebugCallSiteInfo)
     return llvm::DINode::FlagZero;
 
   // Call site-related attributes are available in DWARF v5. Some debuggers,

@@ -8657,6 +8657,8 @@ def err_conditional_vector_size : Error<
 def err_conditional_vector_element_size : Error<
   "vector condition type %0 and result type %1 do not have elements of the "
   "same size">;
+def err_conditional_vector_scalar_type_unsupported : Error<
+  "scalar type %0 not supported with vector condition type %1">;
 def err_conditional_vector_has_void : Error<
   "GNU vector conditional operand cannot be %select{void|a throw expression}0">;
 def err_conditional_vector_operand_type
@@ -13760,4 +13762,12 @@ def note_amdgcn_protected_by_predicate : Note<"jump enters statement controlled"
                                               " by AMDGPU feature predicate">;
 
 def err_amdgcn_coop_atomic_invalid_as : Error<"cooperative atomic requires a global or generic pointer">;
+
+def warn_comparison_in_enum_initializer : Warning<
+  "comparison operator '%0' is potentially a typo for a shift operator '%1'">,
+  InGroup<DiagGroup<"enum-compare-typo">>;
+
+def note_enum_compare_typo_suggest : Note<
+  "use '%0' to perform a bitwise shift">;
+
 } // end of sema component.

@@ -1060,6 +1060,7 @@ CGOpenMPRuntime::CGOpenMPRuntime(CodeGenModule &CGM)
       hasRequiresUnifiedSharedMemory(), /*HasRequiresDynamicAllocators*/ false);
   Config.setDefaultTargetAS(
       CGM.getContext().getTargetInfo().getTargetAddressSpace(LangAS::Default));
+  Config.setRuntimeCC(CGM.getRuntimeCC());
 
   OMPBuilder.setConfig(Config);
   OMPBuilder.initialize();
@@ -11392,8 +11393,8 @@ void CGOpenMPRuntime::emitTargetDataCalls(
   llvm::OpenMPIRBuilder::LocationDescription OmpLoc(CodeGenIP);
   llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
       cantFail(OMPBuilder.createTargetData(
-          OmpLoc, AllocaIP, CodeGenIP, DeviceID, IfCondVal, Info, GenMapInfoCB,
-          CustomMapperCB,
+          OmpLoc, AllocaIP, CodeGenIP, /*DeallocIPs=*/{}, DeviceID, IfCondVal,
+          Info, GenMapInfoCB, CustomMapperCB,
           /*MapperFunc=*/nullptr, BodyCB, DeviceAddrCB, RTLoc));
   CGF.Builder.restoreIP(AfterIP);
 }
