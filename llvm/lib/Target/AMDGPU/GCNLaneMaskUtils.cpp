@@ -32,6 +32,7 @@ bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
 /// Determine whether the lane-mask register \p Reg is a wave-wide constant.
 /// If so, the value is stored in \p Val.
 bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val) const {
+  return false;
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   const MachineInstr *MI;
@@ -218,6 +219,7 @@ void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
 bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
                                          MachineBasicBlock &UseBlock,
                                          unsigned RemainingDepth) {
+  return false;
   MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   MachineInstr *DefInstr = nullptr;
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
@@ -541,7 +543,15 @@ void GCNLaneMaskUpdater::process() {
     LMU.buildMergeLaneMasks(*Info.Block, insertPt, {}, Info.Merged, Previous,
                             Info.Value, LMA, Accumulating);
 
-    if (Info.Flags & ResetAtEnd) {
+    /*if (Info.Flags & ResetAtEnd) {
+      // We enter this if block if Info.Block is Ti and Ri
+      // Here we check if Accumulator was set by a simple copy, if so, we use the corresponding register
+      // This is a copy propogation optimization.
+      // It depends on getting the latest def of Accumulator in Info.Block and checking if it has no uses.
+      // TODO : Swithing off this optimization for nonSSA context since Accumulator will 
+      // have a use at the end of Info.Block : Set Accumumlator to 0 (since Info.Block is Ri)
+      // Will implement a nonSSA variant for the same.
+      
       MachineInstr *mergeInstr = MRI.getVRegDef(Info.Merged);
       dbgs() << "\tmergeInstr:";
       mergeInstr->dump();
@@ -554,7 +564,7 @@ void GCNLaneMaskUpdater::process() {
         dbgs() << "\tErase mergeInstr\n";
         mergeInstr->eraseFromParent();
       }
-    }
+    }*/
   }
 
   Processed = true;

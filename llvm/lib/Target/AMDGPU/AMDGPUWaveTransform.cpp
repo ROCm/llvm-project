@@ -2128,32 +2128,32 @@ void ControlFlowRewriter::rewrite() {
       Register PrimaryExec = PredInfo.PrimarySuccessorExec; 
       LLVM_DEBUG(dbgs() << "Pred:" << Pred->Block->name() << "\nPrimaryExec:" << printReg(PrimaryExec,MRI.getTargetRegisterInfo(), 0, &MRI) << "\n");
 
-      MachineInstr *PrimaryExecDef;
-      for (;;) {
-        PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
-        if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
-          break;
-        PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
-      }
+      // MachineInstr *PrimaryExecDef;
+      // for (;;) {
+      //   PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
+      //   if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
+      //     break;
+      //   PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
-      LLVM_DEBUG(dbgs() << "PrimaryExecDef:");
-      LLVM_DEBUG(PrimaryExecDef->dump());
-      LLVM_DEBUG(dbgs() << "\n");
+      // LLVM_DEBUG(dbgs() << "PrimaryExecDef:");
+      // LLVM_DEBUG(PrimaryExecDef->dump());
+      // LLVM_DEBUG(dbgs() << "\n");
 
       // Rejoin = EXEC ^ PrimaryExec
       //
       // Fold immediately if PrimaryExec was obtained via XOR as well.
       Register Rejoin;
 
-      if (PrimaryExecDef->getParent() == Pred->Block &&
-          PrimaryExecDef->getOpcode() == LMC.XorOpc &&
-          PrimaryExecDef->getOperand(1).isReg() &&
-          PrimaryExecDef->getOperand(2).isReg()) {
-        if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(2).getReg();
-        else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(1).getReg();
-      }
+      // if (PrimaryExecDef->getParent() == Pred->Block &&
+      //     PrimaryExecDef->getOpcode() == LMC.XorOpc &&
+      //     PrimaryExecDef->getOperand(1).isReg() &&
+      //     PrimaryExecDef->getOperand(2).isReg()) {
+      //   if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(2).getReg();
+      //   else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
       if (!Rejoin) {
         // Try to find a previously generated XOR (or merely masked) value
