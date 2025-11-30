@@ -1,0 +1,184 @@
+#!/usr/bin/python3
+
+import subprocess
+import re
+import os
+import sys
+
+def parse_rocm_smi_toponuma():
+    """
+    Parses the output of 'rocm-smi --showtoponuma' to extract GPU affinity
+    and NUMA node information, storing them in arrays indexed by GPU number.
+
+    Returns:
+        tuple: A tuple containing two lists:
+               - gpu_affinity (list): List where index is GPU number and value is affinity.
+               - numa_node (list): List where index is GPU number and value is NUMA node.
+               Returns (None, None) if the command fails or output is unparseable.
+    """
+    try:
+        # Execute the rocm-smi command
+        result = subprocess.run(['rocm-smi', '--showtoponuma'], capture_output=True, text=True, check=True)
+        output = result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing rocm-smi: {e}")
+        return None, None
+    except FileNotFoundError:
+        print("Error: 'rocm-smi' command not found. Ensure ROCm is installed and in your PATH.")
+        return None, None
+
+    gpu_affinity = []
+    numa_node = []
+
+    # Regex to find lines containing GPU information (e.g., "GPU[0-9]: Affinity: [0-9]+, Node: [0-9]+")
+    # This regex is an example and might need adjustment based on the exact rocm-smi output format.
+    patternAffy = re.compile(r"GPU\[(\d+)\]\s+:\s+\(Topology\) Numa Affinity:\s+(\d+)")
+    patternNode = re.compile(r"GPU\[(\d+)\]\s+:\s+\(Topology\) Numa Node:\s+(\d+)")
+
+    for line in output.splitlines():
+        match = patternAffy.search(line)
+        if match:
+            gpu_id = int(match.group(1))
+            affinity = int(match.group(2))
+            # Ensure lists are large enough to accommodate the GPU ID
+            while len(gpu_affinity) <= gpu_id:
+                gpu_affinity.append(None)
+
+            gpu_affinity[gpu_id] = affinity
+        match = patternNode.search(line)
+        if match:
+            gpu_id = int(match.group(1))
+            node = int(match.group(2))
+
+            # Ensure lists are large enough to accommodate the GPU ID
+            while len(numa_node) <= gpu_id:
+                numa_node.append(None)
+
+            numa_node[gpu_id] = node
+    return gpu_affinity, numa_node
+
+def parse_lscpu_numa():
+# get lscpu numa info
+#    NUMA node0 CPU(s):                       0-7
+#    NUMA node1 CPU(s):                       8-15
+    try:
+        # Execute the rocm-smi command
+        result = subprocess.run(['lscpu'], capture_output=True, text=True, check=True)
+        output = result.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing lscpu: {e}")
+        return None, None
+    except FileNotFoundError:
+        print("Error: 'lscpu' command not found.")
+        return None, None
+
+    numa_cpus = []
+    numa_cpue = []
+
+    patternLSCPU = re.compile(r"NUMA node(\d+) CPU\(s\):\s+(\d+)-(\d+)")
+
+    for line in output.splitlines():
+        match = patternLSCPU.search(line)
+        if match:
+            numa_id = int(match.group(1))
+            cpus = int(match.group(2))
+            cpue = int(match.group(3))
+            if debug_numa > 2:print("numa:", numa_id, cpus, cpue)
+            # Ensure lists are large enough to accommodate the GPU ID
+            while len(numa_cpus) <= numa_id:
+                numa_cpus.append(None)
+            while len(numa_cpue) <= numa_id:
+                numa_cpue.append(None)
+
+            numa_cpus[numa_id] = cpus
+            numa_cpue[numa_id] = cpue
+    return numa_cpus, numa_cpue
+
+def check_numactl_exists():
+    try:
+        subprocess.run(['numactl', '--version'], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    # numactl command not found in PATH
+    except FileNotFoundError: return False
+    except subprocess.CalledProcessError: return True
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return False
+
+def check_taskset_exists():
+    try:
+        subprocess.run(['taskset', '--version'], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    # taskset command not found in PATH
+    except FileNotFoundError: return False
+    except subprocess.CalledProcessError: return True
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return False
+
+def processArgs():
+    sysPos=1
+    debug_numa=0
+    use_taskset=False
+    use_numactl=True
+    use_nobind=False
+    # loop over bind arguments
+    while True:
+      if   sys.argv[sysPos] == "-v": debug_numa=1
+      elif sys.argv[sysPos] == "-vv":  debug_numa=2
+      elif sys.argv[sysPos] == "-vvv": debug_numa=3
+      elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
+      elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
+      elif sys.argv[sysPos] == "-nobind":  use_nobind=True;  use_taskset=False; use_numactl=False
+      else: break
+      sysPos += 1
+
+    return sysPos, debug_numa, use_taskset, use_numactl, use_nobind
+
+if __name__ == "__main__":
+    sysPos, debug_numa, use_taskset, use_numactl, use_nobind = processArgs()
+    #check for numactl and taskset
+    has_numactl = check_numactl_exists()
+    has_taskset = check_taskset_exists()
+
+    #get topo info
+    numa_cpus, numa_cpue = parse_lscpu_numa()
+    affinity_data, node_data = parse_rocm_smi_toponuma()
+    numGpus = len(node_data)
+    rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
+    localRank = int(os.environ.get('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
+    numRanksLocal = int(os.environ.get('OMPI_COMM_WORLD_LOCAL_SIZE', '1'))
+    if rocrVisDev != -1:
+       adjRank = rocrVisDev
+    else:
+       adjRank = localRank % numGpus
+
+    if debug_numa > 1:
+      print("#GPUs ", numGpus, "numRanks", numRanksLocal, "localRank", localRank, "adjRank", adjRank, "RVD", rocrVisDev)
+      if debug_numa > 2:
+        if affinity_data is not None and node_data is not None:
+          print("GPU Affinity Data:")
+          for i, affinity in enumerate(affinity_data):
+            if affinity is not None:
+                print(f"  GPU {i}: Affinity = {affinity}")
+
+          print("\nNUMA Node Data:")
+          for i, node in enumerate(node_data):
+            if node is not None:
+                print(f"  GPU {i}: NUMA Node = {node}")
+
+    my_env = os.environ.copy()
+    my_env["ROCR_VISIBLE_DEVICES"] = str(adjRank)
+    if use_taskset and has_taskset:
+       program_to_run = [ "taskset", "-c", str(numa_cpus[node_data[adjRank]])+"-"+str(numa_cpue[node_data[adjRank]]) ]
+    elif use_numactl and has_numactl:
+       program_to_run = [ "numactl", "--cpunodebind", str(node_data[adjRank]), "--membind", str(affinity_data[adjRank]) ]
+    elif use_nobind:
+       program_to_run = [ ]
+    else:
+       program_to_run = [ ]
+    program_to_run.extend(sys.argv[sysPos:])
+    if debug_numa > 0: print("ROCR_VISIBLE_DEVICES", adjRank, " ", program_to_run)
+    result = subprocess.run(program_to_run, env=my_env, capture_output=False, text=False, check=False)
