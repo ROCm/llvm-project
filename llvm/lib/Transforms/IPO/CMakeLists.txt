@@ -33,6 +33,7 @@ add_llvm_component_library(LLVMipo
   MemProfContextDisambiguation.cpp
   MergeFunctions.cpp
   ModuleInliner.cpp
+  MSSAArgPromotion.cpp
   OpenMPOpt.cpp
   PartialInlining.cpp
   SampleContextTracker.cpp
