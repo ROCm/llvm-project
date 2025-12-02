@@ -1141,9 +1141,8 @@ SIRegisterInfo::getCrossCopyRegClass(const TargetRegisterClass *RC) const {
   return RC == &AMDGPU::SCC_CLASSRegClass ? &AMDGPU::SReg_32RegClass : RC;
 }
 
-static unsigned getNumSubRegsForSpillOp(const MachineInstr &MI,
-                                        const SIInstrInfo *TII) {
-
+unsigned SIRegisterInfo::getNumSubRegsForSpillOp(const MachineInstr &MI) const {
+  const SIInstrInfo *TII = ST.getInstrInfo();
   unsigned Op = MI.getOpcode();
   switch (Op) {
   case AMDGPU::SI_BLOCK_SPILL_V1024_SAVE:
@@ -2641,7 +2640,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
           *MBB, MI, DL, Opc, Index, VData->getReg(), VData->isKill(), FrameReg,
           TII->getNamedOperand(*MI, AMDGPU::OpName::offset)->getImm(),
           *MI->memoperands_begin(), RS, nullptr, NeedsCFI);
-      MFI->addToSpilledVGPRs(getNumSubRegsForSpillOp(*MI, TII));
+      MFI->addToSpilledVGPRs(getNumSubRegsForSpillOp(*MI));
       if (IsWWMRegSpill)
         TII->restoreExec(*MF, *MBB, MI, DL, MFI->getSGPRForEXECCopy());
 

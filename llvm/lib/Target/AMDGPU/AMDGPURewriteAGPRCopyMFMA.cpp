@@ -111,6 +111,17 @@ public:
   bool tryFoldCopiesToAGPR(Register VReg, MCRegister AssignedAGPR) const;
   bool tryFoldCopiesFromAGPR(Register VReg, MCRegister AssignedAGPR) const;
 
+  /// Derives the subregister index from a spill pseudo instruction by
+  /// constructing a lane mask that covers the spilled portion and finding
+  /// the matching subregister.
+  ///
+  /// \param MI the spill reload pseudo instruction containing the offset and
+  /// spill size info
+  /// \param Reg the original virtual register being spilled (mostly a tuple
+  /// register)
+  /// \return the subregister index corresponding to the reload portion.
+  unsigned getSubRegFromReload(MachineInstr &MI, Register VReg) const;
+
   /// Replace spill instruction \p SpillMI which loads/stores from/to \p SpillFI
   /// with a COPY to the replacement register value \p VReg.
   void replaceSpillWithCopyToVReg(MachineInstr &SpillMI, int SpillFI,
@@ -414,6 +425,33 @@ bool AMDGPURewriteAGPRCopyMFMAImpl::tryFoldCopiesFromAGPR(
   return MadeChange;
 }
 
+unsigned
+AMDGPURewriteAGPRCopyMFMAImpl::getSubRegFromReload(MachineInstr &MI,
+                                                   Register Reg) const {
+  unsigned NumRegs = TRI.getRegSizeInBits(*MRI.getRegClass(Reg)) / 32;
+  unsigned SubReg = 0;
+  // SubReg accesses for the tuple registers are of interest here.
+  // Note: We don't support lo16 and hi16 subreg reloads. If that assuption is
+  // changed in the future, this function should be revised.
+  if (NumRegs == 1)
+    return SubReg;
+
+  unsigned NumSpilledRegs = TRI.getNumSubRegsForSpillOp(MI);
+  // Skip if the entire tuple register is reloaded.
+  if (NumRegs == NumSpilledRegs)
+    return SubReg;
+
+  // Construct the covering lanes for the reloaded portion.
+  unsigned SubRegIdx =
+      TII.getNamedOperand(MI, AMDGPU::OpName::offset)->getImm() / 4;
+  // Each 32-bit register consists of two regunits and the subreg lanemasks are
+  // maintained in terms of regunits.
+  uint64_t Lanes = (1ULL << NumSpilledRegs * 2) - 1;
+  LaneBitmask CoveringLanes = LaneBitmask(Lanes << SubRegIdx * 2);
+  SubReg = TRI.getSubRegIdxFromLaneMask(CoveringLanes);
+  return SubReg;
+}
+
 void AMDGPURewriteAGPRCopyMFMAImpl::replaceSpillWithCopyToVReg(
     MachineInstr &SpillMI, int SpillFI, Register VReg) const {
   const DebugLoc &DL = SpillMI.getDebugLoc();
@@ -423,9 +461,11 @@ void AMDGPURewriteAGPRCopyMFMAImpl::replaceSpillWithCopyToVReg(
     NewCopy = BuildMI(MBB, SpillMI, DL, TII.get(TargetOpcode::COPY), VReg)
                   .add(SpillMI.getOperand(0));
   } else {
+    // Identify the subregs if SpillMI is really a subreg-load.
+    unsigned SubReg = getSubRegFromReload(SpillMI, VReg);
     NewCopy = BuildMI(MBB, SpillMI, DL, TII.get(TargetOpcode::COPY))
                   .add(SpillMI.getOperand(0))
-                  .addReg(VReg);
+                  .addReg(VReg, 0, SubReg);
   }
 
   LIS.ReplaceMachineInstrInMaps(SpillMI, *NewCopy);
