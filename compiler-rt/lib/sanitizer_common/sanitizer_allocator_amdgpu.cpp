@@ -43,7 +43,14 @@ static const size_t kPageSize_ = 4096;
 static atomic_uint8_t amdgpu_runtime_shutdown{0};
 static atomic_uint8_t amdgpu_event_registered{0};
 
-// Check if AMDGPU runtime shutdown state
+#  define LOAD_HSA_FUNC_WITH_ERROR_CHECK(func, name, success)         \
+    func = (decltype(func))dlsym(RTLD_NEXT, name);                    \
+    if (!func) {                                                      \
+      VReport(2, "Amdgpu Init: Failed to load " #name " function\n"); \
+      success = false;                                                \
+    }
+
+// Check AMDGPU runtime shutdown state
 bool AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown() {
   return static_cast<bool>(
       atomic_load(&amdgpu_runtime_shutdown, memory_order_acquire));
@@ -54,38 +61,43 @@ void AmdgpuMemFuncs::NotifyAmdgpuRuntimeShutdown() {
   uint8_t shutdown = 0;
   if (atomic_compare_exchange_strong(&amdgpu_runtime_shutdown, &shutdown, 1,
                                      memory_order_acq_rel)) {
-    VReport(1, " Amdgpu Allocator: AMDGPU runtime shutdown detected\n");
+    VReport(2, "Amdgpu Allocator: AMDGPU runtime shutdown detected\n");
   }
 }
 
 bool AmdgpuMemFuncs::Init() {
-  hsa_amd.memory_pool_allocate =
-      (decltype(hsa_amd.memory_pool_allocate))dlsym(
-          RTLD_NEXT, "hsa_amd_memory_pool_allocate");
-  hsa_amd.memory_pool_free = (decltype(hsa_amd.memory_pool_free))dlsym(
-      RTLD_NEXT, "hsa_amd_memory_pool_free");
-  hsa_amd.pointer_info = (decltype(hsa_amd.pointer_info))dlsym(
-      RTLD_NEXT, "hsa_amd_pointer_info");
-  hsa_amd.vmem_address_reserve_align =
-      (decltype(hsa_amd.vmem_address_reserve_align))dlsym(
-          RTLD_NEXT, "hsa_amd_vmem_address_reserve_align");
-  hsa_amd.vmem_address_free = (decltype(hsa_amd.vmem_address_free))dlsym(
-      RTLD_NEXT, "hsa_amd_vmem_address_free");
-  hsa_amd.register_system_event_handler =
-      (decltype(hsa_amd.register_system_event_handler))dlsym(
-          RTLD_NEXT, "hsa_amd_register_system_event_handler");
-  if (!hsa_amd.memory_pool_allocate || !hsa_amd.memory_pool_free ||
-      !hsa_amd.pointer_info || !hsa_amd.vmem_address_reserve_align ||
-      !hsa_amd.vmem_address_free || !hsa_amd.register_system_event_handler)
+  bool success = true;
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.memory_pool_allocate,
+                                 "hsa_amd_memory_pool_allocate", success);
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.memory_pool_free,
+                                 "hsa_amd_memory_pool_free", success);
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.pointer_info, "hsa_amd_pointer_info",
+                                 success);
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.vmem_address_reserve_align,
+                                 "hsa_amd_vmem_address_reserve_align", success);
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.vmem_address_free,
+                                 "hsa_amd_vmem_address_free", success);
+  LOAD_HSA_FUNC_WITH_ERROR_CHECK(hsa_amd.register_system_event_handler,
+                                 "hsa_amd_register_system_event_handler",
+                                 success);
+  if (!success) {
+    VReport(1, "Amdgpu Init: Failed to load AMDGPU runtime functions\n");
     return false;
+  }
   return true;
 }
 
 void *AmdgpuMemFuncs::Allocate(uptr size, uptr alignment,
                                DeviceAllocationInfo *da_info) {
   // Do not allocate if AMDGPU runtime is shutdown
-  if (IsAmdgpuRuntimeShutdown())
+  if (IsAmdgpuRuntimeShutdown()) {
+    VReport(1,
+            "Amdgpu Allocate: Runtime shutdown, skipping allocation for size "
+            "%zu alignment %zu\n",
+            size, alignment);
     return nullptr;
+  }
+
   AmdgpuAllocationInfo *aa_info =
       reinterpret_cast<AmdgpuAllocationInfo *>(da_info);
   if (!aa_info->memory_pool.handle) {
@@ -104,8 +116,14 @@ void *AmdgpuMemFuncs::Allocate(uptr size, uptr alignment,
 
 void AmdgpuMemFuncs::Deallocate(void *p) {
   // Deallocate does nothing after AMDGPU runtime shutdown
-  if (IsAmdgpuRuntimeShutdown())
+  if (IsAmdgpuRuntimeShutdown()) {
+    VReport(
+        1,
+        "Amdgpu Deallocate: Runtime shutdown, skipping deallocation for %p\n",
+        reinterpret_cast<void*>(p));
     return;
+  }
+
   DevicePointerInfo DevPtrInfo;
   if (AmdgpuMemFuncs::GetPointerInfo(reinterpret_cast<uptr>(p), &DevPtrInfo)) {
     if (DevPtrInfo.type == HSA_EXT_POINTER_TYPE_HSA) {
@@ -118,6 +136,14 @@ void AmdgpuMemFuncs::Deallocate(void *p) {
 }
 
 bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
+  // GetPointerInfo returns false after AMDGPU runtime shutdown
+  if (IsAmdgpuRuntimeShutdown()) {
+    VReport(1,
+            "Amdgpu GetPointerInfo: Runtime shutdown, skipping query for %p\n",
+            reinterpret_cast<void*>(ptr));
+    return false;
+  }
+
   hsa_amd_pointer_info_t info;
   info.size = sizeof(hsa_amd_pointer_info_t);
   hsa_status_t status =
@@ -138,9 +164,11 @@ bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
  // Register shutdown system event handler only once
  // TODO: Register multiple event handlers if needed in future
 void AmdgpuMemFuncs::RegisterSystemEventHandlers() {
-  // Check if already registered
-  if (atomic_load(&amdgpu_event_registered, memory_order_acquire) == 0) {
-    // Callback to just detect runtime shutdown
+  uint8_t registered = 0;
+  // Check if shutdown event handler is already registered
+  if (atomic_compare_exchange_strong(&amdgpu_event_registered, &registered, 1,
+                                     memory_order_acq_rel)) {
+    // Callback to detect and notify AMDGPU runtime shutdown
     hsa_amd_system_event_callback_t callback = [](const hsa_amd_event_t* event,
                                                   void* data) {
       if (!event)
@@ -149,12 +177,20 @@ void AmdgpuMemFuncs::RegisterSystemEventHandlers() {
         AmdgpuMemFuncs::NotifyAmdgpuRuntimeShutdown();
       return HSA_STATUS_SUCCESS;
     };
-    // Register the callback
+    // Register the event callback
     hsa_status_t status =
         hsa_amd.register_system_event_handler(callback, nullptr);
-    // Mark as registered if successful
+    // Check as registered if successful
     if (status == HSA_STATUS_SUCCESS)
-      atomic_store(&amdgpu_event_registered, 1, memory_order_release);
+      VReport(
+          1,
+          "Amdgpu RegisterSystemEventHandlers: Registered shutdown event \n");
+    else {
+      VReport(1,
+              "Amdgpu RegisterSystemEventHandlers: Failed to register shutdown "
+              "event \n");
+      atomic_store(&amdgpu_event_registered, 0, memory_order_release);
+    }
   }
 }
 
