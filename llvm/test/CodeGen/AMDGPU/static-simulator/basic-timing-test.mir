@@ -1,0 +1,221 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+
+---
+name: vopd_single_cycle_occupancy
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0, $vgpr0, $vgpr1, $vgpr2, $vgpr3
+
+    $vgpr10, $vgpr11 = V_DUAL_MUL_F32_e32_X_MUL_F32_e32_gfx1250 $sgpr0, $vgpr0, $sgpr0, $vgpr1, implicit $mode, implicit $exec, implicit $mode, implicit $exec, implicit $mode, implicit $exec
+    $vgpr12, $vgpr13 = V_DUAL_MUL_F32_e32_X_MUL_F32_e32_gfx1250 $sgpr0, $vgpr2, $sgpr0, $vgpr3, implicit $mode, implicit $exec, implicit $mode, implicit $exec, implicit $mode, implicit $exec
+    $vgpr14 = V_MOV_B32_e32 42, implicit $exec
+
+    S_ENDPGM 0, implicit $vgpr10, implicit $vgpr11, implicit $vgpr12, implicit $vgpr13, implicit $vgpr14
+...
+
+---
+name: trans_half_rate_occupancy
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2
+
+    $vgpr10 = V_EXP_F32_e32 $vgpr0, implicit $exec, implicit $mode
+    $vgpr11 = V_EXP_F32_e32 $vgpr1, implicit $exec, implicit $mode
+    $vgpr12 = V_EXP_F32_e32 $vgpr2, implicit $exec, implicit $mode
+
+    S_ENDPGM 0, implicit $vgpr10, implicit $vgpr11, implicit $vgpr12
+...
+
+---
+name: valu_single_cycle_occupancy
+tracksRegLiveness: true
+body: |
+  bb.0:
+    $vgpr10 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr11 = V_MOV_B32_e32 2, implicit $exec
+    $vgpr12 = V_MOV_B32_e32 3, implicit $exec
+    $vgpr13 = V_MOV_B32_e32 4, implicit $exec
+
+    S_ENDPGM 0, implicit $vgpr10, implicit $vgpr11, implicit $vgpr12, implicit $vgpr13
+...
+
+---
+name: spill_reload_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr2, $sgpr0, $sgpr1, $sgpr2
+    SCRATCH_STORE_DWORD_SADDR $vgpr0, $sgpr0, 0, 0, implicit $exec, implicit $flat_scr
+    SCRATCH_STORE_DWORD_SADDR $vgpr1, $sgpr0, 4, 0, implicit $exec, implicit $flat_scr
+    $vgpr10 = SCRATCH_LOAD_DWORD_SADDR $sgpr0, 0, 0, implicit $exec, implicit $flat_scr
+    $vgpr11 = SCRATCH_LOAD_DWORD_SADDR $sgpr0, 4, 0, implicit $exec, implicit $flat_scr
+    $vgpr2 = V_WRITELANE_B32 $sgpr1, 0, $vgpr2, implicit $exec
+    $vgpr2 = V_WRITELANE_B32 $sgpr2, 1, $vgpr2, implicit $exec
+    $sgpr10 = V_READLANE_B32 $vgpr2, 0, implicit $exec
+    $sgpr11 = V_READLANE_B32 $vgpr2, 1, implicit $exec
+    S_ENDPGM 0, implicit $vgpr10, implicit $vgpr11, implicit $sgpr10, implicit $sgpr11
+...
+
+# CHECK-LABEL: spill_reload_test
+# CHECK: Spill: 2/2 | Reload: 2/2
+# CHECK: SGPR->Lane: 2/2 | Lane->SGPR: 2/2
+
+---
+# v0,v8,v16 all map to bank 0
+name: bank_conflict_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr8, $vgpr16
+    $vgpr20 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr21 = V_FMA_F32_e64 0, $vgpr0, 0, $vgpr8, 0, $vgpr16, 0, 0, implicit $exec, implicit $mode
+    $vgpr22 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr20, implicit $vgpr21, implicit $vgpr22
+...
+
+# CHECK-LABEL: bank_conflict_test
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: RegBank=1
+# CHECK: V_FMA_F32_e64 0, $vgpr0, 0, $vgpr8, 0, $vgpr16
+# CHECK: Stalls: RegBank=2
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr1
+# CHECK: Stalls: (none)
+
+---
+name: tuple_bank_conflict_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr8_vgpr9
+    $vgpr20_vgpr21 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit $vgpr20_vgpr21
+...
+
+# CHECK-LABEL: tuple_bank_conflict_test
+# CHECK: V_PK_ADD_F32
+# CHECK: Stalls: RegBank=1
+
+---
+# SGPRs have 4 banks (reg % 4)
+name: salu_bank_conflict_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0, $sgpr1, $sgpr4, $sgpr8
+    $sgpr20 = S_ADD_I32 $sgpr0, $sgpr4, implicit-def $scc
+    $sgpr21 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr20, implicit $sgpr21
+...
+
+# CHECK-LABEL: salu_bank_conflict_test
+# CHECK: S_ADD_I32 $sgpr0, $sgpr4
+# CHECK: Stalls: RegBank=1
+# CHECK: S_ADD_I32 $sgpr0, $sgpr1
+# CHECK: Stalls: (none)
+
+---
+name: wmma_no_bank_conflict_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    S_ENDPGM 0, implicit $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23
+...
+
+# CHECK-LABEL: wmma_no_bank_conflict_test
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK-NOT: RegBank
+
+---
+name: source_cache_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr8
+    $vgpr20 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr21 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr22 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr0 = V_MOV_B32_e32 42, implicit $exec
+    $vgpr23 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr20, implicit $vgpr21, implicit $vgpr22, implicit $vgpr23
+...
+
+# CHECK-LABEL: source_cache_test
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: RegBank=1
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: (none)
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr1
+# CHECK: Stalls: (none)
+# CHECK: V_MOV_B32_e32 42
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: (none)
+
+---
+name: tuple_cache_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr8_vgpr9
+    $vgpr20_vgpr21 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr22_vgpr23 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr0_vgpr1 = V_PK_ADD_F32 8, $vgpr20_vgpr21, 8, $vgpr22_vgpr23, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr24_vgpr25 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit $vgpr24_vgpr25
+...
+
+# CHECK-LABEL: tuple_cache_test
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: RegBank=1
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: (none)
+# CHECK: V_PK_ADD_F32 8, $vgpr20_vgpr21, 8, $vgpr22_vgpr23
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: (none)
+
+---
+name: cache_eviction_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr8, $vgpr16, $vgpr24, $vgpr32, $vgpr1
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr41 = V_ADD_F32_e32 $vgpr8, $vgpr1, implicit $exec, implicit $mode
+    $vgpr42 = V_ADD_F32_e32 $vgpr16, $vgpr1, implicit $exec, implicit $mode
+    $vgpr43 = V_ADD_F32_e32 $vgpr24, $vgpr1, implicit $exec, implicit $mode
+    $vgpr44 = V_ADD_F32_e32 $vgpr32, $vgpr1, implicit $exec, implicit $mode
+    $vgpr45 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr46 = V_ADD_F32_e32 $vgpr8, $vgpr1, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr46
+...
+
+# CHECK-LABEL: cache_eviction_test
+# CHECK: VGPR Operand Cache
+# CHECK: VGPR reads:
+# CHECK: Evictions:
+
+---
+name: regbank_coexec_interaction_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24, $vgpr32
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $sgpr10 = S_MOV_B32 1
+    $sgpr11 = S_MOV_B32 2
+    $sgpr12 = S_MOV_B32 3
+    $sgpr13 = S_MOV_B32 4
+    $sgpr14 = S_MOV_B32 5
+    $sgpr15 = S_MOV_B32 6
+    $vgpr40 = V_ADD_F32_e32 $vgpr24, $vgpr32, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: regbank_coexec_interaction_test
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK: V_ADD_F32_e32 $vgpr24, $vgpr32
+# CHECK: Stalls:{{.*}}Total: {{[2-9]}}

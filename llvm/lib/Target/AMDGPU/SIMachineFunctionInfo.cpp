@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "SIMachineFunctionInfo.h"
+#include "AMDGPUStaticSimulator.h"
 #include "AMDGPUSubtarget.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
