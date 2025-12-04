@@ -696,7 +696,9 @@ ArgumentPromoter::getInOutArgClobber(const ArgPromotionInfo &ArgInfo) {
               return FoundClobber;
             // If the UseI's location is definitely overwritten with the clober
             // we can skip this path, otherwise it can be clobbered earlier.
-            if (AA.isMustAlias(MemoryLocation::get(DefI), UseLoc.value()))
+            auto DefLoc = MemoryLocation::getOrNone(DefI);
+            if (DefLoc.has_value() &&
+                AA.isMustAlias(DefLoc.value(), UseLoc.value()))
               return CheckOtherPhiPath;
 
             return ContinueThisPhiPath;
