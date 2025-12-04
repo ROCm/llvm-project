@@ -457,6 +457,18 @@ getPromotionCandidates(FunctionAnalysisManager &FAM, Argument *PtrArg,
     ArgAlign = std::max(ArgAlign, InstAlign);
   }
 
+  // Check if the parameter has an explicit alignment attribute that's
+  // insufficient for the loads/stores. If the parameter has an explicit
+  // alignment guarantee that's less than what we need, we cannot promote.
+  if (auto ParamAlign = PtrArg->getParamAlign()) {
+    if (ParamAlign.value() < ArgAlign) {
+      LLVM_DEBUG(dbgs() << " - insufficient alignment guarantee (param has "
+                        << ParamAlign.value().value() << ", need "
+                        << ArgAlign.value() << ")\n");
+      return false;
+    }
+  }
+
   Candidates.emplace_back(PtrArg, ValueTy, ArgAlign);
   if (NumLoads + NumStores) {
     auto &C = Candidates.back();
@@ -1263,6 +1275,14 @@ static Function *promoteArguments(Function *F, FunctionAnalysisManager &FAM) {
     CallBase *CB = dyn_cast<CallBase>(U.getUser());
     // Must be a direct call.
     if (CB == nullptr || !CB->isCallee(&U)) // [1]
+      return nullptr;
+
+    // Must have matching function type (no bitcasts or type mismatches).
+    if (CB->getCalledFunction() != F)
+      return nullptr;
+
+    // Don't promote if there are recursive calls.
+    if (CB->getParent()->getParent() == F)
       return nullptr;
 
     // Can't change signature of musttail callee
