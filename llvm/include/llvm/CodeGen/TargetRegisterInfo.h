@@ -1256,6 +1256,11 @@ public:
       ArrayRef<MCPhysReg> Exceptions = ArrayRef<MCPhysReg>()) const;
 
   virtual const TargetRegisterClass *
+  getConstrainedRegClass(const TargetRegisterClass *RC) const {
+    return RC;
+  }
+
+  virtual const TargetRegisterClass *
   getConstrainedRegClassForOperand(const MachineOperand &MO,
                                    const MachineRegisterInfo &MRI) const {
     return nullptr;
