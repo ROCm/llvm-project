@@ -30,6 +30,7 @@ set_source_files_properties(RegAllocScore.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
 set_source_files_properties(MachineRegisterInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
 set_source_files_properties(RegisterClassInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
 set_source_files_properties(TargetRegisterInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegisterPressure.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
 
 add_llvm_component_library(LLVMCodeGen
   AggressiveAntiDepBreaker.cpp
