@@ -411,6 +411,13 @@ public:
 
   MCRegister getExec() const;
 
+  /// getDomVRegDefInBasicBlock - Return the last machine instr that defines
+  /// the specified virtual register in the basic block, searching backwards
+  /// from instruction I (exclusive). Returns nullptr if no definition is
+  /// found.
+  MachineInstr *getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator I) const;
+
   // Find reaching register definition
   MachineInstr *findReachingDef(Register Reg, unsigned SubReg,
                                 MachineInstr &Use,

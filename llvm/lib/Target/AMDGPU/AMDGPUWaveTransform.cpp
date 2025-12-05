@@ -1871,7 +1871,7 @@ void ControlFlowRewriter::rewrite() {
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
-
+    MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
     if (!Info.OrigExit) {
       // Remove original terminators.
       while (!Node->Block->empty() && Node->Block->back().isTerminator())
@@ -1884,7 +1884,7 @@ void ControlFlowRewriter::rewrite() {
     assert(!Info.OrigExit);
 
     if (Node->Successors.size() == 1) {
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::S_BRANCH))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Node->Successors[0]->Block);
       continue;
     }
@@ -1909,24 +1909,24 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_SCC1;
       } else {
         Register CondReg = Info.OrigCondition;
-        bool isCondRegSubsetOfExec = LMA.isSubsetOfExec(CondReg, *Node->Block);
+        bool isCondRegSubsetOfExec =
+            LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd);
         LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(CondReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "," << Node->Block->name() << ") : " << isCondRegSubsetOfExec << "\n");
     
         if (!isCondRegSubsetOfExec) {
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(LMC.AndOpc),
-                  CondReg)
+          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
               .addReg(Info.OrigCondition);
         }
-        BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::COPY),
+        BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::COPY),
                 LMC.VccReg)
             .addReg(CondReg);
 
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
       }
 
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(Opcode))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
           .addMBB(LaneSucc->Wave->Block);
 
       // The _other_ successor may be a flow block instead of an original
@@ -1936,7 +1936,7 @@ void ControlFlowRewriter::rewrite() {
         Other = Node->Successors[1];
       else
         Other = Node->Successors[0];
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::S_BRANCH))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Other->Block);
     }
   }
@@ -1951,7 +1951,6 @@ void ControlFlowRewriter::rewrite() {
       RegMap;
   GCNLaneMaskUpdater Updater(Function);
   Updater.setLaneMaskAnalysis(&LMA);
-  Updater.setAccumulating(true);
 
   for (WaveNode *LaneTarget : NodeOrder) {
     LLVM_DEBUG(dbgs() << "\nPROCESSING NODE:" << LaneTarget->printableName() << "\n\n");
@@ -1973,7 +1972,7 @@ void ControlFlowRewriter::rewrite() {
     // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
     // Updater.
     // FIXME: we are creating a register here only to initialize the updater
-    Updater.init(LMU.createLaneMaskReg());
+    Updater.init();
     Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
     LLVM_DEBUG(dbgs() << "\nMark ResetInMiddle(X): " << LaneTarget->printableName() << '\n');
     for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
@@ -1984,6 +1983,9 @@ void ControlFlowRewriter::rewrite() {
     LLVM_DEBUG(dbgs() << "Iterating over Ti\n\n");
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
       Register CondReg;
+
+      MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
+          LaneOrigin.Node->Block->getFirstTerminator();
 
       LLVM_DEBUG(dbgs() << "\nOrigin(Ti): " << LaneOrigin << '\n');
       if(LaneOrigin.CondReg){
@@ -2009,30 +2011,32 @@ void ControlFlowRewriter::rewrite() {
         // cond = SCC ? EXEC : 0; (or reverse)
         CondReg = LMU.createLaneMaskReg();
         if (!LaneOrigin.InvertCondition) {
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addReg(LMC.ExecReg)
-              .addImm(0)->dump();
+              .addImm(0)
+              ->dump();
         } else {
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addImm(0)
-              .addReg(LMC.ExecReg)->dump();
+              .addReg(LMC.ExecReg)
+              ->dump();
         }
       } else {
         CondReg = LaneOrigin.CondReg;
-        bool isCondRegSubsetOfExec = LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block);
+        bool isCondRegSubsetOfExec =
+            LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
+                               MBBILaneOriginNodeFirstTerm);
         LLVM_DEBUG(dbgs() << "isSubsetOfExec(" << printReg(LaneOrigin.CondReg, MRI.getTargetRegisterInfo(), 0, &MRI) << "," << LaneOrigin.Node->Block->name() << ") : " << isCondRegSubsetOfExec << "\n");
         if (!isCondRegSubsetOfExec) {
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
-              .addReg(Prev)->dump();
+              .addReg(Prev)
+              ->dump();
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .first = CondReg;
@@ -2048,11 +2052,11 @@ void ControlFlowRewriter::rewrite() {
           // e.g. folding the XOR into the original V_CMP.
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.XorOpc), CondReg)
               .addReg(LaneOrigin.CondReg)
-              .addImm(-1)->dump();
+              .addImm(-1)
+              ->dump();
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .second = CondReg;
@@ -2089,17 +2093,22 @@ void ControlFlowRewriter::rewrite() {
                                     MRI.getTargetRegisterInfo(), 0, &MRI)
                         << '\n');
 
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+      MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(LMC.MovTermOpc), LMC.ExecReg)
-          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec)->dump();
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
-              TII.get(AMDGPU::SI_WAVE_CF_EDGE))->dump();
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+          .addReg(OriginCFGNodeInfo.PrimarySuccessorExec)
+          ->dump();
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
+              TII.get(AMDGPU::SI_WAVE_CF_EDGE))
+          ->dump();
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::S_CBRANCH_EXECZ))
-          .addMBB(OriginNode->Successors[1]->Block)->dump();
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+          .addMBB(OriginNode->Successors[1]->Block)
+          ->dump();
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::S_BRANCH))
-          .addMBB(OriginNode->Successors[0]->Block)->dump();
+          .addMBB(OriginNode->Successors[0]->Block)
+          ->dump();
 
       LLVM_DEBUG(dbgs() << "\nNodeDivergentPair:" << NodeDivergentPair.getPointer()->printableName() << "," << NodeDivergentPair.getInt() << " complete...\n");
     }
@@ -2120,7 +2129,7 @@ void ControlFlowRewriter::rewrite() {
     LLVM_DEBUG(dbgs() << "\nRejoin @ " << Secondary->printableName() << '\n');
     Secondary->dump();
     // FIXME: we are creating a register here only to initialize the updater
-    Updater.init(LMU.createLaneMaskReg());
+    Updater.init();
     Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetInMiddle);
     LLVM_DEBUG(dbgs() << "\nMark ResetInMiddle(X): " << Secondary->printableName() << '\n');
 
@@ -2132,32 +2141,32 @@ void ControlFlowRewriter::rewrite() {
       Register PrimaryExec = PredInfo.PrimarySuccessorExec; 
       LLVM_DEBUG(dbgs() << "Pred:" << Pred->Block->name() << "\nPrimaryExec:" << printReg(PrimaryExec,MRI.getTargetRegisterInfo(), 0, &MRI) << "\n");
 
-      MachineInstr *PrimaryExecDef;
-      for (;;) {
-        PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
-        if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
-          break;
-        PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
-      }
+      // MachineInstr *PrimaryExecDef;
+      // for (;;) {
+      //   PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
+      //   if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
+      //     break;
+      //   PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
-      LLVM_DEBUG(dbgs() << "PrimaryExecDef:");
-      LLVM_DEBUG(PrimaryExecDef->dump());
-      LLVM_DEBUG(dbgs() << "\n");
+      // LLVM_DEBUG(dbgs() << "PrimaryExecDef:");
+      // LLVM_DEBUG(PrimaryExecDef->dump());
+      // LLVM_DEBUG(dbgs() << "\n");
 
       // Rejoin = EXEC ^ PrimaryExec
       //
       // Fold immediately if PrimaryExec was obtained via XOR as well.
       Register Rejoin;
 
-      if (PrimaryExecDef->getParent() == Pred->Block &&
-          PrimaryExecDef->getOpcode() == LMC.XorOpc &&
-          PrimaryExecDef->getOperand(1).isReg() &&
-          PrimaryExecDef->getOperand(2).isReg()) {
-        if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(2).getReg();
-        else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(1).getReg();
-      }
+      // if (PrimaryExecDef->getParent() == Pred->Block &&
+      //     PrimaryExecDef->getOpcode() == LMC.XorOpc &&
+      //     PrimaryExecDef->getOperand(1).isReg() &&
+      //     PrimaryExecDef->getOperand(2).isReg()) {
+      //   if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(2).getReg();
+      //   else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
       if (!Rejoin) {
         // Try to find a previously generated XOR (or merely masked) value
@@ -2199,6 +2208,7 @@ void ControlFlowRewriter::rewrite() {
 
   }
 
+  Updater.insertAccumulatorResets();
   Updater.cleanup();
 
   LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_clean\n");
