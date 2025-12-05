@@ -44,6 +44,16 @@ set(LLVM_TARGET_DEFINITIONS InstCombineTables.td)
 tablegen(LLVM InstCombineTables.inc -gen-searchable-tables)
 add_public_tablegen_target(InstCombineTableGen)
 
+set_source_files_properties(GCNILPSched.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(GCNIterativeScheduler.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(GCNSchedStrategy.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(AMDGPUPerfHintAnalysis.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(AMDGPUTargetMachine.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(SIMachineScheduler.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(SIRegisterInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(SIISelLowering.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(GCNRegPressure.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+
 add_llvm_target(AMDGPUCodeGen
   AMDGPUAliasAnalysis.cpp
   AMDGPUAlwaysInlinePass.cpp

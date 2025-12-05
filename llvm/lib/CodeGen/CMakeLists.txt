@@ -22,6 +22,15 @@ if (DEFINED LLVM_HAVE_TF_AOT OR LLVM_HAVE_TFLITE)
   endif()
 endif()
 
+set_source_files_properties(RegAllocBase.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegAllocBasic.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegAllocFast.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegAllocGreedy.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegAllocScore.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(MachineRegisterInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(RegisterClassInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+set_source_files_properties(TargetRegisterInfo.cpp PROPERTIES COMPILE_FLAGS "-O0 -g")
+
 add_llvm_component_library(LLVMCodeGen
   AggressiveAntiDepBreaker.cpp
   AllocationOrder.cpp
