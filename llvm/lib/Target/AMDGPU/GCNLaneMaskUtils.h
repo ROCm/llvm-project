@@ -44,14 +44,15 @@ public:
   const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const { return LMC; }
 
   bool maybeLaneMask(Register Reg) const;
-  bool isConstantLaneMask(Register Reg, bool &Val) const;
+  bool isConstantLaneMask(Register Reg, bool &Val, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
 
   Register createLaneMaskReg() const;
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
                            GCNLaneMaskAnalysis *LMA = nullptr,
-                           bool Accumulating = false) const;
+                           bool Accumulating = false,
+                          bool isPrevZeroReg = false) const;
 };
 
 /// Lazy analyses of lane masks.
@@ -64,7 +65,8 @@ private:
 public:
   GCNLaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
 
-  bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock,
+  bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock, 
+                      MachineBasicBlock::iterator I,
                       unsigned RemainingDepth = 5);
 };
 
@@ -106,7 +108,6 @@ public:
 private:
   GCNLaneMaskUtils LMU;
   GCNLaneMaskAnalysis *LMA = nullptr;
-  MachineSSAUpdater SSAUpdater;
   MachineRegisterInfo &MRI;
   bool Accumulating = false;
 
@@ -116,7 +117,6 @@ private:
     MachineBasicBlock *Block;
     unsigned Flags = 0; // ResetFlags
     Register Value;
-    Register Merged;
 
     explicit BlockInfo(MachineBasicBlock *Block) : Block(Block) {}
 
@@ -124,7 +124,6 @@ private:
       dbgs() << "BlockInfo{";
       dbgs() << " Block:" << Block->name() << ",";
       dbgs() << " Value:" << printReg(Value, MRI.getTargetRegisterInfo(), 0, &MRI) << ",";
-      dbgs() << " Merged:" << printReg(Merged, MRI.getTargetRegisterInfo(), 0, &MRI) << ",";
       dbgs() << " Flags:";
       if(Flags & ResetAtEnd) dbgs() << "ResetAtEnd,";
       if(Flags & ResetInMiddle) dbgs() << "ResetInMiddle,";
@@ -136,13 +135,15 @@ private:
 
   Register ZeroReg;
   DenseSet<MachineInstr *> PotentiallyDead;
-
+  DenseMap<MachineBasicBlock*, DenseSet<Register>> AccumulatorResetBlocks;
 public:
-  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), SSAUpdater(MF), MRI(MF.getRegInfo()) {}
+  Register Accumulator;
+
+  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), MRI(MF.getRegInfo()) {}
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
-  void init(Register Reg);
+  void init();
   void cleanup();
 
   void setAccumulating(bool Val) { Accumulating = Val; }
@@ -153,7 +154,7 @@ public:
   Register getValueInMiddleOfBlock(MachineBasicBlock &Block);
   Register getValueAtEndOfBlock(MachineBasicBlock &Block);
   Register getValueAfterMerge(MachineBasicBlock &Block);
-
+  void insertAccumulatorResets();
 private:
   void process();
   SmallVectorImpl<BlockInfo>::iterator findBlockInfo(MachineBasicBlock &Block);

@@ -622,6 +622,13 @@ public:
   /// multiple definitions or no definition, return null.
   LLVM_ABI MachineInstr *getUniqueVRegDef(Register Reg) const;
 
+  /// getDomVRegDefInBasicBlock - Return the last machine instr that defines
+  /// the specified virtual register in the basic block, searching backwards
+  /// from instruction I (inclusive). Returns nullptr if no definition is found.
+  /// accepts end() sentinel value iterator as a valid parameter, will decrement 
+  /// it to the previous instruction if it is end()
+  LLVM_ABI MachineBasicBlock::iterator getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
+  
   /// clearKillFlags - Iterate over all the uses of the given register and
   /// clear the kill flag from the MachineOperand. This function is used by
   /// optimization passes which extend register lifetimes and need only

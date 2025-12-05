@@ -422,6 +422,20 @@ MachineInstr *MachineRegisterInfo::getUniqueVRegDef(Register Reg) const {
   return &*I;
 }
 
+/// getDomVRegDefInBasicBlock - Return the last machine instr that defines
+/// the specified virtual register in the basic block, searching backwards
+/// from instruction I (exclusive). Returns MBB.end() if no definition is found.
+MachineBasicBlock::iterator MachineRegisterInfo::getDomVRegDefInBasicBlock(
+  Register Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const {
+  if(I == MBB.begin()) return MBB.end();
+  // Iterate backwards from I (exclusive) to the beginning of the basic block
+  do {
+    --I;
+    if (I->modifiesRegister(Reg, getTargetRegisterInfo()))  return I;
+  } while (I != MBB.begin());
+  return MBB.end();
+}
+
 bool MachineRegisterInfo::hasOneNonDBGUse(Register RegNo) const {
   return hasSingleElement(use_nodbg_operands(RegNo));
 }
