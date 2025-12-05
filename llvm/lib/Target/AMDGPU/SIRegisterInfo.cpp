@@ -4127,6 +4127,11 @@ SIRegisterInfo::getRegClassForSizeOnBank(unsigned Size,
 }
 
 const TargetRegisterClass *
+SIRegisterInfo::getConstrainedRegClass(const TargetRegisterClass *RC) const {
+  return getProperlyAlignedRC(RC);
+}
+
+const TargetRegisterClass *
 SIRegisterInfo::getConstrainedRegClassForOperand(const MachineOperand &MO,
                                          const MachineRegisterInfo &MRI) const {
   const RegClassOrRegBank &RCOrRB = MRI.getRegClassOrRegBank(MO.getReg());
@@ -4239,6 +4244,28 @@ bool SIRegisterInfo::isProperlyAlignedRC(const TargetRegisterClass &RC) const {
   assert(&RC != &AMDGPU::VS_64RegClass);
 
   return true;
+}
+
+const TargetRegisterClass *
+SIRegisterInfo::getProperlyAlignedRC(const TargetRegisterClass *RC) const {
+  if (!RC || !ST.needsAlignedVGPRs())
+    return RC;
+
+  unsigned Size = getRegSizeInBits(*RC);
+  if (Size <= 32)
+    return RC;
+
+  if (RC == &AMDGPU::VS_64RegClass)
+    return &AMDGPU::VS_64_Align2RegClass;
+
+  if (isVGPRClass(RC))
+    return getAlignedVGPRClassForBitWidth(Size);
+  if (isAGPRClass(RC))
+    return getAlignedAGPRClassForBitWidth(Size);
+  if (isVectorSuperClass(RC))
+    return getAlignedVectorSuperClassForBitWidth(Size);
+
+  return RC;
 }
 
 ArrayRef<MCPhysReg>
