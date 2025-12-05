@@ -101,6 +101,11 @@ void GCNSchedStrategy::initialize(ScheduleDAGMI *DAG) {
   GenericScheduler::initialize(DAG);
 
   MF = &DAG->MF;
+  
+  // Initialize physical register tracking in GCN trackers
+  const MachineRegisterInfo &MRI = MF->getRegInfo();
+  DownwardTracker.initPhysLiveRegs(MRI);
+  UpwardTracker.initPhysLiveRegs(MRI);
 
   const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
 
@@ -1117,7 +1122,6 @@ void GCNScheduleDAGMILive::finalizeSchedule() {
 
 void GCNScheduleDAGMILive::runSchedStages() {
   LLVM_DEBUG(dbgs() << "All regions recorded, starting actual scheduling.\n");
-
   if (!Regions.empty()) {
     BBLiveInMap = getRegionLiveInMap();
     if (GCNTrackers)

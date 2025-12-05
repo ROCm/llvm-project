@@ -279,12 +279,32 @@ public:
 
 protected:
   const LiveIntervals &LIS;
-  LiveRegSet LiveRegs;
-  GCNRegPressure CurPressure, MaxPressure;
+  
+  // Virtual register tracking (existing)
+  LiveRegSet VirtLiveRegs;
+  GCNRegPressure CurVirtPressure, MaxVirtPressure;
+  
+  // Physical register tracking (new) - uses register units
+  // Using shared_ptr because LiveRegSet contains SparseSet with deleted copy ctor
+  // Temporary tracker copies share the same PhysLiveRegs for read-only access
+  std::shared_ptr<llvm::LiveRegSet> PhysLiveRegs;
+  GCNRegPressure CurPhysPressure, MaxPhysPressure;
+  
   const MachineInstr *LastTrackedMI = nullptr;
   mutable const MachineRegisterInfo *MRI = nullptr;
 
-  GCNRPTracker(const LiveIntervals &LIS_) : LIS(LIS_) {}
+  GCNRPTracker(const LiveIntervals &LIS_) 
+      : LIS(LIS_), 
+        PhysLiveRegs(std::make_shared<llvm::LiveRegSet>()) {}
+  
+  // Copy constructor - PhysLiveRegs shared_ptr is copied (temporary trackers
+  // read from the same PhysLiveRegs without modifying it)
+  GCNRPTracker(const GCNRPTracker &Other) 
+      : LIS(Other.LIS), VirtLiveRegs(Other.VirtLiveRegs),
+        CurVirtPressure(Other.CurVirtPressure), MaxVirtPressure(Other.MaxVirtPressure),
+        PhysLiveRegs(Other.PhysLiveRegs), // Share the PhysLiveRegs
+        CurPhysPressure(Other.CurPhysPressure), MaxPhysPressure(Other.MaxPhysPressure),
+        LastTrackedMI(Other.LastTrackedMI), MRI(Other.MRI) {}
 
   void reset(const MachineInstr &MI, const LiveRegSet *LiveRegsCopy,
              bool After);
@@ -295,18 +315,39 @@ protected:
   LaneBitmask getLastUsedLanes(Register Reg, SlotIndex Pos) const;
 
 public:
+  // Initialize PhysLiveRegs capacity. Must be called before first use.
+  void initPhysLiveRegs(const MachineRegisterInfo &MRI_) {
+    PhysLiveRegs->init(MRI_);
+  }
+
   // reset tracker and set live register set to the specified value.
   void reset(const MachineRegisterInfo &MRI_, const LiveRegSet &LiveRegs_);
+  
   // live regs for the current state
-  const decltype(LiveRegs) &getLiveRegs() const { return LiveRegs; }
+  const decltype(VirtLiveRegs) &getLiveRegs() const { return VirtLiveRegs; }
+  const decltype(VirtLiveRegs) &getVirtLiveRegs() const { return VirtLiveRegs; }
+  const llvm::LiveRegSet *getPhysLiveRegs() const { return PhysLiveRegs.get(); }
   const MachineInstr *getLastTrackedMI() const { return LastTrackedMI; }
 
-  void clearMaxPressure() { MaxPressure.clear(); }
+  void clearMaxPressure() { 
+    MaxVirtPressure.clear();
+    MaxPhysPressure.clear();
+  }
 
-  GCNRegPressure getPressure() const { return CurPressure; }
+  // Returns combined virtual + physical register pressure
+  GCNRegPressure getPressure() const { return CurVirtPressure + CurPhysPressure; }
+  
+  // Returns only virtual register pressure
+  GCNRegPressure getVirtPressure() const { return CurVirtPressure; }
+  
+  // Returns only physical register pressure
+  GCNRegPressure getPhysPressure() const { return CurPhysPressure; }
+  
+  // Returns combined virtual + physical max pressure
+  GCNRegPressure getMaxPressure() const { return MaxVirtPressure + MaxPhysPressure; }
 
-  decltype(LiveRegs) moveLiveRegs() {
-    return std::move(LiveRegs);
+  decltype(VirtLiveRegs) moveLiveRegs() {
+    return std::move(VirtLiveRegs);
   }
 };
 
@@ -349,12 +390,13 @@ public:
   /// to reported by LIS.
   bool isValid() const;
 
-  const GCNRegPressure &getMaxPressure() const { return MaxPressure; }
-
-  void resetMaxPressure() { MaxPressure = CurPressure; }
+  void resetMaxPressure() { 
+    MaxVirtPressure = CurVirtPressure;
+    MaxPhysPressure = CurPhysPressure;
+  }
 
   GCNRegPressure getMaxPressureAndReset() {
-    GCNRegPressure RP = MaxPressure;
+    GCNRegPressure RP = getMaxPressure();
     resetMaxPressure();
     return RP;
   }
@@ -378,8 +420,9 @@ public:
 
   /// \p return MaxPressure and clear it.
   GCNRegPressure moveMaxPressure() {
-    auto Res = MaxPressure;
-    MaxPressure.clear();
+    auto Res = getMaxPressure();
+    MaxVirtPressure.clear();
+    MaxPhysPressure.clear();
     return Res;
   }
 
