@@ -222,7 +222,7 @@ void RegionPressure::openBottom(MachineBasicBlock::const_iterator PrevBottom) {
 
 void LiveRegSet::init(const MachineRegisterInfo &MRI) {
   const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
-  unsigned NumRegUnits = TRI.getNumRegUnits();  // Fixed: was getNumRegs()
+  unsigned NumRegUnits = TRI.getNumRegs();
   unsigned NumVirtRegs = MRI.getNumVirtRegs();
   Regs.setUniverse(NumRegUnits + NumVirtRegs);
   this->NumRegUnits = NumRegUnits;
