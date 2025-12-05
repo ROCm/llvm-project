@@ -131,7 +131,7 @@ Common Errors
 
      usage: yaml_to_classes.py [-h] [--output_dir OUTPUT_DIR] [--h_def_file H_DEF_FILE]
      [--add_function RETURN_TYPE NAME ARGUMENTS STANDARDS GUARD ATTRIBUTES]
-     [--e ENTRY_POINTS]
+     [--e ENTRY_POINTS] [--export-decls]
      yaml_file
      yaml_to_classes.py:
      error: argument --add_function: expected 6 arguments

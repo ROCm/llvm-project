@@ -19,11 +19,13 @@
 
 #if defined(__HIP__) || defined(__CUDA__)
 #define __LIBC_ATTRS __attribute__((device))
-#else
-#define __LIBC_ATTRS
 #endif
 
-// TODO: Define these for CUDA / HIP.
+#pragma omp begin declare target
+
+#include <llvm-libc-decls/assert.h>
+
+#pragma omp end declare target
 
 #undef __LIBC_ATTRS
 

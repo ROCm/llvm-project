@@ -15,15 +15,21 @@
 
 #include_next <time.h>
 
+#if __has_include(<llvm-libc-decls/time.h>)
+
 #if defined(__HIP__) || defined(__CUDA__)
 #define __LIBC_ATTRS __attribute__((device))
-#else
-#define __LIBC_ATTRS
 #endif
 
-// TODO: Define these for CUDA / HIP.
+#pragma omp begin declare target
 
-#undef __LIBC_ATTRS
+_Static_assert(sizeof(clock_t) == sizeof(long), "ABI mismatch!");
+
+#include <llvm-libc-decls/time.h>
+
+#pragma omp end declare target
+
+#endif
 
 #else
 #include_next <time.h>
