@@ -101,12 +101,6 @@ void GCNSchedStrategy::initialize(ScheduleDAGMI *DAG) {
   GenericScheduler::initialize(DAG);
 
   MF = &DAG->MF;
-  
-  // Initialize physical register tracking in GCN trackers
-  const MachineRegisterInfo &MRI = MF->getRegInfo();
-  DownwardTracker.initPhysLiveRegs(MRI);
-  UpwardTracker.initPhysLiveRegs(MRI);
-
   const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
 
   SGPRExcessLimit =
@@ -1137,6 +1131,11 @@ void GCNScheduleDAGMILive::runSchedStages() {
 #endif
 
   GCNSchedStrategy &S = static_cast<GCNSchedStrategy &>(*SchedImpl);
+  // Initialize physical register tracking in GCN trackers
+  if (GCNTrackers) {
+    S.getDownwardTracker()->initPhysLiveRegs(MRI);
+    S.getUpwardTracker()->initPhysLiveRegs(MRI);
+  }
   while (S.advanceStage()) {
     auto Stage = createSchedStage(S.getCurrentStage());
     if (!Stage->initGCNSchedStage())
