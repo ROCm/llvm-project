@@ -99,17 +99,6 @@ llvm.func @sections_private(%x : !llvm.ptr) {
   llvm.return
 }
 
-// -----
-
-llvm.func @simd_linear(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
-  // expected-warning@below {{ignored clause: linear in omp.simd operation}}
-  omp.simd linear(%x = %step : !llvm.ptr) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
-    }
-  }
-  llvm.return
-}
 
 // -----
 
@@ -215,17 +204,6 @@ llvm.func @target_in_reduction(%x : !llvm.ptr) {
   // expected-error@below {{not yet implemented: Unhandled clause in_reduction in omp.target operation}}
   // expected-error@below {{LLVM Translation failed for operation: omp.target}}
   omp.target in_reduction(@add_f32 %x -> %prv : !llvm.ptr) {
-    omp.terminator
-  }
-  llvm.return
-}
-
-// -----
-
-llvm.func @target_is_device_ptr(%x : !llvm.ptr) {
-  // expected-error@below {{not yet implemented: Unhandled clause is_device_ptr in omp.target operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.target}}
-  omp.target is_device_ptr(%x : !llvm.ptr) {
     omp.terminator
   }
   llvm.return

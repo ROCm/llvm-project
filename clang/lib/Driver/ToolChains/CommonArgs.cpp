@@ -35,6 +35,7 @@
 #include "clang/Driver/ToolChain.h"
 #include "clang/Driver/Util.h"
 #include "clang/Driver/XRayArgs.h"
+#include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -1018,7 +1019,6 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
   StringRef Linker = Args.getLastArgValue(options::OPT_fuse_ld_EQ);
   const char *LinkerPath = Args.MakeArgString(ToolChain.GetLinkerPath());
   const Driver &D = ToolChain.getDriver();
-
   const bool IsFatLTO = Args.hasFlag(options::OPT_ffat_lto_objects,
                                      options::OPT_fno_fat_lto_objects, false);
   const bool IsUnifiedLTO = Args.hasArg(options::OPT_funified_lto);
@@ -1121,27 +1121,14 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
     CmdArgs.push_back(
         Args.MakeArgString(Twine(PluginOptPrefix) + ExtraDash + "mcpu=" + CPU));
 
-  if (Arg *A = Args.getLastArg(options::OPT_O_Group)) {
-    // The optimization level matches
-    // CompilerInvocation.cpp:getOptimizationLevel().
-    StringRef OOpt;
-    if (A->getOption().matches(options::OPT_O4) ||
-        A->getOption().matches(options::OPT_Ofast))
-      OOpt = "3";
-    else if (A->getOption().matches(options::OPT_O)) {
-      OOpt = A->getValue();
-      if (OOpt == "g")
-        OOpt = "1";
-      else if (OOpt == "s" || OOpt == "z")
-        OOpt = "2";
-    } else if (A->getOption().matches(options::OPT_O0))
-      OOpt = "0";
-    if (!OOpt.empty()) {
+  if (Args.getLastArg(options::OPT_O_Group)) {
+    unsigned OptimizationLevel =
+        getOptimizationLevel(Args, InputKind(), D.getDiags());
+    CmdArgs.push_back(Args.MakeArgString(Twine(PluginOptPrefix) + ExtraDash +
+                                         "O" + Twine(OptimizationLevel)));
+    if (IsAMDGCN)
       CmdArgs.push_back(
-          Args.MakeArgString(Twine(PluginOptPrefix) + ExtraDash + "O" + OOpt));
-      if (IsAMDGCN)
-        CmdArgs.push_back(Args.MakeArgString(Twine("--lto-CGO") + OOpt));
-    }
+          Args.MakeArgString(Twine("--lto-CGO") + Twine(OptimizationLevel)));
   }
 
   if (Args.hasArg(options::OPT_gsplit_dwarf)) {
@@ -3196,7 +3183,6 @@ void tools::addOpenMPDeviceRTL(const Driver &D,
       Triple.isAMDGCN()  ? options::OPT_libomptarget_amdgpu_bc_path_EQ
       : Triple.isNVPTX() ? options::OPT_libomptarget_nvptx_bc_path_EQ
                          : options::OPT_libomptarget_spirv_bc_path_EQ;
-
 
   StringRef ArchPrefix = Triple.isAMDGCN()  ? "amdgpu"
                          : Triple.isNVPTX() ? "nvptx"

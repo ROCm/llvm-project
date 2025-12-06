@@ -914,12 +914,8 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
   // If DWARF address space value is other than None, add it.  The IR
   // verifier checks that DWARF address space only exists for pointer
   // or reference types.
-  if (auto AS = DTy->getDWARFAddressSpace()) {
-    // TODO: Drop address_class once the debugger adopts address_space
-    for (auto ASTag :
-         {dwarf::DW_AT_address_class, dwarf::DW_AT_LLVM_address_space})
-      addUInt(Buffer, ASTag, dwarf::DW_FORM_data4, *AS);
-  }
+  if (auto AS = DTy->getDWARFAddressSpace())
+    addUInt(Buffer, dwarf::DW_AT_LLVM_address_space, dwarf::DW_FORM_data4, *AS);
 
   // Add template alias template parameters.
   if (Tag == dwarf::DW_TAG_template_alias)
@@ -1621,6 +1617,9 @@ void DwarfUnit::constructSubrangeDIE(DIE &DW_Subrange, const DISubrangeType *SR,
     if (auto *BV = dyn_cast_if_present<DIVariable *>(Bound)) {
       if (auto *VarDIE = getDIE(BV))
         addDIEEntry(DW_Subrange, Attr, *VarDIE);
+    } else if (auto *DT = dyn_cast_if_present<DIDerivedType *>(Bound)) {
+      if (auto *DTDIE = getDIE(DT))
+        addDIEEntry(DW_Subrange, Attr, *DTDIE);
     } else if (auto *BE = dyn_cast_if_present<DIExpression *>(Bound)) {
       addBlock(DW_Subrange, Attr, BE);
     } else if (auto *BI = dyn_cast_if_present<ConstantInt *>(Bound)) {
