@@ -178,7 +178,7 @@ if __name__ == "__main__":
        use_taskset = False
        use_numactl = False
        use_nobind = True
-    fi
+    
     if rocrVisDev != -1:
        adjRank = rocrVisDev
     else:
