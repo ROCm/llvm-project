@@ -129,6 +129,18 @@ def processArgs():
     use_numactl=True
     use_nobind=False
     dry_run=False
+    #  -h   Print this help message and exit
+    #  -md  Set number of desired devices for multi-device mode, default=1
+    #  -s   suppress output, often useful in benchmarking
+    #  -q   suppress output, quiet, alias of -s, same as GPURUN_VERBOSE=0
+    #  -m   use numactl membind to CPUs in same NUMA domain. Note: Allocation
+    #       fails when not enough memory available on these nodes.
+    #  -l   use numactl localalloc to CPUs in same NUMA domain. Note: If
+    #       memory cannot be allocated, alloc falls back to other nodes.
+    #  -nr  use numactl ROCR_VISIBLE_DEVICES
+    #  -nm  use numactl OMPI_COMM_WORLD_LOCAL_RANK
+    #  --version Print version of gpurun and exit
+    skip_args = ["-h", "-md", "-s", "-q", "-m", "-l", "-nr", "-nm", "--version" ]
     # loop over bind arguments
     while True:
       if   sys.argv[sysPos] == "-v": debug_numa=1
@@ -138,6 +150,8 @@ def processArgs():
       elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
       elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
       elif sys.argv[sysPos] == "-nobind":  use_nobind=True;  use_taskset=False; use_numactl=False
+      #to be implimented GPURUN options
+      elif sys.argv[sysPos] in skip_args: skipped_args=True
       else: break
       sysPos += 1
 
@@ -156,6 +170,14 @@ if __name__ == "__main__":
     rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
     localRank = int(os.environ.get('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
     numRanksLocal = int(os.environ.get('OMPI_COMM_WORLD_LOCAL_SIZE', '1'))
+
+    # support override by envvar
+    gpurun_bypass = int(os.environ.get('GPURUN_BYPASS', '0'))
+    if gpurun_bypass:
+       use_taskset = False
+       use_numactl = False
+       use_nobind = True
+    fi
     if rocrVisDev != -1:
        adjRank = rocrVisDev
     else:
