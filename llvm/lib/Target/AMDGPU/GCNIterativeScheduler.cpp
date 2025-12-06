@@ -242,6 +242,9 @@ GCNIterativeScheduler::GCNIterativeScheduler(MachineSchedContext *C,
   , Context(C)
   , Strategy(S)
   , UPTracker(*LIS) {
+  // Initialize physical register tracking in UPTracker
+  // Must be done once before first use
+  UPTracker.initPhysLiveRegs(Context->MF->getRegInfo());
 }
 
 // returns max pressure for a region
@@ -282,6 +285,7 @@ GCNIterativeScheduler::getSchedulePressure(const Region &R,
                                            Range &&Schedule) const {
   auto const BBEnd = R.Begin->getParent()->end();
   GCNUpwardRPTracker RPTracker(*LIS);
+  RPTracker.initPhysLiveRegs(MF.getRegInfo());
   if (R.End != BBEnd) {
     // R.End points to the boundary instruction but the
     // schedule doesn't include it
