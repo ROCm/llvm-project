@@ -123,13 +123,18 @@ def check_taskset_exists():
         print(f"An unexpected error occurred: {e}")
         return False
 
-def processArgs():
-    sysPos=1
-    debug_numa=0
-    use_taskset=False
-    use_numactl=True
-    use_nobind=False
-    dry_run=False
+def helpExit(exCode):
+    if exCode == 1: print("Error: nothing to bind")
+    print("Usage: gpurun [gpurun_options] Program and options")
+    print("  -h --help : display help test")
+    print("  -v : display gpurun command")
+    print("  -vv : display additional debug info")
+    print("  -vvv : display more debug info")
+    print("  -dryrun : do not run bindings")
+    print("  -taskset : use taskset for binding")
+    print("  -numatcl : use numactl for binding [default]")
+    sys.exit(exCode)
+    # still to do
     #  -h   Print this help message and exit
     #  -md  Set number of desired devices for multi-device mode, default=1
     #  -s   suppress output, often useful in benchmarking
@@ -141,12 +146,22 @@ def processArgs():
     #  -nr  use numactl ROCR_VISIBLE_DEVICES
     #  -nm  use numactl OMPI_COMM_WORLD_LOCAL_RANK
     #  --version Print version of gpurun and exit
+
+def processArgs():
+    sysPos=1
+    debug_numa=0
+    use_taskset=False
+    use_numactl=True
+    use_nobind=False
+    dry_run=False
     skip_args = ["-h", "-md", "-s", "-q", "-m", "-l", "-nr", "-nm", "--version" ]
     # loop over bind arguments
     while True:
+      if len(sys.argv[sysPos:]) == 0: helpExit(1)
       if   sys.argv[sysPos] == "-v": debug_numa=1
       elif sys.argv[sysPos] == "-vv":  debug_numa=2
       elif sys.argv[sysPos] == "-vvv": debug_numa=3
+      elif sys.argv[sysPos] in ["-h", "--help"]: helpExit(0)
       elif sys.argv[sysPos] == "-dryrun": dry_run=True
       elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
       elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
@@ -178,7 +193,7 @@ if __name__ == "__main__":
        use_taskset = False
        use_numactl = False
        use_nobind = True
-    
+
     if rocrVisDev != -1:
        adjRank = rocrVisDev
     else:
