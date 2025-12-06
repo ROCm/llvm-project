@@ -970,6 +970,7 @@ void GCNScheduleDAGMILive::schedule() {
 GCNRegPressure
 GCNScheduleDAGMILive::getRealRegPressure(unsigned RegionIdx) const {
   GCNDownwardRPTracker RPTracker(*LIS);
+  RPTracker.initPhysLiveRegs(MF.getRegInfo());
   RPTracker.advance(Regions[RegionIdx].first, Regions[RegionIdx].second,
                     &LiveIns[RegionIdx]);
   return RPTracker.moveMaxPressure();
@@ -984,6 +985,7 @@ static MachineInstr *getLastMIForRegion(MachineBasicBlock::iterator RegionBegin,
 void GCNScheduleDAGMILive::computeBlockPressure(unsigned RegionIdx,
                                                 const MachineBasicBlock *MBB) {
   GCNDownwardRPTracker RPTracker(*LIS);
+  RPTracker.initPhysLiveRegs(MF.getRegInfo());
 
   // If the block has the only successor then live-ins of that successor are
   // live-outs of the current block. We can reuse calculated live set if the
@@ -1133,8 +1135,8 @@ void GCNScheduleDAGMILive::runSchedStages() {
   GCNSchedStrategy &S = static_cast<GCNSchedStrategy &>(*SchedImpl);
   // Initialize physical register tracking in GCN trackers
   if (GCNTrackers) {
-    S.getDownwardTracker()->initPhysLiveRegs(MRI);
-    S.getUpwardTracker()->initPhysLiveRegs(MRI);
+    S.getDownwardTracker()->initPhysLiveRegs(MF.getRegInfo());
+    S.getUpwardTracker()->initPhysLiveRegs(MF.getRegInfo());
   }
   while (S.advanceStage()) {
     auto Stage = createSchedStage(S.getCurrentStage());
