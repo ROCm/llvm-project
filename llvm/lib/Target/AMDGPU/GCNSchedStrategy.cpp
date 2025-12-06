@@ -2136,6 +2136,7 @@ void PreRARematStage::rematerialize() {
       RP = getRegPressure(DAG.MRI, DAG.LiveIns[I]);
     } else {
       GCNDownwardRPTracker RPT(*DAG.LIS);
+      RPT.initPhysLiveRegs(DAG.MRI);
       RPT.reset(*NonDbgMBBI, &DAG.LiveIns[I]);
       RPT.advance(DAG.Regions[I].second);
       RP = RPT.moveMaxPressure();

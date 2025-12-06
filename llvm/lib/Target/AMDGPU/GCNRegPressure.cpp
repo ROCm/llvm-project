@@ -1057,6 +1057,7 @@ bool GCNRegPressurePrinter::runOnMachineFunction(MachineFunction &MF) {
         RPAtMBBEnd = getRegPressure(MRI, LiveIn);
       } else {
         GCNDownwardRPTracker RPT(LIS);
+        RPT.initPhysLiveRegs(MRI);
         RPT.reset(MBB.front());
 
         LiveIn = RPT.getLiveRegs();
@@ -1072,6 +1073,7 @@ bool GCNRegPressurePrinter::runOnMachineFunction(MachineFunction &MF) {
       }
     } else {
       GCNUpwardRPTracker RPT(LIS);
+      RPT.initPhysLiveRegs(MRI);
       RPT.reset(MRI, MBBLastSlot);
 
       LiveOut = RPT.getLiveRegs();
@@ -1142,6 +1144,7 @@ LLVM_DUMP_METHOD void llvm::dumpMaxRegPressure(MachineFunction &MF,
   unsigned MaxNumRegs = 0;
   const MachineInstr *MaxVirtPressureMI = nullptr;
   GCNUpwardRPTracker RPT(LIS);
+  RPT.initPhysLiveRegs(MRI);
   for (const MachineBasicBlock &MBB : MF) {
     RPT.reset(MRI, LIS.getSlotIndexes()->getMBBEndIdx(&MBB).getPrevSlot());
     for (const MachineInstr &MI : reverse(MBB)) {
