@@ -71,6 +71,9 @@ void GCNRegPressure::inc(unsigned Reg,
   if (Register(Reg).isVirtual()) {
     RC = MRI.getRegClass(Reg);
   } else {
+    // For physical registers, skip non-allocatable registers (reserved, special, etc.)
+    if (!MRI.isAllocatable(Reg))
+      return;
     // For physical registers, get the minimal register class
     RC = TRI->getMinimalPhysRegClass(Reg);
     if (!RC)
@@ -497,10 +500,12 @@ void GCNRPTracker::reset(const MachineInstr &MI,
 
   MaxVirtPressure = CurVirtPressure = getRegPressure(*MRI, VirtLiveRegs);
   
-  // Clear physical register tracking
-  PhysLiveRegs->clear();
-  MaxPhysPressure.clear();
-  CurPhysPressure.clear();
+  // Clear physical register tracking (only if enabled)
+  if (TrackPhysRegs) {
+    PhysLiveRegs->clear();
+    MaxPhysPressure.clear();
+    CurPhysPressure.clear();
+  }
 }
 
 void GCNRPTracker::reset(const MachineRegisterInfo &MRI_,
@@ -510,10 +515,12 @@ void GCNRPTracker::reset(const MachineRegisterInfo &MRI_,
   LastTrackedMI = nullptr;
   MaxVirtPressure = CurVirtPressure = getRegPressure(MRI_, LiveRegs_);
   
-  // Clear physical register tracking
-  PhysLiveRegs->clear();
-  MaxPhysPressure.clear();
-  CurPhysPressure.clear();
+  // Clear physical register tracking (only if enabled)
+  if (TrackPhysRegs) {
+    PhysLiveRegs->clear();
+    MaxPhysPressure.clear();
+    CurPhysPressure.clear();
+  }
 }
 
 /// Mostly copy/paste from CodeGen/RegisterPressure.cpp
@@ -586,42 +593,52 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
   MaxVirtPressure = HasECDefs ? max(CurVirtPressure + ECDefPressure, MaxVirtPressure)
                           : max(CurVirtPressure, MaxVirtPressure);
 
-  // Track physical register defs and uses
-  const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
-  
-  // Kill physical register defs
-  for (const MachineOperand &MO : MI.all_defs()) {
-    if (!MO.getReg().isPhysical())
-      continue;
-    Register Reg = MO.getReg();
+  // Track physical register defs and uses (only if enabled)
+  if (TrackPhysRegs) {
+    const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
     
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
-      LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
-      if (PrevMask.any()) {
-        PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-        CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
+    // Kill physical register defs
+    for (const MachineOperand &MO : MI.all_defs()) {
+      if (!MO.getReg().isPhysical())
+        continue;
+      Register Reg = MO.getReg();
+      
+      // Skip non-allocatable physical registers
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
+        LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
+        if (PrevMask.any()) {
+          PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+          CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
+        }
       }
     }
-  }
-  
-  // Make physical register uses alive
-  for (const MachineOperand &MO : MI.uses()) {
-    if (!MO.isReg() || !MO.getReg().isPhysical() || !MO.readsReg())
-      continue;
-    Register Reg = MO.getReg();
     
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
-      LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
-      if (PrevMask.none()) {
-        PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-        CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+    // Make physical register uses alive
+    for (const MachineOperand &MO : MI.uses()) {
+      if (!MO.isReg() || !MO.getReg().isPhysical() || !MO.readsReg())
+        continue;
+      Register Reg = MO.getReg();
+      
+      // Skip non-allocatable physical registers
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
+        LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
+        if (PrevMask.none()) {
+          PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+          CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+        }
       }
     }
+    
+    MaxPhysPressure = max(MaxPhysPressure, CurPhysPressure);
   }
-  
-  MaxPhysPressure = max(MaxPhysPressure, CurPhysPressure);
 
   assert(CurVirtPressure == getRegPressure(*MRI, VirtLiveRegs));
 }
@@ -701,28 +718,34 @@ bool GCNDownwardRPTracker::advanceBeforeNext(MachineInstr *MI,
     }
   }
 
-  // Track physical register deaths
-  const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
-  for (auto &MO : CurrMI->operands()) {
-    if (!MO.isReg() || !MO.getReg().isPhysical())
-      continue;
-    Register Reg = MO.getReg();
-    
-    // For physical registers, we use register units
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
-      LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
+  // Track physical register deaths (only if enabled)
+  if (TrackPhysRegs) {
+    const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+    for (auto &MO : CurrMI->operands()) {
+      if (!MO.isReg() || !MO.getReg().isPhysical())
+        continue;
+      Register Reg = MO.getReg();
       
-      if (MO.isDef() && !MO.isDead()) {
-        // Physical register is defined and not dead - mark as live
-        PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-        if (PrevMask.none())
-          CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
-      } else if (MO.isKill() || MO.isDead()) {
-        // Physical register is killed/dead - mark as not live
-        PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-        if (PrevMask.any())
-          CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
+      // Skip non-allocatable physical registers (reserved, special, etc.)
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      // For physical registers, we use register units
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
+        LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
+        
+        if (MO.isDef() && !MO.isDead()) {
+          // Physical register is defined and not dead - mark as live
+          PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+          if (PrevMask.none())
+            CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+        } else if (MO.isKill() || MO.isDead()) {
+          // Physical register is killed/dead - mark as not live
+          PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+          if (PrevMask.any())
+            CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
+        }
       }
     }
   }
@@ -757,20 +780,26 @@ void GCNDownwardRPTracker::advanceToNext(MachineInstr *MI,
     CurVirtPressure.inc(Reg, PrevMask, LiveMask, *MRI);
   }
 
-  // Add new physical register defs
-  for (const auto &MO : CurrMI->all_defs()) {
-    Register Reg = MO.getReg();
-    if (!Reg.isPhysical())
-      continue;
-    
-    // For physical registers, we use register units
-    const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
-      LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
-      PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-      if (PrevMask.none())
-        CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+  // Add new physical register defs (only if enabled)
+  if (TrackPhysRegs) {
+    for (const auto &MO : CurrMI->all_defs()) {
+      Register Reg = MO.getReg();
+      if (!Reg.isPhysical())
+        continue;
+      
+      // Skip non-allocatable physical registers
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      // For physical registers, we use register units
+      const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
+        LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
+        PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+        if (PrevMask.none())
+          CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+      }
     }
   }
 
@@ -889,43 +918,53 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
     TempVirtPressure.inc(Reg, LiveMask, NewMask, *MRI);
   }
 
-  // Process physical registers directly from MI operands
-  // Track physical register defs
-  for (const auto &MO : MI->all_defs()) {
-    Register Reg = MO.getReg();
-    if (!Reg.isPhysical())
-      continue;
-    
-    // Check if this physical register unit was already live
-    bool WasLive = false;
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      if (PhysLiveRegs->contains(VirtRegOrUnit(static_cast<MCRegUnit>(Unit))).any()) {
-        WasLive = true;
-        break;
+  // Process physical registers directly from MI operands (only if enabled)
+  if (TrackPhysRegs) {
+    // Track physical register defs
+    for (const auto &MO : MI->all_defs()) {
+      Register Reg = MO.getReg();
+      if (!Reg.isPhysical())
+        continue;
+      
+      // Skip non-allocatable physical registers
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      // Check if this physical register unit was already live
+      bool WasLive = false;
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        if (PhysLiveRegs->contains(VirtRegOrUnit(static_cast<MCRegUnit>(Unit))).any()) {
+          WasLive = true;
+          break;
+        }
       }
+      
+      if (!WasLive)
+        TempPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
     }
-    
-    if (!WasLive)
-      TempPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
-  }
 
-  // Track physical register kills (uses that are last uses)
-  for (const auto &MO : MI->uses()) {
-    if (!MO.isReg() || !MO.getReg().isPhysical() || !MO.isKill())
-      continue;
-    Register Reg = MO.getReg();
-    
-    // Check if this physical register unit is currently live
-    bool IsLive = false;
-    for (MCRegUnit Unit : TRI->regunits(Reg)) {
-      if (PhysLiveRegs->contains(VirtRegOrUnit(static_cast<MCRegUnit>(Unit))).any()) {
-        IsLive = true;
-        break;
+    // Track physical register kills (uses that are last uses)
+    for (const auto &MO : MI->uses()) {
+      if (!MO.isReg() || !MO.getReg().isPhysical() || !MO.isKill())
+        continue;
+      Register Reg = MO.getReg();
+      
+      // Skip non-allocatable physical registers
+      if (!MRI->isAllocatable(Reg))
+        continue;
+      
+      // Check if this physical register unit is currently live
+      bool IsLive = false;
+      for (MCRegUnit Unit : TRI->regunits(Reg)) {
+        if (PhysLiveRegs->contains(VirtRegOrUnit(static_cast<MCRegUnit>(Unit))).any()) {
+          IsLive = true;
+          break;
+        }
       }
+      
+      if (IsLive)
+        TempPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
     }
-    
-    if (IsLive)
-      TempPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
   }
 
   return TempVirtPressure + TempPhysPressure;

@@ -1134,9 +1134,12 @@ void GCNScheduleDAGMILive::runSchedStages() {
 
   GCNSchedStrategy &S = static_cast<GCNSchedStrategy &>(*SchedImpl);
   // Initialize physical register tracking in GCN trackers
+  // Always initialize for safety, but only enable tracking when GCNTrackers is set
+  S.getDownwardTracker()->initPhysLiveRegs(MF.getRegInfo());
+  S.getUpwardTracker()->initPhysLiveRegs(MF.getRegInfo());
   if (GCNTrackers) {
-    S.getDownwardTracker()->initPhysLiveRegs(MF.getRegInfo());
-    S.getUpwardTracker()->initPhysLiveRegs(MF.getRegInfo());
+    S.getDownwardTracker()->enablePhysTracking(true);
+    S.getUpwardTracker()->enablePhysTracking(true);
   }
   while (S.advanceStage()) {
     auto Stage = createSchedStage(S.getCurrentStage());

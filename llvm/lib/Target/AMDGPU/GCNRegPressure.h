@@ -290,6 +290,10 @@ protected:
   std::shared_ptr<llvm::LiveRegSet> PhysLiveRegs;
   GCNRegPressure CurPhysPressure, MaxPhysPressure;
   
+  // Flag to control whether physical register tracking is active
+  // Set to true when GCNTrackers are enabled, false otherwise
+  bool TrackPhysRegs = false;
+  
   const MachineInstr *LastTrackedMI = nullptr;
   mutable const MachineRegisterInfo *MRI = nullptr;
 
@@ -304,6 +308,7 @@ protected:
         CurVirtPressure(Other.CurVirtPressure), MaxVirtPressure(Other.MaxVirtPressure),
         PhysLiveRegs(Other.PhysLiveRegs), // Share the PhysLiveRegs
         CurPhysPressure(Other.CurPhysPressure), MaxPhysPressure(Other.MaxPhysPressure),
+        TrackPhysRegs(Other.TrackPhysRegs),
         LastTrackedMI(Other.LastTrackedMI), MRI(Other.MRI) {}
 
   void reset(const MachineInstr &MI, const LiveRegSet *LiveRegsCopy,
@@ -316,8 +321,15 @@ protected:
 
 public:
   // Initialize PhysLiveRegs capacity. Must be called before first use.
+  // Always call this for safety, even if physical tracking is disabled.
   void initPhysLiveRegs(const MachineRegisterInfo &MRI_) {
     PhysLiveRegs->init(MRI_);
+  }
+  
+  // Enable physical register tracking. Should only be called when GCNTrackers
+  // are enabled to avoid changing behavior when using generic trackers.
+  void enablePhysTracking(bool Enable = true) {
+    TrackPhysRegs = Enable;
   }
 
   // reset tracker and set live register set to the specified value.
