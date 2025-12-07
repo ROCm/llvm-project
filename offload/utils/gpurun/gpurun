@@ -127,25 +127,24 @@ def helpExit(exCode):
     if exCode == 1: print("Error: nothing to bind")
     print("Usage: gpurun [gpurun_options] Program and options")
     print("  -h --help : display help test")
-    print("  -v : display gpurun command")
-    print("  -vv : display additional debug info")
-    print("  -vvv : display more debug info")
-    print("  -dryrun : do not run bindings")
-    print("  -taskset : use taskset for binding")
-    print("  -numatcl : use numactl for binding [default]")
+    print("  -v        : display gpurun command")
+    print("  -vv       : display additional debug info")
+    print("  -vvv      : display more debug info")
+    print("  -dryrun   : do not run bindings")
+    print("  -taskset  : use taskset for binding")
+    print("  -numatcl  : use numactl for binding [default]")
+    print("  -md       : Set number of desired devices for multi-device mode, default=1")
+    print("  -nr       : use numactl ROCR_VISIBLE_DEVICES")
+    print("  -nm       : use numactl OMPI_COMM_WORLD_LOCAL_RANK")
+    print("  --version : Print version of gpurun and exit")
+    print("")
     sys.exit(exCode)
     # still to do
-    #  -h   Print this help message and exit
-    #  -md  Set number of desired devices for multi-device mode, default=1
-    #  -s   suppress output, often useful in benchmarking
-    #  -q   suppress output, quiet, alias of -s, same as GPURUN_VERBOSE=0
     #  -m   use numactl membind to CPUs in same NUMA domain. Note: Allocation
     #       fails when not enough memory available on these nodes.
     #  -l   use numactl localalloc to CPUs in same NUMA domain. Note: If
     #       memory cannot be allocated, alloc falls back to other nodes.
-    #  -nr  use numactl ROCR_VISIBLE_DEVICES
-    #  -nm  use numactl OMPI_COMM_WORLD_LOCAL_RANK
-    #  --version Print version of gpurun and exit
+    #  support GPU-xxxxxxxx
 
 def processArgs():
     sysPos=1
@@ -153,8 +152,13 @@ def processArgs():
     use_taskset=False
     use_numactl=True
     use_nobind=False
+    use_nr=False
+    use_nm=False
+    use_md=False
+    md_count=1
+
     dry_run=False
-    skip_args = ["-h", "-md", "-s", "-q", "-m", "-l", "-nr", "-nm", "--version" ]
+    skip_args = ["-s", "-q", "-m", "-l" ]
     # loop over bind arguments
     while True:
       if len(sys.argv[sysPos:]) == 0: helpExit(1)
@@ -162,25 +166,33 @@ def processArgs():
       elif sys.argv[sysPos] == "-vv":  debug_numa=2
       elif sys.argv[sysPos] == "-vvv": debug_numa=3
       elif sys.argv[sysPos] in ["-h", "--help"]: helpExit(0)
+      elif sys.argv[sysPos] == "--version": print("Version: 22.0.0"); sys.exit(0)
       elif sys.argv[sysPos] == "-dryrun": dry_run=True
       elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
       elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
       elif sys.argv[sysPos] == "-nobind":  use_nobind=True;  use_taskset=False; use_numactl=False
+      elif sys.argv[sysPos] == "-nr":  use_nr=True
+      elif sys.argv[sysPos] == "-nm":  use_nm=True
+      elif sys.argv[sysPos] == "-md":
+          use_md=True
+          if sys.argv[sysPos+1].isdigit():
+              md_count=int(sys.argv[sysPos+1])
+              sysPos += 1
       #to be implimented GPURUN options
       elif sys.argv[sysPos] in skip_args: skipped_args=True
       else: break
       sysPos += 1
 
-    return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run
+    return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm
 
 if __name__ == "__main__":
-    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run = processArgs()
+    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm = processArgs()
     #check for numactl and taskset
     has_numactl = check_numactl_exists()
     has_taskset = check_taskset_exists()
 
     #get topo info
-    numa_cpus, numa_cpue = parse_lscpu_numa()
+    if use_taskset: numa_cpus, numa_cpue = parse_lscpu_numa()
     affinity_data, node_data = parse_rocm_smi_toponuma()
     numGpus = len(node_data)
     rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
@@ -194,11 +206,12 @@ if __name__ == "__main__":
        use_numactl = False
        use_nobind = True
 
-    if rocrVisDev != -1:
+    if rocrVisDev != -1 or use_nr:
        adjRank = rocrVisDev
-    else:
+    elif use_nm:
        adjRank = localRank % numGpus
-
+    else:
+       adjRank=0
     if debug_numa > 1:
       print("#GPUs ", numGpus, "numRanks", numRanksLocal, "localRank", localRank, "adjRank", adjRank, "RVD", rocrVisDev)
       if debug_numa > 2:
@@ -214,7 +227,10 @@ if __name__ == "__main__":
                 print(f"  GPU {i}: NUMA Node = {node}")
 
     my_env = os.environ.copy()
-    my_env["ROCR_VISIBLE_DEVICES"] = str(adjRank)
+    if use_md:
+       my_env["ROCR_VISIBLE_DEVICES"] = "0,1"
+    else:
+       my_env["ROCR_VISIBLE_DEVICES"] = str(adjRank)
     if use_taskset and has_taskset:
        program_to_run = [ "taskset", "-c", str(numa_cpus[node_data[adjRank]])+"-"+str(numa_cpue[node_data[adjRank]]) ]
     elif use_numactl and has_numactl:
@@ -224,5 +240,5 @@ if __name__ == "__main__":
     else:
        program_to_run = [ ]
     program_to_run.extend(sys.argv[sysPos:])
-    if debug_numa > 0 or dry_run: print("ROCR_VISIBLE_DEVICES", adjRank, " ", program_to_run)
+    if debug_numa > 0 or dry_run: print("ROCR_VISIBLE_DEVICES", my_env["ROCR_VISIBLE_DEVICES"], " ", program_to_run)
     if not dry_run: result = subprocess.run(program_to_run, env=my_env, capture_output=False, text=False, check=False)
