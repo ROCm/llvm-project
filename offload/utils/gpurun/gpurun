@@ -2,6 +2,25 @@
 #
 # Copyright(C) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
+#   gpurun: Application process launch utility for GPUs.
+#           This utility ensures the process will enable either a single
+#           GPU or the number specified with -md (multi-device) option.
+#           It launches the application binary with either the 'taskset'
+#           or 'numactl' utility so the process only runs on CPU cores
+#           in the same NUMA domain as the selected GPUs.
+#
+#           This utility sets environment variable ROCR_VISIBLE_DEVICES
+#           to selected GPUs ONLY if it was not already set by the
+#           callers environment AND the number of GPUs is not 1.
+#
+#         Future:
+#           This utility also sets environment variable HSA_CU_MASK
+#           to control which CUs are available to the process.
+#           HSA_CU_MASK is set only when more than one OpenMPI process
+#           (rank) will utilize the same GPU and it is not preset.
+#           Lastly, it sets env variable OMPX_TARGET_TEAM_PROCS to the
+#           number of CUs available to the process after masking.
+
 import subprocess
 import re
 import os
@@ -129,6 +148,7 @@ def helpExit(exCode):
     print("  -md       : Set number of desired devices for multi-device mode, default=1")
     print("  -nr       : use numactl ROCR_VISIBLE_DEVICES")
     print("  -nm       : use numactl OMPI_COMM_WORLD_LOCAL_RANK")
+    print("  -topo     : display the topology and exit")
     print("  --version : Print version of gpurun and exit")
     print("")
     sys.exit(exCode)
@@ -150,6 +170,7 @@ def processArgs():
     use_md=False
     md_count=1
 
+    dump_topo=False
     dry_run=False
     skip_args = ["-s", "-q", "-m", "-l" ]
     # loop over bind arguments
@@ -164,6 +185,7 @@ def processArgs():
       elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
       elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
       elif sys.argv[sysPos] == "-nobind":  use_nobind=True;  use_taskset=False; use_numactl=False
+      elif sys.argv[sysPos] == "-topo":  dump_topo=True
       elif sys.argv[sysPos] == "-nr":  use_nr=True
       elif sys.argv[sysPos] == "-nm":  use_nm=True
       elif sys.argv[sysPos] == "-md":
@@ -176,18 +198,26 @@ def processArgs():
       else: break
       sysPos += 1
 
-    return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm
+    return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo
+
+def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus, numa_cpue):
+    Tb="\t"
+    print("Topology \nGPU     Node  Affinity   CPUs    UUID")
+    for i in range(len(node_data)):
+      print(i, Tb, node_data[i], Tb, affinity_data[i], Tb,  str(numa_cpus[i])+"-"+str(numa_cpue[i]), Tb, hip_uuid[i])
+    sys.exit(0)
 
 if __name__ == "__main__":
-    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm = processArgs()
+    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo = processArgs()
     #check for numactl and taskset
     has_numactl = check_numactl_exists()
     has_taskset = check_taskset_exists()
 
     #get topo info
-    if use_taskset: numa_cpus, numa_cpue = parse_lscpu_numa()
+    if use_taskset or dump_topo: numa_cpus, numa_cpue = parse_lscpu_numa()
     affinity_data, node_data, hip_uuid = get_amd_smi_static_numa()
     if debug_numa > 1: print(affinity_data, node_data, hip_uuid)
+    if dump_topo: dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus, numa_cpue)
 
     numGpus = len(node_data)
     rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
