@@ -1,65 +1,58 @@
 #!/usr/bin/python3
+#
 # Copyright(C) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 import subprocess
 import re
 import os
 import sys
+from amdsmi import *
 
-def parse_rocm_smi_toponuma():
+def get_amd_smi_static_numa():
     """
-    Parses the output of 'rocm-smi --showtoponuma' to extract GPU affinity
+    get the output of 'amd-smi static --numa' to extract GPU affinity
     and NUMA node information, storing them in arrays indexed by GPU number.
     """
-    try:
-        # Execute the rocm-smi command
-        result = subprocess.run(['rocm-smi', '--showtoponuma'], capture_output=True, text=True, check=True)
-        output = result.stdout
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing rocm-smi: {e}")
-        return None, None
-    except FileNotFoundError:
-        print("Error: 'rocm-smi' command not found. Ensure ROCm is installed and in your PATH.")
-        return None, None
-
     gpu_affinity = []
     numa_node = []
+    hip_uuid = []
+    gpu_id = 0
 
-    # Regex to find lines containing GPU information (e.g., "GPU[0-9]: Affinity: [0-9]+, Node: [0-9]+")
-    patternAffy = re.compile(r"GPU\[(\d+)\]\s+:\s+\(Topology\) Numa Affinity:\s+(\d+)")
-    patternErrA = re.compile(r"get_numa_affinity_topology, Not supported on the given system")
-    patternNode = re.compile(r"GPU\[(\d+)\]\s+:\s+\(Topology\) Numa Node:\s+(\d+)")
+    amdsmi_init()
 
-    for line in output.splitlines():
-        match = patternAffy.search(line)
-        if match:
-            gpu_id = int(match.group(1))
-            affinity = int(match.group(2))
-            # Ensure lists are large enough to accommodate the GPU ID
-            while len(gpu_affinity) <= gpu_id:
-                gpu_affinity.append(None)
+    try:
+       devices = amdsmi_get_processor_handles()
+       if len(devices) == 0:
+          print("No GPUs on machine")
+          sys.extit(1)
+       for device in devices:
+          info = amdsmi_get_gpu_enumeration_info(device)
+          node_number = amdsmi_topo_get_numa_node_number(device)
+          if debug_numa > 2: print("****");print("gpu_id: ", gpu_id);print("Numa: ",node_number)
+          # Ensure lists are large enough to accommodate the GPU ID
+          while len(numa_node) <= gpu_id:
+             numa_node.append(None)
+          numa_node[gpu_id] = node_number
+          while len(hip_uuid) <= gpu_id:
+             hip_uuid.append(None)
+          hip_uuid[gpu_id] = info['hip_uuid']
+          if debug_numa > 2: print("hip_id: ", info['hip_id']); print("hip_uuid: ", info['hip_uuid'])
 
-            gpu_affinity[gpu_id] = affinity
-        match = patternNode.search(line)
-        if match:
-            gpu_id = int(match.group(1))
-            node = int(match.group(2))
+          try:
+            affi_node = amdsmi_get_gpu_topo_numa_affinity(device)
+            if debug_numa > 2: print("Affinity: ", affi_node)
+          except AmdSmiException as e:
+            if debug_numa > 2: print("N/A")
 
-            # Ensure lists are large enough to accommodate the GPU ID
-            while len(numa_node) <= gpu_id:
-                numa_node.append(None)
+          # Ensure lists are large enough to accommodate the GPU ID
+          while len(gpu_affinity) <= gpu_id:
+             gpu_affinity.append(None)
+          gpu_affinity[gpu_id] = affi_node
+          gpu_id += 1
+    except AmdSmiException as e:
+      printr(f"Error executing amd-smi: {e}")
 
-            numa_node[gpu_id] = node
-        #cpx tpx etc are missing affinity info, fix it here
-        match = patternErrA.search(line)
-        if match:
-            # Ensure lists are large enough to accommodate the GPU ID
-            while len(gpu_affinity) <= gpu_id:
-                gpu_affinity.append(None)
-
-            #use previous gpu_affinity
-            gpu_affinity[gpu_id] = affinity
-    return gpu_affinity, numa_node
+    return gpu_affinity, numa_node, hip_uuid
 
 def parse_lscpu_numa():
 # get lscpu numa info
@@ -193,7 +186,9 @@ if __name__ == "__main__":
 
     #get topo info
     if use_taskset: numa_cpus, numa_cpue = parse_lscpu_numa()
-    affinity_data, node_data = parse_rocm_smi_toponuma()
+    affinity_data, node_data, hip_uuid = get_amd_smi_static_numa()
+    if debug_numa > 1: print(affinity_data, node_data, hip_uuid)
+
     numGpus = len(node_data)
     rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
     localRank = int(os.environ.get('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
