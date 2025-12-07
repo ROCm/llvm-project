@@ -185,7 +185,7 @@ def processArgs():
       elif sys.argv[sysPos] == "-taskset": use_taskset=True; use_numactl=False; use_nobind=False
       elif sys.argv[sysPos] == "-numactl": use_numactl=True; use_taskset=False; use_nobind=False
       elif sys.argv[sysPos] == "-nobind":  use_nobind=True;  use_taskset=False; use_numactl=False
-      elif sys.argv[sysPos] == "-topo":  dump_topo=True
+      elif sys.argv[sysPos] == "-topo":  dump_topo=True; break
       elif sys.argv[sysPos] == "-nr":  use_nr=True
       elif sys.argv[sysPos] == "-nm":  use_nm=True
       elif sys.argv[sysPos] == "-md":
@@ -202,9 +202,9 @@ def processArgs():
 
 def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus, numa_cpue):
     Tb="\t"
-    print("Topology \nGPU     Node  Affinity   CPUs    UUID")
+    print("Topology \nGPU     Node  Affinity       UUID               Cores")
     for i in range(len(node_data)):
-      print(i, Tb, node_data[i], Tb, affinity_data[i], Tb,  str(numa_cpus[i])+"-"+str(numa_cpue[i]), Tb, hip_uuid[i])
+      print(i, Tb, node_data[i], Tb, affinity_data[i], Tb, hip_uuid[i], Tb, str(numa_cpus[affinity_data[i]])+"-"+str(numa_cpue[affinity_data[i]]))
     sys.exit(0)
 
 if __name__ == "__main__":
@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     if rocrVisDev != -1 or use_nr:
        adjRank = rocrVisDev
-    elif use_nm:
+    elif use_nm or use_numactl:
        adjRank = localRank % numGpus
     else:
        adjRank=0
