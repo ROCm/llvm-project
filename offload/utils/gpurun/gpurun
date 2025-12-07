@@ -89,27 +89,20 @@ def parse_lscpu_numa():
         return None, None
 
     numa_cpus = []
-    numa_cpue = []
-
-    patternLSCPU = re.compile(r"NUMA node(\d+) CPU\(s\):\s+(\d+)-(\d+)")
+    patternLSCPU = re.compile(r"NUMA node(\d+) CPU\(s\):\s+([\d,-]+)")
 
     if debug_numa > 2:print("NUMA CPUs:")
     for line in output.splitlines():
         match = patternLSCPU.search(line)
         if match:
             numa_id = int(match.group(1))
-            cpus = int(match.group(2))
-            cpue = int(match.group(3))
-            if debug_numa > 2:print("  numa:", numa_id, cpus, cpue)
+            cpus = match.group(2)
+            if debug_numa > 2:print("  numa cores:", numa_id, cpus)
             # Ensure lists are large enough to accommodate the GPU ID
             while len(numa_cpus) <= numa_id:
                 numa_cpus.append(None)
-            while len(numa_cpue) <= numa_id:
-                numa_cpue.append(None)
-
             numa_cpus[numa_id] = cpus
-            numa_cpue[numa_id] = cpue
-    return numa_cpus, numa_cpue
+    return numa_cpus
 
 def check_numactl_exists():
     try:
@@ -200,11 +193,11 @@ def processArgs():
 
     return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo
 
-def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus, numa_cpue):
+def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus):
     Tb="\t"
     print("Topology \nGPU     Node  Affinity       UUID               Cores")
     for i in range(len(node_data)):
-      print(i, Tb, node_data[i], Tb, affinity_data[i], Tb, hip_uuid[i], Tb, str(numa_cpus[affinity_data[i]])+"-"+str(numa_cpue[affinity_data[i]]))
+      print(i, Tb, node_data[i], Tb, affinity_data[i], Tb, hip_uuid[i], Tb, numa_cpus[affinity_data[i]])
     sys.exit(0)
 
 if __name__ == "__main__":
@@ -214,10 +207,10 @@ if __name__ == "__main__":
     has_taskset = check_taskset_exists()
 
     #get topo info
-    if use_taskset or dump_topo: numa_cpus, numa_cpue = parse_lscpu_numa()
+    if use_taskset or dump_topo: numa_cpus = parse_lscpu_numa()
     affinity_data, node_data, hip_uuid = get_amd_smi_static_numa()
     if debug_numa > 1: print(affinity_data, node_data, hip_uuid)
-    if dump_topo: dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus, numa_cpue)
+    if dump_topo: dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus)
 
     numGpus = len(node_data)
     rocrVisDev = int(os.environ.get('ROCR_VISIBLE_DEVICES', '-1'))
@@ -257,7 +250,7 @@ if __name__ == "__main__":
     else:
        my_env["ROCR_VISIBLE_DEVICES"] = str(adjRank)
     if use_taskset and has_taskset:
-       program_to_run = [ "taskset", "-c", str(numa_cpus[node_data[adjRank]])+"-"+str(numa_cpue[node_data[adjRank]]) ]
+       program_to_run = [ "taskset", "-c", numa_cpus[node_data[adjRank]]]
     elif use_numactl and has_numactl:
        program_to_run = [ "numactl", "--cpunodebind", str(node_data[adjRank]), "--membind", str(affinity_data[adjRank]) ]
     elif use_nobind:
