@@ -24,8 +24,12 @@ namespace llvm {
 class LoongArchSubtarget;
 
 class LoongArchInstrInfo : public LoongArchGenInstrInfo {
+  const LoongArchRegisterInfo RegInfo;
+
 public:
   explicit LoongArchInstrInfo(const LoongArchSubtarget &STI);
+
+  const LoongArchRegisterInfo &getRegisterInfo() const { return RegInfo; }
 
   MCInst getNop() const override;
 
@@ -64,6 +68,9 @@ public:
   bool isBranchOffsetInRange(unsigned BranchOpc,
                              int64_t BrOffset) const override;
 
+  bool isSafeToMove(const MachineInstr &MI, const MachineBasicBlock *MBB,
+                    const MachineFunction &MF) const override;
+
   bool isSchedulingBoundary(const MachineInstr &MI,
                             const MachineBasicBlock *MBB,
                             const MachineFunction &MF) const override;
@@ -92,6 +99,12 @@ public:
 
   ArrayRef<std::pair<unsigned, const char *>>
   getSerializableBitmaskMachineOperandTargetFlags() const override;
+
+  bool canFoldIntoAddrMode(const MachineInstr &MemI, Register Reg,
+                           const MachineInstr &AddrI,
+                           ExtAddrMode &AM) const override;
+  MachineInstr *emitLdStWithAddr(MachineInstr &MemI,
+                                 const ExtAddrMode &AM) const override;
 
 protected:
   const LoongArchSubtarget &STI;
