@@ -745,7 +745,7 @@ TEST_F(OpenMPIRBuilderTest, ParallelSimpleGPU) {
   ASSERT_NE(Parallel51CI, nullptr);
 
   EXPECT_EQ(Parallel51CI->getCalledFunction()->getName(), "__kmpc_parallel_60");
-  EXPECT_EQ(Parallel51CI->arg_size(), 9U);
+  EXPECT_EQ(Parallel51CI->arg_size(), 10U);
   EXPECT_EQ(Parallel51CI->getArgOperand(5), OutlinedFn);
   EXPECT_TRUE(
       isa<GlobalVariable>(Parallel51CI->getArgOperand(0)->stripPointerCasts()));
