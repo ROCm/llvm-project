@@ -1,5 +1,4 @@
 ! This test checks lowering of OpenMP tile directive
-! XFAIL: *
 
 ! RUN: %flang %flags %openmp_flags -fopenmp-version=51 %s -o %t.exe
 ! RUN: %t.exe | FileCheck %s --match-full-lines
