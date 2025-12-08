@@ -20,6 +20,15 @@
 #           (rank) will utilize the same GPU and it is not preset.
 #           Lastly, it sets env variable OMPX_TARGET_TEAM_PROCS to the
 #           number of CUs available to the process after masking.
+#
+#   $ gpurun -topo
+#   Topology     Numa: 0   PageSize: [always] madvise never
+#
+#   GPU     Node  Affinity       UUID               Cores
+#    0        0       0       GPU-b256278bf70405e2    0-23,96-119
+#    1        1       1       GPU-a33557394e2c744e    24-47,120-143
+#    2        2       2       GPU-4f78640baf57e5f0    48-71,144-167
+#    3        3       3       GPU-b66921701d196e10    72-95,168-191
 
 import subprocess
 import re
@@ -194,8 +203,12 @@ def processArgs():
     return sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo
 
 def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus):
+    numaStat="<unknown>"
+    pageSize="<unknown>"
+    with open('/proc/sys/kernel/numa_balancing', 'r') as f: numaStat = f.read()
+    with open('/sys/kernel/mm/transparent_hugepage/enabled', 'r') as f: pageSize = f.read()
     Tb="\t"
-    print("Topology \nGPU     Node  Affinity       UUID               Cores")
+    print("Topology     Numa: "+numaStat.strip()+"   PageSize: "+pageSize.strip()+"\n\nGPU     Node  Affinity       UUID               Cores")
     for i in range(len(node_data)):
       print(i, Tb, node_data[i], Tb, affinity_data[i], Tb, hip_uuid[i], Tb, numa_cpus[affinity_data[i]])
     sys.exit(0)
