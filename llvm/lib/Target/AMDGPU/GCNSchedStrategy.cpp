@@ -971,6 +971,8 @@ GCNRegPressure
 GCNScheduleDAGMILive::getRealRegPressure(unsigned RegionIdx) const {
   GCNDownwardRPTracker RPTracker(*LIS);
   RPTracker.initPhysLiveRegs(MF.getRegInfo());
+  if (GCNTrackers)
+    RPTracker.enablePhysTracking(true);
   RPTracker.advance(Regions[RegionIdx].first, Regions[RegionIdx].second,
                     &LiveIns[RegionIdx]);
   return RPTracker.moveMaxPressure();
@@ -986,6 +988,8 @@ void GCNScheduleDAGMILive::computeBlockPressure(unsigned RegionIdx,
                                                 const MachineBasicBlock *MBB) {
   GCNDownwardRPTracker RPTracker(*LIS);
   RPTracker.initPhysLiveRegs(MF.getRegInfo());
+  if (GCNTrackers)
+    RPTracker.enablePhysTracking(true);
 
   // If the block has the only successor then live-ins of that successor are
   // live-outs of the current block. We can reuse calculated live set if the
@@ -2140,6 +2144,8 @@ void PreRARematStage::rematerialize() {
     } else {
       GCNDownwardRPTracker RPT(*DAG.LIS);
       RPT.initPhysLiveRegs(DAG.MRI);
+      if (GCNTrackers)
+        RPT.enablePhysTracking(true);
       RPT.reset(*NonDbgMBBI, &DAG.LiveIns[I]);
       RPT.advance(DAG.Regions[I].second);
       RP = RPT.moveMaxPressure();
