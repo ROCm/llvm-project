@@ -43,14 +43,15 @@ public:
   const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const { return LMC; }
 
   bool maybeLaneMask(Register Reg) const;
-  bool isConstantLaneMask(Register Reg, bool &Val) const;
+  bool isConstantLaneMask(Register Reg, bool &Val, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
 
   Register createLaneMaskReg() const;
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
                            GCNLaneMaskAnalysis *LMA = nullptr,
-                           bool Accumulating = false) const;
+                           bool Accumulating = false, 
+                           bool isPrevZeroReg = false) const;
 };
 
 /// Lazy analyses of lane masks.
@@ -63,7 +64,7 @@ private:
 public:
   GCNLaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
 
-  bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock,
+  bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock, MachineBasicBlock::iterator I,
                       unsigned RemainingDepth = 5);
 };
 
@@ -105,7 +106,6 @@ public:
 private:
   GCNLaneMaskUtils LMU;
   GCNLaneMaskAnalysis *LMA = nullptr;
-  MachineSSAUpdater SSAUpdater;
 
   bool Accumulating = false;
 
@@ -115,7 +115,6 @@ private:
     MachineBasicBlock *Block;
     unsigned Flags = 0; // ResetFlags
     Register Value;
-    Register Merged;
 
     explicit BlockInfo(MachineBasicBlock *Block) : Block(Block) {}
   };
@@ -124,9 +123,11 @@ private:
 
   Register ZeroReg;
   DenseSet<MachineInstr *> PotentiallyDead;
-
+  DenseMap<MachineBasicBlock*, DenseSet<Register>> AccumulatorResetBlocks;
 public:
-  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), SSAUpdater(MF) {}
+  Register Accumulator;
+
+  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
@@ -141,7 +142,7 @@ public:
   Register getValueInMiddleOfBlock(MachineBasicBlock &Block);
   Register getValueAtEndOfBlock(MachineBasicBlock &Block);
   Register getValueAfterMerge(MachineBasicBlock &Block);
-
+  void insertAccumulatorResets();
 private:
   void process();
   SmallVectorImpl<BlockInfo>::iterator findBlockInfo(MachineBasicBlock &Block);

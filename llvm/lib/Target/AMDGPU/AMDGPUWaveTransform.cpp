@@ -1839,7 +1839,7 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_SCC1;
       } else {
         Register CondReg = Info.OrigCondition;
-        if (!LMA.isSubsetOfExec(CondReg, *Node->Block)) {
+        if (!LMA.isSubsetOfExec(CondReg, *Node->Block, Node->Block->end())) {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(LMC.AndOpc),
                   CondReg)
@@ -1939,7 +1939,7 @@ void ControlFlowRewriter::rewrite() {
         }
       } else {
         CondReg = LaneOrigin.CondReg;
-        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block)) {
+        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block, LaneOrigin.Node->Block->getFirstTerminator())) {
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*LaneOrigin.Node->Block,
@@ -2039,28 +2039,33 @@ void ControlFlowRewriter::rewrite() {
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
       Register PrimaryExec = PredInfo.PrimarySuccessorExec;
 
-      MachineInstr *PrimaryExecDef;
-      for (;;) {
-        PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
-        if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
-          break;
-        PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
-      }
+      //Turning off this copy-chain optimization to retain the Accumulator as the PrimaryExec
+
+      // MachineInstr *PrimaryExecDef;
+      // for (;;) {
+      //   PrimaryExecDef = MRI.getVRegDef(PrimaryExec);
+      //   if (PrimaryExecDef->getOpcode() != AMDGPU::COPY)
+      //     break;
+      //   PrimaryExec = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
       // Rejoin = EXEC ^ PrimaryExec
       //
       // Fold immediately if PrimaryExec was obtained via XOR as well.
       Register Rejoin;
 
-      if (PrimaryExecDef->getParent() == Pred->Block &&
-          PrimaryExecDef->getOpcode() == LMC.XorOpc &&
-          PrimaryExecDef->getOperand(1).isReg() &&
-          PrimaryExecDef->getOperand(2).isReg()) {
-        if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(2).getReg();
-        else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
-          Rejoin = PrimaryExecDef->getOperand(1).getReg();
-      }
+      //Turning off this XOR optimiztion since buildMergeLaneMasks() will not 
+      // introduce XOR instruction for creating the PrimaryExec
+
+      // if (PrimaryExecDef->getParent() == Pred->Block &&
+      //     PrimaryExecDef->getOpcode() == LMC.XorOpc &&
+      //     PrimaryExecDef->getOperand(1).isReg() &&
+      //     PrimaryExecDef->getOperand(2).isReg()) {
+      //   if (PrimaryExecDef->getOperand(1).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(2).getReg();
+      //   else if (PrimaryExecDef->getOperand(2).getReg() == LMC.ExecReg)
+      //     Rejoin = PrimaryExecDef->getOperand(1).getReg();
+      // }
 
       if (!Rejoin) {
         // Try to find a previously generated XOR (or merely masked) value
@@ -2101,7 +2106,7 @@ void ControlFlowRewriter::rewrite() {
     LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_"
                       << Secondary->printableName() << ".rejoin\n");
   }
-
+  Updater.insertAccumulatorResets();
   Updater.cleanup();
 
   LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_clean\n");
