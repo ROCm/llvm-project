@@ -1815,8 +1815,6 @@ static void genTaskloopClauses(
   cp.processPriority(stmtCtx, clauseOps);
   cp.processReduction(loc, clauseOps, reductionSyms);
   cp.processUntied(clauseOps);
-
-  cp.processTODO<clause::Collapse>(loc, llvm::omp::Directive::OMPD_taskloop);
 }
 
 static void genTaskwaitClauses(lower::AbstractConverter &converter,
