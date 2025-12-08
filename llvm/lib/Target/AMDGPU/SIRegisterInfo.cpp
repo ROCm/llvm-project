@@ -3936,12 +3936,11 @@ bool SIRegisterInfo::shouldCoalesce(MachineInstr *MI,
 
 bool SIRegisterInfo::shouldEnableSubRegReload(unsigned SubReg) const {
   // Disable lo16 and hi16 (16-bit) accesses as they are subreg views of the
-  // same 32-bit register and don't represent independent storage.
-  if (SubReg == AMDGPU::lo16 || SubReg == AMDGPU::hi16)
-    return false;
-
-  // Enable for other tuple sub-registers.
-  return true;
+  // same 32-bit register and don't represent independent storage. If the number
+  // of bits set in the mask is odd, it indicates the presence of a 16-bit
+  // access as each 32-bit register consists of two Regunits and they take two
+  // bits in the regmask.
+  return getSubRegIndexLaneMask(SubReg).getNumLanes() % 2 == 0;
 }
 
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
