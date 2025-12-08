@@ -1457,8 +1457,6 @@ static struct AP64<LocalAddressSpaceView> AP_;
 static struct AP32<LocalAddressSpaceView> AP_;
 #endif
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
                                             hsa_amd_ipc_memory_t* handle) {
   void* ptr_ = get_allocator().GetBlockBegin(ptr);
@@ -1466,53 +1464,13 @@ hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
                      ? instance.GetAsanChunkByAddr(reinterpret_cast<uptr>(ptr_))
                      : nullptr;
   if (ptr_ && m) {
-||||||| parent of f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
-hsa_status_t asan_hsa_amd_ipc_memory_create(void *ptr, size_t len,
-  hsa_amd_ipc_memory_t * handle) {
-  void *ptr_;
-  size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr);
-  if (len_) {
-=======
-hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
-                                            hsa_amd_ipc_memory_t* handle) {
-  void* ptr_;
-||||||| parent of b03bb8d0297e (Fix clang-format noise.)
-hsa_status_t asan_hsa_amd_ipc_memory_create(void* ptr, size_t len,
-                                            hsa_amd_ipc_memory_t* handle) {
-  void* ptr_;
-=======
-hsa_status_t asan_hsa_amd_ipc_memory_create(void *ptr, size_t len,
-  hsa_amd_ipc_memory_t * handle) {
-  void *ptr_;
->>>>>>> b03bb8d0297e (Fix clang-format noise.)
-  size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr);
-  if (len_) {
->>>>>>> f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
     static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
-<<<<<<< HEAD
-<<<<<<< HEAD
     uptr p = reinterpret_cast<uptr>(ptr);
     uptr p_ = reinterpret_cast<uptr>(ptr_);
     if (p == p_ + kPageSize_ && len == m->UsedSize()) {
       size_t len_ = get_allocator().GetActuallyAllocatedSize(ptr_);
       return REAL(hsa_amd_ipc_memory_create)(ptr_, len_, handle);
     }
-||||||| parent of f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
-    ptr_ = reinterpret_cast<void *>(reinterpret_cast<uptr>(ptr) - kPageSize_);
-  } else {
-    ptr_ = ptr;
-    len_ = len;
-=======
-    ptr_ = reinterpret_cast<void*>(reinterpret_cast<uptr>(ptr) - kPageSize_);
-||||||| parent of b03bb8d0297e (Fix clang-format noise.)
-    ptr_ = reinterpret_cast<void*>(reinterpret_cast<uptr>(ptr) - kPageSize_);
-=======
-    ptr_ = reinterpret_cast<void *>(reinterpret_cast<uptr>(ptr) - kPageSize_);
->>>>>>> b03bb8d0297e (Fix clang-format noise.)
-  } else {
-    ptr_ = ptr;
-    len_ = len;
->>>>>>> f3f3213e9b22 ([ASan][Compiler-rt] Support Gracefull hsa-runtime shutdown.)
   }
   return REAL(hsa_amd_ipc_memory_create)(ptr, len, handle);
 }

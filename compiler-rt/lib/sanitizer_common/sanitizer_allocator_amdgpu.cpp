@@ -90,7 +90,7 @@ bool AmdgpuMemFuncs::Init() {
 void *AmdgpuMemFuncs::Allocate(uptr size, uptr alignment,
                                DeviceAllocationInfo *da_info) {
   // Do not allocate if AMDGPU runtime is shutdown
-  if (IsAmdgpuRuntimeShutdown()) {
+  if (UNLIKELY(IsAmdgpuRuntimeShutdown())) {
     VReport(1,
             "Amdgpu Allocate: Runtime shutdown, skipping allocation for size "
             "%zu alignment %zu\n",
@@ -116,7 +116,7 @@ void *AmdgpuMemFuncs::Allocate(uptr size, uptr alignment,
 
 void AmdgpuMemFuncs::Deallocate(void *p) {
   // Deallocate does nothing after AMDGPU runtime shutdown
-  if (IsAmdgpuRuntimeShutdown()) {
+  if (UNLIKELY(IsAmdgpuRuntimeShutdown())) {
     VReport(
         1,
         "Amdgpu Deallocate: Runtime shutdown, skipping deallocation for %p\n",
@@ -137,7 +137,7 @@ void AmdgpuMemFuncs::Deallocate(void *p) {
 
 bool AmdgpuMemFuncs::GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info) {
   // GetPointerInfo returns false after AMDGPU runtime shutdown
-  if (IsAmdgpuRuntimeShutdown()) {
+  if (UNLIKELY(IsAmdgpuRuntimeShutdown())) {
     VReport(1,
             "Amdgpu GetPointerInfo: Runtime shutdown, skipping query for %p\n",
             reinterpret_cast<void*>(ptr));

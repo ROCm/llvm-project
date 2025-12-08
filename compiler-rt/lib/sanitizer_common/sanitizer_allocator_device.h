@@ -122,7 +122,7 @@ class DeviceAllocatorT {
       CHECK_EQ(chunks_[idx], p_);
       CHECK_LT(idx, n_chunks_);
       h = GetHeader(chunks_[idx], &header);
-      if (dev_runtime_unloaded_)
+      if (UNLIKELY(dev_runtime_unloaded_))
         return;
       chunks_[idx] = chunks_[--n_chunks_];
       chunks_sorted_ = false;
@@ -141,7 +141,7 @@ class DeviceAllocatorT {
     uptr res = 0;
     for (uptr i = 0; i < n_chunks_; i++) {
       Header *h = GetHeader(chunks_[i], &header);
-      if (dev_runtime_unloaded_)
+      if (UNLIKELY(dev_runtime_unloaded_))
         return 0;
       res += RoundUpMapSize(h->map_size);
     }
@@ -310,7 +310,7 @@ class DeviceAllocatorT {
     // Device allocator has dependency on device runtime. If device runtime
     // is unloaded, GetPointerInfo() will fail. For such case, we can still
     // return a valid value for map_beg, map_size will be limited to one page
-    if (!dev_runtime_unloaded_) {
+    if (LIKELY(!dev_runtime_unloaded_)) {
       if (DeviceMemFuncs::GetPointerInfo(chunk, h))
         return h;
       // If GetPointerInfo() fails, we don't assume the runtime is unloaded yet.
