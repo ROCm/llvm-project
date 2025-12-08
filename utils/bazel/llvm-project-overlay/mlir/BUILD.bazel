@@ -1280,6 +1280,7 @@ cc_binary(
     deps = [
         ":CAPIIR",
         ":CAPILLVM",
+        ":CAPITarget",
         ":MLIRBindingsPythonNanobindHeadersAndDeps",
         "@nanobind",
     ],
@@ -10158,6 +10159,22 @@ gentbl_cc_library(
     tblgen = ":mlir-tblgen",
     td_file = "include/mlir/Dialect/OpenACC/Transforms/Passes.td",
     deps = [":PassBaseTdFiles"],
+)
+
+cc_library(
+    name = "OpenACCAnalysis",
+    srcs = glob(
+        [
+            "lib/Dialect/OpenACC/Analysis/*.cpp",
+        ],
+    ),
+    hdrs = glob(["include/mlir/Dialect/OpenACC/Analysis/*.h"]),
+    includes = ["include"],
+    deps = [
+        ":IR",
+        ":OpenACCDialect",
+        ":Pass",
+    ],
 )
 
 cc_library(
