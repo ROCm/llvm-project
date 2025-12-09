@@ -2029,13 +2029,12 @@ int64_t RewriteScheduleStage::getRewriteCost(
     const DenseMap<MachineBasicBlock *, std::set<Register>> &CopyForUse,
     const SmallPtrSetImpl<MachineInstr *> &CopyForDef) {
   MachineBranchProbabilityInfo MBPI;
-  MachineBlockFrequencyInfo MBFI;
+  MachineBlockFrequencyInfo *MBFI = DAG.MBFI;
 
-  MBFI.calculate(MF, MBPI, *DAG.MLI);
   int64_t BestSpillCost = 0;
   int64_t Cost = 0;
 
-  uint64_t EntryFreq = MBFI.getEntryFreq().getFrequency();
+  uint64_t EntryFreq = MBFI->getEntryFreq().getFrequency();
 
   for (unsigned Region = 0; Region < DAG.Regions.size(); Region++) {
     if (!RegionsWithExcessArchVGPR[Region])
@@ -2052,7 +2051,7 @@ int64_t RewriteScheduleStage::getRewriteCost(
     unsigned SpillCostAfter = PressureAfter.getVGPRSpills(MF);
 
     uint64_t BlockFreq =
-        MBFI.getBlockFreq(DAG.Regions[Region].first->getParent())
+        MBFI->getBlockFreq(DAG.Regions[Region].first->getParent())
             .getFrequency();
 
     bool RelativeFreqIsDenom = EntryFreq > BlockFreq;
@@ -2093,7 +2092,7 @@ int64_t RewriteScheduleStage::getRewriteCost(
     auto DefReg = DefMI->getOperand(0).getReg();
     uint64_t DefFreq =
         EntryFreq
-            ? MBFI.getBlockFreq(DefMI->getParent()).getFrequency() / EntryFreq
+            ? MBFI->getBlockFreq(DefMI->getParent()).getFrequency() / EntryFreq
             : 1;
 
     const TargetRegisterClass *RC = DAG.MRI.getRegClass(DefReg);
@@ -2103,7 +2102,7 @@ int64_t RewriteScheduleStage::getRewriteCost(
   // Account for CopyForUse copies in each block that the register is used.
   for (auto &[UseBlock, UseRegs] : CopyForUse) {
     uint64_t UseFreq =
-        EntryFreq ? MBFI.getBlockFreq(UseBlock).getFrequency() / EntryFreq : 1;
+        EntryFreq ? MBFI->getBlockFreq(UseBlock).getFrequency() / EntryFreq : 1;
 
     for (Register UseReg : UseRegs) {
       const TargetRegisterClass *RC = DAG.MRI.getRegClass(UseReg);
