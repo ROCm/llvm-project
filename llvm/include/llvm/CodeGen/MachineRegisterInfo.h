@@ -619,8 +619,11 @@ public:
 
   /// getDomVRegDefInBasicBlock - Return the last machine instr that defines
   /// the specified virtual register in the basic block, searching backwards
-  /// from instruction I (exclusive). Returns MBB.end() if no definition is found.
-  LLVM_ABI MachineBasicBlock::iterator getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
+  /// from instruction I (exclusive). Returns MBB.end() if no definition is
+  /// found.
+  LLVM_ABI MachineBasicBlock::iterator
+  getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator I) const;
 
   /// getUniqueVRegDef - Return the unique machine instr that defines the
   /// specified virtual register or null if none is found.  If there are

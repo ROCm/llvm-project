@@ -1939,7 +1939,8 @@ void ControlFlowRewriter::rewrite() {
         }
       } else {
         CondReg = LaneOrigin.CondReg;
-        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block, LaneOrigin.Node->Block->getFirstTerminator())) {
+        if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
+                                LaneOrigin.Node->Block->getFirstTerminator())) {
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*LaneOrigin.Node->Block,
@@ -2039,7 +2040,8 @@ void ControlFlowRewriter::rewrite() {
       CFGNodeInfo &PredInfo = NodeInfo.find(Pred)->second;
       Register PrimaryExec = PredInfo.PrimarySuccessorExec;
 
-      //Turning off this copy-chain optimization to retain the Accumulator as the PrimaryExec
+      // Turning off this copy-chain optimization to retain the Accumulator as
+      // the PrimaryExec
 
       // MachineInstr *PrimaryExecDef;
       // for (;;) {
@@ -2054,8 +2056,8 @@ void ControlFlowRewriter::rewrite() {
       // Fold immediately if PrimaryExec was obtained via XOR as well.
       Register Rejoin;
 
-      //Turning off this XOR optimiztion since buildMergeLaneMasks() will not 
-      // introduce XOR instruction for creating the PrimaryExec
+      // Turning off this XOR optimiztion since buildMergeLaneMasks() will not
+      //  introduce XOR instruction for creating the PrimaryExec
 
       // if (PrimaryExecDef->getParent() == Pred->Block &&
       //     PrimaryExecDef->getOpcode() == LMC.XorOpc &&

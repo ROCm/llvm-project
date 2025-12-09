@@ -31,7 +31,9 @@ bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
 
 /// Determine whether the lane-mask register \p Reg is a wave-wide constant.
 /// If so, the value is stored in \p Val.
-bool GCNLaneMaskUtils::isConstantLaneMask(Register Reg, bool &Val, MachineBasicBlock &MBB, MachineBasicBlock::iterator MI) const {
+bool GCNLaneMaskUtils::isConstantLaneMask(
+    Register Reg, bool &Val, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MI) const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   for (;;) {
@@ -100,13 +102,10 @@ Register GCNLaneMaskUtils::createLaneMaskReg() const {
 ///                     (PrevReg & ~EXEC), and don't add extra 1-bits to DstReg
 ///                     beyond (CurReg & EXEC).
 /// \param isPrevZeroReg Indicates that PrevReg is a zero register.
-void GCNLaneMaskUtils::buildMergeLaneMasks(MachineBasicBlock &MBB,
-                                           MachineBasicBlock::iterator I,
-                                           const DebugLoc &DL, Register DstReg,
-                                           Register PrevReg, Register CurReg,
-                                           GCNLaneMaskAnalysis *LMA,
-                                           bool accumulating, 
-                                           bool isPrevZeroReg) const {
+void GCNLaneMaskUtils::buildMergeLaneMasks(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const DebugLoc &DL,
+    Register DstReg, Register PrevReg, Register CurReg,
+    GCNLaneMaskAnalysis *LMA, bool accumulating, bool isPrevZeroReg) const {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const SIInstrInfo *TII = ST.getInstrInfo();
   bool PrevVal = false;
@@ -198,13 +197,13 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
   for (;;) {
     if (!Register::isVirtualRegister(Reg)) {
       if (Reg == LMC.ExecReg &&
-        (DefInstr == UseBlock.end() || DefInstr->getParent() == &UseBlock))
+          (DefInstr == UseBlock.end() || DefInstr->getParent() == &UseBlock))
         return true;
       return false;
     }
 
     DefInstr = MRI.getDomVRegDefInBasicBlock(Reg, UseBlock, I);
-    if(DefInstr == UseBlock.end())
+    if (DefInstr == UseBlock.end())
       return false;
     if (DefInstr->getOpcode() == AMDGPU::COPY) {
       Reg = DefInstr->getOperand(1).getReg();
@@ -439,7 +438,7 @@ void GCNLaneMaskUpdater::process() {
     assert(Accumulating || !Info.Flags);
     assert(Info.Flags || Info.Value);
 
-    if(!Info.Value || (Info.Flags & ResetAtEnd))
+    if (!Info.Value || (Info.Flags & ResetAtEnd))
       AccumulatorResetBlocks[Info.Block].insert(Accumulator);
   }
 
@@ -471,7 +470,6 @@ void GCNLaneMaskUpdater::process() {
     LMU.buildMergeLaneMasks(*Info.Block, insertPt, {}, Accumulator, Previous,
                             Info.Value, LMA, Accumulating, Previous == ZeroReg);
 
-
     // Switching off this optimization, since Accumulator will always have a use
     // if (Info.Flags & ResetAtEnd) {
     //   MachineInstr *mergeInstr = MRI.getVRegDef(Info.Merged);
@@ -495,16 +493,20 @@ GCNLaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
 }
 
 void GCNLaneMaskUpdater::insertAccumulatorResets() {
-  const SIInstrInfo *TII = LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
+  const SIInstrInfo *TII =
+      LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
   for (auto &Entry : AccumulatorResetBlocks) {
     MachineBasicBlock *B = Entry.first;
     DenseSet<Register> &Accumulators = Entry.second;
     for (Register ACC : Accumulators) {
-      //get first branch instruction    
+      // Get first branch instruction.
       MachineBasicBlock::iterator I = B->getFirstTerminator();
-      while(I != B->end() && !I->isBranch())  I++;
-      if(I == B->end()) I--;
-      BuildMI(*B, I, {}, TII->get(LMU.getLaneMaskConsts().MovOpc), ACC).addImm(0);
+      while (I != B->end() && !I->isBranch())
+        I++;
+      if (I == B->end())
+        I--;
+      BuildMI(*B, I, {}, TII->get(LMU.getLaneMaskConsts().MovOpc), ACC)
+          .addImm(0);
     }
   }
 }
