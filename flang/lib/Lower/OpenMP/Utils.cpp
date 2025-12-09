@@ -780,17 +780,9 @@ static void processTileSizesFromOpenMPConstruct(
   if (!ompCons)
     return;
   if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
-    const auto &nestedOptional =
-        std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
-    assert(nestedOptional.has_value() &&
-           "Expected a DoConstruct or OpenMPLoopConstruct");
-    const auto *innerConstruct =
-        std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
-            &(nestedOptional.value()));
-    if (innerConstruct) {
-      const auto &innerLoopDirective = innerConstruct->value();
+    if (auto *innerConstruct = ompLoop->GetNestedConstruct()) {
       const parser::OmpDirectiveSpecification &innerBeginSpec =
-          innerLoopDirective.BeginDir();
+          innerConstruct->BeginDir();
       if (innerBeginSpec.DirId() == llvm::omp::Directive::OMPD_tile) {
         // Get the size values from parse tree and convert to a vector.
         for (const auto &clause : innerBeginSpec.Clauses().v) {
@@ -828,7 +820,8 @@ int64_t collectLoopRelatedInfo(
 
   // Collect the loops to collapse.
   lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
-  if (doConstructEval->getIf<parser::DoConstruct>()->IsDoConcurrent()) {
+  auto &&doConcurrent = doConstructEval->getIf<parser::DoConstruct>();
+  if (doConcurrent && doConcurrent->IsDoConcurrent()) {
     TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }
 
@@ -854,9 +847,11 @@ void collectLoopRelatedInfo(
 
   // Collect the loops to collapse.
   lower::pft::Evaluation *doConstructEval = &eval.getFirstNestedEvaluation();
-  if (doConstructEval->getIf<parser::DoConstruct>()->IsDoConcurrent()) {
+  auto &&doConcurrent = doConstructEval->getIf<parser::DoConstruct>();
+  if (doConcurrent && doConcurrent->IsDoConcurrent()) {
     TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }
+
 
   // Collect sizes from tile directive if present.
   std::int64_t sizesLengthValue = 0l;
@@ -868,19 +863,20 @@ void collectLoopRelatedInfo(
         });
 
     if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
-      const auto &nestedOptional =
-          std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
-      assert(nestedOptional.has_value() &&
-             "Expected a DoConstruct or OpenMPLoopConstruct");
-      const auto *innerConstruct =
-          std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
-              &(nestedOptional.value()));
+     // const auto &nestedOptional = std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+    //    const auto *innerConstruct = std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(   &(nestedOptional.value()));
+      const parser::OpenMPLoopConstruct *innerConstruct =        ompLoop->GetNestedConstruct();
+
+        // assert(nestedOptional.has_value() &&  "Expected a DoConstruct or OpenMPLoopConstruct");
+      
+
+
+    
       if (innerConstruct) {
-        const auto &innerLoopDirective = innerConstruct->value();
-        const auto &innerBegin =
-            std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
-        const auto &innerDirective =
-            Fortran::parser::omp::GetOmpDirectiveName(innerBegin).v;
+       // const auto &innerLoopDirective = innerConstruct->value();
+        const auto &innerLoopDirective = *innerConstruct;
+        const auto &innerBegin =  std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+        const auto &innerDirective =   Fortran::parser::omp::GetOmpDirectiveName(innerBegin).v;
 
         if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
           // Get the size values from parse tree and convert to a vector
@@ -894,6 +890,9 @@ void collectLoopRelatedInfo(
           // default: permution(2,1)
           if (permutationLengthValue == 0)
             permutationLengthValue = 2;
+
+
+           doConstructEval = & doConstructEval->getFirstNestedEvaluation();
         }
       }
     }
@@ -943,15 +942,15 @@ void collectPermutationFromOpenMPConstruct(
     return;
 
   if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
-    const auto &nestedOptional =
-        std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
-    assert(nestedOptional.has_value() &&
-           "Expected a DoConstruct or OpenMPLoopConstruct");
-    const auto *innerConstruct =
-        std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
-            &(nestedOptional.value()));
+  //  const auto &nestedOptional = std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+   // assert(nestedOptional.has_value() && "Expected a DoConstruct or OpenMPLoopConstruct");
+  //  const auto *innerConstruct = std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(  &(nestedOptional.value()));
+         const parser::OpenMPLoopConstruct *innerConstruct =        ompLoop->GetNestedConstruct();
+
+
     if (innerConstruct) {
-      const auto &innerLoopDirective = innerConstruct->value();
+    //  const auto &innerLoopDirective = innerConstruct->value();
+        const auto &innerLoopDirective = *innerConstruct;
       const auto &innerBegin = innerLoopDirective.BeginDir();
       const auto &innerDirective =
           Fortran::parser::omp::GetOmpDirectiveName(innerLoopDirective).v;

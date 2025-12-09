@@ -559,13 +559,63 @@ static void processHostEvalClauses(lower::AbstractConverter &converter,
 }
 
 static lower::pft::Evaluation *
-getCollapsedLoopEval(lower::pft::Evaluation &eval, int collapseValue) {
+getCollapsedLoopEval(lower::pft::Evaluation &eval, int collapseValue) {  
+  lower::pft::Evaluation *curEval = &eval.getFirstNestedEvaluation();
+
+
+  const     parser::OpenMPConstruct*ompCons =   eval.getIf<parser::OpenMPConstruct>();
+     if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
+      // const auto &nestedOptional = std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
+      // const auto *innerConstruct = std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(   &(nestedOptional.value()));
+      const parser::OpenMPLoopConstruct *innerConstruct = ompLoop->GetNestedConstruct();
+
+        // assert(nestedOptional.has_value() &&  "Expected a DoConstruct or OpenMPLoopConstruct");
+      
+
+
+    int permutationLengthValue = 0;
+      if (innerConstruct) {
+       // const auto &innerLoopDirective = innerConstruct->value();
+        const auto &innerLoopDirective = *innerConstruct;
+        const auto &innerBegin =  std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
+        const auto &innerDirective =   Fortran::parser::omp::GetOmpDirectiveName(innerBegin).v;
+
+        if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
+          // Get the size values from parse tree and convert to a vector
+          const auto &innerClauseList{innerBegin.Clauses()};
+          for (const auto &clause : innerClauseList.v) {
+            if (const auto tclause{std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+              permutationLengthValue = tclause->v.size();
+            }
+          }
+          // default: permution(2,1)
+          if (permutationLengthValue == 0)
+            permutationLengthValue = 2;
+
+
+           curEval = & curEval->getFirstNestedEvaluation();
+        }
+      }
+    }
+
+     #if 0
+    while (true) {
+          const parser::OpenMPConstruct *innerEval = eval.getIf<parser::OpenMPConstruct>();
+        
+
+
+          break;
+    }
+    #endif 
+
+
+
+
   // Return the Evaluation of the innermost collapsed loop, or the current one
   // if there was no COLLAPSE.
   if (collapseValue == 0)
     return &eval;
 
-  lower::pft::Evaluation *curEval = &eval.getFirstNestedEvaluation();
   for (int i = 1; i < collapseValue; i++) {
     // The nested evaluations should be DoConstructs (i.e. they should form
     // a loop nest). Each DoConstruct is a tuple <NonLabelDoStmt, Block,
@@ -575,6 +625,9 @@ getCollapsedLoopEval(lower::pft::Evaluation &eval, int collapseValue) {
   }
   return curEval;
 }
+
+
+
 
 static void genNestedEvaluations(lower::AbstractConverter &converter,
                                  lower::pft::Evaluation &eval,
@@ -3070,6 +3123,9 @@ static mlir::omp::WsloopOp genStandaloneDo(
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
+  auto q = getNonTransformQueue(llvm::make_range(item, queue.end()));
+  auto transforms = llvm::make_range(q.end(), queue.end());
+
   mlir::omp::WsloopOperands wsloopClauseOps;
   llvm::SmallVector<const semantics::Symbol *> wsloopReductionSyms;
   genWsloopClauses(converter, semaCtx, stmtCtx, item->clauses, loc,
@@ -4161,22 +4217,16 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
   mlir::Location currentLocation = converter.genLocation(beginSpec.source);
 
   const parser::OmpDirectiveName &beginName = beginSpec.DirName();
-  ConstructQueue queue{
-      buildConstructQueue(converter.getFirOpBuilder().getModule(), semaCtx,
-                          eval, beginName.source, beginName.v, clauses)};
+  ConstructQueue queue{buildConstructQueue(converter.getFirOpBuilder().getModule(), semaCtx, eval, beginName.source, beginName.v, clauses)};
 
-  auto &optLoopCons =
-      std::get<std::optional<parser::NestedConstruct>>(loopConstruct.t);
-  if (optLoopCons.has_value()) {
-    if (auto *ompNestedLoopCons{
-            std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(
-                &*optLoopCons)}) {
-      const Fortran::parser::OpenMPLoopConstruct &x =
-          ompNestedLoopCons->value();
-      llvm::omp::Directive nestedDirective =
-          parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
 
-      List<Clause> nestedClauses = makeClauses(x.BeginDir().Clauses(), semaCtx);
+
+
+  if (const parser::OpenMPLoopConstruct *ompNestedLoopCons = loopConstruct.GetNestedConstruct()) {
+      llvm::omp::Directive nestedDirective = parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
+      List<Clause> nestedClauses = makeClauses(ompNestedLoopCons->BeginDir().Clauses(), semaCtx);
+
+     
 
       switch (nestedDirective) {
       case llvm::omp::Directive::OMPD_tile:
@@ -4184,23 +4234,54 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
         // generating the omp.loop_nest op.
         break;
       case llvm::omp::Directive::OMPD_interchange: {
-        ConstructQueue nestedQueue{buildConstructQueue(
-            converter.getFirOpBuilder().getModule(), semaCtx, eval,
-            beginName.source, nestedDirective, nestedClauses)};
+        ConstructQueue nestedQueue{buildConstructQueue(converter.getFirOpBuilder().getModule(), semaCtx, eval, beginName.source, nestedDirective, nestedClauses)};
         for (auto nl : nestedQueue) {
           queue.push_back(nl);
         }
       } break;
       default: {
         unsigned version = semaCtx.langOptions().OpenMPVersion;
-        TODO(currentLocation,
-             "Applying a loop-associated on the loop generated by the " +
-                 llvm::omp::getOpenMPDirectiveName(nestedDirective, version) +
-                 " construct");
+        TODO(currentLocation, "Applying a loop-associated on the loop generated by the " +   llvm::omp::getOpenMPDirectiveName(nestedDirective, version) + " construct");
+      }
+      }
+    }
+
+
+#if 0
+||||||| 8ad44f5061d4
+  auto &optLoopCons = std::get<std::optional<parser::NestedConstruct>>(loopConstruct.t);
+  if (optLoopCons.has_value()) {
+    if (auto *ompNestedLoopCons{std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(&*optLoopCons)}) {
+      llvm::omp::Directive nestedDirective = parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
+      switch (nestedDirective) {
+      case llvm::omp::Directive::OMPD_tile:
+        // Skip OMPD_tile since the tile sizes will be retrieved when
+        // generating the omp.loop_nest op.
+        break;
+      default: {
+        unsigned version = semaCtx.langOptions().OpenMPVersion;
+        TODO(currentLocation, "Applying a loop-associated on the loop generated by the " + llvm::omp::getOpenMPDirectiveName(nestedDirective, version) + " construct");
       }
       }
     }
   }
+=======
+  if (const parser::OpenMPLoopConstruct *ompNestedLoopCons = loopConstruct.GetNestedConstruct()) {
+    llvm::omp::Directive nestedDirective = parser::omp::GetOmpDirectiveName(*ompNestedLoopCons).v;
+    switch (nestedDirective) {
+    case llvm::omp::Directive::OMPD_tile:
+      // Skip OMPD_tile since the tile sizes will be retrieved when
+      // generating the omp.loop_nest op.
+      break;
+    default: {
+      unsigned version = semaCtx.langOptions().OpenMPVersion;
+      TODO(currentLocation, "Applying a loop-associated on the loop generated by the " + llvm::omp::getOpenMPDirectiveName(nestedDirective, version) + " construct");
+    }
+    }
+  }
+>>>>>>> 5a5462de820a5362794b1d6444069d7dcc22e6c5
+#endif
+
 
   genOMPDispatch(converter, symTable, semaCtx, eval, currentLocation, queue,
                  queue.begin());
