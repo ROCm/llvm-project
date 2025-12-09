@@ -1172,9 +1172,12 @@ const SCEV *ScalarEvolution::getTruncateExpr(const SCEV *Op, Type *Ty,
     return getTruncateOrZeroExtend(SZ->getOperand(), Ty, Depth + 1);
 
   if (Depth > MaxCastDepth) {
+    // Avoid caching depth-limited unsimplified results. Later queries at lower
+    // depth should be able to simplify (e.g., truncate of AddRec -> AddRec).
+    // Caching here would return this unsimplified SCEVTruncateExpr for future
+    // queries, preventing proper simplification.
     SCEV *S =
         new (SCEVAllocator) SCEVTruncateExpr(ID.Intern(SCEVAllocator), Op, Ty);
-    UniqueSCEVs.InsertNode(S, IP);
     registerUser(S, Op);
     return S;
   }
