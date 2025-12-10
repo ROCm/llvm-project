@@ -5215,9 +5215,6 @@ private:
     DP("Device memory initializing...\n");
 
     // Prepare kernel arguments
-    uint64_t HeapAddr = reinterpret_cast<uint64_t>(DMHeapPtr);
-    uint64_t SlabAddr = reinterpret_cast<uint64_t>(DMSlabPtr);
-
     struct __attribute__((packed)) {
       uint64_t HeapAddr;
       uint64_t SlabAddr;
