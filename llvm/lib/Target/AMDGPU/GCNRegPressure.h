@@ -346,8 +346,9 @@ public:
     MaxPhysPressure.clear();
   }
 
-  // Returns combined virtual + physical register pressure
-  GCNRegPressure getPressure() const { return CurVirtPressure + CurPhysPressure; }
+  // Returns max of virtual and physical register pressure (not sum, since they
+  // can overlap - e.g., inline asm constraints on $s0 while result lives in vregs)
+  GCNRegPressure getPressure() const { return max(CurVirtPressure, CurPhysPressure); }
   
   // Returns only virtual register pressure
   GCNRegPressure getVirtPressure() const { return CurVirtPressure; }
@@ -355,8 +356,8 @@ public:
   // Returns only physical register pressure
   GCNRegPressure getPhysPressure() const { return CurPhysPressure; }
   
-  // Returns combined virtual + physical max pressure
-  GCNRegPressure getMaxPressure() const { return MaxVirtPressure + MaxPhysPressure; }
+  // Returns max of virtual and physical max pressure (not sum)
+  GCNRegPressure getMaxPressure() const { return max(MaxVirtPressure, MaxPhysPressure); }
 
   decltype(VirtLiveRegs) moveLiveRegs() {
     return std::move(VirtLiveRegs);

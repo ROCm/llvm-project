@@ -607,13 +607,19 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
       if (!MRI->isAllocatable(Reg))
         continue;
       
+      // Check if any unit of this register was live before
+      bool WasLive = false;
       for (MCRegUnit Unit : TRI->regunits(Reg)) {
         VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
         LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
         if (PrevMask.any()) {
+          WasLive = true;
           PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-          CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
         }
+      }
+      // Update pressure once per register, not once per unit
+      if (WasLive) {
+        CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
       }
     }
     
@@ -627,13 +633,19 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
       if (!MRI->isAllocatable(Reg))
         continue;
       
+      // Check if any unit of this register was not live before
+      bool WasNotLive = false;
       for (MCRegUnit Unit : TRI->regunits(Reg)) {
         VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
         LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
         if (PrevMask.none()) {
+          WasNotLive = true;
           PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-          CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
         }
+      }
+      // Update pressure once per register, not once per unit
+      if (WasNotLive) {
+        CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
       }
     }
     
@@ -731,21 +743,33 @@ bool GCNDownwardRPTracker::advanceBeforeNext(MachineInstr *MI,
         continue;
       
       // For physical registers, we use register units
+      // Track if the register transitioned from not-live to live or vice versa
+      bool WasLive = false;
+      bool WasNotLive = false;
+      
       for (MCRegUnit Unit : TRI->regunits(Reg)) {
         VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
         LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
         
+        if (PrevMask.any())
+          WasLive = true;
+        else
+          WasNotLive = true;
+        
         if (MO.isDef() && !MO.isDead()) {
           // Physical register is defined and not dead - mark as live
           PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-          if (PrevMask.none())
-            CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
         } else if (MO.isKill() || MO.isDead()) {
           // Physical register is killed/dead - mark as not live
           PhysLiveRegs->erase(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
-          if (PrevMask.any())
-            CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
         }
+      }
+      
+      // Update pressure once per register based on the transition
+      if (MO.isDef() && !MO.isDead() && WasNotLive) {
+        CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+      } else if ((MO.isKill() || MO.isDead()) && WasLive) {
+        CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
       }
     }
   }
@@ -793,12 +817,20 @@ void GCNDownwardRPTracker::advanceToNext(MachineInstr *MI,
       
       // For physical registers, we use register units
       const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+      
+      // Check if any unit of this register was not live before
+      bool WasNotLive = false;
       for (MCRegUnit Unit : TRI->regunits(Reg)) {
         VirtRegOrUnit VRU(static_cast<MCRegUnit>(Unit));
         LaneBitmask PrevMask = PhysLiveRegs->contains(VRU);
-        PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
         if (PrevMask.none())
-          CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+          WasNotLive = true;
+        PhysLiveRegs->insert(VRegMaskOrUnit(VRU, LaneBitmask::getAll()));
+      }
+      
+      // Update pressure once per register, not once per unit
+      if (WasNotLive) {
+        CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
       }
     }
   }
@@ -967,7 +999,9 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
     }
   }
 
-  return TempVirtPressure + TempPhysPressure;
+  // Return max of virtual and physical pressure (not sum), since physical
+  // register constraints (e.g., inline asm) can overlap with virtual registers
+  return max(TempVirtPressure, TempPhysPressure);
 }
 
 bool GCNUpwardRPTracker::isValid() const {
