@@ -51,7 +51,6 @@ public:
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
                            GCNLaneMaskAnalysis *LMA = nullptr,
-                           bool Accumulating = false,
                            bool isPrevZeroReg = false) const;
 };
 
@@ -72,23 +71,13 @@ public:
 
 /// \brief SSA-updater for lane masks.
 ///
-/// The updater operates in one of two modes: "default" and "accumulating".
-///
-/// Default mode is the analog to regular SSA construction and suitable for the
-/// lowering of normal per-lane boolean values to lane masks: the mask can be
-/// (re-)written multiple times for each lane. In each basic block, only the
-/// lanes enabled by that block's EXEC mask are updated. Bits for lanes that
-/// never contributed with an available value are undefined.
-///
-/// Accumulating mode is used for some aspects of control flow lowering. In
-/// this mode, each lane is assumed to provide a "true" available value only
+/// Each lane is assumed to provide a "true" available value only
 /// once, and to never attempt to change the value back to "false" -- except
 /// that all lanes are reset to false in "reset blocks" as explained below.
-/// In accumulating mode, the bits for lanes that never contributed with an
-/// available value are 0.
+/// The bits for lanes that never contributed with an available value are 0.
 ///
-/// In accumulating mode, all lanes are reset to 0 at certain points in "reset
-/// blocks" which are added via \ref addReset. The reset happens in one or both
+/// All lanes are reset to 0 at certain points in "reset blocks"
+///  which are added via \ref addReset. The reset happens in one or both
 /// of two modes:
 ///  - ResetInMiddle: Reset logically happens after the point queried by
 ///    \ref getValueInMiddleOfBlock and before the contribution of the block's
@@ -108,8 +97,6 @@ public:
 private:
   GCNLaneMaskUtils LMU;
   GCNLaneMaskAnalysis *LMA = nullptr;
-
-  bool Accumulating = false;
 
   bool Processed = false;
 
@@ -136,8 +123,6 @@ public:
 
   void init(Register Reg);
   void cleanup();
-
-  void setAccumulating(bool Val) { Accumulating = Val; }
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
   void addAvailable(MachineBasicBlock &Block, Register Value);
