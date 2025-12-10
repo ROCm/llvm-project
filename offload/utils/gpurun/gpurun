@@ -1,7 +1,7 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 #
 # Copyright(C) 2025 Advanced Micro Devices, Inc. All rights reserved.
-
+#
 #   gpurun: Application process launch utility for GPUs.
 #           This utility ensures the process will enable either a single
 #           GPU or the number specified with -md (multi-device) option.
@@ -214,6 +214,7 @@ def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus):
     sys.exit(0)
 
 if __name__ == "__main__":
+    assert sys.version_info >= (3, 7)
     sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo = processArgs()
     #check for numactl and taskset
     has_numactl = check_numactl_exists()
