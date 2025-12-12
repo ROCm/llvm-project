@@ -669,6 +669,7 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::OffloadBundlingJobClass:
   case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
+
   case Action::OffloadPackagerJobClass:
     return getOffloadPackager();
   case Action::LinkerWrapperJobClass:
@@ -1646,6 +1647,8 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
     Res |= SanitizerKind::ShadowCallStack;
   if (getTriple().isAArch64(64))
     Res |= SanitizerKind::MemTag;
+  if (getTriple().isBPF())
+    Res |= SanitizerKind::KernelAddress;
   return Res;
 }
 
@@ -1907,3 +1910,4 @@ llvm::opt::DerivedArgList *ToolChain::TranslateXarchArgs(
   delete DAL;
   return nullptr;
 }
+

@@ -131,6 +131,14 @@ public:
     return cir::IntType::get(getContext(), n, false);
   }
 
+  static unsigned getCIRIntOrFloatBitWidth(mlir::Type eltTy) {
+    if (auto intType = mlir::dyn_cast<cir::IntTypeInterface>(eltTy))
+      return intType.getWidth();
+    if (auto floatType = mlir::dyn_cast<cir::FPTypeInterface>(eltTy))
+      return floatType.getWidth();
+
+    llvm_unreachable("Unsupported type in getCIRIntOrFloatBitWidth");
+  }
   cir::IntType getSIntNTy(int n) {
     return cir::IntType::get(getContext(), n, true);
   }
@@ -321,6 +329,19 @@ public:
                            mlir::IntegerAttr align = {},
                            cir::MemOrderAttr order = {}) {
     return cir::StoreOp::create(*this, loc, val, dst, isVolatile, align, order);
+  }
+
+  /// Emit a load from an boolean flag variable.
+  cir::LoadOp createFlagLoad(mlir::Location loc, mlir::Value addr) {
+    mlir::Type boolTy = getBoolTy();
+    if (boolTy != mlir::cast<cir::PointerType>(addr.getType()).getPointee())
+      addr = createPtrBitcast(addr, boolTy);
+    return createLoad(loc, addr, /*isVolatile=*/false, /*alignment=*/1);
+  }
+
+  cir::StoreOp createFlagStore(mlir::Location loc, bool val, mlir::Value dst) {
+    mlir::Value flag = getBool(val, loc);
+    return CIRBaseBuilderTy::createStore(loc, flag, dst);
   }
 
   [[nodiscard]] cir::GlobalOp createGlobal(mlir::ModuleOp mlirModule,
@@ -563,6 +584,16 @@ public:
   cir::CmpOp createCompare(mlir::Location loc, cir::CmpOpKind kind,
                            mlir::Value lhs, mlir::Value rhs) {
     return cir::CmpOp::create(*this, loc, getBoolTy(), kind, lhs, rhs);
+  }
+
+  cir::VecCmpOp createVecCompare(mlir::Location loc, cir::CmpOpKind kind,
+                                 mlir::Value lhs, mlir::Value rhs) {
+    VectorType vecCast = mlir::cast<VectorType>(lhs.getType());
+    IntType integralTy =
+        getSIntNTy(getCIRIntOrFloatBitWidth(vecCast.getElementType()));
+    VectorType integralVecTy =
+        VectorType::get(context, integralTy, vecCast.getSize());
+    return cir::VecCmpOp::create(*this, loc, integralVecTy, kind, lhs, rhs);
   }
 
   mlir::Value createIsNaN(mlir::Location loc, mlir::Value operand) {

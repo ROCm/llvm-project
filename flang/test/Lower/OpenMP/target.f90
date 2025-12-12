@@ -530,7 +530,7 @@ subroutine omp_target_device_ptr
    use iso_c_binding, only : c_ptr, c_loc
    type(c_ptr) :: a
    integer, target :: b
-   !CHECK: %[[MAP:.*]] = omp.map.info var_ptr({{.*}})   map_clauses(tofrom) capture(ByRef) mapper(@[[CPTR_DEFAULT:_QQM__fortran_builtinsc_ptr\.omp\.default\.mapper]]) -> {{.*}} {name = "a"}
+   !CHECK: %[[MAP:.*]] = omp.map.info var_ptr({{.*}})   map_clauses(tofrom) capture(ByRef) mapper(@[[CPTR_DEFAULT:_QQM__fortran_builtinsc_ptr_omp_default_mapper]]) -> {{.*}} {name = "a"}
    !CHECK: omp.target_data map_entries(%[[MAP]]{{.*}}) use_device_ptr({{.*}} -> %[[VAL_1:.*]] : !fir.ref<!fir.type<_QM__fortran_builtinsT__builtin_c_ptr{__address:i64}>>)
    !$omp target data map(tofrom: a) use_device_ptr(a)
    !CHECK: {{.*}} = fir.coordinate_of %[[VAL_1:.*]], __address : (!fir.ref<!fir.type<_QM__fortran_builtinsT__builtin_c_ptr{__address:i64}>>) -> !fir.ref<i64>
@@ -565,6 +565,36 @@ subroutine omp_target_device_addr
    !$omp end target data
    !CHECK: }
 end subroutine omp_target_device_addr
+
+
+!===============================================================================
+! Target `is_device_ptr` clause
+!===============================================================================
+
+!CHECK-LABEL: func.func @_QPomp_target_is_device_ptr() {
+subroutine omp_target_is_device_ptr
+   use iso_c_binding, only: c_ptr
+   implicit none
+   integer :: i
+   integer :: arr(4)
+   type(c_ptr) :: p
+
+   i = 0
+   arr = 0
+
+   !CHECK: %[[P_STORAGE:.*]] = omp.map.info {{.*}}{name = "p"}
+   !CHECK: %[[P_IS:.*]] = omp.map.info {{.*}}{name = "p"}
+   !CHECK: %[[ARR_MAP:.*]] = omp.map.info {{.*}}{name = "arr"}
+   !CHECK: omp.target is_device_ptr(%[[P_IS]] :
+   !CHECK-SAME: has_device_addr(%[[P_STORAGE]] ->
+   !CHECK-SAME: map_entries({{.*}}%[[ARR_MAP]] ->
+   !$omp target is_device_ptr(p)
+      i = i + 1
+      arr(1) = i
+   !$omp end target
+   !CHECK: omp.terminator
+   !CHECK: }
+end subroutine omp_target_is_device_ptr
 
 
 !===============================================================================

@@ -38,19 +38,6 @@ llvm.func @distribute_allocate(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr
 
 // -----
 
-llvm.func @distribute_dist_schedule(%lb : i32, %ub : i32, %step : i32, %x : i32) {
-  // expected-error@below {{not yet implemented: Unhandled clause dist_schedule with chunk_size in omp.distribute operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.distribute}}
-  omp.distribute dist_schedule_static dist_schedule_chunk_size(%x : i32) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
-    }
-  }
-  llvm.return
-}
-
-// -----
-
 llvm.func @distribute_order(%lb : i32, %ub : i32, %step : i32) {
   // expected-error@below {{not yet implemented: Unhandled clause order in omp.distribute operation}}
   // expected-error@below {{LLVM Translation failed for operation: omp.distribute}}
@@ -112,17 +99,6 @@ llvm.func @sections_private(%x : !llvm.ptr) {
   llvm.return
 }
 
-// -----
-
-llvm.func @simd_linear(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
-  // expected-warning@below {{ignored clause: linear in omp.simd operation}}
-  omp.simd linear(%x = %step : !llvm.ptr) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
-    }
-  }
-  llvm.return
-}
 
 // -----
 
@@ -228,17 +204,6 @@ llvm.func @target_in_reduction(%x : !llvm.ptr) {
   // expected-error@below {{not yet implemented: Unhandled clause in_reduction in omp.target operation}}
   // expected-error@below {{LLVM Translation failed for operation: omp.target}}
   omp.target in_reduction(@add_f32 %x -> %prv : !llvm.ptr) {
-    omp.terminator
-  }
-  llvm.return
-}
-
-// -----
-
-llvm.func @target_is_device_ptr(%x : !llvm.ptr) {
-  // expected-error@below {{not yet implemented: Unhandled clause is_device_ptr in omp.target operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.target}}
-  omp.target is_device_ptr(%x : !llvm.ptr) {
     omp.terminator
   }
   llvm.return
