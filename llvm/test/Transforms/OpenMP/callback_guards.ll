@@ -41,7 +41,7 @@ omp_loop.body:
   %5 = add i32 %0, 1
   store i32 %5, ptr %p, align 4
   %omp_global_thread_num = call i32 @__kmpc_global_thread_num(ptr addrspacecast (ptr addrspace(1) @1 to ptr))
-  call void @__kmpc_parallel_51(ptr addrspacecast (ptr addrspace(1) @1 to ptr), i32 %omp_global_thread_num, i32 1, i32 -1, i32 -1, ptr @parallel_func_..omp_par.3, ptr @parallel_func_..omp_par.3.wrapper, ptr %1, i64 1)
+  call void @__kmpc_parallel_60(ptr addrspacecast (ptr addrspace(1) @1 to ptr), i32 %omp_global_thread_num, i32 1, i32 -1, i32 -1, ptr @parallel_func_..omp_par.3, ptr @parallel_func_..omp_par.3.wrapper, ptr %1, i64 1, i32 0)
   %6 = load i32, ptr %p, align 4
   %7 = add i32 %6, 1
   store i32 %7, ptr %p, align 4
@@ -72,7 +72,7 @@ declare i32 @__kmpc_target_init(ptr, ptr)
 declare noalias ptr @__kmpc_alloc_shared(i64)
 declare void @__kmpc_target_deinit()
 declare i32 @__kmpc_global_thread_num(ptr)
-declare void @__kmpc_parallel_51(ptr, i32, i32, i32, i32, ptr, ptr, ptr, i64)
+declare void @__kmpc_parallel_60(ptr, i32, i32, i32, i32, ptr, ptr, ptr, i64, i32)
 declare void @__kmpc_distribute_static_loop_4u(ptr, ptr, ptr, i32, i32, i8)
 
 attributes #1 = { nounwind "frame-pointer"="all" }
