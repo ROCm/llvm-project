@@ -1503,7 +1503,7 @@ amd_comgr_action_info_get_package_entry_id_count(
  * the terminating null character.
  *
  * @param[out] package_entry_id If not NULL, then the first @p size characters of
- * the Nth bundle entry ID string are copied into @p package_entry_id. If NULL,
+ * the Nth package entry ID string are copied into @p package_entry_id. If NULL,
  * no package entry ID is copied, and only @p size is updated (useful in order
  * to find the size of the buffer requried to copy the package_entry_id string).
  *

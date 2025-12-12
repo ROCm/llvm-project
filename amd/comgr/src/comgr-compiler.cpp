@@ -1472,7 +1472,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       Input->Name = Buf;
     }
 
-    // Write input file system so that OffloadBundler API can process
+    // Write input file system so that the offload-binary API can process
     // TODO: Switch write to VFS
     SmallString<128> InputFilePath = getFilePath(Input, InputDir);
     if (auto Status = outputToFile(Input, InputFilePath)) {

@@ -1158,7 +1158,7 @@ amd_comgr_status_t AMD_COMGR_API
     *Size = ActionPackageEntryIDs[Index].size() + 1;
 
   // Now that the calling API has had a chance to allocate memory, copy the
-  // bundle entry ID at Index to PackageEntryID
+  // package entry ID at Index to PackageEntryID
   else
     memcpy(PackageEntryID, ActionPackageEntryIDs[Index].c_str(), *Size);
 
