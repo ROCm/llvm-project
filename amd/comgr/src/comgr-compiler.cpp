@@ -1515,6 +1515,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
           case llvm::object::IMG_Fatbinary:
             FileExtension = "fatbin";
             DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_FATBIN);
+            break;
           case llvm::object::IMG_SPIRV:
             FileExtension = "spv";
             DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_SPIRV);
