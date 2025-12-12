@@ -797,24 +797,62 @@ static void processTileSizesFromOpenMPConstruct(
   }
 }
 
+static bool processInterchangePermutationFromOpenMPConstruct(
+    const parser::OpenMPConstruct *ompCons,
+    std::function<void(const parser::OmpClause::Permutation *)> processFun) {
+  if (!ompCons)
+    return false;
+  if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
+    if (auto *innerConstruct = ompLoop->GetNestedConstruct()) {
+      const parser::OmpDirectiveSpecification &innerBeginSpec =
+          innerConstruct->BeginDir();
+      if (innerBeginSpec.DirId() == llvm::omp::Directive::OMPD_interchange) {
+        // Get the size values from parse tree and convert to a vector.
+        for (const auto &clause : innerBeginSpec.Clauses().v) {
+          if (const auto tclause{
+                  std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+            processFun(tclause);
+            break;
+          }
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 pft::Evaluation *getNestedDoConstruct(pft::Evaluation &eval) {
-  for (pft::Evaluation &nested : eval.getNestedEvaluations()) {
-    // In an OpenMPConstruct there can be compiler directives:
-    // 1 <<OpenMPConstruct>>
-    //     2 CompilerDirective: !unroll
-    //     <<DoConstruct>> -> 8
-    if (nested.getIf<parser::CompilerDirective>())
-      continue;
-    // Within a DoConstruct, there can be compiler directives, plus
-    // there is a DoStmt before the body:
-    // <<DoConstruct>> -> 8
-    //     3 NonLabelDoStmt -> 7: do i = 1, n
-    //     <<DoConstruct>> -> 7
-    if (nested.getIf<parser::NonLabelDoStmt>())
-      continue;
-    assert(nested.getIf<parser::DoConstruct>() &&
-           "Unexpected construct in the nested evaluations");
-    return &nested;
+  pft::Evaluation *curEval = &eval;
+  while (true) {
+    for (pft::Evaluation &nested : curEval->getNestedEvaluations()) {
+      // In an OpenMPConstruct there can be compiler directives:
+      // 1 <<OpenMPConstruct>>
+      //     2 CompilerDirective: !unroll
+      //     <<DoConstruct>> -> 8
+      if (nested.getIf<parser::CompilerDirective>())
+        continue;
+      // Within a DoConstruct, there can be compiler directives, plus
+      // there is a DoStmt before the body:
+      // <<DoConstruct>> -> 8
+      //     3 NonLabelDoStmt -> 7: do i = 1, n
+      //     <<DoConstruct>> -> 7
+      if (nested.getIf<parser::NonLabelDoStmt>())
+        continue;
+
+      if (nested.getIf<parser::DoConstruct>())
+        return &nested;
+
+      // Follow innermost loop construct
+      if (auto &&ompCons = nested.getIf<parser::OpenMPConstruct>()) {
+        auto &&u = ompCons->u;
+        auto &&name = parser::omp::GetOmpDirectiveName(u);
+        curEval = &nested;
+        break;
+      }
+
+      llvm_unreachable("Expected do loop to be in the nested evaluations");
+    }
   }
   llvm_unreachable("Expected do loop to be in the nested evaluations");
 }
@@ -874,7 +912,6 @@ void collectLoopRelatedInfo(
     TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }
 
-
   // Collect sizes from tile directive if present.
   std::int64_t sizesLengthValue = 0l;
   std::int64_t permutationLengthValue = 0l;
@@ -884,39 +921,16 @@ void collectLoopRelatedInfo(
           sizesLengthValue = tclause->v.size();
         });
 
-    if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
-     // const auto &nestedOptional = std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
-    //    const auto *innerConstruct = std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(   &(nestedOptional.value()));
-      const parser::OpenMPLoopConstruct *innerConstruct =        ompLoop->GetNestedConstruct();
-
-        // assert(nestedOptional.has_value() &&  "Expected a DoConstruct or OpenMPLoopConstruct");
-      
-
-
-    
-      if (innerConstruct) {
-       // const auto &innerLoopDirective = innerConstruct->value();
-        const auto &innerLoopDirective = *innerConstruct;
-        const auto &innerBegin =  std::get<parser::OmpBeginLoopDirective>(innerLoopDirective.t);
-        const auto &innerDirective =   Fortran::parser::omp::GetOmpDirectiveName(innerBegin).v;
-
-        if (innerDirective == llvm::omp::Directive::OMPD_interchange) {
-          // Get the size values from parse tree and convert to a vector
-          const auto &innerClauseList{innerBegin.Clauses()};
-          for (const auto &clause : innerClauseList.v) {
-            if (const auto tclause{
-                    std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+    if (processInterchangePermutationFromOpenMPConstruct(
+            ompCons, [&](const parser::OmpClause::Permutation *tclause) {
               permutationLengthValue = tclause->v.size();
-            }
-          }
-          // default: permution(2,1)
-          if (permutationLengthValue == 0)
-            permutationLengthValue = 2;
-
-
-           doConstructEval = & doConstructEval->getFirstNestedEvaluation();
-        }
+            })) {
+      if (permutationLengthValue == 0) {
+        // default: permution(2,1)
+        permutationLengthValue = 2;
       }
+      //            doConstructEval = &
+      //            doConstructEval->getFirstNestedEvaluation();
     }
   }
 
