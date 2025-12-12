@@ -319,6 +319,10 @@ protected:
 
   LaneBitmask getLastUsedLanes(Register Reg, SlotIndex Pos) const;
 
+  // Helper methods for physical register tracking
+  Register getPhysRegFromUnit(MCRegUnit Unit) const;
+  bool isUnitLiveAt(MCRegUnit Unit, SlotIndex SI) const;
+
 public:
   // Initialize PhysLiveRegs capacity. Must be called before first use.
   // Always call this for safety, even if physical tracking is disabled.
@@ -346,9 +350,8 @@ public:
     MaxPhysPressure.clear();
   }
 
-  // Returns max of virtual and physical register pressure (not sum, since they
-  // can overlap - e.g., inline asm constraints on $s0 while result lives in vregs)
-  GCNRegPressure getPressure() const { return max(CurVirtPressure, CurPhysPressure); }
+  // Returns sum of virtual and physical register pressure
+  GCNRegPressure getPressure() const { return CurVirtPressure + CurPhysPressure; }
   
   // Returns only virtual register pressure
   GCNRegPressure getVirtPressure() const { return CurVirtPressure; }
@@ -356,8 +359,8 @@ public:
   // Returns only physical register pressure
   GCNRegPressure getPhysPressure() const { return CurPhysPressure; }
   
-  // Returns max of virtual and physical max pressure (not sum)
-  GCNRegPressure getMaxPressure() const { return max(MaxVirtPressure, MaxPhysPressure); }
+  // Returns sum of virtual and physical max pressure
+  GCNRegPressure getMaxPressure() const { return MaxVirtPressure + MaxPhysPressure; }
 
   decltype(VirtLiveRegs) moveLiveRegs() {
     return std::move(VirtLiveRegs);
