@@ -1931,7 +1931,7 @@ typedef enum amd_comgr_action_kind_s {
 
   /**
    * Unpackage each source data object in @p input. For each successful
-   * unbundling, add a bc object or archive object to @p result, depending on
+   * unpackaging, add a bc object or archive object to @p result, depending on
    * the corresponding input.
    *
    * Return @p AMD_COMGR_STATUS_ERROR if any unpackaging

@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
   size_t PackageSize;
 
   if (argc < 4) {
-    printf("Usage: %s <bc bundle> <arch> <bc output>\n", argv[0]);
+    printf("Usage: %s <bc package> <arch> <bc output>\n", argv[0]);
     return -1;
   }
 
