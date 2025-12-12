@@ -37,6 +37,7 @@
 #include "clang/FrontendTool/Utils.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/LLVMContext.h"
@@ -58,6 +59,7 @@
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptions.h"
+#include "llvm/MC/SectionKind.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/OffloadBinary.h"
@@ -1456,7 +1458,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     llvm::SmallVector<llvm::object::OffloadFile> Files;
 
-    llvm::MemoryBufferRef DataBufferRef(Input->Data, "package_data");
+    llvm::StringRef DataBuffer(Input->Data, Input->Size);
+    llvm::MemoryBufferRef DataBufferRef(DataBuffer, "package_data");
     if (llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
       return AMD_COMGR_STATUS_ERROR;
     }
@@ -1489,47 +1492,49 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     SmallVector<std::string> OutputFileNames;
     SmallVector<std::string> TargetNames;
+    SmallVector<amd_comgr_data_kind_t> DataKinds;
     for (const llvm::object::OffloadFile &File : Files) {
       const llvm::object::OffloadBinary *Binary = File.getBinary();
       StringRef Triple = Binary->getTriple();
+      StringRef Arch = Binary->getArch();
+      std::string Target = (Triple + "-" + Arch).str();
 
-      const char *FileExtension;
-      switch (Binary->getImageKind()) {
-      case llvm::object::IMG_Object:
-        FileExtension = "o";
-        break;
-      case llvm::object::IMG_Bitcode:
-        FileExtension = "bc";
-        break;
-      case llvm::object::IMG_Cubin:
-        FileExtension = "cubin";
-        break;
-      case llvm::object::IMG_Fatbinary:
-        FileExtension = "fatbin";
-        break;
-      case llvm::object::IMG_PTX:
-        FileExtension = "ptx";
-        break;
-      case llvm::object::IMG_SPIRV:
-        FileExtension = "spv";
-        break;
-      default:
-        FileExtension = "unknown";
-        break;
-      }
-
-      for (StringRef Entry : ActionInfo->BundleEntryIDs) {
+      for (StringRef Entry : ActionInfo->PackageEntryIDs) {
         // TODO: this should probably check compatability, not strict equivalence
-        if (Entry == Triple) {
+        if (Entry == Target) {
+          const char *FileExtension;
+          switch (Binary->getImageKind()) {
+          case llvm::object::IMG_Object:
+            FileExtension = "o";
+            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_EXECUTABLE);
+            break;
+          case llvm::object::IMG_Bitcode:
+            FileExtension = "bc";
+            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_BC);
+            break;
+          case llvm::object::IMG_Fatbinary:
+            FileExtension = "fatbin";
+            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_FATBIN);
+          case llvm::object::IMG_SPIRV:
+            FileExtension = "spv";
+            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_SPIRV);
+            break;
+          default:
+            // TODO:: Should this simply return an error?
+            FileExtension = "unknown";
+            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_UNDEF);
+            break;
+          }
+
           SmallString<128> OutputFilePath = OutputDir;
           sys::path::append(OutputFilePath,
-                            OutputPrefix + "-" + Triple + "." + FileExtension);
+                            OutputPrefix + "-" + Target + "." + FileExtension);
 
           OutputFileNames.emplace_back(OutputFilePath);
-          TargetNames.emplace_back(Triple);
+          TargetNames.emplace_back(Target);
 
           if (env::shouldEmitVerboseLogs()) {
-            LogS << "\tPackage Entry Target: " << Triple << "\n"
+            LogS << "\tPackage Entry Target: " << Target << "\n"
                 << "\tOutput Filename: " << OutputFilePath << "\n";
             LogS.flush();
           }
@@ -1537,7 +1542,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       }
     }
 
-    UnpackageCommand Unpackage(Files, OutputFileNames, TargetNames);
+    UnpackageCommand Unpackage(Files, TargetNames, OutputFileNames);
     if (Cache) {
       if (auto Status = Cache->execute(Unpackage, LogS)) {
         return Status;
@@ -1548,7 +1553,32 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       }
     }
 
-    // TODO: create OutSetT entries
+    auto *DataKind = DataKinds.begin();
+    for (StringRef OutputFilePath : OutputFileNames) {
+
+      amd_comgr_data_t ResultT;
+
+      if (auto Status = amd_comgr_create_data(*DataKind, &ResultT)) {
+        return Status;
+      }
+
+      // ResultT can be released after addition to the data_set
+      ScopedDataObjectReleaser SDOR(ResultT);
+
+      DataObject *Result = DataObject::convert(ResultT);
+      if (auto Status = inputFromFile(Result, OutputFilePath)) {
+        return Status;
+      }
+
+      StringRef OutputFileName = sys::path::filename(OutputFilePath);
+      Result->setName(OutputFileName);
+
+      if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
+        return Status;
+      }
+
+      ++DataKind;
+    }
   }
 
   return AMD_COMGR_STATUS_SUCCESS;

@@ -93,23 +93,24 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   StringMap<StringRef> Worklist;
   const auto *Output = OutputFileNames.begin();
-  for (auto &Triple : TargetNames) {
-    // TODO: check that triples are valid for a package?
-    Worklist[Triple] = *Output;
+  for (auto &Target : TargetNames) {
+    Worklist[Target] = *Output;
     ++Output;
   }
 
   for (const llvm::object::OffloadFile &File : Files) {
     const llvm::object::OffloadBinary *Binary = File.getBinary();
     StringRef Triple = Binary->getTriple();
+    StringRef Arch = Binary->getArch();
+    std::string Target = (Triple + "-" + Arch).str();
 
     // TODO: does this instead need to check that the triples are compatible?
     // (rather than simply equivalent)
-    if (Worklist.contains(Triple)) {
+    if (Worklist.contains(Target)) {
       StringRef Image = Binary->getImage();
 
       // create an output file descriptor
-      auto OutputName = Worklist[Triple];
+      auto OutputName = Worklist[Target];
       std::error_code EC;
       raw_fd_ostream OutputFile(OutputName, EC, sys::fs::OF_None);
       if (EC) {
@@ -122,7 +123,7 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
 
       // erase the entry from Worklist (so that we can track if all expected
       // files have been unpackaged)
-      Worklist.erase(Triple);
+      Worklist.erase(Target);
     }
   }
 
