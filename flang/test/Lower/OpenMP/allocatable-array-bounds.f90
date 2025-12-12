@@ -47,7 +47,7 @@
 subroutine read_write_section()
     integer, allocatable :: sp_read(:)
     integer, allocatable :: sp_write(:)
-    allocate(sp_read(10)) 
+    allocate(sp_read(10))
     allocate(sp_write(10))
     sp_write = (/0,0,0,0,0,0,0,0,0,0/)
     sp_read = (/1,2,3,4,5,6,7,8,9,10/)
@@ -64,7 +64,7 @@ module assumed_allocatable_array_routines
 
 !HOST-LABEL: func.func @_QMassumed_allocatable_array_routinesPassumed_shape_array(
 
-!HOST: %[[DECLARE:.*]]:2 = hlfir.declare %[[ARG:.*]] dummy_scope %{{[0-9]+}} {fortran_attrs = #fir.var_attrs<allocatable, intent_inout>, uniq_name = "_QMassumed_allocatable_array_routinesFassumed_shape_arrayEarr_read_write"} : (!fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.dscope) -> (!fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>)
+!HOST: %[[DECLARE:.*]]:2 = hlfir.declare %[[ARG:.*]] dummy_scope %{{[0-9]+}} arg {{[0-9]+}} {fortran_attrs = #fir.var_attrs<allocatable, intent_inout>, uniq_name = "_QMassumed_allocatable_array_routinesFassumed_shape_arrayEarr_read_write"} : (!fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.dscope) -> (!fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>)
 !HOST: %[[LOAD_1:.*]] = fir.load %[[DECLARE]]#0 : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>
 !HOST: %[[LOAD_2:.*]] = fir.load %[[DECLARE]]#0 : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>
 !HOST: %[[CONSTANT_1:.*]] = arith.constant 0 : index

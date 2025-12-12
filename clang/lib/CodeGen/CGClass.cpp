@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ABIInfoImpl.h"
 #include "CGBlocks.h"
 #include "CGCXXABI.h"
 #include "CGDebugInfo.h"
@@ -927,7 +926,7 @@ namespace {
     }
 
     void addMemcpyableField(FieldDecl *F) {
-      if (isEmptyFieldForLayout(CGF.getContext(), F))
+      if (F->isZeroSize(CGF.getContext()))
         return;
       if (!FirstField)
         addInitialField(F);
@@ -1884,7 +1883,7 @@ namespace {
                               const CXXDestructorDecl *DD)
        : Context(Context), EHStack(EHStack), DD(DD), StartIndex(std::nullopt) {}
    void PushCleanupForField(const FieldDecl *Field) {
-     if (isEmptyFieldForLayout(Context, Field))
+     if (Field->isZeroSize(Context))
        return;
      unsigned FieldIndex = Field->getFieldIndex();
      if (FieldHasTrivialDestructorBody(Context, Field)) {
@@ -2831,10 +2830,15 @@ void CodeGenFunction::EmitTypeMetadataCodeForVCall(const CXXRecordDecl *RD,
                                                    SourceLocation Loc) {
   if (SanOpts.has(SanitizerKind::CFIVCall))
     EmitVTablePtrCheckForCall(RD, VTable, CodeGenFunction::CFITCK_VCall, Loc);
-  else if (CGM.getCodeGenOpts().WholeProgramVTables &&
-           // Don't insert type test assumes if we are forcing public
-           // visibility.
-           !CGM.AlwaysHasLTOVisibilityPublic(RD)) {
+  // Emit the intrinsics of (type_test and assume) for the features of WPD and
+  // speculative devirtualization. For WPD, emit the intrinsics only for the
+  // case of non_public LTO visibility.
+  // TODO: refactor this condition and similar ones into a function (e.g.,
+  // ShouldEmitDevirtualizationMD) to encapsulate the details of the different
+  // types of devirtualization.
+  else if ((CGM.getCodeGenOpts().WholeProgramVTables &&
+            !CGM.AlwaysHasLTOVisibilityPublic(RD)) ||
+           CGM.getCodeGenOpts().DevirtualizeSpeculatively) {
     CanQualType Ty = CGM.getContext().getCanonicalTagType(RD);
     llvm::Metadata *MD = CGM.CreateMetadataIdentifierForType(Ty);
     llvm::Value *TypeId =
@@ -2992,8 +2996,9 @@ void CodeGenFunction::EmitVTablePtrCheck(const CXXRecordDecl *RD,
 }
 
 bool CodeGenFunction::ShouldEmitVTableTypeCheckedLoad(const CXXRecordDecl *RD) {
-  if (!CGM.getCodeGenOpts().WholeProgramVTables ||
-      !CGM.HasHiddenLTOVisibility(RD))
+  if ((!CGM.getCodeGenOpts().WholeProgramVTables ||
+       !CGM.HasHiddenLTOVisibility(RD)) &&
+      !CGM.getCodeGenOpts().DevirtualizeSpeculatively)
     return false;
 
   if (CGM.getCodeGenOpts().VirtualFunctionElimination)

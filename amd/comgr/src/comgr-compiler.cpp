@@ -29,12 +29,12 @@
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Job.h"
 #include "clang/Driver/OffloadBundler.h"
-#include "clang/Driver/Options.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/FrontendTool/Utils.h"
+#include "clang/Options/Options.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -86,7 +86,7 @@ using namespace llvm::opt;
 using namespace llvm::sys;
 using namespace clang;
 using namespace clang::driver;
-using namespace clang::driver::options;
+using namespace clang::options;
 using namespace COMGR::TimeStatistics;
 
 namespace COMGR {
@@ -1138,7 +1138,7 @@ amd_comgr_status_t AMDGPUCompiler::addDeviceLibraries() {
   SmallString<256> ClangBinaryPath(env::getLLVMPath());
   sys::path::append(ClangBinaryPath, "bin", "clang");
 
-  std::string ClangResourceDir = Driver::GetResourcesPath(ClangBinaryPath);
+  std::string ClangResourceDir = GetResourcesPath(ClangBinaryPath);
 
   SmallString<256> DeviceLibPath(ClangResourceDir);
   sys::path::append(DeviceLibPath, "lib");
@@ -2357,14 +2357,14 @@ AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,
   if ((VFSStatus.has_value() && *VFSStatus) ||
       (!VFSStatus.has_value() && ActionInfo->ShouldUseVFS)) {
     if (env::shouldEmitVerboseLogs()) {
-      LogS << "    File System: VFS\n";
+      LogS << "\t File System: VFS\n";
     }
     UseVFS = true;
     InMemoryFS = new vfs::InMemoryFileSystem;
     OverlayFS->pushOverlay(InMemoryFS);
   } else {
     if (env::shouldEmitVerboseLogs()) {
-      LogS << "    File System: Real\n";
+      LogS << "\t File System: Real\n";
     }
   }
 }

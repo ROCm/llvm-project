@@ -394,6 +394,8 @@ bool MachineOperand::isIdenticalTo(const MachineOperand &Other) const {
     return getPredicate() == Other.getPredicate();
   case MachineOperand::MO_ShuffleMask:
     return getShuffleMask() == Other.getShuffleMask();
+  case MachineOperand::MO_LaneMask:
+    return getLaneMask() == Other.getLaneMask();
   }
   llvm_unreachable("Invalid machine operand type");
 }
@@ -460,6 +462,9 @@ hash_code llvm::hash_value(const MachineOperand &MO) {
     return hash_combine(MO.getType(), MO.getTargetFlags(), MO.getPredicate());
   case MachineOperand::MO_ShuffleMask:
     return hash_combine(MO.getType(), MO.getTargetFlags(), MO.getShuffleMask());
+  case MachineOperand::MO_LaneMask:
+    return hash_combine(MO.getType(), MO.getTargetFlags(),
+                        MO.getLaneMask().getAsInteger());
   }
   llvm_unreachable("Invalid machine operand type");
 }
@@ -782,12 +787,12 @@ static void printCFI(raw_ostream &OS, const MCCFIInstruction &CFI,
     break;
   case MCCFIInstruction::OpLLVMRegisterPair: {
     const auto &Fields =
-        CFI.getExtraFields<MCCFIInstruction::RegisterPairExtraFields>();
+        CFI.getExtraFields<MCCFIInstruction::RegisterPairFields>();
 
     OS << "llvm_register_pair ";
     if (MCSymbol *Label = CFI.getLabel())
       MachineOperand::printSymbol(OS, *Label);
-    printCFIRegister(CFI.getRegister(), OS, TRI);
+    printCFIRegister(Fields.Register, OS, TRI);
     OS << ", ";
     printCFIRegister(Fields.Reg1, OS, TRI);
     OS << ", " << Fields.Reg1SizeInBits << ", ";
@@ -797,12 +802,12 @@ static void printCFI(raw_ostream &OS, const MCCFIInstruction &CFI,
   }
   case MCCFIInstruction::OpLLVMVectorRegisters: {
     const auto &Fields =
-        CFI.getExtraFields<MCCFIInstruction::VectorRegistersExtraFields>();
+        CFI.getExtraFields<MCCFIInstruction::VectorRegistersFields>();
 
     OS << "llvm_vector_registers ";
     if (MCSymbol *Label = CFI.getLabel())
       MachineOperand::printSymbol(OS, *Label);
-    printCFIRegister(CFI.getRegister(), OS, TRI);
+    printCFIRegister(Fields.Register, OS, TRI);
     for (auto [Reg, Lane, Size] : Fields.VectorRegisters) {
       OS << ", ";
       printCFIRegister(Reg, OS, TRI);
@@ -812,25 +817,25 @@ static void printCFI(raw_ostream &OS, const MCCFIInstruction &CFI,
   }
   case MCCFIInstruction::OpLLVMVectorOffset: {
     const auto &Fields =
-        CFI.getExtraFields<MCCFIInstruction::VectorOffsetExtraFields>();
+        CFI.getExtraFields<MCCFIInstruction::VectorOffsetFields>();
 
     OS << "llvm_vector_offset ";
     if (MCSymbol *Label = CFI.getLabel())
       MachineOperand::printSymbol(OS, *Label);
-    printCFIRegister(CFI.getRegister(), OS, TRI);
+    printCFIRegister(Fields.Register, OS, TRI);
     OS << ", " << Fields.RegisterSizeInBits << ", ";
     printCFIRegister(Fields.MaskRegister, OS, TRI);
-    OS << ", " << Fields.MaskRegisterSizeInBits << ", " << CFI.getOffset();
+    OS << ", " << Fields.MaskRegisterSizeInBits << ", " << Fields.Offset;
     break;
   }
   case MCCFIInstruction::OpLLVMVectorRegisterMask: {
     const auto &Fields =
-        CFI.getExtraFields<MCCFIInstruction::VectorRegisterMaskExtraFields>();
+        CFI.getExtraFields<MCCFIInstruction::VectorRegisterMaskFields>();
 
     OS << "llvm_vector_register_mask ";
     if (MCSymbol *Label = CFI.getLabel())
       MachineOperand::printSymbol(OS, *Label);
-    printCFIRegister(CFI.getRegister(), OS, TRI);
+    printCFIRegister(Fields.Register, OS, TRI);
     OS << ", ";
     printCFIRegister(Fields.SpillRegister, OS, TRI);
     OS << ", " << Fields.SpillRegisterLaneSizeInBits << ", ";
@@ -1077,11 +1082,11 @@ void MachineOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   case MachineOperand::MO_Predicate: {
     auto Pred = static_cast<CmpInst::Predicate>(getPredicate());
-    OS << (CmpInst::isIntPredicate(Pred) ? "int" : "float") << "pred("
-       << Pred << ')';
+    OS << (CmpInst::isIntPredicate(Pred) ? "int" : "float") << "pred(" << Pred
+       << ')';
     break;
   }
-  case MachineOperand::MO_ShuffleMask:
+  case MachineOperand::MO_ShuffleMask: {
     OS << "shufflemask(";
     ArrayRef<int> Mask = getShuffleMask();
     StringRef Separator;
@@ -1095,6 +1100,14 @@ void MachineOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
 
     OS << ')';
     break;
+  }
+  case MachineOperand::MO_LaneMask: {
+    OS << "lanemask(";
+    LaneBitmask LaneMask = getLaneMask();
+    OS << "0x" << PrintLaneMask(LaneMask);
+    OS << ')';
+    break;
+  }
   }
 }
 

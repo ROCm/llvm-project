@@ -16,8 +16,8 @@
 #include "clang/Driver/CommonArgs.h"
 #include "clang/Driver/Distro.h"
 #include "clang/Driver/Driver.h"
-#include "clang/Driver/Options.h"
 #include "clang/Driver/SanitizerArgs.h"
+#include "clang/Options/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/ProfileData/InstrProf.h"
 #include "llvm/Support/Path.h"
@@ -731,10 +731,10 @@ void Linux::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   const Driver &D = getDriver();
   std::string SysRoot = computeSysRoot();
 
-  if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc))
+  if (DriverArgs.hasArg(options::OPT_nostdinc))
     return;
 
-  if (DriverArgs.hasArg(clang::driver::options::OPT_fopenmp)) {
+  if (DriverArgs.hasArg(clang::options::OPT_fopenmp)) {
     // Look for system files in our compiler AOMP/include dir first
     addSystemInclude(DriverArgs, CC1Args,
                      DriverArgs.MakeArgString(D.Dir + "/../include"));
@@ -1156,12 +1156,12 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsPowerPC64 || IsSystemZ ||
       IsLoongArch64 || IsRISCV64)
     Res |= SanitizerKind::Thread;
-  if (IsX86_64 || IsAArch64)
+  if (IsX86_64 || IsAArch64 || IsSystemZ)
     Res |= SanitizerKind::Type;
   if (IsX86_64 || IsSystemZ || IsPowerPC64)
     Res |= SanitizerKind::KernelMemory;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsMIPS || IsArmArch ||
-      IsPowerPC64 || IsHexagon || IsLoongArch64 || IsRISCV64)
+      IsPowerPC64 || IsHexagon || IsLoongArch64 || IsRISCV64 || IsSystemZ)
     Res |= SanitizerKind::Scudo;
   if (IsX86_64 || IsAArch64 || IsRISCV64) {
     Res |= SanitizerKind::HWAddress;
