@@ -1,4 +1,4 @@
-# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-enable-static-simulator -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
 # REQUIRES: asserts
 
 ---
@@ -219,3 +219,49 @@ body: |
 # CHECK: V_WMMA_F32_16X16X32_BF16
 # CHECK: V_ADD_F32_e32 $vgpr24, $vgpr32
 # CHECK: Stalls:{{.*}}Total: {{[2-9]}}
+
+---
+# PK8 conversion instructions occupy VALU for 4 cycles
+name: pk8_valu_occupancy_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2
+    ; PK8 instruction: 4 cycle VALU occupancy
+    $vgpr8_vgpr9_vgpr10_vgpr11 = V_CVT_SCALE_PK8_F16_FP8_e64 $vgpr0_vgpr1, $vgpr2, 0, implicit $mode, implicit $exec
+    ; These VALU instructions should stall waiting for VALU
+    $vgpr20 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr21 = V_MOV_B32_e32 2, implicit $exec
+    $vgpr22 = V_MOV_B32_e32 3, implicit $exec
+    $vgpr23 = V_MOV_B32_e32 4, implicit $exec
+    S_ENDPGM 0, implicit $vgpr23
+...
+
+# CHECK-LABEL: pk8_valu_occupancy_test
+# CHECK: V_CVT_SCALE_PK8_F16_FP8
+# CHECK: V_MOV_B32_e32 1
+# CHECK: Stalls: FU=3
+# CHECK: V_MOV_B32_e32 2
+# CHECK: Stalls: (none)
+
+---
+# PK16 conversion instructions occupy VALU for 8 cycles
+name: pk16_valu_occupancy_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2, $vgpr3
+    ; PK16 instruction: 8 cycle VALU occupancy
+    $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15 = V_CVT_SCALE_PK16_F16_FP6_e64 $vgpr0_vgpr1_vgpr2, $vgpr3, 0, implicit $mode, implicit $exec
+    ; These VALU instructions should stall waiting for VALU
+    $vgpr20 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr21 = V_MOV_B32_e32 2, implicit $exec
+    S_ENDPGM 0, implicit $vgpr21
+...
+
+# CHECK-LABEL: pk16_valu_occupancy_test
+# CHECK: V_CVT_SCALE_PK16_F16_FP6
+# CHECK: V_MOV_B32_e32 1
+# CHECK: Stalls: FU=7
+# CHECK: V_MOV_B32_e32 2
+# CHECK: Stalls: (none)
