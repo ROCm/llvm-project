@@ -227,7 +227,7 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
                 beginName.v == llvm::omp::Directive::OMPD_do_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_loop ||
                 beginName.v == llvm::omp::Directive::OMPD_interchange) {
-              // TODO: Check whther interchange (or tile, unroll) recursively
+              // TODO: Check whether interchange (or tile, unroll) recursively
               // applies to and simd-eligible nest itself
               eligibleSIMD = true;
             }

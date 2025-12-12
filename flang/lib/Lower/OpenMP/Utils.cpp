@@ -929,8 +929,6 @@ void collectLoopRelatedInfo(
         // default: permution(2,1)
         permutationLengthValue = 2;
       }
-      //            doConstructEval = &
-      //            doConstructEval->getFirstNestedEvaluation();
     }
   }
 
@@ -977,15 +975,11 @@ void collectPermutationFromOpenMPConstruct(
     return;
 
   if (auto *ompLoop{std::get_if<parser::OpenMPLoopConstruct>(&ompCons->u)}) {
-  //  const auto &nestedOptional = std::get<std::optional<parser::NestedConstruct>>(ompLoop->t);
-   // assert(nestedOptional.has_value() && "Expected a DoConstruct or OpenMPLoopConstruct");
-  //  const auto *innerConstruct = std::get_if<common::Indirection<parser::OpenMPLoopConstruct>>(  &(nestedOptional.value()));
-         const parser::OpenMPLoopConstruct *innerConstruct =        ompLoop->GetNestedConstruct();
-
+    const parser::OpenMPLoopConstruct *innerConstruct =
+        ompLoop->GetNestedConstruct();
 
     if (innerConstruct) {
-    //  const auto &innerLoopDirective = innerConstruct->value();
-        const auto &innerLoopDirective = *innerConstruct;
+      const auto &innerLoopDirective = *innerConstruct;
       const auto &innerBegin = innerLoopDirective.BeginDir();
       const auto &innerDirective =
           Fortran::parser::omp::GetOmpDirectiveName(innerLoopDirective).v;

@@ -99,12 +99,22 @@ ConstructQueue buildConstructQueue(
 }
 
 // from clang
-static bool isOpenMPLoopTransformationDirective(llvm::omp::Directive DKind) {
-  return DKind == llvm::omp::Directive::OMPD_tile ||
-         DKind == llvm::omp::Directive::OMPD_unroll ||
-         DKind == llvm::omp::Directive::OMPD_reverse ||
-         DKind == llvm::omp::Directive::OMPD_interchange ||
-         DKind == llvm::omp::Directive::OMPD_stripe;
+// There is a copy in check-omp-loops.cpp
+static bool isOpenMPLoopTransformationDirective(llvm::omp::Directive dir) {
+  switch (dir) {
+  // TODO case llvm::omp::Directive::OMPD_flatten:
+  case llvm::omp::Directive::OMPD_fuse:
+  case llvm::omp::Directive::OMPD_interchange:
+    // case llvm::omp::Directive::OMPD_nothing:
+  case llvm::omp::Directive::OMPD_reverse:
+  // TODO case llvm::omp::Directive::OMPD_split:
+  case llvm::omp::Directive::OMPD_stripe:
+  case llvm::omp::Directive::OMPD_tile:
+  case llvm::omp::Directive::OMPD_unroll:
+    return true;
+  default:
+    return false;
+  }
 }
 
 llvm::iterator_range<ConstructQueue::const_iterator> getNonTransformQueue(
