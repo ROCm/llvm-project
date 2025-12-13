@@ -1,3 +1,4 @@
 add_subdirectory_optional_install(IR)
 add_subdirectory_optional_install(Transforms)
 add_subdirectory_optional_install(Utils)
+add_subdirectory_optional_install(TransformOps)

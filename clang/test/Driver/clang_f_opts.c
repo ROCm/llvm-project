@@ -377,7 +377,6 @@
 // RUN: -ftree-ter                                                            \
 // RUN: -ftree-vrp                                                            \
 // RUN: -fno-devirtualize                                                     \
-// RUN: -fno-devirtualize-speculatively                                       \
 // RUN: -fslp-vectorize-aggressive                                            \
 // RUN: -fno-slp-vectorize-aggressive                                         \
 // RUN: %s 2>&1 | FileCheck --check-prefix=CHECK-WARNING %s
@@ -436,7 +435,6 @@
 // CHECK-WARNING-DAG: optimization flag '-ftree-ter' is not supported
 // CHECK-WARNING-DAG: optimization flag '-ftree-vrp' is not supported
 // CHECK-WARNING-DAG: optimization flag '-fno-devirtualize' is not supported
-// CHECK-WARNING-DAG: optimization flag '-fno-devirtualize-speculatively' is not supported
 // CHECK-WARNING-DAG: the flag '-fslp-vectorize-aggressive' has been deprecated and will be ignored
 // CHECK-WARNING-DAG: the flag '-fno-slp-vectorize-aggressive' has been deprecated and will be ignored
 
@@ -624,6 +622,10 @@
 // RUN: %clang -### --target=aarch64-windows-msvc %s 2>&1 | FileCheck -check-prefix=CHECK-NO-MS-VOLATILE %s
 // RUN: %clang -### --target=aarch64-windows-msvc -fms-volatile %s 2>&1 | FileCheck -check-prefix=CHECK-MS-VOLATILE %s
 // RUN: %clang -### --target=aarch64-windows-msvc -fno-ms-volatile %s 2>&1 | FileCheck -check-prefix=CHECK-NO-MS-VOLATILE %s
+// RUN: %clang -### --target=x86_64-windows-msvc %s 2>&1 | FileCheck -check-prefix=CHECK-MS-VOLATILE %s
+// RUN: %clang -### --target=x86_64-windows-msvc -fno-ms-volatile %s 2>&1 | FileCheck -check-prefix=CHECK-NO-MS-VOLATILE %s
+// RUN: %clang -### --target=i686-windows-msvc %s 2>&1 | FileCheck -check-prefix=CHECK-MS-VOLATILE %s
+// RUN: %clang -### --target=i686-windows-msvc -fno-ms-volatile %s 2>&1 | FileCheck -check-prefix=CHECK-NO-MS-VOLATILE %s
 // CHECK-MS-VOLATILE: -fms-volatile
 // CHECK-NO-MS-VOLATILE-NOT: -fms-volatile
 

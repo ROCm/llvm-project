@@ -1276,13 +1276,6 @@ Error SimplifyRODataLoads::runOnFunctions(BinaryContext &BC) {
 }
 
 Error AssignSections::runOnFunctions(BinaryContext &BC) {
-  for (BinaryFunction *Function : BC.getInjectedBinaryFunctions()) {
-    if (!Function->isPatch()) {
-      Function->setCodeSectionName(BC.getInjectedCodeSectionName());
-      Function->setColdCodeSectionName(BC.getInjectedColdCodeSectionName());
-    }
-  }
-
   // In non-relocation mode functions have pre-assigned section names.
   if (!BC.HasRelocations)
     return Error::success();
@@ -1508,12 +1501,6 @@ Error PrintProgramStats::runOnFunctions(BinaryContext &BC) {
   if (NumAllStaleFunctions) {
     const float PctStale =
         NumAllStaleFunctions / (float)NumAllProfiledFunctions * 100.0f;
-    const float PctStaleFuncsWithEqualBlockCount =
-        (float)BC.Stats.NumStaleFuncsWithEqualBlockCount /
-        NumAllStaleFunctions * 100.0f;
-    const float PctStaleBlocksWithEqualIcount =
-        (float)BC.Stats.NumStaleBlocksWithEqualIcount /
-        BC.Stats.NumStaleBlocks * 100.0f;
     auto printErrorOrWarning = [&]() {
       if (PctStale > opts::StaleThreshold)
         BC.errs() << "BOLT-ERROR: ";
@@ -1536,17 +1523,6 @@ Error PrintProgramStats::runOnFunctions(BinaryContext &BC) {
                 << "%) belong to functions with invalid"
                    " (possibly stale) profile.\n";
     }
-    BC.outs() << "BOLT-INFO: " << BC.Stats.NumStaleFuncsWithEqualBlockCount
-              << " stale function"
-              << (BC.Stats.NumStaleFuncsWithEqualBlockCount == 1 ? "" : "s")
-              << format(" (%.1f%% of all stale)",
-                        PctStaleFuncsWithEqualBlockCount)
-              << " have matching block count.\n";
-    BC.outs() << "BOLT-INFO: " << BC.Stats.NumStaleBlocksWithEqualIcount
-              << " stale block"
-              << (BC.Stats.NumStaleBlocksWithEqualIcount == 1 ? "" : "s")
-              << format(" (%.1f%% of all stale)", PctStaleBlocksWithEqualIcount)
-              << " have matching icount.\n";
     if (PctStale > opts::StaleThreshold) {
       return createFatalBOLTError(
           Twine("BOLT-ERROR: stale functions exceed specified threshold of ") +
