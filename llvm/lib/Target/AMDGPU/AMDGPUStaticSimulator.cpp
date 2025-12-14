@@ -630,12 +630,15 @@ enum class MSBSetOutcome { Fused, Exposed };
 
 bool canMSBSetFuse(InstClass PrevIC) {
   switch (PrevIC) {
+  case InstClass::DS_READ:
+  case InstClass::DS_WRITE:
+  case InstClass::BARRIER:
+  case InstClass::WAITCNT:
+    return false;
   case InstClass::VALU:
   case InstClass::TRANS:
   case InstClass::SALU:
   case InstClass::WMMA:
-  case InstClass::DS_READ:
-  case InstClass::DS_WRITE:
   case InstClass::VMEM_READ:
   case InstClass::VMEM_WRITE:
   case InstClass::SMEM:
@@ -728,6 +731,16 @@ StallSources computeStallSources(
     IssueCycle = BusyUntil;
   }
 
+  // TRANS holds VALU in WMMA I-slots
+  if ((IC == InstClass::VALU || IC == InstClass::TRANS) &&
+      State.VALUResourceBusyUntil > IssueCycle) {
+    unsigned VALUResStall = State.getVALUResourceStallInWindow();
+    if (VALUResStall > 0) {
+      S.Unit = std::max(S.Unit, VALUResStall);
+      IssueCycle = State.VALUResourceBusyUntil;
+    }
+  }
+
   if (IC == InstClass::WMMA) {
     unsigned TRANSStall = State.getWMMATRANSStall();
     if (State.CurrentCycle + TRANSStall > IssueCycle)
@@ -738,6 +751,10 @@ StallSources computeStallSources(
     unsigned LDScaleStall = HasScaling ? State.getLDScaleStall(IssueCycle) : 0;
     if (LDScaleStall > 0) {
       IssueCycle += LDScaleStall;
+      S.LDScaleBlocked = true;
+    }
+    if (HasScaling && State.VALUResourceBusyUntil > IssueCycle) {
+      IssueCycle = State.VALUResourceBusyUntil;
       S.LDScaleBlocked = true;
     }
     S.VALUSlot = IssueCycle - State.CurrentCycle;
@@ -924,6 +941,7 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     Metrics.NumTRANS++;
     State.trackTRANS(T.Latency);
     State.trackVALUForWMMA(T.IC);
+    State.holdVALUResourceInWindow(T.ResourceCycles);
     break;
 
   case InstClass::WMMA: {
