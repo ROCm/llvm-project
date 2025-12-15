@@ -16,7 +16,7 @@
 
 namespace __sanitizer {
 struct HsaFunctions {
-  // ---------------- Memory Functions ----------------
+  // -------------- Memory Allocate/Deallocate Functions ----------------
   hsa_status_t (*memory_pool_allocate)(hsa_amd_memory_pool_t memory_pool,
                                        size_t size, uint32_t flags, void **ptr);
   hsa_status_t (*memory_pool_free)(void *ptr);
@@ -30,7 +30,7 @@ struct HsaFunctions {
                                              uint64_t flags);
   hsa_status_t (*vmem_address_free)(void *ptr, size_t size);
 
-  // ----------------Event Functions ----------------
+  // ----------------- System Event Register Function -------------------
   hsa_status_t (*register_system_event_handler)(
       hsa_amd_system_event_callback_t callback, void *data);
 };

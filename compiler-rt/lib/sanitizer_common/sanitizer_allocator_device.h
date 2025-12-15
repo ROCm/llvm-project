@@ -122,8 +122,6 @@ class DeviceAllocatorT {
       CHECK_EQ(chunks_[idx], p_);
       CHECK_LT(idx, n_chunks_);
       h = GetHeader(chunks_[idx], &header);
-      if (UNLIKELY(dev_runtime_unloaded_))
-        return;
       chunks_[idx] = chunks_[--n_chunks_];
       chunks_sorted_ = false;
       stats.n_frees++;
@@ -141,8 +139,6 @@ class DeviceAllocatorT {
     uptr res = 0;
     for (uptr i = 0; i < n_chunks_; i++) {
       Header *h = GetHeader(chunks_[i], &header);
-      if (UNLIKELY(dev_runtime_unloaded_))
-        return 0;
       res += RoundUpMapSize(h->map_size);
     }
     return res;
