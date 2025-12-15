@@ -469,6 +469,9 @@ public:
            MI.getOpcode() == AMDGPU::ATOMIC_FENCE;
   }
 
+  /// Get next real instruction, skipping debug/meta/implicit-def instructions.
+  static MachineInstr *getNextRealInstr(MachineInstr *MI);
+
   static bool isVALU(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::VALU;
   }

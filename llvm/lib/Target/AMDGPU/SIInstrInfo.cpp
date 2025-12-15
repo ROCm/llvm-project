@@ -3458,6 +3458,18 @@ bool SIInstrInfo::isFoldableCopy(const MachineInstr &MI) {
   }
 }
 
+MachineInstr *SIInstrInfo::getNextRealInstr(MachineInstr *MI) {
+  if (!MI)
+    return nullptr;
+  for (MachineInstr *Next = MI->getNextNode(); Next;
+       Next = Next->getNextNode()) {
+    if (!Next->isDebugInstr() && !Next->isMetaInstruction() &&
+        !Next->isImplicitDef())
+      return Next;
+  }
+  return nullptr;
+}
+
 unsigned SIInstrInfo::getFoldableCopySrcIdx(const MachineInstr &MI) {
   switch (MI.getOpcode()) {
   case AMDGPU::V_MOV_B16_t16_e32:
