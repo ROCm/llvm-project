@@ -10,6 +10,7 @@
 
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIRegisterInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -37,7 +38,8 @@ bool GCNLaneMaskUtils::isConstantLaneMask(
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   for (;;) {
-    MI = MRI.getDomVRegDefInBasicBlock(Reg, MBB, MI);
+    MI = SIRegisterInfo::getDomVRegDefInBasicBlock(Reg, MBB, MI,
+                                                   MRI.getTargetRegisterInfo());
     if (MI == MBB.end()) {
       // This can happen when called from GCNLaneMaskUpdater, where Reg can
       // be a placeholder that has not yet been filled in.
@@ -190,7 +192,8 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
       return false;
     }
 
-    DefInstr = MRI.getDomVRegDefInBasicBlock(Reg, UseBlock, I);
+    DefInstr = SIRegisterInfo::getDomVRegDefInBasicBlock(
+        Reg, UseBlock, I, MRI.getTargetRegisterInfo());
     if (DefInstr == UseBlock.end())
       return false;
     if (DefInstr->getOpcode() == AMDGPU::COPY) {

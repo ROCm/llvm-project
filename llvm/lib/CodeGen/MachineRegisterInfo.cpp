@@ -674,16 +674,3 @@ bool MachineRegisterInfo::isReservedRegUnit(MCRegUnit Unit) const {
   }
   return false;
 }
-
-MachineBasicBlock::iterator MachineRegisterInfo::getDomVRegDefInBasicBlock(
-    Register Reg, MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const {
-  if (I == MBB.begin())
-    return MBB.end();
-  // Iterate backwards from I (exclusive) to the beginning of the basic block
-  do {
-    --I;
-    if (I->modifiesRegister(Reg, getTargetRegisterInfo()))
-      return I;
-  } while (I != MBB.begin());
-  return MBB.end();
-}
