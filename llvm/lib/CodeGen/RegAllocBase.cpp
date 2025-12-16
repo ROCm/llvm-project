@@ -155,6 +155,13 @@ void RegAllocBase::allocatePhysRegs() {
 
 void RegAllocBase::postOptimization() {
   spiller().postOptimization();
+  
+  // Verify that LiveRegMatrix has no dangling pointers after spilling.
+  // This catches bugs where LiveIntervals are deleted but not removed from
+  // the LiveRegMatrix (e.g., LLVM bug #48911).
+  assert(Matrix->isValid() && 
+         "LiveRegMatrix contains dangling pointers after postOptimization");
+  
   for (auto *DeadInst : DeadRemats) {
     LIS->RemoveMachineInstrFromMaps(*DeadInst);
     DeadInst->eraseFromParent();

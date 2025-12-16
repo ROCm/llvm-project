@@ -554,6 +554,9 @@ extern char &AMDGPUExportKernelRuntimeHandlesLegacyID;
 void initializeGCNNSAReassignLegacyPass(PassRegistry &);
 extern char &GCNNSAReassignID;
 
+void initializeAMDGPUHotBlockRegisterRenamingLegacyPass(PassRegistry &);
+extern char &AMDGPUHotBlockRegisterRenamingID;
+
 void initializeGCNPreRALongBranchRegLegacyPass(PassRegistry &);
 extern char &GCNPreRALongBranchRegID;
 
