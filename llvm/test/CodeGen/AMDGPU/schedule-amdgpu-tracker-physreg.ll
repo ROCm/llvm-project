@@ -10,7 +10,7 @@
 ; GCN:    Occupancy: 5
 ; GCN-GCNTRACKERS:    Occupancy: 5
 
-; FIXME: GCN Trackers do not track pressure from PhysRegs, so scheduling is actually worse
+; NOTE: GCN Trackers now track pressure from both virtual and physical registers
 
 define amdgpu_kernel void @spill(ptr addrspace(1) %arg, i32 %cnd) #0 {
 entry:

@@ -470,6 +470,18 @@ bool GCNRPTracker::isUnitLiveAt(MCRegUnit Unit, SlotIndex SI) const {
   return LR->liveAt(SI);
 }
 
+// Helper: Check if a physical register should be tracked for pressure
+// Returns true for actual SGPRs/VGPRs/AGPRs, false for special registers (VCC, EXEC, M0, etc.)
+//
+// The generic RegPressureTracker avoids counting special registers through pressure sets:
+// register classes with "GeneratePressureSet = 0" in the .td files don't contribute to
+// pressure. Since GCNRPTracker counts registers directly, we need to explicitly filter
+// special registers to match the generic tracker's behavior.
+//
+// This list corresponds to special registers that:
+// 1. Are in register classes with GeneratePressureSet = 0 (see SIRegisterInfo.td)
+// 2. Are reserved in getReservedRegs() (see SIRegisterInfo.cpp)
+// 3. Shouldn't count toward actual SGPR/VGPR/AGPR pressure
 LaneBitmask llvm::getLiveLaneMask(const LiveInterval &LI, SlotIndex SI,
                                   const MachineRegisterInfo &MRI,
                                   LaneBitmask LaneMaskFilter) {
@@ -619,13 +631,14 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
   // Track physical register defs and uses (only if enabled)
   if (TrackPhysRegs) {
     const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+    const SIRegisterInfo *STRI = static_cast<const SIRegisterInfo *>(TRI);
     
     // Kill physical register defs (moving backward in upward tracking)
     for (const MachineOperand &MO : MI.all_defs()) {
       if (!MO.getReg().isPhysical())
         continue;
       Register Reg = MO.getReg();
-      if (!MRI->isAllocatable(Reg))
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg))
         continue;
       
       // Check if any unit of this register was live before
@@ -650,7 +663,7 @@ void GCNUpwardRPTracker::recede(const MachineInstr &MI) {
       if (!MO.isReg() || !MO.getReg().isPhysical() || !MO.readsReg())
         continue;
       Register Reg = MO.getReg();
-      if (!MRI->isAllocatable(Reg))
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg))
         continue;
       
       // Check if any unit of this register was not live before
@@ -754,6 +767,7 @@ bool GCNDownwardRPTracker::advanceBeforeNext(MachineInstr *MI,
   // Track physical register deaths (only if enabled)
   if (TrackPhysRegs) {
     const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+    const SIRegisterInfo *STRI = static_cast<const SIRegisterInfo *>(TRI);
     
     // Iterate over actual instruction operands to track which registers die
     SmallSet<Register, 8> SeenRegs;
@@ -761,7 +775,7 @@ bool GCNDownwardRPTracker::advanceBeforeNext(MachineInstr *MI,
       if (!MO.isReg() || !MO.getReg().isPhysical())
         continue;
       Register Reg = MO.getReg();
-      if (!MRI->isAllocatable(Reg) || !SeenRegs.insert(Reg).second)
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg) || !SeenRegs.insert(Reg).second)
         continue;
       
       // Check if any unit of this register is dying (using LiveIntervals for accuracy)
@@ -782,7 +796,10 @@ bool GCNDownwardRPTracker::advanceBeforeNext(MachineInstr *MI,
       
       // Update pressure once per register if it was live and is now dying
       if (WasLive && IsDying) {
+        LLVM_DEBUG(dbgs() << "  PhysKill: " << printReg(Reg, TRI)
+                         << " SGPRs=" << CurPhysPressure.getSGPRNum() << " -> ";);
         CurPhysPressure.inc(Reg, LaneBitmask::getAll(), LaneBitmask::getNone(), *MRI);
+        LLVM_DEBUG(dbgs() << CurPhysPressure.getSGPRNum() << "\n";);
       }
     }
   }
@@ -820,11 +837,12 @@ void GCNDownwardRPTracker::advanceToNext(MachineInstr *MI,
   // Add new physical register defs (only if enabled)
   if (TrackPhysRegs) {
     const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
+    const SIRegisterInfo *STRI = static_cast<const SIRegisterInfo *>(TRI);
     
     // Iterate over actual instruction operands (not units) to avoid aliasing issues
     for (const auto &MO : CurrMI->all_defs()) {
       Register Reg = MO.getReg();
-      if (!Reg.isPhysical() || !MRI->isAllocatable(Reg))
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg))
         continue;
       
       // Check if any unit of this register was not live before
@@ -840,7 +858,10 @@ void GCNDownwardRPTracker::advanceToNext(MachineInstr *MI,
       
       // Update pressure once per register if it wasn't live before
       if (WasNotLive) {
+        LLVM_DEBUG(dbgs() << "  PhysDef: " << printReg(Reg, TRI) 
+                         << " SGPRs=" << CurPhysPressure.getSGPRNum() << " -> ";);
         CurPhysPressure.inc(Reg, LaneBitmask::getNone(), LaneBitmask::getAll(), *MRI);
+        LLVM_DEBUG(dbgs() << CurPhysPressure.getSGPRNum() << "\n";);
       }
     }
   }
@@ -962,12 +983,13 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
 
   // Process physical registers using instruction operands (only if enabled)
   if (TrackPhysRegs) {
+    const SIRegisterInfo *STRI = static_cast<const SIRegisterInfo *>(TRI);
     SmallSet<Register, 8> SeenRegs;
     
     // Process physical register defs
     for (const auto &MO : MI->all_defs()) {
       Register Reg = MO.getReg();
-      if (!Reg.isPhysical() || !MRI->isAllocatable(Reg) || !SeenRegs.insert(Reg).second)
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg) || !SeenRegs.insert(Reg).second)
         continue;
       
       // Check if any unit of this register is not currently live
@@ -990,7 +1012,7 @@ GCNDownwardRPTracker::bumpDownwardPressure(const MachineInstr *MI,
       if (!MO.isReg() || !MO.getReg().isPhysical())
         continue;
       Register Reg = MO.getReg();
-      if (!MRI->isAllocatable(Reg) || !SeenRegs.insert(Reg).second)
+      if (!STRI->shouldTrackRegisterForPressure(*MRI, Reg) || !SeenRegs.insert(Reg).second)
         continue;
       
       // Check if any unit of this register is dying (using LiveIntervals)

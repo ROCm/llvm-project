@@ -3957,6 +3957,118 @@ bool SIRegisterInfo::isAGPR(const MachineRegisterInfo &MRI,
   return RC && isAGPRClass(RC);
 }
 
+bool SIRegisterInfo::isReservedSpecialRegister(Register Reg) {
+  if (!Reg.isPhysical())
+    return false;
+
+  // Check all special-purpose registers that are reserved in getReservedRegs().
+  // These registers don't contribute to general register pressure and
+  // correspond to register classes with GeneratePressureSet = 0 in .td files.
+  switch (Reg.id()) {
+  // MODE - floating point mode register
+  case AMDGPU::MODE:
+  
+  // EXEC - execution mask (and sub-registers)
+  case AMDGPU::EXEC:
+  case AMDGPU::EXEC_LO:
+  case AMDGPU::EXEC_HI:
+  
+  // FLAT_SCR - flat scratch address (and sub-registers)
+  case AMDGPU::FLAT_SCR:
+  case AMDGPU::FLAT_SCR_LO:
+  case AMDGPU::FLAT_SCR_HI:
+  
+  // M0 - memory operation descriptor
+  case AMDGPU::M0:
+  
+  // VCC - condition code register (and sub-registers)
+  case AMDGPU::VCC:
+  case AMDGPU::VCC_LO:
+  case AMDGPU::VCC_HI:
+  
+  // SCC - scalar condition code
+  case AMDGPU::SCC:
+  
+  // Special source operands
+  case AMDGPU::SRC_VCCZ:
+  case AMDGPU::SRC_EXECZ:
+  case AMDGPU::SRC_SCC:
+  
+  // Memory aperture registers
+  case AMDGPU::SRC_SHARED_BASE:
+  case AMDGPU::SRC_SHARED_LIMIT:
+  case AMDGPU::SRC_PRIVATE_BASE:
+  case AMDGPU::SRC_PRIVATE_LIMIT:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
+  case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
+  
+  // Async counter pseudo registers
+  case AMDGPU::ASYNCcnt:
+  case AMDGPU::TENSORcnt:
+  
+  // Other special registers
+  case AMDGPU::SRC_POPS_EXITING_WAVE_ID:
+  case AMDGPU::LDS_DIRECT:
+  
+  // XNACK_MASK (and sub-registers) - page fault handling
+  case AMDGPU::XNACK_MASK:
+  case AMDGPU::XNACK_MASK_LO:
+  case AMDGPU::XNACK_MASK_HI:
+  
+  // Trap handler registers (TBA/TMA and their sub-registers)
+  case AMDGPU::TBA:
+  case AMDGPU::TBA_LO:
+  case AMDGPU::TBA_HI:
+  case AMDGPU::TMA:
+  case AMDGPU::TMA_LO:
+  case AMDGPU::TMA_HI:
+  
+  // Trap handler temporary registers (tuples and various register sizes)
+  case AMDGPU::TTMP0_TTMP1:
+  case AMDGPU::TTMP2_TTMP3:
+  case AMDGPU::TTMP4_TTMP5:
+  case AMDGPU::TTMP6_TTMP7:
+  case AMDGPU::TTMP8_TTMP9:
+  case AMDGPU::TTMP10_TTMP11:
+  case AMDGPU::TTMP12_TTMP13:
+  case AMDGPU::TTMP14_TTMP15:
+  
+  // Null register
+  case AMDGPU::SGPR_NULL64:
+    return true;
+  
+  default:
+    return false;
+  }
+  
+  // Note: Individual TTMP registers (TTMP0-TTMP15, etc.) and other sub-registers
+  // are reserved via reserveRegisterTuples() in getReservedRegs(), which marks
+  // all aliases as non-allocatable. They don't need explicit checks here since
+  // shouldTrackRegisterForPressure() filters non-allocatable registers.
+}
+
+bool SIRegisterInfo::shouldTrackRegisterForPressure(
+    const MachineRegisterInfo &MRI, Register Reg) const {
+  // Only track physical, allocatable registers
+  if (!Reg.isPhysical() || !MRI.isAllocatable(Reg))
+    return false;
+
+  // Filter out special-purpose registers using the utility method
+  // (matches getReservedRegs() logic)
+  if (isReservedSpecialRegister(Reg))
+    return false;
+
+  // For all other allocatable registers, check if they're in register files
+  // we track (SGPR/VGPR/AGPR). This ensures we only count general-purpose
+  // registers and handles any edge cases not caught by isReservedSpecialRegister.
+  //
+  // The generic RegPressureTracker achieves this filtering implicitly through
+  // pressure sets (defined in .td files with GeneratePressureSet = 0 for
+  // special registers). Since GCNRPTracker counts registers directly, we
+  // must filter explicitly.
+  return isSGPRReg(MRI, Reg) || isVGPR(MRI, Reg) || isAGPR(MRI, Reg);
+}
+
 unsigned SIRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
                                              MachineFunction &MF) const {
   unsigned MinOcc = ST.getOccupancyWithWorkGroupSizes(MF).first;
