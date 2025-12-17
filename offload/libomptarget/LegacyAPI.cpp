@@ -183,7 +183,7 @@ EXTERN void __kmpc_push_target_tripcount_mapper(ident_t *Loc, int64_t DeviceId,
                                                 uint64_t LoopTripcount) {
   TIMESCOPE_WITH_IDENT(Loc);
   if (checkDevice(DeviceId, Loc)) {
-    DP("Not offloading to device %" PRId64 "\n", DeviceId);
+    ODBG(ODT_Interface) << "Not offloading to devicer " <<  PRId64 << " " << DeviceId;
     return;
   }
   ODBG(ODT_Interface) << "WARNING: " << __func__
