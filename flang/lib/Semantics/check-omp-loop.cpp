@@ -225,10 +225,7 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
             const auto &beginName{c.BeginDir().DirName()};
             if (beginName.v == llvm::omp::Directive::OMPD_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_do_simd ||
-                beginName.v == llvm::omp::Directive::OMPD_loop ||
-                beginName.v == llvm::omp::Directive::OMPD_interchange) {
-              // TODO: Check whether interchange (or tile, unroll) recursively
-              // applies to and simd-eligible nest itself
+                beginName.v == llvm::omp::Directive::OMPD_loop) {
               eligibleSIMD = true;
             }
           },
