@@ -497,11 +497,9 @@ __OMP_RTL(__kmpc_target_init, false, Int32, KernelEnvironmentPtr, KernelLaunchEn
 __OMP_RTL(__kmpc_target_deinit, false, Void,)
 __OMP_RTL(__kmpc_specialized_kernel_init, false, Void,)
 __OMP_RTL(__kmpc_kernel_prepare_parallel, false, Void, VoidPtr)
-__OMP_RTL(__kmpc_parallel_51, false, Void, IdentPtr, Int32, Int32, Int32, Int32,
-          FuncPtrTy, FuncPtrTy, VoidPtrPtr, SizeTy)
 __OMP_RTL(__kmpc_parallel_spmd, false, Void, IdentPtr, Int32, VoidPtr, VoidPtrPtr, SizeTy)
 __OMP_RTL(__kmpc_parallel_60, false, Void, IdentPtr, Int32, Int32, Int32, Int32,
-          VoidPtr, VoidPtr, VoidPtrPtr, SizeTy, Int32, Int32, Int8Ptr)
+          FuncPtrTy, FuncPtrTy, VoidPtrPtr, SizeTy, Int32)
 __OMP_RTL(__kmpc_for_static_loop_4, false, Void, IdentPtr, VoidPtr, VoidPtr, Int32, Int32, Int32, Int8)
 __OMP_RTL(__kmpc_for_static_loop_4u, false, Void, IdentPtr, VoidPtr, VoidPtr, Int32, Int32, Int32, Int8)
 __OMP_RTL(__kmpc_for_static_loop_8, false, Void, IdentPtr, VoidPtr, VoidPtr, Int64, Int64, Int64, Int8)
@@ -1362,7 +1360,7 @@ __OMP_RTL_ATTRS(__kmpc_specialized_kernel_init, AttributeSet(), AttributeSet(),
                 ParamAttrs())
 __OMP_RTL_ATTRS(__kmpc_parallel_spmd, AlwaysInlineAttrs, AttributeSet(),
                 ParamAttrs())
-__OMP_RTL_ATTRS(__kmpc_parallel_51, AlwaysInlineAttrs, AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_parallel_60, AlwaysInlineAttrs, AttributeSet(),
                 ParamAttrs(AttributeSet(), SExt, SExt, SExt, SExt,
                            AttributeSet(), AttributeSet(), AttributeSet(),
                            SizeTyExt))
@@ -1483,6 +1481,38 @@ __OMP_PROC_BIND_KIND(unknown, 7)
 
 #undef __OMP_PROC_BIND_KIND
 #undef OMP_PROC_BIND_KIND
+
+///}
+
+
+/// Callback information in OpenMP Runtime Functions
+///
+///{
+
+#define Indices(...) ArrayRef<int>({__VA_ARGS__})
+
+#ifndef OMP_RTL_CB_INFO
+#define OMP_RTL_CB_INFO(Enum, Str, ArgNo, ArgIndices, IsVarArg)
+#endif
+
+#define __OMP_RTL_CB_INFO(Name, ArgNo, ArgIndices, IsVarArg)                                      \
+  OMP_RTL_CB_INFO(OMPRTL_##Name, #Name, ArgNo, ArgIndices, IsVarArg)
+
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_4u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_static_loop_8u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_4u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_distribute_for_static_loop_8u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_4u, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8, 1, Indices(-1, -1), false)
+__OMP_RTL_CB_INFO(__kmpc_for_static_loop_8u, 1, Indices(-1, -1), false)
+
+#undef __OMP_RTL_CB_INFO
+#undef OMP_RTL_CB_INFO
 
 ///}
 

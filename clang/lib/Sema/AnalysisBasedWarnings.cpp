@@ -1142,6 +1142,14 @@ static bool DiagnoseUninitializedConstRefUse(Sema &S, const VarDecl *VD,
   return !S.getDiagnostics().isLastDiagnosticIgnored();
 }
 
+/// Diagnose uninitialized const pointer usages.
+static bool DiagnoseUninitializedConstPtrUse(Sema &S, const VarDecl *VD,
+                                             const UninitUse &Use) {
+  S.Diag(Use.getUser()->getBeginLoc(), diag::warn_uninit_const_pointer)
+      << VD->getDeclName() << Use.getUser()->getSourceRange();
+  return !S.getDiagnostics().isLastDiagnosticIgnored();
+}
+
 /// DiagnoseUninitializedUse -- Helper function for diagnosing uses of an
 /// uninitialized variable. This manages the different forms of diagnostic
 /// emitted for particular types of uses. Returns true if the use was diagnosed
@@ -1747,9 +1755,9 @@ private:
     // a stable ordering.
     llvm::sort(*vec, [](const UninitUse &a, const UninitUse &b) {
       // Prefer the direct use of an uninitialized variable over its use via
-      // constant reference.
-      if (a.isConstRefUse() != b.isConstRefUse())
-        return b.isConstRefUse();
+      // constant reference or pointer.
+      if (a.isConstRefOrPtrUse() != b.isConstRefOrPtrUse())
+        return b.isConstRefOrPtrUse();
       // Prefer a more confident report over a less confident one.
       if (a.getKind() != b.getKind())
         return a.getKind() > b.getKind();
@@ -1759,6 +1767,9 @@ private:
     for (const auto &U : *vec) {
       if (U.isConstRefUse()) {
         if (DiagnoseUninitializedConstRefUse(S, vd, U))
+          return;
+      } else if (U.isConstPtrUse()) {
+        if (DiagnoseUninitializedConstPtrUse(S, vd, U))
           return;
       } else {
         // If we have self-init, downgrade all uses to 'may be uninitialized'.
@@ -2872,6 +2883,32 @@ public:
         << EscapeExpr->getEndLoc();
   }
 
+  void suggestAnnotation(SuggestionScope Scope,
+                         const ParmVarDecl *ParmToAnnotate,
+                         const Expr *EscapeExpr) override {
+    unsigned DiagID;
+    switch (Scope) {
+    case SuggestionScope::CrossTU:
+      DiagID = diag::warn_lifetime_safety_cross_tu_suggestion;
+      break;
+    case SuggestionScope::IntraTU:
+      DiagID = diag::warn_lifetime_safety_intra_tu_suggestion;
+      break;
+    }
+
+    SourceLocation InsertionPoint = Lexer::getLocForEndOfToken(
+        ParmToAnnotate->getEndLoc(), 0, S.getSourceManager(), S.getLangOpts());
+
+    S.Diag(ParmToAnnotate->getBeginLoc(), DiagID)
+        << ParmToAnnotate->getSourceRange()
+        << FixItHint::CreateInsertion(InsertionPoint,
+                                      " [[clang::lifetimebound]]");
+
+    S.Diag(EscapeExpr->getBeginLoc(),
+           diag::note_lifetime_safety_suggestion_returned_here)
+        << EscapeExpr->getSourceRange();
+  }
+
 private:
   Sema &S;
 };
@@ -3003,6 +3040,9 @@ void clang::sema::AnalysisBasedWarnings::IssueWarnings(
       .setAlwaysAdd(Stmt::ImplicitCastExprClass)
       .setAlwaysAdd(Stmt::UnaryOperatorClass);
   }
+  if (EnableLifetimeSafetyAnalysis) {
+    AC.getCFGBuildOptions().AddLifetime = true;
+  }
 
   // Install the logical handler.
   std::optional<LogicalErrorHandler> LEH;
@@ -3067,7 +3107,8 @@ void clang::sema::AnalysisBasedWarnings::IssueWarnings(
   if (!Diags.isIgnored(diag::warn_uninit_var, D->getBeginLoc()) ||
       !Diags.isIgnored(diag::warn_sometimes_uninit_var, D->getBeginLoc()) ||
       !Diags.isIgnored(diag::warn_maybe_uninit_var, D->getBeginLoc()) ||
-      !Diags.isIgnored(diag::warn_uninit_const_reference, D->getBeginLoc())) {
+      !Diags.isIgnored(diag::warn_uninit_const_reference, D->getBeginLoc()) ||
+      !Diags.isIgnored(diag::warn_uninit_const_pointer, D->getBeginLoc())) {
     if (CFG *cfg = AC.getCFG()) {
       UninitValsDiagReporter reporter(S);
       UninitVariablesAnalysisStats stats;

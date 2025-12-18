@@ -3147,6 +3147,9 @@ LogicalResult ParallelOp::verify() {
     return emitOpError() << "expects number of results: " << resultsSize
                          << " to be the same as number of initial values: "
                          << initValsSize;
+  if (reduceOp.getNumOperands() != initValsSize)
+    // Delegate error reporting to ReduceOp
+    return success();
 
   // Check that the types of the results and reductions are the same.
   for (int64_t i = 0; i < static_cast<int64_t>(reductionsSize); ++i) {
@@ -3449,6 +3452,11 @@ void ReduceOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult ReduceOp::verifyRegions() {
+  if (getReductions().size() != getOperands().size())
+    return emitOpError() << "expects number of reduction regions: "
+                         << getReductions().size()
+                         << " to be the same as number of reduction operands: "
+                         << getOperands().size();
   // The region of a ReduceOp has two arguments of the same type as its
   // corresponding operand.
   for (int64_t i = 0, e = getReductions().size(); i < e; ++i) {
@@ -3739,9 +3747,9 @@ struct WhileMoveIfDown : public OpRewritePattern<scf::WhileOp> {
         (ifOp.elseBlock() && !ifOp.elseBlock()->without_terminator().empty()))
       return failure();
 
-    assert(ifOp->use_empty() || (llvm::all_equal(ifOp->getUsers()) &&
-                                 *ifOp->user_begin() == conditionOp) &&
-                                    "ifOp has unexpected uses");
+    assert((ifOp->use_empty() || (llvm::all_equal(ifOp->getUsers()) &&
+                                  *ifOp->user_begin() == conditionOp)) &&
+           "ifOp has unexpected uses");
 
     Location loc = op.getLoc();
 
@@ -4466,7 +4474,7 @@ struct WhileOpAlignBeforeArgs : public OpRewritePattern<WhileOp> {
 
   LogicalResult matchAndRewrite(WhileOp loop,
                                 PatternRewriter &rewriter) const override {
-    auto oldBefore = loop.getBeforeBody();
+    auto *oldBefore = loop.getBeforeBody();
     ConditionOp oldTerm = loop.getConditionOp();
     ValueRange beforeArgs = oldBefore->getArguments();
     ValueRange termArgs = oldTerm.getArgs();
@@ -4487,7 +4495,7 @@ struct WhileOpAlignBeforeArgs : public OpRewritePattern<WhileOp> {
                                                beforeArgs);
     }
 
-    auto oldAfter = loop.getAfterBody();
+    auto *oldAfter = loop.getAfterBody();
 
     SmallVector<Type> newResultTypes(beforeArgs.size());
     for (auto &&[i, j] : llvm::enumerate(*mapping))
@@ -4496,8 +4504,8 @@ struct WhileOpAlignBeforeArgs : public OpRewritePattern<WhileOp> {
     auto newLoop = WhileOp::create(
         rewriter, loop.getLoc(), newResultTypes, loop.getInits(),
         /*beforeBuilder=*/nullptr, /*afterBuilder=*/nullptr);
-    auto newBefore = newLoop.getBeforeBody();
-    auto newAfter = newLoop.getAfterBody();
+    auto *newBefore = newLoop.getBeforeBody();
+    auto *newAfter = newLoop.getAfterBody();
 
     SmallVector<Value> newResults(beforeArgs.size());
     SmallVector<Value> newAfterArgs(beforeArgs.size());

@@ -18,13 +18,21 @@
 
 #define FORTRAN_PROCEDURE_NAME(name) name##_
 
-#ifdef _WIN32
+#if defined (_WIN32)
 // UID and GID don't exist on Windows, these exist to avoid errors.
+typedef std::uint32_t uid_t;
+typedef std::uint32_t gid_t;
+#elif (defined(__AMDGPU__) || defined(__NVPTX__)) && defined (EMBED_FLANG_RT_GPU_LLVM_IR)
 typedef std::uint32_t uid_t;
 typedef std::uint32_t gid_t;
 #else
 #include "sys/types.h" //pid_t
 #endif
+namespace Fortran {
+namespace runtime {
+class Descriptor;
+}
+} // namespace Fortran
 
 extern "C" {
 
@@ -110,6 +118,9 @@ float RTNAME(Rand)(int *i, const char *sourceFile, int line);
 
 // GNU extension subroutine SRAND(SEED)
 void FORTRAN_PROCEDURE_NAME(srand)(int *seed);
+
+// flang extension subroutine SHOW_DESCRIPTOR(D)
+void RTNAME(ShowDescriptor)(const Fortran::runtime::Descriptor *descr);
 
 } // extern "C"
 #endif // FORTRAN_RUNTIME_EXTENSIONS_H_
