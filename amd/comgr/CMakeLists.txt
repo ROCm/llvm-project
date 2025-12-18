@@ -78,6 +78,7 @@ set(SOURCES
   src/comgr-env.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
+  src/comgr-bc-to-spirv-command.cpp
   src/comgr-spirv-command.cpp
   src/comgr-symbol.cpp
   src/comgr-symbolizer.cpp

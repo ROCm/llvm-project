@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-compiler.h"
+#include "comgr-bc-to-spirv-command.h"
 #include "comgr-cache.h"
 #include "comgr-clang-command.h"
 #include "comgr-device-libs.h"
@@ -33,6 +34,7 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Options/Options.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
@@ -2122,7 +2124,6 @@ amd_comgr_status_t AMDGPUCompiler::compileSpirvToRelocatable() {
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  // Translate .spv to .bc
   amd_comgr_data_set_t TranslatedSpirvT;
   if (auto Status = amd_comgr_create_data_set(&TranslatedSpirvT))
     return Status;
@@ -2191,6 +2192,72 @@ amd_comgr_status_t AMDGPUCompiler::compileSourceToSpirv() {
   }
 
   return processFiles(AMD_COMGR_DATA_KIND_SPIRV, ".spv");
+}
+
+amd_comgr_status_t AMDGPUCompiler::translateBitcodeToSpirv() {
+#ifdef COMGR_DISABLE_SPIRV
+  LogS << "Calling AMDGPUCompiler::translateBitcodeToSpirv() not "
+       << "supported. Comgr is built with -DCOMGR_DISABLE_SPIRV. Re-build LLVM "
+       << "and Comgr with LLVM-SPIRV-Translator support to continue.\n";
+  return AMD_COMGR_STATUS_ERROR;
+#else
+  if (auto Status = createTmpDirs()) {
+    return Status;
+  }
+
+  auto Cache = CommandCache::get(LogS);
+
+  for (auto *Input : InSet->DataObjects) {
+    if (Input->DataKind != AMD_COMGR_DATA_KIND_BC)
+      continue;
+
+    if (env::shouldSaveTemps())
+      if (auto Status = outputToFile(Input, getFilePath(Input, InputDir)))
+        return Status;
+
+    SmallString<0> OutBuf;
+    BCToSPIRVCommand BcToSpirv(Input, OutBuf);
+
+    amd_comgr_status_t Status;
+    if (!Cache) {
+      Status = BcToSpirv.execute(LogS);
+    } else {
+      Status = Cache->execute(BcToSpirv, LogS);
+    }
+
+    if (Status) {
+      return Status;
+    }
+
+    amd_comgr_data_t OutputT;
+    if (auto Status = amd_comgr_create_data(AMD_COMGR_DATA_KIND_SPIRV, &OutputT)) {
+      return Status;
+    }
+
+    ScopedDataObjectReleaser SDOR(OutputT);
+
+    DataObject *Output = DataObject::convert(OutputT);
+    Output->setName(std::string(Input->Name) + std::string(".spv"));
+    Output->setData(OutBuf);
+
+    if (auto Status = amd_comgr_data_set_add(OutSetT, OutputT))
+      return Status;
+
+    if (env::shouldEmitVerboseLogs()) {
+      LogS << "BC to SPIR-V Translation: amd-llvm-spirv "
+           << getFilePath(Input, InputDir) << " -o "
+           << getFilePath(Output, OutputDir) << " (command line equivalent)\n";
+    }
+
+    if (env::shouldSaveTemps()) {
+      if (auto Status = outputToFile(Output, getFilePath(Output, OutputDir))) {
+        return Status;
+      }
+    }
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+#endif
 }
 
 AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,

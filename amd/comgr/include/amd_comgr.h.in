@@ -1839,9 +1839,22 @@ typedef enum amd_comgr_action_kind_s {
   AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV = 0x14,
 
   /**
+   * Translate each source LLVM IR Bitcode object in @p input into SPIR-V.
+   * For each successful translation, add a SPIR-V object to @p result.
+   *
+   * This action uses the amd-llvm-spirv translator to convert LLVM bitcode
+   * to SPIR-V bytecode suitable for use with HIP runtime compilation.
+   *
+   * Return @p AMD_COMGR_STATUS_ERROR if any translation fails
+   *
+   * Skip any input that is not LLVM IR Bitcode.
+   */
+  AMD_COMGR_ACTION_TRANSLATE_BC_TO_SPIRV = 0x15,
+
+  /**
    * Marker for last valid action kind.
    */
-  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV
+  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_TRANSLATE_BC_TO_SPIRV
 } amd_comgr_action_kind_t;
 
 /**
