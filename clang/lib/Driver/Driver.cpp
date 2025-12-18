@@ -29,6 +29,7 @@
 #include "ToolChains/Haiku.h"
 #include "ToolChains/Hexagon.h"
 #include "ToolChains/Hurd.h"
+#include "ToolChains/LFILinux.h"
 #include "ToolChains/Lanai.h"
 #include "ToolChains/Linux.h"
 #include "ToolChains/MSP430.h"
@@ -66,7 +67,6 @@
 #include "clang/Driver/ToolChain.h"
 #include "clang/Driver/Types.h"
 #include "clang/Driver/Util.h"
-#include "clang/Lex/DependencyDirectivesScanner.h"
 #include "clang/Options/OptionUtils.h"
 #include "clang/Options/Options.h"
 #include "clang/Options/OptionUtils.h"
@@ -91,6 +91,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/IOSandbox.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -1300,6 +1301,7 @@ bool Driver::loadConfigFiles() {
         UserConfigDir = static_cast<std::string>(CfgDir);
     }
   }
+  
   // Prepare list of directories where config file is searched for.
   StringRef CfgFileSearchDirs[] = {UserConfigDir, SystemConfigDir, Dir};
   ExpCtx.setSearchDirs(CfgFileSearchDirs);
@@ -1858,6 +1860,8 @@ bool Driver::getCrashDiagnosticFile(StringRef ReproCrashFilename,
   using namespace llvm::sys;
   assert(llvm::Triple(llvm::sys::getProcessTriple()).isOSDarwin() &&
          "Only knows about .crash files on Darwin");
+  // This is not a formal output of the compiler, let's bypass the sandbox.
+  auto BypassSandbox = sandbox::scopedDisable();
 
   // The .crash file can be found on at ~/Library/Logs/DiagnosticReports/
   // (or /Library/Logs/DiagnosticReports for root) and has the filename pattern
@@ -3784,10 +3788,9 @@ class OffloadingActionBuilder final {
       }
 
       // By default, we produce an action for each device arch.
-      for (Action *&A : CudaDeviceActions) {
+      for (Action *&A : CudaDeviceActions)
         A = C.getDriver().ConstructPhaseAction(C, Args, CurPhase, A,
                                                AssociatedOffloadKind);
-      }
 
       if (CompileDeviceOnly && CurPhase == FinalPhase && BundleOutput &&
           *BundleOutput) {
@@ -4229,11 +4232,6 @@ void Driver::handleArguments(Compilation &C, DerivedArgList &Args,
     YcArg = nullptr;
   }
 
-  if (Args.hasArgNoClaim(options::OPT_fmodules_driver))
-    // TODO: Check against all incompatible -fmodules-driver arguments
-    if (!ModulesModeCXX20 && !Args.hasArgNoClaim(options::OPT_fmodules))
-      Args.eraseArg(options::OPT_fmodules_driver);
-
   Arg *FinalPhaseArg;
   phases::ID FinalPhase = getFinalPhase(Args, &FinalPhaseArg);
 
@@ -4360,33 +4358,6 @@ void Driver::handleArguments(Compilation &C, DerivedArgList &Args,
   }
 }
 
-static bool hasCXXModuleInputType(const Driver::InputList &Inputs) {
-  const auto IsTypeCXXModule = [](const auto &Input) -> bool {
-    const auto TypeID = Input.first;
-    return (TypeID == types::TY_CXXModule);
-  };
-  return llvm::any_of(Inputs, IsTypeCXXModule);
-}
-
-llvm::ErrorOr<bool>
-Driver::ScanInputsForCXX20ModulesUsage(const InputList &Inputs) const {
-  const auto CXXInputs = llvm::make_filter_range(
-      Inputs, [](const auto &Input) { return types::isCXX(Input.first); });
-  for (const auto &Input : CXXInputs) {
-    StringRef Filename = Input.second->getSpelling();
-    auto ErrOrBuffer = VFS->getBufferForFile(Filename);
-    if (!ErrOrBuffer)
-      return ErrOrBuffer.getError();
-    const auto Buffer = std::move(*ErrOrBuffer);
-
-    if (scanInputForCXX20ModulesUsage(Buffer->getBuffer())) {
-      Diags.Report(diag::remark_found_cxx20_module_usage) << Filename;
-      return true;
-    }
-  }
-  return false;
-}
-
 void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
                           const InputList &Inputs, ActionList &Actions) const {
   llvm::PrettyStackTraceString CrashInfo("Building compilation actions");
@@ -4400,33 +4371,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
   phases::ID FinalPhase = getFinalPhase(Args, &FinalPhaseArg);
 
   handleArguments(C, Args, Inputs, Actions);
-
-  if (Args.hasFlag(options::OPT_fmodules_driver,
-                   options::OPT_fno_modules_driver, false)) {
-    // TODO: Move the logic for implicitly enabling explicit-module-builds out
-    // of -fmodules-driver once it is no longer experimental.
-    // Currently, this serves diagnostic purposes only.
-    bool UsesCXXModules = hasCXXModuleInputType(Inputs);
-    if (!UsesCXXModules) {
-      const auto ErrOrScanResult = ScanInputsForCXX20ModulesUsage(Inputs);
-      if (!ErrOrScanResult) {
-        Diags.Report(diag::err_cannot_open_file)
-            << ErrOrScanResult.getError().message();
-        return;
-      }
-      UsesCXXModules = *ErrOrScanResult;
-    }
-    if (UsesCXXModules || Args.hasArg(options::OPT_fmodules))
-      BuildDriverManagedModuleBuildActions(C, Args, Inputs, Actions);
-    return;
-  }
-
-  BuildDefaultActions(C, Args, Inputs, Actions);
-}
-
-void Driver::BuildDefaultActions(Compilation &C, DerivedArgList &Args,
-                                 const InputList &Inputs,
-                                 ActionList &Actions) const {
 
   bool UseNewOffloadingDriver =
       C.isOffloadingHostKind(Action::OFK_OpenMP) ||
@@ -4722,12 +4666,6 @@ void Driver::BuildDefaultActions(Compilation &C, DerivedArgList &Args,
 
   // Claim ignored clang-cl options.
   Args.ClaimAllArgs(options::OPT_cl_ignored_Group);
-}
-
-void Driver::BuildDriverManagedModuleBuildActions(
-    Compilation &C, llvm::opt::DerivedArgList &Args, const InputList &Inputs,
-    ActionList &Actions) const {
-  Diags.Report(diag::remark_performing_driver_managed_module_build);
 }
 
 /// Returns the canonical name for the offloading architecture when using a HIP
@@ -6961,6 +6899,8 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         TC = std::make_unique<toolchains::OHOS>(*this, Target, Args);
       else if (Target.isWALI())
         TC = std::make_unique<toolchains::WebAssembly>(*this, Target, Args);
+      else if (Target.isLFI())
+        TC = std::make_unique<toolchains::LFILinux>(*this, Target, Args);
       else
         TC = std::make_unique<toolchains::Linux>(*this, Target, Args);
       break;
@@ -7468,3 +7408,4 @@ void driver::applyOverrideOptions(SmallVectorImpl<const char *> &Args,
       ++S;
   }
 }
+

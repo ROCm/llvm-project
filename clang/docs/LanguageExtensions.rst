@@ -382,7 +382,9 @@ Builtin Macros
 
 ``__COUNTER__``
   Defined to an integer value that starts at zero and is incremented each time
-  the ``__COUNTER__`` macro is expanded.
+  the ``__COUNTER__`` macro is expanded. This is a standard feature in C2y but
+  is an extension in earlier language modes and in C++. This macro can only be
+  expanded 2147483647 times at most.
 
 ``__INCLUDE_LEVEL__``
   Defined to an integral value that is the include depth of the file currently
@@ -1067,6 +1069,12 @@ The matrix type extension supports explicit casts. Implicit type conversion betw
     i = (matrix_5_5<int>)d;
     i = static_cast<matrix_5_5<int>>(d);
   }
+
+The matrix type extension supports column and row major memory layouts, but not
+all builtins are supported with row-major layout. The layout defaults to column
+major and can be specified using `-fmatrix-memory-layout`. To enable column 
+major layout, use `-fmatrix-memory-layout=column-major`, and for row major
+layout use `-fmatrix-memory-layout=row-major`
 
 Half-Precision Floating Point
 =============================
@@ -1820,6 +1828,7 @@ Octal literals prefixed with ``0o`` or ``0O``                                  C
 ``_Countof`` (N3369, N3469)                                                    C2y           C89
 ``_Generic`` with a type operand (N3260)                                       C2y           C89, C++
 ``++``/``--`` on ``_Complex`` value (N3259)                                    C2y           C89, C++
+``__COUNTER__`` (N3457)                                                        C2y           C89, C++
 ============================================= ================================ ============= =============
 
 Builtin type aliases
@@ -2038,8 +2047,6 @@ The following type trait primitives are supported by Clang. Those traits marked
   is trivially relocatable, as defined by the C++26 standard [meta.unary.prop].
   Note that when relocating the caller code should ensure that if the object is polymorphic,
   the dynamic type is of the most derived type. Padding bytes should not be copied.
-* ``__builtin_is_replaceable`` (C++): Returns true if an object
-  is replaceable, as defined by the C++26 standard [meta.unary.prop].
 * ``__is_trivially_equality_comparable`` (Clang): Returns true if comparing two
   objects of the provided type is known to be equivalent to comparing their
   object representations. Note that types containing padding bytes are never
@@ -4307,9 +4314,9 @@ as ``unsigned __int128`` and C23 ``unsigned _BitInt(N)``.
 ``__builtin_counted_by_ref`` returns a pointer to the count field from the
 ``counted_by`` attribute.
 
-The argument must be a flexible array member. If the argument isn't a flexible
-array member or doesn't have the ``counted_by`` attribute, the builtin returns
-``(void *)0``.
+The argument must be a flexible array member or a pointer with the ``counted_by``
+attribute. If the argument doesn't have the ``counted_by`` attribute, the builtin
+returns ``(void *)0``.
 
 **Syntax**:
 
@@ -4340,9 +4347,9 @@ array member or doesn't have the ``counted_by`` attribute, the builtin returns
 The ``__builtin_counted_by_ref`` builtin allows the programmer to prevent a
 common error associated with the ``counted_by`` attribute. When using the
 ``counted_by`` attribute, the ``count`` field **must** be set before the
-flexible array member can be accessed. Otherwise, the sanitizers may view such
-accesses as false positives. For instance, it's not uncommon for programmers to
-initialize the flexible array before setting the ``count`` field:
+flexible array member or pointer can be accessed. Otherwise, the sanitizers may
+view such accesses as false positives. For instance, it's not uncommon for
+programmers to initialize the flexible array before setting the ``count`` field:
 
 .. code-block:: c
 
@@ -4360,10 +4367,9 @@ initialize the flexible array before setting the ``count`` field:
   ptr->count = COUNT;
 
 Enforcing the rule that ``ptr->count = COUNT;`` must occur after every
-allocation of a struct with a flexible array member with the ``counted_by``
-attribute is prone to failure in large code bases. This builtin mitigates this
-for allocators (like in Linux) that are implemented in a way where the counter
-assignment can happen automatically.
+allocation of a struct with a ``counted_by`` member is prone to failure in large
+code bases. This builtin mitigates this for allocators (like in Linux) that are
+implemented in a way where the counter assignment can happen automatically.
 
 **Note:** The value returned by ``__builtin_counted_by_ref`` cannot be assigned
 to a variable, have its address taken, or passed into or returned from a

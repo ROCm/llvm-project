@@ -498,6 +498,11 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
   Builder.defineMacro("__STDC_EMBED_EMPTY__",
                       llvm::itostr(static_cast<int>(EmbedResult::Empty)));
 
+  // We define this to '1' here to indicate that we only support '_Defer'
+  // as a keyword.
+  if (LangOpts.DeferTS)
+    Builder.defineMacro("__STDC_DEFER_TS25755__", "1");
+
   if (LangOpts.ObjC)
     Builder.defineMacro("__OBJC__");
 
@@ -1544,6 +1549,9 @@ void clang::InitializePreprocessor(Preprocessor &PP,
   PredefineBuffer.reserve(4080);
   llvm::raw_string_ostream Predefines(PredefineBuffer);
   MacroBuilder Builder(Predefines);
+
+  // Ensure that the initial value of __COUNTER__ is hooked up.
+  PP.setCounterValue(InitOpts.InitialCounterValue);
 
   // Emit line markers for various builtin sections of the file. The 3 here
   // marks <built-in> as being a system header, which suppresses warnings when

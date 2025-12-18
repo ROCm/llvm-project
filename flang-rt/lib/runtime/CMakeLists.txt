@@ -35,6 +35,7 @@ set(supported_sources
   edit-input.cpp
   edit-output.cpp
   environment.cpp
+  exceptions.cpp
   external-unit.cpp
   extrema.cpp
   file.cpp
@@ -178,7 +179,11 @@ else ()
 endif ()
 
 if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-  set(sources ${gpu_sources})
+  if (FLANG_RT_EMBED_GPU_LLVM_IR)
+    set(sources ${supported_sources} ${gpu_sources})
+  else ()
+    set(sources ${gpu_sources})
+  endif ()
 elseif(FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   set(sources ${supported_sources})
 else ()

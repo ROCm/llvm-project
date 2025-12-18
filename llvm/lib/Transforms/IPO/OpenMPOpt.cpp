@@ -50,6 +50,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -544,6 +545,24 @@ struct OMPInformationCache : public InformationCache {
     collectUses(RFI, /*CollectStats*/ false);
   }
 
+  void setCallbackMetadata(Function *F, unsigned ArgNo, ArrayRef<int> Indices,
+                           bool IsVarArg) {
+    if (!F)
+      return;
+
+    LLVMContext &Ctx = F->getContext();
+    MDBuilder MDB(Ctx);
+
+    // Create the new callback encoding for this runtime function
+    MDNode *NewCallbackEncoding =
+        MDB.createCallbackEncoding(ArgNo, Indices, IsVarArg);
+
+    if (!F->getMetadata(LLVMContext::MD_callback))
+      // No existing metadata, create new with single entry
+      F->addMetadata(LLVMContext::MD_callback,
+                     *MDNode::get(Ctx, {NewCallbackEncoding}));
+  }
+
   // Helper function to recollect uses of all runtime functions.
   void recollectUses() {
     for (int Idx = 0; Idx < RFIs.size(); ++Idx)
@@ -627,8 +646,13 @@ struct OMPInformationCache : public InformationCache {
       });                                                                      \
     }                                                                          \
   }
-#include "llvm/Frontend/OpenMP/OMPKinds.def"
+#define OMP_RTL_CB_INFO(_Enum, _Name, _ArgNo, _ArgIndices, _IsVarArg)          \
+  {                                                                            \
+    Function *F = M.getFunction(_Name);                                        \
+    setCallbackMetadata(F, _ArgNo, _ArgIndices, _IsVarArg);                    \
+  }
 
+#include "llvm/Frontend/OpenMP/OMPKinds.def"
     // Remove the `noinline` attribute from `__kmpc`, `ompx::` and `omp_`
     // functions, except if `optnone` is present.
     if (isOpenMPDevice(M)) {
@@ -730,7 +754,7 @@ struct KernelInfoState : AbstractState {
 
   /// State to indicate if we can track parallel level of the associated
   /// function. We will give up tracking if we encounter unknown caller or the
-  /// caller is __kmpc_parallel_51.
+  /// caller is __kmpc_parallel_60.
   BooleanStateWithSetVector<uint8_t> ParallelLevels;
 
   /// Flag that indicates if the kernel has nested Parallelism
@@ -2120,8 +2144,8 @@ Kernel OpenMPOpt::getUniqueKernelFor(Function &F) {
         return getUniqueKernelFor(*CB);
 
       OMPInformationCache::RuntimeFunctionInfo &KernelParallelRFI =
-          OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_51];
-      // Allow the use in __kmpc_parallel_51 calls.
+          OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_60];
+      // Allow the use in __kmpc_parallel_60 calls.
       if (OpenMPOpt::getCallIfRegularCall(*U.getUser(), &KernelParallelRFI))
         return getUniqueKernelFor(*CB);
       return nullptr;
@@ -2148,7 +2172,7 @@ Kernel OpenMPOpt::getUniqueKernelFor(Function &F) {
 
 bool OpenMPOpt::rewriteDeviceCodeStateMachine() {
   OMPInformationCache::RuntimeFunctionInfo &KernelParallelRFI =
-      OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_51];
+      OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_60];
 
   bool Changed = false;
   if (!KernelParallelRFI)
@@ -2160,7 +2184,7 @@ bool OpenMPOpt::rewriteDeviceCodeStateMachine() {
 
   for (Function *F : SCC) {
 
-    // Check if the function is a use in a __kmpc_parallel_51 call at
+    // Check if the function is a use in a __kmpc_parallel_60 call at
     // all.
     bool UnknownUse = false;
     bool KernelParallelUse = false;
@@ -2192,7 +2216,7 @@ bool OpenMPOpt::rewriteDeviceCodeStateMachine() {
       UnknownUse = true;
     });
 
-    // Do not emit a remark if we haven't seen a __kmpc_parallel_51
+    // Do not emit a remark if we haven't seen a __kmpc_parallel_60
     // use.
     if (!KernelParallelUse)
       continue;
@@ -2211,7 +2235,7 @@ bool OpenMPOpt::rewriteDeviceCodeStateMachine() {
       continue;
     }
 
-    // Even if we have __kmpc_parallel_51 calls, we (for now) give
+    // Even if we have __kmpc_parallel_60 calls, we (for now) give
     // up if the function is not called from a unique kernel.
     Kernel K = getUniqueKernelFor(*F);
     if (!K) {
@@ -4487,7 +4511,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
 
     Instruction *IsWorker =
         ICmpInst::Create(ICmpInst::ICmp, llvm::CmpInst::ICMP_NE, KernelInitCB,
-                         ConstantInt::get(KernelInitCB->getType(), -1),
+                         ConstantInt::getAllOnesValue(KernelInitCB->getType()),
                          "thread.is_worker", InitBB);
     IsWorker->setDebugLoc(DLoc);
     BranchInst::Create(IsWorkerCheckBB, UserCodeEntryBB, IsWorker, InitBB);
@@ -4779,6 +4803,43 @@ struct AAKernelInfoFunction : AAKernelInfo {
     bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
+      auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
+      Function *Callee = CB.getCalledFunction();
+      const auto &It = OMPInfoCache.RuntimeFunctionIDMap.find(Callee);
+      if (It != OMPInfoCache.RuntimeFunctionIDMap.end()) {
+        MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
+        // If this runtime function has callbacks, we need to look at them
+        // to find potential parallel regions.
+        if (CallbackMD && CallbackMD->getNumOperands() > 0) {
+          // TODO: Handle multiple callbacks?
+          MDNode *OpMD = cast<MDNode>(CallbackMD->getOperand(0).get());
+          if (OpMD && OpMD->getNumOperands() > 0) {
+            auto *CBArgCM = cast<ConstantAsMetadata>(OpMD->getOperand(0));
+            const unsigned int ArgNo =
+                cast<ConstantInt>(CBArgCM->getValue())->getZExtValue();
+            auto *LoopRegion = dyn_cast<Function>(
+                CB.getArgOperand(ArgNo)->stripPointerCasts());
+            // Only analyze the callback if we have a concrete function
+            // definition. Declarations cannot be analyzed interprocedurally.
+            if (LoopRegion && !LoopRegion->isDeclaration()) {
+              LLVM_DEBUG(dbgs() << "[OpenMPOpt] Analyzing callback function: "
+                                << LoopRegion->getName() << "\n");
+              auto *FnAA = A.getAAFor<AAKernelInfo>(
+                  *this, IRPosition::function(*LoopRegion),
+                  DepClassTy::OPTIONAL);
+              if (FnAA) {
+                getState() ^= FnAA->getState();
+                AllSPMDStatesWereFixed &=
+                    FnAA->SPMDCompatibilityTracker.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedKnownParallelRegions.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedUnknownParallelRegions.isAtFixpoint();
+              }
+            }
+          }
+        }
+      }
       auto *CBAA = A.getAAFor<AAKernelInfo>(
           *this, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
       if (!CBAA)
@@ -4851,8 +4912,8 @@ private:
   /// Update info regarding parallel levels.
   void updateParallelLevels(Attributor &A) {
     auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
-    OMPInformationCache::RuntimeFunctionInfo &Parallel51RFI =
-        OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_51];
+    OMPInformationCache::RuntimeFunctionInfo &Parallel60RFI =
+        OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_60];
 
     auto PredCallSite = [&](AbstractCallSite ACS) {
       Function *Caller = ACS.getInstruction()->getFunction();
@@ -4862,12 +4923,12 @@ private:
       auto *CAA =
           A.getOrCreateAAFor<AAKernelInfo>(IRPosition::function(*Caller));
       if (CAA && CAA->ParallelLevels.isValidState()) {
-        // Any function that is called by `__kmpc_parallel_51` will not be
+        // Any function that is called by `__kmpc_parallel_60` will not be
         // folded as the parallel level in the function is updated. In order to
         // get it right, all the analysis would depend on the implentation. That
         // said, if in the future any change to the implementation, the analysis
         // could be wrong. As a consequence, we are just conservative here.
-        if (Caller == Parallel51RFI.Declaration) {
+        if (Caller == Parallel60RFI.Declaration) {
           ParallelLevels.indicatePessimisticFixpoint();
           return true;
         }
@@ -4954,7 +5015,12 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         // state based on the callee state in updateImpl.
         return;
       }
-      if (NumCallees > 1) {
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !Callee->hasMetadata(LLVMContext::MD_callback)) {
         indicatePessimisticFixpoint();
         return;
       }
@@ -4975,6 +5041,7 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_barrier:
       case OMPRTL___kmpc_nvptx_parallel_reduce_nowait_v2:
       case OMPRTL___kmpc_nvptx_teams_reduce_nowait_v2:
+      case OMPRTL___kmpc_reduction_get_fixed_buffer:
       case OMPRTL___kmpc_error:
       case OMPRTL___kmpc_flush:
       case OMPRTL___kmpc_get_hardware_thread_id_in_block:
@@ -5036,8 +5103,8 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_target_deinit:
         KernelDeinitCB = &CB;
         break;
-      case OMPRTL___kmpc_parallel_51:
-        if (!handleParallel51(A, CB))
+      case OMPRTL___kmpc_parallel_60:
+        if (!handleParallel60(A, CB))
           indicatePessimisticFixpoint();
         return;
       case OMPRTL___kmpc_omp_task:
@@ -5062,16 +5129,6 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
-        // Parallel regions might be reached by these calls, as they take a
-        // callback argument potentially containing arbitrary user-provided
-        // code.
-        ReachedUnknownParallelRegions.insert(&CB);
-        // TODO: The presence of these calls on their own does not prevent a
-        // kernel from being SPMD-izable. We mark it as such because we need
-        // further changes in order to also consider the contents of the
-        // callbacks passed to them.
-        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
-        SPMDCompatibilityTracker.insert(&CB);
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,
@@ -5124,12 +5181,17 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         getState() = FnAA->getState();
         return ChangeStatus::CHANGED;
       }
-      if (NumCallees > 1)
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !F->hasMetadata(LLVMContext::MD_callback))
         return indicatePessimisticFixpoint();
 
       CallBase &CB = cast<CallBase>(getAssociatedValue());
-      if (It->getSecond() == OMPRTL___kmpc_parallel_51) {
-        if (!handleParallel51(A, CB))
+      if (It->getSecond() == OMPRTL___kmpc_parallel_60) {
+        if (!handleParallel60(A, CB))
           return indicatePessimisticFixpoint();
         return StateBefore == getState() ? ChangeStatus::UNCHANGED
                                          : ChangeStatus::CHANGED;
@@ -5189,9 +5251,9 @@ struct AAKernelInfoCallSite : AAKernelInfo {
                                      : ChangeStatus::CHANGED;
   }
 
-  /// Deal with a __kmpc_parallel_51 call (\p CB). Returns true if the call was
+  /// Deal with a __kmpc_parallel_60 call (\p CB). Returns true if the call was
   /// handled, if a problem occurred, false is returned.
-  bool handleParallel51(Attributor &A, CallBase &CB) {
+  bool handleParallel60(Attributor &A, CallBase &CB) {
     const unsigned int NonWrapperFunctionArgNo = 5;
     const unsigned int WrapperFunctionArgNo = 6;
     auto ParallelRegionOpArgNo = SPMDCompatibilityTracker.isAssumed()

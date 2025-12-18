@@ -1,6 +1,6 @@
 ! This test checks lowering of OpenMP DO Directive (Worksharing)
 ! with linear clause
-! XFAIL: *
+
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir %s -o - 2>&1 | FileCheck %s
 
 !CHECK: %[[X_alloca:.*]] = fir.alloca i32 {bindc_name = "x", uniq_name = "_QFsimple_linearEx"}
@@ -18,6 +18,7 @@ subroutine simple_linear
         y = x + 2
     end do
     !$omp end do
+    !CHECK: } {linear_var_types = [i32]}
 end subroutine
 
 
@@ -31,11 +32,12 @@ subroutine linear_step
     !$omp do linear(x:4)
     !CHECK: %[[LOAD:.*]] = fir.load %[[X]]#0 : !fir.ref<i32>
     !CHECK: %[[const:.*]] = arith.constant 2 : i32
-    !CHECK: %[[RESULT:.*]] = arith.addi %[[LOAD]], %[[const]] : i32   
+    !CHECK: %[[RESULT:.*]] = arith.addi %[[LOAD]], %[[const]] : i32
     do i = 1, 10
         y = x + 2
     end do
     !$omp end do
+    !CHECK: } {linear_var_types = [i32]}
 end subroutine
 
 !CHECK: %[[A_alloca:.*]] = fir.alloca i32 {bindc_name = "a", uniq_name = "_QFlinear_exprEa"}
@@ -54,4 +56,5 @@ subroutine linear_expr
         y = x + 2
     end do
     !$omp end do
+    !CHECK: } {linear_var_types = [i32]}
 end subroutine
