@@ -26,4 +26,3 @@ void add_value(float* a, float* b, float* res) {
 
     clean_value(a);
 }
-
