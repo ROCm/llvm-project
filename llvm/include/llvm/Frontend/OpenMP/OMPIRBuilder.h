@@ -2371,6 +2371,7 @@ public:
     BasicBlock *EntryBB, *ExitBB, *OuterAllocBB;
     SmallVector<BasicBlock *> OuterDeallocBBs;
     SmallVector<Value *, 2> ExcludeArgsFromAggregate;
+    bool FixUpNonEntryAllocas = false;
 
     LLVM_ABI virtual ~OutlineInfo() = default;
 
