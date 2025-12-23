@@ -46,6 +46,7 @@ class DFAPacketizer;
 class InstrItineraryData;
 class LiveIntervals;
 class LiveVariables;
+class MachineDominatorTree;
 class MachineLoop;
 class MachineMemOperand;
 class MachineModuleInfo;
@@ -2193,6 +2194,13 @@ public:
                                             Register Dst) const {
     return BuildMI(MBB, InsPt, DL, get(TargetOpcode::COPY), Dst)
         .addReg(Src, 0, SrcSubReg);
+  }
+
+  virtual bool
+  eliminateI1PHIs(MachineFunction &MF, MachineDominatorTree *MDT,
+                  MachineLoopInfo *MLI, LiveVariables *LV, LiveIntervals *LIS,
+                  std::vector<SparseBitVector<>> *LiveInSets) const {
+    return false;
   }
 
   /// Returns a \p outliner::OutlinedFunction struct containing target-specific
