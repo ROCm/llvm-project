@@ -58,6 +58,21 @@ jobs:
           repository: "ROCm/TheRock"
           ref: "compiler/amd-mainline"
           fetch-depth: 10
+      - name: Update child workflows
+        run: |
+          # Define the regex pattern and replacement
+          REGEX_PATTERN='repository: "ROCm/TheRock"'
+          REPLACEMENT='repository: "ROCm/TheRock"\n  ref: compiler/amd-mainline'
+
+          # Directory containing child workflows
+          WORKFLOW_DIR=".github/workflows"
+
+          # Loop through child YAML files and apply the regex replacement
+          for file in "$WORKFLOW_DIR"/*.yml; do
+            echo "Updating $file..."
+            sed -i "s|$REGEX_PATTERN|$REPLACEMENT|g" "$file"
+            cat $file
+          done            
       - name: SHA of TheRock
         run: |
              git rev-parse HEAD
@@ -68,7 +83,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --json labels)" >> $GITHUB_ENV
+          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --repo ROCm/llvm-project --json labels)" >> $GITHUB_ENV
 
       - name: Configuring CI options
         id: configure
