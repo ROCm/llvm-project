@@ -640,6 +640,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUWaveTransformPass(*PR);
   initializeAMDGPUPreWaveTransformPass(*PR);
   initializeAMDGPUFinalizeISelWaveTransformPass(*PR);
+  initializeAMDGPUExtendVGPRLiveRangesPass(*PR);
 }
 
 static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
@@ -1894,6 +1895,8 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
   // To Allocate wwm registers used in whole quad mode operations (for shaders).
   if (!LateWaveTransform)
     addPass(&SIPreAllocateWWMRegsLegacyID);
+  else
+    addPass(&AMDGPUExtendVGPRLiveRangesID);
 
   // For allocating other whole wave mode registers.
   addPass(createWWMRegAllocPass(true));
