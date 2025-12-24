@@ -1490,6 +1490,12 @@ def FeaturePkAddMinMaxInsts : SubtargetFeature<"pk-add-min-max-insts",
   "Has v_pk_add_{min|max}_{i|u}16 instructions"
 >;
 
+def FeatureAsyncmarkIntrinsics : SubtargetFeature<"asyncmark-intrinsics",
+  "HasAsyncmarkIntrinsics",
+  "true",
+  "The target supports asyncmark/wait intrinsics for explicit tracking of asynchronous operations."
+>;
+
 def FeatureVMemToLDSLoad : SubtargetFeature<"vmem-to-lds-load-insts",
   "HasVMemToLDSLoad",
   "true",
@@ -1598,7 +1604,7 @@ def FeatureGFX9 : GCNSubtargetFeatureGeneration<"GFX9",
    FeatureDefaultComponentZero,FeatureVmemWriteVgprInOrder, FeatureVMemToLDSLoad,
    FeatureCubeInsts, FeatureLerpInst, FeatureSadInsts, FeatureQsadInsts,
    FeatureCvtNormInsts, FeatureCvtPkNormVOP2Insts,
-   FeatureCvtPkNormVOP3Insts
+   FeatureCvtPkNormVOP3Insts, FeatureAsyncmarkIntrinsics
   ]
 >;
 
@@ -1625,7 +1631,7 @@ def FeatureGFX10 : GCNSubtargetFeatureGeneration<"GFX10",
    FeatureVmemWriteVgprInOrder, FeatureVMemToLDSLoad, FeatureCubeInsts,
    FeatureLerpInst, FeatureSadInsts, FeatureQsadInsts,
    FeatureCvtNormInsts, FeatureCvtPkNormVOP2Insts,
-   FeatureCvtPkNormVOP3Insts
+   FeatureCvtPkNormVOP3Insts, FeatureAsyncmarkIntrinsics
   ]
 >;
 
@@ -1674,7 +1680,8 @@ def FeatureGFX12 : GCNSubtargetFeatureGeneration<"GFX12",
    FeatureDefaultComponentBroadcast, FeatureMaxHardClauseLength32,
    FeatureAtomicFMinFMaxF32GlobalInsts, FeatureAtomicFMinFMaxF32FlatInsts,
    FeatureIEEEMinimumMaximumInsts, FeatureMinimum3Maximum3F32,
-   FeatureMinimum3Maximum3F16, FeatureAgentScopeFineGrainedRemoteMemoryAtomics
+   FeatureMinimum3Maximum3F16, FeatureAgentScopeFineGrainedRemoteMemoryAtomics,
+   FeatureAsyncmarkIntrinsics
   ]
 >;
 
@@ -2627,6 +2634,9 @@ def HasFlatScratchSVSMode : Predicate<"Subtarget->hasFlatScratchSVSMode()">,
 
 def HasVMemToLDSLoad : Predicate<"Subtarget->hasVMemToLDSLoad()">,
   AssemblerPredicate<(all_of FeatureVMemToLDSLoad)>;
+
+def HasAsyncmarkIntrinsics : Predicate<"Subtarget->hasAsyncmarkIntrinsics()">,
+  AssemblerPredicate<(all_of FeatureAsyncmarkIntrinsics)>;
 
 def HasFlatGVSMode : Predicate<"Subtarget->hasFlatGVSMode()">,
   AssemblerPredicate<(all_of FeatureFlatGVSMode)>;

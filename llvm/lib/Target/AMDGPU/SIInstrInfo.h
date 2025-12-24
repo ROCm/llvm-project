@@ -615,11 +615,13 @@ public:
 
   static bool isLDSDMA(const MachineInstr &MI) {
     return (isVALU(MI) && (isMUBUF(MI) || isFLAT(MI))) ||
+      SIInstrInfo::usesASYNC_CNT(MI) ||
            (MI.getDesc().TSFlags & SIInstrFlags::TENSOR_CNT);
   }
 
   bool isLDSDMA(uint16_t Opcode) {
     return (isVALU(Opcode) && (isMUBUF(Opcode) || isFLAT(Opcode))) ||
+      usesASYNC_CNT(Opcode) ||
            (get(Opcode).TSFlags & SIInstrFlags::TENSOR_CNT);
   }
 
@@ -1017,6 +1019,10 @@ public:
 
   static bool usesASYNC_CNT(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::ASYNC_CNT;
+  }
+
+  bool usesASYNC_CNT(uint16_t Opcode) const {
+    return get(Opcode).TSFlags & SIInstrFlags::ASYNC_CNT;
   }
 
   static bool usesLGKM_CNT(const MachineInstr &MI) {

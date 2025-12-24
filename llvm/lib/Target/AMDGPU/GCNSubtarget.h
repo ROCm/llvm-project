@@ -205,6 +205,7 @@ protected:
   bool DynamicVGPR = false;
   bool DynamicVGPRBlockSize32 = false;
   bool HasVMemToLDSLoad = false;
+  bool HasAsyncmarkIntrinsics = false;
   bool RequiresAlignVGPR = false;
 
   // This should not be used directly. 'TargetID' tracks the dynamic settings
@@ -1390,6 +1391,8 @@ public:
   }
 
   bool hasVMemToLDSLoad() const { return HasVMemToLDSLoad; }
+
+  bool hasAsyncmarkIntrinsics() const { return HasAsyncmarkIntrinsics; }
 
   bool hasSALUFloatInsts() const { return HasSALUFloatInsts; }
 

@@ -257,7 +257,7 @@ AMDGPUTargetInfo::AMDGPUTargetInfo(const llvm::Triple &Triple,
   MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
   CUMode = !(GPUFeatures & llvm::AMDGPU::FEATURE_WGP);
 
-  for (auto F : {"image-insts", "gws", "vmem-to-lds-load-insts"}) {
+  for (auto F : {"image-insts", "gws", "vmem-to-lds-load-insts", "asyncmark-intrinsics"}) {
     if (GPUKind != llvm::AMDGPU::GK_NONE)
       ReadOnlyFeatures.insert(F);
   }

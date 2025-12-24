@@ -1089,6 +1089,7 @@ struct Waitcnt {
   unsigned BvhCnt = ~0u;    // gfx12+ only.
   unsigned KmCnt = ~0u;     // gfx12+ only.
   unsigned XCnt = ~0u;      // gfx1250.
+  unsigned AsyncCnt = ~0u;  // gfx1250.
 
   Waitcnt() = default;
   // Pre-gfx12 constructor.
@@ -1097,9 +1098,10 @@ struct Waitcnt {
 
   // gfx12+ constructor.
   Waitcnt(unsigned LoadCnt, unsigned ExpCnt, unsigned DsCnt, unsigned StoreCnt,
-          unsigned SampleCnt, unsigned BvhCnt, unsigned KmCnt, unsigned XCnt)
+          unsigned SampleCnt, unsigned BvhCnt, unsigned KmCnt, unsigned XCnt,
+          unsigned AsyncCnt)
       : LoadCnt(LoadCnt), ExpCnt(ExpCnt), DsCnt(DsCnt), StoreCnt(StoreCnt),
-        SampleCnt(SampleCnt), BvhCnt(BvhCnt), KmCnt(KmCnt), XCnt(XCnt) {}
+        SampleCnt(SampleCnt), BvhCnt(BvhCnt), KmCnt(KmCnt), XCnt(XCnt), AsyncCnt(AsyncCnt) {}
 
   bool hasWait() const { return StoreCnt != ~0u || hasWaitExceptStoreCnt(); }
 
@@ -1117,7 +1119,8 @@ struct Waitcnt {
         std::min(LoadCnt, Other.LoadCnt), std::min(ExpCnt, Other.ExpCnt),
         std::min(DsCnt, Other.DsCnt), std::min(StoreCnt, Other.StoreCnt),
         std::min(SampleCnt, Other.SampleCnt), std::min(BvhCnt, Other.BvhCnt),
-        std::min(KmCnt, Other.KmCnt), std::min(XCnt, Other.XCnt));
+        std::min(KmCnt, Other.KmCnt), std::min(XCnt, Other.XCnt),
+        std::min(AsyncCnt, Other.AsyncCnt));
   }
 
   friend raw_ostream &operator<<(raw_ostream &OS, const AMDGPU::Waitcnt &Wait);
@@ -1216,6 +1219,10 @@ unsigned getSamplecntBitMask(const IsaVersion &Version);
 /// \returns Bvhcnt bit mask for given isa \p Version.
 /// Returns 0 for versions that do not support BVHcnt
 unsigned getBvhcntBitMask(const IsaVersion &Version);
+
+/// \returns Asynccnt bit mask for given isa \p Version.
+/// Returns 0 for versions that do not support Asynccnt
+unsigned getAsynccntBitMask(const IsaVersion &Version);
 
 /// \returns Dscnt bit mask for given isa \p Version.
 /// Returns 0 for versions that do not support DScnt

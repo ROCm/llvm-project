@@ -421,6 +421,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
     Features["gfx11-insts"] = true;
     Features["gfx12-insts"] = true;
     Features["gfx1250-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     Features["bitop3-insts"] = true;
     Features["prng-inst"] = true;
     Features["tanh-insts"] = true;
@@ -549,6 +550,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
     Features["s-memtime-inst"] = true;
     Features["gws"] = true;
     Features["vmem-to-lds-load-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     Features["atomic-fmin-fmax-global-f32"] = true;
     Features["atomic-fmin-fmax-global-f64"] = true;
     Features["cube-insts"] = true;
@@ -581,6 +583,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
     Features["s-memtime-inst"] = true;
     Features["gws"] = true;
     Features["vmem-to-lds-load-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     Features["atomic-fmin-fmax-global-f32"] = true;
     Features["atomic-fmin-fmax-global-f64"] = true;
     Features["cube-insts"] = true;
@@ -639,6 +642,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
     Features["s-memtime-inst"] = true;
     Features["gws"] = true;
     Features["vmem-to-lds-load-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     Features["atomic-fmin-fmax-global-f64"] = true;
     Features["wavefrontsize64"] = true;
     Features["cube-insts"] = true;
@@ -675,6 +679,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
   case GK_GFX9_GENERIC:
     Features["gfx9-insts"] = true;
     Features["vmem-to-lds-load-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     [[fallthrough]];
   case GK_GFX810:
   case GK_GFX805:
@@ -807,6 +812,7 @@ AMDGPU::fillAMDGPUFeatureMap(StringRef GPU, const Triple &T,
     Features["transpose-load-f4f6-insts"] = true;
     Features["vmem-pref-insts"] = true;
     Features["vmem-to-lds-load-insts"] = true;
+    Features["asyncmark-intrinsics"] = true;
     Features["wavefrontsize32"] = true;
     Features["wavefrontsize64"] = true;
   } else if (T.isAMDGCN()) {

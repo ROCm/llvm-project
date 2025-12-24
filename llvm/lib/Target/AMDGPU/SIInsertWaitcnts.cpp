@@ -78,6 +78,7 @@ enum InstCounterType {
   BVH_CNT,                           // gfx12+ only.
   KM_CNT,                            // gfx12+ only.
   X_CNT,                             // gfx1250.
+  ASYNC_CNT,                         // gfx1250.
   NUM_EXTENDED_INST_CNTS,
   NUM_INST_CNTS = NUM_EXTENDED_INST_CNTS
 };
@@ -141,6 +142,7 @@ struct HardwareLimits {
   unsigned BvhcntMax;    // gfx12+ only.
   unsigned KmcntMax;     // gfx12+ only.
   unsigned XcntMax;      // gfx1250.
+  unsigned AsynccntMax;  // gfx1250.
 };
 
 #define AMDGPU_DECLARE_WAIT_EVENTS(DECL)                                       \
@@ -162,7 +164,8 @@ struct HardwareLimits {
   DECL(EXP_POS_ACCESS)           /* write to export position */                \
   DECL(EXP_PARAM_ACCESS)         /* write to export parameter */               \
   DECL(VMW_GPR_LOCK)             /* vmem write holding on its data src */      \
-  DECL(EXP_LDS_ACCESS)           /* read by ldsdir counting as export */
+  DECL(EXP_LDS_ACCESS)           /* read by ldsdir counting as export */       \
+  DECL(ASYNC_ACCESS)              /* access that uses ASYNC_CNT */
 
 // clang-format off
 #define AMDGPU_EVENT_ENUM(Name) Name,
@@ -200,7 +203,7 @@ enum VmemType {
 static const unsigned instrsForExtendedCounterTypes[NUM_EXTENDED_INST_CNTS] = {
     AMDGPU::S_WAIT_LOADCNT,  AMDGPU::S_WAIT_DSCNT,     AMDGPU::S_WAIT_EXPCNT,
     AMDGPU::S_WAIT_STORECNT, AMDGPU::S_WAIT_SAMPLECNT, AMDGPU::S_WAIT_BVHCNT,
-    AMDGPU::S_WAIT_KMCNT,    AMDGPU::S_WAIT_XCNT};
+    AMDGPU::S_WAIT_KMCNT,    AMDGPU::S_WAIT_XCNT,      AMDGPU::S_WAIT_ASYNCCNT};
 
 static bool updateVMCntOnly(const MachineInstr &Inst) {
   return (SIInstrInfo::isVMEM(Inst) && !SIInstrInfo::isFLAT(Inst)) ||
@@ -251,6 +254,8 @@ unsigned &getCounterRef(AMDGPU::Waitcnt &Wait, InstCounterType T) {
     return Wait.KmCnt;
   case X_CNT:
     return Wait.XCnt;
+  case ASYNC_CNT:
+    return Wait.AsyncCnt;
   default:
     llvm_unreachable("bad InstCounterType");
   }
@@ -411,7 +416,9 @@ public:
         eventMask({VMEM_SAMPLER_READ_ACCESS}),
         eventMask({VMEM_BVH_READ_ACCESS}),
         eventMask({SMEM_ACCESS, SQ_MESSAGE, SCC_WRITE}),
-        eventMask({VMEM_GROUP, SMEM_GROUP})};
+        eventMask({VMEM_GROUP, SMEM_GROUP}),
+        eventMask({ASYNC_ACCESS}),
+    };
 
     return WaitEventMaskForInstGFX12Plus;
   }
@@ -489,6 +496,8 @@ public:
       return Limits.KmcntMax;
     case X_CNT:
       return Limits.XcntMax;
+    case ASYNC_CNT:
+      return Limits.AsynccntMax;
     default:
       break;
     }
@@ -537,6 +546,9 @@ public:
   // Return the appropriate VMEM_*_ACCESS type for Inst, which must be a VMEM
   // instruction.
   WaitEventType getVmemWaitEventType(const MachineInstr &Inst) const {
+    if (SIInstrInfo::usesASYNC_CNT(Inst))
+      return ASYNC_ACCESS;
+
     switch (Inst.getOpcode()) {
     // FIXME: GLOBAL_INV needs to be tracked with xcnt too.
     case AMDGPU::GLOBAL_INV:
@@ -588,6 +600,14 @@ public:
 
   bool isAsyncLdsDmaWrite(const MachineInstr &MI) const {
     return SIInstrInfo::mayWriteLDSThroughDMA(MI) && isAsync(MI);
+  }
+
+  bool shouldUpdateAsyncMark(const MachineInstr &MI, InstCounterType T) const {
+    if (!isAsyncLdsDmaWrite(MI))
+      return false;
+    if (SIInstrInfo::usesASYNC_CNT(MI))
+      return T == ASYNC_CNT;
+    return T == LOAD_CNT;
   }
 
   bool isVmemAccess(const MachineInstr &MI) const;
@@ -1143,11 +1163,7 @@ void WaitcntBrackets::updateByEvent(WaitEventType E, MachineInstr &Inst) {
         setVMemScore(LDSDMA_BEGIN + Slot, T, CurrScore);
     }
 
-    // FIXME: Not supported on GFX12 yet. Newer async operations use other
-    // counters too, so will need a map from instruction or event types to
-    // counter types.
-    if (Context->isAsyncLdsDmaWrite(Inst) && T == LOAD_CNT) {
-      assert(!SIInstrInfo::usesASYNC_CNT(Inst));
+    if (Context->shouldUpdateAsyncMark(Inst, T)) {
       AsyncScore[T] = CurrScore;
     }
 
@@ -1202,6 +1218,9 @@ void WaitcntBrackets::print(raw_ostream &OS) const {
       break;
     case X_CNT:
       OS << "    X_CNT(" << SR << "):";
+      break;
+    case ASYNC_CNT:
+      OS << "    ASYNC_CNT(" << SR << "):";
       break;
     default:
       OS << "    UNKNOWN(" << SR << "):";
@@ -1304,6 +1323,9 @@ void WaitcntBrackets::print(raw_ostream &OS) const {
       case X_CNT:
         OS << "    X_CNT: " << MarkedScore;
         break;
+      case ASYNC_CNT:
+        OS << "    ASYNC_CNT: " << MarkedScore;
+        break;
       default:
         OS << "    UNKNOWN: " << MarkedScore;
         break;
@@ -1324,6 +1346,7 @@ void WaitcntBrackets::simplifyWaitcnt(AMDGPU::Waitcnt &Wait) {
   simplifyWaitcnt(BVH_CNT, Wait.BvhCnt);
   simplifyWaitcnt(KM_CNT, Wait.KmCnt);
   simplifyXcnt(Wait, Wait);
+  simplifyWaitcnt(ASYNC_CNT, Wait.AsyncCnt);
 }
 
 void WaitcntBrackets::simplifyWaitcnt(InstCounterType T,
@@ -1784,7 +1807,7 @@ WaitcntGeneratorPreGFX12::getAllZeroWaitcnt(bool IncludeVSCnt) const {
 AMDGPU::Waitcnt
 WaitcntGeneratorGFX12Plus::getAllZeroWaitcnt(bool IncludeVSCnt) const {
   return AMDGPU::Waitcnt(0, 0, 0, IncludeVSCnt ? 0 : ~0u, 0, 0, 0,
-                         ~0u /* XCNT */);
+                         ~0u /* XCNT */, 0);
 }
 
 /// Combine consecutive S_WAIT_*CNT instructions that precede \p It and
@@ -1800,6 +1823,7 @@ bool WaitcntGeneratorGFX12Plus::applyPreexistingWaitcnt(
   bool Modified = false;
   MachineInstr *CombinedLoadDsCntInstr = nullptr;
   MachineInstr *CombinedStoreDsCntInstr = nullptr;
+  MachineInstr *WaitAsyncmarkInstr = nullptr;
   MachineInstr *WaitInstrs[NUM_EXTENDED_INST_CNTS] = {};
 
   LLVM_DEBUG({
@@ -1853,7 +1877,10 @@ bool WaitcntGeneratorGFX12Plus::applyPreexistingWaitcnt(
       II.eraseFromParent();
       continue;
     } else if (Opcode == AMDGPU::WAIT_ASYNCMARK) {
-      reportFatalUsageError("WAIT_ASYNCMARK is not ready for GFX12 yet");
+      unsigned N = II.getOperand(0).getImm();
+      AMDGPU::Waitcnt OldWait = ScoreBrackets.determineAsyncWait(N);
+      Wait = Wait.combined(OldWait);
+      UpdatableInstr = &WaitAsyncmarkInstr;
     } else {
       std::optional<InstCounterType> CT = counterTypeForInstr(Opcode);
       assert(CT.has_value());
@@ -2113,7 +2140,7 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(MachineInstr &MI,
     Wait.LoadCnt = 0;
   }
 
-  // All waits must be resolved at call return.
+  // All waits must be resolved at call return, except ASYNC_CNT.
   // NOTE: this could be improved with knowledge of all call sites or
   //   with knowledge of the called routines.
   if (Opc == AMDGPU::SI_RETURN_TO_EPILOG || Opc == AMDGPU::SI_RETURN ||
@@ -2129,6 +2156,8 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(MachineInstr &MI,
     if (ST->hasExtendedWaitCounts() &&
         !ScoreBrackets.hasPendingEvent(VMEM_ACCESS))
       AllZeroWait.LoadCnt = ~0u;
+    // We never wait for ASYNC_CNT at call boundaries.
+    AllZeroWait.AsyncCnt = ~0u;
     Wait = Wait.combined(AllZeroWait);
   }
   // In dynamic VGPR mode, we want to release the VGPRs before the wave exits.
@@ -2496,6 +2525,9 @@ void SIInsertWaitcnts::updateEventWaitcntAfter(MachineInstr &Inst,
     } else {
       ScoreBrackets->updateByEvent(LDS_ACCESS, Inst);
     }
+  } else if (SIInstrInfo::usesASYNC_CNT(Inst)) {
+    ScoreBrackets->updateByEvent(ASYNC_ACCESS, Inst);
+    IsVMEMAccess = true;
   } else if (TII->isFLAT(Inst)) {
     if (SIInstrInfo::isGFX12CacheInvOrWBInst(Inst.getOpcode())) {
       ScoreBrackets->updateByEvent(getVmemWaitEventType(Inst), Inst);
@@ -2538,9 +2570,10 @@ void SIInsertWaitcnts::updateEventWaitcntAfter(MachineInstr &Inst,
     ScoreBrackets->updateByEvent(SMEM_ACCESS, Inst);
   } else if (Inst.isCall()) {
     if (callWaitsOnFunctionReturn(Inst)) {
-      // Act as a wait on everything
-      ScoreBrackets->applyWaitcnt(
-          WCG->getAllZeroWaitcnt(/*IncludeVSCnt=*/false));
+      // Act as a wait on everything except ASYNC_CNT.
+      AMDGPU::Waitcnt Wait = WCG->getAllZeroWaitcnt(/*IncludeVSCnt=*/false);
+      Wait.AsyncCnt = ~0u;
+      ScoreBrackets->applyWaitcnt(Wait);
       ScoreBrackets->setStateOnFunctionEntryOrReturn();
     } else {
       // May need to way wait for anything.
@@ -3091,6 +3124,7 @@ bool SIInsertWaitcnts::run(MachineFunction &MF) {
   Limits.BvhcntMax = AMDGPU::getBvhcntBitMask(IV);
   Limits.KmcntMax = AMDGPU::getKmcntBitMask(IV);
   Limits.XcntMax = AMDGPU::getXcntBitMask(IV);
+  Limits.AsynccntMax = AMDGPU::getAsynccntBitMask(IV);
 
   BlockInfos.clear();
   bool Modified = false;

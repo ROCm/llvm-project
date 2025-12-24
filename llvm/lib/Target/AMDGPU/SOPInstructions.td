@@ -1692,7 +1692,7 @@ def S_WAITCNT_lds_direct : SPseudoInstSI<(outs), (ins)> {
    let hasSideEffects = 0;
 }
 
-let SubtargetPredicate = HasVMemToLDSLoad in {
+let SubtargetPredicate = HasAsyncmarkIntrinsics in {
 def ASYNCMARK : SPseudoInstSI<(outs), (ins),
   [(int_amdgcn_asyncmark)]> {
    let maybeAtomic = 0;
