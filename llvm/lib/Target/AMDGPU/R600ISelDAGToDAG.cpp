@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUISelDAGToDAG.h"
 #include "MCTargetDesc/R600MCTargetDesc.h"
 #include "R600.h"

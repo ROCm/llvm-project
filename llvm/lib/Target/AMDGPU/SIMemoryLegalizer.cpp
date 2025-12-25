@@ -14,9 +14,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUMachineModuleInfo.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "Utils/AMDGPUWaitcnt.h"
 #include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"

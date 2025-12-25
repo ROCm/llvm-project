@@ -30,6 +30,7 @@
 #include "AMDGPU.h"
 #include "GCNSubtarget.h"
 #include "SIMachineFunctionInfo.h"
+#include "Utils/AMDGPUWaitcnt.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/TargetParser/TargetParser.h"
 

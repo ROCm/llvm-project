@@ -13,6 +13,7 @@
 
 #include "SIInstrInfo.h"
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUInstrInfo.h"
 #include "AMDGPULaneMaskUtils.h"
 #include "GCNHazardRecognizer.h"

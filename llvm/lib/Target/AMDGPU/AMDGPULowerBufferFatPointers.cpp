@@ -219,9 +219,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUTargetMachine.h"
 #include "GCNSubtarget.h"
-#include "SIDefines.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/InstSimplifyFolder.h"

@@ -59,9 +59,9 @@
 
 #include "SILoadStoreOptimizer.h"
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-#include "SIDefines.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/InitializePasses.h"

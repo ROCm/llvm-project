@@ -17,9 +17,9 @@
 // ToDo: What to do with instruction suffixes (v_mov_b32 vs v_mov_b32_e32)?
 
 #include "Disassembler/AMDGPUDisassembler.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "MCTargetDesc/AMDGPUMCExpr.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-#include "SIDefines.h"
 #include "SIRegisterInfo.h"
 #include "TargetInfo/AMDGPUTargetInfo.h"
 #include "Utils/AMDGPUAsmUtils.h"

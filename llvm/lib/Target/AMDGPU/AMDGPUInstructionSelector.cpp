@@ -13,6 +13,7 @@
 
 #include "AMDGPUInstructionSelector.h"
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUGlobalISelUtils.h"
 #include "AMDGPUInstrInfo.h"
 #include "AMDGPURegisterBankInfo.h"

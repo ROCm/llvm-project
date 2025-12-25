@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDKernelCodeT.h"
 #include "MCTargetDesc/AMDGPUInstPrinter.h"
 #include "MCTargetDesc/AMDGPUMCAsmInfo.h"
@@ -13,11 +14,11 @@
 #include "MCTargetDesc/AMDGPUMCKernelDescriptor.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "MCTargetDesc/AMDGPUTargetStreamer.h"
-#include "SIDefines.h"
 #include "SIInstrInfo.h"
 #include "TargetInfo/AMDGPUTargetInfo.h"
 #include "Utils/AMDGPUAsmUtils.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "Utils/AMDGPUWaitcnt.h"
 #include "Utils/AMDKernelCodeTUtils.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/SmallBitVector.h"

@@ -13,6 +13,7 @@
 
 #include "SIISelLowering.h"
 #include "AMDGPU.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "AMDGPUInstrInfo.h"
 #include "AMDGPULaneMaskUtils.h"
 #include "AMDGPUSelectionDAGInfo.h"

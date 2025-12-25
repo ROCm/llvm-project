@@ -8,10 +8,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUInstPrinter.h"
+#include "Utils/AMDGPUCachePolicyBits.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
-#include "SIDefines.h"
 #include "Utils/AMDGPUAsmUtils.h"
 #include "Utils/AMDGPUBaseInfo.h"
+#include "Utils/AMDGPUWaitcnt.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCExpr.h"
