@@ -12,6 +12,15 @@
 /// create the correct interference with those WWM/WQM values during the last
 /// register-allocation pass for those WWM/WQM values.
 //
+// TODO: Ihis piece may still need some significant rework. As it is, we
+// do not cap those extended physical live-ranges because we do not how to
+// do it. Does it create too much extra interference for whole-wave-mode
+// register allocation?
+// Is there a different way to tackle this problem? Note that we really need
+// is to extend those physical VGPRs live-range through those WWM definitions
+// for the correct interference. But what is the right way to pass that info
+// to register allocator? Can it be achieved by simply adding RegMask operands
+// to those WWM definition instructions?
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
@@ -38,10 +47,22 @@ private:
   MachineRegisterInfo *MRI;
   MachinePostDominatorTree *PDT;
 
+  // Control dependencies map: for each block, the set of blocks it is directly
+  // control-dependent on.
   DenseMap<MachineBasicBlock *, SmallPtrSet<MachineBasicBlock *, 2>> CtrlDeps;
+  // All the divergent control block that influences one of the WWMBBs
+  DenseSet<MachineBasicBlock *> DivergentCtrlBBs;
 
   void buildControlDependences(MachineFunction &MF);
-  bool influences(MachineBasicBlock *CtrlMBB, MachineBasicBlock *DepMBB);
+  void findAllCtrlMBBs(MachineBasicBlock *DepMBB,
+                       SmallPtrSetImpl<MachineBasicBlock *> &Result);
+  //bool influences(MachineBasicBlock *CtrlMBB, MachineBasicBlock *DepMBB) {
+  //  SmallPtrSet<MachineBasicBlock *, 8> AllCtrlMBBs;
+  //  findAllCtrlMBBs(DepMBB, AllCtrlMBBs);
+  //  return (AllCtrlMBBs.count(CtrlMBB));
+  //}
+  void findDivergentCtrlMBBs(MachineBasicBlock *DepMBB,
+                             DenseSet<MachineBasicBlock *> &Result);
 
 public:
   static char ID;
@@ -75,7 +96,86 @@ FunctionPass *llvm::createAMDGPUExtendVGPRLiveRangesPass() {
   return new AMDGPUExtendVGPRLiveRanges();
 }
 
+static bool hasWWMInMBB(const MachineBasicBlock &MBB) {
+  for (const MachineInstr &MI : MBB) {
+    if (MI.getOpcode() == AMDGPU::V_SET_INACTIVE_B32 ||
+        MI.getOpcode() == AMDGPU::SI_SPILL_S32_TO_VGPR ||
+        MI.getOpcode() == AMDGPU::ENTER_STRICT_WWM ||
+        MI.getOpcode() == AMDGPU::ENTER_STRICT_WQM) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// TODO: A block ending with a divergent branch should have
+// an instruction updating the EXEC register followed by a branch
+// using EXEC as the condition.
+static bool endsWithDivergentBranch(const MachineBasicBlock &MBB,
+                                    const SIInstrInfo *TII) {
+  MachineBasicBlock *TrueMBB = nullptr;
+  MachineBasicBlock *FalseMBB = nullptr;
+  SmallVector<MachineOperand, 1> Cond;
+  TII->analyzeBranch(const_cast<MachineBasicBlock &>(MBB), TrueMBB, FalseMBB,
+                     Cond);
+
+  if (!Cond.size())
+    return false;
+
+  auto CondOpnd = Cond.back();
+  if (CondOpnd.getReg() == AMDGPU::EXEC ||
+      CondOpnd.getReg() == AMDGPU::EXEC_LO ||
+      CondOpnd.getReg() == AMDGPU::EXEC_HI)
+    return true;
+
+  return false;
+}
+
+void AMDGPUExtendVGPRLiveRanges::findAllCtrlMBBs(
+    MachineBasicBlock *DepMBB, SmallPtrSetImpl<MachineBasicBlock *> &Result) {
+  Result.clear();
+  if (CtrlDeps.find(DepMBB) == CtrlDeps.end())
+    return;
+
+  SmallVector<MachineBasicBlock *, 8> WL;
+  for (auto *ParMBB : CtrlDeps[DepMBB]) {
+    WL.push_back(ParMBB);
+    Result.insert(ParMBB);
+  }
+
+  while (!WL.empty()) {
+    auto *MBB = WL.back();
+    WL.pop_back();
+    if (CtrlDeps.find(MBB) == CtrlDeps.end())
+      continue;
+    for (auto *ParMBB : CtrlDeps[DepMBB]) {
+      if (Result.count(ParMBB))
+        continue;
+      WL.push_back(ParMBB);
+      Result.insert(ParMBB);
+    }
+  }
+}
+
+void AMDGPUExtendVGPRLiveRanges::findDivergentCtrlMBBs(
+    MachineBasicBlock *DepMBB, DenseSet<MachineBasicBlock *> &Result) {
+  SmallPtrSet<MachineBasicBlock *, 8> AllCtrlMBBs;
+  findAllCtrlMBBs(DepMBB, AllCtrlMBBs);
+  for (auto *MBB : AllCtrlMBBs) {
+    if (endsWithDivergentBranch(*MBB, TII)) {
+      Result.insert(MBB);
+    }
+  }
+}
+
+// Build the control-dependence graph for the function. Also find all the
+// divergent control blocks that influence WWM blocks.
 void AMDGPUExtendVGPRLiveRanges::buildControlDependences(MachineFunction &MF) {
+  DivergentCtrlBBs.clear();
+  CtrlDeps.clear();
+  // Set of blocks that contain instructions that may write to VGPR in
+  // whole-wave mode.
+  DenseSet<MachineBasicBlock *> WWMBBs;
   for (auto *MBB : nodes(&MF)) {
     // skip
     if (MBB->getSingleSuccessor())
@@ -95,37 +195,14 @@ void AMDGPUExtendVGPRLiveRanges::buildControlDependences(MachineFunction &MF) {
            Node && Node->getBlock() != PostDomMBB; Node = Node->getIDom()) {
         auto *PathMBB = Node->getBlock();
         CtrlDeps[PathMBB].insert(MBB);
+        if (hasWWMInMBB(*PathMBB))
+          WWMBBs.insert(PathMBB);
       }
     }
   }
-}
-
-bool AMDGPUExtendVGPRLiveRanges::influences(MachineBasicBlock *CtrlMBB,
-                                            MachineBasicBlock *DepMBB) {
-  if (CtrlDeps.find(DepMBB) == CtrlDeps.end())
-    return false;
-
-  SmallVector<MachineBasicBlock *, 8> WL;
-  SmallPtrSet<MachineBasicBlock *, 8> Visited;
-  for (auto *ParMBB : CtrlDeps[DepMBB]) {
-    WL.push_back(ParMBB);
+  for (auto *WWMMBB : WWMBBs) {
+    findDivergentCtrlMBBs(WWMMBB, DivergentCtrlBBs);
   }
-
-  while (!WL.empty()) {
-    auto *MBB = WL.back();
-    WL.pop_back();
-    Visited.insert(MBB);
-    if (MBB == CtrlMBB)
-      return true;
-    if (CtrlDeps.find(MBB) != CtrlDeps.end()) {
-      for (auto *ParMBB : CtrlDeps[DepMBB]) {
-        if (!Visited.count(ParMBB))
-          WL.push_back(ParMBB);
-      }
-    }
-  }
-
-  return false;
 }
 
 bool AMDGPUExtendVGPRLiveRanges::runOnMachineFunction(MachineFunction &MF) {
@@ -143,88 +220,49 @@ bool AMDGPUExtendVGPRLiveRanges::runOnMachineFunction(MachineFunction &MF) {
 
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   bool Changed = false;
-  for (MCRegUnit U : TRI->regunits()) {
-    for (MCRegUnitRootIterator Root(U, TRI); Root.isValid(); ++Root) {
-      auto RC = TRI->getPhysRegBaseClass(*Root);
-      if (!RC || TRI->isSGPRClass(RC)) {
-        // dbgs() << printReg(*Root, TRI) << "\n";
-        // skip reg-class that is not relevant
+
+  // Iterate through the CFG in RPO oder.
+  for (MachineBasicBlock *MBB : RPOT) {
+    SmallPtrSet<MachineBasicBlock *, 3> CtrlBBs;
+    findAllCtrlMBBs(MBB, CtrlBBs);
+    // Find the union of the live RegUnits at the immediate post-dominators
+    // of those control-blocks.
+    LiveRegUnits LiveRegs(*TRI);
+    for (auto *CtrlMBB : CtrlBBs) {
+      // Only counts control-blocks that are divergent and influence WWMBBs.
+      if (!DivergentCtrlBBs.count(CtrlMBB))
         continue;
-      }
-      for (MCPhysReg Reg : TRI->superregs_inclusive(*Root)) {
-        // if a reg is either not-seen or reserved, not a concern for RA
-        if (MRI->reg_empty(Reg) || MRI->isReserved(Reg))
+      auto *IPD = PDT->getNode(CtrlMBB)->getIDom()->getBlock();
+      LiveRegs.addLiveIns(*IPD);
+    }
+    if (LiveRegs.empty())
+      continue;
+    // Iterate through all the MachineInstr in MBB, check their defs against
+    // LiveRegs, and extend the live-ranges if needed.
+    for (MachineInstr &MI : *MBB) {
+      for (MachineOperand &MO : MI.defs()) {
+        if (!MO.isReg() || !MO.getReg().isPhysical())
           continue;
-
-        // iterate through the CFG, processing every divergent branch
-        for (MachineBasicBlock *MBB : RPOT) {
-          MachineBasicBlock *TrueMBB = nullptr;
-          MachineBasicBlock *FalseMBB = nullptr;
-          SmallVector<MachineOperand, 1> Cond;
-          TII->analyzeBranch(*MBB, TrueMBB, FalseMBB, Cond);
-
-          if (!Cond.size())
+        if (!TRI->isVectorRegister(*MRI, MO.getReg()))
+          continue;
+        MCPhysReg PhysReg = MO.getReg();
+        if (LiveRegs.available(PhysReg))
+          continue;
+        // Add implicit use to extend the live-range of PhysReg.
+        bool UseExists = false;
+        for (auto Opnd : MI.all_uses()) {
+          if (Opnd.isReg() && Opnd.getReg() == PhysReg) {
+            UseExists = true;
             break;
-
-          auto CondOpnd = Cond.back();
-          if (!FalseMBB)
-            FalseMBB = MBB->getNextNode();
-
-          // check if this is a divergent branch
-          // is this the right way?
-          if (CondOpnd.getReg() != AMDGPU::VCC &&
-              CondOpnd.getReg() != AMDGPU::VCC_LO &&
-              CondOpnd.getReg() != AMDGPU::VCC_HI &&
-              CondOpnd.getReg() != AMDGPU::EXEC &&
-              CondOpnd.getReg() != AMDGPU::EXEC_LO &&
-              CondOpnd.getReg() != AMDGPU::EXEC_HI)
-            continue;
-
-          auto *IPD = PDT->getNode(MBB)->getIDom()->getBlock();
-          // is register live at the join-point
-          if (!IPD->isLiveIn(Reg))
-            continue;
-
-          auto CBR = CondOpnd.getParent();
-          // add implicit use if a def is inside the influence region
-          bool UseAdded = false;
-          for (MachineOperand &MO : MRI->def_operands(Reg)) {
-            MachineInstr &MI = *MO.getParent();
-            auto DefMBB = MI.getParent();
-            if (influences(MBB, DefMBB)) {
-              // MI add implicit use for Reg;
-              bool UseExists = false;
-              for (auto Opnd : MI.all_uses()) {
-                if (Opnd.isReg() && Opnd.getReg() == Reg) {
-                  UseExists = true;
-                  break;
-                }
-              }
-              if (!UseExists) {
-                MI.addOperand(MF, MachineOperand::CreateReg(Reg, false, true));
-                UseAdded = true;
-                Changed = true;
-              }
-            }
           }
-          // add implicit def to branch in order to cap the liveness
-          if (UseAdded && !FalseMBB->isLiveIn(Reg) && !TrueMBB->isLiveIn(Reg)) {
-            bool DefExists = false;
-            for (auto Opnd : CBR->all_defs()) {
-              if (Opnd.isReg() && Opnd.getReg() == Reg) {
-                DefExists = true;
-                break;
-              }
-            }
-            if (!DefExists) {
-              CBR->addOperand(MF, MachineOperand::CreateReg(Reg, true, true));
-              // should we try to merge implicit-def to make MIR concise?
-            }
-          }
-        } // end the block-loop
-      } // end the reg-loop
-    } // end the root-loop
-  } // end of the unit-loop
+        }
+        if (!UseExists) {
+          MI.addOperand(MF, MachineOperand::CreateReg(PhysReg, false, true));
+          Changed = true;
+        }
+      }
+    }
+  }
 
   if (Changed) {
     // recompute liveness
@@ -237,6 +275,6 @@ bool AMDGPUExtendVGPRLiveRanges::runOnMachineFunction(MachineFunction &MF) {
       recomputeLivenessFlags(*MBB);
     }
   }
-  CtrlDeps.clear();
+
   return Changed;
 }
