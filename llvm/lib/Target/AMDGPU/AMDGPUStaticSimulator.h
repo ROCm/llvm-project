@@ -20,6 +20,7 @@
 
 #include "SIDefines.h"
 #include "SIInstrInfo.h"
+#include "Utils/AMDGPUBaseInfo.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/MachinePassManager.h"
@@ -104,13 +105,14 @@ inline unsigned getLatencyForClass(InstClass IC) {
 /// Reason for stall cycles on an instruction
 enum class StallReason : uint8_t {
   NONE = 0,
-  FU_BUSY,         // Functional unit not ready
-  COEXEC_BLOCKED,  // Blocked by WMMA co-execution rules
-  WAITCNT,         // Memory wait (s_wait_*)
-  DELAY_ALU,       // RAW dependency (s_delay_alu)
-  MEM_FIFO,        // Memory FIFO full
-  MSB_SET_EXPOSED, // s_set_vgpr_msb not fused
-  REG_BANK         // Register bank conflict (operands in same sub-bank)
+  FU_BUSY,          // Functional unit not ready
+  COEXEC_BLOCKED,   // Blocked by WMMA co-execution rules
+  LONG_LAT_VALU,    // Long-latency VALU blocked by WMMA window
+  WAITCNT,          // Memory wait (s_wait_*)
+  DELAY_ALU,        // RAW dependency (s_delay_alu)
+  MEM_FIFO,         // Memory FIFO full
+  MSB_SET_EXPOSED,  // s_set_vgpr_msb not fused
+  REG_BANK          // Register bank conflict (operands in same sub-bank)
 };
 
 /// Stage type for WMMA co-execution (for annotation display)
@@ -145,6 +147,7 @@ struct InstrSimInfo {
     case StallReason::NONE:           return nullptr;
     case StallReason::FU_BUSY:        return "FU busy";
     case StallReason::COEXEC_BLOCKED: return "CoExec blocked";
+    case StallReason::LONG_LAT_VALU:  return "LongLatVALU blocked";
     case StallReason::WAITCNT:        return "WaitCnt";
     case StallReason::DELAY_ALU:      return "DelayAlu";
     case StallReason::MEM_FIFO:       return "FIFO full";
@@ -535,6 +538,8 @@ struct BlockMetrics {
   unsigned StallVMEMUnit = 0;
 
   unsigned StallRegBankConflict = 0;
+  unsigned RegBankConflictsInWMMAWindow = 0; // Meta counter, not stalls
+  unsigned StallLongLatVALU = 0;
 
   unsigned VGPRCacheHits = 0;
   unsigned VGPRCacheMisses = 0;
@@ -620,6 +625,8 @@ struct BlockMetrics {
     Result.StallLDS = scale(StallLDS);
     Result.StallVMEMUnit = scale(StallVMEMUnit);
     Result.StallRegBankConflict = scale(StallRegBankConflict);
+    Result.RegBankConflictsInWMMAWindow = scale(RegBankConflictsInWMMAWindow);
+    Result.StallLongLatVALU = scale(StallLongLatVALU);
 
     Result.VGPRCacheHits = scale(VGPRCacheHits);
     Result.VGPRCacheMisses = scale(VGPRCacheMisses);
@@ -691,6 +698,8 @@ struct BlockMetrics {
     Result.StallLDS = StallLDS + O.StallLDS;
     Result.StallVMEMUnit = StallVMEMUnit + O.StallVMEMUnit;
     Result.StallRegBankConflict = StallRegBankConflict + O.StallRegBankConflict;
+    Result.RegBankConflictsInWMMAWindow = RegBankConflictsInWMMAWindow + O.RegBankConflictsInWMMAWindow;
+    Result.StallLongLatVALU = StallLongLatVALU + O.StallLongLatVALU;
 
     Result.VGPRCacheHits = VGPRCacheHits + O.VGPRCacheHits;
     Result.VGPRCacheMisses = VGPRCacheMisses + O.VGPRCacheMisses;
@@ -801,6 +810,12 @@ struct BlockMetrics {
     Emit("MemFIFO", StallMemFIFO);
     Emit("Wait", StallWaitCnt);
     Emit("RegBank", StallRegBankConflict);
+    Emit("LongLatVALU", StallLongLatVALU);
+    if (RegBankConflictsInWMMAWindow) {
+      if (!First) OS << " | ";
+      OS << "RegBankInWMMA:" << RegBankConflictsInWMMAWindow << " (not counted)";
+      First = false;
+    }
     if (NumMSBSetExposed || NumMSBSetMasked) {
       if (!First) OS << " | ";
       OS << "MSBExposed:" << NumMSBSetExposed;
@@ -981,6 +996,56 @@ struct RegisterFile {
         SrcCache.invalidate(BaseHWReg + i);
     }
   }
+
+  /// Update VGPR cache for WMMA (A/B only, skip C tied to dest).
+  RegBankResult updateCacheForWMMA(const MachineInstr &MI,
+                                   const SIInstrInfo &TII) {
+    RegBankResult Result;
+    if (!TRI) return Result;
+
+    SrcCache.resetCycleStats();
+    const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+    std::string Pattern;
+    unsigned PortIdx = 0;
+
+    auto ProcessOperand = [&](AMDGPU::OpName OpName) {
+      int Idx = AMDGPU::getNamedOperandIdx(MI.getOpcode(), OpName);
+      if (Idx < 0) return;
+      const MachineOperand &MO = MI.getOperand(Idx);
+      if (!MO.isReg() || !MO.getReg().isPhysical()) return;
+
+      Register Reg = MO.getReg();
+      if (!TRI->isVGPR(MRI, Reg)) return;
+
+      const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
+      unsigned NumComponents = (RC ? TRI->getRegSizeInBits(*RC) : 32) / 32;
+      unsigned BaseHWReg = TRI->getHWRegIndex(Reg);
+      unsigned Port = PortIdx % 3;
+
+      bool AllHit = true;
+      for (unsigned i = 0; i < NumComponents; ++i) {
+        unsigned HWReg = BaseHWReg + i;
+        if (!SrcCache.checkHit(HWReg, Port)) {
+          SrcCache.recordMiss(HWReg, Port);
+          AllHit = false;
+        }
+      }
+      Pattern += AllHit ? '$' : '-';
+      PortIdx++;
+    };
+
+    // Track A, B (VGPRs); skip C (tied to dest), skip scale (SGPRs)
+    ProcessOperand(AMDGPU::OpName::src0);
+    ProcessOperand(AMDGPU::OpName::src1);
+
+    if (!Pattern.empty())
+      Result.CachePattern = "(" + Pattern + ")";
+    Result.CacheHits = SrcCache.CycleHits;
+    Result.CacheMisses = SrcCache.CycleMisses;
+    Result.CacheEvictions = SrcCache.CycleEvictions;
+    Result.Stalls = 0;
+    return Result;
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -1056,7 +1121,7 @@ struct GPUSimState {
     CurrentCycle = TargetCycle;
     if (ActiveWMMA.Active && CurrentCycle >= ActiveWMMA.EndCycle) {
       ActiveWMMA.Active = false;
-      VALUResourceBusyUntil = 0;
+      // Don't reset VALUResourceBusyUntil - long-lat VALU may still be holding it
     }
     retireCompletedMemOps();
     return Delta;

@@ -329,11 +329,7 @@ void AMDGPUAsmPrinter::emitInstruction(const MachineInstr *MI) {
     return;
   }
 
-  // Emit per-instruction simulation annotation (if available)
   auto emitSimAnnotation = [&]() {
-    if (!isVerbose())
-      return;
-    
     const SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
     if (!MFI)
       return;

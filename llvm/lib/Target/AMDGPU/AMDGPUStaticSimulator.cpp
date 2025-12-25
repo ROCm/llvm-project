@@ -316,12 +316,13 @@ unsigned getInstrLatency(const MachineInstr &MI, const SIInstrInfo &TII,
 
 unsigned getResourceCycles(const MachineInstr &MI, const SIInstrInfo &TII,
                            InstClass IC) {
-  // PK8/PK16 scaled conversions occupy VALU for 4/8 cycles
-  StringRef Name = TII.getName(MI.getOpcode());
-  if (Name.contains("_PK8_") || Name.contains("_pk8_"))
-    return 4;
-  if (Name.contains("_PK16_") || Name.contains("_pk16_"))
-    return 8;
+  // Use getRepeatRate() for VALU/TRANS to get canonical long-lat VALU resource cycles
+  // getRepeatRate returns 1 for regular VALU, >1 for long-lat VALU (PK8=4, PK16=8, F64=32, etc.)
+  if (IC == InstClass::VALU || IC == InstClass::TRANS) {
+    unsigned RepeatRate = TII.getRepeatRate(MI);
+    if (RepeatRate > 1)
+      return RepeatRate;
+  }
 
   if (AMDGPU::isVOPD(MI.getOpcode()))
     return 1;
@@ -606,6 +607,7 @@ struct StallSources {
   unsigned WaitCnt = 0;
   unsigned MemFIFO = 0;
   unsigned RegBank = 0;
+  unsigned LongLatVALU = 0;
   std::string CachePattern;
 
   unsigned CacheHits = 0;
@@ -616,9 +618,12 @@ struct StallSources {
   unsigned CoExecFromEffective = 0;
   bool HasFUCoExecInteraction = false;
   bool LDScaleBlocked = false;
+  bool RegBankInWMMAWindow = false;  // Track if regbank conflict occurred in WMMA window
 
   unsigned total() const {
-    return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO, RegBank});
+    unsigned EffectiveRegBank = RegBankInWMMAWindow ? 0 : RegBank;
+    return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO,
+                     EffectiveRegBank, LongLatVALU});
   }
 };
 
@@ -744,14 +749,12 @@ StallSources computeStallSources(
     IssueCycle = BusyUntil;
   }
 
-  // TRANS holds VALU in WMMA I-slots
+  // Long-lat VALU/TRANS hold VALU resource
   if ((IC == InstClass::VALU || IC == InstClass::TRANS) &&
       State.VALUResourceBusyUntil > IssueCycle) {
-    unsigned VALUResStall = State.getVALUResourceStallInWindow();
-    if (VALUResStall > 0) {
-      S.Unit = std::max(S.Unit, VALUResStall);
-      IssueCycle = State.VALUResourceBusyUntil;
-    }
+    unsigned VALUResStall = State.VALUResourceBusyUntil - IssueCycle;
+    S.Unit = std::max(S.Unit, VALUResStall);
+    IssueCycle = State.VALUResourceBusyUntil;
   }
 
   if (IC == InstClass::WMMA) {
@@ -780,16 +783,42 @@ StallSources computeStallSources(
     S.CacheHits = RB.CacheHits;
     S.CacheMisses = RB.CacheMisses;
     S.CacheEvictions = RB.CacheEvictions;
-    IssueCycle += RB.Stalls;
+    // In WMMA window: track reg bank conflicts separately, don't add to stall
+    if (State.inWMMAWindow()) {
+      S.RegBankInWMMAWindow = true;
+      // Don't add to IssueCycle - just track as meta counter
+    } else {
+      IssueCycle += RB.Stalls;
+    }
+  }
+
+  // WMMA: track A, B in cache (skip C - tied to dest)
+  if (IC == InstClass::WMMA) {
+    auto RB = State.RegFile.updateCacheForWMMA(MI, TII);
+    S.CachePattern = RB.CachePattern;
+    S.CacheHits = RB.CacheHits;
+    S.CacheMisses = RB.CacheMisses;
+    S.CacheEvictions = RB.CacheEvictions;
   }
 
   if (State.inWMMAWindow() && IC != InstClass::WMMA) {
-    unsigned CoExecStall = State.getCoExecStallAt(IC, IssueCycle);
-    if (CoExecStall > 0) {
-      S.EffectiveCycle = IssueCycle;
-      S.CoExecFromEffective = CoExecStall;
-      S.HasFUCoExecInteraction = (IssueCycle > State.CurrentCycle);
-      IssueCycle += CoExecStall;
+    // Long-lat VALU can't co-execute - waits for entire WMMA window
+    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
+    if (LongLatVALU > 1) {
+      unsigned WaitForWindow = State.ActiveWMMA.EndCycle - IssueCycle;
+      if (WaitForWindow > 0) {
+        S.LongLatVALU = WaitForWindow;
+        IssueCycle = State.ActiveWMMA.EndCycle;
+      }
+    } else {
+      // Regular co-execution check for other instructions
+      unsigned CoExecStall = State.getCoExecStallAt(IC, IssueCycle);
+      if (CoExecStall > 0) {
+        S.EffectiveCycle = IssueCycle;
+        S.CoExecFromEffective = CoExecStall;
+        S.HasFUCoExecInteraction = (IssueCycle > State.CurrentCycle);
+        IssueCycle += CoExecStall;
+      }
     }
     S.CoExec = IssueCycle - State.CurrentCycle;
   }
@@ -836,6 +865,10 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
   Metrics.VGPRCacheHits += S.CacheHits;
   Metrics.VGPRCacheMisses += S.CacheMisses;
   Metrics.VGPRCacheEvictions += S.CacheEvictions;
+
+  // Track reg bank conflicts in WMMA window separately (not added to stalls)
+  if (S.RegBankInWMMAWindow && S.RegBank > 0)
+    Metrics.RegBankConflictsInWMMAWindow += S.RegBank;
 
   unsigned TotalStall = S.total();
   if (TotalStall == 0)
@@ -895,7 +928,10 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
     }
   } else if (S.DelayAlu == TotalStall) {
     Metrics.StallDelayAlu += TotalStall;
-  } else if (S.RegBank == TotalStall) {
+  } else if (S.LongLatVALU == TotalStall) {
+    Metrics.StallCoExec += TotalStall;
+    Metrics.StallLongLatVALU += TotalStall;
+  } else if (S.RegBank == TotalStall && !S.RegBankInWMMAWindow) {
     Metrics.StallRegBankConflict += TotalStall;
   }
 }
@@ -932,7 +968,7 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
   Metrics.NumInstructions++;
 
   switch (T.IC) {
-  case InstClass::VALU:
+  case InstClass::VALU: {
     Metrics.NumVALU++;
     if (AMDGPU::isVOPD(MI.getOpcode())) {
       Metrics.NumVOPD++;
@@ -943,7 +979,12 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     }
     State.trackVALU(T.Latency);
     State.trackVALUForWMMA(T.IC);
+    unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
+    if (LongLatVALU > 1)
+      State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
+                                              State.CurrentCycle + LongLatVALU);
     break;
+  }
 
   case InstClass::SALU:
     Metrics.NumSALU++;
@@ -1078,10 +1119,13 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     printStall("FU", Stalls.Unit);
     printStall("VALUSlot", Stalls.VALUSlot);
     printStall("WMMACoExecMiss", Stalls.CoExecFromEffective);
+    printStall("LongLatVALU", Stalls.LongLatVALU);
     printStall("DelayALU", Stalls.DelayAlu);
     printStall("WaitCnt", Stalls.WaitCnt);
     printStall("MemFIFO", Stalls.MemFIFO);
     printStall("RegBank", Stalls.RegBank);
+    if (Stalls.RegBankInWMMAWindow && Stalls.RegBank > 0)
+      dbgs() << " [in WMMA window, not counted]";
   }
   dbgs() << " → Total: " << Stalls.total();
   if (!Stalls.CachePattern.empty())
@@ -1209,9 +1253,14 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
   if (Stalls.WaitCnt > Max) { Max = Stalls.WaitCnt; Reason = StallReason::WAITCNT; }
   if (Stalls.DelayAlu > Max) { Max = Stalls.DelayAlu; Reason = StallReason::DELAY_ALU; }
   if (Stalls.CoExec > Max) { Max = Stalls.CoExec; Reason = StallReason::COEXEC_BLOCKED; }
+  if (Stalls.LongLatVALU > Max) { Max = Stalls.LongLatVALU; Reason = StallReason::LONG_LAT_VALU; }
   if (Stalls.MemFIFO > Max) { Max = Stalls.MemFIFO; Reason = StallReason::MEM_FIFO; }
   if (Stalls.Unit > Max) { Max = Stalls.Unit; Reason = StallReason::FU_BUSY; }
-  if (Stalls.RegBank > Max) { Max = Stalls.RegBank; Reason = StallReason::REG_BANK; }
+  // Only count reg bank if not in WMMA window
+  if (!Stalls.RegBankInWMMAWindow && Stalls.RegBank > Max) {
+    Max = Stalls.RegBank;
+    Reason = StallReason::REG_BANK;
+  }
 
   return Reason;
 }

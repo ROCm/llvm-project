@@ -199,28 +199,6 @@ body: |
 # CHECK: Evictions:
 
 ---
-name: regbank_coexec_interaction_test
-tracksRegLiveness: true
-body: |
-  bb.0:
-    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24, $vgpr32
-    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
-    $sgpr10 = S_MOV_B32 1
-    $sgpr11 = S_MOV_B32 2
-    $sgpr12 = S_MOV_B32 3
-    $sgpr13 = S_MOV_B32 4
-    $sgpr14 = S_MOV_B32 5
-    $sgpr15 = S_MOV_B32 6
-    $vgpr40 = V_ADD_F32_e32 $vgpr24, $vgpr32, implicit $exec, implicit $mode
-    S_ENDPGM 0, implicit $vgpr40
-...
-
-# CHECK-LABEL: regbank_coexec_interaction_test
-# CHECK: V_WMMA_F32_16X16X32_BF16
-# CHECK: V_ADD_F32_e32 $vgpr24, $vgpr32
-# CHECK: Stalls:{{.*}}Total: {{[2-9]}}
-
----
 # PK8 conversion instructions occupy VALU for 4 cycles
 name: pk8_valu_occupancy_test
 tracksRegLiveness: true
@@ -288,26 +266,6 @@ body: |
 # CHECK: Stalls:{{.*}}FU={{[1-9]}}
 
 ---
-# V_CVT_PK8 (4cy) holds VALU in WMMA window
-name: pk8_holds_valu_in_wmma_window
-tracksRegLiveness: true
-body: |
-  bb.0:
-    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24_vgpr25, $vgpr26
-    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
-    $sgpr10 = S_MOV_B32 1
-    $vgpr32_vgpr33_vgpr34_vgpr35 = V_CVT_SCALE_PK8_F16_FP8_e64 $vgpr24_vgpr25, $vgpr26, 0, implicit $mode, implicit $exec
-    $vgpr40 = V_MOV_B32_e32 42, implicit $exec
-    S_ENDPGM 0, implicit $vgpr40
-...
-
-# CHECK-LABEL: pk8_holds_valu_in_wmma_window
-# CHECK: V_WMMA_F32_16X16X32_BF16
-# CHECK: V_CVT_SCALE_PK8_F16_FP8
-# CHECK: V_MOV_B32_e32 42
-# CHECK: Stalls:{{.*}}FU={{[2-4]}}
-
----
 # TRANS -> TRANS in WMMA window (second stalls for first)
 name: trans_holds_trans_in_wmma_window
 tracksRegLiveness: true
@@ -346,3 +304,149 @@ body: |
 # CHECK: Stalls: (none)
 # CHECK: V_ADD_F32_e32
 # CHECK: Stalls: (none)
+
+---
+# RegBank conflict in WMMA window - tracked but no stall
+name: regbank_in_wmma_window_no_stall
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr0, $vgpr8
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: regbank_in_wmma_window_no_stall
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: WMMACoExecMiss=1 → Total: 1
+
+---
+# Same conflict outside WMMA window DOES stall
+name: regbank_outside_wmma_window_does_stall
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr8
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: regbank_outside_wmma_window_does_stall
+# CHECK: Stalls: RegBank=1
+# CHECK-NOT: [in WMMA window
+
+---
+# Summary shows RegBankInWMMA counter
+name: regbank_wmma_summary_check
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr0, $vgpr8, $vgpr16
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr41 = V_FMA_F32_e64 0, $vgpr0, 0, $vgpr8, 0, $vgpr16, 0, 0, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr41
+...
+
+# CHECK-LABEL: regbank_wmma_summary_check
+# CHECK: RegBankInWMMA:2 (not counted)
+
+---
+# Long-lat VALU waits for entire WMMA window; TRANS can co-execute
+name: longlatvalu_waits_for_wmma_window
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24_vgpr25, $vgpr26, $vgpr27
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr30 = V_EXP_F32_e32 $vgpr27, implicit $exec, implicit $mode
+    $vgpr32_vgpr33_vgpr34_vgpr35 = V_CVT_SCALE_PK8_F16_FP8_e64 $vgpr24_vgpr25, $vgpr26, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit $vgpr35
+...
+
+# CHECK-LABEL: longlatvalu_waits_for_wmma_window
+# CHECK: V_EXP_F32_e32
+# CHECK: WMMACoExecMiss=1
+# CHECK: V_CVT_SCALE_PK8_F16_FP8
+# CHECK: LongLatVALU={{[5-9]}}
+
+---
+# Long-lat VALU holds VALU resource, blocks subsequent TRANS
+name: longlatvalu_holds_valu_after_wmma
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24_vgpr25, $vgpr26, $vgpr27
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $sgpr10 = S_MOV_B32 1
+    $sgpr11 = S_MOV_B32 2
+    $sgpr12 = S_MOV_B32 3
+    $sgpr13 = S_MOV_B32 4
+    $sgpr14 = S_MOV_B32 5
+    $sgpr15 = S_MOV_B32 6
+    $sgpr16 = S_MOV_B32 7
+    $sgpr17 = S_MOV_B32 8
+    $vgpr32_vgpr33_vgpr34_vgpr35 = V_CVT_SCALE_PK8_F16_FP8_e64 $vgpr24_vgpr25, $vgpr26, 0, implicit $mode, implicit $exec
+    $vgpr40 = V_EXP_F32_e32 $vgpr27, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: longlatvalu_holds_valu_after_wmma
+# CHECK: V_CVT_SCALE_PK8_F16_FP8
+# CHECK: ResourceCycles: 4
+# CHECK: V_EXP_F32_e32
+# CHECK: Stalls: FU=3
+# CHECK: FU: TRANS:3
+
+---
+# WMMA reuse: second WMMA gets cache hits
+name: wmma_cache_hit_on_reuse
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31, 0, 0, 0, 0, implicit $exec
+    S_ENDPGM 0, implicit $vgpr31
+...
+
+# CHECK-LABEL: wmma_cache_hit_on_reuse
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK: Cache(--)
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK: Cache($$)
+# CHECK: From cache: 16/16 (50%)
+
+---
+# WMMA dest invalidates cache
+name: wmma_dest_invalidated
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr16, $vgpr17, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: wmma_dest_invalidated
+# CHECK: V_ADD_F32_e32 $vgpr16, $vgpr17
+# CHECK: Cache(--)
+# CHECK: From cache: 0/0 (0%)
+
+---
+# VALU reuses WMMA A matrix - partial cache hit
+name: wmma_then_valu_cache_hit
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr1
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+# CHECK-LABEL: wmma_then_valu_cache_hit
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr1
+# CHECK: Cache($-)
