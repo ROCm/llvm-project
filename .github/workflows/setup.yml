@@ -68,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --json labels)" >> $GITHUB_ENV
+          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --repo ROCm/llvm-project --json labels)" >> $GITHUB_ENV
 
       - name: Configuring CI options
         id: configure
