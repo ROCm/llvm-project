@@ -53,10 +53,10 @@ jobs:
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
     steps:
       - name: Checkout TheRock repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: "ROCm/TheRock"
-          ref: "compiler/amd-mainline"
+          ref: compiler/amd-mainline
           fetch-depth: 10
       - name: SHA of TheRock
         run: |
@@ -68,17 +68,15 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --json labels)" >> $GITHUB_ENV
+          echo "PR_LABELS=$(gh pr view ${PR_NUMBER} --repo ROCm/llvm-project --json labels)" >> $GITHUB_ENV
 
       - name: Configuring CI options
         id: configure
         env:
-          #INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
-          INPUT_LINUX_AMDGPU_FAMILIES: "gfx94X"
+          INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
           LINUX_TEST_LABELS: ${{ github.event.inputs.linux_test_labels }}
           LINUX_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.linux_use_prebuilt_artifacts }}
-          #INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
-          INPUT_WINDOWS_AMDGPU_FAMILIES: "gfx1151"
+          INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
           WINDOWS_TEST_LABELS: ${{ github.event.inputs.windows_test_labels }}
           WINDOWS_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.windows_use_prebuilt_artifacts }}
           BUILD_VARIANT: ${{ inputs.build_variant }}
