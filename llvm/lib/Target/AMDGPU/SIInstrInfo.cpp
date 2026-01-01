@@ -1943,9 +1943,9 @@ void SIInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   MachinePointerInfo PtrInfo
     = MachinePointerInfo::getFixedStack(*MF, FrameIndex);
 
-  MachineMemOperand *MMO = MF->getMachineMemOperand(
-      PtrInfo, MachineMemOperand::MOLoad, FrameInfo.getObjectSize(FrameIndex),
-      FrameInfo.getObjectAlign(FrameIndex));
+  MachineMemOperand *MMO =
+      MF->getMachineMemOperand(PtrInfo, MachineMemOperand::MOLoad, SpillSize,
+                               FrameInfo.getObjectAlign(FrameIndex));
 
   if (RI.isSGPRClass(RC)) {
     MFI->setHasSpilledSGPRs();
