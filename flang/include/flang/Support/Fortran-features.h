@@ -57,7 +57,7 @@ ENUM_CLASS(LanguageFeature, BackslashEscapes, OldDebugLines,
     ContiguousOkForSeqAssociation, ForwardRefExplicitTypeDummy,
     InaccessibleDeferredOverride,
     AmdMemoryAllocator, CudaWarpMatchFunction,
-    DoConcurrentOffload, TransferBOZ, Coarray)
+    DoConcurrentOffload, TransferBOZ, Coarray, PointerPassObject)
 
 // Portability and suspicious usage warnings
 ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
@@ -80,7 +80,8 @@ ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
     CompatibleDeclarationsFromDistinctModules, ConstantIsContiguous,
     NullActualForDefaultIntentAllocatable, UseAssociationIntoSameNameSubprogram,
     HostAssociatedIntentOutInSpecExpr, NonVolatilePointerToVolatile,
-    RealConstantWidening, VolatileOrAsynchronousTemporary)
+    RealConstantWidening, VolatileOrAsynchronousTemporary, UnusedVariable,
+    UsedUndefinedVariable, BadValueInDeadCode)
 
 using LanguageFeatures = EnumSet<LanguageFeature, LanguageFeature_enumSize>;
 using UsageWarnings = EnumSet<UsageWarning, UsageWarning_enumSize>;
