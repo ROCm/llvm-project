@@ -54,10 +54,12 @@ LiveInterval &LiveRangeEdit::createEmptyIntervalFrom(Register OldReg,
 
 Register LiveRangeEdit::createFrom(Register OldReg,
                                    const TargetRegisterClass *RC) {
-  Register VReg =
-      RC ? MRI.createVirtualRegister(RC) : MRI.cloneVirtualRegister(OldReg);
+  Register VReg = MRI.cloneVirtualRegister(OldReg);
+
+  // Change the RC if given. Instead of creating a new virtual register for RC
+  // directly, this would help preserve the vreg flags.
   if (RC)
-    MRI.setType(VReg, LLT{});
+    MRI.setRegClass(VReg, RC);
 
   if (VRM) {
     VRM->setIsSplitFromReg(VReg, VRM->getOriginal(OldReg));
