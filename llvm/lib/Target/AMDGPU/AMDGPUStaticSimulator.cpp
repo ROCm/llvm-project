@@ -60,6 +60,11 @@ static cl::opt<bool> VerboseSimulation(
     cl::desc("Enable verbose per-instruction logging in static simulator"),
     cl::init(false), cl::Hidden);
 
+static cl::opt<bool> EnablePKScalarBug(
+    "amdgpu-static-sim-pk-scalar-bug",
+    cl::desc("Model PK/VOPD/CVT scalar resource bug (holds SSRC for 6 cycles)"),
+    cl::init(false), cl::Hidden);
+
 /// Check if enabled via cl::opt or AMDGPU_ENABLE_STATIC_SIM env var.
 static bool isStaticSimulatorEnabled() {
   if (const char *EnvVal = std::getenv("AMDGPU_ENABLE_STATIC_SIM"))
@@ -599,6 +604,18 @@ InstTiming getInstTiming(const MachineInstr &MI, const SIInstrInfo &TII) {
           getResourceCycles(MI, TII, IC)};
 }
 
+/// Check if instruction has any explicit SGPR operands (for PK scalar bug)
+bool hasSGPROperands(const MachineInstr &MI, const SIRegisterInfo &TRI) {
+  const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+  for (const MachineOperand &MO : MI.explicit_operands()) {
+    if (!MO.isReg() || !MO.getReg().isPhysical())
+      continue;
+    if (TRI.isSGPRReg(MRI, MO.getReg()))
+      return true;
+  }
+  return false;
+}
+
 struct StallSources {
   unsigned Unit = 0;
   unsigned VALUSlot = 0;
@@ -608,6 +625,7 @@ struct StallSources {
   unsigned MemFIFO = 0;
   unsigned RegBank = 0;
   unsigned LongLatVALU = 0;
+  unsigned PKScalarBug = 0;
   std::string CachePattern;
 
   unsigned CacheHits = 0;
@@ -623,7 +641,7 @@ struct StallSources {
   unsigned total() const {
     unsigned EffectiveRegBank = RegBankInWMMAWindow ? 0 : RegBank;
     return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO,
-                     EffectiveRegBank, LongLatVALU});
+                     EffectiveRegBank, LongLatVALU, PKScalarBug});
   }
 };
 
@@ -792,6 +810,13 @@ StallSources computeStallSources(
     }
   }
 
+  if (EnablePKScalarBug && IC == InstClass::SALU &&
+      State.ScalarResourceBusyUntil > IssueCycle &&
+      State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
+    S.PKScalarBug = State.ScalarResourceBusyUntil - IssueCycle;
+    IssueCycle = State.ScalarResourceBusyUntil;
+  }
+
   // WMMA: track A, B in cache (skip C - tied to dest)
   if (IC == InstClass::WMMA) {
     auto RB = State.RegFile.updateCacheForWMMA(MI, TII);
@@ -906,13 +931,17 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
     Metrics.StallFunctionalUnit += TotalStall;
     Metrics.StallVALU += TotalStall;
   } else if (S.CoExec == TotalStall) {
-    Metrics.StallCoExec += TotalStall;
+    // If PKScalar contributed to this stall, attribute it separately
+    unsigned PKPortion = (IC == InstClass::SALU) ? S.PKScalarBug : 0;
+    unsigned CoExPortion = TotalStall - PKPortion;
+    Metrics.StallCoExec += CoExPortion;
+    Metrics.StallPKScalarBug += PKPortion;
     switch (IC) {
     case InstClass::VALU:
-      Metrics.CoExecMissVALU += TotalStall;
+      Metrics.CoExecMissVALU += CoExPortion;
       break;
     case InstClass::TRANS:
-      Metrics.CoExecMissTRANS += TotalStall;
+      Metrics.CoExecMissTRANS += CoExPortion;
       break;
     case InstClass::DS_READ:
     case InstClass::DS_WRITE:
@@ -920,10 +949,10 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
     case InstClass::VMEM_WRITE:
     case InstClass::SMEM:
     case InstClass::TDM:
-      Metrics.CoExecMissMemory += TotalStall;
+      Metrics.CoExecMissMemory += CoExPortion;
       break;
     default:
-      Metrics.CoExecMissOther += TotalStall;
+      Metrics.CoExecMissOther += CoExPortion;
       break;
     }
   } else if (S.DelayAlu == TotalStall) {
@@ -931,6 +960,8 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
   } else if (S.LongLatVALU == TotalStall) {
     Metrics.StallCoExec += TotalStall;
     Metrics.StallLongLatVALU += TotalStall;
+  } else if (S.PKScalarBug == TotalStall) {
+    Metrics.StallPKScalarBug += TotalStall;
   } else if (S.RegBank == TotalStall && !S.RegBankInWMMAWindow) {
     Metrics.StallRegBankConflict += TotalStall;
   }
@@ -970,10 +1001,12 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
   switch (T.IC) {
   case InstClass::VALU: {
     Metrics.NumVALU++;
-    if (AMDGPU::isVOPD(MI.getOpcode())) {
+    bool IsVOPD = AMDGPU::isVOPD(MI.getOpcode());
+    bool IsPacked = TII.isPacked(MI);
+    if (IsVOPD) {
       Metrics.NumVOPD++;
       Metrics.NumVALU++;  // VOPD = 2 VALU ops
-    } else if (TII.isPacked(MI)) {
+    } else if (IsPacked) {
       Metrics.NumPacked++;
       Metrics.NumVALU++;  // Packed = 2 VALU ops
     }
@@ -983,6 +1016,9 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     if (LongLatVALU > 1)
       State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
                                               State.CurrentCycle + LongLatVALU);
+    // PK/VOPD/CVT bug: falsely holds scalar resource for 6 cycles
+    if (EnablePKScalarBug && (IsVOPD || IsPacked || LongLatVALU > 1))
+      State.ScalarResourceBusyUntil = State.CurrentCycle + 6;
     break;
   }
 
@@ -1120,6 +1156,7 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     printStall("VALUSlot", Stalls.VALUSlot);
     printStall("WMMACoExecMiss", Stalls.CoExecFromEffective);
     printStall("LongLatVALU", Stalls.LongLatVALU);
+    printStall("PKScalar", Stalls.PKScalarBug);
     printStall("DelayALU", Stalls.DelayAlu);
     printStall("WaitCnt", Stalls.WaitCnt);
     printStall("MemFIFO", Stalls.MemFIFO);
@@ -1254,6 +1291,9 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
   if (Stalls.DelayAlu > Max) { Max = Stalls.DelayAlu; Reason = StallReason::DELAY_ALU; }
   if (Stalls.CoExec > Max) { Max = Stalls.CoExec; Reason = StallReason::COEXEC_BLOCKED; }
   if (Stalls.LongLatVALU > Max) { Max = Stalls.LongLatVALU; Reason = StallReason::LONG_LAT_VALU; }
+  if (Stalls.PKScalarBug > 0 && Stalls.PKScalarBug >= Max) {
+    Max = Stalls.PKScalarBug; Reason = StallReason::PK_SCALAR_BUG;
+  }
   if (Stalls.MemFIFO > Max) { Max = Stalls.MemFIFO; Reason = StallReason::MEM_FIFO; }
   if (Stalls.Unit > Max) { Max = Stalls.Unit; Reason = StallReason::FU_BUSY; }
   // Only count reg bank if not in WMMA window

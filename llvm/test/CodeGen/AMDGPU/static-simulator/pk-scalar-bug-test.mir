@@ -1,0 +1,112 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-enable-static-simulator -amdgpu-static-sim-pk-scalar-bug -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+
+---
+# PK stalls SALU, VALU unaffected
+name: pk_stalls_salu
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr4, $vgpr5, $sgpr0, $sgpr1
+    $vgpr10 = V_PK_ADD_F16 8, $vgpr0, 8, $vgpr1, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr20 = V_ADD_F32_e32 $vgpr4, $vgpr5, implicit $exec, implicit $mode
+    $sgpr10 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr10, implicit $vgpr20
+...
+
+# CHECK-LABEL: pk_stalls_salu
+# CHECK: V_ADD_F32_e32
+# CHECK: Stalls: (none)
+# CHECK: S_ADD_I32
+# CHECK: Stalls: PKScalar=4
+# CHECK: PKScalar:4
+
+---
+# VOPD also triggers bug
+name: vopd_stalls_salu
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0, $vgpr0, $vgpr1, $sgpr1
+    $vgpr10, $vgpr11 = V_DUAL_MUL_F32_e32_X_MUL_F32_e32_gfx1250 $sgpr0, $vgpr0, $sgpr0, $vgpr1, implicit $mode, implicit $exec, implicit $mode, implicit $exec, implicit $mode, implicit $exec
+    $sgpr10 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr10
+...
+
+# CHECK-LABEL: vopd_stalls_salu
+# CHECK: S_ADD_I32
+# CHECK: Stalls: PKScalar=
+
+---
+# No stall after 6 cycles
+name: pk_no_stall_after_6_cycles
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $sgpr0, $sgpr1
+    $vgpr10 = V_PK_ADD_F16 8, $vgpr0, 8, $vgpr1, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr12 = V_MOV_B32_e32 1, implicit $exec
+    $vgpr13 = V_MOV_B32_e32 2, implicit $exec
+    $vgpr14 = V_MOV_B32_e32 3, implicit $exec
+    $vgpr15 = V_MOV_B32_e32 4, implicit $exec
+    $vgpr16 = V_MOV_B32_e32 5, implicit $exec
+    $vgpr17 = V_MOV_B32_e32 6, implicit $exec
+    $sgpr10 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr10
+...
+
+# CHECK-LABEL: pk_no_stall_after_6_cycles
+# CHECK: S_ADD_I32
+# CHECK: Stalls: (none)
+
+---
+# Second SALU doesn't stall (resource released)
+name: pk_multiple_salu
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $sgpr0, $sgpr1, $sgpr2, $sgpr3
+    $vgpr10 = V_PK_ADD_F16 8, $vgpr0, 8, $vgpr1, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $sgpr10 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    $sgpr11 = S_ADD_I32 $sgpr2, $sgpr3, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr10, implicit $sgpr11
+...
+
+# CHECK-LABEL: pk_multiple_salu
+# CHECK: S_ADD_I32 $sgpr0, $sgpr1
+# CHECK: Stalls: PKScalar=5
+# CHECK: S_ADD_I32 $sgpr2, $sgpr3
+# CHECK: Stalls: (none)
+
+---
+# VALU with SGPR source does NOT stall (only SALU affected)
+name: pk_no_stall_valu_with_sgpr
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $sgpr0, $vgpr2
+    $vgpr10 = V_PK_ADD_F16 8, $vgpr0, 8, $vgpr1, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr20 = V_ADD_F32_e32 $sgpr0, $vgpr2, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr20
+...
+
+# CHECK-LABEL: pk_no_stall_valu_with_sgpr
+# CHECK: V_ADD_F32_e32 $sgpr0
+# CHECK: Stalls: (none)
+
+---
+# V_CVT (long-lat VALU) also triggers bug
+name: cvt_stalls_salu
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2, $sgpr0, $sgpr1
+    $vgpr10_vgpr11_vgpr12_vgpr13 = V_CVT_SCALE_PK8_F16_FP8_e64 $vgpr0_vgpr1, $vgpr2, 0, implicit $mode, implicit $exec
+    $sgpr10 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    S_ENDPGM 0, implicit $sgpr10
+...
+
+# CHECK-LABEL: cvt_stalls_salu
+# CHECK: V_CVT_SCALE_PK8_F16_FP8
+# CHECK: S_ADD_I32
+# CHECK: Stalls: PKScalar=5
