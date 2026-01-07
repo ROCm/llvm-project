@@ -1,3 +1,4 @@
 ---
-Rent me
+needs more work
+[SPIRV] Support non-constant indices for vector insert/extract (#172514)
 ---
