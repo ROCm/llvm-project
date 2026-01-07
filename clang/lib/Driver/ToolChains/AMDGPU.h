@@ -141,6 +141,11 @@ public:
     return true;
   }
 
+  /// Get the Rocm Installation path
+  StringRef getRocmInstallationPath() const {
+    return RocmInstallation->getInstallPath();
+  }
+
   /// Needed for translating LTO options.
   const char *getDefaultLinker() const override { return "ld.lld"; }
 
