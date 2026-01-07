@@ -17,7 +17,6 @@
 #include "SPIRVSubtarget.h"
 #include "SPIRVUtils.h"
 #include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/IR/IntrinsicsSPIRV.h"
 #include "llvm/Support/Debug.h"
 #include <stack>
@@ -108,37 +107,6 @@ static SPIRVType *deduceTypeFromResultRegister(MachineInstr *Use,
   return nullptr;
 }
 
-static SPIRVType *deducePointerTypeFromResultRegister(MachineInstr *Use,
-                                                      Register UseRegister,
-                                                      SPIRVGlobalRegistry *GR,
-                                                      MachineIRBuilder &MIB) {
-  assert(Use->getOpcode() == TargetOpcode::G_LOAD ||
-         Use->getOpcode() == TargetOpcode::G_STORE);
-
-  Register ValueReg = Use->getOperand(0).getReg();
-  SPIRVType *ValueType = GR->getSPIRVTypeForVReg(ValueReg);
-  if (!ValueType)
-    return nullptr;
-
-  return GR->getOrCreateSPIRVPointerType(ValueType, MIB,
-                                         SPIRV::StorageClass::Function);
-}
-
-static SPIRVType *deduceTypeFromPointerOperand(MachineInstr *Use,
-                                               Register UseRegister,
-                                               SPIRVGlobalRegistry *GR,
-                                               MachineIRBuilder &MIB) {
-  assert(Use->getOpcode() == TargetOpcode::G_LOAD ||
-         Use->getOpcode() == TargetOpcode::G_STORE);
-
-  Register PtrReg = Use->getOperand(1).getReg();
-  SPIRVType *PtrType = GR->getSPIRVTypeForVReg(PtrReg);
-  if (!PtrType)
-    return nullptr;
-
-  return GR->getPointeeType(PtrType);
-}
-
 static SPIRVType *deduceTypeFromUses(Register Reg, MachineFunction &MF,
                                      SPIRVGlobalRegistry *GR,
                                      MachineIRBuilder &MIB) {
@@ -166,13 +134,6 @@ static SPIRVType *deduceTypeFromUses(Register Reg, MachineFunction &MF,
     case TargetOpcode::COPY:
     case TargetOpcode::G_STRICT_FMA:
       ResType = deduceTypeFromResultRegister(&Use, Reg, GR, MIB);
-      break;
-    case TargetOpcode::G_LOAD:
-    case TargetOpcode::G_STORE:
-      if (Reg == Use.getOperand(1).getReg())
-        ResType = deducePointerTypeFromResultRegister(&Use, Reg, GR, MIB);
-      else
-        ResType = deduceTypeFromPointerOperand(&Use, Reg, GR, MIB);
       break;
     case TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS:
     case TargetOpcode::G_INTRINSIC: {
@@ -362,7 +323,6 @@ static void registerSpirvTypeForNewInstructions(MachineFunction &MF,
 
   for (auto *I : Worklist) {
     MachineIRBuilder MIB(*I);
-    LLVM_DEBUG(dbgs() << "Assigning default type to results in " << *I);
     for (unsigned Idx = 0; Idx < I->getNumDefs(); ++Idx) {
       Register ResVReg = I->getOperand(Idx).getReg();
       if (GR->getSPIRVTypeForVReg(ResVReg))
@@ -377,6 +337,9 @@ static void registerSpirvTypeForNewInstructions(MachineFunction &MF,
       } else {
         ResType = GR->getOrCreateSPIRVIntegerType(ResLLT.getSizeInBits(), MIB);
       }
+      LLVM_DEBUG(dbgs() << "Could not determine type for " << ResVReg
+                        << ", defaulting to " << *ResType << "\n");
+
       setRegClassType(ResVReg, ResType, GR, &MRI, MF, true);
     }
   }
