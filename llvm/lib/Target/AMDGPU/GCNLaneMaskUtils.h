@@ -121,7 +121,7 @@ public:
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
-  void init(Register Reg);
+  void init();
   void cleanup();
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);

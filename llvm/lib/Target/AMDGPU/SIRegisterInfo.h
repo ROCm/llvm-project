@@ -421,10 +421,9 @@ public:
   /// the specified virtual register in the basic block, searching backwards
   /// from instruction I (inclusive). Returns MBB.end() if no definition is
   /// found.
-  static MachineBasicBlock::iterator
-  getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
-                            MachineBasicBlock::iterator I,
-                            const TargetRegisterInfo *TRI);
+  static MachineInstr *getDomVRegDefInBasicBlock(Register Reg,
+                                                 MachineBasicBlock &MBB,
+                                                 MachineBasicBlock::iterator I);
 
   const uint32_t *getAllVGPRRegMask() const;
   const uint32_t *getAllAGPRRegMask() const;
