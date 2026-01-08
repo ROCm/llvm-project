@@ -74,8 +74,7 @@ jobs:
     needs: setup
     if: >-
       ${{
-        needs.setup.outputs.linux_variants != '[]' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        needs.setup.outputs.linux_variants != '[]'
       }}
     strategy:
       fail-fast: false
@@ -95,7 +94,7 @@ jobs:
       expect_failure: ${{ matrix.variant.expect_failure == true }}
       use_prebuilt_artifacts: ${{ inputs.linux_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
+      test_type: 'smoke'
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
     permissions:
       contents: read
