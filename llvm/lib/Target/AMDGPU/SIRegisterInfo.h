@@ -419,11 +419,10 @@ public:
 
   /// getDomVRegDefInBasicBlock - Return the last machine instr that defines
   /// the specified virtual register in the basic block, searching backwards
-  /// from instruction I (inclusive). Returns MBB.end() if no definition is
+  /// from instruction I (exclusive). Returns nullptr if no definition is
   /// found.
-  static MachineInstr *getDomVRegDefInBasicBlock(Register Reg,
-                                                 MachineBasicBlock &MBB,
-                                                 MachineBasicBlock::iterator I);
+  MachineInstr *getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
+                                          MachineBasicBlock::iterator I) const;
 
   const uint32_t *getAllVGPRRegMask() const;
   const uint32_t *getAllAGPRRegMask() const;

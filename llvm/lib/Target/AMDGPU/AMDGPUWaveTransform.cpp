@@ -1801,6 +1801,7 @@ void ControlFlowRewriter::rewrite() {
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
+    MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
     if (!Info.OrigExit) {
       // Remove original terminators.
@@ -1814,7 +1815,7 @@ void ControlFlowRewriter::rewrite() {
     assert(!Info.OrigExit);
 
     if (Node->Successors.size() == 1) {
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::S_BRANCH))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Node->Successors[0]->Block);
       continue;
     }
@@ -1839,21 +1840,20 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_SCC1;
       } else {
         Register CondReg = Info.OrigCondition;
-        if (!LMA.isSubsetOfExec(CondReg, *Node->Block, Node->Block->end())) {
+        if (!LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(LMC.AndOpc),
-                  CondReg)
+          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
               .addReg(Info.OrigCondition);
         }
-        BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::COPY),
+        BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::COPY),
                 LMC.VccReg)
             .addReg(CondReg);
 
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
       }
 
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(Opcode))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
           .addMBB(LaneSucc->Wave->Block);
 
       // The _other_ successor may be a flow block instead of an original
@@ -1863,7 +1863,7 @@ void ControlFlowRewriter::rewrite() {
         Other = Node->Successors[1];
       else
         Other = Node->Successors[0];
-      BuildMI(*Node->Block, Node->Block->end(), {}, TII.get(AMDGPU::S_BRANCH))
+      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Other->Block);
     }
   }
@@ -1904,6 +1904,8 @@ void ControlFlowRewriter::rewrite() {
 
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
       Register CondReg;
+      MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
+          LaneOrigin.Node->Block->getFirstTerminator();
 
       if (!LaneOrigin.CondReg) {
         assert(!LaneOrigin.InvertCondition);
@@ -1924,14 +1926,12 @@ void ControlFlowRewriter::rewrite() {
         // cond = SCC ? EXEC : 0; (or reverse)
         CondReg = LMU.createLaneMaskReg();
         if (!LaneOrigin.InvertCondition) {
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addReg(LMC.ExecReg)
               .addImm(0);
         } else {
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.CSelectOpc), CondReg)
               .addImm(0)
               .addReg(LMC.ExecReg);
@@ -1939,11 +1939,10 @@ void ControlFlowRewriter::rewrite() {
       } else {
         CondReg = LaneOrigin.CondReg;
         if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
-                                LaneOrigin.Node->Block->getFirstTerminator())) {
+                                MBBILaneOriginNodeFirstTerm)) {
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
               .addReg(Prev);
@@ -1963,8 +1962,7 @@ void ControlFlowRewriter::rewrite() {
           // e.g. folding the XOR into the original V_CMP.
           Register Prev = CondReg;
           CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block,
-                  LaneOrigin.Node->Block->getFirstTerminator(), {},
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                   TII.get(LMC.XorOpc), CondReg)
               .addReg(LaneOrigin.CondReg)
               .addImm(-1);
@@ -2001,15 +1999,22 @@ void ControlFlowRewriter::rewrite() {
                                     MRI.getTargetRegisterInfo(), 0, &MRI)
                         << '\n');
 
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+      MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
+
+      // FIXME: Find a way to avoid adding MovTermOpc, instead add MovOpc. This
+      // Term operator being the first terminator, acts as an anchor point for
+      // finding the right insertion point in other parts of the Wave Transform.
+      // Since accumulator reset instructions may be added after this
+      // instruction, this move operation cannot be a terminator.
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(LMC.MovTermOpc), LMC.ExecReg)
           .addReg(OriginCFGNodeInfo.PrimarySuccessorExec);
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::SI_WAVE_CF_EDGE));
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::S_CBRANCH_EXECZ))
           .addMBB(OriginNode->Successors[1]->Block);
-      BuildMI(*OriginNode->Block, OriginNode->Block->end(), {},
+      BuildMI(*OriginNode->Block, MBBIOriginNodeEnd, {},
               TII.get(AMDGPU::S_BRANCH))
           .addMBB(OriginNode->Successors[0]->Block);
     }
@@ -2218,8 +2223,8 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   CFGUpdates.clear();
 
   // Step 3: Re-establish SSA.
-  SSAReconstructor SSAReconstruction(MF, *DomTree, ReconvergeHelper);
-  SSAReconstruction.run();
+  // SSAReconstructor SSAReconstruction(MF, *DomTree, ReconvergeHelper);
+  // SSAReconstruction.run();
 
   // Step 4: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();

@@ -4213,15 +4213,13 @@ const TargetRegisterClass *SIRegisterInfo::getVGPR64Class() const {
 
 MachineInstr *
 SIRegisterInfo::getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
-                                          MachineBasicBlock::iterator I) {
-  if (I == MBB.begin())
-    return nullptr;
+                                          MachineBasicBlock::iterator I) const {
   // Iterate backwards from I (exclusive) to the beginning of the basic block
-  do {
+  while (I != MBB.begin()) {
     --I;
-    if (I->definesRegister(Reg, nullptr))
+    if (I->definesRegister(Reg, this))
       return &*I;
-  } while (I != MBB.begin());
+  }
   return nullptr;
 }
 

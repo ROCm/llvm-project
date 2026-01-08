@@ -17,6 +17,7 @@
 
 #include "AMDGPULaneMaskUtils.h"
 
+#include "SIRegisterInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -41,6 +42,10 @@ public:
 
   MachineFunction *function() const { return &MF; }
   const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const { return LMC; }
+
+  const SIRegisterInfo &getRegisterInfo() const {
+    return *MF.getSubtarget<GCNSubtarget>().getRegisterInfo();
+  }
 
   bool maybeLaneMask(Register Reg) const;
   bool isConstantLaneMask(Register Reg, bool &Val, MachineBasicBlock &MBB,

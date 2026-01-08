@@ -35,10 +35,9 @@ bool GCNLaneMaskUtils::maybeLaneMask(Register Reg) const {
 bool GCNLaneMaskUtils::isConstantLaneMask(
     Register Reg, bool &Val, MachineBasicBlock &MBB,
     MachineBasicBlock::iterator MBBIter) const {
-  MachineRegisterInfo &MRI = MF.getRegInfo();
   MachineInstr *MI = nullptr;
   for (;;) {
-    MI = SIRegisterInfo::getDomVRegDefInBasicBlock(Reg, MBB, MBBIter);
+    MI = getRegisterInfo().getDomVRegDefInBasicBlock(Reg, MBB, MBBIter);
     if (!MI) {
       // This can happen when called from GCNLaneMaskUpdater, where Reg can
       // be a placeholder that has not yet been filled in.
@@ -192,7 +191,8 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
       return false;
     }
 
-    DefInstr = SIRegisterInfo::getDomVRegDefInBasicBlock(Reg, UseBlock, I);
+    DefInstr =
+        LMU.getRegisterInfo().getDomVRegDefInBasicBlock(Reg, UseBlock, I);
     if (!DefInstr)
       return false;
     if (DefInstr->getOpcode() == AMDGPU::COPY) {
@@ -464,17 +464,15 @@ GCNLaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
 void GCNLaneMaskUpdater::insertAccumulatorResets() {
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
-  for (auto &Entry : AccumulatorResetBlocks) {
-    MachineBasicBlock *B = Entry.first;
-    DenseSet<Register> &Accumulators = Entry.second;
+  for (auto &[B, Accumulators] : AccumulatorResetBlocks) {
     MachineBasicBlock::iterator I = B->getFirstTerminator();
     if (I->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
         I->getOperand(0).getReg() == LMU.getLaneMaskConsts().ExecReg) {
       I->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
       I++;
     }
-    for (Register Accumulator : Accumulators) {
-      BuildMI(*B, I, {}, TII->get(LMU.getLaneMaskConsts().MovOpc), Accumulator)
+    for (Register Acc : Accumulators) {
+      BuildMI(*B, I, {}, TII->get(LMU.getLaneMaskConsts().MovOpc), Acc)
           .addImm(0);
     }
   }
