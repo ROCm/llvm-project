@@ -176,6 +176,8 @@ public:
   const TargetRegisterClass *
   getCrossCopyRegClass(const TargetRegisterClass *RC) const override;
 
+  unsigned getNumSubRegsForSpillOp(const MachineInstr &MI) const;
+
   const TargetRegisterClass *
   getRegClassForBlockOp(const MachineFunction &MF) const {
     return &AMDGPU::VReg_1024RegClass;
@@ -358,6 +360,8 @@ public:
   ArrayRef<int16_t> getRegSplitParts(const TargetRegisterClass *RC,
                                      unsigned EltSize) const;
 
+  bool shouldEnableSubRegReload(unsigned SubReg) const override;
+
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
 
@@ -380,6 +384,9 @@ public:
   getRegClassForTypeOnBank(LLT Ty, const RegisterBank &Bank) const {
     return getRegClassForSizeOnBank(Ty.getSizeInBits(), Bank);
   }
+
+  const TargetRegisterClass *
+  getConstrainedRegClass(const TargetRegisterClass *RC) const override;
 
   const TargetRegisterClass *
   getConstrainedRegClassForOperand(const MachineOperand &MO,
@@ -442,6 +449,11 @@ public:
   // Returns true if a given register class is properly aligned for
   // the subtarget.
   bool isProperlyAlignedRC(const TargetRegisterClass &RC) const;
+
+  // Given \p RC returns corresponding aligned register class if required
+  // by the subtarget.
+  const TargetRegisterClass *
+  getProperlyAlignedRC(const TargetRegisterClass *RC) const;
 
   /// Return all SGPR128 which satisfy the waves per execution unit requirement
   /// of the subtarget.

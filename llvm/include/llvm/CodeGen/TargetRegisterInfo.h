@@ -438,6 +438,8 @@ public:
                                 LaneBitmask LaneMask,
                                 SmallVectorImpl<unsigned> &Indexes) const;
 
+  unsigned getSubRegIdxFromLaneMask(LaneBitmask LaneMask) const;
+
   /// The lane masks returned by getSubRegIndexLaneMask() above can only be
   /// used to determine if sub-registers overlap - they can't be used to
   /// determine if a set of sub-registers completely cover another
@@ -1225,6 +1227,11 @@ public:
     return true;
   }
 
+  /// To enable the spill-restore of sub registers during RA. This would
+  /// eventually improve the register allocation for the functions that involve
+  /// subreg uses of register tuples.
+  virtual bool shouldEnableSubRegReload(unsigned SubReg) const { return false; }
+
   /// When prioritizing live ranges in register allocation, if this hook returns
   /// true then the AllocationPriority of the register class will be treated as
   /// more important than whether the range is local to a basic block or global.
@@ -1247,6 +1254,11 @@ public:
   /// of the set as well.
   bool checkAllSuperRegsMarked(const BitVector &RegisterSet,
       ArrayRef<MCPhysReg> Exceptions = ArrayRef<MCPhysReg>()) const;
+
+  virtual const TargetRegisterClass *
+  getConstrainedRegClass(const TargetRegisterClass *RC) const {
+    return RC;
+  }
 
   virtual const TargetRegisterClass *
   getConstrainedRegClassForOperand(const MachineOperand &MO,
