@@ -53,13 +53,32 @@ __attribute__((noinline)) uint64_t __asan_malloc_impl(uint64_t bufsz,
                                                       uint64_t pc);
 __attribute__((noinline)) void __asan_free_impl(uint64_t ptr, uint64_t pc);
 
+// Direct RPC call for sanitizer report (bypasses emissary for efficiency)
+extern "C" {
+[[gnu::visibility("protected"),
+  gnu::weak]] rpc::Client __llvm_rpc_client asm("__llvm_rpc_client");
+}
+
 __attribute__((noinline)) void
 __ockl_sanitizer_report(uint64_t addr, uint64_t pc, uint64_t wgidx,
                         uint64_t wgidy, uint64_t wgidz, uint64_t wave_id,
                         uint64_t is_read, uint64_t access_size) {
-  unsigned long long rc =
-      _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_SANITIZER, _asan_report_idx), addr,
-                     pc, wgidx, wgidy, wgidz, wave_id, is_read, access_size);
+  // Use dedicated RPC opcode for sanitizer instead of emissary
+  rpc::Client::Port Port = __llvm_rpc_client.open<OFFLOAD_SANITIZER_REPORT>();
+  
+  // Send sanitizer data directly via RPC buffer
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = addr;
+    buffer->data[1] = pc;
+    buffer->data[2] = wgidx;
+    buffer->data[3] = wgidy;
+    buffer->data[4] = wgidz;
+    buffer->data[5] = wave_id;
+    buffer->data[6] = is_read;
+    buffer->data[7] = access_size;
+  });
+  
+  Port.close();
   return;
 }
 #endif
