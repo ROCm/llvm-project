@@ -1633,17 +1633,10 @@ static bool runImpl(Module &M, AnalysisGetter &AG, TargetMachine &TM,
   AC.IsModulePass = true;
   AC.DefaultInitializeLiveInternals = false;
   AC.IndirectCalleeSpecializationCallback =
-      [&TM](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
-            Function &Callee, unsigned NumAssumedCallees) {
-        if (AMDGPU::isEntryFunctionCC(Callee.getCallingConv()))
-          return false;
-        // Singleton functions can be specialized.
-        if (NumAssumedCallees == 1)
-          return true;
-        // Otherwise specialize uniform values.
-        const auto &TTI = TM.getTargetTransformInfo(*CB.getCaller());
-        return TTI.getInstructionUniformity(CB.getCalledOperand()) ==
-               InstructionUniformity::AlwaysUniform;
+      [](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
+         Function &Callee, unsigned NumAssumedCallees) {
+        return !AMDGPU::isEntryFunctionCC(Callee.getCallingConv()) &&
+               (NumAssumedCallees <= IndirectCallSpecializationThreshold);
       };
   AC.IPOAmendableCB = [](const Function &F) {
     return F.getCallingConv() == CallingConv::AMDGPU_KERNEL;
