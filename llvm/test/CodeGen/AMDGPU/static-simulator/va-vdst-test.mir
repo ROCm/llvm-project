@@ -1,0 +1,75 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-enable-static-simulator -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+
+---
+# s_wait_alu va_vdst(0) waits for all pending VALU writes
+name: simple_va_vdst_wait
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr1, $vgpr2
+    $vgpr0 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
+    S_WAITCNT_DEPCTR 3999  ; va_vdst(0)
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: simple_va_vdst_wait
+# CHECK: V_ADD_F32_e32
+# CHECK: S_WAITCNT_DEPCTR 3999
+# CHECK: s_wait_alu: va_vdst(0), pending=1, stall=
+# CHECK: VaVdst:{{[1-9]}}
+
+---
+# Multiple pending VALUs, partial wait va_vdst(1)
+name: multiple_pending_valu
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr1, $vgpr2, $vgpr4, $vgpr5, $vgpr7, $vgpr8, $vgpr9
+    $vgpr0 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
+    $vgpr3 = V_MUL_F32_e32 $vgpr4, $vgpr5, implicit $mode, implicit $exec
+    $vgpr6 = V_FMA_F32_e64 0, $vgpr7, 0, $vgpr8, 0, $vgpr9, 0, 0, implicit $mode, implicit $exec
+    S_WAITCNT_DEPCTR 8095  ; va_vdst(1)
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: multiple_pending_valu
+# CHECK: V_ADD_F32_e32
+# CHECK: V_MUL_F32_e32
+# CHECK: V_FMA_F32_e64
+# CHECK: S_WAITCNT_DEPCTR 8095
+# CHECK: s_wait_alu: va_vdst(1), pending=3, stall=
+
+---
+# No stall when va_vdst already <= target
+name: no_stall_satisfied
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr1, $vgpr2
+    $vgpr0 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
+    S_WAITCNT_DEPCTR 12191  ; va_vdst(2), 1 <= 2 → no stall
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: no_stall_satisfied
+# CHECK: V_ADD_F32_e32
+# CHECK: S_WAITCNT_DEPCTR 12191
+# CHECK: Stalls: (none)
+
+---
+# TRANS also increments va_vdst
+name: trans_increments_va_vdst
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr1
+    $vgpr0 = V_EXP_F32_e32 $vgpr1, implicit $mode, implicit $exec
+    S_WAITCNT_DEPCTR 3999  ; va_vdst(0)
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: trans_increments_va_vdst
+# CHECK: V_EXP_F32_e32
+# CHECK: S_WAITCNT_DEPCTR 3999
+# CHECK: s_wait_alu: va_vdst(0), pending=1, stall=

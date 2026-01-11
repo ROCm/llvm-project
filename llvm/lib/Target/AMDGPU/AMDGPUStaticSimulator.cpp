@@ -60,6 +60,11 @@ static cl::opt<bool> VerboseSimulation(
     cl::desc("Enable verbose per-instruction logging in static simulator"),
     cl::init(false), cl::Hidden);
 
+static cl::opt<bool> EnableScoreboard(
+    "amdgpu-static-sim-scoreboard",
+    cl::desc("Enable register scoreboard for RAW detection without s_delay_alu"),
+    cl::init(false), cl::Hidden);
+
 /// Check if enabled via cl::opt or AMDGPU_ENABLE_STATIC_SIM env var.
 static bool isStaticSimulatorEnabled() {
   if (const char *EnvVal = std::getenv("AMDGPU_ENABLE_STATIC_SIM"))
@@ -214,7 +219,72 @@ static const char *getUnitName(FunctionalUnit Unit) {
 // s_delay_alu Parsing (gfx1250)
 //===----------------------------------------------------------------------===//
 
-unsigned parseDelayAlu(const MachineInstr &MI, const GPUSimState &State) {
+// Decode a single delay dependency based on current state
+unsigned decodeDelayDep(unsigned Dep, const GPUSimState &State) {
+  if (Dep == 0)
+    return 0;
+
+  // VALU_DEP_1 to VALU_DEP_4 (values 1-4)
+  if (Dep >= 1 && Dep <= 4) {
+    unsigned Index = Dep - 1;
+    if (Index < State.RecentVALU.size()) {
+      auto &Recent = State.RecentVALU[State.RecentVALU.size() - 1 - Index];
+      unsigned Elapsed = State.CurrentCycle - Recent.IssueCycle;
+      if (Elapsed < Recent.Latency)
+        return Recent.Latency - Elapsed;
+    }
+    return 0;
+  }
+
+  // TRANS32_DEP_1 to TRANS32_DEP_3 (values 5-7)
+  if (Dep >= 5 && Dep <= 7) {
+    unsigned Index = Dep - 5;
+    if (Index < State.RecentTRANS.size()) {
+      auto &Recent = State.RecentTRANS[State.RecentTRANS.size() - 1 - Index];
+      unsigned Elapsed = State.CurrentCycle - Recent.IssueCycle;
+      if (Elapsed < Recent.Latency)
+        return Recent.Latency - Elapsed;
+    }
+    return 0;
+  }
+
+  // SALU_CYCLE_1 to SALU_CYCLE_4 (values 9-12)
+  if (Dep >= 9 && Dep <= 12) {
+    unsigned WaitCycles = Dep - 8;
+    unsigned Elapsed = State.CurrentCycle - State.LastSALUCycle;
+    if (Elapsed < WaitCycles)
+      return WaitCycles - Elapsed;
+    return 0;
+  }
+
+  return 0;
+}
+
+// Check pending instid1 from previous s_delay_alu
+// SkipApply: decrement only, don't apply stall (for MSB_SET)
+unsigned checkPendingDelayAlu(GPUSimState &State, bool SkipApply = false) {
+  if (!State.PendingInstId1)
+    return 0;
+
+  auto &Pending = *State.PendingInstId1;
+  if (Pending.InstructionsLeft > 0) {
+    Pending.InstructionsLeft--;
+    return 0;
+  }
+
+  if (SkipApply)
+    return 0;
+
+  unsigned Stall = decodeDelayDep(Pending.DepType, State);
+  if (VerboseSimulation && Stall > 0) {
+    dbgs() << "    PendingInstId1: Dep=" << Pending.DepType
+           << " stall=" << Stall << "\n";
+  }
+  State.PendingInstId1.reset();
+  return Stall;
+}
+
+unsigned parseDelayAlu(const MachineInstr &MI, GPUSimState &State) {
   if (MI.getOpcode() != AMDGPU::S_DELAY_ALU)
     return 0;
 
@@ -222,58 +292,47 @@ unsigned parseDelayAlu(const MachineInstr &MI, const GPUSimState &State) {
   unsigned Dep1 = Imm & 0xF;
   unsigned Skip = (Imm >> 4) & 0x7;
   unsigned Dep2 = (Imm >> 7) & 0xF;
-  (void)Skip;
 
-  auto decodeStall = [&](unsigned Dep) -> unsigned {
-    if (Dep == 0)
-      return 0;
+  unsigned Stall1 = decodeDelayDep(Dep1, State);
 
-    // VALU_DEP_1 to VALU_DEP_4 (values 1-4)
-    if (Dep >= 1 && Dep <= 4) {
-      unsigned Index = Dep - 1;
-      if (Index < State.RecentVALU.size()) {
-        auto &Recent = State.RecentVALU[State.RecentVALU.size() - 1 - Index];
-        unsigned Elapsed = State.CurrentCycle - Recent.IssueCycle;
-        if (Elapsed < Recent.Latency)
-          return Recent.Latency - Elapsed;
-      }
-      return 0;
+  // If there's an instid1, set up pending delay for later
+  // Skip = count of instructions between s_delay_alu and target
+  // After Skip decrements to 0, instid1 applies
+  if (Dep2 != 0) {
+    State.PendingInstId1 = GPUSimState::PendingDelayAlu{
+        Dep2, Skip, State.CurrentCycle};
+    if (VerboseSimulation) {
+      dbgs() << "    DelayALU: instid0=" << Dep1 << " (stall " << Stall1
+             << "), skip=" << Skip << ", instid1=" << Dep2 << " (pending)\n";
     }
-
-    // TRANS32_DEP_1 to TRANS32_DEP_3 (values 5-7)
-    if (Dep >= 5 && Dep <= 7) {
-      unsigned Index = Dep - 5;
-      if (Index < State.RecentTRANS.size()) {
-        auto &Recent = State.RecentTRANS[State.RecentTRANS.size() - 1 - Index];
-        unsigned Elapsed = State.CurrentCycle - Recent.IssueCycle;
-        if (Elapsed < Recent.Latency)
-          return Recent.Latency - Elapsed;
-      }
-      return 0;
-    }
-
-    // SALU_CYCLE_1 to SALU_CYCLE_4
-    if (Dep >= 9 && Dep <= 12) {
-      unsigned WaitCycles = Dep - 8;
-      unsigned Elapsed = State.CurrentCycle - State.LastSALUCycle;
-      if (Elapsed < WaitCycles)
-        return WaitCycles - Elapsed;
-      return 0;
-    }
-
-    return 0;
-  };
-
-  unsigned Stall1 = decodeStall(Dep1);
-  unsigned Stall2 = decodeStall(Dep2);
-
-  if (VerboseSimulation) {
-    dbgs() << "    DelayALU decode: Dep1=" << Dep1 << " (stall " << Stall1
-           << "), Skip=" << Skip << ", Dep2=" << Dep2 << " (stall " << Stall2
-           << ") → " << std::max(Stall1, Stall2) << "\n";
+  } else if (VerboseSimulation) {
+    dbgs() << "    DelayALU: instid0=" << Dep1 << " (stall " << Stall1 << ")\n";
   }
 
-  return std::max(Stall1, Stall2);
+  return Stall1;
+}
+
+// Parse s_wait_alu depctr_va_vdst(N): wait until pending VALU writes <= N
+unsigned parseWaitAluVaVdst(const MachineInstr &MI, GPUSimState &State) {
+  if (MI.getOpcode() != AMDGPU::S_WAITCNT_DEPCTR)
+    return 0;
+
+  unsigned Imm = MI.getOperand(0).getImm();
+  unsigned VaVdstTarget = AMDGPU::DepCtr::decodeFieldVaVdst(Imm);
+
+  // VaVdst field is 4 bits (0-15). 15 means "don't wait"
+  if (VaVdstTarget == 15)
+    return 0;
+
+  unsigned ReadyCycle = State.getVaVdstReadyCycle(VaVdstTarget);
+  unsigned Stall = ReadyCycle > State.CurrentCycle ? ReadyCycle - State.CurrentCycle : 0;
+
+  if (VerboseSimulation && Stall > 0) {
+    dbgs() << "    s_wait_alu: va_vdst(" << VaVdstTarget << "), pending="
+           << State.getVaVdst() << ", stall=" << Stall << "\n";
+  }
+
+  return Stall;
 }
 
 //===----------------------------------------------------------------------===//
@@ -599,6 +658,35 @@ InstTiming getInstTiming(const MachineInstr &MI, const SIInstrInfo &TII) {
           getResourceCycles(MI, TII, IC)};
 }
 
+/// Check if instruction implicitly waits for all VALU to complete (VA_VDST==0)
+/// Same logic as AMDGPUInsertDelayAlu::instructionWaitsForVALU
+static bool instructionWaitsForVALU(const MachineInstr &MI) {
+  const uint64_t VA_VDST_0 = SIInstrFlags::DS | SIInstrFlags::EXP |
+                             SIInstrFlags::FLAT | SIInstrFlags::MIMG |
+                             SIInstrFlags::MTBUF | SIInstrFlags::MUBUF;
+  if (MI.getDesc().TSFlags & VA_VDST_0)
+    return true;
+  if (MI.getOpcode() == AMDGPU::S_SENDMSG_RTN_B32 ||
+      MI.getOpcode() == AMDGPU::S_SENDMSG_RTN_B64)
+    return true;
+  if (MI.getOpcode() == AMDGPU::S_WAITCNT_DEPCTR &&
+      AMDGPU::DepCtr::decodeFieldVaVdst(MI.getOperand(0).getImm()) == 0)
+    return true;
+  return false;
+}
+
+/// Check if instruction has explicit SGPR operands
+static bool hasSGPROperands(const MachineInstr &MI, const SIRegisterInfo &TRI) {
+  const MachineRegisterInfo &MRI = MI.getMF()->getRegInfo();
+  for (const MachineOperand &MO : MI.explicit_operands()) {
+    if (!MO.isReg() || !MO.getReg().isPhysical())
+      continue;
+    if (TRI.isSGPRReg(MRI, MO.getReg()))
+      return true;
+  }
+  return false;
+}
+
 struct StallSources {
   unsigned Unit = 0;
   unsigned VALUSlot = 0;
@@ -608,6 +696,9 @@ struct StallSources {
   unsigned MemFIFO = 0;
   unsigned RegBank = 0;
   unsigned LongLatVALU = 0;
+  unsigned SSRC = 0;
+  unsigned VaVdst = 0;
+  unsigned RAW = 0;  // Scoreboard-detected RAW dependency
   std::string CachePattern;
 
   unsigned CacheHits = 0;
@@ -618,12 +709,12 @@ struct StallSources {
   unsigned CoExecFromEffective = 0;
   bool HasFUCoExecInteraction = false;
   bool LDScaleBlocked = false;
-  bool RegBankInWMMAWindow = false;  // Track if regbank conflict occurred in WMMA window
+  bool RegBankInWMMAWindow = false;
 
   unsigned total() const {
     unsigned EffectiveRegBank = RegBankInWMMAWindow ? 0 : RegBank;
     return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO,
-                     EffectiveRegBank, LongLatVALU});
+                     EffectiveRegBank, LongLatVALU, SSRC, VaVdst, RAW});
   }
 };
 
@@ -677,6 +768,9 @@ bool handleMSBSet(InstClass IC, GPUSimState &State, BlockMetrics &Metrics,
                   const SIInstrInfo &TII, unsigned EntryCycle) {
   if (IC != InstClass::MSB_SET)
     return false;
+
+  // MSB_SET counts toward s_delay_alu skip (LowerVGPREncoding runs before InsertDelayAlu)
+  (void)checkPendingDelayAlu(State, /*SkipApply=*/true);
 
   MSBSetOutcome Outcome = classifyMSBSet(State);
   bool IsMasked = false;
@@ -743,6 +837,14 @@ StallSources computeStallSources(
   StallSources S;
   unsigned IssueCycle = State.CurrentCycle;
 
+  // Check for pending instid1 from previous s_delay_alu
+  unsigned PendingDelay = checkPendingDelayAlu(State);
+  if (PendingDelay > 0) {
+    S.DelayAlu = PendingDelay;
+    if (State.CurrentCycle + PendingDelay > IssueCycle)
+      IssueCycle = State.CurrentCycle + PendingDelay;
+  }
+
   unsigned BusyUntil = State.getUnitBusyUntil(Unit);
   if (BusyUntil > IssueCycle) {
     S.Unit = BusyUntil - State.CurrentCycle;
@@ -792,6 +894,40 @@ StallSources computeStallSources(
     }
   }
 
+  // VALU with SSRC blocks following SALU until VALU completes
+  if (IC == InstClass::SALU && State.VaSSRCBusyUntil > IssueCycle) {
+    S.SSRC = State.VaSSRCBusyUntil - IssueCycle;
+    IssueCycle = State.VaSSRCBusyUntil;
+  }
+
+  // Scoreboard-based RAW detection (without s_delay_alu)
+  if (EnableScoreboard && State.RegFile.TRI) {
+    unsigned MaxRAW = 0;
+    if (instructionWaitsForVALU(MI)) {
+      // Memory ops implicitly wait for ALL pending VALU writes (VA_VDST==0)
+      MaxRAW = State.getMaxPendingRAW();
+      LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation) {
+        dbgs() << "    RAW implicit wait (VA_VDST==0): stall=" << MaxRAW << "\n";
+      });
+    } else {
+      // Check RAW for explicit operands
+      for (const MachineOperand &MO : MI.explicit_uses()) {
+        if (MO.isReg() && MO.getReg().isPhysical()) {
+          unsigned RAWStall = State.getRAWStall(MO.getReg(), State.RegFile.TRI);
+          MaxRAW = std::max(MaxRAW, RAWStall);
+        }
+      }
+      LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation) {
+        dbgs() << "    RAW scoreboard: stall=" << MaxRAW << "\n";
+      });
+    }
+    if (MaxRAW > 0) {
+      S.RAW = MaxRAW;
+      if (State.CurrentCycle + MaxRAW > IssueCycle)
+        IssueCycle = State.CurrentCycle + MaxRAW;
+    }
+  }
+
   // WMMA: track A, B in cache (skip C - tied to dest)
   if (IC == InstClass::WMMA) {
     auto RB = State.RegFile.updateCacheForWMMA(MI, TII);
@@ -799,6 +935,16 @@ StallSources computeStallSources(
     S.CacheHits = RB.CacheHits;
     S.CacheMisses = RB.CacheMisses;
     S.CacheEvictions = RB.CacheEvictions;
+  }
+
+  // s_wait_alu depctr_va_vdst(N): wait until pending VALU writes <= N
+  if (MI.getOpcode() == AMDGPU::S_WAITCNT_DEPCTR) {
+    unsigned VaVdstStall = parseWaitAluVaVdst(MI, State);
+    if (VaVdstStall > 0) {
+      S.VaVdst = VaVdstStall;
+      if (State.CurrentCycle + VaVdstStall > IssueCycle)
+        IssueCycle = State.CurrentCycle + VaVdstStall;
+    }
   }
 
   if (State.inWMMAWindow() && IC != InstClass::WMMA) {
@@ -931,6 +1077,12 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
   } else if (S.LongLatVALU == TotalStall) {
     Metrics.StallCoExec += TotalStall;
     Metrics.StallLongLatVALU += TotalStall;
+  } else if (S.SSRC == TotalStall) {
+    Metrics.StallVaSSRC += TotalStall;
+  } else if (S.VaVdst == TotalStall) {
+    Metrics.StallVaVdst += TotalStall;
+  } else if (S.RAW == TotalStall) {
+    Metrics.StallRAW += TotalStall;
   } else if (S.RegBank == TotalStall && !S.RegBankInWMMAWindow) {
     Metrics.StallRegBankConflict += TotalStall;
   }
@@ -983,6 +1135,13 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     if (LongLatVALU > 1)
       State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
                                               State.CurrentCycle + LongLatVALU);
+    // VALU with SSRC blocks following SALU until VALU result is ready
+    if (State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
+      State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
+                                          State.CurrentCycle + T.Latency);
+    }
+    // Track pending VGPR write for va_vdst
+    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency});
     break;
   }
 
@@ -996,6 +1155,8 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     State.trackTRANS(T.Latency);
     State.trackVALUForWMMA(T.IC);
     State.holdVALUResourceInWindow(T.ResourceCycles);
+    // Track pending VGPR write for va_vdst
+    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency});
     break;
 
   case InstClass::WMMA: {
@@ -1003,6 +1164,11 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     State.trackTRANS(T.Latency);
     unsigned Occupancy = State.startWMMAWindow(MI, TII);
     Metrics.WMMAWindowCycles += Occupancy;
+    // WMMA with SGPR operands (scale) blocks SALU (VA_SSRC)
+    if (State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
+      State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
+                                          State.CurrentCycle + T.Latency);
+    }
     if (VerboseSimulation) {
       dbgs() << "  Class: WMMA | Unit: XDL | Occupancy: " << Occupancy
              << " | Window: " << State.ActiveWMMA.Info.TotalWindow << "\n";
@@ -1084,6 +1250,28 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
 
   if (T.IC != InstClass::WMMA)
     State.setUnitBusyUntil(T.Unit, State.CurrentCycle + T.ResourceCycles);
+
+  // Scoreboard: record destination registers and handle implicit waits
+  // Only track synchronous ALU ops (VALU, TRANS, SALU) - NOT async memory ops
+  // Async ops (DS, VMEM) are handled via s_waitcnt, not scoreboard
+  if (EnableScoreboard && State.RegFile.TRI) {
+    // Memory ops implicitly wait for VA_VDST==0, clearing pending RAW hazards
+    if (instructionWaitsForVALU(MI)) {
+      State.clearRegScoreboard();
+      if (VerboseSimulation)
+        dbgs() << "  → Scoreboard cleared (implicit VA_VDST wait)\n";
+    }
+    // Only record writes from synchronous ALU instructions
+    // WMMA is treated like TRANS for delay purposes (per AMDGPUInsertDelayAlu)
+    if (T.IC == InstClass::VALU || T.IC == InstClass::TRANS ||
+        T.IC == InstClass::SALU || T.IC == InstClass::WMMA) {
+      for (const MachineOperand &MO : MI.defs()) {
+        if (MO.isReg() && MO.getReg().isPhysical()) {
+          State.recordRegWrite(MO.getReg(), T.Latency, State.RegFile.TRI);
+        }
+      }
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -1120,6 +1308,9 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     printStall("VALUSlot", Stalls.VALUSlot);
     printStall("WMMACoExecMiss", Stalls.CoExecFromEffective);
     printStall("LongLatVALU", Stalls.LongLatVALU);
+    printStall("SSRC", Stalls.SSRC);
+    printStall("VaVdst", Stalls.VaVdst);
+    printStall("RAW", Stalls.RAW);
     printStall("DelayALU", Stalls.DelayAlu);
     printStall("WaitCnt", Stalls.WaitCnt);
     printStall("MemFIFO", Stalls.MemFIFO);
@@ -1254,6 +1445,8 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
   if (Stalls.DelayAlu > Max) { Max = Stalls.DelayAlu; Reason = StallReason::DELAY_ALU; }
   if (Stalls.CoExec > Max) { Max = Stalls.CoExec; Reason = StallReason::COEXEC_BLOCKED; }
   if (Stalls.LongLatVALU > Max) { Max = Stalls.LongLatVALU; Reason = StallReason::LONG_LAT_VALU; }
+  if (Stalls.SSRC > 0 && Stalls.SSRC >= Max) { Max = Stalls.SSRC; Reason = StallReason::VA_SSRC_STALL; }
+  if (Stalls.VaVdst > 0 && Stalls.VaVdst >= Max) { Max = Stalls.VaVdst; Reason = StallReason::VA_VDST_WAIT; }
   if (Stalls.MemFIFO > Max) { Max = Stalls.MemFIFO; Reason = StallReason::MEM_FIFO; }
   if (Stalls.Unit > Max) { Max = Stalls.Unit; Reason = StallReason::FU_BUSY; }
   // Only count reg bank if not in WMMA window

@@ -108,6 +108,8 @@ enum class StallReason : uint8_t {
   FU_BUSY,          // Functional unit not ready
   COEXEC_BLOCKED,   // Blocked by WMMA co-execution rules
   LONG_LAT_VALU,    // Long-latency VALU blocked by WMMA window
+  VA_SSRC_STALL,    // VA_SSRC: VALU/WMMA with SGPR blocks SALU
+  VA_VDST_WAIT,     // VA_VDST: s_wait_alu depctr_va_vdst stall
   WAITCNT,          // Memory wait (s_wait_*)
   DELAY_ALU,        // RAW dependency (s_delay_alu)
   MEM_FIFO,         // Memory FIFO full
@@ -148,6 +150,8 @@ struct InstrSimInfo {
     case StallReason::FU_BUSY:        return "FU busy";
     case StallReason::COEXEC_BLOCKED: return "CoExec blocked";
     case StallReason::LONG_LAT_VALU:  return "LongLatVALU blocked";
+    case StallReason::VA_SSRC_STALL:  return "VA_SSRC blocked";
+    case StallReason::VA_VDST_WAIT:   return "VA_VDST wait";
     case StallReason::WAITCNT:        return "WaitCnt";
     case StallReason::DELAY_ALU:      return "DelayAlu";
     case StallReason::MEM_FIFO:       return "FIFO full";
@@ -538,8 +542,11 @@ struct BlockMetrics {
   unsigned StallVMEMUnit = 0;
 
   unsigned StallRegBankConflict = 0;
-  unsigned RegBankConflictsInWMMAWindow = 0; // Meta counter, not stalls
+  unsigned RegBankConflictsInWMMAWindow = 0;
   unsigned StallLongLatVALU = 0;
+  unsigned StallVaSSRC = 0;
+  unsigned StallVaVdst = 0;
+  unsigned StallRAW = 0;
 
   unsigned VGPRCacheHits = 0;
   unsigned VGPRCacheMisses = 0;
@@ -552,7 +559,8 @@ struct BlockMetrics {
 
   unsigned StallCycles() const {
     return NumMSBSetExposed + StallFunctionalUnit + StallCoExec +
-           StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict;
+           StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict +
+           StallVaSSRC + StallVaVdst + StallRAW;
   }
 
   // WMMA Co-execution
@@ -627,6 +635,9 @@ struct BlockMetrics {
     Result.StallRegBankConflict = scale(StallRegBankConflict);
     Result.RegBankConflictsInWMMAWindow = scale(RegBankConflictsInWMMAWindow);
     Result.StallLongLatVALU = scale(StallLongLatVALU);
+    Result.StallVaSSRC = scale(StallVaSSRC);
+    Result.StallVaVdst = scale(StallVaVdst);
+    Result.StallRAW = scale(StallRAW);
 
     Result.VGPRCacheHits = scale(VGPRCacheHits);
     Result.VGPRCacheMisses = scale(VGPRCacheMisses);
@@ -700,6 +711,9 @@ struct BlockMetrics {
     Result.StallRegBankConflict = StallRegBankConflict + O.StallRegBankConflict;
     Result.RegBankConflictsInWMMAWindow = RegBankConflictsInWMMAWindow + O.RegBankConflictsInWMMAWindow;
     Result.StallLongLatVALU = StallLongLatVALU + O.StallLongLatVALU;
+    Result.StallVaSSRC = StallVaSSRC + O.StallVaSSRC;
+    Result.StallVaVdst = StallVaVdst + O.StallVaVdst;
+    Result.StallRAW = StallRAW + O.StallRAW;
 
     Result.VGPRCacheHits = VGPRCacheHits + O.VGPRCacheHits;
     Result.VGPRCacheMisses = VGPRCacheMisses + O.VGPRCacheMisses;
@@ -811,6 +825,9 @@ struct BlockMetrics {
     Emit("Wait", StallWaitCnt);
     Emit("RegBank", StallRegBankConflict);
     Emit("LongLatVALU", StallLongLatVALU);
+    Emit("VaSSRC", StallVaSSRC);
+    Emit("VaVdst", StallVaVdst);
+    Emit("RAW", StallRAW);
     if (RegBankConflictsInWMMAWindow) {
       if (!First) OS << " | ";
       OS << "RegBankInWMMA:" << RegBankConflictsInWMMAWindow << " (not counted)";
@@ -1088,10 +1105,95 @@ struct GPUSimState {
   std::deque<RecentInst> RecentTRANS;
   unsigned LastSALUCycle = 0;
 
+  // VA_VDST tracking: pending VALU/TRANS writes to VGPRs
+  struct PendingVALUWrite {
+    unsigned ReadyCycle;  // When this write completes
+  };
+  std::deque<PendingVALUWrite> PendingVaVdst;
+
+  unsigned getVaVdst() const {
+    unsigned count = 0;
+    for (const auto &e : PendingVaVdst)
+      if (e.ReadyCycle > CurrentCycle) count++;
+    return std::min(count, 15u);  // Max 15
+  }
+
+  // Get cycle when va_vdst will be <= target
+  // Hardware retires in FIFO order (issue order), not completion order!
+  unsigned getVaVdstReadyCycle(unsigned target) const {
+    unsigned currentCount = getVaVdst();
+    if (currentCount <= target) return CurrentCycle;
+
+    unsigned toRetire = currentCount - target;
+
+    // Compute retirement times in issue order (FIFO)
+    // Each instruction retires when: max(its ready time, previous retired)
+    std::vector<unsigned> retireTimes;
+    unsigned lastRetire = CurrentCycle;
+    for (const auto &e : PendingVaVdst) {
+      if (e.ReadyCycle > CurrentCycle) {
+        lastRetire = std::max(e.ReadyCycle, lastRetire);
+        retireTimes.push_back(lastRetire);
+      }
+    }
+
+    if (toRetire <= retireTimes.size())
+      return retireTimes[toRetire - 1];
+    return CurrentCycle;
+  }
+
   unsigned LastVALUCycle = ~0u;
   unsigned LastTRANSCycle = ~0u;
 
   unsigned VALUResourceBusyUntil = 0; // TRANS holds VALU in WMMA I-slots
+  unsigned VaSSRCBusyUntil = 0; // VA_SSRC: VALU/WMMA with SGPR blocks SALU until ready
+
+  // Register scoreboard: tracks when each register's result will be ready
+  // Enables RAW dependency detection without s_delay_alu
+  DenseMap<MCRegUnit, unsigned> RegScoreboard;
+
+  // Check RAW stall for reading a register
+  unsigned getRAWStall(Register Reg, const TargetRegisterInfo *TRI) const {
+    if (!TRI || !Reg.isPhysical())
+      return 0;
+    unsigned MaxStall = 0;
+    for (MCRegUnit Unit : TRI->regunits(Reg)) {
+      auto It = RegScoreboard.find(Unit);
+      if (It != RegScoreboard.end() && It->second > CurrentCycle)
+        MaxStall = std::max(MaxStall, It->second - CurrentCycle);
+    }
+    return MaxStall;
+  }
+
+  // Record a write - register will be ready at CurrentCycle + Latency
+  void recordRegWrite(Register Reg, unsigned Latency, const TargetRegisterInfo *TRI) {
+    if (!TRI || !Reg.isPhysical())
+      return;
+    unsigned ReadyCycle = CurrentCycle + Latency;
+    for (MCRegUnit Unit : TRI->regunits(Reg))
+      RegScoreboard[Unit] = ReadyCycle;
+  }
+
+  // Clear scoreboard - called when memory ops implicitly wait for VA_VDST==0
+  void clearRegScoreboard() { RegScoreboard.clear(); }
+
+  // Get max stall across ALL pending writes (for implicit VA_VDST waits)
+  unsigned getMaxPendingRAW() const {
+    unsigned MaxStall = 0;
+    for (const auto &KV : RegScoreboard) {
+      if (KV.second > CurrentCycle)
+        MaxStall = std::max(MaxStall, KV.second - CurrentCycle);
+    }
+    return MaxStall;
+  }
+
+  // Pending instid1 from s_delay_alu with skip
+  struct PendingDelayAlu {
+    unsigned DepType;         // Encoded dependency (VALU_DEP_*, TRANS_DEP_*, SALU_CYCLE_*)
+    unsigned InstructionsLeft; // Skip count remaining
+    unsigned IssueCycle;      // When s_delay_alu was seen (for SALU_CYCLE)
+  };
+  std::optional<PendingDelayAlu> PendingInstId1;
 
   InstClass PreviousInstClass = InstClass::OTHER;
 
@@ -1124,6 +1226,9 @@ struct GPUSimState {
       // Don't reset VALUResourceBusyUntil - long-lat VALU may still be holding it
     }
     retireCompletedMemOps();
+    // Prune completed va_vdst entries
+    while (!PendingVaVdst.empty() && PendingVaVdst.front().ReadyCycle <= CurrentCycle)
+      PendingVaVdst.pop_front();
     return Delta;
   }
 
