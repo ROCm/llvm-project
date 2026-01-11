@@ -152,7 +152,7 @@ jobs:
              git config --global --add safe.directory $PWD
              git log --oneline 1
              ls -l compiler/amd-llvm
-             rm -v .amd-llvm.smrev
+             rm -v compiler/amd-llvm/.amd-llvm.smrev
              cd compiler/amd-llvm/llvm             
              git log --oneline -3
              cd -
