@@ -150,7 +150,7 @@ jobs:
       - name: TheRock and llvm SHA
         run: |
              git config --global --add safe.directory $PWD
-             git log --oneline 1
+             git log --oneline -1
              ls -l compiler/amd-llvm
              rm -v compiler/amd-llvm/.amd-llvm.smrev
              cd compiler/amd-llvm/llvm             
