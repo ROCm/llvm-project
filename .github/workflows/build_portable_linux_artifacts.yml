@@ -153,7 +153,7 @@ jobs:
              git log --oneline -1
              ls -l compiler/amd-llvm
              cd compiler/amd-llvm/llvm  
-             ls -l compiler/amd-llvm
+             ls -l
              git log --oneline -3
              cd -
 
