@@ -108,7 +108,6 @@ enum class StallReason : uint8_t {
   FU_BUSY,          // Functional unit not ready
   COEXEC_BLOCKED,   // Blocked by WMMA co-execution rules
   LONG_LAT_VALU,    // Long-latency VALU blocked by WMMA window
-  PK_SCALAR_BUG,    // PK/VOPD incorrectly holds scalar resource
   WAITCNT,          // Memory wait (s_wait_*)
   DELAY_ALU,        // RAW dependency (s_delay_alu)
   MEM_FIFO,         // Memory FIFO full
@@ -149,7 +148,6 @@ struct InstrSimInfo {
     case StallReason::FU_BUSY:        return "FU busy";
     case StallReason::COEXEC_BLOCKED: return "CoExec blocked";
     case StallReason::LONG_LAT_VALU:  return "LongLatVALU blocked";
-    case StallReason::PK_SCALAR_BUG:  return "PKScalar bug";
     case StallReason::WAITCNT:        return "WaitCnt";
     case StallReason::DELAY_ALU:      return "DelayAlu";
     case StallReason::MEM_FIFO:       return "FIFO full";
@@ -542,7 +540,6 @@ struct BlockMetrics {
   unsigned StallRegBankConflict = 0;
   unsigned RegBankConflictsInWMMAWindow = 0; // Meta counter, not stalls
   unsigned StallLongLatVALU = 0;
-  unsigned StallPKScalarBug = 0;
 
   unsigned VGPRCacheHits = 0;
   unsigned VGPRCacheMisses = 0;
@@ -555,8 +552,7 @@ struct BlockMetrics {
 
   unsigned StallCycles() const {
     return NumMSBSetExposed + StallFunctionalUnit + StallCoExec +
-           StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict +
-           StallPKScalarBug;
+           StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict;
   }
 
   // WMMA Co-execution
@@ -631,7 +627,6 @@ struct BlockMetrics {
     Result.StallRegBankConflict = scale(StallRegBankConflict);
     Result.RegBankConflictsInWMMAWindow = scale(RegBankConflictsInWMMAWindow);
     Result.StallLongLatVALU = scale(StallLongLatVALU);
-    Result.StallPKScalarBug = scale(StallPKScalarBug);
 
     Result.VGPRCacheHits = scale(VGPRCacheHits);
     Result.VGPRCacheMisses = scale(VGPRCacheMisses);
@@ -705,7 +700,6 @@ struct BlockMetrics {
     Result.StallRegBankConflict = StallRegBankConflict + O.StallRegBankConflict;
     Result.RegBankConflictsInWMMAWindow = RegBankConflictsInWMMAWindow + O.RegBankConflictsInWMMAWindow;
     Result.StallLongLatVALU = StallLongLatVALU + O.StallLongLatVALU;
-    Result.StallPKScalarBug = StallPKScalarBug + O.StallPKScalarBug;
 
     Result.VGPRCacheHits = VGPRCacheHits + O.VGPRCacheHits;
     Result.VGPRCacheMisses = VGPRCacheMisses + O.VGPRCacheMisses;
@@ -817,7 +811,6 @@ struct BlockMetrics {
     Emit("Wait", StallWaitCnt);
     Emit("RegBank", StallRegBankConflict);
     Emit("LongLatVALU", StallLongLatVALU);
-    Emit("PKScalar", StallPKScalarBug);
     if (RegBankConflictsInWMMAWindow) {
       if (!First) OS << " | ";
       OS << "RegBankInWMMA:" << RegBankConflictsInWMMAWindow << " (not counted)";
@@ -1099,7 +1092,6 @@ struct GPUSimState {
   unsigned LastTRANSCycle = ~0u;
 
   unsigned VALUResourceBusyUntil = 0; // TRANS holds VALU in WMMA I-slots
-  unsigned ScalarResourceBusyUntil = 0;
 
   InstClass PreviousInstClass = InstClass::OTHER;
 
