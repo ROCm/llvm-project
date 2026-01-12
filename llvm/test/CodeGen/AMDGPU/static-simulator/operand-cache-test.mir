@@ -1,0 +1,130 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1250 -amdgpu-enable-static-simulator -amdgpu-static-sim-verbose -debug-only=amdgpu-static-simulator -run-pass amdgpu-static-simulator %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+
+# ============================================================================
+# VGPR Operand Source Cache Tests
+# ============================================================================
+# Tests for VGPR operand source cache behavior.
+# The cache tracks recently-read operands and reports hits/misses.
+# ============================================================================
+
+---
+# Basic cache: second read of same operands is cached
+# CHECK-LABEL: source_cache_test
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: RegBank=1
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: (none)
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr1
+# CHECK: Stalls: (none)
+# CHECK: V_MOV_B32_e32 42
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr8
+# CHECK: Stalls: (none)
+name: source_cache_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $vgpr8
+    $vgpr20 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr21 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    $vgpr22 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr0 = V_MOV_B32_e32 42, implicit $exec
+    $vgpr23 = V_ADD_F32_e32 $vgpr0, $vgpr8, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr20, implicit $vgpr21, implicit $vgpr22, implicit $vgpr23
+...
+
+---
+# Tuple registers: cache works with register pairs
+# CHECK-LABEL: tuple_cache_test
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: RegBank=1
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: (none)
+# CHECK: V_PK_ADD_F32 8, $vgpr20_vgpr21, 8, $vgpr22_vgpr23
+# CHECK: V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9
+# CHECK: Stalls: (none)
+name: tuple_cache_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr8_vgpr9
+    $vgpr20_vgpr21 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr22_vgpr23 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr0_vgpr1 = V_PK_ADD_F32 8, $vgpr20_vgpr21, 8, $vgpr22_vgpr23, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr24_vgpr25 = V_PK_ADD_F32 8, $vgpr0_vgpr1, 8, $vgpr8_vgpr9, 0, 0, 0, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit $vgpr24_vgpr25
+...
+
+---
+# Cache eviction: old entries evicted when cache fills
+# CHECK-LABEL: cache_eviction_test
+# CHECK: VGPR Operand Cache
+# CHECK: VGPR reads:
+# CHECK: Evictions:
+name: cache_eviction_test
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr8, $vgpr16, $vgpr24, $vgpr32, $vgpr1
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr41 = V_ADD_F32_e32 $vgpr8, $vgpr1, implicit $exec, implicit $mode
+    $vgpr42 = V_ADD_F32_e32 $vgpr16, $vgpr1, implicit $exec, implicit $mode
+    $vgpr43 = V_ADD_F32_e32 $vgpr24, $vgpr1, implicit $exec, implicit $mode
+    $vgpr44 = V_ADD_F32_e32 $vgpr32, $vgpr1, implicit $exec, implicit $mode
+    $vgpr45 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    $vgpr46 = V_ADD_F32_e32 $vgpr8, $vgpr1, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr46
+...
+
+---
+# WMMA: Second WMMA reuses same operands - cache hits
+# CHECK-LABEL: wmma_cache_hit_on_reuse
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK: Cache(--)
+# CHECK: V_WMMA_F32_16X16X32_BF16
+# CHECK: Cache($$)
+# CHECK: End BB#0: 3 insts, 10 cycles, 7 stalls
+# CHECK: From cache: 16/16 (50%)
+name: wmma_cache_hit_on_reuse
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31, 0, 0, 0, 0, implicit $exec
+    S_ENDPGM 0, implicit $vgpr31
+...
+
+---
+# WMMA dest invalidates cache for subsequent reads
+# CHECK-LABEL: wmma_dest_invalidated
+# CHECK: V_ADD_F32_e32 $vgpr16, $vgpr17
+# CHECK: Cache(--)
+# CHECK: End BB#0: 3 insts, 4 cycles, 1 stalls
+# CHECK: From cache: 0/0 (0%)
+name: wmma_dest_invalidated
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr16, $vgpr17, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+
+---
+# VALU reuses WMMA A matrix - partial cache hit
+# CHECK-LABEL: wmma_then_valu_cache_hit
+# CHECK: V_ADD_F32_e32 $vgpr0, $vgpr1
+# CHECK: Cache($-)
+# CHECK: End BB#0: 3 insts, 4 cycles, 1 stalls
+name: wmma_then_valu_cache_hit
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, $vgpr1
+    $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23 = V_WMMA_F32_16X16X32_BF16_w32_twoaddr 8, $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7, 8, $vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15, 8, $vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23, 0, 0, 0, 0, implicit $exec
+    $vgpr40 = V_ADD_F32_e32 $vgpr0, $vgpr1, implicit $exec, implicit $mode
+    S_ENDPGM 0, implicit $vgpr40
+...
+

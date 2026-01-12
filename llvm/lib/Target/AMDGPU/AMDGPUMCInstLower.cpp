@@ -381,10 +381,7 @@ void AMDGPUAsmPrinter::emitInstruction(const MachineInstr *MI) {
         OS << " OK";
       else if (Info.StallCycles > 0 && 
                Info.Reason == AMDGPU::StallReason::COEXEC_BLOCKED) {
-        if (Info.LDScaleBlocked)
-          OS << " LD_SCALE";
-        else
-          OS << " BLOCKED";
+        OS << " BLOCKED";
       }
       HasContent = true;
     }

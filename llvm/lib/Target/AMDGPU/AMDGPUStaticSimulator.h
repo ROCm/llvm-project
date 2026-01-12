@@ -105,16 +105,17 @@ inline unsigned getLatencyForClass(InstClass IC) {
 /// Reason for stall cycles on an instruction
 enum class StallReason : uint8_t {
   NONE = 0,
-  FU_BUSY,          // Functional unit not ready
-  COEXEC_BLOCKED,   // Blocked by WMMA co-execution rules
-  LONG_LAT_VALU,    // Long-latency VALU blocked by WMMA window
-  VA_SSRC_STALL,    // VA_SSRC: VALU/WMMA with SGPR blocks SALU
-  VA_VDST_WAIT,     // VA_VDST: s_wait_alu depctr_va_vdst stall
-  WAITCNT,          // Memory wait (s_wait_*)
-  DELAY_ALU,        // RAW dependency (s_delay_alu)
-  MEM_FIFO,         // Memory FIFO full
-  MSB_SET_EXPOSED,  // s_set_vgpr_msb not fused
-  REG_BANK          // Register bank conflict (operands in same sub-bank)
+  FU_BUSY,              // Functional unit not ready
+  COEXEC_BLOCKED,       // Blocked by WMMA co-execution rules
+  LONG_LAT_VALU,        // Long-latency VALU blocked by WMMA window
+  LOLVALU_TRANS_HAZARD, // 1-cycle mutual exclusion: LOLVALU <-> TRANS
+  VA_SSRC_STALL,        // VA_SSRC: VALU/WMMA with SGPR blocks SALU
+  VA_VDST_WAIT,         // VA_VDST: s_wait_alu depctr_va_vdst stall
+  WAITCNT,              // Memory wait (s_wait_*)
+  DELAY_ALU,            // RAW dependency (s_delay_alu)
+  MEM_FIFO,             // Memory FIFO full
+  MSB_SET_EXPOSED,      // s_set_vgpr_msb not fused
+  REG_BANK              // Register bank conflict (operands in same sub-bank)
 };
 
 /// Stage type for WMMA co-execution (for annotation display)
@@ -139,24 +140,24 @@ struct InstrSimInfo {
   bool WasExposed = false;
   bool WasMasked = false;
   bool IsWMMA = false;
-  bool LDScaleBlocked = false;
   StringRef WMMAPattern;
   std::string CachePattern;  // e.g., "($--)" for VGPR cache hits ($=hit, -=miss)
 
   /// Get human-readable reason string
   const char *getReasonString() const {
     switch (Reason) {
-    case StallReason::NONE:           return nullptr;
-    case StallReason::FU_BUSY:        return "FU busy";
-    case StallReason::COEXEC_BLOCKED: return "CoExec blocked";
-    case StallReason::LONG_LAT_VALU:  return "LongLatVALU blocked";
-    case StallReason::VA_SSRC_STALL:  return "VA_SSRC blocked";
-    case StallReason::VA_VDST_WAIT:   return "VA_VDST wait";
-    case StallReason::WAITCNT:        return "WaitCnt";
-    case StallReason::DELAY_ALU:      return "DelayAlu";
-    case StallReason::MEM_FIFO:       return "FIFO full";
-    case StallReason::MSB_SET_EXPOSED: return "MSB exposed";
-    case StallReason::REG_BANK:       return "RegBank conflict";
+    case StallReason::NONE:               return nullptr;
+    case StallReason::FU_BUSY:            return "FU busy";
+    case StallReason::COEXEC_BLOCKED:     return "CoExec blocked";
+    case StallReason::LONG_LAT_VALU:      return "LongLatVALU blocked";
+    case StallReason::LOLVALU_TRANS_HAZARD: return "LOLVALU<->TRANS hazard";
+    case StallReason::VA_SSRC_STALL:      return "VA_SSRC blocked";
+    case StallReason::VA_VDST_WAIT:       return "VA_VDST wait";
+    case StallReason::WAITCNT:            return "WaitCnt";
+    case StallReason::DELAY_ALU:          return "DelayAlu";
+    case StallReason::MEM_FIFO:           return "FIFO full";
+    case StallReason::MSB_SET_EXPOSED:    return "MSB exposed";
+    case StallReason::REG_BANK:           return "RegBank conflict";
     }
     return "Unknown";
   }
@@ -544,6 +545,7 @@ struct BlockMetrics {
   unsigned StallRegBankConflict = 0;
   unsigned RegBankConflictsInWMMAWindow = 0;
   unsigned StallLongLatVALU = 0;
+  unsigned StallLOLVALUTRANS = 0;
   unsigned StallVaSSRC = 0;
   unsigned StallVaVdst = 0;
   unsigned StallRAW = 0;
@@ -560,7 +562,7 @@ struct BlockMetrics {
   unsigned StallCycles() const {
     return NumMSBSetExposed + StallFunctionalUnit + StallCoExec +
            StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict +
-           StallVaSSRC + StallVaVdst + StallRAW;
+           StallLOLVALUTRANS + StallVaSSRC + StallVaVdst + StallRAW;
   }
 
   // WMMA Co-execution
@@ -635,6 +637,7 @@ struct BlockMetrics {
     Result.StallRegBankConflict = scale(StallRegBankConflict);
     Result.RegBankConflictsInWMMAWindow = scale(RegBankConflictsInWMMAWindow);
     Result.StallLongLatVALU = scale(StallLongLatVALU);
+    Result.StallLOLVALUTRANS = scale(StallLOLVALUTRANS);
     Result.StallVaSSRC = scale(StallVaSSRC);
     Result.StallVaVdst = scale(StallVaVdst);
     Result.StallRAW = scale(StallRAW);
@@ -711,6 +714,7 @@ struct BlockMetrics {
     Result.StallRegBankConflict = StallRegBankConflict + O.StallRegBankConflict;
     Result.RegBankConflictsInWMMAWindow = RegBankConflictsInWMMAWindow + O.RegBankConflictsInWMMAWindow;
     Result.StallLongLatVALU = StallLongLatVALU + O.StallLongLatVALU;
+    Result.StallLOLVALUTRANS = StallLOLVALUTRANS + O.StallLOLVALUTRANS;
     Result.StallVaSSRC = StallVaSSRC + O.StallVaSSRC;
     Result.StallVaVdst = StallVaVdst + O.StallVaVdst;
     Result.StallRAW = StallRAW + O.StallRAW;
@@ -825,6 +829,7 @@ struct BlockMetrics {
     Emit("Wait", StallWaitCnt);
     Emit("RegBank", StallRegBankConflict);
     Emit("LongLatVALU", StallLongLatVALU);
+    Emit("LOLVALUxTRANS", StallLOLVALUTRANS);
     Emit("VaSSRC", StallVaSSRC);
     Emit("VaVdst", StallVaVdst);
     Emit("RAW", StallRAW);
@@ -1147,6 +1152,7 @@ struct GPUSimState {
 
   unsigned VALUResourceBusyUntil = 0; // TRANS holds VALU in WMMA I-slots
   unsigned VaSSRCBusyUntil = 0; // VA_SSRC: VALU/WMMA with SGPR blocks SALU until ready
+  unsigned LOLVALUTRANSHazardUntil = 0; // 1-cycle mutual exclusion: LOLVALU <-> TRANS
 
   // Register scoreboard: tracks when each register's result will be ready
   // Enables RAW dependency detection without s_delay_alu
@@ -1232,18 +1238,24 @@ struct GPUSimState {
     return Delta;
   }
 
-  unsigned startWMMAWindow(const MachineInstr &MI, const SIInstrInfo &TII) {
+  /// Start a WMMA window.
+  /// For scaled WMMA WMMAStartCycle is when WMMA phase begins
+  /// For non-scaled WMMA: WMMAStartCycle == CurrentCycle
+  unsigned startWMMAWindow(const MachineInstr &MI, const SIInstrInfo &TII,
+                           unsigned WMMAStartCycle) {
     WMMACoExecInfo Info = getWMMACoExecInfo(MI, TII);
 
     bool BackToBack = HadPreviousWMMA &&
-                      CurrentCycle >= ActiveWMMA.OccupancyCycle &&
-                      CurrentCycle < ActiveWMMA.EndCycle;
+                      WMMAStartCycle >= ActiveWMMA.OccupancyCycle &&
+                      WMMAStartCycle < ActiveWMMA.EndCycle;
 
     HadPreviousWMMA = true;
 
-    ActiveWMMA.StartCycle = CurrentCycle;
-    ActiveWMMA.EndCycle = CurrentCycle + Info.TotalWindow;
-    ActiveWMMA.OccupancyCycle = CurrentCycle + Info.Occupancy;
+    // Window starts at WMMAStartCycle (for scaled: after scale read)
+    ActiveWMMA.StartCycle = WMMAStartCycle;
+    ActiveWMMA.EndCycle = WMMAStartCycle + Info.TotalWindow;
+    // Occupancy is relative to when WMMA phase starts
+    ActiveWMMA.OccupancyCycle = WMMAStartCycle + Info.Occupancy;
     ActiveWMMA.Active = true;
     ActiveWMMA.IsBackToBack = BackToBack;
     ActiveWMMA.Info = Info;
@@ -1298,14 +1310,6 @@ struct GPUSimState {
     return (CurrentCycle < TRANSEndCycle) ? (TRANSEndCycle - CurrentCycle) : 0;
   }
 
-  unsigned getLDScaleStall(unsigned EffectiveCycle) const {
-    if (LastVALUCycle != ~0u && LastVALUCycle == EffectiveCycle - 1)
-      return 1;
-    if (LastTRANSCycle != ~0u && LastTRANSCycle == EffectiveCycle - 2)
-      return 1;
-    return 0;
-  }
-
   bool canCoExecuteWithWMMA(InstClass IC) const {
     return getCoExecStall(IC) == 0;
   }
@@ -1314,12 +1318,18 @@ struct GPUSimState {
     if (!ActiveWMMA.Active)
       return 0;
 
+    const WMMACoExecInfo &Info = ActiveWMMA.Info;
+
+    // Scale read cycle: blocks all co-execution until window starts
+    if (Info.HasScaling && AtCycle < ActiveWMMA.StartCycle) {
+      return ActiveWMMA.StartCycle - AtCycle;
+    }
+
     auto StageOpt = ActiveWMMA.getCurrentStage(AtCycle);
     if (!StageOpt)
       return 0;
 
     unsigned Stage = *StageOpt;
-    const WMMACoExecInfo &Info = ActiveWMMA.Info;
 
     if (Info.canCoExec(IC, Stage))
       return 0;

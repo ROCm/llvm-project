@@ -696,6 +696,7 @@ struct StallSources {
   unsigned MemFIFO = 0;
   unsigned RegBank = 0;
   unsigned LongLatVALU = 0;
+  unsigned LOLVALUTRANSHazard = 0; // 1-cycle mutual exclusion: LOLVALU <-> TRANS
   unsigned SSRC = 0;
   unsigned VaVdst = 0;
   unsigned RAW = 0;  // Scoreboard-detected RAW dependency
@@ -708,13 +709,17 @@ struct StallSources {
   unsigned EffectiveCycle = 0;
   unsigned CoExecFromEffective = 0;
   bool HasFUCoExecInteraction = false;
-  bool LDScaleBlocked = false;
   bool RegBankInWMMAWindow = false;
+
+  // For WMMA_SCALE decomposition: track when WMMA phase starts
+  unsigned WMMAStartCycle = 0;
+  bool IsScaledWMMA = false;
 
   unsigned total() const {
     unsigned EffectiveRegBank = RegBankInWMMAWindow ? 0 : RegBank;
     return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO,
-                     EffectiveRegBank, LongLatVALU, SSRC, VaVdst, RAW});
+                     EffectiveRegBank, LongLatVALU, LOLVALUTRANSHazard, SSRC,
+                     VaVdst, RAW});
   }
 };
 
@@ -830,106 +835,165 @@ bool handleMSBSet(InstClass IC, GPUSimState &State, BlockMetrics &Metrics,
   return true;
 }
 
-StallSources computeStallSources(
-    const MachineInstr &MI, InstClass IC, FunctionalUnit Unit,
-    const SIInstrInfo &TII, GPUSimState &State) {
+// Helper: update IssueCycle if stall source is larger
+static void applyStall(unsigned &IssueCycle, unsigned CurrentCycle,
+                       unsigned StallUntil) {
+  if (StallUntil > IssueCycle)
+    IssueCycle = StallUntil;
+}
 
+// Compute VALU resource stalls (LOLVALU holds VALU, TRANS in WMMA window)
+static unsigned computeVALUResourceStall(InstClass IC, const GPUSimState &State,
+                                         unsigned IssueCycle) {
+  unsigned Stall = 0;
+  if (IC == InstClass::VALU && State.VALUResourceBusyUntil > IssueCycle)
+    Stall = State.VALUResourceBusyUntil - IssueCycle;
+  // TRANS checks VALUResourceBusyUntil only in WMMA window
+  if (IC == InstClass::TRANS && State.inWMMAWindow() &&
+      State.VALUResourceBusyUntil > IssueCycle)
+    Stall = std::max(Stall, State.VALUResourceBusyUntil - IssueCycle);
+  return Stall;
+}
+
+// Compute WMMA_SCALE timing using decomposition model:
+// Scale Read (1-cycle VALU) followed by WMMA (XDL)
+static void computeWMMAScaleStall(const GPUSimState &State,
+                                  unsigned &IssueCycle, StallSources &S) {
+  unsigned ScaleReadCycle = IssueCycle;
+
+  // Scale read needs VALU resource free
+  ScaleReadCycle = std::max(ScaleReadCycle, State.VALUResourceBusyUntil);
+
+  // In WMMA window: scale read must be in I-slot
+  if (State.inWMMAWindow()) {
+    unsigned CoExecStall = State.getCoExecStall(InstClass::VALU);
+    ScaleReadCycle = std::max(ScaleReadCycle, State.CurrentCycle + CoExecStall);
+  }
+
+  // WMMA phase needs XDL at (ScaleReadCycle + 1)
+  unsigned WMMAStartCycle = ScaleReadCycle + 1;
+  unsigned XDLFreeAt = State.getUnitBusyUntil(FunctionalUnit::XDL);
+
+  if (WMMAStartCycle < XDLFreeAt) {
+    // Delay scale read so WMMA starts when XDL is free
+    unsigned DesiredScaleSlot = XDLFreeAt - 1;
+
+    if (State.inWMMAWindow() && DesiredScaleSlot >= State.ActiveWMMA.StartCycle &&
+        DesiredScaleSlot < State.ActiveWMMA.EndCycle) {
+      // Check if VALU allowed at this slot
+      auto StageOpt = State.ActiveWMMA.getCurrentStage(DesiredScaleSlot);
+      if (StageOpt && State.ActiveWMMA.Info.canCoExec(InstClass::VALU, *StageOpt)) {
+        ScaleReadCycle = DesiredScaleSlot;
+        WMMAStartCycle = XDLFreeAt;
+      } else {
+        // V/E-slot: wait for window to end
+        ScaleReadCycle = State.ActiveWMMA.EndCycle;
+        WMMAStartCycle = ScaleReadCycle + 1;
+      }
+    } else {
+      // Outside window or after window: just delay
+      ScaleReadCycle = DesiredScaleSlot;
+      WMMAStartCycle = XDLFreeAt;
+    }
+  }
+
+  IssueCycle = ScaleReadCycle;
+  S.WMMAStartCycle = WMMAStartCycle;
+  S.VALUSlot = IssueCycle - State.CurrentCycle;
+}
+
+// Compute scoreboard-based RAW stalls
+static unsigned computeRAWStall(const MachineInstr &MI, GPUSimState &State) {
+  if (!EnableScoreboard || !State.RegFile.TRI)
+    return 0;
+
+  unsigned MaxRAW = 0;
+  if (instructionWaitsForVALU(MI)) {
+    // Memory ops implicitly wait for ALL pending VALU writes
+    MaxRAW = State.getMaxPendingRAW();
+    LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation)
+      dbgs() << "    RAW implicit wait (VA_VDST==0): stall=" << MaxRAW << "\n";);
+  } else {
+    for (const MachineOperand &MO : MI.explicit_uses()) {
+      if (MO.isReg() && MO.getReg().isPhysical()) {
+        unsigned RAWStall = State.getRAWStall(MO.getReg(), State.RegFile.TRI);
+        MaxRAW = std::max(MaxRAW, RAWStall);
+      }
+    }
+    LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation)
+      dbgs() << "    RAW scoreboard: stall=" << MaxRAW << "\n";);
+  }
+  return MaxRAW;
+}
+
+// Compute memory FIFO stalls
+static unsigned computeMemFIFOStall(InstClass IC, const GPUSimState &State) {
+  switch (IC) {
+  case InstClass::DS_READ:
+  case InstClass::DS_WRITE:
+    return State.getDSFIFOStall();
+  case InstClass::VMEM_READ:
+  case InstClass::VMEM_WRITE:
+    return State.getVMEMBufferStall();
+  case InstClass::TDM:
+    return State.getTDMFIFOStall();
+  default:
+    return 0;
+  }
+}
+
+StallSources computeStallSources(const MachineInstr &MI, InstClass IC,
+                                 FunctionalUnit Unit, const SIInstrInfo &TII,
+                                 GPUSimState &State) {
   StallSources S;
   unsigned IssueCycle = State.CurrentCycle;
+  bool IsLOLVALU = IC == InstClass::VALU && TII.getRepeatRate(MI) > 1;
 
-  // Check for pending instid1 from previous s_delay_alu
+  // 1. Pending delay_alu from previous instruction
   unsigned PendingDelay = checkPendingDelayAlu(State);
   if (PendingDelay > 0) {
     S.DelayAlu = PendingDelay;
-    if (State.CurrentCycle + PendingDelay > IssueCycle)
-      IssueCycle = State.CurrentCycle + PendingDelay;
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + PendingDelay);
   }
 
+  // 2. Functional unit availability
   unsigned BusyUntil = State.getUnitBusyUntil(Unit);
   if (BusyUntil > IssueCycle) {
     S.Unit = BusyUntil - State.CurrentCycle;
     IssueCycle = BusyUntil;
   }
 
-  // Long-lat VALU/TRANS hold VALU resource
-  if ((IC == InstClass::VALU || IC == InstClass::TRANS) &&
-      State.VALUResourceBusyUntil > IssueCycle) {
-    unsigned VALUResStall = State.VALUResourceBusyUntil - IssueCycle;
+  // 3. VALU resource stalls (LOLVALU, TRANS in WMMA window)
+  unsigned VALUResStall = computeVALUResourceStall(IC, State, IssueCycle);
+  if (VALUResStall > 0) {
     S.Unit = std::max(S.Unit, VALUResStall);
-    IssueCycle = State.VALUResourceBusyUntil;
+    IssueCycle = std::max(IssueCycle, State.VALUResourceBusyUntil);
   }
 
-  if (IC == InstClass::WMMA) {
-    unsigned TRANSStall = State.getWMMATRANSStall();
-    if (State.CurrentCycle + TRANSStall > IssueCycle)
-      IssueCycle = State.CurrentCycle + TRANSStall;
+  // 4. LOLVALU <-> TRANS 1-cycle mutual exclusion hazard
+  if ((IC == InstClass::TRANS || IsLOLVALU) &&
+      State.LOLVALUTRANSHazardUntil > IssueCycle) {
+    S.LOLVALUTRANSHazard = State.LOLVALUTRANSHazardUntil - IssueCycle;
+    IssueCycle = State.LOLVALUTRANSHazardUntil;
+  }
 
+  // 5. WMMA-specific stalls
+  if (IC == InstClass::WMMA) {
     StringRef Name = TII.getName(MI.getOpcode());
     bool HasScaling = Name.contains_insensitive("scale");
-    unsigned LDScaleStall = HasScaling ? State.getLDScaleStall(IssueCycle) : 0;
-    if (LDScaleStall > 0) {
-      IssueCycle += LDScaleStall;
-      S.LDScaleBlocked = true;
-    }
-    if (HasScaling && State.VALUResourceBusyUntil > IssueCycle) {
-      IssueCycle = State.VALUResourceBusyUntil;
-      S.LDScaleBlocked = true;
-    }
-    S.VALUSlot = IssueCycle - State.CurrentCycle;
-  }
+    S.IsScaledWMMA = HasScaling;
 
-  if (IC == InstClass::VALU || IC == InstClass::TRANS || IC == InstClass::SALU) {
-    auto RB = State.RegFile.getRegBankStalls(MI);
-    S.RegBank = RB.Stalls;
-    S.CachePattern = RB.CachePattern;
-    S.CacheHits = RB.CacheHits;
-    S.CacheMisses = RB.CacheMisses;
-    S.CacheEvictions = RB.CacheEvictions;
-    // In WMMA window: track reg bank conflicts separately, don't add to stall
-    if (State.inWMMAWindow()) {
-      S.RegBankInWMMAWindow = true;
-      // Don't add to IssueCycle - just track as meta counter
+    // TRANS holds VALU for 2 cycles, blocks WMMA
+    unsigned TRANSStall = State.getWMMATRANSStall();
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + TRANSStall);
+
+    if (HasScaling) {
+      computeWMMAScaleStall(State, IssueCycle, S);
     } else {
-      IssueCycle += RB.Stalls;
+      S.WMMAStartCycle = IssueCycle;
     }
-  }
 
-  // VALU with SSRC blocks following SALU until VALU completes
-  if (IC == InstClass::SALU && State.VaSSRCBusyUntil > IssueCycle) {
-    S.SSRC = State.VaSSRCBusyUntil - IssueCycle;
-    IssueCycle = State.VaSSRCBusyUntil;
-  }
-
-  // Scoreboard-based RAW detection (without s_delay_alu)
-  if (EnableScoreboard && State.RegFile.TRI) {
-    unsigned MaxRAW = 0;
-    if (instructionWaitsForVALU(MI)) {
-      // Memory ops implicitly wait for ALL pending VALU writes (VA_VDST==0)
-      MaxRAW = State.getMaxPendingRAW();
-      LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation) {
-        dbgs() << "    RAW implicit wait (VA_VDST==0): stall=" << MaxRAW << "\n";
-      });
-    } else {
-      // Check RAW for explicit operands
-      for (const MachineOperand &MO : MI.explicit_uses()) {
-        if (MO.isReg() && MO.getReg().isPhysical()) {
-          unsigned RAWStall = State.getRAWStall(MO.getReg(), State.RegFile.TRI);
-          MaxRAW = std::max(MaxRAW, RAWStall);
-        }
-      }
-      LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation) {
-        dbgs() << "    RAW scoreboard: stall=" << MaxRAW << "\n";
-      });
-    }
-    if (MaxRAW > 0) {
-      S.RAW = MaxRAW;
-      if (State.CurrentCycle + MaxRAW > IssueCycle)
-        IssueCycle = State.CurrentCycle + MaxRAW;
-    }
-  }
-
-  // WMMA: track A, B in cache (skip C - tied to dest)
-  if (IC == InstClass::WMMA) {
+    // Track WMMA cache hits/misses
     auto RB = State.RegFile.updateCacheForWMMA(MI, TII);
     S.CachePattern = RB.CachePattern;
     S.CacheHits = RB.CacheHits;
@@ -937,27 +1001,54 @@ StallSources computeStallSources(
     S.CacheEvictions = RB.CacheEvictions;
   }
 
-  // s_wait_alu depctr_va_vdst(N): wait until pending VALU writes <= N
+  // 6. Register bank stalls (VALU/TRANS/SALU)
+  if (IC == InstClass::VALU || IC == InstClass::TRANS || IC == InstClass::SALU) {
+    auto RB = State.RegFile.getRegBankStalls(MI);
+    S.RegBank = RB.Stalls;
+    S.CachePattern = RB.CachePattern;
+    S.CacheHits = RB.CacheHits;
+    S.CacheMisses = RB.CacheMisses;
+    S.CacheEvictions = RB.CacheEvictions;
+    if (State.inWMMAWindow()) {
+      S.RegBankInWMMAWindow = true; // Track but don't stall
+    } else {
+      IssueCycle += RB.Stalls;
+    }
+  }
+
+  // 7. VA_SSRC: VALU with SGPR blocks SALU until complete
+  if (IC == InstClass::SALU && State.VaSSRCBusyUntil > IssueCycle) {
+    S.SSRC = State.VaSSRCBusyUntil - IssueCycle;
+    IssueCycle = State.VaSSRCBusyUntil;
+  }
+
+  // 8. Scoreboard RAW hazards (optional mode)
+  unsigned RAW = computeRAWStall(MI, State);
+  if (RAW > 0) {
+    S.RAW = RAW;
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + RAW);
+  }
+
+  // 9. s_wait_alu va_vdst(N)
   if (MI.getOpcode() == AMDGPU::S_WAITCNT_DEPCTR) {
     unsigned VaVdstStall = parseWaitAluVaVdst(MI, State);
     if (VaVdstStall > 0) {
       S.VaVdst = VaVdstStall;
-      if (State.CurrentCycle + VaVdstStall > IssueCycle)
-        IssueCycle = State.CurrentCycle + VaVdstStall;
+      applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + VaVdstStall);
     }
   }
 
+  // 10. WMMA co-execution window rules
   if (State.inWMMAWindow() && IC != InstClass::WMMA) {
-    // Long-lat VALU can't co-execute - waits for entire WMMA window
     unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
     if (LongLatVALU > 1) {
-      unsigned WaitForWindow = State.ActiveWMMA.EndCycle - IssueCycle;
-      if (WaitForWindow > 0) {
-        S.LongLatVALU = WaitForWindow;
+      // LOLVALU can't co-execute - waits for entire window
+      if (State.ActiveWMMA.EndCycle > IssueCycle) {
+        S.LongLatVALU = State.ActiveWMMA.EndCycle - IssueCycle;
         IssueCycle = State.ActiveWMMA.EndCycle;
       }
     } else {
-      // Regular co-execution check for other instructions
+      // Regular co-execution slot check
       unsigned CoExecStall = State.getCoExecStallAt(IC, IssueCycle);
       if (CoExecStall > 0) {
         S.EffectiveCycle = IssueCycle;
@@ -969,39 +1060,23 @@ StallSources computeStallSources(
     S.CoExec = IssueCycle - State.CurrentCycle;
   }
 
+  // 11. s_delay_alu parsing
   if (IC == InstClass::DELAY_ALU) {
     unsigned DelayStall = parseDelayAlu(MI, State);
     S.DelayAlu = DelayStall;
-    if (State.CurrentCycle + DelayStall > IssueCycle)
-      IssueCycle = State.CurrentCycle + DelayStall;
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + DelayStall);
   }
 
+  // 12. Waitcnt stalls
   if (IC == InstClass::WAITCNT) {
     unsigned WaitStall = computeWaitStall(MI, State);
     S.WaitCnt = WaitStall;
-    if (State.CurrentCycle + WaitStall > IssueCycle)
-      IssueCycle = State.CurrentCycle + WaitStall;
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + WaitStall);
   }
 
-  unsigned FIFOStall = 0;
-  switch (IC) {
-  case InstClass::DS_READ:
-  case InstClass::DS_WRITE:
-    FIFOStall = State.getDSFIFOStall();
-    break;
-  case InstClass::VMEM_READ:
-  case InstClass::VMEM_WRITE:
-    FIFOStall = State.getVMEMBufferStall();
-    break;
-  case InstClass::TDM:
-    FIFOStall = State.getTDMFIFOStall();
-    break;
-  default:
-    break;
-  }
-  S.MemFIFO = FIFOStall;
-  if (State.CurrentCycle + FIFOStall > IssueCycle)
-    IssueCycle = State.CurrentCycle + FIFOStall;
+  // 13. Memory FIFO stalls
+  S.MemFIFO = computeMemFIFOStall(IC, State);
+  applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + S.MemFIFO);
 
   return S;
 }
@@ -1077,6 +1152,8 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
   } else if (S.LongLatVALU == TotalStall) {
     Metrics.StallCoExec += TotalStall;
     Metrics.StallLongLatVALU += TotalStall;
+  } else if (S.LOLVALUTRANSHazard == TotalStall) {
+    Metrics.StallLOLVALUTRANS += TotalStall;
   } else if (S.SSRC == TotalStall) {
     Metrics.StallVaSSRC += TotalStall;
   } else if (S.VaVdst == TotalStall) {
@@ -1115,7 +1192,7 @@ void trackWMMACoExec(InstClass IC, const StallSources &S,
 }
 
 void recordInstruction(const MachineInstr &MI, const InstTiming &T,
-                       const SIInstrInfo &TII,
+                       const SIInstrInfo &TII, const StallSources &Stalls,
                        GPUSimState &State, BlockMetrics &Metrics) {
   Metrics.NumInstructions++;
 
@@ -1132,9 +1209,13 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     State.trackVALU(T.Latency);
     State.trackVALUForWMMA(T.IC);
     unsigned LongLatVALU = TII.isTRANS(MI) ? 0 : TII.getRepeatRate(MI);
-    if (LongLatVALU > 1)
+    if (LongLatVALU > 1) {
       State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
                                               State.CurrentCycle + LongLatVALU);
+      // LOLVALU sets 1-cycle hazard for TRANS (next TRANS must wait 1 cycle)
+      State.LOLVALUTRANSHazardUntil = std::max(State.LOLVALUTRANSHazardUntil,
+                                                State.CurrentCycle + 2);
+    }
     // VALU with SSRC blocks following SALU until VALU result is ready
     if (State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
       State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
@@ -1155,6 +1236,9 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     State.trackTRANS(T.Latency);
     State.trackVALUForWMMA(T.IC);
     State.holdVALUResourceInWindow(T.ResourceCycles);
+    // TRANS sets 1-cycle hazard for LOLVALU (next LOLVALU must wait 1 cycle)
+    State.LOLVALUTRANSHazardUntil = std::max(State.LOLVALUTRANSHazardUntil,
+                                              State.CurrentCycle + 2);
     // Track pending VGPR write for va_vdst
     State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency});
     break;
@@ -1162,12 +1246,26 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
   case InstClass::WMMA: {
     Metrics.NumWMMA++;
     State.trackTRANS(T.Latency);
-    unsigned Occupancy = State.startWMMAWindow(MI, TII);
+
+    // use WMMAStartCycle from stall computation
+    unsigned WMMAStartCycle = Stalls.IsScaledWMMA ? Stalls.WMMAStartCycle
+                                                   : State.CurrentCycle;
+    unsigned Occupancy = State.startWMMAWindow(MI, TII, WMMAStartCycle);
     Metrics.WMMAWindowCycles += Occupancy;
+
+    // For scaled WMMA: scale read updates VALU state
+    if (Stalls.IsScaledWMMA) {
+      // Scale read at CurrentCycle occupies VALU for 1 cycle
+      State.VALUResourceBusyUntil = std::max(State.VALUResourceBusyUntil,
+                                              State.CurrentCycle + 1);
+      State.LastVALUCycle = State.CurrentCycle;
+    }
+
     // WMMA with SGPR operands (scale) blocks SALU (VA_SSRC)
+    // SSRC stall is based on when WMMA phase starts, not scale read
     if (State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
       State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
-                                          State.CurrentCycle + T.Latency);
+                                          WMMAStartCycle + T.Latency);
     }
     if (VerboseSimulation) {
       dbgs() << "  Class: WMMA | Unit: XDL | Occupancy: " << Occupancy
@@ -1308,6 +1406,7 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     printStall("VALUSlot", Stalls.VALUSlot);
     printStall("WMMACoExecMiss", Stalls.CoExecFromEffective);
     printStall("LongLatVALU", Stalls.LongLatVALU);
+    printStall("LOLVALUxTRANS", Stalls.LOLVALUTRANSHazard);
     printStall("SSRC", Stalls.SSRC);
     printStall("VaVdst", Stalls.VaVdst);
     printStall("RAW", Stalls.RAW);
@@ -1342,9 +1441,6 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     }
     dbgs() << " → additional CoExec=" << Stalls.CoExecFromEffective << ")\n";
   }
-
-  if (Stalls.LDScaleBlocked)
-    dbgs() << "  LD_SCALE: WMMA_SCALE blocked (need slot for scale loading)\n";
 }
 
 void logWMMAWindow(const GPUSimState &State, InstClass IC) {
@@ -1445,6 +1541,7 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
   if (Stalls.DelayAlu > Max) { Max = Stalls.DelayAlu; Reason = StallReason::DELAY_ALU; }
   if (Stalls.CoExec > Max) { Max = Stalls.CoExec; Reason = StallReason::COEXEC_BLOCKED; }
   if (Stalls.LongLatVALU > Max) { Max = Stalls.LongLatVALU; Reason = StallReason::LONG_LAT_VALU; }
+  if (Stalls.LOLVALUTRANSHazard > Max) { Max = Stalls.LOLVALUTRANSHazard; Reason = StallReason::LOLVALU_TRANS_HAZARD; }
   if (Stalls.SSRC > 0 && Stalls.SSRC >= Max) { Max = Stalls.SSRC; Reason = StallReason::VA_SSRC_STALL; }
   if (Stalls.VaVdst > 0 && Stalls.VaVdst >= Max) { Max = Stalls.VaVdst; Reason = StallReason::VA_VDST_WAIT; }
   if (Stalls.MemFIFO > Max) { Max = Stalls.MemFIFO; Reason = StallReason::MEM_FIFO; }
@@ -1477,7 +1574,6 @@ void populateInstrSimInfo(InstrSimInfo &Info, const StallSources &Stalls,
     }
 
     Info.CoExecuted = (Stalls.CoExec == 0);
-    Info.LDScaleBlocked = Stalls.LDScaleBlocked;
   }
 }
 
@@ -1528,7 +1624,7 @@ void simulateInst(const MachineInstr &MI, const SIInstrInfo &TII,
   if (VerboseSimulation)
     logWMMAWindow(State, T.IC);
 
-  recordInstruction(MI, T, TII, State, Metrics);
+  recordInstruction(MI, T, TII, Stalls, State, Metrics);
   State.RegFile.invalidateWrites(MI);
 
   if (VerboseSimulation)
