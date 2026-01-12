@@ -93,6 +93,7 @@ jobs:
           git fetch origin pull/${{ github.event.pull_request.number }}/head
           PR_SHA=$(git rev-parse FETCH_HEAD)
           # Update the submodule pointer using cacheinfo
+          cd ../../
           git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
           git submodule
     
