@@ -84,6 +84,16 @@ jobs:
           ref: compiler/amd-staging
           #ref: ${{ secrets.THEROCK_MAINLINE_REF }}
           fetch-depth: 10
+          
+      - name: Update Submodule Pointer to the PR
+        run: |
+          cd compiler/amd-llvm
+          # Fetch the latest commit SHA from the PR branch
+          PR_SHA=$(git rev-parse origin/pull/${{ github.event.pull_request.number }}/head)
+          # Update the submodule pointer using cacheinfo
+          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
+          git submodule
+    
 
       - name: Install python deps
         run: |
@@ -116,11 +126,6 @@ jobs:
         timeout-minutes: 30
         run: |
           ./build_tools/fetch_sources.py --jobs 12
-
-      - name: "Checking out repository for llvm-project"
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-        with:
-          path: compiler/amd-llvm
 
       - name: "Checking out repository for spriv-llvm-translator"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
