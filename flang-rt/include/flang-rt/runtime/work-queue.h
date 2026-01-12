@@ -64,7 +64,10 @@
 #include "flang/Common/api-attrs.h"
 #include "flang/Common/optional.h"
 #include "flang/Runtime/freestanding-tools.h"
-#include <flang/Common/variant.h>
+#include <cstddef>
+#include <cstdint>
+#include <new>
+#include <type_traits>
 
 namespace Fortran::runtime::io {
 class IoStatementState;
@@ -424,17 +427,144 @@ struct NullTicket {
   RT_API_ATTRS int Continue(WorkQueue &) const { return StatOk; }
 };
 
+// Ticket type enumeration for tagged union
+enum class TicketType : std::uint8_t {
+  Null = 0,
+  Initialize,
+  InitializeClone,
+  Finalize,
+  Destroy,
+  Assign,
+  DerivedAssignFalse,
+  DerivedAssignTrue,
+  DescriptorIoOutput,
+  DescriptorIoInput,
+  DerivedIoOutput,
+  DerivedIoInput
+};
+
+// Helper template to calculate maximum size at compile time
+template <std::size_t A, std::size_t B> struct MaxSize {
+  static constexpr std::size_t value = (A > B) ? A : B;
+};
+
+template <std::size_t A, std::size_t B, std::size_t C, std::size_t D,
+    std::size_t E, std::size_t F, std::size_t G, std::size_t H, std::size_t I,
+    std::size_t J, std::size_t K, std::size_t L>
+struct MaxSize12 {
+  static constexpr std::size_t value = MaxSize<A,
+      MaxSize<B,
+          MaxSize<C,
+              MaxSize<D,
+                  MaxSize<E,
+                      MaxSize<F,
+                          MaxSize<G,
+                              MaxSize<H,
+                                  MaxSize<I,
+                                      MaxSize<J, MaxSize<K, L>::value>::value>::
+                                          value>::value>::value>::value>::
+                                  value>::value>::value>::value>::value;
+};
+
+// Forward declarations for ticket storage
+struct TicketStorage {
+  // Calculate maximum size needed for any ticket type
+  // We need to ensure proper alignment - use the maximum alignment required
+  static constexpr std::size_t maxSize_ = MaxSize12<
+      sizeof(NullTicket), sizeof(InitializeTicket),
+      sizeof(InitializeCloneTicket), sizeof(FinalizeTicket),
+      sizeof(DestroyTicket), sizeof(AssignTicket),
+      sizeof(DerivedAssignTicket<false>), sizeof(DerivedAssignTicket<true>),
+      sizeof(io::descr::DescriptorIoTicket<io::Direction::Output>),
+      sizeof(io::descr::DescriptorIoTicket<io::Direction::Input>),
+      sizeof(io::descr::DerivedIoTicket<io::Direction::Output>),
+      sizeof(io::descr::DerivedIoTicket<io::Direction::Input>)>::value;
+
+  // Use maximum alignment - typically 8 or 16 bytes should be sufficient
+  // but we'll use alignas with the largest alignment requirement
+  alignas(alignof(InitializeTicket)) alignas(alignof(InitializeCloneTicket))
+      alignas(alignof(FinalizeTicket)) alignas(alignof(DestroyTicket))
+      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket<false>))
+      alignas(alignof(DerivedAssignTicket<true>))
+      alignas(alignof(io::descr::DescriptorIoTicket<io::Direction::Output>))
+      alignas(alignof(io::descr::DescriptorIoTicket<io::Direction::Input>))
+      alignas(alignof(io::descr::DerivedIoTicket<io::Direction::Output>))
+      alignas(alignof(io::descr::DerivedIoTicket<io::Direction::Input>))
+      char storage[maxSize_];
+
+  RT_API_ATTRS void *GetPtr() { return storage; }
+  RT_API_ATTRS const void *GetPtr() const { return storage; }
+};
+
 struct Ticket {
   RT_API_ATTRS int Continue(WorkQueue &);
-  bool begun{false};
-  std::variant<NullTicket, InitializeTicket, InitializeCloneTicket,
-      FinalizeTicket, DestroyTicket, AssignTicket, DerivedAssignTicket<false>,
-      DerivedAssignTicket<true>,
-      io::descr::DescriptorIoTicket<io::Direction::Output>,
-      io::descr::DescriptorIoTicket<io::Direction::Input>,
-      io::descr::DerivedIoTicket<io::Direction::Output>,
-      io::descr::DerivedIoTicket<io::Direction::Input>>
-      u;
+  RT_API_ATTRS ~Ticket();
+  RT_API_ATTRS Ticket();
+  RT_API_ATTRS Ticket(const Ticket &) = delete;
+  RT_API_ATTRS Ticket &operator=(const Ticket &) = delete;
+  RT_API_ATTRS Ticket(Ticket &&) = delete;
+  RT_API_ATTRS Ticket &operator=(Ticket &&) = delete;
+
+  // Template method to construct a ticket in place
+  template <typename T, typename... Args>
+  RT_API_ATTRS void emplace(Args &&...args) {
+    // Destroy existing ticket if any
+    destroy();
+    // Set type
+    type_ = getTicketType<T>();
+    // Construct new ticket using placement new
+    new (storage_.GetPtr()) T(std::forward<Args>(args)...);
+  }
+
+  // Get ticket type index (for debugging)
+  RT_API_ATTRS std::size_t index() const {
+    return static_cast<std::size_t>(type_);
+  }
+
+  // Get ticket type
+  RT_API_ATTRS TicketType type() const { return type_; }
+
+  bool begun{false};  // Public for WorkQueue access
+
+private:
+  RT_API_ATTRS void destroy();
+  RT_API_ATTRS int dispatchBegin(WorkQueue &workQueue);
+  RT_API_ATTRS int dispatchContinue(WorkQueue &workQueue);
+
+  template <typename T> static constexpr TicketType getTicketType() {
+    if constexpr (std::is_same_v<T, NullTicket>) {
+      return TicketType::Null;
+    } else if constexpr (std::is_same_v<T, InitializeTicket>) {
+      return TicketType::Initialize;
+    } else if constexpr (std::is_same_v<T, InitializeCloneTicket>) {
+      return TicketType::InitializeClone;
+    } else if constexpr (std::is_same_v<T, FinalizeTicket>) {
+      return TicketType::Finalize;
+    } else if constexpr (std::is_same_v<T, DestroyTicket>) {
+      return TicketType::Destroy;
+    } else if constexpr (std::is_same_v<T, AssignTicket>) {
+      return TicketType::Assign;
+    } else if constexpr (std::is_same_v<T, DerivedAssignTicket<false>>) {
+      return TicketType::DerivedAssignFalse;
+    } else if constexpr (std::is_same_v<T, DerivedAssignTicket<true>>) {
+      return TicketType::DerivedAssignTrue;
+    } else if constexpr (std::is_same_v<T,
+                          io::descr::DescriptorIoTicket<io::Direction::Output>>) {
+      return TicketType::DescriptorIoOutput;
+    } else if constexpr (std::is_same_v<T,
+                          io::descr::DescriptorIoTicket<io::Direction::Input>>) {
+      return TicketType::DescriptorIoInput;
+    } else if constexpr (std::is_same_v<T,
+                          io::descr::DerivedIoTicket<io::Direction::Output>>) {
+      return TicketType::DerivedIoOutput;
+    } else if constexpr (std::is_same_v<T,
+                          io::descr::DerivedIoTicket<io::Direction::Input>>) {
+      return TicketType::DerivedIoInput;
+    }
+  }
+
+  TicketType type_{TicketType::Null};
+  TicketStorage storage_;
 };
 
 class WorkQueue {
@@ -463,7 +593,7 @@ public:
     if (runTicketsImmediately_) {
       return InitializeTicket{descriptor, derived, memcpyFct}.Run(*this);
     } else {
-      StartTicket().u.emplace<InitializeTicket>(descriptor, derived, memcpyFct);
+      StartTicket().emplace<InitializeTicket>(descriptor, derived, memcpyFct);
       return StatContinue;
     }
   }
@@ -474,7 +604,7 @@ public:
       return InitializeCloneTicket{clone, original, derived, hasStat, errMsg}
           .Run(*this);
     } else {
-      StartTicket().u.emplace<InitializeCloneTicket>(
+      StartTicket().emplace<InitializeCloneTicket>(
           clone, original, derived, hasStat, errMsg);
       return StatContinue;
     }
@@ -484,7 +614,7 @@ public:
     if (runTicketsImmediately_) {
       return FinalizeTicket{descriptor, derived}.Run(*this);
     } else {
-      StartTicket().u.emplace<FinalizeTicket>(descriptor, derived);
+      StartTicket().emplace<FinalizeTicket>(descriptor, derived);
       return StatContinue;
     }
   }
@@ -493,7 +623,7 @@ public:
     if (runTicketsImmediately_) {
       return DestroyTicket{descriptor, derived, finalize}.Run(*this);
     } else {
-      StartTicket().u.emplace<DestroyTicket>(descriptor, derived, finalize);
+      StartTicket().emplace<DestroyTicket>(descriptor, derived, finalize);
       return StatContinue;
     }
   }
@@ -503,7 +633,7 @@ public:
     if (runTicketsImmediately_) {
       return AssignTicket{to, from, flags, memmoveFct, declaredType}.Run(*this);
     } else {
-      StartTicket().u.emplace<AssignTicket>(
+      StartTicket().emplace<AssignTicket>(
           to, from, flags, memmoveFct, declaredType);
       return StatContinue;
     }
@@ -517,7 +647,7 @@ public:
           to, from, derived, flags, memmoveFct, deallocateAfter}
           .Run(*this);
     } else {
-      StartTicket().u.emplace<DerivedAssignTicket<IS_COMPONENTWISE>>(
+      StartTicket().emplace<DerivedAssignTicket<IS_COMPONENTWISE>>(
           to, from, derived, flags, memmoveFct, deallocateAfter);
       return StatContinue;
     }
@@ -531,7 +661,7 @@ public:
           io, descriptor, table, anyIoTookPlace}
           .Run(*this);
     } else {
-      StartTicket().u.emplace<io::descr::DescriptorIoTicket<DIR>>(
+      StartTicket().emplace<io::descr::DescriptorIoTicket<DIR>>(
           io, descriptor, table, anyIoTookPlace);
       return StatContinue;
     }
@@ -545,7 +675,7 @@ public:
           io, descriptor, derived, table, anyIoTookPlace}
           .Run(*this);
     } else {
-      StartTicket().u.emplace<io::descr::DerivedIoTicket<DIR>>(
+      StartTicket().emplace<io::descr::DerivedIoTicket<DIR>>(
           io, descriptor, derived, table, anyIoTookPlace);
       return StatContinue;
     }
