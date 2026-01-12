@@ -111,6 +111,7 @@ enum class StallReason : uint8_t {
   LOLVALU_TRANS_HAZARD, // 1-cycle mutual exclusion: LOLVALU <-> TRANS
   VA_SSRC_STALL,        // VA_SSRC: VALU/WMMA with SGPR blocks SALU
   VA_VDST_WAIT,         // VA_VDST: s_wait_alu depctr_va_vdst stall
+  RAW_HAZARD,           // RAW: register dependency (scoreboard)
   WAITCNT,              // Memory wait (s_wait_*)
   DELAY_ALU,            // RAW dependency (s_delay_alu)
   MEM_FIFO,             // Memory FIFO full
@@ -153,6 +154,7 @@ struct InstrSimInfo {
     case StallReason::LOLVALU_TRANS_HAZARD: return "LOLVALU<->TRANS hazard";
     case StallReason::VA_SSRC_STALL:      return "VA_SSRC blocked";
     case StallReason::VA_VDST_WAIT:       return "VA_VDST wait";
+    case StallReason::RAW_HAZARD:         return "RAW hazard";
     case StallReason::WAITCNT:            return "WaitCnt";
     case StallReason::DELAY_ALU:          return "DelayAlu";
     case StallReason::MEM_FIFO:           return "FIFO full";

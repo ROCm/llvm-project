@@ -2,14 +2,12 @@
 # REQUIRES: asserts
 
 ---
-# Test: RAW dependency detected by scoreboard (no s_delay_alu)
+# VALU -> VALU RAW: v_add writes v0 (latency 7), v_mul reads v0 immediately
 name: raw_without_delay_alu
 tracksRegLiveness: true
 body: |
   bb.0:
     liveins: $vgpr1, $vgpr2, $vgpr4
-    ; v_add writes v0 with latency 7
-    ; v_mul reads v0 immediately - RAW stall!
     $vgpr0 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
     $vgpr3 = V_MUL_F32_e32 $vgpr0, $vgpr4, implicit $mode, implicit $exec
     S_ENDPGM 0
@@ -18,18 +16,17 @@ body: |
 # CHECK-LABEL: raw_without_delay_alu
 # CHECK: V_ADD_F32_e32
 # CHECK: V_MUL_F32_e32 $vgpr0
-# CHECK: RAW scoreboard: stall=
-# CHECK: RAW:{{[1-9]}}
+# CHECK: RAW dependency: stall=6
+# CHECK: Stalls: RAW=6
 
 ---
-# Test: No RAW when reading different register
+# No RAW when reading different register
 name: no_raw_different_reg
 tracksRegLiveness: true
 body: |
   bb.0:
     liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr4
     $vgpr10 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
-    ; Reading vgpr0 (not vgpr10) - no RAW
     $vgpr3 = V_MUL_F32_e32 $vgpr0, $vgpr4, implicit $mode, implicit $exec
     S_ENDPGM 0
 ...
@@ -39,5 +36,58 @@ body: |
 # CHECK: V_MUL_F32_e32 $vgpr0
 # CHECK: Stalls: (none)
 
+---
+# VALU -> DS_READ RAW: v_add writes v0 (address), ds_read uses v0
+name: valu_to_dsread_raw
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $vgpr1, $vgpr2
+    $vgpr0 = V_ADD_F32_e32 $vgpr1, $vgpr2, implicit $mode, implicit $exec
+    $vgpr10 = DS_READ_B32_gfx9 $vgpr0, 0, 0, implicit $exec
+    S_ENDPGM 0
 ...
 
+# CHECK-LABEL: valu_to_dsread_raw
+# CHECK: V_ADD_F32_e32
+# CHECK: DS_READ_B32
+# CHECK: RAW dependency: stall=6
+# CHECK: Stalls: RAW=6
+
+---
+# SALU -> VALU RAW: s_add writes s2 (latency 2), v_add reads s2
+name: salu_to_valu_raw
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0, $sgpr1, $vgpr0
+    $sgpr2 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    $vgpr1 = V_ADD_F32_e64 0, $vgpr0, 0, $sgpr2, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: salu_to_valu_raw
+# CHECK: S_ADD_I32
+# CHECK: V_ADD_F32_e64
+# CHECK: RAW dependency: stall=1
+# CHECK: Stalls: RAW=1
+
+---
+# SALU -> SALU RAW: s_add writes s2 (latency 2), s_mul reads s2
+name: salu_to_salu_raw
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $sgpr0, $sgpr1, $sgpr3
+    $sgpr2 = S_ADD_I32 $sgpr0, $sgpr1, implicit-def $scc
+    $sgpr4 = S_MUL_I32 $sgpr2, $sgpr3
+    S_ENDPGM 0
+...
+
+# CHECK-LABEL: salu_to_salu_raw
+# CHECK: S_ADD_I32
+# CHECK: S_MUL_I32 $sgpr2
+# CHECK: RAW dependency: stall=1
+# CHECK: Stalls: RAW=1
+
+...

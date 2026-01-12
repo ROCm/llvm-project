@@ -699,7 +699,7 @@ struct StallSources {
   unsigned LOLVALUTRANSHazard = 0; // 1-cycle mutual exclusion: LOLVALU <-> TRANS
   unsigned SSRC = 0;
   unsigned VaVdst = 0;
-  unsigned RAW = 0;  // Scoreboard-detected RAW dependency
+  unsigned RAW = 0;              // RAW: register dependency (all instruction types)
   std::string CachePattern;
 
   unsigned CacheHits = 0;
@@ -902,27 +902,22 @@ static void computeWMMAScaleStall(const GPUSimState &State,
   S.VALUSlot = IssueCycle - State.CurrentCycle;
 }
 
-// Compute scoreboard-based RAW stalls
+// Compute scoreboard-based RAW stalls for ALL instruction types.
+// HW interlocks ensure correctness, but cause performance stalls we model here.
 static unsigned computeRAWStall(const MachineInstr &MI, GPUSimState &State) {
   if (!EnableScoreboard || !State.RegFile.TRI)
     return 0;
 
+  // Check RAW for ALL source operands (VGPR and SGPR)
   unsigned MaxRAW = 0;
-  if (instructionWaitsForVALU(MI)) {
-    // Memory ops implicitly wait for ALL pending VALU writes
-    MaxRAW = State.getMaxPendingRAW();
-    LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation)
-      dbgs() << "    RAW implicit wait (VA_VDST==0): stall=" << MaxRAW << "\n";);
-  } else {
-    for (const MachineOperand &MO : MI.explicit_uses()) {
-      if (MO.isReg() && MO.getReg().isPhysical()) {
-        unsigned RAWStall = State.getRAWStall(MO.getReg(), State.RegFile.TRI);
-        MaxRAW = std::max(MaxRAW, RAWStall);
-      }
+  for (const MachineOperand &MO : MI.explicit_uses()) {
+    if (MO.isReg() && MO.getReg().isPhysical()) {
+      unsigned RAWStall = State.getRAWStall(MO.getReg(), State.RegFile.TRI);
+      MaxRAW = std::max(MaxRAW, RAWStall);
     }
-    LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation)
-      dbgs() << "    RAW scoreboard: stall=" << MaxRAW << "\n";);
   }
+  LLVM_DEBUG(if (MaxRAW > 0 && VerboseSimulation)
+    dbgs() << "    RAW dependency: stall=" << MaxRAW << "\n";);
   return MaxRAW;
 }
 
@@ -1023,10 +1018,11 @@ StallSources computeStallSources(const MachineInstr &MI, InstClass IC,
   }
 
   // 8. Scoreboard RAW hazards (optional mode)
-  unsigned RAW = computeRAWStall(MI, State);
-  if (RAW > 0) {
-    S.RAW = RAW;
-    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + RAW);
+  // Note: Memory ops rely on explicit s_wait_alu for VA_VDST protection
+  unsigned RAWStall = computeRAWStall(MI, State);
+  if (RAWStall > 0) {
+    S.RAW = RAWStall;
+    applyStall(IssueCycle, State.CurrentCycle, State.CurrentCycle + RAWStall);
   }
 
   // 9. s_wait_alu va_vdst(N)
@@ -1550,6 +1546,7 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
   if (Stalls.LOLVALUTRANSHazard > Max) { Max = Stalls.LOLVALUTRANSHazard; Reason = StallReason::LOLVALU_TRANS_HAZARD; }
   if (Stalls.SSRC > 0 && Stalls.SSRC >= Max) { Max = Stalls.SSRC; Reason = StallReason::VA_SSRC_STALL; }
   if (Stalls.VaVdst > 0 && Stalls.VaVdst >= Max) { Max = Stalls.VaVdst; Reason = StallReason::VA_VDST_WAIT; }
+  if (Stalls.RAW > 0 && Stalls.RAW >= Max) { Max = Stalls.RAW; Reason = StallReason::RAW_HAZARD; }
   if (Stalls.MemFIFO > Max) { Max = Stalls.MemFIFO; Reason = StallReason::MEM_FIFO; }
   if (Stalls.Unit > Max) { Max = Stalls.Unit; Reason = StallReason::FU_BUSY; }
   // Only count reg bank if not in WMMA window
