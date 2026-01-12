@@ -1110,7 +1110,8 @@ struct GPUSimState {
   std::deque<RecentInst> RecentTRANS;
   unsigned LastSALUCycle = 0;
 
-  // VA_VDST tracking: pending VALU/TRANS writes to VGPRs
+  // VA_VDST tracking: pending VALU/TRANS/WMMA writes to VGPRs
+  // Per ISA: "XDL (WMMA, SWMMAC) instructions are recorded as TRANS"
   struct PendingVALUWrite {
     unsigned ReadyCycle;  // When this write completes
   };

@@ -1267,6 +1267,11 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
       State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
                                           WMMAStartCycle + T.Latency);
     }
+
+    // XDL (WMMA) is recorded as TRANS in the scoreboard for VA_VDST tracking
+    // Per ISA: "XDL (WMMA, SWMMAC) instructions are recorded as TRANS"
+    State.PendingVaVdst.push_back({WMMAStartCycle + T.Latency});
+
     if (VerboseSimulation) {
       dbgs() << "  Class: WMMA | Unit: XDL | Occupancy: " << Occupancy
              << " | Window: " << State.ActiveWMMA.Info.TotalWindow << "\n";
