@@ -1262,15 +1262,16 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     }
 
     // WMMA with SGPR operands (scale) blocks SALU (VA_SSRC)
-    // SSRC stall is based on when WMMA phase starts, not scale read
+    // Use co-execution window occupancy, not SchedModel latency
     if (State.RegFile.TRI && hasSGPROperands(MI, *State.RegFile.TRI)) {
       State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
-                                          WMMAStartCycle + T.Latency);
+                                          WMMAStartCycle + Occupancy);
     }
 
     // XDL (WMMA) is recorded as TRANS in the scoreboard for VA_VDST tracking
     // Per ISA: "XDL (WMMA, SWMMAC) instructions are recorded as TRANS"
-    State.PendingVaVdst.push_back({WMMAStartCycle + T.Latency});
+    // Use co-execution window occupancy for timing consistency
+    State.PendingVaVdst.push_back({WMMAStartCycle + Occupancy});
 
     if (VerboseSimulation) {
       dbgs() << "  Class: WMMA | Unit: XDL | Occupancy: " << Occupancy
