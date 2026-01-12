@@ -87,6 +87,7 @@ jobs:
           
       - name: Update Submodule Pointer to the PR
         run: |
+          git config --global --add safe.directory $PWD
           cd compiler/amd-llvm
           # Fetch the latest commit SHA from the PR branch
           PR_SHA=$(git rev-parse origin/pull/${{ github.event.pull_request.number }}/head)
