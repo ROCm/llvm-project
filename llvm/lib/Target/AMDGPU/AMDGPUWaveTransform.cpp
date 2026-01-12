@@ -1867,7 +1867,9 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(Other->Block);
     }
   }
-
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
@@ -2012,7 +2014,11 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(OriginNode->Successors[0]->Block);
     }
 
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_"
+                      << LaneTarget->printableName() << "\n");
     LLVM_DEBUG(Function.dump());
+    LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_"
+                      << LaneTarget->printableName() << "\n");
   }
 
   // Step 3: Insert rejoin masks.
@@ -2089,10 +2095,18 @@ void ControlFlowRewriter::rewrite() {
         .addReg(LMC.ExecReg)
         .addReg(Rejoin);
 
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_"
+                      << Secondary->printableName() << ".rejoin\n");
     LLVM_DEBUG(Function.dump());
+    LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_"
+                      << Secondary->printableName() << ".rejoin\n");
   }
 
   Updater.cleanup();
+
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_clean\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_clean\n");
 }
 
 namespace {
