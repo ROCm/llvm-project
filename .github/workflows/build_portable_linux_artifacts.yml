@@ -95,6 +95,13 @@ jobs:
           # Update the submodule pointer using cacheinfo
           cd ../../
           git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
+          
+          # Deinitialize and reinitialize the submodule to ensure sync
+          git submodule deinit -f -- compiler/amd-llvm
+          git submodule update --init --recursive compiler/amd-llvm
+          
+          # Verify the pointer update
+          git submodule status
           git submodule
     
 
