@@ -90,7 +90,8 @@ jobs:
           git config --global --add safe.directory $PWD
           cd compiler/amd-llvm
           # Fetch the latest commit SHA from the PR branch
-          PR_SHA=$(git rev-parse origin/pull/${{ github.event.pull_request.number }}/head)
+          git fetch origin pull/${{ github.event.pull_request.number }}/head
+          PR_SHA=$(git rev-parse FETCH_HEAD)
           # Update the submodule pointer using cacheinfo
           git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
           git submodule
