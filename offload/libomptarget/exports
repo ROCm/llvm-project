@@ -66,8 +66,6 @@ VERS1.0 {
     __ockl_dm_alloc;
     __ockl_dm_dealloc;
     __ockl_devmem_request;
-    __asan_malloc_impl;
-    __asan_free_impl;
     llvm_omp_target_alloc_host;
     llvm_omp_target_alloc_shared;
     llvm_omp_target_alloc_device;

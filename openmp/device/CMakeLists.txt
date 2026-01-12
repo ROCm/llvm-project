@@ -52,7 +52,7 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
   )
   get_target_property(_ocml_bc ocml IMPORTED_LOCATION)
   get_target_property(_ockl_bc ockl IMPORTED_LOCATION)
-  get_target_property(_asanrtl_bc asanrtl IMPORTED_LOCATION)
+	get_target_property(_asanrtl_bc asanrtl IMPORTED_LOCATION)
 
   if(NOT _ockl_bc)
     message(FATAL_ERROR "Could not find ockl.bc")
@@ -63,15 +63,17 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
   if(NOT _asanrtl_bc)
     message(FATAL_ERROR "Could not find asanrtl.bc")
   endif()
+
   if(SANITIZER_AMDGPU)
     list(APPEND compile_flags "SHELL: -DSANITIZER_AMDGPU=1")
     # For ASan: Don't link asanrtl.bc and ockl.bc at compile time of libompdevice.a
     # They will be linked once in POST_BUILD step to avoid duplicates symbols
     # Note: Oclc control constants are provided using Platform.h
-    #
   else()
     list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc}")
   endif()
+	list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ocml_bc}")
+endif()
 
 list(APPEND compile_options -flto)
 list(APPEND compile_options -fvisibility=hidden)
@@ -81,7 +83,6 @@ list(APPEND compile_options -fno-rtti)
 list(APPEND compile_options -fno-exceptions)
 list(APPEND compile_options -fconvergent-functions)
 list(APPEND compile_options -Wno-unknown-cuda-version)
-list(APPEND compile_options -fno-sanitize=address)
 list(APPEND compile_options -O3)
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   list(APPEND compile_options --target=${LLVM_DEFAULT_TARGET_TRIPLE})

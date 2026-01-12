@@ -25,10 +25,12 @@ using namespace allocator;
 // without 'libc' support.
 extern "C" {
 
+#ifdef __AMDGPU__
 [[gnu::noinline]] uint64_t __asan_malloc_impl(uint64_t bufsz, uint64_t pc);
 [[gnu::noinline]] void __asan_free_impl(uint64_t ptr, uint64_t pc);
 [[gnu::noinline]] uint64_t __ockl_dm_alloc(uint64_t bufsz);
 [[gnu::noinline]] void __ockl_dm_dealloc(uint64_t ptr);
+#endif
 
 #ifdef __AMDGPU__
 [[gnu::noinline]] void *__alt_libc_malloc(size_t sz);
@@ -36,9 +38,19 @@ extern "C" {
 
 [[gnu::noinline]] uint64_t __ockl_devmem_request(uint64_t addr, uint64_t size) {
   if (size) { // allocation request
+#if defined(SANITIZER_AMDGPU)
+    [[clang::noinline]] return __asan_malloc_impl(
+        size, uint64_t(__builtin_return_address(0)));
+#else
     [[clang::noinline]] return (uint64_t)__alt_libc_malloc((size_t)size);
+#endif
   } else { // free request
+#if defined(SANITIZER_AMDGPU)
+    [[clang::noinline]] __asan_free_impl(addr,
+                                         uint64_t(__builtin_return_address(0)));
+#else
     [[clang::noinline]] __alt_libc_free((void *)addr);
+#endif
     return 0;
   }
 }

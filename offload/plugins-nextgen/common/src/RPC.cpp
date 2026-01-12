@@ -29,96 +29,9 @@ using namespace target;
 #include "Emissary.h"
 #endif
 
-#if defined(__has_include)
-#if __has_include("hsa.h")
-#include "hsa.h"
-#include "hsa_ven_amd_loader.h"
-#elif __has_include("hsa/hsa.h")
-#include "hsa/hsa.h"
-#include "hsa/hsa_ven_amd_loader.h"
+#if SANITIZER_AMDGPU
+#include "Sanitizer.h"
 #endif
-#endif
-
-// Forward declaration for ASan report function from compiler-rt
-extern "C" void __asan_report_nonself_error(
-    uint64_t *callstack, uint32_t n_callstack, uint64_t *addr, uint32_t naddr,
-    uint64_t *entity_ids, uint32_t n_entities, bool is_write,
-    uint32_t access_size, bool is_abort, const char *name, int64_t vma_adjust,
-    int fd, uint64_t file_extent_size, uint64_t file_extent_start = 0);
-
-// Structure to hold sanitizer data from one lane
-struct SanitizerData {
-  uint64_t addr;
-  uint64_t pc;
-  uint64_t wgidx;
-  uint64_t wgidy;
-  uint64_t wgidz;
-  uint64_t wave_id;
-  uint64_t is_read;
-  uint64_t access_size;
-};
-
-// Handler for sanitizer reports from all lanes
-template <uint32_t NumLanes>
-static void HandleSanitizerReport(const SanitizerData *LaneData,
-                                   uint64_t ActiveMask, int DeviceID) {
-  uint64_t device_failing_addresses[64] = {0};
-  uint64_t entity_id[68] = {0};  // [0]=DeviceID, [1-3]=WG IDs, [4-67]=Wave IDs
-  
-  uint32_t n_activelanes = __builtin_popcountl(ActiveMask);
-  entity_id[0] = DeviceID;
-  
-  // Variables from first work-item (shared across all lanes)
-  uint64_t PC = 0;
-  uint64_t AccessInfo = 0, AccessSize = 0;
-  
-  int indx = 0, en_idx = 1;
-  bool first_workitem = false;
-  
-  // Iterate through all active lanes
-  for (uint32_t lane_id = 0; lane_id < NumLanes && lane_id < 64; ++lane_id) {
-    if (!(ActiveMask & (1ULL << lane_id)))
-      continue;
-    
-    const SanitizerData &data = LaneData[lane_id];
-    device_failing_addresses[indx++] = data.addr;
-    
-    if (!first_workitem) {
-      // First work-item: collect all shared data
-      PC = data.pc;
-      entity_id[en_idx++] = data.wgidx;
-      entity_id[en_idx++] = data.wgidy;
-      entity_id[en_idx++] = data.wgidz;
-      entity_id[en_idx++] = data.wave_id;
-      AccessInfo = data.is_read;  // 0=write, 1=read
-      AccessSize = data.access_size;
-      first_workitem = true;
-    } else {
-      // Subsequent work-items: only wave ID
-      entity_id[en_idx++] = data.wave_id;
-    }
-  }
-  
-  if (!first_workitem)
-    return;  // No active lanes
-  
-  // Decode access information
-  bool IsWrite = (AccessInfo == 0);  // 0=write, 1=read
-  bool IsAbort = true;  // Always abort on GPU errors
-  
-  uint64_t callstack[1] = {PC};
-  
-  // TODO: Add URI locator support for source location
-  int uri_fd = -1;
-  uint64_t size = 0, offset = 0;
-  int64_t loadAddrAdjust = 0;
-  
-  // Report the error with all collected lane data
-  __asan_report_nonself_error(callstack, 1, device_failing_addresses,
-                              n_activelanes, entity_id, n_activelanes + 4,
-                              IsWrite, AccessSize, IsAbort, "amdgpu",
-                              loadAddrAdjust, uri_fd, size, offset);
-}
 
 template <uint32_t NumLanes>
 rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
@@ -162,6 +75,27 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     });
     break;
   }
+#if SANITIZER_AMDGPU
+  case OFFLOAD_SANITIZER_REPORT: {
+    SanitizerData LaneData[NumLanes];
+    uint64_t ActiveMask = 0;
+    // Collect data from all active lanes
+    Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
+      LaneData[ID].addr = buffer->data[0];
+      LaneData[ID].pc = buffer->data[1];
+      LaneData[ID].wgidx = buffer->data[2];
+      LaneData[ID].wgidy = buffer->data[3];
+      LaneData[ID].wgidz = buffer->data[4];
+      LaneData[ID].wave_id = buffer->data[5];
+      LaneData[ID].is_read = buffer->data[6];
+      LaneData[ID].access_size = buffer->data[7];
+      ActiveMask |= (1ULL << ID);
+    });
+    // Now process all lanes together
+    HandleSanitizerReport(NumLanes, LaneData, ActiveMask, Device.getDeviceId());
+    break;
+  }
+#endif
 #ifdef OFFLOAD_ENABLE_EMISSARY_APIS
   case ALT_LIBC_MALLOC: {
     Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
@@ -206,11 +140,7 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     void *Args[NumLanes] = {nullptr};
     Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
       Args[ID] = reinterpret_cast<void *>(buffer->data[0]);
-      llvm::outs() << "DeviceID: " << Device.getDeviceId() << "\n";
-      llvm::outs() << "LaneID: " << ID << "\n";
-      llvm::outs() << "Args[ID]:" << Args[ID] << "\n";
-      llvm::outs() << "NumLanes:" << NumLanes << "\n";
-      Results[ID] = Emissary((char *)Args[ID], NumLanes, Device.getDeviceId());
+      Results[ID] = Emissary((char *)Args[ID]);
     });
     Port.send([&](rpc::Buffer *Buffer, uint32_t ID) {
       Device.moveBusyToFree_ArgBuf(Args[ID]);
@@ -218,32 +148,10 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     });
     break;
   }
-  case OFFLOAD_SANITIZER_REPORT: {
-    SanitizerData LaneData[NumLanes];
-    uint64_t ActiveMask = 0;
-    
-    // Collect data from all active lanes
-    Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
-      LaneData[ID].addr = buffer->data[0];
-      LaneData[ID].pc = buffer->data[1];
-      LaneData[ID].wgidx = buffer->data[2];
-      LaneData[ID].wgidy = buffer->data[3];
-      LaneData[ID].wgidz = buffer->data[4];
-      LaneData[ID].wave_id = buffer->data[5];
-      LaneData[ID].is_read = buffer->data[6];
-      LaneData[ID].access_size = buffer->data[7];
-      ActiveMask |= (1ULL << ID);
-    });
-    
-    // Now process all lanes together
-    HandleSanitizerReport<NumLanes>(LaneData, ActiveMask, Device.getDeviceId());
-    break;
-  }
 #else
   case EMISSARY_PREMALLOC:
   case EMISSARY_FREE:
   case OFFLOAD_EMISSARY:
-  case OFFLOAD_SANITIZER_REPORT:
 #endif
   default:
     return rpc::RPC_UNHANDLED_OPCODE;

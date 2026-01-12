@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This contains source code of sanitizer support using Emissary.
+// This contains source code of GPU sanitizer support.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,57 +28,11 @@
  THE SOFTWARE.
  */
 
-#include "Emissary.h"
-#include <cstdint>
-#include <cstdlib>
-#include <fcntl.h>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <sys/stat.h>
-#include <tuple>
-#include <unistd.h>
-#include <vector>
+#if SANITIZER_AMDGPU
 
-#if defined(__has_include)
-#if __has_include("hsa.h")
-#include "hsa.h"
-#include "hsa_ven_amd_loader.h"
-#elif __has_include("hsa/hsa.h")
-#include "hsa/hsa.h"
-#include "hsa/hsa_ven_amd_loader.h"
-#endif
-#else
-#include "hsa/hsa.h"
-#include "hsa/hsa_vem_amd_loader.h"
-#endif
+#include "Sanitizer.h"
 
-class UriLocator {
-public:
-  struct UriInfo {
-    std::string uriPath;
-    int64_t loadAddressDiff;
-  };
-
-  struct UriRange {
-    uint64_t startAddr_, endAddr_;
-    int64_t elfDelta_;
-    std::string Uri_;
-  };
-
-  bool init_ = false;
-  std::vector<UriRange> rangeTab_;
-  hsa_ven_amd_loader_1_03_pfn_t fn_table_;
-
-  hsa_status_t createUriRangeTable();
-
-  ~UriLocator() {}
-
-  UriInfo lookUpUri(uint64_t device_pc);
-  std::pair<uint64_t, uint64_t> decodeUriAndGetFd(UriInfo &uri_path,
-                                                  int *uri_fd);
-};
-
+// Forward declaration for ASan report function from compiler-rt
 extern "C" void __asan_report_nonself_error(
     uint64_t *callstack, uint32_t n_callstack, uint64_t *addr, uint32_t naddr,
     uint64_t *entity_ids, uint32_t n_entities, bool is_write,
@@ -189,7 +143,7 @@ hsa_status_t UriLocator::createUriRangeTable() {
 // Encoding of uniform-resource-identifier(URI) is detailed in
 // https://llvm.org/docs/AMDGPUUsage.html#loaded-code-object-path-uniform-resource-identifier-uri
 // The below code currently extracts the uri of loaded code object using
-// file-uri.
+// either file-uri or memory-uri.
 std::pair<uint64_t, uint64_t> UriLocator::decodeUriAndGetFd(UriInfo &uri,
                                                             int *uri_fd) {
 
@@ -274,91 +228,71 @@ UriLocator::UriInfo UriLocator::lookUpUri(uint64_t device_pc) {
   return errorstate;
 }
 
-static service_rc emissary_asan(emisArgBuf_t *ab, emis_argptr_t *args[MAXVARGS],
-                                int NumLanes, int DeviceID) {
+// Handler for sanitizer reports from all lanes
+void HandleSanitizerReport(uint32_t NumLanes, const SanitizerData *LaneData,
+                           uint64_t ActiveMask, int DeviceID) {
+  uint64_t device_failing_addresses[64] = {0};
+  uint64_t entity_id[68] = {0}; // [0]=DeviceID, [1-3]=WG IDs, [4-67]=Wave IDs
 
-  for (int i = 0; i < 8; i++) {
-    printf("\n%llx\n", args[i]);
+  uint32_t n_activelanes = __builtin_popcountl(ActiveMask);
+  entity_id[0] = DeviceID;
+
+  // Variables from first work-item (shared across all lanes)
+  uint64_t PC = 0;
+  uint64_t AccessInfo = 0, AccessSize = 0;
+
+  int indx = 0, en_idx = 1;
+  bool first_workitem = false; // Iterate through all active lanes
+  for (uint32_t lane_id = 0; lane_id < NumLanes; ++lane_id) {
+    if (!(ActiveMask & (1ULL << lane_id)))
+      continue;
+
+    const SanitizerData &data = LaneData[lane_id];
+    device_failing_addresses[indx++] = data.addr;
+
+    if (!first_workitem) {
+      // First work-item: collect all shared data
+      PC = data.pc;
+      entity_id[en_idx++] = data.wgidx;
+      entity_id[en_idx++] = data.wgidy;
+      entity_id[en_idx++] = data.wgidz;
+      entity_id[en_idx++] = data.wave_id;
+      AccessInfo = data.is_read; // 0=write, 1=read
+      AccessSize = data.access_size;
+      first_workitem = true;
+    } else {
+      // Subsequent work-items: only wave ID
+      entity_id[en_idx++] = data.wave_id;
+    }
   }
 
-  std::cout << NumLanes << "\n";
+  if (!first_workitem)
+    return; // No active lanes
 
-  uint64_t Addr = (uint64_t)args[0];
-  uint64_t PC = (uint64_t)args[1];
+  // Decode access information
+  bool IsWrite = (AccessInfo == 0); // 0=write, 1=read
+  bool IsAbort = true;              // Always abort on GPU errors
 
-  uint64_t Wgidx = (uint64_t)args[2];
-  uint64_t Wgidy = (uint64_t)args[3];
-  uint64_t Wgidz = (uint64_t)args[4];
+  uint64_t Callstack[1] = {PC};
 
-  uint64_t n_activeLanes = NumLanes;
+  // TODO: Add URI locator support for source location
+  int Uri_fd = -1;
+  uint64_t Size = 0, Offset = 0;
+  int64_t LoadAddrAdjust = 0;
 
-  uint64_t WaveID = (uint64_t)args[5];
+  UriLocator *Uri_locator = new UriLocator();
 
-  uint64_t AccessInfo = (uint64_t)args[6];
-  uint64_t AccessSize = (uint64_t)args[7];
-
-  bool IsWrite = false, IsAbort = true;
-  if (AccessInfo & 0xFFFFFFFF00000000)
-    IsAbort = false;
-  if (AccessInfo & 1)
-    IsWrite = true;
-
-  uint64_t callstack[1];
-  callstack[0] = PC;
-  uint32_t n_callstack = 1;
-
-  uint64_t entity_id[68];
-  entity_id[0] = DeviceID; // Device ID
-  entity_id[1] = Wgidx;
-  entity_id[2] = Wgidy;
-  entity_id[3] = Wgidz;
-  entity_id[4] = WaveID;
-
-  uint64_t device_failing_addresses[64];
-  device_failing_addresses[0] = Addr;
-
-  bool first_workitem = false;
-  for (int i = 0; i < NumLanes; i++) {
+  if (Uri_locator) {
+    UriLocator::UriInfo Uri_info = Uri_locator->lookUpUri(Callstack[0]);
+    std::tie(Offset, Size) = Uri_locator->decodeUriAndGetFd(Uri_info, &Uri_fd);
+    LoadAddrAdjust = Uri_info.loadAddressDiff;
   }
 
-  std::string fileuri;
-  uint64_t size = 0, offset = 0;
-  int64_t loadAddrAdjust = 0;
-  int uri_fd = -1;
-  UriLocator *uri_locator = new UriLocator();
-
-  if (uri_locator) {
-    UriLocator::UriInfo uri_info = uri_locator->lookUpUri(callstack[0]);
-    std::tie(offset, size) = uri_locator->decodeUriAndGetFd(uri_info, &uri_fd);
-    loadAddrAdjust = uri_info.loadAddressDiff;
-  }
-
-  __asan_report_nonself_error(callstack, n_callstack, device_failing_addresses,
-                              n_activeLanes, entity_id, n_activeLanes + 4,
+  // Report the error with all collected lane data
+  __asan_report_nonself_error(Callstack, 1, device_failing_addresses,
+                              n_activelanes, entity_id, n_activelanes + 4,
                               IsWrite, AccessSize, IsAbort, "amdgpu",
-                              loadAddrAdjust, uri_fd, size, offset);
-  return _RC_SUCCESS;
+                              LoadAddrAdjust, Uri_fd, Size, Offset);
 }
 
-extern "C" emis_return_t EmissarySanitizer(emisArgBuf_t *ab,
-                                           emis_argptr_t *args[MAXVARGS],
-                                           int NumLanes, int DeviceID) {
-  emis_return_t return_value;
-  service_rc rc;
-
-  switch (ab->emisfnid) {
-  case _asan_report_idx: {
-    rc = emissary_asan(ab, args, NumLanes, DeviceID);
-    break;
-  }
-  case _unsupported_SANITIZER:
-  default: {
-    fprintf(stderr, "Unsupported Sanitizer ID: (%d). \n", ab->emisfnid);
-    return_value = 0;
-    rc = _RC_STATUS_ERROR;
-  }
-  };
-  if (rc != _RC_SUCCESS)
-    fprintf(stderr, "HOST failure in EmissarySanitizer. \n");
-  return (emis_return_t)return_value;
-}
+#endif

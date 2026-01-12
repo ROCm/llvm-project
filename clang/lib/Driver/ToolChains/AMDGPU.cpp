@@ -649,6 +649,8 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
   addLinkerCompressDebugSectionsOption(getToolChain(), Args, CmdArgs);
 
+  // ASan instrumented OpenMP+Offload libraries are installed in default ROCm LLVM ASan custom path.
+  // Below code prepends the LLVM ASan custom path to pick ASan instrumented libompdevice.a.
   const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
   if (SanArgs.needsAsanRt()) {
     const AMDGPUToolChain &AMDGPU =

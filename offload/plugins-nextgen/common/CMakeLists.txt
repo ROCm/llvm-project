@@ -12,7 +12,6 @@ if(OFFLOAD_ENABLE_EMISSARY_APIS)
     src/Emissary.cpp
     src/EmissaryFortrt.cpp
     src/EmissaryPrint.cpp
-    src/EmissarySanitizer.cpp
   )
 endif()
 
@@ -26,6 +25,7 @@ add_library(PluginCommon OBJECT
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
+  src/Sanitizer.cpp
   ${emissary_sources}
 )
 add_dependencies(PluginCommon intrinsics_gen PluginErrcodes)

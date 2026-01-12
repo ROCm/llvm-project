@@ -21,7 +21,6 @@ typedef enum {
   EMIS_ID_MPI,
   EMIS_ID_HDF5,
   EMIS_ID_RESERVE,
-  EMIS_ID_SANITIZER,
 } offload_emis_id_t;
 
 typedef enum {
@@ -55,11 +54,6 @@ typedef enum {
   _FortranAioBeginExternalFormattedOutput_idx,
   _FortranAStopStatement_idx,
 } offload_emis_fortrt_idx;
-
-typedef enum {
-  _unsupported_SANITIZER,
-  _asan_report_idx,
-} offload_emis_sanitizer_idx;
 
 /// This structure is created by emisExtractArgBuf to make it easier
 /// to get values from the data buffer passed by rpc.
