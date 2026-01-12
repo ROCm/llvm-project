@@ -88,18 +88,10 @@ jobs:
       - name: Update Submodule Pointer to the PR
         run: |
           git config --global --add safe.directory $PWD
-          cd compiler/amd-llvm
-          # Fetch the latest commit SHA from the PR branch
-          git fetch origin pull/${{ github.event.pull_request.number }}/head
-          PR_SHA=$(git rev-parse FETCH_HEAD)
+          # Fetch the latest commit SHA from the PR branch          
+          PR_SHA=${{ github.event.pull_request.head.sha }}
           # Update the submodule pointer using cacheinfo
-          cd ../../
-          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
-          
-          # Deinitialize and reinitialize the submodule to ensure sync
-          git submodule deinit -f -- compiler/amd-llvm
-          git submodule update --init --recursive compiler/amd-llvm
-          
+          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm                   
           # Verify the pointer update
           git submodule status
           git submodule
