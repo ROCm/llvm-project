@@ -1410,12 +1410,6 @@ struct AAAMDGPUMinAGPRAlloc
       default: {
         // Some intrinsics may use AGPRs, but if we have a choice, we are not
         // required to use AGPRs.
-
-        if (const Function *CalledFunc = CB.getCalledFunction())
-          if (isTrapLikeLeafIntrinsic(*CalledFunc) &&
-              !CB.hasFnAttr("trap-func-name"))
-            return true;
-
         // Assume !nocallback intrinsics may call a function which requires
         // AGPRs.
         return CB.hasFnAttr(Attribute::NoCallback);
