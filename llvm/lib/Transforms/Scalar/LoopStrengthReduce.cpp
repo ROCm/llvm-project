@@ -5893,8 +5893,7 @@ void LSRInstance::RewriteForPHI(PHINode *PN, const LSRUse &LU,
                 SplitCriticalEdge(BB, Parent,
                                   CriticalEdgeSplittingOptions(&DT, &LI, MSSAU)
                                       .setMergeIdenticalEdges()
-                                      .setKeepOneInputPHIs()
-                                      .setPreserveLCSSA());
+                                      .setKeepOneInputPHIs());
           } else {
             SmallVector<BasicBlock*, 2> NewBBs;
             DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
@@ -6152,7 +6151,7 @@ LSRInstance::LSRInstance(Loop *L, IVUsers &IU, ScalarEvolution &SE,
       MSSAU(MSSAU), AMK(PreferredAddresingMode.getNumOccurrences() > 0
                             ? PreferredAddresingMode
                             : TTI.getPreferredAddressingMode(L, &SE)),
-      Rewriter(SE, L->getHeader()->getDataLayout(), "lsr", true),
+      Rewriter(SE, L->getHeader()->getDataLayout(), "lsr", false),
       BaselineCost(L, SE, TTI, AMK) {
   // If LoopSimplify form is not available, stay out of trouble.
   if (!L->isLoopSimplifyForm())
@@ -7054,7 +7053,7 @@ static bool ReduceLoopStrength(Loop *L, IVUsers &IU, ScalarEvolution &SE,
   if (EnablePhiElim && L->isLoopSimplifyForm()) {
     SmallVector<WeakTrackingVH, 16> DeadInsts;
     const DataLayout &DL = L->getHeader()->getDataLayout();
-    SCEVExpander Rewriter(SE, DL, "lsr", true);
+    SCEVExpander Rewriter(SE, DL, "lsr", false);
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
     Rewriter.setDebugType(DEBUG_TYPE);
 #endif
@@ -7135,6 +7134,9 @@ PreservedAnalyses LoopStrengthReducePass::run(Loop &L, LoopAnalysisManager &AM,
   if (!ReduceLoopStrength(&L, AM.getResult<IVUsersAnalysis>(L, AR), AR.SE,
                           AR.DT, AR.LI, AR.TTI, AR.AC, AR.TLI, AR.MSSA))
     return PreservedAnalyses::all();
+  
+  if (auto *OuterLoop = L.getOutermostLoop())
+    formLCSSARecursively(*OuterLoop, AR.DT, &AR.LI, &AR.SE);
 
   auto PA = getLoopPassPreservedAnalyses();
   if (AR.MSSA)
