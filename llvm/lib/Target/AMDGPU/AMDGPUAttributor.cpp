@@ -1384,6 +1384,14 @@ struct AAAMDGPUMinAGPRAlloc
         return true;
       }
 
+      if (const Function *CalledFunc = CB.getCalledFunction()) {
+        if (isTrapLikeLeafIntrinsic(*CalledFunc)) {
+          if (CB.hasFnAttr("trap-func-name"))
+            return CB.hasFnAttr(Attribute::NoCallback);
+          return true;
+        }
+      }
+
       switch (CB.getIntrinsicID()) {
       case Intrinsic::not_intrinsic:
         break;
@@ -1401,12 +1409,6 @@ struct AAAMDGPUMinAGPRAlloc
 
         return true;
       }
-      case Intrinsic::debugtrap:
-        // llvm.debugtrap currently lacks the attributes required for
-        // isTrapLikeLeafIntrinsic, so keep it explicitly whitelisted.
-        if (CB.hasFnAttr("trap-func-name"))
-          return CB.hasFnAttr(Attribute::NoCallback);
-        return true;
       default: {
         // Some intrinsics may use AGPRs, but if we have a choice, we are not
         // required to use AGPRs.
