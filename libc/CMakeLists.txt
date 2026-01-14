@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20.0)
 set(LLVM_SUBPROJECT_TITLE "libc")
 
+# fixme: %lc PR causing issues
+add_definitions("-DLIBC_COPT_PRINTF_DISABLE_WIDE")
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   message(FATAL_ERROR "Builds rooted in the libc directory are not supported. "
     "Builds should be rooted in the runtimes directory instead. "
