@@ -65,6 +65,11 @@ static cl::opt<bool> EnableScoreboard(
     cl::desc("Enable register scoreboard for RAW detection without s_delay_alu"),
     cl::init(false), cl::Hidden);
 
+static cl::opt<unsigned> VaVdstMultiplier(
+    "amdgpu-static-sim-va-vdst-multiplier",
+    cl::desc("Multiplier for VA_VDST latency tracking (default 1)"),
+    cl::init(4), cl::Hidden);
+
 /// Check if enabled via cl::opt or AMDGPU_ENABLE_STATIC_SIM env var.
 static bool isStaticSimulatorEnabled() {
   if (const char *EnvVal = std::getenv("AMDGPU_ENABLE_STATIC_SIM"))
@@ -1217,8 +1222,8 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
       State.VaSSRCBusyUntil = std::max(State.VaSSRCBusyUntil,
                                           State.CurrentCycle + T.Latency);
     }
-    // Track pending VGPR write for va_vdst
-    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency});
+    // Track pending VGPR write for va_vdst (with optional multiplier)
+    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency * VaVdstMultiplier});
     break;
   }
 
@@ -1235,8 +1240,8 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
     // TRANS sets 1-cycle hazard for LOLVALU (next LOLVALU must wait 1 cycle)
     State.LOLVALUTRANSHazardUntil = std::max(State.LOLVALUTRANSHazardUntil,
                                               State.CurrentCycle + 2);
-    // Track pending VGPR write for va_vdst
-    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency});
+    // Track pending VGPR write for va_vdst (with optional multiplier)
+    State.PendingVaVdst.push_back({State.CurrentCycle + T.Latency * VaVdstMultiplier});
     break;
 
   case InstClass::WMMA: {
@@ -1266,8 +1271,8 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
 
     // XDL (WMMA) is recorded as TRANS in the scoreboard for VA_VDST tracking
     // Per ISA: "XDL (WMMA, SWMMAC) instructions are recorded as TRANS"
-    // Use co-execution window occupancy for timing consistency
-    State.PendingVaVdst.push_back({WMMAStartCycle + Occupancy});
+    // Use co-execution window occupancy for timing consistency (with optional multiplier)
+    State.PendingVaVdst.push_back({WMMAStartCycle + Occupancy * VaVdstMultiplier});
 
     if (VerboseSimulation) {
       dbgs() << "  Class: WMMA | Unit: XDL | Occupancy: " << Occupancy

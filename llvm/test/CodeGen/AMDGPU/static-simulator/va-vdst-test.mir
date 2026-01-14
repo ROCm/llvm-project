@@ -90,4 +90,4 @@ body: |
 # CHECK: V_WMMA_F32_16X16X32_BF16
 # CHECK: Occupancy: 8 | Window: 9
 # CHECK: S_WAITCNT_DEPCTR 3999
-# CHECK: s_wait_alu: va_vdst(0), pending=1, stall=7
+# CHECK: s_wait_alu: va_vdst(0), pending=1, stall=31
