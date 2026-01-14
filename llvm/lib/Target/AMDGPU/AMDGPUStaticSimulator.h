@@ -116,7 +116,8 @@ enum class StallReason : uint8_t {
   DELAY_ALU,            // RAW dependency (s_delay_alu)
   MEM_FIFO,             // Memory FIFO full
   MSB_SET_EXPOSED,      // s_set_vgpr_msb not fused
-  REG_BANK              // Register bank conflict (operands in same sub-bank)
+  REG_BANK,             // Register bank conflict (operands in same sub-bank)
+  IS_FETCH
 };
 
 /// Stage type for WMMA co-execution (for annotation display)
@@ -160,6 +161,7 @@ struct InstrSimInfo {
     case StallReason::MEM_FIFO:           return "FIFO full";
     case StallReason::MSB_SET_EXPOSED:    return "MSB exposed";
     case StallReason::REG_BANK:           return "RegBank conflict";
+    case StallReason::IS_FETCH:           return "IS fetch";
     }
     return "Unknown";
   }
@@ -444,6 +446,75 @@ inline WMMACoExecInfo getWMMACoExecInfo(const MachineInstr &MI,
 }
 
 //===----------------------------------------------------------------------===//
+// Instruction Store (IS) Cache Model
+//===----------------------------------------------------------------------===//
+
+namespace ISCache {
+  constexpr unsigned NumLines = 4;
+  constexpr unsigned LineSizeDW = 16;
+  constexpr unsigned LineSizeBytes = LineSizeDW * 4;
+} // namespace ISCache
+
+struct ISCacheState {
+  unsigned CurrentLine = 0;
+  unsigned BytesConsumed = 0;
+
+  std::array<unsigned, ISCache::NumLines> LineReadyCycle = {0, 0, 0, 0};
+
+  unsigned TotalFetchStalls = 0;
+
+  unsigned NumFetchesTriggered = 0;
+
+  unsigned consumeBytes(unsigned Bytes, unsigned CurrentCycle,
+                        unsigned FetchLatency) {
+    unsigned Stall = 0;
+
+    while (Bytes > 0) {
+      unsigned RemainingInLine = ISCache::LineSizeBytes - BytesConsumed;
+
+      if (Bytes <= RemainingInLine) {
+        BytesConsumed += Bytes;
+        Bytes = 0;
+      } else {
+        Bytes -= RemainingInLine;
+        BytesConsumed = ISCache::LineSizeBytes;
+      }
+
+      if (BytesConsumed >= ISCache::LineSizeBytes) {
+        unsigned FinishedLine = CurrentLine;
+        LineReadyCycle[FinishedLine] = CurrentCycle + FetchLatency;
+        NumFetchesTriggered++;
+
+        CurrentLine = (CurrentLine + 1) % ISCache::NumLines;
+        BytesConsumed = 0;
+
+        if (LineReadyCycle[CurrentLine] > CurrentCycle) {
+          unsigned LineStall = LineReadyCycle[CurrentLine] - CurrentCycle;
+          Stall += LineStall;
+          TotalFetchStalls += LineStall;
+        }
+      }
+    }
+
+    return Stall;
+  }
+
+  unsigned getCurrentLineStall(unsigned CurrentCycle) const {
+    if (LineReadyCycle[CurrentLine] > CurrentCycle)
+      return LineReadyCycle[CurrentLine] - CurrentCycle;
+    return 0;
+  }
+
+  void reset() {
+    CurrentLine = 0;
+    BytesConsumed = 0;
+    LineReadyCycle = {0, 0, 0, 0};
+    TotalFetchStalls = 0;
+    NumFetchesTriggered = 0;
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // PendingMemOp - Tracks in-flight memory operations
 //===----------------------------------------------------------------------===//
 
@@ -551,6 +622,9 @@ struct BlockMetrics {
   unsigned StallVaSSRC = 0;
   unsigned StallVaVdst = 0;
   unsigned StallRAW = 0;
+  unsigned StallISFetch = 0;
+  unsigned ISFetchesTriggered = 0;
+  unsigned ISBytesConsumed = 0;
 
   unsigned VGPRCacheHits = 0;
   unsigned VGPRCacheMisses = 0;
@@ -564,7 +638,8 @@ struct BlockMetrics {
   unsigned StallCycles() const {
     return NumMSBSetExposed + StallFunctionalUnit + StallCoExec +
            StallDelayAlu + StallMemFIFO + StallWaitCnt + StallRegBankConflict +
-           StallLOLVALUTRANS + StallVaSSRC + StallVaVdst + StallRAW;
+           StallLOLVALUTRANS + StallVaSSRC + StallVaVdst + StallRAW +
+           StallISFetch;
   }
 
   // WMMA Co-execution
@@ -643,6 +718,8 @@ struct BlockMetrics {
     Result.StallVaSSRC = scale(StallVaSSRC);
     Result.StallVaVdst = scale(StallVaVdst);
     Result.StallRAW = scale(StallRAW);
+    Result.StallISFetch = scale(StallISFetch);
+    Result.ISFetchesTriggered = scale(ISFetchesTriggered);
 
     Result.VGPRCacheHits = scale(VGPRCacheHits);
     Result.VGPRCacheMisses = scale(VGPRCacheMisses);
@@ -720,6 +797,8 @@ struct BlockMetrics {
     Result.StallVaSSRC = StallVaSSRC + O.StallVaSSRC;
     Result.StallVaVdst = StallVaVdst + O.StallVaVdst;
     Result.StallRAW = StallRAW + O.StallRAW;
+    Result.StallISFetch = StallISFetch + O.StallISFetch;
+    Result.ISFetchesTriggered = ISFetchesTriggered + O.ISFetchesTriggered;
 
     Result.VGPRCacheHits = VGPRCacheHits + O.VGPRCacheHits;
     Result.VGPRCacheMisses = VGPRCacheMisses + O.VGPRCacheMisses;
@@ -835,6 +914,13 @@ struct BlockMetrics {
     Emit("VaSSRC", StallVaSSRC);
     Emit("VaVdst", StallVaVdst);
     Emit("RAW", StallRAW);
+    if (StallISFetch) {
+      if (!First) OS << " | ";
+      OS << "ISFetch:" << StallISFetch;
+      if (ISFetchesTriggered)
+        OS << " (" << ISFetchesTriggered << " fetches)";
+      First = false;
+    }
     if (RegBankConflictsInWMMAWindow) {
       if (!First) OS << " | ";
       OS << "RegBankInWMMA:" << RegBankConflictsInWMMAWindow << " (not counted)";
@@ -1080,6 +1166,8 @@ struct RegisterFile {
 struct GPUSimState {
   unsigned CurrentCycle = 0;
   RegisterFile RegFile;
+
+  ISCacheState ISCache;
 
   std::array<unsigned, static_cast<size_t>(FunctionalUnit::NUM_UNITS)>
       UnitBusyUntil = {};

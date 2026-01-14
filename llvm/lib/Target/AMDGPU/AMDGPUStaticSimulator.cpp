@@ -70,6 +70,16 @@ static cl::opt<unsigned> VaVdstMultiplier(
     cl::desc("Multiplier for VA_VDST latency tracking (default 1)"),
     cl::init(4), cl::Hidden);
 
+static cl::opt<unsigned> SQCToISLatency(
+    "amdgpu-static-sim-sqc-is-latency",
+    cl::desc("SQC to IS (Instruction Store) cache line fetch latency in cycles"),
+    cl::init(26), cl::Hidden);
+
+static cl::opt<bool> EnableISCacheModel(
+    "amdgpu-static-sim-is-cache",
+    cl::desc("Enable Instruction Store cache line modeling"),
+    cl::init(true), cl::Hidden);
+
 /// Check if enabled via cl::opt or AMDGPU_ENABLE_STATIC_SIM env var.
 static bool isStaticSimulatorEnabled() {
   if (const char *EnvVal = std::getenv("AMDGPU_ENABLE_STATIC_SIM"))
@@ -705,6 +715,7 @@ struct StallSources {
   unsigned SSRC = 0;
   unsigned VaVdst = 0;
   unsigned RAW = 0;              // RAW: register dependency (all instruction types)
+  unsigned ISFetch = 0;
   std::string CachePattern;
 
   unsigned CacheHits = 0;
@@ -724,7 +735,7 @@ struct StallSources {
     unsigned EffectiveRegBank = RegBankInWMMAWindow ? 0 : RegBank;
     return std::max({Unit, VALUSlot, CoExec, DelayAlu, WaitCnt, MemFIFO,
                      EffectiveRegBank, LongLatVALU, LOLVALUTRANSHazard, SSRC,
-                     VaVdst, RAW});
+                     VaVdst, RAW, ISFetch});
   }
 };
 
@@ -794,6 +805,38 @@ bool handleMSBSet(InstClass IC, GPUSimState &State, BlockMetrics &Metrics,
     }
   }
 
+  unsigned ISFetchStall = 0;
+  if (EnableISCacheModel) {
+    unsigned InstBytes = TII.getInstSizeInBytes(MI);
+
+    ISFetchStall = State.ISCache.getCurrentLineStall(State.CurrentCycle);
+    if (ISFetchStall > 0) {
+      Metrics.StallISFetch += ISFetchStall;
+      State.advanceToCycle(State.CurrentCycle + ISFetchStall);
+    }
+
+    unsigned FetchesBefore = State.ISCache.NumFetchesTriggered;
+    unsigned AdditionalISStall = State.ISCache.consumeBytes(
+        InstBytes, State.CurrentCycle, SQCToISLatency);
+
+    if (AdditionalISStall > 0) {
+      Metrics.StallISFetch += AdditionalISStall;
+      State.advanceToCycle(State.CurrentCycle + AdditionalISStall);
+    }
+
+    unsigned FetchesTriggered = State.ISCache.NumFetchesTriggered - FetchesBefore;
+    if (FetchesTriggered > 0)
+      Metrics.ISFetchesTriggered += FetchesTriggered;
+
+    if (VerboseSimulation && (ISFetchStall > 0 || AdditionalISStall > 0 || FetchesTriggered > 0)) {
+      dbgs() << "    IS: consumed " << InstBytes << " bytes, "
+             << "stall=" << (ISFetchStall + AdditionalISStall)
+             << ", fetches=" << FetchesTriggered << "\n";
+    }
+
+    Metrics.ISBytesConsumed += InstBytes;
+  }
+
   // Apply outcome
   Metrics.NumInstructions++;
   Metrics.NumMSBSet++;
@@ -818,6 +861,13 @@ bool handleMSBSet(InstClass IC, GPUSimState &State, BlockMetrics &Metrics,
     dbgs() << "\n[Cycle " << DisplayCycle << "] ";
     MI.print(dbgs(), /*IsStandalone=*/true, /*SkipOpers=*/false,
              /*SkipDebugLoc=*/true, /*AddNewLine=*/false);
+
+    unsigned InstBytes = TII.getInstSizeInBytes(MI);
+    dbgs() << "\n  Class: MSB_SET | Size: " << InstBytes << " bytes";
+    if (EnableISCacheModel) {
+      dbgs() << " | IS: line " << State.ISCache.CurrentLine
+             << " byte " << State.ISCache.BytesConsumed << "/" << ISCache::LineSizeBytes;
+    }
     dbgs() << "\n  → MSB_SET ";
     if (Outcome == MSBSetOutcome::Fused) {
       dbgs() << "fused with prev (free)";
@@ -1163,6 +1213,7 @@ void attributeStall(const StallSources &S, FunctionalUnit Unit, InstClass IC,
     Metrics.StallRAW += TotalStall;
   } else if (S.RegBank == TotalStall && !S.RegBankInWMMAWindow) {
     Metrics.StallRegBankConflict += TotalStall;
+  } else if (S.ISFetch == TotalStall) {
   }
 }
 
@@ -1383,16 +1434,34 @@ void recordInstruction(const MachineInstr &MI, const InstTiming &T,
 // Verbose Logging Helpers
 //===----------------------------------------------------------------------===//
 
-void logInstHeader(unsigned Cycle, const MachineInstr &MI, const InstTiming &T) {
+void logInstHeader(unsigned Cycle, const MachineInstr &MI, const InstTiming &T,
+                   const SIInstrInfo &TII, const GPUSimState &State) {
   dbgs() << "\n[Cycle " << Cycle << "] ";
   MI.print(dbgs(), /*IsStandalone=*/true, /*SkipOpers=*/false,
            /*SkipDebugLoc=*/true, /*AddNewLine=*/false);
   dbgs() << "\n";
-  if (T.IC != InstClass::WMMA) {
-    dbgs() << "  Class: " << getInstClassName(T.IC)
-           << " | Unit: " << getUnitName(T.Unit)
-           << " | Latency: " << T.Latency
-           << " | ResourceCycles: " << T.ResourceCycles << "\n";
+
+  unsigned InstBytes = TII.getInstSizeInBytes(MI);
+  dbgs() << "  Class: " << getInstClassName(T.IC)
+         << " | Unit: " << getUnitName(T.Unit)
+         << " | Latency: " << T.Latency
+         << " | ResourceCycles: " << T.ResourceCycles
+         << " | Size: " << InstBytes << " bytes\n";
+
+  // Show IS cache state
+  if (EnableISCacheModel) {
+    dbgs() << "  IS: line " << State.ISCache.CurrentLine
+           << " byte " << State.ISCache.BytesConsumed
+           << "/" << ISCache::LineSizeBytes
+           << " | lines ready @[";
+    for (unsigned i = 0; i < ISCache::NumLines; ++i) {
+      if (i > 0) dbgs() << ",";
+      if (State.ISCache.LineReadyCycle[i] <= Cycle)
+        dbgs() << "now";
+      else
+        dbgs() << State.ISCache.LineReadyCycle[i];
+    }
+    dbgs() << "]\n";
   }
 }
 
@@ -1421,6 +1490,7 @@ void logStalls(const StallSources &Stalls, const GPUSimState &State) {
     printStall("WaitCnt", Stalls.WaitCnt);
     printStall("MemFIFO", Stalls.MemFIFO);
     printStall("RegBank", Stalls.RegBank);
+    printStall("ISFetch", Stalls.ISFetch);
     if (Stalls.RegBankInWMMAWindow && Stalls.RegBank > 0)
       dbgs() << " [in WMMA window, not counted]";
   }
@@ -1559,6 +1629,7 @@ static StallReason getDominantStallReason(const StallSources &Stalls) {
     Max = Stalls.RegBank;
     Reason = StallReason::REG_BANK;
   }
+  if (Stalls.ISFetch > Max) { Max = Stalls.ISFetch; Reason = StallReason::IS_FETCH; }
 
   return Reason;
 }
@@ -1596,7 +1667,7 @@ void simulateInst(const MachineInstr &MI, const SIInstrInfo &TII,
     return;
 
   if (VerboseSimulation)
-    logInstHeader(EntryCycle, MI, T);
+    logInstHeader(EntryCycle, MI, T, TII, State);
 
   if (T.IC == InstClass::WAITCNT) {
     const MachineBasicBlock *MBB = MI.getParent();
@@ -1614,6 +1685,20 @@ void simulateInst(const MachineInstr &MI, const SIInstrInfo &TII,
   WMMAWindowCapture WMMAState = captureWMMAWindowState(State, EntryCycle, T.IC);
   StallSources Stalls = computeStallSources(MI, T.IC, T.Unit, TII, State);
 
+  if (EnableISCacheModel) {
+    unsigned PotentialIssueCycle = State.CurrentCycle + Stalls.total();
+    unsigned ISLineStall = State.ISCache.getCurrentLineStall(PotentialIssueCycle);
+    if (ISLineStall > 0) {
+      Stalls.ISFetch = ISLineStall;
+      if (VerboseSimulation) {
+        dbgs() << "    IS fetch stall: line " << State.ISCache.CurrentLine
+               << " not ready until cycle "
+               << State.ISCache.LineReadyCycle[State.ISCache.CurrentLine]
+               << ", stall=" << ISLineStall << "\n";
+      }
+    }
+  }
+
   if (VerboseSimulation)
     logStalls(Stalls, State);
 
@@ -1625,6 +1710,40 @@ void simulateInst(const MachineInstr &MI, const SIInstrInfo &TII,
       dbgs() << "  → Advancing cycle: " << State.CurrentCycle
              << " → " << ReadyCycle << "\n";
     State.advanceToCycle(ReadyCycle);
+  }
+
+  if (EnableISCacheModel) {
+    unsigned InstBytes = TII.getInstSizeInBytes(MI);
+    unsigned FetchesBefore = State.ISCache.NumFetchesTriggered;
+    unsigned AdditionalISStall = State.ISCache.consumeBytes(
+        InstBytes, State.CurrentCycle, SQCToISLatency);
+
+    if (AdditionalISStall > 0) {
+      Metrics.StallISFetch += AdditionalISStall;
+      State.advanceToCycle(State.CurrentCycle + AdditionalISStall);
+      if (VerboseSimulation) {
+        dbgs() << "    IS line transition stall: +" << AdditionalISStall
+               << " cycles (instruction spans lines)\n";
+      }
+    }
+
+    unsigned FetchesTriggered = State.ISCache.NumFetchesTriggered - FetchesBefore;
+    if (FetchesTriggered > 0) {
+      Metrics.ISFetchesTriggered += FetchesTriggered;
+      if (VerboseSimulation) {
+        dbgs() << "    IS fetch triggered: line "
+               << ((State.ISCache.CurrentLine + ISCache::NumLines - 1) % ISCache::NumLines)
+               << " → ready @ " << (State.CurrentCycle + SQCToISLatency)
+               << ", now issuing from line " << State.ISCache.CurrentLine
+               << " (byte " << State.ISCache.BytesConsumed << ")\n";
+      }
+    }
+
+    Metrics.ISBytesConsumed += InstBytes;
+  }
+
+  if (Stalls.ISFetch > 0) {
+    Metrics.StallISFetch += Stalls.ISFetch;
   }
 
   trackWMMACoExec(T.IC, Stalls, State, Metrics);
@@ -1718,6 +1837,42 @@ static void printBlockFrequencies(const MachineFunction &MF,
 
 constexpr unsigned DefaultTripCount = 10;
 
+static cl::opt<unsigned>
+    TripCountOverride("amdgpu-static-sim-trip-count", cl::Hidden,
+                               cl::desc("Override static sim trip count analysis."));
+
+static unsigned computeSteadyStateISStall(unsigned LoopBodyBytes,
+                                          unsigned LoopBodyCycles,
+                                          unsigned FetchLatency) {
+  if (LoopBodyCycles == 0 || FetchLatency == 0)
+    return 0;
+
+  unsigned FetchableBytes = (LoopBodyCycles * ISCache::LineSizeBytes) / FetchLatency;
+
+  if (LoopBodyBytes > FetchableBytes) {
+    unsigned ExcessBytes = LoopBodyBytes - FetchableBytes;
+    unsigned ExcessLines = (ExcessBytes + ISCache::LineSizeBytes - 1) / ISCache::LineSizeBytes;
+    return ExcessLines * FetchLatency;
+  }
+  return 0;
+}
+
+static unsigned computeIterationsUntilBackup(unsigned LoopBodyBytes,
+                                             unsigned LoopBodyCycles,
+                                             unsigned FetchLatency) {
+  if (LoopBodyCycles == 0 || FetchLatency == 0 || LoopBodyBytes == 0)
+    return UINT_MAX;
+
+  unsigned InitialBuffer = ISCache::NumLines * ISCache::LineSizeBytes;
+  unsigned FetchablePerIter = (LoopBodyCycles * ISCache::LineSizeBytes) / FetchLatency;
+
+  if (LoopBodyBytes <= FetchablePerIter)
+    return UINT_MAX;
+
+  unsigned DeficitPerIter = LoopBodyBytes - FetchablePerIter;
+  return (InitialBuffer + DeficitPerIter - 1) / DeficitPerIter;
+}
+
 unsigned getLoopTripCount(MachineLoop *L,
                           const MachineBlockFrequencyInfo *MBFI = nullptr) {
   if (MBFI) {
@@ -1748,7 +1903,7 @@ BlockMetrics analyzeLoop(MachineLoop *L, MachineLoopInfo &MLI,
                          DenseSet<MachineBasicBlock *> &Visited,
                          KernelPerfReport &Report,
                          const MachineBlockFrequencyInfo *MBFI) {
-  unsigned TripCount = getLoopTripCount(L, MBFI);
+  unsigned TripCount = TripCountOverride.getNumOccurrences() ? TripCountOverride.getValue() : getLoopTripCount(L, MBFI);
   unsigned LoopDepth = L->getLoopDepth();
 
   Report.NumLoops++;
@@ -1864,6 +2019,50 @@ BlockMetrics analyzeLoop(MachineLoop *L, MachineLoopInfo &MLI,
   if (VerboseSimulation)
     dbgs() << "  Scaled total: " << ScaledMetrics.TotalCycles << " cycles "
            << "(Cold + Warm * " << (TripCount - 1) << ")\n";
+
+  if (EnableISCacheModel && TripCount > 1 && WarmMetrics.TotalCycles > 0) {
+    unsigned LoopBodyBytes = WarmMetrics.ISBytesConsumed;
+    unsigned LoopBodyCycles = WarmMetrics.TotalCycles;
+    unsigned FetchLatency = SQCToISLatency;
+
+    unsigned SteadyStateStall = computeSteadyStateISStall(LoopBodyBytes,
+                                                          LoopBodyCycles,
+                                                          FetchLatency);
+    unsigned IterationsUntilBackup = computeIterationsUntilBackup(LoopBodyBytes,
+                                                                   LoopBodyCycles,
+                                                                   FetchLatency);
+
+    if (VerboseSimulation) {
+      dbgs() << "\n  IS Cache Analysis:\n";
+      dbgs() << "    Loop body: " << LoopBodyBytes << " bytes / "
+             << LoopBodyCycles << " cycles\n";
+      dbgs() << "    Fetch rate: " << format("%.2f", 64.0 / FetchLatency)
+             << " bytes/cycle (1 line per " << FetchLatency << " cycles)\n";
+      dbgs() << "    Consume rate: " << format("%.2f", (float)LoopBodyBytes / LoopBodyCycles)
+             << " bytes/cycle\n";
+      if (IterationsUntilBackup < UINT_MAX) {
+        dbgs() << "    *** IS cache backs up after ~" << IterationsUntilBackup
+               << " iterations ***\n";
+        dbgs() << "    Steady-state stall per iteration: " << SteadyStateStall
+               << " cycles\n";
+      } else {
+        dbgs() << "    IS cache does NOT back up (fetch >= consume)\n";
+      }
+    }
+
+    if (IterationsUntilBackup < TripCount && SteadyStateStall > 0) {
+      unsigned StallIterations = TripCount - IterationsUntilBackup;
+      unsigned AdditionalISStall = StallIterations * SteadyStateStall;
+
+      if (VerboseSimulation) {
+        dbgs() << "    Adding " << AdditionalISStall << " estimated IS stall cycles "
+               << "(" << StallIterations << " × " << SteadyStateStall << ")\n";
+      }
+
+      ScaledMetrics.StallISFetch += AdditionalISStall;
+      ScaledMetrics.TotalCycles += AdditionalISStall;
+    }
+  }
 
   return ScaledMetrics;
 }
