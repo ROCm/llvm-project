@@ -29,6 +29,26 @@ on:
         type: string
       sanity_check_only_for_family:
         type: boolean
+      external_source_checkout:
+        type: boolean
+        description: "Whether source is from external repo (rocm-libraries/systems)"
+        default: false
+      therock_ref:
+        type: string
+        description: "TheRock git ref to use (for external repos)"
+        default: ""
+      repository_override:
+        type: string
+        description: "Override github.repository for testing (e.g., 'ROCm/rocm-libraries')"
+        default: ""
+      cmake_options:
+        type: string
+        description: "Extra CMake options for external repo projects"
+        default: ""
+      project_to_test:
+        type: string
+        description: "Comma-separated list of projects to test (for external repos)"
+        default: ""
 
 permissions:
   contents: read
