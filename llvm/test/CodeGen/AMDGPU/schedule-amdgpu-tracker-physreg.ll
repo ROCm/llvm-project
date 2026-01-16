@@ -1,5 +1,8 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=tahiti -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0  < %s | FileCheck --check-prefix=GCN %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=tahiti -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0 -amdgpu-use-amdgpu-trackers=1  < %s | FileCheck --check-prefix=GCN-GCNTRACKERS %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=tahiti -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0 -debug-only=machine-scheduler < %s 2>&1 | FileCheck --check-prefix=SCHED %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=tahiti -amdgpu-s-branch-bits=5 -amdgpu-long-branch-factor=0 -amdgpu-use-amdgpu-trackers=1 -debug-only=machine-scheduler < %s 2>&1 | FileCheck --check-prefix=SCHED-GCNTRACKERS %s
+; REQUIRES: asserts
 ; CHECK-LABEL: {{^}}spill:
 ; GCN:    NumSgprs: 104
 ; GCN-GCNTRACKERS:    NumSgprs: 104
@@ -9,8 +12,21 @@
 ; GCN-GCNTRACKERS:    ScratchSize: 0
 ; GCN:    Occupancy: 5
 ; GCN-GCNTRACKERS:    Occupancy: 5
-
-; NOTE: GCN Trackers now track pressure from both virtual and physical registers
+;
+; Check scheduling pressure values:
+; SCHED-LABEL: spill:%bb.0 entry
+; SCHED: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 98
+; SCHED: Pressure after scheduling: VGPRs: 0 AGPRs: 0, SGPRs: 97
+;
+; SCHED-GCNTRACKERS-LABEL: spill:%bb.0 entry
+; SCHED-GCNTRACKERS: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 99
+; SCHED-GCNTRACKERS: Pressure after scheduling: VGPRs: 0 AGPRs: 0, SGPRs: 99
+;
+; NOTE: GCN Trackers now track pressure from both virtual and physical registers.
+; The +1 in region pressure and +2 in final pressure comes from summing physical
+; register pressure (from inline asm constraints) with virtual register pressure.
+; This causes the scheduler to be more conservative, which can lead to different
+; register allocation decisions (hence the extra VGPR in the GCN-GCNTRACKERS case).
 
 define amdgpu_kernel void @spill(ptr addrspace(1) %arg, i32 %cnd) #0 {
 entry:
@@ -249,6 +265,12 @@ bb3:
 ; GCN-GCNTRACKERS:    NumVgprs: 3
 ; GCN:    ScratchSize: 8
 ; GCN-GCNTRACKERS:    ScratchSize: 12
+;
+; SCHED-LABEL: spill_func:%bb.0 entry
+; SCHED: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 97
+;
+; SCHED-GCNTRACKERS-LABEL: spill_func:%bb.0 entry
+; SCHED-GCNTRACKERS: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 98
 
 define void @spill_func(ptr addrspace(1) %arg) #0 {
 entry:
