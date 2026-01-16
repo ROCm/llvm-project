@@ -4771,7 +4771,10 @@ struct AAKernelInfoFunction : AAKernelInfo {
       updateReachingKernelEntries(A, AllReachingKernelsKnown);
       UsedAssumedInformationFromReachingKernels = !AllReachingKernelsKnown;
 
-      if (!SPMDCompatibilityTracker.empty()) {
+      // Only check SPMD compatibility if there are instructions that need
+      // guarding and we haven't already reached a fixpoint for SPMD tracking.
+      if (!SPMDCompatibilityTracker.empty() &&
+          !SPMDCompatibilityTracker.isAtFixpoint()) {
         if (!ParallelLevels.isValidState())
           SPMDCompatibilityTracker.indicatePessimisticFixpoint();
         else if (!ReachingKernelEntries.isValidState())
@@ -4884,6 +4887,11 @@ private:
   /// Update info regarding reaching kernels.
   void updateReachingKernelEntries(Attributor &A,
                                    bool &AllReachingKernelsKnown) {
+    // If ReachingKernelEntries is already at a fixpoint, no need to
+    // iterate over all call sites again.
+    if (ReachingKernelEntries.isAtFixpoint())
+      return;
+
     auto PredCallSite = [&](AbstractCallSite ACS) {
       Function *Caller = ACS.getInstruction()->getFunction();
 
@@ -4911,6 +4919,11 @@ private:
 
   /// Update info regarding parallel levels.
   void updateParallelLevels(Attributor &A) {
+    // If ParallelLevels is already at a fixpoint, no need to iterate over
+    // all call sites again.
+    if (ParallelLevels.isAtFixpoint())
+      return;
+
     auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
     OMPInformationCache::RuntimeFunctionInfo &Parallel60RFI =
         OMPInfoCache.RFIs[OMPRTL___kmpc_parallel_60];
@@ -5680,6 +5693,15 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
     A.getOrCreateAAFor<AAHeapToStack>(IRPosition::function(F));
   if (F.hasFnAttribute(Attribute::Convergent))
     A.getOrCreateAAFor<AANonConvergent>(IRPosition::function(F));
+
+  // Skip per-instruction AA registration for very large functions.
+  // Large functions (e.g., runtime library functions) are often eliminated
+  // as dead code, and even when kept, fine-grained per-instruction analysis
+  // is expensive and may not be effective. Kernels are typically small and
+  // will always be analyzed.
+  constexpr unsigned InstructionThreshold = 1000;
+  if (!F.hasFnAttribute("kernel") && F.getInstructionCount() > InstructionThreshold)
+    return;
 
   for (auto &I : instructions(F)) {
     if (auto *LI = dyn_cast<LoadInst>(&I)) {
