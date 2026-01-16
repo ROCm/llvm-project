@@ -22,13 +22,6 @@ THE SOFTWARE.
 
 #include "hipBin.h"
 
-#if defined _WIN32 || defined _WIN64
-#include <windows.h>
-#include <iostream>
-#include <tchar.h>
-#include <stdio.h>
-#endif
-
 int main(int argc, char* argv[]){
     HipBin hipbin;
     vector<HipBinBase*>& platformPtrs = hipbin.getHipBinPtrs();
@@ -38,16 +31,16 @@ int main(int argc, char* argv[]){
     LPTSTR cmd = GetCommandLine();
     TCHAR* context = NULL;
     LPTSTR token = _tcstok_s(cmd, " ", &context);
-#endif
 
-    for (int i = 0; i < argc; i++) {
-#if defined _WIN32 || defined _WIN64
-        argvcc.push_back(token);
-	token = _tcstok_s(NULL, " ", &context); 
-#else
-	argvcc.push_back(argv[i]);
-#endif
+    while (token != NULL) {
+      argvcc.push_back(token);
+      token = _tcstok_s(NULL, " ", &context); 
     }
+#else
+    for (int i = 0; i < argc; i++) {
+      argvcc.push_back(argv[i]);
+    }
+#endif
 
     // 0th index points to the first platform detected.
     // In the near future this vector will contain mulitple devices
