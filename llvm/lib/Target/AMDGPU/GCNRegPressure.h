@@ -285,9 +285,8 @@ protected:
   GCNRegPressure CurVirtPressure, MaxVirtPressure;
   
   // Physical register tracking (new) - uses register units
-  // Using shared_ptr because LiveRegSet contains SparseSet with deleted copy ctor
-  // Temporary tracker copies share the same PhysLiveRegs for read-only access
-  std::shared_ptr<llvm::LiveRegSet> PhysLiveRegs;
+  // LiveRegSet now has a copy constructor that properly deep-copies the underlying SparseSet
+  llvm::LiveRegSet PhysLiveRegs;
   GCNRegPressure CurPhysPressure, MaxPhysPressure;
   
   // Flag to control whether physical register tracking is active
@@ -297,19 +296,21 @@ protected:
   const MachineInstr *LastTrackedMI = nullptr;
   mutable const MachineRegisterInfo *MRI = nullptr;
 
-  GCNRPTracker(const LiveIntervals &LIS_) 
-      : LIS(LIS_), 
-        PhysLiveRegs(std::make_shared<llvm::LiveRegSet>()) {}
+  GCNRPTracker(const LiveIntervals &LIS_) : LIS(LIS_) {}
   
-  // Copy constructor - PhysLiveRegs shared_ptr is copied (temporary trackers
-  // read from the same PhysLiveRegs without modifying it)
+  // Copy constructor - PhysLiveRegs must be initialized then copied
   GCNRPTracker(const GCNRPTracker &Other) 
       : LIS(Other.LIS), VirtLiveRegs(Other.VirtLiveRegs),
         CurVirtPressure(Other.CurVirtPressure), MaxVirtPressure(Other.MaxVirtPressure),
-        PhysLiveRegs(Other.PhysLiveRegs), // Share the PhysLiveRegs
         CurPhysPressure(Other.CurPhysPressure), MaxPhysPressure(Other.MaxPhysPressure),
         TrackPhysRegs(Other.TrackPhysRegs),
-        LastTrackedMI(Other.LastTrackedMI), MRI(Other.MRI) {}
+        LastTrackedMI(Other.LastTrackedMI), MRI(Other.MRI) {
+    // Initialize PhysLiveRegs with proper universe, then copy contents
+    if (MRI) {
+      PhysLiveRegs.init(*MRI);
+      PhysLiveRegs = Other.PhysLiveRegs;  // Use assignment operator to copy live regs
+    }
+  }
 
   void reset(const MachineInstr &MI, const LiveRegSet *LiveRegsCopy,
              bool After);
@@ -327,7 +328,7 @@ public:
   // Initialize PhysLiveRegs capacity. Must be called before first use.
   // Always call this for safety, even if physical tracking is disabled.
   void initPhysLiveRegs(const MachineRegisterInfo &MRI_) {
-    PhysLiveRegs->init(MRI_);
+    PhysLiveRegs.init(MRI_);
   }
   
   // Enable physical register tracking. Should only be called when GCNTrackers
@@ -342,7 +343,7 @@ public:
   // live regs for the current state
   const decltype(VirtLiveRegs) &getLiveRegs() const { return VirtLiveRegs; }
   const decltype(VirtLiveRegs) &getVirtLiveRegs() const { return VirtLiveRegs; }
-  const llvm::LiveRegSet *getPhysLiveRegs() const { return PhysLiveRegs.get(); }
+  const llvm::LiveRegSet *getPhysLiveRegs() const { return &PhysLiveRegs; }
   const MachineInstr *getLastTrackedMI() const { return LastTrackedMI; }
 
   void clearMaxPressure() { 

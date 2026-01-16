@@ -293,6 +293,23 @@ private:
   }
 
 public:
+  // Default constructor
+  LiveRegSet() = default;
+  
+  // Copy assignment operator - copies live register contents
+  // Note: Both LiveRegSets must have been initialized with init() first
+  LiveRegSet &operator=(const LiveRegSet &Other) {
+    if (this != &Other) {
+      NumRegUnits = Other.NumRegUnits;
+      Regs.clear();
+      // Copy each element from Other.Regs into this->Regs
+      for (const IndexMaskPair &Pair : Other.Regs) {
+        Regs.insert(Pair);
+      }
+    }
+    return *this;
+  }
+  
   LLVM_ABI void clear();
   LLVM_ABI void init(const MachineRegisterInfo &MRI);
 

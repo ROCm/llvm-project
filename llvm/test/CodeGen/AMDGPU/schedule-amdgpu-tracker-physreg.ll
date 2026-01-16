@@ -7,7 +7,7 @@
 ; GCN:    NumSgprs: 104
 ; GCN-GCNTRACKERS:    NumSgprs: 104
 ; GCN:    NumVgprs: 1
-; GCN-GCNTRACKERS:    NumVgprs: 2
+; GCN-GCNTRACKERS:    NumVgprs: 1
 ; GCN:    ScratchSize: 0
 ; GCN-GCNTRACKERS:    ScratchSize: 0
 ; GCN:    Occupancy: 5
@@ -20,13 +20,13 @@
 ;
 ; SCHED-GCNTRACKERS-LABEL: spill:%bb.0 entry
 ; SCHED-GCNTRACKERS: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 99
-; SCHED-GCNTRACKERS: Pressure after scheduling: VGPRs: 0 AGPRs: 0, SGPRs: 99
+; SCHED-GCNTRACKERS: Pressure after scheduling: VGPRs: 0 AGPRs: 0, SGPRs: 98
 ;
 ; NOTE: GCN Trackers now track pressure from both virtual and physical registers.
-; The +1 in region pressure and +2 in final pressure comes from summing physical
-; register pressure (from inline asm constraints) with virtual register pressure.
-; This causes the scheduler to be more conservative, which can lead to different
-; register allocation decisions (hence the extra VGPR in the GCN-GCNTRACKERS case).
+; With proper deep-copying of PhysLiveRegs in the copy constructor, the GCN tracker
+; now achieves better results, matching the generic tracker's VGPR count (1 VGPR).
+; The SGPR pressure is still slightly higher (98 vs 97) due to summing physical
+; register pressure from inline asm constraints with virtual register pressure.
 
 define amdgpu_kernel void @spill(ptr addrspace(1) %arg, i32 %cnd) #0 {
 entry:
@@ -262,9 +262,9 @@ bb3:
 ; GCN:    NumSgprs: 104
 ; GCN-GCNTRACKERS:    NumSgprs: 104
 ; GCN:    NumVgprs: 2
-; GCN-GCNTRACKERS:    NumVgprs: 3
+; GCN-GCNTRACKERS:    NumVgprs: 2
 ; GCN:    ScratchSize: 8
-; GCN-GCNTRACKERS:    ScratchSize: 12
+; GCN-GCNTRACKERS:    ScratchSize: 8
 ;
 ; SCHED-LABEL: spill_func:%bb.0 entry
 ; SCHED: Region register pressure: VGPRs: 0 AGPRs: 0, SGPRs: 97
