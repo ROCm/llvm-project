@@ -538,6 +538,7 @@ void GCNRPTracker::reset(const MachineInstr &MI,
   // Clear physical register tracking (only if enabled)
   if (TrackPhysRegs) {
     PhysLiveRegs.clear();
+    PhysLiveRegs.init(*MRI);
     MaxPhysPressure.clear();
     CurPhysPressure.clear();
   }
@@ -553,6 +554,7 @@ void GCNRPTracker::reset(const MachineRegisterInfo &MRI_,
   // Clear physical register tracking (only if enabled)
   if (TrackPhysRegs) {
     PhysLiveRegs.clear();
+    PhysLiveRegs.init(*MRI);
     MaxPhysPressure.clear();
     CurPhysPressure.clear();
   }
