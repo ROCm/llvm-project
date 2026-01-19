@@ -80,6 +80,8 @@ STATISTIC(NumAttributesValidFixpoint,
           "Number of abstract attributes in a valid fixpoint state");
 STATISTIC(NumAttributesManifested,
           "Number of abstract attributes manifested in IR");
+STATISTIC(NumAbstractAttributesCreated,
+          "Number of abstract attributes created");
 
 // TODO: Determine a good default value.
 //
@@ -2226,6 +2228,9 @@ void Attributor::runTillFixpoint() {
   LLVM_DEBUG(dbgs() << "\n[Attributor] Fixpoint iteration done after: "
                     << IterationCounter << "/" << MaxIterations
                     << " iterations\n");
+
+  // Track total AAs created for statistics.
+  NumAbstractAttributesCreated += DG.SyntheticRoot.Deps.size();
 
   // Reset abstract arguments not settled in a sound fixpoint by now. This
   // happens when we stopped the fixpoint iteration early. Note that only the

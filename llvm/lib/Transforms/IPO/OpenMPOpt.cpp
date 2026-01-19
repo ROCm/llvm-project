@@ -181,6 +181,12 @@ STATISTIC(NumOpenMPParallelRegionsMerged,
 STATISTIC(NumBytesMovedToSharedMemory,
           "Amount of memory pushed to shared memory");
 STATISTIC(NumBarriersEliminated, "Number of redundant barriers eliminated");
+STATISTIC(NumOpenMPOptFunctionAAsCreated,
+          "Number of function-level AAs created by OpenMPOpt");
+STATISTIC(NumOpenMPOptInstructionAAsCreated,
+          "Number of per-instruction AAs created by OpenMPOpt");
+STATISTIC(NumOpenMPOptLargeFunctionsSkipped,
+          "Number of large functions where per-instruction AA registration was skipped");
 
 #if !defined(NDEBUG)
 static constexpr auto TAG = "[" DEBUG_TYPE "]";
@@ -5686,13 +5692,24 @@ void OpenMPOpt::registerAAs(bool IsModulePass) {
 }
 
 void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
-  if (!DisableOpenMPOptDeglobalization)
+  unsigned FunctionAAs = 0;
+
+  if (!DisableOpenMPOptDeglobalization) {
     A.getOrCreateAAFor<AAHeapToShared>(IRPosition::function(F));
+    ++FunctionAAs;
+  }
   A.getOrCreateAAFor<AAExecutionDomain>(IRPosition::function(F));
-  if (!DisableOpenMPOptDeglobalization)
+  ++FunctionAAs;
+  if (!DisableOpenMPOptDeglobalization) {
     A.getOrCreateAAFor<AAHeapToStack>(IRPosition::function(F));
-  if (F.hasFnAttribute(Attribute::Convergent))
+    ++FunctionAAs;
+  }
+  if (F.hasFnAttribute(Attribute::Convergent)) {
     A.getOrCreateAAFor<AANonConvergent>(IRPosition::function(F));
+    ++FunctionAAs;
+  }
+
+  NumOpenMPOptFunctionAAsCreated += FunctionAAs;
 
   // Skip per-instruction AA registration for very large functions.
   // Large functions (e.g., runtime library functions) are often eliminated
@@ -5700,9 +5717,15 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
   // is expensive and may not be effective. Kernels are typically small and
   // will always be analyzed.
   constexpr unsigned InstructionThreshold = 1000;
-  if (!F.hasFnAttribute("kernel") && F.getInstructionCount() > InstructionThreshold)
+  if (!F.hasFnAttribute("kernel") && F.getInstructionCount() > InstructionThreshold) {
+    ++NumOpenMPOptLargeFunctionsSkipped;
+    LLVM_DEBUG(dbgs() << TAG << " Skipping per-instruction AA registration for "
+                      << F.getName() << " (" << F.getInstructionCount()
+                      << " instructions)\n");
     return;
+  }
 
+  unsigned InstructionAAs = 0;
   for (auto &I : instructions(F)) {
     if (auto *LI = dyn_cast<LoadInst>(&I)) {
       bool UsedAssumedInformation = false;
@@ -5710,6 +5733,7 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
                              UsedAssumedInformation, AA::Interprocedural);
       A.getOrCreateAAFor<AAAddressSpace>(
           IRPosition::value(*LI->getPointerOperand()));
+      InstructionAAs += 2; // SimplifiedValue + AddressSpace
       continue;
     }
 #if 0 // fixme snap2 mi-teams nest_call_par2
@@ -5723,20 +5747,28 @@ void OpenMPOpt::registerAAsForFunction(Attributor &A, const Function &F) {
       A.getOrCreateAAFor<AAIsDead>(IRPosition::value(*SI));
       A.getOrCreateAAFor<AAAddressSpace>(
           IRPosition::value(*SI->getPointerOperand()));
+      InstructionAAs += 2; // IsDead + AddressSpace
       continue;
     }
     if (auto *FI = dyn_cast<FenceInst>(&I)) {
       A.getOrCreateAAFor<AAIsDead>(IRPosition::value(*FI));
+      ++InstructionAAs;
       continue;
     }
     if (auto *II = dyn_cast<IntrinsicInst>(&I)) {
       if (II->getIntrinsicID() == Intrinsic::assume) {
         A.getOrCreateAAFor<AAPotentialValues>(
             IRPosition::value(*II->getArgOperand(0)));
+        ++InstructionAAs;
         continue;
       }
     }
   }
+
+  NumOpenMPOptInstructionAAsCreated += InstructionAAs;
+  LLVM_DEBUG(dbgs() << TAG << " Registered " << FunctionAAs << " function AAs and "
+                    << InstructionAAs << " instruction AAs for " << F.getName()
+                    << "\n");
 }
 
 const char AAICVTracker::ID = 0;
@@ -5948,8 +5980,25 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
 
   Attributor A(Functions, InfoCache, AC);
 
+  // Capture statistics before running to compute delta.
+  unsigned FunctionAAsBefore = NumOpenMPOptFunctionAAsCreated;
+  unsigned InstructionAAsBefore = NumOpenMPOptInstructionAAsCreated;
+  unsigned LargeFunctionsSkippedBefore = NumOpenMPOptLargeFunctionsSkipped;
+
   OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A);
   Changed |= OMPOpt.run(true);
+
+  LLVM_DEBUG({
+    unsigned FunctionAAsCreated = NumOpenMPOptFunctionAAsCreated - FunctionAAsBefore;
+    unsigned InstructionAAsCreated = NumOpenMPOptInstructionAAsCreated - InstructionAAsBefore;
+    unsigned LargeFunctionsSkipped = NumOpenMPOptLargeFunctionsSkipped - LargeFunctionsSkippedBefore;
+    dbgs() << TAG << " OpenMPOpt Module Pass summary:\n"
+           << TAG << "   Functions analyzed: " << SCC.size() << "\n"
+           << TAG << "   Function AAs created: " << FunctionAAsCreated << "\n"
+           << TAG << "   Instruction AAs created: " << InstructionAAsCreated << "\n"
+           << TAG << "   Large functions skipped: " << LargeFunctionsSkipped << "\n"
+           << TAG << "   Total AAs created: " << (FunctionAAsCreated + InstructionAAsCreated) << "\n";
+  });
 
   // Optionally inline device functions for potentially better performance.
   if (AlwaysInlineDeviceFunctions && isOpenMPDevice(M))
@@ -6026,8 +6075,24 @@ PreservedAnalyses OpenMPOptCGSCCPass::run(LazyCallGraph::SCC &C,
 
   Attributor A(Functions, InfoCache, AC);
 
+  // Capture statistics before running to compute delta.
+  unsigned FunctionAAsBefore = NumOpenMPOptFunctionAAsCreated;
+  unsigned InstructionAAsBefore = NumOpenMPOptInstructionAAsCreated;
+  unsigned LargeFunctionsSkippedBefore = NumOpenMPOptLargeFunctionsSkipped;
+
   OpenMPOpt OMPOpt(SCC, CGUpdater, OREGetter, InfoCache, A);
   bool Changed = OMPOpt.run(false);
+
+  LLVM_DEBUG({
+    unsigned FunctionAAsCreated = NumOpenMPOptFunctionAAsCreated - FunctionAAsBefore;
+    unsigned InstructionAAsCreated = NumOpenMPOptInstructionAAsCreated - InstructionAAsBefore;
+    unsigned LargeFunctionsSkipped = NumOpenMPOptLargeFunctionsSkipped - LargeFunctionsSkippedBefore;
+    dbgs() << TAG << " OpenMPOpt CGSCC Pass summary (SCC size " << SCC.size() << "):\n"
+           << TAG << "   Function AAs created: " << FunctionAAsCreated << "\n"
+           << TAG << "   Instruction AAs created: " << InstructionAAsCreated << "\n"
+           << TAG << "   Large functions skipped: " << LargeFunctionsSkipped << "\n"
+           << TAG << "   Total AAs created: " << (FunctionAAsCreated + InstructionAAsCreated) << "\n";
+  });
 
   if (PrintModuleAfterOptimizations)
     LLVM_DEBUG(dbgs() << TAG << "Module after OpenMPOpt CGSCC Pass:\n" << M);
