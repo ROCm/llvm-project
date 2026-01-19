@@ -16,7 +16,7 @@ on:
         value: true
       linux_variants:
         description: Matrix variants to run on Linux
-        value: ${{ jobs.setup.outputs.linux_variants }}
+        value:  ${{ jobs.setup.outputs.linux_variants }}
       linux_test_labels:
         description: ROCm projects to run Linux tests on. Optional filter.
         value: ${{ jobs.setup.outputs.linux_test_labels }}
@@ -39,10 +39,9 @@ permissions:
 jobs:
   setup:
     runs-on: ubuntu-24.04
+    environment: rock-ci
     env:
-      # The commit being checked out is the merge commit for a PR. Its first
-      # parent will be the tip of the base branch.
-      BASE_REF: HEAD^
+      BASE_REF:  ${{ vars.THEROCK_CI_REF }}
     outputs:
       enable_build_jobs: true
       linux_variants: ${{ steps.configure.outputs.linux_variants }}
@@ -56,8 +55,8 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: "ROCm/TheRock"
-          ref: ${{ secrets.THEROCK_MAINLINE_REF }}
-          fetch-depth: 10
+          #fetch-depth: 10
+          ref: ${{ vars.THEROCK_CI_REF }}
       - name: SHA of TheRock
         run: |
              git rev-parse HEAD
@@ -74,7 +73,7 @@ jobs:
         id: configure
         env:
           #INPUT_LINUX_AMDGPU_FAMILIES: ${{ github.event.inputs.linux_amdgpu_families }}
-          INPUT_LINUX_AMDGPU_FAMILIES: "gfx94X"
+          INPUT_LINUX_AMDGPU_FAMILIES: 'gfx94X-dcgpu,gfx110X-all,gfx1151'
           LINUX_TEST_LABELS: ${{ github.event.inputs.linux_test_labels }}
           LINUX_USE_PREBUILT_ARTIFACTS: ${{ github.event.inputs.linux_use_prebuilt_artifacts }}
           #INPUT_WINDOWS_AMDGPU_FAMILIES: ${{ github.event.inputs.windows_amdgpu_families }}
