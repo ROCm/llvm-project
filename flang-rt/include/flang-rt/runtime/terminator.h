@@ -81,15 +81,18 @@ public:
 #pragma GCC diagnostic pop
 #endif
 
-  RT_API_ATTRS void CrashHeader() const;
-  [[noreturn]] RT_API_ATTRS void CrashFooter() const;
+  // Error handling functions are marked RT_DEVICE_NOINLINE to reduce code size
+  // during LTO. These are cold paths that should not be inlined.
+  RT_DEVICE_NOINLINE RT_API_ATTRS void CrashHeader() const;
+  [[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void CrashFooter() const;
 #if !defined(RT_DEVICE_COMPILATION)
   void InvokeCrashHandler(const char *message, ...) const;
   [[noreturn]] void CrashArgs(const char *message, va_list &) const;
 #endif
-  [[noreturn]] RT_API_ATTRS void CheckFailed(
+  [[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void CheckFailed(
       const char *predicate, const char *file, int line) const;
-  [[noreturn]] RT_API_ATTRS void CheckFailed(const char *predicate) const;
+  [[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void CheckFailed(
+      const char *predicate) const;
 
   // For test harnessing - overrides CrashArgs().
   static void RegisterCrashHandler(void (*)(const char *sourceFile,

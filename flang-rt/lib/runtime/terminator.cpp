@@ -41,7 +41,7 @@ void Terminator::InvokeCrashHandler(const char *message, ...) const {
 
 RT_OFFLOAD_API_GROUP_BEGIN
 
-RT_API_ATTRS void Terminator::CrashHeader() const {
+RT_DEVICE_NOINLINE RT_API_ATTRS void Terminator::CrashHeader() const {
 #if defined(RT_DEVICE_COMPILATION)
   std::printf("\nfatal Fortran runtime error");
   if (sourceFileName_) {
@@ -66,7 +66,7 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
 #endif
 }
 
-[[noreturn]] RT_API_ATTRS void Terminator::CrashFooter() const {
+[[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void Terminator::CrashFooter() const {
 #if defined(RT_DEVICE_COMPILATION)
   std::printf("\n");
 #else
@@ -82,13 +82,13 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
 #endif
 }
 
-[[noreturn]] RT_API_ATTRS void Terminator::CheckFailed(
+[[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void Terminator::CheckFailed(
     const char *predicate, const char *file, int line) const {
   Crash("Internal error: RUNTIME_CHECK(%s) failed at %s(%d)", predicate, file,
       line);
 }
 
-[[noreturn]] RT_API_ATTRS void Terminator::CheckFailed(
+[[noreturn]] RT_DEVICE_NOINLINE RT_API_ATTRS void Terminator::CheckFailed(
     const char *predicate) const {
   Crash("Internal error: RUNTIME_CHECK(%s) failed at %s(%d)", predicate,
       sourceFileName_, sourceLine_);
