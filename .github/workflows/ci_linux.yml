@@ -29,6 +29,12 @@ on:
         type: string
       sanity_check_only_for_family:
         type: boolean
+      LLVM_PR_NUMBER:
+        type: string
+      SPIRV_PR_NUMBER:
+        type: string
+      HIPIFY_PR_NUMBER:
+        type: string
 
 permissions:
   contents: read
@@ -47,6 +53,10 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_variant_suffix: ${{ inputs.build_variant_suffix }}
       expect_failure: ${{ inputs.expect_failure }}
+      LLVM_PR_NUMBER: ${{ inputs.LLVM_PR_NUMBER }}
+      SPIRV_PR_NUMBER: ${{ inputs.SPIRV_PR_NUMBER }}
+      HIPIFY_PR_NUMBER: ${{ inputs.HIPIFY_PR_NUMBER }}
+        
     permissions:
       contents: read
       id-token: write

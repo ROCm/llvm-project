@@ -20,6 +20,21 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      LLVM_PR_NUMBER:
+        description: "pass the LLVM PR number only"
+        required: false
+        type: string
+        default: ""
+      SPIRV_PR_NUMBER:
+        description: "pass the SPIRV PR number only"
+        required: false
+        type: string
+        default: ""
+      HIPIFY_PR_NUMBER:
+        description: "pass the HIPIFY PR number only"
+        required: false
+        type: string
+        default: ""      
       linux_amdgpu_families:
         type: string
         description: "Insert comma-separated list of Linux GPU families to build and test. ex: gfx94X, gfx1201X"
@@ -96,6 +111,10 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'smoke'
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
+      LLVM_PR_NUMBER: ${{ inputs.LLVM_PR_NUMBER }}
+      SPIRV_PR_NUMBER: ${{ inputs.SPIRV_PR_NUMBER }}
+      HIPIFY_PR_NUMBER: ${{ inputs.HIPIFY_PR_NUMBER }}
+        
     permissions:
       contents: read
       id-token: write
