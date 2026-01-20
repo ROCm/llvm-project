@@ -55,6 +55,7 @@ RT_API_ATTRS void Ticket::destroy() {
     reinterpret_cast<TicketType *>(storage_.GetPtr())->~TicketType();
     break;
   }
+#if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput: {
     using TicketType = io::descr::DescriptorIoTicket<io::Direction::Output>;
     reinterpret_cast<TicketType *>(storage_.GetPtr())->~TicketType();
@@ -75,6 +76,7 @@ RT_API_ATTRS void Ticket::destroy() {
     reinterpret_cast<TicketType *>(storage_.GetPtr())->~TicketType();
     break;
   }
+#endif
   }
   type_ = TicketType::Null;
 }
@@ -104,6 +106,7 @@ RT_API_ATTRS int Ticket::dispatchBegin(WorkQueue &workQueue) {
   case TicketType::DerivedAssignTrue:
     return reinterpret_cast<DerivedAssignTicket<true> *>(storage_.GetPtr())
         ->Begin(workQueue);
+#if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput:
     return reinterpret_cast<
                io::descr::DescriptorIoTicket<io::Direction::Output> *>(
@@ -124,6 +127,7 @@ RT_API_ATTRS int Ticket::dispatchBegin(WorkQueue &workQueue) {
                io::descr::DerivedIoTicket<io::Direction::Input> *>(
                storage_.GetPtr())
         ->Begin(workQueue);
+#endif
   }
   return StatOk; // Should never reach here
 }
@@ -154,6 +158,7 @@ RT_API_ATTRS int Ticket::dispatchContinue(WorkQueue &workQueue) {
   case TicketType::DerivedAssignTrue:
     return reinterpret_cast<DerivedAssignTicket<true> *>(storage_.GetPtr())
         ->Continue(workQueue);
+#if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput:
     return reinterpret_cast<
                io::descr::DescriptorIoTicket<io::Direction::Output> *>(
@@ -174,6 +179,7 @@ RT_API_ATTRS int Ticket::dispatchContinue(WorkQueue &workQueue) {
                io::descr::DerivedIoTicket<io::Direction::Input> *>(
                storage_.GetPtr())
         ->Continue(workQueue);
+#endif
   }
   return StatOk; // Should never reach here
 }

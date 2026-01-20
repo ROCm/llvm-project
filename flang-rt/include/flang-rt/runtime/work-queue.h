@@ -373,6 +373,8 @@ private:
   StaticDescriptor<maxRank, true, 0> fromComponentDescriptor_;
 };
 
+// IO tickets are only used on host - descriptor-io.cpp is not compiled for GPU
+#if !defined(RT_DEVICE_COMPILATION)
 namespace io::descr {
 
 template <io::Direction DIR>
@@ -421,6 +423,7 @@ private:
 };
 
 } // namespace io::descr
+#endif // !defined(RT_DEVICE_COMPILATION)
 
 struct NullTicket {
   RT_API_ATTRS int Begin(WorkQueue &) const { return StatOk; }
@@ -437,10 +440,12 @@ enum class TicketType : std::uint8_t {
   Assign,
   DerivedAssignFalse,
   DerivedAssignTrue,
+#if !defined(RT_DEVICE_COMPILATION)
   DescriptorIoOutput,
   DescriptorIoInput,
   DerivedIoOutput,
   DerivedIoInput
+#endif
 };
 
 // Helper template to calculate maximum size at compile time
@@ -448,6 +453,19 @@ template <std::size_t A, std::size_t B> struct MaxSize {
   static constexpr std::size_t value = (A > B) ? A : B;
 };
 
+template <std::size_t A, std::size_t B, std::size_t C, std::size_t D,
+    std::size_t E, std::size_t F, std::size_t G, std::size_t H>
+struct MaxSize8 {
+  static constexpr std::size_t value = MaxSize<A,
+      MaxSize<B,
+          MaxSize<C,
+              MaxSize<D,
+                  MaxSize<E,
+                      MaxSize<F, MaxSize<G, H>::value>::value>::value>::value>::
+                  value>::value>::value;
+};
+
+#if !defined(RT_DEVICE_COMPILATION)
 template <std::size_t A, std::size_t B, std::size_t C, std::size_t D,
     std::size_t E, std::size_t F, std::size_t G, std::size_t H, std::size_t I,
     std::size_t J, std::size_t K, std::size_t L>
@@ -465,11 +483,13 @@ struct MaxSize12 {
                                           value>::value>::value>::value>::
                                   value>::value>::value>::value>::value;
 };
+#endif
 
 // Forward declarations for ticket storage
 struct TicketStorage {
   // Calculate maximum size needed for any ticket type
   // We need to ensure proper alignment - use the maximum alignment required
+#if !defined(RT_DEVICE_COMPILATION)
   static constexpr std::size_t maxSize_ = MaxSize12<
       sizeof(NullTicket), sizeof(InitializeTicket),
       sizeof(InitializeCloneTicket), sizeof(FinalizeTicket),
@@ -491,6 +511,20 @@ struct TicketStorage {
       alignas(alignof(io::descr::DerivedIoTicket<io::Direction::Output>))
       alignas(alignof(io::descr::DerivedIoTicket<io::Direction::Input>))
       char storage[maxSize_];
+#else
+  // Device builds exclude IO tickets for reduced code size
+  static constexpr std::size_t maxSize_ = MaxSize8<
+      sizeof(NullTicket), sizeof(InitializeTicket),
+      sizeof(InitializeCloneTicket), sizeof(FinalizeTicket),
+      sizeof(DestroyTicket), sizeof(AssignTicket),
+      sizeof(DerivedAssignTicket<false>), sizeof(DerivedAssignTicket<true>)>::value;
+
+  alignas(alignof(InitializeTicket)) alignas(alignof(InitializeCloneTicket))
+      alignas(alignof(FinalizeTicket)) alignas(alignof(DestroyTicket))
+      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket<false>))
+      alignas(alignof(DerivedAssignTicket<true>))
+      char storage[maxSize_];
+#endif
 
   RT_API_ATTRS void *GetPtr() { return storage; }
   RT_API_ATTRS const void *GetPtr() const { return storage; }
@@ -548,7 +582,9 @@ private:
       return TicketType::DerivedAssignFalse;
     } else if constexpr (std::is_same_v<T, DerivedAssignTicket<true>>) {
       return TicketType::DerivedAssignTrue;
-    } else if constexpr (std::is_same_v<T,
+    }
+#if !defined(RT_DEVICE_COMPILATION)
+    else if constexpr (std::is_same_v<T,
                           io::descr::DescriptorIoTicket<io::Direction::Output>>) {
       return TicketType::DescriptorIoOutput;
     } else if constexpr (std::is_same_v<T,
@@ -561,6 +597,7 @@ private:
                           io::descr::DerivedIoTicket<io::Direction::Input>>) {
       return TicketType::DerivedIoInput;
     }
+#endif
   }
 
   TicketType type_{TicketType::Null};
@@ -652,6 +689,8 @@ public:
       return StatContinue;
     }
   }
+  // IO ticket methods are only available on host - not used in GPU offloading
+#if !defined(RT_DEVICE_COMPILATION)
   template <io::Direction DIR>
   RT_API_ATTRS int BeginDescriptorIo(io::IoStatementState &io,
       const Descriptor &descriptor, const io::NonTbpDefinedIoTable *table,
@@ -680,6 +719,7 @@ public:
       return StatContinue;
     }
   }
+#endif
 
   RT_API_ATTRS int Run();
 
