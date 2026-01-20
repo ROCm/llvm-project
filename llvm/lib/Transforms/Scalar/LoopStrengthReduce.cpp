@@ -5902,7 +5902,8 @@ void LSRInstance::RewriteForPHI(PHINode *PN, const LSRUse &LU,
                 SplitCriticalEdge(BB, Parent,
                                   CriticalEdgeSplittingOptions(&DT, &LI, MSSAU)
                                       .setMergeIdenticalEdges()
-                                      .setKeepOneInputPHIs());
+                                      .setKeepOneInputPHIs()
+                                      .setPreserveLCSSA());
           } else {
             SmallVector<BasicBlock*, 2> NewBBs;
             DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
@@ -6159,7 +6160,7 @@ LSRInstance::LSRInstance(Loop *L, IVUsers &IU, ScalarEvolution &SE,
       MSSAU(MSSAU), AMK(PreferredAddresingMode.getNumOccurrences() > 0
                             ? PreferredAddresingMode
                             : TTI.getPreferredAddressingMode(L, &SE)),
-      Rewriter(SE, "lsr", false), BaselineCost(L, SE, TTI, AMK) {
+      Rewriter(SE, "lsr", true), BaselineCost(L, SE, TTI, AMK) {
   // If LoopSimplify form is not available, stay out of trouble.
   if (!L->isLoopSimplifyForm())
     return;
@@ -7059,7 +7060,7 @@ static bool ReduceLoopStrength(Loop *L, IVUsers &IU, ScalarEvolution &SE,
   Changed |= DeleteDeadPHIs(L->getHeader(), &TLI, MSSAU.get());
   if (EnablePhiElim && L->isLoopSimplifyForm()) {
     SmallVector<WeakTrackingVH, 16> DeadInsts;
-    SCEVExpander Rewriter(SE, "lsr", false);
+    SCEVExpander Rewriter(SE, "lsr", true);
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
     Rewriter.setDebugType(DEBUG_TYPE);
 #endif

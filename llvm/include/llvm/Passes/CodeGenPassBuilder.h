@@ -730,9 +730,9 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addIRPasses(
 
   // Run loop strength reduction before anything else.
   if (getOptLevel() != CodeGenOptLevel::None && !Opt.DisableLSR) {
-    addPass(createFunctionToLoopPassAdaptor(
+    addFunctionPass(createFunctionToLoopPassAdaptor(
             CanonicalizeFreezeInLoopsPass(),
-            /*UseMemorySSA=*/false));
+            /*UseMemorySSA=*/false), PMW);
 
     LoopPassManager LPM;
     LPM.addPass(LoopStrengthReducePass());
@@ -1057,12 +1057,8 @@ Error CodeGenPassBuilder<Derived, TargetMachineT>::addMachinePasses(
 
   derived().addPreEmitPass(PMW);
 
-  if (TM.Options.EnableIPRA) {
-    // Collect register usage information and produce a register mask of
-    // clobbered registers, to be used to optimize call sites.
-    flushFPMsToMPM(PMW);
+  if (TM.Options.EnableIPRA)
     addMachineFunctionPass(RegUsageInfoCollectorPass(), PMW);
-  }
 
   addMachineFunctionPass(FuncletLayoutPass(), PMW);
 
