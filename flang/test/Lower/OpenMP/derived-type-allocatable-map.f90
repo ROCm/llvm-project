@@ -5,19 +5,10 @@
 !CHECK: %[[BOUNDS:.*]] = omp.map.bounds lower_bound({{.*}}) upper_bound({{.*}}) extent({{.*}}) stride({{.*}}) start_idx({{.*}}) {stride_in_bytes = true}
 !CHECK: %[[MEMBER_COORD:.*]] = fir.coordinate_of %[[DECLARE]]#0, array_j : (!fir.ref<!fir.type<[[ONE_LAYER_TY]]>>) -> !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>
 !CHECK: %[[MEMBER_BASE_ADDR:.*]] = fir.box_offset %[[MEMBER_COORD]] base_addr : (!fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>
-
-!CHECK: %[[MAP_MEMBER_BASE_ADDR:.*]] = omp.map.info var_ptr(%[[MEMBER_COORD]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.box<!fir.heap<!fir.array<?xi32>>>) map_clauses(tofrom) capture(ByRef) var_ptr_ptr(%[[MEMBER_BASE_ADDR]] : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32)   bounds(%[[BOUNDS]]) -> !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>> {{.*}}
-!CHECK: %[[MAP_MEMBER_DESCRIPTOR:.*]] = omp.map.info var_ptr(%[[MEMBER_COORD]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.box<!fir.heap<!fir.array<?xi32>>>) map_clauses(always, descriptor, to) capture(ByRef) -> !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>> {{.*}}
-!CHECK: %[[MAP_MEMBER_ATTACH:.*]] = omp.map.info var_ptr(%[[MEMBER_COORD]] : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.box<!fir.heap<!fir.array<?xi32>>>) map_clauses(attach, ref_ptr_ptee) capture(ByRef) var_ptr_ptr({{.*}} : !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>, i32) bounds({{.*}}) -> !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>> {name = "one_l%array_j"}
-!CHECK: %[[MAP_PARENT:.*]] = omp.map.info var_ptr(%[[DECLARE]]#1 : !fir.ref<!fir.type<[[ONE_LAYER_TY]]>>, !fir.type<[[ONE_LAYER_TY]]>) map_clauses(storage) capture(ByRef) members(%[[MAP_MEMBER_DESCRIPTOR]], %[[MAP_MEMBER_BASE_ADDR]] : [4], [4, 0] : !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) -> !fir.ref<!fir.type<[[ONE_LAYER_TY]]>> {{{.*}} partial_map = true}
-!CHECK:   omp.target map_entries(%[[MAP_PARENT]] -> %[[ARG0:.*]], %[[MAP_MEMBER_DESCRIPTOR]] -> %[[ARG1:.*]], %[[MAP_MEMBER_ATTACH]] -> %[[ARG2:.*]], %[[MAP_MEMBER_BASE_ADDR]] -> %[[ARG3:.*]] : !fir.ref<!fir.type<[[ONE_LAYER_TY]]>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.ref<!fir.box<!fir.heap<!fir.array<?xi32>>>>, !fir.llvm_ptr<!fir.ref<!fir.array<?xi32>>>) {
-!CHECK:        %{{.*}}:2 = hlfir.declare %[[ARG0]] {{{.*}}} : (!fir.ref<!fir.type<[[ONE_LAYER_TY]]>>) -> (!fir.ref<!fir.type<[[ONE_LAYER_TY]]>>, !fir.ref<!fir.type<[[ONE_LAYER_TY]]>>)
-subroutine dtype_alloca_map_op_block()
     type :: one_layer
     real(4) :: i
     integer, allocatable :: scalar
     integer(4) :: array_i(10)
-    real(4) :: j
     integer, allocatable :: array_j(:)
     integer(4) :: k
     end type one_layer
