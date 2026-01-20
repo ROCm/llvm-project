@@ -3296,7 +3296,9 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
       constrainOpWithReadfirstlane(B, MI, 1); // M0
       return;
     case Intrinsic::amdgcn_raw_buffer_load_lds:
-    case Intrinsic::amdgcn_raw_ptr_buffer_load_lds: {
+    case Intrinsic::amdgcn_raw_buffer_load_async_lds:
+    case Intrinsic::amdgcn_raw_ptr_buffer_load_lds:
+    case Intrinsic::amdgcn_raw_ptr_buffer_load_async_lds: {
       applyDefaultMapping(OpdMapper);
       constrainOpWithReadfirstlane(B, MI, 1); // rsrc
       constrainOpWithReadfirstlane(B, MI, 2); // M0
@@ -3304,7 +3306,9 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
       return;
     }
     case Intrinsic::amdgcn_struct_buffer_load_lds:
-    case Intrinsic::amdgcn_struct_ptr_buffer_load_lds: {
+    case Intrinsic::amdgcn_struct_buffer_load_async_lds:
+    case Intrinsic::amdgcn_struct_ptr_buffer_load_lds:
+    case Intrinsic::amdgcn_struct_ptr_buffer_load_async_lds: {
       applyDefaultMapping(OpdMapper);
       constrainOpWithReadfirstlane(B, MI, 1); // rsrc
       constrainOpWithReadfirstlane(B, MI, 2); // M0
@@ -3320,7 +3324,9 @@ void AMDGPURegisterBankInfo::applyMappingImpl(
       return;
     }
     case Intrinsic::amdgcn_load_to_lds:
-    case Intrinsic::amdgcn_global_load_lds: {
+    case Intrinsic::amdgcn_load_async_to_lds:
+    case Intrinsic::amdgcn_global_load_lds:
+    case Intrinsic::amdgcn_global_load_async_lds: {
       applyDefaultMapping(OpdMapper);
       constrainOpWithReadfirstlane(B, MI, 2);
       return;
@@ -5439,7 +5445,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       break;
     }
     case Intrinsic::amdgcn_raw_buffer_load_lds:
-    case Intrinsic::amdgcn_raw_ptr_buffer_load_lds: {
+    case Intrinsic::amdgcn_raw_buffer_load_async_lds:
+    case Intrinsic::amdgcn_raw_ptr_buffer_load_lds:
+    case Intrinsic::amdgcn_raw_ptr_buffer_load_async_lds: {
       OpdsMapping[1] = getSGPROpMapping(MI.getOperand(1).getReg(), MRI, *TRI);
       OpdsMapping[2] = getSGPROpMapping(MI.getOperand(2).getReg(), MRI, *TRI);
       OpdsMapping[4] = getVGPROpMapping(MI.getOperand(4).getReg(), MRI, *TRI);
@@ -5472,7 +5480,9 @@ AMDGPURegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       break;
     }
     case Intrinsic::amdgcn_struct_buffer_load_lds:
-    case Intrinsic::amdgcn_struct_ptr_buffer_load_lds: {
+    case Intrinsic::amdgcn_struct_buffer_load_async_lds:
+    case Intrinsic::amdgcn_struct_ptr_buffer_load_lds:
+    case Intrinsic::amdgcn_struct_ptr_buffer_load_async_lds: {
       OpdsMapping[1] = getSGPROpMapping(MI.getOperand(1).getReg(), MRI, *TRI);
       OpdsMapping[2] = getSGPROpMapping(MI.getOperand(2).getReg(), MRI, *TRI);
       OpdsMapping[4] = getVGPROpMapping(MI.getOperand(4).getReg(), MRI, *TRI);

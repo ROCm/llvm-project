@@ -1254,8 +1254,7 @@ defm PkAddMinMaxInsts : AMDGPUSubtargetFeature<"pk-add-min-max-insts",
 
 defm VMemToLDSLoad : AMDGPUSubtargetFeature<"vmem-to-lds-load-insts",
   "The platform has memory to lds instructions (global_load w/lds bit set, buffer_load"
-  "w/lds bit set or global_load_lds. This does not include scratch_load_lds.",
-  /*GenPredicate=*/0
+  "w/lds bit set or global_load_lds. This does not include scratch_load_lds."
 >;
 
 defm LdsBarrierArriveAtomic : AMDGPUSubtargetFeature<"lds-barrier-arrive-atomic",
