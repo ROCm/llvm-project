@@ -583,7 +583,6 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUAtomicOptimizerPass(*PR);
   initializeAMDGPULowerKernelArgumentsPass(*PR);
   initializeAMDGPUPromoteKernelArgumentsPass(*PR);
-  initializeAMDGPULowerKernelAttributesPass(*PR);
   initializeAMDGPUExportKernelRuntimeHandlesLegacyPass(*PR);
   initializeAMDGPUPostLegalizerCombinerPass(*PR);
   initializeAMDGPUPreLegalizerCombinerPass(*PR);
@@ -909,12 +908,11 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         if (EarlyInlineAll && !EnableFunctionCalls)
           PM.addPass(AMDGPUAlwaysInlinePass());
 
-        if (Level != OptimizationLevel::O0)
-          if (!isLTOPreLink(Phase))
-            if (EnableAMDGPUAttributor && getTargetTriple().isAMDGCN()) {
-              AMDGPUAttributorOptions Opts;
-              PM.addPass(AMDGPUAttributorPass(*this, Opts, Phase));
-            }
+        if (!isLTOPreLink(Phase))
+          if (EnableAMDGPUAttributor && getTargetTriple().isAMDGCN()) {
+            AMDGPUAttributorOptions Opts;
+            PM.addPass(AMDGPUAttributorPass(*this, Opts, Phase));
+          }
       });
 
   PB.registerPeepholeEPCallback(
@@ -947,10 +945,6 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         // Add infer address spaces pass to the opt pipeline after inlining
         // but before SROA to increase SROA opportunities.
         FPM.addPass(InferAddressSpacesPass());
-
-        // This should run after inlining to have any chance of doing
-        // anything, and before other cleanup optimizations.
-        FPM.addPass(AMDGPULowerKernelAttributesPass());
 
         if (Level != OptimizationLevel::O0) {
           // Promote alloca to vector before SROA and loop unroll. If we
