@@ -292,13 +292,6 @@ private:
 
 #define DEBUG_TYPE "objdump"
 
-enum class ColorOutput {
-  Auto,
-  Enable,
-  Disable,
-  Invalid,
-};
-
 static uint64_t AdjustVMA;
 static bool AllHeaders;
 static std::string ArchName;
@@ -311,7 +304,7 @@ bool objdump::SymbolDescription;
 bool objdump::TracebackTable;
 static std::vector<std::string> DisassembleSymbols;
 static bool DisassembleZeroes;
-static ColorOutput DisassemblyColor;
+ColorOutput objdump::DisassemblyColor;
 DIDumpType objdump::DwarfDumpType;
 static bool DynamicRelocations;
 static bool FaultMapSection;
