@@ -999,7 +999,8 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
 
 Expected<DeviceImageTy *> GenericDeviceTy::loadBinary(GenericPluginTy &Plugin,
                                                       StringRef InputTgtImage) {
-  ODBG(OLDT_Init) << "Load data from image " << InputTgtImage.bytes_begin();
+  ODBG(OLDT_Init) << "Load data from image "
+                  << static_cast<const void *>(InputTgtImage.bytes_begin());
 
   std::unique_ptr<MemoryBuffer> Buffer;
   if (identify_magic(InputTgtImage) == file_magic::bitcode) {
@@ -1914,8 +1915,9 @@ int32_t GenericPluginTy::supports_empty_images() {
 int32_t GenericPluginTy::isPluginCompatible(StringRef Image) {
   auto HandleError = [&](Error Err) -> bool {
     std::string ErrStr = toString(std::move(Err));
-    ODBG(OLDT_Init) << "Failure to check validity of image " << Image.data()
-                    << ": " << ErrStr;
+    ODBG(OLDT_Init) << "Failure to check validity of image "
+                    << static_cast<const void *>(Image.data()) << ": "
+                    << ErrStr;
     return false;
   };
   switch (identify_magic(Image)) {
@@ -1943,7 +1945,8 @@ int32_t GenericPluginTy::isPluginCompatible(StringRef Image) {
 int32_t GenericPluginTy::isDeviceCompatible(int32_t DeviceId, StringRef Image) {
   auto HandleError = [&](Error Err) -> bool {
     std::string ErrStr = toString(std::move(Err));
-    ODBG(OLDT_Init) << "Failure to check validity of image " << Image << ": "
+    ODBG(OLDT_Init) << "Failure to check validity of image "
+                    << static_cast<const void *>(Image.data()) << ": "
                     << ErrStr;
     return false;
   };
