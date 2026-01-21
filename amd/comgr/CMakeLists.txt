@@ -84,6 +84,17 @@ set(SOURCES
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
 
+# Add Windows resource file for manifest and version info embedding
+if(WIN32)
+  configure_file(
+    src/comgr.rc.in
+    src/comgr.rc @ONLY)
+  configure_file(
+    src/comgr.manifest.in
+    src/comgr.manifest @ONLY)
+  list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/src/comgr.rc")
+endif()
+
 if(COMGR_BUILD_SHARED_LIBS)
   add_library(amd_comgr SHARED ${SOURCES})
   # Windows doesn't have a strip utility, so CMAKE_STRIP won't be set.
