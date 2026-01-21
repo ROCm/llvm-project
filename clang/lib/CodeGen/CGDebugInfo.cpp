@@ -6739,12 +6739,29 @@ void CGDebugInfo::EmitGlobalVariableForHeterogeneousDwarf(
   llvm::DIExprBuilder ExprBuilder(CGM.getLLVMContext());
   // FIXME: There isn't general support for getting a Constant from an APValue,
   // but we should be able to support all possibilities here.
-  if (Init.isInt())
+  switch (Init.getKind()) {
+  case APValue::Int:
     ExprBuilder.append<llvm::DIOp::Constant>(
         llvm::ConstantInt::get(CGM.getLLVMContext(), Init.getInt()));
-  else if (Init.isFloat())
+    break;
+  case APValue::Float:
     ExprBuilder.append<llvm::DIOp::Constant>(
         llvm::ConstantFP::get(CGM.getLLVMContext(), Init.getFloat()));
+    break;
+  case APValue::Indeterminate:
+  case APValue::None:
+  case APValue::Array:
+  case APValue::Struct:
+  case APValue::Vector:
+  case APValue::ComplexInt:
+  case APValue::ComplexFloat:
+  case APValue::FixedPoint:
+  case APValue::Union:
+  case APValue::MemberPointer:
+  case APValue::AddrLabelDiff:
+  case APValue::LValue:
+    return;
+  }
 
   GV.reset(DBuilder.createGlobalVariableExpression(
       DContext, Name, StringRef(), Unit, getLineNumber(VD->getLocation()), Ty,
