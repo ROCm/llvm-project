@@ -45,16 +45,10 @@ RT_API_ATTRS void Ticket::destroy() {
   case TicketType::Assign:
     reinterpret_cast<AssignTicket *>(storage_.GetPtr())->~AssignTicket();
     break;
-  case TicketType::DerivedAssignFalse: {
-    using TicketType = DerivedAssignTicket<false>;
-    reinterpret_cast<TicketType *>(storage_.GetPtr())->~TicketType();
+  case TicketType::DerivedAssign:
+    reinterpret_cast<DerivedAssignTicket *>(storage_.GetPtr())
+        ->~DerivedAssignTicket();
     break;
-  }
-  case TicketType::DerivedAssignTrue: {
-    using TicketType = DerivedAssignTicket<true>;
-    reinterpret_cast<TicketType *>(storage_.GetPtr())->~TicketType();
-    break;
-  }
 #if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput: {
     using TicketType = io::descr::DescriptorIoTicket<io::Direction::Output>;
@@ -100,11 +94,8 @@ RT_API_ATTRS int Ticket::dispatchBegin(WorkQueue &workQueue) {
   case TicketType::Assign:
     return reinterpret_cast<AssignTicket *>(storage_.GetPtr())
         ->Begin(workQueue);
-  case TicketType::DerivedAssignFalse:
-    return reinterpret_cast<DerivedAssignTicket<false> *>(storage_.GetPtr())
-        ->Begin(workQueue);
-  case TicketType::DerivedAssignTrue:
-    return reinterpret_cast<DerivedAssignTicket<true> *>(storage_.GetPtr())
+  case TicketType::DerivedAssign:
+    return reinterpret_cast<DerivedAssignTicket *>(storage_.GetPtr())
         ->Begin(workQueue);
 #if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput:
@@ -152,11 +143,8 @@ RT_API_ATTRS int Ticket::dispatchContinue(WorkQueue &workQueue) {
   case TicketType::Assign:
     return reinterpret_cast<AssignTicket *>(storage_.GetPtr())
         ->Continue(workQueue);
-  case TicketType::DerivedAssignFalse:
-    return reinterpret_cast<DerivedAssignTicket<false> *>(storage_.GetPtr())
-        ->Continue(workQueue);
-  case TicketType::DerivedAssignTrue:
-    return reinterpret_cast<DerivedAssignTicket<true> *>(storage_.GetPtr())
+  case TicketType::DerivedAssign:
+    return reinterpret_cast<DerivedAssignTicket *>(storage_.GetPtr())
         ->Continue(workQueue);
 #if !defined(RT_DEVICE_COMPILATION)
   case TicketType::DescriptorIoOutput:

@@ -246,6 +246,79 @@ protected:
   int phase_{0};
 };
 
+// Unified base class that can operate in either componentwise or elementwise
+// mode, selected at runtime. This allows a single DerivedAssignTicket class
+// instead of two template instantiations.
+class ComponentsAndElements : public Componentwise, public Elementwise {
+public:
+  RT_API_ATTRS ComponentsAndElements(const Descriptor &instance,
+      const typeInfo::DerivedType &derived, const Descriptor *from,
+      bool isComponentwise)
+      : Componentwise{derived}, Elementwise{instance, from},
+        isComponentwise_{isComponentwise} {
+    if (isComponentwise_) {
+      if (Elementwise::IsComplete()) {
+        Componentwise::SkipToEnd();
+      }
+    } else {
+      if (Componentwise::IsComplete()) {
+        Elementwise::SkipToEnd();
+      }
+    }
+  }
+  RT_API_ATTRS bool IsComplete() const {
+    return isComponentwise_ ? Componentwise::IsComplete()
+                            : Elementwise::IsComplete();
+  }
+  RT_API_ATTRS void Advance() {
+    if (isComponentwise_) {
+      // ComponentsOverElements: outer loop over components, inner over elements
+      SkipToNextElement();
+      if (Elementwise::IsComplete()) {
+        Elementwise::Reset();
+        Componentwise::Advance();
+      }
+    } else {
+      // ElementsOverComponents: outer loop over elements, inner over components
+      SkipToNextComponent();
+      if (Componentwise::IsComplete()) {
+        Componentwise::Reset();
+        Elementwise::Advance();
+      }
+    }
+  }
+  RT_API_ATTRS void SkipToNextElement() {
+    phase_ = 0;
+    if (isComponentwise_) {
+      Elementwise::Advance();
+    } else {
+      Componentwise::Reset();
+      Elementwise::Advance();
+    }
+  }
+  RT_API_ATTRS void SkipToNextComponent() {
+    phase_ = 0;
+    if (isComponentwise_) {
+      Elementwise::Reset();
+      Componentwise::Advance();
+    } else {
+      Componentwise::Advance();
+    }
+  }
+  RT_API_ATTRS void Reset() {
+    phase_ = 0;
+    Elementwise::Reset();
+    Componentwise::Reset();
+  }
+  RT_API_ATTRS bool isComponentwise() const { return isComponentwise_; }
+
+protected:
+  int phase_{0};
+
+private:
+  bool isComponentwise_;
+};
+
 // Ticket worker classes
 
 // Implements derived type instance initialization.
@@ -346,25 +419,21 @@ private:
 };
 
 // Implements derived type intrinsic assignment.
-template <bool IS_COMPONENTWISE>
-class DerivedAssignTicket
-    : public ImmediateTicketRunner<DerivedAssignTicket<IS_COMPONENTWISE>>,
-      private std::conditional_t<IS_COMPONENTWISE, ComponentsOverElements,
-          ElementsOverComponents> {
+// Uses runtime flag instead of template parameter to reduce code size.
+class DerivedAssignTicket : public ImmediateTicketRunner<DerivedAssignTicket>,
+                            private ComponentsAndElements {
 public:
-  using Base = std::conditional_t<IS_COMPONENTWISE, ComponentsOverElements,
-      ElementsOverComponents>;
   RT_API_ATTRS DerivedAssignTicket(const Descriptor &to, const Descriptor &from,
       const typeInfo::DerivedType &derived, int flags, MemmoveFct memmoveFct,
-      Descriptor *deallocateAfter)
+      Descriptor *deallocateAfter, bool isComponentwise)
       : ImmediateTicketRunner<DerivedAssignTicket>{*this},
-        Base{to, derived, &from}, flags_{flags}, memmoveFct_{memmoveFct},
+        ComponentsAndElements{to, derived, &from, isComponentwise},
+        flags_{flags}, memmoveFct_{memmoveFct},
         deallocateAfter_{deallocateAfter} {}
   RT_API_ATTRS int Begin(WorkQueue &);
   RT_API_ATTRS int Continue(WorkQueue &);
 
 private:
-  static constexpr bool isComponentwise_{IS_COMPONENTWISE};
   bool toIsContiguous_{this->instance_.IsContiguous()};
   bool fromIsContiguous_{this->from_->IsContiguous()};
   int flags_{0};
@@ -438,8 +507,7 @@ enum class TicketType : std::uint8_t {
   Finalize,
   Destroy,
   Assign,
-  DerivedAssignFalse,
-  DerivedAssignTrue,
+  DerivedAssign, // Consolidated from DerivedAssignFalse/DerivedAssignTrue
 #if !defined(RT_DEVICE_COMPILATION)
   DescriptorIoOutput,
   DescriptorIoInput,
@@ -454,22 +522,21 @@ template <std::size_t A, std::size_t B> struct MaxSize {
 };
 
 template <std::size_t A, std::size_t B, std::size_t C, std::size_t D,
-    std::size_t E, std::size_t F, std::size_t G, std::size_t H>
-struct MaxSize8 {
+    std::size_t E, std::size_t F, std::size_t G>
+struct MaxSize7 {
   static constexpr std::size_t value = MaxSize<A,
       MaxSize<B,
           MaxSize<C,
               MaxSize<D,
-                  MaxSize<E,
-                      MaxSize<F, MaxSize<G, H>::value>::value>::value>::value>::
-                  value>::value>::value;
+                  MaxSize<E, MaxSize<F, G>::value>::value>::value>::value>::
+              value>::value;
 };
 
 #if !defined(RT_DEVICE_COMPILATION)
 template <std::size_t A, std::size_t B, std::size_t C, std::size_t D,
     std::size_t E, std::size_t F, std::size_t G, std::size_t H, std::size_t I,
-    std::size_t J, std::size_t K, std::size_t L>
-struct MaxSize12 {
+    std::size_t J, std::size_t K>
+struct MaxSize11 {
   static constexpr std::size_t value = MaxSize<A,
       MaxSize<B,
           MaxSize<C,
@@ -478,10 +545,9 @@ struct MaxSize12 {
                       MaxSize<F,
                           MaxSize<G,
                               MaxSize<H,
-                                  MaxSize<I,
-                                      MaxSize<J, MaxSize<K, L>::value>::value>::
-                                          value>::value>::value>::value>::
-                                  value>::value>::value>::value>::value;
+                                  MaxSize<I, MaxSize<J, K>::value>::value>::
+                                      value>::value>::value>::value>::value>::
+                          value>::value>::value;
 };
 #endif
 
@@ -490,11 +556,11 @@ struct TicketStorage {
   // Calculate maximum size needed for any ticket type
   // We need to ensure proper alignment - use the maximum alignment required
 #if !defined(RT_DEVICE_COMPILATION)
-  static constexpr std::size_t maxSize_ = MaxSize12<
+  static constexpr std::size_t maxSize_ = MaxSize11<
       sizeof(NullTicket), sizeof(InitializeTicket),
       sizeof(InitializeCloneTicket), sizeof(FinalizeTicket),
       sizeof(DestroyTicket), sizeof(AssignTicket),
-      sizeof(DerivedAssignTicket<false>), sizeof(DerivedAssignTicket<true>),
+      sizeof(DerivedAssignTicket),
       sizeof(io::descr::DescriptorIoTicket<io::Direction::Output>),
       sizeof(io::descr::DescriptorIoTicket<io::Direction::Input>),
       sizeof(io::descr::DerivedIoTicket<io::Direction::Output>),
@@ -504,8 +570,7 @@ struct TicketStorage {
   // but we'll use alignas with the largest alignment requirement
   alignas(alignof(InitializeTicket)) alignas(alignof(InitializeCloneTicket))
       alignas(alignof(FinalizeTicket)) alignas(alignof(DestroyTicket))
-      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket<false>))
-      alignas(alignof(DerivedAssignTicket<true>))
+      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket))
       alignas(alignof(io::descr::DescriptorIoTicket<io::Direction::Output>))
       alignas(alignof(io::descr::DescriptorIoTicket<io::Direction::Input>))
       alignas(alignof(io::descr::DerivedIoTicket<io::Direction::Output>))
@@ -513,16 +578,15 @@ struct TicketStorage {
       char storage[maxSize_];
 #else
   // Device builds exclude IO tickets for reduced code size
-  static constexpr std::size_t maxSize_ = MaxSize8<
+  static constexpr std::size_t maxSize_ = MaxSize7<
       sizeof(NullTicket), sizeof(InitializeTicket),
       sizeof(InitializeCloneTicket), sizeof(FinalizeTicket),
       sizeof(DestroyTicket), sizeof(AssignTicket),
-      sizeof(DerivedAssignTicket<false>), sizeof(DerivedAssignTicket<true>)>::value;
+      sizeof(DerivedAssignTicket)>::value;
 
   alignas(alignof(InitializeTicket)) alignas(alignof(InitializeCloneTicket))
       alignas(alignof(FinalizeTicket)) alignas(alignof(DestroyTicket))
-      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket<false>))
-      alignas(alignof(DerivedAssignTicket<true>))
+      alignas(alignof(AssignTicket)) alignas(alignof(DerivedAssignTicket))
       char storage[maxSize_];
 #endif
 
@@ -578,10 +642,8 @@ private:
       return TicketType::Destroy;
     } else if constexpr (std::is_same_v<T, AssignTicket>) {
       return TicketType::Assign;
-    } else if constexpr (std::is_same_v<T, DerivedAssignTicket<false>>) {
-      return TicketType::DerivedAssignFalse;
-    } else if constexpr (std::is_same_v<T, DerivedAssignTicket<true>>) {
-      return TicketType::DerivedAssignTrue;
+    } else if constexpr (std::is_same_v<T, DerivedAssignTicket>) {
+      return TicketType::DerivedAssign;
     }
 #if !defined(RT_DEVICE_COMPILATION)
     else if constexpr (std::is_same_v<T,
@@ -675,17 +737,16 @@ public:
       return StatContinue;
     }
   }
-  template <bool IS_COMPONENTWISE>
   RT_API_ATTRS int BeginDerivedAssign(Descriptor &to, const Descriptor &from,
       const typeInfo::DerivedType &derived, int flags, MemmoveFct memmoveFct,
-      Descriptor *deallocateAfter) {
+      Descriptor *deallocateAfter, bool isComponentwise) {
     if (runTicketsImmediately_) {
-      return DerivedAssignTicket<IS_COMPONENTWISE>{
-          to, from, derived, flags, memmoveFct, deallocateAfter}
+      return DerivedAssignTicket{
+          to, from, derived, flags, memmoveFct, deallocateAfter, isComponentwise}
           .Run(*this);
     } else {
-      StartTicket().emplace<DerivedAssignTicket<IS_COMPONENTWISE>>(
-          to, from, derived, flags, memmoveFct, deallocateAfter);
+      StartTicket().emplace<DerivedAssignTicket>(
+          to, from, derived, flags, memmoveFct, deallocateAfter, isComponentwise);
       return StatContinue;
     }
   }

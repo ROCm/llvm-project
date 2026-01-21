@@ -473,18 +473,12 @@ RT_API_ATTRS int AssignTicket::Continue(WorkQueue &workQueue) {
         toElementBytes, fromElementBytes);
   }
   if (toDerived_) {
-    if (toDerived_->noDefinedAssignment()) { // componentwise
-      if (int status{workQueue.BeginDerivedAssign<true>(
-              to_, *from_, *toDerived_, flags_, memmoveFct_, toDeallocate_)};
-          status != StatOk && status != StatContinue) {
-        return status;
-      }
-    } else { // elementwise
-      if (int status{workQueue.BeginDerivedAssign<false>(
-              to_, *from_, *toDerived_, flags_, memmoveFct_, toDeallocate_)};
-          status != StatOk && status != StatContinue) {
-        return status;
-      }
+    // isComponentwise = true when noDefinedAssignment(), false otherwise
+    bool isComponentwise = toDerived_->noDefinedAssignment();
+    if (int status{workQueue.BeginDerivedAssign(to_, *from_, *toDerived_,
+            flags_, memmoveFct_, toDeallocate_, isComponentwise)};
+        status != StatOk && status != StatContinue) {
+      return status;
     }
     toDeallocate_ = nullptr;
   } else if (IsSimpleMemmove()) {
@@ -539,9 +533,7 @@ RT_API_ATTRS int AssignTicket::Continue(WorkQueue &workQueue) {
   }
 }
 
-template <bool IS_COMPONENTWISE>
-RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Begin(
-    WorkQueue &workQueue) {
+RT_API_ATTRS int DerivedAssignTicket::Begin(WorkQueue &workQueue) {
   if (toIsContiguous_ && fromIsContiguous_ &&
       this->derived_.noDestructionNeeded() &&
       this->derived_.noDefinedAssignment() &&
@@ -594,12 +586,8 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Begin(
   }
   return StatContinue;
 }
-template RT_API_ATTRS int DerivedAssignTicket<false>::Begin(WorkQueue &);
-template RT_API_ATTRS int DerivedAssignTicket<true>::Begin(WorkQueue &);
 
-template <bool IS_COMPONENTWISE>
-RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
-    WorkQueue &workQueue) {
+RT_API_ATTRS int DerivedAssignTicket::Continue(WorkQueue &workQueue) {
   while (!this->IsComplete()) {
     // Copy the data components (incl. the parent) first.
     switch (this->component_->genre()) {
@@ -621,7 +609,7 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
       } else { // Component has intrinsic type; simply copy raw bytes
         std::size_t componentByteSize{
             this->component_->SizeInBytes(this->instance_)};
-        if (IS_COMPONENTWISE && toIsContiguous_ && fromIsContiguous_) {
+        if (isComponentwise() && toIsContiguous_ && fromIsContiguous_) {
           std::size_t offset{
               static_cast<std::size_t>(this->component_->offset())};
           char *to{this->instance_.template OffsetElement<char>(offset)};
@@ -655,7 +643,7 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
     case typeInfo::Component::Genre::PointerDevice: {
       std::size_t componentByteSize{
           this->component_->SizeInBytes(this->instance_)};
-      if (IS_COMPONENTWISE && toIsContiguous_ && fromIsContiguous_) {
+      if (isComponentwise() && toIsContiguous_ && fromIsContiguous_) {
         std::size_t offset{
             static_cast<std::size_t>(this->component_->offset())};
         char *to{this->instance_.template OffsetElement<char>(offset)};
@@ -740,8 +728,6 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
   }
   return StatOk;
 }
-template RT_API_ATTRS int DerivedAssignTicket<false>::Continue(WorkQueue &);
-template RT_API_ATTRS int DerivedAssignTicket<true>::Continue(WorkQueue &);
 
 RT_API_ATTRS void DoFromSourceAssign(Descriptor &alloc,
     const Descriptor &source, Terminator &terminator, MemmoveFct memmoveFct) {
