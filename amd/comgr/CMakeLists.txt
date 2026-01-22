@@ -39,6 +39,12 @@ else()
   set(AMD_COMGR_GIT_COMMIT "not-available")
 endif()
 
+if (THEROCK_HIP_MAJOR_VERSION AND THE_ROCK_HIP_MINOR_VERSION)
+  set(AMD_COMGR_BUILD_SOURCE "TheRock")
+else()
+  set(AMD_COMGR_BUILD_SOURCE "Driver")
+endif()
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 # Optionally, build Compiler Support with ccache.
