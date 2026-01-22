@@ -727,6 +727,31 @@ __amd_streamOpsWrite(
   }
 }
 
+__attribute__((always_inline)) void
+__amd_streamOpsIncrement(
+    __global atomic_uint* ptrUint,
+    __global atomic_ulong* ptrUlong,
+    ulong value) {
+
+    if (ptrUint) {
+      atomic_fetch_add_explicit (ptrUint, value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    } else {
+      atomic_fetch_add_explicit  (ptrUlong, value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    }
+}
+
+__attribute__((always_inline)) void
+__amd_streamOpsDecrement(
+    __global atomic_uint* ptrUint,
+    __global atomic_ulong* ptrUlong,
+    ulong value) {
+
+    if (ptrUint) {
+      atomic_fetch_sub_explicit (ptrUint, value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    } else {
+      atomic_fetch_sub_explicit  (ptrUlong, value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    }
+}
 
 __attribute__((always_inline)) void
 __amd_streamOpsWait(
