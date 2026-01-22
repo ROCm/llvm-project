@@ -44,15 +44,17 @@ jobs:
       BASE_REF:  ${{ vars.THEROCK_CI_REF }}
     outputs:
       enable_build_jobs: true
-      linux_variants: ${{ steps.configure.outputs.linux_variants }}
+      linux_variants: >
+        [ {"test-runs-on": "linux-gfx1151-gpu-rocm", "family": "gfx1151", "bypass_tests_for_releases": true, "sanity_check_only_for_family": true, "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "artifact_group": "gfx1151"}, {"test-runs-on": "linux-mi325-1gpu-ossci-rocm-frac", "test-runs-on-multi-gpu": "linux-mi325-4gpu-ossci-rocm", "benchmark-runs-on": "linux-mi325-1gpu-ossci-rocm-frac", "family": "gfx94X-dcgpu", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "artifact_group": "gfx94X-dcgpu"}]
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
-      windows_variants: ${{ steps.configure.outputs.windows_variants }}
+      windows_variants: >
+            [{"test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm", "family": "gfx1151", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "windows-release", "artifact_group": "gfx1151"}]
       test_type: 'smoke'
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
     steps:
       - name: Checkout TheRock repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: "ROCm/TheRock"
           #fetch-depth: 10
