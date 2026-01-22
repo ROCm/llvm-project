@@ -248,9 +248,8 @@ llvm::omp::target::ompt::setTraceEventTy(int DeviceId, unsigned int Enable,
     return ompt_set_never;
   }
 
-  ODBG(ODT_Tool) << "Executing setTraceEventTy: DeviceId="
-                 << DeviceId << " Enable=" <<  Enable
-                 << " EventTy=" << EventTy;
+  ODBG(ODT_Tool) << "Executing setTraceEventTy: DeviceId=" << DeviceId
+                 << " Enable=" << Enable << " EventTy=" << EventTy;
 
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   if (TracedDevices.find(DeviceId) == TracedDevices.end())

@@ -84,13 +84,10 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
       initTraceRecordMetaData(NewCursor);
       DeviceBuf->Cursor.store(NewCursor, std::memory_order_release);
 
-      ODBG(ODT_Tool) << "Thread "
-               << llvm::omp::target::ompt::getThreadId()
-               << " Assigned "
-               << RecSize << " bytes at " << NewCursor
-               << " in existing buffer "
-               << DeviceBuf->Start << " for "
-               << " device" << DeviceId;
+      ODBG(ODT_Tool) << "Thread " << llvm::omp::target::ompt::getThreadId()
+                     << ": Assigned " << RecSize << " bytes at " << NewCursor
+                     << " in existing buffer " << DeviceBuf->Start
+                     << " for device " << DeviceId;
       return NewCursor;
     } else {
       ToBeFlushedCursor = OldCursor;
@@ -137,13 +134,10 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
   if (OMPX_FlushOnBufferFull && ToBeFlushedCursor)
     triggerFlushOnBufferFull(ToBeFlushedCursor, ToBeFlushedBuf);
 
-  ODBG(ODT_Tool) << "Thread "
-               << llvm::omp::target::ompt::getThreadId()
-               << " Assigned "
-               << RecSize << " bytes at " << NewBuffer
-               << " in new buffer "
-               << DeviceBuf->Start << " for "
-               << " device" << DeviceId;
+  ODBG(ODT_Tool) << "Thread " << llvm::omp::target::ompt::getThreadId()
+                 << ": Assigned " << RecSize << " bytes at " << NewBuffer
+                 << " in new buffer with id " << NewBufId << " for device "
+                 << DeviceId;
   return NewBuffer;
 }
 
@@ -183,9 +177,8 @@ void OmptTracingBufferMgr::triggerFlushOnBufferFull(void *cursor, BufPtr Buf) {
     flush_md_itr->second.FlushCursor = cursor; // update the cursor
     // Do not update the flush status since it may be under processing
     // by another thread
-    ODBG(ODT_Tool) << "Updated id " <<  flush_id << " cursor "
-             << cursor << " buf "
-             << flush_md_itr->second.FlushBuf->Start;
+    ODBG(ODT_Tool) << "Updated id " << flush_id << " cursor " << cursor
+                   << " buf " << flush_md_itr->second.FlushBuf->Start;
   }
   flush_lock.unlock();
   buf_lock.unlock();
@@ -385,7 +378,7 @@ void OmptTracingBufferMgr::dispatchCallback(int64_t DeviceId, void *Buffer,
   // Note that we don't want to hold a lock when dispatching the callback.
   if (llvm::omp::target::ompt::isTracedDevice(DeviceId)) {
     ODBG(ODT_Tool) << "Dispatch callback w/ range (inclusive) to be flushed: "
-             <<FirstCursor <<  " -> " << LastCursor;
+                   << FirstCursor << " -> " << LastCursor;
     llvm::omp::target::ompt::ompt_callback_buffer_complete(
         DeviceId, Buffer,
         /* bytes returned in this callback */
@@ -525,10 +518,9 @@ OmptTracingBufferMgr::findAndReserveFlushedBuf(uint64_t FlushId) {
 
   FlushInfo flush_info(flush_itr->first, flush_itr->second.FlushCursor,
                        flush_itr->second.FlushBuf);
-  ODBG(ODT_Tool) << "Reserved buffer: flush_id:"
-           << flush_itr->first
-           << " cursor:" << flush_itr->second.FlushCursor
-           << " buf " << flush_itr->second.FlushBuf->Start;
+  ODBG(ODT_Tool) << "Reserved buffer: flush_id:" << flush_itr->first
+                 << ", cursor:" << flush_itr->second.FlushCursor
+                 << ", buf:" << flush_itr->second.FlushBuf->Start;
   return flush_info;
 }
 
@@ -543,10 +535,10 @@ void OmptTracingBufferMgr::unreserveFlushedBuf(const FlushInfo &flush_info) {
   auto itr = Id2FlushMdMap.find(flush_info.FlushId);
   assert(itr != Id2FlushMdMap.end() &&
          itr->second.FlushStatus == Flush_processing);
-  ODBG(ODT_Tool) << "Unreserved buffer: flush_id:"
-           << flush_info.FlushId
-           << " cursor:" << flush_info.FlushCursor
-           << " buf " << flush_info.FlushBuf->Start;
+  itr->second.FlushStatus = Flush_waiting;
+  ODBG(ODT_Tool) << "Unreserved buffer: flush_id:" << flush_info.FlushId
+                 << ", cursor:" << flush_info.FlushCursor
+                 << ", buf:" << flush_info.FlushBuf->Start;
 }
 
 /*
@@ -556,10 +548,9 @@ void OmptTracingBufferMgr::unreserveFlushedBuf(const FlushInfo &flush_info) {
  * Note lock order: buf_lock -> flush_lock
  */
 void OmptTracingBufferMgr::destroyFlushedBuf(const FlushInfo &flush_info) {
-  ODBG(ODT_Tool) << "Destroying buffer: flush_id:"
-           << flush_info.FlushId
-           << " cursor:" << flush_info.FlushCursor
-           << " buf " << flush_info.FlushBuf->Start;
+  ODBG(ODT_Tool) << "Destroying buffer: flush_id:" << flush_info.FlushId
+                 << ", cursor:" << flush_info.FlushCursor
+                 << ", buf:" << flush_info.FlushBuf->Start;
 
   BufPtr buf = flush_info.FlushBuf;
 

@@ -303,8 +303,8 @@ ompt_interface_fn_t llvm::omp::target::ompt::lookupDeviceTracingFn(
   FOREACH_OMPT_DEVICE_TRACING_FN(compareAgainst);
 #undef compareAgainst
 
-  ODBG(ODT_Tool) << "Warning: Could not find requested function " <<
-     InterfaceFunctionName;
+  ODBG(ODT_Tool) << "Warning: Could not find requested function "
+                 << InterfaceFunctionName;
   return (ompt_interface_fn_t) nullptr;
 }
 
