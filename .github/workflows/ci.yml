@@ -47,6 +47,7 @@ on:
         description: "If provided, the tests will run on this artifact ID"
         default: ""
   pull_request:
+    branches: [amd-staging]
     types:
       - labeled
       - opened
