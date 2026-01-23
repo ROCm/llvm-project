@@ -73,28 +73,6 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Set linkage of every external definition to linkonce_odr.
-  for (Module::iterator i = M->begin(), e = M->end(); i != e; ++i) {
-    if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
-        i->setLinkage(GlobalValue::LinkOnceODRLinkage);
-    }
-  }
-
-  for (Module::global_iterator i = M->global_begin(), e = M->global_end();
-       i != e; ++i) {
-    if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
-        i->setLinkage(GlobalValue::LinkOnceODRLinkage);
-    }
-  }
-
-  for (Module::alias_iterator i = M->alias_begin(), e = M->alias_end();
-       i != e; ++i) {
-    if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
-        i->setLinkage(GlobalValue::LinkOnceODRLinkage);
-    }
-  }
-
-
   if (OutputFilename.empty()) {
     errs() << "no output file\n";
     return 1;
