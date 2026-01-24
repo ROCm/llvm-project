@@ -8,7 +8,3 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks theRock and npsdb builds of hipRuntime
-[HIP] Pass HIP library directly and refactor (#176019)
-[HIP] Provide implicit include to ROCm library directory (#177704)
----
