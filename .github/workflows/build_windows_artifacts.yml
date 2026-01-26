@@ -105,6 +105,8 @@ jobs:
           pip install -r requirements.txt
 
       - name: Install requirements
+        retry:
+          max-attempts: 3
         # The first two lines removes the default commmunity feed and uses the internal proxy feed
         run: |
           choco source disable -n=chocolatey
