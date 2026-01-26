@@ -6748,6 +6748,39 @@ void CGDebugInfo::EmitGlobalVariableForHeterogeneousDwarf(
     ExprBuilder.append<llvm::DIOp::Constant>(
         llvm::ConstantFP::get(CGM.getLLVMContext(), Init.getFloat()));
     break;
+  case APValue::LValue: {
+    // Convert the LValue to a constant using ConstantEmitter.
+    llvm::Constant *C = ConstantEmitter(CGM).emitAbstract(
+        SourceLocation(), Init, VD->getType());
+    if (!C)
+      return;
+    
+    // DIOp::Constant only supports specific constant types.
+    // For pointer constants (typical for LValue), we need to convert to an integer.
+    if (auto *CI = dyn_cast<llvm::ConstantInt>(C)) {
+      ExprBuilder.append<llvm::DIOp::Constant>(CI);
+    } else if (auto *CFP = dyn_cast<llvm::ConstantFP>(C)) {
+      ExprBuilder.append<llvm::DIOp::Constant>(CFP);
+    } else {
+      // For pointer or other constants, we need to convert to an integer representation.
+      // This is similar to how null pointers are handled elsewhere.
+      llvm::Type *IntTy = CGM.getTypes().ConvertType(VD->getType());
+      if (IntTy->isPointerTy()) {
+        IntTy = CGM.getDataLayout().getIntPtrType(IntTy);
+        C = llvm::ConstantExpr::getPtrToInt(C, IntTy);
+        if (auto *CI = dyn_cast<llvm::ConstantInt>(C)) {
+          ExprBuilder.append<llvm::DIOp::Constant>(CI);
+        } else {
+          // If we still can't convert to ConstantInt, we can't emit this LValue
+          return;
+        }
+      } else {
+        // Not a pointer type, can't handle this case
+        return;
+      }
+    }
+    break;
+  }
   case APValue::Indeterminate:
   case APValue::None:
   case APValue::Array:
@@ -6759,7 +6792,6 @@ void CGDebugInfo::EmitGlobalVariableForHeterogeneousDwarf(
   case APValue::Union:
   case APValue::MemberPointer:
   case APValue::AddrLabelDiff:
-  case APValue::LValue:
     return;
   }
 
