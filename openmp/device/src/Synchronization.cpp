@@ -108,34 +108,9 @@ void namedBarrier() {
   fence::team(atomic::release);
 }
 
-void fenceTeam(atomic::OrderingTy Ordering) {
-  return __scoped_atomic_thread_fence(Ordering, atomic::workgroup);
+void syncThreadsAligned(atomic::OrderingTy Ordering) {
+  synchronize::threads(Ordering);
 }
-
-void fenceKernel(atomic::OrderingTy Ordering) {
-  return __scoped_atomic_thread_fence(Ordering, atomic::device);
-}
-
-void fenceSystem(atomic::OrderingTy Ordering) {
-  return __scoped_atomic_thread_fence(Ordering, atomic::system);
-}
-
-void syncWarp(__kmpc_impl_lanemask_t) {
-  // This is a no-op on current AMDGPU hardware but it is used by the optimizer
-  // to enforce convergent behaviour between control flow graphs.
-  __builtin_amdgcn_wave_barrier();
-}
-
-void syncThreads(atomic::OrderingTy Ordering) {
-  if (Ordering != atomic::relaxed)
-    fenceTeam(Ordering == atomic::acq_rel ? atomic::release : atomic::seq_cst);
-
-  __builtin_amdgcn_s_barrier();
-
-  if (Ordering != atomic::relaxed)
-    fenceTeam(Ordering == atomic::acq_rel ? atomic::acquire : atomic::seq_cst);
-}
-void syncThreadsAligned(atomic::OrderingTy Ordering) { syncThreads(Ordering); }
 
 void initLock(omp_lock_t *Lock) { unsetLock(Lock); }
 
@@ -153,18 +128,19 @@ void setLock(omp_lock_t *Lock) {
 }
 
 void unsetCriticalLock(omp_lock_t *Lock) {
-  (void)atomicExchange((uint32_t *)Lock, UNSET, atomic::acq_rel);
+  [[maybe_unused]] uint32_t before =
+      atomicExchange((uint32_t *)Lock, UNSET, atomic::acq_rel);
 }
 
 void setCriticalLock(omp_lock_t *Lock) {
   uint64_t LowestActiveThread = utils::ffs(mapping::activemask()) - 1;
   if (mapping::getThreadIdInWarp() == LowestActiveThread) {
-    fenceKernel(atomic::release);
+    fence::kernel(atomic::release);
     while (
         !atomic::cas((uint32_t *)Lock, UNSET, SET, atomic::relaxed, atomic::relaxed)) {
       __builtin_amdgcn_s_sleep(32);
     }
-    fenceKernel(atomic::acquire);
+    fence::kernel(atomic::acquire);
   }
 }
 
@@ -188,22 +164,20 @@ void namedBarrier() {
   __nvvm_barrier_sync_cnt(BarrierNo, NumThreads);
 }
 
-void fenceTeam(int) { __nvvm_membar_cta(); }
-
-void fenceKernel(int) { __nvvm_membar_gl(); }
-
-void fenceSystem(int) { __nvvm_membar_sys(); }
-
-void syncWarp(__kmpc_impl_lanemask_t Mask) { __nvvm_bar_warp_sync(Mask); }
-
-void syncThreads(atomic::OrderingTy Ordering) {
-  constexpr int BarrierNo = 8;
-  __nvvm_barrier_sync(BarrierNo);
-}
-
 void syncThreadsAligned(atomic::OrderingTy Ordering) { __syncthreads(); }
 
 constexpr uint32_t OMP_SPIN = 1000;
+constexpr uint32_t UNSET = 0;
+constexpr uint32_t SET = 1;
+
+void unsetLock(omp_lock_t *Lock) {
+  [[maybe_unused]] uint32_t before = atomicExchange(
+      reinterpret_cast<uint32_t *>(Lock), UNSET, atomic::seq_cst);
+}
+
+int testLock(omp_lock_t *Lock) {
+  return atomic::add(reinterpret_cast<uint32_t *>(Lock), 0u, atomic::seq_cst);
+}
 
 void initLock(omp_lock_t *Lock) { unsetLock(Lock); }
 
@@ -211,8 +185,8 @@ void destroyLock(omp_lock_t *Lock) { unsetLock(Lock); }
 
 void setLock(omp_lock_t *Lock) {
   // TODO: not sure spinning is a good idea here..
-  while (atomic::cas((uint32_t *)Lock, UNSET, SET, atomic::seq_cst,
-                     atomic::seq_cst) != UNSET) {
+  while (atomic::cas(reinterpret_cast<uint32_t *>(Lock), UNSET, SET,
+                     atomic::seq_cst, atomic::seq_cst) != UNSET) {
     int32_t start = __nvvm_read_ptx_sreg_clock();
     int32_t now;
     for (;;) {
@@ -270,21 +244,9 @@ void synchronize::init(bool IsSPMD) {
     impl::namedBarrierInit();
 }
 
-void synchronize::warp(LaneMaskTy Mask) { impl::syncWarp(Mask); }
-
-void synchronize::threads(atomic::OrderingTy Ordering) {
-  impl::syncThreads(Ordering);
-}
-
 void synchronize::threadsAligned(atomic::OrderingTy Ordering) {
   impl::syncThreadsAligned(Ordering);
 }
-
-void fence::team(atomic::OrderingTy Ordering) { impl::fenceTeam(Ordering); }
-
-void fence::kernel(atomic::OrderingTy Ordering) { impl::fenceKernel(Ordering); }
-
-void fence::system(atomic::OrderingTy Ordering) { impl::fenceSystem(Ordering); }
 
 void unsetCriticalLock(omp_lock_t *Lock) { impl::unsetLock(Lock); }
 
@@ -378,6 +340,6 @@ void ompx_sync_block_acq_rel() {
   impl::syncThreadsAligned(atomic::OrderingTy::acq_rel);
 }
 void ompx_sync_block_divergent(int Ordering) {
-  impl::syncThreads(atomic::OrderingTy(Ordering));
+  synchronize::threads(atomic::OrderingTy(Ordering));
 }
 } // extern "C"
