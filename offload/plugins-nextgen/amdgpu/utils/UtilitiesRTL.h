@@ -20,6 +20,8 @@
 
 #include "llvm/Frontend/Offloading/Utility.h"
 
+using namespace llvm::omp::target::debug;
+
 namespace llvm {
 namespace omp {
 namespace target {
@@ -72,7 +74,7 @@ extractXnackModeFromBinary(const __tgt_device_image *TgtImage) {
                                 /*InitContent=*/false);
   if (auto Err = ElfOrErr.takeError()) {
     consumeError(std::move(Err));
-    DP("An error occured while reading ELF to extract XNACK mode\n");
+    ODBG(ODT_Tool) << "An error occured while reading ELF to extract XNACK mode";
     return ELF::EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4;
   }
   u_int16_t EFlags = ElfOrErr->getPlatformFlags();
@@ -80,7 +82,7 @@ extractXnackModeFromBinary(const __tgt_device_image *TgtImage) {
   hsa_utils::XnackBuildMode XnackFlags = EFlags & ELF::EF_AMDGPU_FEATURE_XNACK_V4;
 
   if (XnackFlags == ELF::EF_AMDGPU_FEATURE_XNACK_UNSUPPORTED_V4)
-    DP("XNACK is not supported on this system!\n");
+    ODBG(ODT_Tool) << "XNACK is not supported on this system!";
 
   return XnackFlags;
 }

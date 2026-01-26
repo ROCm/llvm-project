@@ -65,7 +65,7 @@ void PluginManager::init() {
 void PluginManager::deinit() {
   TIMESCOPE();
   if (OffloadPolicy::isOffloadDisabled()) {
-    DP("Offload is disabled. Skipping plugin deinitialization\n");
+    ODBG(ODT_Deinit) << "Offload is disabled. Skipping plugin deinitialization";
     return;
   }
   ODBG(ODT_Deinit) << "Unloading RTLs...";

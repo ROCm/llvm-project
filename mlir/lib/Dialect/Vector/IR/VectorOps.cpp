@@ -23,6 +23,7 @@
 #include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StructuredOpsUtils.h"
+#include "mlir/Dialect/Utils/VerificationUtils.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Builders.h"
@@ -2364,11 +2365,48 @@ LogicalResult foldExtractFromFromElements(ExtractOp extractOp,
   return success();
 }
 
+/// Replace `vector.extract` with `vector.shape_cast`.
+///
+/// BEFORE:
+/// %0 = vector.extract %arg0[0] : vector<4xf32> from vector<1x4xf32>
+/// AFTER:
+/// %0 = vector.shape_cast %arg0 : vector<1x4xf32> to vector<4xf32>
+///
+/// The canonical form of vector operations that reshape vectors is shape_cast.
+struct ExtractToShapeCast final : OpRewritePattern<vector::ExtractOp> {
+  using Base::Base;
+  LogicalResult matchAndRewrite(vector::ExtractOp extractOp,
+                                PatternRewriter &rewriter) const override {
+    VectorType sourceType = extractOp.getSourceVectorType();
+    VectorType outType = dyn_cast<VectorType>(extractOp.getType());
+    if (!outType)
+      return failure();
+
+    if (sourceType.getNumElements() != outType.getNumElements())
+      return rewriter.notifyMatchFailure(
+          extractOp, "extract to vector with fewer elements");
+
+    // Negative values in `position` means that the extacted value is poison.
+    // There is a vector.extract folder for this.
+    if (llvm::any_of(extractOp.getMixedPosition(),
+                     [](OpFoldResult v) { return !isConstantIntValue(v, 0); }))
+      return rewriter.notifyMatchFailure(extractOp,
+                                         "leaving for extract poison folder");
+
+    rewriter.replaceOpWithNewOp<vector::ShapeCastOp>(extractOp, outType,
+                                                     extractOp.getSource());
+
+    return success();
+  }
+};
+
 } // namespace
 
 void ExtractOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<ExtractOpFromBroadcast, ExtractOpFromCreateMask>(context);
+  results
+      .add<ExtractOpFromBroadcast, ExtractOpFromCreateMask, ExtractToShapeCast>(
+          context);
   results.add(foldExtractFromShapeCastToShapeCast);
   results.add(foldExtractFromFromElements);
 }
@@ -3082,13 +3120,43 @@ struct BroadcastFolder : public OpRewritePattern<BroadcastOp> {
     return success();
   }
 };
+
+/// Replace `vector.broadcast` with `vector.shape_cast`.
+///
+/// BEFORE:
+/// %0 = vector.broadcast %arg0 : vector<4xi8> to vector<1x1x4xi8>
+/// AFTER:
+/// %0 = vector.shape_cast %arg0 : vector<4xi8> to vector<1x1x4xi8>
+///
+/// The canonical form of vector operations that reshape vectors is shape_cast.
+struct BroadcastToShapeCast final
+    : public OpRewritePattern<vector::BroadcastOp> {
+  using Base::Base;
+  LogicalResult matchAndRewrite(vector::BroadcastOp broadcast,
+                                PatternRewriter &rewriter) const override {
+
+    auto sourceType = dyn_cast<VectorType>(broadcast.getSourceType());
+    if (!sourceType) {
+      return rewriter.notifyMatchFailure(
+          broadcast, "source is a scalar, shape_cast doesn't support scalar");
+    }
+
+    VectorType outType = broadcast.getType();
+    if (sourceType.getNumElements() != outType.getNumElements()) {
+      return rewriter.notifyMatchFailure(
+          broadcast, "broadcast to a greater number of elements");
+    }
+
+    rewriter.replaceOpWithNewOp<vector::ShapeCastOp>(broadcast, outType,
+                                                     broadcast.getSource());
+    return success();
+  }
+};
 } // namespace
 
 void BroadcastOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                               MLIRContext *context) {
-  // BroadcastToShapeCast is not a default canonicalization, it is opt-in by
-  // calling `populateCastAwayVectorLeadingOneDimPatterns`
-  results.add<BroadcastFolder>(context);
+  results.add<BroadcastFolder, BroadcastToShapeCast>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -5930,8 +5998,9 @@ LogicalResult MaskedLoadOp::verify() {
   VectorType resVType = getVectorType();
   MemRefType memType = getMemRefType();
 
-  if (resVType.getElementType() != memType.getElementType())
-    return emitOpError("base and result element type should match");
+  if (failed(
+          verifyElementTypesMatch(*this, memType, resVType, "base", "result")))
+    return failure();
   if (llvm::size(getIndices()) != memType.getRank())
     return emitOpError("requires ") << memType.getRank() << " indices";
   if (resVType.getShape() != maskVType.getShape())
@@ -5989,8 +6058,9 @@ LogicalResult MaskedStoreOp::verify() {
   VectorType valueVType = getVectorType();
   MemRefType memType = getMemRefType();
 
-  if (valueVType.getElementType() != memType.getElementType())
-    return emitOpError("base and valueToStore element type should match");
+  if (failed(verifyElementTypesMatch(*this, memType, valueVType, "base",
+                                     "valueToStore")))
+    return failure();
   if (llvm::size(getIndices()) != memType.getRank())
     return emitOpError("requires ") << memType.getRank() << " indices";
   if (valueVType.getShape() != maskVType.getShape())
@@ -6049,8 +6119,9 @@ LogicalResult GatherOp::verify() {
   if (!llvm::isa<MemRefType, RankedTensorType>(baseType))
     return emitOpError("requires base to be a memref or ranked tensor type");
 
-  if (resVType.getElementType() != baseType.getElementType())
-    return emitOpError("base and result element type should match");
+  if (failed(
+          verifyElementTypesMatch(*this, baseType, resVType, "base", "result")))
+    return failure();
   if (llvm::size(getOffsets()) != baseType.getRank())
     return emitOpError("requires ") << baseType.getRank() << " indices";
   if (resVType.getShape() != indVType.getShape())
@@ -6158,8 +6229,9 @@ LogicalResult ScatterOp::verify() {
   if (!llvm::isa<MemRefType, RankedTensorType>(baseType))
     return emitOpError("requires base to be a memref or ranked tensor type");
 
-  if (valueVType.getElementType() != baseType.getElementType())
-    return emitOpError("base and valueToStore element type should match");
+  if (failed(verifyElementTypesMatch(*this, baseType, valueVType, "base",
+                                     "valueToStore")))
+    return failure();
   if (llvm::size(getOffsets()) != baseType.getRank())
     return emitOpError("requires ") << baseType.getRank() << " indices";
   if (valueVType.getShape() != indVType.getShape())
@@ -6241,8 +6313,9 @@ LogicalResult ExpandLoadOp::verify() {
   VectorType resVType = getVectorType();
   MemRefType memType = getMemRefType();
 
-  if (resVType.getElementType() != memType.getElementType())
-    return emitOpError("base and result element type should match");
+  if (failed(
+          verifyElementTypesMatch(*this, memType, resVType, "base", "result")))
+    return failure();
   if (llvm::size(getIndices()) != memType.getRank())
     return emitOpError("requires ") << memType.getRank() << " indices";
   if (resVType.getDimSize(0) != maskVType.getDimSize(0))
@@ -6294,8 +6367,9 @@ LogicalResult CompressStoreOp::verify() {
   VectorType valueVType = getVectorType();
   MemRefType memType = getMemRefType();
 
-  if (valueVType.getElementType() != memType.getElementType())
-    return emitOpError("base and valueToStore element type should match");
+  if (failed(verifyElementTypesMatch(*this, memType, valueVType, "base",
+                                     "valueToStore")))
+    return failure();
   if (llvm::size(getIndices()) != memType.getRank())
     return emitOpError("requires ") << memType.getRank() << " indices";
   if (valueVType.getDimSize(0) != maskVType.getDimSize(0))
@@ -6356,8 +6430,9 @@ LogicalResult ShapeCastOp::verify() {
   VectorType resultType = getResultVectorType();
 
   // Check that element type is preserved
-  if (sourceType.getElementType() != resultType.getElementType())
-    return emitOpError("has different source and result element types");
+  if (failed(verifyElementTypesMatch(*this, sourceType, resultType, "source",
+                                     "result")))
+    return failure();
 
   // Check that number of elements is preserved
   int64_t sourceNElms = sourceType.getNumElements();
@@ -6553,10 +6628,7 @@ public:
   }
 };
 
-/// Pattern to rewrite Y = ShapeCast(Broadcast(X)) as either
-///   i) Y = ShapeCast(X), or
-///  ii) Y = Broadcast(X)
-/// If both (i) and (ii) are possible, (i) is chosen.
+/// Pattern to rewrite Y = ShapeCast(Broadcast(X)) as Y = Broadcast(X)
 class ShapeCastBroadcastFolder final : public OpRewritePattern<ShapeCastOp> {
 public:
   using Base::Base;
@@ -6570,22 +6642,6 @@ public:
 
     auto srcVectorType = dyn_cast<VectorType>(broadcastOp.getSourceType());
     bool srcIsScalar = !srcVectorType;
-
-    // Replace Y = ShapeCast(Broadcast(X)) with Y = ShapeCast(X).
-    // Example:
-    // %0 = vector.broadcast %in : vector<3x4xf32> to vector<1x3x4xf32>
-    // %1 = vector.shape_cast %0 : vector<1x3x4xf32> to vector<12xf32>
-    // to
-    // %1 = vector.shape_cast %in : vector<3x4xf32> to vector<12xf32>
-    if (srcVectorType) {
-      if (srcVectorType.getNumElements() ==
-          shapeCastOp.getResultVectorType().getNumElements()) {
-        rewriter.replaceOpWithNewOp<vector::ShapeCastOp>(
-            shapeCastOp, shapeCastOp.getResultVectorType(),
-            broadcastOp.getSource());
-        return success();
-      }
-    }
 
     // Replace Y = ShapeCast(Broadcast(X)) with Y = Broadcast(X)
     // Example

@@ -396,7 +396,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
   // correct, we will synchronize explicitly when the object is deleted. Update
   // the error with the result of the synchronize operation.
   if (AsyncInfoPtr == &LocalAsyncInfo && LocalAsyncInfo.Queue && !Err) {
-    DP("Synchronizing Operation for LOCAL\n");
+     ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
     Err = Device.synchronize(&LocalAsyncInfo);
     // Invalidate the wrapper object.
   }
@@ -407,7 +407,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
   // This was introduced.
   else if (AsyncInfoPtr && !AsyncInfoPtr->ExecAsync && AsyncInfoPtr->Queue &&
            !Err) {
-    DP("Synchronizing Operation for EXECASYNC\n");
+    ODBG(ODT_Init) << "Synchronizing Operation for EXECASYNC";
     Err = Device.synchronize(AsyncInfoPtr);
   }
 
@@ -444,9 +444,11 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
           GHandler.readGlobalFromImage(GenericDevice, Image, ExecModeGlobal)) {
     // Consume the error since it is acceptable to fail.
     [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-    DP("Failed to read execution mode for '%s': %s\n"
-       "Using default Bare (0) execution mode\n",
-       getName(), ErrStr.data());
+     ODBG(ODT_Init) << "Failed to read execution mode for "
+                    << getName()
+                    << ":"
+                    << ErrStr.data()
+                    << "Using default Bare (0) execution mode";
 
     ExecutionMode = OMP_TGT_EXEC_MODE_BARE;
   } else {
@@ -462,8 +464,9 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
   StaticGlobalTy<int8_t> MultiDeviceGlobal(getName(), "_multi_device");
   if (auto Err = GHandler.readGlobalFromImage(GenericDevice, Image,
                                               MultiDeviceGlobal)) {
-    DP("Missing symbol %s, continue execution anyway.\n",
-       MultiDeviceGlobal.getName().data());
+    ODBG(ODT_Init) << "Missing symbol "
+                   << MultiDeviceGlobal.getName().data()
+                   << " continue execution anyway.";
     consumeError(std::move(Err));
     IsMultiDeviceKernel = false;
   } else {

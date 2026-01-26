@@ -486,9 +486,7 @@ class CodeGenPrepareLegacyPass : public FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  CodeGenPrepareLegacyPass() : FunctionPass(ID) {
-    initializeCodeGenPrepareLegacyPassPass(*PassRegistry::getPassRegistry());
-  }
+  CodeGenPrepareLegacyPass() : FunctionPass(ID) {}
 
   bool runOnFunction(Function &F) override;
 
@@ -2675,7 +2673,7 @@ bool CodeGenPrepare::optimizeCallInst(CallInst *CI, ModifyDT &ModifiedDT) {
       GlobalVariable *GV;
       if ((GV = dyn_cast<GlobalVariable>(Val)) && GV->canIncreaseAlignment() &&
           GV->getPointerAlignment(*DL) < PrefAlign &&
-          DL->getTypeAllocSize(GV->getValueType()) >= MinSize + Offset2)
+          GV->getGlobalSize(*DL) >= MinSize + Offset2)
         GV->setAlignment(PrefAlign);
     }
   }
@@ -7093,7 +7091,7 @@ bool CodeGenPrepare::optimizePhiType(
     }
   }
 
-  if (!ConvertTy || !AnyAnchored ||
+  if (!ConvertTy || !AnyAnchored || PhiTy == ConvertTy ||
       !TLI->shouldConvertPhiType(PhiTy, ConvertTy))
     return false;
 

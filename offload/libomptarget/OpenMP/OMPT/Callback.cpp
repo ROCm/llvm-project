@@ -418,8 +418,8 @@ void Interface::endTarget(int64_t DeviceId, void *Code) {
 }
 
 void Interface::announceTargetRegion(const char *RegionName) {
-  DP("in Interface::target_region_%s target_id=%lu\n", RegionName,
-     TargetData.value);
+  ODBG(ODT_Tool) << "in Interface::target_region_" << RegionName
+                 << " target_id=" << TargetData.value;
 }
 
 void Interface::beginTargetDataOperation() {

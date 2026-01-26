@@ -52,6 +52,7 @@ extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
 getProfilerToAttach();
 
 using namespace llvm::offload::debug;
+using namespace llvm::omp::target::debug;
 
 namespace llvm {
 namespace omp {
@@ -403,7 +404,7 @@ struct GenericKernelTy {
     // AMD-only execution modes
     case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
     case OMP_TGT_EXEC_MODE_XTEAM_RED:
-      DP("AMD-only execution mode\n");
+      ODBG(ODT_Tool) << "AMD-only execution mode";
       return true;
     }
     llvm_unreachable("Unknown execution mode!");

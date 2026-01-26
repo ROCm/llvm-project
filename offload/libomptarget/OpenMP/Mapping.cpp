@@ -395,8 +395,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     if (LR.TPR.Flags.IsNewEntry ||
         LR.TPR.getEntry()->AllocKind != TARGET_ALLOC_SHARED) {
 
-      DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
-         Size, DPxPTR(HstPtrBegin), DPxPTR(LR.TPR.TargetPointer));
+      ODBG(ODT_Mapping) << "Moving " << Size << " bytes (hst:" << HstPtrBegin
+                        << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
 
       int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
                                   AsyncInfo, LR.TPR.getEntry());

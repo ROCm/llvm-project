@@ -44,6 +44,7 @@ FOREACH_OMPT_DEVICE_TRACING_FN_IMPLEMENTAIONS(defineOmptTracingFnMutex)
 std::mutex llvm::omp::target::ompt::DeviceIdWritingMutex;
 
 using namespace llvm::omp::target::ompt;
+using namespace llvm::omp::target::debug;
 
 std::shared_ptr<llvm::sys::DynamicLibrary>
     llvm::omp::target::ompt::ParentLibrary(nullptr);
@@ -119,7 +120,7 @@ void llvm::omp::target::ompt::removeDeviceId(ompt_device_t *Device) {
 OMPT_API_ROUTINE ompt_set_result_t ompt_set_trace_ompt(ompt_device_t *Device,
                                                        unsigned int Enable,
                                                        unsigned int EventTy) {
-  DP("Executing ompt_set_trace_ompt\n");
+  ODBG(ODT_Tool) << "Executing ompt_set_trace_ompt";
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
@@ -138,7 +139,7 @@ OMPT_API_ROUTINE ompt_set_result_t ompt_set_trace_ompt(ompt_device_t *Device,
 OMPT_API_ROUTINE int
 ompt_start_trace(ompt_device_t *Device, ompt_callback_buffer_request_t Request,
                  ompt_callback_buffer_complete_t Complete) {
-  DP("Executing ompt_start_trace\n");
+  ODBG(ODT_Tool) << "Executing ompt_start_trace";
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
@@ -172,7 +173,7 @@ ompt_start_trace(ompt_device_t *Device, ompt_callback_buffer_request_t Request,
 }
 
 OMPT_API_ROUTINE int ompt_flush_trace(ompt_device_t *Device) {
-  DP("Executing ompt_flush_trace\n");
+  ODBG(ODT_Tool) << "Executing ompt_flush_trace";
 
   std::unique_lock<std::mutex> Lock(ompt_flush_trace_mutex);
   ensureFuncPtrLoaded<libomptarget_ompt_flush_trace_t>(
@@ -182,7 +183,7 @@ OMPT_API_ROUTINE int ompt_flush_trace(ompt_device_t *Device) {
 }
 
 OMPT_API_ROUTINE int ompt_stop_trace(ompt_device_t *Device) {
-  DP("Executing ompt_stop_trace\n");
+  ODBG(ODT_Tool) << "Executing ompt_stop_trace";
 
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
@@ -255,7 +256,7 @@ ompt_get_record_type(ompt_buffer_t *Buffer, ompt_buffer_cursor_t CurrentPos) {
 
 OMPT_API_ROUTINE ompt_device_time_t
 ompt_get_device_time(ompt_device_t *Device) {
-  DP("Executing ompt_get_device_time\n");
+  ODBG(ODT_Tool) << "Executing ompt_get_device_time";
   return getSystemTimestampInNs();
 }
 
@@ -265,7 +266,7 @@ OMPT_API_ROUTINE double ompt_translate_time(ompt_device_t *Device,
   // We do not need to account for clock-skew / drift. So simple linear
   // translation using the host to device rate we obtained.
   double TranslatedTime = DeviceTime * HostToDeviceSlope + HostToDeviceOffset;
-  DP("D2H translated time: %f\n", TranslatedTime);
+  ODBG(ODT_Tool) << "D2H translated time: " << TranslatedTime;
 
   return TranslatedTime;
 }
@@ -302,8 +303,8 @@ ompt_interface_fn_t llvm::omp::target::ompt::lookupDeviceTracingFn(
   FOREACH_OMPT_DEVICE_TRACING_FN(compareAgainst);
 #undef compareAgainst
 
-  DP("Warning: Could not find requested function '%s'\n",
-     InterfaceFunctionName);
+  ODBG(ODT_Tool) << "Warning: Could not find requested function "
+                 << InterfaceFunctionName;
   return (ompt_interface_fn_t) nullptr;
 }
 
