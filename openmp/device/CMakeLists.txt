@@ -69,6 +69,7 @@ list(APPEND compile_options -fconvergent-functions)
 list(APPEND compile_options -Wno-unknown-cuda-version)
 list(APPEND compile_options -fno-sanitize=address)
 list(APPEND compile_options -O3)
+
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   list(APPEND compile_options --target=${LLVM_DEFAULT_TARGET_TRIPLE})
 endif()
@@ -87,7 +88,10 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
 elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^nvptx" OR
        "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^nvptx")
   set(target_name "nvptx")
-  list(APPEND compile_flags --cuda-feature=+ptx63)
+  list(APPEND compile_options --cuda-feature=+ptx63)
+elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv64" OR
+       "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv64")
+  set(target_name "spirv") 
 endif()
 
 # Trick to combine these into a bitcode file via the linker's LTO pass.
@@ -109,9 +113,16 @@ target_include_directories(libompdevice PRIVATE
                            ${CMAKE_CURRENT_SOURCE_DIR}/include
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../libc
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../offload/include)
-target_compile_options(libompdevice PRIVATE ${compile_options} ${compile_flags})
-target_link_options(libompdevice PRIVATE
-                    "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+target_compile_options(libompdevice PRIVATE ${compile_options})
+if(NOT "${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" AND
+   NOT "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  target_link_options(libompdevice PRIVATE
+                  "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+else()
+  target_link_options(libompdevice PRIVATE
+                  "-nostdlib" "-emit-llvm")
+endif()
+
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   target_link_options(libompdevice PRIVATE "--target=${LLVM_DEFAULT_TARGET_TRIPLE}")
 endif()
