@@ -92,6 +92,7 @@ set(SOURCES
 
 # Add Windows resource file for manifest and version info embedding
 if(WIN32)
+  string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
   configure_file(
     src/comgr.rc.in
     src/comgr.rc @ONLY)
