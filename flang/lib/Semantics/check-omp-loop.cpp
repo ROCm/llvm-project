@@ -186,7 +186,6 @@ void OmpStructureChecker::HasInvalidLoopBinding(
   }
 }
 
-
 static bool IsLoopTransforming(llvm::omp::Directive dir) {
   switch (dir) {
   // TODO case llvm::omp::Directive::OMPD_flatten:
@@ -251,7 +250,8 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
             const auto &beginName{c.BeginDir().DirName()};
             if (beginName.v == llvm::omp::Directive::OMPD_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_do_simd ||
-                beginName.v == llvm::omp::Directive::OMPD_loop || IsLoopTransforming(beginName.v)) {
+                beginName.v == llvm::omp::Directive::OMPD_loop ||
+                IsLoopTransforming(beginName.v)) {
               eligibleSIMD = true;
             }
           },
@@ -270,8 +270,6 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
         "construct with the `SIMD` clause."_err_en_US);
   }
 }
-
-
 
 void OmpStructureChecker::CheckNestedBlock(
     const parser::OpenMPLoopConstruct &x, const parser::Block &body) {

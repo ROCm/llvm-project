@@ -822,9 +822,7 @@ static bool processInterchangePermutationFromOpenMPConstruct(
     }
   }
   return false;
-} 
-
-
+}
 
 pft::Evaluation *getNestedDoConstruct(pft::Evaluation &eval) {
   pft::Evaluation *curEval = &eval;
