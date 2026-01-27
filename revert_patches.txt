@@ -11,3 +11,6 @@ breaks build of aqlprofiler
 breaks aomp/test/smoke-limbo/xteamr
 [OpenMP] Cleanup synchronization primitives (#177710)
 ---
+needs aditional integration
+[OFFLOAD] Build DeviceRTL with SPIRV backend (#174675)
+---

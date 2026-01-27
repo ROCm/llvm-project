@@ -1280,7 +1280,7 @@ __ockl_dm_hinfo(ulong *rp)
 #if defined NON_SLAB_TRACKING
 // return a snapshot of the current number of nonslab allocations
 // which haven't been deallocated
-__attribute__((cold)) ulong
+__attribute__((cold,weak)) ulong
 __ockl_dm_nna(void)
 {
     __global heap_t *hp = get_heap_ptr();
