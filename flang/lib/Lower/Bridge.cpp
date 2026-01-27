@@ -4332,8 +4332,7 @@ private:
     mlir::Block &endBody = changeOp.getRegion().back();
     builder->setInsertionPointToEnd(&endBody);
     genEndChangeTeamStmt(*this, endTeamEval, *endTeamStmt);
-    mlir::Operation *terminator = endBody.getTerminator();
-    assert((terminator && mlir::isa<mif::EndTeamOp>(terminator)) &&
+    assert(mlir::isa_and_nonnull<mif::EndTeamOp>(endBody.getTerminator()) &&
            "missing end team terminator");
     builder->setInsertionPointAfter(changeOp.getOperation());
 
