@@ -40,7 +40,6 @@
 #include <algorithm>
 #include <cassert>
 #include <optional>
-#include <utility>
 
 using namespace llvm;
 using namespace llvm::at;
@@ -61,6 +60,23 @@ TinyPtrVector<DbgVariableRecord *> llvm::findDVRDeclares(Value *V) {
       Declares.push_back(DVR);
 
   return Declares;
+}
+
+TinyPtrVector<DbgVariableRecord *> llvm::findDVRDeclareValues(Value *V) {
+  // This function is hot. Check whether the value has any metadata to avoid a
+  // DenseMap lookup. This check is a bitfield datamember lookup.
+  if (!V->isUsedByMetadata())
+    return {};
+  auto *L = ValueAsMetadata::getIfExists(V);
+  if (!L)
+    return {};
+
+  TinyPtrVector<DbgVariableRecord *> DEclareValues;
+  for (DbgVariableRecord *DVR : L->getAllDbgVariableRecordUsers())
+    if (DVR->getType() == DbgVariableRecord::LocationType::DeclareValue)
+      DEclareValues.push_back(DVR);
+
+  return DEclareValues;
 }
 
 TinyPtrVector<DbgVariableRecord *> llvm::findDVRValues(Value *V) {
@@ -247,7 +263,7 @@ void DebugInfoFinder::processType(DIType *DT) {
   }
 }
 
-void DebugInfoFinder::processImportedEntity(DIImportedEntity *Import) {
+void DebugInfoFinder::processImportedEntity(const DIImportedEntity *Import) {
   auto *Entity = Import->getEntity();
   if (auto *T = dyn_cast<DIType>(Entity))
     processType(T);
@@ -294,9 +310,9 @@ void DebugInfoFinder::processSubprogram(DISubprogram *SP) {
   // just DISubprogram's, referenced from anywhere within the Function being
   // cloned prior to calling MapMetadata / RemapInstruction to avoid their
   // duplication later as DICompileUnit's are also directly referenced by
-  // llvm.dbg.cu list. Thefore we need to collect DICompileUnit's here as well.
-  // Also, DICompileUnit's may reference DISubprogram's too and therefore need
-  // to be at least looked through.
+  // llvm.dbg.cu list. Therefore we need to collect DICompileUnit's here as
+  // well. Also, DICompileUnit's may reference DISubprogram's too and therefore
+  // need to be at least looked through.
   processCompileUnit(SP->getUnit());
   processType(SP->getType());
   for (auto *Element : SP->getTemplateParams()) {
@@ -307,15 +323,13 @@ void DebugInfoFinder::processSubprogram(DISubprogram *SP) {
     }
   }
 
-  for (auto *N : SP->getRetainedNodes()) {
-    if (auto *Var = dyn_cast_or_null<DILocalVariable>(N))
-      processVariable(Var);
-    else if (auto *Import = dyn_cast_or_null<DIImportedEntity>(N))
-      processImportedEntity(Import);
-  }
+  SP->forEachRetainedNode(
+      [this](const DILocalVariable *LV) { processVariable(LV); },
+      [](const DILabel *L) {},
+      [this](const DIImportedEntity *IE) { processImportedEntity(IE); });
 }
 
-void DebugInfoFinder::processVariable(DILocalVariable *DV) {
+void DebugInfoFinder::processVariable(const DILocalVariable *DV) {
   if (!NodesSeen.insert(DV).second)
     return;
   processScope(DV->getScope());
@@ -377,7 +391,7 @@ bool DebugInfoFinder::addScope(DIScope *Scope) {
 
 /// Recursively handle DILocations in followup metadata etc.
 ///
-/// TODO: If for example a followup loop metadata would refence itself this
+/// TODO: If for example a followup loop metadata would reference itself this
 /// function would go into infinite recursion. We do not expect such cycles in
 /// the loop metadata (except for the self-referencing first element
 /// "LoopID"). However, we could at least handle such situations more gracefully
@@ -679,7 +693,7 @@ private:
     auto Variables = nullptr;
     auto TemplateParams = nullptr;
 
-    // Make a distinct DISubprogram, for situations that warrent it.
+    // Make a distinct DISubprogram, for situations that warrant it.
     auto distinctMDSubprogram = [&]() {
       return DISubprogram::getDistinct(
           MDS->getContext(), FileAndScope, MDS->getName(), LinkageName,
@@ -2043,7 +2057,7 @@ void at::remapAssignID(DenseMap<DIAssignID *, DIAssignID *> &Map,
     I.setMetadata(LLVMContext::MD_DIAssignID, GetNewID(ID));
 }
 
-/// Collect constant properies (base, size, offset) of \p StoreDest.
+/// Collect constant properties (base, size, offset) of \p StoreDest.
 /// Return std::nullopt if any properties are not constants or the
 /// offset from the base pointer is negative.
 static std::optional<AssignmentInfo>
@@ -2329,7 +2343,7 @@ PreservedAnalyses AssignmentTrackingPass::run(Function &F,
     return PreservedAnalyses::all();
 
   // Record that this module uses assignment tracking. It doesn't matter that
-  // some functons in the module may not use it - the debug info in those
+  // some functions in the module may not use it - the debug info in those
   // functions will still be handled properly.
   setAssignmentTrackingModuleFlag(*F.getParent());
 
