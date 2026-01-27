@@ -2703,7 +2703,7 @@ LogicalResult TeamsOp::verify() {
                      "in any OpenMP dialect operations");
 
   // Check for num_teams clause restrictions
-  if (failed(verifyNumTeamsClause(targetOp, this->getNumTeamsLower(),
+  if (failed(verifyNumTeamsClause(getOperation(), this->getNumTeamsLower(),
                                   this->getNumTeamsUpperVars())))
     return failure();
 
