@@ -827,23 +827,36 @@ static bool processInterchangePermutationFromOpenMPConstruct(
 
 
 pft::Evaluation *getNestedDoConstruct(pft::Evaluation &eval) {
-  for (pft::Evaluation &nested : eval.getNestedEvaluations()) {
-    // In an OpenMPConstruct there can be compiler directives:
-    // 1 <<OpenMPConstruct>>
-    //     2 CompilerDirective: !unroll
-    //     <<DoConstruct>> -> 8
-    if (nested.getIf<parser::CompilerDirective>())
-      continue;
-    // Within a DoConstruct, there can be compiler directives, plus
-    // there is a DoStmt before the body:
-    // <<DoConstruct>> -> 8
-    //     3 NonLabelDoStmt -> 7: do i = 1, n
-    //     <<DoConstruct>> -> 7
-    if (nested.getIf<parser::NonLabelDoStmt>())
-      continue;
-    assert(nested.getIf<parser::DoConstruct>() &&
-           "Unexpected construct in the nested evaluations");
-    return &nested;
+  pft::Evaluation *curEval = &eval;
+  while (true) {
+    for (pft::Evaluation &nested : curEval->getNestedEvaluations()) {
+      // In an OpenMPConstruct there can be compiler directives:
+      // 1 <<OpenMPConstruct>>
+      //     2 CompilerDirective: !unroll
+      //     <<DoConstruct>> -> 8
+      if (nested.getIf<parser::CompilerDirective>())
+        continue;
+      // Within a DoConstruct, there can be compiler directives, plus
+      // there is a DoStmt before the body:
+      // <<DoConstruct>> -> 8
+      //     3 NonLabelDoStmt -> 7: do i = 1, n
+      //     <<DoConstruct>> -> 7
+      if (nested.getIf<parser::NonLabelDoStmt>())
+        continue;
+
+      if (nested.getIf<parser::DoConstruct>())
+        return &nested;
+
+      // Follow innermost loop construct
+      if (auto &&ompCons = nested.getIf<parser::OpenMPConstruct>()) {
+        auto &&u = ompCons->u;
+        auto &&name = parser::omp::GetOmpDirectiveName(u);
+        curEval = &nested;
+        break;
+      }
+
+      llvm_unreachable("Expected do loop to be in the nested evaluations");
+    }
   }
   llvm_unreachable("Expected do loop to be in the nested evaluations");
 }
