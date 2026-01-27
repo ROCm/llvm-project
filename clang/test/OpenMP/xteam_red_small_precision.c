@@ -133,7 +133,7 @@ int main()
 // CHECK-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP30:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP31:%.*]] = load half, ptr addrspace(5) [[TMP5]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_h_16x64(half [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_h, ptr @__kmpc_rfun_sum_lds_h, half 0xH0000, i64 [[TMP17]], i32 [[TMP16]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_h(half [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_h, ptr @__kmpc_rfun_sum_lds_h, half 0xH0000, i64 [[TMP17]], i32 [[TMP16]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -236,7 +236,7 @@ int main()
 // CHECK-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP30:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP31:%.*]] = load bfloat, ptr addrspace(5) [[TMP5]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_bf_16x64(bfloat [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_bf, ptr @__kmpc_rfun_sum_lds_bf, bfloat 0xR0000, i64 [[TMP17]], i32 [[TMP16]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_bf(bfloat [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_bf, ptr @__kmpc_rfun_sum_lds_bf, bfloat 0xR0000, i64 [[TMP17]], i32 [[TMP16]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -339,6 +339,6 @@ int main()
 // CHECK-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP30:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP31:%.*]] = load i16, ptr addrspace(5) [[TMP5]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_s_16x64(i16 [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_s, ptr @__kmpc_rfun_sum_lds_s, i16 0, i64 [[TMP17]], i32 [[TMP16]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_s(i16 [[TMP31]], ptr [[TMP2]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_s, ptr @__kmpc_rfun_sum_lds_s, i16 0, i64 [[TMP17]], i32 [[TMP16]], i32 1)
 // CHECK-NEXT:    ret void
 //

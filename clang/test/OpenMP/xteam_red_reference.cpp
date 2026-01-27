@@ -107,6 +107,6 @@ void compute_reduced_sum(int n, int &x) {
 // CHECK-NEXT:    [[TMP27:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP28:%.*]] = load ptr, ptr [[TMP_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP29:%.*]] = load i32, ptr addrspace(5) [[TMP3]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteamr_i_16x64(i32 [[TMP29]], ptr [[TMP28]], ptr [[TMP26]], ptr [[TMP27]], ptr @__kmpc_rfun_sum_i, ptr @__kmpc_rfun_sum_lds_i, i32 0, i64 [[TMP15]], i32 [[TMP14]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_i(i32 [[TMP29]], ptr [[TMP28]], ptr [[TMP26]], ptr [[TMP27]], ptr @__kmpc_rfun_sum_i, ptr @__kmpc_rfun_sum_lds_i, i32 0, i64 [[TMP15]], i32 [[TMP14]], i32 1)
 // CHECK-NEXT:    ret void
 //
