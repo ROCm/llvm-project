@@ -6725,10 +6725,21 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        options::OPT_fno_openmp_assume_threads_oversubscription,
                        /*Default=*/false))
         CmdArgs.push_back("-fopenmp-assume-threads-oversubscription");
+      if (Args.hasArg(options::OPT_fopenmp_target_ignore_env_vars))
+        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
+      else if (Args.hasArg(options::OPT_fno_openmp_target_ignore_env_vars))
+        CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
+
       if (Args.hasArg(options::OPT_fopenmp_assume_no_thread_state))
         CmdArgs.push_back("-fopenmp-assume-no-thread-state");
+      else if (Args.hasArg(options::OPT_fno_openmp_assume_no_thread_state))
+        CmdArgs.push_back("-fno-openmp-assume-no-thread-state");
+
       if (Args.hasArg(options::OPT_fopenmp_assume_no_nested_parallelism))
         CmdArgs.push_back("-fopenmp-assume-no-nested-parallelism");
+      else if (Args.hasArg(options::OPT_fno_openmp_assume_no_nested_parallelism))
+        CmdArgs.push_back("-fno-openmp-assume-no-nested-parallelism");
+
       if (Args.hasArg(options::OPT_fopenmp_offload_mandatory))
         CmdArgs.push_back("-fopenmp-offload-mandatory");
       if (Args.hasArg(options::OPT_fopenmp_force_usm))
