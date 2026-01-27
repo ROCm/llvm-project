@@ -264,6 +264,9 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     "/wd4146" #[[Suppress 'unary minus operator applied to unsigned type, result still unsigned]]
     "/Zc:preprocessor" #[[Enable standards conforming preprocessor - https://learn.microsoft.com/en-us/cpp/build/reference/zc-preprocessor]])
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _HAS_EXCEPTIONS=0)
+  # Disable automatic manifest embedding to avoid duplicate resource errors
+  # (CVT1100/LNK1123) when linking. The sources already contain a manifest.
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS "/MANIFEST:NO")
 endif()
 
 # Windows is strict about visibility of exports in shared libraries, so we ask
