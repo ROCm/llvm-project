@@ -71,7 +71,7 @@ public:
   static char ID;
 
   LiveDebugValuesLegacy();
-  ~LiveDebugValuesLegacy() = default;
+  ~LiveDebugValuesLegacy() override = default;
 
   /// Calculate the liveness information for the given machine function.
   bool runOnMachineFunction(MachineFunction &MF) override;
@@ -103,9 +103,7 @@ INITIALIZE_PASS(LiveDebugValuesLegacy, DEBUG_TYPE, "Live DEBUG_VALUE analysis",
                 false, false)
 
 /// Default construct and initialize the pass.
-LiveDebugValuesLegacy::LiveDebugValuesLegacy() : MachineFunctionPass(ID) {
-  initializeLiveDebugValuesLegacyPass(*PassRegistry::getPassRegistry());
-}
+LiveDebugValuesLegacy::LiveDebugValuesLegacy() : MachineFunctionPass(ID) {}
 
 LiveDebugValues::LiveDebugValues() {
   InstrRefImpl =

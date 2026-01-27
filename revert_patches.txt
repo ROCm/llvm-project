@@ -1,4 +1,16 @@
 ---
-revert: breaks rocBLAS build
-d57230c7 [AMDGPU][MC] Disallow op_sel in some VOP3P dot instructions (#100485)
+rocwmma and CK needs changes
+[AMDGPU][NFC] Change AMDGPU builtins to use ExtVector (#176033)
+---
+Emma: need to reland
+Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependency on isZeroSize (#96422)" (#156)"" (#2065)""
+---
+breaks build of aqlprofiler
+[AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
+---
+breaks aomp/test/smoke-limbo/xteamr
+[OpenMP] Cleanup synchronization primitives (#177710)
+---
+needs aditional integration
+[OFFLOAD] Build DeviceRTL with SPIRV backend (#174675)
 ---

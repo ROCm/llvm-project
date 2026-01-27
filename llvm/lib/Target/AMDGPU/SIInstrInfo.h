@@ -125,6 +125,11 @@ public:
       unsigned SubIdx, const TargetRegisterClass *SubRC) const;
 
 private:
+  bool optimizeSCC(MachineInstr *SCCValid, MachineInstr *SCCRedefine,
+                   bool NeedInversion) const;
+
+  bool invertSCCUse(MachineInstr *SCCDef) const;
+
   void swapOperands(MachineInstr &Inst) const;
 
   std::pair<bool, MachineBasicBlock *>
@@ -135,6 +140,8 @@ private:
                    MachineDominatorTree *MDT = nullptr) const;
 
   void lowerScalarAbs(SIInstrWorklist &Worklist, MachineInstr &Inst) const;
+
+  void lowerScalarAbsDiff(SIInstrWorklist &Worklist, MachineInstr &Inst) const;
 
   void lowerScalarXnor(SIInstrWorklist &Worklist, MachineInstr &Inst) const;
 
@@ -172,7 +179,7 @@ private:
   void addUsersToMoveToVALUWorklist(Register Reg, MachineRegisterInfo &MRI,
                                     SIInstrWorklist &Worklist) const;
 
-  void addSCCDefUsersToVALUWorklist(MachineOperand &Op,
+  void addSCCDefUsersToVALUWorklist(const MachineOperand &Op,
                                     MachineInstr &SCCDefInst,
                                     SIInstrWorklist &Worklist,
                                     Register NewCond = Register()) const;
@@ -297,8 +304,7 @@ private:
   void storeRegToStackSlotImpl(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator MI, Register SrcReg,
                                bool isKill, int FrameIndex,
-                               const TargetRegisterClass *RC,
-                               const TargetRegisterInfo *TRI, Register VReg,
+                               const TargetRegisterClass *RC, Register VReg,
                                MachineInstr::MIFlag Flags, bool NeedsCFI) const;
 
 public:
@@ -310,6 +316,8 @@ public:
 
   bool getConstValDefinedInReg(const MachineInstr &MI, const Register Reg,
                                int64_t &ImmVal) const override;
+
+  std::optional<int64_t> getImmOrMaterializedImm(MachineOperand &Op) const;
 
   unsigned getVectorRegSpillSaveOpcode(Register Reg,
                                        const TargetRegisterClass *RC,
@@ -323,22 +331,20 @@ public:
 
   void storeRegToStackSlot(
       MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
-      bool isKill, int FrameIndex, const TargetRegisterClass *RC,
-      const TargetRegisterInfo *TRI, Register VReg,
+      bool isKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
   void loadRegFromStackSlot(
       MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register DestReg,
-      int FrameIndex, const TargetRegisterClass *RC,
-      const TargetRegisterInfo *TRI, Register VReg,
+      int FrameIndex, const TargetRegisterClass *RC, Register VReg,
+      unsigned SubReg = 0,
       MachineInstr::MIFlag Flags = MachineInstr::NoFlags) const override;
 
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
   void reMaterialize(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                      Register DestReg, unsigned SubIdx,
-                     const MachineInstr &Orig,
-                     const TargetRegisterInfo &TRI) const override;
+                     const MachineInstr &Orig) const override;
 
   // Splits a V_MOV_B64_DPP_PSEUDO opcode into a pair of v_mov_b32_dpp
   // instructions. Returns a pair of generated instructions.
@@ -441,6 +447,9 @@ public:
   static unsigned getFoldableCopySrcIdx(const MachineInstr &MI);
 
   void removeModOperands(MachineInstr &MI) const;
+
+  void mutateAndCleanupImplicit(MachineInstr &MI,
+                                const MCInstrDesc &NewDesc) const;
 
   /// Return the extracted immediate value in a subregister use from a constant
   /// materialized in a super register.
@@ -599,6 +608,10 @@ public:
     return get(Opcode).TSFlags & SIInstrFlags::MTBUF;
   }
 
+  static bool isBUF(const MachineInstr &MI) {
+    return isMUBUF(MI) || isMTBUF(MI);
+  }
+
   static bool isSMRD(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::SMRD;
   }
@@ -618,11 +631,13 @@ public:
   }
 
   static bool isLDSDMA(const MachineInstr &MI) {
-    return isVALU(MI) && (isMUBUF(MI) || isFLAT(MI));
+    return (isVALU(MI) && (isMUBUF(MI) || isFLAT(MI))) ||
+           (MI.getDesc().TSFlags & SIInstrFlags::TENSOR_CNT);
   }
 
   bool isLDSDMA(uint16_t Opcode) {
-    return isVALU(Opcode) && (isMUBUF(Opcode) || isFLAT(Opcode));
+    return (isVALU(Opcode) && (isMUBUF(Opcode) || isFLAT(Opcode))) ||
+           (get(Opcode).TSFlags & SIInstrFlags::TENSOR_CNT);
   }
 
   static bool isGWS(const MachineInstr &MI) {
@@ -704,11 +719,11 @@ public:
     return get(Opcode).TSFlags & SIInstrFlags::FLAT;
   }
 
-  /// \returns true for SCRATCH_ instructions, or FLAT_ instructions with
-  /// SCRATCH_ memory operands.
+  /// \returns true for SCRATCH_ instructions, or FLAT/BUF instructions unless
+  /// the MMOs do not include scratch.
   /// Conservatively correct; will return true if \p MI cannot be proven
   /// to not hit scratch.
-  bool mayAccessScratchThroughFlat(const MachineInstr &MI) const;
+  bool mayAccessScratch(const MachineInstr &MI) const;
 
   /// \returns true for FLAT instructions that can access VMEM.
   bool mayAccessVMEMThroughFlat(const MachineInstr &MI) const;
@@ -725,6 +740,52 @@ public:
     case AMDGPU::SCRATCH_LOAD_BLOCK_SADDR:
     case AMDGPU::SCRATCH_STORE_BLOCK_SVS:
     case AMDGPU::SCRATCH_LOAD_BLOCK_SVS:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  static bool setsSCCIfResultIsNonZero(const MachineInstr &MI) {
+    switch (MI.getOpcode()) {
+    case AMDGPU::S_ABSDIFF_I32:
+    case AMDGPU::S_ABS_I32:
+    case AMDGPU::S_AND_B32:
+    case AMDGPU::S_AND_B64:
+    case AMDGPU::S_ANDN2_B32:
+    case AMDGPU::S_ANDN2_B64:
+    case AMDGPU::S_ASHR_I32:
+    case AMDGPU::S_ASHR_I64:
+    case AMDGPU::S_BCNT0_I32_B32:
+    case AMDGPU::S_BCNT0_I32_B64:
+    case AMDGPU::S_BCNT1_I32_B32:
+    case AMDGPU::S_BCNT1_I32_B64:
+    case AMDGPU::S_BFE_I32:
+    case AMDGPU::S_BFE_I64:
+    case AMDGPU::S_BFE_U32:
+    case AMDGPU::S_BFE_U64:
+    case AMDGPU::S_LSHL_B32:
+    case AMDGPU::S_LSHL_B64:
+    case AMDGPU::S_LSHR_B32:
+    case AMDGPU::S_LSHR_B64:
+    case AMDGPU::S_NAND_B32:
+    case AMDGPU::S_NAND_B64:
+    case AMDGPU::S_NOR_B32:
+    case AMDGPU::S_NOR_B64:
+    case AMDGPU::S_NOT_B32:
+    case AMDGPU::S_NOT_B64:
+    case AMDGPU::S_OR_B32:
+    case AMDGPU::S_OR_B64:
+    case AMDGPU::S_ORN2_B32:
+    case AMDGPU::S_ORN2_B64:
+    case AMDGPU::S_QUADMASK_B32:
+    case AMDGPU::S_QUADMASK_B64:
+    case AMDGPU::S_WQM_B32:
+    case AMDGPU::S_WQM_B64:
+    case AMDGPU::S_XNOR_B32:
+    case AMDGPU::S_XNOR_B64:
+    case AMDGPU::S_XOR_B32:
+    case AMDGPU::S_XOR_B64:
       return true;
     default:
       return false;
@@ -774,7 +835,11 @@ public:
   }
 
   static bool mayWriteLDSThroughDMA(const MachineInstr &MI) {
-    return isLDSDMA(MI) && MI.getOpcode() != AMDGPU::BUFFER_STORE_LDS_DWORD;
+    unsigned Opc = MI.getOpcode();
+    // Exclude instructions that read FROM LDS (not write to it)
+    return isLDSDMA(MI) && Opc != AMDGPU::BUFFER_STORE_LDS_DWORD &&
+           Opc != AMDGPU::TENSOR_STORE_FROM_LDS &&
+           Opc != AMDGPU::TENSOR_STORE_FROM_LDS_D2;
   }
 
   static bool isSBarrierSCCWrite(unsigned Opcode) {
@@ -972,6 +1037,14 @@ public:
     return MI.getDesc().TSFlags & SIInstrFlags::LGKM_CNT;
   }
 
+  static bool usesASYNC_CNT(const MachineInstr &MI) {
+    return MI.getDesc().TSFlags & SIInstrFlags::ASYNC_CNT;
+  }
+
+  bool usesASYNC_CNT(uint16_t Opcode) const {
+    return get(Opcode).TSFlags & SIInstrFlags::ASYNC_CNT;
+  }
+
   // Most sopk treat the immediate as a signed 16-bit, however some
   // use it as unsigned.
   static bool sopkIsZext(unsigned Opcode) {
@@ -1145,13 +1218,13 @@ public:
   bool isVGPRCopy(const MachineInstr &MI) const {
     assert(isCopyInstr(MI));
     Register Dest = MI.getOperand(0).getReg();
-    const MachineFunction &MF = *MI.getParent()->getParent();
+    const MachineFunction &MF = *MI.getMF();
     const MachineRegisterInfo &MRI = MF.getRegInfo();
     return !RI.isSGPRReg(MRI, Dest);
   }
 
   bool hasVGPRUses(const MachineInstr &MI) const {
-    const MachineFunction &MF = *MI.getParent()->getParent();
+    const MachineFunction &MF = *MI.getMF();
     const MachineRegisterInfo &MRI = MF.getRegInfo();
     return llvm::any_of(MI.explicit_uses(),
                         [&MRI, this](const MachineOperand &MO) {
@@ -1532,6 +1605,8 @@ public:
   bool isBasicBlockPrologue(const MachineInstr &MI,
                             Register Reg = Register()) const override;
 
+  bool canAddToBBProlog(const MachineInstr &MI) const;
+
   MachineInstr *createPHIDestinationCopy(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator InsPt,
                                          const DebugLoc &DL, Register Src,
@@ -1593,10 +1668,6 @@ public:
   /// Return true if this opcode should not be used by codegen.
   bool isAsmOnlyOpcode(int MCOp) const;
 
-  const TargetRegisterClass *
-  getRegClass(const MCInstrDesc &TID, unsigned OpNum,
-              const TargetRegisterInfo *TRI) const override;
-
   void fixImplicitOperands(MachineInstr &MI) const;
 
   MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr &MI,
@@ -1610,8 +1681,10 @@ public:
                            const MachineInstr &MI,
                            unsigned *PredCost = nullptr) const override;
 
+  const MachineOperand &getCalleeOperand(const MachineInstr &MI) const override;
+
   InstructionUniformity
-  getInstructionUniformity(const MachineInstr &MI) const override final;
+  getInstructionUniformity(const MachineInstr &MI) const final;
 
   InstructionUniformity
   getGenericInstructionUniformity(const MachineInstr &MI) const;
@@ -1626,6 +1699,7 @@ public:
 
   const TargetSchedModel &getSchedModel() const { return SchedModel; }
 
+  // FIXME: This should be removed
   // Enforce operand's \p OpName even alignment if required by target.
   // This is used if an operand is a 32 bit register but needs to be aligned
   // regardless.
@@ -1658,7 +1732,7 @@ TargetInstrInfo::RegSubRegPair getRegSequenceSubReg(MachineInstr &MI,
 /// skipping copy like instructions and subreg-manipulation pseudos.
 /// Following another subreg of a reg:subreg isn't supported.
 MachineInstr *getVRegSubRegDef(const TargetInstrInfo::RegSubRegPair &P,
-                               MachineRegisterInfo &MRI);
+                               const MachineRegisterInfo &MRI);
 
 /// \brief Return false if EXEC is not changed between the def of \p VReg at \p
 /// DefMI and the use at \p UseMI. Should be run on SSA. Currently does not
@@ -1668,10 +1742,6 @@ bool execMayBeModifiedBeforeUse(const MachineRegisterInfo &MRI,
                                 const MachineInstr &DefMI,
                                 const MachineInstr &UseMI);
 
-bool checkIfExecMayBeModifiedBeforeUseAcrossBB(
-    const MachineRegisterInfo &MRI, Register VReg, const MachineInstr &DefMI,
-    const MachineInstr &UseMI, const int SIFoldOperandsPreheaderThreshold);
-    
 /// \brief Return false if EXEC is not changed between the def of \p VReg at \p
 /// DefMI and all its uses. Should be run on SSA. Currently does not attempt to
 /// track between blocks.

@@ -12,7 +12,7 @@
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/InputInfo.h"
-#include "clang/Driver/Options.h"
+#include "clang/Options/Options.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
@@ -71,11 +71,8 @@ void HIPSPV::Linker::constructLinkAndEmitSpirvCommand(
                                     Target, /*IsBitCodeSDL=*/true,
                                     /*PostClangLink=*/false);
 
-  LinkArgs.append({"-o", TempFile});
-  const char *LlvmLink =
-      Args.MakeArgString(getToolChain().GetProgramPath("llvm-link"));
-  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
-                                         LlvmLink, LinkArgs, Inputs, Output));
+  tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkArgs, Output, Args,
+                                  TempFile);
 
   // Post-link HIP lowering.
 
@@ -213,7 +210,7 @@ HIPSPVToolChain::getDeviceLibs(
   // Find device libraries in --hip-device-lib-path and HIP_DEVICE_LIB_PATH.
   auto HipDeviceLibPathArgs = DriverArgs.getAllArgValues(
       // --hip-device-lib-path is alias to this option.
-      clang::driver::options::OPT_rocm_device_lib_path_EQ);
+      options::OPT_rocm_device_lib_path_EQ);
   for (auto Path : HipDeviceLibPathArgs)
     LibraryPaths.push_back(DriverArgs.MakeArgString(Path));
 

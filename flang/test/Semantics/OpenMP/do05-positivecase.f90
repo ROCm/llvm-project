@@ -1,4 +1,4 @@
-! RUN: %python %S/../test_symbols.py %s %flang_fc1 -fopenmp
+! RUN: %python %S/../test_symbols.py %s %flang_fc1 -fopenmp -fopenmp-version=45
 ! OpenMP Version 4.5
 ! 2.7.1 Loop Construct restrictions on single directive.
 ! A positive case
@@ -58,7 +58,7 @@ program OMP_DO
   end do
   !$omp end target teams distribute parallel do simd
 
-  !$omp target teams distribute 
+  !$omp target teams distribute
   !DEF: /OMP_DO/OtherConstruct6/i (OmpPrivate, OmpPreDetermined) HostAssoc INTEGER(4)
   do i=1,100
     !REF: /OMP_DO/OtherConstruct6/i

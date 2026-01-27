@@ -202,8 +202,10 @@ llvm::DIDerivedType *DebugTranslation::translateImpl(DIDerivedTypeAttr attr) {
       /*File=*/nullptr, /*Line=*/0,
       /*Scope=*/nullptr, translate(attr.getBaseType()), attr.getSizeInBits(),
       attr.getAlignInBits(), attr.getOffsetInBits(),
-      attr.getDwarfAddressSpace(), llvm::dwarf::DW_MSPACE_LLVM_none, /*PtrAuthData=*/std::nullopt,
-      /*Flags=*/llvm::DINode::FlagZero, translate(attr.getExtraData()));
+      attr.getDwarfAddressSpace(),
+      llvm::dwarf::DW_MSPACE_LLVM_none, /*PtrAuthData=*/std::nullopt,
+      /*Flags=*/static_cast<llvm::DINode::DIFlags>(attr.getFlags()),
+      translate(attr.getExtraData()));
 }
 
 llvm::DIStringType *DebugTranslation::translateImpl(DIStringTypeAttr attr) {
@@ -392,7 +394,7 @@ llvm::DISubrange *DebugTranslation::translateImpl(DISubrangeAttr attr) {
             .Case<>([&](LLVM::DIGlobalVariableAttr global) {
               return translate(global);
             })
-            .Default([&](Attribute attr) { return nullptr; });
+            .Default(nullptr);
     return metadata;
   };
   return llvm::DISubrange::get(llvmCtx, getMetadataOrNull(attr.getCount()),
@@ -422,10 +424,10 @@ DebugTranslation::translateImpl(DIGenericSubrangeAttr attr) {
             .Case([&](LLVM::DILocalVariableAttr local) {
               return translate(local);
             })
-            .Case<>([&](LLVM::DIGlobalVariableAttr global) {
+            .Case([&](LLVM::DIGlobalVariableAttr global) {
               return translate(global);
             })
-            .Default([&](Attribute attr) { return nullptr; });
+            .Default(nullptr);
     return metadata;
   };
   return llvm::DIGenericSubrange::get(llvmCtx,
@@ -443,7 +445,7 @@ DebugTranslation::translateImpl(DISubroutineTypeAttr attr) {
     types.push_back(translate(type));
   return llvm::DISubroutineType::get(
       llvmCtx, llvm::DINode::FlagZero, attr.getCallingConvention(),
-      llvm::DITypeRefArray(llvm::MDNode::get(llvmCtx, types)));
+      llvm::DITypeArray(llvm::MDNode::get(llvmCtx, types)));
 }
 
 llvm::DIType *DebugTranslation::translateImpl(DITypeAttr attr) {

@@ -8,6 +8,7 @@
 
 // Runtime exception support.
 
+#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
 #include "flang/Runtime/exceptions.h"
 #include "flang-rt/runtime/terminator.h"
 #include <cfenv>
@@ -49,9 +50,14 @@ extern "C" {
 
 // Map a set of Fortran ieee_arithmetic module exceptions to a libm fenv.h
 // excepts value.
-uint32_t RTNAME(MapException)(uint32_t excepts) {
+uint32_t RTDEF(MapException)(uint32_t excepts) {
   Terminator terminator{__FILE__, __LINE__};
 
+#if defined(RT_DEVICE_COMPILATION)
+  terminator.Crash(
+      "not implemented yet: raising IEEE FP exception in device code: %d",
+      excepts);
+#else
   static constexpr uint32_t v{FE_INVALID};
   static constexpr uint32_t s{__FE_DENORM};
   static constexpr uint32_t z{FE_DIVBYZERO};
@@ -74,6 +80,7 @@ uint32_t RTNAME(MapException)(uint32_t excepts) {
   }
   uint32_t except_value = map[excepts];
   return except_value;
+#endif
 }
 
 // The following exception processing routines have a libm call component,
@@ -87,10 +94,12 @@ void RTNAME(feclearexcept)(uint32_t excepts) {
   _mm_setcsr(_mm_getcsr() & ~(excepts & _MM_EXCEPT_MASK));
 #endif
 }
-void RTNAME(feraiseexcept)(uint32_t excepts) {
+void RTDEF(feraiseexcept)(uint32_t excepts) {
+#if !defined(RT_DEVICE_COMPILATION)
   feraiseexcept(excepts);
 #if defined(_MM_EXCEPT_DENORM)
   _mm_setcsr(_mm_getcsr() | (excepts & _MM_EXCEPT_MASK));
+#endif
 #endif
 }
 uint32_t RTNAME(fetestexcept)(uint32_t excepts) {
@@ -199,3 +208,4 @@ size_t RTNAME(GetStatusTypeSize)(void) {
 
 } // extern "C"
 } // namespace Fortran::runtime
+#endif

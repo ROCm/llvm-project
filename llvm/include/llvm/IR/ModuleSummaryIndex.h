@@ -30,7 +30,6 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/InterleavedRange.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ScaledNumber.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
@@ -76,19 +75,11 @@ struct CalleeInfo {
   LLVM_PREFERRED_TYPE(bool)
   uint32_t HasTailCall : 1;
 
-  /// The value stored in RelBlockFreq has to be interpreted as the digits of
-  /// a scaled number with a scale of \p -ScaleShift.
-  static constexpr unsigned RelBlockFreqBits = 28;
-  uint32_t RelBlockFreq : RelBlockFreqBits;
-  static constexpr int32_t ScaleShift = 8;
-  static constexpr uint64_t MaxRelBlockFreq = (1 << RelBlockFreqBits) - 1;
-
   CalleeInfo()
       : Hotness(static_cast<uint32_t>(HotnessType::Unknown)),
-        HasTailCall(false), RelBlockFreq(0) {}
-  explicit CalleeInfo(HotnessType Hotness, bool HasTC, uint64_t RelBF)
-      : Hotness(static_cast<uint32_t>(Hotness)), HasTailCall(HasTC),
-        RelBlockFreq(RelBF) {}
+        HasTailCall(false) {}
+  explicit CalleeInfo(HotnessType Hotness, bool HasTC)
+      : Hotness(static_cast<uint32_t>(Hotness)), HasTailCall(HasTC) {}
 
   void updateHotness(const HotnessType OtherHotness) {
     Hotness = std::max(Hotness, static_cast<uint32_t>(OtherHotness));
@@ -99,24 +90,6 @@ struct CalleeInfo {
   void setHasTailCall(const bool HasTC) { HasTailCall = HasTC; }
 
   HotnessType getHotness() const { return HotnessType(Hotness); }
-
-  /// Update \p RelBlockFreq from \p BlockFreq and \p EntryFreq
-  ///
-  /// BlockFreq is divided by EntryFreq and added to RelBlockFreq. To represent
-  /// fractional values, the result is represented as a fixed point number with
-  /// scale of -ScaleShift.
-  void updateRelBlockFreq(uint64_t BlockFreq, uint64_t EntryFreq) {
-    if (EntryFreq == 0)
-      return;
-    using Scaled64 = ScaledNumber<uint64_t>;
-    Scaled64 Temp(BlockFreq, ScaleShift);
-    Temp /= Scaled64::get(EntryFreq);
-
-    uint64_t Sum =
-        SaturatingAdd<uint64_t>(Temp.toInt<uint64_t>(), RelBlockFreq);
-    Sum = std::min(Sum, uint64_t(MaxRelBlockFreq));
-    RelBlockFreq = static_cast<uint32_t>(Sum);
-  }
 };
 
 inline const char *getHotnessName(CalleeInfo::HotnessType HT) {
@@ -172,9 +145,13 @@ struct alignas(8) GlobalValueSummaryInfo {
 
   /// Add a summary corresponding to a global value definition in a module with
   /// the corresponding GUID.
-  void addSummary(std::unique_ptr<GlobalValueSummary> Summary) {
-    return SummaryList.push_back(std::move(Summary));
-  }
+  inline void addSummary(std::unique_ptr<GlobalValueSummary> Summary);
+
+  /// Verify that the HasLocal flag is consistent with the SummaryList. Should
+  /// only be called prior to index-based internalization and promotion.
+  inline void verifyLocal() const;
+
+  bool hasLocal() const { return HasLocal; }
 
 private:
   /// List of global value summary structures for a particular value held
@@ -183,6 +160,22 @@ private:
   /// compiling without sufficient distinguishing path, or (theoretically) hash
   /// collisions. Each summary is from a different module.
   GlobalValueSummaryList SummaryList;
+
+  /// True if the SummaryList contains at least one summary with local linkage.
+  /// In most cases there should be only one, unless translation units with
+  /// same-named locals were compiled without distinguishing path. And generally
+  /// there should not be a mix of local and non-local summaries, because the
+  /// GUID for a local is computed with the path prepended and a ';' delimiter.
+  /// In extremely rare cases there could be a GUID hash collision. Having the
+  /// flag saves having to walk through all summaries to prove the existence or
+  /// not of any locals.
+  /// NOTE: this flag is set when the index is built. It does not reflect
+  /// index-based internalization and promotion decisions. Generally most
+  /// index-based analysis occurs before then, but any users should assert that
+  /// the withInternalizeAndPromote() flag is not set on the index.
+  /// TODO: Replace checks in various ThinLTO analyses that loop through all
+  /// summaries to handle the local case with a check of the flag.
+  bool HasLocal : 1;
 };
 
 /// Map from global value GUID to corresponding summary structures. Use a
@@ -218,6 +211,10 @@ struct ValueInfo {
   ArrayRef<std::unique_ptr<GlobalValueSummary>> getSummaryList() const {
     return getRef()->second.getSummaryList();
   }
+
+  void verifyLocal() const { getRef()->second.verifyLocal(); }
+
+  bool hasLocal() const { return getRef()->second.hasLocal(); }
 
   // Even if the index is built with GVs available, we may not have one for
   // summary entries synthesized for profiled indirect call targets.
@@ -430,29 +427,19 @@ struct AllocInfo {
 };
 
 inline raw_ostream &operator<<(raw_ostream &OS, const AllocInfo &AE) {
-  bool First = true;
-  OS << "Versions: ";
-  for (auto V : AE.Versions) {
-    if (!First)
-      OS << ", ";
-    First = false;
-    OS << (unsigned)V;
-  }
+  OS << "Versions: "
+     << interleaved(map_range(AE.Versions, StaticCastTo<unsigned>));
+
   OS << " MIB:\n";
-  for (auto &M : AE.MIBs) {
+  for (auto &M : AE.MIBs)
     OS << "\t\t" << M << "\n";
-  }
   if (!AE.ContextSizeInfos.empty()) {
     OS << "\tContextSizeInfo per MIB:\n";
     for (auto Infos : AE.ContextSizeInfos) {
       OS << "\t\t";
-      bool FirstInfo = true;
-      for (auto [FullStackId, TotalSize] : Infos) {
-        if (!FirstInfo)
-          OS << ", ";
-        FirstInfo = false;
-        OS << "{ " << FullStackId << ", " << TotalSize << " }";
-      }
+      ListSeparator InfoLS;
+      for (auto [FullStackId, TotalSize] : Infos)
+        OS << InfoLS << "{ " << FullStackId << ", " << TotalSize << " }";
       OS << "\n";
     }
   }
@@ -649,7 +636,23 @@ public:
   friend class ModuleSummaryIndex;
 };
 
-GlobalValueSummaryInfo::GlobalValueSummaryInfo(bool HaveGVs) : U(HaveGVs) {}
+GlobalValueSummaryInfo::GlobalValueSummaryInfo(bool HaveGVs)
+    : U(HaveGVs), HasLocal(false) {}
+
+void GlobalValueSummaryInfo::addSummary(
+    std::unique_ptr<GlobalValueSummary> Summary) {
+  if (GlobalValue::isLocalLinkage(Summary->linkage()))
+    HasLocal = true;
+  return SummaryList.push_back(std::move(Summary));
+}
+
+void GlobalValueSummaryInfo::verifyLocal() const {
+  assert(HasLocal ==
+         llvm::any_of(SummaryList,
+                      [](const std::unique_ptr<GlobalValueSummary> &Summary) {
+                        return GlobalValue::isLocalLinkage(Summary->linkage());
+                      }));
+}
 
 /// Alias summary information.
 class AliasSummary : public GlobalValueSummary {
@@ -1449,6 +1452,9 @@ private:
   /// every summary of a GV is synchronized.
   bool WithDSOLocalPropagation = false;
 
+  /// Indicates that summary-based internalization and promotion has run.
+  bool WithInternalizeAndPromote = false;
+
   /// Indicates that we have whole program visibility.
   bool WithWholeProgramVisibility = false;
 
@@ -1652,6 +1658,9 @@ public:
 
   bool withDSOLocalPropagation() const { return WithDSOLocalPropagation; }
   void setWithDSOLocalPropagation() { WithDSOLocalPropagation = true; }
+
+  bool withInternalizeAndPromote() const { return WithInternalizeAndPromote; }
+  void setWithInternalizeAndPromote() { WithInternalizeAndPromote = true; }
 
   bool withWholeProgramVisibility() const { return WithWholeProgramVisibility; }
   void setWithWholeProgramVisibility() { WithWholeProgramVisibility = true; }

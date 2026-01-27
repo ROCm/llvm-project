@@ -20,7 +20,7 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#ifndef _LIBCPP_ABI_DO_NOT_EXPORT_BASIC_STRING_COMMON
+#if _LIBCPP_AVAILABILITY_MINIMUM_HEADER_VERSION < 14
 
 template <bool>
 struct __basic_string_common;
@@ -35,12 +35,12 @@ struct __basic_string_common<true> {
 void __basic_string_common<true>::__throw_length_error() const { std::__throw_length_error("basic_string"); }
 void __basic_string_common<true>::__throw_out_of_range() const { std::__throw_out_of_range("basic_string"); }
 
-#endif // _LIBCPP_ABI_DO_NOT_EXPORT_BASIC_STRING_COMMON
+#endif // _LIBCPP_AVAILABILITY_MINIMUM_HEADER_VERSION < 14
 
 // Define legacy ABI functions
 // ---------------------------
 
-#ifndef _LIBCPP_ABI_STRING_OPTIMIZED_EXTERNAL_INSTANTIATION
+#if _LIBCPP_AVAILABILITY_MINIMUM_HEADER_VERSION < 21
 
 // This initializes the string with [__s, __s + __sz), but capacity() == __reserve. Assumes that __reserve >= __sz.
 template <class _CharT, class _Traits, class _Allocator>
@@ -53,15 +53,12 @@ void basic_string<_CharT, _Traits, _Allocator>::__init(const value_type* __s, si
   __annotate_new(__sz);
 }
 
-#  define STRING_LEGACY_API(CharT)                                                                                     \
-    template _LIBCPP_EXPORTED_FROM_ABI void basic_string<CharT>::__init(const value_type*, size_type, size_type)
-
-STRING_LEGACY_API(char);
+template _LIBCPP_EXPORTED_FROM_ABI void basic_string<char>::__init(const value_type*, size_type, size_type);
 #  if _LIBCPP_HAS_WIDE_CHARACTERS
-STRING_LEGACY_API(wchar_t);
+template _LIBCPP_EXPORTED_FROM_ABI void basic_string<wchar_t>::__init(const value_type*, size_type, size_type);
 #  endif
 
-#endif // _LIBCPP_ABI_STRING_OPTIMIZED_EXTERNAL_INSTANTIATION
+#endif // _LIBCPP_AVAILABILITY_MINIMUM_HEADER_VERSION < 21
 
 #define _LIBCPP_EXTERN_TEMPLATE_DEFINE(...) template _LIBCPP_EXPORTED_FROM_ABI __VA_ARGS__;
 #ifdef _LIBCPP_ABI_STRING_OPTIMIZED_EXTERNAL_INSTANTIATION
@@ -360,9 +357,11 @@ wstring to_wstring(unsigned long val) { return i_to_string<wstring>(val); }
 wstring to_wstring(unsigned long long val) { return i_to_string<wstring>(val); }
 #endif
 
+#if not defined(__AMDGPU__) && not defined(__NVPTX__)
 string to_string(float val) { return as_string(snprintf, initial_string< string>()(), "%f", val); }
 string to_string(double val) { return as_string(snprintf, initial_string< string>()(), "%f", val); }
 string to_string(long double val) { return as_string(snprintf, initial_string< string>()(), "%Lf", val); }
+#endif
 
 #if _LIBCPP_HAS_WIDE_CHARACTERS
 wstring to_wstring(float val) { return as_string(get_swprintf(), initial_string<wstring>()(), L"%f", val); }

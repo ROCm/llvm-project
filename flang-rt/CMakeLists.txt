@@ -137,7 +137,12 @@ cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_LIB_PATH)
 # Important: flang-rt user options must be prefixed with "FLANG_RT_". Variables
 # with this prefix will be forwarded in bootstrap builds.
 
-option(FLANG_RT_INCLUDE_TESTS "Generate build targets for the flang-rt unit and regression-tests." "${LLVM_INCLUDE_TESTS}")
+# TODO: Support tests for the GPU target.
+set(FLANG_RT_INCLUDE_TESTS_default ${LLVM_INCLUDE_TESTS})
+if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
+  set(FLANG_RT_INCLUDE_TESTS_default OFF)
+endif()
+option(FLANG_RT_INCLUDE_TESTS "Generate build targets for the flang-rt unit and regression-tests." "${FLANG_RT_INCLUDE_TESTS_default}")
 
 # Provide an interface to link against the LLVM libc/libc++ projects directly.
 set(FLANG_RT_SUPPORTED_PROVIDERS system llvm)
@@ -152,6 +157,8 @@ if (NOT "${FLANG_RT_LIBCXX_PROVIDER}" IN_LIST FLANG_RT_SUPPORTED_PROVIDERS)
 endif ()
 
 option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." ON)
+option(FLANG_RT_EMBED_GPU_LLVM_IR "Build Flang-RT as GPU LLVM IR library" ON)
+
 if (WIN32)
   # Windows DLL currently not implemented.
   set(FLANG_RT_ENABLE_SHARED OFF)
@@ -327,7 +334,25 @@ endif ()
 
 if (FLANG_RT_INCLUDE_TESTS)
   add_subdirectory(test)
-  add_subdirectory(unittests)
+  if (NOT "${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
+    add_subdirectory(unittests)
+  endif()
 else ()
   add_custom_target(check-flang-rt)
+endif()
+
+###################
+# Install headers #
+###################
+
+if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+  add_llvm_install_targets(install-flang-rt-headers COMPONENT flang-rt-headers)
+
+  install(DIRECTORY include/flang-rt/runtime
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/flang-rt"
+    COMPONENT flang-rt-headers
+    FILES_MATCHING
+    PATTERN "*.h"
+    PATTERN ".git" EXCLUDE
+    PATTERN "CMakeFiles" EXCLUDE)
 endif()

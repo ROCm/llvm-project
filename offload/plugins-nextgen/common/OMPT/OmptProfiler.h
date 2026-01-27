@@ -19,7 +19,6 @@
 
 #include "OmptDeviceTracing.h"
 #include "OpenMP/OMPT/Callback.h"
-#include "OpenMP/OMPT/Interface.h"
 #include "Shared/Debug.h"
 #include "omp-tools.h"
 
@@ -31,6 +30,8 @@
 #define DEBUG_PREFIX "OMPT"
 
 extern uint64_t getSystemTimestampInNs();
+
+using namespace llvm::omp::target::debug;
 
 namespace llvm {
 namespace omp {
@@ -63,7 +64,8 @@ public:
   if (ompt::Initialized && ompt::lookupCallbackByCode) {                       \
     ompt::lookupCallbackByCode((ompt_callbacks_t)(Code),                       \
                                ((ompt_callback_t *)&(Name##_fn)));             \
-    DP("class bound %s=%p\n", #Name, ((void *)(uint64_t)Name##_fn));           \
+    ODBG(ODT_Tool) << "class bound " << #Name                                  \
+                   << "=" << ((void *)(uint64_t)Name##_fn);                    \
   }
 
     FOREACH_OMPT_DEVICE_EVENT(bindOmptCallback);
@@ -72,15 +74,15 @@ public:
 #define bindOmptTracingFunction(FunctionName)                                  \
   if (ompt::Initialized && ompt::lookupDeviceTracingFn) {                      \
     FunctionName##_fn = ompt::lookupDeviceTracingFn(#FunctionName);            \
-    DP("device tracing fn bound %s=%p\n", #FunctionName,                       \
-       ((void *)(uint64_t)FunctionName##_fn));                                 \
+    ODBG(ODT_Tool) << "device tracing fn bound " << #FunctionName              \
+                   << "=" << ((void *)(uint64_t)FunctionName##_fn);            \
   }
 
     FOREACH_OMPT_DEVICE_TRACING_FN_COMMON(bindOmptTracingFunction);
 #undef bindOmptTracingFunction
   }
 
-  bool shouldEnableProfiling() override;
+  bool isProfilingEnabled() override;
 
   void handleInit(plugin::GenericDeviceTy *Device,
                   plugin::GenericPluginTy *Plugin) override;

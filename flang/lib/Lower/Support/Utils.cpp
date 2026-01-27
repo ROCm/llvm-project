@@ -84,7 +84,7 @@ public:
          x.cosubscript())
       cosubs -= getHashValue(v);
     return getHashValue(x.base()) * 97u - cosubs + getHashValue(x.stat()) +
-           257u + getHashValue(x.team());
+           257u + getHashValue(x.team()) + getHashValue(x.notify());
   }
   static unsigned getHashValue(const Fortran::evaluate::NamedEntity &x) {
     if (x.IsSymbol())
@@ -343,7 +343,8 @@ public:
                       const Fortran::evaluate::CoarrayRef &y) {
     return isEqual(x.base(), y.base()) &&
            isEqual(x.cosubscript(), y.cosubscript()) &&
-           isEqual(x.stat(), y.stat()) && isEqual(x.team(), y.team());
+           isEqual(x.stat(), y.stat()) && isEqual(x.team(), y.team()) &&
+           isEqual(x.notify(), y.notify());
   }
   static bool isEqual(const Fortran::evaluate::NamedEntity &x,
                       const Fortran::evaluate::NamedEntity &y) {
@@ -612,6 +613,10 @@ unsigned getHashValue(const Fortran::lower::ExplicitIterSpace::ArrayBases &x) {
       [&](const auto *p) { return HashEvaluateExpr::getHashValue(*p); }, x);
 }
 
+unsigned getHashValue(const Fortran::evaluate::Component *x) {
+  return HashEvaluateExpr::getHashValue(*x);
+}
+
 bool isEqual(const Fortran::lower::SomeExpr *x,
              const Fortran::lower::SomeExpr *y) {
   const auto *empty =
@@ -641,6 +646,17 @@ bool isEqual(const Fortran::lower::ExplicitIterSpace::ArrayBases &x,
             }
           }},
       x, y);
+}
+
+bool isEqual(const Fortran::evaluate::Component *x,
+             const Fortran::evaluate::Component *y) {
+  const auto *empty =
+      llvm::DenseMapInfo<const Fortran::evaluate::Component *>::getEmptyKey();
+  const auto *tombstone = llvm::DenseMapInfo<
+      const Fortran::evaluate::Component *>::getTombstoneKey();
+  if (x == empty || y == empty || x == tombstone || y == tombstone)
+    return x == y;
+  return x == y || IsEqualEvaluateExpr::isEqual(*x, *y);
 }
 
 void copyFirstPrivateSymbol(lower::AbstractConverter &converter,

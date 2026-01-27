@@ -533,17 +533,38 @@ def Dangling : DiagGroup<"dangling", [DanglingAssignment,
                                       DanglingGsl,
                                       ReturnStackAddress]>;
 
-def LifetimeSafetyPermissive : DiagGroup<"experimental-lifetime-safety-permissive">;
-def LifetimeSafetyStrict : DiagGroup<"experimental-lifetime-safety-strict">;
-def LifetimeSafety : DiagGroup<"experimental-lifetime-safety",
+def LifetimeSafetyPermissive : DiagGroup<"lifetime-safety-permissive">;
+def LifetimeSafetyStrict : DiagGroup<"lifetime-safety-strict">;
+def LifetimeSafety : DiagGroup<"lifetime-safety",
                                [LifetimeSafetyPermissive, LifetimeSafetyStrict]> {
   code Documentation = [{
     Experimental warnings to detect use-after-free and related temporal safety bugs based on lifetime safety analysis.
   }];
 }
+def LifetimeSafetyCrossTUSuggestions
+    : DiagGroup<"lifetime-safety-cross-tu-suggestions">;
+def LifetimeSafetyIntraTUSuggestions
+    : DiagGroup<"lifetime-safety-intra-tu-suggestions">;
+def LifetimeSafetySuggestions
+    : DiagGroup<"lifetime-safety-suggestions",
+                [LifetimeSafetyCrossTUSuggestions,
+                 LifetimeSafetyIntraTUSuggestions]> {
+  code Documentation = [{
+    Lifetime annotation suggestions for function parameters that should be marked [[clang::lifetimebound]] based on lifetime analysis.
+  }];
+}
+def LifetimeSafetyNoescape
+    : DiagGroup<"lifetime-safety-noescape"> {
+  code Documentation = [{
+    Detects misuse of [[clang::noescape]] annotation where the parameter escapes (for example, through return).
+  }];
+}
 
 def DistributedObjectModifiers : DiagGroup<"distributed-object-modifiers">;
 def DllexportExplicitInstantiationDecl : DiagGroup<"dllexport-explicit-instantiation-decl">;
+def DllexportExplicitInstantiation :
+  DiagGroup<"dllexport-explicit-instantiation",
+            [DllexportExplicitInstantiationDecl]>;
 def ExcessInitializers : DiagGroup<"excess-initializers">;
 def ExpansionToDefined : DiagGroup<"expansion-to-defined">;
 def FlagEnum : DiagGroup<"flag-enum">;
@@ -607,7 +628,6 @@ def MainReturnType : DiagGroup<"main-return-type">;
 def MaxUnsignedZero : DiagGroup<"max-unsigned-zero">;
 def MissingBraces : DiagGroup<"missing-braces">;
 def MissingDeclarations: DiagGroup<"missing-declarations">;
-def : DiagGroup<"missing-format-attribute">;
 def MissingIncludeDirs : DiagGroup<"missing-include-dirs">;
 def MissingNoreturn : DiagGroup<"missing-noreturn">;
 def MultiChar : DiagGroup<"multichar">;
@@ -636,7 +656,6 @@ def ModuleConflict : DiagGroup<"module-conflict">;
 def ModuleFileExtension : DiagGroup<"module-file-extension">;
 def ModuleIncludeDirectiveTranslation : DiagGroup<"module-include-translation">;
 def ModuleMap : DiagGroup<"module-map">;
-def ModulesDriver : DiagGroup<"modules-driver">;
 def RoundTripCC1Args : DiagGroup<"round-trip-cc1-args">;
 def NewlineEOF : DiagGroup<"newline-eof">;
 def Nullability : DiagGroup<"nullability">;
@@ -789,6 +808,8 @@ def ShadowFieldInConstructor : DiagGroup<"shadow-field-in-constructor",
                                          [ShadowFieldInConstructorModified]>;
 def ShadowIvar : DiagGroup<"shadow-ivar">;
 def ShadowUncapturedLocal : DiagGroup<"shadow-uncaptured-local">;
+
+def ShadowHeader : DiagGroup<"shadow-header">;
 
 // -Wshadow-all is a catch-all for all shadowing. -Wshadow is just the
 // shadowing that we think is unsafe.
@@ -962,9 +983,11 @@ def UninitializedMaybe : DiagGroup<"conditional-uninitialized">;
 def UninitializedSometimes : DiagGroup<"sometimes-uninitialized">;
 def UninitializedStaticSelfInit : DiagGroup<"static-self-init">;
 def UninitializedConstReference : DiagGroup<"uninitialized-const-reference">;
+def UninitializedConstPointer : DiagGroup<"uninitialized-const-pointer">;
 def Uninitialized  : DiagGroup<"uninitialized", [UninitializedSometimes,
                                                  UninitializedStaticSelfInit,
-                                                 UninitializedConstReference]>;
+                                                 UninitializedConstReference,
+                                                 UninitializedConstPointer]>;
 def IgnoredPragmaIntrinsic : DiagGroup<"ignored-pragma-intrinsic">;
 // #pragma optimize is often used to avoid to work around MSVC codegen bugs or
 // to disable inlining. It's not completely clear what alternative to suggest
@@ -985,7 +1008,8 @@ def NSReturnsMismatch : DiagGroup<"nsreturns-mismatch">;
 
 def IndependentClassAttribute : DiagGroup<"IndependentClass-attribute">;
 def UnknownAttributes : DiagGroup<"unknown-attributes">;
-def IgnoredAttributes : DiagGroup<"ignored-attributes">;
+def IgnoredAttributes : DiagGroup<"ignored-attributes",
+                                  [DllexportExplicitInstantiation]>;
 def Attributes : DiagGroup<"attributes", [UnknownAttributes,
                                           IgnoredAttributes]>;
 def UnknownSanitizers : DiagGroup<"unknown-sanitizers">;
@@ -1059,6 +1083,7 @@ def SuperSubClassMismatch : DiagGroup<"super-class-method-mismatch">;
 def OverridingMethodMismatch : DiagGroup<"overriding-method-mismatch">;
 def VariadicMacros : DiagGroup<"variadic-macros">;
 def VectorConversion : DiagGroup<"vector-conversion">;      // clang specific
+def MatrixConversion : DiagGroup<"matrix-conversion">;      // clang specific
 def VexingParse : DiagGroup<"vexing-parse">;
 def VLAUseStaticAssert : DiagGroup<"vla-extension-static-assert">;
 def VLACxxExtension : DiagGroup<"vla-cxx-extension", [VLAUseStaticAssert]>;
@@ -1181,6 +1206,7 @@ def FormatY2K : DiagGroup<"format-y2k">;
 def FormatPedantic : DiagGroup<"format-pedantic">;
 def FormatSignedness : DiagGroup<"format-signedness">;
 def FormatTypeConfusion : DiagGroup<"format-type-confusion">;
+def MissingFormatAttribute : DiagGroup<"missing-format-attribute">;
 
 def FormatOverflowNonKprintf: DiagGroup<"format-overflow-non-kprintf">;
 def FormatOverflow: DiagGroup<"format-overflow", [FormatOverflowNonKprintf]>;
@@ -1192,7 +1218,7 @@ def Format : DiagGroup<"format",
                         FormatSecurity, FormatY2K, FormatInvalidSpecifier,
                         FormatInsufficientArgs, FormatOverflow, FormatTruncation]>,
              DiagCategory<"Format String Issue">;
-def FormatNonLiteral : DiagGroup<"format-nonliteral">;
+def FormatNonLiteral : DiagGroup<"format-nonliteral", [MissingFormatAttribute]>;
 def Format2 : DiagGroup<"format=2",
                         [FormatNonLiteral, FormatSecurity, FormatY2K]>;
 
@@ -1312,7 +1338,7 @@ def Consumed       : DiagGroup<"consumed">;
 // DefaultIgnore in addition to putting it here.
 def All : DiagGroup<"all", [Most, Parentheses, Switch, SwitchBool,
                             MisleadingIndentation, PackedNonPod,
-                            VLACxxExtension, PerfConstraintImpliesNoexcept]>;
+                            VLACxxExtension]>;
 
 // Warnings that should be in clang-cl /w4.
 def : DiagGroup<"CL4", [All, Extra]>;
@@ -1333,6 +1359,8 @@ def : DiagGroup<"int-conversions",
                 [IntConversion]>; // -Wint-conversions = -Wint-conversion
 def : DiagGroup<"vector-conversions",
                 [VectorConversion]>; // -Wvector-conversions = -Wvector-conversion
+def : DiagGroup<"matrix-conversions",
+                [MatrixConversion]>; // -Wmatrix-conversions = -Wmatrix-conversion
 def : DiagGroup<"unused-local-typedefs", [UnusedLocalTypedef]>;
                 // -Wunused-local-typedefs = -Wunused-local-typedef
 
@@ -1434,6 +1462,7 @@ def MicrosoftDrectveSection : DiagGroup<"microsoft-drectve-section">;
 def MicrosoftInclude : DiagGroup<"microsoft-include">;
 def MicrosoftCppMacro : DiagGroup<"microsoft-cpp-macro">;
 def MicrosoftFixedEnum : DiagGroup<"microsoft-fixed-enum">;
+def MicrosoftEmptyEnum : DiagGroup<"microsoft-empty-enum">;
 def MicrosoftSealed : DiagGroup<"microsoft-sealed">;
 def MicrosoftAbstract : DiagGroup<"microsoft-abstract">;
 def MicrosoftUnqualifiedFriend : DiagGroup<"microsoft-unqualified-friend">;
@@ -1487,7 +1516,8 @@ def Microsoft : DiagGroup<"microsoft",
      MicrosoftConstInit, MicrosoftVoidPseudoDtor, MicrosoftAnonTag,
      MicrosoftCommentPaste, MicrosoftEndOfFile,
      MicrosoftInitFromPredefined, MicrosoftStringLiteralFromPredefined,
-     MicrosoftInconsistentDllImport, MicrosoftInlineOnNonFunction]>;
+     MicrosoftInconsistentDllImport, MicrosoftInlineOnNonFunction,
+     MicrosoftEmptyEnum]>;
 
 def ClangClPch : DiagGroup<"clang-cl-pch">;
 
@@ -1750,7 +1780,9 @@ def ReadOnlyPlacementChecks : DiagGroup<"read-only-types">;
 def UnsafeBufferUsageInContainer : DiagGroup<"unsafe-buffer-usage-in-container">;
 def UnsafeBufferUsageInLibcCall : DiagGroup<"unsafe-buffer-usage-in-libc-call">;
 def UnsafeBufferUsageInUniquePtrArrayAccess : DiagGroup<"unsafe-buffer-usage-in-unique-ptr-array-access">;
-def UnsafeBufferUsage : DiagGroup<"unsafe-buffer-usage", [UnsafeBufferUsageInContainer, UnsafeBufferUsageInLibcCall, UnsafeBufferUsageInUniquePtrArrayAccess]>;
+def UnsafeBufferUsageInStaticSizedArray : DiagGroup<"unsafe-buffer-usage-in-static-sized-array">;
+def UnsafeBufferUsageInFormatAttrCall : DiagGroup<"unsafe-buffer-usage-in-format-attr-call">;
+def UnsafeBufferUsage : DiagGroup<"unsafe-buffer-usage", [UnsafeBufferUsageInContainer, UnsafeBufferUsageInLibcCall, UnsafeBufferUsageInUniquePtrArrayAccess, UnsafeBufferUsageInStaticSizedArray, UnsafeBufferUsageInFormatAttrCall]>;
 
 // Warnings and notes InstallAPI verification.
 def InstallAPIViolation : DiagGroup<"installapi-violation">;
@@ -1764,3 +1796,15 @@ def ExtractAPIMisuse : DiagGroup<"extractapi-misuse">;
 // Warnings about using the non-standard extension having an explicit specialization
 // with a storage class specifier.
 def ExplicitSpecializationStorageClass : DiagGroup<"explicit-specialization-storage-class">;
+
+// Warnings related to the simdlen intrinsic
+def SIMDLen : DiagGroup<"simdlen">;
+
+// Warnings related to PGO coverage limitations
+def PGOCoverage : DiagGroup<"pgo-coverage">;
+
+// Warnings related to -ftrivial-auto-var-init
+def TrivialAutoVarInit : DiagGroup<"trivial-auto-var-init">;
+
+// A warning for options that enable a feature that is not yet complete
+def ExperimentalOption : DiagGroup<"experimental-option">;
