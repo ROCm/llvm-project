@@ -420,7 +420,7 @@ private:
               for (Value privateVar : op.getPrivateVars())
                 collectRewrite(privateVar, region, rewriteValues,
                                parentValRewrites);
-              if (Value threadLimit = op.getThreadLimit())
+              for (Value threadLimit : op.getThreadLimitVars())
                 collectRewrite(threadLimit, region, rewriteValues,
                                parentValRewrites);
             } else if constexpr (std::is_same_v<decltype(op),
