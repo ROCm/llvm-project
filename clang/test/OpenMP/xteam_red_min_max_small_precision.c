@@ -130,7 +130,7 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load half, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_h_16x64(half [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_h, ptr @__kmpc_rfun_min_lds_h, half 0xH7C00, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_h(half [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_h, ptr @__kmpc_rfun_min_lds_h, half 0xH7C00, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -215,7 +215,7 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load bfloat, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_bf_16x64(bfloat [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_bf, ptr @__kmpc_rfun_min_lds_bf, bfloat 0xR7F80, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_bf(bfloat [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_bf, ptr @__kmpc_rfun_min_lds_bf, bfloat 0xR7F80, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -300,7 +300,7 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load i16, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_s_16x64(i16 [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_s, ptr @__kmpc_rfun_min_lds_s, i16 32767, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_s(i16 [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_min_s, ptr @__kmpc_rfun_min_lds_s, i16 32767, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -385,7 +385,7 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load half, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_h_16x64(half [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_h, ptr @__kmpc_rfun_max_lds_h, half 0xHFC00, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_h(half [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_h, ptr @__kmpc_rfun_max_lds_h, half 0xHFC00, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -470,7 +470,7 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load bfloat, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_bf_16x64(bfloat [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_bf, ptr @__kmpc_rfun_max_lds_bf, bfloat 0xRFF80, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_bf(bfloat [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_bf, ptr @__kmpc_rfun_max_lds_bf, bfloat 0xRFF80, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
 //
@@ -555,6 +555,6 @@ int main() {
 // CHECK-NEXT:    [[TMP25:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP26:%.*]] = load ptr, ptr [[DOTADDR1_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP27:%.*]] = load i16, ptr addrspace(5) [[TMP4]], align 2
-// CHECK-NEXT:    call void @__kmpc_xteamr_s_16x64(i16 [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_s, ptr @__kmpc_rfun_max_lds_s, i16 -32768, i64 [[TMP13]], i32 [[TMP12]], i32 1)
+// CHECK-NEXT:    call void @__kmpc_xteamr_s(i16 [[TMP27]], ptr [[TMP2]], ptr [[TMP25]], ptr [[TMP26]], ptr @__kmpc_rfun_max_s, ptr @__kmpc_rfun_max_lds_s, i16 -32768, i64 [[TMP13]], i32 [[TMP12]], i32 1)
 // CHECK-NEXT:    ret void
 //
