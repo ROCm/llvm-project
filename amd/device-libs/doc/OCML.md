@@ -161,8 +161,11 @@ The following table contains a list of {function} currently supported by OCML, a
 | nearbyint | round to nearest integer (see also rint) | 0 | 0 | 0 |
 | nextafter | next closest value above or below | 0 | 0 | 0 |
 | pow | general power | 16 | 16 | 4 |
+| pow_fast | general power | 178 | n/a | n/a |
 | pown | power with integral exponent | 16 | 16 | 4 |
+| pown_fast | power with integral exponent | 209.01 | n/a | n/a |
 | powr | power with positive floating point exponent | 16 | 16 | 4 |
+| powr_fast | power with positive floating point exponent | 206.25 | n/a | n/a |
 | pred | predecessor | c | c | c |
 | rcbrt | reciprocal cube root | 2 | 2 | 2 |
 | remainder | floating point remainder | 0 | 0 | 0 |
@@ -172,6 +175,7 @@ The following table contains a list of {function} currently supported by OCML, a
 | rlen3 | reciprocal len3 | 2 | 2 | 2 |
 | rlen4 | reciprocal len4 | 2 | 2 | 2 |
 | rootn | nth root | 16 | 16 | 4 |
+| rootn_fast | nth root | 88 | n/a | n/a |
 | round | round to integer, always away from 0 | c | c | c |
 | rsqrt | reciprocal square root | 2 | 2 | 1 |
 | scalb | multiply by 2 raised to a power | c | c | c |
