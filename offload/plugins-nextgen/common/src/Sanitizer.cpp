@@ -288,11 +288,13 @@ void HandleSanitizerReport(uint32_t NumLanes, const SanitizerData *LaneData,
     LoadAddrAdjust = Uri_info.loadAddressDiff;
   }
 
+#if defined(__linux__)
   // Report the error with all collected lane data
   __asan_report_nonself_error(Callstack, 1, device_failing_addresses,
                               n_activelanes, entity_id, n_activelanes + 4,
                               IsWrite, AccessSize, IsAbort, "amdgpu",
                               LoadAddrAdjust, Uri_fd, Size, Offset);
+#endif
 }
 
 #endif

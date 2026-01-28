@@ -142,14 +142,14 @@ if(LLVM_DEFAULT_TARGET_TRIPLE)
 endif()
 
 # For SANITIZER_AMDGPU: Use llvm-link POST_BUILD to merge ASAN runtime and OCKL
-# into the device library bitcode to resolve all and __asan_* __ockl_* symbols
+# into the device library bitcode to resolve all __asan_* and __ockl_* symbols
 if(SANITIZER_AMDGPU)
   find_program(LLVM_LINK_EXECUTABLE NAMES llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
   if(NOT LLVM_LINK_EXECUTABLE)
     message(FATAL_ERROR "llvm-link not found")
   endif()
   add_custom_command(TARGET libompdevice POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy 
+    COMMAND ${CMAKE_COMMAND} -E copy
       ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc
       ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc.tmp
     COMMAND ${LLVM_LINK_EXECUTABLE}

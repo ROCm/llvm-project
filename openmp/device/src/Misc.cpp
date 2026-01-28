@@ -14,6 +14,7 @@
 #include "DeviceTypes.h"
 #include "Shared/RPCOpcodes.h"
 #include "shared/rpc.h"
+#include "Platform.h"
 
 #include "Debug.h"
 
@@ -135,7 +136,7 @@ unsigned long long __llvm_omp_host_call(void *fn, void *data, size_t size) {
 }
 
 #if SANITIZER_AMDGPU
-__attribute__((noinline)) void
+[[gnu::noinline]] void
 __ockl_sanitizer_report(uint64_t addr, uint64_t pc, uint64_t wgidx,
                         uint64_t wgidy, uint64_t wgidz, uint64_t wave_id,
                         uint64_t is_read, uint64_t access_size) {
