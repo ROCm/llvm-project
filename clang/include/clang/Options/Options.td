@@ -3983,23 +3983,9 @@ def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-te
   HelpText<"Do not assume teams oversubscription.">;
 def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">,
   HelpText<"Do not assume threads oversubscription.">;
-def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">,
-  HelpText<"Assert that a thread in a parallel region may modify an ICV">;
-def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">,
-  HelpText<"Assert no nested parallel regions in the GPU">,
-  MarshallingInfoFlag<LangOpts<"OpenMPNoNestedParallelism">>;
-def fno_openmp_assume_no_nested_parallelism : Flag<["-"], "fno-openmp-assume-no-nested-parallelism">,
-  HelpText<"Assert that a nested parallel region may be used in the GPU">;
 def fopenmp_assume_no_thread_state : Flag<["-"], "fopenmp-assume-no-thread-state">,
   HelpText<"Assert no thread in a parallel region modifies an ICV">,
   MarshallingInfoFlag<LangOpts<"OpenMPNoThreadState">>;
-def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">,
-  HelpText<"Assert that a thread in a parallel region may modify an ICV">;
-def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">,
-  HelpText<"Assert no nested parallel regions in the GPU">,
-  MarshallingInfoFlag<LangOpts<"OpenMPNoNestedParallelism">>;
-def fno_openmp_assume_no_nested_parallelism : Flag<["-"], "fno-openmp-assume-no-nested-parallelism">,
-  HelpText<"Assert that a nested parallel region may be used in the GPU">;
 def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">,
   HelpText<"Assert that a thread in a parallel region may modify an ICV">;
 def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">,
@@ -4036,6 +4022,13 @@ def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars
   HelpText<"Assume that the OpenMP runtime can ignore environment variables during code generation for GPU offload">,
   MarshallingInfoFlag<LangOpts<"OpenMPTargetIgnoreEnvVars">>;
 def fno_openmp_target_ignore_env_vars : Flag<["-"], "fno-openmp-target-ignore-env-vars">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option]>;
+def fopenmp_target_fast : Flag<["-"], "fopenmp-target-fast">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option]>,
+  HelpText<"Convenience flag to enable aggressive OpenMP GPU optimizations">;
+def fno_openmp_target_fast : Flag<["-"], "fno-openmp-target-fast">,
   Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
   Visibility<[ClangOption, CC1Option]>;
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
