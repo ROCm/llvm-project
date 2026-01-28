@@ -23,9 +23,6 @@ fast_expylnx(float x, float y)
 static float
 compute_expylnx_int(float x, int ny)
 {
-    if (UNSAFE_MATH_OPT())
-        return fast_expylnx(x, (float)ny);
-
     float ax = BUILTIN_ABS_F32(x);
     int nyh = ny & 0xffff0000;
     float2 y = fadd((float)nyh, (float)(ny - nyh));
@@ -37,11 +34,6 @@ static float
 compute_exp_inverse_y_lnx_int(float x, int ny)
 {
     float ax = BUILTIN_ABS_F32(x);
-    if (UNSAFE_MATH_OPT()) {
-        float y = MATH_FAST_RCP((float)ny);
-        return fast_expylnx(ax, y);
-    }
-
     int nyh = ny & 0xffff0000;
     float2 y = fadd((float)nyh, (float)(ny - nyh));
     y = rcp(y);
@@ -51,9 +43,6 @@ compute_exp_inverse_y_lnx_int(float x, int ny)
 static float
 compute_expylnx_float(float x, float y)
 {
-    if (UNSAFE_MATH_OPT())
-        return fast_expylnx(x, y);
-
     float ax = BUILTIN_ABS_F32(x);
     return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
 }
@@ -108,13 +97,27 @@ pow_fixup(float x, float y, float expylnx)
 CONSTATTR float
 MATH_MANGLE(pow)(float x, float y)
 {
+    if (UNSAFE_MATH_OPT())
+        return MATH_MANGLE(pow_fast)(x, y);
+
     if (x == 1.0f)
         y = 1.0f;
     if (y == 0.0f)
         x = 1.0f;
 
     float expylnx = compute_expylnx_float(x, y);
+    return pow_fixup(x, y, expylnx);
+}
 
+CONSTATTR float
+MATH_MANGLE(pow_fast)(float x, float y)
+{
+    if (x == 1.0f)
+        y = 1.0f;
+    if (y == 0.0f)
+        x = 1.0f;
+
+    float expylnx = fast_expylnx(x, y);
     return pow_fixup(x, y, expylnx);
 }
 
@@ -148,10 +151,23 @@ powr_fixup(float x, float y, float expylnx)
 CONSTATTR float
 MATH_MANGLE(powr)(float x, float y)
 {
+    if (UNSAFE_MATH_OPT())
+        return MATH_MANGLE(powr_fast)(x, y);
+
     if (x < 0.0f)
         x = QNAN_F32;
 
     float expylnx = compute_expylnx_float(x, y);
+    return powr_fixup(x, y, expylnx);
+}
+
+CONSTATTR float
+MATH_MANGLE(powr_fast)(float x, float y)
+{
+    if (x < 0.0f)
+        x = QNAN_F32;
+
+    float expylnx = fast_expylnx(x, y);
     return powr_fixup(x, y, expylnx);
 }
 
@@ -175,10 +191,23 @@ pown_fixup(float x, int ny, float expylnx)
 CONSTATTR float
 MATH_MANGLE(pown)(float x, int ny)
 {
+    if (UNSAFE_MATH_OPT())
+        return MATH_MANGLE(pown_fast)(x, ny);
+
     if (ny == 0)
         x = 1.0f;
 
     float expylnx = compute_expylnx_int(x, ny);
+    return pown_fixup(x, ny, expylnx);
+}
+
+CONSTATTR float
+MATH_MANGLE(pown_fast)(float x, int ny)
+{
+    if (ny == 0)
+        x = 1.0f;
+
+    float expylnx = fast_expylnx(x, (float)ny);
     return pown_fixup(x, ny, expylnx);
 }
 
@@ -206,7 +235,18 @@ rootn_fixup(float x, int ny, float expylnx)
 CONSTATTR float
 MATH_MANGLE(rootn)(float x, int ny)
 {
+    if (UNSAFE_MATH_OPT())
+        return MATH_MANGLE(rootn_fast)(x, ny);
+
     float expylnx = compute_exp_inverse_y_lnx_int(x, ny);
+    return rootn_fixup(x, ny, expylnx);
+}
+
+CONSTATTR float
+MATH_MANGLE(rootn_fast)(float x, int ny)
+{
+    float y = MATH_FAST_RCP((float)ny);
+    float expylnx = fast_expylnx(x, y);
     return rootn_fixup(x, ny, expylnx);
 }
 
