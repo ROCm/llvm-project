@@ -8,9 +8,3 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks aomp/test/smoke-limbo/xteamr
-[OpenMP] Cleanup synchronization primitives (#177710)
----
-needs aditional integration
-[OFFLOAD] Build DeviceRTL with SPIRV backend (#174675)
----
