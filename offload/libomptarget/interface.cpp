@@ -27,7 +27,6 @@
 #include "Utils/ExponentialBackoff.h"
 
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
-#include "llvm/Support/Format.h"
 
 #include <cassert>
 #include <cstdint>
@@ -142,9 +141,9 @@ targetData(ident_t *Loc, int64_t DeviceId, int32_t ArgNum, void **ArgsBase,
                          RegionTypeMsg);
   ODBG_OS(ODT_Kernel, [&](llvm::raw_ostream &Os) {
     for (int I = 0; I < ArgNum; ++I) {
-      Os << "Entry " << llvm::format_decimal(I, 2) << ": Base=" << ArgsBase[I]
+      Os << "Entry " << llvm::format("%2d", I) << ": Base=" << ArgsBase[I]
          << ", Begin=" << Args[I] << ", Size=" << ArgSizes[I]
-         << ", Type=" << llvm::format_hex(ArgTypes[I], 8) << ", Name="
+         << ", Type=" << llvm::format("0x%" PRIx64, ArgTypes[I]) << ", Name="
          << ((ArgNames) ? getNameFromMapping(ArgNames[I]) : "unknown") << "\n";
     }
   });
@@ -391,11 +390,11 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
 
   ODBG_OS(ODT_Kernel, [&](llvm::raw_ostream &Os) {
     for (uint32_t I = 0; I < KernelArgs->NumArgs; ++I) {
-      Os << "Entry " << llvm::format_decimal(I, 2)
-         << " Base=" << KernelArgs->ArgBasePtrs[I]
+      Os << "Entry" << llvm::format("%2d", I)
+         << ": Base=" << KernelArgs->ArgBasePtrs[I]
          << ", Begin=" << KernelArgs->ArgPtrs[I]
          << ", Size=" << KernelArgs->ArgSizes[I]
-         << ", Type=" << llvm::format_hex(KernelArgs->ArgTypes[I], 8)
+         << ", Type=" << llvm::format("0x%" PRIx64, KernelArgs->ArgTypes[I])
          << ", Name="
          << (KernelArgs->ArgNames
                  ? getNameFromMapping(KernelArgs->ArgNames[I]).c_str()
@@ -440,12 +439,12 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
     // Launch kernel on one or across multiple devices.
     for (int64_t DeviceIndex = FirstDeviceId;
          DeviceIndex < FirstDeviceId + NumMultiDevices; DeviceIndex++) {
-      DP("Entering target region for device %" PRId64
-         " with entry point " DPxMOD "\n",
-         DeviceIndex, DPxPTR(HostPtr));
+      ODBG(ODT_Kernel) << "Entering target region for device "
+                     << DeviceIndex << " with entry point "
+                     << HostPtr;
 
       if (checkDevice(DeviceIndex, Loc)) {
-        DP("Not offloading to device %" PRId64 "\n", DeviceIndex);
+        ODBG(ODT_Kernel) <<  "Not offloading to device " << DeviceIndex;
         return OMP_TGT_FAIL;
       }
 
@@ -455,14 +454,13 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
                              KernelArgs->ArgNames, "Entering OpenMP kernel");
 #ifdef OMPTARGET_DEBUG
       for (int I = 0; I < KernelArgs->NumArgs; ++I) {
-        DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
-           ", Type=0x%" PRIx64 ", Name=%s\n",
-           I, DPxPTR(KernelArgs->ArgBasePtrs[I]),
-           DPxPTR(KernelArgs->ArgPtrs[I]), KernelArgs->ArgSizes[I],
-           KernelArgs->ArgTypes[I],
-           (KernelArgs->ArgNames)
-               ? getNameFromMapping(KernelArgs->ArgNames[I]).c_str()
-               : "unknown");
+        ODBG(ODT_Device)
+          << "Entry " << I
+          << " Base=" << KernelArgs->ArgBasePtrs[I]
+          << " Begin=" << KernelArgs->ArgPtrs[I]
+          << " Size=" << KernelArgs->ArgSizes[I]
+          << " Type=0x%" << KernelArgs->ArgTypes[I]
+          << " Name=" << KernelArgs->ArgNames;
       }
 #endif
 
@@ -623,7 +621,8 @@ EXTERN void __tgt_push_mapper_component(void *RtMapperHandle, void *Base,
   ODBG(ODT_Interface) << "__tgt_push_mapper_component(Handle=" << RtMapperHandle
                       << ") adds an entry (Base=" << Base << ", Begin=" << Begin
                       << ", Size=" << Size
-                      << ", Type=" << llvm::format_hex(Type, 8) << ", Name="
+                      << ", Type=" << llvm::format("0x%" PRIx64, Type)
+                      << ", Name="
                       << ((Name) ? getNameFromMapping(Name) : "unknown") << ")";
   auto *MapperComponentsPtr = (struct MapperComponentsTy *)RtMapperHandle;
   MapperComponentsPtr->Components.push_back(

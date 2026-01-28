@@ -104,9 +104,8 @@ void ompt::OmptProfilerTy::handleKernelCompletion(uint64_t StartNanos,
   if (!Data)
     return;
 
-  DP("OMPT-Async: Time kernel for asynchronous execution: Start %lu "
-     "End %lu\n",
-     StartNanos, EndNanos);
+  ODBG(ODT_Tool) << "OMPT-Async: Time kernel for asynchronous execution: Start "
+                 << StartNanos << " End " << EndNanos;
 
   auto OmptEventInfo = reinterpret_cast<ompt::OmptEventInfoTy *>(Data);
   assert(OmptEventInfo && "Invalid OmptEventInfo");
@@ -131,9 +130,8 @@ void ompt::OmptProfilerTy::handleDataTransfer(uint64_t StartNanos,
   if (!Data)
     return;
 
-  DP("OMPT-Async: Time data for asynchronous execution: Start %lu "
-     "End %lu\n",
-     StartNanos, EndNanos);
+  ODBG(ODT_Tool) << "OMPT-Async: Time data for asynchronous execution: Start "
+                 << StartNanos << " End " << EndNanos;
 
   auto OmptEventInfo = reinterpret_cast<ompt::OmptEventInfoTy *>(Data);
   assert(OmptEventInfo && "Invalid OmptEventInfo");
@@ -150,6 +148,6 @@ bool ompt::OmptProfilerTy::isProfilingEnabled() { return ompt::TracingActive; }
 
 void ompt::OmptProfilerTy::setTimeConversionFactorsImpl(double Slope,
                                                         double Offset) {
-  DP("Using Time Slope: %f and Offset: %f \n", Slope, Offset);
+  ODBG(ODT_Tool) << "Using Time Slope: " << Slope << " and Offset: " << Offset;
   setOmptHostToDeviceRate(Slope, Offset);
 }

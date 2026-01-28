@@ -1,5 +1,4 @@
 // RUN: mlir-opt -split-input-file -verify-diagnostics %s
-
 func.func @unknown_clause() {
   // expected-error@+1 {{expected '{' to begin a region}}
   omp.parallel invalid {
@@ -1447,18 +1446,41 @@ func.func @omp_teams_allocate(%data_var : memref<i32>) {
 // -----
 
 func.func @omp_teams_num_teams1(%lb : i32) {
-  // expected-error @below {{expected num_teams upper bound to be defined if the lower bound is defined}}
-  "omp.teams" (%lb) ({
+  omp.target {
+    // expected-error @below {{expected exactly one num_teams upper bound when lower bound is specified}}
+    "omp.teams" (%lb) ({
+      omp.terminator
+    }) {operandSegmentSizes = array<i32: 0,0,0,1,0,0,0,0>} : (i32) -> ()
     omp.terminator
-  }) {operandSegmentSizes = array<i32: 0,0,0,1,0,0,0,0>} : (i32) -> ()
+  }
+  return
+}
+
+// -----
+
+func.func @omp_teams_num_teams_multidim_with_bounds() {
+  omp.target {
+    %v0 = arith.constant 1 : i32
+    %v1 = arith.constant 2 : i32
+    %lb = arith.constant 3 : i32
+    %ub = arith.constant 4 : i32
+    // expected-error @below {{expected exactly one num_teams upper bound when lower bound is specified}}
+    "omp.teams" (%lb, %v0, %v1) ({
+      omp.terminator
+    }) {operandSegmentSizes = array<i32: 0,0,0,1,2,0,0,0>} : (i32, i32, i32) -> ()
+    omp.terminator
+  }
   return
 }
 
 // -----
 
 func.func @omp_teams_num_teams2(%lb : i32, %ub : i16) {
-  // expected-error @below {{expected num_teams upper bound and lower bound to be the same type}}
-  omp.teams num_teams(%lb : i32 to %ub : i16) {
+  omp.target {
+    // expected-error @below {{expected num_teams upper bound and lower bound to be the same type}}
+    omp.teams num_teams(%lb : i32 to %ub : i16) {
+      omp.terminator
+    }
     omp.terminator
   }
   return
@@ -3135,43 +3157,12 @@ func.func @invalid_workdistribute() -> () {
 }
 
 // -----
-func.func @target_allocmem_invalid_uniq_name(%device : i32) -> () {
-// expected-error @below {{op attribute 'uniq_name' failed to satisfy constraint: string attribute}}
-  %0 = omp.target_allocmem %device : i32, i64 {uniq_name=2}
-  return
-}
+// expected-error @+1 {{'omp.declare_simd' op must be nested inside a function}}
+omp.declare_simd
 
 // -----
-func.func @target_allocmem_invalid_bindc_name(%device : i32) -> () {
-// expected-error @below {{op attribute 'bindc_name' failed to satisfy constraint: string attribute}}
-  %0 = omp.target_allocmem %device : i32, i64 {bindc_name=2}
-  return
-}
-
-// -----
-func.func @alloc_shared_mem_invalid_alignment1(%n: i32) -> () {
-  // expected-error @below {{op attribute 'alignment' failed to satisfy constraint: 64-bit signless integer attribute whose value is positive}}
-  %0 = omp.alloc_shared_mem %n x i64 {alignment=-2} : (i32) -> !llvm.ptr
-  return
-}
-
-// -----
-func.func @alloc_shared_mem_invalid_alignment2(%n: i32) -> () {
-  // expected-error @below {{ALIGN value : 3 must be power of 2}}
-  %0 = omp.alloc_shared_mem %n x i64 {alignment=3} : (i32) -> !llvm.ptr
-  return
-}
-
-// -----
-func.func @alloc_shared_mem_invalid_array_size(%n: f32) -> () {
-  // expected-error @below {{invalid kind of type specified: expected builtin.integer, but found 'f32'}}
-  %0 = omp.alloc_shared_mem %n x i64 : (f32) -> !llvm.ptr
-  return
-}
-
-// -----
-func.func @free_shared_mem_invalid_ptr(%ptr : !llvm.ptr) -> () {
-  // expected-error @below {{op 'heapref' operand must be defined by an 'omp.alloc_shared_memory' op}}
-  omp.free_shared_mem %ptr : !llvm.ptr
+func.func @omp_declare_simd_branch() -> () {
+  // expected-error @+1 {{'omp.declare_simd' op cannot have both 'inbranch' and 'notinbranch'}}
+  omp.declare_simd inbranch notinbranch
   return
 }

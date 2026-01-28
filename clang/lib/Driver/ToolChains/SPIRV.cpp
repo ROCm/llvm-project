@@ -71,9 +71,28 @@ void SPIRV::constructAssembleCommand(Compilation &C, const Tool &T,
   if (!llvm::sys::fs::can_execute(ExeCand))
     ExeCand = T.getToolChain().GetProgramPath("spirv-as");
 
+  if (!llvm::sys::fs::can_execute(ExeCand) &&
+      !C.getArgs().hasArg(clang::options::OPT__HASH_HASH_HASH)) {
+    C.getDriver().Diag(clang::diag::err_drv_no_spv_tools) << "spirv-as";
+    return;
+  }
   const char *Exec = C.getArgs().MakeArgString(ExeCand);
   C.addCommand(std::make_unique<Command>(JA, T, ResponseFileSupport::None(),
                                          Exec, CmdArgs, Input, Output));
+}
+
+void SPIRV::constructLLVMLinkCommand(Compilation &C, const Tool &T,
+                                     const JobAction &JA,
+                                     const InputInfo &Output,
+                                     const InputInfoList &Inputs,
+                                     const llvm::opt::ArgList &Args) {
+
+  ArgStringList LlvmLinkArgs;
+
+  for (auto Input : Inputs)
+    LlvmLinkArgs.push_back(Input.getFilename());
+
+  tools::constructLLVMLinkCommand(C, T, JA, Inputs, LlvmLinkArgs, Output, Args);
 }
 
 void SPIRV::Translator::ConstructJob(Compilation &C, const JobAction &JA,
@@ -127,6 +146,10 @@ void SPIRV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
+  if (JA.getType() == types::TY_LLVM_BC) {
+    constructLLVMLinkCommand(C, *this, JA, Output, Inputs, Args);
+    return;
+  }
   const ToolChain &ToolChain = getToolChain();
   std::string Linker = ToolChain.GetProgramPath(getShortName());
   ArgStringList CmdArgs;
@@ -139,6 +162,11 @@ void SPIRV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // the default linker (spirv-link).
   if (Args.hasArg(options::OPT_sycl_link))
     Linker = ToolChain.GetProgramPath("clang-sycl-linker");
+  else if (!llvm::sys::fs::can_execute(Linker) &&
+           !C.getArgs().hasArg(clang::options::OPT__HASH_HASH_HASH)) {
+    C.getDriver().Diag(clang::diag::err_drv_no_spv_tools) << getShortName();
+    return;
+  }
   C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
                                          Args.MakeArgString(Linker), CmdArgs,
                                          Inputs, Output));

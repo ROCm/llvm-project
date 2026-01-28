@@ -21,7 +21,9 @@
 #include "clang/AST/GlobalDecl.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/CIR/Dialect/IR/CIRAttrs.h"
 #include "clang/CIR/Dialect/IR/CIRDialect.h"
+#include "clang/CIR/Dialect/IR/CIRTypes.h"
 #include "clang/CIR/Interfaces/CIROpInterfaces.h"
 #include "clang/CIR/MissingFeatures.h"
 
@@ -30,6 +32,8 @@
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
+
+#include <algorithm>
 
 using namespace clang;
 using namespace clang::CIRGen;
@@ -360,6 +364,12 @@ void CIRGenModule::emitGlobal(clang::GlobalDecl gd) {
     return;
   }
 
+  // TODO(OMP): The logic in this function for the 'rest' of the OpenMP
+  // declarative declarations is complicated and needs to be done on a per-kind
+  // basis, so all of that needs to be added when we implement the individual
+  // global-allowed declarations. See uses of `cir::MissingFeatures::openMP
+  // throughout this function.
+
   const auto *global = cast<ValueDecl>(gd.getDecl());
 
   if (const auto *fd = dyn_cast<FunctionDecl>(global)) {
@@ -652,10 +662,21 @@ CIRGenModule::getOrCreateCIRGlobal(StringRef mangledName, mlir::Type ty,
 
   mlir::Location loc = getLoc(d->getSourceRange());
 
+  // Calculate constant storage flag before creating the global. This was moved
+  // from after the global creation to ensure the constant flag is set correctly
+  // at creation time, matching the logic used in emitCXXGlobalVarDeclInit.
+  bool isConstant = false;
+  if (d) {
+    bool needsDtor =
+        d->needsDestruction(astContext) == QualType::DK_cxx_destructor;
+    isConstant = d->getType().isConstantStorage(
+        astContext, /*ExcludeCtor=*/true, /*ExcludeDtor=*/!needsDtor);
+  }
+
   // mlir::SymbolTable::Visibility::Public is the default, no need to explicitly
   // mark it as such.
   cir::GlobalOp gv =
-      CIRGenModule::createGlobalOp(*this, loc, mangledName, ty, false,
+      CIRGenModule::createGlobalOp(*this, loc, mangledName, ty, isConstant,
                                    /*insertPoint=*/entry.getOperation());
 
   // This is the first use or definition of a mangled name.  If there is a
@@ -675,10 +696,6 @@ CIRGenModule::getOrCreateCIRGlobal(StringRef mangledName, mlir::Type ty,
       errorNYI(d->getSourceRange(), "OpenMP target global variable");
 
     gv.setAlignmentAttr(getSize(astContext.getDeclAlign(d)));
-    // FIXME: This code is overly simple and should be merged with other global
-    // handling.
-    gv.setConstant(d->getType().isConstantStorage(
-        astContext, /*ExcludeCtor=*/false, /*ExcludeDtor=*/false));
 
     setLinkageForGV(gv, d);
 
@@ -870,10 +887,12 @@ void CIRGenModule::emitGlobalVarDefinition(const clang::VarDecl *vd,
     emitter->finalize(gv);
 
   // If it is safe to mark the global 'constant', do so now.
+  // Use the same logic as classic codegen EmitGlobalVarDefinition.
   gv.setConstant((vd->hasAttr<CUDAConstantAttr>() && langOpts.CUDAIsDevice) ||
                  (!needsGlobalCtor && !needsGlobalDtor &&
-                  vd->getType().isConstantStorage(
-                      astContext, /*ExcludeCtor=*/true, /*ExcludeDtor=*/true)));
+                  vd->getType().isConstantStorage(astContext,
+                                                  /*ExcludeCtor=*/true,
+                                                  /*ExcludeDtor=*/true)));
   assert(!cir::MissingFeatures::opGlobalSection());
 
   // Set CIR's linkage type as appropriate.
@@ -962,9 +981,39 @@ CIRGenModule::getConstantArrayFromStringLiteral(const StringLiteral *e) {
     return builder.getString(str, eltTy, finalSize);
   }
 
-  errorNYI(e->getSourceRange(),
-           "getConstantArrayFromStringLiteral: wide characters");
-  return mlir::Attribute();
+  auto arrayTy = mlir::cast<cir::ArrayType>(convertType(e->getType()));
+
+  auto arrayEltTy = mlir::cast<cir::IntType>(arrayTy.getElementType());
+
+  uint64_t arraySize = arrayTy.getSize();
+  unsigned literalSize = e->getLength();
+  assert(arraySize == literalSize + 1 &&
+         "wide string literal array size must be literal length plus null "
+         "terminator");
+
+  // Check if the string is all null bytes before building the vector.
+  // In most non-zero cases, this will break out on the first element.
+  bool isAllZero = true;
+  for (unsigned i = 0; i < literalSize; ++i) {
+    if (e->getCodeUnit(i) != 0) {
+      isAllZero = false;
+      break;
+    }
+  }
+
+  if (isAllZero)
+    return cir::ZeroAttr::get(arrayTy);
+
+  // Otherwise emit a constant array holding the characters.
+  SmallVector<mlir::Attribute> elements;
+  elements.reserve(arraySize);
+  for (unsigned i = 0; i < literalSize; ++i)
+    elements.push_back(cir::IntAttr::get(arrayEltTy, e->getCodeUnit(i)));
+  // Add null terminator
+  elements.push_back(cir::IntAttr::get(arrayEltTy, 0));
+
+  auto elementsAttr = mlir::ArrayAttr::get(&getMLIRContext(), elements);
+  return builder.getConstArray(elementsAttr, arrayTy);
 }
 
 bool CIRGenModule::supportsCOMDAT() const {
@@ -1478,9 +1527,15 @@ mlir::Value CIRGenModule::emitMemberPointerConstant(const UnaryOperator *e) {
   const auto *decl = cast<DeclRefExpr>(e->getSubExpr())->getDecl();
 
   // A member function pointer.
-  if (isa<CXXMethodDecl>(decl)) {
-    errorNYI(e->getSourceRange(), "emitMemberPointerConstant: method pointer");
-    return {};
+  if (const auto *methodDecl = dyn_cast<CXXMethodDecl>(decl)) {
+    auto ty = mlir::cast<cir::MethodType>(convertType(e->getType()));
+    if (methodDecl->isVirtual())
+      return cir::ConstantOp::create(
+          builder, loc, getCXXABI().buildVirtualMethodAttr(ty, methodDecl));
+
+    cir::FuncOp methodFuncOp = getAddrOfFunction(methodDecl);
+    return cir::ConstantOp::create(builder, loc,
+                                   builder.getMethodAttr(ty, methodFuncOp));
   }
 
   // Otherwise, a member data pointer.
@@ -1543,6 +1598,27 @@ void CIRGenModule::emitTopLevelDecl(Decl *decl) {
     break;
   case Decl::OpenACCDeclare:
     emitGlobalOpenACCDeclareDecl(cast<OpenACCDeclareDecl>(decl));
+    break;
+  case Decl::OMPThreadPrivate:
+    emitOMPThreadPrivateDecl(cast<OMPThreadPrivateDecl>(decl));
+    break;
+  case Decl::OMPGroupPrivate:
+    emitOMPGroupPrivateDecl(cast<OMPGroupPrivateDecl>(decl));
+    break;
+  case Decl::OMPAllocate:
+    emitOMPAllocateDecl(cast<OMPAllocateDecl>(decl));
+    break;
+  case Decl::OMPCapturedExpr:
+    emitOMPCapturedExpr(cast<OMPCapturedExprDecl>(decl));
+    break;
+  case Decl::OMPDeclareReduction:
+    emitOMPDeclareReduction(cast<OMPDeclareReductionDecl>(decl));
+    break;
+  case Decl::OMPDeclareMapper:
+    emitOMPDeclareMapper(cast<OMPDeclareMapperDecl>(decl));
+    break;
+  case Decl::OMPRequires:
+    emitOMPRequiresDecl(cast<OMPRequiresDecl>(decl));
     break;
   case Decl::Enum:
   case Decl::Using:          // using X; [C++]
@@ -1719,6 +1795,71 @@ static std::string getMangledNameImpl(CIRGenModule &cgm, GlobalDecl gd,
   }
 
   return std::string(out.str());
+}
+
+static FunctionDecl *
+createOpenACCBindTempFunction(ASTContext &ctx, const IdentifierInfo *bindName,
+                              const FunctionDecl *protoFunc) {
+  // If this is a C no-prototype function, we can take the 'easy' way out and
+  // just create a function with no arguments/functions, etc.
+  if (!protoFunc->hasPrototype())
+    return FunctionDecl::Create(
+        ctx, /*DC=*/ctx.getTranslationUnitDecl(),
+        /*StartLoc=*/SourceLocation{}, /*NLoc=*/SourceLocation{}, bindName,
+        protoFunc->getType(), /*TInfo=*/nullptr, StorageClass::SC_None);
+
+  QualType funcTy = protoFunc->getType();
+  auto *fpt = cast<FunctionProtoType>(protoFunc->getType());
+
+  // If this is a member function, add an explicit 'this' to the function type.
+  if (auto *methodDecl = dyn_cast<CXXMethodDecl>(protoFunc);
+      methodDecl && methodDecl->isImplicitObjectMemberFunction()) {
+    llvm::SmallVector<QualType> paramTypes{fpt->getParamTypes()};
+    paramTypes.insert(paramTypes.begin(), methodDecl->getThisType());
+
+    funcTy = ctx.getFunctionType(fpt->getReturnType(), paramTypes,
+                                 fpt->getExtProtoInfo());
+    fpt = cast<FunctionProtoType>(funcTy);
+  }
+
+  auto *tempFunc =
+      FunctionDecl::Create(ctx, /*DC=*/ctx.getTranslationUnitDecl(),
+                           /*StartLoc=*/SourceLocation{},
+                           /*NLoc=*/SourceLocation{}, bindName, funcTy,
+                           /*TInfo=*/nullptr, StorageClass::SC_None);
+
+  SmallVector<ParmVarDecl *> params;
+  params.reserve(fpt->getNumParams());
+
+  // Add all of the parameters.
+  for (unsigned i = 0, e = fpt->getNumParams(); i != e; ++i) {
+    ParmVarDecl *parm = ParmVarDecl::Create(
+        ctx, tempFunc, /*StartLoc=*/SourceLocation{},
+        /*IdLoc=*/SourceLocation{},
+        /*Id=*/nullptr, fpt->getParamType(i), /*TInfo=*/nullptr,
+        StorageClass::SC_None, /*DefArg=*/nullptr);
+    parm->setScopeInfo(0, i);
+    params.push_back(parm);
+  }
+
+  tempFunc->setParams(params);
+
+  return tempFunc;
+}
+
+std::string
+CIRGenModule::getOpenACCBindMangledName(const IdentifierInfo *bindName,
+                                        const FunctionDecl *attachedFunction) {
+  FunctionDecl *tempFunc = createOpenACCBindTempFunction(
+      getASTContext(), bindName, attachedFunction);
+
+  std::string ret = getMangledNameImpl(*this, GlobalDecl(tempFunc), tempFunc);
+
+  // This does nothing (it is a do-nothing function), since this is a
+  // slab-allocator, but leave a call in to immediately destroy this in case we
+  // ever come up with a way of getting allocations back.
+  getASTContext().Deallocate(tempFunc);
+  return ret;
 }
 
 StringRef CIRGenModule::getMangledName(GlobalDecl gd) {
@@ -1986,6 +2127,35 @@ void CIRGenModule::setTLSMode(mlir::Operation *op, const VarDecl &d) {
   global.setTlsModel(tlm);
 }
 
+void CIRGenModule::setCIRFunctionAttributes(GlobalDecl globalDecl,
+                                            const CIRGenFunctionInfo &info,
+                                            cir::FuncOp func, bool isThunk) {
+  // TODO(cir): More logic of constructAttributeList is needed.
+  cir::CallingConv callingConv;
+  cir::SideEffect sideEffect;
+
+  // TODO(cir): The current list should be initialized with the extra function
+  // attributes, but we don't have those yet.  For now, the PAL is initialized
+  // with nothing.
+  assert(!cir::MissingFeatures::opFuncExtraAttrs());
+  // Initialize PAL with existing attributes to merge attributes.
+  mlir::NamedAttrList pal{};
+  constructAttributeList(func.getName(), info, globalDecl, pal, callingConv,
+                         sideEffect,
+                         /*attrOnCallSite=*/false, isThunk);
+
+  for (mlir::NamedAttribute attr : pal)
+    func->setAttr(attr.getName(), attr.getValue());
+
+  // TODO(cir): Check X86_VectorCall incompatibility wiht WinARM64EC
+
+  // TODO(cir): typically the calling conv is set right here, but since
+  // cir::CallingConv is empty and we've not yet added calling-conv to FuncOop,
+  // this isn't really useful here.  This should call func.setCallingConv/etc
+  // later.
+  assert(!cir::MissingFeatures::opFuncCallingConv());
+}
+
 void CIRGenModule::setFunctionAttributes(GlobalDecl globalDecl,
                                          cir::FuncOp func,
                                          bool isIncompleteFunction,
@@ -1994,7 +2164,11 @@ void CIRGenModule::setFunctionAttributes(GlobalDecl globalDecl,
   // represent them in dedicated ops. The correct attributes are ensured during
   // translation to LLVM. Thus, we don't need to check for them here.
 
-  assert(!cir::MissingFeatures::setFunctionAttributes());
+  if (!isIncompleteFunction)
+    setCIRFunctionAttributes(globalDecl,
+                             getTypes().arrangeGlobalDeclaration(globalDecl),
+                             func, isThunk);
+
   assert(!cir::MissingFeatures::setTargetAttributes());
 
   // TODO(cir): This needs a lot of work to better match CodeGen. That
@@ -2563,6 +2737,26 @@ DiagnosticBuilder CIRGenModule::errorNYI(SourceLocation loc,
 DiagnosticBuilder CIRGenModule::errorNYI(SourceRange loc,
                                          llvm::StringRef feature) {
   return errorNYI(loc.getBegin(), feature) << loc;
+}
+
+void CIRGenModule::error(SourceLocation loc, StringRef error) {
+  unsigned diagID = getDiags().getCustomDiagID(DiagnosticsEngine::Error, "%0");
+  getDiags().Report(astContext.getFullLoc(loc), diagID) << error;
+}
+
+/// Print out an error that codegen doesn't support the specified stmt yet.
+void CIRGenModule::errorUnsupported(const Stmt *s, llvm::StringRef type) {
+  unsigned diagId = diags.getCustomDiagID(DiagnosticsEngine::Error,
+                                          "cannot compile this %0 yet");
+  diags.Report(astContext.getFullLoc(s->getBeginLoc()), diagId)
+      << type << s->getSourceRange();
+}
+
+/// Print out an error that codegen doesn't support the specified decl yet.
+void CIRGenModule::errorUnsupported(const Decl *d, llvm::StringRef type) {
+  unsigned diagId = diags.getCustomDiagID(DiagnosticsEngine::Error,
+                                          "cannot compile this %0 yet");
+  diags.Report(astContext.getFullLoc(d->getLocation()), diagId) << type;
 }
 
 void CIRGenModule::mapBlockAddress(cir::BlockAddrInfoAttr blockInfo,

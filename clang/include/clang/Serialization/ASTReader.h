@@ -220,8 +220,8 @@ public:
   }
 
   /// Receives __COUNTER__ value.
-  virtual void ReadCounter(const serialization::ModuleFile &M,
-                           unsigned Value) {}
+  virtual void ReadCounter(const serialization::ModuleFile &M, uint32_t Value) {
+  }
 
   /// This is called for each AST file loaded.
   virtual void visitModuleFile(StringRef Filename,
@@ -254,7 +254,7 @@ public:
   /// \returns true to continue receiving the next input file, false to stop.
   virtual bool visitInputFileAsRequested(StringRef FilenameAsRequested,
                                          StringRef Filename, bool isSystem,
-                                         bool isOverridden,
+                                         bool isOverridden, time_t StoredTime,
                                          bool isExplicitModule) {
     return true;
   }
@@ -312,7 +312,7 @@ public:
                                bool Complain,
                                std::string &SuggestedPredefines) override;
 
-  void ReadCounter(const serialization::ModuleFile &M, unsigned Value) override;
+  void ReadCounter(const serialization::ModuleFile &M, uint32_t Value) override;
   bool needsInputFileVisitation() override;
   bool needsSystemInputFileVisitation() override;
   void visitModuleFile(StringRef Filename,
@@ -352,7 +352,7 @@ public:
                                StringRef ModuleFilename,
                                StringRef SpecificModuleCachePath,
                                bool Complain) override;
-  void ReadCounter(const serialization::ModuleFile &M, unsigned Value) override;
+  void ReadCounter(const serialization::ModuleFile &M, uint32_t Value) override;
 };
 
 /// ASTReaderListenter implementation to set SuggestedPredefines of
@@ -1078,6 +1078,9 @@ private:
 
   /// The IDs of all decls with function effects to be checked.
   SmallVector<GlobalDeclID> DeclsWithEffectsToVerify;
+
+  /// The RISC-V intrinsic pragma(including RVV, SiFive and Andes).
+  SmallVector<bool, 3> RISCVVecIntrinsicPragma;
 
 private:
   struct ImportedSubmodule {
@@ -2021,7 +2024,8 @@ public:
       StringRef Filename, FileManager &FileMgr, const ModuleCache &ModCache,
       const PCHContainerReader &PCHContainerRdr, const LangOptions &LangOpts,
       const CodeGenOptions &CGOpts, const TargetOptions &TargetOpts,
-      const PreprocessorOptions &PPOpts, StringRef ExistingModuleCachePath,
+      const PreprocessorOptions &PPOpts, const HeaderSearchOptions &HSOpts,
+      StringRef SpecificModuleCachePath,
       bool RequireStrictOptionMatches = false);
 
   /// Returns the suggested contents of the predefines buffer,

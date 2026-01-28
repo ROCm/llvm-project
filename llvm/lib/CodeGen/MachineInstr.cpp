@@ -100,7 +100,7 @@ void MachineInstr::addImplicitDefUseOperands(MachineFunction &MF) {
 MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
                            DebugLoc DL, bool NoImp)
     : MCID(&TID), NumOperands(0), Flags(0), AsmPrinterFlags(0),
-      DbgLoc(std::move(DL)), DebugInstrNum(0), Opcode(TID.Opcode) {
+      Opcode(TID.Opcode), DebugInstrNum(0), DbgLoc(std::move(DL)) {
   assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   // Reserve space for the expected number of operands.
@@ -119,8 +119,8 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MCInstrDesc &TID,
 /// uniqueness.
 MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
     : MCID(&MI.getDesc()), NumOperands(0), Flags(0), AsmPrinterFlags(0),
-      Info(MI.Info), DbgLoc(MI.getDebugLoc()), DebugInstrNum(0),
-      Opcode(MI.getOpcode()) {
+      Opcode(MI.getOpcode()), DebugInstrNum(0), Info(MI.Info),
+      DbgLoc(MI.getDebugLoc()) {
   assert(DbgLoc.hasTrivialDestructor() && "Expected trivial destructor");
 
   CapOperands = OperandCapacity::get(MI.getNumOperands());
@@ -742,9 +742,22 @@ bool MachineInstr::isIdenticalTo(const MachineInstr &Other,
   if (getPreInstrSymbol() != Other.getPreInstrSymbol() ||
       getPostInstrSymbol() != Other.getPostInstrSymbol())
     return false;
-  // Call instructions with different CFI types are not identical.
-  if (isCall() && getCFIType() != Other.getCFIType())
-    return false;
+  if (isCall()) {
+    // Call instructions with different CFI types are not identical.
+    if (getCFIType() != Other.getCFIType())
+      return false;
+    // Even if the call instructions have the same ops, they are not identical
+    // if they are for different globals (this may happen with indirect calls).
+    if (isCandidateForAdditionalCallInfo()) {
+      MachineFunction::CalledGlobalInfo ThisCGI =
+          getParent()->getParent()->tryGetCalledGlobal(this);
+      MachineFunction::CalledGlobalInfo OtherCGI =
+          Other.getParent()->getParent()->tryGetCalledGlobal(&Other);
+      if (ThisCGI.Callee != OtherCGI.Callee ||
+          ThisCGI.TargetFlags != OtherCGI.TargetFlags)
+        return false;
+    }
+  }
   if (getDeactivationSymbol() != Other.getDeactivationSymbol())
     return false;
 
@@ -1928,6 +1941,8 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
       OS << " [isconvergent]";
     if (ExtraInfo & InlineAsm::Extra_IsAlignStack)
       OS << " [alignstack]";
+    if (ExtraInfo & InlineAsm::Extra_MayUnwind)
+      OS << " [unwind]";
     if (getInlineAsmDialect() == InlineAsm::AD_ATT)
       OS << " [attdialect]";
     if (getInlineAsmDialect() == InlineAsm::AD_Intel)
@@ -2015,7 +2030,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
   // operands.
   if (MCSymbol *PreInstrSymbol = getPreInstrSymbol()) {
     if (!FirstOp) {
-      FirstOp = false;
       OS << ',';
     }
     OS << " pre-instr-symbol ";
@@ -2023,7 +2037,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   if (MCSymbol *PostInstrSymbol = getPostInstrSymbol()) {
     if (!FirstOp) {
-      FirstOp = false;
       OS << ',';
     }
     OS << " post-instr-symbol ";
@@ -2031,7 +2044,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   if (MDNode *HeapAllocMarker = getHeapAllocMarker()) {
     if (!FirstOp) {
-      FirstOp = false;
       OS << ',';
     }
     OS << " heap-alloc-marker ";
@@ -2039,7 +2051,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   if (MDNode *PCSections = getPCSections()) {
     if (!FirstOp) {
-      FirstOp = false;
       OS << ',';
     }
     OS << " pcsections ";
@@ -2047,7 +2058,6 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
   }
   if (MDNode *MMRA = getMMRAMetadata()) {
     if (!FirstOp) {
-      FirstOp = false;
       OS << ',';
     }
     OS << " mmra ";

@@ -496,25 +496,24 @@ uint32_t Module::ResolveSymbolContextForAddress(
       if (symtab && so_addr.IsSectionOffset()) {
         Symbol *matching_symbol = nullptr;
 
-        symtab->ForEachSymbolContainingFileAddress(
-            so_addr.GetFileAddress(),
-            [&matching_symbol](Symbol *symbol) -> bool {
-              if (symbol->GetType() != eSymbolTypeInvalid) {
-                matching_symbol = symbol;
-                return false; // Stop iterating
-              }
-              return true; // Keep iterating
-            });
-        sc.symbol = matching_symbol;
-        if (!sc.symbol && resolve_scope & eSymbolContextFunction &&
-            !(resolved_flags & eSymbolContextFunction)) {
-          bool verify_unique = false; // No need to check again since
-                                      // ResolveSymbolContext failed to find a
-                                      // symbol at this address.
-          if (ObjectFile *obj_file = sc.module_sp->GetObjectFile())
-            sc.symbol =
-                obj_file->ResolveSymbolForAddress(so_addr, verify_unique);
+        addr_t file_address = so_addr.GetFileAddress();
+        Symbol *symbol_at_address =
+            symtab->FindSymbolAtFileAddress(file_address);
+        if (symbol_at_address &&
+            symbol_at_address->GetType() != lldb::eSymbolTypeInvalid) {
+          matching_symbol = symbol_at_address;
+        } else {
+          symtab->ForEachSymbolContainingFileAddress(
+              file_address, [&matching_symbol](Symbol *symbol) -> bool {
+                if (symbol->GetType() != eSymbolTypeInvalid) {
+                  matching_symbol = symbol;
+                  return false; // Stop iterating
+                }
+                return true; // Keep iterating
+              });
         }
+
+        sc.symbol = matching_symbol;
 
         if (sc.symbol) {
           if (sc.symbol->IsSynthetic()) {
@@ -641,10 +640,16 @@ void Module::FindCompileUnits(const FileSpec &path,
   }
 }
 
-Module::LookupInfo::LookupInfo(ConstString name,
+Module::LookupInfo::LookupInfo(const LookupInfo &lookup_info,
+                               ConstString lookup_name)
+    : m_name(lookup_info.GetName()), m_lookup_name(lookup_name),
+      m_language(lookup_info.GetLanguageType()),
+      m_name_type_mask(lookup_info.GetNameTypeMask()) {}
+
+Module::LookupInfo::LookupInfo(ConstString name, ConstString lookup_name,
                                FunctionNameType name_type_mask,
                                LanguageType lang_type)
-    : m_name(name), m_lookup_name(name), m_language(lang_type) {
+    : m_name(name), m_lookup_name(lookup_name), m_language(lang_type) {
   std::optional<ConstString> basename;
   Language *lang = Language::FindPlugin(lang_type);
 
@@ -696,10 +701,9 @@ Module::LookupInfo::LookupInfo(ConstString name,
   }
 }
 
-std::vector<Module::LookupInfo>
-Module::LookupInfo::MakeLookupInfos(ConstString name,
-                                    lldb::FunctionNameType name_type_mask,
-                                    lldb::LanguageType lang_type) {
+std::vector<Module::LookupInfo> Module::LookupInfo::MakeLookupInfos(
+    ConstString name, lldb::FunctionNameType name_type_mask,
+    lldb::LanguageType lang_type, ConstString lookup_name_override) {
   std::vector<LanguageType> lang_types;
   if (lang_type != eLanguageTypeUnknown) {
     lang_types.push_back(lang_type);
@@ -717,10 +721,12 @@ Module::LookupInfo::MakeLookupInfos(ConstString name,
       lang_types = {eLanguageTypeObjC, eLanguageTypeC_plus_plus};
   }
 
+  ConstString lookup_name = lookup_name_override ? lookup_name_override : name;
+
   std::vector<Module::LookupInfo> infos;
   infos.reserve(lang_types.size());
   for (LanguageType lang_type : lang_types) {
-    Module::LookupInfo info(name, name_type_mask, lang_type);
+    Module::LookupInfo info(name, lookup_name, name_type_mask, lang_type);
     infos.push_back(info);
   }
   return infos;

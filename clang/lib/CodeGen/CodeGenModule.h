@@ -903,6 +903,35 @@ public:
   /// Return true iff an Objective-C runtime has been configured.
   bool hasObjCRuntime() { return !!ObjCRuntime; }
 
+  /// Check if a direct method should use precondition thunks (exposed symbols).
+  /// This applies to ALL direct methods (including variadic).
+  /// Returns false if OMD is null or not a direct method.
+  ///
+  /// Also checks the runtime family, currently we only support NeXT.
+  /// TODO: Add support for GNUStep as well.
+  bool usePreconditionThunk(const ObjCMethodDecl *OMD) const {
+    return OMD && OMD->isDirectMethod() &&
+           getLangOpts().ObjCRuntime.allowsDirectDispatch() &&
+           getLangOpts().ObjCRuntime.isNeXTFamily() &&
+           getCodeGenOpts().ObjCDirectPreconditionThunk;
+  }
+
+  /// Check if a direct method should use precondition thunks at call sites.
+  /// This applies only to non-variadic direct methods.
+  /// Returns false if OMD is null or not eligible for thunks (variadic
+  /// methods).
+  bool shouldHavePreconditionThunk(const ObjCMethodDecl *OMD) const {
+    return OMD && usePreconditionThunk(OMD) && !OMD->isVariadic();
+  }
+
+  /// Check if a direct method should have inline precondition checks at call
+  /// sites. This applies to direct methods that cannot use thunks (variadic
+  /// methods). These methods get exposed symbols but need inline precondition
+  /// checks instead of thunks. Returns false if OMD is null or not eligible.
+  bool shouldHavePreconditionInline(const ObjCMethodDecl *OMD) const {
+    return OMD && usePreconditionThunk(OMD) && OMD->isVariadic();
+  }
+
   const std::string &getModuleNameHash() const { return ModuleNameHash; }
 
   void setIsSPMDExecutionMode(bool isSPMD) { isSPMDExecutionMode = isSPMD; }
@@ -1557,6 +1586,9 @@ public:
   /// Print out an error that codegen doesn't support the specified stmt yet.
   void ErrorUnsupported(const Stmt *S, const char *Type);
 
+  /// Print out an error that codegen doesn't support the specified stmt yet.
+  void ErrorUnsupported(const Stmt *S, llvm::StringRef Type);
+
   /// Print out an error that codegen doesn't support the specified decl yet.
   void ErrorUnsupported(const Decl *D, const char *Type);
 
@@ -1736,6 +1768,7 @@ public:
   void EmitGlobal(GlobalDecl D);
 
   bool TryEmitBaseDestructorAsAlias(const CXXDestructorDecl *D);
+  void EmitDefinitionAsAlias(GlobalDecl Alias, GlobalDecl Target);
 
   llvm::GlobalValue *GetGlobalValue(StringRef Ref);
 
@@ -2451,6 +2484,9 @@ public:
   TrapReasonBuilder BuildTrapReason(unsigned DiagID, TrapReason &TR) {
     return TrapReasonBuilder(&getDiags(), DiagID, TR);
   }
+
+  std::optional<llvm::Attribute::AttrKind>
+  StackProtectorAttribute(const Decl *D) const;
 
 private:
   bool shouldDropDLLAttribute(const Decl *D, const llvm::GlobalValue *GV) const;
