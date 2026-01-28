@@ -186,6 +186,23 @@ void OmpStructureChecker::HasInvalidLoopBinding(
   }
 }
 
+static bool IsLoopTransforming(llvm::omp::Directive dir) {
+  switch (dir) {
+  // TODO case llvm::omp::Directive::OMPD_flatten:
+  case llvm::omp::Directive::OMPD_fuse:
+  case llvm::omp::Directive::OMPD_interchange:
+  case llvm::omp::Directive::OMPD_nothing:
+  case llvm::omp::Directive::OMPD_reverse:
+  // TODO case llvm::omp::Directive::OMPD_split:
+  case llvm::omp::Directive::OMPD_stripe:
+  case llvm::omp::Directive::OMPD_tile:
+  case llvm::omp::Directive::OMPD_unroll:
+    return true;
+  default:
+    return false;
+  }
+}
+
 void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
   // Check the following:
   //  The only OpenMP constructs that can be encountered during execution of
@@ -234,7 +251,7 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
             if (beginName.v == llvm::omp::Directive::OMPD_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_do_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_loop ||
-                beginName.v == llvm::omp::Directive::OMPD_interchange) {
+                IsLoopTransforming(beginName.v)) {
               // TODO: Check whether interchange (or tile, unroll) recursively
               // applies to and simd-eligible nest itself
               eligibleSIMD = true;
@@ -253,23 +270,6 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
         "of a 'SIMD' region are the `ATOMIC` construct, the `LOOP` construct, "
         "the `SIMD` construct, the `SCAN` construct and the `ORDERED` "
         "construct with the `SIMD` clause."_err_en_US);
-  }
-}
-
-static bool IsLoopTransforming(llvm::omp::Directive dir) {
-  switch (dir) {
-  // TODO case llvm::omp::Directive::OMPD_flatten:
-  case llvm::omp::Directive::OMPD_fuse:
-  case llvm::omp::Directive::OMPD_interchange:
-  case llvm::omp::Directive::OMPD_nothing:
-  case llvm::omp::Directive::OMPD_reverse:
-  // TODO case llvm::omp::Directive::OMPD_split:
-  case llvm::omp::Directive::OMPD_stripe:
-  case llvm::omp::Directive::OMPD_tile:
-  case llvm::omp::Directive::OMPD_unroll:
-    return true;
-  default:
-    return false;
   }
 }
 
