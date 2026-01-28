@@ -328,7 +328,7 @@ private:
         collectRewrite(cast<omp::MapInfoOp>(mapVar.getDefiningOp()), mapInfos);
       for (Value privateVar : targetOp.getPrivateVars())
         collectRewrite(privateVar, rewriteValues);
-      for (Value threadLimit : op.getThreadLimitVars())
+      for (Value threadLimit : targetOp.getThreadLimitVars())
         collectRewrite(threadLimit, rewriteValues);
     }
 
