@@ -93,12 +93,15 @@ set(SOURCES
 # Add Windows resource file for manifest and version info embedding
 if(WIN32)
   string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
+  # Used for manifest and version info embedding
+  set(COMGR_DLL_NAME "amd_comgr_${amd_comgr_VERSION_MAJOR}.dll")
+  set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
   configure_file(
     src/comgr.rc.in
     src/comgr.rc @ONLY)
   configure_file(
-    src/comgr.manifest.in
-    src/comgr.manifest @ONLY)
+    src/${COMGR_MANIFEST_NAME}.MANIFEST.in
+    src/${COMGR_MANIFEST_NAME}.MANIFEST @ONLY)
   list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/src/comgr.rc")
 endif()
 
@@ -373,6 +376,14 @@ else()
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+# Install the manifest file alongside the DLL for Windows SxS
+if(WIN32)
+  install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/src/${COMGR_MANIFEST_NAME}.MANIFEST"
+    COMPONENT amd-comgr
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 install(FILES
