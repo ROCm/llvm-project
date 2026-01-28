@@ -25,7 +25,6 @@ add_library(PluginCommon OBJECT
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
-  src/Sanitizer.cpp
   ${emissary_sources}
 )
 add_dependencies(PluginCommon intrinsics_gen PluginErrcodes)
@@ -104,7 +103,6 @@ target_include_directories(PluginCommon PUBLIC
   ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
   ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}
-  /home/ampandey/aomp-toolchain/rocm/aomp/include/hsa
 )
 
 set_target_properties(PluginCommon PROPERTIES POSITION_INDEPENDENT_CODE ON)

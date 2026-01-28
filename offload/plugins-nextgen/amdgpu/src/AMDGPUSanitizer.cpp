@@ -1,4 +1,4 @@
-//===---- amdgcn_urilocator.cpp - services support for urilocator  --------===//
+//===---- AMDGPUSanitizer.cpp - AMDGPU-specific sanitizer support ---------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,31 +6,53 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This contains source code of GPU sanitizer support.
+// This contains AMDGPU-specific GPU sanitizer support using HSA runtime APIs.
 //
 //===----------------------------------------------------------------------===//
 
 /* Copyright (c) 2023 Advanced Micro Devices, Inc.
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
- The above copyright notice and this permission notice shall be included in
- all copies or substantial portions of the Software.
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- */
+| Permission is hereby granted, free of charge, to any person obtaining a copy
+| of this software and associated documentation files (the "Software"), to deal
+| in the Software without restriction, including without limitation the rights
+| to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+| copies of the Software, and to permit persons to whom the Software is
+| furnished to do so, subject to the following conditions:
+| The above copyright notice and this permission notice shall be included in
+| all copies or substantial portions of the Software.
+| THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+| IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+| FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+| AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+| LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+| OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+| THE SOFTWARE.
+| */
 
 #if SANITIZER_AMDGPU
 
 #include "Sanitizer.h"
+#include <cstdint>
+#include <cstdlib>
+#include <fcntl.h>
+#include <sstream>
+#include <string>
+#include <sys/stat.h>
+#include <tuple>
+#include <unistd.h>
+#include <vector>
+
+#if defined(__has_include)
+#if __has_include("hsa.h")
+#include "hsa.h"
+#include "hsa_ven_amd_loader.h"
+#elif __has_include("hsa/hsa.h")
+#include "hsa/hsa.h"
+#include "hsa/hsa_ven_amd_loader.h"
+#endif
+#else
+#include "hsa/hsa.h"
+#include "hsa/hsa_ven_amd_loader.h"
+#endif
 
 // Forward declaration for ASan report function from compiler-rt
 extern "C" void __asan_report_nonself_error(
@@ -38,6 +60,33 @@ extern "C" void __asan_report_nonself_error(
     uint64_t *entity_ids, uint32_t n_entities, bool is_write,
     uint32_t access_size, bool is_abort, const char *name, int64_t vma_adjust,
     int fd, uint64_t file_extent_size, uint64_t file_exten_start = 0);
+
+// AMDGPU-specific UriLocator class using HSA runtime APIs
+class AMDGPUUriLocator {
+public:
+  struct UriInfo {
+    std::string uriPath;
+    int64_t loadAddressDiff;
+  };
+
+  struct UriRange {
+    uint64_t startAddr_, endAddr_;
+    int64_t elfDelta_;
+    std::string Uri_;
+  };
+
+  bool init_ = false;
+  std::vector<UriRange> rangeTab_;
+  hsa_ven_amd_loader_1_03_pfn_t fn_table_;
+
+  hsa_status_t createUriRangeTable();
+
+  ~AMDGPUUriLocator() {}
+
+  UriInfo lookUpUri(uint64_t device_pc);
+  std::pair<uint64_t, uint64_t> decodeUriAndGetFd(UriInfo &uri_path,
+                                                  int *uri_fd);
+};
 
 static bool GetFileHandle(const char *fname, int *fd_ptr, size_t *sz_ptr) {
   if ((fd_ptr == nullptr) || (sz_ptr == nullptr)) {
@@ -61,7 +110,7 @@ static bool GetFileHandle(const char *fname, int *fd_ptr, size_t *sz_ptr) {
   return true;
 }
 
-hsa_status_t UriLocator::createUriRangeTable() {
+hsa_status_t AMDGPUUriLocator::createUriRangeTable() {
   auto execCb = [](hsa_executable_t exec, void *data) -> hsa_status_t {
     int execState = 0;
     hsa_status_t status;
@@ -144,7 +193,7 @@ hsa_status_t UriLocator::createUriRangeTable() {
 // https://llvm.org/docs/AMDGPUUsage.html#loaded-code-object-path-uniform-resource-identifier-uri
 // The below code currently extracts the uri of loaded code object using
 // either file-uri or memory-uri.
-std::pair<uint64_t, uint64_t> UriLocator::decodeUriAndGetFd(UriInfo &uri,
+std::pair<uint64_t, uint64_t> AMDGPUUriLocator::decodeUriAndGetFd(UriInfo &uri,
                                                             int *uri_fd) {
 
   std::ostringstream ss;
@@ -203,7 +252,7 @@ std::pair<uint64_t, uint64_t> UriLocator::decodeUriAndGetFd(UriInfo &uri,
   return {offset, size};
 }
 
-UriLocator::UriInfo UriLocator::lookUpUri(uint64_t device_pc) {
+AMDGPUUriLocator::UriInfo AMDGPUUriLocator::lookUpUri(uint64_t device_pc) {
   UriInfo errorstate{"", 0};
 
   if (!init_) {
@@ -228,7 +277,7 @@ UriLocator::UriInfo UriLocator::lookUpUri(uint64_t device_pc) {
   return errorstate;
 }
 
-// Handler for sanitizer reports from all lanes
+// Handler for sanitizer reports from all lanes - AMDGPU implementation
 void HandleSanitizerReport(uint32_t NumLanes, const SanitizerData *LaneData,
                            uint64_t ActiveMask, int DeviceID) {
   uint64_t device_failing_addresses[64] = {0};
@@ -275,15 +324,15 @@ void HandleSanitizerReport(uint32_t NumLanes, const SanitizerData *LaneData,
 
   uint64_t Callstack[1] = {PC};
 
-  // TODO: Add URI locator support for source location
+  // Use AMDGPU-specific URI locator for source location
   int Uri_fd = -1;
   uint64_t Size = 0, Offset = 0;
   int64_t LoadAddrAdjust = 0;
 
-  UriLocator *Uri_locator = new UriLocator();
+  AMDGPUUriLocator *Uri_locator = new AMDGPUUriLocator();
 
   if (Uri_locator) {
-    UriLocator::UriInfo Uri_info = Uri_locator->lookUpUri(Callstack[0]);
+    AMDGPUUriLocator::UriInfo Uri_info = Uri_locator->lookUpUri(Callstack[0]);
     std::tie(Offset, Size) = Uri_locator->decodeUriAndGetFd(Uri_info, &Uri_fd);
     LoadAddrAdjust = Uri_info.loadAddressDiff;
   }
