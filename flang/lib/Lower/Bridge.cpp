@@ -2392,8 +2392,8 @@ private:
                          &loopControl->u)) {
         // Non-concurrent increment loop.
         IncrementLoopInfo &info = incrementLoopNestInfo.emplace_back(
-            *bounds->name.thing.symbol, bounds->lower, bounds->upper,
-            bounds->step);
+            *bounds->Name().thing.symbol, bounds->Lower(), bounds->Upper(),
+            bounds->Step());
         if (unstructuredContext) {
           maybeStartBlock(preheaderBlock);
           info.hasRealControl = info.loopVariableSym->GetType()->IsNumeric(
