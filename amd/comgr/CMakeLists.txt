@@ -85,20 +85,9 @@ set(SOURCES
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
 
+# Add Windows resource file for version info
 if(WIN32)
-  # TODO: Evaluate whether this should be set from the super-project?
-  # NOTE: This is quite ugly and requires some hacks as of now.
-  #       Eventually, we would like for the DLL name to be set uniformly across all build platforms.
-  if (DEFINED THEROCK_HIP_MAJOR_VERSION AND DEFINED THEROCK_HIP_MINOR_VERSION)
-    set(AMD_COMGR_BUILD_SOURCE "TheRock")
-    set(COMGR_DLL_NAME "amd_comgr0${THEROCK_HIP_MAJOR_VERSION}0${THEROCK_HIP_MINOR_VERSION}.dll")
-  else()
-    set(AMD_COMGR_BUILD_SOURCE "Driver")
-    set(COMGR_DLL_NAME "amd_comgr_${amd_comgr_VERSION_MAJOR}.dll")
-  endif()
   string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
-
-  # Add Windows resource file for version info
   set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
   configure_file(
     cmake/${COMGR_MANIFEST_NAME}.MANIFEST.in
@@ -311,12 +300,6 @@ include(DeviceLibs)
 option(COMGR_EMBED_LIBCXX_HEADERS "Embed libc++ headers for HIPRTC" ON)
 if(COMGR_EMBED_LIBCXX_HEADERS)
   include(LibcxxHeaders)
-endif()
-
-# Add major version to the name on windows, including Win64
-if (WIN32)
-  set_target_properties(amd_comgr PROPERTIES
-    OUTPUT_NAME "amd_comgr_${amd_comgr_VERSION_MAJOR}")
 endif()
 
 set_target_properties(amd_comgr PROPERTIES

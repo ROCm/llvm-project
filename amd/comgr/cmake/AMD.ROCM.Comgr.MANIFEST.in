@@ -6,5 +6,5 @@
     version="@amd_comgr_VERSION_MAJOR@.@amd_comgr_VERSION_MINOR@.@amd_comgr_VERSION_PATCH@.0"
     processorArchitecture="amd64"/>
   <description>AMD Code Object Manager</description>
-  <file name="@COMGR_DLL_NAME@"/>
+  <file name="amd_comgr.dll"/>
 </assembly>
