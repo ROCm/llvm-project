@@ -23,7 +23,7 @@ BEGIN
             VALUE "FileVersion", "@amd_comgr_VERSION_MAJOR@.@amd_comgr_VERSION_MINOR@.@amd_comgr_VERSION_PATCH@.0\0"
             VALUE "InternalName", "amd_comgr\0"
             VALUE "LegalCopyright", "Copyright (C) @COMGR_BUILD_YEAR@ Advanced Micro Devices, Inc.\0"
-            VALUE "OriginalFilename", "amd_comgr_@amd_comgr_VERSION_MAJOR@.dll\0"
+            VALUE "OriginalFilename", "@COMGR_DLL_NAME@\0"
             VALUE "ProductName", "AMD Comgr\0"
             VALUE "ProductVersion", "@amd_comgr_VERSION_MAJOR@.@amd_comgr_VERSION_MINOR@.@amd_comgr_VERSION_PATCH@.0\0"
         END
