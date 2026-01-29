@@ -1,5 +1,4 @@
-// REQUIRES: comgr-has-spirv
-// UNSUPPORTED: all
+// REQUIRES: comgr-has-spirv temporary-disable
 // COM: Generate a SPIR-V file from a HIP kernel
 // RUN: clang -x hip --offload-arch=amdgcnspirv -nogpulib -nogpuinc \
 // RUN:    --no-gpu-bundle-output --offload-device-only -O3 %s -o %t.spv \
