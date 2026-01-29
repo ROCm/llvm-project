@@ -44,7 +44,8 @@ extern "C" {
 }
 #endif
 
-#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
+//#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
+#if (defined(__AMDGPU__) || defined(__SPIRV__)) && !defined(OMPTARGET_HAS_LIBC)
 [[gnu::weak]] void *malloc(size_t Size) { return allocator::alloc(Size); }
 [[gnu::weak]] void free(void *Ptr) { allocator::free(Ptr); }
 #else

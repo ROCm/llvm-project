@@ -25,6 +25,7 @@
 using namespace llvm;
 using namespace llvm::ELF;
 using namespace llvm::object;
+using namespace llvm::omp::target::debug;
 
 bool utils::elf::isELF(StringRef Buffer) {
   switch (identify_magic(Buffer)) {
@@ -35,7 +36,7 @@ bool utils::elf::isELF(StringRef Buffer) {
   case file_magic::elf_core:
     return true;
   default:
-    DP("Not an ELF image!\n");
+    ODBG(ODT_Tool) << "Not an ELF image!";
     return false;
   }
 }

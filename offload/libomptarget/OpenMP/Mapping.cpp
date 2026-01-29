@@ -85,10 +85,14 @@ int MappingInfoTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin,
                /*Name=*/nullptr,
                /*IsRefCountINF=*/true))
            .first->HDTT;
-  ODBG(ODT_Mapping) << "Creating new map entry: HstBase=" << NewEntry.HstPtrBase
-                    << ", HstBegin=" << NewEntry.HstPtrBegin
-                    << ", HstEnd=" << NewEntry.HstPtrEnd
-                    << ", TgtBegin=" << NewEntry.TgtPtrBegin
+  ODBG(ODT_Mapping) << "Creating new map entry: HstBase="
+                    << reinterpret_cast<void *>(NewEntry.HstPtrBase)
+                    << ", HstBegin="
+                    << reinterpret_cast<void *>(NewEntry.HstPtrBegin)
+                    << ", HstEnd="
+                    << reinterpret_cast<void *>(NewEntry.HstPtrEnd)
+                    << ", TgtBegin="
+                    << reinterpret_cast<void *>(NewEntry.TgtPtrBegin)
                     << ", DynRefCount=" << NewEntry.dynRefCountToStr()
                     << ", HoldRefCount=" << NewEntry.holdRefCountToStr();
   (void)NewEntry;
@@ -391,8 +395,8 @@ TargetPointerResultTy MappingInfoTy::getTargetPointer(
     if (LR.TPR.Flags.IsNewEntry ||
         LR.TPR.getEntry()->AllocKind != TARGET_ALLOC_SHARED) {
 
-      DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
-         Size, DPxPTR(HstPtrBegin), DPxPTR(LR.TPR.TargetPointer));
+      ODBG(ODT_Mapping) << "Moving " << Size << " bytes (hst:" << HstPtrBegin
+                        << ") -> (tgt:" << LR.TPR.TargetPointer << ")";
 
       int Ret = Device.submitData(LR.TPR.TargetPointer, HstPtrBegin, Size,
                                   AsyncInfo, LR.TPR.getEntry());
@@ -546,9 +550,11 @@ int MappingInfoTy::deallocTgtPtrAndEntry(HostDataToTargetTy *Entry,
                                          int64_t Size) {
   assert(Entry && "Trying to deallocate a null entry.");
 
-  ODBG(ODT_Mapping) << "Deleting tgt data " << Entry->TgtPtrBegin << " of size "
-                    << Size << " by freeing allocation "
-                    << "starting at " << Entry->TgtAllocBegin;
+  ODBG(ODT_Mapping) << "Deleting tgt data "
+                    << reinterpret_cast<void *>(Entry->TgtPtrBegin)
+                    << " of size " << Size << " by freeing allocation "
+                    << "starting at "
+                    << reinterpret_cast<void *>(Entry->TgtAllocBegin);
 
   void *Event = Entry->getEvent();
   if (Event && Device.destroyEvent(Event) != OFFLOAD_SUCCESS) {

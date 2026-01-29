@@ -439,12 +439,12 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
     // Launch kernel on one or across multiple devices.
     for (int64_t DeviceIndex = FirstDeviceId;
          DeviceIndex < FirstDeviceId + NumMultiDevices; DeviceIndex++) {
-      DP("Entering target region for device %" PRId64
-         " with entry point " DPxMOD "\n",
-         DeviceIndex, DPxPTR(HostPtr));
+      ODBG(ODT_Kernel) << "Entering target region for device "
+                     << DeviceIndex << " with entry point "
+                     << HostPtr;
 
       if (checkDevice(DeviceIndex, Loc)) {
-        DP("Not offloading to device %" PRId64 "\n", DeviceIndex);
+        ODBG(ODT_Kernel) <<  "Not offloading to device " << DeviceIndex;
         return OMP_TGT_FAIL;
       }
 
@@ -454,14 +454,13 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
                              KernelArgs->ArgNames, "Entering OpenMP kernel");
 #ifdef OMPTARGET_DEBUG
       for (int I = 0; I < KernelArgs->NumArgs; ++I) {
-        DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
-           ", Type=0x%" PRIx64 ", Name=%s\n",
-           I, DPxPTR(KernelArgs->ArgBasePtrs[I]),
-           DPxPTR(KernelArgs->ArgPtrs[I]), KernelArgs->ArgSizes[I],
-           KernelArgs->ArgTypes[I],
-           (KernelArgs->ArgNames)
-               ? getNameFromMapping(KernelArgs->ArgNames[I]).c_str()
-               : "unknown");
+        ODBG(ODT_Device)
+          << "Entry " << I
+          << " Base=" << KernelArgs->ArgBasePtrs[I]
+          << " Begin=" << KernelArgs->ArgPtrs[I]
+          << " Size=" << KernelArgs->ArgSizes[I]
+          << " Type=0x%" << KernelArgs->ArgTypes[I]
+          << " Name=" << KernelArgs->ArgNames;
       }
 #endif
 

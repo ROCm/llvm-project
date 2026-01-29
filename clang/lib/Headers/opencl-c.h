@@ -51,6 +51,14 @@
  // Internal feature macro to provide subgroup builtins.
  #define __opencl_subgroup_builtins 1
  #endif
+
+#if defined(cl_khr_depth_images) || defined(__OPENCL_CPP_VERSION__) ||         \
+    (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+// Internal feature macro to provide depth image builtins.
+#define __opencl_depth_image_builtins 1
+#endif // defined(cl_khr_depth_images) || defined(__OPENCL_CPP_VERSION__) ||
+       // (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+
 // built-in scalar data types:
 
 /**
@@ -15957,8 +15965,8 @@ float4 __ovld __purefn read_imagef(read_only image2d_array_t, sampler_t, float4)
 int4 __ovld __purefn read_imagei(read_only image2d_array_t, sampler_t, int4);
 int4 __ovld __purefn read_imagei(read_only image2d_array_t, sampler_t, float4);
 uint4 __ovld __purefn read_imageui(read_only image2d_array_t, sampler_t, int4);
-uint4 __ovld __purefn read_imageui(read_only image2d_array_t, sampler_t, float4);
-#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
+uint4 __ovld __purefn read_imageui(read_only image2d_array_t, sampler_t,
+                                   float4);
 
 float4 __ovld __purefn read_imagef(read_only image1d_t, sampler_t, int);
 float4 __ovld __purefn read_imagef(read_only image1d_t, sampler_t, float);
@@ -15968,7 +15976,6 @@ int4 __ovld __purefn read_imagei(read_only image1d_t, sampler_t, float);
 uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, int);
 uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, float);
 
-#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 float4 __ovld __purefn read_imagef(read_only image1d_array_t, sampler_t, int2);
 float4 __ovld __purefn read_imagef(read_only image1d_array_t, sampler_t, float2);
 
@@ -15978,13 +15985,13 @@ uint4 __ovld __purefn read_imageui(read_only image1d_array_t, sampler_t, int2);
 uint4 __ovld __purefn read_imageui(read_only image1d_array_t, sampler_t, float2);
 #endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_depth_t, sampler_t, float2);
 float __ovld __purefn read_imagef(read_only image2d_depth_t, sampler_t, int2);
 
 float __ovld __purefn read_imagef(read_only image2d_array_depth_t, sampler_t, float4);
 float __ovld __purefn read_imagef(read_only image2d_array_depth_t, sampler_t, int4);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 #if defined(cl_khr_gl_msaa_sharing)
 float4 __ovld __purefn read_imagef(read_only image2d_msaa_t, int2, int);
@@ -16001,9 +16008,10 @@ float __ovld __purefn read_imagef(read_only image2d_array_msaa_depth_t, int4, in
 #endif //cl_khr_gl_msaa_sharing
 
 // OpenCL Extension v2.0 s9.18 - Mipmaps
-#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+#if defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 #ifdef cl_khr_mipmap_image
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 float4 __ovld __purefn read_imagef(read_only image1d_t, sampler_t, float, float);
 int4 __ovld __purefn read_imagei(read_only image1d_t, sampler_t, float, float);
 uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, float, float);
@@ -16011,27 +16019,31 @@ uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, float, float)
 float4 __ovld __purefn read_imagef(read_only image1d_array_t, sampler_t, float2, float);
 int4 __ovld __purefn read_imagei(read_only image1d_array_t, sampler_t, float2, float);
 uint4 __ovld __purefn read_imageui(read_only image1d_array_t, sampler_t, float2, float);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 
 float4 __ovld __purefn read_imagef(read_only image2d_t, sampler_t, float2, float);
 int4 __ovld __purefn read_imagei(read_only image2d_t, sampler_t, float2, float);
 uint4 __ovld __purefn read_imageui(read_only image2d_t, sampler_t, float2, float);
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_depth_t, sampler_t, float2, float);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 float4 __ovld __purefn read_imagef(read_only image2d_array_t, sampler_t, float4, float);
 int4 __ovld __purefn read_imagei(read_only image2d_array_t, sampler_t, float4, float);
 uint4 __ovld __purefn read_imageui(read_only image2d_array_t, sampler_t, float4, float);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_array_depth_t, sampler_t, float4, float);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 float4 __ovld __purefn read_imagef(read_only image3d_t, sampler_t, float4, float);
 int4 __ovld __purefn read_imagei(read_only image3d_t, sampler_t, float4, float);
 uint4 __ovld __purefn read_imageui(read_only image3d_t, sampler_t, float4, float);
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 float4 __ovld __purefn read_imagef(read_only image1d_t, sampler_t, float, float, float);
 int4 __ovld __purefn read_imagei(read_only image1d_t, sampler_t, float, float, float);
 uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, float, float, float);
@@ -16039,31 +16051,34 @@ uint4 __ovld __purefn read_imageui(read_only image1d_t, sampler_t, float, float,
 float4 __ovld __purefn read_imagef(read_only image1d_array_t, sampler_t, float2, float, float);
 int4 __ovld __purefn read_imagei(read_only image1d_array_t, sampler_t, float2, float, float);
 uint4 __ovld __purefn read_imageui(read_only image1d_array_t, sampler_t, float2, float, float);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 
 float4 __ovld __purefn read_imagef(read_only image2d_t, sampler_t, float2, float2, float2);
 int4 __ovld __purefn read_imagei(read_only image2d_t, sampler_t, float2, float2, float2);
 uint4 __ovld __purefn read_imageui(read_only image2d_t, sampler_t, float2, float2, float2);
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_depth_t, sampler_t, float2, float2, float2);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 float4 __ovld __purefn read_imagef(read_only image2d_array_t, sampler_t, float4, float2, float2);
 int4 __ovld __purefn read_imagei(read_only image2d_array_t, sampler_t, float4, float2, float2);
 uint4 __ovld __purefn read_imageui(read_only image2d_array_t, sampler_t, float4, float2, float2);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_array_depth_t, sampler_t, float4, float2, float2);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 float4 __ovld __purefn read_imagef(read_only image3d_t, sampler_t, float4, float4, float4);
 int4 __ovld __purefn read_imagei(read_only image3d_t, sampler_t, float4, float4, float4);
 uint4 __ovld __purefn read_imageui(read_only image3d_t, sampler_t, float4, float4, float4);
 
 #endif //cl_khr_mipmap_image
-#endif //defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+#endif // defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 
-#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
+#if defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 
 /**
 * Sampler-less Image Access
@@ -16089,36 +16104,39 @@ float4 __ovld __purefn read_imagef(read_only image2d_array_t, int4);
 int4 __ovld __purefn read_imagei(read_only image2d_array_t, int4);
 uint4 __ovld __purefn read_imageui(read_only image2d_array_t, int4);
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_only image2d_depth_t, int2);
 float __ovld __purefn read_imagef(read_only image2d_array_depth_t, int4);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 float4 __ovld __purefn read_imagef(read_only image3d_t, int4);
 int4 __ovld __purefn read_imagei(read_only image3d_t, int4);
 uint4 __ovld __purefn read_imageui(read_only image3d_t, int4);
 
-#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
+#endif // defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 
 // Image read functions returning half4 type
 #ifdef cl_khr_fp16
-half4 __ovld __purefn read_imageh(read_only image1d_t, sampler_t, int);
-half4 __ovld __purefn read_imageh(read_only image1d_t, sampler_t, float);
 half4 __ovld __purefn read_imageh(read_only image2d_t, sampler_t, int2);
 half4 __ovld __purefn read_imageh(read_only image2d_t, sampler_t, float2);
 half4 __ovld __purefn read_imageh(read_only image3d_t, sampler_t, int4);
 half4 __ovld __purefn read_imageh(read_only image3d_t, sampler_t, float4);
 #if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
+half4 __ovld __purefn read_imageh(read_only image1d_t, sampler_t, int);
+half4 __ovld __purefn read_imageh(read_only image1d_t, sampler_t, float);
 half4 __ovld __purefn read_imageh(read_only image1d_array_t, sampler_t, int2);
 half4 __ovld __purefn read_imageh(read_only image1d_array_t, sampler_t, float2);
 half4 __ovld __purefn read_imageh(read_only image2d_array_t, sampler_t, int4);
 half4 __ovld __purefn read_imageh(read_only image2d_array_t, sampler_t, float4);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
 /**
  * Sampler-less Image Access
  */
-half4 __ovld __purefn read_imageh(read_only image1d_t, int);
 half4 __ovld __purefn read_imageh(read_only image2d_t, int2);
 half4 __ovld __purefn read_imageh(read_only image3d_t, int4);
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
+half4 __ovld __purefn read_imageh(read_only image1d_t, int);
 half4 __ovld __purefn read_imageh(read_only image1d_array_t, int2);
 half4 __ovld __purefn read_imageh(read_only image2d_array_t, int4);
 half4 __ovld __purefn read_imageh(read_only image1d_buffer_t, int);
@@ -16153,10 +16171,10 @@ int4 __ovld __purefn read_imagei(read_write image3d_t, int4);
 uint4 __ovld __purefn read_imageui(read_write image3d_t, int4);
 #endif // cl_khr_3d_image_writes
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_write image2d_depth_t, int2);
 float __ovld __purefn read_imagef(read_write image2d_array_depth_t, int4);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 #if cl_khr_gl_msaa_sharing
 float4 __ovld __purefn read_imagef(read_write image2d_msaa_t, int2, int);
@@ -16172,6 +16190,7 @@ float __ovld __purefn read_imagef(read_write image2d_array_msaa_depth_t, int4, i
 #endif //cl_khr_gl_msaa_sharing
 
 #ifdef cl_khr_mipmap_image
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 float4 __ovld __purefn read_imagef(read_write image1d_t, sampler_t, float, float);
 int4 __ovld __purefn read_imagei(read_write image1d_t, sampler_t, float, float);
 uint4 __ovld __purefn read_imageui(read_write image1d_t, sampler_t, float, float);
@@ -16179,18 +16198,27 @@ uint4 __ovld __purefn read_imageui(read_write image1d_t, sampler_t, float, float
 float4 __ovld __purefn read_imagef(read_write image1d_array_t, sampler_t, float2, float);
 int4 __ovld __purefn read_imagei(read_write image1d_array_t, sampler_t, float2, float);
 uint4 __ovld __purefn read_imageui(read_write image1d_array_t, sampler_t, float2, float);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
 
 float4 __ovld __purefn read_imagef(read_write image2d_t, sampler_t, float2, float);
 int4 __ovld __purefn read_imagei(read_write image2d_t, sampler_t, float2, float);
 uint4 __ovld __purefn read_imageui(read_write image2d_t, sampler_t, float2, float);
 
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_write image2d_depth_t, sampler_t, float2, float);
+#endif // defined(__opencl_depth_image_builtins)
 
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 float4 __ovld __purefn read_imagef(read_write image2d_array_t, sampler_t, float4, float);
 int4 __ovld __purefn read_imagei(read_write image2d_array_t, sampler_t, float4, float);
 uint4 __ovld __purefn read_imageui(read_write image2d_array_t, sampler_t, float4, float);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
 
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_write image2d_array_depth_t, sampler_t, float4, float);
+#endif // defined(__opencl_depth_image_builtins)
 
 #ifdef cl_khr_3d_image_writes
 float4 __ovld __purefn read_imagef(read_write image3d_t, sampler_t, float4, float);
@@ -16198,6 +16226,7 @@ int4 __ovld __purefn read_imagei(read_write image3d_t, sampler_t, float4, float)
 uint4 __ovld __purefn read_imageui(read_write image3d_t, sampler_t, float4, float);
 #endif // cl_khr_3d_image_writes
 
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 float4 __ovld __purefn read_imagef(read_write image1d_t, sampler_t, float, float, float);
 int4 __ovld __purefn read_imagei(read_write image1d_t, sampler_t, float, float, float);
 uint4 __ovld __purefn read_imageui(read_write image1d_t, sampler_t, float, float, float);
@@ -16205,18 +16234,27 @@ uint4 __ovld __purefn read_imageui(read_write image1d_t, sampler_t, float, float
 float4 __ovld __purefn read_imagef(read_write image1d_array_t, sampler_t, float2, float, float);
 int4 __ovld __purefn read_imagei(read_write image1d_array_t, sampler_t, float2, float, float);
 uint4 __ovld __purefn read_imageui(read_write image1d_array_t, sampler_t, float2, float, float);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
 
 float4 __ovld __purefn read_imagef(read_write image2d_t, sampler_t, float2, float2, float2);
 int4 __ovld __purefn read_imagei(read_write image2d_t, sampler_t, float2, float2, float2);
 uint4 __ovld __purefn read_imageui(read_write image2d_t, sampler_t, float2, float2, float2);
 
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_write image2d_depth_t, sampler_t, float2, float2, float2);
+#endif // defined(__opencl_depth_image_builtins)
 
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 float4 __ovld __purefn read_imagef(read_write image2d_array_t, sampler_t, float4, float2, float2);
 int4 __ovld __purefn read_imagei(read_write image2d_array_t, sampler_t, float4, float2, float2);
 uint4 __ovld __purefn read_imageui(read_write image2d_array_t, sampler_t, float4, float2, float2);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
 
+#if defined(__opencl_depth_image_builtins)
 float __ovld __purefn read_imagef(read_write image2d_array_depth_t, sampler_t, float4, float2, float2);
+#endif // defined(__opencl_depth_image_builtins)
 
 #ifdef cl_khr_3d_image_writes
 float4 __ovld __purefn read_imagef(read_write image3d_t, sampler_t, float4, float4, float4);
@@ -16332,14 +16370,14 @@ void __ovld write_imagei(write_only image3d_t, int4, int4);
 void __ovld write_imageui(write_only image3d_t, int4, uint4);
 #endif
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 void __ovld write_imagef(write_only image2d_depth_t, int2, float);
 void __ovld write_imagef(write_only image2d_array_depth_t, int4, float);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 // OpenCL Extension v2.0 s9.18 - Mipmaps
-#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
 #if defined(cl_khr_mipmap_image_writes)
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 void __ovld write_imagef(write_only image1d_t, int, int, float4);
 void __ovld write_imagei(write_only image1d_t, int, int, int4);
 void __ovld write_imageui(write_only image1d_t, int, int, uint4);
@@ -16348,16 +16386,20 @@ void __ovld write_imagef(write_only image1d_array_t, int2, int, float4);
 void __ovld write_imagei(write_only image1d_array_t, int2, int, int4);
 void __ovld write_imageui(write_only image1d_array_t, int2, int, uint4);
 
+void __ovld write_imagef(write_only image2d_array_t, int4, int, float4);
+void __ovld write_imagei(write_only image2d_array_t, int4, int, int4);
+void __ovld write_imageui(write_only image2d_array_t, int4, int, uint4);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
+
 void __ovld write_imagef(write_only image2d_t, int2, int, float4);
 void __ovld write_imagei(write_only image2d_t, int2, int, int4);
 void __ovld write_imageui(write_only image2d_t, int2, int, uint4);
 
-void __ovld write_imagef(write_only image2d_array_t, int4, int, float4);
-void __ovld write_imagei(write_only image2d_array_t, int4, int, int4);
-void __ovld write_imageui(write_only image2d_array_t, int4, int, uint4);
-
+#if defined(__opencl_depth_image_builtins)
 void __ovld write_imagef(write_only image2d_depth_t, int2, int, float);
 void __ovld write_imagef(write_only image2d_array_depth_t, int4, int, float);
+#endif // defined(__opencl_depth_image_builtins)
 
 #ifdef cl_khr_3d_image_writes
 void __ovld write_imagef(write_only image3d_t, int4, int, float4);
@@ -16365,8 +16407,7 @@ void __ovld write_imagei(write_only image3d_t, int4, int, int4);
 void __ovld write_imageui(write_only image3d_t, int4, int, uint4);
 #endif //cl_khr_3d_image_writes
 
-#endif //defined(cl_khr_mipmap_image_writes)
-#endif //defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+#endif // defined(cl_khr_mipmap_image_writes)
 
 // Image write functions for half4 type
 #ifdef cl_khr_fp16
@@ -16408,12 +16449,13 @@ void __ovld write_imagei(read_write image3d_t, int4, int4);
 void __ovld write_imageui(read_write image3d_t, int4, uint4);
 #endif
 
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 void __ovld write_imagef(read_write image2d_depth_t, int2, float);
 void __ovld write_imagef(read_write image2d_array_depth_t, int4, float);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 #if defined(cl_khr_mipmap_image_writes)
+#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_1_2)
 void __ovld write_imagef(read_write image1d_t, int, int, float4);
 void __ovld write_imagei(read_write image1d_t, int, int, int4);
 void __ovld write_imageui(read_write image1d_t, int, int, uint4);
@@ -16422,16 +16464,20 @@ void __ovld write_imagef(read_write image1d_array_t, int2, int, float4);
 void __ovld write_imagei(read_write image1d_array_t, int2, int, int4);
 void __ovld write_imageui(read_write image1d_array_t, int2, int, uint4);
 
+void __ovld write_imagef(read_write image2d_array_t, int4, int, float4);
+void __ovld write_imagei(read_write image2d_array_t, int4, int, int4);
+void __ovld write_imageui(read_write image2d_array_t, int4, int, uint4);
+#endif // defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >=
+       // CL_VERSION_1_2)
+
 void __ovld write_imagef(read_write image2d_t, int2, int, float4);
 void __ovld write_imagei(read_write image2d_t, int2, int, int4);
 void __ovld write_imageui(read_write image2d_t, int2, int, uint4);
 
-void __ovld write_imagef(read_write image2d_array_t, int4, int, float4);
-void __ovld write_imagei(read_write image2d_array_t, int4, int, int4);
-void __ovld write_imageui(read_write image2d_array_t, int4, int, uint4);
-
+#if defined(__opencl_depth_image_builtins)
 void __ovld write_imagef(read_write image2d_depth_t, int2, int, float);
 void __ovld write_imagef(read_write image2d_array_depth_t, int4, int, float);
+#endif // defined(__opencl_depth_image_builtins)
 
 #ifdef cl_khr_3d_image_writes
 void __ovld write_imagef(read_write image3d_t, int4, int, float4);
@@ -16468,10 +16514,10 @@ int __ovld __cnfn get_image_width(read_only image2d_t);
 int __ovld __cnfn get_image_width(read_only image3d_t);
 int __ovld __cnfn get_image_width(read_only image1d_array_t);
 int __ovld __cnfn get_image_width(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_width(read_only image2d_depth_t);
 int __ovld __cnfn get_image_width(read_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_width(read_only image2d_msaa_t);
 int __ovld __cnfn get_image_width(read_only image2d_msaa_depth_t);
@@ -16487,10 +16533,10 @@ int __ovld __cnfn get_image_width(write_only image3d_t);
 #endif
 int __ovld __cnfn get_image_width(write_only image1d_array_t);
 int __ovld __cnfn get_image_width(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_width(write_only image2d_depth_t);
 int __ovld __cnfn get_image_width(write_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_width(write_only image2d_msaa_t);
 int __ovld __cnfn get_image_width(write_only image2d_msaa_depth_t);
@@ -16507,10 +16553,10 @@ int __ovld __cnfn get_image_width(read_write image3d_t);
 #endif // cl_khr_3d_image_writes
 int __ovld __cnfn get_image_width(read_write image1d_array_t);
 int __ovld __cnfn get_image_width(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_width(read_write image2d_depth_t);
 int __ovld __cnfn get_image_width(read_write image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_width(read_write image2d_msaa_t);
 int __ovld __cnfn get_image_width(read_write image2d_msaa_depth_t);
@@ -16525,10 +16571,10 @@ int __ovld __cnfn get_image_width(read_write image2d_array_msaa_depth_t);
 int __ovld __cnfn get_image_height(read_only image2d_t);
 int __ovld __cnfn get_image_height(read_only image3d_t);
 int __ovld __cnfn get_image_height(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_height(read_only image2d_depth_t);
 int __ovld __cnfn get_image_height(read_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_height(read_only image2d_msaa_t);
 int __ovld __cnfn get_image_height(read_only image2d_msaa_depth_t);
@@ -16541,10 +16587,10 @@ int __ovld __cnfn get_image_height(write_only image2d_t);
 int __ovld __cnfn get_image_height(write_only image3d_t);
 #endif
 int __ovld __cnfn get_image_height(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_height(write_only image2d_depth_t);
 int __ovld __cnfn get_image_height(write_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_height(write_only image2d_msaa_t);
 int __ovld __cnfn get_image_height(write_only image2d_msaa_depth_t);
@@ -16558,10 +16604,10 @@ int __ovld __cnfn get_image_height(read_write image2d_t);
 int __ovld __cnfn get_image_height(read_write image3d_t);
 #endif // cl_khr_3d_image_writes
 int __ovld __cnfn get_image_height(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_height(read_write image2d_depth_t);
 int __ovld __cnfn get_image_height(read_write image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_height(read_write image2d_msaa_t);
 int __ovld __cnfn get_image_height(read_write image2d_msaa_depth_t);
@@ -16583,18 +16629,22 @@ int __ovld __cnfn get_image_depth(read_write image3d_t);
 #endif //defined(__opencl_c_read_write_images)
 #endif // cl_khr_3d_image_writes
 
-// OpenCL Extension v2.0 s9.18 - Mipmaps
-#if defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+// OpenCL Extension - Mipmaps
+#if defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 #ifdef cl_khr_mipmap_image
 /**
  * Return the image miplevels.
  */
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(read_only image1d_t);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(read_only image2d_t);
 int __ovld get_image_num_mip_levels(read_only image3d_t);
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(write_only image1d_t);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(write_only image2d_t);
 #ifdef cl_khr_3d_image_writes
 int __ovld get_image_num_mip_levels(write_only image3d_t);
@@ -16608,31 +16658,37 @@ int __ovld get_image_num_mip_levels(read_write image3d_t);
 #endif // cl_khr_3d_image_writes
 #endif //defined(__opencl_c_read_write_images)
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(read_only image1d_array_t);
 int __ovld get_image_num_mip_levels(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
+#if defined(__opencl_depth_image_builtins)
 int __ovld get_image_num_mip_levels(read_only image2d_array_depth_t);
 int __ovld get_image_num_mip_levels(read_only image2d_depth_t);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(write_only image1d_array_t);
 int __ovld get_image_num_mip_levels(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
+#if defined(__opencl_depth_image_builtins)
 int __ovld get_image_num_mip_levels(write_only image2d_array_depth_t);
 int __ovld get_image_num_mip_levels(write_only image2d_depth_t);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 
 #if defined(__opencl_c_read_write_images)
+#if __OPENCL_C_VERSION__ >= CL_VERSION_1_2
 int __ovld get_image_num_mip_levels(read_write image1d_array_t);
 int __ovld get_image_num_mip_levels(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_1_2
+#if defined(__opencl_depth_image_builtins)
 int __ovld get_image_num_mip_levels(read_write image2d_array_depth_t);
 int __ovld get_image_num_mip_levels(read_write image2d_depth_t);
-#endif // cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #endif //defined(__opencl_c_read_write_images)
 
-#endif //cl_khr_mipmap_image
-#endif //defined(__OPENCL_CPP_VERSION__) || (__OPENCL_C_VERSION__ >= CL_VERSION_2_0)
+#endif // cl_khr_mipmap_image
+#endif // defined(__OPENCL_CPP_VERSION__) || defined(__OPENCL_C_VERSION__)
 
 /**
  * Return the channel data type. Valid values are:
@@ -16659,10 +16715,10 @@ int __ovld __cnfn get_image_channel_data_type(read_only image2d_t);
 int __ovld __cnfn get_image_channel_data_type(read_only image3d_t);
 int __ovld __cnfn get_image_channel_data_type(read_only image1d_array_t);
 int __ovld __cnfn get_image_channel_data_type(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_data_type(read_only image2d_depth_t);
 int __ovld __cnfn get_image_channel_data_type(read_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_data_type(read_only image2d_msaa_t);
 int __ovld __cnfn get_image_channel_data_type(read_only image2d_msaa_depth_t);
@@ -16678,10 +16734,10 @@ int __ovld __cnfn get_image_channel_data_type(write_only image3d_t);
 #endif
 int __ovld __cnfn get_image_channel_data_type(write_only image1d_array_t);
 int __ovld __cnfn get_image_channel_data_type(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_data_type(write_only image2d_depth_t);
 int __ovld __cnfn get_image_channel_data_type(write_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_data_type(write_only image2d_msaa_t);
 int __ovld __cnfn get_image_channel_data_type(write_only image2d_msaa_depth_t);
@@ -16698,10 +16754,10 @@ int __ovld __cnfn get_image_channel_data_type(read_write image3d_t);
 #endif // cl_khr_3d_image_writes
 int __ovld __cnfn get_image_channel_data_type(read_write image1d_array_t);
 int __ovld __cnfn get_image_channel_data_type(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_data_type(read_write image2d_depth_t);
 int __ovld __cnfn get_image_channel_data_type(read_write image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_data_type(read_write image2d_msaa_t);
 int __ovld __cnfn get_image_channel_data_type(read_write image2d_msaa_depth_t);
@@ -16733,10 +16789,10 @@ int __ovld __cnfn get_image_channel_order(read_only image2d_t);
 int __ovld __cnfn get_image_channel_order(read_only image3d_t);
 int __ovld __cnfn get_image_channel_order(read_only image1d_array_t);
 int __ovld __cnfn get_image_channel_order(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_order(read_only image2d_depth_t);
 int __ovld __cnfn get_image_channel_order(read_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_order(read_only image2d_msaa_t);
 int __ovld __cnfn get_image_channel_order(read_only image2d_msaa_depth_t);
@@ -16752,10 +16808,10 @@ int __ovld __cnfn get_image_channel_order(write_only image3d_t);
 #endif
 int __ovld __cnfn get_image_channel_order(write_only image1d_array_t);
 int __ovld __cnfn get_image_channel_order(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_order(write_only image2d_depth_t);
 int __ovld __cnfn get_image_channel_order(write_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_order(write_only image2d_msaa_t);
 int __ovld __cnfn get_image_channel_order(write_only image2d_msaa_depth_t);
@@ -16772,10 +16828,10 @@ int __ovld __cnfn get_image_channel_order(read_write image3d_t);
 #endif // cl_khr_3d_image_writes
 int __ovld __cnfn get_image_channel_order(read_write image1d_array_t);
 int __ovld __cnfn get_image_channel_order(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int __ovld __cnfn get_image_channel_order(read_write image2d_depth_t);
 int __ovld __cnfn get_image_channel_order(read_write image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int __ovld __cnfn get_image_channel_order(read_write image2d_msaa_t);
 int __ovld __cnfn get_image_channel_order(read_write image2d_msaa_depth_t);
@@ -16791,10 +16847,10 @@ int __ovld __cnfn get_image_channel_order(read_write image2d_array_msaa_depth_t)
  */
 int2 __ovld __cnfn get_image_dim(read_only image2d_t);
 int2 __ovld __cnfn get_image_dim(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int2 __ovld __cnfn get_image_dim(read_only image2d_array_depth_t);
 int2 __ovld __cnfn get_image_dim(read_only image2d_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int2 __ovld __cnfn get_image_dim(read_only image2d_msaa_t);
 int2 __ovld __cnfn get_image_dim(read_only image2d_msaa_depth_t);
@@ -16804,10 +16860,10 @@ int2 __ovld __cnfn get_image_dim(read_only image2d_array_msaa_depth_t);
 
 int2 __ovld __cnfn get_image_dim(write_only image2d_t);
 int2 __ovld __cnfn get_image_dim(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int2 __ovld __cnfn get_image_dim(write_only image2d_array_depth_t);
 int2 __ovld __cnfn get_image_dim(write_only image2d_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int2 __ovld __cnfn get_image_dim(write_only image2d_msaa_t);
 int2 __ovld __cnfn get_image_dim(write_only image2d_msaa_depth_t);
@@ -16818,10 +16874,10 @@ int2 __ovld __cnfn get_image_dim(write_only image2d_array_msaa_depth_t);
 #if defined(__opencl_c_read_write_images)
 int2 __ovld __cnfn get_image_dim(read_write image2d_t);
 int2 __ovld __cnfn get_image_dim(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 int2 __ovld __cnfn get_image_dim(read_write image2d_array_depth_t);
 int2 __ovld __cnfn get_image_dim(read_write image2d_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 int2 __ovld __cnfn get_image_dim(read_write image2d_msaa_t);
 int2 __ovld __cnfn get_image_dim(read_write image2d_msaa_depth_t);
@@ -16850,9 +16906,9 @@ int4 __ovld __cnfn get_image_dim(read_write image3d_t);
 
 size_t __ovld __cnfn get_image_array_size(read_only image1d_array_t);
 size_t __ovld __cnfn get_image_array_size(read_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 size_t __ovld __cnfn get_image_array_size(read_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 size_t __ovld __cnfn get_image_array_size(read_only image2d_array_msaa_t);
 size_t __ovld __cnfn get_image_array_size(read_only image2d_array_msaa_depth_t);
@@ -16860,9 +16916,9 @@ size_t __ovld __cnfn get_image_array_size(read_only image2d_array_msaa_depth_t);
 
 size_t __ovld __cnfn get_image_array_size(write_only image1d_array_t);
 size_t __ovld __cnfn get_image_array_size(write_only image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 size_t __ovld __cnfn get_image_array_size(write_only image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 size_t __ovld __cnfn get_image_array_size(write_only image2d_array_msaa_t);
 size_t __ovld __cnfn get_image_array_size(write_only image2d_array_msaa_depth_t);
@@ -16871,9 +16927,9 @@ size_t __ovld __cnfn get_image_array_size(write_only image2d_array_msaa_depth_t)
 #if defined(__opencl_c_read_write_images)
 size_t __ovld __cnfn get_image_array_size(read_write image1d_array_t);
 size_t __ovld __cnfn get_image_array_size(read_write image2d_array_t);
-#ifdef cl_khr_depth_images
+#if defined(__opencl_depth_image_builtins)
 size_t __ovld __cnfn get_image_array_size(read_write image2d_array_depth_t);
-#endif //cl_khr_depth_images
+#endif // defined(__opencl_depth_image_builtins)
 #if defined(cl_khr_gl_msaa_sharing)
 size_t __ovld __cnfn get_image_array_size(read_write image2d_array_msaa_t);
 size_t __ovld __cnfn get_image_array_size(read_write image2d_array_msaa_depth_t);
@@ -18695,6 +18751,18 @@ void        __ovld __conv intel_sub_group_block_write_ul8( __local ulong* p, ulo
 #endif // defined(cl_intel_subgroups_long)
 #endif // cl_intel_subgroup_local_block_io
 
+#ifdef cl_intel_split_work_group_barrier
+void __ovld __conv intel_work_group_barrier_arrive(cl_mem_fence_flags flags);
+void __ovld __conv intel_work_group_barrier_wait(cl_mem_fence_flags flags);
+
+#if __OPENCL_C_VERSION__ >= CL_VERSION_2_0
+void __ovld __conv intel_work_group_barrier_arrive(cl_mem_fence_flags flags,
+                                                   memory_scope scope);
+void __ovld __conv intel_work_group_barrier_wait(cl_mem_fence_flags flags,
+                                                 memory_scope scope);
+#endif // __OPENCL_C_VERSION__ >= CL_VERSION_2_0
+#endif // cl_intel_split_work_group_barrier
+
 #ifdef cl_intel_device_side_avc_motion_estimation
 #pragma OPENCL EXTENSION cl_intel_device_side_avc_motion_estimation : begin
 
@@ -19429,4 +19497,5 @@ int __ovld arm_dot_acc_sat(char4, char4, int);
 
 #undef __cnfn
 #undef __ovld
+
 #endif //_OPENCL_H_
