@@ -1250,6 +1250,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual bool useAutoZeroCopyImpl() { return false; }
 
   bool isFastReductionEnabled() const { return IsFastReductionEnabled; }
+  void setIsFastReductionEnabled(bool IsFastReductionEnabled) {
+    this->IsFastReductionEnabled = IsFastReductionEnabled;
+  }
 
   /// Performs sanity checks on zero-copy options and prints diagnostic info.
   Error zeroCopySanityChecksAndDiag(bool isUnifiedSharedMemory,
