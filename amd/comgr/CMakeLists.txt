@@ -100,12 +100,12 @@ if(WIN32)
   # Add Windows resource file for version info
   set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
   configure_file(
-    src/${COMGR_MANIFEST_NAME}.MANIFEST.in
-    src/${COMGR_MANIFEST_NAME}.MANIFEST @ONLY)
+    cmake/${COMGR_MANIFEST_NAME}.MANIFEST.in
+    cmake/${COMGR_MANIFEST_NAME}.MANIFEST @ONLY)
   configure_file(
-    src/comgr.rc.in
-    src/comgr.rc @ONLY)
-  list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/src/comgr.rc")
+    cmake/comgr.rc.in
+    cmake/comgr.rc @ONLY)
+  list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/cmake/comgr.rc")
 endif()
 
 if(COMGR_BUILD_SHARED_LIBS)
@@ -384,7 +384,7 @@ endif()
 # Install the manifest file alongside the DLL for Windows SxS
 if(WIN32)
   install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/src/${COMGR_MANIFEST_NAME}.MANIFEST"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake/${COMGR_MANIFEST_NAME}.MANIFEST"
     COMPONENT amd-comgr
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
