@@ -74,17 +74,29 @@ uint32_t getWarpIdInBlock();
 /// Return the number of warps in the block.
 uint32_t getNumberOfWarpsInBlock();
 
-/// Return the thread Id in the block, in [0, getNumberOfThreadsInBlock(Dim)).
-uint32_t getThreadIdInBlock(int32_t Dim = DIM_X);
+/// Return the thread Id in the block in a dimension, in [0, getNumberOfThreadsInBlock(Dim)).
+uint32_t getThreadIdInBlock(int32_t Dim);
 
-/// Return the block size, thus number of threads in the block.
-uint32_t getNumberOfThreadsInBlock(int32_t Dim = DIM_X);
+/// Return the thread Id in the block, in [0, getTotalNumberOfThreadsInBlock()).
+uint32_t getTotalThreadIdInBlock();
+
+/// Return the block size for a dimension, thus number of threads in the block.
+uint32_t getNumberOfThreadsInBlock(int32_t Dim);
+
+/// Return the total block size.
+uint32_t getTotalNumberOfThreadsInBlock();
 
 /// Return the block Id in the kernel, in [0, getNumberOfBlocksInKernel(Dim)).
-uint32_t getBlockIdInKernel(int32_t Dim = DIM_X);
+uint32_t getBlockIdInKernel(int32_t Dim);
 
-/// Return the number of blocks in the kernel.
-uint32_t getNumberOfBlocksInKernel(int32_t Dim = DIM_X);
+/// Return the block Id in the kernel, in [0, getTotalNumberofBlocksInKernel()).
+uint32_t getTotalBlockIdInKernel();
+
+/// Return the number of blocks in the kernel for a dimension.
+uint32_t getNumberOfBlocksInKernel(int32_t Dim);
+
+/// Return the total number of blocks in the kernel.
+uint32_t getTotalNumberOfBlocksInKernel();
 
 /// Return the kernel size, thus number of threads in the kernel.
 uint32_t getNumberOfThreadsInKernel();
@@ -95,8 +107,10 @@ uint32_t getNumberOfThreadsInKernel();
 /// Note: The version taking \p IsSPMD mode explicitly can be used during the
 /// initialization of the target region, that is before `mapping::isSPMDMode()`
 /// can be called by any thread other than the main one.
-uint32_t getMaxTeamThreads();
-uint32_t getMaxTeamThreads(bool IsSPMD);
+uint32_t getMaxTeamThreads(int Dim = mapping::DIM_X);
+uint32_t getMaxTeamThreads(bool IsSPMD, int Dim = mapping::DIM_X);
+
+uint32_t getMaxTotalTeamThreads(bool IsSPMD);
 
 /// Return the number of processing elements on the device.
 uint32_t getNumberOfProcessorElements();

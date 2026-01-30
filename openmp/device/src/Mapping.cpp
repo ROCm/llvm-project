@@ -117,7 +117,7 @@ uint32_t mapping::getNumberOfThreadsInKernel() {
 
 uint32_t mapping::getWarpIdInBlock() {
   uint32_t WarpID =
-      mapping::getThreadIdInBlock(mapping::DIM_X) / mapping::getWarpSize();
+      mapping::getTotalThreadIdInBlock() / mapping::getWarpSize();
   ASSERT(WarpID < mapping::getNumberOfWarpsInBlock(), nullptr);
   return WarpID;
 }
@@ -128,13 +128,28 @@ uint32_t mapping::getBlockIdInKernel(int32_t Dim) {
   return BlockId;
 }
 
+uint32_t mapping::getTotalBlockIdInKernel() {
+  // The X dimension is the fastest dimension.
+  return mapping::getBlockIdInKernel(mapping::DIM_X) +
+         (mapping::getBlockIdInKernel(mapping::DIM_Y) +
+          mapping::getBlockIdInKernel(mapping::DIM_Z) *
+          mapping::getNumberOfBlocksInKernel(mapping::DIM_Y)) *
+         mapping::getNumberOfBlocksInKernel(mapping::DIM_X);
+}
+
 uint32_t mapping::getNumberOfWarpsInBlock() {
-  return (mapping::getNumberOfThreadsInBlock() + mapping::getWarpSize() - 1) /
+  return (mapping::getTotalNumberOfThreadsInBlock() + mapping::getWarpSize() - 1) /
          mapping::getWarpSize();
 }
 
 uint32_t mapping::getNumberOfBlocksInKernel(int32_t Dim) {
   return __gpu_num_blocks(Dim);
+}
+
+uint32_t mapping::getTotalNumberOfBlocksInKernel() {
+  return mapping::getNumberOfBlocksInKernel(mapping::DIM_X) *
+         mapping::getNumberOfBlocksInKernel(mapping::DIM_Y) *
+         mapping::getNumberOfBlocksInKernel(mapping::DIM_Z);
 }
 
 uint32_t mapping::getNumberOfProcessorElements() {
@@ -163,10 +178,12 @@ bool mapping::isGenericMode() { return !isSPMDMode(); }
 
 extern "C" {
 [[gnu::noinline]] uint32_t __kmpc_get_hardware_thread_id_in_block() {
-  return mapping::getThreadIdInBlock();
+  /// KTODO: What should we return here?
+  return mapping::getThreadIdInBlock(mapping::DIM_X);
 }
 
 [[gnu::noinline]] uint32_t __kmpc_get_hardware_num_threads_in_block() {
+  /// KTODO: What should we return here?
   return mapping::getNumberOfThreadsInBlock(mapping::DIM_X);
 }
 

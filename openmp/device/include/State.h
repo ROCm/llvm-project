@@ -83,6 +83,7 @@ struct TeamStateTy {
   ///}
 
   uint32_t ParallelTeamSize;
+  uint32_t ParallelTeamSizeDim[3];
   uint32_t HasThreadState;
   ParallelRegionFnTy ParallelRegionFnVar;
 };
@@ -117,7 +118,7 @@ extern Local<ThreadStateTy **> ThreadStates;
 
 /// Initialize the state machinery. Must be called by all threads.
 void init(bool IsSPMD, KernelEnvironmentTy &KernelEnvironment,
-          KernelLaunchEnvironmentTy &KernelLaunchEnvironment);
+          KernelLaunchEnvironmentTy *KernelLaunchEnvironment);
 
 /// Return the kernel and kernel launch environment associated with the current
 /// kernel. The former is static and contains compile time information that
@@ -137,6 +138,9 @@ enum ValueKind {
   VK_RunSchedChunk,
   VK_ParallelRegionFn,
   VK_ParallelTeamSize,
+  VK_ParallelTeamSizeDimX,
+  VK_ParallelTeamSizeDimY,
+  VK_ParallelTeamSizeDimZ,
   VK_HasThreadState,
 };
 
@@ -161,7 +165,7 @@ void resetStateForThread(uint32_t TId);
     if (OMP_LIKELY(ForceTeamState || !config::mayUseThreadStates() ||          \
                    !TeamState.HasThreadState))                                 \
       return TeamState.ICVState.Member;                                        \
-    uint32_t TId = mapping::getThreadIdInBlock();                              \
+    uint32_t TId = mapping::getTotalThreadIdInBlock();                         \
     if (OMP_UNLIKELY(!ThreadStates[TId])) {                                    \
       ThreadStates[TId] = reinterpret_cast<ThreadStateTy *>(                   \
           memory::allocGlobal(sizeof(ThreadStateTy),                           \
@@ -176,7 +180,7 @@ void resetStateForThread(uint32_t TId);
 // FIXME: https://github.com/llvm/llvm-project/issues/123241.
 #define lookupImpl(Member, ForceTeamState)                                     \
   {                                                                            \
-    auto TId = mapping::getThreadIdInBlock();                                  \
+    auto TId = mapping::getTotalThreadIdInBlock();                             \
     if (OMP_UNLIKELY(!ForceTeamState && config::mayUseThreadStates() &&        \
                      TeamState.HasThreadState && ThreadStates[TId]))           \
       return ThreadStates[TId]->ICVState.Member;                               \
@@ -212,6 +216,12 @@ lookup32(ValueKind Kind, bool IsReadonly, IdentTy *Ident, bool ForceTeamState) {
     lookupForModify32Impl(RunSchedChunkVar, Ident, ForceTeamState);
   case state::VK_ParallelTeamSize:
     return TeamState.ParallelTeamSize;
+  case state::VK_ParallelTeamSizeDimX:
+    return TeamState.ParallelTeamSizeDim[0];
+  case state::VK_ParallelTeamSizeDimY:
+    return TeamState.ParallelTeamSizeDim[1];
+  case state::VK_ParallelTeamSizeDimZ:
+    return TeamState.ParallelTeamSizeDim[2];
   case state::VK_HasThreadState:
     return TeamState.HasThreadState;
   default:
@@ -337,6 +347,10 @@ inline state::Value<uint32_t, state::VK_RunSchedChunk> RunSchedChunk;
 /// TODO
 inline state::Value<uint32_t, state::VK_ParallelTeamSize> ParallelTeamSize;
 
+inline state::Value<uint32_t, state::VK_ParallelTeamSizeDimX> ParallelTeamSizeDimX;
+inline state::Value<uint32_t, state::VK_ParallelTeamSizeDimY> ParallelTeamSizeDimY;
+inline state::Value<uint32_t, state::VK_ParallelTeamSizeDimZ> ParallelTeamSizeDimZ;
+
 /// TODO
 inline state::Value<uint32_t, state::VK_HasThreadState> HasThreadState;
 
@@ -349,7 +363,10 @@ void runAndCheckState(void(Func(void)));
 void assumeInitialState(bool IsSPMD);
 
 /// Return the value of the ParallelTeamSize ICV.
-int getEffectivePTeamSize();
+int getTotalEffectivePTeamSize();
+
+/// Return the value of the ParallelTeam ICV in a dimension.
+int getEffectivePTeamSize(int Dim);
 
 } // namespace state
 

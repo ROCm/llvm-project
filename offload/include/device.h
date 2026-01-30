@@ -37,6 +37,8 @@
 #include "PluginInterface.h"
 
 using GenericPluginTy = llvm::omp::target::plugin::GenericPluginTy;
+using DeviceInfo = llvm::omp::target::plugin::DeviceInfo;
+using InfoTreeNode = llvm::omp::target::plugin::InfoTreeNode;
 
 // Forward declarations.
 struct __tgt_bin_desc;

@@ -1414,7 +1414,7 @@ private:
     KernelArgsTy KernelArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
     if (auto Err = CUDAKernel.launchImpl(
-            *this, NumBlocksAndThreads, NumBlocksAndThreads, KernelArgs,
+            *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
             KernelLaunchParamsTy{}, AsyncInfoWrapper))
       return Err;
 
@@ -1458,6 +1458,7 @@ private:
 
 Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                uint32_t NumThreads[3], uint32_t NumBlocks[3],
+                               uint32_t DynBlockMemSize,
                                KernelArgsTy &KernelArgs,
                                KernelLaunchParamsTy LaunchParams,
                                AsyncInfoWrapperTy &AsyncInfoWrapper) const {
@@ -1487,20 +1488,24 @@ Error CUDAKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   if (GenericDevice.getRPCServer())
     GenericDevice.Plugin.getRPCServer().Thread->notify();
 
+  // Increase to the requested dynamic memory size for the device if needed.
+  DynBlockMemSize =
+      std::max(DynBlockMemSize, GenericDevice.getDynamicMemorySize());
+
   // In case we require more memory than the current limit.
-  if (MaxDynCGroupMem >= MaxDynCGroupMemLimit) {
+  if (DynBlockMemSize >= MaxDynBlockMemSize) {
     CUresult AttrResult = cuFuncSetAttribute(
-        Func, CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, MaxDynCGroupMem);
+        Func, CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, DynBlockMemSize);
     if (auto Err = Plugin::check(
             AttrResult,
             "error in cuFuncSetAttribute while setting the memory limits: %s"))
       return Err;
-    MaxDynCGroupMemLimit = MaxDynCGroupMem;
+    MaxDynBlockMemSize = DynBlockMemSize;
   }
 
   CUresult Res = cuLaunchKernel(Func, NumBlocks[0], NumBlocks[1], NumBlocks[2],
                                 NumThreads[0], NumThreads[1], NumThreads[2],
-                                MaxDynCGroupMem, Stream, nullptr, Config);
+                                DynBlockMemSize, Stream, nullptr, Config);
 
   // Register a callback to indicate when the kernel is complete.
   if (GenericDevice.getRPCServer())

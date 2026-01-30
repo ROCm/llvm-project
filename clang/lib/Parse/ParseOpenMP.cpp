@@ -5073,6 +5073,28 @@ bool Parser::ParseOpenMPVarList(OpenMPDirectiveKind DKind,
           Diag(Tok, diag::err_modifier_expected_colon) << "fallback";
       }
     }
+  } else if (Kind == OMPC_num_teams || Kind == OMPC_thread_limit) {
+    if (!Tok.isAnnotation() && PP.getSpelling(Tok) == "dims" &&
+        NextToken().is(tok::l_paren)) {
+      ColonProtectionRAIIObject ColonRAII(*this);
+
+      SourceLocation TLoc = Tok.getLocation();
+      ConsumeToken();
+      SourceLocation RLoc;
+      ExprResult ExprR = ParseOpenMPParensExpr(getOpenMPClauseName(Kind), RLoc);
+      if (ExprR.isUsable()) {
+        Data.ExtraModifier = (Kind == OMPC_num_teams) ? OMPC_NUMTEAMS_dims
+                                                      : OMPC_THREADLIMIT_dims;
+        Data.ExtraModifierExpr = ExprR.get();
+        Data.ExtraModifierLoc = TLoc;
+      }
+
+      if (Tok.is(tok::colon))
+        Data.ColonLoc = ConsumeToken();
+      else
+        Diag(Tok, diag::warn_pragma_expected_colon)
+            << getOpenMPClauseName(Kind) << " clause";
+    }
   }
 
   bool IsComma =

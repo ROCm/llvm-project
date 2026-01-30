@@ -35,8 +35,8 @@ enum OMPTgtExecModeFlags : unsigned char {
 };
 
 static void
-inititializeRuntime(bool IsSPMD, KernelEnvironmentTy &KernelEnvironment,
-                    KernelLaunchEnvironmentTy &KernelLaunchEnvironment) {
+initializeRuntime(bool IsSPMD, KernelEnvironmentTy &KernelEnvironment,
+                  KernelLaunchEnvironmentTy *KernelLaunchEnvironment) {
   // Order is important here.
   synchronize::init(IsSPMD);
   mapping::init(IsSPMD);
@@ -46,7 +46,7 @@ inititializeRuntime(bool IsSPMD, KernelEnvironmentTy &KernelEnvironment,
 
 /// Simple generic state machine for worker threads.
 static void genericStateMachine(IdentTy *Ident) {
-  uint32_t TId = mapping::getThreadIdInBlock();
+  uint32_t TId = mapping::getTotalThreadIdInBlock();
 
   do {
     ParallelRegionFnTy WorkFn = nullptr;
@@ -80,17 +80,17 @@ extern "C" {
 /// \param Ident               Source location identification, can be NULL.
 ///
 int32_t __kmpc_target_init(KernelEnvironmentTy &KernelEnvironment,
-                           KernelLaunchEnvironmentTy &KernelLaunchEnvironment) {
+                           KernelLaunchEnvironmentTy *KernelLaunchEnvironment) {
   ConfigurationEnvironmentTy &Configuration = KernelEnvironment.Configuration;
   bool IsSPMD = Configuration.ExecMode & OMP_TGT_EXEC_MODE_SPMD;
   bool UseGenericStateMachine = Configuration.UseGenericStateMachine;
   if (IsSPMD) {
-    inititializeRuntime(/*IsSPMD=*/true, KernelEnvironment,
-                        KernelLaunchEnvironment);
+    initializeRuntime(/*IsSPMD=*/true, KernelEnvironment,
+                      KernelLaunchEnvironment);
     synchronize::threadsAligned(atomic::relaxed);
   } else {
-    inititializeRuntime(/*IsSPMD=*/false, KernelEnvironment,
-                        KernelLaunchEnvironment);
+    initializeRuntime(/*IsSPMD=*/false, KernelEnvironment,
+                      KernelLaunchEnvironment);
     // No need to wait since only the main threads will execute user
     // code and workers will run into a barrier right away.
   }
@@ -122,10 +122,10 @@ int32_t __kmpc_target_init(KernelEnvironmentTy &KernelEnvironment,
   // main thread's warp, so none of its threads can ever be active worker
   // threads.
   if (UseGenericStateMachine &&
-      mapping::getThreadIdInBlock() < mapping::getMaxTeamThreads(IsSPMD))
+      mapping::getTotalThreadIdInBlock() < mapping::getMaxTotalTeamThreads(IsSPMD))
     genericStateMachine(KernelEnvironment.Ident);
 
-  return mapping::getThreadIdInBlock();
+  return mapping::getTotalThreadIdInBlock();
 }
 
 /// De-Initialization

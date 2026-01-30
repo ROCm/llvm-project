@@ -42,10 +42,12 @@ void gpu_irregular_warp_reduce(void *reduce_data, ShuffleReductFnTy shflFct,
   }
 }
 
+/// KTODO: Check whether two threads in a different dimension can overlap. There
+/// are calls to mapping::getNumberOfWarpsInBlock() that should be reviewed.
 static uint32_t gpu_irregular_simd_reduce(void *reduce_data,
                                           ShuffleReductFnTy shflFct) {
   uint32_t size, remote_id, physical_lane_id;
-  physical_lane_id = mapping::getThreadIdInBlock() % mapping::getWarpSize();
+  physical_lane_id = mapping::getTotalThreadIdInBlock() % mapping::getWarpSize();
   __kmpc_impl_lanemask_t lanemask_lt = mapping::lanemaskLT();
   __kmpc_impl_lanemask_t Liveness = mapping::activemask();
   uint32_t logical_lane_id = utils::popc(Liveness & lanemask_lt) * 2;
@@ -64,7 +66,7 @@ static uint32_t gpu_irregular_simd_reduce(void *reduce_data,
 static int32_t nvptx_parallel_reduce_nowait(void *reduce_data,
                                             ShuffleReductFnTy shflFct,
                                             InterWarpCopyFnTy cpyFct) {
-  uint32_t BlockThreadId = mapping::getThreadIdInBlock();
+  uint32_t BlockThreadId = mapping::getTotalThreadIdInBlock();
   if (mapping::isMainThreadInGenericMode(/*IsSPMD=*/false))
     BlockThreadId = 0;
   uint32_t NumThreads = omp_get_num_threads();
@@ -99,7 +101,7 @@ static int32_t nvptx_parallel_reduce_nowait(void *reduce_data,
       gpu_irregular_warp_reduce(
           reduce_data, shflFct,
           /*LaneCount=*/NumThreads % mapping::getWarpSize(),
-          /*LaneId=*/mapping::getThreadIdInBlock() % mapping::getWarpSize());
+          /*LaneId=*/mapping::getTotalThreadIdInBlock() % mapping::getWarpSize());
 
     // When we have more than [mapping::getWarpSize()] number of threads
     // a block reduction is performed here.
@@ -123,7 +125,7 @@ static int32_t nvptx_parallel_reduce_nowait(void *reduce_data,
   else if (!(Liveness & (Liveness + 1))) // Partial warp but contiguous lanes
     gpu_irregular_warp_reduce(reduce_data, shflFct,
                               /*LaneCount=*/utils::popc(Liveness),
-                              /*LaneId=*/mapping::getThreadIdInBlock() %
+                              /*LaneId=*/mapping::getTotalThreadIdInBlock() %
                                   mapping::getWarpSize());
   else { // Dispersed lanes. Only threads in L2
          // parallel region may enter here; return
@@ -268,7 +270,7 @@ int32_t __kmpc_nvptx_teams_reduce_nowait_v2(
     InterWarpCopyFnTy cpyFct, ListGlobalFnTy lgcpyFct, ListGlobalFnTy lgredFct,
     ListGlobalFnTy glcpyFct, ListGlobalFnTy glredFct) {
   // Terminate all threads in non-SPMD mode except for the master thread.
-  uint32_t ThreadId = mapping::getThreadIdInBlock();
+  uint32_t ThreadId = mapping::getTotalThreadIdInBlock();
   if (mapping::isGenericMode()) {
     if (!mapping::isMainThreadInGenericMode())
       return 0;

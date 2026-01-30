@@ -629,12 +629,15 @@ public:
   /// have no associated teams construct.
   ///
   /// Otherwise, return nullptr.
-  const Expr *getNumTeamsExprForTargetDirective(CodeGenFunction &CGF,
-                                                const OMPExecutableDirective &D,
-                                                int32_t &MinTeamsVal,
-                                                int32_t &MaxTeamsVal);
-  llvm::Value *emitNumTeamsForTargetDirective(CodeGenFunction &CGF,
-                                              const OMPExecutableDirective &D);
+  void
+  getNumTeamsExprForTargetDirective(CodeGenFunction &CGF,
+                                    const OMPExecutableDirective &D,
+                                    int32_t &MinTeamsVal, llvm::SmallVectorImpl<int32_t> &MaxTeamsVals,
+                                    llvm::SmallVectorImpl<const Expr *> &Exprs);
+  void
+  emitNumTeamsForTargetDirective(CodeGenFunction &CGF,
+                                 const OMPExecutableDirective &D,
+                                 llvm::SmallVectorImpl<llvm::Value *> &Values);
 
   /// Check for a number of threads upper bound constant value (stored in \p
   /// UpperBound), or expression (returned). If the value is conditional (via an
@@ -644,13 +647,14 @@ public:
   const Expr *getNumThreadsExprForTargetDirective(
       CodeGenFunction &CGF, const OMPExecutableDirective &D,
       int32_t &UpperBound, bool UpperBoundOnly,
-      llvm::Value **CondExpr = nullptr, const Expr **ThreadLimitExpr = nullptr);
+      llvm::SmallVectorImpl<const Expr *> &ThreadLimitExprs,
+      llvm::Value **CondExpr = nullptr);
 
   /// Emit an expression that denotes the number of threads a target region
   /// shall use. Will generate "i32 0" to allow the runtime to choose.
-  llvm::Value *
-  emitNumThreadsForTargetDirective(CodeGenFunction &CGF,
-                                   const OMPExecutableDirective &D);
+  void emitNumThreadsForTargetDirective(
+      CodeGenFunction &CGF, const OMPExecutableDirective &D,
+      llvm::SmallVectorImpl<llvm::Value *> &Values);
 
   /// Return the trip count of loops associated with constructs / 'target teams
   /// distribute' and 'teams distribute parallel for'. \param SizeEmitter Emits

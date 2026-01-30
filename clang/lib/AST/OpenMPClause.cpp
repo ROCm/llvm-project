@@ -1891,11 +1891,12 @@ OMPContainsClause *OMPContainsClause::CreateEmpty(const ASTContext &C,
 OMPNumTeamsClause *OMPNumTeamsClause::Create(
     const ASTContext &C, OpenMPDirectiveKind CaptureRegion,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
-    ArrayRef<Expr *> VL, Stmt *PreInit) {
+    ArrayRef<Expr *> VL, Expr *Dims, Stmt *PreInit) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
   OMPNumTeamsClause *Clause =
       new (Mem) OMPNumTeamsClause(C, StartLoc, LParenLoc, EndLoc, VL.size());
   Clause->setVarRefs(VL);
+  Clause->setDims(Dims);
   Clause->setPreInitStmt(PreInit, CaptureRegion);
   return Clause;
 }
@@ -1909,11 +1910,12 @@ OMPNumTeamsClause *OMPNumTeamsClause::CreateEmpty(const ASTContext &C,
 OMPThreadLimitClause *OMPThreadLimitClause::Create(
     const ASTContext &C, OpenMPDirectiveKind CaptureRegion,
     SourceLocation StartLoc, SourceLocation LParenLoc, SourceLocation EndLoc,
-    ArrayRef<Expr *> VL, Stmt *PreInit) {
+    ArrayRef<Expr *> VL, Expr *Dims, Stmt *PreInit) {
   void *Mem = C.Allocate(totalSizeToAlloc<Expr *>(VL.size()));
   OMPThreadLimitClause *Clause =
       new (Mem) OMPThreadLimitClause(C, StartLoc, LParenLoc, EndLoc, VL.size());
   Clause->setVarRefs(VL);
+  Clause->setDims(Dims);
   Clause->setPreInitStmt(PreInit, CaptureRegion);
   return Clause;
 }
