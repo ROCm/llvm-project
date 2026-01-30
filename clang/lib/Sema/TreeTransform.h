@@ -2135,11 +2135,11 @@ public:
   ///
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
-  OMPClause *RebuildOMPNumTeamsClause(ArrayRef<Expr *> VarList,
+  OMPClause *RebuildOMPNumTeamsClause(ArrayRef<Expr *> VarList, Expr *Dims,
                                       SourceLocation StartLoc,
                                       SourceLocation LParenLoc,
                                       SourceLocation EndLoc) {
-    return getSema().OpenMP().ActOnOpenMPNumTeamsClause(VarList, StartLoc,
+    return getSema().OpenMP().ActOnOpenMPNumTeamsClause(VarList, Dims, StartLoc,
                                                         LParenLoc, EndLoc);
   }
 
@@ -2147,12 +2147,12 @@ public:
   ///
   /// By default, performs semantic analysis to build the new statement.
   /// Subclasses may override this routine to provide different behavior.
-  OMPClause *RebuildOMPThreadLimitClause(ArrayRef<Expr *> VarList,
+  OMPClause *RebuildOMPThreadLimitClause(ArrayRef<Expr *> VarList, Expr *Dims,
                                          SourceLocation StartLoc,
                                          SourceLocation LParenLoc,
                                          SourceLocation EndLoc) {
-    return getSema().OpenMP().ActOnOpenMPThreadLimitClause(VarList, StartLoc,
-                                                           LParenLoc, EndLoc);
+    return getSema().OpenMP().ActOnOpenMPThreadLimitClause(
+        VarList, Dims, StartLoc, LParenLoc, EndLoc);
   }
 
   /// Build a new OpenMP 'priority' clause.
@@ -11518,8 +11518,15 @@ TreeTransform<Derived>::TransformOMPNumTeamsClause(OMPNumTeamsClause *C) {
       return nullptr;
     Vars.push_back(EVar.get());
   }
+  Expr *Dims = C->getDims();
+  if (Dims) {
+    ExprResult DimsRes = getDerived().TransformExpr(Dims);
+    if (DimsRes.isInvalid())
+      return nullptr;
+    Dims = DimsRes.get();
+  }
   return getDerived().RebuildOMPNumTeamsClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+      Vars, Dims, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>
@@ -11533,8 +11540,15 @@ TreeTransform<Derived>::TransformOMPThreadLimitClause(OMPThreadLimitClause *C) {
       return nullptr;
     Vars.push_back(EVar.get());
   }
+  Expr *Dims = C->getDims();
+  if (Dims) {
+    ExprResult DimsRes = getDerived().TransformExpr(Dims);
+    if (DimsRes.isInvalid())
+      return nullptr;
+    Dims = DimsRes.get();
+  }
   return getDerived().RebuildOMPThreadLimitClause(
-      Vars, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+      Vars, Dims, C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
 }
 
 template <typename Derived>

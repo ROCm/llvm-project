@@ -192,7 +192,7 @@ void setLock(omp_lock_t *Lock) {
     for (;;) {
       now = __nvvm_read_ptx_sreg_clock();
       int32_t cycles = now > start ? now - start : now + (0xffffffff - start);
-      if (cycles >= OMP_SPIN * mapping::getBlockIdInKernel()) {
+      if (cycles >= OMP_SPIN * mapping::getTotalBlockIdInKernel()) {
         break;
       }
     }

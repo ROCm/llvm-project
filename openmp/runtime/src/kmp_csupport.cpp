@@ -4515,6 +4515,24 @@ void omp_free(void *ptr, omp_allocator_handle_t allocator) {
 }
 /* end of OpenMP 5.1 Memory Management routines */
 
+int omp_get_num_threads_dim(int Dim) { return 0; }
+
+int omp_get_thread_num_dim(int Dim) { return 0; }
+
+int omp_get_team_num_dim(int Dim) { return 1; }
+
+int omp_get_num_teams_dim(int Dim) { return 1; }
+
+void *omp_get_dyn_groupprivate_ptr(size_t offset, omp_access_t access_group) {
+  return NULL;
+}
+
+void *omp_get_dyn_groupprivate_fallback_ptr(size_t offset, omp_access_t access_group) {
+  return NULL;
+}
+
+size_t omp_get_dyn_groupprivate_size(omp_access_t access_group) { return 0; }
+
 int __kmpc_get_target_offload(void) {
   if (!__kmp_init_serial) {
     __kmp_serial_initialize();

@@ -457,6 +457,26 @@ void omp_free(void *ptr, omp_allocator_handle_t allocator) {
 #endif
 }
 
+void *omp_get_dyn_groupprivate_ptr(size_t offset, omp_access_t access_group) {
+  i;
+  return NULL;
+}
+
+void *omp_get_dyn_groupprivate_fallback_ptr(size_t offset, omp_access_t access_group) {
+  i;
+  return NULL;
+}
+
+size_t omp_get_dyn_groupprivate_size(omp_access_t access_group) {
+  i;
+  return 0;
+}
+
+size_t omp_get_groupprivate_limit(int device_num, omp_access_t access_group) {
+  i;
+  return 0;
+}
+
 /* OpenMP 5.0 Affinity Format */
 void omp_set_affinity_format(char const *format) { i; }
 size_t omp_get_affinity_format(char *buffer, size_t size) {

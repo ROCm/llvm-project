@@ -6377,9 +6377,16 @@ void CGOpenMPRuntime::computeMinAndMaxThreadsAndTeams(
   int32_t &MaxTeamsVal = Attrs.MaxTeams.front();
   int32_t &MaxThreadsVal = Attrs.MaxThreads.front();
 
-  getNumTeamsExprForTargetDirective(CGF, D, Attrs.MinTeams, MaxTeamsVal);
-  getNumThreadsExprForTargetDirective(CGF, D, MaxThreadsVal,
-                                      /*UpperBoundOnly=*/true);
+  {
+    llvm::SmallVector<const Expr *> Exprs;
+    getNumTeamsExprForTargetDirective(CGF, D, Attrs.MinTeams, Attrs.MaxTeams,
+                                      Exprs);
+  }
+  {
+    llvm::SmallVector<const Expr *> Exprs;
+    getNumThreadsExprForTargetDirective(CGF, D, MaxThreadsVal,
+                                        /*UpperBoundOnly=*/true, Exprs);
+  }
 
   for (auto *C : D.getClausesOfKind<OMPXAttributeClause>()) {
     for (auto *A : C->getAttrs()) {
@@ -6498,13 +6505,14 @@ const Stmt *CGOpenMPRuntime::getSingleCompoundChild(ASTContext &Ctx,
   return Child;
 }
 
-const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
+void CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
     CodeGenFunction &CGF, const OMPExecutableDirective &D, int32_t &MinTeamsVal,
-    int32_t &MaxTeamsVal) {
+    llvm::SmallVectorImpl<int32_t> &MaxTeamsVals, llvm::SmallVectorImpl<const Expr *> &Exprs) {
 
   OpenMPDirectiveKind DirectiveKind = D.getDirectiveKind();
   assert(isOpenMPTargetExecutionDirective(DirectiveKind) &&
          "Expected target-based executable directive.");
+  MaxTeamsVals.resize(1, -1);
   switch (DirectiveKind) {
   case OMPD_target: {
     const auto *CS = D.getInnermostCapturedStmt();
@@ -6516,24 +6524,32 @@ const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
             dyn_cast_or_null<OMPExecutableDirective>(ChildStmt)) {
       if (isOpenMPTeamsDirective(NestedDir->getDirectiveKind())) {
         if (NestedDir->hasClausesOfKind<OMPNumTeamsClause>()) {
-          const Expr *NumTeams = NestedDir->getSingleClause<OMPNumTeamsClause>()
-                                     ->getNumTeams()
-                                     .front();
-          if (NumTeams->isIntegerConstantExpr(CGF.getContext()))
-            if (auto Constant =
-                    NumTeams->getIntegerConstantExpr(CGF.getContext()))
-              MinTeamsVal = MaxTeamsVal = Constant->getExtValue();
-          return NumTeams;
+          auto NTExprs =
+              NestedDir->getSingleClause<OMPNumTeamsClause>()->getNumTeams();
+          for (size_t E = 0; E < NTExprs.size(); ++E) {
+            Exprs.push_back(NTExprs[E]);
+
+            if (NTExprs[E]->isIntegerConstantExpr(CGF.getContext())) {
+              if (auto Constant =
+                    NTExprs[E]->getIntegerConstantExpr(CGF.getContext())) {
+                MaxTeamsVals.resize(E+1);
+                MaxTeamsVals[E] = Constant->getExtValue();
+                if (E == 0)
+                  MinTeamsVal = MaxTeamsVals[E];
+              }
+            }
+          }
+          return;
         }
-        MinTeamsVal = MaxTeamsVal = 0;
-        return nullptr;
+        MinTeamsVal = MaxTeamsVals[0] = 0;
+        return;
       }
-      MinTeamsVal = MaxTeamsVal = 1;
-      return nullptr;
+      MinTeamsVal = MaxTeamsVals[0] = 1;
+      return;
     }
     // A value of -1 is used to check if we need to emit no teams region
-    MinTeamsVal = MaxTeamsVal = -1;
-    return nullptr;
+    MinTeamsVal = MaxTeamsVals[0] = -1;
+    return;
   }
   case OMPD_target_teams_loop:
   case OMPD_target_teams:
@@ -6542,23 +6558,32 @@ const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
   case OMPD_target_teams_distribute_parallel_for:
   case OMPD_target_teams_distribute_parallel_for_simd: {
     if (D.hasClausesOfKind<OMPNumTeamsClause>()) {
-      const Expr *NumTeams =
-          D.getSingleClause<OMPNumTeamsClause>()->getNumTeams().front();
-      if (NumTeams->isIntegerConstantExpr(CGF.getContext()))
-        if (auto Constant = NumTeams->getIntegerConstantExpr(CGF.getContext()))
-          MinTeamsVal = MaxTeamsVal = Constant->getExtValue();
-      return NumTeams;
+      auto NTExprs = D.getSingleClause<OMPNumTeamsClause>()->getNumTeams();
+      for (size_t E = 0; E < NTExprs.size(); ++E) {
+        Exprs.push_back(NTExprs[E]);
+
+        if (NTExprs[E]->isIntegerConstantExpr(CGF.getContext())) {
+          if (auto Constant =
+                NTExprs[E]->getIntegerConstantExpr(CGF.getContext())) {
+            MaxTeamsVals.resize(E+1);
+            MaxTeamsVals[E] = Constant->getExtValue();
+            if (E == 0)
+              MinTeamsVal = MaxTeamsVals[E];
+          }
+        }
+      }
+      return;
     }
-    MinTeamsVal = MaxTeamsVal = 0;
-    return nullptr;
+    MinTeamsVal = MaxTeamsVals[0] = 0;
+    return;
   }
   case OMPD_target_parallel:
   case OMPD_target_parallel_for:
   case OMPD_target_parallel_for_simd:
   case OMPD_target_parallel_loop:
   case OMPD_target_simd:
-    MinTeamsVal = MaxTeamsVal = 1;
-    return nullptr;
+    MinTeamsVal = MaxTeamsVals[0] = 1;
+    return;
   case OMPD_parallel:
   case OMPD_for:
   case OMPD_parallel_for:
@@ -6626,16 +6651,18 @@ const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
   llvm_unreachable("Unexpected directive kind.");
 }
 
-llvm::Value *CGOpenMPRuntime::emitNumTeamsForTargetDirective(
-    CodeGenFunction &CGF, const OMPExecutableDirective &D) {
+void CGOpenMPRuntime::emitNumTeamsForTargetDirective(
+    CodeGenFunction &CGF, const OMPExecutableDirective &D,
+    llvm::SmallVectorImpl<llvm::Value *> &Values) {
   assert(!CGF.getLangOpts().OpenMPIsTargetDevice &&
          "Clauses associated with the teams directive expected to be emitted "
          "only for the host!");
   CGBuilderTy &Bld = CGF.Builder;
   int32_t MinNT = -1, MaxNT = -1;
-  const Expr *NumTeams =
-      getNumTeamsExprForTargetDirective(CGF, D, MinNT, MaxNT);
-  if (NumTeams != nullptr) {
+  llvm::SmallVector<int32_t> MaxNTs;
+  llvm::SmallVector<const Expr *> Exprs;
+  getNumTeamsExprForTargetDirective(CGF, D, MinNT, MaxNTs, Exprs);
+  if (Exprs.size() != 0) {
     OpenMPDirectiveKind DirectiveKind = D.getDirectiveKind();
 
     switch (DirectiveKind) {
@@ -6643,10 +6670,13 @@ llvm::Value *CGOpenMPRuntime::emitNumTeamsForTargetDirective(
       const auto *CS = D.getInnermostCapturedStmt();
       CGOpenMPInnerExprInfo CGInfo(CGF, *CS);
       CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGInfo);
-      llvm::Value *NumTeamsVal = CGF.EmitScalarExpr(NumTeams,
-                                                  /*IgnoreResultAssign*/ true);
-      return Bld.CreateIntCast(NumTeamsVal, CGF.Int32Ty,
-                             /*isSigned=*/true);
+      for (const Expr *E : Exprs) {
+        llvm::Value *NumTeamsVal =
+            CGF.EmitScalarExpr(E, /*IgnoreResultAssign*/ true);
+        Values.push_back(
+            Bld.CreateIntCast(NumTeamsVal, CGF.Int32Ty, /*isSigned=*/true));
+      }
+      return;
     }
     case OMPD_target_teams:
     case OMPD_target_teams_distribute:
@@ -6654,10 +6684,13 @@ llvm::Value *CGOpenMPRuntime::emitNumTeamsForTargetDirective(
     case OMPD_target_teams_distribute_parallel_for:
     case OMPD_target_teams_distribute_parallel_for_simd: {
       CodeGenFunction::RunCleanupsScope NumTeamsScope(CGF);
-      llvm::Value *NumTeamsVal = CGF.EmitScalarExpr(NumTeams,
-                                                  /*IgnoreResultAssign*/ true);
-      return Bld.CreateIntCast(NumTeamsVal, CGF.Int32Ty,
-                             /*isSigned=*/true);
+      for (const Expr *E : Exprs) {
+        llvm::Value *NumTeamsVal =
+            CGF.EmitScalarExpr(E, /*IgnoreResultAssign*/ true);
+        Values.push_back(
+            Bld.CreateIntCast(NumTeamsVal, CGF.Int32Ty, /*isSigned=*/true));
+      }
+      return;
     }
     default:
       break;
@@ -6665,7 +6698,7 @@ llvm::Value *CGOpenMPRuntime::emitNumTeamsForTargetDirective(
   }
 
   assert(MinNT == MaxNT && "Num threads ranges require handling here.");
-  return llvm::ConstantInt::getSigned(CGF.Int32Ty, MinNT);
+  Values.push_back(llvm::ConstantInt::get(CGF.Int32Ty, MinNT));
 }
 
 /// Check for a num threads constant value (stored in \p DefaultVal), or
@@ -6765,7 +6798,8 @@ static void getNumThreads(CodeGenFunction &CGF, const CapturedStmt *CS,
 
 const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
     CodeGenFunction &CGF, const OMPExecutableDirective &D, int32_t &UpperBound,
-    bool UpperBoundOnly, llvm::Value **CondVal, const Expr **ThreadLimitExpr) {
+    bool UpperBoundOnly, llvm::SmallVectorImpl<const Expr *> &ThreadLimitExprs,
+    llvm::Value **CondVal) {
   assert((!CGF.getLangOpts().OpenMPIsTargetDevice || UpperBoundOnly) &&
          "Clauses associated with the teams directive expected to be emitted "
          "only for the host!");
@@ -6776,20 +6810,48 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
   const Expr *NT = nullptr;
   const Expr **NTPtr = UpperBoundOnly ? nullptr : &NT;
 
-  auto CheckForConstExpr = [&](const Expr *E, const Expr **EPtr) {
-    if (E->isIntegerConstantExpr(CGF.getContext())) {
+  auto GetIntegerConstant = [&](const Expr *E) -> std::optional<llvm::APSInt> {
+    if (E->isIntegerConstantExpr(CGF.getContext()))
       if (auto Constant = E->getIntegerConstantExpr(CGF.getContext()))
-        UpperBound = UpperBound ? Constant->getZExtValue()
-                                : std::min(UpperBound,
-                                           int32_t(Constant->getZExtValue()));
-    }
+        return Constant;
+    return std::nullopt;
+  };
+
+  auto CheckUpperBound = [&](const Expr *E) {
+    if (auto Constant = GetIntegerConstant(E))
+      UpperBound = UpperBound ? Constant->getZExtValue() : std::min(UpperBound, int32_t(Constant->getZExtValue()));
     // If we haven't found a upper bound, remember we saw a thread limiting
     // clause.
     if (UpperBound == -1)
       UpperBound = 0;
-    if (EPtr)
-      *EPtr = E;
   };
+
+  auto CheckUpperBoundAndTrackExprs =
+      [&](llvm::ArrayRef<const Expr *> Exprs,
+          llvm::SmallVectorImpl<const Expr *> &ExprsOut) {
+        assert(ExprsOut.size() == 0 && "Expected empty vector");
+        for (const Expr *E : Exprs)
+          ExprsOut.push_back(E);
+
+        SmallVector<int32_t> UBs;
+        for (const Expr *E : Exprs) {
+          int32_t UB = -1;
+          if (auto Constant = GetIntegerConstant(E))
+            UBs.push_back(Constant->getZExtValue());
+        }
+
+        if (UBs.size() == Exprs.size()) {
+          int32_t UBTotal = 1;
+          for (int32_t UB : UBs)
+            UBTotal *= UB;
+          UpperBound = UpperBound ? UBTotal : std::min(UpperBound, UBTotal);
+        }
+
+        // If we haven't found a upper bound, remember we saw a thread limiting
+        // clause.
+        if (UpperBound == -1)
+          UpperBound = 0;
+      };
 
   auto ReturnSequential = [&]() {
     UpperBound = 1;
@@ -6808,30 +6870,27 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
     if (const auto *Dir = dyn_cast_or_null<OMPExecutableDirective>(Child)) {
       if (const auto *TLC = Dir->getSingleClause<OMPThreadLimitClause>()) {
         ThreadLimitClause = TLC;
-        if (ThreadLimitExpr) {
-          CGOpenMPInnerExprInfo CGInfo(CGF, *CS);
-          CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGInfo);
-          CodeGenFunction::LexicalScope Scope(
-              CGF,
-              ThreadLimitClause->getThreadLimit().front()->getSourceRange());
-          if (const auto *PreInit =
-                  cast_or_null<DeclStmt>(ThreadLimitClause->getPreInitStmt())) {
-            for (const auto *I : PreInit->decls()) {
-              if (!I->hasAttr<OMPCaptureNoInitAttr>()) {
-                CGF.EmitVarDecl(cast<VarDecl>(*I));
-              } else {
-                CodeGenFunction::AutoVarEmission Emission =
-                    CGF.EmitAutoVarAlloca(cast<VarDecl>(*I));
-                CGF.EmitAutoVarCleanups(Emission);
-              }
+        CGOpenMPInnerExprInfo CGInfo(CGF, *CS);
+        CodeGenFunction::CGCapturedStmtRAII CapInfoRAII(CGF, &CGInfo);
+        CodeGenFunction::LexicalScope Scope(
+            CGF, ThreadLimitClause->getThreadLimit().front()->getSourceRange());
+        if (const auto *PreInit =
+                cast_or_null<DeclStmt>(ThreadLimitClause->getPreInitStmt())) {
+          for (const auto *I : PreInit->decls()) {
+            if (!I->hasAttr<OMPCaptureNoInitAttr>()) {
+              CGF.EmitVarDecl(cast<VarDecl>(*I));
+            } else {
+              CodeGenFunction::AutoVarEmission Emission =
+                  CGF.EmitAutoVarAlloca(cast<VarDecl>(*I));
+              CGF.EmitAutoVarCleanups(Emission);
             }
           }
         }
       }
     }
     if (ThreadLimitClause)
-      CheckForConstExpr(ThreadLimitClause->getThreadLimit().front(),
-                        ThreadLimitExpr);
+      CheckUpperBoundAndTrackExprs(ThreadLimitClause->getThreadLimit(),
+                                ThreadLimitExprs);
     if (const auto *Dir = dyn_cast_or_null<OMPExecutableDirective>(Child)) {
       if (isOpenMPTeamsDirective(Dir->getDirectiveKind()) &&
           !isOpenMPDistributeDirective(Dir->getDirectiveKind())) {
@@ -6852,8 +6911,8 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
     if (D.hasClausesOfKind<OMPThreadLimitClause>()) {
       CodeGenFunction::RunCleanupsScope ThreadLimitScope(CGF);
       const auto *ThreadLimitClause = D.getSingleClause<OMPThreadLimitClause>();
-      CheckForConstExpr(ThreadLimitClause->getThreadLimit().front(),
-                        ThreadLimitExpr);
+      CheckUpperBoundAndTrackExprs(ThreadLimitClause->getThreadLimit(),
+                                ThreadLimitExprs);
     }
     const CapturedStmt *CS = D.getInnermostCapturedStmt();
     getNumThreads(CGF, CS, NTPtr, UpperBound, UpperBoundOnly, CondVal);
@@ -6871,8 +6930,8 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
     if (D.hasClausesOfKind<OMPThreadLimitClause>()) {
       CodeGenFunction::RunCleanupsScope ThreadLimitScope(CGF);
       const auto *ThreadLimitClause = D.getSingleClause<OMPThreadLimitClause>();
-      CheckForConstExpr(ThreadLimitClause->getThreadLimit().front(),
-                        ThreadLimitExpr);
+      CheckUpperBoundAndTrackExprs(ThreadLimitClause->getThreadLimit(),
+                                ThreadLimitExprs);
     }
     getNumThreads(CGF, D.getInnermostCapturedStmt(), NTPtr, UpperBound,
                   UpperBoundOnly, CondVal);
@@ -6908,13 +6967,13 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
     if (D.hasClausesOfKind<OMPThreadLimitClause>()) {
       CodeGenFunction::RunCleanupsScope ThreadLimitScope(CGF);
       const auto *ThreadLimitClause = D.getSingleClause<OMPThreadLimitClause>();
-      CheckForConstExpr(ThreadLimitClause->getThreadLimit().front(),
-                        ThreadLimitExpr);
+      CheckUpperBoundAndTrackExprs(ThreadLimitClause->getThreadLimit(),
+                                ThreadLimitExprs);
     }
     if (D.hasClausesOfKind<OMPNumThreadsClause>()) {
       CodeGenFunction::RunCleanupsScope NumThreadsScope(CGF);
       const auto *NumThreadsClause = D.getSingleClause<OMPNumThreadsClause>();
-      CheckForConstExpr(NumThreadsClause->getNumThreads(), nullptr);
+      CheckUpperBound(NumThreadsClause->getNumThreads());
       return NumThreadsClause->getNumThreads();
     }
     return NT;
@@ -6928,61 +6987,72 @@ const Expr *CGOpenMPRuntime::getNumThreadsExprForTargetDirective(
   llvm_unreachable("Unsupported directive kind.");
 }
 
-llvm::Value *CGOpenMPRuntime::emitNumThreadsForTargetDirective(
-    CodeGenFunction &CGF, const OMPExecutableDirective &D) {
-  llvm::Value *NumThreadsVal = nullptr;
+void CGOpenMPRuntime::emitNumThreadsForTargetDirective(
+    CodeGenFunction &CGF, const OMPExecutableDirective &D,
+    llvm::SmallVectorImpl<llvm::Value *> &Values) {
+  llvm::SmallVector<llvm::Value *> NumThreadsVals;
   llvm::Value *CondVal = nullptr;
-  llvm::Value *ThreadLimitVal = nullptr;
-  const Expr *ThreadLimitExpr = nullptr;
+  llvm::SmallVector<llvm::Value *> ThreadLimitVals;
+  llvm::SmallVector<const Expr *> ThreadLimitExprs;
   int32_t UpperBound = -1;
 
   const Expr *NT = getNumThreadsExprForTargetDirective(
-      CGF, D, UpperBound, /* UpperBoundOnly */ false, &CondVal,
-      &ThreadLimitExpr);
+      CGF, D, UpperBound, /* UpperBoundOnly */ false, ThreadLimitExprs,
+      &CondVal);
 
   // Thread limit expressions are used below, emit them.
-  if (ThreadLimitExpr) {
-    ThreadLimitVal =
-        CGF.EmitScalarExpr(ThreadLimitExpr, /*IgnoreResultAssign=*/true);
-    ThreadLimitVal = CGF.Builder.CreateIntCast(ThreadLimitVal, CGF.Int32Ty,
-                                               /*isSigned=*/false);
+  if (ThreadLimitExprs.size()) {
+    for (const Expr *E : ThreadLimitExprs) {
+      llvm::Value *V = CGF.EmitScalarExpr(E, /*IgnoreResultAssign=*/true);
+      ThreadLimitVals.push_back(CGF.Builder.CreateIntCast(V, CGF.Int32Ty,
+                                                          /*isSigned=*/false));
+    }
   }
 
   // Generate the num teams expression.
   if (UpperBound == 1) {
-    NumThreadsVal = CGF.Builder.getInt32(UpperBound);
+    NumThreadsVals.push_back(CGF.Builder.getInt32(UpperBound));
   } else if (NT) {
-    NumThreadsVal = CGF.EmitScalarExpr(NT, /*IgnoreResultAssign=*/true);
-    NumThreadsVal = CGF.Builder.CreateIntCast(NumThreadsVal, CGF.Int32Ty,
-                                              /*isSigned=*/false);
-  } else if (ThreadLimitVal) {
+    llvm::Value *V = CGF.EmitScalarExpr(NT, /*IgnoreResultAssign=*/true);
+    NumThreadsVals.push_back(CGF.Builder.CreateIntCast(V, CGF.Int32Ty,
+                                                       /*isSigned=*/false));
+  } else if (ThreadLimitVals.size()) {
     // If we do not have a num threads value but a thread limit, replace the
     // former with the latter. We know handled the thread limit expression.
-    NumThreadsVal = ThreadLimitVal;
-    ThreadLimitVal = nullptr;
+    NumThreadsVals = std::move(ThreadLimitVals);
   } else {
     // Default to "0" which means runtime choice.
-    assert(!ThreadLimitVal && "Default not applicable with thread limit value");
-    NumThreadsVal = CGF.Builder.getInt32(0);
+    assert(!ThreadLimitVals.size() &&
+           "Default not applicable with thread limit value");
+    NumThreadsVals.push_back(CGF.Builder.getInt32(0));
   }
 
   // Handle if clause. If if clause present, the number of threads is
   // calculated as <cond> ? (<numthreads> ? <numthreads> : 0 ) : 1.
   if (CondVal) {
+    assert(NumThreadsVals.size() == 1 &&
+           "Expecting one dimension with if clause");
+
     CodeGenFunction::RunCleanupsScope Scope(CGF);
-    NumThreadsVal = CGF.Builder.CreateSelect(CondVal, NumThreadsVal,
-                                             CGF.Builder.getInt32(1));
+    llvm::Value *V = CGF.Builder.CreateSelect(CondVal, NumThreadsVals[0],
+                                              CGF.Builder.getInt32(1));
+    NumThreadsVals = {V};
   }
 
   // If the thread limit and num teams expression were present, take the
   // minimum.
-  if (ThreadLimitVal) {
-    NumThreadsVal = CGF.Builder.CreateSelect(
-        CGF.Builder.CreateICmpULT(ThreadLimitVal, NumThreadsVal),
-        ThreadLimitVal, NumThreadsVal);
+  if (ThreadLimitVals.size()) {
+    assert(ThreadLimitVals.size() == NumThreadsVals.size() &&
+           "Expecting same dimensions");
+
+    for (size_t D = 0; D < NumThreadsVals.size(); ++D) {
+      NumThreadsVals[D] = CGF.Builder.CreateSelect(
+          CGF.Builder.CreateICmpULT(ThreadLimitVals[D], NumThreadsVals[D]),
+          ThreadLimitVals[D], NumThreadsVals[D]);
+    }
   }
 
-  return NumThreadsVal;
+  Values = std::move(NumThreadsVals);
 }
 
 namespace {
@@ -11338,9 +11408,8 @@ static void emitTargetCallKernelLaunch(
       emitClauseForBareTargetDirective<OMPThreadLimitClause>(CGF, D,
                                                              NumThreads);
     } else {
-      NumTeams.push_back(OMPRuntime->emitNumTeamsForTargetDirective(CGF, D));
-      NumThreads.push_back(
-          OMPRuntime->emitNumThreadsForTargetDirective(CGF, D));
+      OMPRuntime->emitNumTeamsForTargetDirective(CGF, D, NumTeams);
+      OMPRuntime->emitNumThreadsForTargetDirective(CGF, D, NumThreads);
     }
 
     llvm::Value *DeviceID = emitDeviceID(Device, CGF);

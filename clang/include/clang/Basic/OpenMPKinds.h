@@ -265,6 +265,18 @@ enum OpenMPNumThreadsClauseModifier {
   OMPC_NUMTHREADS_unknown
 };
 
+enum OpenMPNumTeamsClauseModifier {
+#define OPENMP_NUMTEAMS_MODIFIER(Name) OMPC_NUMTEAMS_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_NUMTEAMS_unknown
+};
+
+enum OpenMPThreadLimitClauseModifier {
+#define OPENMP_THREADLIMIT_MODIFIER(Name) OMPC_THREADLIMIT_##Name,
+#include "clang/Basic/OpenMPKinds.def"
+  OMPC_THREADLIMIT_unknown
+};
+
 /// OpenMP dependence types for 'doacross' clause.
 enum OpenMPDoacrossClauseModifier {
 #define OPENMP_DOACROSS_MODIFIER(Name) OMPC_DOACROSS_##Name,

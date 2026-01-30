@@ -226,7 +226,7 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
   static void dispatch_init(IdentTy *loc, int32_t threadId,
                             kmp_sched_t schedule, T lb, T ub, ST st, ST chunk,
                             DynamicScheduleTracker *DST) {
-    int tid = mapping::getThreadIdInBlock();
+    int tid = mapping::getTotalThreadIdInBlock();
     T tnum = omp_get_num_threads();
     T tripCount = ub - lb + 1; // +1 because ub is inclusive
     ASSERT0(LT_FUSSY, threadId < tnum,
@@ -480,14 +480,14 @@ template <typename T, typename ST> struct omptarget_nvptx_LoopSupport {
 
 // Create a new DST, link the current one, and define the new as current.
 static DynamicScheduleTracker *pushDST() {
-  int32_t ThreadIndex = mapping::getThreadIdInBlock();
+  int32_t ThreadIndex = mapping::getTotalThreadIdInBlock();
   // Each block will allocate an array of pointers to DST structs. The array is
   // equal in length to the number of threads in that block.
   if (!ThreadDST) {
     // Allocate global memory array of pointers to DST structs:
     if (mapping::isMainThreadInGenericMode() || ThreadIndex == 0)
       ThreadDST = static_cast<DynamicScheduleTracker **>(
-          memory::allocGlobal(mapping::getNumberOfThreadsInBlock() *
+          memory::allocGlobal(mapping::getTotalNumberOfThreadsInBlock() *
                                   sizeof(DynamicScheduleTracker *),
                               "new ThreadDST array"));
     synchronize::threads(atomic::seq_cst);
@@ -509,12 +509,12 @@ static DynamicScheduleTracker *pushDST() {
 
 // Return the current DST.
 static DynamicScheduleTracker *peekDST() {
-  return ThreadDST[mapping::getThreadIdInBlock()];
+  return ThreadDST[mapping::getTotalThreadIdInBlock()];
 }
 
 // Pop the current DST and restore the last one.
 static void popDST() {
-  int32_t ThreadIndex = mapping::getThreadIdInBlock();
+  int32_t ThreadIndex = mapping::getTotalThreadIdInBlock();
   DynamicScheduleTracker *CurrentDST = ThreadDST[ThreadIndex];
   DynamicScheduleTracker *OldDST = CurrentDST->NextDST;
   memory::freeGlobal(CurrentDST, "remove DST");
@@ -896,8 +896,8 @@ public:
     Ty TId = 0;
 
     // All teams need to participate.
-    Ty NumBlocks = mapping::getNumberOfBlocksInKernel();
-    Ty BId = mapping::getBlockIdInKernel();
+    Ty NumBlocks = mapping::getTotalNumberOfBlocksInKernel();
+    Ty BId = mapping::getTotalBlockIdInKernel();
 
     // If the block chunk is not specified we pick a default now.
     if (BlockChunk == 0)
@@ -948,11 +948,11 @@ public:
     // All threads need to participate but the user might have used a
     // `num_threads` clause on the parallel and reduced the number compared to
     // the block size.
-    Ty TId = mapping::getThreadIdInBlock();
+    Ty TId = mapping::getTotalThreadIdInBlock();
 
     // All teams need to participate.
-    Ty NumBlocks = mapping::getNumberOfBlocksInKernel();
-    Ty BId = mapping::getBlockIdInKernel();
+    Ty NumBlocks = mapping::getTotalNumberOfBlocksInKernel();
+    Ty BId = mapping::getTotalBlockIdInKernel();
 
     // If the block chunk is not specified we pick a default now.
     if (BlockChunk == 0)
