@@ -1,5 +1,4 @@
 // REQUIRES: comgr-has-spirv
-// UNSUPPORTED: true
 // COM: Same as spirv-translator but with the cache
 // RUN: rm -fr %t.cache
 
