@@ -444,6 +444,11 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       result = todo("thread_limit with multi-dimensional values");
   };
 
+  auto checkDynGroupprivate = [&todo](auto op, LogicalResult &result) {
+    if (op.getDynGroupprivateSize())
+      result = todo("dyn_groupprivate");
+  };
+
   LogicalResult result = success();
   llvm::TypeSwitch<Operation &>(op)
       .Case([&](omp::DistributeOp op) {
@@ -469,6 +474,7 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkPrivate(op, result);
         checkNumTeams(op, result);
         checkThreadLimit(op, result);
+        checkDynGroupprivate(op, result);
       })
       .Case([&](omp::TaskOp op) {
         checkAllocate(op, result);
@@ -4218,6 +4224,26 @@ convertOmpCancellationPoint(omp::CancellationPointOp op,
   return success();
 }
 
+static LLVM::GlobalOp
+getGlobalFromSymbol(Operation *symOp,
+                    LLVM::ModuleTranslation &moduleTranslation,
+                    Operation *opInst) {
+
+  // Handle potential address space cast
+  if (auto asCast = dyn_cast<LLVM::AddrSpaceCastOp>(symOp))
+    symOp = asCast.getOperand().getDefiningOp();
+
+  // Check if we have an AddressOfOp
+  if (!isa<LLVM::AddressOfOp>(symOp)) {
+    if (opInst)
+      opInst->emitError("Addressing symbol not found");
+    return nullptr;
+  }
+
+  LLVM::AddressOfOp addressOfOp = cast<LLVM::AddressOfOp>(symOp);
+  return addressOfOp.getGlobal(moduleTranslation.symbolTable());
+}
+
 /// Converts an OpenMP Threadprivate operation into LLVM IR using
 /// OpenMPIRBuilder.
 static LogicalResult
@@ -4252,6 +4278,99 @@ convertOmpThreadprivate(Operation &opInst, llvm::IRBuilderBase &builder,
       ompLoc, globalValue, size, global.getSymName() + ".cache");
   moduleTranslation.mapValue(opInst.getResult(0), callInst);
 
+  return success();
+}
+
+/// Converts an OpenMP groupprivate operation into LLVM IR using
+/// OpenMPIRBuilder.
+static LogicalResult
+convertOmpGroupprivate(Operation &opInst, llvm::IRBuilderBase &builder,
+                       LLVM::ModuleTranslation &moduleTranslation) {
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  auto groupprivateOp = cast<omp::GroupprivateOp>(opInst);
+
+  if (failed(checkImplementationStatus(opInst)))
+    return failure();
+
+  bool isTargetDevice = ompBuilder->Config.isTargetDevice();
+  auto deviceType = groupprivateOp.getDeviceType();
+
+  // Skip allocation based on device_type
+  bool shouldAllocate = true;
+  if (deviceType.has_value()) {
+    switch (*deviceType) {
+    case mlir::omp::DeclareTargetDeviceType::host:
+      // Only allocate on host
+      shouldAllocate = !isTargetDevice;
+      break;
+    case mlir::omp::DeclareTargetDeviceType::nohost:
+      // Only allocate on device
+      shouldAllocate = isTargetDevice;
+      break;
+    case mlir::omp::DeclareTargetDeviceType::any:
+      // Allocate on both
+      shouldAllocate = true;
+      break;
+    }
+  }
+
+  Value symAddr = groupprivateOp.getSymAddr();
+  llvm::Value *symValue = moduleTranslation.lookupValue(symAddr);
+  llvm::Value *resultPtr;
+
+  // Get the element type and variable name from the global.
+  // Groupprivate requires sym_addr to come from a global variable.
+  llvm::Type *varType = nullptr;
+  std::string varName = "omp.groupprivate";
+
+  if (Operation *symOp = symAddr.getDefiningOp()) {
+    if (LLVM::GlobalOp global =
+            getGlobalFromSymbol(symOp, moduleTranslation, nullptr)) {
+      // Get type from the global
+      varType = moduleTranslation.convertType(global.getType());
+      // Get name from the global
+      if (llvm::GlobalValue *globalValue =
+              moduleTranslation.lookupGlobal(global)) {
+        varName = globalValue->getName().str();
+      }
+    }
+  }
+
+  if (!varType) {
+    return opInst.emitError()
+           << "Groupprivate requires sym_addr to reference a global variable";
+  }
+
+  if (shouldAllocate) {
+    if (isTargetDevice) {
+      llvm::Module *llvmModule = moduleTranslation.getLLVMModule();
+      llvm::Triple targetTriple = llvm::Triple(llvmModule->getTargetTriple());
+      if (targetTriple.isAMDGCN() || targetTriple.isNVPTX()) {
+        // Shared address space is 3 for AMDGPU and NVPTX targets.
+        unsigned sharedAddressSpace = 3;
+        llvm::GlobalVariable *sharedVar = new llvm::GlobalVariable(
+            *llvmModule, varType, /*isConstant=*/false,
+            llvm::GlobalValue::InternalLinkage, llvm::PoisonValue::get(varType),
+            varName, /*InsertBefore=*/nullptr,
+            llvm::GlobalValue::NotThreadLocal, sharedAddressSpace,
+            /*isExternallyInitialized=*/false);
+        resultPtr = sharedVar;
+      } else {
+        return opInst.emitError()
+               << "Groupprivate operation is not supported for this target: "
+               << targetTriple.str();
+      }
+    } else {
+      // Use original address when allocating on host device.
+      // TODO: Add support for allocating group-private storage on host device.
+      resultPtr = symValue;
+    }
+  } else {
+    // Use original address when not allocating group-private storage.
+    resultPtr = symValue;
+  }
+
+  moduleTranslation.mapValue(opInst.getResult(0), resultPtr);
   return success();
 }
 
@@ -6754,6 +6873,25 @@ initTargetRuntimeAttrs(llvm::IRBuilderBase &builder,
   }
 }
 
+static llvm::omp::OMPDynGroupprivateFallbackType
+getFallbackType(omp::TargetOp targetOp) {
+  if (!targetOp.getFallbackAttr())
+    return llvm::omp::OMPDynGroupprivateFallbackType::DefaultMem;
+
+  // Extract the FallbackModifier enum value.
+  mlir::omp::FallbackModifier fb = targetOp.getFallbackAttr().getValue();
+  switch (fb) {
+  case mlir::omp::FallbackModifier::abort:
+    return llvm::omp::OMPDynGroupprivateFallbackType::Abort;
+  case mlir::omp::FallbackModifier::null:
+    return llvm::omp::OMPDynGroupprivateFallbackType::Null;
+  case mlir::omp::FallbackModifier::default_mem:
+    return llvm::omp::OMPDynGroupprivateFallbackType::DefaultMem;
+  }
+
+  llvm_unreachable("unexpected dyn_groupprivate fallback type");
+}
+
 static LogicalResult
 convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
                  LLVM::ModuleTranslation &moduleTranslation) {
@@ -7045,12 +7183,20 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   if (Value targetIfCond = targetOp.getIfExpr())
     ifCond = moduleTranslation.lookupValue(targetIfCond);
 
+  mlir::Value dynGroupPrivateSize = targetOp.getDynGroupprivateSize();
+  llvm::Value *dynSizeVal = nullptr;
+  if (dynGroupPrivateSize)
+    dynSizeVal = moduleTranslation.lookupValue(dynGroupPrivateSize);
+
+  llvm::omp::OMPDynGroupprivateFallbackType fallbackType =
+      getFallbackType(targetOp);
+
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
       moduleTranslation.getOpenMPBuilder()->createTarget(
           ompLoc, isOffloadEntry, allocIP, builder.saveIP(), deallocIPs, info,
           entryInfo, defaultAttrs, runtimeAttrs, ifCond, kernelInput,
           genMapInfoCB, bodyCB, argAccessorCB, customMapperCB, dds,
-          targetOp.getNowait());
+          targetOp.getNowait(), dynSizeVal, fallbackType);
 
   if (failed(handleError(afterIP, opInst)))
     return failure();
@@ -7545,8 +7691,8 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
 
   if (ompBuilder->Config.isTargetDevice() &&
-      !isa<omp::TargetOp, omp::MapInfoOp, omp::TerminatorOp, omp::YieldOp>(
-          op) &&
+      !isa<omp::TargetOp, omp::MapInfoOp, omp::TerminatorOp, omp::YieldOp,
+           omp::ThreadprivateOp, omp::GroupprivateOp>(op) &&
       isHostDeviceOp(op))
     return op->emitOpError() << "unsupported host op found in device";
 
@@ -7682,6 +7828,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           })
           .Case([&](omp::ThreadprivateOp) {
             return convertOmpThreadprivate(*op, builder, moduleTranslation);
+          })
+          .Case([&](omp::GroupprivateOp) {
+            return convertOmpGroupprivate(*op, builder, moduleTranslation);
           })
           .Case<omp::TargetDataOp, omp::TargetEnterDataOp,
                 omp::TargetExitDataOp, omp::TargetUpdateOp>([&](auto op) {
