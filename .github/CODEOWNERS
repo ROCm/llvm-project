@@ -55,6 +55,7 @@
 /mlir/**/SubsetOpInterfaceImpl.* @matthias-springer
 /mlir/include/mlir/Interfaces/DestinationStyleOpInterface.* @matthias-springer
 /mlir/lib/Interfaces/DestinationStyleOpInterface.* @matthias-springer
+/mlir/**/Interfaces/ControlFlowInterfaces.* @matthias-springer
 
 # AMDGPU and ROCDL dialects in MLIR.
 /mlir/include/mlir/Dialect/AMDGPU @krzysz00 @kuhar
@@ -190,6 +191,6 @@
 /clang/bindings/python @DeinAlptraum
 
 # AMD-specific projects.
-/amd/comgr/ @lamb-j
+/amd/comgr/ @lamb-j @chinmaydd
 /amd/device-libs/ @b-sumner
 /amd/hipcc/ @david-salinas

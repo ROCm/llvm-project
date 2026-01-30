@@ -36,7 +36,7 @@ EXTERN int ompx_get_team_procs(int DeviceNum) {
   if (!DeviceOrErr)
     FATAL_MESSAGE(DeviceNum, "%s", toString(DeviceOrErr.takeError()).c_str());
   int TeamProcs = DeviceOrErr->getTeamProcs();
-  DP("Call to ompx_get_team_procs returning %d\n", TeamProcs);
+  ODBG(ODT_Interface) << "Call to ompx_get_team_procs returning " << TeamProcs;
   return TeamProcs;
 }
 

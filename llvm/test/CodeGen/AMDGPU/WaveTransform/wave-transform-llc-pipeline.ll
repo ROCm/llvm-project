@@ -47,6 +47,7 @@
 ; GCN-O0-NEXT:      Instrument function entry/exit with calls to e.g. mcount() (post inlining)
 ; GCN-O0-NEXT:      Scalarize Masked Memory Intrinsics
 ; GCN-O0-NEXT:      Expand reduction intrinsics
+; GCN-O0-NEXT:      Dominator Tree Construction
 ; GCN-O0-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O0-NEXT:    Lower buffer fat pointer operations to buffer resources
 ; GCN-O0-NEXT:    AMDGPU lower intrinsics
@@ -255,8 +256,8 @@
 ; GCN-O3-NEXT:      Global Value Numbering
 ; GCN-O3-NEXT:    AMDGPU Preload Kernel Arguments
 ; GCN-O3-NEXT:    FunctionPass Manager
-; GCN-O3-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O3-NEXT:      Dominator Tree Construction
+; GCN-O3-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O3-NEXT:      Natural Loop Information
 ; GCN-O3-NEXT:      CodeGen Prepare
 ; GCN-O3-NEXT:      Dominator Tree Construction
@@ -346,7 +347,6 @@
 ; GCN-O3-NEXT:        GCN DPP Combine
 ; GCN-O3-NEXT:        SI Load Store Optimizer
 ; GCN-O3-NEXT:        SI Peephole SDWA
-; GCN-O3-NEXT:        Machine Block Frequency Analysis
 ; GCN-O3-NEXT:        MachineDominator Tree Construction
 ; GCN-O3-NEXT:        Early Machine Loop Invariant Code Motion
 ; GCN-O3-NEXT:        MachineDominator Tree Construction

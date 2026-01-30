@@ -1586,6 +1586,9 @@ public:
   /// Print out an error that codegen doesn't support the specified stmt yet.
   void ErrorUnsupported(const Stmt *S, const char *Type);
 
+  /// Print out an error that codegen doesn't support the specified stmt yet.
+  void ErrorUnsupported(const Stmt *S, llvm::StringRef Type);
+
   /// Print out an error that codegen doesn't support the specified decl yet.
   void ErrorUnsupported(const Decl *D, const char *Type);
 
@@ -2481,6 +2484,9 @@ public:
   TrapReasonBuilder BuildTrapReason(unsigned DiagID, TrapReason &TR) {
     return TrapReasonBuilder(&getDiags(), DiagID, TR);
   }
+
+  std::optional<llvm::Attribute::AttrKind>
+  StackProtectorAttribute(const Decl *D) const;
 
 private:
   bool shouldDropDLLAttribute(const Decl *D, const llvm::GlobalValue *GV) const;

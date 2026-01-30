@@ -39,7 +39,7 @@ using namespace omp;
 using namespace target;
 using namespace plugin;
 using namespace error;
-using namespace debug;
+using namespace llvm::offload::debug;
 
 namespace llvm::omp::target::plugin {
 // Used for kernel tracing implementation
@@ -102,8 +102,8 @@ private:
       VAddr = *VAddrOrErr;
     }
 
-    ODBG(ODT_Alloc) << "Request " << MaxMemoryAllocation
-                    << " bytes allocated at " << VAddr;
+    ODBG(OLDT_Alloc) << "Request " << MaxMemoryAllocation
+                     << " bytes allocated at " << VAddr;
 
     if (auto Err = Device->memoryVAMap(&MemoryStart, VAddr, &ASize))
       return Err;
@@ -341,7 +341,7 @@ public:
     Alloc = MemoryPtr;
     MemoryPtr = (char *)MemoryPtr + AlignedSize;
     MemorySize += AlignedSize;
-    ODBG(ODT_Alloc) << "Memory Allocator return " << Alloc;
+    ODBG(OLDT_Alloc) << "Memory Allocator return " << Alloc;
     return Alloc;
   }
 
@@ -396,7 +396,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
   // correct, we will synchronize explicitly when the object is deleted. Update
   // the error with the result of the synchronize operation.
   if (AsyncInfoPtr == &LocalAsyncInfo && LocalAsyncInfo.Queue && !Err) {
-    DP("Synchronizing Operation for LOCAL\n");
+     ODBG(ODT_Init) << "Synchronizing Operation for LOCAL";
     Err = Device.synchronize(&LocalAsyncInfo);
     // Invalidate the wrapper object.
   }
@@ -407,7 +407,7 @@ void AsyncInfoWrapperTy::finalize(Error &Err) {
   // This was introduced.
   else if (AsyncInfoPtr && !AsyncInfoPtr->ExecAsync && AsyncInfoPtr->Queue &&
            !Err) {
-    DP("Synchronizing Operation for EXECASYNC\n");
+    ODBG(ODT_Init) << "Synchronizing Operation for EXECASYNC";
     Err = Device.synchronize(AsyncInfoPtr);
   }
 
@@ -430,8 +430,8 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
       return Err;
   } else {
     KernelEnvironment = KernelEnvironmentTy{};
-    ODBG(ODT_Kernel) << "Failed to read kernel environment for '" << getName()
-                     << "' Using default Bare (0) execution mode";
+    ODBG(OLDT_Kernel) << "Failed to read kernel environment for '" << getName()
+                      << "' Using default Bare (0) execution mode";
   }
 
   // Create a metadata object for the exec mode global (auto-generated).
@@ -444,9 +444,11 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
           GHandler.readGlobalFromImage(GenericDevice, Image, ExecModeGlobal)) {
     // Consume the error since it is acceptable to fail.
     [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-    DP("Failed to read execution mode for '%s': %s\n"
-       "Using default Bare (0) execution mode\n",
-       getName(), ErrStr.data());
+     ODBG(ODT_Init) << "Failed to read execution mode for "
+                    << getName()
+                    << ":"
+                    << ErrStr.data()
+                    << "Using default Bare (0) execution mode";
 
     ExecutionMode = OMP_TGT_EXEC_MODE_BARE;
   } else {
@@ -462,8 +464,9 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
   StaticGlobalTy<int8_t> MultiDeviceGlobal(getName(), "_multi_device");
   if (auto Err = GHandler.readGlobalFromImage(GenericDevice, Image,
                                               MultiDeviceGlobal)) {
-    DP("Missing symbol %s, continue execution anyway.\n",
-       MultiDeviceGlobal.getName().data());
+    ODBG(ODT_Init) << "Missing symbol "
+                   << MultiDeviceGlobal.getName().data()
+                   << " continue execution anyway.";
     consumeError(std::move(Err));
     IsMultiDeviceKernel = false;
   } else {
@@ -999,7 +1002,8 @@ Error GenericDeviceTy::deinit(GenericPluginTy &Plugin) {
 
 Expected<DeviceImageTy *> GenericDeviceTy::loadBinary(GenericPluginTy &Plugin,
                                                       StringRef InputTgtImage) {
-  ODBG(ODT_Init) << "Load data from image " << InputTgtImage.bytes_begin();
+  ODBG(OLDT_Init) << "Load data from image "
+                  << static_cast<const void *>(InputTgtImage.bytes_begin());
 
   std::unique_ptr<MemoryBuffer> Buffer;
   if (identify_magic(InputTgtImage) == file_magic::bitcode) {
@@ -1061,7 +1065,7 @@ Error GenericDeviceTy::setupRPCServer(GenericPluginTy &Plugin,
     return Err;
 
   RPCServer = &Server;
-  ODBG(ODT_Init) << "Running an RPC server on device " << getDeviceId();
+  ODBG(OLDT_Init) << "Running an RPC server on device " << getDeviceId();
   return Plugin::success();
 }
 
@@ -1339,12 +1343,14 @@ Error GenericDeviceTy::synchronize(__tgt_async_info *AsyncInfo,
   return Plugin::success();
 }
 
-Error GenericDeviceTy::queryAsync(__tgt_async_info *AsyncInfo) {
+Error GenericDeviceTy::queryAsync(__tgt_async_info *AsyncInfo,
+                                  bool ReleaseQueue,
+                                  bool *IsQueueWorkCompleted) {
   if (!AsyncInfo || !AsyncInfo->Queue)
     return Plugin::error(ErrorCode::INVALID_ARGUMENT,
                          "invalid async info queue");
 
-  return queryAsyncImpl(*AsyncInfo);
+  return queryAsyncImpl(*AsyncInfo, ReleaseQueue, IsQueueWorkCompleted);
 }
 
 Error GenericDeviceTy::memoryVAMap(void **Addr, void *VAddr, size_t *RSize) {
@@ -1738,8 +1744,8 @@ void *GenericDeviceTy::getFree_ArgBuf(size_t sz) {
   if (!found_ptr) {
     auto AllocOrErr = this->allocate(sz, &found_ptr, TARGET_ALLOC_SHARED);
     if (!AllocOrErr) {
-      REPORT("Could not get SHARED mem for Arg Buffer: %s\n",
-             toString(AllocOrErr.takeError()).data());
+      REPORT() << "Could not get SHARED mem for Arg Buffer: " <<
+             toString(AllocOrErr.takeError()).data();
       return nullptr;
     }
     found_ptr = *AllocOrErr;
@@ -1911,9 +1917,10 @@ int32_t GenericPluginTy::supports_empty_images() {
 
 int32_t GenericPluginTy::isPluginCompatible(StringRef Image) {
   auto HandleError = [&](Error Err) -> bool {
-    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-    ODBG(ODT_Init) << "Failure to check validity of image " << Image.data()
-                   << ": " << ErrStr;
+    std::string ErrStr = toString(std::move(Err));
+    ODBG(OLDT_Init) << "Failure to check validity of image "
+                    << static_cast<const void *>(Image.data()) << ": "
+                    << ErrStr;
     return false;
   };
   switch (identify_magic(Image)) {
@@ -1940,9 +1947,10 @@ int32_t GenericPluginTy::isPluginCompatible(StringRef Image) {
 
 int32_t GenericPluginTy::isDeviceCompatible(int32_t DeviceId, StringRef Image) {
   auto HandleError = [&](Error Err) -> bool {
-    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-    ODBG(ODT_Init) << "Failure to check validity of image " << Image << ": "
-                   << ErrStr;
+    std::string ErrStr = toString(std::move(Err));
+    ODBG(OLDT_Init) << "Failure to check validity of image "
+                    << static_cast<const void *>(Image.data()) << ": "
+                    << ErrStr;
     return false;
   };
   switch (identify_magic(Image)) {
@@ -2511,9 +2519,8 @@ int GenericPluginTy::set_coarse_grain_mem_region(int32_t DeviceId, void *ptr,
     auto Err = getDevice(DeviceId).setCoarseGrainMemory(ptr, size);
 
     if (Err) {
-      REPORT("Failure switching memory region to coarse grain mode (ptr: %p, "
-             "size: %ld)\n",
-             ptr, size);
+      REPORT() << "Failure switching memory region to coarse grain mode (ptr: "
+               << ptr << " size: " << size;
       return OFFLOAD_FAIL;
     }
     return OFFLOAD_SUCCESS;
@@ -2535,9 +2542,8 @@ int GenericPluginTy::prepopulate_page_table(int32_t DeviceId, void *ptr,
     auto Err = getDevice(DeviceId).prepopulatePageTable(ptr, size);
 
     if (Err) {
-      REPORT("Failure prepopulating GPU page table (ptr: %p, "
-             "size: %ld)\n",
-             ptr, size);
+      REPORT() <<"Failure prepopulating GPU page table (ptr: " << ptr
+               << "size:" << size;
       return OFFLOAD_FAIL;
     }
     return OFFLOAD_SUCCESS;
@@ -2574,8 +2580,8 @@ void GenericPluginTy::set_coarse_grain_mem(int32_t DeviceId, const void *ptr,
   auto T = logger::log<int32_t>(__func__, DeviceId, ptr, size);
   if (auto Err = getDevice(DeviceId).setCoarseGrainMemoryImpl((void *)ptr, size,
                                                               set_attr))
-    REPORT("Failure to setCoarseGrainMemory: %s\n",
-           toString(std::move(Err)).data());
+    REPORT() << "Failure to setCoarseGrainMemory: "
+             << toString(std::move(Err)).data();
   T.res(0);
   return;
 }
@@ -2583,8 +2589,8 @@ void GenericPluginTy::set_coarse_grain_mem(int32_t DeviceId, const void *ptr,
 int32_t GenericPluginTy::is_accessible_ptr(int32_t DeviceId, const void *Ptr,
                                            size_t Size) {
   auto HandleError = [&](Error Err) -> bool {
-    [[maybe_unused]] std::string ErrStr = toString(std::move(Err));
-    ODBG(ODT_Mapping) << "Failure while checking accessibility of pointer "
+    std::string ErrStr = toString(std::move(Err));
+    ODBG(OLDT_Device) << "Failure while checking accessibility of pointer "
                       << Ptr << " for device " << DeviceId << ": " << ErrStr;
     return false;
   };
