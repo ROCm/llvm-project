@@ -154,8 +154,6 @@ __ockl_sanitizer_report(uint64_t addr, uint64_t pc, uint64_t wgidx,
     buffer->data[6] = is_read;
     buffer->data[7] = access_size;
   });
-
-  Port.close();
   return;
 }
 #endif

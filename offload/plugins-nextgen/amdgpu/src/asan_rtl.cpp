@@ -1,4 +1,4 @@
-//===---- AMDGPUSanitizer.cpp - AMDGPU-specific sanitizer support ---------===//
+//===---- asan_rtl.cpp - AMDGPU-specific sanitizer support ---------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -30,7 +30,6 @@
 
 #if SANITIZER_AMDGPU
 
-#include "Sanitizer.h"
 #include <cstdint>
 #include <cstdlib>
 #include <fcntl.h>
@@ -40,6 +39,8 @@
 #include <tuple>
 #include <unistd.h>
 #include <vector>
+
+#include "Sanitizer.h"
 
 #if defined(__has_include)
 #if __has_include("hsa.h")
@@ -194,7 +195,7 @@ hsa_status_t AMDGPUUriLocator::createUriRangeTable() {
 // The below code currently extracts the uri of loaded code object using
 // either file-uri or memory-uri.
 std::pair<uint64_t, uint64_t> AMDGPUUriLocator::decodeUriAndGetFd(UriInfo &uri,
-                                                            int *uri_fd) {
+                                                                  int *uri_fd) {
 
   std::ostringstream ss;
   char cur;
@@ -280,69 +281,69 @@ AMDGPUUriLocator::UriInfo AMDGPUUriLocator::lookUpUri(uint64_t device_pc) {
 // Handler for sanitizer reports from all lanes - AMDGPU implementation
 void HandleSanitizerReport(uint32_t NumLanes, const SanitizerData *LaneData,
                            uint64_t ActiveMask, int DeviceID) {
-  uint64_t device_failing_addresses[64] = {0};
-  uint64_t entity_id[68] = {0}; // [0]=DeviceID, [1-3]=WG IDs, [4-67]=Wave IDs
+  uint64_t DeviceFailingAddresses[64] = {0};
+  uint64_t EntityId[68] = {0}; // [0]=DeviceID, [1-3]=WG IDs, [4-67]=Wave IDs
 
-  uint32_t n_activelanes = __builtin_popcountl(ActiveMask);
-  entity_id[0] = DeviceID;
+  uint32_t NumActiveLanes = __builtin_popcountl(ActiveMask);
+  EntityId[0] = DeviceID;
 
   // Variables from first work-item (shared across all lanes)
   uint64_t PC = 0;
   uint64_t AccessInfo = 0, AccessSize = 0;
 
-  int indx = 0, en_idx = 1;
-  bool first_workitem = false; // Iterate through all active lanes
-  for (uint32_t lane_id = 0; lane_id < NumLanes; ++lane_id) {
-    if (!(ActiveMask & (1ULL << lane_id)))
+  int Index = 0, EntityIdx = 1;
+  bool FirstWorkitem = false; // Iterate through all active lanes
+  for (uint32_t LaneId = 0; LaneId < NumLanes; ++LaneId) {
+    if (!(ActiveMask & (1ULL << LaneId)))
       continue;
 
-    const SanitizerData &data = LaneData[lane_id];
-    device_failing_addresses[indx++] = data.addr;
+    const SanitizerData &Data = LaneData[LaneId];
+    DeviceFailingAddresses[Index++] = Data.addr;
 
-    if (!first_workitem) {
+    if (!FirstWorkitem) {
       // First work-item: collect all shared data
-      PC = data.pc;
-      entity_id[en_idx++] = data.wgidx;
-      entity_id[en_idx++] = data.wgidy;
-      entity_id[en_idx++] = data.wgidz;
-      entity_id[en_idx++] = data.wave_id;
-      AccessInfo = data.is_read; // 0=write, 1=read
-      AccessSize = data.access_size;
-      first_workitem = true;
+      PC = Data.pc;
+      EntityId[EntityIdx++] = Data.wgidx;
+      EntityId[EntityIdx++] = Data.wgidy;
+      EntityId[EntityIdx++] = Data.wgidz;
+      EntityId[EntityIdx++] = Data.wave_id;
+      AccessInfo = Data.is_read; // bit 0: 1=write, 0=read
+      AccessSize = Data.access_size;
+      FirstWorkitem = true;
     } else {
       // Subsequent work-items: only wave ID
-      entity_id[en_idx++] = data.wave_id;
+      EntityId[EntityIdx++] = Data.wave_id;
     }
   }
 
-  if (!first_workitem)
+  if (!FirstWorkitem)
     return; // No active lanes
 
   // Decode access information
-  bool IsWrite = (AccessInfo == 0); // 0=write, 1=read
-  bool IsAbort = true;              // Always abort on GPU errors
+  bool IsWrite = (AccessInfo & 1); // bit 0 set means write
+  bool IsAbort = true;             // Always abort on GPU errors
 
   uint64_t Callstack[1] = {PC};
 
   // Use AMDGPU-specific URI locator for source location
-  int Uri_fd = -1;
+  int UriFd = -1;
   uint64_t Size = 0, Offset = 0;
   int64_t LoadAddrAdjust = 0;
 
-  AMDGPUUriLocator *Uri_locator = new AMDGPUUriLocator();
+  AMDGPUUriLocator *UriLocator = new AMDGPUUriLocator();
 
-  if (Uri_locator) {
-    AMDGPUUriLocator::UriInfo Uri_info = Uri_locator->lookUpUri(Callstack[0]);
-    std::tie(Offset, Size) = Uri_locator->decodeUriAndGetFd(Uri_info, &Uri_fd);
-    LoadAddrAdjust = Uri_info.loadAddressDiff;
+  if (UriLocator) {
+    AMDGPUUriLocator::UriInfo UriInfo = UriLocator->lookUpUri(Callstack[0]);
+    std::tie(Offset, Size) = UriLocator->decodeUriAndGetFd(UriInfo, &UriFd);
+    LoadAddrAdjust = UriInfo.loadAddressDiff;
   }
 
 #if defined(__linux__)
   // Report the error with all collected lane data
-  __asan_report_nonself_error(Callstack, 1, device_failing_addresses,
-                              n_activelanes, entity_id, n_activelanes + 4,
+  __asan_report_nonself_error(Callstack, 1, DeviceFailingAddresses,
+                              NumActiveLanes, EntityId, NumActiveLanes + 4,
                               IsWrite, AccessSize, IsAbort, "amdgpu",
-                              LoadAddrAdjust, Uri_fd, Size, Offset);
+                              LoadAddrAdjust, UriFd, Size, Offset);
 #endif
 }
 

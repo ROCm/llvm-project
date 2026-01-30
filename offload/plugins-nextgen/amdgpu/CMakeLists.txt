@@ -34,7 +34,7 @@ add_target_library(omptarget.rtl.amdgpu AMDGPU)
 
 target_sources(omptarget.rtl.amdgpu PRIVATE 
   src/rtl.cpp
-  src/AMDGPUSanitizer.cpp
+  src/asan_rtl.cpp
 )
 target_include_directories(omptarget.rtl.amdgpu PRIVATE
                            ${CMAKE_CURRENT_SOURCE_DIR}/utils)
