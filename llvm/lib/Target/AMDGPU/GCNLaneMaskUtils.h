@@ -111,13 +111,25 @@ private:
     Register Value;
 
     explicit BlockInfo(MachineBasicBlock *Block) : Block(Block) {}
+
+    void dump() {
+      dbgs() << "BlockInfo{";
+      dbgs() << " Block:" << printMBBReference(*Block) << ",";
+      dbgs() << " Flags:";
+      if (Flags & ResetAtEnd)
+        dbgs() << "ResetAtEnd,";
+      if (Flags & ResetInMiddle)
+        dbgs() << "ResetInMiddle,";
+      dbgs() << "}\n";
+    }
   };
 
   SmallVector<BlockInfo, 4> Blocks;
 
   Register ZeroReg;
   DenseSet<MachineInstr *> PotentiallyDead;
-  DenseMap<MachineBasicBlock *, DenseSet<Register>> AccumulatorResetBlocks;
+  DenseMap<MachineBasicBlock *, SmallVector<std::pair<Register, unsigned>, 2>>
+      AccumulatorResetBlocks;
 
 public:
   Register Accumulator;

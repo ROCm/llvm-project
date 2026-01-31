@@ -542,7 +542,8 @@ void ReconvergeCFGHelper::run() {
   for (auto &NodePtr : Nodes) {
     WaveNode *Node = NodePtr.get();
 
-    LLVM_DEBUG(dbgs() << "[RCFG_HELPER] Reconverging: " << Node->printableName() << '\n');
+    LLVM_DEBUG(dbgs() << "[RCFG_HELPER] Reconverging: " << Node->printableName()
+                      << '\n');
 
     int RerouteClass = -1;
     for (WaveNode *Pred : Node->Predecessors) {
@@ -1917,15 +1918,20 @@ void ControlFlowRewriter::rewrite() {
     // FIXME: we are creating a register here only to initialize the updater
     Updater.init();
     Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
-    LLVM_DEBUG(dbgs() << "SET_X:" << printMBBReference(*LaneTarget->Block) << '\n');
+    LLVM_DEBUG(dbgs() << "SET_X:" << printMBBReference(*LaneTarget->Block)
+                      << '\n');
     for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
       Updater.addReset(*NodeDivergentPair.getPointer()->Block,
                        GCNLaneMaskUpdater::ResetAtEnd);
-      LLVM_DEBUG(dbgs() << "SET_R:" << printMBBReference(*NodeDivergentPair.getPointer()->Block) << '\n');
+      LLVM_DEBUG(
+          dbgs() << "SET_R:"
+                 << printMBBReference(*NodeDivergentPair.getPointer()->Block)
+                 << '\n');
     }
 
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
-      LLVM_DEBUG(dbgs() << "SET_T:" << printMBBReference(*LaneOrigin.Node->Block) << '\n');
+      LLVM_DEBUG(dbgs() << "SET_T:"
+                        << printMBBReference(*LaneOrigin.Node->Block) << '\n');
       Register CondReg;
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
@@ -2024,8 +2030,10 @@ void ControlFlowRewriter::rewrite() {
 
       MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
 
-      LLVM_DEBUG(dbgs() << "ACC:" << printReg(OriginCFGNodeInfo.PrimarySuccessorExec,
-                                    MRI.getTargetRegisterInfo(), 0, &MRI) << '\n');
+      LLVM_DEBUG(dbgs() << "ACC:"
+                        << printReg(OriginCFGNodeInfo.PrimarySuccessorExec,
+                                    MRI.getTargetRegisterInfo(), 0, &MRI)
+                        << '\n');
 
       // FIXME: Find a way to avoid adding MovTermOpc, instead add MovOpc. This
       // Term operator being the first terminator, acts as an anchor point for
@@ -2061,7 +2069,9 @@ void ControlFlowRewriter::rewrite() {
 
     // FIXME: we are creating a register here only to initialize the updater
     Updater.init();
-    LLVM_DEBUG(dbgs() << "SET_X:" << printMBBReference(*Secondary->Block) << '\n');
+    Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetAtEnd);
+    LLVM_DEBUG(dbgs() << "SET_X:" << printMBBReference(*Secondary->Block)
+                      << '\n');
 
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
@@ -2104,8 +2114,10 @@ void ControlFlowRewriter::rewrite() {
             TII.get(LMC.OrOpc), LMC.ExecReg)
         .addReg(LMC.ExecReg)
         .addReg(Rejoin);
-    
-    LLVM_DEBUG(dbgs() << "ACC:" << printReg(Rejoin, MRI.getTargetRegisterInfo(), 0, &MRI) << '\n');
+
+    LLVM_DEBUG(dbgs() << "ACC:"
+                      << printReg(Rejoin, MRI.getTargetRegisterInfo(), 0, &MRI)
+                      << '\n');
 
     LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_"
                       << printMBBReference(*Secondary->Block) << ".rejoin\n");
@@ -2254,10 +2266,10 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
 
   // Step 3: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();
-  
-  LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName()<< "\n"); 
+
+  LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName() << "\n");
   ReconvergeHelper.dumpNodes();
-  LLVM_DEBUG(dbgs() << "RCFG_END:" << MF.getName()<< "\n"); 
+  LLVM_DEBUG(dbgs() << "RCFG_END:" << MF.getName() << "\n");
 
   // FIXME: restore the following 1 line:
   // UI.clear();

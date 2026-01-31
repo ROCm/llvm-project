@@ -404,7 +404,6 @@ getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
 
 /// Internal method to insert merge instructions.
 void GCNLaneMaskUpdater::process() {
-  MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
   MachineBasicBlock &Entry = LMU.function()->front();
@@ -427,8 +426,8 @@ void GCNLaneMaskUpdater::process() {
   for (BlockInfo &Info : Blocks) {
     assert(Info.Flags || Info.Value);
     Info.dump();
-    if (!Info.Value || (Info.Flags & ResetAtEnd))
-      AccumulatorResetBlocks[Info.Block].insert(Accumulator);
+    if (Info.Flags)
+      AccumulatorResetBlocks[Info.Block].push_back({Accumulator, Info.Flags});
   }
 
   // Once the SSA updater is ready, we can fill in all merge code, relying
@@ -463,16 +462,32 @@ GCNLaneMaskUpdater::findBlockInfo(MachineBasicBlock &Block) {
 void GCNLaneMaskUpdater::insertAccumulatorResets() {
   const SIInstrInfo *TII =
       LMU.function()->getSubtarget<GCNSubtarget>().getInstrInfo();
-  for (auto &[B, Accumulators] : AccumulatorResetBlocks) {
-    MachineBasicBlock::iterator I = B->getFirstTerminator();
-    if (I->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
-        I->getOperand(0).getReg() == LMU.getLaneMaskConsts().ExecReg) {
-      I->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
-      I++;
+  for (auto &[B, AccFlagPairs] : AccumulatorResetBlocks) {
+
+    // TODO : We only need to compute EndInsertPt if any of B's AccFlagPairs has
+    // ResetAtEnd
+    MachineBasicBlock::iterator EndInsertPt;
+    EndInsertPt = B->getFirstTerminator();
+    if (EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
+        EndInsertPt->getOperand(0).getReg() ==
+            LMU.getLaneMaskConsts().ExecReg) {
+      EndInsertPt->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
+      EndInsertPt++;
     }
-    for (Register Acc : Accumulators) {
-      BuildMI(*B, I, {}, TII->get(LMU.getLaneMaskConsts().MovOpc), Acc)
-          .addImm(0);
+
+    for (auto &[Acc, Flags] : AccFlagPairs) {
+      if (Flags & ResetInMiddle) {
+        // Insert at beginning of basic block for ResetInMiddle
+        BuildMI(*B, B->begin(), {}, TII->get(LMU.getLaneMaskConsts().MovOpc),
+                Acc)
+            .addImm(0);
+      }
+      if (Flags & ResetAtEnd) {
+        // Insert at end of basic block for ResetAtEnd
+        BuildMI(*B, EndInsertPt, {}, TII->get(LMU.getLaneMaskConsts().MovOpc),
+                Acc)
+            .addImm(0);
+      }
     }
   }
 }
