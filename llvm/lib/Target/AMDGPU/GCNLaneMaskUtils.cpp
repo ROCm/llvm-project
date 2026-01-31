@@ -179,7 +179,6 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
                                          MachineBasicBlock &UseBlock,
                                          MachineBasicBlock::iterator I,
                                          unsigned RemainingDepth) {
-  MachineRegisterInfo &MRI = LMU.function()->getRegInfo();
   MachineInstr *DefInstr = nullptr;
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
@@ -427,7 +426,7 @@ void GCNLaneMaskUpdater::process() {
   // Reset accumulator.
   for (BlockInfo &Info : Blocks) {
     assert(Info.Flags || Info.Value);
-
+    Info.dump();
     if (!Info.Value || (Info.Flags & ResetAtEnd))
       AccumulatorResetBlocks[Info.Block].insert(Accumulator);
   }
