@@ -8,7 +8,3 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks oclConformance basic_types/ hiloeo
-[VectorCombine] Trim low end of loads used in shufflevector rebroadcasts. (#149093)
-[VectorCombine] Fix crash with poison mask elements in shrinkLoadForShuffles (#178920)
---
