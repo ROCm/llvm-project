@@ -84,6 +84,30 @@ set(SOURCES
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
 
+if(WIN32)
+  # TODO: Evaluate whether this should be set from the super-project?
+  # NOTE: This is quite ugly and requires some hacks as of now.
+  #       Eventually, we would like for the DLL name to be set uniformly across all build platforms.
+  if (DEFINED THEROCK_HIP_MAJOR_VERSION AND DEFINED THEROCK_HIP_MINOR_VERSION)
+    set(AMD_COMGR_BUILD_SOURCE "TheRock")
+    set(COMGR_DLL_NAME "amd_comgr0${THEROCK_HIP_MAJOR_VERSION}0${THEROCK_HIP_MINOR_VERSION}.dll")
+  else()
+    set(AMD_COMGR_BUILD_SOURCE "Driver")
+    set(COMGR_DLL_NAME "amd_comgr_${amd_comgr_VERSION_MAJOR}.dll")
+  endif()
+  string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
+
+  # Add Windows resource file for version info
+  set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
+  configure_file(
+    src/${COMGR_MANIFEST_NAME}.MANIFEST.in
+    src/${COMGR_MANIFEST_NAME}.MANIFEST @ONLY)
+  configure_file(
+    src/comgr.rc.in
+    src/comgr.rc @ONLY)
+  list(APPEND SOURCES "${CMAKE_CURRENT_BINARY_DIR}/src/comgr.rc")
+endif()
+
 if(COMGR_BUILD_SHARED_LIBS)
   add_library(amd_comgr SHARED ${SOURCES})
   # Windows doesn't have a strip utility, so CMAKE_STRIP won't be set.
@@ -246,6 +270,9 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     "/wd4146" #[[Suppress 'unary minus operator applied to unsigned type, result still unsigned]]
     "/Zc:preprocessor" #[[Enable standards conforming preprocessor - https://learn.microsoft.com/en-us/cpp/build/reference/zc-preprocessor]])
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS _HAS_EXCEPTIONS=0)
+  # disable automatic manifest embedding to avoid duplicate resource errors
+  # (CVT1100/LNK1123) - the manifest is already embedded via comgr.rc
+  list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS "/MANIFEST:NO")
 endif()
 
 # Windows is strict about visibility of exports in shared libraries, so we ask
@@ -352,6 +379,14 @@ else()
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+# Install the manifest file alongside the DLL for Windows SxS
+if(WIN32)
+  install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/src/${COMGR_MANIFEST_NAME}.MANIFEST"
+    COMPONENT amd-comgr
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 install(FILES

@@ -45,10 +45,6 @@ using namespace CodeGen;
 //                              Statement Emission
 //===----------------------------------------------------------------------===//
 
-namespace llvm {
-extern cl::opt<bool> EnableSingleByteCoverage;
-} // namespace llvm
-
 void CodeGenFunction::EmitStopPoint(const Stmt *S) {
   if (CGDebugInfo *DI = getDebugInfo()) {
     SourceLocation Loc;
@@ -1998,8 +1994,8 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
     // If the skipped block has no labels in it, just emit the executed block.
     // This avoids emitting dead code and simplifies the CFG substantially.
     if (S.isConstexpr() || !ContainsLabel(Skipped)) {
-      if (CondConstant)
-        incrementProfileCounter(&S);
+      incrementProfileCounter(CondConstant ? UseExecPath : UseSkipPath, &S,
+                              /*UseBoth=*/true);
       if (Executed) {
         MaybeEmitDeferredVarDeclInit(S.getConditionVariable());
         RunCleanupsScope ExecutedScope(*this);
@@ -2010,14 +2006,14 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
     }
   }
 
+  auto HasSkip = hasSkipCounter(&S);
+
   // Otherwise, the condition did not fold, or we couldn't elide it.  Just emit
   // the conditional branch.
   llvm::BasicBlock *ThenBlock = createBasicBlock("if.then");
   llvm::BasicBlock *ContBlock = createBasicBlock("if.end");
-  llvm::BasicBlock *ElseBlock = ContBlock;
-  if (Else)
-    ElseBlock = createBasicBlock("if.else");
-
+  llvm::BasicBlock *ElseBlock =
+      (Else || HasSkip ? createBasicBlock("if.else") : ContBlock);
   // Prefer the PGO based weights over the likelihood attribute.
   // When the build isn't optimized the metadata isn't used, so don't generate
   // it.
@@ -2053,10 +2049,7 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
 
   // Emit the 'then' code.
   EmitBlock(ThenBlock);
-  if (llvm::EnableSingleByteCoverage)
-    incrementProfileCounter(S.getThen());
-  else
-    incrementProfileCounter(&S);
+  incrementProfileCounter(UseExecPath, &S);
   {
     RunCleanupsScope ThenScope(*this);
     EmitStmt(S.getThen());
@@ -2070,9 +2063,9 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
       auto NL = ApplyDebugLocation::CreateEmpty(*this);
       EmitBlock(ElseBlock);
     }
-    // When single byte coverage mode is enabled, add a counter to else block.
-    if (llvm::EnableSingleByteCoverage)
-      incrementProfileCounter(Else);
+    // Add a counter to else block unless it has CounterExpr.
+    if (HasSkip)
+      incrementProfileCounter(UseSkipPath, &S);
     {
       RunCleanupsScope ElseScope(*this);
       EmitStmt(Else);
@@ -2082,15 +2075,14 @@ void CodeGenFunction::EmitIfStmt(const IfStmt &S) {
       auto NL = ApplyDebugLocation::CreateEmpty(*this);
       EmitBranch(ContBlock);
     }
+  } else if (HasSkip) {
+    EmitBlock(ElseBlock);
+    incrementProfileCounter(UseSkipPath, &S);
+    EmitBranch(ContBlock);
   }
 
   // Emit the continuation block for code after the if.
   EmitBlock(ContBlock, true);
-
-  // When single byte coverage mode is enabled, add a counter to continuation
-  // block.
-  if (llvm::EnableSingleByteCoverage)
-    incrementProfileCounter(&S);
 }
 
 bool CodeGenFunction::checkIfLoopMustProgress(const Expr *ControllingExpression,
@@ -4619,6 +4611,8 @@ CodeGenFunction::GenerateCapturedStmtFunction(const CapturedStmt &S) {
     llvm::Function::Create(FuncLLVMTy, llvm::GlobalValue::InternalLinkage,
                            CapturedStmtInfo->getHelperName(), &CGM.getModule());
   CGM.SetInternalFunctionAttributes(CD, F, FuncInfo);
+  if (!CGM.getCodeGenOpts().SampleProfileFile.empty())
+    F->addFnAttr("sample-profile-suffix-elision-policy", "selected");
   if (CD->isNothrow())
     F->addFnAttr(llvm::Attribute::NoUnwind);
 
