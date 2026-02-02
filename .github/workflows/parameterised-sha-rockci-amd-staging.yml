@@ -79,16 +79,6 @@ jobs:
     with:
       build_variant: "release"
 
-  debug_inputs:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Debug inputs received by parameterised_linux.yml
-        run: |
-          echo "event_name=${{ github.event_name }}"
-          echo "LLVM_PR_URL='${{ github.event.inputs.LLVM_PR_URL }}'"
-          echo "SPIRV_PR_URL='${{ github.event.inputs.SPIRV_PR_URL }}'"
-          echo "HIPIFY_PR_URL='${{ github.event.inputs.HIPIFY_PR_URL }}'"
-
   linux_build_and_test:
     name: Linux::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
     needs: setup
