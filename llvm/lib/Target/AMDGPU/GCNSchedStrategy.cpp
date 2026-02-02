@@ -101,7 +101,7 @@ static cl::opt<bool> PrintMaxRPRegUsageAfterScheduler(
 
 static cl::opt<bool> DisableRewriteMFMAFormSchedStage(
     "amdgpu-disable-rewrite-mfma-form-sched-stage", cl::Hidden,
-    cl::desc("Disable rewrie mfma rewrite scheduling stage"), cl::init(true));
+    cl::desc("Disable rewrie mfma rewrite scheduling stage"), cl::init(false));
 
 const unsigned ScheduleMetrics::ScaleFactor = 100;
 
@@ -1330,11 +1330,11 @@ bool RewriteMFMAFormStage::initGCNSchedStage() {
   if (!initHeuristics(RewriteCands, CopyForUse, CopyForDef))
     return false;
 
-  int64_t Cost = getRewriteCost(RewriteCands, CopyForUse, CopyForDef);
+  double Cost = getRewriteCost(RewriteCands, CopyForUse, CopyForDef);
 
   // If we haven't found the beneficial conditions, prefer the VGPR form which
   // may result in less cross RC copies.
-  if (Cost > 0)
+  if (Cost > 0.0)
     return false;
 
   return rewrite(RewriteCands);
@@ -2247,15 +2247,14 @@ bool RewriteMFMAFormStage::initHeuristics(
   return Changed;
 }
 
-int64_t RewriteMFMAFormStage::getRewriteCost(
+double RewriteMFMAFormStage::getRewriteCost(
     const std::vector<std::pair<MachineInstr *, unsigned>> &RewriteCands,
     const DenseMap<MachineBasicBlock *, std::set<Register>> &CopyForUse,
     const SmallPtrSetImpl<MachineInstr *> &CopyForDef) {
   MachineBlockFrequencyInfo *MBFI = DAG.MBFI;
 
-  int64_t BestSpillCost = 0;
-  int64_t Cost = 0;
-  uint64_t EntryFreq = MBFI->getEntryFreq().getFrequency();
+  double BestSpillCost = 0.0;
+  double Cost = 0.0;
 
   std::pair<unsigned, unsigned> MaxVectorRegs =
       ST.getMaxNumVectorRegs(MF.getFunction());
@@ -2270,6 +2269,8 @@ int64_t RewriteMFMAFormStage::getRewriteCost(
     GCNRegPressure &PressureBefore = DAG.Pressure[Region];
     unsigned SpillCostBefore = PressureBefore.getVGPRSpills(
         MF, ArchVGPRThreshold, AGPRThreshold, CombinedThreshold);
+    LLVM_DEBUG(dbgs() << "RewriteMFMA: Region " << Region
+                      << " spill cost before: " << SpillCostBefore << "\n");
 
     // For the cases we care about (i.e. ArchVGPR usage is greater than the
     // addressable limit), rewriting alone should bring pressure to manageable
@@ -2278,29 +2279,21 @@ int64_t RewriteMFMAFormStage::getRewriteCost(
     GCNRegPressure PressureAfter = DAG.getRealRegPressure(Region);
     unsigned SpillCostAfter = PressureAfter.getVGPRSpills(
         MF, ArchVGPRThreshold, AGPRThreshold, CombinedThreshold);
+    LLVM_DEBUG(dbgs() << "RewriteMFMA: Region " << Region
+                      << " spill cost after: " << SpillCostAfter << "\n");
 
-    uint64_t BlockFreq =
-        MBFI->getBlockFreq(DAG.Regions[Region].first->getParent())
-            .getFrequency();
-
-    bool RelativeFreqIsDenom = EntryFreq > BlockFreq;
-    uint64_t RelativeFreq = EntryFreq && BlockFreq
-                                ? (RelativeFreqIsDenom ? EntryFreq / BlockFreq
-                                                       : BlockFreq / EntryFreq)
-                                : 1;
+    MachineBasicBlock *MBB = DAG.Regions[Region].first->getParent();
+    double BlockFreq = MBFI->getBlockFreqRelativeToEntryBlock(MBB);
 
     // This assumes perfect spilling / splitting -- using one spill / copy
     // instruction and one restoreFrom / copy for each excess register,
-    int64_t SpillCost = ((int)SpillCostAfter - (int)SpillCostBefore) * 2;
+    double SpillCost = ((double)SpillCostAfter - (double)SpillCostBefore) * 2;
 
     // Also account for the block frequency.
-    if (RelativeFreqIsDenom)
-      SpillCost /= (int64_t)RelativeFreq;
-    else
-      SpillCost *= (int64_t)RelativeFreq;
+    SpillCost *= BlockFreq;
 
     // If we have increased spilling in any block, just bail.
-    if (SpillCost > 0)
+    if (SpillCost > 0.0)
       return SpillCost;
 
     if (SpillCost < BestSpillCost)
@@ -2309,34 +2302,36 @@ int64_t RewriteMFMAFormStage::getRewriteCost(
 
   // Set the cost to the largest decrease in spill cost in order to not double
   // count spill reductions.
+  LLVM_DEBUG(dbgs() << "RewriteMFMA: BestSpillCost: " << BestSpillCost << "\n");
   Cost = BestSpillCost;
-  assert(Cost <= 0);
-
-  unsigned CopyCost = 0;
+  assert(Cost <= 0.0);
 
   // For each CopyForDef, increase the cost by the register size while
   // accounting for block frequency.
+  double DefCopyCost = 0.0;
   for (MachineInstr *DefMI : CopyForDef) {
     Register DefReg = DefMI->getOperand(0).getReg();
-    uint64_t DefFreq =
-        EntryFreq
-            ? MBFI->getBlockFreq(DefMI->getParent()).getFrequency() / EntryFreq
-            : 1;
+    MachineBasicBlock *DefMBB = DefMI->getParent();
+    double DefFreq = MBFI->getBlockFreqRelativeToEntryBlock(DefMBB);
 
     const TargetRegisterClass *RC = DAG.MRI.getRegClass(DefReg);
-    CopyCost += RC->getCopyCost() * DefFreq;
+    DefCopyCost += (double)RC->getCopyCost() * DefFreq;
   }
+  LLVM_DEBUG(dbgs() << "RewriteMFMA: Def copy Costs: " << DefCopyCost << "\n");
 
   // Account for CopyForUse copies in each block that the register is used.
+  double UseCopyCost = 0.0;
   for (auto &[UseBlock, UseRegs] : CopyForUse) {
-    uint64_t UseFreq =
-        EntryFreq ? MBFI->getBlockFreq(UseBlock).getFrequency() / EntryFreq : 1;
+    uint64_t UseFreq = MBFI->getBlockFreqRelativeToEntryBlock(UseBlock);
 
     for (Register UseReg : UseRegs) {
       const TargetRegisterClass *RC = DAG.MRI.getRegClass(UseReg);
-      CopyCost += RC->getCopyCost() * UseFreq;
+      UseCopyCost += (double)RC->getCopyCost() * UseFreq;
     }
   }
+
+  LLVM_DEBUG(dbgs() << "RewriteMFMA: Use copy Costs: " << UseCopyCost << "\n");
+  double CopyCost = UseCopyCost + DefCopyCost;
 
   // Reset the classes that were changed to AGPR for better RB analysis.
   // We must do rewriting after copy-insertion, as some defs of the register
