@@ -20,6 +20,7 @@ MATH_MANGLE(sincospi)(double x, __private double * cp)
     double s = odd ? sc.c : sc.s;
 
     s = AS_DOUBLE(AS_LONG(s) ^ flip ^ (AS_LONG(x) & SIGNBIT_DP64));
+    sc.s = -sc.s;
 
     double c = odd ? sc.s : sc.c;
     c = AS_DOUBLE(AS_LONG(c) ^ flip);
