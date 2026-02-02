@@ -241,7 +241,7 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
 #define BUILTIN_FREXP_EXP_F32(X)                                               \
     ({                                                                         \
         int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
+        __builtin_frexpf(X, &_exp);                                            \
         _exp;                                                                  \
     })
 
