@@ -109,9 +109,9 @@ jobs:
 
       - name: Update submodule pointers from provided parameter PR values
         if: ${{ github.event_name == 'workflow_call' && (
-          (inputs.LLVM_PR_URL != '' && inputs.LLVM_PR_URL != null) ||
-          (inputs.HIPIFY_PR_URL != '' && inputs.HIPIFY_PR_URL != null) ||
-          (inputs.SPIRV_PR_URL != '' && inputs.SPIRV_PR_URL != null)
+          inputs.LLVM_PR_URL != '' ||
+          inputs.HIPIFY_PR_URL != '' ||
+          inputs.SPIRV_PR_URL != ''
         ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
