@@ -106,6 +106,9 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: ${{ needs.setup.outputs.test_type }}
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
+      LLVM_PR_URL: ${{ inputs.LLVM_PR_URL }}
+      SPIRV_PR_URL: ${{ inputs.SPIRV_PR_URL }}
+      HIPIFY_PR_URL: ${{ inputs.HIPIFY_PR_URL }}
     permissions:
       contents: read
       id-token: write
@@ -136,6 +139,9 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'smoke'
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
+      LLVM_PR_URL: ${{ inputs.LLVM_PR_URL }}
+      SPIRV_PR_URL: ${{ inputs.SPIRV_PR_URL }}
+      HIPIFY_PR_URL: ${{ inputs.HIPIFY_PR_URL }}       
     permissions:
       contents: read
       id-token: write

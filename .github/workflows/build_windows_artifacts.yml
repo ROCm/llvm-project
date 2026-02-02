@@ -48,6 +48,15 @@ on:
         type: boolean
       extra_cmake_options:
         type: string
+      LLVM_PR_URL:
+        required: false
+        type: string
+      SPIRV_PR_URL:
+        required: false
+        type: string
+      HIPIFY_PR_URL:
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -108,6 +117,53 @@ jobs:
           dir L:
           wmic logicaldisk get name
 
+      - name: Update submodule pointers from provided parameter PR values
+        if: ${{ github.event_name == 'workflow_call' && ( inputs.LLVM_PR_URL != '' || inputs.HIPIFY_PR_URL != '' || inputs.SPIRV_PR_URL != '' ) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global --add safe.directory "$PWD"
+          LLVM_PR_URL="${{ inputs.LLVM_PR_URL }}"
+          SPIRV_PR_URL="${{ inputs.SPIRV_PR_URL }}"
+          HIPIFY_PR_URL="${{ inputs.HIPIFY_PR_URL }}"
+
+          #Get the SHA of PR 
+          pr_url_to_owner_repo_num() {
+            local url="$1"
+            OWNER="$(echo "$url" | awk -F/ '{print $4}')"
+            REPO="$(echo  "$url" | awk -F/ '{print $5}')"
+            PRNUM="$(echo  "$url" | awk -F/ '{print $7}')"
+          }
+          pr_url_to_sha_api() {
+            local url="$1"
+            pr_url_to_owner_repo_num "$url"
+            curl -sS -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PRNUM}" \
+            | jq -r '.head.sha'
+          }
+          # Update ONLY the submodules that have values
+          if [[ -n "$LLVM_PR_URL" ]]; then
+              LLVM_SHA="$(pr_url_to_sha_api "$LLVM_PR_URL")"
+              echo "LLVM head SHA: $LLVM_SHA"
+              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          fi
+          if [[ -n "$SPIRV_PR_URL" ]]; then
+              SPIRV_SHA="$(pr_url_to_sha_api "$SPIRV_PR_URL")"
+              echo "SPIRV head SHA: $SPIRV_SHA"
+              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          fi
+          if [[ -n "$HIPIFY_PR_URL" ]]; then
+              HIPIFY_SHA="$(pr_url_to_sha_api "$HIPIFY_PR_URL")"
+              echo "HIPIFY head SHA: $HIPIFY_SHA"
+              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          fi    
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          git commit -m "Update submodule references"
+          git submodule status
+          git submodule
 
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
@@ -181,7 +237,7 @@ jobs:
           ref: amd-staging
 
       - name: Apply patches
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_call' }}
         run: |
              cp -v patches/amd-mainline/llvm-project/*.patch compiler/amd-llvm
              cd compiler/amd-llvm
@@ -193,7 +249,7 @@ jobs:
              cd -
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_call' }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
