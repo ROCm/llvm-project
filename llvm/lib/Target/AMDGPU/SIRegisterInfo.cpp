@@ -4211,6 +4211,18 @@ const TargetRegisterClass *SIRegisterInfo::getVGPR64Class() const {
                                 : &AMDGPU::VReg_64RegClass;
 }
 
+MachineInstr *
+SIRegisterInfo::getDomVRegDefInBasicBlock(Register Reg, MachineBasicBlock &MBB,
+                                          MachineBasicBlock::iterator I) const {
+  // Iterate backwards from I (exclusive) to the beginning of the basic block
+  while (I != MBB.begin()) {
+    --I;
+    if (I->definesRegister(Reg, this))
+      return &*I;
+  }
+  return nullptr;
+}
+
 // Find reaching register definition
 MachineInstr *SIRegisterInfo::findReachingDef(Register Reg, unsigned SubReg,
                                               MachineInstr &Use,

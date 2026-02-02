@@ -17,6 +17,7 @@
 
 #include "AMDGPULaneMaskUtils.h"
 
+#include "SIRegisterInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -42,15 +43,20 @@ public:
   MachineFunction *function() const { return &MF; }
   const AMDGPU::LaneMaskConstants &getLaneMaskConsts() const { return LMC; }
 
+  const SIRegisterInfo &getRegisterInfo() const {
+    return *MF.getSubtarget<GCNSubtarget>().getRegisterInfo();
+  }
+
   bool maybeLaneMask(Register Reg) const;
-  bool isConstantLaneMask(Register Reg, bool &Val) const;
+  bool isConstantLaneMask(Register Reg, bool &Val, MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator I) const;
 
   Register createLaneMaskReg() const;
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg, Register CurReg,
                            GCNLaneMaskAnalysis *LMA = nullptr,
-                           bool Accumulating = false) const;
+                           bool isPrevZeroReg = false) const;
 };
 
 /// Lazy analyses of lane masks.
@@ -64,28 +70,19 @@ public:
   GCNLaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
 
   bool isSubsetOfExec(Register Reg, MachineBasicBlock &UseBlock,
+                      MachineBasicBlock::iterator I,
                       unsigned RemainingDepth = 5);
 };
 
 /// \brief SSA-updater for lane masks.
 ///
-/// The updater operates in one of two modes: "default" and "accumulating".
-///
-/// Default mode is the analog to regular SSA construction and suitable for the
-/// lowering of normal per-lane boolean values to lane masks: the mask can be
-/// (re-)written multiple times for each lane. In each basic block, only the
-/// lanes enabled by that block's EXEC mask are updated. Bits for lanes that
-/// never contributed with an available value are undefined.
-///
-/// Accumulating mode is used for some aspects of control flow lowering. In
-/// this mode, each lane is assumed to provide a "true" available value only
+/// Each lane is assumed to provide a "true" available value only
 /// once, and to never attempt to change the value back to "false" -- except
 /// that all lanes are reset to false in "reset blocks" as explained below.
-/// In accumulating mode, the bits for lanes that never contributed with an
-/// available value are 0.
+/// The bits for lanes that never contributed with an available value are 0.
 ///
-/// In accumulating mode, all lanes are reset to 0 at certain points in "reset
-/// blocks" which are added via \ref addReset. The reset happens in one or both
+/// All lanes are reset to 0 at certain points in "reset blocks"
+///  which are added via \ref addReset. The reset happens in one or both
 /// of two modes:
 ///  - ResetInMiddle: Reset logically happens after the point queried by
 ///    \ref getValueInMiddleOfBlock and before the contribution of the block's
@@ -105,9 +102,6 @@ public:
 private:
   GCNLaneMaskUtils LMU;
   GCNLaneMaskAnalysis *LMA = nullptr;
-  MachineSSAUpdater SSAUpdater;
-
-  bool Accumulating = false;
 
   bool Processed = false;
 
@@ -115,25 +109,37 @@ private:
     MachineBasicBlock *Block;
     unsigned Flags = 0; // ResetFlags
     Register Value;
-    Register Merged;
 
     explicit BlockInfo(MachineBasicBlock *Block) : Block(Block) {}
+
+    void dump() {
+      dbgs() << "BlockInfo{";
+      dbgs() << " Block:" << printMBBReference(*Block) << ",";
+      dbgs() << " Flags:";
+      if (Flags & ResetAtEnd)
+        dbgs() << "ResetAtEnd,";
+      if (Flags & ResetInMiddle)
+        dbgs() << "ResetInMiddle,";
+      dbgs() << "}\n";
+    }
   };
 
   SmallVector<BlockInfo, 4> Blocks;
 
   Register ZeroReg;
   DenseSet<MachineInstr *> PotentiallyDead;
+  DenseMap<MachineBasicBlock *, SmallVector<std::pair<Register, unsigned>, 2>>
+      AccumulatorResetBlocks;
 
 public:
-  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF), SSAUpdater(MF) {}
+  Register Accumulator;
+
+  GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
 
-  void init(Register Reg);
+  void init();
   void cleanup();
-
-  void setAccumulating(bool Val) { Accumulating = Val; }
 
   void addReset(MachineBasicBlock &Block, ResetFlags Flags);
   void addAvailable(MachineBasicBlock &Block, Register Value);
@@ -141,6 +147,7 @@ public:
   Register getValueInMiddleOfBlock(MachineBasicBlock &Block);
   Register getValueAtEndOfBlock(MachineBasicBlock &Block);
   Register getValueAfterMerge(MachineBasicBlock &Block);
+  void insertAccumulatorResets();
 
 private:
   void process();
