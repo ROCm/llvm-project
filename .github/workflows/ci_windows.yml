@@ -32,7 +32,7 @@ on:
         type: string
       sanity_check_only_for_family:
         type: boolean
-      LLVM_PR_URL
+      LLVM_PR_URL:
         required: false
         type: string
       SPIRV_PR_URL:
