@@ -113,15 +113,15 @@ jobs:
            (inputs.LLVM_PR_URL != '' && inputs.LLVM_PR_URL != null) ||
            (inputs.HIPIFY_PR_URL != '' && inputs.HIPIFY_PR_URL != null) ||
            (inputs.SPIRV_PR_URL != '' && inputs.SPIRV_PR_URL != null)
-         ) }}     
+         ) }} 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --global --add safe.directory "$PWD"
           # Read values (supports workflow_call via inputs.* and workflow_dispatch via github.event.inputs.*)
-          LLVM_PR_URL="${{ inputs.LLVM_PR_URL }}"
-          SPIRV_PR_URL="${{ inputs.SPIRV_PR_URL }}"
-          HIPIFY_PR_URL="${{ inputs.HIPIFY_PR_URL }}"
+          LLVM_PR_URL=${{ inputs.LLVM_PR_URL }}
+          SPIRV_PR_URL=${{ inputs.SPIRV_PR_URL }}
+          HIPIFY_PR_URL=${{ inputs.HIPIFY_PR_URL }}
 
           #Get the SHA of PR 
           pr_url_to_owner_repo_num() {
