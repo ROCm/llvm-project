@@ -91,6 +91,13 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
+
+      - name: Debug inputs received by artifacts_linux.yml
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "LLVM_PR_URL='${{ inputs.LLVM_PR_URL }}'"
+          echo "SPIRV_PR_URL='${{ inputs.SPIRV_PR_URL }}'"
+          echo "HIPIFY_PR_URL='${{ inputs.HIPIFY_PR_URL }}'"
           
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}

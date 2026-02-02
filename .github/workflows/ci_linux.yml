@@ -46,6 +46,16 @@ permissions:
   contents: read
 
 jobs:
+  debug_inputs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Debug inputs received by ci_linux.yml
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "LLVM_PR_URL='${{ inputs.LLVM_PR_URL }}'"
+          echo "SPIRV_PR_URL='${{ inputs.SPIRV_PR_URL }}'"
+          echo "HIPIFY_PR_URL='${{ inputs.HIPIFY_PR_URL }}'"
+  
   build_portable_linux_artifacts:
     name: Build Artifacts
     if: ${{ inputs.use_prebuilt_artifacts == 'false' }}
