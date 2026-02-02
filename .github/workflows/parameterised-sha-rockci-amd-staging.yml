@@ -15,6 +15,9 @@
 name: Parameterised CI amd-staging
 
 on:
+  push:
+    branches:
+      - 'amd/dev/kirthana14m/**'  
   workflow_dispatch:
     inputs:
       LLVM_PR_URL:
