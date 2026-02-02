@@ -502,7 +502,7 @@ static LogicalResult checkImplementationStatus(Operation &op) {
             omp::AtomicCaptureOp>([&](auto op) { checkHint(op, result); })
       .Case<omp::TargetEnterDataOp, omp::TargetExitDataOp>(
           [&](auto op) { checkDepend(op, result); })
-      .Case<omp::TargetUpdateOp>([&](auto op) { checkDepend(op, result); })
+      .Case([&](omp::TargetUpdateOp op) { checkDepend(op, result); })
       .Case([&](omp::TargetOp op) {
         checkAllocate(op, result);
         checkBare(op, result);
@@ -756,20 +756,6 @@ static llvm::omp::ProcBindKind getProcBindKind(omp::ClauseProcBindKind kind) {
     return llvm::omp::ProcBindKind::OMP_PROC_BIND_spread;
   }
   llvm_unreachable("Unknown ClauseProcBindKind kind");
-}
-
-/// Maps block arguments from \p blockArgIface (which are MLIR values) to the
-/// corresponding LLVM values of \p the interface's operands. This is useful
-/// when an OpenMP region with entry block arguments is converted to LLVM. In
-/// this case the block arguments are (part of) of the OpenMP region's entry
-/// arguments and the operands are (part of) of the operands to the OpenMP op
-/// containing the region.
-static void forwardArgs(LLVM::ModuleTranslation &moduleTranslation,
-                        omp::BlockArgOpenMPOpInterface blockArgIface) {
-  llvm::SmallVector<std::pair<Value, BlockArgument>> blockArgsPairs;
-  blockArgIface.getBlockArgsPairs(blockArgsPairs);
-  for (auto [var, arg] : blockArgsPairs)
-    moduleTranslation.mapValue(arg, moduleTranslation.lookupValue(var));
 }
 
 /// Converts an OpenMP 'masked' operation into LLVM IR using OpenMPIRBuilder.
@@ -5290,10 +5276,11 @@ static void mapParentWithMembers(
        !mapData.IsDeclareTarget[mapDataIndex])
           ? llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM
           : llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_NONE;
+  auto parentClause =
+      llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]);
 
-  // Detect if this mapping uses a user-defined mapper.
-  bool hasUserMapper = mapData.Mappers[mapDataIndex] != nullptr;
-  if (hasUserMapper) {
+  auto *parentMapper = mapData.Mappers[mapDataIndex];
+  if (parentMapper) {
     using mapFlags = llvm::omp::OpenMPOffloadMappingFlags;
     // Preserve relevant map-type bits from the parent clause. These include
     // the copy direction (TO/FROM), as well as commonly used modifiers that
@@ -5308,7 +5295,11 @@ static void mapParentWithMembers(
   combinedInfo.Types.emplace_back(baseFlag);
   combinedInfo.DevicePointers.emplace_back(
       mapData.DevicePointers[mapDataIndex]);
-  combinedInfo.Mappers.emplace_back(mapData.Mappers[mapDataIndex]);
+  // Only attach the mapper to the base entry when we are mapping the whole
+  // parent. Combined/segment entries must not carry a mapper; otherwise the
+  // mapper can be invoked with a partial size, which is undefined behaviour.
+  combinedInfo.Mappers.emplace_back(
+      parentMapper && !parentClause.getPartialMap() ? parentMapper : nullptr);
   combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
       mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
   combinedInfo.BasePointers.emplace_back(mapData.BasePointers[mapDataIndex]);
@@ -5320,8 +5311,6 @@ static void mapParentWithMembers(
   // Fortran pointers and allocatables, the mapping of the pointed to
   // data by the descriptor (which itself, is a structure containing
   // runtime information on the dynamically allocated data).
-  auto parentClause =
-      llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]);
 
   llvm::Value *lowAddr, *highAddr;
   if (!parentClause.getPartialMap()) {
@@ -5374,7 +5363,7 @@ static void mapParentWithMembers(
       combinedInfo.Types.emplace_back(mapFlag);
       combinedInfo.DevicePointers.emplace_back(
           mapData.DevicePointers[mapDataIndex]);
-      combinedInfo.Mappers.emplace_back(mapData.Mappers[mapDataIndex]);
+      combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
           mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
       combinedInfo.BasePointers.emplace_back(
@@ -5409,7 +5398,7 @@ static void mapParentWithMembers(
         combinedInfo.Types.emplace_back(mapFlag);
         combinedInfo.DevicePointers.emplace_back(
             mapData.DevicePointers[mapDataOverlapIdx]);
-        combinedInfo.Mappers.emplace_back(mapData.Mappers[mapDataOverlapIdx]);
+        combinedInfo.Mappers.emplace_back(nullptr);
         combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
             mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
         combinedInfo.BasePointers.emplace_back(
@@ -5431,7 +5420,7 @@ static void mapParentWithMembers(
       combinedInfo.Types.emplace_back(mapFlag);
       combinedInfo.DevicePointers.emplace_back(
           mapData.DevicePointers[mapDataIndex]);
-      combinedInfo.Mappers.emplace_back(mapData.Mappers[mapDataIndex]);
+      combinedInfo.Mappers.emplace_back(nullptr);
       combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
           mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
       combinedInfo.BasePointers.emplace_back(
@@ -5671,6 +5660,17 @@ getOrCreateUserDefinedMapperFunc(Operation *op, llvm::IRBuilderBase &builder,
   if (auto *lookupFunc = moduleTranslation.lookupFunction(mapperFuncName))
     return lookupFunc;
 
+  // Recursive types can cause re-entrant mapper emission. The mapper function
+  // is created by OpenMPIRBuilder before the callbacks run, so it may already
+  // exist in the LLVM module even though it is not yet registered in the
+  // ModuleTranslation mapping table. Reuse and register it to break the
+  // recursion.
+  if (llvm::Function *existingFunc =
+          moduleTranslation.getLLVMModule()->getFunction(mapperFuncName)) {
+    moduleTranslation.mapFunction(mapperFuncName, existingFunc);
+    return existingFunc;
+  }
+
   return emitUserDefinedMapper(declMapperOp, builder, moduleTranslation,
                                mapperFuncName, targetDirective);
 }
@@ -5727,7 +5727,13 @@ emitUserDefinedMapper(Operation *op, llvm::IRBuilderBase &builder,
       genMapInfoCB, varType, mapperFuncName, customMapperCB);
   if (!newFn)
     return newFn.takeError();
-  moduleTranslation.mapFunction(mapperFuncName, *newFn);
+  if (llvm::Function *mappedFunc =
+          moduleTranslation.lookupFunction(mapperFuncName)) {
+    assert(mappedFunc == *newFn &&
+           "mapper function mapping disagrees with emitted function");
+  } else {
+    moduleTranslation.mapFunction(mapperFuncName, *newFn);
+  }
   return *newFn;
 }
 
@@ -5747,9 +5753,9 @@ convertOmpTargetData(Operation *op, llvm::IRBuilderBase &builder,
   llvm::OpenMPIRBuilder::TargetDataInfo info(
       /*RequiresDevicePointerInfo=*/true,
       /*SeparateBeginEndCalls=*/true);
-  bool isTargetDevice = ompBuilder->Config.isTargetDevice();
-  bool isOffloadEntry =
-      isTargetDevice || !ompBuilder->Config.TargetTriples.empty();
+  assert(!ompBuilder->Config.isTargetDevice() &&
+         "target data/enter/exit/update are host ops");
+  bool isOffloadEntry = !ompBuilder->Config.TargetTriples.empty();
 
   auto getDeviceID = [&](mlir::Value dev) -> llvm::Value * {
     llvm::Value *v = moduleTranslation.lookupValue(dev);
@@ -5925,38 +5931,20 @@ convertOmpTargetData(Operation *op, llvm::IRBuilderBase &builder,
       if (info.DevicePtrInfoMap.empty()) {
         // For host device we still need to do the mapping for codegen,
         // otherwise it may try to lookup a missing value.
-        if (!ompBuilder->Config.IsTargetDevice.value_or(false)) {
-          mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Address,
-                       blockArgIface.getUseDeviceAddrBlockArgs(),
-                       useDeviceAddrVars, mapData);
-          mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer,
-                       blockArgIface.getUseDevicePtrBlockArgs(),
-                       useDevicePtrVars, mapData);
-        }
+        mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Address,
+                     blockArgIface.getUseDeviceAddrBlockArgs(),
+                     useDeviceAddrVars, mapData);
+        mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer,
+                     blockArgIface.getUseDevicePtrBlockArgs(), useDevicePtrVars,
+                     mapData);
       }
       break;
     case BodyGenTy::NoPriv:
       // If device info is available then region has already been generated
       if (info.DevicePtrInfoMap.empty()) {
-        // For device pass, if use_device_ptr(addr) mappings were present,
-        // we need to link them here before codegen.
-        if (ompBuilder->Config.IsTargetDevice.value_or(false)) {
-          mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Address,
-                       blockArgIface.getUseDeviceAddrBlockArgs(),
-                       useDeviceAddrVars, mapData);
-          mapUseDevice(llvm::OpenMPIRBuilder::DeviceInfoTy::Pointer,
-                       blockArgIface.getUseDevicePtrBlockArgs(),
-                       useDevicePtrVars, mapData);
-        }
-
-        SmallVector<llvm::PHINode *> phis;
-        llvm::Expected<llvm::BasicBlock *> continuationBlock =
-            convertOmpOpRegions(region, "omp.data.region", builder,
-                                moduleTranslation, &phis);
-        if (!continuationBlock)
-          return continuationBlock.takeError();
-        builder.SetInsertPoint(*continuationBlock,
-                               (*continuationBlock)->getFirstInsertionPt());
+        if (failed(inlineConvertOmpRegions(region, "omp.data.region", builder,
+                                           moduleTranslation)))
+          return llvm::make_error<PreviouslyReportedError>();
       }
       break;
     }
@@ -7312,7 +7300,8 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::amendOperation(
                 llvm::OpenMPIRBuilder *ompBuilder =
                     moduleTranslation.getOpenMPBuilder();
                 auto VFS = llvm::vfs::getRealFileSystem();
-                ompBuilder->loadOffloadInfoMetadata(*VFS, filepathAttr.getValue());
+                ompBuilder->loadOffloadInfoMetadata(*VFS,
+                                                    filepathAttr.getValue());
                 return success();
               }
               return failure();
@@ -7394,9 +7383,6 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::amendOperation(
 static bool isHostDeviceOp(Operation *op) {
   // Assumes no reverse offloading
   if (op->getParentOfType<omp::TargetOp>())
-    return false;
-
-  if (mlir::isa<omp::TargetAllocMemOp, omp::TargetFreeMemOp>(op))
     return false;
 
   if (auto parentFn = op->getParentOfType<LLVM::LLVMFuncOp>()) {
@@ -7559,9 +7545,8 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
 
   if (ompBuilder->Config.isTargetDevice() &&
-      !isa<omp::TargetOp, omp::TargetDataOp, omp::TargetEnterDataOp,
-           omp::TargetExitDataOp, omp::TargetUpdateOp, omp::MapInfoOp,
-           omp::TerminatorOp, omp::YieldOp>(op) &&
+      !isa<omp::TargetOp, omp::MapInfoOp, omp::TerminatorOp, omp::YieldOp>(
+          op) &&
       isHostDeviceOp(op))
     return op->emitOpError() << "unsupported host op found in device";
 

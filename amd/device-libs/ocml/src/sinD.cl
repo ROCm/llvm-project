@@ -15,13 +15,14 @@ MATH_MANGLE(sin)(double x)
     struct redret r = MATH_PRIVATE(trigred)(ax);
     struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
 
-    int2 s = AS_INT2((r.i & 1) == 0 ? sc.s : sc.c);
-    s.hi ^= (r.i > 1 ? 0x80000000 : 0) ^ (AS_INT2(x).hi & 0x80000000);
+    double s = (r.i & 1) == 0 ? sc.s : sc.c;
 
-    if (!FINITE_ONLY_OPT()) {
-        s = BUILTIN_ISFINITE_F64(ax) ? s : AS_INT2(QNANBITPATT_DP64);
-    }
+    s = AS_DOUBLE(AS_LONG(s) ^ (r.i > 1 ? 0x8000000000000000 : 0) ^
+                  (AS_LONG(x) ^ AS_LONG(ax)));
 
-    return AS_DOUBLE(s);
+    if (!FINITE_ONLY_OPT())
+        s = BUILTIN_ISFINITE_F64(ax) ? s : QNAN_F64;
+
+    return s;
 }
 

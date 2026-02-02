@@ -14,22 +14,23 @@ MATH_MANGLE(sincospi)(double x, __private double * cp)
     struct redret r = MATH_PRIVATE(trigpired)(BUILTIN_ABS_F64(x));
     struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
 
-    int flip = r.i > 1 ? (int)0x80000000 : 0;
+    long flip = r.i > 1 ? SIGNBIT_DP64 : 0;
     bool odd = (r.i & 1) != 0;
 
-    int2 s = AS_INT2(odd ? sc.c : sc.s);
-    s.hi ^= flip ^ (AS_INT2(x).hi & 0x80000000);
-    sc.s = -sc.s;
-    int2 c = AS_INT2(odd ? sc.s : sc.c);
-    c.hi ^= flip;
+    double s = odd ? sc.c : sc.s;
+
+    s = AS_DOUBLE(AS_LONG(s) ^ flip ^ (AS_LONG(x) & SIGNBIT_DP64));
+
+    double c = odd ? sc.s : sc.c;
+    c = AS_DOUBLE(AS_LONG(c) ^ flip);
 
     if (!FINITE_ONLY_OPT()) {
         bool finite = BUILTIN_ISFINITE_F64(x);
-        s = finite ? s : AS_INT2(QNANBITPATT_DP64);
-        c = finite ? c : AS_INT2(QNANBITPATT_DP64);
+        s = finite ? s : QNAN_F64;
+        c = finite ? c : QNAN_F64;
     }
 
-    *cp = AS_DOUBLE(c);
-    return AS_DOUBLE(s);
+    *cp = c;
+    return s;
 }
 

@@ -12,7 +12,6 @@
 # FULL-NEXT: dynLDSAlign: 1
 # FULL-NEXT: isEntryFunction: true
 # FULL-NEXT: isChainFunction: false
-# FULL-NEXT: noSignedZerosFPMath: false
 # FULL-NEXT: memoryBound:     true
 # FULL-NEXT: waveLimiter:     true
 # FULL-NEXT: hasSpilledSGPRs: false
@@ -97,7 +96,6 @@ machineFunctionInfo:
   ldsSize: 2048
   gdsSize: 256
   isEntryFunction: true
-  noSignedZerosFPMath: false
   memoryBound:     true
   waveLimiter:     true
   scratchRSrcReg:  '$sgpr8_sgpr9_sgpr10_sgpr11'
@@ -126,7 +124,6 @@ body:             |
 # FULL-NEXT: dynLDSAlign: 1
 # FULL-NEXT: isEntryFunction: false
 # FULL-NEXT: isChainFunction: false
-# FULL-NEXT: noSignedZerosFPMath: false
 # FULL-NEXT: memoryBound:     false
 # FULL-NEXT: waveLimiter:     false
 # FULL-NEXT: hasSpilledSGPRs: false
@@ -209,7 +206,6 @@ body:             |
 # FULL-NEXT: dynLDSAlign: 1
 # FULL-NEXT: isEntryFunction: false
 # FULL-NEXT: isChainFunction: false
-# FULL-NEXT: noSignedZerosFPMath: false
 # FULL-NEXT: memoryBound:     false
 # FULL-NEXT: waveLimiter:     false
 # FULL-NEXT: hasSpilledSGPRs: false
@@ -293,7 +289,6 @@ body:             |
 # FULL-NEXT: dynLDSAlign: 1
 # FULL-NEXT: isEntryFunction: true
 # FULL-NEXT: isChainFunction: false
-# FULL-NEXT: noSignedZerosFPMath: false
 # FULL-NEXT: memoryBound:     false
 # FULL-NEXT: waveLimiter:     false
 # FULL-NEXT: hasSpilledSGPRs: false
