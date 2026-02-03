@@ -8,3 +8,6 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
+miscompiles and aborts some llvm lits
+[CodeGen] Refactor targets to override the new getTgtMemIntrinsic overload (NFC) (#175844)
+---
