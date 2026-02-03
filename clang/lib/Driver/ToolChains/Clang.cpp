@@ -6763,6 +6763,11 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                     options::OPT_fno_offload_via_llvm, false) &&
       (JA.isDeviceOffloading(Action::OFK_None) ||
        JA.isDeviceOffloading(Action::OFK_OpenMP))) {
+
+    // Determine if target-fast optimizations should be enabled
+    bool TargetFastUsed =
+        Args.hasFlag(options::OPT_fopenmp_target_fast,
+                     options::OPT_fno_openmp_target_fast, OFastEnabled);
     switch (D.getOpenMPRuntime(Args)) {
     case Driver::OMPRT_OMP:
     case Driver::OMPRT_IOMP5:
@@ -6879,19 +6884,53 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                        /*Default=*/false))
         CmdArgs.push_back("-fopenmp-assume-threads-oversubscription");
 
-      if (Args.hasFlag(options::OPT_fopenmp_assume_no_thread_state,
-                       options::OPT_fno_openmp_assume_no_thread_state,
-                       isTargetFastUsed(Args)))
-        CmdArgs.push_back("-fopenmp-assume-no-thread-state");
-      else
-        CmdArgs.push_back("-fno-openmp-assume-no-thread-state");
+      // Handle -fopenmp-target-fast
+      if (Arg *A = Args.getLastArg(options::OPT_fopenmp_target_fast,
+                                   options::OPT_fno_openmp_target_fast)) {
+        if (A->getOption().matches(options::OPT_fopenmp_target_fast))
+          CmdArgs.push_back("-fopenmp-target-fast");
+        else
+          CmdArgs.push_back("-fno-openmp-target-fast");
+      } else if (OFastEnabled) {
+        CmdArgs.push_back("-fopenmp-target-fast");
+      }
 
-      if (Args.hasFlag(options::OPT_fopenmp_assume_no_nested_parallelism,
-                       options::OPT_fno_openmp_assume_no_nested_parallelism,
-                       isTargetFastUsed(Args)))
+      // Handle -fopenmp-target-ignore-env-vars (implied by target-fast)
+      if (Arg *A =
+              Args.getLastArg(options::OPT_fopenmp_target_ignore_env_vars,
+                              options::OPT_fno_openmp_target_ignore_env_vars)) {
+        if (A->getOption().matches(options::OPT_fopenmp_target_ignore_env_vars))
+          CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
+        else
+          CmdArgs.push_back("-fno-openmp-target-ignore-env-vars");
+      } else if (TargetFastUsed) {
+        CmdArgs.push_back("-fopenmp-target-ignore-env-vars");
+      }
+
+      // Handle -fopenmp-assume-no-thread-state (implied by target-fast)
+      if (Arg *A =
+              Args.getLastArg(options::OPT_fopenmp_assume_no_thread_state,
+                              options::OPT_fno_openmp_assume_no_thread_state)) {
+        if (A->getOption().matches(options::OPT_fopenmp_assume_no_thread_state))
+          CmdArgs.push_back("-fopenmp-assume-no-thread-state");
+        else
+          CmdArgs.push_back("-fno-openmp-assume-no-thread-state");
+      } else if (TargetFastUsed) {
+        CmdArgs.push_back("-fopenmp-assume-no-thread-state");
+      }
+
+      // Handle -fopenmp-assume-no-nested-parallelism (implied by target-fast)
+      if (Arg *A = Args.getLastArg(
+              options::OPT_fopenmp_assume_no_nested_parallelism,
+              options::OPT_fno_openmp_assume_no_nested_parallelism)) {
+        if (A->getOption().matches(
+                options::OPT_fopenmp_assume_no_nested_parallelism))
+          CmdArgs.push_back("-fopenmp-assume-no-nested-parallelism");
+        else
+          CmdArgs.push_back("-fno-openmp-assume-no-nested-parallelism");
+      } else if (TargetFastUsed) {
         CmdArgs.push_back("-fopenmp-assume-no-nested-parallelism");
-      else
-        CmdArgs.push_back("-fno-openmp-assume-no-nested-parallelism");
+      }
 
       if (Args.hasArg(options::OPT_fopenmp_offload_mandatory))
         CmdArgs.push_back("-fopenmp-offload-mandatory");

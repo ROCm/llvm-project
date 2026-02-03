@@ -251,8 +251,7 @@ LANGOPT(OpenMPOptimisticCollapse  , 1, 0, NotCompatible, "Use at most 32 bits to
 LANGOPT(OpenMPThreadSubscription  , 1, 0, NotCompatible, "Assume work-shared loops do not have more iterations than participating threads.")
 LANGOPT(OpenMPTeamSubscription  , 1, 0, NotCompatible, "Assume distributed loops do not have more iterations than participating teams.")
 LANGOPT(OpenMPNoThreadState  , 1, 0, NotCompatible, "Assume that no thread in a parallel region will modify an ICV.")
-LANGOPT(OpenMPNoNestedParallelism  , 1, 0, NotCompatible, "Assume that no thread in a parallel region will encounter a parallel region")
-LANGOPT(OpenMPOffloadMandatory  , 1, 0, NotCompatible, "Assert that offloading is mandatory and do not create a host fallback.")
+LANGOPT(OpenMPNoNestedParallelism  , 1, 0, NotCompatible, "Assume that no thread in a parallel region will encounter a parallel region")LANGOPT(OpenMPOffloadMandatory  , 1, 0, NotCompatible, "Assert that offloading is mandatory and do not create a host fallback.")
 LANGOPT(OpenMPForceUSM     , 1, 0, NotCompatible, "Enable OpenMP unified shared memory mode via compiler.")
 LANGOPT(OpenMPKernelIO , 1, 1, NotCompatible, "Enable OpenMP host-exec Device IO.")
 
