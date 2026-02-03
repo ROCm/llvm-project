@@ -11257,3 +11257,197 @@ bool SIInstrInfo::isXDL(const MachineInstr &MI) const {
 
   return AMDGPU::getMAIIsGFX940XDL(Opcode);
 }
+
+unsigned SIInstrInfo::getRepeatRate(const MachineInstr &MI) const {
+#if 0
+  // XDL WMMA uses an unbuffered resource, so the ReleaseAtCycle from the
+  // sched model is the repeat rate.
+  if (isXDLWMMA(MI)) {
+    const MCSchedClassDesc *SC = SchedModel.resolveSchedClass(&MI);
+    if (SchedModel.getWriteProcResBegin(SC) !=
+        SchedModel.getWriteProcResEnd(SC))
+      return SchedModel.getWriteProcResBegin(SC)->ReleaseAtCycle;
+  }
+#endif
+
+  if (!AMDGPU::isGFX1250(ST) || !isVALU(MI))
+    return 1;
+
+  unsigned Opc = MI.getOpcode();
+  if (Opc == AMDGPU::V_EXP_F32_e32 || Opc == AMDGPU::V_EXP_F32_e64 ||
+      Opc == AMDGPU::V_LOG_F32_e32 || Opc == AMDGPU::V_LOG_F32_e64 ||
+      Opc == AMDGPU::V_RCP_F32_e32 || Opc == AMDGPU::V_RCP_F32_e64 ||
+      Opc == AMDGPU::V_RCP_IFLAG_F32_e32 ||
+      Opc == AMDGPU::V_RCP_IFLAG_F32_e64 || Opc == AMDGPU::V_RSQ_F32_e32 ||
+      Opc == AMDGPU::V_RSQ_F32_e64 || Opc == AMDGPU::V_SQRT_F32_e32 ||
+      Opc == AMDGPU::V_SQRT_F32_e64 || Opc == AMDGPU::V_SIN_F32_e32 ||
+      Opc == AMDGPU::V_SIN_F32_e64 || Opc == AMDGPU::V_COS_F32_e32 ||
+      Opc == AMDGPU::V_COS_F32_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_EXP_BF16_e32 || Opc == AMDGPU::V_EXP_BF16_e64 ||
+      Opc == AMDGPU::V_LOG_BF16_e32 || Opc == AMDGPU::V_LOG_BF16_e64 ||
+      Opc == AMDGPU::V_RCP_BF16_e32 || Opc == AMDGPU::V_RCP_BF16_e64 ||
+      Opc == AMDGPU::V_RSQ_BF16_e32 || Opc == AMDGPU::V_RSQ_BF16_e64 ||
+      Opc == AMDGPU::V_SQRT_BF16_e32 || Opc == AMDGPU::V_SQRT_BF16_e64 ||
+      Opc == AMDGPU::V_SIN_BF16_e32 || Opc == AMDGPU::V_SIN_BF16_e64 ||
+      Opc == AMDGPU::V_COS_BF16_e32 || Opc == AMDGPU::V_COS_BF16_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_EXP_F16_e32 || Opc == AMDGPU::V_EXP_F16_e64 ||
+      Opc == AMDGPU::V_LOG_F16_e32 || Opc == AMDGPU::V_LOG_F16_e64 ||
+      Opc == AMDGPU::V_RCP_F16_e32 || Opc == AMDGPU::V_RCP_F16_e64 ||
+      Opc == AMDGPU::V_RSQ_F16_e32 || Opc == AMDGPU::V_RSQ_F16_e64 ||
+      Opc == AMDGPU::V_SQRT_F16_e32 || Opc == AMDGPU::V_SQRT_F16_e64 ||
+      Opc == AMDGPU::V_SIN_F16_e32 || Opc == AMDGPU::V_SIN_F16_e64 ||
+      Opc == AMDGPU::V_COS_F16_e32 || Opc == AMDGPU::V_COS_F16_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_TANH_BF16_e32 || Opc == AMDGPU::V_TANH_BF16_e64 ||
+      Opc == AMDGPU::V_TANH_F16_e32 || Opc == AMDGPU::V_TANH_F16_e64 ||
+      Opc == AMDGPU::V_TANH_F32_e32 || Opc == AMDGPU::V_TANH_F32_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_RCP_F64_e32 || Opc == AMDGPU::V_RCP_F64_e64 ||
+      Opc == AMDGPU::V_RSQ_F64_e32 || Opc == AMDGPU::V_RSQ_F64_e64 ||
+      Opc == AMDGPU::V_SQRT_F64_e32 || Opc == AMDGPU::V_SQRT_F64_e64 ||
+      Opc == AMDGPU::V_TRIG_PREOP_F64_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_MUL_LO_U32_e64 || Opc == AMDGPU::V_MUL_HI_U32_e64 ||
+      Opc == AMDGPU::V_MUL_HI_I32_e64 || Opc == AMDGPU::V_MAD_U32_e64 ||
+      Opc == AMDGPU::V_MAD_NC_U64_U32_e64 ||
+      Opc == AMDGPU::V_MAD_NC_I64_I32_e64 ||
+      Opc == AMDGPU::V_MAD_CO_U64_U32_e64_gfx12 ||
+      Opc == AMDGPU::V_MAD_CO_I64_I32_e64_gfx12)
+    return 4;
+
+  if (Opc == AMDGPU::V_LSHLREV_B64_e64 || Opc == AMDGPU::V_LSHRREV_B64_e64 ||
+      Opc == AMDGPU::V_ASHRREV_I64_e64 || Opc == AMDGPU::V_MOV_B64_e64 ||
+      Opc == AMDGPU::V_MOV_B64_e32 || Opc == AMDGPU::V_LSHL_ADD_U64_e64 ||
+      Opc == AMDGPU::V_TRIG_PREOP_F64_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_CMP_EQ_I64_e32 || Opc == AMDGPU::V_CMP_EQ_I64_e64 ||
+      Opc == AMDGPU::V_CMP_LE_I64_e32 || Opc == AMDGPU::V_CMP_LE_I64_e64 ||
+      Opc == AMDGPU::V_CMP_GE_I64_e32 || Opc == AMDGPU::V_CMP_GE_I64_e64 ||
+      Opc == AMDGPU::V_CMP_NE_I64_e32 || Opc == AMDGPU::V_CMP_NE_I64_e64 ||
+      Opc == AMDGPU::V_CMP_EQ_U64_e64 || Opc == AMDGPU::V_CMP_EQ_U64_e64 ||
+      Opc == AMDGPU::V_CMP_LE_U64_e32 || Opc == AMDGPU::V_CMP_LE_U64_e64 ||
+      Opc == AMDGPU::V_CMP_GE_U64_e32 || Opc == AMDGPU::V_CMP_GE_U64_e64 ||
+      Opc == AMDGPU::V_CMP_NE_U64_e32 || Opc == AMDGPU::V_CMP_NE_U64_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_MUL_U64_e32 || Opc == AMDGPU::V_MAX_U64_e64 ||
+      Opc == AMDGPU::V_MAX_I64_e64 || Opc == AMDGPU::V_MIN_U64_e64 ||
+      Opc == AMDGPU::V_MIN_I64_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_QSAD_PK_U16_U8_e64 ||
+      Opc == AMDGPU::V_MQSAD_PK_U16_U8_e64 || Opc == AMDGPU::V_MQSAD_U32_U8_e64)
+    return 4;
+
+  if (Opc == AMDGPU::V_ADD_U64_e32 || Opc == AMDGPU::V_ADD_U64_e64)
+    return 2;
+
+  if (Opc == AMDGPU::V_CMP_EQ_F64_e32 || Opc == AMDGPU::V_CMP_EQ_F64_e64 ||
+      Opc == AMDGPU::V_CMP_LE_F64_e32 || Opc == AMDGPU::V_CMP_LE_F64_e64 ||
+      Opc == AMDGPU::V_CMP_GE_F64_e32 || Opc == AMDGPU::V_CMP_GE_F64_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_CVT_I32_F64_e32 || Opc == AMDGPU::V_CVT_I32_F64_e64 ||
+      Opc == AMDGPU::V_CVT_F64_I32_e32 || Opc == AMDGPU::V_CVT_F64_I32_e64 ||
+      Opc == AMDGPU::V_CVT_F32_F64_e32 || Opc == AMDGPU::V_CVT_F32_F64_e64 ||
+      Opc == AMDGPU::V_CVT_F64_F32_e32 || Opc == AMDGPU::V_CVT_F64_F32_e64 ||
+      Opc == AMDGPU::V_CVT_U32_F64_e32 || Opc == AMDGPU::V_CVT_U32_F64_e64 ||
+      Opc == AMDGPU::V_CVT_F64_U32_e32 || Opc == AMDGPU::V_CVT_F64_U32_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_TRUNC_F64_e32 || Opc == AMDGPU::V_TRUNC_F64_e64 ||
+      Opc == AMDGPU::V_CEIL_F64_e64 || Opc == AMDGPU::V_CEIL_F64_e32 ||
+      Opc == AMDGPU::V_RNDNE_F64_e64 || Opc == AMDGPU::V_RNDNE_F64_e32 ||
+      Opc == AMDGPU::V_FLOOR_F64_e32 || Opc == AMDGPU::V_FLOOR_F64_e64 ||
+      Opc == AMDGPU::V_FREXP_EXP_I32_F64_e32 ||
+      Opc == AMDGPU::V_FREXP_EXP_I32_F64_e64 ||
+      Opc == AMDGPU::V_FREXP_MANT_F64_e32 ||
+      Opc == AMDGPU::V_FREXP_MANT_F64_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_FRACT_F64_e32 || Opc == AMDGPU::V_FRACT_F64_e64 ||
+      Opc == AMDGPU::V_FMA_F64_e64 || Opc == AMDGPU::V_DIV_FIXUP_F64_e64 ||
+      Opc == AMDGPU::V_DIV_FMAS_F64_e64 || Opc == AMDGPU::V_DIV_SCALE_F64_e64 ||
+      Opc == AMDGPU::V_ADD_F64_e64 || Opc == AMDGPU::V_MUL_F64_e64 ||
+      Opc == AMDGPU::V_MIN_NUM_F64_e64 || Opc == AMDGPU::V_MAX_NUM_F64_e64 ||
+      Opc == AMDGPU::V_LDEXP_F64_e64 || Opc == AMDGPU::V_MINIMUM_F64_e64 ||
+      Opc == AMDGPU::V_MAXIMUM_F64_e64)
+    return 32;
+
+  if (Opc == AMDGPU::V_CVT_SCALEF32_PK32_BF16_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_BF6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_BF16_FP6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_FP6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_F16_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_BF6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_F16_FP6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_FP6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_F32_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK32_F32_FP6_e64)
+    return 16;
+
+  if (Opc == AMDGPU::V_CVT_SCALEF32_2XPK16_BF6_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_2XPK16_FP6_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_BF6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_FP6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_BF6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_FP6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_BF6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_FP6_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_BF6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_FP6_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_BF6_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK16_FP6_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_BF6_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK16_FP6_F32_e64)
+    return 8;
+
+  if (Opc == AMDGPU::V_CVT_SCALE_PK16_BF16_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK16_F16_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK16_F32_BF6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK16_BF16_FP6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK16_F16_FP6_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK16_F32_FP6_e64)
+    return 8;
+
+  // V_CVT_SCALE_PK8 instructions: 4 cycle occupancy
+  if (Opc == AMDGPU::V_CVT_SCALE_PK8_F16_FP8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_BF16_FP8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_F16_BF8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_BF16_BF8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_F32_FP8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_F32_BF8_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_F16_FP4_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_BF16_FP4_e64 ||
+      Opc == AMDGPU::V_CVT_SCALE_PK8_F32_FP4_e64)
+    return 4;
+
+  if (Opc == AMDGPU::V_CVT_SCALEF32_PK8_BF8_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK8_FP8_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK8_BF8_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK8_FP8_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_BF8_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_FP8_BF16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_BF8_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_FP8_F16_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK8_BF8_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_PK8_FP8_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_BF8_F32_e64 ||
+      Opc == AMDGPU::V_CVT_SCALEF32_SR_PK8_FP8_F32_e64)
+    return 4;
+
+  if (Opc == AMDGPU::V_PERM_PK16_B4_U4_e64 ||
+      Opc == AMDGPU::V_PERM_PK16_B6_U4_e64 ||
+      Opc == AMDGPU::V_PERM_PK16_B8_U4_e64)
+    return 4;
+
+  return 1;
+}
