@@ -2455,7 +2455,6 @@ void AMDGPUCodeGenPassBuilder::addPreEmitPass(PassManagerWrapper &PMW) const {
   }
 
   addMachineFunctionPass(BranchRelaxationPass(), PMW);
-  addMachineFunctionPass(BranchRelaxationPass(), PMW);
 
   // Static simulator runs last to analyze the final machine code
   addMachineFunctionPass(AMDGPUStaticSimulatorPass(), PMW);

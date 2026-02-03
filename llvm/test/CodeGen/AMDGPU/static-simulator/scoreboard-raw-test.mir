@@ -16,8 +16,8 @@ body: |
 # CHECK-LABEL: raw_without_delay_alu
 # CHECK: V_ADD_F32_e32
 # CHECK: V_MUL_F32_e32 $vgpr0
-# CHECK: RAW dependency: stall=6
-# CHECK: Stalls: RAW=6
+# CHECK: RAW dependency: stall=4
+# CHECK: Stalls: RAW=4
 
 ---
 # No RAW when reading different register
@@ -51,8 +51,8 @@ body: |
 # CHECK-LABEL: valu_to_dsread_raw
 # CHECK: V_ADD_F32_e32
 # CHECK: DS_READ_B32
-# CHECK: RAW dependency: stall=6
-# CHECK: Stalls: RAW=6
+# CHECK: RAW dependency: stall=4
+# CHECK: Stalls: RAW=4
 
 ---
 # SALU -> VALU RAW: s_add writes s2 (latency 2), v_add reads s2

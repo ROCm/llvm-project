@@ -15,10 +15,10 @@ body: |
 
 # CHECK-LABEL: valu_ssrc_stalls_salu
 # CHECK: V_ADD_F32_e32 $sgpr0
-# CHECK: Latency: 7
+# CHECK: Latency: 5
 # CHECK: S_ADD_I32
-# CHECK: Stalls: SSRC=6
-# CHECK: VaSSRC:6
+# CHECK: Stalls: SSRC=4
+# CHECK: VaSSRC:4
 
 ---
 # VALU without SGPR doesn't block SALU (negative test)
