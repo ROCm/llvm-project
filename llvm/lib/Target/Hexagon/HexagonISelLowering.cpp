@@ -2026,12 +2026,13 @@ static Value *getUnderLyingObjectForBrevLdIntr(Value *V) {
 }
 
 /// Given an intrinsic, checks if on the target the intrinsic will need to map
-/// to a MemIntrinsicNode (touches memory). If this is the case, it stores
-/// the intrinsic information into the Infos vector.
-void HexagonTargetLowering::getTgtMemIntrinsic(
-    SmallVectorImpl<IntrinsicInfo> &Infos, const CallBase &I,
-    MachineFunction &MF, unsigned Intrinsic) const {
-  IntrinsicInfo Info;
+/// to a MemIntrinsicNode (touches memory). If this is the case, it returns
+/// true and store the intrinsic information into the IntrinsicInfo that was
+/// passed to the function.
+bool HexagonTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
+                                               const CallBase &I,
+                                               MachineFunction &MF,
+                                               unsigned Intrinsic) const {
   switch (Intrinsic) {
   case Intrinsic::hexagon_L2_loadrd_pbr:
   case Intrinsic::hexagon_L2_loadri_pbr:
@@ -2054,8 +2055,7 @@ void HexagonTargetLowering::getTgtMemIntrinsic(
     Info.offset = 0;
     Info.align = DL.getABITypeAlign(Info.memVT.getTypeForEVT(Cont));
     Info.flags = MachineMemOperand::MOLoad;
-    Infos.push_back(Info);
-    return;
+    return true;
   }
   case Intrinsic::hexagon_V6_vgathermw:
   case Intrinsic::hexagon_V6_vgathermw_128B:
@@ -2079,14 +2079,15 @@ void HexagonTargetLowering::getTgtMemIntrinsic(
     Info.offset = 0;
     Info.align =
         MaybeAlign(M.getDataLayout().getTypeAllocSizeInBits(VecTy) / 8);
-    Info.flags = MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
+    Info.flags = MachineMemOperand::MOLoad |
+                 MachineMemOperand::MOStore |
                  MachineMemOperand::MOVolatile;
-    Infos.push_back(Info);
-    return;
+    return true;
   }
   default:
     break;
   }
+  return false;
 }
 
 bool HexagonTargetLowering::hasBitTest(SDValue X, SDValue Y) const {

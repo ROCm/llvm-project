@@ -18631,10 +18631,10 @@ PPCTargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
   return false;
 }
 
-void PPCTargetLowering::getTgtMemIntrinsic(
-    SmallVectorImpl<IntrinsicInfo> &Infos, const CallBase &I,
-    MachineFunction &MF, unsigned Intrinsic) const {
-  IntrinsicInfo Info;
+bool PPCTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
+                                           const CallBase &I,
+                                           MachineFunction &MF,
+                                           unsigned Intrinsic) const {
   switch (Intrinsic) {
   case Intrinsic::ppc_atomicrmw_xchg_i128:
   case Intrinsic::ppc_atomicrmw_add_i128:
@@ -18651,8 +18651,7 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.align = Align(16);
     Info.flags = MachineMemOperand::MOLoad | MachineMemOperand::MOStore |
                  MachineMemOperand::MOVolatile;
-    Infos.push_back(Info);
-    return;
+    return true;
   case Intrinsic::ppc_atomic_load_i128:
     Info.opc = ISD::INTRINSIC_W_CHAIN;
     Info.memVT = MVT::i128;
@@ -18660,8 +18659,7 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.offset = 0;
     Info.align = Align(16);
     Info.flags = MachineMemOperand::MOLoad | MachineMemOperand::MOVolatile;
-    Infos.push_back(Info);
-    return;
+    return true;
   case Intrinsic::ppc_atomic_store_i128:
     Info.opc = ISD::INTRINSIC_VOID;
     Info.memVT = MVT::i128;
@@ -18669,8 +18667,7 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.offset = 0;
     Info.align = Align(16);
     Info.flags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
-    Infos.push_back(Info);
-    return;
+    return true;
   case Intrinsic::ppc_altivec_lvx:
   case Intrinsic::ppc_altivec_lvxl:
   case Intrinsic::ppc_altivec_lvebx:
@@ -18709,8 +18706,7 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.size = 2*VT.getStoreSize()-1;
     Info.align = Align(1);
     Info.flags = MachineMemOperand::MOLoad;
-    Infos.push_back(Info);
-    return;
+    return true;
   }
   case Intrinsic::ppc_altivec_stvx:
   case Intrinsic::ppc_altivec_stvxl:
@@ -18750,8 +18746,7 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.size = 2*VT.getStoreSize()-1;
     Info.align = Align(1);
     Info.flags = MachineMemOperand::MOStore;
-    Infos.push_back(Info);
-    return;
+    return true;
   }
   case Intrinsic::ppc_stdcx:
   case Intrinsic::ppc_stwcx:
@@ -18782,12 +18777,13 @@ void PPCTargetLowering::getTgtMemIntrinsic(
     Info.offset = 0;
     Info.align = Alignment;
     Info.flags = MachineMemOperand::MOStore | MachineMemOperand::MOVolatile;
-    Infos.push_back(Info);
-    return;
+    return true;
   }
   default:
     break;
   }
+
+  return false;
 }
 
 /// It returns EVT::Other if the type should be determined using generic
