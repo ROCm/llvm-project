@@ -21020,58 +21020,6 @@ static bool ValidateAMDGPUPredicateBI(Sema &Sema, CallExpr *CE) {
   return true;
 }
 
-static Expr *MaybeHandleAMDGPUPredicateBI(Sema &Sema, Expr *E, bool &Invalid) {
-  if (auto *UO = dyn_cast<UnaryOperator>(E)) {
-    auto *SE = dyn_cast<CallExpr>(UO->getSubExpr());
-    if (IsAMDGPUPredicateBI(SE)) {
-      assert(UO->getOpcode() == UnaryOperator::Opcode::UO_LNot &&
-             "__builtin_amdgcn_processor_is and __builtin_amdgcn_is_invocable "
-             "can only be used as operands of logical ops!");
-
-      if (!ValidateAMDGPUPredicateBI(Sema, SE)) {
-        Invalid = true;
-        return nullptr;
-      }
-
-      UO->setSubExpr(ExpandAMDGPUPredicateBI(Sema.getASTContext(), SE));
-      UO->setType(Sema.getASTContext().getLogicalOperationType());
-
-      return UO;
-    }
-  }
-  if (auto *BO = dyn_cast<BinaryOperator>(E)) {
-    auto *LHS = dyn_cast<CallExpr>(BO->getLHS());
-    auto *RHS = dyn_cast<CallExpr>(BO->getRHS());
-    if (IsAMDGPUPredicateBI(LHS) && IsAMDGPUPredicateBI(RHS)) {
-      assert(BO->isLogicalOp() &&
-             "__builtin_amdgcn_processor_is and __builtin_amdgcn_is_invocable "
-             "can only be used as operands of logical ops!");
-
-      if (!ValidateAMDGPUPredicateBI(Sema, LHS) ||
-          !ValidateAMDGPUPredicateBI(Sema, RHS)) {
-        Invalid = true;
-        return nullptr;
-      }
-
-      BO->setLHS(ExpandAMDGPUPredicateBI(Sema.getASTContext(), LHS));
-      BO->setRHS(ExpandAMDGPUPredicateBI(Sema.getASTContext(), RHS));
-      BO->setType(Sema.getASTContext().getLogicalOperationType());
-
-      return BO;
-    }
-  }
-  if (auto *CE = dyn_cast<CallExpr>(E))
-    if (IsAMDGPUPredicateBI(CE)) {
-      if (!ValidateAMDGPUPredicateBI(Sema, CE)) {
-        Invalid = true;
-        return nullptr;
-      }
-      return ExpandAMDGPUPredicateBI(Sema.getASTContext(), CE);
-    }
-
-  return nullptr;
-}
-
 ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
                                        bool IsConstexpr) {
   DiagnoseAssignmentAsCondition(E);

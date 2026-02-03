@@ -1300,7 +1300,7 @@ bool Driver::loadConfigFiles() {
         UserConfigDir = static_cast<std::string>(CfgDir);
     }
   }
-  
+
   // Prepare list of directories where config file is searched for.
   StringRef CfgFileSearchDirs[] = {UserConfigDir, SystemConfigDir, Dir};
   ExpCtx.setSearchDirs(CfgFileSearchDirs);
@@ -4368,9 +4368,6 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
     Diag(clang::diag::err_drv_no_input_files);
     return;
   }
-
-  Arg *FinalPhaseArg;
-  phases::ID FinalPhase = getFinalPhase(Args, &FinalPhaseArg);
 
   handleArguments(C, Args, Inputs, Actions);
 
