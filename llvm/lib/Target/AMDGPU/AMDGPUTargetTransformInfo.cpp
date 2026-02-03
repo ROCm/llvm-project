@@ -200,10 +200,9 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
       if (UP.Threshold >= Threshold)
         continue;
 
+      const AllocaInst *Alloca =
+          dyn_cast<AllocaInst>(getUnderlyingObject(GEP));
       if (AS == AMDGPUAS::PRIVATE_ADDRESS) {
-        const Value *Ptr = GEP->getPointerOperand();
-        const AllocaInst *Alloca =
-            dyn_cast<AllocaInst>(getUnderlyingObject(Ptr));
         if (!Alloca || !Alloca->isStaticAlloca())
           continue;
         Type *Ty = Alloca->getAllocatedType();
@@ -228,6 +227,9 @@ void AMDGPUTTIImpl::getUnrollingPreferences(
                           << *L << " due to LDS use.\n");
         UP.Runtime = UnrollRuntimeLocal;
       }
+
+      if (!Alloca || !Alloca->isStaticAlloca())
+        continue;
 
       // Check if GEP depends on a value defined by this loop itself.
       bool HasLoopDef = false;
