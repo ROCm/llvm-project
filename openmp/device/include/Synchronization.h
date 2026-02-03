@@ -241,12 +241,14 @@ static inline void threads(atomic::OrderingTy Ordering) {
   __nvvm_barrier_sync(8);
 #elif defined(__AMDGPU__)
   if (Ordering != atomic::relaxed)
-    fence::team(Ordering == atomic::acq_rel ? atomic::release : atomic::seq_cst);
+    fence::team(Ordering == atomic::acq_rel ? atomic::release
+                                            : atomic::seq_cst);
 
   __builtin_amdgcn_s_barrier();
 
   if (Ordering != atomic::relaxed)
-    fence::team(Ordering == atomic::acq_rel ? atomic::acquire : atomic::seq_cst);
+    fence::team(Ordering == atomic::acq_rel ? atomic::acquire
+                                            : atomic::seq_cst);
 #else
   __gpu_sync_threads();
 #endif

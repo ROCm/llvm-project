@@ -4,7 +4,7 @@
 # In the scheduled run, we run all targets from amdgpu_family_matrix.py and amdgpu_family_matrix_xfail.py
 # As some of these builds are xfail, we allow errors to occur with `continue-on-error`, where the job will fail but the workflow is green
 
-name: CI Nightly
+name: CI amd-staging Nightly
 
 on:
   # For AMD GPU families that expect_failure, we run builds and tests from this scheduled trigger
@@ -61,8 +61,7 @@ jobs:
     needs: setup
     if: >-
       ${{
-        needs.setup.outputs.linux_variants != '[]' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        needs.setup.outputs.linux_variants != '[]'
       }}
     strategy:
       fail-fast: false
@@ -93,8 +92,7 @@ jobs:
     needs: setup
     if: >-
       ${{
-        needs.setup.outputs.windows_variants != '[]' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        needs.setup.outputs.windows_variants != '[]'
       }}
     strategy:
       fail-fast: false
