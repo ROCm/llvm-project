@@ -117,35 +117,30 @@ jobs:
           SPIRV_PR_URL="${{ inputs.SPIRV_PR_URL }}"
           HIPIFY_PR_URL="${{ inputs.HIPIFY_PR_URL }}"
 
-          #Get the SHA of PR 
-          pr_url_to_owner_repo_num() {
-            local url="$1"
-            OWNER="$(echo "$url" | awk -F/ '{print $4}')"
-            REPO="$(echo  "$url" | awk -F/ '{print $5}')"
-            PRNUM="$(echo  "$url" | awk -F/ '{print $7}')"
-          }
-          pr_url_to_sha_api() {
-            local url="$1"
-            pr_url_to_owner_repo_num "$url"
-            curl -sS -L \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            "https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PRNUM}" \
-            | jq -r '.head.sha'
-          }
+          # Function to get SHA with git-ls
+          get_pr_sha() {
+             local pr_url="$1"
+             #Extract repo URL and PR number
+             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
+             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
+
+             #Use git ls-remote to get SHA without fetching
+             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+          } 
+          
           # Update ONLY the submodules that have values
           if [[ -n "$LLVM_PR_URL" ]]; then
-              LLVM_SHA="$(pr_url_to_sha_api "$LLVM_PR_URL")"
+              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
               echo "LLVM head SHA: $LLVM_SHA"
               git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
           fi
           if [[ -n "$SPIRV_PR_URL" ]]; then
-              SPIRV_SHA="$(pr_url_to_sha_api "$SPIRV_PR_URL")"
+              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
               echo "SPIRV head SHA: $SPIRV_SHA"
               git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
           fi
           if [[ -n "$HIPIFY_PR_URL" ]]; then
-              HIPIFY_SHA="$(pr_url_to_sha_api "$HIPIFY_PR_URL")"
+              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
               echo "HIPIFY head SHA: $HIPIFY_SHA"
               git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
           fi    
