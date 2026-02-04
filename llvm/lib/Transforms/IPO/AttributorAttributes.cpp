@@ -107,6 +107,12 @@ static cl::opt<int> MaxPotentialValuesIterations(
         "Maximum number of iterations we keep dismantling potential values."),
     cl::init(64));
 
+static cl::opt<bool> SkipIntrinsicsInReachability(
+    "attributor-skip-intrinsics-in-reachability", cl::Hidden,
+    cl::desc("Skip intrinsic calls when computing inter-function reachability. "
+             "Intrinsics cannot transitively reach user functions."),
+    cl::init(true));
+
 STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
 
@@ -10866,6 +10872,13 @@ struct AAInterFnReachabilityFunction
 
     // Determine call like instructions that we can reach from the inst.
     auto CheckCallBase = [&](Instruction &CBInst) {
+      // Skip intrinsic calls - they cannot transitively reach user functions.
+      // This is a significant optimization for OpenMP code where many intrinsics
+      // (llvm.assume, llvm.amdgcn.*, llvm.lifetime.*) are present in outlined
+      // functions, causing excessive reachability analysis overhead.
+      if (SkipIntrinsicsInReachability && isa<IntrinsicInst>(&CBInst))
+        return true;
+
       // There are usually less nodes in the call graph, check inter function
       // reachability first.
       if (CheckReachableCallBase(cast<CallBase>(&CBInst)))
