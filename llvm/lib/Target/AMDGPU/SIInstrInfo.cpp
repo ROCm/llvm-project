@@ -11100,8 +11100,7 @@ static bool evaluateCompare(const MachineInstr *CmpInstr,
   }
 
 
-  dbgs() << "FFFFFFFFFFFFFFFFFFFFFFFFFFF evaluating comp " << Cmp0Value << " " << Cmp1Value << "\n";
-  CmpInstr->dump();
+  dbgs() << "FFFFFFFFFFFFFFFFFFFFFFFFFFF evaluating comp " << CmpInstr->getOpcode() << " " << Cmp0Value << " " << Cmp1Value << "\n";
     
   switch (CmpInstr->getOpcode()) {
   default:
