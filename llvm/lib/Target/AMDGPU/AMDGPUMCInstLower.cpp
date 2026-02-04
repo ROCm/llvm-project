@@ -358,7 +358,7 @@ void AMDGPUAsmPrinter::emitInstruction(const MachineInstr *MI) {
     
     OS << "Sim:";
     
-    if (Info.IsWMMA && !Info.WMMAPattern.empty()) {
+    if (Info.IsWMMA && Info.WMMAPattern && Info.WMMAPattern[0]) {
       OS << " " << Info.WMMAPattern;
       HasContent = true;
     }

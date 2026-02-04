@@ -190,6 +190,8 @@ add_llvm_target(AMDGPUCodeGen
   LINK_COMPONENTS
   AMDGPUDesc
   AMDGPUInfo
+  AMDGPUSim
+  AMDGPUSimMIRAdapter
   AMDGPUUtils
   Analysis
   AsmPrinter
@@ -218,6 +220,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPU
   )
 
+add_subdirectory(AMDGPUSim)
 add_subdirectory(AsmParser)
 add_subdirectory(Disassembler)
 add_subdirectory(MCA)
