@@ -13649,6 +13649,20 @@ static uint32_t getPermuteMask(SDValue V) {
   return ~0;
 }
 
+static SDValue matchPERM(SDNode *N, TargetLowering::DAGCombinerInfo &DCI);
+
+SDValue SITargetLowering::performLeftShiftCombine(SDNode *N,
+                                                  DAGCombinerInfo &DCI) const {
+  if (DCI.getDAGCombineLevel() < AfterLegalizeTypes)
+    return SDValue();
+
+  EVT VT = N->getValueType(0);
+  if (VT != MVT::i32)
+    return SDValue();
+
+  return matchPERM(N, DCI);
+}
+
 SDValue SITargetLowering::performAndCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   if (DCI.isBeforeLegalize())
@@ -17450,6 +17464,10 @@ SDValue SITargetLowering::PerformDAGCombine(SDNode *N,
     return performMinMaxCombine(N, DCI);
   case ISD::FMA:
     return performFMACombine(N, DCI);
+  case ISD::SHL:
+    if (auto Res = performLeftShiftCombine(N, DCI))
+      return Res;
+    break;
   case ISD::AND:
     return performAndCombine(N, DCI);
   case ISD::OR:
