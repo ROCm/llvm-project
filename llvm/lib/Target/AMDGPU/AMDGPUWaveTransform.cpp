@@ -1818,7 +1818,9 @@ void ControlFlowRewriter::rewrite() {
     }
     return RegAllOnes;
   };
-
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
@@ -1888,9 +1890,11 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(Other->Block);
     }
   }
-  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str()
+                    << "_with_term\n");
   LLVM_DEBUG(Function.dump());
-  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str()
+                    << "_with_term\n");
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
@@ -2268,7 +2272,7 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   CFRewriter.rewrite();
 
   LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName() << "\n");
-  ReconvergeHelper.dumpNodes();
+  LLVM_DEBUG(ReconvergeHelper.dumpNodes());
   LLVM_DEBUG(dbgs() << "RCFG_END:" << MF.getName() << "\n");
 
   // FIXME: restore the following 1 line:
