@@ -4312,7 +4312,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
       SmallVector<SDValue, 8> Ops;
       if (NumOps != 0) {
         // Get the index into the OperandLists.
-        uint64_t OperandIndex = MatcherTable[MatcherIndex++];
+        size_t OperandIndex = MatcherTable[MatcherIndex++];
         if (OperandIndex & 128)
           OperandIndex = GetVBR(OperandIndex, MatcherTable, MatcherIndex);
 
