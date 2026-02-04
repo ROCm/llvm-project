@@ -2053,10 +2053,11 @@ define void @store_v4i8(<4 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v4i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -2114,10 +2115,11 @@ define void @store_v5i8(<5 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v5i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    buffer_store_byte v4, off, s[16:19], 0 offset:4
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
@@ -2183,9 +2185,10 @@ define void @store_v6i8(<6 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
+; SDAG-NEXT:    s_mov_b32 s5, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s5
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    buffer_store_short v4, off, s[16:19], 0 offset:4
@@ -2254,10 +2257,11 @@ define void @store_v7i8(<7 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v7i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    v_perm_b32 v0, v4, v5, s4
 ; SDAG-NEXT:    buffer_store_short v0, off, s[16:19], 0 offset:4
@@ -2329,13 +2333,14 @@ define void @store_v8i8(<8 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v8i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
-; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
-; SDAG-NEXT:    v_perm_b32 v5, v6, v7, s4
-; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v4, v5, 16, v4
-; SDAG-NEXT:    v_lshl_or_b32 v3, v1, 16, v0
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    s_mov_b32 s5, 0xc0c0004
+; SDAG-NEXT:    v_perm_b32 v6, v6, v7, s4
+; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s5
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
+; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s5
+; SDAG-NEXT:    v_or_b32_e32 v4, v4, v6
+; SDAG-NEXT:    v_or_b32_e32 v3, v0, v2
 ; SDAG-NEXT:    buffer_store_dwordx2 v[3:4], off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -2416,16 +2421,17 @@ define void @store_v12i8(<12 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v12i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
-; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s4
-; SDAG-NEXT:    v_perm_b32 v9, v10, v11, s4
-; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
-; SDAG-NEXT:    v_perm_b32 v5, v6, v7, s4
-; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v8, v9, 16, v8
-; SDAG-NEXT:    v_lshl_or_b32 v7, v5, 16, v4
-; SDAG-NEXT:    v_lshl_or_b32 v6, v1, 16, v0
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    s_mov_b32 s5, 0xc0c0004
+; SDAG-NEXT:    v_perm_b32 v10, v10, v11, s4
+; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s5
+; SDAG-NEXT:    v_perm_b32 v6, v6, v7, s4
+; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s5
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
+; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s5
+; SDAG-NEXT:    v_or_b32_e32 v8, v8, v10
+; SDAG-NEXT:    v_or_b32_e32 v7, v4, v6
+; SDAG-NEXT:    v_or_b32_e32 v6, v0, v2
 ; SDAG-NEXT:    buffer_store_dwordx3 v[6:8], off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -2523,19 +2529,20 @@ define void @store_v16i8(<16 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v16i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
-; SDAG-NEXT:    v_perm_b32 v12, v12, v13, s4
-; SDAG-NEXT:    v_perm_b32 v13, v14, v15, s4
-; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s4
-; SDAG-NEXT:    v_perm_b32 v9, v10, v11, s4
-; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
-; SDAG-NEXT:    v_perm_b32 v5, v6, v7, s4
-; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v12, v13, 16, v12
-; SDAG-NEXT:    v_lshl_or_b32 v11, v9, 16, v8
-; SDAG-NEXT:    v_lshl_or_b32 v10, v5, 16, v4
-; SDAG-NEXT:    v_lshl_or_b32 v9, v1, 16, v0
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    s_mov_b32 s5, 0xc0c0004
+; SDAG-NEXT:    v_perm_b32 v14, v14, v15, s4
+; SDAG-NEXT:    v_perm_b32 v12, v12, v13, s5
+; SDAG-NEXT:    v_perm_b32 v10, v10, v11, s4
+; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s5
+; SDAG-NEXT:    v_perm_b32 v6, v6, v7, s4
+; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s5
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
+; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s5
+; SDAG-NEXT:    v_or_b32_e32 v12, v12, v14
+; SDAG-NEXT:    v_or_b32_e32 v11, v8, v10
+; SDAG-NEXT:    v_or_b32_e32 v10, v4, v6
+; SDAG-NEXT:    v_or_b32_e32 v9, v0, v2
 ; SDAG-NEXT:    buffer_store_dwordx4 v[9:12], off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -2676,34 +2683,35 @@ define void @store_v32i8(<32 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: store_v32i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
-; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s4
-; SDAG-NEXT:    v_perm_b32 v9, v10, v11, s4
-; SDAG-NEXT:    buffer_load_ubyte v10, off, s[0:3], s32
-; SDAG-NEXT:    v_perm_b32 v12, v12, v13, s4
-; SDAG-NEXT:    v_perm_b32 v13, v14, v15, s4
-; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
-; SDAG-NEXT:    v_perm_b32 v5, v6, v7, s4
-; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v6, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v3, v13, 16, v12
-; SDAG-NEXT:    v_lshl_or_b32 v2, v9, 16, v8
-; SDAG-NEXT:    v_lshl_or_b32 v1, v5, 16, v4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v6, 16, v0
-; SDAG-NEXT:    v_perm_b32 v7, v28, v29, s4
-; SDAG-NEXT:    v_perm_b32 v11, v24, v25, s4
-; SDAG-NEXT:    v_perm_b32 v14, v26, v27, s4
-; SDAG-NEXT:    v_perm_b32 v15, v20, v21, s4
-; SDAG-NEXT:    v_perm_b32 v20, v22, v23, s4
-; SDAG-NEXT:    v_perm_b32 v16, v16, v17, s4
-; SDAG-NEXT:    v_perm_b32 v17, v18, v19, s4
+; SDAG-NEXT:    s_mov_b32 s5, 0xc0c0004
+; SDAG-NEXT:    v_perm_b32 v8, v8, v9, s5
+; SDAG-NEXT:    buffer_load_ubyte v9, off, s[0:3], s32
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v14, v14, v15, s4
+; SDAG-NEXT:    v_perm_b32 v12, v12, v13, s5
+; SDAG-NEXT:    v_perm_b32 v10, v10, v11, s4
+; SDAG-NEXT:    v_perm_b32 v6, v6, v7, s4
+; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s5
+; SDAG-NEXT:    v_perm_b32 v5, v2, v3, s4
+; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s5
+; SDAG-NEXT:    v_or_b32_e32 v3, v12, v14
+; SDAG-NEXT:    v_or_b32_e32 v2, v8, v10
+; SDAG-NEXT:    v_or_b32_e32 v1, v4, v6
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v5
+; SDAG-NEXT:    v_perm_b32 v7, v28, v29, s5
+; SDAG-NEXT:    v_perm_b32 v11, v26, v27, s4
+; SDAG-NEXT:    v_perm_b32 v13, v24, v25, s5
+; SDAG-NEXT:    v_perm_b32 v15, v22, v23, s4
+; SDAG-NEXT:    v_perm_b32 v20, v20, v21, s5
+; SDAG-NEXT:    v_perm_b32 v18, v18, v19, s4
+; SDAG-NEXT:    v_perm_b32 v16, v16, v17, s5
 ; SDAG-NEXT:    buffer_store_dwordx4 v[0:3], off, s[16:19], 0
-; SDAG-NEXT:    v_lshl_or_b32 v5, v14, 16, v11
-; SDAG-NEXT:    v_lshl_or_b32 v4, v20, 16, v15
-; SDAG-NEXT:    v_lshl_or_b32 v3, v17, 16, v16
+; SDAG-NEXT:    v_or_b32_e32 v5, v13, v11
+; SDAG-NEXT:    v_or_b32_e32 v4, v20, v15
+; SDAG-NEXT:    v_or_b32_e32 v3, v16, v18
 ; SDAG-NEXT:    s_waitcnt vmcnt(1)
-; SDAG-NEXT:    v_perm_b32 v0, v30, v10, s4
-; SDAG-NEXT:    v_lshl_or_b32 v6, v0, 16, v7
+; SDAG-NEXT:    v_perm_b32 v0, v30, v9, s4
+; SDAG-NEXT:    v_or_b32_e32 v6, v7, v0
 ; SDAG-NEXT:    buffer_store_dwordx4 v[3:6], off, s[16:19], 0 offset:16
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -3541,10 +3549,11 @@ define void @volatile_store_v4i8(<4 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG-LABEL: volatile_store_v4i8:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; SDAG-NEXT:    s_mov_b32 s4, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s4
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; SDAG-NEXT:    s_setpc_b64 s[30:31]
@@ -3608,9 +3617,10 @@ define void @volatile_store_v6i8(<6 x i8> %data, ptr addrspace(8) inreg %buf) {
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; SDAG-NEXT:    s_mov_b32 s4, 0xc0c0004
+; SDAG-NEXT:    s_mov_b32 s5, 0x40c0c
+; SDAG-NEXT:    v_perm_b32 v2, v2, v3, s5
 ; SDAG-NEXT:    v_perm_b32 v0, v0, v1, s4
-; SDAG-NEXT:    v_perm_b32 v1, v2, v3, s4
-; SDAG-NEXT:    v_lshl_or_b32 v0, v1, 16, v0
+; SDAG-NEXT:    v_or_b32_e32 v0, v0, v2
 ; SDAG-NEXT:    v_perm_b32 v4, v4, v5, s4
 ; SDAG-NEXT:    buffer_store_dword v0, off, s[16:19], 0
 ; SDAG-NEXT:    s_waitcnt vmcnt(0)

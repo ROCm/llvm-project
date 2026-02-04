@@ -473,13 +473,12 @@ define amdgpu_kernel void @ashr_v_imm_v2i16(ptr addrspace(1) %out, ptr addrspace
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    flat_load_dword v3, v[0:1]
-; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
-; VI-NEXT:    v_mov_b32_e32 v2, 8
 ; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
+; VI-NEXT:    s_mov_b32 s0, 0xc070c05
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_ashrrev_i16_sdwa v2, v2, v3 dst_sel:WORD_1 dst_unused:UNUSED_PAD src0_sel:DWORD src1_sel:WORD_1
-; VI-NEXT:    v_or_b32_sdwa v2, sext(v3), v2 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:BYTE_1 src1_sel:DWORD
+; VI-NEXT:    v_perm_b32 v2, v3, v3, s0
 ; VI-NEXT:    flat_store_dword v[0:1], v2
 ; VI-NEXT:    s_endpgm
 ;
@@ -656,20 +655,18 @@ define amdgpu_kernel void @ashr_v_imm_v4i16(ptr addrspace(1) %out, ptr addrspace
 ; VI:       ; %bb.0:
 ; VI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; VI-NEXT:    v_lshlrev_b32_e32 v2, 3, v0
-; VI-NEXT:    v_mov_b32_e32 v4, 8
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    flat_load_dwordx2 v[0:1], v[0:1]
+; VI-NEXT:    s_mov_b32 s2, 0xc070c05
 ; VI-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-NEXT:    v_add_u32_e32 v2, vcc, s0, v2
 ; VI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_ashrrev_i16_sdwa v5, v4, v1 dst_sel:WORD_1 dst_unused:UNUSED_PAD src0_sel:DWORD src1_sel:WORD_1
-; VI-NEXT:    v_ashrrev_i16_sdwa v4, v4, v0 dst_sel:WORD_1 dst_unused:UNUSED_PAD src0_sel:DWORD src1_sel:WORD_1
-; VI-NEXT:    v_or_b32_sdwa v1, sext(v1), v5 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:BYTE_1 src1_sel:DWORD
-; VI-NEXT:    v_or_b32_sdwa v0, sext(v0), v4 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:BYTE_1 src1_sel:DWORD
+; VI-NEXT:    v_perm_b32 v1, v1, v1, s2
+; VI-NEXT:    v_perm_b32 v0, v0, v0, s2
 ; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
 ;

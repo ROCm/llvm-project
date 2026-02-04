@@ -1820,26 +1820,25 @@ define amdgpu_kernel void @v_ctlz_i17_sel_ne_bitwidth(ptr addrspace(1) noalias %
 ; VI:       ; %bb.0:
 ; VI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; VI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
+; VI-NEXT:    s_mov_b32 s4, 0xc000504
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s2, v0
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-NEXT:    flat_load_ubyte v2, v[2:3]
 ; VI-NEXT:    flat_load_ushort v0, v[0:1]
-; VI-NEXT:    v_mov_b32_e32 v1, 0x1ffff
+; VI-NEXT:    flat_load_ubyte v1, v[2:3]
+; VI-NEXT:    v_mov_b32_e32 v2, 0x1ffff
 ; VI-NEXT:    s_mov_b32 s3, 0xf000
 ; VI-NEXT:    s_mov_b32 s2, -1
-; VI-NEXT:    s_waitcnt vmcnt(1)
-; VI-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_or_b32_e32 v0, v0, v2
+; VI-NEXT:    v_perm_b32 v0, v0, v1, s4
 ; VI-NEXT:    v_ffbh_u32_e32 v0, v0
 ; VI-NEXT:    v_min_u32_e32 v0, 32, v0
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, -15, v0
 ; VI-NEXT:    v_cmp_ne_u32_e32 vcc, 17, v0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
+; VI-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; VI-NEXT:    buffer_store_short v0, off, s[0:3], 0
 ; VI-NEXT:    v_bfe_u32 v0, v0, 16, 1
 ; VI-NEXT:    buffer_store_byte v0, off, s[0:3], 0 offset:2
@@ -1904,10 +1903,10 @@ define amdgpu_kernel void @v_ctlz_i17_sel_ne_bitwidth(ptr addrspace(1) noalias %
 ; GFX10-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-NEXT:    s_clause 0x1
-; GFX10-NEXT:    global_load_ushort v1, v0, s[2:3]
-; GFX10-NEXT:    global_load_ubyte v2, v0, s[2:3] offset:2
+; GFX10-NEXT:    global_load_ubyte v1, v0, s[2:3] offset:2
+; GFX10-NEXT:    global_load_ushort v2, v0, s[2:3]
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_lshl_or_b32 v0, v2, 16, v1
+; GFX10-NEXT:    v_perm_b32 v0, v2, v1, 0xc000504
 ; GFX10-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX10-NEXT:    v_ffbh_u32_e32 v0, v0
 ; GFX10-NEXT:    v_min_u32_e32 v0, 32, v0
@@ -1947,10 +1946,10 @@ define amdgpu_kernel void @v_ctlz_i17_sel_ne_bitwidth(ptr addrspace(1) noalias %
 ; GFX11-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_clause 0x1
-; GFX11-NEXT:    global_load_u16 v1, v0, s[2:3]
-; GFX11-NEXT:    global_load_u8 v0, v0, s[2:3] offset:2
+; GFX11-NEXT:    global_load_u8 v1, v0, s[2:3] offset:2
+; GFX11-NEXT:    global_load_u16 v0, v0, s[2:3]
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-NEXT:    v_lshl_or_b32 v0, v0, 16, v1
+; GFX11-NEXT:    v_perm_b32 v0, v0, v1, 0xc000504
 ; GFX11-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_clz_i32_u32_e32 v0, v0

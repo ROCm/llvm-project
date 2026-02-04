@@ -51,7 +51,6 @@ entry:
 }
 
 ; FIXME: This is treated like a kernel
-; XGCN-LABEL: {{^}}func:
 ; XGCN: s_endpgm
 ; define spir_func void @func(ptr addrspace(1) %out) {
 ; entry:
@@ -753,12 +752,12 @@ define amdgpu_ps void @ps_mesa_inreg_v2i16(<2 x i16> inreg %arg0) {
 ;
 ; VI-LABEL: ps_mesa_inreg_v2i16:
 ; VI:       ; %bb.0:
-; VI-NEXT:    s_and_b32 s1, s0, 0xffff0000
+; VI-NEXT:    v_mov_b32_e32 v0, 0x7060c0c
+; VI-NEXT:    v_perm_b32 v0, s0, s0, v0
 ; VI-NEXT:    s_add_i32 s0, s0, 1
 ; VI-NEXT:    s_and_b32 s0, s0, 0xffff
-; VI-NEXT:    s_or_b32 s0, s1, s0
-; VI-NEXT:    s_add_i32 s0, s0, 0x10000
-; VI-NEXT:    v_mov_b32_e32 v0, s0
+; VI-NEXT:    v_or_b32_e32 v0, s0, v0
+; VI-NEXT:    v_add_u32_e32 v0, vcc, 0x10000, v0
 ; VI-NEXT:    flat_store_dword v[0:1], v0
 ; VI-NEXT:    s_endpgm
 ;
