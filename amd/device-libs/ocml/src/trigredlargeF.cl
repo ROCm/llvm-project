@@ -12,7 +12,7 @@
 CONSTATTR struct redret
 MATH_PRIVATE(trigredlarge)(float x)
 {
-    int xe = (int)(AS_UINT(x) >> 23) - 127;
+    int xe = BUILTIN_FREXP_EXP_F32(x) - 1;
     uint xm = 0x00800000U | (AS_UINT(x) & 0x7fffffU);
 
     // 224 bits of 2/PI: . A2F9836E 4E441529 FC2757D1 F534DDC0 DB629599 3C439041 FE5163AB
@@ -86,7 +86,7 @@ MATH_PRIVATE(trigredlarge)(float x)
 
     // Subtract 1 if msb of fraction is 1, i.e. fraction >= 0.5
     uint flip = i & 1 ? 0xffffffffU : 0U;
-    uint sign = i & 1 ? 0x80000000U : 0U;
+    uint sign = i & 1 ? (uint)SIGNBIT_SP32 : 0U;
     p7 = p7 ^ flip;
     p6 = p6 ^ flip;
     p5 = p5 ^ flip;

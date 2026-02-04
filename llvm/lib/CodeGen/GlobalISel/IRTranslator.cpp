@@ -258,9 +258,8 @@ int IRTranslator::getOrCreateFrameIndex(const AllocaInst &AI) {
   if (!Inserted)
     return MapEntry->second;
 
-  uint64_t ElementSize = DL->getTypeAllocSize(AI.getAllocatedType());
   uint64_t Size =
-      ElementSize * cast<ConstantInt>(AI.getArraySize())->getZExtValue();
+      AI.getAllocationSize(*DL).value_or(TypeSize::getZero()).getFixedValue();
 
   // Always allocate at least one byte.
   Size = std::max<uint64_t>(Size, 1u);
@@ -2823,20 +2822,16 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
   if (translateKnownIntrinsic(CI, ID, MIRBuilder))
     return true;
 
-  TargetLowering::IntrinsicInfo Info;
-  bool IsTgtMemIntrinsic = TLI->getTgtMemIntrinsic(Info, CI, *MF, ID);
+  SmallVector<TargetLowering::IntrinsicInfo> Infos;
+  TLI->getTgtMemIntrinsic(Infos, CI, *MF, ID);
 
-  return translateIntrinsic(CI, ID, MIRBuilder,
-                            IsTgtMemIntrinsic ? &Info : nullptr);
+  return translateIntrinsic(CI, ID, MIRBuilder, Infos);
 }
 
 /// Translate a call or callbr to an intrinsic.
-/// Depending on whether TLI->getTgtMemIntrinsic() is true, TgtMemIntrinsicInfo
-/// is a pointer to the correspondingly populated IntrinsicInfo object.
-/// Otherwise, this pointer is null.
 bool IRTranslator::translateIntrinsic(
     const CallBase &CB, Intrinsic::ID ID, MachineIRBuilder &MIRBuilder,
-    const TargetLowering::IntrinsicInfo *TgtMemIntrinsicInfo) {
+    ArrayRef<TargetLowering::IntrinsicInfo> TgtMemIntrinsicInfos) {
   ArrayRef<Register> ResultRegs;
   if (!CB.getType()->isVoidTy())
     ResultRegs = getOrCreateVRegs(CB);
@@ -2878,30 +2873,25 @@ bool IRTranslator::translateIntrinsic(
     }
   }
 
-  // Add a MachineMemOperand if it is a target mem intrinsic.
-  if (TgtMemIntrinsicInfo) {
-    const Function *F = CB.getCalledFunction();
+  // Add MachineMemOperands for each memory access described by the target.
+  for (const auto &Info : TgtMemIntrinsicInfos) {
+    Align Alignment = Info.align.value_or(
+        DL->getABITypeAlign(Info.memVT.getTypeForEVT(CB.getContext())));
+    LLT MemTy = Info.memVT.isSimple()
+                    ? getLLTForMVT(Info.memVT.getSimpleVT())
+                    : LLT::scalar(Info.memVT.getStoreSizeInBits());
 
-    Align Alignment = TgtMemIntrinsicInfo->align.value_or(DL->getABITypeAlign(
-        TgtMemIntrinsicInfo->memVT.getTypeForEVT(F->getContext())));
-    LLT MemTy =
-        TgtMemIntrinsicInfo->memVT.isSimple()
-            ? getLLTForMVT(TgtMemIntrinsicInfo->memVT.getSimpleVT())
-            : LLT::scalar(TgtMemIntrinsicInfo->memVT.getStoreSizeInBits());
-
-    // TODO: We currently just fallback to address space 0 if getTgtMemIntrinsic
-    //       didn't yield anything useful.
+    // TODO: We currently just fallback to address space 0 if
+    // getTgtMemIntrinsic didn't yield anything useful.
     MachinePointerInfo MPI;
-    if (TgtMemIntrinsicInfo->ptrVal) {
-      MPI = MachinePointerInfo(TgtMemIntrinsicInfo->ptrVal,
-                               TgtMemIntrinsicInfo->offset);
-    } else if (TgtMemIntrinsicInfo->fallbackAddressSpace) {
-      MPI = MachinePointerInfo(*TgtMemIntrinsicInfo->fallbackAddressSpace);
+    if (Info.ptrVal) {
+      MPI = MachinePointerInfo(Info.ptrVal, Info.offset);
+    } else if (Info.fallbackAddressSpace) {
+      MPI = MachinePointerInfo(*Info.fallbackAddressSpace);
     }
     MIB.addMemOperand(MF->getMachineMemOperand(
-        MPI, TgtMemIntrinsicInfo->flags, MemTy, Alignment, CB.getAAMetadata(),
-        /*Ranges=*/nullptr, TgtMemIntrinsicInfo->ssid,
-        TgtMemIntrinsicInfo->order, TgtMemIntrinsicInfo->failureOrder));
+        MPI, Info.flags, MemTy, Alignment, CB.getAAMetadata(),
+        /*Ranges=*/nullptr, Info.ssid, Info.order, Info.failureOrder));
   }
 
   if (CB.isConvergent()) {
@@ -3218,7 +3208,7 @@ bool IRTranslator::translateAlloca(const User &U,
       MIRBuilder.buildConstant(IntPtrTy, ~(uint64_t)(StackAlign.value() - 1));
   auto AlignedAlloc = MIRBuilder.buildAnd(IntPtrTy, AllocAdd, AlignCst);
 
-  Align Alignment = std::max(AI.getAlign(), DL->getPrefTypeAlign(Ty));
+  Align Alignment = AI.getAlign();
   if (Alignment <= StackAlign)
     Alignment = Align(1);
   MIRBuilder.buildDynStackAlloc(getOrCreateVReg(AI), AlignedAlloc, Alignment);
@@ -4134,11 +4124,25 @@ static bool checkForMustTailInVarArgFn(bool IsVarArg, const BasicBlock &BB) {
 bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
   MF = &CurMF;
   const Function &F = MF->getFunction();
+  ORE = std::make_unique<OptimizationRemarkEmitter>(&F);
+  CLI = MF->getSubtarget().getCallLowering();
+
+  if (CLI->fallBackToDAGISel(*MF)) {
+    OptimizationRemarkMissed R("gisel-irtranslator", "GISelFailure",
+                               F.getSubprogram(), &F.getEntryBlock());
+    R << "unable to lower function: "
+      << ore::NV("Prototype", F.getFunctionType());
+
+    reportTranslationError(*MF, *ORE, R);
+    return false;
+  }
+
   GISelCSEAnalysisWrapper &Wrapper =
       getAnalysis<GISelCSEAnalysisWrapperPass>().getCSEWrapper();
   // Set the CSEConfig and run the analysis.
   GISelCSEInfo *CSEInfo = nullptr;
   TPC = &getAnalysis<TargetPassConfig>();
+
   bool EnableCSE = EnableCSEInIRTranslator.getNumOccurrences()
                        ? EnableCSEInIRTranslator
                        : TPC->isGISelCSEEnabled();
@@ -4161,7 +4165,6 @@ bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
   EntryBuilder->setMF(*MF);
   MRI = &MF->getRegInfo();
   DL = &F.getDataLayout();
-  ORE = std::make_unique<OptimizationRemarkEmitter>(&F);
   const TargetMachine &TM = MF->getTarget();
   TM.resetTargetOptions(F);
   EnableOpts = OptLevel != CodeGenOptLevel::None && !skipFunction(F);
@@ -4238,15 +4241,6 @@ bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
 
   // Make our arguments/constants entry block fallthrough to the IR entry block.
   EntryBB->addSuccessor(&getMBB(F.front()));
-
-  if (CLI->fallBackToDAGISel(*MF)) {
-    OptimizationRemarkMissed R("gisel-irtranslator", "GISelFailure",
-                               F.getSubprogram(), &F.getEntryBlock());
-    R << "unable to lower function: "
-      << ore::NV("Prototype", F.getFunctionType());
-    reportTranslationError(*MF, *ORE, R);
-    return false;
-  }
 
   // Lower the actual args into this basic block.
   SmallVector<ArrayRef<Register>, 8> VRegArgs;

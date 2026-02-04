@@ -5767,7 +5767,7 @@ extern "C" __device__ double test_normcdfinv(double x) {
 // NCRDIV-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq i32 [[DEC_I]], 0
 // NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[WHILE_END_LOOPEXIT_I:.*]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP21:![0-9]+]]
 // NCRDIV:       [[WHILE_END_LOOPEXIT_I]]:
-// NCRDIV-NEXT:    [[TMP1:%.*]] = tail call contract float @llvm.sqrt.f32(float [[ADD_I]])
+// NCRDIV-NEXT:    [[TMP1:%.*]] = tail call contract float @llvm.sqrt.f32(float [[ADD_I]]), !fpmath [[META22:![0-9]+]]
 // NCRDIV-NEXT:    br label %[[_ZL5NORMFIPKF_EXIT]]
 // NCRDIV:       [[_ZL5NORMFIPKF_EXIT]]:
 // NCRDIV-NEXT:    [[__R_0_LCSSA_I:%.*]] = phi float [ 0.000000e+00, %[[ENTRY]] ], [ [[TMP1]], %[[WHILE_END_LOOPEXIT_I]] ]
@@ -5884,7 +5884,7 @@ extern "C" __device__ float test_normf(int x, const float *y) {
 // NCRDIV-NEXT:    [[ADD_I]] = fadd contract double [[__R_08_I]], [[MUL_I]]
 // NCRDIV-NEXT:    [[INCDEC_PTR_I]] = getelementptr inbounds nuw i8, ptr [[__A_ADDR_07_I]], i64 8
 // NCRDIV-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq i32 [[DEC_I]], 0
-// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[WHILE_END_LOOPEXIT_I:.*]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP22:![0-9]+]]
+// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[WHILE_END_LOOPEXIT_I:.*]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP23:![0-9]+]]
 // NCRDIV:       [[WHILE_END_LOOPEXIT_I]]:
 // NCRDIV-NEXT:    [[TMP1:%.*]] = tail call contract double @llvm.sqrt.f64(double [[ADD_I]])
 // NCRDIV-NEXT:    br label %[[_ZL4NORMIPKD_EXIT]]
@@ -6525,7 +6525,7 @@ extern "C" __device__ double test_rint(double x) {
 // NCRDIV-NEXT:    [[ADD_I]] = fadd contract float [[__R_08_I]], [[MUL_I]]
 // NCRDIV-NEXT:    [[INCDEC_PTR_I]] = getelementptr inbounds nuw i8, ptr [[__A_ADDR_07_I]], i64 4
 // NCRDIV-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq i32 [[DEC_I]], 0
-// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[_ZL6RNORMFIPKF_EXIT]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP23:![0-9]+]]
+// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[_ZL6RNORMFIPKF_EXIT]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP24:![0-9]+]]
 // NCRDIV:       [[_ZL6RNORMFIPKF_EXIT]]:
 // NCRDIV-NEXT:    [[__R_0_LCSSA_I:%.*]] = phi float [ 0.000000e+00, %[[ENTRY]] ], [ [[ADD_I]], %[[WHILE_BODY_I]] ]
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = tail call contract noundef float @__ocml_rsqrt_f32(float noundef [[__R_0_LCSSA_I]]) #[[ATTR14]]
@@ -6634,7 +6634,7 @@ extern "C" __device__ float test_rnormf(int x, const float* y) {
 // NCRDIV-NEXT:    [[ADD_I]] = fadd contract double [[__R_08_I]], [[MUL_I]]
 // NCRDIV-NEXT:    [[INCDEC_PTR_I]] = getelementptr inbounds nuw i8, ptr [[__A_ADDR_07_I]], i64 8
 // NCRDIV-NEXT:    [[TOBOOL_NOT_I:%.*]] = icmp eq i32 [[DEC_I]], 0
-// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[_ZL5RNORMIPKD_EXIT]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP24:![0-9]+]]
+// NCRDIV-NEXT:    br i1 [[TOBOOL_NOT_I]], label %[[_ZL5RNORMIPKD_EXIT]], label %[[WHILE_BODY_I]], !llvm.loop [[LOOP25:![0-9]+]]
 // NCRDIV:       [[_ZL5RNORMIPKD_EXIT]]:
 // NCRDIV-NEXT:    [[__R_0_LCSSA_I:%.*]] = phi double [ 0.000000e+00, %[[ENTRY]] ], [ [[ADD_I]], %[[WHILE_BODY_I]] ]
 // NCRDIV-NEXT:    [[CALL_I:%.*]] = tail call contract noundef double @__ocml_rsqrt_f64(double noundef [[__R_0_LCSSA_I]]) #[[ATTR14]]
@@ -7593,7 +7593,7 @@ extern "C" __device__ double test_sinpi(double x) {
 // NCRDIV-LABEL: define dso_local noundef float @test_sqrtf(
 // NCRDIV-SAME: float noundef [[X:%.*]]) local_unnamed_addr #[[ATTR3]] {
 // NCRDIV-NEXT:  [[ENTRY:.*:]]
-// NCRDIV-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.sqrt.f32(float [[X]]), !fpmath [[META25:![0-9]+]]
+// NCRDIV-NEXT:    [[TMP0:%.*]] = tail call contract noundef float @llvm.sqrt.f32(float [[X]]), !fpmath [[META22]]
 // NCRDIV-NEXT:    ret float [[TMP0]]
 //
 // AMDGCNSPIRV-LABEL: define spir_func noundef float @test_sqrtf(
@@ -9555,10 +9555,10 @@ extern "C" __device__ int test_int_max(int x, int y) {
 // NCRDIV: [[DOUBLE_TBAA19]] = !{[[META20:![0-9]+]], [[META20]], i64 0}
 // NCRDIV: [[META20]] = !{!"double", [[META6]], i64 0}
 // NCRDIV: [[LOOP21]] = distinct !{[[LOOP21]], [[META10]], [[META11]]}
-// NCRDIV: [[LOOP22]] = distinct !{[[LOOP22]], [[META10]], [[META11]]}
+// NCRDIV: [[META22]] = !{float 3.000000e+00}
 // NCRDIV: [[LOOP23]] = distinct !{[[LOOP23]], [[META10]], [[META11]]}
 // NCRDIV: [[LOOP24]] = distinct !{[[LOOP24]], [[META10]], [[META11]]}
-// NCRDIV: [[META25]] = !{float 3.000000e+00}
+// NCRDIV: [[LOOP25]] = distinct !{[[LOOP25]], [[META10]], [[META11]]}
 // NCRDIV: [[LOOP26]] = distinct !{[[LOOP26]], [[META10]], [[META11]]}
 // NCRDIV: [[LOOP27]] = distinct !{[[LOOP27]], [[META10]], [[META11]]}
 //.
