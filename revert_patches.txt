@@ -8,3 +8,7 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
+Unbreak CK, need to fix real issue
+Revert "[AMDGPU] Add builtins for wave reduction intrinsics (#170813)"
+Revert "[AMDGPU] Programmatically port old `.def` clang builtins to `.td` (#175873)"
+---
