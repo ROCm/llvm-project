@@ -47,5 +47,7 @@ int main(int argc, char *argv[]) {
     printf("ObjectInfo[%d].offset: %ld\n", i, ObjectInfo[i].offset);
   }
 
+  amd_comgr_(release_data(DataObject));
+  free(BufObject);
   return 0;
 }

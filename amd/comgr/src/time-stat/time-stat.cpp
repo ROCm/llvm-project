@@ -43,7 +43,10 @@ namespace TimeStatistics {
 
 namespace {
 std::unique_ptr<PerfStats> PS = nullptr;
-void dump() { PS->dumpPerfStats(); }
+void dump() {
+  PS->dumpPerfStats();
+  PS.reset();
+}
 } // namespace
 
 void getLogFile(std::string &PerfLog) {
