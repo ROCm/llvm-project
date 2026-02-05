@@ -389,7 +389,6 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   else if (std::optional<std::string> LibPathEnv =
                llvm::sys::Process::GetEnv("HIP_DEVICE_LIB_PATH"))
     LibDevicePath = std::move(*LibPathEnv);
-
   auto &FS = D.getVFS();
   if (!LibDevicePath.empty()) {
     // Maintain compatability with HIP flag/envvar pointing directly at the
@@ -431,6 +430,16 @@ void RocmInstallationDetector::detectDeviceLibrary() {
   HasDeviceLibrary = CheckDeviceLib(LibDevicePath, true);
   if (HasDeviceLibrary)
     return;
+
+  // Find device libraries in <LLVM_DIR>/amdgcn/bitcode
+  auto &oROCmDirs = getInstallationPathCandidates();
+  for (const auto &Candidate : oROCmDirs) {
+    LibDevicePath = Candidate.Path;
+    llvm::sys::path::append(LibDevicePath, "amdgcn", "bitcode");
+    HasDeviceLibrary = CheckDeviceLib(LibDevicePath, true);
+    if (HasDeviceLibrary)
+      return;
+  }
 
   // Find device libraries in a legacy ROCm directory structure
   // ${ROCM_ROOT}/amdgcn/bitcode/*
