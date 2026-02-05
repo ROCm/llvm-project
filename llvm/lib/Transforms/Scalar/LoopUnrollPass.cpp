@@ -179,6 +179,10 @@ static cl::opt<unsigned> PragmaUnrollFullMaxIterations(
     "pragma-unroll-full-max-iterations", cl::init(1'000'000), cl::Hidden,
     cl::desc("Maximum allowed iterations to unroll under pragma unroll full."));
 
+static cl::opt<bool> PragmaUnrollWithNoTripCount(
+    "pragma-unroll-with-no-trip-count", cl::init(true), cl::Hidden,
+    cl::desc("Allow unrolling of loops with no trip count."));
+
 /// A magic value for use with the Threshold parameter to indicate
 /// that the loop unroll should be performed regardless of how much
 /// code expansion would result.
@@ -826,10 +830,13 @@ shouldPragmaUnroll(Loop *L, const PragmaInfo &PInfo,
 
     return TripCount;
   }
-
-  if (PInfo.PragmaEnableUnroll && !TripCount && MaxTripCount &&
-      MaxTripCount <= UnrollMaxUpperBound)
-    return MaxTripCount;
+#if 1
+  if (PragmaUnrollWithNoTripCount) {
+    if (PInfo.PragmaEnableUnroll && !TripCount && MaxTripCount &&
+        MaxTripCount <= UnrollMaxUpperBound)
+      return MaxTripCount;
+  }
+#endif
 
   // if didn't return until here, should continue to other priorties
   return std::nullopt;
