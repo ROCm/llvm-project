@@ -106,7 +106,7 @@ jobs:
 
       - name: Update submodule pointers from provided parameter PR values
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: ./.github/actions/update-submodule-pr
+        uses: ./multi-pr/.github/actions/update-submodule-pr
  
       - name: Install python deps
         run: |
