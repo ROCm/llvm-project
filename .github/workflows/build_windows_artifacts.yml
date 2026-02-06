@@ -74,11 +74,11 @@ jobs:
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
       IS_PR_FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
     steps:
-      - name: Checkout current repository
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: actions/checkout@v4
-        with:
-          path: multi-pr
+      #- name: Checkout current repository
+      #  if: ${{ github.event_name == 'workflow_dispatch' }}
+      #  uses: actions/checkout@v4
+      #  with:
+      #    path: multi-pr
       
       - name: Checkout TheRock repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -102,6 +102,7 @@ jobs:
           git submodule status
           git submodule
 
+<<<<<<< HEAD
       - name: "Map Current Directory to L Drive"
         id: subst
         shell: cmd
@@ -114,10 +115,62 @@ jobs:
           dir L:
           wmic logicaldisk get name
 
-      - name: Update submodule pointers from provided parameter PR values
+      - name: Download PR_params.env from parent job for multiple PR sha
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: ./multi-pr/.github/actions/update-submodule-pr
-          
+        uses: actions/download-artifact@v4
+        with:
+          name: build-params
+          path: .
+
+      - name: Source PR_params.env and persist for later steps
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -a
+          source ./PR_params.env
+          set +a
+          # Persist across subsequent steps of THIS job
+          echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+          echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
+          echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+
+      - name: Update submodule pointers
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config --global --add safe. directory "$PWD"
+          # Function to get SHA with git-ls
+          get_pr_sha() {
+             local pr_url="$1"
+             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/. *||')
+             local pr_num=$(echo "$pr_url" | sed 's|. */pull/||')
+             git ls-remote "${base_repo_url}. git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+          }
+
+          # LLVM PR
+          if [[ -n "$LLVM_PR_URL" ]]; then
+              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
+              echo "LLVM head SHA: $LLVM_SHA"
+              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          fi
+
+          # SPIRV PR
+          if [[ -n "$SPIRV_PR_URL" ]]; then
+              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
+              echo "SPIRV head SHA: $SPIRV_SHA"
+              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          fi
+
+          # HIPIFY PR
+          if [[ -n "$HIPIFY_PR_URL" ]]; then
+              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
+              echo "HIPIFY head SHA: $HIPIFY_SHA"
+              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          fi
+          git config --global user. email "z1-cciauto@amd. com"
+          git config --global user. name "Z1 cciauto"
+          git commit -m "Update submodule references from PR URLs"
+          git submodule status
+          git submodule
+
 
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
