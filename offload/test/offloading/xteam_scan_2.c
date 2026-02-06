@@ -162,6 +162,7 @@ int main() {
 }
 
 // clang-format off
+// Segmented scan uses two kernels: phase 1 (scan) + phase 2 (write-back).
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args:10 teamsXthrds:( 85X 256)

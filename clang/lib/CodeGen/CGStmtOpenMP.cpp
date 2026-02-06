@@ -6457,17 +6457,23 @@ void CodeGenFunction::EmitOMPScanDirective(const OMPScanDirective &S) {
 
       if (CGM.getLangOpts().OpenMPIsTargetDevice &&
           CGM.isXteamRedKernel(ParentDir) && CGM.isXteamScanKernel()) {
-        // Store the updated value of reduction variable(in the second phase of
-        // Xteam scan) to the OrigExpr(aka Red_Var). This will be consumed by
-        // the AfterScanBlock later on.
-        const CodeGenModule::XteamRedVarMap &RedVarMap =
-            CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
-        const VarDecl *RedVarDecl =
-            cast<VarDecl>(cast<DeclRefExpr>(OrigExpr)->getDecl());
-        Address XteamRedLocalAddr =
-            RedVarMap.find(RedVarDecl)->second.RedVarAddr;
-        Builder.CreateStore(Builder.CreateLoad(XteamRedLocalAddr),
-                            DestLVal.getAddress());
+        // For Xteam scan: propagate the scan result from the per-thread
+        // reduction variable to OrigExpr so the AfterScanBlock can consume it.
+        // For segmented scans this stores to OrigExpr (shared variable).
+        // For NoLoop scans we skip this store because OrigExpr is a single
+        // global scalar shared by all threads -- writing per-thread results
+        // to it would race.  Instead, EmitXteamRedStmt intercepts the
+        // after-scan user code and reads directly from RVI.RedVarAddr.
+        if (CGM.isXteamSegmentedScanKernel()) {
+          const CodeGenModule::XteamRedVarMap &RedVarMap =
+              CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
+          const VarDecl *RedVarDecl =
+              cast<VarDecl>(cast<DeclRefExpr>(OrigExpr)->getDecl());
+          Address XteamRedLocalAddr =
+              RedVarMap.find(RedVarDecl)->second.RedVarAddr;
+          Builder.CreateStore(Builder.CreateLoad(XteamRedLocalAddr),
+                              DestLVal.getAddress());
+        }
       } else {
         EmitOMPCopy(
             PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
@@ -8276,8 +8282,9 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
     auto LPCRegion =
         CGOpenMPRuntime::LastprivateConditionalRAII::disable(*this, S);
     emitCommonOMPTargetDirective(*this, S, CodeGen);
-    this->CGM.isXteamScanPhaseOne = false;
-    if (this->CGM.isXteamScanKernel()) {
+    if (this->CGM.isXteamSegmentedScanKernel()) {
+      // Segmented scan still needs a second kernel for the after-scan loop
+      this->CGM.isXteamScanPhaseOne = false;
       emitCommonOMPTargetDirective(*this, S, CodeGen);
       this->CGM.isXteamScanPhaseOne = true;
     }

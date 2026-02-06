@@ -87,21 +87,14 @@ int main() {
   return 0;
 }
 // clang-format off
+// NoLoop scans use a single-pass kernel (no _1 phase-two kernel).
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args: 9 teamsXthrds:( 250X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED:.*]]_main_l45
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args: 9 teamsXthrds:( 250X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_main_l45_1
-
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args: 9 teamsXthrds:( 250X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED]]_main_l67
-
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args: 9 teamsXthrds:( 250X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_main_l67_1
 /// CHECK: Inclusive Scan: Success!
 /// CHECK: Exclusive Scan: Success!
 
@@ -111,14 +104,6 @@ int main() {
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK-512WGSize: args: 9 teamsXthrds:( 100X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_main_l45_1
-
-/// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args: 9 teamsXthrds:( 100X 512)
 /// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_main_l67
-
-/// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args: 9 teamsXthrds:( 100X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_main_l67_1
 /// CHECK-512WGSize: Inclusive Scan: Success!
 /// CHECK-512WGSize: Exclusive Scan: Success!

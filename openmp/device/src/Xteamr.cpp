@@ -11,174 +11,51 @@
 //===----------------------------------------------------------------------===//
 
 #include "Xteamr.h"
-#include "Debug.h"
-#include "DeviceUtils.h"
-#include "Interface.h"
 #include "Mapping.h"
-#include "State.h"
 
-#define _CD double _Complex
-#define _CF float _Complex
-#define _US unsigned short
-#define _UI unsigned int
-#define _UL unsigned long
-#define _INLINE_ATTR_ __attribute__((flatten, always_inline))
-#define _RF_LDS volatile __gpu_local
-// Wave size (will be constant-folded since it's known at compile time)
-// Should probably be made into constexpr in the future.
-#define _WSZ __gpu_num_lanes()
-// Maximum number of waves in a thread block
-// (1024 / _WSZ = 32 or 16 waves, depending on whether _WSZ is 32 or 64)
-#define _MaxNumWaves 32
+using namespace ompx;
 
-// Headers for specialized shfl_xor
-double xteamr_shfl_xor_d(double var, const int lane_mask, const uint32_t width);
-float xteamr_shfl_xor_f(float var, const int lane_mask, const uint32_t width);
-int xteamr_shfl_xor_int(int var, const int lane_mask, const uint32_t width);
-double _Complex xteamr_shfl_xor_cd(double _Complex var, const int lane_mask,
-                                   const uint32_t width);
-float _Complex xteamr_shfl_xor_cf(float _Complex var, const int lane_mask,
-                                  const uint32_t width);
-
-// Define the arch (amdgcn vs nvptx) variants of shfl
-#ifdef __AMDGPU__
-int xteamr_shfl_xor_int(int var, const int lane_mask, const uint32_t width) {
-  int self = ompx::mapping::getThreadIdInWarp(); // __lane_id();
-  int index = self ^ lane_mask;
-  index = index >= ((self + width) & ~(width - 1)) ? self : index;
-  return __builtin_amdgcn_ds_bpermute(index << 2, var);
-}
-double xteamr_shfl_xor_d(double var, const int lane_mask,
-                         const uint32_t width) {
-  static_assert(sizeof(double) == 2 * sizeof(int), "");
-  static_assert(sizeof(double) == sizeof(uint64_t), "");
-
-  int tmp[2];
-  __builtin_memcpy(tmp, &var, sizeof(tmp));
-  tmp[0] = xteamr_shfl_xor_int(tmp[0], lane_mask, width);
-  tmp[1] = xteamr_shfl_xor_int(tmp[1], lane_mask, width);
-
-  uint64_t tmp0 =
-      (static_cast<uint64_t>(tmp[1]) << 32ull) | static_cast<uint32_t>(tmp[0]);
-  double tmp1;
-  __builtin_memcpy(&tmp1, &tmp0, sizeof(tmp0));
-  return tmp1;
-}
-#elif defined(__NVPTX__)
-int xteamr_shfl_xor_int(int var, const int lane_mask, const uint32_t width) {
-  return __nvvm_shfl_sync_bfly_i32(0xFFFFFFFF, var, lane_mask, 0x1f);
-}
-double xteamr_shfl_xor_d(double var, int laneMask, const uint32_t width) {
-  unsigned lo, hi;
-  asm volatile("mov.b64 {%0,%1}, %2;" : "=r"(lo), "=r"(hi) : "d"(var));
-  hi = xteamr_shfl_xor_int(hi, laneMask, width);
-  lo = xteamr_shfl_xor_int(lo, laneMask, width);
-  asm volatile("mov.b64 %0, {%1,%2};" : "=d"(var) : "r"(lo), "r"(hi));
-  return var;
-}
-#endif
-
-float xteamr_shfl_xor_f(float var, const int lane_mask, const uint32_t width) {
-  union {
-    int i;
-    unsigned u;
-    float f;
-  } tmp;
-  tmp.f = var;
-  tmp.i = xteamr_shfl_xor_int(tmp.i, lane_mask, width);
-  return tmp.f;
-}
-double _Complex xteamr_shfl_xor_cd(double _Complex var, const int lane_mask,
-                                   const uint32_t width) {
-  __real__(var) = xteamr_shfl_xor_d(__real__(var), lane_mask, width);
-  __imag__(var) = xteamr_shfl_xor_d(__imag__(var), lane_mask, width);
-  return var;
-}
-float _Complex xteamr_shfl_xor_cf(float _Complex var, const int lane_mask,
-                                  const uint32_t width) {
-  __real__(var) = xteamr_shfl_xor_f(__real__(var), lane_mask, width);
-  __imag__(var) = xteamr_shfl_xor_f(__imag__(var), lane_mask, width);
-  return var;
-}
-
-// type specific shfl_xor functions
-double xteamr_shfl_xor(double var, const int lane_mask) {
-  return xteamr_shfl_xor_d(var, lane_mask, _WSZ);
-}
-float xteamr_shfl_xor(float var, const int lane_mask) {
-  return xteamr_shfl_xor_f(var, lane_mask, _WSZ);
-}
-float xteamr_shfl_xor(_Float16 var, const int lane_mask) {
-  return xteamr_shfl_xor_f(var, lane_mask, _WSZ);
-}
-float xteamr_shfl_xor(__bf16 var, const int lane_mask) {
-  return xteamr_shfl_xor_f(var, lane_mask, _WSZ);
-}
-double _Complex xteamr_shfl_xor(double _Complex var, const int lane_mask) {
-  return xteamr_shfl_xor_cd(var, lane_mask, _WSZ);
-}
-float _Complex xteamr_shfl_xor(float _Complex var, const int lane_mask) {
-  return xteamr_shfl_xor_cf(var, lane_mask, _WSZ);
-}
-int xteamr_shfl_xor(short var, const int lane_mask) {
-  return xteamr_shfl_xor_int(var, lane_mask, _WSZ);
-}
-unsigned int xteamr_shfl_xor(unsigned short var, const int lane_mask) {
-  return xteamr_shfl_xor_int(var, lane_mask, _WSZ);
-}
-int xteamr_shfl_xor(int var, const int lane_mask) {
-  return xteamr_shfl_xor_int(var, lane_mask, _WSZ);
-}
-unsigned int xteamr_shfl_xor(unsigned int var, const int lane_mask) {
-  return xteamr_shfl_xor_int(var, lane_mask, _WSZ);
-}
-long xteamr_shfl_xor(long var, const int lane_mask) {
-  return xteamr_shfl_xor_d(var, lane_mask, _WSZ);
-}
-unsigned long xteamr_shfl_xor(unsigned long var, const int lane_mask) {
-  return xteamr_shfl_xor_d(var, lane_mask, _WSZ);
-}
+//===----------------------------------------------------------------------===//
+// Cross-team reduction implementation using shared primitives
+//===----------------------------------------------------------------------===//
 
 /// Templated internal function used by all extern typed reductions
 ///
-/// \param T Template typename parameter T
-/// \param _IS_FAST Template parameter if an atomic add should be used instead
-/// of
-///         the 1-team-reduction round. Applies to sum reduction currently.
+/// Uses shared primitives from XteamCommon.h for wave and block operations.
 ///
-/// \param val Input thread local (TLS) value for warp shfl reduce
-/// \param r_ptr Pointer to result value, also used in final reduction
-/// \param team_vals Global array of team values for this reduction only
-/// \param teams_done_ptr Pointer to atomically accessed teams done counter
+/// \param T Template typename parameter T
+/// \param _IS_FAST Template parameter for fast atomic path
+/// \param val Input thread local value
+/// \param r_ptr Pointer to result value
+/// \param team_vals Global array of team values
+/// \param teams_done_ptr Pointer to atomic teams done counter
 /// \param _rf Function pointer to TLS pair reduction function
 /// \param _rf_lds Function pointer to LDS pair reduction function
-/// \param rnv Reduction null value, used for partial waves
-/// \param k The iteration value from 0 to (NumTeams*_NUM_THREADS)-1
-/// \param NumTeams The number of teams participating in reduction
+/// \param rnv Reduction null value
+/// \param k The iteration value from 0 to (NumTeams*NumThreads)-1
+/// \param NumTeams The number of teams
 /// \param Scope The scope of the atomic operation
-
+///
+/// Note that block=team and warp=wave.
+///
 template <typename T, const bool _IS_FAST = false>
-_INLINE_ATTR_ void
+_XTEAM_INLINE_ATTR void
 _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
                  void (*_rf)(T *, T), void (*_rf_lds)(_RF_LDS T *, _RF_LDS T *),
                  const T rnv, const uint64_t k, const uint32_t NumTeams,
                  ompx::atomic::MemScopeTy Scope) {
 
-  // More efficient to derive these constants than get from mapped API
-
-  // Must be a power of 2.
-  const uint32_t block_size = ompx::mapping::getNumberOfThreadsInBlock();
-
-  const uint32_t number_of_waves = (block_size - 1) / _WSZ + 1;
+  const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
   const uint32_t omp_thread_num = k % block_size;
   const uint32_t omp_team_num = k / block_size;
-  const uint32_t wave_num = omp_thread_num / _WSZ;
-  const uint32_t lane_num = omp_thread_num % _WSZ;
 
-  static _RF_LDS T xwave_lds[_MaxNumWaves];
+  // LDS array for wave results
+  static _RF_LDS T xwave_lds[_XTEAM_MAX_NUM_WAVES];
 
 // Cuda may restrict max threads, so clear unused wave values
 #ifdef __NVPTX__
+  const uint32_t warp_size = _XTEAM_WARP_SIZE;
+  const uint32_t number_of_waves = (block_size - 1) / warp_size + 1;
   if (number_of_waves == 32) {
     if (omp_thread_num == 0) {
       for (uint32_t i = (omp_get_num_threads() / 32); i < number_of_waves; i++)
@@ -187,29 +64,18 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
   }
 #endif
 
-  // Binary reduce each wave, then copy to xwave_lds[wave_num]
-  const uint32_t start_offset = block_size < _WSZ ? block_size / 2 : _WSZ / 2;
-  for (unsigned int offset = start_offset; offset > 0; offset >>= 1)
-    (*_rf)(&val, xteamr_shfl_xor(val, offset));
-  if (lane_num == 0)
-    xwave_lds[wave_num] = val;
-
-  // Binary reduce all wave values into wave_lds[0]
-  for (unsigned int offset = number_of_waves / 2; offset > 0; offset >>= 1) {
-    ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-    if (omp_thread_num < offset)
-      (*_rf_lds)(&(xwave_lds[omp_thread_num]),
-                 &(xwave_lds[omp_thread_num + offset]));
-  }
+  // Use shared block_reduce primitive for intra-team reduction
+  T team_result = xteam::block_reduce(val, _rf, _rf_lds, rnv, xwave_lds);
 
   if constexpr (_IS_FAST) {
+    // Fast path: use atomic add directly
     if (omp_thread_num == 0)
-      ompx::atomic::add(r_ptr, xwave_lds[0], ompx::atomic::seq_cst, Scope);
+      ompx::atomic::add(r_ptr, team_result, ompx::atomic::seq_cst, Scope);
   } else if (NumTeams == 1) {
-    // We're only doing intra-team reduction, team_vals might be nullptr.
+    // Single team: just write result
     if (omp_thread_num == 0)
-      *r_ptr = xwave_lds[0];
-    ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
+      *r_ptr = team_result;
+    synchronize::threadsAligned(atomic::seq_cst);
   } else {
     // No sync needed here from last reduction in LDS loop
     // because we only need xwave_lds[0] correct on thread 0.
@@ -217,62 +83,36 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
     // Save the teams reduced value in team_vals global array
     // and atomically increment teams_done counter.
     static _RF_LDS uint32_t td;
-    if (omp_thread_num == 0) {
-      team_vals[omp_team_num] = xwave_lds[0];
-      td = ompx::atomic::inc(teams_done_ptr, NumTeams - 1u,
-                             ompx::atomic::seq_cst,
-                             ompx::atomic::MemScopeTy::device);
-    }
+    if (omp_thread_num == 0)
+      team_vals[omp_team_num] = team_result;
 
-    // This sync needed so all threads from last team see the shared volatile
-    // value td (teams done counter) so they know they are in the last team.
-    ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-
-    // If td counter reaches NumTeams-1, this is the last team.
-    // The team number of this last team is nondeterministic.
-    if (td == (NumTeams - 1u)) {
-
-      // All threads from last completed team enter here.
-      // All other teams exit the helper function.
+    // Use shared is_last_team primitive
+    if (xteam::is_last_team(teams_done_ptr, NumTeams, td)) {
+      // Last team performs final reduction across all team values
 
       // To use TLS shfl reduce, copy team values to TLS val.
       val = (omp_thread_num < NumTeams) ? team_vals[omp_thread_num] : rnv;
 
       // Need sync here to prepare for TLS shfl reduce.
-      ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
+      synchronize::threadsAligned(atomic::seq_cst);
 
-      // Reduce each wave into xwave_lds[wave_num]
-      for (unsigned int offset = start_offset; offset > 0; offset >>= 1)
-        (*_rf)(&val, xteamr_shfl_xor(val, offset));
-      if (lane_num == 0)
-        xwave_lds[wave_num] = val;
-
-      // Binary reduce all wave values into wave_lds[0]
-      for (unsigned int offset = number_of_waves / 2; offset > 0;
-           offset >>= 1) {
-        ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-        if (omp_thread_num < offset)
-          (*_rf_lds)(&(xwave_lds[omp_thread_num]),
-                     &(xwave_lds[omp_thread_num + offset]));
-      }
+      // Use block_reduce again for final reduction
+      T final_result = xteam::block_reduce(val, _rf, _rf_lds, rnv, xwave_lds);
 
       if (omp_thread_num == 0) {
         // Reduce with the original result value.
-        val = xwave_lds[0];
-        (*_rf)(&val, *r_ptr);
+        (*_rf)(&final_result, *r_ptr);
 
         // If more teams than threads, do non-parallel reduction of extra
         // team_vals. This loop iterates only if NumTeams > block_size.
-        for (unsigned int offset = block_size; offset < NumTeams; offset++)
-          (*_rf)(&val, team_vals[offset]);
+        for (unsigned offset = block_size; offset < NumTeams; offset++)
+          (*_rf)(&final_result, team_vals[offset]);
 
-        // Write over the external result value.
-        *r_ptr = val;
+        *r_ptr = final_result;
       }
 
-      // This sync needed to prevent warps in last team from starting
-      // if there was another reduction.
-      ompx::synchronize::threadsAligned(ompx::atomic::relaxed);
+      // Prevent warps from starting next reduction early
+      synchronize::threadsAligned(atomic::relaxed);
     }
   }
 }
@@ -280,7 +120,6 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
 /// Internal macro used by extern intra-team reductions
 ///
 /// \param T Template typename parameter T
-///
 /// \param val Input thread local (TLS) value for warp shfl reduce
 /// \param r_ptr Pointer to result value, also used in final reduction
 /// \param _rf Function pointer to TLS pair reduction function
@@ -292,12 +131,21 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
   _xteam_reduction<T>((val), (r_ptr), nullptr, nullptr, (_rf), (_rf_lds),      \
                       (rnv), (k), 1, ompx::atomic::MemScopeTy::single)
 
-//  Calls to these __kmpc extern C functions are created in clang codegen
-//  for FORTRAN, c, and C++. They may also be used for simulation and testing.
-//  The headers for these extern C functions are in ../include/Interface.h
-//  The compiler builds the name based on the data type.
+//===----------------------------------------------------------------------===//
+// Extern C wrapper functions
 //
-#define _EXT_ATTR extern "C" _INLINE_ATTR_ void
+// Calls to these __kmpc extern C functions are created in clang codegen
+// for FORTRAN, c, and C++. They may also be used for simulation and testing.
+// The headers for these extern C functions are in ../include/Interface.h
+// The compiler builds the name based on the data type.
+//===----------------------------------------------------------------------===//
+
+#define _EXT_ATTR extern "C" _XTEAM_EXTERN_ATTR void
+#define _CD double _Complex
+#define _CF float _Complex
+#define _US unsigned short
+#define _UI unsigned int
+#define _UL unsigned long
 
 _EXT_ATTR
 __kmpc_xteamr_d(double v, double *r_p, double *tvs, uint32_t *td,
@@ -321,6 +169,7 @@ __kmpc_iteamr_d(double v, double *r_p, void (*rf)(double *, double),
                 const double rnv, const uint64_t k) {
   _iteam_reduction(double, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_f(float v, float *r_p, float *tvs, uint32_t *td,
                 void (*rf)(float *, float),
@@ -343,6 +192,7 @@ __kmpc_iteamr_f(float v, float *r_p, void (*rf)(float *, float),
                 const float rnv, const uint64_t k) {
   _iteam_reduction(float, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_h(_Float16 v, _Float16 *r_p, _Float16 *tvs, uint32_t *td,
                 void (*rf)(_Float16 *, _Float16),
@@ -366,6 +216,7 @@ __kmpc_iteamr_h(_Float16 v, _Float16 *r_p, void (*rf)(_Float16 *, _Float16),
                 const _Float16 rnv, const uint64_t k) {
   _iteam_reduction(_Float16, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_bf(__bf16 v, __bf16 *r_p, __bf16 *tvs, uint32_t *td,
                  void (*rf)(__bf16 *, __bf16),
@@ -388,6 +239,7 @@ __kmpc_iteamr_bf(__bf16 v, __bf16 *r_p, void (*rf)(__bf16 *, __bf16),
                  const __bf16 rnv, const uint64_t k) {
   _iteam_reduction(__bf16, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_s(short v, short *r_p, short *tvs, uint32_t *td,
                 void (*rf)(short *, short),
@@ -410,6 +262,7 @@ __kmpc_iteamr_s(short v, short *r_p, void (*rf)(short *, short),
                 const short rnv, const uint64_t k) {
   _iteam_reduction(short, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_us(_US v, _US *r_p, _US *tvs, uint32_t *td,
                  void (*rf)(_US *, _US),
@@ -432,6 +285,7 @@ __kmpc_iteamr_us(_US v, _US *r_p, void (*rf)(_US *, _US),
                  const uint64_t k) {
   _iteam_reduction(_US, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_i(int v, int *r_p, int *tvs, uint32_t *td, void (*rf)(int *, int),
                 void (*rflds)(_RF_LDS int *, _RF_LDS int *), const int rnv,
@@ -453,6 +307,7 @@ __kmpc_iteamr_i(int v, int *r_p, void (*rf)(int *, int),
                 const uint64_t k) {
   _iteam_reduction(int, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_ui(_UI v, _UI *r_p, _UI *tvs, uint32_t *td,
                  void (*rf)(_UI *, _UI),
@@ -475,6 +330,8 @@ __kmpc_iteamr_ui(_UI v, _UI *r_p, void (*rf)(_UI *, _UI),
                  const uint64_t k) {
   _iteam_reduction(_UI, v, r_p, rf, rflds, rnv, k);
 }
+
+// Long
 _EXT_ATTR
 __kmpc_xteamr_l(long v, long *r_p, long *tvs, uint32_t *td,
                 void (*rf)(long *, long),
@@ -497,6 +354,7 @@ __kmpc_iteamr_l(long v, long *r_p, void (*rf)(long *, long),
                 const uint64_t k) {
   _iteam_reduction(long, v, r_p, rf, rflds, rnv, k);
 }
+
 _EXT_ATTR
 __kmpc_xteamr_ul(_UL v, _UL *r_p, _UL *tvs, uint32_t *td,
                  void (*rf)(_UL *, _UL),
@@ -520,8 +378,10 @@ __kmpc_iteamr_ul(_UL v, _UL *r_p, void (*rf)(_UL *, _UL),
   _iteam_reduction(_UL, v, r_p, rf, rflds, rnv, k);
 }
 
+//===----------------------------------------------------------------------===//
 // Built-in pair reduction functions used as function pointers for
 // cross team reduction functions.
+//===----------------------------------------------------------------------===//
 
 _EXT_ATTR __kmpc_rfun_sum_d(double *val, double otherval) { *val += otherval; }
 _EXT_ATTR __kmpc_rfun_sum_lds_d(_RF_LDS double *val, _RF_LDS double *otherval) {
@@ -575,6 +435,7 @@ _EXT_ATTR __kmpc_rfun_sum_ul(_UL *val, _UL otherval) { *val += otherval; }
 _EXT_ATTR __kmpc_rfun_sum_lds_ul(_RF_LDS _UL *val, _RF_LDS _UL *otherval) {
   *val += *otherval;
 }
+
 _EXT_ATTR __kmpc_rfun_max_d(double *val, double otherval) {
   *val = (otherval > *val) ? otherval : *val;
 }
@@ -637,6 +498,7 @@ _EXT_ATTR __kmpc_rfun_max_ul(_UL *val, _UL otherval) {
 _EXT_ATTR __kmpc_rfun_max_lds_ul(_RF_LDS _UL *val, _RF_LDS _UL *otherval) {
   *val = (*otherval > *val) ? *otherval : *val;
 }
+
 _EXT_ATTR __kmpc_rfun_min_d(double *val, double otherval) {
   *val = (otherval < *val) ? otherval : *val;
 }
@@ -705,7 +567,4 @@ _EXT_ATTR __kmpc_rfun_min_lds_ul(_RF_LDS _UL *val, _RF_LDS _UL *otherval) {
 #undef _US
 #undef _UI
 #undef _UL
-#undef _INLINE_ATTR_
-#undef _RF_LDS
-#undef _MaxNumWaves
-#undef _WSZ
+#undef _EXT_ATTR

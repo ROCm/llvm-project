@@ -11096,6 +11096,16 @@ static void emitTargetCallKernelLaunch(
         addXTeamReductionComponentHelper(
             CGF, CombinedInfo, CGF.CGM.ReductionVars[3]); // segment_vals
     } else {
+      // For segmented scan, d_segment_vals must be N-sized (one entry per
+      // loop element) because the BigJumpLoop stores per-element running
+      // sums indexed by the loop iteration variable.  Compute the trip
+      // count (N) early so it is available at allocation time.
+      llvm::Value *NumIterationsForScan = nullptr;
+      if (CGF.CGM.isXteamScanKernel() && CGF.CGM.isXteamSegmentedScanKernel()) {
+        NumIterationsForScan =
+            OMPRuntime->emitTargetNumIterationsCall(CGF, D, SizeEmitter);
+      }
+
       for (; CapturedCount + ArgPos < CapturedVars.size();) {
         // Process the pair of captured variables:
         llvm::Value *DTeamValsInst = nullptr;
@@ -11143,54 +11153,87 @@ static void emitTargetCallKernelLaunch(
               TgtAllocArgs, "d_team_vals");
 
           if (CGF.CGM.isXteamScanKernel()) {
-            // d_scan_storage = omp_target_alloc(sizeof(red-type) * (2*num_teams*num_threads + 1), devid)
+            // d_scan_storage layout (uniform for both NoLoop and segmented):
+            //   [block_aggregates][block_prefixes][scan_result][block_status]
+            //    T[NumTeams]       T[NumTeams]     T[Grid] uint32_t[NumTeams]
+            // No alignment padding needed since T is at least 4 bytes.
+            // For segmented scans the per-element running sums live in a
+            // separate d_segment_vals allocation (N-sized).
+            llvm::Value *NumTeams = XteamRedNumTeamsFromClauseVal
+                                        ? XteamRedNumTeamsFromClauseVal
+                                        : XteamRedNumTeamsFromOccupancy;
             llvm::Value *TotalNumThreads = CGF.Builder.CreateMul(
-                XteamRedNumTeamsFromClauseVal ? XteamRedNumTeamsFromClauseVal
-                                              : XteamRedNumTeamsFromOccupancy,
+                NumTeams,
                 CGF.Builder.CreateIntCast(
                     CGF.Builder.getInt32(CGF.CGM.getXteamRedBlockSize(D)),
                     CGF.Int64Ty, false),
                 "total_num_threads");
-            llvm::Value *StorageSize = CGF.Builder.CreateAdd(
-                CGF.Builder.CreateMul(TotalNumThreads,
-                                      llvm::ConstantInt::get(CGF.Int64Ty, 2)),
-                llvm::ConstantInt::get(CGF.Int64Ty, 1), "storage_size");
-            llvm::Value *DScanStorageSz = CGF.Builder.CreateMul(
-                RedVarTySz, StorageSize, "d_scan_storage_sz");
+
+            // size of block_aggregates (= size of block_prefixes)
+            llvm::Value *AggBytes =
+                CGF.Builder.CreateMul(NumTeams, RedVarTySz, "agg_bytes");
+            // size of block_status (uint32_t per team)
+            uint64_t StatusElemSz =
+                CGF.CGM.getDataLayout().getTypeAllocSize(CGF.Int32Ty);
+            llvm::Value *StatusBytes = CGF.Builder.CreateMul(
+                NumTeams, llvm::ConstantInt::get(CGF.Int64Ty, StatusElemSz),
+                "status_bytes");
+
+            // scan_result: per-thread results from _xteam_scan (Grid entries)
+            llvm::Value *ResultBytes = CGF.Builder.CreateMul(
+                TotalNumThreads, RedVarTySz, "result_bytes");
+
+            // Total = AggBytes + AggBytes + ResultBytes + StatusBytes
+            llvm::Value *DScanStorageSz =
+                CGF.Builder.CreateAdd(AggBytes, AggBytes);
+            DScanStorageSz = CGF.Builder.CreateAdd(DScanStorageSz, ResultBytes);
+            DScanStorageSz = CGF.Builder.CreateAdd(DScanStorageSz, StatusBytes,
+                                                   "d_scan_storage_sz");
             llvm::Value *TgtAllocArgsScan[] = {DScanStorageSz, DevIdVal};
             DScanStorageInst = CGF.EmitRuntimeCall(
                 OMPBuilder.getOrCreateRuntimeFunction(CGF.CGM.getModule(),
                                                       OMPRTL_omp_target_alloc),
                 TgtAllocArgsScan, "d_scan_storage");
+
+            // Zero-initialize block_status in d_scan_storage.
+            // The decoupled look-back algorithm requires all block_status
+            // entries to start as BLOCK_INVALID (0).  block_status sits at
+            // the end of d_scan_storage, at offset (DScanStorageSz -
+            // StatusBytes).
+            {
+              llvm::Value *StatusOffset = CGF.Builder.CreateSub(
+                  DScanStorageSz, StatusBytes, "status_offset");
+              // Host-side zero buffer (stack alloca + memset)
+              llvm::Value *ZeroBuf =
+                  CGF.Builder.CreateAlloca(CGF.Int8Ty, StatusBytes, "zero_buf");
+              CGF.Builder.CreateMemSet(ZeroBuf, CGF.Builder.getInt8(0),
+                                       StatusBytes, llvm::MaybeAlign());
+              // omp_target_memcpy(dst, src, len, dst_off, src_off, dst_dev,
+              //                   src_dev)
+              llvm::Value *MemcpyArgs[] = {
+                  DScanStorageInst,
+                  ZeroBuf,
+                  StatusBytes,
+                  StatusOffset,
+                  llvm::ConstantInt::get(CGF.Int64Ty, 0),
+                  DevIdVal,
+                  InitialDevInst};
+              CGF.EmitRuntimeCall(
+                  OMPBuilder.getOrCreateRuntimeFunction(
+                      CGF.CGM.getModule(), OMPRTL_omp_target_memcpy),
+                  MemcpyArgs);
+            }
+
             if (CGF.CGM.isXteamSegmentedScanKernel()) {
-              // Emit the lower and upper bounds
-              const auto *LBDecl = cast<VarDecl>(
-                  cast<DeclRefExpr>(
-                      cast<OMPLoopDirective>(D).getLowerBoundVariable())
-                      ->getDecl());
-              CGF.EmitVarDecl(*LBDecl);
-
-              const auto *UBDecl = cast<VarDecl>(
-                  cast<DeclRefExpr>(
-                      cast<OMPLoopDirective>(D).getUpperBoundVariable())
-                      ->getDecl());
-              CGF.EmitVarDecl(*UBDecl);
-              const auto UBLValue = CGF.EmitLValue(cast<DeclRefExpr>(
-                  cast<OMPLoopDirective>(D).getUpperBoundVariable()));
-              const auto LBLValue = CGF.EmitLValue(cast<DeclRefExpr>(
-                  cast<OMPLoopDirective>(D).getLowerBoundVariable()));
-              // Emit SegmentValsSize = UBLValue - LBLValue + 1
-              llvm::Value *SegmentValsSize = CGF.Builder.CreateAdd(
-                  CGF.Builder.CreateSub(
-                      CGF.Builder.CreateLoad(UBLValue.getAddress()),
-                      CGF.Builder.CreateLoad(LBLValue.getAddress())),
-                  llvm::ConstantInt::get(CGF.Int32Ty, 1), "segment_vals_size");
-
+              // Segmented: per-element running sums, one entry per loop
+              // element (N).  The BigJumpLoop indexes this array by the loop
+              // iteration variable which ranges from 0 to N-1.
+              assert(NumIterationsForScan &&
+                     "trip count must be available for segmented scan");
+              llvm::Value *NumIterI64 = CGF.Builder.CreateIntCast(
+                  NumIterationsForScan, CGF.Int64Ty, /*isSigned=*/false);
               llvm::Value *DSegmentValsSz = CGF.Builder.CreateMul(
-                  RedVarTySz,
-                  CGF.Builder.CreateIntCast(SegmentValsSize, CGF.Int64Ty,
-                                            /*isSigned*/ false),
-                  "d_segment_vals_sz");
+                  NumIterI64, RedVarTySz, "d_segment_vals_sz");
               llvm::Value *TgtAllocArgsScan[] = {DSegmentValsSz, DevIdVal};
               DSegmentValsInst = CGF.EmitRuntimeCall(
                   OMPBuilder.getOrCreateRuntimeFunction(
@@ -11557,10 +11600,16 @@ void CGOpenMPRuntime::scanForTargetRegionsFunctions(const Stmt *S,
       CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
           CGM, ParentName,
           cast<OMPTargetTeamsDistributeParallelForDirective>(E));
-      if (CGM.isXteamScanKernel() && !CGM.isXteamScanPhaseOne)
+      if (CGM.isXteamSegmentedScanKernel()) {
+        // Segmented scan needs a second (phase-2) device kernel for the
+        // after-scan write-back loop.  Toggle the phase flag so the second
+        // emission generates the phase-2 variant (_1 suffix).
+        CGM.isXteamScanPhaseOne = false;
         CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDeviceFunction(
             CGM, ParentName,
             cast<OMPTargetTeamsDistributeParallelForDirective>(E));
+        CGM.isXteamScanPhaseOne = true;
+      }
       break;
     case OMPD_target_teams_distribute_parallel_for_simd:
       CodeGenFunction::
