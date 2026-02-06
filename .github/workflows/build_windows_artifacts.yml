@@ -136,13 +136,13 @@ jobs:
       - name: Update submodule pointers
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          git config --global --add safe. directory "$PWD"
+          git config --global --add safe.directory "$PWD"
           # Function to get SHA with git-ls
           get_pr_sha() {
              local pr_url="$1"
-             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/. *||')
-             local pr_num=$(echo "$pr_url" | sed 's|. */pull/||')
-             git ls-remote "${base_repo_url}. git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
+             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
+             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
           }
 
           # LLVM PR
@@ -165,8 +165,8 @@ jobs:
               echo "HIPIFY head SHA: $HIPIFY_SHA"
               git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
           fi
-          git config --global user. email "z1-cciauto@amd. com"
-          git config --global user. name "Z1 cciauto"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
           git submodule status
           git submodule
