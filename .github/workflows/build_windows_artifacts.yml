@@ -96,20 +96,6 @@ jobs:
           git submodule status
           git submodule
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-      - name: "Map Current Directory to L Drive"
-        id: subst
-        shell: cmd
-        run: |
-          REM Get the current working directory
-          set currentDir=%cd%
-          REM Substitute the current directory with L: drive
-          subst L: %currentDir%
-          cd L:
-          dir L:
-          wmic logicaldisk get name
-
       - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/download-artifact@v4
@@ -165,7 +151,18 @@ jobs:
           git submodule status
           git submodule
 
-
+      - name: "Map Current Directory to L Drive"
+        id: subst
+        shell: cmd
+        run: |
+          REM Get the current working directory
+          set currentDir=%cd%
+          REM Substitute the current directory with L: drive
+          subst L: %currentDir%
+          cd L:
+          dir L:
+          wmic logicaldisk get name
+          
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: 3.12

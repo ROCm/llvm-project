@@ -15,9 +15,6 @@
 name: Parameterised CI amd-staging
 
 on:
-  push:
-    branches:
-      - 'amd/dev/kirthana14m/**'  
   workflow_dispatch:
     inputs:
       LLVM_PR_URL:
@@ -75,7 +72,7 @@ concurrency:
 
 jobs:
 
-  mutiple_pr_sha_params:
+  multiple_pr_sha_params:
     runs-on: ubuntu-24.04
     steps:
       - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
