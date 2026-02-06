@@ -1215,8 +1215,8 @@ struct InformationCache {
   InformationCache(const Module &M, AnalysisGetter &AG,
                    BumpPtrAllocator &Allocator, SetVector<Function *> *CGSCC,
                    bool UseExplorer = true)
-      : CGSCC(CGSCC), DL(M.getDataLayout()), Allocator(Allocator), AG(AG),
-        TargetTriple(M.getTargetTriple()) {
+      : CGSCC(CGSCC), TheModule(M), DL(M.getDataLayout()), Allocator(Allocator),
+        AG(AG), TargetTriple(M.getTargetTriple()) {
     if (UseExplorer)
       Explorer = new (Allocator) MustBeExecutedContextExplorer(
           /* ExploreInterBlock */
@@ -1305,6 +1305,25 @@ struct InformationCache {
   bool isKernel(const Function &F) {
     FunctionInfo &FI = getFunctionInfo(F);
     return FI.IsKernel;
+  }
+
+  /// Return the set of kernel functions in the module.
+  /// This is lazily computed on first access by directly checking the
+  /// "kernel" function attribute, bypassing getFunctionInfo() entirely.
+  /// Use this in hot paths instead of repeated isKernel() calls.
+  ///
+  /// OPTIMIZATION: This reduces billions of getFunctionInfo() calls in
+  /// workloads like VASP where isKernel() is called ~4.3B times from
+  /// AAPointerInfoImpl::forallInterferingAccesses().
+  const DenseSet<const Function *> &getKernelFunctions() const {
+    if (!KernelSetInitialized) {
+      for (const Function &F : TheModule) {
+        if (F.hasFnAttribute("kernel"))
+          KernelFunctions.insert(&F);
+      }
+      KernelSetInitialized = true;
+    }
+    return KernelFunctions;
   }
 
   /// Return true if \p Arg is involved in a must-tail call, thus the argument
@@ -1424,11 +1443,21 @@ private:
   /// through the information cache interface *prior* to looking at them.
   LLVM_ABI void initializeInformationCache(const Function &F, FunctionInfo &FI);
 
+  /// Reference to the module being analyzed.
+  const Module &TheModule;
+
   /// The datalayout used in the module.
   const DataLayout &DL;
 
   /// The allocator used to allocate memory, e.g. for `FunctionInfo`s.
   BumpPtrAllocator &Allocator;
+
+  /// Pre-computed set of kernel functions in the module.
+  /// Built lazily on first access via getKernelFunctions() to avoid
+  /// repeated isKernel() → getFunctionInfo() calls in hot paths.
+  /// This optimization reduces billions of redundant lookups.
+  mutable DenseSet<const Function *> KernelFunctions;
+  mutable bool KernelSetInitialized = false;
 
   /// MustBeExecutedContextExplorer
   MustBeExecutedContextExplorer *Explorer = nullptr;

@@ -1208,23 +1208,19 @@ struct AAPointerInfoImpl
       };
     };
 
-    // OPTIMIZATION: Pre-compute kernel functions set to avoid repeated
-    // isKernel() calls in the AccessCB and IsLiveInCalleeCB lambdas.
-    // The isKernel() function calls getFunctionInfo() which, while cached,
-    // still has overhead from DenseMap lookup (~11ns per call). With millions
-    // of accesses (4.3B calls measured in VASP), this adds up to ~49 seconds.
-    // By building the set once, we replace repeated getFunctionInfo() lookups
-    // with simple DenseSet::contains() calls.
-    // This set is built lazily only when needed (InstInKernel or
-    // ObjHasKernelLifetime will be true).
-    DenseSet<const Function *> KernelFunctionsInModule;
-    auto BuildKernelSetIfNeeded = [&]() {
-      if (KernelFunctionsInModule.empty()) {
-        for (const Function &F : Scope.getParent()->functions()) {
-          if (A.getInfoCache().isKernel(F))
-            KernelFunctionsInModule.insert(&F);
-        }
-      }
+    // OPTIMIZATION: Use the pre-computed kernel functions set from
+    // InformationCache. This set is built once per module (lazily on first
+    // access) and shared across all AAs, eliminating the need to rebuild it
+    // on every forallInterferingAccesses() call.
+    // This reduces billions of getFunctionInfo() calls in workloads like VASP
+    // where isKernel() was called ~4.3B times from this function.
+    // NOTE: We use a pointer that's initialized lazily only when needed to
+    // avoid function call overhead when kernel checks aren't required.
+    const DenseSet<const Function *> *KernelFunctionsPtr = nullptr;
+    auto GetKernelFunctions = [&]() -> const DenseSet<const Function *> & {
+      if (!KernelFunctionsPtr)
+        KernelFunctionsPtr = &A.getInfoCache().getKernelFunctions();
+      return *KernelFunctionsPtr;
     };
 
     // The IsLiveInCalleeCB will be used by the AA::isPotentiallyReachable query
@@ -1251,13 +1247,15 @@ struct AAPointerInfoImpl
       // as it is "dead" in the (unknown) callees.
       ObjHasKernelLifetime = HasKernelLifetime(GV, *GV->getParent());
       if (ObjHasKernelLifetime) {
-        // OPTIMIZATION: Build kernel set once and use it in the lambda.
-        // This avoids ~11M isKernel() calls (measured in VASP) by replacing
-        // them with fast DenseSet lookups.
-        BuildKernelSetIfNeeded();
-        IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
+        // OPTIMIZATION: Use the pre-computed kernel set from InformationCache.
+        // This avoids ~11M isKernel() calls (measured in VASP) by using
+        // the module-level cached set instead of per-call computation.
+        // NOTE: Capture pointer to the set (which lives in InformationCache)
+        // rather than a local reference to avoid dangling reference issues.
+        const auto *KernelSetPtr = &GetKernelFunctions();
+        IsLiveInCalleeCB = [KernelSetPtr](const Function &Fn) {
           ++NumIsKernelLine1227;
-          return !KernelFunctionsInModule.contains(&Fn);
+          return !KernelSetPtr->contains(&Fn);
         };
       }
     }
@@ -1266,11 +1264,11 @@ struct AAPointerInfoImpl
     // therefore blockers in the reachability traversal.
     AA::InstExclusionSetTy ExclusionSet;
 
-    // OPTIMIZATION: If we'll use the kernel check in AccessCB, ensure the
-    // kernel set is built. This happens when both InstInKernel and
-    // ObjHasKernelLifetime are true.
+    // OPTIMIZATION: Pre-fetch the kernel set pointer if we'll need it in
+    // AccessCB. This avoids calling GetKernelFunctions() for every access.
+    const DenseSet<const Function *> *KernelSetForAccessCB = nullptr;
     if (InstInKernel && ObjHasKernelLifetime)
-      BuildKernelSetIfNeeded();
+      KernelSetForAccessCB = &GetKernelFunctions();
 
     auto AccessCB = [&](const Access &Acc, bool Exact) {
       Function *AccScope = Acc.getRemoteInst()->getFunction();
@@ -1278,13 +1276,12 @@ struct AAPointerInfoImpl
 
       // If the object has kernel lifetime we can ignore accesses only reachable
       // by other kernels. For now we only skip accesses *in* other kernels.
-      // OPTIMIZATION: Use pre-computed KernelFunctionsInModule set instead of
-      // calling isKernel() for each access. This eliminates ~4.3B
-      // getFunctionInfo() calls (measured in VASP) by replacing them with
-      // fast DenseSet lookups (~O(1) vs ~11ns per getFunctionInfo call).
-      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
+      // OPTIMIZATION: Use the module-level cached kernel set from
+      // InformationCache instead of calling isKernel() for each access.
+      // This eliminates ~4.3B getFunctionInfo() calls (measured in VASP).
+      if (KernelSetForAccessCB && !AccInSameScope) {
         ++NumIsKernelLine1242;
-        if (KernelFunctionsInModule.contains(AccScope))
+        if (KernelSetForAccessCB->contains(AccScope))
           return true;
       }
 
