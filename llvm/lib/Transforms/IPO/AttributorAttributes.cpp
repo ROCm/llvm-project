@@ -116,6 +116,13 @@ static cl::opt<bool> SkipIntrinsicsInReachability(
 STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
 
+// Fine-grained getFunctionInfo call tracking (via isKernel wrapper)
+STATISTIC(NumIsKernelLine1180, "isKernel calls at forallInterferingAccesses:1180 (InstInKernel)");
+STATISTIC(NumIsKernelLine1214, "isKernel calls at forallInterferingAccesses:1214 (ObjHasKernelLifetime)");
+STATISTIC(NumIsKernelLine1227, "isKernel calls in IsLiveInCalleeCB lambda:1227");
+STATISTIC(NumIsKernelLine1242, "isKernel calls in AccessCB lambda:1242");
+STATISTIC(NumIsInvolvedInMustTailCall, "isInvolvedInMustTailCall calls (lines 5487,5506)");
+
 // Some helper macros to deal with statistics tracking.
 //
 // Usage:
@@ -1177,6 +1184,7 @@ struct AAPointerInfoImpl
     // TODO: Use reaching kernels from AAKernelInfo (or move it to
     // AAExecutionDomain) such that we allow scopes other than kernels as long
     // as the reaching kernels are disjoint.
+    ++NumIsKernelLine1180;
     bool InstInKernel = A.getInfoCache().isKernel(Scope);
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
@@ -1211,6 +1219,7 @@ struct AAPointerInfoImpl
       // If the alloca containing function is not recursive the alloca
       // must be dead in the callee.
       const Function *AIFn = AI->getFunction();
+      ++NumIsKernelLine1214;
       ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
       bool IsKnownNoRecurse;
       if (AA::hasAssumedIRAttr<Attribute::NoRecurse>(
@@ -1224,6 +1233,7 @@ struct AAPointerInfoImpl
       ObjHasKernelLifetime = HasKernelLifetime(GV, *GV->getParent());
       if (ObjHasKernelLifetime)
         IsLiveInCalleeCB = [&A](const Function &Fn) {
+          ++NumIsKernelLine1227;
           return !A.getInfoCache().isKernel(Fn);
         };
     }
@@ -1238,9 +1248,11 @@ struct AAPointerInfoImpl
 
       // If the object has kernel lifetime we can ignore accesses only reachable
       // by other kernels. For now we only skip accesses *in* other kernels.
-      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope &&
-          A.getInfoCache().isKernel(*AccScope))
-        return true;
+      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
+        ++NumIsKernelLine1242;
+        if (A.getInfoCache().isKernel(*AccScope))
+          return true;
+      }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
         if (Acc.isWrite() || (isa<LoadInst>(I) && Acc.isWriteOrAssumption()))
@@ -5484,6 +5496,7 @@ struct AAAlignArgument final
     // If the associated argument is involved in a must-tail call we give up
     // because we would need to keep the argument alignments of caller and
     // callee in-sync. Just does not seem worth the trouble right now.
+    ++NumIsInvolvedInMustTailCall;
     if (A.getInfoCache().isInvolvedInMustTailCall(*getAssociatedArgument()))
       return ChangeStatus::UNCHANGED;
     return Base::manifest(A);
@@ -5502,9 +5515,11 @@ struct AAAlignCallSiteArgument final : AAAlignFloating {
     // If the associated argument is involved in a must-tail call we give up
     // because we would need to keep the argument alignments of caller and
     // callee in-sync. Just does not seem worth the trouble right now.
-    if (Argument *Arg = getAssociatedArgument())
+    if (Argument *Arg = getAssociatedArgument()) {
+      ++NumIsInvolvedInMustTailCall;
       if (A.getInfoCache().isInvolvedInMustTailCall(*Arg))
         return ChangeStatus::UNCHANGED;
+    }
     ChangeStatus Changed = AAAlignImpl::manifest(A);
     Align InheritAlign =
         getAssociatedValue().getPointerAlignment(A.getDataLayout());
