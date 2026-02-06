@@ -75,23 +75,22 @@ concurrency:
 
 jobs:
 
-  pr_params:
+  mutiple_pr_sha_params:
     runs-on: ubuntu-24.04
     steps:
-      - name: Write project PRs into file
-        shell: bash
+      - name: Store LLVM, HIPIFY and SPIRV PR URLs into file
         run: |
-          cat > PR_params.env <<'EOF'
+          cat > ${{ github.run_id }}_PR_params.env <<'EOF'
           LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
           SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
           HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
           EOF
 
-      - name: Upload PRs artifact
+      - name: Upload stored file of PR URls
         uses: actions/upload-artifact@v4
         with:
-          name: build-params
-          path: PR_params.env
+          name: multiple-pr-build-params
+          path: ${{ github.run_id }}_PR_params.env
   
   setup:
     uses: ./.github/workflows/setup.yml
@@ -102,7 +101,7 @@ jobs:
     name: Linux::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
     needs:
       - setup
-      - pr_params
+      - multiple_pr_sha_params
     if: >-
       ${{
         needs.setup.outputs.linux_variants != '[]'
@@ -135,7 +134,7 @@ jobs:
     name: Windows::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
     needs: 
       - setup
-      - pr_params
+      - multiple_pr_sha_params
     if: >-
       ${{
         needs.setup.outputs.windows_variants != '[]'

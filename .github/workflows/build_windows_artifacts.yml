@@ -74,12 +74,6 @@ jobs:
       AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
       IS_PR_FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
     steps:
-      #- name: Checkout current repository
-      #  if: ${{ github.event_name == 'workflow_dispatch' }}
-      #  uses: actions/checkout@v4
-      #  with:
-      #    path: multi-pr
-      
       - name: Checkout TheRock repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -103,6 +97,7 @@ jobs:
           git submodule
 
 <<<<<<< HEAD
+<<<<<<< HEAD
       - name: "Map Current Directory to L Drive"
         id: subst
         shell: cmd
@@ -115,25 +110,24 @@ jobs:
           dir L:
           wmic logicaldisk get name
 
-      - name: Download PR_params.env from parent job for multiple PR sha
+      - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/download-artifact@v4
         with:
-          name: build-params
+          name: multiple-pr-build-params
           path: .
 
-      - name: Source PR_params.env and persist for later steps
+      - name: Source the multiple PR's of params
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -a
-          source ./PR_params.env
+          source ./${{ github.run_id }}_PR_params.env
           set +a
-          # Persist across subsequent steps of THIS job
           echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
           echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
           echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
-      - name: Update submodule pointers
+      - name: Update submodule pointers from provided parameter PR values
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           git config --global --add safe.directory "$PWD"
