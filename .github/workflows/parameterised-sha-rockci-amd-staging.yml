@@ -74,6 +74,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  pr_params:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Write project PRs into file
+        shell: bash
+        run: |
+          cat > PR_params.env <<'EOF'
+          LLVM_PR_URL=${{ github.event.inputs.LLVM_PR_URL }}
+          SPIRV_PR_URL=${{ github.event.inputs.SPIRV_PR_URL }}
+          HIPIFY_PR_URL=${{ github.event.inputs.HIPIFY_PR_URL }}
+          EOF
+
+      - name: Upload PRs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-params
+          path: PR_params.env
+  
   setup:
     uses: ./.github/workflows/setup.yml
     with:
@@ -81,7 +100,9 @@ jobs:
 
   linux_build_and_test:
     name: Linux::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
+    needs:
+      - setup
+      - pr_params
     if: >-
       ${{
         needs.setup.outputs.linux_variants != '[]'
@@ -106,16 +127,15 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: ${{ needs.setup.outputs.test_type }}
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
-      LLVM_PR_URL: ${{ github.event.inputs.LLVM_PR_URL }}
-      SPIRV_PR_URL: ${{ github.event.inputs.SPIRV_PR_URL }}
-      HIPIFY_PR_URL: ${{ github.event.inputs.HIPIFY_PR_URL }}
     permissions:
       contents: read
       id-token: write
 
   windows_build_and_test:
     name: Windows::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
+    needs: 
+      - setup
+      - pr_params
     if: >-
       ${{
         needs.setup.outputs.windows_variants != '[]'
@@ -139,9 +159,6 @@ jobs:
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: 'smoke'
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
-      LLVM_PR_URL: ${{ github.event.inputs.LLVM_PR_URL }}
-      SPIRV_PR_URL: ${{ github.event.inputs.SPIRV_PR_URL }}
-      HIPIFY_PR_URL: ${{ github.event.inputs.HIPIFY_PR_URL }}       
     permissions:
       contents: read
       id-token: write

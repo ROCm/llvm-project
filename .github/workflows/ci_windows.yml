@@ -32,15 +32,6 @@ on:
         type: string
       sanity_check_only_for_family:
         type: boolean
-      LLVM_PR_URL:
-        required: false
-        type: string
-      SPIRV_PR_URL:
-        required: false        
-        type: string
-      HIPIFY_PR_URL:
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -59,9 +50,6 @@ jobs:
       build_variant_suffix: ${{ inputs.build_variant_suffix }}
       package_version: ${{ inputs.rocm_package_version }}
       expect_failure: ${{ inputs.expect_failure }}
-      LLVM_PR_URL: ${{ inputs.LLVM_PR_URL }}
-      SPIRV_PR_URL: ${{ inputs.SPIRV_PR_URL }}
-      HIPIFY_PR_URL: ${{ inputs.HIPIFY_PR_URL }}
     permissions:
       contents: read
       id-token: write

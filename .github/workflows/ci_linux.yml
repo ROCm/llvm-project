@@ -3,15 +3,6 @@ name: CI - Linux
 on:
   workflow_call:
     inputs:
-      LLVM_PR_URL:
-        required: false
-        type: string
-      SPIRV_PR_URL:
-        required: false        
-        type: string
-      HIPIFY_PR_URL:
-        required: false        
-        type: string      
       artifact_group:
         type: string
       amdgpu_families:
@@ -59,9 +50,6 @@ jobs:
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       build_variant_suffix: ${{ inputs.build_variant_suffix }}
       expect_failure: ${{ inputs.expect_failure }}
-      LLVM_PR_URL: ${{ inputs.LLVM_PR_URL }}
-      SPIRV_PR_URL: ${{ inputs.SPIRV_PR_URL }}
-      HIPIFY_PR_URL: ${{ inputs.HIPIFY_PR_URL }}        
     permissions:
       contents: read
       id-token: write

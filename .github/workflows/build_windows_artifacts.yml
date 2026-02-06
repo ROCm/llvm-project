@@ -48,15 +48,6 @@ on:
         type: boolean
       extra_cmake_options:
         type: string
-      LLVM_PR_URL:
-        required: false
-        type: string
-      SPIRV_PR_URL:
-        required: false
-        type: string
-      HIPIFY_PR_URL:
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -118,47 +109,9 @@ jobs:
           wmic logicaldisk get name
 
       - name: Update submodule pointers from provided parameter PR values
-        if: ${{ github.event_name == 'workflow_dispatch' && ( inputs.LLVM_PR_URL != '' || inputs.HIPIFY_PR_URL != '' || inputs.SPIRV_PR_URL != '' ) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --global --add safe.directory "$PWD"
-          LLVM_PR_URL="${{ inputs.LLVM_PR_URL }}"
-          SPIRV_PR_URL="${{ inputs.SPIRV_PR_URL }}"
-          HIPIFY_PR_URL="${{ inputs.HIPIFY_PR_URL }}"
-
-          # Function to get SHA with git-ls
-          get_pr_sha() {
-             local pr_url="$1"
-             #Extract repo URL and PR number
-             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
-             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-
-             #Use git ls-remote to get SHA without fetching
-             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
-          }
-
-          # Update ONLY the submodules that have values
-          if [[ -n "$LLVM_PR_URL" ]]; then
-              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-              echo "LLVM head SHA: $LLVM_SHA"
-              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
-          fi
-          if [[ -n "$SPIRV_PR_URL" ]]; then
-              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
-              echo "SPIRV head SHA: $SPIRV_SHA"
-              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
-          fi
-          if [[ -n "$HIPIFY_PR_URL" ]]; then
-              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
-              echo "HIPIFY head SHA: $HIPIFY_SHA"
-              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
-          fi    
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
-          git commit -m "Update submodule references"
-          git submodule status
-          git submodule
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: ./.github/actions/update-submodule-pr
+          
 
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
