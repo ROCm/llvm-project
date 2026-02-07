@@ -8,6 +8,3 @@ Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependenc
 breaks build of aqlprofiler
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-needs downstream work
-[clang][OpenMP] Add OpenMP GPU optimization flag framework (#178914)
----
