@@ -15969,38 +15969,6 @@ static bool isOverflowingIntegerType(ASTContext &Ctx, QualType T) {
   return Ctx.getIntWidth(T) >= Ctx.getIntWidth(Ctx.IntTy);
 }
 
-static Expr *ExpandAMDGPUPredicateBI(ASTContext &Ctx, CallExpr *CE) {
-  if (!CE->getBuiltinCallee())
-    return CXXBoolLiteralExpr::Create(Ctx, false, Ctx.BoolTy, CE->getExprLoc());
-
-  if (Ctx.getTargetInfo().getTriple().isSPIRV()) {
-    CE->setType(Ctx.getLogicalOperationType());
-    return CE;
-  }
-
-  bool P = false;
-  auto &TI = Ctx.getTargetInfo();
-
-  if (CE->getDirectCallee()->getName() == "__builtin_amdgcn_processor_is") {
-    auto *GFX = dyn_cast<StringLiteral>(CE->getArg(0)->IgnoreParenCasts());
-    auto TID = TI.getTargetID();
-    if (GFX && TID) {
-      auto N = GFX->getString();
-      P = TI.isValidCPUName(GFX->getString()) && TID->find(N) == 0;
-    }
-  } else {
-    auto *FD = cast<FunctionDecl>(CE->getArg(0)->getReferencedDeclOfCallee());
-
-    StringRef RF = Ctx.BuiltinInfo.getRequiredFeatures(FD->getBuiltinID());
-    llvm::StringMap<bool> CF;
-    Ctx.getFunctionFeatureMap(CF, FD);
-
-    P = Builtin::evaluateRequiredTargetFeatures(RF, CF);
-  }
-
-  return CXXBoolLiteralExpr::Create(Ctx, P, Ctx.BoolTy, CE->getExprLoc());
-}
-
 ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
                                       UnaryOperatorKind Opc, Expr *InputExpr,
                                       bool IsAfterAmp) {
@@ -21002,36 +20970,6 @@ void Sema::DiagnoseEqualityWithExtraParens(ParenExpr *ParenE) {
       Diag(Loc, diag::note_equality_comparison_to_assign)
         << FixItHint::CreateReplacement(Loc, "=");
     }
-}
-
-static bool ValidateAMDGPUPredicateBI(Sema &Sema, CallExpr *CE) {
-  if (CE->getDirectCallee()->getName() == "__builtin_amdgcn_processor_is") {
-    auto *GFX = dyn_cast<StringLiteral>(CE->getArg(0)->IgnoreParenCasts());
-    if (!GFX) {
-      Sema.Diag(CE->getExprLoc(),
-                diag::err_amdgcn_processor_is_arg_not_literal);
-      return false;
-    }
-    auto N = GFX->getString();
-    if (!Sema.getASTContext().getTargetInfo().isValidCPUName(N) &&
-        (!Sema.getASTContext().getAuxTargetInfo() ||
-         !Sema.getASTContext().getAuxTargetInfo()->isValidCPUName(N))) {
-      Sema.Diag(CE->getExprLoc(),
-                diag::err_amdgcn_processor_is_arg_invalid_value)
-          << N;
-      return false;
-    }
-  } else {
-    auto *Arg = CE->getArg(0);
-    if (!Arg || Arg->getType() != Sema.getASTContext().BuiltinFnTy) {
-      Sema.Diag(CE->getExprLoc(),
-                diag::err_amdgcn_is_invocable_arg_invalid_value)
-          << Arg;
-      return false;
-    }
-  }
-
-  return true;
 }
 
 ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
