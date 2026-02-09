@@ -2730,6 +2730,13 @@ defm sanitize_handler_preserve_all_regs
           NegFlag<SetFalse, [], [],
                   "Disable handlers with preserve_all calling convention">>,
       Group<f_clang_Group>;
+defm sanitize_trap_loop : BoolOption<"f", "sanitize-trap-loop",
+  CodeGenOpts<"SanitizeTrapLoop">, DefaultFalse,
+  PosFlag<SetTrue, [], [],
+          "Use infinite loops in trapping mode">,
+  NegFlag<SetFalse, [], [],
+          "Do not use infinite loops in trapping mode">>,
+  Group<f_clang_Group>;
 def fsanitize_link_runtime : Flag<["-"], "fsanitize-link-runtime">,
                            Group<f_clang_Group>;
 def fno_sanitize_link_runtime : Flag<["-"], "fno-sanitize-link-runtime">,
@@ -2970,6 +2977,20 @@ or passing a null pointer to a function parameter annotated with the "nonnull"
 attribute as undefined behavior. (And, thus the optimizer may assume that any
 pointer used in such a way must not have been null and optimize away the
 branches accordingly.) On by default.}]>;
+
+defm lifetime_dse
+    : BoolFOption<"lifetime-dse", CodeGenOpts<"StrictLifetimes">, DefaultTrue,
+                  NegFlag<SetFalse, [], [ClangOption, CC1Option],
+                          "Do not aggressively delete stores after the end of "
+                          "an object's lifetime">,
+                  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+                          "Aggressively delete stores after the end of an "
+                          "object's lifetime">,
+                  BothFlags<[], [ClangOption, CLOption]>>,
+      DocBrief<
+          [{When enabled, mark an object dead after its destructor returns which allows the
+the optimizer to perform more aggressive optimizations in some cases, particularly dead
+store elimination.}]>;
 
 defm use_line_directives : BoolFOption<"use-line-directives",
   PreprocessorOutputOpts<"UseLineDirectives">, DefaultFalse,
@@ -3790,6 +3811,11 @@ defm application_extension : BoolFOption<"application-extension",
   PosFlag<SetTrue, [], [ClangOption, CC1Option],
           "Restrict code to those available for App Extensions">,
   NegFlag<SetFalse>>;
+defm reflection : BoolFOption<"reflection",
+  LangOpts<"Reflection">, DefaultFalse,
+  PosFlag<SetTrue, [], [CC1Option],
+          "Enable C++26 reflection">,
+  NegFlag<SetFalse>>, ShouldParseIf<cplusplus.KeyPath>;
 defm sized_deallocation : BoolFOption<"sized-deallocation",
   LangOpts<"SizedDeallocation">, Default<cpp14.KeyPath>,
   PosFlag<SetTrue, [], [], "Enable C++14 sized global deallocation functions">,
@@ -3942,8 +3968,6 @@ def fopenmp_gpu_threads_per_team_EQ : Joined<["-"], "fopenmp-gpu-threads-per-tea
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fopenmp_target_xteam_reduction_blocksize_EQ : Joined<["-"], "fopenmp-target-xteam-reduction-blocksize=">, Group<f_Group>,
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>;
-def fopenmp_target_fast : Flag<["-"], "fopenmp-target-fast">, Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>;
-def fno_openmp_target_fast : Flag<["-"], "fno-openmp-target-fast">, Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>;
 def fopenmp_target_ignore_env_vars : Flag<["-"], "fopenmp-target-ignore-env-vars">, Group<f_Group>, 
   Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option, FlangOption]>,
   HelpText<"Assert that device related environment variables can be ignored while generating code">,
@@ -4080,20 +4104,16 @@ def fno_openmp_assume_teams_oversubscription : Flag<["-"], "fno-openmp-assume-te
   HelpText<"Do not assume teams oversubscription.">;
 def fno_openmp_assume_threads_oversubscription : Flag<["-"], "fno-openmp-assume-threads-oversubscription">,
   HelpText<"Do not assume threads oversubscription.">;
-def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Assert that a thread in a parallel region may modify an ICV">,
-  MarshallingInfoFlag<LangOpts<"OpenMPNoThreadState">>;
 def fopenmp_assume_no_thread_state : Flag<["-"], "fopenmp-assume-no-thread-state">,
   HelpText<"Assert no thread in a parallel region modifies an ICV">,
   MarshallingInfoFlag<LangOpts<"OpenMPNoThreadState">>;
+def fno_openmp_assume_no_thread_state : Flag<["-"], "fno-openmp-assume-no-thread-state">,
+  HelpText<"Assert that a thread in a parallel region may modify an ICV">;
 def fopenmp_assume_no_nested_parallelism : Flag<["-"], "fopenmp-assume-no-nested-parallelism">,
   HelpText<"Assert no nested parallel regions in the GPU">,
   MarshallingInfoFlag<LangOpts<"OpenMPNoNestedParallelism">>;
-def fno_openmp_assume_no_nested_parallelism : Flag<["-"], "fno-openmp-assume-no-nested-parallelism">, Group<f_Group>,
-  Flags<[NoArgumentUnused, HelpHidden]>, Visibility<[ClangOption, CC1Option]>,
-  HelpText<"Assert that a nested parallel region may be used in the GPU">,
-  MarshallingInfoFlag<LangOpts<"OpenMPNoNestedParallelism">>;
+def fno_openmp_assume_no_nested_parallelism : Flag<["-"], "fno-openmp-assume-no-nested-parallelism">,
+  HelpText<"Assert that a nested parallel region may be used in the GPU">;
 
 } // let Group = f_Group
 } // let Visibility = [ClangOption, CC1Option, FC1Option]
@@ -4117,6 +4137,13 @@ def fopenmp_target_new_runtime : Flag<["-"], "fopenmp-target-new-runtime">,
   Group<f_Group>, Flags<[HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
 def fno_openmp_target_new_runtime : Flag<["-"], "fno-openmp-target-new-runtime">,
   Group<f_Group>, Flags<[HelpHidden]>, Visibility<[ClangOption, CC1Option]>;
+def fopenmp_target_fast : Flag<["-"], "fopenmp-target-fast">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>,
+  HelpText<"Assert common GPU usage patterns to enable OpenMP runtime optimizations">;
+def fno_openmp_target_fast : Flag<["-"], "fno-openmp-target-fast">,
+  Group<f_Group>, Flags<[NoArgumentUnused, HelpHidden]>,
+  Visibility<[ClangOption, CC1Option, FlangOption]>;
 defm openmp_optimistic_collapse : BoolFOption<"openmp-optimistic-collapse",
   LangOpts<"OpenMPOptimisticCollapse">, DefaultFalse,
   PosFlag<SetTrue, [], [ClangOption, CC1Option]>,

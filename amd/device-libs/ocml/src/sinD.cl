@@ -17,7 +17,7 @@ MATH_MANGLE(sin)(double x)
 
     double s = (r.i & 1) == 0 ? sc.s : sc.c;
 
-    s = AS_DOUBLE(AS_LONG(s) ^ (r.i > 1 ? 0x8000000000000000 : 0) ^
+    s = AS_DOUBLE(AS_LONG(s) ^ (r.i > 1 ? SIGNBIT_DP64 : 0) ^
                   (AS_LONG(x) ^ AS_LONG(ax)));
 
     if (!FINITE_ONLY_OPT())

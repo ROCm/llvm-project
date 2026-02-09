@@ -242,8 +242,7 @@ bool AMDGPUInstructionSelector::selectCOPY_SCC_VCC(MachineInstr &I) const {
               .addReg(VCCReg);
   }
 
-  if (!constrainSelectedInstRegOperands(*Cmp, TII, TRI, RBI))
-    return false;
+  constrainSelectedInstRegOperands(*Cmp, TII, TRI, RBI);
 
   Register DstReg = I.getOperand(0).getReg();
   BuildMI(*BB, &I, DL, TII.get(AMDGPU::COPY), DstReg).addReg(AMDGPU::SCC);
@@ -284,7 +283,8 @@ bool AMDGPUInstructionSelector::selectCOPY_VCC_SCC(MachineInstr &I) const {
                              .addImm(0);
 
   I.eraseFromParent();
-  return constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectReadAnyLane(MachineInstr &I) const {
@@ -298,7 +298,8 @@ bool AMDGPUInstructionSelector::selectReadAnyLane(MachineInstr &I) const {
                  .addReg(SrcReg);
 
   I.eraseFromParent();
-  return constrainSelectedInstRegOperands(*RFL, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*RFL, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectPHI(MachineInstr &I) const {
@@ -421,10 +422,11 @@ bool AMDGPUInstructionSelector::selectG_AND_OR_XOR(MachineInstr &I) const {
 
   // Dead implicit-def of scc
   I.addOperand(MachineOperand::CreateReg(AMDGPU::SCC, true, // isDef
-                                         true, // isImp
-                                         false, // isKill
-                                         true)); // isDead
-  return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+                                         true,              // isImp
+                                         false,             // isKill
+                                         true));            // isDead
+  constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectG_ADD_SUB(MachineInstr &I) const {
@@ -450,7 +452,8 @@ bool AMDGPUInstructionSelector::selectG_ADD_SUB(MachineInstr &I) const {
         .add(I.getOperand(2))
         .setOperandDead(3); // Dead scc
       I.eraseFromParent();
-      return constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+      constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+      return true;
     }
 
     if (STI.hasAddNoCarryInsts()) {
@@ -458,7 +461,8 @@ bool AMDGPUInstructionSelector::selectG_ADD_SUB(MachineInstr &I) const {
       I.setDesc(TII.get(Opc));
       I.addOperand(*MF, MachineOperand::CreateImm(0));
       I.addOperand(*MF, MachineOperand::CreateReg(AMDGPU::EXEC, false, true));
-      return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+      constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+      return true;
     }
 
     const unsigned Opc = Sub ? AMDGPU::V_SUB_CO_U32_e64 : AMDGPU::V_ADD_CO_U32_e64;
@@ -471,7 +475,8 @@ bool AMDGPUInstructionSelector::selectG_ADD_SUB(MachineInstr &I) const {
       .add(I.getOperand(2))
       .addImm(0);
     I.eraseFromParent();
-    return constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(*Add, TII, TRI, RBI);
+    return true;
   }
 
   assert(!Sub && "illegal sub should not reach here");
@@ -512,8 +517,7 @@ bool AMDGPUInstructionSelector::selectG_ADD_SUB(MachineInstr &I) const {
       .addReg(CarryReg, RegState::Kill)
       .addImm(0);
 
-    if (!constrainSelectedInstRegOperands(*Addc, TII, TRI, RBI))
-      return false;
+    constrainSelectedInstRegOperands(*Addc, TII, TRI, RBI);
   }
 
   BuildMI(*BB, &I, DL, TII.get(AMDGPU::REG_SEQUENCE), DstReg)
@@ -549,7 +553,8 @@ bool AMDGPUInstructionSelector::selectG_UADDO_USUBO_UADDE_USUBE(
     I.setDesc(TII.get(HasCarryIn ? CarryOpc : NoCarryOpc));
     I.addOperand(*MF, MachineOperand::CreateReg(AMDGPU::EXEC, false, true));
     I.addOperand(*MF, MachineOperand::CreateImm(0));
-    return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+    return true;
   }
 
   Register Src0Reg = I.getOperand(2).getReg();
@@ -615,7 +620,8 @@ bool AMDGPUInstructionSelector::selectG_AMDGPU_MAD_64_32(
   I.addOperand(*MF, MachineOperand::CreateImm(0));
   I.addImplicitDefUseOperands(*MF);
   I.getOperand(0).setIsEarlyClobber(true);
-  return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(I, TII, TRI, RBI);
+  return true;
 }
 
 // TODO: We should probably legalize these to only using 32-bit results.
@@ -831,15 +837,13 @@ bool AMDGPUInstructionSelector::selectG_BUILD_VECTOR(MachineInstr &MI) const {
     auto MIB = BuildMI(*BB, MI, DL, TII.get(AMDGPU::V_AND_B32_e32), TmpReg)
                    .addImm(0xFFFF)
                    .addReg(Src0);
-    if (!constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI))
-      return false;
+    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
 
     MIB = BuildMI(*BB, MI, DL, TII.get(AMDGPU::V_LSHL_OR_B32_e64), Dst)
               .addReg(Src1)
               .addImm(16)
               .addReg(TmpReg);
-    if (!constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI))
-      return false;
+    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
 
     MI.eraseFromParent();
     return true;
@@ -885,7 +889,8 @@ bool AMDGPUInstructionSelector::selectG_BUILD_VECTOR(MachineInstr &MI) const {
                      .setOperandDead(3); // Dead scc
 
       MI.eraseFromParent();
-      return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+      constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+      return true;
     }
     if (STI.hasSPackHL()) {
       Opc = AMDGPU::S_PACK_HL_B32_B16;
@@ -894,7 +899,8 @@ bool AMDGPUInstructionSelector::selectG_BUILD_VECTOR(MachineInstr &MI) const {
   }
 
   MI.setDesc(TII.get(Opc));
-  return constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectG_IMPLICIT_DEF(MachineInstr &I) const {
@@ -992,7 +998,8 @@ bool AMDGPUInstructionSelector::selectG_SBFX_UBFX(MachineInstr &MI) const {
                  .addReg(OffsetReg)
                  .addReg(WidthReg);
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectInterpP1F16(MachineInstr &MI) const {
@@ -1094,7 +1101,8 @@ bool AMDGPUInstructionSelector::selectWritelane(MachineInstr &MI) const {
   MIB.addReg(VDstIn);
 
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 // We need to handle this here because tablegen doesn't support matching
@@ -1135,7 +1143,8 @@ bool AMDGPUInstructionSelector::selectDivScale(MachineInstr &MI) const {
     .addImm(0);    // $omod
 
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectG_INTRINSIC(MachineInstr &I) const {
@@ -1492,8 +1501,8 @@ bool AMDGPUInstructionSelector::selectG_ICMP_or_FCMP(MachineInstr &I) const {
             .add(I.getOperand(3));
     BuildMI(*BB, &I, DL, TII.get(AMDGPU::COPY), CCReg)
       .addReg(AMDGPU::SCC);
+    constrainSelectedInstRegOperands(*ICmp, TII, TRI, RBI);
     bool Ret =
-        constrainSelectedInstRegOperands(*ICmp, TII, TRI, RBI) &&
         RBI.constrainGenericRegister(CCReg, AMDGPU::SReg_32RegClass, *MRI);
     I.eraseFromParent();
     return Ret;
@@ -1523,9 +1532,9 @@ bool AMDGPUInstructionSelector::selectG_ICMP_or_FCMP(MachineInstr &I) const {
 
   RBI.constrainGenericRegister(ICmp->getOperand(0).getReg(),
                                *TRI.getBoolRC(), *MRI);
-  bool Ret = constrainSelectedInstRegOperands(*ICmp, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*ICmp, TII, TRI, RBI);
   I.eraseFromParent();
-  return Ret;
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectIntrinsicCmp(MachineInstr &I) const {
@@ -1579,8 +1588,7 @@ bool AMDGPUInstructionSelector::selectIntrinsicCmp(MachineInstr &I) const {
     SelectedMI.addImm(0); // op_sel
 
   RBI.constrainGenericRegister(Dst, *TRI.getBoolRC(), *MRI);
-  if (!constrainSelectedInstRegOperands(*SelectedMI, TII, TRI, RBI))
-    return false;
+  constrainSelectedInstRegOperands(*SelectedMI, TII, TRI, RBI);
 
   I.eraseFromParent();
   return true;
@@ -1666,8 +1674,7 @@ bool AMDGPUInstructionSelector::selectBallot(MachineInstr &I) const {
                      .addReg(SrcReg)
                      .addReg(TRI.getExec())
                      .setOperandDead(3); // Dead scc
-      if (!constrainSelectedInstRegOperands(*And, TII, TRI, RBI))
-        return false;
+      constrainSelectedInstRegOperands(*And, TII, TRI, RBI);
     }
   }
 
@@ -1734,7 +1741,8 @@ bool AMDGPUInstructionSelector::selectGroupStaticSize(MachineInstr &I) const {
   }
 
   I.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectReturnAddress(MachineInstr &I) const {
@@ -1858,9 +1866,9 @@ bool AMDGPUInstructionSelector::selectDSOrderedIntrinsic(
   if (!RBI.constrainGenericRegister(M0Val, AMDGPU::SReg_32RegClass, *MRI))
     return false;
 
-  bool Ret = constrainSelectedInstRegOperands(*DS, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*DS, TII, TRI, RBI);
   MI.eraseFromParent();
-  return Ret;
+  return true;
 }
 
 static unsigned gwsIntrinToOpcode(unsigned IntrID) {
@@ -2034,7 +2042,8 @@ bool AMDGPUInstructionSelector::selectDSAppendConsume(MachineInstr &MI,
     .addImm(IsGDS ? -1 : 0)
     .cloneMemRefs(MI);
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectInitWholeWave(MachineInstr &MI) const {
@@ -2346,7 +2355,8 @@ bool AMDGPUInstructionSelector::selectDSBvhStackIntrinsic(
                  .cloneMemRefs(MI);
 
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectG_INTRINSIC_W_SIDE_EFFECTS(
@@ -2448,11 +2458,10 @@ bool AMDGPUInstructionSelector::selectG_SELECT(MachineInstr &I) const {
             .add(I.getOperand(2))
             .add(I.getOperand(3));
 
-    bool Ret = false;
-    Ret |= constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
-    Ret |= constrainSelectedInstRegOperands(*CopySCC, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(*CopySCC, TII, TRI, RBI);
     I.eraseFromParent();
-    return Ret;
+    return true;
   }
 
   // Wide VGPR select should have been split in RegBankSelect.
@@ -2467,9 +2476,9 @@ bool AMDGPUInstructionSelector::selectG_SELECT(MachineInstr &I) const {
               .add(I.getOperand(2))
               .add(I.getOperand(1));
 
-  bool Ret = constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*Select, TII, TRI, RBI);
   I.eraseFromParent();
-  return Ret;
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectG_TRUNC(MachineInstr &I) const {
@@ -2685,7 +2694,8 @@ bool AMDGPUInstructionSelector::selectG_SZA_EXT(MachineInstr &I) const {
         .addImm(Mask)
         .addReg(SrcReg);
       I.eraseFromParent();
-      return constrainSelectedInstRegOperands(*ExtI, TII, TRI, RBI);
+      constrainSelectedInstRegOperands(*ExtI, TII, TRI, RBI);
+      return true;
     }
 
     const unsigned BFE = Signed ? AMDGPU::V_BFE_I32_e64 : AMDGPU::V_BFE_U32_e64;
@@ -2695,7 +2705,8 @@ bool AMDGPUInstructionSelector::selectG_SZA_EXT(MachineInstr &I) const {
       .addImm(0) // Offset
       .addImm(SrcSize); // Width
     I.eraseFromParent();
-    return constrainSelectedInstRegOperands(*ExtI, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(*ExtI, TII, TRI, RBI);
+    return true;
   }
 
   if (SrcBank->getID() == AMDGPU::SGPRRegBankID && DstSize <= 64) {
@@ -3169,7 +3180,8 @@ bool AMDGPUInstructionSelector::selectG_PTRMASK(MachineInstr &I) const {
       .addReg(MaskReg)
       .setOperandDead(3); // Dead scc
     I.eraseFromParent();
-    return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+    constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+    return true;
   }
 
   unsigned NewOpc = IsVGPR ? AMDGPU::V_AND_B32_e64 : AMDGPU::S_AND_B32;
@@ -3544,7 +3556,8 @@ bool AMDGPUInstructionSelector::selectBufferLoadLds(MachineInstr &MI) const {
   MIB.setMemRefs({LoadMMO, StoreMMO});
 
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 /// Match a zero extend from a 32-bit value to 64-bits.
@@ -3731,7 +3744,8 @@ bool AMDGPUInstructionSelector::selectGlobalLoadLds(MachineInstr &MI) const{
   MIB.setMemRefs({LoadMMO, StoreMMO});
 
   MI.eraseFromParent();
-  return constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(*MIB, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectBVHIntersectRayIntrinsic(
@@ -3741,7 +3755,8 @@ bool AMDGPUInstructionSelector::selectBVHIntersectRayIntrinsic(
   MI.setDesc(TII.get(MI.getOperand(OpcodeOpIdx).getImm()));
   MI.removeOperand(OpcodeOpIdx);
   MI.addImplicitDefUseOperands(*MI.getMF());
-  return constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  return true;
 }
 
 // FIXME: This should be removed and let the patterns select. We just need the
@@ -3871,7 +3886,8 @@ bool AMDGPUInstructionSelector::selectPermlaneSwapIntrin(
   MachineOperand &FI = MI.getOperand(4);
   FI.setImm(FI.getImm() ? AMDGPU::DPP::DPP_FI_1 : AMDGPU::DPP::DPP_FI_0);
 
-  return constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  constrainSelectedInstRegOperands(MI, TII, TRI, RBI);
+  return true;
 }
 
 bool AMDGPUInstructionSelector::selectWaveAddress(MachineInstr &MI) const {
@@ -4106,7 +4122,7 @@ static std::pair<unsigned, uint8_t> BitOp3_Op(Register R,
     SmallVector<Register, 3> Backup(Src.begin(), Src.end());
     if (!getOperandBits(LHS, LHSBits) ||
         !getOperandBits(RHS, RHSBits)) {
-      Src = Backup;
+      Src = std::move(Backup);
       return std::make_pair(0, 0);
     }
 

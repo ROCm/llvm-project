@@ -10,12 +10,12 @@
 CONSTATTR half2
 MATH_MANGLE2(scalbn)(half2 x, int2 n)
 {
-    return (half2)(MATH_MANGLE(ldexp)(x.lo, n.lo), MATH_MANGLE(ldexp)(x.hi, n.hi));
+    return BUILTIN_FLDEXP_2F16(x, n);
 }
 
 CONSTATTR half
 MATH_MANGLE(scalbn)(half x, int n)
 {
-    return MATH_MANGLE(ldexp)(x, n);
+    return BUILTIN_FLDEXP_F16(x, n);
 }
 
