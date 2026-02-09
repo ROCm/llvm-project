@@ -240,7 +240,7 @@ jobs:
           python3 build_tools/github_actions/build_configure.py --manylinux
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' || github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
