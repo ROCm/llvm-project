@@ -1,7 +1,7 @@
 // clang-format off
 // This test verifies the output of inclusive and exclusive scan computed using the Xteam Scan Kernel
-// for various datatypes for both Segmented(default) Scan and No-Loop Scan kernel variants
-// 
+// for various datatypes for both Segmented(default) Scan and No-Loop Scan kernel variants.
+// For the default (segmented) variant, workgroup size is determined by the runtime (captured as ConstWGSize).
 
 // RUN: %libomptarget-compile-generic -fopenmp-target-ignore-env-vars -fopenmp-target-xteam-scan -fopenmp-assume-no-nested-parallelism -fopenmp-assume-no-thread-state -lm -latomic
 // RUN: env LIBOMPTARGET_KERNEL_TRACE=1 \
@@ -114,123 +114,123 @@ int main() {
 }
 // clang-format off
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE:[0-9]+]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS:[0-9]+]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*i.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*i.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*j.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*j.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*m.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*m.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*l.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*l.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*d.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:16400B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:8208B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*d.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*f.*]]_l50
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l50_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: lds_usage:8200B
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: lds_usage:4104B
 /// CHECK: n:__omp_offloading_[[MANGLED:.*f.*]]_l74
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: lds_usage:0B
 /// CHECK: n:__omp_offloading_[[MANGLED]]_l74_1
 

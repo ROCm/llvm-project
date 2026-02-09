@@ -21,7 +21,7 @@ MATH_MANGLE(sincos)(float x, __private float *cp)
     struct scret sc = MATH_PRIVATE(sincosred)(r.hi);
 #endif
 
-    int flip = r.i > 1 ? 0x80000000 : 0;
+    int flip = r.i > 1 ? SIGNBIT_SP32 : 0;
     bool odd = (r.i & 1) != 0;
     float s = odd ? sc.c : sc.s;
     s = AS_FLOAT(AS_INT(s) ^ flip ^ (AS_INT(ax) ^ AS_INT(x)));

@@ -109,8 +109,8 @@ void addDebugInfoPass(mlir::PassManager &pm,
                        [&]() { return fir::createAddDebugInfoPass(options); });
 }
 
-void addFIRToLLVMPass(mlir::PassManager &pm,
-                      const MLIRToLLVMPassPipelineConfig &config) {
+fir::FIRToLLVMPassOptions
+getFIRToLLVMPassOptions(const MLIRToLLVMPassPipelineConfig &config) {
   fir::FIRToLLVMPassOptions options;
   options.ignoreMissingTypeDescriptors = ignoreMissingTypeDescriptors;
   options.skipExternalRttiDefinition = skipExternalRttiDefinition;
@@ -119,6 +119,12 @@ void addFIRToLLVMPass(mlir::PassManager &pm,
   options.typeDescriptorsRenamedForAssembly =
       !disableCompilerGeneratedNamesConversion;
   options.ComplexRange = config.ComplexRange;
+  return options;
+}
+
+void addFIRToLLVMPass(mlir::PassManager &pm,
+                      const MLIRToLLVMPassPipelineConfig &config) {
+  fir::FIRToLLVMPassOptions options = getFIRToLLVMPassOptions(config);
   addPassConditionally(pm, disableFirToLlvmIr,
                        [&]() { return fir::createFIRToLLVMPass(options); });
   // The dialect conversion framework may leave dead unrealized_conversion_cast

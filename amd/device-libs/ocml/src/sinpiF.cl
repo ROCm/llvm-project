@@ -16,7 +16,7 @@ MATH_MANGLE(sinpi)(float x)
     struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
 
     float s = (r.i & 1) == 0 ? sc.s : sc.c;
-    s = AS_FLOAT(AS_INT(s) ^ (r.i > 1 ? 0x80000000 : 0) ^ (AS_INT(x) ^ AS_INT(ax)));
+    s = AS_FLOAT(AS_INT(s) ^ (r.i > 1 ? SIGNBIT_SP32 : 0) ^ (AS_INT(x) ^ AS_INT(ax)));
 
     if (!FINITE_ONLY_OPT()) {
         s = BUILTIN_ISFINITE_F32(ax) ? s : QNAN_F32;

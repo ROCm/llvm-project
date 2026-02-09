@@ -1,7 +1,6 @@
 // RUN: %clang_cc1 -triple amdgcn-unknown-unknown -target-cpu gfx950         -S -verify -o - %s
 // RUN: %clang_cc1 -triple amdgcn-unknown-unknown -target-cpu gfx9-4-generic -S -verify -o - %s
 // REQUIRES: amdgpu-registered-target
-
 typedef __attribute__((__vector_size__(4 * sizeof(unsigned int)))) unsigned int v4u32;
 typedef v4u32 __global *global_ptr_to_v4u32;
 
