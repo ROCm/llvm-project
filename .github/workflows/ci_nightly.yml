@@ -117,6 +117,27 @@ jobs:
       contents: read
       id-token: write
 
+  notify_build_status:
+    name: Notify amd-staging nightly status
+    if: always()
+    needs:
+      - windows_build_and_test
+      - linux_build_and_test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Notify status
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="ℹ️"
+          if [ "$STATUS" = "success" ]; then ICON="✅"; fi
+          if [ "$STATUS" = "failure" ]; then ICON="❌"; fi
+          curl -H "Content-Type: application/json" \
+          -d "{
+          \"title\": \"$ICON Build $STATUS\",
+          \"text\": \"**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Status:** $STATUS\n\n🔗 [Details: ](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
+           }" \
+          ${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}
+
   # build_python_packages:
   #   name: Build Python Packages
   #   uses: ./.github/workflows/build_python_packages.yml
