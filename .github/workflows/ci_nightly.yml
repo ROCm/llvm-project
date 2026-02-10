@@ -139,7 +139,7 @@ jobs:
             STATUS="failure"
           elif [ "${{ needs.windows_build_and_test.result }}" = "cancelled" ] || [ "${{ needs.linux_build_and_test.result }}" = "cancelled" ]; then
             STATUS="failure"
-          elif [ "${{ needs.windows_build_and_test.result }}" = "success" ] && [ "${{ needs.linux_build_and_test.result }}" = "cancelled" ]; then
+          elif [ "${{ needs.windows_build_and_test.result }}" = "success" ] && [ "${{ needs.linux_build_and_test.result }}" = "success" ]; then
             STATUS="success"
           fi
           
