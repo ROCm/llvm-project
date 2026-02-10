@@ -126,17 +126,24 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Notify status
+        env:
+          TZ: 'America/Chicago'
         run: |
+          START_DATE=$(date --date="$START_TIMESTAMP" +"%Y-%m-%d")     
           STATUS="${{ job.status }}"
           ICON="ℹ️"
+      
           if [ "$STATUS" = "success" ]; then ICON="✅"; fi
-          if [ "$STATUS" = "failure" ]; then ICON="❌"; fi
+          if [ "$STATUS" = "failure" ]; then ICON="❌"; fi      
+         
+          WEBHOOK_URL="${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}"      
+          # Sending notification
           curl -H "Content-Type: application/json" \
           -d "{
-          \"title\": \"$ICON Build $STATUS\",
-          \"text\": \"**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Status:** $STATUS\n\n🔗 [Details: ](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
-           }" \
-          ${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}
+            \"title\": \"$START_DATE - $ICON Build $STATUS\",
+            \"text\": \"**Repository:** ${{ github.repository }}  \n**Branch:** ${{ github.ref_name }}  \n**Status:** $STATUS  \n🔗 [Build Link](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
+          }" \
+          "$WEBHOOK_URL"
 
   # build_python_packages:
   #   name: Build Python Packages
