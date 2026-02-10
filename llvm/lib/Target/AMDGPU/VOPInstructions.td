@@ -419,6 +419,13 @@ class VOP3a_ScaleSel_gfx1250<bits<10> op, VOPProfile p> : VOP3e_gfx11_gfx12<op, 
   let Inst{14-11} = scale_sel;
 }
 
+class VOP3Interp_OpSel_gfx9<bits<10> op, VOPProfile p> : VOP3Interp_vi<op, p> {
+  let Inst{11} = src0_modifiers{2};
+  // There's no src1
+  let Inst{13} = src2_modifiers{2};
+  let Inst{14} = !if(p.HasDst,  src0_modifiers{3}, 0);
+}
+
 class VOP3Interp_gfx10<bits<10> op, VOPProfile p> : VOP3e_gfx10<op, p> {
   bits<6> attr;
   bits<2> attrchan;
@@ -1350,8 +1357,12 @@ class VOPBinOpClampPat<SDPatternOperator node, Instruction inst, ValueType vt> :
 
 class getVOP3ModPat<VOPProfile P, SDPatternOperator node> {
   dag src0 = !if(P.HasOMod,
-    (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers, i1:$clamp, i32:$omod),
-    (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers, i1:$clamp));
+    !if(P.HasClamp,
+        (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers, i1:$clamp, i32:$omod),
+        (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers, i32:$omod)),
+    !if(P.HasClamp,
+        (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers, i1:$clamp),
+        (VOP3Mods0 P.Src0VT:$src0, i32:$src0_modifiers)));
 
   list<dag> ret3 = [(set P.DstVT:$vdst,
     (DivergentFragOrOp<node, P>.ret (P.Src0VT src0),
@@ -1510,12 +1521,13 @@ class VOP3Features<bit Clamp, bit OpSel, bit Packed, bit MAI> {
   bit IsMAI = MAI;
 }
 
-def VOP3_REGULAR : VOP3Features<0, 0, 0, 0>;
-def VOP3_CLAMP   : VOP3Features<1, 0, 0, 0>;
-def VOP3_OPSEL   : VOP3Features<1, 1, 0, 0>;
-def VOP3_PACKED  : VOP3Features<1, 1, 1, 0>;
-def VOP3_MAI     : VOP3Features<0, 0, 0, 1>;
-def VOP3_OPSEL_ONLY : VOP3Features<0, 1, 0, 0>;
+def VOP3_REGULAR         : VOP3Features<0, 0, 0, 0>;
+def VOP3_CLAMP           : VOP3Features<1, 0, 0, 0>;
+def VOP3_OPSEL           : VOP3Features<1, 1, 0, 0>;
+def VOP3_PACKED          : VOP3Features<1, 1, 1, 0>;
+def VOP3_PACKED_NO_OPSEL : VOP3Features<1, 0, 1, 0>;
+def VOP3_MAI             : VOP3Features<0, 0, 0, 1>;
+def VOP3_OPSEL_ONLY      : VOP3Features<0, 1, 0, 0>;
 
 // Packed is misleading, but it enables the appropriate op_sel
 // modifiers.
@@ -2196,12 +2208,12 @@ include "VOP3PInstructions.td"
 include "VOPDInstructions.td"
 
 class ClassPat<Instruction inst, ValueType vt> : GCNPat <
-  (is_fpclass (vt (VOP3ModsNonCanonicalizing vt:$src0, i32:$src0_mods)), (i32 timm:$mask)),
+  (i1 (is_fpclass (vt (VOP3ModsNonCanonicalizing vt:$src0, i32:$src0_mods)), (i32 timm:$mask))),
   (inst i32:$src0_mods, vt:$src0, (V_MOV_B32_e32 timm:$mask))
 >;
 
 class ClassPat_t16<Instruction inst, ValueType vt> : GCNPat <
-  (is_fpclass (vt (VOP3ModsNonCanonicalizing vt:$src0, i32:$src0_mods)), (i32 timm:$mask)),
+  (i1 (is_fpclass (vt (VOP3ModsNonCanonicalizing vt:$src0, i32:$src0_mods)), (i32 timm:$mask))),
   (inst i32:$src0_mods, vt:$src0, SRCMODS.NONE, (V_MOV_B32_e32 timm:$mask))
 >;
 

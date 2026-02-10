@@ -40,6 +40,7 @@ Using Clang as a Compiler
    SanitizerCoverage
    SanitizerStats
    SanitizerSpecialCaseList
+   AllocToken
    BoundsSafety
    BoundsSafetyAdoptionGuide
    BoundsSafetyImplPlans
@@ -103,7 +104,6 @@ Using Clang Tools
    ClangOffloadWrapper
    ClangOffloadBundler
    ClangOffloadWrapper
-   ClangOffloadPackager
    ClangRepl
    ClangSYCLLinker
 
@@ -123,7 +123,7 @@ Design Documents
    ControlFlowIntegrityDesign
    HardwareAssistedAddressSanitizerDesign.rst
    ConstantInterpreter
-
+   ClangIRCodeDuplication
 
 Indices and tables
 ==================

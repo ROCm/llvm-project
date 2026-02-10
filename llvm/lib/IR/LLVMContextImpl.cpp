@@ -25,7 +25,6 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <cassert>
-#include <utility>
 
 using namespace llvm;
 
@@ -110,6 +109,7 @@ LLVMContextImpl::~LLVMContextImpl() {
   ArrayConstants.freeConstants();
   StructConstants.freeConstants();
   VectorConstants.freeConstants();
+  ConstantPtrAuths.freeConstants();
   InlineAsms.freeConstants();
 
   CAZConstants.clear();

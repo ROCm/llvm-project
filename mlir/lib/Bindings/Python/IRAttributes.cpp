@@ -867,7 +867,7 @@ public:
     if (PyObject_GetBuffer(array.ptr(), &view, flags) != 0) {
       throw nb::python_error();
     }
-    auto freeBuffer = llvm::make_scope_exit([&]() { PyBuffer_Release(&view); });
+    llvm::scope_exit freeBuffer([&]() { PyBuffer_Release(&view); });
 
     MlirContext context = contextWrapper->get();
     MlirAttribute attr = getAttributeFromBuffer(
@@ -1306,6 +1306,10 @@ PyType_Slot PyDenseElementsAttribute::slots[] = {
     e.restore();
     nb::chain_error(PyExc_BufferError, "Error converting attribute to buffer");
     return -1;
+  } catch (std::exception &e) {
+    nb::chain_error(PyExc_BufferError,
+                    "Error converting attribute to buffer: %s", e.what());
+    return -1;
   }
   view->obj = obj;
   view->ndim = 1;
@@ -1443,7 +1447,7 @@ public:
 
     // This scope releaser will only release if we haven't yet transferred
     // ownership.
-    auto freeBuffer = llvm::make_scope_exit([&]() {
+    llvm::scope_exit freeBuffer([&]() {
       if (view)
         PyBuffer_Release(view.get());
     });

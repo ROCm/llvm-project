@@ -51,6 +51,8 @@
 extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
 getProfilerToAttach();
 
+using namespace llvm::omp::target::debug;
+
 namespace llvm {
 namespace omp {
 namespace target {
@@ -787,8 +789,8 @@ public:
       IgnoreLockMappedFailures = false;
     } else {
       // Disable by default.
-      DP("Invalid value LIBOMPTARGET_LOCK_MAPPED_HOST_BUFFERS=%s\n",
-         OMPX_LockMappedBuffers.get().data());
+      ODBG(ODT_Alloc) << "Invalid value LIBOMPTARGET_LOCK_MAPPED_HOST_BUFFERS="
+                      << OMPX_LockMappedBuffers.get();
       LockMappedBuffers = false;
     }
   }
@@ -866,6 +868,13 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// this id is not unique between different plugins; they may overlap.
   int32_t getDeviceId() const { return DeviceId; }
 
+  /// Get the unique identifier of the device.
+  const char *getDeviceUid() const { return DeviceUid.c_str(); }
+
+  /// Get the total shared memory per block (in bytes) that can be used in any
+  /// kernel.
+  size_t getMaxBlockSharedMemSize() const { return MaxBlockSharedMemSize; }
+
   /// Set the context of the device if needed, before calling device-specific
   /// functions. Plugins may implement this function as a no-op if not needed.
   virtual Error setContext() = 0;
@@ -890,10 +899,6 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Unload a previously loaded Image from the device
   Error unloadBinary(DeviceImageTy *Image);
   virtual Error unloadBinaryImpl(DeviceImageTy *Image) = 0;
-
-  /// Setup the global device memory pool, if the plugin requires one.
-  Error setupDeviceMemoryPool(GenericPluginTy &Plugin, DeviceImageTy &Image,
-                              uint64_t PoolSize);
 
   // Setup the RPC server for this device if needed. This may not run on some
   // plugins like the CPU targets. By default, it will not be executed so it is
@@ -1026,13 +1031,10 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   Error launchKernel(void *EntryPtr, void **ArgPtrs, ptrdiff_t *ArgOffsets,
                      KernelArgsTy &KernelArgs, __tgt_async_info *AsyncInfo);
 
-  /// Initialize a __tgt_async_info structure. Related to interop features.
+  /// Initialize a __tgt_async_info structure.
   Error initAsyncInfo(__tgt_async_info **AsyncInfoPtr);
   virtual Error initAsyncInfoImpl(AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
 
-  /// Initialize a __tgt_device_info structure. Related to interop features.
-  Error initDeviceInfo(__tgt_device_info *DeviceInfo);
-  virtual Error initDeviceInfoImpl(__tgt_device_info *DeviceInfo) = 0;
 
   // Switch memory region to coarse grain mode
   Error setCoarseGrainMemory(void *ptr, int64_t size);
@@ -1106,9 +1108,12 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   Error syncEvent(void *EventPtr);
   virtual Error syncEventImpl(void *EventPtr) = 0;
 
+  /// Obtain information about the device.
+  Expected<InfoTreeNode> obtainInfo();
+  virtual Expected<InfoTreeNode> obtainInfoImpl() = 0;
+
   /// Print information about the device.
   Error printInfo();
-  virtual Expected<InfoTreeNode> obtainInfoImpl() = 0;
 
   /// Return true if the device has work that is either queued or currently
   /// running
@@ -1167,6 +1172,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   virtual bool getOMPXGenericSpmdUseSmallBlockSize() const {
     llvm_unreachable("Unimplemented");
   }
+  virtual uint32_t getOMPXXteamBlockSize() const {
+    llvm_unreachable("Unimplemented");
+  }
 
   /// Get target compute unit kind (e.g., sm_80, or gfx908).
   virtual std::string getComputeUnitKind() const { return "unknown"; }
@@ -1223,6 +1231,16 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Allocate and construct a kernel object.
   virtual Expected<GenericKernelTy &> constructKernel(const char *Name) = 0;
 
+  virtual bool hasDeviceHeapSize() { return false; }
+  virtual Error getDeviceHeapSize(uint64_t &V) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+  virtual Error setDeviceHeapSize(uint64_t V) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "%s not supported by platform", __func__);
+  }
+
   /// Returns true if current plugin architecture is an APU
   /// and unified_shared_memory was not requested by the program.
   bool useAutoZeroCopy();
@@ -1250,6 +1268,10 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   /// Return true if a descriptor of size 'Size' should be allocated using
   /// shared memory. Default implementation returns 'false',
   virtual bool useSharedMemForDescriptor(int64_t Size);
+
+  /// Returns true if the plugin can guarantee that the associated
+  /// storage is accessible
+  Expected<bool> isAccessiblePtr(const void *Ptr, size_t Size);
 
   virtual Expected<omp_interop_val_t *>
   createInterop(int32_t InteropType, interop_spec_t &InteropSpec) {
@@ -1353,12 +1375,6 @@ private:
   /// plugin can implement the setters as no-op and setting the output
   /// value to zero for the getters.
   virtual Error setDeviceStackSize(uint64_t V) = 0;
-  virtual Error getDeviceHeapSize(uint64_t &V) = 0;
-  virtual Error setDeviceHeapSize(uint64_t V) = 0;
-
-  /// Indicate whether the device should setup the global device memory pool. If
-  /// false is return the value on the device will be uninitialized.
-  virtual bool shouldSetupDeviceMemoryPool() const { return true; }
 
   /// Indicate whether or not the device should setup the RPC server. This is
   /// only necessary for unhosted targets like the GPU.
@@ -1369,6 +1385,10 @@ private:
 
   /// Per device setting of MemoryManager's Threshold
   virtual size_t getMemoryManagerSizeThreshold() { return 0; }
+
+  virtual Expected<bool> isAccessiblePtrImpl(const void *Ptr, size_t Size) {
+    return false;
+  }
 
   /// Environment variables defined by the OpenMP standard.
   Int32Envar OMP_TeamLimit;
@@ -1409,6 +1429,14 @@ protected:
   /// global device id and is not the device id visible to the OpenMP user.
   const int32_t DeviceId;
 
+  /// The unique identifier of the device.
+  /// Per default, the unique identifier of the device is set to the device id,
+  /// combined with the plugin name, since the offload device id may overlap
+  /// between different plugins.
+  std::string DeviceUid;
+  /// Construct the device UID from the vendor (U)UID.
+  void setDeviceUidFromVendorUid(StringRef VendorUid);
+
   /// The default grid values used for this device.
   llvm::omp::GV GridValues;
 
@@ -1439,13 +1467,12 @@ protected:
   /// Variable to enable kernel duration tracing.
   BoolEnvar OMPX_KernelDurationTracing;
 
+  /// The total per-block native shared memory that a kernel may use.
+  size_t MaxBlockSharedMemSize = 0;
 private:
   /// Return the kernel environment object for kernel \p Name.
   Expected<KernelEnvironmentTy>
   getKernelEnvironmentForKernel(StringRef Name, DeviceImageTy &Image);
-
-  DeviceMemoryPoolTy DeviceMemoryPool = {nullptr, 0};
-  DeviceMemoryPoolTrackingTy DeviceMemoryPoolTracking = {0, 0, ~0U, 0};
 
   bool IsFastReductionEnabled = false;
 };
@@ -1558,6 +1585,9 @@ private:
   uint32_t RunLimiter = ThreadCandidate.size() * CUMultiplierCandidate.size();
   // Used for keeping track of the metatdata used in tuning for each kernel.
   std::unordered_map<std::string, TuningMetadataTy> TuningData;
+  /// Internal representation for OMPT device (initialize & finalize)
+  std::atomic<bool> OmptInitialized;
+
 };
 
 /// Class implementing common functionalities of offload plugins. Each plugin
@@ -1591,6 +1621,14 @@ struct GenericPluginTy {
   virtual GenericGlobalHandlerTy *createGlobalHandler() = 0;
 
   /// Get the reference to the device with a certain device id.
+  const GenericDeviceTy &getDevice(int32_t DeviceId) const {
+    assert(isValidDeviceId(DeviceId) && "Invalid device id");
+    assert(Devices[DeviceId] && "Device is uninitialized");
+
+    return *Devices[DeviceId];
+  }
+
+  /// Get the reference to the device with a certain device id.
   GenericDeviceTy &getDevice(int32_t DeviceId) {
     assert(isValidDeviceId(DeviceId) && "Invalid device id");
     assert(Devices[DeviceId] && "Device is uninitialized");
@@ -1609,6 +1647,9 @@ struct GenericPluginTy {
     assert(UserDeviceIds.contains(DeviceId) && "No user-id registered");
     return UserDeviceIds.at(DeviceId);
   }
+
+  /// Get the UID for the host device.
+  static constexpr const char *getHostDeviceUid() { return "HOST"; }
 
   /// Get the ELF code to recognize the binary image of this plugin.
   virtual uint16_t getMagicElfBits() const = 0;
@@ -1852,10 +1893,6 @@ public:
   /// Creates an asynchronous queue for the given plugin.
   int32_t init_async_info(int32_t DeviceId, __tgt_async_info **AsyncInfoPtr);
 
-  /// Creates device information to be used for diagnostics.
-  int32_t init_device_info(int32_t DeviceId, __tgt_device_info *DeviceInfo,
-                           const char **ErrStr);
-
   /// Sets the region of memory that is considered coarse grained.
   int set_coarse_grain_mem_region(int32_t DeviceId, void *ptr, int64_t size);
 
@@ -1872,6 +1909,9 @@ public:
   /// Set coarse_grain memory for omp_register_coarse_grain_mem
   void set_coarse_grain_mem(int32_t DeviceId, const void *ptr, int64_t size,
                             bool set_attr);
+
+  /// Returns if the associated storage is accessible for a given device.
+  int32_t is_accessible_ptr(int32_t DeviceId, const void *Ptr, size_t Size);
 
   /// Look up a global symbol in the given binary.
   int32_t get_global(__tgt_device_binary Binary, uint64_t Size,
@@ -1929,6 +1969,13 @@ public:
   /// Queue an asynchronous barrier in the queue associated with the interop
   /// object and return immediately.
   int32_t async_barrier(omp_interop_val_t *Interop);
+
+  /// Returns a Range over all the devices in the plugin that can be
+  /// used in a for loop:
+  /// for (&Device : GenericPluginRef.getDevicesRange()) {
+  auto getDevicesRange() {
+    return llvm::make_range(Devices.begin(), Devices.end());
+  }
 
 private:
   /// Indicates if the platform runtime has been fully initialized.
@@ -2014,7 +2061,8 @@ public:
   /// must be called before the destructor.
   virtual Error deinit() {
     if (NextAvailable)
-      DP("Missing %d resources to be returned\n", NextAvailable);
+      ODBG(ODT_Deinit) << "Missing " << NextAvailable
+                       << " resources to be returned";
 
     // TODO: This prevents a bug on libomptarget to make the plugins fail. There
     // may be some resources not returned. Do not destroy these ones.

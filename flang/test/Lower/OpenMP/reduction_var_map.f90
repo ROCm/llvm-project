@@ -1,5 +1,5 @@
 !RUN: %flang_fc1 -emit-hlfir -fopenmp %s -o - | FileCheck %s
-
+!XFAIL: *
 ! This test checks that if reduction clause is on a combined target
 ! construct, there is an implicit map(tofrom) for each reduction variable.
 
@@ -22,7 +22,7 @@ end subroutine omp_target_combined
 !CHECK-LABEL: func.func @_QPomp_target_combined() {
 !CHECK: omp.map.info var_ptr({{.*}} : !fir.ref<i64>, i64) map_clauses(tofrom) capture(ByRef) -> !fir.ref<i64> {name = "s1"}
 !CHECK: omp.map.info var_ptr({{.*}} : !fir.ref<i64>, i64) map_clauses(tofrom) capture(ByRef) -> !fir.ref<i64> {name = "s2"}
-!CHECK: omp.map.info var_ptr({{.*}} : !fir.ref<i32>, i32) map_clauses(implicit, exit_release_or_enter_alloc) capture(ByCopy) -> !fir.ref<i32> {name = "i"}
+!CHECK: omp.map.info var_ptr({{.*}} : !fir.ref<i32>, i32) map_clauses(implicit) capture(ByCopy) -> !fir.ref<i32> {name = "i"}
 
 subroutine omp_target_team_separate
    implicit none

@@ -147,4 +147,10 @@ struct P7 {
 
 // LAYOUT-DWN32-NEXT: <CGBitFieldInfo Offset:{{[0-9]+}} Size:16 IsSigned:0 StorageSize:16 StorageOffset:0
 // LAYOUT-DWN32-NEXT: <CGBitFieldInfo Offset:{{[0-9]+}} Size:8 IsSigned:0 StorageSize:8 StorageOffset:2
+<<<<<<< HEAD
+=======
+
+// LAYOUT-M68K-NEXT: <CGBitFieldInfo Offset:{{[0-9]+}} Size:16 IsSigned:0 StorageSize:16 StorageOffset:0
+// LAYOUT-M68K-NEXT: <CGBitFieldInfo Offset:{{[0-9]+}} Size:8 IsSigned:0 StorageSize:8 StorageOffset:2
+>>>>>>> 90797cc529cda3ba39dc272f87710210b41c0630
 // CHECK-NEXT: ]>
