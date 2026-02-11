@@ -1717,6 +1717,18 @@ void ControlFlowRewriter::prepareWaveCfg() {
       } else if (Terminator.isReturn()) {
         assert(!Info.OrigCondition);
         Info.OrigExit = true;
+      } else {
+        // TODO: These opcodes should be handled. They must either be avoided
+        // entirely by pre-wave-transform codegen passes or wave-transform pass
+        // should handle them.
+        assert(Opcode != AMDGPU::S_CBRANCH_EXECZ &&
+               Opcode != AMDGPU::S_CBRANCH_EXECNZ &&
+               Opcode != AMDGPU::S_CBRANCH_VCCZ &&
+               Opcode != AMDGPU::S_CBRANCH_VCCNZ &&
+               Opcode != AMDGPU::S_CBRANCH_SCC0 &&
+               Opcode != AMDGPU::S_CBRANCH_SCC1 &&
+               Opcode != AMDGPU::SI_WATERFALL_LOOP &&
+               "wave-transform: unhandled branch opcode");
       }
     }
 
