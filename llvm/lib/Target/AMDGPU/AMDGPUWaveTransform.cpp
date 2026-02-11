@@ -1585,9 +1585,14 @@ private:
     /// Whether the condition should be inverted.
     bool InvertCondition = false;
 
+    /// Whether the condition register use was marked as undef.
+    bool CondIsUndef = false;
+
     explicit LaneOriginInfo(WaveNode *Node, Register CondReg = {},
-                            bool InvertCondition = false)
-        : Node(Node), CondReg(CondReg), InvertCondition(InvertCondition) {}
+                            bool InvertCondition = false,
+                            bool CondIsUndef = false)
+        : Node(Node), CondReg(CondReg), InvertCondition(InvertCondition),
+          CondIsUndef(CondIsUndef) {}
   };
 
   struct CFGNodeInfo {
@@ -1597,6 +1602,9 @@ private:
 
     /// Branch condition, if the block originally had a conditional branch.
     Register OrigCondition;
+
+    /// Whether the original condition register was marked as undef.
+    bool OrigConditionUndef = false;
 
     /// Branch target if \ref condition is true.
     WaveNode *OrigSuccCond = nullptr;
@@ -1709,6 +1717,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
           Opcode == AMDGPU::SI_BRCOND_UNIFORM_Z) {
         assert(!Info.OrigCondition);
         Info.OrigCondition = Terminator.getOperand(1).getReg();
+        Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Opcode == AMDGPU::S_BRANCH) {
@@ -1780,9 +1789,11 @@ void ControlFlowRewriter::prepareWaveCfg() {
         }
       } else {
         NodeInfo.find(Info.OrigSuccCond)
-            ->second.origins.emplace_back(Node, Info.OrigCondition);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, false,
+                                          Info.OrigConditionUndef);
         NodeInfo.find(Info.OrigSuccFinal)
-            ->second.origins.emplace_back(Node, Info.OrigCondition, true);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, true,
+                                          Info.OrigConditionUndef);
       }
     }
   }
@@ -1889,15 +1900,19 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_SCC1;
       } else {
         Register CondReg = Info.OrigCondition;
-        if (!LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
+        if (!Info.OrigConditionUndef &&
+            !LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
           CondReg = LMU.createLaneMaskReg();
           BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
               .addReg(LMC.ExecReg)
               .addReg(Info.OrigCondition);
         }
-        BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::COPY),
-                LMC.VccReg)
-            .addReg(CondReg);
+        MachineInstr *CopyMI = BuildMI(*Node->Block, MBBINodeEnd, {},
+                                       TII.get(AMDGPU::COPY), LMC.VccReg)
+                                   .addReg(CondReg);
+        // Preserve undef flag if the condition register was undef
+        if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
+          CopyMI->getOperand(1).setIsUndef();
 
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
       }
@@ -1999,17 +2014,21 @@ void ControlFlowRewriter::rewrite() {
         CondReg = LaneOrigin.CondReg;
         if (!LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
                                 MBBILaneOriginNodeFirstTerm)) {
-          Register Prev = CondReg;
-          CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.AndOpc), CondReg)
-              .addReg(LMC.ExecReg)
-              .addReg(Prev);
+          if (!LaneOrigin.CondIsUndef) {
+            Register Prev = CondReg;
+            CondReg = LMU.createLaneMaskReg();
+            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                    TII.get(LMC.AndOpc), CondReg)
+                .addReg(LMC.ExecReg)
+                .addReg(Prev);
+          }
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .first = CondReg;
         }
 
+        // Skip XOR inversion if the condition register use was undef.
+        // Inverting undef (undef ^ -1) is still undef.
         if (LaneOrigin.InvertCondition) {
           // CondReg = EXEC ^ origCond;
           //
@@ -2020,11 +2039,13 @@ void ControlFlowRewriter::rewrite() {
           // TODO: We rely on later passes to clean up,
           // e.g. folding the XOR into the original V_CMP.
           Register Prev = CondReg;
-          CondReg = LMU.createLaneMaskReg();
-          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                  TII.get(LMC.XorOpc), CondReg)
-              .addReg(LaneOrigin.CondReg)
-              .addImm(-1);
+          if (!LaneOrigin.CondIsUndef) {
+            CondReg = LMU.createLaneMaskReg();
+            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                    TII.get(LMC.XorOpc), CondReg)
+                .addReg(LaneOrigin.CondReg)
+                .addImm(-1);
+          }
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
               .second = CondReg;
