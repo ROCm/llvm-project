@@ -1853,7 +1853,6 @@ void ControlFlowRewriter::rewrite() {
     }
     return RegAllOnes;
   };
-
   LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
   LLVM_DEBUG(Function.dump());
   LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
@@ -1908,12 +1907,12 @@ void ControlFlowRewriter::rewrite() {
               .addReg(LMC.ExecReg)
               .addReg(Info.OrigCondition);
         }
-        MachineInstrBuilder CopyMIB = BuildMI(*Node->Block, MBBINodeEnd, {},
-                                              TII.get(AMDGPU::COPY), LMC.VccReg)
-                                          .addReg(CondReg);
+        MachineInstr *CopyMI = BuildMI(*Node->Block, MBBINodeEnd, {},
+                                       TII.get(AMDGPU::COPY), LMC.VccReg)
+                                   .addReg(CondReg);
         // Preserve undef flag if the condition register was undef
         if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
-          CopyMIB->getOperand(1).setIsUndef();
+          CopyMI->getOperand(1).setIsUndef();
 
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
       }
