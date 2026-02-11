@@ -1,25 +1,29 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1030 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1010 %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx1030 -amdgpu-late-wave-transform=1 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-late-wave-transform=1 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1010 %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-late-wave-transform=1 -amdgpu-s-branch-bits=7 < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX1030 %s
 
-; For gfx1010, overestimate the branch size in case we need to insert
-; a nop for the buggy offset.
+; With the Late Wave Transform, the gfx1010-specific 0x3f offset
+; distinction does not apply due to uniform branches lowering through
+; VCC rather than SCC. All targets produce the same long-branch
+; relaxation pattern.
 
 ; GCN-LABEL: long_forward_scc_branch_3f_offset_bug:
 ; GFX1030: s_cmp_lg_u32
-; GFX1030: s_cbranch_scc1  [[ENDBB:.LBB[0-9]+_[0-9]+]]
+; GFX1030: s_cbranch_vccz
+; GFX1030: s_getpc_b64
+; GFX1030: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-
 
 ; GFX1010: s_cmp_lg_u32
-; GFX1010-NEXT: s_cbranch_scc0  [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
+; GFX1010: s_cbranch_vccz  [[LOOP_BB:.LBB[0-9]+_[0-9]+]]
 ; GFX1010: s_getpc_b64
 ; GFX1010-NEXT: [[POST_GETPC:.Lpost_getpc[0-9]+]]:{{$}}
 ; GFX1010-NEXT: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])&4294967295
 ; GFX1010-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])>>32
-; GFX1010: [[RELAX_BB]]:
+; GFX1010: [[LOOP_BB]]:
 
 ; GCN: v_nop
 ; GCN: s_sleep
-; GCN: s_cbranch_scc1
+; GCN: s_cbranch_vccz
 
 ; GCN: [[ENDBB]]:
 ; GCN: global_store_{{dword|b32}}
@@ -52,19 +56,19 @@ bb3:
 }
 
 ; GCN-LABEL: {{^}}long_forward_exec_branch_3f_offset_bug:
-; GFX1030: s_mov_b32
-; GFX1030: v_cmpx_eq_u32
-; GFX1030: s_cbranch_execnz [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
+; GFX1030: v_cmp_ne_u32
+; GFX1030: s_mov_b32 exec_lo
+; GFX1030: s_cbranch_execnz [[TAKEN_BB:.LBB[0-9]+_[0-9]+]]
 
-; GFX1010: v_cmp_eq_u32
-; GFX1010: s_and_saveexec_b32
-; GFX1010-NEXT: s_cbranch_execnz  [[RELAX_BB:.LBB[0-9]+_[0-9]+]]
+; GFX1010: v_cmp_ne_u32
+; GFX1010: s_mov_b32 exec_lo
+; GFX1010: s_cbranch_execnz  [[TAKEN_BB:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: s_getpc_b64
 ; GCN-NEXT: [[POST_GETPC:.Lpost_getpc[0-9]+]]:{{$}}
 ; GCN-NEXT: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])&4294967295
-; GCN-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB:.LBB[0-9]+_[0-9]+]]-[[POST_GETPC]])>>32
-; GCN: [[RELAX_BB]]:
+; GCN-NEXT: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, ([[ENDBB]]-[[POST_GETPC]])>>32
+; GCN: [[TAKEN_BB]]:
 
 ; GCN: v_nop
 ; GCN: s_sleep
