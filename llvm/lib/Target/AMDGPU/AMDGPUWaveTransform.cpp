@@ -100,6 +100,28 @@ static cl::opt<bool>
 
 namespace {
 
+static bool isArtificialTerminator(MachineInstr &MI) {
+  // Return true for instructions that are marked as terminators to support
+  // special exec management.
+  switch (MI.getOpcode()) {
+  case AMDGPU::S_MOV_B64_term:
+  case AMDGPU::S_XOR_B64_term:
+  case AMDGPU::S_OR_B64_term:
+  case AMDGPU::S_ANDN2_B64_term:
+  case AMDGPU::S_AND_B64_term:
+  case AMDGPU::S_AND_SAVEEXEC_B64_term:
+  case AMDGPU::S_MOV_B32_term:
+  case AMDGPU::S_XOR_B32_term:
+  case AMDGPU::S_OR_B32_term:
+  case AMDGPU::S_ANDN2_B32_term:
+  case AMDGPU::S_AND_B32_term:
+  case AMDGPU::S_AND_SAVEEXEC_B32_term:
+    return true;
+  default:
+    return false;
+  }
+}
+
 struct WaveNode;
 
 /// Map a lane-level successor or predecessor to a wave-level successor or
@@ -1692,13 +1714,15 @@ void ControlFlowRewriter::prepareWaveCfg() {
       } else if (Opcode == AMDGPU::S_BRANCH) {
         Info.OrigSuccFinal =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
-      } else {
+      } else if (Terminator.isReturn()) {
         assert(!Info.OrigCondition);
-        assert(Opcode == AMDGPU::S_ENDPGM || Opcode == AMDGPU::SI_RETURN ||
-               Opcode == AMDGPU::SI_RETURN_TO_EPILOG);
-
         Info.OrigExit = true;
       }
+    }
+
+    if (!Info.OrigExit && Node->Successors.empty()) {
+      // May be an unreachable block. Treat them like exit blocks.
+      Info.OrigExit = true;
     }
 
     if (!Info.OrigSuccFinal && !Info.OrigExit) {
@@ -1828,7 +1852,8 @@ void ControlFlowRewriter::rewrite() {
 
     if (!Info.OrigExit) {
       // Remove original terminators.
-      while (!Node->Block->empty() && Node->Block->back().isTerminator())
+      while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
+             !isArtificialTerminator(Node->Block->back()))
         Node->Block->back().eraseFromParent();
     }
 
@@ -1838,8 +1863,9 @@ void ControlFlowRewriter::rewrite() {
     assert(!Info.OrigExit);
 
     if (Node->Successors.size() == 1) {
-      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
-          .addMBB(Node->Successors[0]->Block);
+      if (Node->Block->empty() || !isArtificialTerminator(Node->Block->back()))
+        BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
+            .addMBB(Node->Successors[0]->Block);
       continue;
     }
 
