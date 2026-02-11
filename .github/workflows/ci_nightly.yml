@@ -7,6 +7,9 @@
 name: CI amd-staging Nightly
 
 on:
+  push:
+    branches:
+      - amd/dev/kirthana14m/full-test-nightly-staging
   # For AMD GPU families that expect_failure, we run builds and tests from this scheduled trigger
   schedule:
     - cron: "0 2 * * *" # Runs nightly at 2 AM UTC
@@ -81,7 +84,7 @@ jobs:
       expect_failure: ${{ matrix.variant.expect_failure == true }}
       use_prebuilt_artifacts: ${{ inputs.linux_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: full
+      test_type: "full"
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
     permissions:
       contents: read
@@ -111,7 +114,7 @@ jobs:
       expect_failure: ${{ matrix.variant.expect_failure == true }}
       use_prebuilt_artifacts: ${{ inputs.windows_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: full
+      test_type: "full"
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
     permissions:
       contents: read
