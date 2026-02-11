@@ -14,6 +14,9 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "gcn-lane-mask-utils"
 
 using namespace llvm;
 
@@ -425,7 +428,7 @@ void GCNLaneMaskUpdater::process() {
   // Reset accumulator.
   for (BlockInfo &Info : Blocks) {
     assert(Info.Flags || Info.Value);
-    Info.dump();
+    LLVM_DEBUG(Info.dump());
     if (Info.Flags)
       AccumulatorResetBlocks[Info.Block].push_back({Accumulator, Info.Flags});
   }
