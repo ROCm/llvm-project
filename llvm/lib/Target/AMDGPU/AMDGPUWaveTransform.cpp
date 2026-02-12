@@ -75,7 +75,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "GCNLaneMaskUtils.h"
+#include "AMDGPULaneMaskUtils.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIInstrInfo.h"
