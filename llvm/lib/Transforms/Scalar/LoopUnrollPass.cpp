@@ -952,6 +952,10 @@ bool llvm::computeUnrollCount(
   const bool ExplicitUnroll = PragmaCount > 0 || PragmaFullUnroll ||
                               PragmaEnableUnroll || UserUnrollCount;
 
+  if (ExplicitUnroll) {
+    UP.AllowExpensiveTripCount = true;
+  }
+
   PragmaInfo PInfo(UserUnrollCount, PragmaFullUnroll, PragmaCount,
                    PragmaEnableUnroll);
   // Use an explicit peel count that has been specified for testing. In this
