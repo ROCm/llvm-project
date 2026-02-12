@@ -18798,10 +18798,7 @@ bool SITargetLowering::needsFetchWindowAlignment(
   if (!getSubtarget()->hasGFX950Insts() || !MBB)
     return false;
   const SIInstrInfo *TII = getSubtarget()->getInstrInfo();
-  // Skip meta-instructions to find the first real instruction.
   auto I = MBB->getFirstNonDebugInstr();
-  while (I != MBB->end() && TII->getInstSizeInBytes(*I) == 0)
-    ++I;
   // Only 8-byte instructions can be split by a 32-byte boundary.
   return I != MBB->end() && TII->getInstSizeInBytes(*I) == 8;
 }
