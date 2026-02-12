@@ -85,7 +85,11 @@ jobs:
       use_prebuilt_artifacts: ${{ inputs.linux_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
       test_type: "full"
-      sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
+      sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}      
+      project_to_test: >-
+        rocblas,rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,
+        hipcub,rocthrust,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma
+
     permissions:
       contents: read
       id-token: write
