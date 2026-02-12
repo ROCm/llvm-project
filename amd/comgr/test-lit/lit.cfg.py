@@ -18,3 +18,8 @@ if not config.comgr_disable_spirv:
 # By default, disable the cache for the tests.
 # Test for the cache must explicitly enable this variable.
 config.environment['AMD_COMGR_CACHE'] = "0"
+
+# Add substitutions for LLVM tools
+config.substitutions.append(('%clang', os.path.join(config.llvm_tools_dir, 'clang')))
+config.substitutions.append(('%llvm-dis', os.path.join(config.llvm_tools_dir, 'llvm-dis')))
+config.substitutions.append(('%llvm-objdump', os.path.join(config.llvm_tools_dir, 'llvm-objdump')))
