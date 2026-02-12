@@ -365,7 +365,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_3
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.10(0x40000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $sgpr0, $vgpr1
+  ; POSTWT-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr0
@@ -546,7 +546,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_4
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.9(0x40000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $sgpr0
+  ; POSTWT-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr1
@@ -730,7 +730,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_5
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.10(0x40000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $sgpr0, $sgpr1
+  ; POSTWT-NEXT:   liveins: $sgpr0, $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr0
@@ -915,7 +915,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_6
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $vgpr0, $sgpr1
+  ; POSTWT-NEXT:   liveins: $sgpr0, $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr0
