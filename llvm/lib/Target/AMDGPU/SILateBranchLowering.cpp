@@ -261,13 +261,6 @@ bool SILateBranchLowering::run(MachineFunction &MF) {
         MadeChange = true;
         break;
 
-      case AMDGPU::SI_WAVE_CF_EDGE:
-        // Erase wave-CF edge markers now that CFG-restructuring passes
-        // have completed, so that BranchRelaxation can analyze branches.
-        MI.eraseFromParent();
-        MadeChange = true;
-        break;
-
       case AMDGPU::SI_EARLY_TERMINATE_SCC0:
         EarlyTermInstrs.push_back(&MI);
         break;

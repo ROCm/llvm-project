@@ -3267,7 +3267,7 @@ bool SIInstrInfo::analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
     return false;
 
   // Skip over the instructions that are artificially terminators for special
-  // exec management.
+  // exec management and wave-CFG edge markers.
   while (I != E && !I->isBranch() && !I->isReturn()) {
     switch (I->getOpcode()) {
     case AMDGPU::S_MOV_B64_term:
@@ -3282,6 +3282,7 @@ bool SIInstrInfo::analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
     case AMDGPU::S_ANDN2_B32_term:
     case AMDGPU::S_AND_B32_term:
     case AMDGPU::S_AND_SAVEEXEC_B32_term:
+    case AMDGPU::SI_WAVE_CF_EDGE:
       break;
     case AMDGPU::SI_IF:
     case AMDGPU::SI_ELSE:
@@ -3289,8 +3290,6 @@ bool SIInstrInfo::analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
     case AMDGPU::SI_KILL_F32_COND_IMM_TERMINATOR:
       // FIXME: It's messy that these need to be considered here at all.
       return true;
-    case AMDGPU::SI_WAVE_CF_EDGE:
-      return true; // FIXME: wave-cf critical edges cannot be safely split
     default:
       llvm_unreachable("unexpected non-branch terminator inst");
     }
