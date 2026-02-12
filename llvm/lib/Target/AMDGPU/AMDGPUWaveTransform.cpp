@@ -2339,16 +2339,14 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   // ConvergenceInfo.clear();
   DomTree = nullptr;
 
-  // Update the LiveIns of flow blocks.
+  // Update the LiveIns for all blocks.
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   for (MachineBasicBlock *MBB : reverse(RPOT)) {
-    if (is_contained(FlowBlocks, MBB)){
-      for (const MachineBasicBlock *Succ : MBB->successors()) {
-        for (const auto &LI : Succ->liveins())
-          MBB->addLiveIn(LI);
-      }
-      MBB->sortUniqueLiveIns();
+    for (const MachineBasicBlock *Succ : MBB->successors()) {
+      for (const auto &LI : Succ->liveins())
+        MBB->addLiveIn(LI);
     }
+    MBB->sortUniqueLiveIns();
   }
 
 

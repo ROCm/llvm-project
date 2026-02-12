@@ -637,7 +637,7 @@ body:             |
   ; POSTWT-LABEL: name: if_then_else_nested_divergent_uniform
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.8(0x40000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $sgpr1, $sgpr2
+  ; POSTWT-NEXT:   liveins: $sgpr1, $sgpr2, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr1

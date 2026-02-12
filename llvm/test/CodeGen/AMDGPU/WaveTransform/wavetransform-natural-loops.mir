@@ -255,7 +255,7 @@ body:             |
   ; POSTWT-LABEL: name: two_backedges_divergent_uniform
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $sgpr1
+  ; POSTWT-NEXT:   liveins: $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr1
@@ -1194,7 +1194,7 @@ body:             |
   ; POSTWT-LABEL: name: multi_backedge_exits_divergent_uniform
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr0, $sgpr1, $sgpr2
+  ; POSTWT-NEXT:   liveins: $sgpr1, $sgpr2, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr1
