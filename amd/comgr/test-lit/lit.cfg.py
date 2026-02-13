@@ -2,7 +2,7 @@ import os
 
 import lit.formats
 import lit.util
-
+from lit.llvm import llvm_config
 config.name = "Comgr"
 config.suffixes = {".hip", ".cl", ".c", ".cpp"}
 config.test_format = lit.formats.ShTest(True)
