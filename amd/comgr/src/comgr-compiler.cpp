@@ -749,7 +749,10 @@ AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {
 
   ProcessWarningOptions(Diags, *DiagOpts, *OverlayFS, /*ReportDiags=*/false);
 
-  Driver TheDriver((Twine(env::getLLVMPath()) + "/bin/clang").str(),
+  SmallString<256> ClangBinaryPath(env::getLLVMPath());
+  sys::path::append(ClangBinaryPath, "bin", "clang");
+
+  Driver TheDriver(std::string(ClangBinaryPath),
                    llvm::sys::getDefaultTargetTriple(), Diags,
                    "AMDGPU Code Object Manager", OverlayFS);
   TheDriver.setCheckInputsExist(false);

@@ -18,6 +18,10 @@
 
 using namespace llvm;
 
+namespace {
+const char *DefaultLLVMPath = "/opt/rocm";
+} // anonymous namespace
+
 namespace COMGR {
 namespace env {
 
@@ -66,7 +70,9 @@ bool shouldEmitVerboseLogs() {
 
 llvm::StringRef getLLVMPath() {
   static const char *EnvLLVMPath = std::getenv("LLVM_PATH");
-  return EnvLLVMPath;
+  if (EnvLLVMPath)
+    return EnvLLVMPath;
+  return DefaultLLVMPath;
 }
 
 StringRef getCachePolicy() {
