@@ -82,12 +82,13 @@
 #include "SIMachineFunctionInfo.h"
 #include "llvm/ADT/IntEqClasses.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/ADT/PostOrderIterator.h"
 
 using namespace llvm;
 
@@ -2339,16 +2340,11 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   // ConvergenceInfo.clear();
   DomTree = nullptr;
 
-  // Update the LiveIns for all blocks.
-  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-  for (MachineBasicBlock *MBB : reverse(RPOT)) {
-    for (const MachineBasicBlock *Succ : MBB->successors()) {
-      for (const auto &LI : Succ->liveins())
-        MBB->addLiveIn(LI);
-    }
-    MBB->sortUniqueLiveIns();
-  }
-
+  // Recompute LiveIns for all blocks.
+  SmallVector<MachineBasicBlock *, 16> AllBlocks;
+  for (MachineBasicBlock &MBB : MF)
+    AllBlocks.push_back(&MBB);
+  fullyRecomputeLiveIns(AllBlocks);
 
   MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(true);
 
