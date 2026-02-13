@@ -20,8 +20,5 @@ if not config.comgr_disable_spirv:
 config.environment['AMD_COMGR_CACHE'] = "0"
 
 # Add substitutions for LLVM tools
-config.substitutions.append(('%clang', os.path.join(config.llvm_tools_dir, 'clang')))
-config.substitutions.append(('%llvm-dis', os.path.join(config.llvm_tools_dir, 'llvm-dis')))
-config.substitutions.append(('%llvm-objdump', os.path.join(config.llvm_tools_dir, 'llvm-objdump')))
-config.substitutions.append(('%FileCheck', os.path.join(config.llvm_tools_dir, 'FileCheck')))
-config.substitutions.append(('%amd-llvm-spirv', os.path.join(config.llvm_tools_dir, 'amd-llvm-spirv')))
+tools = ["clang", "llvm-dis", "llvm-objdump", "FileCheck", "amd-llvm-spirv"]
+llvm_config.add_tool_substitutions(tools, config.llvm_tools_dir)
