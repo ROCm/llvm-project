@@ -749,7 +749,21 @@ AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {
 
   ProcessWarningOptions(Diags, *DiagOpts, *OverlayFS, /*ReportDiags=*/false);
 
-  Driver TheDriver((Twine(env::getLLVMPath()) + "/bin/clang").str(),
+  StringRef ClangExecutable = env::getClangExecutable();
+  if (!sys::fs::exists(ClangExecutable)) {
+    LogS << "Error: Clang executable not found: " << ClangExecutable << "\n";
+    if (!std::getenv("AMD_COMGR_CLANG_EXECUTABLE")) {
+      LogS << "AMD_COMGR_CLANG_EXECUTABLE is not set. The default clang "
+           << "executable from the build configuration does not exist.\n";
+    }
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  if (env::shouldEmitVerboseLogs()) {
+    LogS << "    Clang Executable: " << ClangExecutable << "\n";
+  }
+
+  Driver TheDriver(ClangExecutable.str(),
                    llvm::sys::getDefaultTargetTriple(), Diags,
                    "AMDGPU Code Object Manager", OverlayFS);
   TheDriver.setCheckInputsExist(false);
@@ -1126,10 +1140,7 @@ amd_comgr_status_t AMDGPUCompiler::addDeviceLibraries() {
 
   NoGpuLib = false;
 
-  SmallString<256> ClangBinaryPath(env::getLLVMPath());
-  sys::path::append(ClangBinaryPath, "bin", "clang");
-
-  std::string ClangResourceDir = GetResourcesPath(ClangBinaryPath);
+  std::string ClangResourceDir = GetResourcesPath(env::getClangExecutable());
 
   SmallString<256> DeviceLibPath(ClangResourceDir);
   sys::path::append(DeviceLibPath, "lib");

@@ -171,6 +171,19 @@ message("--CLANG_INCLUDE_DIRS: ${CLANG_INCLUDE_DIRS}")
 message("----LLD_INCLUDE_DIRS: ${LLD_INCLUDE_DIRS}")
 message("---AMDDeviceLibs_DIR: ${AMDDeviceLibs_DIR}")
 
+# Configure comgr-config.h with build-time defaults
+set(COMGR_DEFAULT_CLANG_EXECUTABLE "${LLVM_TOOLS_BINARY_DIR}/clang")
+message("COMGR_DEFAULT_CLANG_EXECUTABLE: ${COMGR_DEFAULT_CLANG_EXECUTABLE}")
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/comgr-config.h.in
+  ${CMAKE_CURRENT_BINARY_DIR}/src/comgr-config.h
+  @ONLY)
+
+# Include the build directory so we can find the generated comgr-config.h
+target_include_directories(amd_comgr
+  PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}/src)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if (ADDRESS_SANITIZER)

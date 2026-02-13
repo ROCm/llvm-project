@@ -1,0 +1,22 @@
+//===- comgr-config.h - Comgr build-time configuration ----------*- C++ -*-===//
+//
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+///
+/// \file
+/// This file defines build-time configuration values for Comgr.
+///
+//===----------------------------------------------------------------------===//
+
+#ifndef COMGR_CONFIG_H
+#define COMGR_CONFIG_H
+
+/// Default path to the clang executable that Comgr was built against.
+/// This can be overridden at runtime with the AMD_COMGR_CLANG_EXECUTABLE
+/// environment variable.
+#define COMGR_DEFAULT_CLANG_EXECUTABLE "@COMGR_DEFAULT_CLANG_EXECUTABLE@"
+
+#endif // COMGR_CONFIG_H

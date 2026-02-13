@@ -155,11 +155,12 @@ required. If the value is used, it is read once at the time it is needed, and
 then cached. The exact behavior when changing these values during the execution
 of a process after Comgr APIs have been invoked is undefined.
 
-Comgr supports an environment variable to help locate LLVM:
+Comgr supports an environment variable to override the clang executable:
 
-* `LLVM_PATH`: If set, it is used as an absolute path to the root of the LLVM
-  installation, which is currently used to locate the clang resource directory
-  and clang binary path, allowing for additional optimizations.
+* `AMD_COMGR_CLANG_EXECUTABLE`: If set, it is used as the path to the clang
+  executable. This allows Comgr to locate the clang resource directory and
+  invoke the clang driver. If not set, Comgr uses the clang executable it was
+  built against.
 
 ### Caching
 Comgr utilizes a cache to preserve the results of compilations between executions.

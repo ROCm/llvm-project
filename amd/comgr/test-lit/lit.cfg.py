@@ -25,3 +25,4 @@ config.substitutions.append(('%llvm-dis', os.path.join(config.llvm_tools_dir, 'l
 config.substitutions.append(('%llvm-objdump', os.path.join(config.llvm_tools_dir, 'llvm-objdump')))
 config.substitutions.append(('%FileCheck', os.path.join(config.llvm_tools_dir, 'FileCheck')))
 config.substitutions.append(('%amd-llvm-spirv', os.path.join(config.llvm_tools_dir, 'amd-llvm-spirv')))
+config.substitutions.append(('%not', os.path.join(config.llvm_tools_dir, 'not')))

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr-env.h"
+#include "comgr-config.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
@@ -64,9 +65,12 @@ bool shouldEmitVerboseLogs() {
   return VerboseLogs && StringRef(VerboseLogs) != "0";
 }
 
-llvm::StringRef getLLVMPath() {
-  static const char *EnvLLVMPath = std::getenv("LLVM_PATH");
-  return EnvLLVMPath;
+llvm::StringRef getClangExecutable() {
+  static const char *EnvClangExecutable = std::getenv("AMD_COMGR_CLANG_EXECUTABLE");
+  if (EnvClangExecutable && EnvClangExecutable[0] != '\0') {
+    return EnvClangExecutable;
+  }
+  return COMGR_DEFAULT_CLANG_EXECUTABLE;
 }
 
 StringRef getCachePolicy() {

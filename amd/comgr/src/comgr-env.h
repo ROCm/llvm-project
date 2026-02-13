@@ -29,9 +29,9 @@ bool shouldEmitVerboseLogs();
 /// Return whether the environment requests time statistics collection.
 bool needTimeStatistics();
 
-/// If environment variable LLVM_PATH is set, return the environment variable,
-/// otherwise return the default LLVM path.
-llvm::StringRef getLLVMPath();
+/// If environment variable AMD_COMGR_CLANG_EXECUTABLE is set, return the path
+/// to the clang executable, otherwise return an empty string.
+llvm::StringRef getClangExecutable();
 
 /// If environment variable AMD_COMGR_CACHE_POLICY is set, return the
 /// environment variable, otherwise return empty
