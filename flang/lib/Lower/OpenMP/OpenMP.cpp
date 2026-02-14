@@ -1833,7 +1833,7 @@ static void genTargetClauses(
                 &mapSyms);
   cp.processNowait(clauseOps);
   cp.processThreadLimit(stmtCtx, clauseOps);
-
+  cp.processDynGroupprivate(stmtCtx, clauseOps);
   cp.processTODO<clause::Allocate, clause::InReduction, clause::UsesAllocators>(
       loc, llvm::omp::Directive::OMPD_target);
 
@@ -1975,6 +1975,7 @@ static void genTeamsClauses(
   }
 
   cp.processReduction(loc, clauseOps, reductionSyms);
+  cp.processDynGroupprivate(stmtCtx, clauseOps);
   // TODO Support delayed privatization.
 }
 
@@ -4361,7 +4362,8 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
         !std::holds_alternative<clause::Untied>(clause.u) &&
         !std::holds_alternative<clause::TaskReduction>(clause.u) &&
         !std::holds_alternative<clause::Detach>(clause.u) &&
-        !std::holds_alternative<clause::Device>(clause.u)) {
+        !std::holds_alternative<clause::Device>(clause.u) &&
+        !std::holds_alternative<clause::DynGroupprivate>(clause.u)) {
       std::string name =
           parser::ToUpperCaseLetters(llvm::omp::getOpenMPClauseName(clause.id));
       if (!semaCtx.langOptions().OpenMPSimd)
