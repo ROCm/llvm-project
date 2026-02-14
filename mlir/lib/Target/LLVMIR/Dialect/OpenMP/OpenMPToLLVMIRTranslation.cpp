@@ -455,8 +455,9 @@ static LogicalResult checkImplementationStatus(Operation &op) {
     }
   };
   auto checkNumThreads = [&todo](auto op, LogicalResult &result) {
-    if (op.hasNumThreadsMultiDim())
-      result = todo("num_threads with multi-dimensional values");
+    // Check that we don't exceed the maximum supported dimensions (3)
+    if (op.getNumThreadsDimsCount() > 3)
+      result = todo("num_threads with more than 3 dimensions");
   };
   auto checkThreadLimit = [&todo](auto op, LogicalResult &result) {
     if (op.getThreadLimitDimsCount() > 3)
@@ -6706,14 +6707,12 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
     // else: keep result as -1 to indicate runtime/unknown value
   };
 
-  Value numThreads, numTeamsLower;
+  Value numTeamsLower;
   llvm::SmallVector<Value, 3> numTeamsUpperVec, threadLimitVec, numThreadsVec;
 
   if (!isTargetDevice) {
     extractHostEvalClauses(targetOp, &numThreadsVec, numTeamsLower,
                            &numTeamsUpperVec, &threadLimitVec);
-    if (!numThreadsVec.empty())
-      numThreads = numThreadsVec[0];
   } else {
     // In the target device, values for these clauses are not passed as
     // host_eval, but instead evaluated prior to entry to the region. This
@@ -6731,10 +6730,10 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
     }
 
     if (auto parallelOp = castOrGetParentOfType<omp::ParallelOp>(capturedOp)) {
-      for (Value v : parallelOp.getNumThreadsVars())
-        numThreadsVec.push_back(v);
-      if (!numThreadsVec.empty())
-        numThreads = numThreadsVec[0];
+      // Handle multi-dimensional num_threads
+      numThreadsVec.reserve(parallelOp.getNumThreadsVars().size());
+      for (auto threadsVar : parallelOp.getNumThreadsVars())
+        numThreadsVec.push_back(threadsVar);
     }
   }
 
@@ -6790,6 +6789,7 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
   // Extract 'max_threads' clause from 'parallel' or set to 1 if it's SIMD.
   llvm::SmallVector<int32_t, 3> maxThreadsVals = {-1};
   if (castOrGetParentOfType<omp::ParallelOp>(capturedOp)) {
+    // For multi-dimensional num_threads, use all dimensions
     if (!numThreadsVec.empty()) {
       maxThreadsVals.clear();
       for (Value v : numThreadsVec) {
@@ -6797,10 +6797,6 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
         setMaxValueFromClause(v, val);
         maxThreadsVals.push_back(val);
       }
-    } else {
-      int32_t val = -1;
-      setMaxValueFromClause(numThreads, val);
-      maxThreadsVals[0] = val;
     }
   } else if (castOrGetParentOfType<omp::SimdOp>(capturedOp,
                                                 /*immediateParent=*/true)) {
