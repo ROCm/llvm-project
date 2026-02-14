@@ -8134,11 +8134,14 @@ void OpenMPIRBuilder::writeTeamsForKernel(const Triple &T, Function &Kernel,
 
   if (T.isAMDGPU()) {
     // AMDGPU supports 3D workgroup grid (x,y,z)
+    // Use 1 for unspecified dimensions (indicated by -1 or missing values)
     std::string WorkgroupStr;
     for (size_t I = 0; I < 3; ++I) {
       if (I > 0)
         WorkgroupStr += ",";
-      WorkgroupStr += (I < UBs.size()) ? llvm::utostr(UBs[I]) : "1";
+      int32_t Val = (I < UBs.size()) ? UBs[I] : 1;
+      // Treat -1 (unspecified) as 1 for AMDGPU workgroups
+      WorkgroupStr += llvm::utostr(Val > 0 ? Val : 1);
     }
     Kernel.addFnAttr("amdgpu-max-num-workgroups", WorkgroupStr);
   }
