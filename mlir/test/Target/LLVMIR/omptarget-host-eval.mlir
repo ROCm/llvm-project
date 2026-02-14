@@ -38,7 +38,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: store i64 3000, ptr %[[TRIPCOUNT_ADDR]]
 
 // CHECK: %[[TEAMS_ADDR:.*]] = getelementptr inbounds nuw %struct.__tgt_kernel_arguments, ptr %[[ARGS]], i32 0, i32 10
-// CHECK: store [3 x i32] [i32 1000, i32 0, i32 0], ptr %[[TEAMS_ADDR]]
+// CHECK: store [3 x i32] [i32 1000, i32 -1, i32 -1], ptr %[[TEAMS_ADDR]]
 
 // CHECK: %[[THREADS_ADDR:.*]] = getelementptr inbounds nuw %struct.__tgt_kernel_arguments, ptr %[[ARGS]], i32 0, i32 11
 // CHECK: store [3 x i32] [i32 2000, i32 0, i32 0], ptr %[[THREADS_ADDR]]
