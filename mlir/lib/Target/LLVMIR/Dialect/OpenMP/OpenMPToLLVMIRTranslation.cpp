@@ -443,6 +443,10 @@ static LogicalResult checkImplementationStatus(Operation &op) {
     if (op.hasThreadLimitMultiDim())
       result = todo("thread_limit with multi-dimensional values");
   };
+  auto checkDynGroupprivate = [&todo](auto op, LogicalResult &result) {
+    if (op.getDynGroupprivateSize())
+      result = todo("dyn_groupprivate");
+  };
 
   LogicalResult result = success();
   llvm::TypeSwitch<Operation &>(op)
@@ -465,6 +469,7 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkPrivate(op, result);
         checkNumTeams(op, result);
         checkThreadLimit(op, result);
+        checkDynGroupprivate(op, result);
       })
       .Case([&](omp::TaskOp op) {
         checkAffinity(op, result);
