@@ -60,5 +60,5 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<"dlti.alloca_memo
 }
 
 // CHECK: attributes #[[ATTRS1]] = { "amdgpu-flat-work-group-size"="[[MIN_THREADS1]],[[MAX_THREADS1]]" "omp_target_thread_limit"="[[MAX_THREADS1]]" }
-// CHECK: attributes #[[ATTRS2]] = { "amdgpu-flat-work-group-size"="[[MIN_THREADS2]],[[MAX_THREADS2]]" "amdgpu-max-num-workgroups"="[[MIN_TEAMS2]],1,1" "omp_target_num_teams"="[[MIN_TEAMS2]]" "omp_target_thread_limit"="[[MAX_THREADS2]]" }
-// CHECK: attributes #[[ATTRS3]] = { "amdgpu-flat-work-group-size"="[[MIN_THREADS3]],[[MAX_THREADS3]]" "amdgpu-max-num-workgroups"="[[MIN_TEAMS3]],1,1" "omp_target_num_teams"="[[MIN_TEAMS3]]" "omp_target_thread_limit"="[[MAX_THREADS3]]" }
+// CHECK: attributes #[[ATTRS2]] = { "amdgpu-flat-work-group-size"="[[MIN_THREADS2]],[[MAX_THREADS2]]" "amdgpu-max-num-workgroups"="[[MIN_TEAMS2]],1,1" "omp_target_num_teams"="[[MIN_TEAMS2]],-1,-1" "omp_target_thread_limit"="[[MAX_THREADS2]]" }
+// CHECK: attributes #[[ATTRS3]] = { "amdgpu-flat-work-group-size"="[[MIN_THREADS3]],[[MAX_THREADS3]]" "amdgpu-max-num-workgroups"="[[MIN_TEAMS3]],1,1" "omp_target_num_teams"="[[MIN_TEAMS3]],-1,-1" "omp_target_thread_limit"="[[MAX_THREADS3]]" }
