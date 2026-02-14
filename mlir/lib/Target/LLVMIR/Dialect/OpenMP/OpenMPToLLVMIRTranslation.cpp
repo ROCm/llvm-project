@@ -459,8 +459,8 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       result = todo("num_threads with multi-dimensional values");
   };
   auto checkThreadLimit = [&todo](auto op, LogicalResult &result) {
-    if (op.hasThreadLimitMultiDim())
-      result = todo("thread_limit with multi-dimensional values");
+    if (op.getThreadLimitDimsCount() > 3)
+      result = todo("thread_limit with more than 3 dimensions");
   };
   auto checkDynGroupprivate = [&todo](auto op, LogicalResult &result) {
     if (op.getDynGroupprivateSize())
@@ -6706,7 +6706,7 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
     // else: keep result as -1 to indicate runtime/unknown value
   };
 
-  Value numThreads, numTeamsLower, threadLimit;
+  Value numThreads, numTeamsLower;
   llvm::SmallVector<Value, 3> numTeamsUpperVec, threadLimitVec, numThreadsVec;
 
   if (!isTargetDevice) {
@@ -6714,8 +6714,6 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
                            &numTeamsUpperVec, &threadLimitVec);
     if (!numThreadsVec.empty())
       numThreads = numThreadsVec[0];
-    if (!threadLimitVec.empty())
-      threadLimit = threadLimitVec[0];
   } else {
     // In the target device, values for these clauses are not passed as
     // host_eval, but instead evaluated prior to entry to the region. This
@@ -6726,9 +6724,10 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
       numTeamsUpperVec.reserve(teamsOp.getNumTeamsUpperVars().size());
       for (auto upperVar : teamsOp.getNumTeamsUpperVars())
         numTeamsUpperVec.push_back(upperVar);
-      // Handle thread_limit (only first value for now)
-      if (!teamsOp.getThreadLimitVars().empty())
-        threadLimit = teamsOp.getThreadLimit(0);
+      // Handle all thread_limit dimensions
+      threadLimitVec.reserve(teamsOp.getThreadLimitVars().size());
+      for (auto limitVar : teamsOp.getThreadLimitVars())
+        threadLimitVec.push_back(limitVar);
     }
 
     if (auto parallelOp = castOrGetParentOfType<omp::ParallelOp>(capturedOp)) {
@@ -6786,10 +6785,6 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
       setMaxValueFromClause(v, val);
       teamsThreadLimitVals.push_back(val);
     }
-  } else {
-    int32_t val = -1;
-    setMaxValueFromClause(threadLimit, val);
-    teamsThreadLimitVals[0] = val;
   }
 
   // Extract 'max_threads' clause from 'parallel' or set to 1 if it's SIMD.
@@ -6896,14 +6891,13 @@ initTargetRuntimeAttrs(llvm::IRBuilderBase &builder,
                          &upperBounds, &steps);
 
   // TODO: Handle constant 'if' clauses.
-  // Handle all dimensions for TargetThreadLimit from target op
+  // Resize to 3 dimensions to match TargetKernelDefaultAttrs
+  attrs.TargetThreadLimit.resize(3);
   if (!targetOp.getThreadLimitVars().empty()) {
-    unsigned numDims = targetOp.getThreadLimitVars().size();
-    attrs.TargetThreadLimit.resize(numDims);
-    for (unsigned i = 0; i < numDims; ++i) {
-      Value targetThreadLimit = targetOp.getThreadLimit(i);
-      attrs.TargetThreadLimit[i] =
-          moduleTranslation.lookupValue(targetThreadLimit);
+    for (auto [i, limitVar] : llvm::enumerate(targetOp.getThreadLimitVars())) {
+      if (limitVar) {
+        attrs.TargetThreadLimit[i] = moduleTranslation.lookupValue(limitVar);
+      }
     }
   }
 
@@ -6926,13 +6920,13 @@ initTargetRuntimeAttrs(llvm::IRBuilderBase &builder,
   }
 
   // Handle all dimensions for TeamsThreadLimit from host_eval
+  attrs.TeamsThreadLimit.resize(3);
   if (!teamsThreadLimitVec.empty()) {
-    attrs.TeamsThreadLimit.resize(teamsThreadLimitVec.size());
-    for (unsigned i = 0; i < teamsThreadLimitVec.size(); ++i) {
-      if (teamsThreadLimitVec[i])
+    for (auto [i, limitVar] : llvm::enumerate(teamsThreadLimitVec)) {
+      if (limitVar) {
         attrs.TeamsThreadLimit[i] = builder.CreateSExtOrTrunc(
-            moduleTranslation.lookupValue(teamsThreadLimitVec[i]),
-            builder.getInt32Ty());
+            moduleTranslation.lookupValue(limitVar), builder.getInt32Ty());
+      }
     }
   }
 
