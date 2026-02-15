@@ -87,9 +87,6 @@ jobs:
       test_type: ${{ inputs.test_type }}
       test_labels: ${{ inputs.test_labels }}
       sanity_check_only_for_family: ${{ inputs.sanity_check_only_for_family == true }}
-    env:
-      PROJECT_TO_TEST: ${{ env.PROJECT_TO_TEST }}
-
 
   build_portable_linux_python_packages:
     needs: [build_portable_linux_artifacts]

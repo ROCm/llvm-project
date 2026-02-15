@@ -53,10 +53,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
   cancel-in-progress: true
 
-env:
-  #PROJECT_TO_TEST: ""
-  PROJECT_TO_TEST: 'rocblas,rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,rocthrust,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
-
 jobs:
   setup:
     uses: ./.github/workflows/setup.yml
