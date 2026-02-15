@@ -201,7 +201,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_2
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1
+  ; POSTWT-NEXT:   liveins: $vcc_hi, $sgpr0, $vgpr0, $vgpr1
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr0
@@ -365,7 +365,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_3
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.10(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1
+  ; POSTWT-NEXT:   liveins: $vcc_hi, $sgpr0, $vgpr0, $vgpr1
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr0
@@ -394,6 +394,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.1:
   ; POSTWT-NEXT:   successors: %bb.3(0x40000000), %bb.7(0x40000000)
+  ; POSTWT-NEXT:   liveins: $vcc_hi
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY1]], [[S_MOV_B32_]], implicit-def $scc
@@ -730,7 +731,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_5
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.10(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $sgpr1, $vgpr0
+  ; POSTWT-NEXT:   liveins: $vcc_hi, $sgpr0, $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr0
@@ -759,6 +760,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.1:
   ; POSTWT-NEXT:   successors: %bb.3(0x40000000), %bb.7(0x40000000)
+  ; POSTWT-NEXT:   liveins: $vcc_hi
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY1]], [[S_MOV_B32_]], implicit-def $scc
@@ -915,7 +917,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_6
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $sgpr1, $vgpr0
+  ; POSTWT-NEXT:   liveins: $vcc_hi, $sgpr0, $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:vgpr_32 = COPY $vgpr0
@@ -951,6 +953,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.2:
   ; POSTWT-NEXT:   successors: %bb.4(0x40000000), %bb.5(0x40000000)
+  ; POSTWT-NEXT:   liveins: $vcc_hi
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY2]], [[S_MOV_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[COPY4:%[0-9]+]]:sreg_32 = COPY $scc
@@ -1057,7 +1060,7 @@ body:             |
   ; POSTWT-LABEL: name: partial_join_7
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0, $sgpr1, $vgpr0
+  ; POSTWT-NEXT:   liveins: $vcc_hi, $sgpr0, $sgpr1, $vgpr0
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
   ; POSTWT-NEXT:   [[COPY1:%[0-9]+]]:sgpr_32 = COPY $sgpr1
@@ -1076,6 +1079,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.1:
   ; POSTWT-NEXT:   successors: %bb.3(0x40000000), %bb.4(0x40000000)
+  ; POSTWT-NEXT:   liveins: $vcc_hi
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY1]], [[S_MOV_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[COPY4:%[0-9]+]]:sreg_32 = COPY $scc
