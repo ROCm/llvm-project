@@ -737,12 +737,6 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
   // Get max occupancy for this kernel
   computeMaxOccupancy(GenericDevice);
 
-  uint32_t NumThreads[3] = {KernelArgs.ThreadLimit[0],
-                            KernelArgs.ThreadLimit[1],
-                            KernelArgs.ThreadLimit[2]};
-  uint32_t NumBlocks[3] = {KernelArgs.NumTeams[0], KernelArgs.NumTeams[1],
-                           KernelArgs.NumTeams[2]};
-
   std::string KernelName = getName();
   KernelRunRecordTy *KernelRecord = GenericDevice.getKernelRunRecords();
   uint32_t KernelRunCounter = 0;
@@ -795,8 +789,8 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
     GenericDevice.Plugin.getProfiler()->handlePreKernelLaunch(
         &GenericDevice, NumBlocks, AsyncInfoWrapper);
 
-  return launchImpl(GenericDevice, NumThreads, NumBlocks, KernelArgs,
-                    LaunchParams, AsyncInfoWrapper);
+  return launchImpl(GenericDevice, NumThreads, NumBlocks, DynBlockMemConf.Size,
+                    KernelArgs, LaunchParams, AsyncInfoWrapper);
 }
 
 KernelLaunchParamsTy GenericKernelTy::prepareArgs(
