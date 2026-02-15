@@ -37,10 +37,6 @@ on:
         type: string
       test_labels:
         type: string
-      project_to_test:           
-        type: string
-        required: false 
-        default: ""           
   push:
     branches:
       - ADHOCBUILD
