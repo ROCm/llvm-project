@@ -159,7 +159,8 @@ struct CUDAKernelTy : public GenericKernelTy {
 
   /// Launch the CUDA kernel function.
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
-                   uint32_t NumBlocks[3], KernelArgsTy &KernelArgs,
+                   uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
+                   KernelArgsTy &KernelArgs,
                    KernelLaunchParamsTy LaunchParams,
                    AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
 
@@ -201,6 +202,9 @@ private:
   /// The maximum amount of dynamic shared memory per thread group. By default,
   /// this is set to 48 KB.
   mutable uint32_t MaxDynCGroupMemLimit = 49152;
+
+  /// The maximum dynamic block memory size set for this kernel.
+  mutable uint32_t MaxDynBlockMemSize = 0;
 
   /// The size of the kernel arguments.
   size_t ArgsSize;
