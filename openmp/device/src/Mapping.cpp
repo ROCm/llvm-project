@@ -20,9 +20,9 @@
 using namespace ompx;
 
 static bool isInLastWarp() {
-  uint32_t MainTId = (mapping::getNumberOfThreadsInBlock() - 1) &
+  uint32_t MainTId = (mapping::getTotalNumberOfThreadsInBlock() - 1) &
                      ~(mapping::getWarpSize() - 1);
-  return mapping::getThreadIdInBlock() == MainTId;
+  return mapping::getTotalThreadIdInBlock() == MainTId;
 }
 
 bool mapping::isMainThreadInGenericMode(bool IsSPMD) {
@@ -39,7 +39,7 @@ bool mapping::isMainThreadInGenericMode() {
 
 bool mapping::isInitialThreadInLevel0(bool IsSPMD) {
   if (IsSPMD)
-    return mapping::getThreadIdInBlock() == 0;
+    return mapping::getTotalThreadIdInBlock() == 0;
   return isInLastWarp();
 }
 
@@ -88,8 +88,8 @@ uint32_t mapping::getThreadIdInBlock(int32_t Dim) {
 
 uint32_t mapping::getWarpSize() { return __gpu_num_lanes(); }
 
-uint32_t mapping::getMaxTeamThreads(bool IsSPMD) {
-  uint32_t BlockSize = mapping::getNumberOfThreadsInBlock();
+uint32_t mapping::getMaxTeamThreads(bool IsSPMD, int Dim) {
+  uint32_t BlockSize = mapping::getNumberOfThreadsInBlock(Dim);
   if (IsSPMD)
     return BlockSize;
   // Trim off the odd lanes in the last warp
@@ -98,8 +98,8 @@ uint32_t mapping::getMaxTeamThreads(bool IsSPMD) {
   // If we are in SPMD mode, remove one warp.
   return BlockSize - (!IsSPMD * mapping::getWarpSize());
 }
-uint32_t mapping::getMaxTeamThreads() {
-  return mapping::getMaxTeamThreads(mapping::isSPMDMode());
+uint32_t mapping::getMaxTeamThreads(int Dim) {
+  return mapping::getMaxTeamThreads(mapping::isSPMDMode(), Dim);
 }
 
 uint32_t mapping::getNumberOfThreadsInBlock(int32_t Dim) {

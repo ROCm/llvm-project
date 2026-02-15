@@ -184,7 +184,7 @@ int32_t __kmpc_nvptx_teams_reduce_nowait_v3(
     InterWarpCopyFnTy cpyFct, ListGlobalFnTy lgcpyFct, ListGlobalFnTy lgredFct,
     ListGlobalFnTy glcpyFct, ListGlobalFnTy glredFct) {
   // Terminate all threads in non-SPMD mode except for the main thread.
-  uint32_t ThreadId = mapping::getThreadIdInBlock();
+  uint32_t ThreadId = mapping::getTotalThreadIdInBlock();
   if (mapping::isGenericMode()) {
     if (!mapping::isMainThreadInGenericMode())
       return 0;

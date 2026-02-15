@@ -218,7 +218,7 @@ __attribute__((flatten, always_inline)) void _iteam_reduction(
     void (*_rf_lds)(__XTEAM_SHARED_LDS T *, __XTEAM_SHARED_LDS T *),
     const T rnv, const uint64_t k) {
   // Must be a power of 2.
-  const uint32_t block_size = ompx::mapping::getNumberOfThreadsInBlock();
+  const uint32_t block_size = ompx::mapping::getTotalNumberOfThreadsInBlock();
 
   const uint32_t number_of_waves = (block_size - 1) / _WSZ + 1;
   const uint32_t omp_thread_num = k % block_size;
@@ -278,7 +278,7 @@ __attribute__((flatten, always_inline)) void _xteam_reduction(
   // More efficient to derive these constants than get from mapped API
 
   // Must be a power of 2.
-  const uint32_t block_size = ompx::mapping::getNumberOfThreadsInBlock();
+  const uint32_t block_size = ompx::mapping::getTotalNumberOfThreadsInBlock();
 
   const uint32_t number_of_waves = (block_size - 1) / _WSZ + 1;
   const uint32_t omp_thread_num = k % block_size;

@@ -90,6 +90,11 @@ extern "C" {
   uint32_t NumThreads = determineNumberOfThreads(num_threads);
   uint32_t PTeamSize =
       NumThreads == mapping::getMaxTeamThreads() ? 0 : NumThreads;
+  // For multi-dimensional support, use the single num_threads value for DimX
+  // and set DimY/DimZ to 0 (unspecified) for now.
+  uint32_t PTeamSizeDimX = PTeamSize;
+  uint32_t PTeamSizeDimY = 0;
+  uint32_t PTeamSizeDimZ = 0;
   // Avoid the race between the read of the `icv::Level` above and the write
   // below by synchronizing all threads here.
   synchronize::threadsAligned(atomic::seq_cst);

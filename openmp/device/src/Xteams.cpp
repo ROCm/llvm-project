@@ -213,7 +213,7 @@ _xteam_scan_phase2(T *storage, int segment_size, T *team_vals, T *segment_vals,
   uint32_t omp_team_num = k / _NT;         // team ID
 
   T thread_level_result = rnv;
-  uint32_t NumTeams = ompx::mapping::getNumberOfBlocksInKernel();
+  uint32_t NumTeams = ompx::mapping::getTotalNumberOfBlocksInKernel();
 
   if (segment_size == 1) {
     // Reconstructing the Final Results for No-Loop Scan
