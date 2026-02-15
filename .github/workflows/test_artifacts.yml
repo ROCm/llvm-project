@@ -92,6 +92,7 @@ jobs:
         run: |
           if [[ "${TEST_TYPE:-}" == "smoke" ]]; then
               PROJECTS_TO_TEST='rocblas,rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,rocthrust,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
+              export PROJECTS_TO_TEST
               echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
           fi
           python ./build_tools/github_actions/fetch_test_configurations.py

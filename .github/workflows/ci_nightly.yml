@@ -8,8 +8,8 @@ name: CI amd-staging Nightly
 
 on:
   push:
-    branches:
-      - amd/dev/kirthana14m/full-test-nightly-staging
+    branches:
+      - amd/dev/kirthana14m/full-test-nightly-staging  
   # For AMD GPU families that expect_failure, we run builds and tests from this scheduled trigger
   schedule:
     - cron: "0 2 * * *" # Runs nightly at 2 AM UTC
