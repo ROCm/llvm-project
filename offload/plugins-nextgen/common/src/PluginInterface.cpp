@@ -491,13 +491,14 @@ Error GenericKernelTy::init(GenericDeviceTy &GenericDevice,
 
 Expected<KernelLaunchEnvironmentTy *>
 GenericKernelTy::getKernelLaunchEnvironment(
-    GenericDeviceTy &GenericDevice, uint32_t Version,
+    GenericDeviceTy &GenericDevice, const KernelArgsTy &KernelArgs,
+    const DynBlockMemConfTy &DynBlockMemConf,
     AsyncInfoWrapperTy &AsyncInfoWrapper) const {
   // Ctor/Dtor have no arguments, replaying uses the original kernel launch
   // environment. Older versions of the compiler do not generate a kernel
   // launch environment.
   if (GenericDevice.Plugin.getRecordReplay().isReplaying() ||
-      Version < OMP_KERNEL_ARG_MIN_VERSION_WITH_DYN_PTR)
+      KernelArgs.Version < OMP_KERNEL_ARG_MIN_VERSION_WITH_DYN_PTR)
     return nullptr;
 
   // Specialized kernels don't use the kernel launch environment. Check for
@@ -586,10 +587,10 @@ Error GenericKernelTy::printLaunchInfo(GenericDeviceTy &GenericDevice,
                                        int64_t MultiDeviceUB) const {
   INFO(OMP_INFOTYPE_PLUGIN_KERNEL, GenericDevice.getDeviceId(),
        "Launching kernel %s with [%u,%u,%u] blocks and [%u,%u,%u] threads in "
-       "%s mode\n",
+       "%s mode%s\n",
        getName(), NumBlocks[0], NumBlocks[1], NumBlocks[2], NumThreads[0],
        NumThreads[1], NumThreads[2], getExecutionModeName(),
-       isMultiDeviceKernel() ? " in multi-device mode" : "");
+       isMultiDeviceKernel() ? " (multi-device)" : "");
   return printLaunchInfoDetails(GenericDevice, KernelArgs, NumThreads,
                                 NumBlocks, MultiDeviceLB, MultiDeviceUB);
 }
@@ -695,7 +696,7 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
     // Compute the chunk size based on how many devices we are targeting and
     // the length of the loop trip count.
     int32_t DeviceId = GenericDevice.getDeviceId();
-    if (KernelArgs.Tripcount < NumMultiDevices) {
+    if (KernelArgs.Tripcount < static_cast<uint64_t>(NumMultiDevices)) {
       ArgPtrs[0] = (void *)0;
       ArgPtrs[1] = (void *)(KernelArgs.Tripcount - 1);
     } else {
@@ -954,10 +955,10 @@ GenericDeviceTy::GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId,
       OMPX_InitialNumEvents("LIBOMPTARGET_NUM_INITIAL_EVENTS", 1),
       OMPX_NumMultiDevices("LIBOMPTARGET_NUM_MULTI_DEVICES", 0),
       OMPX_EnableRuntimeAutotuning("OMPX_ENABLE_RUNTIME_AUTOTUNING", false),
-      OMPX_KernelDurationTracing("LIBOMPTARGET_KERNEL_EXE_TIME", false),
       DeviceId(DeviceId), GridValues(OMPGridValues),
       PeerAccesses(NumDevices, PeerAccessState::PENDING), PeerAccessesLock(),
-      PinnedAllocs(*this), RPCServer(nullptr), KernelRunRecords(nullptr) {
+      PinnedAllocs(*this), RPCServer(nullptr), KernelRunRecords(nullptr),
+      OMPX_KernelDurationTracing("LIBOMPTARGET_KERNEL_EXE_TIME", false) {
   // Conservative fall-back to the plugin's device uid for the case that no real
   // vendor (u)uid will become available later.
   setDeviceUidFromVendorUid(std::to_string(static_cast<uint64_t>(DeviceId)));
@@ -2484,8 +2485,8 @@ int32_t GenericPluginTy::query_async(int32_t DeviceId,
 InfoTreeNode GenericPluginTy::obtain_device_info(int32_t DeviceId) {
   auto InfoOrErr = getDevice(DeviceId).obtainInfo();
   if (auto Err = InfoOrErr.takeError()) {
-    REPORT("Failure to obtain device %d info: %s\n", DeviceId,
-           toString(std::move(Err)).data());
+    REPORT() << "Failure to obtain device " << DeviceId << " info: "
+             << toString(std::move(Err)).data() << "\n";
     return InfoTreeNode{};
   }
   return std::move(*InfoOrErr);
@@ -2668,7 +2669,7 @@ int32_t GenericPluginTy::query_coarse_grain_mem_region(int32_t DeviceId,
 void GenericPluginTy::set_coarse_grain_mem(int32_t DeviceId, const void *ptr,
                                            int64_t size, bool set_attr) {
   auto T = logger::log<int32_t>(__func__, DeviceId, ptr, size);
-  if (auto Err = getDevice(DeviceId).setCoarseGrainMemoryImpl((void *)ptr, size,
+  if (auto Err = getDevice(DeviceId).setCoarseGrainMemoryImpl(const_cast<void *>(ptr), size,
                                                               set_attr))
     REPORT() << "Failure to setCoarseGrainMemory: "
              << toString(std::move(Err)).data();
