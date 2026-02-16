@@ -2285,16 +2285,13 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   }
   // Step 2: Create basic blocks for flow nodes and adjust MachineBasicBlock
   // successor and predecessor lists.
-  SmallVector<MachineBasicBlock *> FlowBlocks;
   MachineFunction::iterator insertIt = MF.end();
   for (auto *WN : llvm::reverse(ReconvergeHelper.nodes())) {
     if (!WN->Block) {
       WN->Block = MF.CreateMachineBasicBlock();
-      FlowBlocks.push_back(WN->Block);
       MF.insert(insertIt, WN->Block);
       ReconvergeHelper.setNodeForBlock(WN->Block, WN);
     }
-
     insertIt = WN->Block->getIterator();
   }
 
