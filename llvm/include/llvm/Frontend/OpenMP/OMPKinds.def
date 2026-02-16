@@ -857,6 +857,26 @@ __OMP_ATTRS_SET(AlwaysInlineAttrs,
                     ? AttributeSet(EnumAttr(AlwaysInline))
                     : AttributeSet(EnumAttr(AlwaysInline)))
 
+// AlwaysInline + InaccessibleOrArgMemOnly for functions that are alwaysinline
+// AND read argument memory (e.g., __kmpc_parallel_60 reading args pointer)
+__OMP_ATTRS_SET(AlwaysInlineArgMemAttrs,
+                OptimisticAttributes
+                    ? AttributeSet(EnumAttr(AlwaysInline), EnumAttr(NoUnwind),
+                                   EnumAttr(NoSync), EnumAttr(NoFree),
+                                   EnumAttr(WillReturn),
+                                   MemoryAttr(MemoryEffects::inaccessibleOrArgMemOnly()))
+                    : AttributeSet(EnumAttr(AlwaysInline), EnumAttr(NoUnwind)))
+
+// Functions that read argument memory and memory reachable from arguments.
+// This is necessary to prevent Attributor from incorrectly deducing memory(none)
+// for declarations, which would cause stores to arg memory to be eliminated.
+// We use memory(read) because the function reads through pointers loaded from
+// its arguments (e.g., __kmpc_parallel_60 loads pointers from args array and
+// reads through them).
+__OMP_ATTRS_SET(ArgMemReadAttrs,
+                AttributeSet(EnumAttr(NoUnwind),
+                             MemoryAttr(MemoryEffects::readOnly())))
+
 #if 0
 __OMP_ATTRS_SET(
     InaccessibleOnlyAttrs,
@@ -941,23 +961,23 @@ __OMP_RTL_ATTRS(__kmpc_cancel, InaccessibleArgOnlyAttrs, SExt,
                 ParamAttrs(ReadOnlyPtrAttrs, SExt, SExt))
 __OMP_RTL_ATTRS(__kmpc_cancel_barrier, BarrierAttrs, SExt,
                 ParamAttrs(ReadOnlyPtrAttrs, SExt))
-__OMP_RTL_ATTRS(__kmpc_distribute_for_static_loop_4, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_distribute_for_static_loop_4, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            SExt, SExt, SExt, SExt, ZExt))
-__OMP_RTL_ATTRS(__kmpc_distribute_for_static_loop_4u, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_distribute_for_static_loop_4u, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            ZExt, ZExt, ZExt, ZExt, ZExt))
-__OMP_RTL_ATTRS(__kmpc_distribute_static_loop_4, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_distribute_static_loop_4, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            SExt, SExt, ZExt))
-__OMP_RTL_ATTRS(__kmpc_distribute_static_loop_4u, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_distribute_static_loop_4u, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            ZExt, ZExt, ZExt))
-__OMP_RTL_ATTRS(__kmpc_for_static_loop_4, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_for_static_loop_4, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            SExt, SExt, SExt, ZExt))
-__OMP_RTL_ATTRS(__kmpc_for_static_loop_4u, AlwaysInlineAttrs, AttributeSet(),
-                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_for_static_loop_4u, AlwaysInlineArgMemAttrs, AttributeSet(),
+                ParamAttrs(ReadOnlyPtrAttrs, AttributeSet(), ReadOnlyPtrAttrs,
                            ZExt, ZExt, ZExt, ZExt))
 __OMP_RTL_ATTRS(__kmpc_error, AttributeSet(), AttributeSet(),
                 ParamAttrs(AttributeSet(), SExt))
@@ -1360,9 +1380,9 @@ __OMP_RTL_ATTRS(__kmpc_specialized_kernel_init, AttributeSet(), AttributeSet(),
                 ParamAttrs())
 __OMP_RTL_ATTRS(__kmpc_parallel_spmd, AlwaysInlineAttrs, AttributeSet(),
                 ParamAttrs())
-__OMP_RTL_ATTRS(__kmpc_parallel_60, AlwaysInlineAttrs, AttributeSet(),
+__OMP_RTL_ATTRS(__kmpc_parallel_60, ArgMemReadAttrs, AttributeSet(),
                 ParamAttrs(AttributeSet(), SExt, SExt, SExt, SExt,
-                           AttributeSet(), AttributeSet(), AttributeSet(),
+                           AttributeSet(), AttributeSet(), ReadOnlyPtrAttrs,
                            SizeTyExt))
 __OMP_RTL_ATTRS(__kmpc_serialized_parallel, InaccessibleArgOnlyAttrs,
                 AttributeSet(), ParamAttrs(ReadOnlyPtrAttrs, SExt))

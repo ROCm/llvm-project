@@ -634,6 +634,8 @@ struct OMPInformationCache : public InformationCache {
       RFI.ReturnType = OMPBuilder._ReturnType;                                 \
       RFI.ArgumentTypes = std::move(ArgsTypes);                                \
       RFI.Declaration = F;                                                     \
+      /* Apply attributes from OMPKinds.def to ensure correct memory effects */\
+      OMPBuilder.addAttributes(_Enum, *F);                                     \
       unsigned NumUses = collectUses(RFI);                                     \
       (void)NumUses;                                                           \
       LLVM_DEBUG({                                                             \

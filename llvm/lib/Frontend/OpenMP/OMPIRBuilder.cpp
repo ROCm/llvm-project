@@ -782,6 +782,10 @@ OpenMPIRBuilder::getOrCreateRuntimeFunction(Module &M, RuntimeFunction FnID) {
   } else {
     LLVM_DEBUG(dbgs() << "Found OpenMP runtime function " << Fn->getName()
                       << " with type " << *Fn->getFunctionType() << "\n");
+    // Ensure attributes are applied even for existing declarations.
+    // This is important for declarations that were created without proper
+    // attributes (e.g., from other frontends or earlier passes).
+    addAttributes(FnID, *Fn);
   }
 
   assert(Fn && "Failed to create OpenMP runtime function");

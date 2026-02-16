@@ -1103,37 +1103,6 @@ struct AAPointerInfoImpl
       function_ref<bool(const Access &, bool)> UserCB, bool &HasBeenWrittenTo,
       AA::RangeTy &Range,
       function_ref<bool(const Access &)> SkipCB) const override {
-    
-    // For functions that use OpenMP internalization pattern, AAPointerInfo
-    // cannot correctly track shared memory semantics. Be conservative for
-    // structArg to prevent incorrect dead store elimination.
-    //
-    // The problematic pattern occurs when:
-    // 1. OpenMPOpt creates .internalized versions of functions
-    // 2. Data is stored to structArg and passed through OpenMP runtime
-    // 3. The read happens in the .internalized function through shared memory
-    //
-    // We detect this by checking if the module has any .internalized functions.
-    // If so, be conservative for all structArg in related functions.
-    StringRef FnName = I.getFunction()->getName();
-    const Value &AssocVal = getAssociatedValue();
-    if (AssocVal.getName().contains("structArg")) {
-      // Check if in .internalized function - always be conservative
-      if (FnName.contains(".internalized"))
-        return false;
-      
-      // Check if in __omp_offloading function AND module uses internalization
-      if (FnName.contains("__omp_offloading")) {
-        // Check if any function in the module is .internalized
-        const Module *M = I.getFunction()->getParent();
-        for (const Function &F : *M) {
-          if (F.getName().contains(".internalized")) {
-            return false;  // Module uses internalization, be conservative
-          }
-        }
-      }
-    }
-    
     HasBeenWrittenTo = false;
 
     SmallPtrSet<const Access *, 8> DominatingWrites;
@@ -2118,22 +2087,6 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
     //       redirecting requests to the callee argument.
     Argument *Arg = getAssociatedArgument();
     if (Arg) {
-      // For OpenMP runtime functions that pass shared memory pointers,
-      // AAPointerInfo cannot accurately track the access semantics because
-      // the shared memory is accessed through runtime-managed mechanisms.
-      // Be conservative (pessimistic) for these cases.
-      StringRef ParentName = Arg->getParent()->getName();
-      unsigned ArgNo = Arg->getArgNo();
-      bool IsOpenMPSharedArg = false;
-      // __kmpc_parallel_* arg 7 is the shared variables pointer
-      if (ParentName.contains("__kmpc_parallel") && ArgNo == 7)
-        IsOpenMPSharedArg = true;
-      // __kmpc_for_static_loop_* arg 2 is the shared variables pointer
-      if (ParentName.contains("__kmpc_for_static_loop") && ArgNo == 2)
-        IsOpenMPSharedArg = true;
-      if (IsOpenMPSharedArg)
-        return indicatePessimisticFixpoint();
-        
       const IRPosition &ArgPos = IRPosition::argument(*Arg);
       auto *ArgAA =
           A.getAAFor<AAPointerInfo>(*this, ArgPos, DepClassTy::REQUIRED);
@@ -7999,6 +7952,23 @@ struct AAMemoryBehaviorImpl : public AAMemoryBehavior {
   void initialize(Attributor &A) override {
     intersectAssumedBits(BEST_STATE);
     getKnownStateFromValue(A, getIRPosition(), getState());
+
+    // For function declarations, also check the Memory attribute.
+    // If a memory attribute exists, use it to constrain the assumed state
+    // rather than assuming memory(none).
+    if (auto *F = dyn_cast<Function>(&getAnchorValue())) {
+      if (F->isDeclaration()) {
+        MemoryEffects ME = F->getMemoryEffects();
+        if (!ME.doesNotAccessMemory()) {
+          // Function has memory effects - don't assume memory(none)
+          if (!ME.onlyReadsMemory())
+            removeAssumedBits(NO_WRITES);
+          if (!ME.onlyWritesMemory())
+            removeAssumedBits(NO_READS);
+        }
+      }
+    }
+
     AAMemoryBehavior::initialize(A);
   }
 
@@ -8019,6 +7989,16 @@ struct AAMemoryBehaviorImpl : public AAMemoryBehavior {
       case Attribute::WriteOnly:
         State.addKnownBits(NO_READS);
         break;
+      case Attribute::Memory: {
+        MemoryEffects ME = Attr.getMemoryEffects();
+        if (ME.doesNotAccessMemory())
+          State.addKnownBits(NO_ACCESSES);
+        else if (ME.onlyReadsMemory())
+          State.addKnownBits(NO_WRITES);
+        else if (ME.onlyWritesMemory())
+          State.addKnownBits(NO_READS);
+        break;
+      }
       default:
         llvm_unreachable("Unexpected attribute!");
       }
@@ -8084,11 +8064,12 @@ struct AAMemoryBehaviorImpl : public AAMemoryBehavior {
   }
 
   /// The set of IR attributes AAMemoryBehavior deals with.
-  static const Attribute::AttrKind AttrKinds[3];
+  static const Attribute::AttrKind AttrKinds[4];
 };
 
 const Attribute::AttrKind AAMemoryBehaviorImpl::AttrKinds[] = {
-    Attribute::ReadNone, Attribute::ReadOnly, Attribute::WriteOnly};
+    Attribute::ReadNone, Attribute::ReadOnly, Attribute::WriteOnly,
+    Attribute::Memory};
 
 /// Memory behavior attribute for a floating value.
 struct AAMemoryBehaviorFloating : AAMemoryBehaviorImpl {
@@ -8313,6 +8294,12 @@ struct AAMemoryBehaviorCallSite final
 };
 
 ChangeStatus AAMemoryBehaviorFunction::updateImpl(Attributor &A) {
+  // For declarations (no body), we cannot analyze memory behavior.
+  // Return pessimistic fixpoint to preserve any existing attributes and
+  // prevent incorrectly deducing memory(none).
+  Function &F = cast<Function>(getAnchorValue());
+  if (F.isDeclaration())
+    return indicatePessimisticFixpoint();
 
   // The current assumed state used to determine a change.
   auto AssumedState = getAssumed();
