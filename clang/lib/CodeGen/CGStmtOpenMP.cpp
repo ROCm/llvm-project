@@ -8289,7 +8289,7 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
       this->CGM.isXteamScanPhaseOne = true;
     }
 
-    if (IsInscan)
+    if (IsInscan && !this->CGM.isXteamScanKernel())
       emitScanBasedDirectiveFinals(*this, S, NumIteratorsGen);
   }
 }
