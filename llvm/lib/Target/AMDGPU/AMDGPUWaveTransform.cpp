@@ -1929,8 +1929,10 @@ void ControlFlowRewriter::rewrite() {
         Opcode = AMDGPU::S_CBRANCH_VCCNZ;
       }
 
-      BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
-          .addMBB(LaneSucc->Wave->Block);
+      MachineInstr *CondBrMI =
+          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
+              .addMBB(LaneSucc->Wave->Block);
+      TII.fixImplicitOperands(*CondBrMI);
 
       // The _other_ successor may be a flow block instead of an original
       // successor.
