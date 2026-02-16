@@ -6798,6 +6798,9 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
   attrs.MinTeams = minTeamsVal;
   // Always resize to 3 dimensions to match TargetKernelRuntimeAttrs
   attrs.MaxTeams.resize(3, -1);
+  // Copy computed maxTeamsVals to attrs.MaxTeams
+  for (size_t i = 0; i < maxTeamsVals.size() && i < attrs.MaxTeams.size(); ++i)
+    attrs.MaxTeams[i] = maxTeamsVals[i];
   attrs.MinThreads = 1;
   attrs.MaxThreads.resize(3, -1);
   attrs.MaxThreads.front() = combinedMaxThreadsVal;
