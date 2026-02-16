@@ -40,7 +40,12 @@ set(src_files
   ${emissary_sources}
 
 )
-if(NOT LLVM_TARGETS_TO_BUILD OR "AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
+# Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
+# The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
+# (e.g. X86;AMDGPU;NVPTX), causing ockl.bc/ocml.bc to be linked into NVPTX builds
+# and contaminating the NVPTX DeviceRTL bitcode with AMDGCN intrinsics.
+if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
+   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
   find_package(AMDDeviceLibs REQUIRED CONFIG
                HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
                      ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
@@ -96,7 +101,7 @@ endif()
 # Trick to combine these into a bitcode file via the linker's LTO pass.
 add_executable(libompdevice ${src_files})
 set_target_properties(libompdevice PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  RUNTIME_OUTPUT_DIRECTORY "${LLVM_LIBRARY_OUTPUT_INTDIR}/${LLVM_DEFAULT_TARGET_TRIPLE}"
   LINKER_LANGUAGE CXX
   BUILD_RPATH ""
   INSTALL_RPATH ""
@@ -131,7 +136,7 @@ install(TARGETS libompdevice
 
 add_library(ompdevice.all_objs OBJECT IMPORTED)
 set_property(TARGET ompdevice.all_objs APPEND PROPERTY IMPORTED_OBJECTS
-             ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc)
+             ${LLVM_LIBRARY_OUTPUT_INTDIR}/${LLVM_DEFAULT_TARGET_TRIPLE}/libomptarget-${target_name}.bc)
 
 # Archive all the object files generated above into a static library
 add_library(ompdevice STATIC)
