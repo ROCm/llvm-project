@@ -6744,34 +6744,45 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
       result = 0;
   };
 
-  // Extract 'thread_limit' clause from 'target' and 'teams' directives.
-  int32_t targetThreadLimitVal = -1, teamsThreadLimitVal = -1;
-  if (!targetOp.getThreadLimitVars().empty())
-    setMaxValueFromClause(targetOp.getThreadLimit(0), targetThreadLimitVal);
-  if (!threadLimitVars.empty())
-    setMaxValueFromClause(threadLimitVars[0], teamsThreadLimitVal);
+  // Extract multi-dimensional 'thread_limit' clause from 'target' and 'teams'.
+  llvm::SmallVector<int32_t, 3> targetThreadLimitVals(3, -1);
+  llvm::SmallVector<int32_t, 3> teamsThreadLimitVals(3, -1);
+  for (auto [i, limitVar] : llvm::enumerate(targetOp.getThreadLimitVars())) {
+    if (i < 3)
+      setMaxValueFromClause(limitVar, targetThreadLimitVals[i]);
+  }
+  for (auto [i, limitVar] : llvm::enumerate(threadLimitVars)) {
+    if (i < 3)
+      setMaxValueFromClause(limitVar, teamsThreadLimitVals[i]);
+  }
 
-  // Extract 'max_threads' clause from 'parallel' or set to 1 if it's SIMD.
-  int32_t maxThreadsVal = -1;
+  // Extract multi-dimensional 'num_threads' clause from 'parallel' or set to 1
+  // if it's SIMD.
+  llvm::SmallVector<int32_t, 3> maxThreadsVals(3, -1);
   if (castOrGetParentOfType<omp::ParallelOp>(capturedOp)) {
-    // For multi-dimensional num_threads, only use the first dimension for now
-    if (!numThreadsVars.empty())
-      setMaxValueFromClause(numThreadsVars[0], maxThreadsVal);
+    for (auto [i, threadsVar] : llvm::enumerate(numThreadsVars)) {
+      if (i < 3)
+        setMaxValueFromClause(threadsVar, maxThreadsVals[i]);
+    }
   } else if (castOrGetParentOfType<omp::SimdOp>(capturedOp,
-                                                /*immediateParent=*/true))
-      maxThreadsVal = 1;
+                                                /*immediateParent=*/true)) {
+    maxThreadsVals[0] = 1;
+  }
 
   // For max values, < 0 means unset, == 0 means set but unknown. Select the
-  // minimum value between 'max_threads' and 'thread_limit' clauses that were
-  // set.
-  int32_t combinedMaxThreadsVal = targetThreadLimitVal;
-  if (combinedMaxThreadsVal < 0 ||
-      (teamsThreadLimitVal >= 0 && teamsThreadLimitVal < combinedMaxThreadsVal))
-    combinedMaxThreadsVal = teamsThreadLimitVal;
-
-  if (combinedMaxThreadsVal < 0 ||
-      (maxThreadsVal >= 0 && maxThreadsVal < combinedMaxThreadsVal))
-    combinedMaxThreadsVal = maxThreadsVal;
+  // minimum value between 'num_threads' and 'thread_limit' clauses that were
+  // set, for each dimension.
+  llvm::SmallVector<int32_t, 3> combinedMaxThreadsVals(3, -1);
+  for (size_t i = 0; i < 3; ++i) {
+    int32_t combined = targetThreadLimitVals[i];
+    if (combined < 0 ||
+        (teamsThreadLimitVals[i] >= 0 && teamsThreadLimitVals[i] < combined))
+      combined = teamsThreadLimitVals[i];
+    if (combined < 0 ||
+        (maxThreadsVals[i] >= 0 && maxThreadsVals[i] < combined))
+      combined = maxThreadsVals[i];
+    combinedMaxThreadsVals[i] = combined;
+  }
 
   int32_t reductionDataSize = 0;
   if (isGPU && capturedOp) {
@@ -6803,7 +6814,9 @@ initTargetDefaultAttrs(omp::TargetOp targetOp, Operation *capturedOp,
     attrs.MaxTeams[i] = maxTeamsVals[i];
   attrs.MinThreads = 1;
   attrs.MaxThreads.resize(3, -1);
-  attrs.MaxThreads.front() = combinedMaxThreadsVal;
+  // Copy all dimensions of combinedMaxThreadsVals to attrs.MaxThreads
+  for (size_t i = 0; i < combinedMaxThreadsVals.size() && i < attrs.MaxThreads.size(); ++i)
+    attrs.MaxThreads[i] = combinedMaxThreadsVals[i];
   attrs.ReductionDataSize = reductionDataSize;
   // TODO: Allow modified buffer length similar to
   // fopenmp-cuda-teams-reduction-recs-num flag in clang.
