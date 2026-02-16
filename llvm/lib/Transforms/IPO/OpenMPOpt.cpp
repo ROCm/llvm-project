@@ -104,6 +104,12 @@ static cl::opt<bool> DisableOpenMPOptSPMDization(
     cl::desc("Disable OpenMP optimizations involving SPMD-ization."),
     cl::Hidden, cl::init(false));
 
+static cl::opt<bool> DisableOpenMPOptCallbackSPMDization(
+    "openmp-opt-disable-callback-spmdization",
+    cl::desc("Disable OpenMP optimizations involving SPMD-ization in runtime "
+             "functions taking callbacks."),
+    cl::Hidden, cl::init(true));
+
 static cl::opt<bool> DisableOpenMPOptFolding(
     "openmp-opt-disable-folding",
     cl::desc("Disable OpenMP optimizations involving folding."), cl::Hidden,
@@ -5131,6 +5137,10 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
+        if (DisableOpenMPOptCallbackSPMDization) {
+          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+          SPMDCompatibilityTracker.insert(&CB);
+        }
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,
