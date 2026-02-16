@@ -122,7 +122,7 @@ jobs:
 
   notify_build_status:
     name: Notify amd-staging nightly status
-    if: always()
+    if: always() && github.ref_name != 'amd/dev/kirthana14m/full-test-nightly-staging'
     needs:
       - windows_build_and_test
       - linux_build_and_test

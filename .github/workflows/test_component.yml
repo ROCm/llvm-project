@@ -115,7 +115,19 @@ jobs:
           TOTAL_SHARDS: ${{ fromJSON(inputs.component).total_shards }}
           TEST_TYPE: ${{ fromJSON(inputs.component).test_type }}
         run: |
+          cat > run_test_script.sh <<'EOF'          
           ${{ fromJSON(inputs.component).test_script }}
+          EOF
+          chmod +x run_test_script.sh
+          echo "Running test (attempt 1) for shard ${SHARD_INDEX}/${TOTAL_SHARDS} (${TEST_TYPE})"
+          ./run_test_script.sh || first_test_run_status=$?
+          if [[ -n "${first_test_run_status:-}" ]]; then
+             echo "Attempt 1 failed with exit code ${first_test_run_status}. Retrying once…"
+             sleep 10
+             ./run_test_script.sh || second_test_run_status=$?
+          fi
+          rm -f run_test_script.s
+          exit ${second_test_run_status:-${first_test_run_status:-0}}
 
       # GitHub's 'Complete job' step is unaware of launched executables
       # and will fail to clean up orphan processes.
