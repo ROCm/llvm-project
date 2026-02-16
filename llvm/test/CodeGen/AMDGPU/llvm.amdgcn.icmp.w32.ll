@@ -2,9 +2,9 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GCN,GFX11,SDAG-GFX11 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -mattr="+wavefrontsize32" < %s | FileCheck -check-prefixes=GCN,GFX10,SDAG-GFX10 %s
 
-; RUN: llc -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1100 -mattr="+wavefrontsize32" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1100 -mattr="+wavefrontsize32" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
 ; RUN: FileCheck --check-prefix=ERR %s < %t
-; RUN: llc -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1010 -mattr="+wavefrontsize32" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX10,GISEL-GFX10 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1010 -mattr="+wavefrontsize32" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX10,GISEL-GFX10 %s
 ; RUN: FileCheck --check-prefix=ERR %s < %t
 
 ; Note: GlobalISel abort is disabled so we don't crash on i1 inputs.

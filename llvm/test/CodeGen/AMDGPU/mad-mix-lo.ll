@@ -8,11 +8,11 @@
 
 ; FIXME-TRUE16. enable gisel
 ; XUN: llc -global-isel -mtriple=amdgcn -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-TRUE16 %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-FAKE16 %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX900,GISEL-GFX900 %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=gfx906 < %s | FileCheck -check-prefixes=GFX906,GISEL-GFX906 %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -check-prefixes=VI,GISEL-VI %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=hawaii < %s | FileCheck -check-prefixes=GISEL-CI %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX1100,GISEL-GFX1100,GISEL-GFX1100-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX900,GISEL-GFX900 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx906 < %s | FileCheck -check-prefixes=GFX906,GISEL-GFX906 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -check-prefixes=VI,GISEL-VI %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=hawaii < %s | FileCheck -check-prefixes=GISEL-CI %s
 
 define half @mixlo_simple(float %src0, float %src1, float %src2) #0 {
 ; GFX1100-LABEL: mixlo_simple:

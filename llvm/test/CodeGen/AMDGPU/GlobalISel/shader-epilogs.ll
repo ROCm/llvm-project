@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=amdgcn -mcpu=tonga -show-mc-encoding -global-isel | FileCheck --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=0 < %s -mtriple=amdgcn -mcpu=tonga -show-mc-encoding -global-isel | FileCheck --check-prefix=GCN %s
 
 ; GCN-LABEL: vs_epilog
 ; GCN: s_endpgm

@@ -1,8 +1,8 @@
 ; RUN: llc -mtriple=amdgcn < %s | FileCheck --check-prefixes=SI-NOHSA,GCN-NOHSA,FUNC %s
-; RUN: llc -global-isel -mtriple=amdgcn < %s | FileCheck --check-prefixes=SI-NOHSA,GCN-NOHSA,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn < %s | FileCheck --check-prefixes=SI-NOHSA,GCN-NOHSA,FUNC %s
 
 ; RUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck  --check-prefixes=VI-NOHSA,GCN-NOHSA,FUNC %s
-; RUN: llc -global-isel -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck  --check-prefixes=VI-NOHSA,GCN-NOHSA,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck  --check-prefixes=VI-NOHSA,GCN-NOHSA,FUNC %s
 
 ; RUN: llc -mtriple=r600 -mcpu=redwood < %s | FileCheck --check-prefixes=EG,FUNC %s
 
