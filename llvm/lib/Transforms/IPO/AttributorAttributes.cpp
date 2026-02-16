@@ -10050,7 +10050,7 @@ struct AAPotentialConstantValuesFloating : AAPotentialConstantValuesImpl {
     bool OnlyLeft = false, OnlyRight = false;
     if (C && *C && (*C)->isOneValue())
       OnlyLeft = true;
-    else if (C && *C && (*C)->isNullValue())
+    else if (C && *C && (*C)->isZeroValue())
       OnlyRight = true;
 
     bool LHSContainsUndef = false, RHSContainsUndef = false;

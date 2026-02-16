@@ -455,13 +455,13 @@ Constant *InstCostVisitor::visitSelectInst(SelectInst &I) {
   assert(LastVisited != KnownConstants.end() && "Invalid iterator!");
 
   if (I.getCondition() == LastVisited->first) {
-    Value *V = LastVisited->second->isNullValue() ? I.getFalseValue()
+    Value *V = LastVisited->second->isZeroValue() ? I.getFalseValue()
                                                   : I.getTrueValue();
     return findConstantFor(V);
   }
   if (Constant *Condition = findConstantFor(I.getCondition()))
     if ((I.getTrueValue() == LastVisited->first && Condition->isOneValue()) ||
-        (I.getFalseValue() == LastVisited->first && Condition->isNullValue()))
+        (I.getFalseValue() == LastVisited->first && Condition->isZeroValue()))
       return LastVisited->second;
   return nullptr;
 }
