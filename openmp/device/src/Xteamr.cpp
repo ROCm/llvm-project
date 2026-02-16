@@ -12,6 +12,9 @@
 
 #include "Xteamr.h"
 #include "Mapping.h"
+#ifdef __NVPTX__
+#include "Interface.h"
+#endif
 
 using namespace ompx;
 

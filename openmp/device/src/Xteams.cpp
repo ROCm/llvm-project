@@ -53,6 +53,94 @@ void store_block_status(uint32_t *status_ptr, uint32_t status) {
                 atomic::MemScopeTy::device);
 }
 
+/// Atomic load/store helpers for the look-back data arrays.
+/// These prevent the optimizer from hoisting/reordering data accesses across
+/// the fences and spin-loop that guard the look-back protocol. Without these,
+/// the flatten+always_inline inlining of _xteam_scan causes a miscompilation
+/// at -O1 and above where plain loads of block_aggregates/block_prefixes are
+/// hoisted above the acquire fence.
+///
+/// Integer types: use atomic::load/store directly.
+/// Float/double: bit-cast through uint32_t/uint64_t for the atomic operation.
+/// Complex types (>8 bytes): no hardware atomic; fall back to plain access
+///   and rely on the surrounding fences for ordering.
+
+// --- load_data overloads ---
+_XTEAM_INLINE_ATTR int load_data(int *a) {
+  return atomic::load(a, atomic::acquire, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR unsigned int load_data(unsigned int *a) {
+  return atomic::load(a, atomic::acquire, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR long load_data(long *a) {
+  return atomic::load(a, atomic::acquire, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR unsigned long load_data(unsigned long *a) {
+  return atomic::load(a, atomic::acquire, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR float load_data(float *a) {
+  uint32_t raw =
+      atomic::load(reinterpret_cast<uint32_t *>(a), atomic::acquire,
+                   atomic::MemScopeTy::device);
+  float v;
+  __builtin_memcpy(&v, &raw, sizeof(float));
+  return v;
+}
+_XTEAM_INLINE_ATTR double load_data(double *a) {
+  uint64_t raw =
+      atomic::load(reinterpret_cast<uint64_t *>(a), atomic::acquire,
+                   atomic::MemScopeTy::device);
+  double v;
+  __builtin_memcpy(&v, &raw, sizeof(double));
+  return v;
+}
+_XTEAM_INLINE_ATTR float _Complex load_data(float _Complex *a) {
+  uint64_t raw =
+      atomic::load(reinterpret_cast<uint64_t *>(a), atomic::acquire,
+                   atomic::MemScopeTy::device);
+  float _Complex v;
+  __builtin_memcpy(&v, &raw, sizeof(float _Complex));
+  return v;
+}
+_XTEAM_INLINE_ATTR double _Complex load_data(double _Complex *a) {
+  return *a;
+}
+
+// --- store_data overloads ---
+_XTEAM_INLINE_ATTR void store_data(int *a, int val) {
+  atomic::store(a, val, atomic::release, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(unsigned int *a, unsigned int val) {
+  atomic::store(a, val, atomic::release, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(long *a, long val) {
+  atomic::store(a, val, atomic::release, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(unsigned long *a, unsigned long val) {
+  atomic::store(a, val, atomic::release, atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(float *a, float val) {
+  uint32_t raw;
+  __builtin_memcpy(&raw, &val, sizeof(float));
+  atomic::store(reinterpret_cast<uint32_t *>(a), raw, atomic::release,
+                atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(double *a, double val) {
+  uint64_t raw;
+  __builtin_memcpy(&raw, &val, sizeof(double));
+  atomic::store(reinterpret_cast<uint64_t *>(a), raw, atomic::release,
+                atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(float _Complex *a, float _Complex val) {
+  uint64_t raw;
+  __builtin_memcpy(&raw, &val, sizeof(float _Complex));
+  atomic::store(reinterpret_cast<uint64_t *>(a), raw, atomic::release,
+                atomic::MemScopeTy::device);
+}
+_XTEAM_INLINE_ATTR void store_data(double _Complex *a, double _Complex val) {
+  *a = val;
+}
+
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -146,15 +234,15 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
   if (omp_team_num == 0) {
     // Block 0 has no predecessors - immediately complete
     if (omp_thread_num == 0) {
-      block_aggregates[0] = block_aggregate;
-      block_prefixes[0] = block_aggregate;
+      store_data(&block_aggregates[0], block_aggregate);
+      store_data(&block_prefixes[0], block_aggregate);
       fence::kernel(atomic::release);
       store_block_status(&block_status[0], BLOCK_COMPLETE);
     }
   } else {
     // Publish our aggregate with PARTIAL status
     if (omp_thread_num == 0) {
-      block_aggregates[omp_team_num] = block_aggregate;
+      store_data(&block_aggregates[omp_team_num], block_aggregate);
       fence::kernel(atomic::release);
       store_block_status(&block_status[omp_team_num], BLOCK_PARTIAL);
     }
@@ -175,12 +263,14 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
 
         if (pred_status == BLOCK_COMPLETE) {
           // Predecessor is complete - use its inclusive prefix and we're done
-          (*_rf)(&prefix_from_predecessors, block_prefixes[pred]);
+          T pred_val = load_data(&block_prefixes[pred]);
+          (*_rf)(&prefix_from_predecessors, pred_val);
           break;
         } else {
           // Predecessor is partial - add its aggregate and continue looking
           // back
-          (*_rf)(&prefix_from_predecessors, block_aggregates[pred]);
+          T pred_val = load_data(&block_aggregates[pred]);
+          (*_rf)(&prefix_from_predecessors, pred_val);
           pred--;
         }
       }
@@ -188,7 +278,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
       // Compute our inclusive prefix and mark complete
       T our_prefix = prefix_from_predecessors;
       (*_rf)(&our_prefix, block_aggregate);
-      block_prefixes[omp_team_num] = our_prefix;
+      store_data(&block_prefixes[omp_team_num], our_prefix);
       fence::kernel(atomic::release);
       store_block_status(&block_status[omp_team_num], BLOCK_COMPLETE);
 
