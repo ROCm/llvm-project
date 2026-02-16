@@ -2846,6 +2846,7 @@ static SDValue combineBallotPattern(SDValue VCMP, bool &Negate) {
 void AMDGPUDAGToDAGISel::SelectBRCOND(SDNode *N) {
   SDValue Cond = N->getOperand(1);
 
+  // TODO : Revisit the SelectBRCOND logic for late wave transform
   if (EnableLateWaveTransform) {
     auto Opc =
         Cond->isDivergent() ? AMDGPU::SI_BRCOND : AMDGPU::SI_BRCOND_UNIFORM;
@@ -2853,6 +2854,9 @@ void AMDGPUDAGToDAGISel::SelectBRCOND(SDNode *N) {
                          N->getOperand(2),  // true basic block
                          Cond,              // condition
                          N->getOperand(0)); // chain
+    if (Cond.isUndef())
+      CurDAG->SelectNodeTo(N, AMDGPU::SI_BR_UNDEF, MVT::Other, N->getOperand(2),
+                           N->getOperand(0));
     return;
   }
 
