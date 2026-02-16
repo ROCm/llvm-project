@@ -57,6 +57,7 @@
 #endif
 
 #include <cassert>
+#include <cstdlib>
 #include <optional>
 #include <string>
 
@@ -2570,6 +2571,44 @@ ChangeStatus Attributor::cleanupIR() {
       CGModifiedFunctions.insert(I->getFunction());
       changeToUnreachable(I);
     }
+
+  // INSTRUMENTATION: Dump deleted stores in OpenMP functions to file
+  if (const char *DumpFile = std::getenv("ATTRIBUTOR_DSE_DUMP_FILE")) {
+    SmallVector<StoreInst *, 4> DeletedOpenMPStores;
+    Module *M = nullptr;
+    for (const auto &V : ToBeDeletedInsts) {
+      if (auto *SI = dyn_cast_or_null<StoreInst>(V)) {
+        StringRef FnName = SI->getFunction()->getName();
+        if (FnName.contains(".internalized") ||
+            FnName.contains("__omp_offloading")) {
+          DeletedOpenMPStores.push_back(SI);
+          M = SI->getFunction()->getParent();
+        }
+      }
+    }
+    if (!DeletedOpenMPStores.empty() && M) {
+      std::error_code EC;
+      raw_fd_ostream OS(DumpFile, EC, sys::fs::OF_Append);
+      if (!EC) {
+        OS << "=== DEAD STORES TO BE DELETED ===\n";
+        OS << "Pass: " << Configuration.PassName << "\n";
+        OS << "Module: " << M->getName() << "\n";
+        OS << "IsModulePass: " << Configuration.IsModulePass << "\n";
+        OS << "Functions in SCC: " << Functions.size() << "\n";
+        for (StoreInst *SI : DeletedOpenMPStores) {
+          OS << "[DSE] " << SI->getFunction()->getName() << ": " << *SI << "\n";
+        }
+        OS << "\n=== FUNCTIONS OF INTEREST ===\n";
+        for (Function &F : *M) {
+          if (F.getName().contains("__kmpc_parallel_60") ||
+              F.getName().contains(".internalized")) {
+            OS << F << "\n";
+          }
+        }
+        OS << "\n========================================\n\n";
+      }
+    }
+  }
 
   for (const auto &V : ToBeDeletedInsts) {
     if (Instruction *I = dyn_cast_or_null<Instruction>(V)) {

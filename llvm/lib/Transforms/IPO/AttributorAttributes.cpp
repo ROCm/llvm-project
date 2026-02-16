@@ -67,12 +67,14 @@
 #include "llvm/Support/KnownFPClass.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TypeSize.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/CallPromotionUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <cassert>
+#include <cstdlib>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -1646,6 +1648,45 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
   ChangeStatus Changed = ChangeStatus::UNCHANGED;
   const DataLayout &DL = A.getDataLayout();
   Value &AssociatedValue = getAssociatedValue();
+
+  // INSTRUMENTATION: Dump uses of __kmpc_parallel arg 7 to file
+  if (const char *DumpFile = std::getenv("ATTRIBUTOR_ARGAA_DUMP_FILE")) {
+    if (auto *Arg = dyn_cast<Argument>(&AssociatedValue)) {
+      if (Arg->getParent()->getName().contains("__kmpc_parallel") &&
+          Arg->getArgNo() == 7) {
+        std::error_code EC;
+        raw_fd_ostream OS(DumpFile, EC, sys::fs::OF_Append);
+        if (!EC) {
+          OS << "[ArgAA-USES] Analyzing uses of " << Arg->getParent()->getName()
+             << " arg 7 (total uses: " << Arg->getNumUses() << ")\n";
+
+          // Count use types
+          DenseMap<unsigned, unsigned> UseCounts;
+          for (const Use &U : Arg->uses()) {
+            if (Instruction *UserI = dyn_cast<Instruction>(U.getUser()))
+              UseCounts[UserI->getOpcode()]++;
+          }
+
+          OS << "  Use type breakdown:\n";
+          for (auto &KV : UseCounts) {
+            OS << "    " << Instruction::getOpcodeName(KV.first) << ": "
+               << KV.second << "\n";
+          }
+
+          // Print first 20 uses in detail
+          OS << "  First 20 uses:\n";
+          unsigned i = 0;
+          for (const Use &U : Arg->uses()) {
+            if (i++ >= 20)
+              break;
+            if (Instruction *UserI = dyn_cast<Instruction>(U.getUser()))
+              OS << "    " << *UserI << "\n";
+          }
+          OS << "\n";
+        }
+      }
+    }
+  }
 
   DenseMap<Value *, OffsetInfo> OffsetInfoMap;
   OffsetInfoMap[&AssociatedValue].insert(0);
