@@ -2341,10 +2341,11 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   DomTree = nullptr;
 
   // Recompute LiveIns for all blocks.
-  SmallVector<MachineBasicBlock *, 16> AllBlocks;
-  for (MachineBasicBlock &MBB : MF)
-    AllBlocks.push_back(&MBB);
-  fullyRecomputeLiveIns(AllBlocks);
+  ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+  SmallVector<MachineBasicBlock *, 16> PostOrder;
+  for (auto MBB : reverse(RPOT))
+    PostOrder.push_back(MBB);
+  fullyRecomputeLiveIns(PostOrder);
 
   MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(true);
 
