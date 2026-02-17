@@ -3,11 +3,11 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=fiji < %s | FileCheck -check-prefixes=GCN,VI,SDAG-VI %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,GFX9,SDAG-GFX9 %s
 
-; RUN: llc -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1100 -mattr="+wavefrontsize64" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx1100 -mattr="+wavefrontsize64" < %s 2>%t | FileCheck -check-prefixes=GCN,GFX11,GISEL-GFX11 %s
 ; RUN: FileCheck --check-prefix=ERR %s < %t
-; RUN: llc -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=fiji < %s 2>%t | FileCheck -check-prefixes=GCN,VI,GISEL-VI %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=fiji < %s 2>%t | FileCheck -check-prefixes=GCN,VI,GISEL-VI %s
 ; RUN: FileCheck --check-prefix=ERR %s < %t
-; RUN: llc -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx900 < %s 2>%t | FileCheck -check-prefixes=GCN,GFX9,GISEL-GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -global-isel-abort=2 -mtriple=amdgcn -mcpu=gfx900 < %s 2>%t | FileCheck -check-prefixes=GCN,GFX9,GISEL-GFX9 %s
 ; RUN: FileCheck --check-prefix=ERR %s < %t
 
 ; Note: GlobalISel abort is disabled so we don't crash on i1 inputs.
