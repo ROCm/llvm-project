@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <complex>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -29,27 +30,27 @@
 
 #include "test_xteams.h"
 
-// The new single-pass scan processes one element per thread.
-// ARRAY_SIZE must equal NUM_TEAMS * NUM_THREADS.
-#ifndef _XTEAM_NUM_THREADS
-#define _XTEAM_NUM_THREADS 512
-#endif
-
-#ifndef _XTEAM_NUM_TEAMS
-#define _XTEAM_NUM_TEAMS 4
-#endif
-
-#define _XTEAM_TOTAL_NUM_THREADS (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS)
-
 #ifndef _ARRAY_SIZE
-#define _ARRAY_SIZE _XTEAM_TOTAL_NUM_THREADS
+#define _ARRAY_SIZE 33554432
 #endif
 const uint64_t ARRAY_SIZE = _ARRAY_SIZE;
-
 unsigned int repeat_num_times = 12;
 unsigned int ignore_times = 2; // ignore this many timings first
 
 #define ALIGNMENT (128)
+
+// Represents the Team Size
+#ifndef _XTEAM_NUM_THREADS
+#define _XTEAM_NUM_THREADS 512
+#endif
+
+// Represents the Number of Teams
+#ifndef _XTEAM_NUM_TEAMS
+#define _XTEAM_NUM_TEAMS 4
+#endif
+
+// Represents the total of threads in the Grid
+#define _XTEAM_TOTAL_NUM_THREADS (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS)
 
 unsigned int test_run_rc = 0;
 
@@ -60,7 +61,7 @@ int main(int argc, char *argv[]) {
             << "TEST INT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
   run_tests<int, true>(ARRAY_SIZE);
   std::cout << std::endl
-            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"
+            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"  
             << std::endl;
   run_tests<unsigned, true>(ARRAY_SIZE);
   if (test_run_rc == 0)
@@ -68,146 +69,271 @@ int main(int argc, char *argv[]) {
   return test_run_rc;
 }
 
-// Sequential inclusive scan on host (gold reference for sum)
-template <typename T> T *omp_dot(T *a, T *b, uint64_t array_size) {
-  T *dot_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+// FIXME: Template function for omp_dot doesn't compile. Therefore pragmas are commented.
+// Therefore `omp_dot` essentially represents sequential execution on host.
+template <typename T> T* omp_dot(T *a, T *b, uint64_t array_size) {
+  T* dot_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T sum = 0;
-  for (int64_t i = 0; i < array_size; i++) {
+  // #pragma omp parallel for reduction(inscan, +:sum)
+  for (int64_t i = 0; i < array_size; i++ ) {
     sum += a[i] * b[i];
+    // #pragma omp scan inclusive(sum)
     dot_arr[i] = sum;
   }
   return dot_arr;
 }
 
-// Sequential inclusive scan on host (gold reference for max)
-template <typename T> T *omp_max(T *a, uint64_t array_size) {
-  T *max_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+// FIXME: Template function for omp_max doesn't compile. Therefore pragmas are commented.
+// Therefore `omp_max` essentially represents sequential execution on host.
+template <typename T> T* omp_max(T *a, uint64_t array_size) {
+  T* max_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T max_val = std::numeric_limits<T>::lowest();
-  for (uint64_t i = 0; i < array_size; i++) {
+  // #pragma omp parallel for reduction(inscan, max:max_val)
+  for (uint64_t i = 0; i < array_size; i++ ) {
     max_val = std::max(a[i], max_val);
+    // #pragma omp scan inclusive(max_val)
     max_arr[i] = max_val;
   }
   return max_arr;
 }
 
-// Sequential inclusive scan on host (gold reference for min)
-template <typename T> T *omp_min(T *a, uint64_t array_size) {
-  T *min_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+// FIXME: Template function for omp_min doesn't compile. Therefore pragmas are commented.
+// Therefore `omp_min` essentially represents sequential execution on host.
+template <typename T> T* omp_min(T *a, uint64_t array_size) {
+  T* min_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T min_val = std::numeric_limits<T>::max();
-  for (uint64_t i = 0; i < array_size; i++) {
+  // #pragma omp parallel for reduction(inscan, min:min_val)
+  for (uint64_t i = 0; i < array_size; i++ ) {
     min_val = std::min(a[i], min_val);
+    // #pragma omp scan inclusive(min_val)
     min_arr[i] = min_val;
   }
   return min_arr;
 }
 
-// Single-pass inclusive scan using the decoupled look-back _xteam_scan.
-// Each thread k processes element a[k]*b[k]; the scan function handles
-// intra-block scan and inter-block look-back internally.
-template <typename T> T *sim_dot(T *a, T *b, uint64_t array_size) {
-  T *dot = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+// Simulates the reduction operator `+` for a scan operation by making use of
+// the `scan` directive of OpenMP. The dot product of a[] and b[] are computed
+// and the result is verified along with an output containting time taken and
+// bandwidth calculated.
+template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
+  T *dot = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
   int devid = 0;
+  const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   // Allocate look-back arrays on device
   uint32_t *d_status =
       (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
   T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
   T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+  T *d_scan_out =
+      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
 
-  // Zero-initialize status array
+  // Zero-initialize block status
   uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
   omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
                     devid, omp_get_initial_device());
   free(zeros);
 
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom : dot[0 : array_size])          \
-    is_device_ptr(d_status, d_agg, d_prefix)
-  for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-    T val = (k < array_size) ? a[k] * b[k] : T(0);
-    _overload_to_extern_scan_sum(val, dot, d_status, d_agg, d_prefix, T(0), k,
-                                 array_size, true);
-  }
+  #pragma omp target data map(tofrom: dot[0:array_size])
+  {
+    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
+    // Team level values via the decoupled look-back algorithm.
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
 
+      // compute scan serially per thread instead of launching multiple
+      // kernels sequentially
+      T val0 = T(0); 
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        val0 += a[k*stride+i] * b[k*stride+i];
+        dot[k*stride+i] = val0;
+      }
+      // Exclusive cross-team scan of segment aggregates
+      _overload_to_extern_scan_sum(val0, d_scan_out, d_status, d_agg, d_prefix,
+                                   T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
+    }
+
+    // Second Kernel: Distributes the results of Scan computed at the team
+    // level to the corresponding teams and segments in their respective contexts. 
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
+      T prefix = d_scan_out[k];
+
+      // redistribution of the scanned result back to output array `dot`
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        dot[k*stride+i] += prefix;
+      }
+    }
+  }
   omp_target_free(d_status, devid);
   omp_target_free(d_agg, devid);
   omp_target_free(d_prefix, devid);
+  omp_target_free(d_scan_out, devid);
   return dot;
 }
 
-// Single-pass inclusive max scan
-template <typename T> T *sim_max(T *c, uint64_t array_size) {
-  T *scanned_max = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+
+template <typename T> T* sim_max(T *c, uint64_t array_size) {
+  T *scanned_max = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
   int devid = 0;
   const T rnv = std::numeric_limits<T>::lowest();
+  const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   uint32_t *d_status =
       (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
   T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
   T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+  T *d_scan_out =
+      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
 
   uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
   omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
                     devid, omp_get_initial_device());
   free(zeros);
 
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom : scanned_max[0 : array_size])  \
-    is_device_ptr(d_status, d_agg, d_prefix)
-  for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-    T val = (k < array_size) ? c[k] : rnv;
-    _overload_to_extern_scan_max(val, scanned_max, d_status, d_agg, d_prefix,
-                                 rnv, k, array_size, true);
-  }
+  #pragma omp target data map(tofrom: scanned_max[0:array_size])
+  {
+    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
+    // Team level values via the decoupled look-back algorithm.
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
 
+      // compute scan serially per thread instead of launching multiple
+      // kernels sequentially
+      T val0 = rnv; 
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        val0 = std::max(val0, c[k*stride+i]);
+        scanned_max[k*stride+i] = val0;
+      }
+      _overload_to_extern_scan_max(val0, d_scan_out, d_status, d_agg, d_prefix,
+                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
+    }
+
+    // Second Kernel: Distributes the results of Scan computed at the team
+    // level to the corresponding teams and segments in their respective contexts. 
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
+      T prefix = d_scan_out[k];
+
+      // redistribution of the scanned result back to output array `scanned_max`
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        scanned_max[k*stride+i] = std::max(scanned_max[k*stride+i], prefix);
+      }
+    }
+  }
   omp_target_free(d_status, devid);
   omp_target_free(d_agg, devid);
   omp_target_free(d_prefix, devid);
+  omp_target_free(d_scan_out, devid);
   return scanned_max;
 }
 
-// Single-pass inclusive min scan
-template <typename T> T *sim_min(T *c, uint64_t array_size) {
-  T *scanned_min = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
+
+template <typename T> T* sim_min(T *c, uint64_t array_size) {
+  T* scanned_min = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
   int devid = 0;
   const T rnv = std::numeric_limits<T>::max();
+  const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   uint32_t *d_status =
       (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
   T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
   T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+  T *d_scan_out =
+      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
 
   uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
   omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
                     devid, omp_get_initial_device());
   free(zeros);
 
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom : scanned_min[0 : array_size])  \
-    is_device_ptr(d_status, d_agg, d_prefix)
-  for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-    T val = (k < array_size) ? c[k] : rnv;
-    _overload_to_extern_scan_min(val, scanned_min, d_status, d_agg, d_prefix,
-                                 rnv, k, array_size, true);
-  }
+  #pragma omp target data map(tofrom: scanned_min[0:array_size])
+  {
+    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
+    // Team level values via the decoupled look-back algorithm.
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
 
+      // compute scan serially per thread instead of launching multiple
+      // kernels sequentially
+      T val0 = rnv; 
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        val0 = std::min(val0, c[k*stride+i]);
+        scanned_min[k*stride+i] = val0;
+      }
+      _overload_to_extern_scan_min(val0, d_scan_out, d_status, d_agg, d_prefix,
+                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
+    }
+
+    // Second Kernel: Distributes the results of Scan computed at the team
+    // level to the corresponding teams and segments in their respective contexts. 
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
+      // Every thread processes one segment of `stride` size
+      T prefix = d_scan_out[k];
+
+      // redistribution of the scanned result back to output array `scanned_min`
+      for(uint64_t i = 0; 
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+          && (k*stride+i < array_size));
+          i++) {
+        scanned_min[k*stride+i] = std::min(scanned_min[k*stride+i], prefix);
+      }
+    }
+  }
   omp_target_free(d_status, devid);
   omp_target_free(d_agg, devid);
   omp_target_free(d_prefix, devid);
+  omp_target_free(d_scan_out, devid);
   return scanned_min;
 }
 
+
 // Sets test_run_rc if the computed_val[] is not same as the gold_val[]
 template <typename T, bool DATA_TYPE_IS_INT>
-void _check_val(T *computed_val, T *gold_val, const char *msg,
-                uint64_t array_size) {
+void _check_val(T* computed_val, T* gold_val, const char *msg, uint64_t array_size) {
   double ETOL = 0.0000001; // Error Tolerance
-  for (uint64_t i = 0; i < array_size; i++) {
+  for(int i = 0; i < array_size; i++) {
     if (DATA_TYPE_IS_INT) {
       if (computed_val[i] != gold_val[i]) {
-        std::cerr << msg << " FAIL at: " << i << ": Integer Value was "
-                  << computed_val[i] << " but should be " << gold_val[i]
-                  << ", type: " << typeid(T).name() << std::endl;
+        std::cerr << msg << " FAIL at: " << i << ": Integer Value was " << 
+                computed_val[i] << " but should be " << gold_val[i] << 
+                ", type: " << typeid(T).name() << std::endl;
         test_run_rc = 1;
         break;
       }
@@ -218,8 +344,8 @@ void _check_val(T *computed_val, T *gold_val, const char *msg,
       if (ompErrSum > ETOL) {
         std::cerr << msg << " FAIL at: " << i << " tol:" << ETOL << std::endl
                   << std::setprecision(15) << ". Value was " << computed_val[i]
-                  << " but should be " << gold_val[i]
-                  << ", type: " << typeid(T).name() << std::endl;
+                  << " but should be " << gold_val[i] << ", type: " << typeid(T).name()
+                  << std::endl;
         test_run_rc = 1;
         break;
       }
@@ -227,27 +353,31 @@ void _check_val(T *computed_val, T *gold_val, const char *msg,
   }
 }
 
+
 // Serially compute the correct scanned dot product output
-template <typename T> T *getGoldDot(T *a, T *b, uint64_t array_size) {
+template <typename T>
+T* getGoldDot(T* a, T* b, uint64_t array_size) {
   T *goldDot = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
-  for (uint64_t i = 0; i < array_size; i++)
-    goldDot[i] = i ? goldDot[i - 1] + a[i] * b[i] : a[i] * b[i];
+  for(uint64_t i = 0; i < array_size; i++) 
+    goldDot[i] = i ? goldDot[i-1] + a[i]*b[i] : a[i]*b[i];
   return goldDot;
 }
 
 // Serially compute the correct scanned max output
-template <typename T> T *getGoldMax(T *a, uint64_t array_size) {
+template <typename T>
+T* getGoldMax(T* a, uint64_t array_size) {
   T *goldMax = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
-  for (uint64_t i = 0; i < array_size; i++)
-    goldMax[i] = i ? std::max(goldMax[i - 1], a[i]) : a[i];
+  for(uint64_t i = 0; i < array_size; i++) 
+    goldMax[i] = i ? std::max(goldMax[i-1], a[i]) : a[i];
   return goldMax;
 }
 
 // Serially compute the correct scanned min output
-template <typename T> T *getGoldMin(T *a, uint64_t array_size) {
+template <typename T>
+T* getGoldMin(T* a, uint64_t array_size) {
   T *goldMin = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
-  for (uint64_t i = 0; i < array_size; i++)
-    goldMin[i] = i ? std::min(goldMin[i - 1], a[i]) : a[i];
+  for(uint64_t i = 0; i < array_size; i++) 
+    goldMin[i] = i ? std::min(goldMin[i-1], a[i]) : a[i];
   return goldMin;
 }
 
@@ -264,8 +394,8 @@ void run_tests(uint64_t array_size) {
     b[i] = T(3);
     c[i] = rand() % (int)1e5;
   }
-#pragma omp target enter data map(to : a[0 : array_size], b[0 : array_size],   \
-                                      c[0 : array_size])
+#pragma omp target enter data map(to: a[0:array_size], b[0:array_size], \
+                                      c[0:array_size])
 
   std::cout << "Running kernels " << repeat_num_times << " times" << std::endl;
   std::cout << "Ignoring timing of first " << ignore_times << "  runs "
@@ -273,13 +403,12 @@ void run_tests(uint64_t array_size) {
   std::cout << "Integer Size: " << sizeof(T) << std::endl;
   int num_teams = _XTEAM_NUM_TEAMS;
   std::cout << "Array elements: " << array_size << std::endl;
-  std::cout << "Array size:     "
-            << (double(array_size * sizeof(T)) / (1024 * 1024)) << " MB"
-            << std::endl;
+  std::cout << "Array size:     " << (double(array_size * sizeof(T)) / (1024 * 1024))
+            << " MB" << std::endl;
 
-  T *goldDot = getGoldDot(a, b, array_size);
-  T *goldMax = getGoldMax(c, array_size);
-  T *goldMin = getGoldMin(c, array_size);
+  T* goldDot = getGoldDot(a, b, array_size);
+  T* goldMax = getGoldMax(c, array_size);
+  T* goldMin = getGoldMin(c, array_size);
 
   // List of times
   std::vector<std::vector<double>> timings(6);
@@ -290,63 +419,57 @@ void run_tests(uint64_t array_size) {
   // Timing loop
   for (unsigned int k = 0; k < repeat_num_times; k++) {
     t1 = std::chrono::high_resolution_clock::now();
-    T *omp_dot_arr = omp_dot(a, b, array_size);
+    T * omp_dot_arr = omp_dot(a, b, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[0].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(omp_dot_arr, goldDot, "omp_dot",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(omp_dot_arr, goldDot, "omp_dot", array_size);
     free(omp_dot_arr);
 
     t1 = std::chrono::high_resolution_clock::now();
-    T *sim_dot_arr = sim_dot<T>(a, b, array_size);
+    T* sim_dot_arr = sim_dot<T>(a, b, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[1].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(sim_dot_arr, goldDot, "sim_dot",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(sim_dot_arr, goldDot, "sim_dot", array_size);
     free(sim_dot_arr);
-
+ 
     t1 = std::chrono::high_resolution_clock::now();
-    T *omp_max_arr = omp_max<T>(c, array_size);
+    T* omp_max_arr = omp_max<T>(c, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[2].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(omp_max_arr, goldMax, "omp_max",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(omp_max_arr, goldMax, "omp_max", array_size);
     free(omp_max_arr);
 
     t1 = std::chrono::high_resolution_clock::now();
-    T *sim_max_arr = sim_max<T>(c, array_size);
+    T* sim_max_arr = sim_max<T>(c, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[3].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(sim_max_arr, goldMax, "sim_max",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(sim_max_arr, goldMax, "sim_max", array_size);
     free(sim_max_arr);
-
+    
     t1 = std::chrono::high_resolution_clock::now();
-    T *omp_min_arr = omp_min<T>(c, array_size);
+    T* omp_min_arr = omp_min<T>(c, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[4].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(omp_min_arr, goldMin, "omp_min",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(omp_min_arr, goldMin, "omp_min", array_size);
     free(omp_min_arr);
 
     t1 = std::chrono::high_resolution_clock::now();
-    T *sim_min_arr = sim_min<T>(c, array_size);
+    T* sim_min_arr = sim_min<T>(c, array_size);
     t2 = std::chrono::high_resolution_clock::now();
     timings[5].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
             .count());
-    _check_val<T, DATA_TYPE_IS_INT>(sim_min_arr, goldMin, "sim_min",
-                                    array_size);
+    _check_val<T, DATA_TYPE_IS_INT>(sim_min_arr, goldMin, "sim_min", array_size);
     free(sim_min_arr);
   } // end Timing loop
 
@@ -379,8 +502,8 @@ void run_tests(uint64_t array_size) {
            1.0E-6 * sizes[i] / (average));
   }
 
-#pragma omp target exit data map(release : a[0 : array_size],                  \
-                                     b[0 : array_size], c[0 : array_size])
+#pragma omp target exit data map(release: a[0:array_size], b[0:array_size], \
+                                          c[0:array_size])
   free(goldDot);
   free(goldMax);
   free(goldMin);
