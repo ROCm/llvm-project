@@ -20,6 +20,7 @@
 ; DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-NEXT: Virtual Register Rewriter
 ; DEFAULT-NEXT: AMDGPU Pre Wave Transform
+; DEFAULT-NEXT: AMDGPU Emit LiveDebugVariables
 ; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
 ; DEFAULT: Greedy Register Allocator
@@ -66,6 +67,7 @@
 ; BASIC-DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
 ; BASIC-DEFAULT-NEXT: AMDGPU Pre Wave Transform
+; BASIC-DEFAULT-NEXT: AMDGPU Emit LiveDebugVariables
 ; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: AMDGPU Control Flow Wave Transform
 ; BASIC-DEFAULT: Basic Register Allocator
@@ -88,6 +90,7 @@
 ; DEFAULT-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
 ; DEFAULT-BASIC-NEXT: AMDGPU Pre Wave Transform
+; DEFAULT-BASIC-NEXT: AMDGPU Emit LiveDebugVariables
 ; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: AMDGPU Control Flow Wave Transform
 ; DEFAULT-BASIC: Greedy Register Allocator
@@ -112,6 +115,7 @@
 ; BASIC-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
 ; BASIC-BASIC-NEXT: AMDGPU Pre Wave Transform
+; BASIC-BASIC-NEXT: AMDGPU Emit LiveDebugVariables
 ; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: AMDGPU Control Flow Wave Transform
 ; BASIC-BASIC: Basic Register Allocator
