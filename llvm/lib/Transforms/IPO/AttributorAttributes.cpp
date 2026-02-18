@@ -89,6 +89,11 @@ static cl::opt<bool> ManifestInternal(
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
                                        cl::Hidden);
 
+static cl::opt<bool> EnableFunctionInfoPrecomputation(
+    "function-info-precompute",
+    cl::desc("Precompute function info and kernels set."), cl::Hidden,
+    cl::init(false));
+
 template <>
 unsigned llvm::PotentialConstantIntValuesState::MaxPotentialValues = 0;
 
@@ -1254,11 +1259,17 @@ struct AAPointerInfoImpl
         // OPTIMIZATION: Build kernel set once and use it in the lambda.
         // This avoids ~11M isKernel() calls (measured in VASP) by replacing
         // them with fast DenseSet lookups.
-        BuildKernelSetIfNeeded();
-        IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
-          ++NumIsKernelLine1227;
-          return !KernelFunctionsInModule.contains(&Fn);
-        };
+        if (EnableFunctionInfoPrecomputation) {
+          BuildKernelSetIfNeeded();
+          IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
+            ++NumIsKernelLine1227;
+            return !KernelFunctionsInModule.contains(&Fn);
+          };
+        } else {
+          IsLiveInCalleeCB = [&A](const Function &Fn) {
+            return !A.getInfoCache().isKernel(Fn);
+          };
+        }
       }
     }
 
@@ -1269,7 +1280,8 @@ struct AAPointerInfoImpl
     // OPTIMIZATION: If we'll use the kernel check in AccessCB, ensure the
     // kernel set is built. This happens when both InstInKernel and
     // ObjHasKernelLifetime are true.
-    if (InstInKernel && ObjHasKernelLifetime)
+    if (EnableFunctionInfoPrecomputation && InstInKernel &&
+        ObjHasKernelLifetime)
       BuildKernelSetIfNeeded();
 
     auto AccessCB = [&](const Access &Acc, bool Exact) {
@@ -1284,8 +1296,13 @@ struct AAPointerInfoImpl
       // fast DenseSet lookups (~O(1) vs ~11ns per getFunctionInfo call).
       if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
         ++NumIsKernelLine1242;
-        if (KernelFunctionsInModule.contains(AccScope))
-          return true;
+        if (EnableFunctionInfoPrecomputation) {
+          if (KernelFunctionsInModule.contains(AccScope))
+            return true;
+        } else {
+          if (A.getInfoCache().isKernel(*AccScope))
+            return true;
+        }
       }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
