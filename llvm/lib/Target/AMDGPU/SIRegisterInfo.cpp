@@ -1628,12 +1628,14 @@ void SIRegisterInfo::buildSpillLoadStore(
   // If we're using a block operation, the element should be the whole block.
   // For misaligned registers, use 4-byte elements to avoid alignment errors.
   unsigned EltSize = IsBlock ? RegWidth
-                     : (IsFlat && !IsAGPR && !IsRegMisaligned)
+                     : (IsFlat && !IsAGPR)
                          ? std::min(RegWidth, 16u)
                          : 4u;
-  unsigned NumSubRegs = RegWidth / EltSize;
+  unsigned NumSubRegs = RegWidth / EltSize; // ifmisaligned -> +1
   unsigned Size = NumSubRegs * EltSize;
   unsigned RemSize = RegWidth - Size;
+  unsigned LastChunk = ((RemSize / 4) + 3) % 4;
+  if(IsRegMisaligned && LastChunk) NumSubRegs += 1;
   unsigned NumRemSubRegs = RemSize ? 1 : 0;
   int64_t Offset = InstOffset + MFI.getObjectOffset(Index);
   int64_t MaterializedOffset = Offset;
@@ -1797,12 +1799,46 @@ void SIRegisterInfo::buildSpillLoadStore(
     Desc = &TII->get(LoadStoreOp);
   }
 
+  // For misaligned register tuples, even if tuple size < 128B, we will need to run the loop twice, once to spill the first sub-reg, and once again to spill the remaining part of the tuple.
+  bool IsSecondIteration = false;
+  bool UnalignedTuple = IsRegMisaligned;
+  // unsigned addthis = IsRegMisaligned ? 1 : 0;
   for (unsigned i = 0, e = NumSubRegs + NumRemSubRegs, RegOffset = 0; i != e;
        ++i, RegOffset += EltSize) {
-    if (i == NumSubRegs) {
-      EltSize = RemSize;
+    // For misaligned register tuples, spill only the first sub-reg in the first iteration.
+    unsigned temp;
+    if (i == 0 && IsRegMisaligned) {
+      temp = EltSize; // Save a copy of EltSize.
+      EltSize = 4u; // Spill only the first sub-reg.
       LoadStoreOp = getFlatScratchSpillOpcode(TII, LoadStoreOp, EltSize);
     }
+    // For misaligned register tuples.
+    if (IsSecondIteration) { // (i == e-1 && IsRegMisaligned)
+      RegOffset = 4u; // We already spilt the first sub-reg in the previous iteration.
+      // if (e != 1) i = 0; // Restart the loop.
+      // if (NumRemSubRegs == 0) EltSize -= 4u; // The first sub-reg has already been spilt, don't spill it again.
+      if (RegWidth <= 16) EltSize = RegWidth - 4u;
+      LoadStoreOp = getFlatScratchSpillOpcode(TII, LoadStoreOp, EltSize);
+    }
+    if (UnalignedTuple) {
+      if (i == (e-1)) {
+        EltSize = LastChunk * 4;
+        LoadStoreOp = getFlatScratchSpillOpcode(TII, LoadStoreOp, EltSize);
+      }
+    } else {
+      if (i == NumSubRegs) {
+        EltSize = RemSize;
+        LoadStoreOp = getFlatScratchSpillOpcode(TII, LoadStoreOp, EltSize);
+      }
+    }
+    // if (i == NumSubRegs && !IsSecondIteration) {
+    //   if (UnalignedTuple) {
+    //     EltSize = LastChunk * 4;
+    //   } else {
+    //     EltSize = RemSize;
+    //   }
+    // LoadStoreOp = getFlatScratchSpillOpcode(TII, LoadStoreOp, EltSize);
+    // }
     Desc = &TII->get(LoadStoreOp);
 
     if (!IsFlat && UseVGPROffset) {
@@ -2049,6 +2085,13 @@ void SIRegisterInfo::buildSpillLoadStore(
     //  scavenged.
     if (!IsStore && TII->isBlockLoadStore(LoadStoreOp))
       addImplicitUsesForBlockCSRLoad(MIB, ValueReg);
+    if (IsSecondIteration) 
+      IsSecondIteration = false;
+    if (IsRegMisaligned) { 
+      EltSize = temp; // Reset the element size for the second iteration.
+      IsRegMisaligned = false; // The first sub-reg has been spilt, the rest of the tuple is now even aligned.
+      IsSecondIteration = true;
+    }
   }
 
   if (ScratchOffsetRegDelta != 0) {
