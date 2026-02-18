@@ -294,8 +294,10 @@ void VirtRegRewriterLegacy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<VirtRegMapWrapperLegacy>();
   AU.addRequired<LiveRegMatrixWrapperLegacy>();
 
-  if (!ClearVirtRegs)
+  if (!ClearVirtRegs) {
     AU.addPreserved<LiveDebugVariablesWrapperLegacy>();
+    AU.addPreserved<VirtRegMapWrapperLegacy>();
+  }
 
   MachineFunctionPass::getAnalysisUsage(AU);
 }

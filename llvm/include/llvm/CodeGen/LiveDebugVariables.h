@@ -52,6 +52,16 @@ public:
   /// @param VRM Rename virtual registers according to map.
   LLVM_ABI void emitDebugValues(VirtRegMap *VRM);
 
+  /// revertCollection - Revert the effects of debug value collection by
+  /// re-inserting debug instructions into MIR. After this call, ModifiedMF is
+  /// reset so the teardown assertion in clear() will pass.
+  /// @note Use this at intermediate register allocation stages where VRM does
+  /// not yet cover all register classes.
+  /// @param VRM Virtual registers that have assignments are substituted with
+  /// their physical counterparts; unassigned virtual registers are kept as-is
+  /// for the next LiveDebugVariables instance to track.
+  void revertCollection(VirtRegMap *VRM);
+
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
   /// dump - Print data structures to dbgs().
   void dump() const;
