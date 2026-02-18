@@ -814,8 +814,8 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
 
     // For single-pass look-back scan, we carve arrays out of scan_storage.
     // The layout is the same for both NoLoop and segmented scans:
-    //   [block_aggregates][block_prefixes][scan_result][block_status]
-    //    T[NumTeams]       T[NumTeams]     T[Grid]      uint32_t[NumTeams]
+    //   [block_values][scan_result][block_status]
+    //    T[NumTeams]   T[Grid]      uint32_t[NumTeams+1]
     // No alignment padding needed since T arrays come first and T is at least 4
     // byte large. (might change as supported types change)
     // For segmented scans, d_segment_vals (N-sized) stores per-element running
@@ -828,30 +828,25 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
         CGM.getDataLayout().getTypeSizeInBits(RedVarType) / 8;
 
     llvm::Value *RedVarTySz = llvm::ConstantInt::get(Int64Ty, RedVarSizeBytes);
-    llvm::Value *AggBytes =
-        Builder.CreateMul(NumTeams, RedVarTySz, "agg_bytes");
-    llvm::Value *TwoAggBytes =
-        Builder.CreateAdd(AggBytes, AggBytes, "two_agg_bytes");
+    llvm::Value *ValuesBytes =
+        Builder.CreateMul(NumTeams, RedVarTySz, "values_bytes");
 
-    // block_aggregates starts at offset 0
-    llvm::Value *DBlockAggregates = DScanStorage;
-    // block_prefixes starts after block_aggregates
-    llvm::Value *DBlockPrefixes =
-        Builder.CreateGEP(Int8Ty, DScanStorage, AggBytes);
+    // block_values starts at offset 0
+    llvm::Value *DBlockValues = DScanStorage;
 
-    // scan_result starts after block_prefixes; block_status follows
-    llvm::Value *DResult = Builder.CreateGEP(Int8Ty, DScanStorage, TwoAggBytes);
+    // scan_result starts after block_values; block_status follows
+    llvm::Value *DResult = Builder.CreateGEP(Int8Ty, DScanStorage, ValuesBytes);
     llvm::Value *TotalNumThreadsI64 =
         Builder.CreateMul(NumTeams, llvm::ConstantInt::get(Int64Ty, BlockSize));
     llvm::Value *ResultBytes =
         Builder.CreateMul(TotalNumThreadsI64, RedVarTySz, "result_bytes");
     llvm::Value *StatusOffset =
-        Builder.CreateAdd(TwoAggBytes, ResultBytes, "status_offset");
+        Builder.CreateAdd(ValuesBytes, ResultBytes, "status_offset");
     llvm::Value *DBlockStatus =
         Builder.CreateGEP(Int8Ty, DScanStorage, StatusOffset);
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
-                       DBlockStatus, DBlockAggregates, DBlockPrefixes,
+                       DBlockStatus, DBlockValues,
                        ThreadStartIdx, NumElements, BlockSize, IsInclusiveScan);
 
     // Load scan result back into the reduction variable so the
@@ -2425,18 +2420,17 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       Address DScanStorageAddr = GetAddrOfLocalVar((*Args)[RVI.ArgPos + 2]);
       llvm::Value *DScanStorageP2 = Builder.CreateLoad(DScanStorageAddr);
 
-      // scan_result starts at byte offset 2 * NumTeams * sizeof(T)
+      // scan_result starts at byte offset NumTeams * sizeof(T)
       uint64_t RedVarSzBytes =
           CGM.getDataLayout().getTypeSizeInBits(RedVarType) / 8;
       llvm::Value *RedVarTySzP2 =
           llvm::ConstantInt::get(Int64Ty, RedVarSzBytes);
       llvm::Value *NumTeamsI64 =
           Builder.CreateIntCast(NumTeams, Int64Ty, /*isSigned=*/false);
-      llvm::Value *AggBytesP2 = Builder.CreateMul(NumTeamsI64, RedVarTySzP2);
-      llvm::Value *TwoAggBytesP2 = Builder.CreateAdd(AggBytesP2, AggBytesP2);
+      llvm::Value *ValuesBytesP2 = Builder.CreateMul(NumTeamsI64, RedVarTySzP2);
       llvm::Value *ScanResultBase =
           Builder.CreateGEP(llvm::Type::getInt8Ty(getLLVMContext()),
-                            DScanStorageP2, TwoAggBytesP2);
+                            DScanStorageP2, ValuesBytesP2);
 
       // scan_result[GlobalGpuThreadId] = exclusive prefix for this thread
       llvm::Value *TidI64 =

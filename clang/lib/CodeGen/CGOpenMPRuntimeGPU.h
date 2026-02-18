@@ -184,8 +184,7 @@ public:
   /// Emit call to single-pass Cross-team scan using decoupled look-back
   llvm::Value *getXteamScanSum(CodeGenFunction &CGF, llvm::Value *Val,
                                llvm::Value *DResult, llvm::Value *DBlockStatus,
-                               llvm::Value *DBlockAggregates,
-                               llvm::Value *DBlockPrefixes,
+                               llvm::Value *DBlockValues,
                                llvm::Value *ThreadStartIndex,
                                llvm::Value *NumElements, int BlockSize,
                                bool IsInclusiveScan);

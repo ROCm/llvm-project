@@ -694,10 +694,10 @@ __OMP_RTL(__kmpc_xteamr_l_fast_sum, false, Void, Int64, Int64Ptr, Int64Ptr, Int3
 __OMP_RTL(__llvm_profile_register_function, false, Void, VoidPtr)
 __OMP_RTL(__llvm_profile_register_names_function, false, Void, VoidPtr, Int64)
 
-__OMP_RTL(__kmpc_xteams_i, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int64, Int1)
-__OMP_RTL(__kmpc_xteams_d, false, Void, Double, DoublePtr, Int32Ptr, DoublePtr, DoublePtr, VoidPtr, Double, Int64, Int64, Int1)
-__OMP_RTL(__kmpc_xteams_f, false, Void, Float, FloatPtr, Int32Ptr, FloatPtr, FloatPtr, VoidPtr, Float, Int64, Int64, Int1)
-__OMP_RTL(__kmpc_xteams_l, false, Void, Int64, Int64Ptr, Int32Ptr, Int64Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int64, Int1)
+__OMP_RTL(__kmpc_xteams_i, false, Void, Int32, Int32Ptr, Int32Ptr, Int32Ptr, VoidPtr, Int32, Int64, Int64, Int1)
+__OMP_RTL(__kmpc_xteams_d, false, Void, Double, DoublePtr, Int32Ptr, DoublePtr, VoidPtr, Double, Int64, Int64, Int1)
+__OMP_RTL(__kmpc_xteams_f, false, Void, Float, FloatPtr, Int32Ptr, FloatPtr, VoidPtr, Float, Int64, Int64, Int1)
+__OMP_RTL(__kmpc_xteams_l, false, Void, Int64, Int64Ptr, Int32Ptr, Int64Ptr, VoidPtr, Int64, Int64, Int64, Int1)
 
 __OMP_RTL(__last, false, Void, )
 

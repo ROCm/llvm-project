@@ -11154,8 +11154,8 @@ static void emitTargetCallKernelLaunch(
 
           if (CGF.CGM.isXteamScanKernel()) {
             // d_scan_storage layout (uniform for both NoLoop and segmented):
-            //   [block_aggregates][block_prefixes][scan_result][block_status]
-            //    T[NumTeams]       T[NumTeams]     T[Grid] uint32_t[NumTeams]
+            //   [block_values][scan_result][block_status]
+            //    T[NumTeams]   T[Grid]      uint32_t[NumTeams+1]
             // No alignment padding needed since T is at least 4 bytes.
             // For segmented scans the per-element running sums live in a
             // separate d_segment_vals allocation (N-sized).
@@ -11169,9 +11169,9 @@ static void emitTargetCallKernelLaunch(
                     CGF.Int64Ty, false),
                 "total_num_threads");
 
-            // size of block_aggregates (= size of block_prefixes)
-            llvm::Value *AggBytes =
-                CGF.Builder.CreateMul(NumTeams, RedVarTySz, "agg_bytes");
+            // size of block_values (single merged array)
+            llvm::Value *ValuesBytes =
+                CGF.Builder.CreateMul(NumTeams, RedVarTySz, "values_bytes");
             // size of block_status (uint32_t per team)
             uint64_t StatusElemSz =
                 CGF.CGM.getDataLayout().getTypeAllocSize(CGF.Int32Ty);
@@ -11183,9 +11183,8 @@ static void emitTargetCallKernelLaunch(
             llvm::Value *ResultBytes = CGF.Builder.CreateMul(
                 TotalNumThreads, RedVarTySz, "result_bytes");
 
-            // Total = AggBytes + AggBytes + ResultBytes + StatusBytes
-            llvm::Value *DScanStorageSz =
-                CGF.Builder.CreateAdd(AggBytes, AggBytes);
+            // Total = ValuesBytes + ResultBytes + StatusBytes
+            llvm::Value *DScanStorageSz = ValuesBytes;
             DScanStorageSz = CGF.Builder.CreateAdd(DScanStorageSz, ResultBytes);
             DScanStorageSz = CGF.Builder.CreateAdd(DScanStorageSz, StatusBytes,
                                                    "d_scan_storage_sz");
