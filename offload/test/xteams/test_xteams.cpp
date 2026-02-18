@@ -120,68 +120,50 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
   int devid = 0;
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
-  // Allocate look-back arrays on device
-  uint32_t *d_status =
-      (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
-  T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_scan_out =
-      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-
-  // Zero-initialize block status
-  uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
-  omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
-                    devid, omp_get_initial_device());
-  free(zeros);
+  // Static device allocations for look-back arrays - allocated once, reused.
+  // block_status needs NumTeams + 1 entries: the extra slot is an atomic
+  // done-counter used by the DeviceRTL self-reset (Step 4), so we only
+  // need to zero-initialize once at allocation time.
+  static uint32_t *d_status = nullptr;
+  static T *d_values = nullptr;
+  static T *d_scan_out = nullptr;
+  if (!d_status) {
+    d_status =
+        (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
+    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_scan_out =
+        (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
+    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
+    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
+                      0, 0, devid, omp_get_initial_device());
+  }
 
   #pragma omp target data map(tofrom: dot[0:array_size])
   {
-    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
-    // Team level values via the decoupled look-back algorithm.
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+                                          is_device_ptr(d_status, d_values, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-
-      // compute scan serially per thread instead of launching multiple
-      // kernels sequentially
-      T val0 = T(0); 
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T val0 = T(0);
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
         val0 += a[k*stride+i] * b[k*stride+i];
-        dot[k*stride+i] = val0;
       }
-      // Exclusive cross-team scan of segment aggregates
-      _overload_to_extern_scan_sum(val0, d_scan_out, d_status, d_agg, d_prefix,
+      _overload_to_extern_scan_sum(val0, d_scan_out, d_status, d_values,
                                    T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
                                    false);
-    }
-
-    // Second Kernel: Distributes the results of Scan computed at the team
-    // level to the corresponding teams and segments in their respective contexts. 
-    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
-                                          num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_scan_out)
-    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-      T prefix = d_scan_out[k];
-
-      // redistribution of the scanned result back to output array `dot`
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T running = d_scan_out[k];
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
-        dot[k*stride+i] += prefix;
+        running += a[k*stride+i] * b[k*stride+i];
+        dot[k*stride+i] = running;
       }
     }
   }
-  omp_target_free(d_status, devid);
-  omp_target_free(d_agg, devid);
-  omp_target_free(d_prefix, devid);
-  omp_target_free(d_scan_out, devid);
   return dot;
 }
 
@@ -192,65 +174,46 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
   const T rnv = std::numeric_limits<T>::lowest();
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
-  uint32_t *d_status =
-      (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
-  T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_scan_out =
-      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-
-  uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
-  omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
-                    devid, omp_get_initial_device());
-  free(zeros);
+  static uint32_t *d_status = nullptr;
+  static T *d_values = nullptr;
+  static T *d_scan_out = nullptr;
+  if (!d_status) {
+    d_status =
+        (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
+    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_scan_out =
+        (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
+    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
+    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
+                      0, 0, devid, omp_get_initial_device());
+  }
 
   #pragma omp target data map(tofrom: scanned_max[0:array_size])
   {
-    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
-    // Team level values via the decoupled look-back algorithm.
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+                                          is_device_ptr(d_status, d_values, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-
-      // compute scan serially per thread instead of launching multiple
-      // kernels sequentially
-      T val0 = rnv; 
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T val0 = rnv;
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
         val0 = std::max(val0, c[k*stride+i]);
-        scanned_max[k*stride+i] = val0;
       }
-      _overload_to_extern_scan_max(val0, d_scan_out, d_status, d_agg, d_prefix,
+      _overload_to_extern_scan_max(val0, d_scan_out, d_status, d_values,
                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
                                    false);
-    }
-
-    // Second Kernel: Distributes the results of Scan computed at the team
-    // level to the corresponding teams and segments in their respective contexts. 
-    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
-                                          num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_scan_out)
-    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-      T prefix = d_scan_out[k];
-
-      // redistribution of the scanned result back to output array `scanned_max`
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T running = d_scan_out[k];
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
-        scanned_max[k*stride+i] = std::max(scanned_max[k*stride+i], prefix);
+        running = std::max(running, c[k*stride+i]);
+        scanned_max[k*stride+i] = running;
       }
     }
   }
-  omp_target_free(d_status, devid);
-  omp_target_free(d_agg, devid);
-  omp_target_free(d_prefix, devid);
-  omp_target_free(d_scan_out, devid);
   return scanned_max;
 }
 
@@ -261,65 +224,46 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
   const T rnv = std::numeric_limits<T>::max();
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
-  uint32_t *d_status =
-      (uint32_t *)omp_target_alloc(sizeof(uint32_t) * _XTEAM_NUM_TEAMS, devid);
-  T *d_agg = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_prefix = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
-  T *d_scan_out =
-      (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-
-  uint32_t *zeros = (uint32_t *)calloc(_XTEAM_NUM_TEAMS, sizeof(uint32_t));
-  omp_target_memcpy(d_status, zeros, sizeof(uint32_t) * _XTEAM_NUM_TEAMS, 0, 0,
-                    devid, omp_get_initial_device());
-  free(zeros);
+  static uint32_t *d_status = nullptr;
+  static T *d_values = nullptr;
+  static T *d_scan_out = nullptr;
+  if (!d_status) {
+    d_status =
+        (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
+    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_scan_out =
+        (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
+    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
+    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
+                      0, 0, devid, omp_get_initial_device());
+  }
 
   #pragma omp target data map(tofrom: scanned_min[0:array_size])
   {
-    // First Kernel: Computes the Intra Team Scan and calculates the scan of the
-    // Team level values via the decoupled look-back algorithm.
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_agg, d_prefix, d_scan_out)
+                                          is_device_ptr(d_status, d_values, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-
-      // compute scan serially per thread instead of launching multiple
-      // kernels sequentially
-      T val0 = rnv; 
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T val0 = rnv;
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
         val0 = std::min(val0, c[k*stride+i]);
-        scanned_min[k*stride+i] = val0;
       }
-      _overload_to_extern_scan_min(val0, d_scan_out, d_status, d_agg, d_prefix,
+      _overload_to_extern_scan_min(val0, d_scan_out, d_status, d_values,
                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
                                    false);
-    }
-
-    // Second Kernel: Distributes the results of Scan computed at the team
-    // level to the corresponding teams and segments in their respective contexts. 
-    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
-                                          num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_scan_out)
-    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
-      // Every thread processes one segment of `stride` size
-      T prefix = d_scan_out[k];
-
-      // redistribution of the scanned result back to output array `scanned_min`
-      for(uint64_t i = 0; 
-          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1) 
+      T running = d_scan_out[k];
+      for(uint64_t i = 0;
+          i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
           && (k*stride+i < array_size));
           i++) {
-        scanned_min[k*stride+i] = std::min(scanned_min[k*stride+i], prefix);
+        running = std::min(running, c[k*stride+i]);
+        scanned_min[k*stride+i] = running;
       }
     }
   }
-  omp_target_free(d_status, devid);
-  omp_target_free(d_agg, devid);
-  omp_target_free(d_prefix, devid);
-  omp_target_free(d_scan_out, devid);
   return scanned_min;
 }
 

@@ -23,42 +23,42 @@
 #if defined(__AMDGCN__) || defined(__NVPTX__)
 extern "C" {
 void _INLINE_ATTR_ __kmpc_xteams_d(double v, double *result, uint32_t *status,
-                                   double *agg, double *prefix,
+                                   double *values,
                                    void (*rf)(double *, double),
                                    const double rnv, const uint64_t k,
                                    const uint64_t n, bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_f(float v, float *result, uint32_t *status,
-                                   float *agg, float *prefix,
+                                   float *values,
                                    void (*rf)(float *, float), const float rnv,
                                    const uint64_t k, const uint64_t n,
                                    bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status,
-                                    _CD *agg, _CD *prefix,
+                                    _CD *values,
                                     void (*rf)(_CD *, _CD), const _CD rnv,
                                     const uint64_t k, const uint64_t n,
                                     bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status,
-                                    _CF *agg, _CF *prefix,
+                                    _CF *values,
                                     void (*rf)(_CF *, _CF), const _CF rnv,
                                     const uint64_t k, const uint64_t n,
                                     bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_i(int v, int *result, uint32_t *status,
-                                   int *agg, int *prefix,
+                                   int *values,
                                    void (*rf)(int *, int), const int rnv,
                                    const uint64_t k, const uint64_t n,
                                    bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status,
-                                    _UI *agg, _UI *prefix,
+                                    _UI *values,
                                     void (*rf)(_UI *, _UI), const _UI rnv,
                                     const uint64_t k, const uint64_t n,
                                     bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_l(long v, long *result, uint32_t *status,
-                                   long *agg, long *prefix,
+                                   long *values,
                                    void (*rf)(long *, long), const long rnv,
                                    const uint64_t k, const uint64_t n,
                                    bool is_inclusive);
 void _INLINE_ATTR_ __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status,
-                                    _UL *agg, _UL *prefix,
+                                    _UL *values,
                                     void (*rf)(_UL *, _UL), const _UL rnv,
                                     const uint64_t k, const uint64_t n,
                                     bool is_inclusive);
@@ -69,30 +69,30 @@ void _INLINE_ATTR_ __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status,
 // For host compilation, define null functions for host linking.
 
 extern "C" {
-void __kmpc_xteams_d(double v, double *result, uint32_t *status, double *agg,
-                     double *prefix, void (*rf)(double *, double),
+void __kmpc_xteams_d(double v, double *result, uint32_t *status, double *values,
+                     void (*rf)(double *, double),
                      const double rnv, const uint64_t k, const uint64_t n,
                      bool is_inclusive) {}
-void __kmpc_xteams_f(float v, float *result, uint32_t *status, float *agg,
-                     float *prefix, void (*rf)(float *, float), const float rnv,
+void __kmpc_xteams_f(float v, float *result, uint32_t *status, float *values,
+                     void (*rf)(float *, float), const float rnv,
                      const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status, _CD *agg,
-                      _CD *prefix, void (*rf)(_CD *, _CD), const _CD rnv,
+void __kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status, _CD *values,
+                      void (*rf)(_CD *, _CD), const _CD rnv,
                       const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status, _CF *agg,
-                      _CF *prefix, void (*rf)(_CF *, _CF), const _CF rnv,
+void __kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status, _CF *values,
+                      void (*rf)(_CF *, _CF), const _CF rnv,
                       const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_i(int v, int *result, uint32_t *status, int *agg,
-                     int *prefix, void (*rf)(int *, int), const int rnv,
+void __kmpc_xteams_i(int v, int *result, uint32_t *status, int *values,
+                     void (*rf)(int *, int), const int rnv,
                      const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status, _UI *agg,
-                      _UI *prefix, void (*rf)(_UI *, _UI), const _UI rnv,
+void __kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status, _UI *values,
+                      void (*rf)(_UI *, _UI), const _UI rnv,
                       const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_l(long v, long *result, uint32_t *status, long *agg,
-                     long *prefix, void (*rf)(long *, long), const long rnv,
+void __kmpc_xteams_l(long v, long *result, uint32_t *status, long *values,
+                     void (*rf)(long *, long), const long rnv,
                      const uint64_t k, const uint64_t n, bool is_inclusive) {}
-void __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *agg,
-                      _UL *prefix, void (*rf)(_UL *, _UL), const _UL rnv,
+void __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *values,
+                      void (*rf)(_UL *, _UL), const _UL rnv,
                       const uint64_t k, const uint64_t n, bool is_inclusive) {}
 } // end extern C
 
@@ -103,127 +103,127 @@ void __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *agg,
 
 // _overload_to_extern_scan_sum - sum reduction scan
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    double val, double *result, uint32_t *status, double *agg, double *prefix,
+    double val, double *result, uint32_t *status, double *values,
     const double rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_d(val, result, status, agg, prefix, __kmpc_rfun_sum_d, rnv, k,
+  __kmpc_xteams_d(val, result, status, values, __kmpc_rfun_sum_d, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    float val, float *result, uint32_t *status, float *agg, float *prefix,
+    float val, float *result, uint32_t *status, float *values,
     const float rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_f(val, result, status, agg, prefix, __kmpc_rfun_sum_f, rnv, k,
+  __kmpc_xteams_f(val, result, status, values, __kmpc_rfun_sum_f, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    _CD val, _CD *result, uint32_t *status, _CD *agg, _CD *prefix,
+    _CD val, _CD *result, uint32_t *status, _CD *values,
     const _CD rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_cd(val, result, status, agg, prefix, __kmpc_rfun_sum_cd, rnv, k,
+  __kmpc_xteams_cd(val, result, status, values, __kmpc_rfun_sum_cd, rnv, k,
                    n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    _CF val, _CF *result, uint32_t *status, _CF *agg, _CF *prefix,
+    _CF val, _CF *result, uint32_t *status, _CF *values,
     const _CF rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_cf(val, result, status, agg, prefix, __kmpc_rfun_sum_cf, rnv, k,
+  __kmpc_xteams_cf(val, result, status, values, __kmpc_rfun_sum_cf, rnv, k,
                    n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    int val, int *result, uint32_t *status, int *agg, int *prefix,
+    int val, int *result, uint32_t *status, int *values,
     const int rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_i(val, result, status, agg, prefix, __kmpc_rfun_sum_i, rnv, k,
+  __kmpc_xteams_i(val, result, status, values, __kmpc_rfun_sum_i, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    _UI val, _UI *result, uint32_t *status, _UI *agg, _UI *prefix,
+    _UI val, _UI *result, uint32_t *status, _UI *values,
     const _UI rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ui(val, result, status, agg, prefix, __kmpc_rfun_sum_ui, rnv, k,
+  __kmpc_xteams_ui(val, result, status, values, __kmpc_rfun_sum_ui, rnv, k,
                    n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    long val, long *result, uint32_t *status, long *agg, long *prefix,
+    long val, long *result, uint32_t *status, long *values,
     const long rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_l(val, result, status, agg, prefix, __kmpc_rfun_sum_l, rnv, k,
+  __kmpc_xteams_l(val, result, status, values, __kmpc_rfun_sum_l, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_sum(
-    _UL val, _UL *result, uint32_t *status, _UL *agg, _UL *prefix,
+    _UL val, _UL *result, uint32_t *status, _UL *values,
     const _UL rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ul(val, result, status, agg, prefix, __kmpc_rfun_sum_ul, rnv, k,
+  __kmpc_xteams_ul(val, result, status, values, __kmpc_rfun_sum_ul, rnv, k,
                    n, is_inclusive);
 }
 
 // _overload_to_extern_scan_max - max reduction scan
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    double val, double *result, uint32_t *status, double *agg, double *prefix,
+    double val, double *result, uint32_t *status, double *values,
     const double rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_d(val, result, status, agg, prefix, __kmpc_rfun_max_d, rnv, k,
+  __kmpc_xteams_d(val, result, status, values, __kmpc_rfun_max_d, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    float val, float *result, uint32_t *status, float *agg, float *prefix,
+    float val, float *result, uint32_t *status, float *values,
     const float rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_f(val, result, status, agg, prefix, __kmpc_rfun_max_f, rnv, k,
+  __kmpc_xteams_f(val, result, status, values, __kmpc_rfun_max_f, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    int val, int *result, uint32_t *status, int *agg, int *prefix,
+    int val, int *result, uint32_t *status, int *values,
     const int rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_i(val, result, status, agg, prefix, __kmpc_rfun_max_i, rnv, k,
+  __kmpc_xteams_i(val, result, status, values, __kmpc_rfun_max_i, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    _UI val, _UI *result, uint32_t *status, _UI *agg, _UI *prefix,
+    _UI val, _UI *result, uint32_t *status, _UI *values,
     const _UI rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ui(val, result, status, agg, prefix, __kmpc_rfun_max_ui, rnv, k,
+  __kmpc_xteams_ui(val, result, status, values, __kmpc_rfun_max_ui, rnv, k,
                    n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    long val, long *result, uint32_t *status, long *agg, long *prefix,
+    long val, long *result, uint32_t *status, long *values,
     const long rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_l(val, result, status, agg, prefix, __kmpc_rfun_max_l, rnv, k,
+  __kmpc_xteams_l(val, result, status, values, __kmpc_rfun_max_l, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_max(
-    _UL val, _UL *result, uint32_t *status, _UL *agg, _UL *prefix,
+    _UL val, _UL *result, uint32_t *status, _UL *values,
     const _UL rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ul(val, result, status, agg, prefix, __kmpc_rfun_max_ul, rnv, k,
+  __kmpc_xteams_ul(val, result, status, values, __kmpc_rfun_max_ul, rnv, k,
                    n, is_inclusive);
 }
 
 // _overload_to_extern_scan_min - min reduction scan
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    double val, double *result, uint32_t *status, double *agg, double *prefix,
+    double val, double *result, uint32_t *status, double *values,
     const double rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_d(val, result, status, agg, prefix, __kmpc_rfun_min_d, rnv, k,
+  __kmpc_xteams_d(val, result, status, values, __kmpc_rfun_min_d, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    float val, float *result, uint32_t *status, float *agg, float *prefix,
+    float val, float *result, uint32_t *status, float *values,
     const float rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_f(val, result, status, agg, prefix, __kmpc_rfun_min_f, rnv, k,
+  __kmpc_xteams_f(val, result, status, values, __kmpc_rfun_min_f, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    int val, int *result, uint32_t *status, int *agg, int *prefix,
+    int val, int *result, uint32_t *status, int *values,
     const int rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_i(val, result, status, agg, prefix, __kmpc_rfun_min_i, rnv, k,
+  __kmpc_xteams_i(val, result, status, values, __kmpc_rfun_min_i, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    _UI val, _UI *result, uint32_t *status, _UI *agg, _UI *prefix,
+    _UI val, _UI *result, uint32_t *status, _UI *values,
     const _UI rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ui(val, result, status, agg, prefix, __kmpc_rfun_min_ui, rnv, k,
+  __kmpc_xteams_ui(val, result, status, values, __kmpc_rfun_min_ui, rnv, k,
                    n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    long val, long *result, uint32_t *status, long *agg, long *prefix,
+    long val, long *result, uint32_t *status, long *values,
     const long rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_l(val, result, status, agg, prefix, __kmpc_rfun_min_l, rnv, k,
+  __kmpc_xteams_l(val, result, status, values, __kmpc_rfun_min_l, rnv, k,
                   n, is_inclusive);
 }
 void _INLINE_ATTR_ _overload_to_extern_scan_min(
-    _UL val, _UL *result, uint32_t *status, _UL *agg, _UL *prefix,
+    _UL val, _UL *result, uint32_t *status, _UL *values,
     const _UL rnv, const uint64_t k, const uint64_t n, bool is_inclusive) {
-  __kmpc_xteams_ul(val, result, status, agg, prefix, __kmpc_rfun_min_ul, rnv, k,
+  __kmpc_xteams_ul(val, result, status, values, __kmpc_rfun_min_ul, rnv, k,
                    n, is_inclusive);
 }
 
