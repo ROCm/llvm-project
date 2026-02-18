@@ -116,14 +116,10 @@ template <typename T> T* omp_min(T *a, uint64_t array_size) {
 // and the result is verified along with an output containting time taken and
 // bandwidth calculated.
 template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
-  T *dot = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
+  T *dot = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   int devid = 0;
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
-  // Static device allocations for look-back arrays - allocated once, reused.
-  // block_status needs NumTeams + 1 entries: the extra slot is an atomic
-  // done-counter used by the DeviceRTL self-reset (Step 4), so we only
-  // need to zero-initialize once at allocation time.
   static uint32_t *d_status = nullptr;
   static T *d_values = nullptr;
   static T *d_scan_out = nullptr;
@@ -140,6 +136,7 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
 
   #pragma omp target data map(tofrom: dot[0:array_size])
   {
+    // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
                                           is_device_ptr(d_status, d_values, d_scan_out)
@@ -151,9 +148,16 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
           i++) {
         val0 += a[k*stride+i] * b[k*stride+i];
       }
-      _overload_to_extern_scan_sum(val0, d_scan_out, d_status, d_values,
-                                   T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                   false);
+      d_scan_out[k] = _overload_to_extern_scan_sum(val0, d_status, d_values,
+                                                    T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                                    false);
+    }
+
+    // K2: redistribution
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T running = d_scan_out[k];
       for(uint64_t i = 0;
           i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
@@ -169,7 +173,7 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
 
 
 template <typename T> T* sim_max(T *c, uint64_t array_size) {
-  T *scanned_max = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
+  T *scanned_max = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   int devid = 0;
   const T rnv = std::numeric_limits<T>::lowest();
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
@@ -190,6 +194,7 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
 
   #pragma omp target data map(tofrom: scanned_max[0:array_size])
   {
+    // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
                                           is_device_ptr(d_status, d_values, d_scan_out)
@@ -201,9 +206,16 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
           i++) {
         val0 = std::max(val0, c[k*stride+i]);
       }
-      _overload_to_extern_scan_max(val0, d_scan_out, d_status, d_values,
-                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                   false);
+      d_scan_out[k] = _overload_to_extern_scan_max(val0, d_status, d_values,
+                                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                                    false);
+    }
+
+    // K2: redistribution
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T running = d_scan_out[k];
       for(uint64_t i = 0;
           i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)
@@ -219,7 +231,7 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
 
 
 template <typename T> T* sim_min(T *c, uint64_t array_size) {
-  T* scanned_min = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size); // the output array
+  T* scanned_min = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   int devid = 0;
   const T rnv = std::numeric_limits<T>::max();
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
@@ -240,6 +252,7 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
 
   #pragma omp target data map(tofrom: scanned_min[0:array_size])
   {
+    // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
                                           is_device_ptr(d_status, d_values, d_scan_out)
@@ -251,9 +264,16 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
           i++) {
         val0 = std::min(val0, c[k*stride+i]);
       }
-      _overload_to_extern_scan_min(val0, d_scan_out, d_status, d_values,
-                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                   false);
+      d_scan_out[k] = _overload_to_extern_scan_min(val0, d_status, d_values,
+                                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                                    false);
+    }
+
+    // K2: redistribution
+    #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
+                                          num_threads(_XTEAM_NUM_THREADS) \
+                                          is_device_ptr(d_scan_out)
+    for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T running = d_scan_out[k];
       for(uint64_t i = 0;
           i < stride || ((k == _XTEAM_TOTAL_NUM_THREADS - 1)

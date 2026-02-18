@@ -71,7 +71,6 @@ enum BlockStatus : uint32_t {
 ///     with the inclusive prefix when transitioning to COMPLETE.
 ///
 /// \param val Input thread local value (use rnv for out-of-bounds threads)
-/// \param result_array Output array for final scan results
 /// \param block_status Array of block status values
 /// \param block_values Shared array for aggregates (PARTIAL) and prefixes (COMPLETE)
 /// \param _rf Function pointer to reduction function
@@ -79,14 +78,15 @@ enum BlockStatus : uint32_t {
 /// \param k Global thread index
 /// \param num_elements Total number of elements in the scan (N)
 /// \param is_inclusive True for inclusive scan, false for exclusive
+/// \return The per-thread scan result (exclusive or inclusive prefix)
 ///
 /// Note that block=team and warp=wave.
-/// Threads with k >= num_elements use rnv as their input value and do not
-/// write to result_array, but still participate in the look-back protocol.
+/// Threads with k >= num_elements use rnv as their input value but still
+/// participate in the look-back protocol.
 ///
 template <typename T>
-__attribute__((flatten, always_inline)) void
-_xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
+__attribute__((flatten, always_inline)) T
+_xteam_scan(T val, uint32_t *block_status, T *block_values,
             void (*_rf)(T *, T), const T rnv,
             const uint64_t k, const uint64_t num_elements,
             bool is_inclusive) {
@@ -120,7 +120,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
   // Cross-wave scan within block
   if (lane_num == warp_size - 1)
     wave_totals[wave_num] = local_scan;
-  synchronize::threadsAligned(atomic::acq_rel);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // First wave scans wave totals
   if (wave_num == 0) {
@@ -129,7 +129,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
     if (lane_num < num_waves)
       wave_totals[lane_num] = wt;
   }
-  synchronize::threadsAligned(atomic::acq_rel);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // Add prefix from previous waves
   if (wave_num > 0)
@@ -205,7 +205,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
   }
 
   // All threads wait for thread 0 to complete look-back
-  synchronize::threadsAligned(atomic::acq_rel);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // =========================================================================
   // Step 3: Compute final result for each thread
@@ -241,10 +241,6 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
     final_value = local_exclusive;
   }
 
-  // Store final result (only for valid threads)
-  if (k < num_elements)
-    result_array[k] = final_value;
-
   // =========================================================================
   // Step 4: Self-reset block status for next invocation
   // =========================================================================
@@ -253,7 +249,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
   // Requires block_status to have NumBlocks + 1 entries; the extra entry
   // at index NumBlocks serves as an atomic done-counter.
 
-  synchronize::threadsAligned(atomic::acq_rel);
+  synchronize::threadsAligned(atomic::relaxed);
 
   if (omp_thread_num == 0) {
     const uint32_t num_blocks = mapping::getNumberOfBlocksInKernel();
@@ -266,77 +262,77 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_values,
         block_status[i] = 0;
     }
   }
+
+  return final_value;
 }
 
 //===----------------------------------------------------------------------===//
 // Extern C wrapper functions
 //===----------------------------------------------------------------------===//
 
-#define _EXT_ATTR extern "C" _XTEAM_EXTERN_ATTR void
 #define _CD double _Complex
 #define _CF float _Complex
 #define _UI unsigned int
 #define _UL unsigned long
 
 // Single-pass scan functions using decoupled look-back
-_EXT_ATTR
-__kmpc_xteams_d(double v, double *result, uint32_t *status, double *values,
+extern "C" _XTEAM_EXTERN_ATTR double
+__kmpc_xteams_d(double v, uint32_t *status, double *values,
                 void (*rf)(double *, double), const double rnv,
                 const uint64_t k, const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_f(float v, float *result, uint32_t *status, float *values,
+extern "C" _XTEAM_EXTERN_ATTR float
+__kmpc_xteams_f(float v, uint32_t *status, float *values,
                 void (*rf)(float *, float), const float rnv,
                 const uint64_t k, const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_i(int v, int *result, uint32_t *status, int *values,
+extern "C" _XTEAM_EXTERN_ATTR int
+__kmpc_xteams_i(int v, uint32_t *status, int *values,
                 void (*rf)(int *, int), const int rnv, const uint64_t k,
                 const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status, _UI *values,
+extern "C" _XTEAM_EXTERN_ATTR _UI
+__kmpc_xteams_ui(_UI v, uint32_t *status, _UI *values,
                  void (*rf)(_UI *, _UI), const _UI rnv, const uint64_t k,
                  const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_l(long v, long *result, uint32_t *status, long *values,
+extern "C" _XTEAM_EXTERN_ATTR long
+__kmpc_xteams_l(long v, uint32_t *status, long *values,
                 void (*rf)(long *, long), const long rnv, const uint64_t k,
                 const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *values,
+extern "C" _XTEAM_EXTERN_ATTR _UL
+__kmpc_xteams_ul(_UL v, uint32_t *status, _UL *values,
                  void (*rf)(_UL *, _UL), const _UL rnv, const uint64_t k,
                  const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status, _CD *values,
+extern "C" _XTEAM_EXTERN_ATTR _CD
+__kmpc_xteams_cd(_CD v, uint32_t *status, _CD *values,
                  void (*rf)(_CD *, _CD), const _CD rnv, const uint64_t k,
                  const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
-_EXT_ATTR
-__kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status, _CF *values,
+extern "C" _XTEAM_EXTERN_ATTR _CF
+__kmpc_xteams_cf(_CF v, uint32_t *status, _CF *values,
                  void (*rf)(_CF *, _CF), const _CF rnv, const uint64_t k,
                  const uint64_t n, bool is_inclusive) {
-  _xteam_scan(v, result, status, values, rf, rnv, k, n, is_inclusive);
+  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
 }
 
 #undef _CF
 #undef _CD
 #undef _UI
 #undef _UL
-#undef _EXT_ATTR
