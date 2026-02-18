@@ -16,6 +16,11 @@ on:
         type: string
       component:
         type: string
+  workflow_dispatch:
+    inputs:
+      test_retry:
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -119,19 +124,24 @@ jobs:
           ${{ fromJSON(inputs.component).test_script }}
           EOF
           chmod +x run_test_script.sh
-          echo "Running test (attempt 1) for shard ${SHARD_INDEX}/${TOTAL_SHARDS} (${TEST_TYPE})"
-          ./run_test_script.sh || first_test_run_status=$?
-          if [ -n "${first_test_run_status:-}" ]; then
-             echo "Attempt 1 failed with exit code ${first_test_run_status}. Retrying once…"
-             sleep 20
-             if ./run_test_script.sh; then
-               unset first_test_run_status
-             else
-               second_test_run_status=$?
+          attempts_count=${{ inputs.test_retry }
+          exit_code=0
+          for attempt in $(seq 1 "$attempts_count"); do
+            echo "Running test (attempt ${attempt}/${attempts_count}) for shard ${SHARD_INDEX}/${TOTAL_SHARDS} (${TEST_TYPE})"
+
+            if ./run_test_script.sh; then
+              exit_code=0
+              break
+            else
+              exit_code=$?
+              if [ "$attempt" -lt "$attempts_count" ]; then
+                echo "Attempt ${attempt} failed with exit code ${exit_code}. Retrying in 20 sec…"
+                sleep 20
               fi
-          fi
+            fi
+          done
           rm -f run_test_script.sh
-          exit ${second_test_run_status:-${first_test_run_status:-0}}
+          exit "$exit_code"
 
       # GitHub's 'Complete job' step is unaware of launched executables
       # and will fail to clean up orphan processes.
