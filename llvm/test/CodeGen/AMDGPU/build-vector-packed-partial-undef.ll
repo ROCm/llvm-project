@@ -373,8 +373,8 @@ define void @undef_lo2_v4i16(<2 x i16> %arg0) {
 ; GFX8-SDAG-LABEL: undef_lo2_v4i16:
 ; GFX8-SDAG:       ; %bb.0:
 ; GFX8-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX8-SDAG-NEXT:    v_lshrrev_b32_e32 v1, 16, v0
-; GFX8-SDAG-NEXT:    v_alignbit_b32 v0, v1, v0, 16
+; GFX8-SDAG-NEXT:    s_mov_b32 s4, 0x7060706
+; GFX8-SDAG-NEXT:    v_perm_b32 v0, v0, v0, s4
 ; GFX8-SDAG-NEXT:    ;;#ASMSTART
 ; GFX8-SDAG-NEXT:    ; use v[0:1]
 ; GFX8-SDAG-NEXT:    ;;#ASMEND

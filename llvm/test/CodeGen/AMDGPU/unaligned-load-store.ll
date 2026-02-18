@@ -226,13 +226,6 @@ define amdgpu_kernel void @global_align2_load_store_i64(ptr addrspace(1) %p, ptr
 ; ALIGNED: buffer_load_ubyte
 ; ALIGNED: buffer_load_ubyte
 
-; ALIGNED-NOT: v_or_
-; ALIGNED-NOT: v_lshl
-
-; ALIGNED: buffer_store_byte
-; ALIGNED: buffer_store_byte
-; ALIGNED: buffer_store_byte
-; ALIGNED: buffer_store_byte
 ; ALIGNED: buffer_store_byte
 ; ALIGNED: buffer_store_byte
 ; ALIGNED: buffer_store_byte

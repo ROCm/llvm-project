@@ -207,6 +207,7 @@ private:
                                    unsigned Opc, SDValue LHS,
                                    const ConstantSDNode *CRHS) const;
 
+  SDValue performLeftShiftCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performAndCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performOrCombine(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue performXorCombine(SDNode *N, DAGCombinerInfo &DCI) const;
