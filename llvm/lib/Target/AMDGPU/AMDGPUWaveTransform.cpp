@@ -117,6 +117,8 @@ static bool isArtificialTerminator(MachineInstr &MI) {
   case AMDGPU::S_ANDN2_B32_term:
   case AMDGPU::S_AND_B32_term:
   case AMDGPU::S_AND_SAVEEXEC_B32_term:
+  case AMDGPU::S_CBRANCH_EXECZ:
+  case AMDGPU::S_CBRANCH_EXECNZ:
     return true;
   default:
     return false;
@@ -1721,7 +1723,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
-      } else if (Opcode == AMDGPU::S_BRANCH) {
+      } else if (Opcode == AMDGPU::S_BRANCH || Opcode == AMDGPU::S_CBRANCH_EXECZ || Opcode == AMDGPU::S_CBRANCH_EXECNZ) {
         Info.OrigSuccFinal =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Terminator.isReturn()) {
