@@ -22,6 +22,7 @@ on:
       test_retry:
         type: number
         default: 1
+        required: false
   workflow_call:
     inputs:
       artifact_group:
@@ -40,6 +41,11 @@ on:
         type: string
       test_labels:
         type: string
+      test_retry:
+        type: number
+        default: 1
+        required: false
+          
   push:
     branches:
       - ADHOCBUILD

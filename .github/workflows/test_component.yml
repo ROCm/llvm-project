@@ -18,7 +18,6 @@ on:
         type: string
       test_retry:
         type: number
-        default: 1
 
 permissions:
   contents: read
