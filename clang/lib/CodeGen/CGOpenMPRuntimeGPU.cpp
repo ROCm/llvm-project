@@ -3035,8 +3035,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamRedOperation(
 
 llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
-    llvm::Value *DBlockStatus, llvm::Value *DBlockValues,
-    llvm::Value *ThreadStartIndex,
+    llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
+    llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex,
     llvm::Value *NumElements, int BlockSize, bool IsInclusiveScan) {
   // TODO handle more types
   // As soon as more types are supported, need to align the result array in the
@@ -3063,11 +3063,12 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
   llvm::Value *IsInclusiveVal = llvm::ConstantInt::get(Int1Ty, IsInclusiveScan);
 
   // Args for __kmpc_xteams_X:
-  // (val, result, status, values, rf, rnv, k, num_elements, is_inclusive)
+  // (val, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive)
   llvm::Value *Args[] = {Val,
                          DResult,
                          DBlockStatus,
-                         DBlockValues,
+                         DBlockAggregates,
+                         DBlockPrefixes,
                          RfunPair.first,
                          ZeroVal,
                          ThreadStartIndex,

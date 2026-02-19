@@ -11010,12 +11010,8 @@ static void emitTargetCallKernelLaunch(
     // array and `teams_done_ptr`.
     // 2. The Xteam Scan Reduction kernels require a third helper variable -
     // `scan_storage` array.
-    //    a. The segmented scan variant(the default) requires a fourth helper
-    //    variable - `segmented_vals`
     size_t ExpectedNumArgs =
-        CGF.CGM.isXteamScanKernel()
-            ? (CGF.CGM.isXteamSegmentedScanKernel() ? 4 : 3)
-            : 2;
+        CGF.CGM.isXteamScanKernel() ? 3 : 2;
     assert((CapturedVars.size() ==
             CapturedCount + ExpectedNumArgs * XteamRVM.size()) &&
            "Unexpected number of captured vars");
@@ -11092,25 +11088,12 @@ static void emitTargetCallKernelLaunch(
           CGF, CombinedInfo, CGF.CGM.ReductionVars[1]); // teams_done_ptr
       addXTeamReductionComponentHelper(
           CGF, CombinedInfo, CGF.CGM.ReductionVars[2]); // scan_storage
-      if (CGF.CGM.isXteamSegmentedScanKernel())
-        addXTeamReductionComponentHelper(
-            CGF, CombinedInfo, CGF.CGM.ReductionVars[3]); // segment_vals
     } else {
-      // For segmented scan, d_segment_vals must be N-sized (one entry per
-      // loop element) because the BigJumpLoop stores per-element running
-      // sums indexed by the loop iteration variable.  Compute the trip
-      // count (N) early so it is available at allocation time.
-      llvm::Value *NumIterationsForScan = nullptr;
-      if (CGF.CGM.isXteamScanKernel() && CGF.CGM.isXteamSegmentedScanKernel()) {
-        NumIterationsForScan =
-            OMPRuntime->emitTargetNumIterationsCall(CGF, D, SizeEmitter);
-      }
 
       for (; CapturedCount + ArgPos < CapturedVars.size();) {
         // Process the pair of captured variables:
         llvm::Value *DTeamValsInst = nullptr;
         llvm::Value *DScanStorageInst = nullptr;
-        llvm::Value *DSegmentValsInst = nullptr;
 
         assert(CapturedCount + ArgPos < CapturedVars.size() &&
                "Xteam reduction argument position out of bounds");
@@ -11154,11 +11137,9 @@ static void emitTargetCallKernelLaunch(
 
           if (CGF.CGM.isXteamScanKernel()) {
             // d_scan_storage layout (uniform for both NoLoop and segmented):
-            //   [block_values][scan_result][block_status]
-            //    T[NumTeams]   T[Grid]      uint32_t[NumTeams+1]
+            //   [block_aggregates][block_prefixes][scan_result][block_status]
+            //    T[NumTeams]       T[NumTeams]     T[Grid]      uint32_t[NumTeams+1]
             // No alignment padding needed since T is at least 4 bytes.
-            // For segmented scans the per-element running sums live in a
-            // separate d_segment_vals allocation (N-sized).
             llvm::Value *NumTeams = XteamRedNumTeamsFromClauseVal
                                         ? XteamRedNumTeamsFromClauseVal
                                         : XteamRedNumTeamsFromOccupancy;
@@ -11169,14 +11150,20 @@ static void emitTargetCallKernelLaunch(
                     CGF.Int64Ty, false),
                 "total_num_threads");
 
-            // size of block_values (single merged array)
+            // size of block_aggregates + block_prefixes (2 * NumTeams each)
+            llvm::Value *TwoTimesNumTeams = CGF.Builder.CreateMul(
+                NumTeams, llvm::ConstantInt::get(CGF.Int64Ty, 2));
             llvm::Value *ValuesBytes =
-                CGF.Builder.CreateMul(NumTeams, RedVarTySz, "values_bytes");
-            // size of block_status (uint32_t per team)
+                CGF.Builder.CreateMul(TwoTimesNumTeams, RedVarTySz,
+                                      "values_bytes");
+            // size of block_status (uint32_t per team, plus one done-counter)
             uint64_t StatusElemSz =
                 CGF.CGM.getDataLayout().getTypeAllocSize(CGF.Int32Ty);
+            llvm::Value *NumTeamsPlusOne = CGF.Builder.CreateAdd(
+                NumTeams, llvm::ConstantInt::get(CGF.Int64Ty, 1));
             llvm::Value *StatusBytes = CGF.Builder.CreateMul(
-                NumTeams, llvm::ConstantInt::get(CGF.Int64Ty, StatusElemSz),
+                NumTeamsPlusOne,
+                llvm::ConstantInt::get(CGF.Int64Ty, StatusElemSz),
                 "status_bytes");
 
             // scan_result: per-thread results from _xteam_scan (Grid entries)
@@ -11223,22 +11210,6 @@ static void emitTargetCallKernelLaunch(
                   MemcpyArgs);
             }
 
-            if (CGF.CGM.isXteamSegmentedScanKernel()) {
-              // Segmented: per-element running sums, one entry per loop
-              // element (N).  The BigJumpLoop indexes this array by the loop
-              // iteration variable which ranges from 0 to N-1.
-              assert(NumIterationsForScan &&
-                     "trip count must be available for segmented scan");
-              llvm::Value *NumIterI64 = CGF.Builder.CreateIntCast(
-                  NumIterationsForScan, CGF.Int64Ty, /*isSigned=*/false);
-              llvm::Value *DSegmentValsSz = CGF.Builder.CreateMul(
-                  NumIterI64, RedVarTySz, "d_segment_vals_sz");
-              llvm::Value *TgtAllocArgsScan[] = {DSegmentValsSz, DevIdVal};
-              DSegmentValsInst = CGF.EmitRuntimeCall(
-                  OMPBuilder.getOrCreateRuntimeFunction(
-                      CGF.CGM.getModule(), OMPRTL_omp_target_alloc),
-                  TgtAllocArgsScan, "d_segment_vals");
-            }
           }
         }
         CGF.CGM.ReductionVars.push_back(DTeamValsInst);
@@ -11296,12 +11267,6 @@ static void emitTargetCallKernelLaunch(
           ++ArgPos;
           CGF.CGM.ReductionVars.push_back(DScanStorageInst);
           addXTeamReductionComponentHelper(CGF, CombinedInfo, DScanStorageInst);
-          if (CGF.CGM.isXteamSegmentedScanKernel()) {
-            ++ArgPos;
-            CGF.CGM.ReductionVars.push_back(DSegmentValsInst);
-            addXTeamReductionComponentHelper(CGF, CombinedInfo,
-                                             DSegmentValsInst);
-          }
         }
         // Advance to the next reduction variable in the pair:
         ++ArgPos;

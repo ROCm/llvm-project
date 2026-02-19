@@ -451,20 +451,6 @@ void CodeGenFunction::InitializeXteamRedCapturedVars(
 
     assert(DScanStorageInst && "Device scan storage pointer cannot be null");
     CapturedVars.push_back(DScanStorageInst);
-    if (CGM.isXteamSegmentedScanKernel()) {
-      // Placeholder for d_segment_vals initialized to nullptr
-      llvm::Value *DSegmentValsInst =
-          Builder.CreateAlloca(RedVarType, nullptr, "d_segment_vals");
-      Address DSegmentValsAddr(
-          DSegmentValsInst, RedVarType,
-          Context.getTypeAlignInChars(Context.UnsignedIntTy));
-      llvm::Value *NullPtrDSegmentVals = llvm::ConstantPointerNull::get(
-          llvm::PointerType::get(getLLVMContext(), /*AddressSpace=*/0));
-      Builder.CreateStore(NullPtrDSegmentVals, DSegmentValsAddr);
-
-      assert(DSegmentValsInst && "Segment Vals Array pointer cannot be null");
-      CapturedVars.push_back(DSegmentValsInst);
-    }
   }
 }
 
@@ -805,12 +791,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
             Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
         Args.emplace_back(DScanStorageVD);
         TargetArgs.emplace_back(DScanStorageVD);
-        if (CGM.isXteamSegmentedScanKernel()) {
-          VarDecl *DSegmentValsVD = ImplicitParamDecl::Create(
-              Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
-          Args.emplace_back(DSegmentValsVD);
-          TargetArgs.emplace_back(DSegmentValsVD);
-        }
       }
     }
   }

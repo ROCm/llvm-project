@@ -809,17 +809,13 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
     const CodeGenModule::XteamRedVarInfo &RVI = Itr->second;
 
     assert(RVI.ArgPos + 2 < Args.size() && "Arg position beyond bounds");
-    if (CGM.isXteamSegmentedScanKernel())
-      assert(RVI.ArgPos + 3 < Args.size() && "Arg position beyond bounds");
 
     // For single-pass look-back scan, we carve arrays out of scan_storage.
     // The layout is the same for both NoLoop and segmented scans:
-    //   [block_values][scan_result][block_status]
-    //    T[NumTeams]   T[Grid]      uint32_t[NumTeams+1]
+    //   [block_aggregates][block_prefixes][scan_result][block_status]
+    //    T[NumTeams]       T[NumTeams]     T[Grid]      uint32_t[NumTeams+1]
     // No alignment padding needed since T arrays come first and T is at least 4
     // byte large. (might change as supported types change)
-    // For segmented scans, d_segment_vals (N-sized) stores per-element running
-    // sums separately; scan_result holds the per-thread cross-team prefix.
     Address XteamRedSumArg3 = GetAddrOfLocalVar(Args[RVI.ArgPos + 2]);
     llvm::Value *DScanStorage = Builder.CreateLoad(XteamRedSumArg3);
 
@@ -828,25 +824,35 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
         CGM.getDataLayout().getTypeSizeInBits(RedVarType) / 8;
 
     llvm::Value *RedVarTySz = llvm::ConstantInt::get(Int64Ty, RedVarSizeBytes);
-    llvm::Value *ValuesBytes =
-        Builder.CreateMul(NumTeams, RedVarTySz, "values_bytes");
+    llvm::Value *OneArrayBytes =
+        Builder.CreateMul(NumTeams, RedVarTySz, "one_array_bytes");
 
-    // block_values starts at offset 0
-    llvm::Value *DBlockValues = DScanStorage;
+    // block_aggregates starts at offset 0
+    llvm::Value *DBlockAggregates = DScanStorage;
 
-    // scan_result starts after block_values; block_status follows
-    llvm::Value *DResult = Builder.CreateGEP(Int8Ty, DScanStorage, ValuesBytes);
+    // block_prefixes starts after block_aggregates
+    llvm::Value *DBlockPrefixes =
+        Builder.CreateGEP(Int8Ty, DScanStorage, OneArrayBytes);
+
+    // scan_result starts after both arrays (2 * NumTeams * sizeof(T))
+    llvm::Value *TwoArrayBytes =
+        Builder.CreateMul(OneArrayBytes, llvm::ConstantInt::get(Int64Ty, 2),
+                          "two_array_bytes");
+    llvm::Value *DResult =
+        Builder.CreateGEP(Int8Ty, DScanStorage, TwoArrayBytes);
+
+    // block_status follows scan_result
     llvm::Value *TotalNumThreadsI64 =
         Builder.CreateMul(NumTeams, llvm::ConstantInt::get(Int64Ty, BlockSize));
     llvm::Value *ResultBytes =
         Builder.CreateMul(TotalNumThreadsI64, RedVarTySz, "result_bytes");
     llvm::Value *StatusOffset =
-        Builder.CreateAdd(ValuesBytes, ResultBytes, "status_offset");
+        Builder.CreateAdd(TwoArrayBytes, ResultBytes, "status_offset");
     llvm::Value *DBlockStatus =
         Builder.CreateGEP(Int8Ty, DScanStorage, StatusOffset);
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
-                       DBlockStatus, DBlockValues,
+                       DBlockStatus, DBlockAggregates, DBlockPrefixes,
                        ThreadStartIdx, NumElements, BlockSize, IsInclusiveScan);
 
     // Load scan result back into the reduction variable so the
@@ -2331,7 +2337,6 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
   }
 
   llvm::Value *SegmentLoopUB = nullptr;
-  llvm::Value *DSegmentVals = nullptr;
   llvm::Value *GlobalUpperBound = nullptr;
   const Address *RedVarAddr = nullptr;
   llvm::BasicBlock *ExecBB = nullptr;
@@ -2339,10 +2344,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
   const clang::VarDecl *XteamVD;
   llvm::Type *RedVarType;
   llvm::Value *NumElements = nullptr;
-  // Phase 2 of segmented scan: cross-team prefix from the single-pass scan.
   llvm::Value *CrossTeamPrefix = nullptr;
-  llvm::Value *SegmentStartIV = nullptr;
-  bool IsInclusiveScanForPhase2 = true;
   if (getLangOpts().OpenMPIsTargetDevice && CGM.isXteamSegmentedScanKernel()) {
     // Compute Loop trip-count (N) = GlobalUB - GlobalLB + 1
     const auto UBLValue = EmitLValue(
@@ -2406,17 +2408,10 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
         (RedVarMap.find(XteamVD))->second;
     RedVarAddr = &(RVI.RedVarAddr);
 
-    // SegmentValsAddr points to the SegmentVals array which will store the
-    // intermediate scan results computed per segment by a single thread
-    // sequentially.
-    Address SegmentValsAddr = GetAddrOfLocalVar((*Args)[RVI.ArgPos + 3]);
-    DSegmentVals = Builder.CreateLoad(SegmentValsAddr);
-
     if (!CGM.isXteamScanPhaseOne) {
-      // Phase 2: compute the cross-team prefix from scan_result in
+      // Phase 2: load the cross-team prefix from scan_result in
       // d_scan_storage.  The Phase 1 kernel stored an EXCLUSIVE cross-team
       // prefix for each thread: scan_result[T] = sum(agg[0..T-1]).
-      // Load d_scan_storage from kernel args (ArgPos + 2).
       Address DScanStorageAddr = GetAddrOfLocalVar((*Args)[RVI.ArgPos + 2]);
       llvm::Value *DScanStorageP2 = Builder.CreateLoad(DScanStorageAddr);
 
@@ -2440,19 +2435,9 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
                          getContext().getTypeAlignInChars(XteamVD->getType()));
       CrossTeamPrefix = Builder.CreateLoad(PrefixAddr);
 
-      // Save segment start for the exclusive-scan first-element check
-      SegmentStartIV = Builder.CreateMul(SegmentSizeForScan, GlobalGpuThreadId);
-
-      IsInclusiveScanForPhase2 =
-          CGM.OMPPresentScanDirective->hasClausesOfKind<OMPInclusiveClause>();
-
-      // Publish to CGM so EmitOMPScanDirective can apply the prefix
-      // after EmitOMPReductionClauseInit has run (which reinitializes
-      // RedVarAddr to the identity value).
-      CGM.XteamScanCrossPrefix = CrossTeamPrefix;
-      CGM.XteamScanSegmentStart = SegmentStartIV;
-      CGM.XteamScanDSegmentVals = DSegmentVals;
-      CGM.XteamScanIsInclusivePhase2 = IsInclusiveScanForPhase2;
+      // Initialize RedVarAddr with the cross-team prefix so the before-scan
+      // block accumulates on top of it in each iteration.
+      Builder.CreateStore(CrossTeamPrefix, *RedVarAddr);
     }
   }
 
@@ -2581,71 +2566,30 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
         EmitBlock(NextBB);
       }
       if (CGM.isXteamSegmentedScanKernel()) {
-        if (!CGM.isXteamScanPhaseOne) {
-          // Phase 2: combine per-element within-segment running sums from
-          // d_segment_vals with the cross-team prefix from Phase 1's
-          // single-pass scan.  We store the result into RedVarAddr (the
-          // Xteam per-thread reduction alloca) which the scan directive's
-          // copy (in EmitOMPScanDirective) will propagate to OrigExpr.
-          // Note: RedVarAddr is NOT overwritten by EmitOMPReductionClauseInit
-          // (which creates a separate InscanScope private variable).
-          llvm::Value *IV = Builder.CreateLoad(BigJumpLoopIvAddr);
-          CharUnits RedAlign =
-              getContext().getTypeAlignInChars(XteamVD->getType());
-
-          if (IsInclusiveScanForPhase2) {
-            // Inclusive: final[iv] = d_segment_vals[iv] + cross_prefix
-            Address SegValsGEP(Builder.CreateGEP(RedVarType, DSegmentVals, IV),
-                               RedVarType, RedAlign);
-            llvm::Value *RunSum = Builder.CreateLoad(SegValsGEP);
-            llvm::Value *Combined =
-                RedVarType->isFloatingPointTy()
-                    ? Builder.CreateFAdd(RunSum, CrossTeamPrefix)
-                    : Builder.CreateAdd(RunSum, CrossTeamPrefix);
-            Builder.CreateStore(Combined, *RedVarAddr);
-          } else {
-            // Exclusive: first element in segment gets cross_prefix only;
-            // subsequent elements get d_segment_vals[iv-1] + cross_prefix.
-            // (Element iv==0 of the entire array is handled by the
-            // ExclusiveExitBB skip inside EmitOMPScanDirective.)
-            llvm::Value *IsFirst = Builder.CreateICmpEQ(IV, SegmentStartIV);
-            llvm::BasicBlock *FirstBB = createBasicBlock("seg.excl.first");
-            llvm::BasicBlock *RestBB = createBasicBlock("seg.excl.rest");
-            llvm::BasicBlock *MergeBB = createBasicBlock("seg.excl.merge");
-            Builder.CreateCondBr(IsFirst, FirstBB, RestBB);
-
-            EmitBlock(FirstBB);
-            Builder.CreateStore(CrossTeamPrefix, *RedVarAddr);
-            EmitBranch(MergeBB);
-
-            EmitBlock(RestBB);
-            llvm::Value *PrevIV =
-                Builder.CreateSub(IV, llvm::ConstantInt::get(IV->getType(), 1));
-            Address PrevGEP(Builder.CreateGEP(RedVarType, DSegmentVals, PrevIV),
-                            RedVarType, RedAlign);
-            llvm::Value *PrevSum = Builder.CreateLoad(PrevGEP);
-            llvm::Value *CombinedExcl =
-                RedVarType->isFloatingPointTy()
-                    ? Builder.CreateFAdd(PrevSum, CrossTeamPrefix)
-                    : Builder.CreateAdd(PrevSum, CrossTeamPrefix);
-            Builder.CreateStore(CombinedExcl, *RedVarAddr);
-            EmitBranch(MergeBB);
-
-            EmitBlock(MergeBB);
-          }
-        }
         CodeGenFunction::ParentLoopDirectiveForScanRegion ScanRegion(
             *this, *BigJumpLoopLD);
-        {
-          OMPFirstScanLoop = CGM.isXteamScanPhaseOne;
+        if (!CGM.isXteamScanPhaseOne) {
+          // Phase 2: re-read original inputs via the before-scan block to
+          // accumulate into RedVarAddr (initialized to CrossTeamPrefix
+          // before the loop), then emit the after-scan block to write the
+          // per-element result.  No intermediate d_segment_vals needed.
+          {
+            OMPFirstScanLoop = true;
+            CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
+            EmitOMPXteamScanNoLoopBody(*BigJumpLoopLD);
+          }
+          {
+            OMPFirstScanLoop = false;
+            CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
+            EmitOMPXteamScanNoLoopBody(*BigJumpLoopLD);
+          }
+          CGM.OMPPresentScanDirective = nullptr;
+        } else {
+          // Phase 1: only the before-scan block runs to accumulate
+          // the per-segment aggregate into RedVarAddr.
+          OMPFirstScanLoop = true;
           CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
           EmitOMPXteamScanNoLoopBody(*BigJumpLoopLD);
-        }
-        if (!CGM.isXteamScanPhaseOne) {
-          CGM.OMPPresentScanDirective = nullptr;
-          CGM.XteamScanCrossPrefix = nullptr;
-          CGM.XteamScanSegmentStart = nullptr;
-          CGM.XteamScanDSegmentVals = nullptr;
         }
       } else
         EmitOMPNoLoopBody(*BigJumpLoopLD);
@@ -2662,19 +2606,6 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       (CGM.isXteamRedKernel(&S) || CGM.isBigJumpLoopKernel(&S))) {
     if (CGM.isXteamSegmentedScanKernel()) {
       EmitBlock(Continue.getBlock());
-      if (CGM.isXteamScanPhaseOne) {
-        // Phase 1 only: accumulate per-element running sums into
-        // d_segment_vals.  Phase 2 must NOT overwrite these because the
-        // exclusive scan's next iteration reads d_segment_vals[iv-1].
-        Address SegmentValsGEP =
-            Address(Builder.CreateGEP(RedVarType, DSegmentVals,
-                                      Builder.CreateLoad(BigJumpLoopIvAddr)),
-                    RedVarType,
-                    getContext().getTypeAlignInChars(
-                        XteamVD->getType())); // Segment_Vals[*iv]
-        Builder.CreateStore(Builder.CreateLoad(*RedVarAddr),
-                            SegmentValsGEP); // Segment_Vals[*iv] = red_var
-      }
       llvm::Value *SegmentScanLoopInc =
           Builder.CreateAdd(llvm::ConstantInt::get(Int32Ty, 1),
                             Builder.CreateLoad(BigJumpLoopIvAddr));
@@ -2717,8 +2648,9 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       // EXCLUSIVE prefix of the per-thread aggregates, i.e.
       //   scan_result[T] = sum(aggregate[0] .. aggregate[T-1]).
       // The inclusive/exclusive distinction of the user's scan directive is
-      // handled in Phase 2 when the per-element running sums from
-      // d_segment_vals are combined with the cross-team prefix.
+      // handled in Phase 2 by re-emitting the before-scan block (to
+      // recompute running sums on top of the cross-team prefix) and the
+      // after-scan block (to write the per-element result).
       // NumElements is i32 here (from loop bounds); widen to i64 for the
       // runtime
       llvm::Value *NumElementsI64 =

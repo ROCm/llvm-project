@@ -121,12 +121,14 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   static uint32_t *d_status = nullptr;
-  static T *d_values = nullptr;
+  static T *d_aggregates = nullptr;
+  static T *d_prefixes = nullptr;
   static T *d_scan_out = nullptr;
   if (!d_status) {
     d_status =
         (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
-    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_aggregates = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
     static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
@@ -139,7 +141,7 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
     // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_values, d_scan_out)
+                                          is_device_ptr(d_status, d_aggregates, d_prefixes, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T val0 = T(0);
       for(uint64_t i = 0;
@@ -148,9 +150,10 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
           i++) {
         val0 += a[k*stride+i] * b[k*stride+i];
       }
-      d_scan_out[k] = _overload_to_extern_scan_sum(val0, d_status, d_values,
-                                                    T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                                    false);
+      _overload_to_extern_scan_sum(val0, d_scan_out, d_status,
+                                   d_aggregates, d_prefixes,
+                                   T(0), k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
     }
 
     // K2: redistribution
@@ -179,12 +182,14 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   static uint32_t *d_status = nullptr;
-  static T *d_values = nullptr;
+  static T *d_aggregates = nullptr;
+  static T *d_prefixes = nullptr;
   static T *d_scan_out = nullptr;
   if (!d_status) {
     d_status =
         (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
-    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_aggregates = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
     static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
@@ -197,7 +202,7 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
     // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_values, d_scan_out)
+                                          is_device_ptr(d_status, d_aggregates, d_prefixes, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T val0 = rnv;
       for(uint64_t i = 0;
@@ -206,9 +211,10 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
           i++) {
         val0 = std::max(val0, c[k*stride+i]);
       }
-      d_scan_out[k] = _overload_to_extern_scan_max(val0, d_status, d_values,
-                                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                                    false);
+      _overload_to_extern_scan_max(val0, d_scan_out, d_status,
+                                   d_aggregates, d_prefixes,
+                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
     }
 
     // K2: redistribution
@@ -237,12 +243,14 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
   const uint64_t stride = array_size / _XTEAM_TOTAL_NUM_THREADS;
 
   static uint32_t *d_status = nullptr;
-  static T *d_values = nullptr;
+  static T *d_aggregates = nullptr;
+  static T *d_prefixes = nullptr;
   static T *d_scan_out = nullptr;
   if (!d_status) {
     d_status =
         (uint32_t *)omp_target_alloc(sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
-    d_values = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_aggregates = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
+    d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
     static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
@@ -255,7 +263,7 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
     // K1: aggregate + scan
     #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS) \
                                           num_threads(_XTEAM_NUM_THREADS) \
-                                          is_device_ptr(d_status, d_values, d_scan_out)
+                                          is_device_ptr(d_status, d_aggregates, d_prefixes, d_scan_out)
     for (uint64_t k = 0; k < _XTEAM_TOTAL_NUM_THREADS; k++) {
       T val0 = rnv;
       for(uint64_t i = 0;
@@ -264,9 +272,10 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
           i++) {
         val0 = std::min(val0, c[k*stride+i]);
       }
-      d_scan_out[k] = _overload_to_extern_scan_min(val0, d_status, d_values,
-                                                    rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
-                                                    false);
+      _overload_to_extern_scan_min(val0, d_scan_out, d_status,
+                                   d_aggregates, d_prefixes,
+                                   rnv, k, (uint64_t)_XTEAM_TOTAL_NUM_THREADS,
+                                   false);
     }
 
     // K2: redistribution
