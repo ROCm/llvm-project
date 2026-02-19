@@ -90,6 +90,9 @@ add_library(embed-resource-dir-lib OBJECT)
 add_dependencies(embed-resource-dir-lib embed-resource-dir)
 target_sources(embed-resource-dir-lib PRIVATE ${GEN_RESOURCE_DIR_FILE})
 
+target_include_directories(embed-resource-dir-lib PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(embed-resource-dir-lib PRIVATE ${LLVM_LIBS})
+
 if(resource_directory_object_archive)
   target_link_libraries(amd_comgr PRIVATE ${resource_directory_object_archive})
 endif()
