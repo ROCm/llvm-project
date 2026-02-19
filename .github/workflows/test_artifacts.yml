@@ -19,7 +19,7 @@ on:
         type: string
       test_labels:
         type: string
-      test_retry:
+      test_retry_count:
         type: number
         default: 2                  #It will perform one additional try if failed
         required: false
@@ -41,9 +41,9 @@ on:
         type: string
       test_labels:
         type: string
-      test_retry:
+      test_retry_count:
         type: number
-        default: 1
+        default: 2
         required: false
           
   push:
@@ -131,7 +131,7 @@ jobs:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
-      test_retry: ${{ inputs.test_retry }}
+      test_retry_count: ${{ inputs.test_retry_count }}
       # If the test requires a multi GPU, use the multi GPU test runner
       # Otherwise, use the standard test runner
       test_runs_on: >-
