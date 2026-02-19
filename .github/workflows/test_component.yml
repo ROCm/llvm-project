@@ -16,8 +16,6 @@ on:
         type: string
       component:
         type: string
-  workflow_dispatch:
-    inputs:
       test_retry:
         type: number
         default: 1

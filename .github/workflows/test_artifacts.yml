@@ -19,6 +19,9 @@ on:
         type: string
       test_labels:
         type: string
+      test_retry:
+        type: number
+        default: 1
   workflow_call:
     inputs:
       artifact_group:
@@ -122,6 +125,7 @@ jobs:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
+      test_retry: ${{ inputs.test_retry }}
       # If the test requires a multi GPU, use the multi GPU test runner
       # Otherwise, use the standard test runner
       test_runs_on: >-
