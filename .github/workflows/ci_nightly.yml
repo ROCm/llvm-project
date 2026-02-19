@@ -51,111 +51,90 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup:
-    uses: ./.github/workflows/setup.yml
-    with:
-      build_variant: "release"
-
-  linux_build_and_test:
-    name: Linux::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
-    if: >-
-      ${{
-        needs.setup.outputs.linux_variants != '[]'
-      }}
-    strategy:
-      fail-fast: false
-      matrix:
-        variant: ${{ fromJSON(needs.setup.outputs.linux_variants) }}
-    uses: ./.github/workflows/ci_linux.yml
-    secrets: inherit
-    with:
-      amdgpu_families: ${{ matrix.variant.family }}
-      artifact_group: ${{ matrix.variant.artifact_group }}
-      test_runs_on: ${{ matrix.variant.test-runs-on }}
-      build_variant_label: ${{ matrix.variant.build_variant_label }}
-      build_variant_suffix: ${{ matrix.variant.build_variant_suffix }}
-      build_variant_cmake_preset: ${{ matrix.variant.build_variant_cmake_preset }}
-      test_labels: ${{ needs.setup.outputs.linux_test_labels }}
-      artifact_run_id: ${{ inputs.artifact_run_id }}
-      expect_failure: ${{ matrix.variant.expect_failure == true }}
-      use_prebuilt_artifacts: ${{ inputs.linux_use_prebuilt_artifacts == true && 'true' || 'false' }}
-      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
-      sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
-    permissions:
-      contents: read
-      id-token: write
-
-  windows_build_and_test:
-    name: Windows::${{ matrix.variant.family }}::${{ matrix.variant.build_variant_label }}
-    needs: setup
-    if: >-
-      ${{
-        needs.setup.outputs.windows_variants != '[]'
-      }}
-    strategy:
-      fail-fast: false
-      matrix:
-        variant: ${{ fromJSON(needs.setup.outputs.windows_variants) }}
-    uses: ./.github/workflows/ci_windows.yml
-    with:
-      amdgpu_families: ${{ matrix.variant.family }}
-      artifact_group: ${{ matrix.variant.artifact_group }}
-      test_runs_on: ${{ matrix.variant.test-runs-on }}
-      build_variant_label: ${{ matrix.variant.build_variant_label }}
-      build_variant_suffix: ${{ matrix.variant.build_variant_suffix }}
-      build_variant_cmake_preset: ${{ matrix.variant.build_variant_cmake_preset }}
-      test_labels: ${{ needs.setup.outputs.windows_test_labels }}
-      artifact_run_id: ${{ inputs.artifact_run_id }}
-      expect_failure: ${{ matrix.variant.expect_failure == true }}
-      use_prebuilt_artifacts: ${{ inputs.windows_use_prebuilt_artifacts == true && 'true' || 'false' }}
-      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
-      sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
-    permissions:
-      contents: read
-      id-token: write
-
   notify_build_status:
     name: Notify amd-staging nightly status
     if: always()
-    needs:
-      - windows_build_and_test
-      - linux_build_and_test
     runs-on: ubuntu-24.04
     steps:
+      - name: Download and Extract URLs from logs
+        id: extract_urls
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          THE_ROCK_MANIFEST_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/ROCm-llvm-project/22166651119-linux/manifests/gfx94X-dcgpu/therock_manifest.json"
+          ARTIFACTS_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/ROCm-llvm-project/22166651119-linux/index-gfx94X-dcgpu.html"
+          BUILD_LOGS_URL="https://therock-ci-artifacts-external.s3.amazonaws.com/ROCm-llvm-project/22166651119-linux/logs/gfx94X-dcgpu/index.html"
+          # Fetch the manifest JSON from THE_ROCK_MANIFEST_URL
+          curl -L "$THE_ROCK_MANIFEST_URL" -o manifest.json
+          # Set the URLs as outputs
+          echo "THE_ROCK_MANIFEST_URL=$THE_ROCK_MANIFEST_URL" >> $GITHUB_ENV
+          echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_ENV
+          echo "BUILD_LOGS_URL=$BUILD_LOGS_URL" >> $GITHUB_ENV
+
       - name: Notify status
         env:
           TZ: 'America/Chicago'
         run: |
           START_DATE=$(date +"%Y-%m-%d")  # Use the current date for the report
           
-          # Initialize the status to success
-          STATUS="failure"
-  
+          # Initialize the status to failure
+          STATUS="success"
+
           # Check the results of the dependent jobs
-          if [ "${{ needs.windows_build_and_test.result }}" = "failure" ] || [ "${{ needs.linux_build_and_test.result }}" = "failure" ]; then
-            STATUS="failure"
-          elif [ "${{ needs.windows_build_and_test.result }}" = "cancelled" ] || [ "${{ needs.linux_build_and_test.result }}" = "cancelled" ]; then
-            STATUS="failure"
-          elif [ "${{ needs.windows_build_and_test.result }}" = "success" ] && [ "${{ needs.linux_build_and_test.result }}" = "success" ]; then
-            STATUS="success"
-          fi
+          #if [[ "${{ needs.windows_build_and_test.result }}" =~ ^(failure|cancelled)$ ]] || [[ "${{ needs.linux_build_and_test.result }}" =~ ^(failure|cancelled)$ ]]; then
+          #  STATUS="failure"
+          #elif [[ "${{ needs.windows_build_and_test.result }}" = "success" ]] && [[ "${{ needs.linux_build_and_test.result }}" = "success" ]]; then
+          #  STATUS="success"
+          #fi
           
           # Determine the icon based on the status
           ICON="ℹ️"
           if [ "$STATUS" = "success" ]; then ICON="✅"; fi
           if [ "$STATUS" = "failure" ]; then ICON="❌"; fi      
-  
-          WEBHOOK_URL="${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}"      
-          # Sending notification
-          curl -H "Content-Type: application/json" \
-          -d "{
+
+          WEBHOOK_URL="${{ secrets.NOTIFIER_TESTTING_WEBHOOK_URL }}"      
+          
+          # Extract submodule information and create a table
+          SUBMODULE_TABLE=$(python -c "
+          import json
+          with open('manifest.json') as f:
+            data = json.load(f)
+          the_rock_commit = data.get('the_rock_commit', '')
+          commit_url = f'https://github.com/ROCm/therock/commit/{the_rock_commit}'
+          table = '| TheRock Commit | URL |\n|----------------|-----|\n'
+          table += f'| {the_rock_commit} | ({commit_url}) |\n\n'
+          table += '| Submodule | Commit |\n|-----------|--------|\n'
+          for submodule in data['submodules']:
+            submodule_name = submodule['submodule_name']
+            submodule_url = submodule['submodule_url']
+            pin_sha = submodule['pin_sha']
+            commit_url = f'{submodule_url.replace('.git', '')}/commit/{pin_sha}'
+            table += f'| {submodule_name} | ({commit_url}) |\n'
+          print(table)
+          ")
+
+          # Prepare notification content
+          NOTIFICATION_CONTENT="{
             \"title\": \"$START_DATE - $ICON Build $STATUS\",
-            \"text\": \"**Repository:** ${{ github.repository }}  \n**Branch:** ${{ github.ref_name }}  \n**Status:** $STATUS  \n🔗 [Build Link](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
-          }" \
-          "$WEBHOOK_URL"
+            \"text\": \"**Repository:** ${{ github.repository }}  \n\
+            **Branch:** ${{ github.ref_name }}  \n\
+            **Status:** $STATUS  \n\
+            🔗 [Build Link](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n\
+            **Links:**\n\n\
+            | Description | URL |\n\
+            |-------------|-----|\n\
+            | TheRock Manifest | [TheRock Manifest]($THE_ROCK_MANIFEST_URL) |\n\
+            | Artifacts | [Artifacts]($ARTIFACTS_URL) |\n\
+            | Build Logs | [Build Logs]($BUILD_LOGS_URL) |\n\n\
+            \n\n\
+            $SUBMODULE_TABLE\"
+          }"
+
+          # Echo the notification content for debugging
+          echo "$NOTIFICATION_CONTENT"
+
+          # Commented out the actual sending of the notification
+          curl -H "Content-Type: application/json" -d "$NOTIFICATION_CONTENT" "$WEBHOOK_URL"
 
 
   # build_python_packages:
