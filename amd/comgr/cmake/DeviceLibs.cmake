@@ -40,10 +40,8 @@ endif()
 file(GLOB_RECURSE embedded_files
      LIST_DIRECTORIES false
      CONFIGURE_DEPENDS
-     "${CLANG_RESOURCE_DIR}/*.bc"
-     "${CLANG_RESOURCE_DIR}/*.a")
-# FIXME: Can't get the glob to filter by amdgpu or amdgcn in directory
-list(FILTER embedded_files INCLUDE REGEX ".*(amdgpu|amdgcn).*")
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.bc"
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.a")
 
 # TODO: Stop using bc2h. Really we ought to be able to rely on #embed,
 # but it's not supported by the oldest supported versions of host

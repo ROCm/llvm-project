@@ -14,10 +14,8 @@ make_directory(resource_dir)
 file(GLOB_RECURSE files
      RELATIVE ${CLANG_RESOURCE_DIR}
      LIST_DIRECTORIES false
-     "${CLANG_RESOURCE_DIR}/*.bc"
-     "${CLANG_RESOURCE_DIR}/*.a")
-list(FILTER embedded_files INCLUDE REGEX ".*(amdgpu|amdgcn).*")
-
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.bc"
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.a")
 
 foreach(file ${files})
   string(REGEX REPLACE "[^a-zA-Z0-9_]" "_" sanitized_name "${file}")
