@@ -164,62 +164,62 @@ int main() {
 
 // NoLoop single-pass scan: no _1 phase-two kernels.
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*i.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*i.*]]_l72
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*j.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*j.*]]_l72
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*m.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*m.*]]_l72
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*l.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*l.*]]_l72
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*d.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:264B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*d.*]]_l72
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*f.*]]_l48
 
 /// NO-LOOP: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// NO-LOOP: args: 9 teamsXthrds:( 100X 256)
+/// NO-LOOP: args:10 teamsXthrds:( 100X 256)
 /// NO-LOOP: lds_usage:132B
 /// NO-LOOP: n:__omp_offloading_[[MANGLED:.*f.*]]_l72
 

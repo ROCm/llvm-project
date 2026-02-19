@@ -881,12 +881,6 @@ public:
   bool isXteamScanPhaseOne = true;
   llvm::SmallVector<llvm::Value *, 8> ReductionVars;
   const OMPExecutableDirective *OMPPresentScanDirective = nullptr;
-  /// Phase 2 segmented scan: cross-team prefix and segment-start computed
-  /// before the BigJumpLoop and consumed by EmitOMPScanDirective.
-  llvm::Value *XteamScanCrossPrefix = nullptr;
-  llvm::Value *XteamScanSegmentStart = nullptr;
-  llvm::Value *XteamScanDSegmentVals = nullptr;
-  bool XteamScanIsInclusivePhase2 = true;
 
   /// Finalize LLVM code generation.
   void Release();

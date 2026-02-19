@@ -35,22 +35,9 @@ enum BlockStatus : uint32_t {
   BLOCK_COMPLETE = 2 // Block has computed final inclusive prefix
 };
 
-/// The status array is separate from the value array to simplify atomics.
-/// The status is updated AFTER the value is written, with appropriate fences.
-
-/// Atomically load block status with relaxed ordering (device scope).
-/// Ordering is provided by the standalone fence::kernel(acquire) calls that
-/// follow status reads -- those invalidate the per-CU L1 cache so subsequent
-/// non-atomic reads (e.g. block_values[]) see data flushed to L2 by the
-/// writer's release fence.
-#define load_block_status(status_ptr)                                          \
+#define load_relaxed_device(status_ptr)                                        \
   atomic::load(status_ptr, atomic::relaxed, atomic::MemScopeTy::device)
-
-/// Atomically store block status with relaxed ordering (device scope).
-/// Ordering is provided by the standalone fence::kernel(release) calls that
-/// precede status writes -- those flush the per-CU L1 dirty lines to L2 so
-/// other CUs can see prior non-atomic writes (e.g. block_values[] = ...).
-#define store_block_status(status_ptr, status)                                 \
+#define store_relaxed_device(status_ptr, status)                               \
   atomic::store(status_ptr, status, atomic::relaxed, atomic::MemScopeTy::device)
 
 } // anonymous namespace
@@ -67,26 +54,30 @@ enum BlockStatus : uint32_t {
 /// Memory layout:
 /// - block_status[NumTeams + 1]: Status of each block (INVALID/PARTIAL/COMPLETE)
 ///     The extra entry is an atomic done-counter for self-reset.
-/// - block_values[NumTeams]: Holds the aggregate while PARTIAL, overwritten
-///     with the inclusive prefix when transitioning to COMPLETE.
+/// - block_aggregates[NumTeams]: Written once at PARTIAL, never overwritten.
+/// - block_prefixes[NumTeams]: Written once when transitioning to COMPLETE.
+///   Using separate arrays eliminates the TOCTOU race that occurs when a
+///   single location is overwritten during PARTIAL-to-COMPLETE transitions.
 ///
 /// \param val Input thread local value (use rnv for out-of-bounds threads)
+/// \param result_array Output array for per-thread scan results (size >= num_elements)
 /// \param block_status Array of block status values
-/// \param block_values Shared array for aggregates (PARTIAL) and prefixes (COMPLETE)
+/// \param block_aggregates Array for per-block aggregates (size: NumTeams)
+/// \param block_prefixes Array for per-block inclusive prefixes (size: NumTeams)
 /// \param _rf Function pointer to reduction function
 /// \param rnv Reduction null value (identity element)
 /// \param k Global thread index
 /// \param num_elements Total number of elements in the scan (N)
 /// \param is_inclusive True for inclusive scan, false for exclusive
-/// \return The per-thread scan result (exclusive or inclusive prefix)
 ///
 /// Note that block=team and warp=wave.
 /// Threads with k >= num_elements use rnv as their input value but still
 /// participate in the look-back protocol.
 ///
 template <typename T>
-__attribute__((flatten, always_inline)) T
-_xteam_scan(T val, uint32_t *block_status, T *block_values,
+__attribute__((flatten, always_inline)) void
+_xteam_scan(T val, T *result_array, uint32_t *block_status,
+            T *block_aggregates, T *block_prefixes,
             void (*_rf)(T *, T), const T rnv,
             const uint64_t k, const uint64_t num_elements,
             bool is_inclusive) {
@@ -147,47 +138,36 @@ _xteam_scan(T val, uint32_t *block_status, T *block_values,
   if (omp_thread_num == 0) {
     if (omp_team_num == 0) {
       // Block 0 has no predecessors - immediately complete
-      block_values[0] = block_aggregate;
+      block_prefixes[0] = block_aggregate;
       fence::kernel(atomic::release);
-      store_block_status(&block_status[0], BLOCK_COMPLETE);
+      store_relaxed_device(&block_status[0], BLOCK_COMPLETE);
     } else {
       // Publish our aggregate with PARTIAL status
-      block_values[omp_team_num] = block_aggregate;
+      block_aggregates[omp_team_num] = block_aggregate;
       fence::kernel(atomic::release);
-      store_block_status(&block_status[omp_team_num], BLOCK_PARTIAL);
+      store_relaxed_device(&block_status[omp_team_num], BLOCK_PARTIAL);
 
       // Look back at predecessor blocks.
-      // Because block_values[] is shared for both aggregates (PARTIAL) and
-      // inclusive prefixes (COMPLETE), a predecessor can overwrite its
-      // aggregate with its prefix between our status read and value read.
-      // We re-check the status after reading the value to detect this.
+      // Aggregates and prefixes are in separate arrays, so no TOCTOU race:
+      // block_aggregates[b] is written once (at PARTIAL) and never changed.
+      // block_prefixes[b] is written once (at COMPLETE) in a separate location.
       int pred = omp_team_num - 1;
 
       while (pred >= 0) {
         uint32_t pred_status;
         do {
-          pred_status = load_block_status(&block_status[pred]);
+          pred_status = load_relaxed_device(&block_status[pred]);
         } while (pred_status == BLOCK_INVALID);
-
         fence::kernel(atomic::acquire);
 
         if (pred_status == BLOCK_COMPLETE) {
-          T pred_val = block_values[pred];
+          T pred_val = block_prefixes[pred];
           (*_rf)(&prefix_from_predecessors, pred_val);
           break;
         }
 
-        // PARTIAL: read aggregate, then verify status hasn't changed
-        T pred_val = block_values[pred];
-        fence::kernel(atomic::acquire);
-        pred_status = load_block_status(&block_status[pred]);
-        if (pred_status == BLOCK_COMPLETE) {
-          // Block transitioned; re-read to get the inclusive prefix
-          pred_val = block_values[pred];
-          (*_rf)(&prefix_from_predecessors, pred_val);
-          break;
-        }
-
+        // PARTIAL: accumulate aggregate and continue looking back
+        T pred_val = block_aggregates[pred];
         (*_rf)(&prefix_from_predecessors, pred_val);
         pred--;
       }
@@ -195,9 +175,9 @@ _xteam_scan(T val, uint32_t *block_status, T *block_values,
       // Compute our inclusive prefix and mark complete
       T our_prefix = prefix_from_predecessors;
       (*_rf)(&our_prefix, block_aggregate);
-      block_values[omp_team_num] = our_prefix;
+      block_prefixes[omp_team_num] = our_prefix;
       fence::kernel(atomic::release);
-      store_block_status(&block_status[omp_team_num], BLOCK_COMPLETE);
+      store_relaxed_device(&block_status[omp_team_num], BLOCK_COMPLETE);
 
       // Broadcast prefix to all threads via LDS
       block_prefix_lds = prefix_from_predecessors;
@@ -259,11 +239,12 @@ _xteam_scan(T val, uint32_t *block_status, T *block_values,
     if (done + 1 == num_blocks) {
       // Last block: reset all status entries and the counter for next use
       for (uint32_t i = 0; i <= num_blocks; i++)
-        block_status[i] = 0;
+        block_status[i] = BLOCK_INVALID;
     }
   }
 
-  return final_value;
+  if (k < num_elements)
+    result_array[k] = final_value;
 }
 
 //===----------------------------------------------------------------------===//
@@ -276,60 +257,68 @@ _xteam_scan(T val, uint32_t *block_status, T *block_values,
 #define _UL unsigned long
 
 // Single-pass scan functions using decoupled look-back
-extern "C" _XTEAM_EXTERN_ATTR double
-__kmpc_xteams_d(double v, uint32_t *status, double *values,
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_d(double v, double *result, uint32_t *status,
+                double *aggregates, double *prefixes,
                 void (*rf)(double *, double), const double rnv,
                 const uint64_t k, const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR float
-__kmpc_xteams_f(float v, uint32_t *status, float *values,
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_f(float v, float *result, uint32_t *status,
+                float *aggregates, float *prefixes,
                 void (*rf)(float *, float), const float rnv,
                 const uint64_t k, const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR int
-__kmpc_xteams_i(int v, uint32_t *status, int *values,
-                void (*rf)(int *, int), const int rnv, const uint64_t k,
-                const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_i(int v, int *result, uint32_t *status,
+                int *aggregates, int *prefixes,
+                void (*rf)(int *, int), const int rnv,
+                const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR _UI
-__kmpc_xteams_ui(_UI v, uint32_t *status, _UI *values,
-                 void (*rf)(_UI *, _UI), const _UI rnv, const uint64_t k,
-                 const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status,
+                 _UI *aggregates, _UI *prefixes,
+                 void (*rf)(_UI *, _UI), const _UI rnv,
+                 const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR long
-__kmpc_xteams_l(long v, uint32_t *status, long *values,
-                void (*rf)(long *, long), const long rnv, const uint64_t k,
-                const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_l(long v, long *result, uint32_t *status,
+                long *aggregates, long *prefixes,
+                void (*rf)(long *, long), const long rnv,
+                const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR _UL
-__kmpc_xteams_ul(_UL v, uint32_t *status, _UL *values,
-                 void (*rf)(_UL *, _UL), const _UL rnv, const uint64_t k,
-                 const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status,
+                 _UL *aggregates, _UL *prefixes,
+                 void (*rf)(_UL *, _UL), const _UL rnv,
+                 const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR _CD
-__kmpc_xteams_cd(_CD v, uint32_t *status, _CD *values,
-                 void (*rf)(_CD *, _CD), const _CD rnv, const uint64_t k,
-                 const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status,
+                 _CD *aggregates, _CD *prefixes,
+                 void (*rf)(_CD *, _CD), const _CD rnv,
+                 const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
-extern "C" _XTEAM_EXTERN_ATTR _CF
-__kmpc_xteams_cf(_CF v, uint32_t *status, _CF *values,
-                 void (*rf)(_CF *, _CF), const _CF rnv, const uint64_t k,
-                 const uint64_t n, bool is_inclusive) {
-  return _xteam_scan(v, status, values, rf, rnv, k, n, is_inclusive);
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status,
+                 _CF *aggregates, _CF *prefixes,
+                 void (*rf)(_CF *, _CF), const _CF rnv,
+                 const uint64_t k, const uint64_t n, bool is_inclusive) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive);
 }
 
 #undef _CF
