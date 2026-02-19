@@ -21,7 +21,7 @@ on:
         type: string
       test_retry:
         type: number
-        default: 1
+        default: 2                  #It will perform one additional try if failed
         required: false
   workflow_call:
     inputs:
