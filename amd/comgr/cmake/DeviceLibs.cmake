@@ -12,8 +12,13 @@ endforeach()
 
 set(GEN_RESOURCE_DIR_FILE ${LIB_DIR}/resource_dir.cpp)
 
-include(GetClangResourceDir)
-get_clang_resource_dir(CLANG_RESOURCE_DIR PREFIX ${LLVM_BINARY_DIR})
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(CLANG_RESOURCE_DIR "lib/clang/${LLVM_VERSION_MAJOR}")
+else()
+  # TODO: This should be the only supported build path
+  include(GetClangResourceDir)
+  get_clang_resource_dir(CLANG_RESOURCE_DIR PREFIX ${LLVM_BINARY_DIR})
+endif()
 
 if(COMGR_USE_INCBIN)
   set(resource_directory_object_archive ${LIB_DIR}/resource_directory.a)
