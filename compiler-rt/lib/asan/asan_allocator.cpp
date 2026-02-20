@@ -1645,7 +1645,10 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
 hsa_status_t asan_hsa_init() {
   hsa_status_t status = REAL(hsa_init)();
   if (status == HSA_STATUS_SUCCESS) {
-    __sanitizer::AmdgpuMemFuncs::ClearAmdgpuRuntimeShutdownState();
+    // Only clear state when recovering from a prior shutdown (avoids clearing
+    // amdgpu_event_registered on every refcount bump and re-registering).
+    if (__sanitizer::AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown())
+      __sanitizer::AmdgpuMemFuncs::ClearAmdgpuRuntimeShutdownState();
     __sanitizer::AmdgpuMemFuncs::RegisterSystemEventHandlers();
   }
   return status;
