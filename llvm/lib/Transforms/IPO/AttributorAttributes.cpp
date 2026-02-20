@@ -1226,9 +1226,12 @@ struct AAPointerInfoImpl
     auto BuildKernelSetIfNeeded = [&]() {
       if (KernelFunctionsInModule.empty()) {
         for (const Function &F : Scope.getParent()->functions()) {
-          if (A.getInfoCache().isKernel(F))
+          if (A.getInfoCache().isKernel(F)) {
             KernelFunctionsInModule.insert(&F);
+            LLVM_DEBUG(dbgs() << "[Attributor] Added kernel to set: " << F.getName() << "\n");
+          }
         }
+        LLVM_DEBUG(dbgs() << "[Attributor] Kernel set built. Size: " << KernelFunctionsInModule.size() << "\n");
       }
     };
 
@@ -1263,11 +1266,19 @@ struct AAPointerInfoImpl
           BuildKernelSetIfNeeded();
           IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
             ++NumIsKernelLine1227;
-            return !KernelFunctionsInModule.contains(&Fn);
+            bool Skip = KernelFunctionsInModule.contains(&Fn);
+            if (Fn.getName().contains("omp_par"))
+                 LLVM_DEBUG(dbgs() << "[Attributor] IsLiveInCalleeCB (Fast) for " << Fn.getName() << ": Skip=" << Skip << "\n");
+            return !Skip;
           };
         } else {
           IsLiveInCalleeCB = [&A](const Function &Fn) {
-            return !A.getInfoCache().isKernel(Fn);
+            bool IsK = A.getInfoCache().isKernel(Fn);
+            if (IsK) LLVM_DEBUG(dbgs() << "[Attributor] isKernel check for " << Fn.getName() << " returned true\n");
+            bool Skip = IsK;
+            if (Fn.getName().contains("omp_par"))
+                 LLVM_DEBUG(dbgs() << "[Attributor] IsLiveInCalleeCB (Slow) for " << Fn.getName() << ": Skip=" << Skip << "\n");
+            return !Skip;
           };
         }
       }
@@ -1297,10 +1308,16 @@ struct AAPointerInfoImpl
       if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
         ++NumIsKernelLine1242;
         if (EnableFunctionInfoPrecomputation) {
-          if (KernelFunctionsInModule.contains(AccScope))
+          bool Skip = KernelFunctionsInModule.contains(AccScope);
+          if (AccScope->getName().contains("omp_par"))
+             LLVM_DEBUG(dbgs() << "[Attributor] AccessCB (Fast) checking " << AccScope->getName() << ": Skip=" << Skip << "\n");
+          if (Skip)
             return true;
         } else {
-          if (A.getInfoCache().isKernel(*AccScope))
+          bool Skip = A.getInfoCache().isKernel(*AccScope);
+          if (AccScope->getName().contains("omp_par"))
+             LLVM_DEBUG(dbgs() << "[Attributor] AccessCB (Slow) checking " << AccScope->getName() << ": Skip=" << Skip << "\n");
+          if (Skip)
             return true;
         }
       }
@@ -1663,7 +1680,24 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
   ChangeStatus Changed = ChangeStatus::UNCHANGED;
   const DataLayout &DL = A.getDataLayout();
   Value &AssociatedValue = getAssociatedValue();
-
+  bool LogMoreOut = false;
+  LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: updateImpl - AA = "
+             << this->getIRPosition()
+             << " Associated Value = " << AssociatedValue << "\n");
+  if (getIRPosition().getPositionKind() == IRPosition::IRP_ARGUMENT) {
+    if (Argument *Arg = getIRPosition().getAssociatedArgument()) {
+      Function *ParentFn = Arg->getParent();
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: Argument Details\n");
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: Parent: " << ParentFn->getName() << "\n");
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: ArgNo: " << Arg->getArgNo() << "\n");
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: ParentFn->hasExactDefinition() = " << ParentFn->hasExactDefinition() << "\n");
+      if (ParentFn->getName().contains("__kmpc_parallel_60") && !ParentFn->hasExactDefinition() && Arg->getArgNo() == 7)
+        LogMoreOut = true;
+    }
+    LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: \n");
+  } else {
+    LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating]: not an argument kind\n");
+  }
   DenseMap<Value *, OffsetInfo> OffsetInfoMap;
   OffsetInfoMap[&AssociatedValue].insert(0);
 
@@ -1965,17 +1999,39 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
         return true;
       if (CB->isArgOperand(&U)) {
         unsigned ArgNo = CB->getArgOperandNo(&U);
+        bool LogMore = false;
+        if (ArgNo == 7 && CB->getCalledFunction()->getName().contains("__kmpc_parallel_60")) {
+          LogMore = true;
+          LLVM_DEBUG(dbgs()
+                     << "[AAPointerInfo] Going to look at CSArgPI at position "
+                     << IRPosition::callsite_argument(*CB, ArgNo) << " for "
+                     << *CB << "\n");
+        }
         const auto *CSArgPI = A.getAAFor<AAPointerInfo>(
             *this, IRPosition::callsite_argument(*CB, ArgNo),
             DepClassTy::REQUIRED);
-        if (!CSArgPI)
+        if (!CSArgPI) {
+          if (LogMore)
+            LLVM_DEBUG(dbgs() << "[AAPointerInfo] CSArgPI invalid. Returning false from UsePred\n");
           return false;
+        } else {
+          if (LogMore) {
+            LLVM_DEBUG(dbgs() << "[AAPointerInfo] CSArgPI VALID. Going to translateAndAddState\n");
+            LLVM_DEBUG(dbgs() << "[AAPointerInfo] CSArgPI is " << *CSArgPI << "\n");
+          }
+        }
         bool IsArgMustAcc = (getUnderlyingObject(CurPtr) == &AssociatedValue);
         Changed = translateAndAddState(A, *CSArgPI, OffsetInfoMap[CurPtr], *CB,
                                        IsArgMustAcc) |
                   Changed;
-        if (!CSArgPI->reachesReturn())
+        if (!CSArgPI->reachesReturn()) {
+          if (LogMore)
+            LLVM_DEBUG(dbgs() << "[AAPointerInfo] CSAargPI->reachesReturn() = false and " << "isValidState() = " << isValidState() << "\n");
           return isValidState();
+        } else {
+          if (LogMore)
+            LLVM_DEBUG(dbgs() << "[AAPointerInfo] CSAargP->reachesReturn() = true\n");
+        }
 
         Function *Callee = CB->getCalledFunction();
         if (!Callee || Callee->arg_size() <= ArgNo)
@@ -2024,6 +2080,26 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
     bool Unused;
     return HandlePassthroughUser(NewU.get(), OldU.get(), Unused);
   };
+  if (LogMoreOut) {
+    constexpr auto tag = "[AAPointerInfoFloating]: ";
+    LLVM_DEBUG(dbgs() << tag << "AssociatedValue = " << AssociatedValue << "\n");
+    if (AssociatedValue.use_empty())
+      LLVM_DEBUG(dbgs() << tag << "AssociatedValue has no uses\n");
+    else
+      LLVM_DEBUG(dbgs() << tag << "AssociatedValue.getNumUses() = " << AssociatedValue.getNumUses() << "\n");
+    
+  }
+  if (auto *Arg = dyn_cast<Argument>(&AssociatedValue)) {
+    if (!Arg->getParent()->hasExactDefinition()) {
+      // If the function is readnone for this argument, we know there are no accesses.
+      if (Arg->hasAttribute(Attribute::ReadNone))
+        return ChangeStatus::UNCHANGED; // Or handle as no-op
+      // Otherwise, we must assume unknown accesses (reads and/or writes).
+      // We cannot track offsets, so we must give up.
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating] Argument of declaration " << Arg->getParent()->getName() << ", giving up.\n");
+      return indicatePessimisticFixpoint();
+    }
+  }
   if (!A.checkForAllUses(UsePred, *this, AssociatedValue,
                          /* CheckBBLivenessOnly */ true, DepClassTy::OPTIONAL,
                          /* IgnoreDroppableUses */ true, EquivalentUseCB)) {
@@ -2032,7 +2108,7 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
   }
 
   LLVM_DEBUG({
-    dbgs() << "Accesses by bin after update:\n";
+    dbgs() << "[AAPointerInfo]: Accesses by bin after update:\n";
     dumpState(dbgs());
   });
 
@@ -2091,7 +2167,7 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
             Changed | addAccess(A, {0, LengthVal}, *MI, nullptr, Kind, nullptr);
       }
       LLVM_DEBUG({
-        dbgs() << "Accesses by bin after update:\n";
+        dbgs() << "[AAPointerInfoCSA]: Accesses by bin after update:\n";
         dumpState(dbgs());
       });
 
@@ -2104,6 +2180,8 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
     //       redirecting requests to the callee argument.
     Argument *Arg = getAssociatedArgument();
     if (Arg) {
+      LLVM_DEBUG(dbgs() << "Arg found: " << *Arg << "\n");
+      //      LLVM_DEBUG(dbgs() << "ArgPos: " << ArgPos << "\n");
       const IRPosition &ArgPos = IRPosition::argument(*Arg);
       auto *ArgAA =
           A.getAAFor<AAPointerInfo>(*this, ArgPos, DepClassTy::REQUIRED);
@@ -2112,6 +2190,8 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
                                               *cast<CallBase>(getCtxI()));
       if (!Arg->getParent()->isDeclaration())
         return indicatePessimisticFixpoint();
+    } else {
+      LLVM_DEBUG(dbgs() << "Arg NOT found\n");
     }
 
     bool IsKnownNoCapture;

@@ -141,6 +141,8 @@
 #include "llvm/Transforms/Utils/CallGraphUpdater.h"
 
 #include <limits>
+#include <llvm-14/llvm/Support/raw_ostream.h>
+#include <llvm-14/llvm/Transforms/IPO/Attributor.h>
 #include <map>
 #include <optional>
 
@@ -1600,7 +1602,39 @@ struct Attributor {
     return getOrCreateAAFor<AAType>(IRP, &QueryingAA, DepClass,
                                     /* ForceUpdate */ false);
   }
+  std::string IRPToString(const IRPosition &Pos) {
+    std::string s;
+    llvm::raw_string_ostream OS(s);
+    const Value &AV = Pos.getAssociatedValue();
+    auto getKind = [&](llvm::IRPosition::Kind AP) {
+      switch (AP) {
+      case IRPosition::IRP_INVALID:
+        return "inv";
+      case IRPosition::IRP_FLOAT:
+        return "flt";
+      case IRPosition::IRP_RETURNED:
+        return "fn_ret";
+      case IRPosition::IRP_CALL_SITE_RETURNED:
+        return "cs_ret";
+      case IRPosition::IRP_FUNCTION:
+        return "fn";
+      case IRPosition::IRP_CALL_SITE:
+        return "cs";
+      case IRPosition::IRP_ARGUMENT:
+        return "arg";
+      case IRPosition::IRP_CALL_SITE_ARGUMENT:
+        return "cs_arg";
+      }
+      llvm_unreachable("Unknown attribute position!");
+    };
+    OS << "{" << getKind(Pos.getPositionKind()) << ":" << AV.getName() << " ["
+     << Pos.getAnchorValue().getName() << "@" << Pos.getCallSiteArgNo() << "]";
 
+    if (Pos.hasCallBaseContext())
+      OS << "[cb_context:" << *Pos.getCallBaseContext() << "]";
+     OS << "}";
+     return OS.str();
+  }
   /// The version of getAAFor that allows to omit a querying abstract
   /// attribute. Using this after Attributor started running is restricted to
   /// only the Attributor itself. Initial seeding of AAs can be done via this
@@ -1611,9 +1645,15 @@ struct Attributor {
                                  const AbstractAttribute *QueryingAA,
                                  DepClassTy DepClass, bool ForceUpdate = false,
                                  bool UpdateAfterInit = true) {
+    constexpr auto tag = "[getOrCreateAAFor]: ";
     if (!shouldPropagateCallBaseContext(IRP))
       IRP = IRP.stripCallBaseContext();
-
+      if (QueryingAA)
+        dbgs() << tag << "Looking up AA for position " << IRPToString(IRP)
+               << " requested by " << QueryingAA->getName() << "->["
+               << QueryingAA->getAsStr(this) << "]\n";
+      else
+        dbgs() << tag<< "Looking up AA\n";
     if (AAType *AAPtr = lookupAAFor<AAType>(IRP, QueryingAA, DepClass,
                                             /* AllowInvalidState */ true)) {
       if (ForceUpdate && Phase == AttributorPhase::UPDATE)
@@ -1622,22 +1662,29 @@ struct Attributor {
     }
 
     bool ShouldUpdateAA;
-    if (!shouldInitialize<AAType>(IRP, ShouldUpdateAA))
+    if (!shouldInitialize<AAType>(IRP, ShouldUpdateAA)) {
+        dbgs() << tag << "Not initializing. Returning nullptr\n";
       return nullptr;
+    }
 
-    if (!DebugCounter::shouldExecute(NumAbstractAttributes))
+    if (!DebugCounter::shouldExecute(NumAbstractAttributes)) {
+        dbgs() << tag << "Should not execute\n";
       return nullptr;
+    }
 
     // No matching attribute found, create one.
     // Use the static create method.
+    dbgs() << tag << "creating an AA\n";
     auto &AA = AAType::createForPosition(IRP, *this);
 
     // Always register a new attribute to make sure we clean up the allocated
     // memory properly.
+         dbgs() << tag << "registering new AA\n";
     registerAA(AA);
 
     // If we are currenty seeding attributes, enforce seeding rules.
     if (Phase == AttributorPhase::SEEDING && !shouldSeedAttribute(AA)) {
+        dbgs() << tag << "should not seed Attribute in Seeding phase\n";
       AA.getState().indicatePessimisticFixpoint();
       return &AA;
     }
@@ -1650,11 +1697,13 @@ struct Attributor {
                std::to_string(AA.getIRPosition().getPositionKind());
       });
       ++InitializationChainLength;
+        dbgs() << tag << "initializing AA\n";
       AA.initialize(*this);
       --InitializationChainLength;
     }
 
     if (!ShouldUpdateAA) {
+        dbgs() << tag << "Not updating AA\n";
       AA.getState().indicatePessimisticFixpoint();
       return &AA;
     }
@@ -1665,14 +1714,17 @@ struct Attributor {
       AttributorPhase OldPhase = Phase;
       Phase = AttributorPhase::UPDATE;
 
+        dbgs() << tag << "UPDATING AA\n";
       updateAA(AA);
 
       Phase = OldPhase;
     }
 
-    if (QueryingAA && AA.getState().isValidState())
+    if (QueryingAA && AA.getState().isValidState()) {
+        dbgs() << tag << "Recording dependence\n";
       recordDependence(AA, const_cast<AbstractAttribute &>(*QueryingAA),
                        DepClass);
+    }
     return &AA;
   }
 
@@ -1859,6 +1911,13 @@ struct Attributor {
   /// If a function is exactly defined or it has alwaysinline attribute
   /// and is viable to be inlined, we say it is IPO amendable
   bool isFunctionIPOAmendable(const Function &F) {
+    // if (F.getName().contains("__kmpc_parallel_60")) {
+      // dbgs() << "Function = " << F.getName() << "\n";
+      // dbgs() << "F.hasExactDefinition() = " << F.hasExactDefinition() << "\n";
+      // dbgs() << "InfoCache.InlineableFunctions.count(&F) = " << InfoCache.InlineableFunctions.count(&F) << "\n";
+      // if (Configuration.IPOAmendableCB)
+      //   dbgs() << "Configuration.IPOAmendableCB = " << Configuration.IPOAmendableCB(F) << "\n";
+    // }
     return F.hasExactDefinition() || InfoCache.InlineableFunctions.count(&F) ||
            (Configuration.IPOAmendableCB && Configuration.IPOAmendableCB(F));
   }

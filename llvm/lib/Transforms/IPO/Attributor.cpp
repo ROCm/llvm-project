@@ -41,6 +41,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/DebugLog.h"
 #include "llvm/Support/DebugCounter.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/GraphWriter.h"
@@ -61,9 +62,28 @@
 #include <string>
 
 using namespace llvm;
-
 #define DEBUG_TYPE "attributor"
 #define VERBOSE_DEBUG_TYPE DEBUG_TYPE "-verbose"
+
+namespace {
+class LogRAII {
+public:
+  inline static int Count = 0;
+  LogRAII(std::string scopeName) : scope (scopeName + "." + utostr(Count)) {
+    enter();
+    Count += 1;
+  }
+  ~LogRAII() { this->exit(); Count -= 1; }
+private:
+  void enter() {
+    LDBG() << "*** Entering " << scope << " ***\n";
+  }
+  void exit() {
+    LDBG() << "*** Leaving " << scope << " ***\n";
+  }
+  std::string scope = "";
+};
+} // namespace
 
 DEBUG_COUNTER(ManifestDBGCounter, "attributor-manifest",
               "Determine what attributes are manifested in the IR");
@@ -387,6 +407,7 @@ static bool getPotentialCopiesOfMemoryValue(
     SmallSetVector<Instruction *, 4> *PotentialValueOrigins,
     const AbstractAttribute &QueryingAA, bool &UsedAssumedInformation,
     bool OnlyExact) {
+  LogRAII L("getPotentialCopiesOfMemoryValue" + QueryingAA.getAsStr(&A));
   LLVM_DEBUG(dbgs() << "Trying to determine the potential copies of " << I
                     << " (only exact: " << OnlyExact << ")\n";);
 
@@ -3302,6 +3323,14 @@ void InformationCache::initializeInformationCache(const Function &CF,
     if (I.mayReadOrWriteMemory())
       FI.RWInsts.push_back(&I);
   }
+
+  // if (F.getName().contains("_QMmymodPreduction_and_val..omp_par")) {
+  //    dbgs() << "[Attributor] Initializing InfoCache for " << F.getName() << "\n";
+  //    dbgs() << "  RWInsts size: " << FI.RWInsts.size() << "\n";
+  //    for (auto *I : FI.RWInsts) {
+  //      dbgs() << "    " << *I << "\n";
+  //    }
+  // }
 
   if (F.hasFnAttribute(Attribute::AlwaysInline) &&
       isInlineViable(F).isSuccess())

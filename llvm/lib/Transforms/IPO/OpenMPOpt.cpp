@@ -54,6 +54,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/DebugLog.h"
 #include "llvm/Transforms/IPO/Attributor.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/CallGraphUpdater.h"
@@ -66,6 +67,11 @@ using namespace llvm;
 using namespace omp;
 
 #define DEBUG_TYPE "openmp-opt"
+static cl::opt<bool> PrintDebugForAttributorAndOpenMP(
+    "openmp-attributor-debug",
+    cl::desc(
+        "Print debug logs for openmp and attributor when amdgcn is the arch"),
+    cl::Hidden, cl::init(false));
 
 static cl::opt<bool> DisableOpenMPOptimizations(
     "openmp-opt-disable", cl::desc("Disable OpenMP specific optimizations."),
@@ -191,7 +197,7 @@ STATISTIC(NumBarriersEliminated, "Number of redundant barriers eliminated");
 #if !defined(NDEBUG)
 static constexpr auto TAG = "[" DEBUG_TYPE "]";
 #endif
-
+static int OpenMPOptPassCount;
 namespace KernelInfo {
 
 // struct ConfigurationEnvironmentTy {
@@ -986,8 +992,8 @@ struct OpenMPOpt {
 
     bool Changed = false;
 
-    LLVM_DEBUG(dbgs() << TAG << "Run on SCC with " << SCC.size()
-                      << " functions\n");
+    LLVM_DEBUG(dbgs() << TAG << "[IsModulePass:" << IsModulePass
+                      << "] Run on SCC with " << SCC.size() << " functions\n");
 
     if (IsModulePass) {
       Changed |= runAttributor(IsModulePass);
@@ -4331,10 +4337,11 @@ struct AAKernelInfoFunction : AAKernelInfo {
 
     if (!ExecMode) { // likely fortran missing exec mode
       auto Remark = [&](OptimizationRemark OR) {
-        return OR << "Could not transform generic-mode kernel to SPMD-mode. Missing mode.";
+        return OR << "Could not transform generic-mode kernel to SPMD-mode. "
+                     "Missing mode.";
       };
       A.emitRemark<OptimizationRemark>(KernelInitCB, "OMP122", Remark);
-    return false;
+      return false;
     }
     assert(ExecMode && "Kernel without exec mode?");
     assert(ExecMode->getInitializer() && "ExecMode doesn't have initializer!");
@@ -5855,6 +5862,39 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   KernelSet Kernels = getDeviceKernels(M);
 
+  class DebugFlagAndTypesRAII {
+  public:
+    DebugFlagAndTypesRAII(Module &M) {
+      if (PrintDebugForAttributorAndOpenMP &&
+          M.getTargetTriple().getArch() == llvm::Triple::amdgcn) {
+        OldDebugFlag = llvm::DebugFlag;
+        llvm::DebugFlag = true;
+        const char *Types[] = {"openmp-opt", "attributor"};
+        llvm::setCurrentDebugTypes(Types, 2);
+        llvm::ResetStatistics();
+        llvm::EnableStatistics();
+        printNow = true;
+      }
+    }
+    ~DebugFlagAndTypesRAII() {
+      if (printNow) {
+        printNow = false;
+        llvm::PrintStatistics(llvm::dbgs());
+        llvm::DebugFlag = OldDebugFlag;
+        llvm::setCurrentDebugTypes(nullptr, 0);
+      }
+    }
+
+  private:
+    bool OldDebugFlag;
+    bool printNow = false;
+  };
+  DebugFlagAndTypesRAII DebugRAII(M);
+  LDBG() << " [Start] Pass Run #" << OpenMPOptPassCount;
+  LDBG() << " *** Module Info ***";
+  LDBG() << "Name: " << M.getName();
+  LDBG() << "Target: " << M.getTargetTriple().str();
+
   if (PrintModuleBeforeOptimizations)
     LLVM_DEBUG(dbgs() << TAG << "Module before OpenMPOpt Module Pass:\n" << M);
 
@@ -5951,6 +5991,8 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
   if (PrintModuleAfterOptimizations)
     LLVM_DEBUG(dbgs() << TAG << "Module after OpenMPOpt Module Pass:\n" << M);
 
+  errs() << TAG << " [End] Pass Run #" << OpenMPOptPassCount++
+         << " -> Changed = " << Changed << "\n";
   if (Changed)
     return PreservedAnalyses::none();
 
