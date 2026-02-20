@@ -99,14 +99,14 @@ jobs:
           git submodule
 
       - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && secrets.CALLER == 'parameterized' }}
         uses: actions/download-artifact@v4
         with:
           name: multiple-pr-build-params
           path: .
 
       - name: Source the multiple PR's of params
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && secrets.CALLER == 'parameterized' }}
         run: |
           set -a
           source ./${{ github.run_id }}_PR_params.env
@@ -116,7 +116,7 @@ jobs:
           echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
       - name: Update submodule pointers from provided parameter PR values
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && secrets.CALLER == 'parameterized' }}
         run: |
           git config --global --add safe.directory "$PWD"
           # Function to get SHA with git-ls
@@ -207,7 +207,7 @@ jobs:
              cd -
 
       - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && secrets.CALLER == 'parameterized') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -218,7 +218,7 @@ jobs:
           python3 build_tools/github_actions/build_configure.py --manylinux
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' && secrets.CALLER != 'parameterized') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
