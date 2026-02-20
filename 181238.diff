@@ -1,0 +1,1735 @@
+diff --git a/llvm/lib/Target/AMDGPU/SIISelLowering.cpp b/llvm/lib/Target/AMDGPU/SIISelLowering.cpp
+index fe1d24f7803bd..4781d3e0f9caa 100644
+--- a/llvm/lib/Target/AMDGPU/SIISelLowering.cpp
++++ b/llvm/lib/Target/AMDGPU/SIISelLowering.cpp
+@@ -17171,26 +17171,96 @@ SDValue SITargetLowering::performSetCCCombine(SDNode *N,
+           return LHS.getOperand(0);
+       }
+     }
++  }
+ 
+-    // setcc v.64, 0xXXXX'XXXX'0000'0000, lt/ge
+-    //    => setcc v.hi32, 0xXXXX'XXXX, lt/ge
+-    //
+-    // setcc v.64, 0xXXXX'XXXX'FFFF'FFFF, le/gt
+-    //    => setcc v.hi32, 0xXXXX'XXXX, le/gt
+-    if (VT == MVT::i64) {
+-      const uint64_t Mask32 = maskTrailingOnes<uint64_t>(32);
+-      const uint64_t CRHSInt = CRHSVal.getZExtValue();
+-
+-      if ( // setcc v.64, 0xXXXX'XXXX'0000'0000, lt/ge
+-          ((CRHSInt & Mask32) == 0 && (CC == ISD::SETULT || CC == ISD::SETUGE ||
+-                                       CC == ISD::SETLT || CC == ISD::SETGE)) ||
+-          // setcc v.64, 0xXXXX'XXXX'FFFF'FFFF, le/gt
+-          ((CRHSInt & Mask32) == Mask32 &&
+-           (CC == ISD::SETULE || CC == ISD::SETUGT || CC == ISD::SETLE ||
+-            CC == ISD::SETGT)))
+-        return DAG.getSetCC(SL, N->getValueType(0), getHiHalf64(LHS, DAG),
+-                            DAG.getConstant(CRHSInt >> 32, SL, MVT::i32), CC);
++  // Truncate 64-bit setcc to test only upper 32-bits of its operands in the
++  // following cases where information about the lower 32-bits of its operands
++  // is known:
++  //
++  // If LHS.lo32 == RHS.lo32:
++  //    setcc LHS, RHS, eq/ne => setcc LHS.hi32, RHS.hi32, eq/ne
++  // If LHS.lo32 != RHS.lo32:
++  //    setcc LHS, RHS, eq/ne => setcc LHS.hi32, RHS.hi32, false/true
++  // If LHS.lo32 >= RHS.lo32 (unsigned):
++  //    setcc LHS, RHS, [u]lt/ge => LHS.hi32, RHS.hi32, [u]lt/ge
++  // If LHS.lo32 > RHS.lo32 (unsigned):
++  //    setcc LHS, RHS, [u]le/gt => LHS.hi32, RHS.hi32, [u]lt/ge
++  // If LHS.lo32 <= RHS.lo32 (unsigned):
++  //    setcc LHS, RHS, [u]le/gt => LHS.hi32, RHS.hi32, [u]le/gt
++  // If LHS.lo32 < RHS.lo32 (unsigned):
++  //    setcc LHS, RHS, [u]lt/ge => LHS.hi32, RHS.hi32, [u]le/gt
++  if (VT == MVT::i64) {
++    const KnownBits LHSKnownLo32 = DAG.computeKnownBits(LHS).trunc(32);
++    const KnownBits RHSKnownLo32 = DAG.computeKnownBits(RHS).trunc(32);
++
++    // NewCC is valid iff we can truncate the setcc to only test the upper 32
++    // bits
++    ISD::CondCode NewCC = ISD::SETCC_INVALID;
++
++    switch (CC) {
++    default:
++      break;
++    case ISD::SETEQ: {
++      const std::optional<bool> KnownEq =
++          KnownBits::eq(LHSKnownLo32, RHSKnownLo32);
++      if (KnownEq) {
++        NewCC = *KnownEq ? ISD::SETEQ : ISD::SETFALSE;
++      }
++      break;
++    }
++    case ISD::SETNE: {
++      const std::optional<bool> KnownEq =
++          KnownBits::eq(LHSKnownLo32, RHSKnownLo32);
++      if (KnownEq) {
++        NewCC = *KnownEq ? ISD::SETNE : ISD::SETTRUE;
++      }
++      break;
+     }
++    case ISD::SETULT:
++    case ISD::SETUGE:
++    case ISD::SETLT:
++    case ISD::SETGE: {
++      const std::optional<bool> KnownUge =
++          KnownBits::uge(LHSKnownLo32, RHSKnownLo32);
++      if (KnownUge) {
++        if (*KnownUge) {
++          // LHS.lo32 uge RHS.lo32, so LHS >= RHS iff LHS.hi32 >= RHS.hi32
++          NewCC = CC;
++        } else {
++          // LHS.lo32 ult RHS.lo32, so LHS >= RHS iff LHS.hi32 > RHS.hi32
++          NewCC = CC == ISD::SETULT   ? ISD::SETULE
++                  : CC == ISD::SETUGE ? ISD::SETUGT
++                  : CC == ISD::SETLT  ? ISD::SETLE
++                                      : ISD::SETGT;
++        }
++      }
++      break;
++    }
++    case ISD::SETULE:
++    case ISD::SETUGT:
++    case ISD::SETLE:
++    case ISD::SETGT: {
++      const std::optional<bool> KnownUle =
++          KnownBits::ule(LHSKnownLo32, RHSKnownLo32);
++      if (KnownUle) {
++        if (*KnownUle) {
++          // LHS.lo32 ule RHS.lo32, so LHS <= RHS iff LHS.hi32 <= RHS.hi32
++          NewCC = CC;
++        } else {
++          // LHS.lo32 ugt RHS.lo32, so LHS <= RHS iff LHS.hi32 < RHS.hi32
++          NewCC = CC == ISD::SETULE   ? ISD::SETULT
++                  : CC == ISD::SETUGT ? ISD::SETUGE
++                  : CC == ISD::SETLE  ? ISD::SETLT
++                                      : ISD::SETGE;
++        }
++      }
++      break;
++    }
++    }
++
++    if (NewCC != ISD::SETCC_INVALID)
++      return DAG.getSetCC(SL, N->getValueType(0), getHiHalf64(LHS, DAG),
++                          getHiHalf64(RHS, DAG), NewCC);
+   }
+ 
+   // Eliminate setcc by using carryout from add/sub instruction
+diff --git a/llvm/test/CodeGen/AMDGPU/bypass-div.ll b/llvm/test/CodeGen/AMDGPU/bypass-div.ll
+index 00baf0a44368d..8749e5933beca 100644
+--- a/llvm/test/CodeGen/AMDGPU/bypass-div.ll
++++ b/llvm/test/CodeGen/AMDGPU/bypass-div.ll
+@@ -8,9 +8,8 @@ define i64 @sdiv64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: sdiv64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+ ; GFX9-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+@@ -159,9 +158,8 @@ define i64 @udiv64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: udiv64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+ ; GFX9-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+@@ -295,9 +293,8 @@ define i64 @srem64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: srem64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+ ; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+@@ -442,9 +439,8 @@ define i64 @urem64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: urem64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+ ; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+@@ -698,9 +694,8 @@ define <2 x i64> @sdivrem64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: sdivrem64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr6_vgpr7
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+@@ -869,9 +864,8 @@ define <2 x i64> @udivrem64(i64 %a, i64 %b) {
+ ; GFX9-LABEL: udivrem64:
+ ; GFX9:       ; %bb.0:
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+-; GFX9-NEXT:    v_or_b32_e32 v5, v1, v3
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v1, v3
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr6_vgpr7
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+@@ -1023,9 +1017,8 @@ define i64 @sdiv64_known32(i64 %a, i64 %b) {
+ ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+ ; GFX9-NEXT:    v_ashrrev_i32_e32 v2, 31, v1
+ ; GFX9-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
+-; GFX9-NEXT:    v_or_b32_e32 v5, v2, v0
+-; GFX9-NEXT:    v_mov_b32_e32 v4, 0
+-; GFX9-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; GFX9-NEXT:    v_or_b32_e32 v4, v2, v0
++; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; GFX9-NEXT:    ; implicit-def: $vgpr4_vgpr5
+ ; GFX9-NEXT:    s_and_saveexec_b64 s[4:5], vcc
+ ; GFX9-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
+diff --git a/llvm/test/CodeGen/AMDGPU/extract-subvector.ll b/llvm/test/CodeGen/AMDGPU/extract-subvector.ll
+index 4279b4f285b6f..b0d229f7b4785 100644
+--- a/llvm/test/CodeGen/AMDGPU/extract-subvector.ll
++++ b/llvm/test/CodeGen/AMDGPU/extract-subvector.ll
+@@ -205,14 +205,14 @@ define <4 x i64> @extract_4xi64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
+ ; GCN-NEXT:  .LBB2_4: ; %exit
+ ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+ ; GCN-NEXT:    v_mov_b32_e32 v1, 0xffff8000
+-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v5
+-; GCN-NEXT:    v_cndmask_b32_e64 v0, v1, -1, vcc
+-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v7
+-; GCN-NEXT:    v_cndmask_b32_e64 v2, v1, -1, vcc
+-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v9
+-; GCN-NEXT:    v_cndmask_b32_e64 v4, v1, -1, vcc
+-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v11
+-; GCN-NEXT:    v_cndmask_b32_e64 v6, v1, -1, vcc
++; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v5
++; GCN-NEXT:    v_cndmask_b32_e32 v0, -1, v1, vcc
++; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v7
++; GCN-NEXT:    v_cndmask_b32_e32 v2, -1, v1, vcc
++; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v9
++; GCN-NEXT:    v_cndmask_b32_e32 v4, -1, v1, vcc
++; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v11
++; GCN-NEXT:    v_cndmask_b32_e32 v6, -1, v1, vcc
+ ; GCN-NEXT:    v_mov_b32_e32 v1, -1
+ ; GCN-NEXT:    v_mov_b32_e32 v3, -1
+ ; GCN-NEXT:    v_mov_b32_e32 v5, -1
+@@ -295,22 +295,22 @@ define <8 x i64> @extract_8xi64(ptr addrspace(1) %p0, ptr addrspace(1) %p1, i1 %
+ ; GCN-NEXT:  .LBB3_4: ; %exit
+ ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+ ; GCN-NEXT:    v_mov_b32_e32 v1, 0xffff8000
+-; GCN-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v7
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[4:5], 0, v9
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[6:7], 0, v11
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[8:9], 0, v13
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[10:11], 0, v15
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[12:13], 0, v17
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[14:15], 0, v19
+-; GCN-NEXT:    v_cmp_gt_i32_e64 s[16:17], 0, v5
+-; GCN-NEXT:    v_cndmask_b32_e64 v0, v1, -1, s[16:17]
+-; GCN-NEXT:    v_cndmask_b32_e64 v2, v1, -1, vcc
+-; GCN-NEXT:    v_cndmask_b32_e64 v4, v1, -1, s[4:5]
+-; GCN-NEXT:    v_cndmask_b32_e64 v6, v1, -1, s[6:7]
+-; GCN-NEXT:    v_cndmask_b32_e64 v8, v1, -1, s[8:9]
+-; GCN-NEXT:    v_cndmask_b32_e64 v10, v1, -1, s[10:11]
+-; GCN-NEXT:    v_cndmask_b32_e64 v12, v1, -1, s[12:13]
+-; GCN-NEXT:    v_cndmask_b32_e64 v14, v1, -1, s[14:15]
++; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, -1, v19
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[4:5], -1, v17
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[6:7], -1, v15
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[8:9], -1, v13
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[10:11], -1, v11
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[12:13], -1, v9
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[14:15], -1, v7
++; GCN-NEXT:    v_cmp_lt_i32_e64 s[16:17], -1, v5
++; GCN-NEXT:    v_cndmask_b32_e64 v0, -1, v1, s[16:17]
++; GCN-NEXT:    v_cndmask_b32_e64 v2, -1, v1, s[14:15]
++; GCN-NEXT:    v_cndmask_b32_e64 v4, -1, v1, s[12:13]
++; GCN-NEXT:    v_cndmask_b32_e64 v6, -1, v1, s[10:11]
++; GCN-NEXT:    v_cndmask_b32_e64 v8, -1, v1, s[8:9]
++; GCN-NEXT:    v_cndmask_b32_e64 v10, -1, v1, s[6:7]
++; GCN-NEXT:    v_cndmask_b32_e64 v12, -1, v1, s[4:5]
++; GCN-NEXT:    v_cndmask_b32_e32 v14, -1, v1, vcc
+ ; GCN-NEXT:    v_mov_b32_e32 v1, -1
+ ; GCN-NEXT:    v_mov_b32_e32 v3, -1
+ ; GCN-NEXT:    v_mov_b32_e32 v5, -1
+diff --git a/llvm/test/CodeGen/AMDGPU/optimize-compare.ll b/llvm/test/CodeGen/AMDGPU/optimize-compare.ll
+index 51db31d99d7e2..a441473440c24 100644
+--- a/llvm/test/CodeGen/AMDGPU/optimize-compare.ll
++++ b/llvm/test/CodeGen/AMDGPU/optimize-compare.ll
+@@ -63,11 +63,9 @@ define amdgpu_kernel void @if_masked_0x8000000000000000(i64 %arg, ptr addrspace(
+ ; GCN-LABEL: if_masked_0x8000000000000000:
+ ; GCN:       ; %bb.0:
+ ; GCN-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
+-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+-; GCN-NEXT:    s_mov_b32 s0, 0
+ ; GCN-NEXT:    v_mov_b32_e32 v0, 0
+-; GCN-NEXT:    s_and_b32 s1, s1, 0x80000000
+-; GCN-NEXT:    s_cmp_eq_u64 s[0:1], 0
++; GCN-NEXT:    s_waitcnt lgkmcnt(0)
++; GCN-NEXT:    s_bitcmp0_b32 s1, 31
+ ; GCN-NEXT:    s_cselect_b32 s0, 22, 33
+ ; GCN-NEXT:    v_mov_b32_e32 v1, s0
+ ; GCN-NEXT:    global_store_dword v0, v1, s[2:3]
+diff --git a/llvm/test/CodeGen/AMDGPU/setcc-select-hi32mask.ll b/llvm/test/CodeGen/AMDGPU/setcc-select-hi32mask.ll
+new file mode 100644
+index 0000000000000..9735b1265975b
+--- /dev/null
++++ b/llvm/test/CodeGen/AMDGPU/setcc-select-hi32mask.ll
+@@ -0,0 +1,900 @@
++; NOTE: Assertions have been autogenerated by utils/update_llc_test_checks.py UTC_ARGS: --version 6
++; RUN: llc -mtriple=amdgcn-amd-amdhsa < %s | FileCheck %s
++
++define i32 @select.hi32.sgpr.eq(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.eq:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_eq_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.eq.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.eq.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.eq.multiuse(i64 inreg %mask, i32 inreg %a, i32 inreg %b, i32 inreg %c, i32 inreg %d) {
++; CHECK-LABEL: select.hi32.sgpr.eq.multiuse:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_eq_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    s_cselect_b32 s5, s20, s21
++; CHECK-NEXT:    s_add_i32 s4, s4, s5
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, u0xa0a0a0a000000000
++  %ab = select i1 %mask.hi.c, i32 %a, i32 %b
++  %cd = select i1 %mask.hi.c, i32 %c, i32 %d
++  %ret = add i32 %ab, %cd
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ne(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ne:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lg_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ne i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ne.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ne.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ne i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ult.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ult.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ult.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ult.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_u32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ult.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ult.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.slt.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.slt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_i32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.slt.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.slt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_i32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.slt.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.slt.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_lt_i64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.uge.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.uge.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_u32 s4, 0xa0a0a09f
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.uge.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.uge.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.uge.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.uge.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sge.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sge.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_i32 s4, 0xa0a0a09f
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sge.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sge.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_i32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sge.bad(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sge.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_mov_b32_e32 v0, s18
++; CHECK-NEXT:    v_mov_b32_e32 v1, s19
++; CHECK-NEXT:    s_and_b32 s5, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_mov_b32 s4, 0
++; CHECK-NEXT:    v_cmp_ge_i64_e32 vcc, s[4:5], v[0:1]
++; CHECK-NEXT:    s_and_b64 s[4:5], vcc, exec
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ugt.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ugt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ugt.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ugt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_u32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ugt.2(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ugt.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_u32 s4, s19
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sgt.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sgt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_i32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sgt.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sgt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_i32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sgt.2(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sgt.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_gt_i32 s4, s19
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ule.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ule.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_u32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ule.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ule.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_u32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.ule.2(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.ule.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_le_u32 s4, s19
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sle.0(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sle.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_i32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sle.1(i64 inreg %mask, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sle.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_lt_i32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    s_cselect_b32 s4, s18, s19
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.sgpr.sle.2(i64 inreg %mask, i64 inreg %cmp, i32 inreg %a, i32 inreg %b) {
++; CHECK-LABEL: select.hi32.sgpr.sle.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    s_and_b32 s4, s17, 0xaaaaaaaa
++; CHECK-NEXT:    s_cmp_le_i32 s4, s19
++; CHECK-NEXT:    s_cselect_b32 s4, s20, s21
++; CHECK-NEXT:    v_mov_b32_e32 v0, s4
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.eq(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.eq:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.eq.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.eq.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_eq_u64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.eq.multiuse(i64 %mask, i32 %a, i32 %b, i32 %c, i32 %d) {
++; CHECK-LABEL: select.hi32.vgpr.eq.multiuse:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    v_cndmask_b32_e32 v1, v5, v4, vcc
++; CHECK-NEXT:    v_add_i32_e32 v0, vcc, v0, v1
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp eq i64 %mask.hi, u0xa0a0a0a000000000
++  %ab = select i1 %mask.hi.c, i32 %a, i32 %b
++  %cd = select i1 %mask.hi.c, i32 %c, i32 %d
++  %ret = add i32 %ab, %cd
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ne(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ne:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ne i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ne.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ne.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ne i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sge.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sge.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a09f
++; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sge.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sge.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sge.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sge.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_ge_i64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sge i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.slt.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.slt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.slt.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.slt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.slt.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.slt.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_lt_i64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp slt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.uge.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.uge.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a09f
++; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.uge.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.uge.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.uge.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.uge.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_ge_u64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp uge i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ult.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ult.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ult.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ult.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ult.bad(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ult.bad:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v1, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_mov_b32_e32 v0, 0
++; CHECK-NEXT:    v_cmp_lt_u64_e32 vcc, v[0:1], v[2:3]
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ult i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ugt.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ugt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ugt.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ugt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ugt.2(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ugt.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, v0, v3
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ugt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sgt.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sgt.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sgt.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sgt.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a0
++; CHECK-NEXT:    v_cmp_lt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sgt.2(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sgt.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, v0, v3
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sgt i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ule.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ule.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ule.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ule.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_u32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.ule.2(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.ule.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_cmp_le_u32_e32 vcc, v0, v3
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp ule i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sle.0(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sle.0:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, u0xa0a0a0a000000000
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sle.1(i64 %mask, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sle.1:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    s_mov_b32 s4, 0xa0a0a0a1
++; CHECK-NEXT:    v_cmp_gt_i32_e32 vcc, s4, v0
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v2, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, u0xa0a0a0a000000001
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
++
++define i32 @select.hi32.vgpr.sle.2(i64 %mask, i64 %cmp, i32 %a, i32 %b) {
++; CHECK-LABEL: select.hi32.vgpr.sle.2:
++; CHECK:       ; %bb.0:
++; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
++; CHECK-NEXT:    v_and_b32_e32 v0, 0xaaaaaaaa, v1
++; CHECK-NEXT:    v_cmp_le_i32_e32 vcc, v0, v3
++; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
++; CHECK-NEXT:    s_setpc_b64 s[30:31]
++  %mask.hi = and i64 %mask, u0xaaaaaaaa00000000
++  %mask.hi.c = icmp sle i64 %mask.hi, %cmp
++  %ret = select i1 %mask.hi.c, i32 %a, i32 %b
++  ret i32 %ret
++}
+diff --git a/llvm/test/CodeGen/AMDGPU/sgpr-to-vreg1-copy.ll b/llvm/test/CodeGen/AMDGPU/sgpr-to-vreg1-copy.ll
+index 7c6ae6cad5ae7..ef535b99c6549 100644
+--- a/llvm/test/CodeGen/AMDGPU/sgpr-to-vreg1-copy.ll
++++ b/llvm/test/CodeGen/AMDGPU/sgpr-to-vreg1-copy.ll
+@@ -5,27 +5,24 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
+ ; GCN-LABEL: copy_to_vreg_1:
+ ; GCN:       ; %bb.0: ; %._crit_edge
+ ; GCN-NEXT:    s_load_dword s4, s[4:5], 0x0
+-; GCN-NEXT:    s_mov_b32 s5, 0
++; GCN-NEXT:    v_mov_b32_e32 v1, 0
+ ; GCN-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
+-; GCN-NEXT:    v_mov_b32_e32 v2, 0
++; GCN-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+ ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+-; GCN-NEXT:    s_sub_i32 s6, 1, s4
++; GCN-NEXT:    s_sub_i32 s5, 1, s4
+ ; GCN-NEXT:    s_cmp_lt_u32 s4, 2
+ ; GCN-NEXT:    s_cselect_b64 s[0:1], -1, 0
+ ; GCN-NEXT:    s_and_b64 s[2:3], s[0:1], exec
+-; GCN-NEXT:    s_cselect_b32 s2, s6, 1
++; GCN-NEXT:    s_cselect_b32 s2, s5, 1
+ ; GCN-NEXT:    s_cmp_lg_u64 s[0:1], 0
+-; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, 1, s[0:1]
++; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
+ ; GCN-NEXT:    s_addc_u32 s0, 1, 0
+ ; GCN-NEXT:    s_cmp_ge_u32 s2, s4
+-; GCN-NEXT:    v_readfirstlane_b32 s1, v1
++; GCN-NEXT:    v_readfirstlane_b32 s1, v2
+ ; GCN-NEXT:    s_cselect_b32 s4, s0, s1
+-; GCN-NEXT:    v_mov_b32_e32 v1, s5
+-; GCN-NEXT:    s_cmp_lg_u64 0, 0
+ ; GCN-NEXT:    s_mov_b64 s[0:1], 0
+-; GCN-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
+-; GCN-NEXT:    s_cselect_b64 s[2:3], -1, 0
+-; GCN-NEXT:    v_mov_b64_e32 v[0:1], 0
++; GCN-NEXT:    v_mov_b64_e32 v[2:3], 0
++; GCN-NEXT:    s_mov_b64 s[2:3], 0
+ ; GCN-NEXT:    s_branch .LBB0_3
+ ; GCN-NEXT:  .LBB0_1: ; %Flow
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+@@ -35,9 +32,9 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+ ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+ ; GCN-NEXT:    s_and_b64 s[4:5], exec, s[8:9]
+-; GCN-NEXT:    s_or_b64 s[0:1], s[4:5], s[0:1]
++; GCN-NEXT:    s_or_b64 s[2:3], s[4:5], s[2:3]
+ ; GCN-NEXT:    s_mov_b32 s4, 0
+-; GCN-NEXT:    s_andn2_b64 exec, exec, s[0:1]
++; GCN-NEXT:    s_andn2_b64 exec, exec, s[2:3]
+ ; GCN-NEXT:    s_cbranch_execz .LBB0_8
+ ; GCN-NEXT:  .LBB0_3: ; %.lr.ph27
+ ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
+@@ -50,7 +47,7 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
+ ; GCN-NEXT:  ; %bb.4: ; %pred.store.if
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+ ; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], exec
+-; GCN-NEXT:    global_store_byte v[0:1], v2, off
++; GCN-NEXT:    global_store_byte v[2:3], v1, off
+ ; GCN-NEXT:  .LBB0_5: ; %Flow2
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+ ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
+@@ -59,12 +56,12 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
+ ; GCN-NEXT:    s_cbranch_execz .LBB0_2
+ ; GCN-NEXT:  ; %bb.6: ; %pred.store.continue
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+-; GCN-NEXT:    s_and_saveexec_b64 s[6:7], s[2:3]
++; GCN-NEXT:    s_and_saveexec_b64 s[6:7], s[0:1]
+ ; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[6:7]
+ ; GCN-NEXT:    s_cbranch_execz .LBB0_1
+ ; GCN-NEXT:  ; %bb.7: ; %pred.store.if41
+ ; GCN-NEXT:    ; in Loop: Header=BB0_3 Depth=1
+-; GCN-NEXT:    global_store_byte v[0:1], v2, off
++; GCN-NEXT:    global_store_byte v[2:3], v1, off
+ ; GCN-NEXT:    s_branch .LBB0_1
+ ; GCN-NEXT:  .LBB0_8: ; %DummyReturnBlock
+ ; GCN-NEXT:    s_endpgm
+diff --git a/llvm/test/CodeGen/AMDGPU/srem.ll b/llvm/test/CodeGen/AMDGPU/srem.ll
+index e12e31b14e97d..bf6dba48cb921 100644
+--- a/llvm/test/CodeGen/AMDGPU/srem.ll
++++ b/llvm/test/CodeGen/AMDGPU/srem.ll
+@@ -1501,8 +1501,7 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
+ ; GCN-NEXT:    v_readfirstlane_b32 s3, v3
+ ; GCN-NEXT:    v_readfirstlane_b32 s2, v2
+ ; GCN-NEXT:    s_or_b64 s[6:7], s[4:5], s[2:3]
+-; GCN-NEXT:    s_mov_b32 s6, 0
+-; GCN-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; GCN-NEXT:    s_cmp_lg_u32 s7, 0
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB8_4
+ ; GCN-NEXT:  ; %bb.1:
+ ; GCN-NEXT:    s_ashr_i32 s6, s3, 31
+@@ -1663,14 +1662,13 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
+ ; TAHITI-NEXT:    s_load_dwordx4 s[4:7], s[4:5], 0x9
+ ; TAHITI-NEXT:    s_mov_b32 s3, 0xf000
+ ; TAHITI-NEXT:    s_mov_b32 s2, -1
+-; TAHITI-NEXT:    v_mov_b32_e32 v4, 0
+ ; TAHITI-NEXT:    s_waitcnt lgkmcnt(0)
+ ; TAHITI-NEXT:    s_mov_b32 s0, s6
+ ; TAHITI-NEXT:    s_mov_b32 s1, s7
+ ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], off, s[0:3], 0
+ ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
+-; TAHITI-NEXT:    v_or_b32_e32 v5, v1, v3
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[4:5]
++; TAHITI-NEXT:    v_or_b32_e32 v4, v1, v3
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB8_4
+ ; TAHITI-NEXT:  ; %bb.1:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v5, 31, v3
+@@ -1832,8 +1830,7 @@ define amdgpu_kernel void @srem_i64(ptr addrspace(1) %out, ptr addrspace(1) %in)
+ ; TONGA-NEXT:    v_readfirstlane_b32 s3, v3
+ ; TONGA-NEXT:    v_readfirstlane_b32 s2, v2
+ ; TONGA-NEXT:    s_or_b64 s[6:7], s[4:5], s[2:3]
+-; TONGA-NEXT:    s_mov_b32 s6, 0
+-; TONGA-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; TONGA-NEXT:    s_cmp_lg_u32 s7, 0
+ ; TONGA-NEXT:    s_cbranch_scc0 .LBB8_3
+ ; TONGA-NEXT:  ; %bb.1:
+ ; TONGA-NEXT:    s_ashr_i32 s6, s3, 31
+@@ -2702,11 +2699,10 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    v_readfirstlane_b32 s11, v5
+ ; GCN-NEXT:    v_readfirstlane_b32 s10, v4
+ ; GCN-NEXT:    s_or_b64 s[6:7], s[10:11], s[8:9]
+-; GCN-NEXT:    s_mov_b32 s6, 0
+ ; GCN-NEXT:    v_readfirstlane_b32 s3, v3
+ ; GCN-NEXT:    v_readfirstlane_b32 s2, v2
+ ; GCN-NEXT:    v_readfirstlane_b32 s5, v7
+-; GCN-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; GCN-NEXT:    s_cmp_lg_u32 s7, 0
+ ; GCN-NEXT:    v_readfirstlane_b32 s4, v6
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB10_6
+ ; GCN-NEXT:  ; %bb.1:
+@@ -2855,8 +2851,7 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    s_cselect_b32 s6, s9, s6
+ ; GCN-NEXT:  .LBB10_3:
+ ; GCN-NEXT:    s_or_b64 s[8:9], s[4:5], s[2:3]
+-; GCN-NEXT:    s_mov_b32 s8, 0
+-; GCN-NEXT:    s_cmp_lg_u64 s[8:9], 0
++; GCN-NEXT:    s_cmp_lg_u32 s9, 0
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB10_7
+ ; GCN-NEXT:  ; %bb.4:
+ ; GCN-NEXT:    s_ashr_i32 s8, s3, 31
+@@ -3023,15 +3018,14 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    s_load_dwordx4 s[4:7], s[4:5], 0x9
+ ; TAHITI-NEXT:    s_mov_b32 s3, 0xf000
+ ; TAHITI-NEXT:    s_mov_b32 s2, -1
+-; TAHITI-NEXT:    v_mov_b32_e32 v8, 0
+ ; TAHITI-NEXT:    s_waitcnt lgkmcnt(0)
+ ; TAHITI-NEXT:    s_mov_b32 s0, s6
+ ; TAHITI-NEXT:    s_mov_b32 s1, s7
+ ; TAHITI-NEXT:    buffer_load_dwordx4 v[4:7], off, s[0:3], 0
+ ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], off, s[0:3], 0 offset:16
+ ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
+-; TAHITI-NEXT:    v_or_b32_e32 v9, v5, v1
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[8:9]
++; TAHITI-NEXT:    v_or_b32_e32 v8, v5, v1
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB10_7
+ ; TAHITI-NEXT:  ; %bb.1:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v9, 31, v1
+@@ -3172,9 +3166,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    v_cmp_ge_u32_e32 vcc, v1, v0
+ ; TAHITI-NEXT:    v_cndmask_b32_e32 v8, v1, v4, vcc
+ ; TAHITI-NEXT:  .LBB10_3:
+-; TAHITI-NEXT:    v_or_b32_e32 v1, v7, v3
+-; TAHITI-NEXT:    v_mov_b32_e32 v0, 0
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
++; TAHITI-NEXT:    v_or_b32_e32 v0, v7, v3
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB10_8
+ ; TAHITI-NEXT:  ; %bb.4:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
+@@ -3344,8 +3337,7 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_readfirstlane_b32 s3, v5
+ ; TONGA-NEXT:    v_readfirstlane_b32 s2, v4
+ ; TONGA-NEXT:    s_or_b64 s[6:7], s[2:3], s[0:1]
+-; TONGA-NEXT:    s_mov_b32 s6, 0
+-; TONGA-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; TONGA-NEXT:    s_cmp_lg_u32 s7, 0
+ ; TONGA-NEXT:    s_cbranch_scc0 .LBB10_3
+ ; TONGA-NEXT:  ; %bb.1:
+ ; TONGA-NEXT:    s_ashr_i32 s6, s1, 31
+@@ -3494,9 +3486,8 @@ define amdgpu_kernel void @srem_v2i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_mov_b32_e32 v9, s7
+ ; TONGA-NEXT:    v_mov_b32_e32 v8, s6
+ ; TONGA-NEXT:  .LBB10_5:
+-; TONGA-NEXT:    v_or_b32_e32 v1, v7, v3
+-; TONGA-NEXT:    v_mov_b32_e32 v0, 0
+-; TONGA-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
++; TONGA-NEXT:    v_or_b32_e32 v0, v7, v3
++; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+ ; TONGA-NEXT:    s_cbranch_vccz .LBB10_9
+ ; TONGA-NEXT:  ; %bb.6:
+ ; TONGA-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
+@@ -4879,7 +4870,6 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    v_readfirstlane_b32 s19, v13
+ ; GCN-NEXT:    v_readfirstlane_b32 s18, v12
+ ; GCN-NEXT:    s_or_b64 s[6:7], s[18:19], s[16:17]
+-; GCN-NEXT:    s_mov_b32 s6, 0
+ ; GCN-NEXT:    v_readfirstlane_b32 s2, v2
+ ; GCN-NEXT:    v_readfirstlane_b32 s9, v1
+ ; GCN-NEXT:    v_readfirstlane_b32 s8, v0
+@@ -4890,7 +4880,7 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    v_readfirstlane_b32 s11, v9
+ ; GCN-NEXT:    v_readfirstlane_b32 s10, v8
+ ; GCN-NEXT:    v_readfirstlane_b32 s15, v15
+-; GCN-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; GCN-NEXT:    s_cmp_lg_u32 s7, 0
+ ; GCN-NEXT:    v_readfirstlane_b32 s14, v14
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB12_6
+ ; GCN-NEXT:  ; %bb.1:
+@@ -5039,8 +5029,7 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    s_cselect_b32 s6, s17, s6
+ ; GCN-NEXT:  .LBB12_3:
+ ; GCN-NEXT:    s_or_b64 s[16:17], s[14:15], s[12:13]
+-; GCN-NEXT:    s_mov_b32 s16, 0
+-; GCN-NEXT:    s_cmp_lg_u64 s[16:17], 0
++; GCN-NEXT:    s_cmp_lg_u32 s17, 0
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB12_7
+ ; GCN-NEXT:  ; %bb.4:
+ ; GCN-NEXT:    s_ashr_i32 s16, s13, 31
+@@ -5197,8 +5186,7 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    v_mov_b32_e32 v3, s19
+ ; GCN-NEXT:  .LBB12_9:
+ ; GCN-NEXT:    s_or_b64 s[12:13], s[10:11], s[8:9]
+-; GCN-NEXT:    s_mov_b32 s12, 0
+-; GCN-NEXT:    s_cmp_lg_u64 s[12:13], 0
++; GCN-NEXT:    s_cmp_lg_u32 s13, 0
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB12_12
+ ; GCN-NEXT:  ; %bb.10:
+ ; GCN-NEXT:    s_ashr_i32 s12, s9, 31
+@@ -5352,8 +5340,7 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; GCN-NEXT:    v_mov_b32_e32 v5, s15
+ ; GCN-NEXT:  .LBB12_14:
+ ; GCN-NEXT:    s_or_b64 s[8:9], s[4:5], s[2:3]
+-; GCN-NEXT:    s_mov_b32 s8, 0
+-; GCN-NEXT:    s_cmp_lg_u64 s[8:9], 0
++; GCN-NEXT:    s_cmp_lg_u32 s9, 0
+ ; GCN-NEXT:    s_cbranch_scc0 .LBB12_17
+ ; GCN-NEXT:  ; %bb.15:
+ ; GCN-NEXT:    s_ashr_i32 s8, s3, 31
+@@ -5518,7 +5505,6 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    s_load_dwordx4 s[4:7], s[4:5], 0x9
+ ; TAHITI-NEXT:    s_mov_b32 s3, 0xf000
+ ; TAHITI-NEXT:    s_mov_b32 s2, -1
+-; TAHITI-NEXT:    v_mov_b32_e32 v8, 0
+ ; TAHITI-NEXT:    s_waitcnt lgkmcnt(0)
+ ; TAHITI-NEXT:    s_mov_b32 s0, s6
+ ; TAHITI-NEXT:    s_mov_b32 s1, s7
+@@ -5527,8 +5513,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    buffer_load_dwordx4 v[4:7], off, s[0:3], 0 offset:16
+ ; TAHITI-NEXT:    buffer_load_dwordx4 v[0:3], off, s[0:3], 0 offset:48
+ ; TAHITI-NEXT:    s_waitcnt vmcnt(2)
+-; TAHITI-NEXT:    v_or_b32_e32 v9, v15, v11
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[8:9]
++; TAHITI-NEXT:    v_or_b32_e32 v8, v15, v11
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v8
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB12_13
+ ; TAHITI-NEXT:  ; %bb.1:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v8, 31, v11
+@@ -5669,9 +5655,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    v_cndmask_b32_e32 v8, v8, v9, vcc
+ ; TAHITI-NEXT:    v_mov_b32_e32 v9, 0
+ ; TAHITI-NEXT:  .LBB12_3:
+-; TAHITI-NEXT:    v_or_b32_e32 v11, v17, v13
+-; TAHITI-NEXT:    v_mov_b32_e32 v10, 0
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[10:11]
++; TAHITI-NEXT:    v_or_b32_e32 v10, v17, v13
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB12_14
+ ; TAHITI-NEXT:  ; %bb.4:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v10, 31, v13
+@@ -5813,9 +5798,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    v_mov_b32_e32 v11, 0
+ ; TAHITI-NEXT:  .LBB12_6:
+ ; TAHITI-NEXT:    s_waitcnt vmcnt(0)
+-; TAHITI-NEXT:    v_or_b32_e32 v13, v5, v1
+-; TAHITI-NEXT:    v_mov_b32_e32 v12, 0
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[12:13]
++; TAHITI-NEXT:    v_or_b32_e32 v12, v5, v1
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v12
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB12_15
+ ; TAHITI-NEXT:  ; %bb.7:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v13, 31, v1
+@@ -5956,9 +5940,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TAHITI-NEXT:    v_cmp_ge_u32_e32 vcc, v1, v0
+ ; TAHITI-NEXT:    v_cndmask_b32_e32 v12, v1, v4, vcc
+ ; TAHITI-NEXT:  .LBB12_9:
+-; TAHITI-NEXT:    v_or_b32_e32 v1, v7, v3
+-; TAHITI-NEXT:    v_mov_b32_e32 v0, 0
+-; TAHITI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
++; TAHITI-NEXT:    v_or_b32_e32 v0, v7, v3
++; TAHITI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+ ; TAHITI-NEXT:    s_cbranch_vccz .LBB12_16
+ ; TAHITI-NEXT:  ; %bb.10:
+ ; TAHITI-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
+@@ -6144,8 +6127,7 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_readfirstlane_b32 s1, v11
+ ; TONGA-NEXT:    v_readfirstlane_b32 s0, v10
+ ; TONGA-NEXT:    s_or_b64 s[6:7], s[2:3], s[0:1]
+-; TONGA-NEXT:    s_mov_b32 s6, 0
+-; TONGA-NEXT:    s_cmp_lg_u64 s[6:7], 0
++; TONGA-NEXT:    s_cmp_lg_u32 s7, 0
+ ; TONGA-NEXT:    s_cbranch_scc0 .LBB12_3
+ ; TONGA-NEXT:  ; %bb.1:
+ ; TONGA-NEXT:    s_ashr_i32 s6, s1, 31
+@@ -6294,9 +6276,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_mov_b32_e32 v9, s7
+ ; TONGA-NEXT:    v_mov_b32_e32 v8, s6
+ ; TONGA-NEXT:  .LBB12_5:
+-; TONGA-NEXT:    v_or_b32_e32 v11, v17, v13
+-; TONGA-NEXT:    v_mov_b32_e32 v10, 0
+-; TONGA-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[10:11]
++; TONGA-NEXT:    v_or_b32_e32 v10, v17, v13
++; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v10
+ ; TONGA-NEXT:    s_cbranch_vccz .LBB12_15
+ ; TONGA-NEXT:  ; %bb.6:
+ ; TONGA-NEXT:    v_ashrrev_i32_e32 v10, 31, v13
+@@ -6426,9 +6407,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_mov_b32_e32 v11, 0
+ ; TONGA-NEXT:  .LBB12_8:
+ ; TONGA-NEXT:    s_waitcnt vmcnt(0)
+-; TONGA-NEXT:    v_or_b32_e32 v13, v5, v1
+-; TONGA-NEXT:    v_mov_b32_e32 v12, 0
+-; TONGA-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[12:13]
++; TONGA-NEXT:    v_or_b32_e32 v12, v5, v1
++; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v12
+ ; TONGA-NEXT:    s_cbranch_vccz .LBB12_16
+ ; TONGA-NEXT:  ; %bb.9:
+ ; TONGA-NEXT:    v_ashrrev_i32_e32 v12, 31, v1
+@@ -6557,9 +6537,8 @@ define amdgpu_kernel void @srem_v4i64(ptr addrspace(1) %out, ptr addrspace(1) %i
+ ; TONGA-NEXT:    v_cmp_ge_u32_e32 vcc, v1, v0
+ ; TONGA-NEXT:    v_cndmask_b32_e32 v12, v1, v4, vcc
+ ; TONGA-NEXT:  .LBB12_11:
+-; TONGA-NEXT:    v_or_b32_e32 v1, v7, v3
+-; TONGA-NEXT:    v_mov_b32_e32 v0, 0
+-; TONGA-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
++; TONGA-NEXT:    v_or_b32_e32 v0, v7, v3
++; TONGA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
+ ; TONGA-NEXT:    s_cbranch_vccz .LBB12_17
+ ; TONGA-NEXT:  ; %bb.12:
+ ; TONGA-NEXT:    v_ashrrev_i32_e32 v0, 31, v3
+diff --git a/llvm/test/CodeGen/AMDGPU/wave32.ll b/llvm/test/CodeGen/AMDGPU/wave32.ll
+index 8e7dc4072c012..bd5ab13f0996e 100644
+--- a/llvm/test/CodeGen/AMDGPU/wave32.ll
++++ b/llvm/test/CodeGen/AMDGPU/wave32.ll
+@@ -731,12 +731,12 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1032-LABEL: test_udiv64:
+ ; GFX1032:       ; %bb.0: ; %bb
+ ; GFX1032-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
++; GFX1032-NEXT:    s_mov_b32 s8, 0
+ ; GFX1032-NEXT:    s_waitcnt lgkmcnt(0)
+ ; GFX1032-NEXT:    s_load_dwordx4 s[0:3], s[6:7], 0x0
+ ; GFX1032-NEXT:    s_waitcnt lgkmcnt(0)
+ ; GFX1032-NEXT:    s_or_b64 s[4:5], s[2:3], s[0:1]
+-; GFX1032-NEXT:    s_mov_b32 s4, 0
+-; GFX1032-NEXT:    s_cmp_lg_u64 s[4:5], 0
++; GFX1032-NEXT:    s_cmp_lg_u32 s5, 0
+ ; GFX1032-NEXT:    s_cbranch_scc0 .LBB15_4
+ ; GFX1032-NEXT:  ; %bb.1:
+ ; GFX1032-NEXT:    v_cvt_f32_u32_e32 v0, s0
+@@ -751,71 +751,71 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1032-NEXT:    v_madmk_f32 v0, v1, 0xcf800000, v0
+ ; GFX1032-NEXT:    v_cvt_u32_f32_e32 v1, v1
+ ; GFX1032-NEXT:    v_cvt_u32_f32_e32 v0, v0
+-; GFX1032-NEXT:    v_readfirstlane_b32 s5, v1
+-; GFX1032-NEXT:    v_readfirstlane_b32 s8, v0
+-; GFX1032-NEXT:    s_mul_i32 s11, s9, s5
+-; GFX1032-NEXT:    s_mul_hi_u32 s13, s9, s8
+-; GFX1032-NEXT:    s_mul_i32 s12, s10, s8
++; GFX1032-NEXT:    v_readfirstlane_b32 s4, v1
++; GFX1032-NEXT:    v_readfirstlane_b32 s5, v0
++; GFX1032-NEXT:    s_mul_i32 s11, s9, s4
++; GFX1032-NEXT:    s_mul_hi_u32 s13, s9, s5
++; GFX1032-NEXT:    s_mul_i32 s12, s10, s5
+ ; GFX1032-NEXT:    s_add_i32 s11, s13, s11
+-; GFX1032-NEXT:    s_mul_i32 s14, s9, s8
++; GFX1032-NEXT:    s_mul_i32 s14, s9, s5
+ ; GFX1032-NEXT:    s_add_i32 s11, s11, s12
+-; GFX1032-NEXT:    s_mul_hi_u32 s13, s8, s14
+-; GFX1032-NEXT:    s_mul_i32 s16, s8, s11
+-; GFX1032-NEXT:    s_mul_hi_u32 s15, s5, s14
+-; GFX1032-NEXT:    s_mul_i32 s12, s5, s14
+-; GFX1032-NEXT:    s_mul_hi_u32 s14, s8, s11
++; GFX1032-NEXT:    s_mul_hi_u32 s13, s5, s14
++; GFX1032-NEXT:    s_mul_i32 s16, s5, s11
++; GFX1032-NEXT:    s_mul_hi_u32 s15, s4, s14
++; GFX1032-NEXT:    s_mul_i32 s12, s4, s14
++; GFX1032-NEXT:    s_mul_hi_u32 s14, s5, s11
+ ; GFX1032-NEXT:    s_add_u32 s13, s13, s16
+ ; GFX1032-NEXT:    s_addc_u32 s14, 0, s14
+-; GFX1032-NEXT:    s_mul_hi_u32 s17, s5, s11
++; GFX1032-NEXT:    s_mul_hi_u32 s17, s4, s11
+ ; GFX1032-NEXT:    s_add_u32 s12, s13, s12
+-; GFX1032-NEXT:    s_mul_i32 s11, s5, s11
++; GFX1032-NEXT:    s_mul_i32 s11, s4, s11
+ ; GFX1032-NEXT:    s_addc_u32 s12, s14, s15
+ ; GFX1032-NEXT:    s_addc_u32 s13, s17, 0
+ ; GFX1032-NEXT:    s_add_u32 s11, s12, s11
+ ; GFX1032-NEXT:    s_addc_u32 s12, 0, s13
+-; GFX1032-NEXT:    s_add_u32 s8, s8, s11
+-; GFX1032-NEXT:    s_addc_u32 s5, s5, s12
+-; GFX1032-NEXT:    s_mul_hi_u32 s11, s9, s8
+-; GFX1032-NEXT:    s_mul_i32 s12, s9, s8
+-; GFX1032-NEXT:    s_mul_i32 s9, s9, s5
+-; GFX1032-NEXT:    s_mul_i32 s10, s10, s8
++; GFX1032-NEXT:    s_add_u32 s5, s5, s11
++; GFX1032-NEXT:    s_addc_u32 s4, s4, s12
++; GFX1032-NEXT:    s_mul_hi_u32 s11, s9, s5
++; GFX1032-NEXT:    s_mul_i32 s12, s9, s5
++; GFX1032-NEXT:    s_mul_i32 s9, s9, s4
++; GFX1032-NEXT:    s_mul_i32 s10, s10, s5
+ ; GFX1032-NEXT:    s_add_i32 s9, s11, s9
+-; GFX1032-NEXT:    s_mul_i32 s11, s5, s12
++; GFX1032-NEXT:    s_mul_i32 s11, s4, s12
+ ; GFX1032-NEXT:    s_add_i32 s9, s9, s10
+-; GFX1032-NEXT:    s_mul_hi_u32 s10, s8, s12
+-; GFX1032-NEXT:    s_mul_i32 s15, s8, s9
+-; GFX1032-NEXT:    s_mul_hi_u32 s14, s8, s9
++; GFX1032-NEXT:    s_mul_hi_u32 s10, s5, s12
++; GFX1032-NEXT:    s_mul_i32 s15, s5, s9
++; GFX1032-NEXT:    s_mul_hi_u32 s14, s5, s9
+ ; GFX1032-NEXT:    s_add_u32 s10, s10, s15
+-; GFX1032-NEXT:    s_mul_hi_u32 s13, s5, s12
++; GFX1032-NEXT:    s_mul_hi_u32 s13, s4, s12
+ ; GFX1032-NEXT:    s_addc_u32 s14, 0, s14
+-; GFX1032-NEXT:    s_mul_hi_u32 s12, s5, s9
++; GFX1032-NEXT:    s_mul_hi_u32 s12, s4, s9
+ ; GFX1032-NEXT:    s_add_u32 s10, s10, s11
+-; GFX1032-NEXT:    s_mul_i32 s9, s5, s9
++; GFX1032-NEXT:    s_mul_i32 s9, s4, s9
+ ; GFX1032-NEXT:    s_addc_u32 s10, s14, s13
+ ; GFX1032-NEXT:    s_addc_u32 s11, s12, 0
+ ; GFX1032-NEXT:    s_add_u32 s9, s10, s9
+ ; GFX1032-NEXT:    s_addc_u32 s10, 0, s11
+-; GFX1032-NEXT:    s_add_u32 s8, s8, s9
+-; GFX1032-NEXT:    s_addc_u32 s5, s5, s10
+-; GFX1032-NEXT:    s_mul_hi_u32 s9, s2, s8
+-; GFX1032-NEXT:    s_mul_i32 s12, s2, s5
+-; GFX1032-NEXT:    s_mul_hi_u32 s11, s2, s5
+-; GFX1032-NEXT:    s_mul_hi_u32 s10, s3, s8
+-; GFX1032-NEXT:    s_mul_i32 s8, s3, s8
++; GFX1032-NEXT:    s_add_u32 s5, s5, s9
++; GFX1032-NEXT:    s_addc_u32 s4, s4, s10
++; GFX1032-NEXT:    s_mul_hi_u32 s9, s2, s5
++; GFX1032-NEXT:    s_mul_i32 s12, s2, s4
++; GFX1032-NEXT:    s_mul_hi_u32 s11, s2, s4
++; GFX1032-NEXT:    s_mul_hi_u32 s10, s3, s5
++; GFX1032-NEXT:    s_mul_i32 s5, s3, s5
+ ; GFX1032-NEXT:    s_add_u32 s9, s9, s12
+ ; GFX1032-NEXT:    s_addc_u32 s11, 0, s11
+-; GFX1032-NEXT:    s_mul_hi_u32 s13, s3, s5
+-; GFX1032-NEXT:    s_add_u32 s8, s9, s8
+-; GFX1032-NEXT:    s_mul_i32 s5, s3, s5
+-; GFX1032-NEXT:    s_addc_u32 s8, s11, s10
++; GFX1032-NEXT:    s_mul_hi_u32 s13, s3, s4
++; GFX1032-NEXT:    s_add_u32 s5, s9, s5
++; GFX1032-NEXT:    s_mul_i32 s4, s3, s4
++; GFX1032-NEXT:    s_addc_u32 s5, s11, s10
+ ; GFX1032-NEXT:    s_addc_u32 s9, s13, 0
+-; GFX1032-NEXT:    s_add_u32 s5, s8, s5
+-; GFX1032-NEXT:    s_addc_u32 s8, 0, s9
+-; GFX1032-NEXT:    s_mul_hi_u32 s9, s0, s5
+-; GFX1032-NEXT:    s_mul_i32 s10, s0, s8
+-; GFX1032-NEXT:    s_mul_i32 s11, s1, s5
+-; GFX1032-NEXT:    s_add_i32 s9, s9, s10
++; GFX1032-NEXT:    s_add_u32 s4, s5, s4
++; GFX1032-NEXT:    s_addc_u32 s5, 0, s9
++; GFX1032-NEXT:    s_mul_hi_u32 s9, s0, s4
+ ; GFX1032-NEXT:    s_mul_i32 s10, s0, s5
++; GFX1032-NEXT:    s_mul_i32 s11, s1, s4
++; GFX1032-NEXT:    s_add_i32 s9, s9, s10
++; GFX1032-NEXT:    s_mul_i32 s10, s0, s4
+ ; GFX1032-NEXT:    s_add_i32 s9, s9, s11
+ ; GFX1032-NEXT:    s_sub_i32 s11, s3, s9
+ ; GFX1032-NEXT:    s_sub_u32 s10, s2, s10
+@@ -829,10 +829,10 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1032-NEXT:    s_cselect_b32 s13, -1, 0
+ ; GFX1032-NEXT:    s_cmp_eq_u32 s11, s1
+ ; GFX1032-NEXT:    s_cselect_b32 s11, s13, s14
+-; GFX1032-NEXT:    s_add_u32 s13, s5, 1
+-; GFX1032-NEXT:    s_addc_u32 s14, s8, 0
+-; GFX1032-NEXT:    s_add_u32 s15, s5, 2
+-; GFX1032-NEXT:    s_addc_u32 s16, s8, 0
++; GFX1032-NEXT:    s_add_u32 s13, s4, 1
++; GFX1032-NEXT:    s_addc_u32 s14, s5, 0
++; GFX1032-NEXT:    s_add_u32 s15, s4, 2
++; GFX1032-NEXT:    s_addc_u32 s16, s5, 0
+ ; GFX1032-NEXT:    s_cmp_lg_u32 s11, 0
+ ; GFX1032-NEXT:    s_cselect_b32 s11, s15, s13
+ ; GFX1032-NEXT:    s_cselect_b32 s13, s16, s14
+@@ -845,14 +845,14 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1032-NEXT:    s_cmp_eq_u32 s3, s1
+ ; GFX1032-NEXT:    s_cselect_b32 s1, s10, s9
+ ; GFX1032-NEXT:    s_cmp_lg_u32 s1, 0
+-; GFX1032-NEXT:    s_cselect_b32 s9, s13, s8
+-; GFX1032-NEXT:    s_cselect_b32 s8, s11, s5
+-; GFX1032-NEXT:    s_andn2_b32 vcc_lo, exec_lo, s4
++; GFX1032-NEXT:    s_cselect_b32 s5, s13, s5
++; GFX1032-NEXT:    s_cselect_b32 s4, s11, s4
++; GFX1032-NEXT:    s_andn2_b32 vcc_lo, exec_lo, s8
+ ; GFX1032-NEXT:    s_cbranch_vccnz .LBB15_3
+ ; GFX1032-NEXT:  .LBB15_2:
+ ; GFX1032-NEXT:    v_cvt_f32_u32_e32 v0, s0
+ ; GFX1032-NEXT:    s_sub_i32 s3, 0, s0
+-; GFX1032-NEXT:    s_mov_b32 s9, 0
++; GFX1032-NEXT:    s_mov_b32 s5, 0
+ ; GFX1032-NEXT:    v_rcp_iflag_f32_e32 v0, v0
+ ; GFX1032-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
+ ; GFX1032-NEXT:    v_cvt_u32_f32_e32 v0, v0
+@@ -870,15 +870,15 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1032-NEXT:    s_cselect_b32 s2, s4, s2
+ ; GFX1032-NEXT:    s_add_i32 s3, s1, 1
+ ; GFX1032-NEXT:    s_cmp_ge_u32 s2, s0
+-; GFX1032-NEXT:    s_cselect_b32 s8, s3, s1
++; GFX1032-NEXT:    s_cselect_b32 s4, s3, s1
+ ; GFX1032-NEXT:  .LBB15_3:
+-; GFX1032-NEXT:    v_mov_b32_e32 v0, s8
++; GFX1032-NEXT:    v_mov_b32_e32 v0, s4
+ ; GFX1032-NEXT:    v_mov_b32_e32 v2, 0
+-; GFX1032-NEXT:    v_mov_b32_e32 v1, s9
++; GFX1032-NEXT:    v_mov_b32_e32 v1, s5
+ ; GFX1032-NEXT:    global_store_dwordx2 v2, v[0:1], s[6:7] offset:16
+ ; GFX1032-NEXT:    s_endpgm
+ ; GFX1032-NEXT:  .LBB15_4:
+-; GFX1032-NEXT:    ; implicit-def: $sgpr8_sgpr9
++; GFX1032-NEXT:    ; implicit-def: $sgpr4_sgpr5
+ ; GFX1032-NEXT:    s_branch .LBB15_2
+ ;
+ ; GFX1064-LABEL: test_udiv64:
+@@ -888,8 +888,7 @@ define amdgpu_kernel void @test_udiv64(ptr addrspace(1) %arg) #0 {
+ ; GFX1064-NEXT:    s_load_dwordx4 s[0:3], s[6:7], 0x0
+ ; GFX1064-NEXT:    s_waitcnt lgkmcnt(0)
+ ; GFX1064-NEXT:    s_or_b64 s[4:5], s[2:3], s[0:1]
+-; GFX1064-NEXT:    s_mov_b32 s4, 0
+-; GFX1064-NEXT:    s_cmp_lg_u64 s[4:5], 0
++; GFX1064-NEXT:    s_cmp_lg_u32 s5, 0
+ ; GFX1064-NEXT:    s_cbranch_scc0 .LBB15_4
+ ; GFX1064-NEXT:  ; %bb.1:
+ ; GFX1064-NEXT:    v_cvt_f32_u32_e32 v0, s0
