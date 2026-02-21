@@ -2007,6 +2007,19 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
     bool Unused;
     return HandlePassthroughUser(NewU.get(), OldU.get(), Unused);
   };
+  if (auto *Arg = dyn_cast<Argument>(&AssociatedValue)) {
+    if (!Arg->getParent()->hasExactDefinition()) {
+      // If the function is readnone for this argument, we know there are no
+      // accesses.
+      if (Arg->hasAttribute(Attribute::ReadNone))
+        return ChangeStatus::UNCHANGED; // Or handle as no-op
+      // Otherwise, we must assume unknown accesses (reads and/or writes).
+      // We cannot track offsets, so we must give up.
+      LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating] Argument of declaration "
+                        << Arg->getParent()->getName() << ", giving up.\n");
+      return indicatePessimisticFixpoint();
+    }
+  }
   if (!A.checkForAllUses(UsePred, *this, AssociatedValue,
                          /* CheckBBLivenessOnly */ true, DepClassTy::OPTIONAL,
                          /* IgnoreDroppableUses */ true, EquivalentUseCB)) {
