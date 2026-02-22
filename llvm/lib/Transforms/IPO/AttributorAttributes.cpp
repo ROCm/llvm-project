@@ -117,10 +117,6 @@ STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
 
 // Fine-grained getFunctionInfo call tracking (via isKernel wrapper)
-STATISTIC(NumIsKernelLine1180, "isKernel calls at forallInterferingAccesses:1180 (InstInKernel)");
-STATISTIC(NumIsKernelLine1214, "isKernel calls at forallInterferingAccesses:1214 (ObjHasKernelLifetime)");
-STATISTIC(NumIsKernelLine1227, "isKernel calls in IsLiveInCalleeCB lambda:1227");
-STATISTIC(NumIsKernelLine1242, "isKernel calls in AccessCB lambda:1242");
 STATISTIC(NumIsInvolvedInMustTailCall, "isInvolvedInMustTailCall calls (lines 5487,5506)");
 
 // Some helper macros to deal with statistics tracking.
@@ -1184,7 +1180,6 @@ struct AAPointerInfoImpl
     // TODO: Use reaching kernels from AAKernelInfo (or move it to
     // AAExecutionDomain) such that we allow scopes other than kernels as long
     // as the reaching kernels are disjoint.
-    ++NumIsKernelLine1180;
     bool InstInKernel = A.getInfoCache().isKernel(Scope);
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
@@ -1238,7 +1233,6 @@ struct AAPointerInfoImpl
       // If the alloca containing function is not recursive the alloca
       // must be dead in the callee.
       const Function *AIFn = AI->getFunction();
-      ++NumIsKernelLine1214;
       ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
       bool IsKnownNoRecurse;
       if (AA::hasAssumedIRAttr<Attribute::NoRecurse>(
@@ -1256,7 +1250,6 @@ struct AAPointerInfoImpl
         // them with fast DenseSet lookups.
         BuildKernelSetIfNeeded();
         IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
-          ++NumIsKernelLine1227;
           return !KernelFunctionsInModule.contains(&Fn);
         };
       }
@@ -1283,7 +1276,6 @@ struct AAPointerInfoImpl
       // getFunctionInfo() calls (measured in VASP) by replacing them with
       // fast DenseSet lookups (~O(1) vs ~11ns per getFunctionInfo call).
       if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
-        ++NumIsKernelLine1242;
         if (KernelFunctionsInModule.contains(AccScope))
           return true;
       }
