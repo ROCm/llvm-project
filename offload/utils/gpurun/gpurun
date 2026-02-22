@@ -327,16 +327,16 @@ def dumpTopology(affinity_data, node_data, hip_uuid, numa_cpus):
     sys.exit(0)
 
 if __name__ == "__main__":
+    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo, use_rocmsmi, use_amdsmi, use_membind, use_localalloc = processArgs()
     # support override by envvar
     gpurun_bypass = int(os.environ.get('GPURUN_BYPASS', '0'))
+    my_env = os.environ.copy()
     if gpurun_bypass:
-       my_env = os.environ.copy()
        program_to_run = [ ]
-       program_to_run.extend(sys.argv[1:])
+       program_to_run.extend(sys.argv[sysPos:])
        result = subprocess.run(program_to_run, env=my_env, capture_output=False, text=False, check=False)
        sys.exit(0)
 
-    sysPos, debug_numa, use_taskset, use_numactl, use_nobind, dry_run, use_md, md_count, use_nr, use_nm, dump_topo, use_rocmsmi, use_amdsmi, use_membind, use_localalloc = processArgs()
     #check for numactl and taskset
     has_numactl = check_numactl_exists()
     has_taskset = check_taskset_exists()
