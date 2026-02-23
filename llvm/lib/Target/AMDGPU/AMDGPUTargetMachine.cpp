@@ -2057,7 +2057,7 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Perlane VGPR allocation pipeline.
     addPass(createVGPRAllocPass(true));
     addPreRewrite();
-    addPass(createVirtRegRewriter(false));
+    addPass(createVirtRegRewriter(false, true));
 
     // Prepare the machine function for WaveTransform.
     addPass(createAMDGPUPreWaveTransformPass());
