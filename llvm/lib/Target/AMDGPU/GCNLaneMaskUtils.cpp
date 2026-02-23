@@ -471,7 +471,7 @@ void GCNLaneMaskUpdater::insertAccumulatorResets() {
     // ResetAtEnd
     MachineBasicBlock::iterator EndInsertPt;
     EndInsertPt = B->getFirstTerminator();
-    if (EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
+    if (EndInsertPt != B->end() && EndInsertPt->getOpcode() == LMU.getLaneMaskConsts().MovTermOpc &&
         EndInsertPt->getOperand(0).getReg() ==
             LMU.getLaneMaskConsts().ExecReg) {
       EndInsertPt->setDesc(TII->get(LMU.getLaneMaskConsts().MovOpc));
