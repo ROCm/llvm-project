@@ -407,7 +407,7 @@
 ; GCN-O3-NEXT:        AMDGPU Rewrite AGPR-Copy-MFMA
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        AMDGPU Pre Wave Transform
-; GCN-O3-NEXT:        AMDGPU Emit LiveDebugVariables
+; GCN-O3-NEXT:        AMDGPU Re-emit LiveDebugVariables Before Wave Transform
 ; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        AMDGPU Control Flow Wave Transform
 ; GCN-O3-NEXT:        Slot index numbering
