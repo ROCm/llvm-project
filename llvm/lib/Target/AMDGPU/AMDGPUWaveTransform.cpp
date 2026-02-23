@@ -102,10 +102,10 @@ static cl::opt<bool>
 namespace {
 
 static bool isArtificialTerminator(MachineInstr &MI) {
-  // Return true for instructions that are marked as terminators to support
-  // special exec management.
+
   switch (MI.getOpcode()) {
-  case AMDGPU::S_MOV_B64_term:
+  // Return true for instructions that are marked as terminators to support
+  // special exec management.  case AMDGPU::S_MOV_B64_term:
   case AMDGPU::S_XOR_B64_term:
   case AMDGPU::S_OR_B64_term:
   case AMDGPU::S_ANDN2_B64_term:
@@ -117,6 +117,18 @@ static bool isArtificialTerminator(MachineInstr &MI) {
   case AMDGPU::S_ANDN2_B32_term:
   case AMDGPU::S_AND_B32_term:
   case AMDGPU::S_AND_SAVEEXEC_B32_term:
+  // Return true for uniform branch instructions that are to be retained
+  case AMDGPU::S_CBRANCH_EXECZ:
+  case AMDGPU::S_CBRANCH_EXECNZ:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool isBranchUniform(unsigned Opcode) {
+  switch (Opcode) {
+  case AMDGPU::S_BRANCH:
   case AMDGPU::S_CBRANCH_EXECZ:
   case AMDGPU::S_CBRANCH_EXECNZ:
     return true;
@@ -1723,7 +1735,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
-      } else if (Opcode == AMDGPU::S_BRANCH || Opcode == AMDGPU::S_CBRANCH_EXECZ || Opcode == AMDGPU::S_CBRANCH_EXECNZ) {
+      } else if (isBranchUniform(Opcode)) {
         Info.OrigSuccFinal =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Terminator.isReturn()) {
@@ -1733,9 +1745,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         // TODO: These opcodes should be handled. They must either be avoided
         // entirely by pre-wave-transform codegen passes or wave-transform pass
         // should handle them.
-        assert(Opcode != AMDGPU::S_CBRANCH_EXECZ &&
-               Opcode != AMDGPU::S_CBRANCH_EXECNZ &&
-               Opcode != AMDGPU::S_CBRANCH_VCCZ &&
+        assert(Opcode != AMDGPU::S_CBRANCH_VCCZ &&
                Opcode != AMDGPU::S_CBRANCH_VCCNZ &&
                Opcode != AMDGPU::S_CBRANCH_SCC0 &&
                Opcode != AMDGPU::S_CBRANCH_SCC1 &&
