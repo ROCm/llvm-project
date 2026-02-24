@@ -113,11 +113,20 @@ static cl::opt<bool> SkipIntrinsicsInReachability(
              "Intrinsics cannot transitively reach user functions."),
     cl::init(true));
 
+static cl::opt<bool> PrecomputeFunctionInfo(
+    "function-info-precompute", cl::Hidden,
+    cl::desc("Precompute set of kernels"),
+    cl::init(false));
+
 STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
 
 // Fine-grained getFunctionInfo call tracking (via isKernel wrapper)
 STATISTIC(NumIsInvolvedInMustTailCall, "isInvolvedInMustTailCall calls (lines 5487,5506)");
+
+#if !defined(NDEBUG)
+static constexpr auto TAG = "[" DEBUG_TYPE "] ";
+#endif
 
 // Some helper macros to deal with statistics tracking.
 //
@@ -1214,7 +1223,7 @@ struct AAPointerInfoImpl
     // ObjHasKernelLifetime will be true).
     DenseSet<const Function *> KernelFunctionsInModule;
     auto BuildKernelSetIfNeeded = [&]() {
-      if (KernelFunctionsInModule.empty()) {
+      if (PrecomputeFunctionInfo && KernelFunctionsInModule.empty()) {
         for (const Function &F : Scope.getParent()->functions()) {
           if (A.getInfoCache().isKernel(F))
             KernelFunctionsInModule.insert(&F);
@@ -1249,8 +1258,11 @@ struct AAPointerInfoImpl
         // This avoids ~11M isKernel() calls (measured in VASP) by replacing
         // them with fast DenseSet lookups.
         BuildKernelSetIfNeeded();
-        IsLiveInCalleeCB = [&KernelFunctionsInModule](const Function &Fn) {
-          return !KernelFunctionsInModule.contains(&Fn);
+        IsLiveInCalleeCB = [&KernelFunctionsInModule, &A](const Function &Fn) {
+          if (PrecomputeFunctionInfo)
+            return !KernelFunctionsInModule.contains(&Fn);
+          else
+            return !A.getInfoCache().isKernel(Fn);
         };
       }
     }
@@ -1262,7 +1274,7 @@ struct AAPointerInfoImpl
     // OPTIMIZATION: If we'll use the kernel check in AccessCB, ensure the
     // kernel set is built. This happens when both InstInKernel and
     // ObjHasKernelLifetime are true.
-    if (InstInKernel && ObjHasKernelLifetime)
+    if (PrecomputeFunctionInfo  && InstInKernel && ObjHasKernelLifetime)
       BuildKernelSetIfNeeded();
 
     auto AccessCB = [&](const Access &Acc, bool Exact) {
@@ -1276,8 +1288,14 @@ struct AAPointerInfoImpl
       // getFunctionInfo() calls (measured in VASP) by replacing them with
       // fast DenseSet lookups (~O(1) vs ~11ns per getFunctionInfo call).
       if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
-        if (KernelFunctionsInModule.contains(AccScope))
-          return true;
+        if (PrecomputeFunctionInfo) {
+          if (KernelFunctionsInModule.contains(AccScope))
+            return true;
+        }
+        else {
+          if (A.getInfoCache().isKernel(*AccScope))
+            return true;
+        }
       }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
@@ -1641,7 +1659,9 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
 
   DenseMap<Value *, OffsetInfo> OffsetInfoMap;
   OffsetInfoMap[&AssociatedValue].insert(0);
-
+  LLVM_DEBUG(dbgs() << TAG << "[AAPointerInfoFloating]: " << "updateImpl:"
+                    << this->getIRPosition()
+                    << ", State: " << this->getAsStr(&A) << "\n");
   auto HandlePassthroughUser = [&](Value *Usr, Value *CurPtr, bool &Follow) {
     // One does not simply walk into a map and assign a reference to a possibly
     // new location. That can cause an invalidation before the assignment
@@ -2003,8 +2023,11 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
     if (!Arg->getParent()->hasExactDefinition()) {
       // If the function is readnone for this argument, we know there are no
       // accesses.
-      if (Arg->hasAttribute(Attribute::ReadNone))
+      if (Arg->hasAttribute(Attribute::ReadNone)) {
+        LLVM_DEBUG(dbgs() << TAG << "Function is readnone for argument @" << Arg->getArgNo() << "\n");
+        LLVM_DEBUG(dbgs() << TAG << "Function in question is " << Arg->getParent()->getName() << "\n");
         return ChangeStatus::UNCHANGED; // Or handle as no-op
+      }
       // Otherwise, we must assume unknown accesses (reads and/or writes).
       // We cannot track offsets, so we must give up.
       LLVM_DEBUG(dbgs() << "[AAPointerInfoFloating] Argument of declaration "
@@ -2058,10 +2081,12 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
 
   /// See AbstractAttribute::updateImpl(...).
   ChangeStatus updateImpl(Attributor &A) override {
+    constexpr auto tag = "[AAPointerInfoCallSiteArgument::updateImpl]:  ";
     using namespace AA::PointerInfo;
     // We handle memory intrinsics explicitly, at least the first (=
     // destination) and second (=source) arguments as we know how they are
     // accessed.
+    LLVM_DEBUG(dbgs() << TAG << "Updating in AAPointerInfoCallSiteArgument\n");
     if (auto *MI = dyn_cast_or_null<MemIntrinsic>(getCtxI())) {
       int64_t LengthVal = AA::RangeTy::Unknown;
       if (auto Length = MI->getLengthInBytes())
@@ -2093,20 +2118,41 @@ struct AAPointerInfoCallSiteArgument final : AAPointerInfoFloating {
     Argument *Arg = getAssociatedArgument();
     if (Arg) {
       const IRPosition &ArgPos = IRPosition::argument(*Arg);
+      bool LogHere = false;
+      if (Arg->getArgNo() == 7 && Arg->getParent()->getName().contains("_kmpc_parallel_60")) {
+        LogHere = true;
+        LLVM_DEBUG(dbgs() << tag << "Going to Look for AAPointerInfoArgument\n");
+      }
       auto *ArgAA =
           A.getAAFor<AAPointerInfo>(*this, ArgPos, DepClassTy::REQUIRED);
+      if (LogHere) {
+        if (ArgAA && ArgAA->getState().isValidState()) {
+          LLVM_DEBUG(dbgs() << tag << "AAPointerInfoArgument::updateImpl returned Valid\n");
+        } else {
+          LLVM_DEBUG(dbgs() << tag << "AAPointerInfoArgument::updateImpl returned INVALID\n");
+        }
+      }
       if (ArgAA && ArgAA->getState().isValidState())
         return translateAndAddStateFromCallee(A, *ArgAA,
                                               *cast<CallBase>(getCtxI()));
       if (!Arg->getParent()->isDeclaration())
         return indicatePessimisticFixpoint();
     }
-
+    LLVM_DEBUG(dbgs() << tag << "Checking AANoCapture\n");
     bool IsKnownNoCapture;
-    if (!AA::hasAssumedIRAttr<Attribute::Captures>(
-            A, this, getIRPosition(), DepClassTy::OPTIONAL, IsKnownNoCapture))
-      return indicatePessimisticFixpoint();
+    bool CopyOfIsKnownNoCapture;
+    if (AANoCapture::isImpliedByIR(A, getIRPosition(), Attribute::Captures, CopyOfIsKnownNoCapture))
+      LLVM_DEBUG(dbgs() << tag << "AANoCapture::isImpliedByIR returned true\n");
+    else
+      LLVM_DEBUG(dbgs() << tag << "AANoCapture::isImpliedByIR returned false\n");
 
+    if (!AA::hasAssumedIRAttr<Attribute::Captures>(
+            A, this, getIRPosition(), DepClassTy::OPTIONAL, IsKnownNoCapture)) {
+      LLVM_DEBUG(dbgs() << tag << "indicating pessimistic fixpoint\n");
+      return indicatePessimisticFixpoint();
+    } else {
+      LLVM_DEBUG(dbgs() << tag << "Checking for ReadNone\n");
+    }
     bool IsKnown = false;
     if (AA::isAssumedReadNone(A, getIRPosition(), *this, IsKnown))
       return ChangeStatus::UNCHANGED;
@@ -6101,9 +6147,11 @@ struct AANoCaptureImpl : public AANoCapture {
 };
 
 ChangeStatus AANoCaptureImpl::updateImpl(Attributor &A) {
+  constexpr auto tag = "[AANoCaptureImpl::updateImpl]: ";
   const IRPosition &IRP = getIRPosition();
   Value *V = isArgumentPosition() ? IRP.getAssociatedArgument()
                                   : &IRP.getAssociatedValue();
+  LLVM_DEBUG(dbgs() << "[AANoCaptureImpl]::updateImpl: " << *this << "\n");
   if (!V)
     return indicatePessimisticFixpoint();
 
@@ -6165,6 +6213,12 @@ ChangeStatus AANoCaptureImpl::updateImpl(Attributor &A) {
     }
   }
 
+  if (!F->hasExactDefinition()) {
+    LLVM_DEBUG(dbgs() << tag << "Function " << F->getName()
+                      << " does not have an exact definition. Giving up\n");
+    return indicatePessimisticFixpoint();
+  }
+    
   auto UseCheck = [&](const Use &U, bool &Follow) -> bool {
     // TODO(captures): Make this more precise.
     UseCaptureInfo CI = DetermineUseCaptureKind(U, /*Base=*/nullptr);
@@ -6209,16 +6263,34 @@ struct AANoCaptureCallSiteArgument final : AANoCaptureImpl {
     //       call site specific liveness information and then it makes
     //       sense to specialize attributes for call sites arguments instead of
     //       redirecting requests to the callee argument.
+    constexpr auto tag = "[AANoCaptureCallSiteArgument]: ";
+    LLVM_DEBUG(dbgs() << tag << "updateImpl updating " << *this << "\n");
     Argument *Arg = getAssociatedArgument();
     if (!Arg)
       return indicatePessimisticFixpoint();
     const IRPosition &ArgPos = IRPosition::argument(*Arg);
     bool IsKnownNoCapture;
     const AANoCapture *ArgAA = nullptr;
+    LLVM_DEBUG(
+        dbgs() << tag
+               << "Checking hasAsumedIRAttr<Attribute::Captures> on ArgNo "
+               << Arg->getArgNo() << ".\n");
     if (AA::hasAssumedIRAttr<Attribute::Captures>(
             A, this, ArgPos, DepClassTy::REQUIRED, IsKnownNoCapture, false,
-            &ArgAA))
+            &ArgAA)) {
+      LLVM_DEBUG(dbgs() << tag
+                        << "hasAsumedIRAttr<Attribute::Captures> on ArgNo "
+                        << Arg->getArgNo() << " returned true\n");
       return ChangeStatus::UNCHANGED;
+    }
+    LLVM_DEBUG(dbgs() << tag
+               << "hasAsumedIRAttr<Attribute::Captures> on ArgNo "
+               << Arg->getArgNo() << " returned false\n");
+    if (ArgAA) {
+      LLVM_DEBUG(dbgs() << "updateImpl -> ArgAA is " << *ArgAA << "\n");
+    } else {
+      LLVM_DEBUG(dbgs() << "updateImpl -> ArgAA is null\n");
+    }
     if (!ArgAA || !ArgAA->isAssumedNoCaptureMaybeReturned())
       return indicatePessimisticFixpoint();
     return clampStateAndIndicateChange(getState(), ArgAA->getState());
@@ -8202,7 +8274,10 @@ struct AAMemoryBehaviorFunction final : public AAMemoryBehaviorImpl {
     // TODO: It would be better to merge this with AAMemoryLocation, so that
     // we could determine read/write per location. This would also have the
     // benefit of only one place trying to manifest the memory attribute.
+    constexpr auto tag = "[AAMemoryBehaviorFunction]::manifest]: ";
     Function &F = cast<Function>(getAnchorValue());
+    LLVM_DEBUG(dbgs() << tag << "Manifesting changes for " << F.getName()
+                      << "\n");
     MemoryEffects ME = MemoryEffects::unknown();
     if (isAssumedReadNone())
       ME = MemoryEffects::none();
@@ -8216,6 +8291,7 @@ struct AAMemoryBehaviorFunction final : public AAMemoryBehaviorImpl {
     if (ME.onlyReadsMemory())
       for (Argument &Arg : F.args())
         A.removeAttrs(IRPosition::argument(Arg), Attribute::Writable);
+    LLVM_DEBUG(dbgs() << tag << "ME = " << ME << "\n");
     return A.manifestAttrs(getIRPosition(),
                            Attribute::getWithMemoryEffects(F.getContext(), ME));
   }
@@ -8272,7 +8348,9 @@ struct AAMemoryBehaviorCallSite final
 
 ChangeStatus AAMemoryBehaviorFunction::updateImpl(Attributor &A) {
 
+  constexpr auto tag = "[AAMemoryBehaviorFunction]::updateImpl: ";
   // The current assumed state used to determine a change.
+  LLVM_DEBUG(dbgs() << tag << "updating for " << *this << "\n");
   auto AssumedState = getAssumed();
 
   auto CheckRWInst = [&](Instruction &I) {
@@ -8295,7 +8373,10 @@ ChangeStatus AAMemoryBehaviorFunction::updateImpl(Attributor &A) {
       removeAssumedBits(NO_WRITES);
     return !isAtFixpoint();
   };
-
+  const auto *Func = getIRPosition().getAssociatedFunction();
+  if (!Func->hasExactDefinition()) {
+    return indicatePessimisticFixpoint();
+  }
   bool UsedAssumedInformation = false;
   if (!A.checkForAllReadWriteInstructions(CheckRWInst, *this,
                                           UsedAssumedInformation))
@@ -8616,6 +8697,7 @@ struct AAMemoryLocationImpl : public AAMemoryLocation {
   ChangeStatus manifest(Attributor &A) override {
     // TODO: If AAMemoryLocation and AAMemoryBehavior are merged, we could
     // provide per-location modref information here.
+    constexpr auto tag = "[AAMemoryLocation]::manifest ";
     const IRPosition &IRP = getIRPosition();
 
     SmallVector<Attribute, 1> DeducedAttrs;
@@ -8623,7 +8705,7 @@ struct AAMemoryLocationImpl : public AAMemoryLocation {
     if (DeducedAttrs.size() != 1)
       return ChangeStatus::UNCHANGED;
     MemoryEffects ME = DeducedAttrs[0].getMemoryEffects();
-
+    LLVM_DEBUG(dbgs() << tag << "ME = " << ME << " for " << *this << "\n");
     return A.manifestAttrs(IRP, Attribute::getWithMemoryEffects(
                                     IRP.getAnchorValue().getContext(), ME));
   }
@@ -8961,7 +9043,7 @@ struct AAMemoryLocationFunction final : public AAMemoryLocationImpl {
 
   /// See AbstractAttribute::updateImpl(Attributor &A).
   ChangeStatus updateImpl(Attributor &A) override {
-
+    constexpr auto tag = "[AAMemoryLocationFunction]::updateImpl ";
     const auto *MemBehaviorAA =
         A.getAAFor<AAMemoryBehavior>(*this, getIRPosition(), DepClassTy::NONE);
     if (MemBehaviorAA && MemBehaviorAA->isAssumedReadNone()) {
@@ -8972,7 +9054,14 @@ struct AAMemoryLocationFunction final : public AAMemoryLocationImpl {
       A.recordDependence(*MemBehaviorAA, *this, DepClassTy::OPTIONAL);
       return ChangeStatus::UNCHANGED;
     }
-
+    const auto *F = getIRPosition().getAssociatedFunction();
+    if (!F || !F->hasExactDefinition()) {
+      LLVM_DEBUG(
+          dbgs()
+          << tag << "Function " << F->getName()
+          << " does not have a definition. Indicating pessimistic fixpoint\n");
+      return indicatePessimisticFixpoint();
+    }
     // The current assumed state used to determine a change.
     auto AssumedState = getAssumed();
     bool Changed = false;

@@ -67,6 +67,10 @@ using namespace omp;
 
 #define DEBUG_TYPE "openmp-opt"
 
+static cl::opt<bool> OpenMPOptSpecialDebug(
+    "openmp-opt-special-debug", cl::desc("Debug OpenMPOpt and Attributor."),
+    cl::Hidden, cl::init(false));
+
 static cl::opt<bool> DisableOpenMPOptimizations(
     "openmp-opt-disable", cl::desc("Disable OpenMP specific optimizations."),
     cl::Hidden, cl::init(false));
@@ -961,7 +965,24 @@ private:
     return true;
   }
 };
-
+class OmpOptDebugRAII {
+public:
+  OmpOptDebugRAII(std::function<bool()> condition) {
+    oldDebugFlag = llvm::DebugFlag;
+    if (condition()) {
+      llvm::DebugFlag = true;
+      const char *DebugTypes[] = {"openmp-opt", "attributor"};
+      llvm::setCurrentDebugTypes(DebugTypes, 2);
+      LLVM_DEBUG(dbgs() << TAG << " **** Enabling Debug Messages ****\n");
+    }
+  }
+  ~OmpOptDebugRAII() {
+    LLVM_DEBUG(dbgs() << TAG << " **** End of Debug Messages ****\n");
+    llvm::DebugFlag = oldDebugFlag;
+  }
+private:
+  bool oldDebugFlag;
+};
 struct OpenMPOpt {
 
   using OptimizationRemarkGetter =
@@ -5855,6 +5876,12 @@ PreservedAnalyses OpenMPOptPass::run(Module &M, ModuleAnalysisManager &AM) {
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   KernelSet Kernels = getDeviceKernels(M);
 
+  // OmpOptDebugRAII DebugRAII([&]() {
+  //   if (!OpenMPOptSpecialDebug)
+  //     return false;
+  //   return M.getTargetTriple().getArch() == llvm::Triple::amdgcn;
+  // });
+
   if (PrintModuleBeforeOptimizations)
     LLVM_DEBUG(dbgs() << TAG << "Module before OpenMPOpt Module Pass:\n" << M);
 
@@ -5972,7 +5999,11 @@ PreservedAnalyses OpenMPOptCGSCCPass::run(LazyCallGraph::SCC &C,
     Function *Fn = &N.getFunction();
     SCC.push_back(Fn);
   }
-
+  // OmpOptDebugRAII DebugRAII([&]() {
+  //   return (OpenMPOptSpecialDebug && SCC.size() == 1 &&
+  //           SCC.front()->getName().contains(
+  //               "_QMmymodPreduction_and_val.internalized"));
+  // });
   if (SCC.empty())
     return PreservedAnalyses::all();
 

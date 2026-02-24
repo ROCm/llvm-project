@@ -1611,13 +1611,18 @@ struct Attributor {
                                  const AbstractAttribute *QueryingAA,
                                  DepClassTy DepClass, bool ForceUpdate = false,
                                  bool UpdateAfterInit = true) {
+    // constexpr auto tag = "[Attributor::getOrCreateAAFor]: ";
     if (!shouldPropagateCallBaseContext(IRP))
       IRP = IRP.stripCallBaseContext();
 
     if (AAType *AAPtr = lookupAAFor<AAType>(IRP, QueryingAA, DepClass,
                                             /* AllowInvalidState */ true)) {
-      if (ForceUpdate && Phase == AttributorPhase::UPDATE)
+      // dbgs() << tag << "AA look up successful. Found ";
+      // AAPtr->print(dbgs());
+      if (ForceUpdate && Phase == AttributorPhase::UPDATE) {
+        // dbgs() << tag << "Updating\n";
         updateAA(*AAPtr);
+      }
       return AAPtr;
     }
 
@@ -1631,6 +1636,8 @@ struct Attributor {
     // No matching attribute found, create one.
     // Use the static create method.
     auto &AA = AAType::createForPosition(IRP, *this);
+    // dbgs() << tag << "Created AA ";
+    // AA.print(dbgs());
 
     // Always register a new attribute to make sure we clean up the allocated
     // memory properly.
@@ -1655,6 +1662,8 @@ struct Attributor {
     }
 
     if (!ShouldUpdateAA) {
+      // dbgs() << tag << "Not Updating AA";
+      // AA.print(dbgs());
       AA.getState().indicatePessimisticFixpoint();
       return &AA;
     }
@@ -1664,7 +1673,8 @@ struct Attributor {
     if (UpdateAfterInit) {
       AttributorPhase OldPhase = Phase;
       Phase = AttributorPhase::UPDATE;
-
+      // dbgs() << tag << "Updating AA";
+      // AA.print(dbgs());
       updateAA(AA);
 
       Phase = OldPhase;
