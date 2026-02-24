@@ -19,6 +19,8 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_set_t DataSetSource, DataSetSpirv;
   amd_comgr_action_info_t DataAction;
   size_t Count;
+  const char *Options[] = {"-nogpuinc"};
+  size_t OptionsCount = sizeof(Options) / sizeof(Options[0]);
 
   if (argc != 3) {
     fprintf(stderr, "Usage: source-to-spirv file.hip file.spv\n");
@@ -36,6 +38,7 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
+  amd_comgr_(action_info_set_option_list(DataAction, Options, OptionsCount));
 
   amd_comgr_(create_data_set(&DataSetSpirv));
   amd_comgr_(do_action(AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV,
