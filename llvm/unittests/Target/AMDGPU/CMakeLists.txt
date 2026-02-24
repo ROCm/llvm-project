@@ -6,13 +6,17 @@ include_directories(
 set(LLVM_LINK_COMPONENTS
   AMDGPUCodeGen
   AMDGPUDesc
+  AMDGPUDisassembler
   AMDGPUInfo
+  AMDGPUSim
+  AMDGPUSimMCAdapter
   AMDGPUUtils
   CodeGen
   CodeGenTypes
   Core
   GlobalISel
   MC
+  MCDisassembler
   MIRParser
   Support
   TargetParser
@@ -25,4 +29,6 @@ add_llvm_target_unittest(AMDGPUTests
   ExecMayBeModifiedBeforeAnyUse.cpp
   LiveRegUnits.cpp
   PALMetadata.cpp
+  TraceCFGTest.cpp
+  ${PROJECT_SOURCE_DIR}/lib/Target/AMDGPU/Tools/tracecp/TraceUtil.cpp
   )

@@ -15,6 +15,7 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/Error.h"
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@ struct TraceEntry {
   int64_t InstructionId;
   uint64_t PC;
   uint64_t Opcode;
+  uint64_t InstSize;
   std::string InstructionText;
   MCInst Inst;
 };
@@ -99,6 +101,58 @@ Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
 TraceMetrics simulateTrace(const std::vector<TraceEntry> &Entries,
                            const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
                            bool Verbose = false);
+
+/// CFG Analysis.
+struct BasicBlock {
+  uint64_t StartPC;
+  uint64_t EndPC;
+  unsigned NumInstructions;
+  unsigned ExecutionCount;
+};
+
+struct CFGEdge {
+  uint64_t FromBlockPC; // Start of source block
+  uint64_t FromPC;      // End of source block (branch instruction)
+  uint64_t ToPC;        // Start of target block
+  unsigned Count;       // How many times this edge was taken
+};
+
+/// CFG reconstructed from the trace.
+struct TraceCFG {
+  std::map<uint64_t, BasicBlock> Blocks; // Keyed by StartPC
+  std::vector<CFGEdge> Edges;
+
+  void print() const;
+};
+
+/// Reconstruct CFG from the trace.
+/// \param Entries The trace entries to analyze.
+/// \param MCII The MCInstrInfo to identify branch instructions.
+/// \returns The reconstructed CFG.
+TraceCFG reconstructCFG(const std::vector<TraceEntry> &Entries,
+                        const MCInstrInfo &MCII);
+
+/// A natural loop detected via dominator analysis.
+struct Loop {
+  uint64_t HeaderPC;                   // Loop header (dominates all body nodes)
+  std::vector<uint64_t> LatchPCs;      // Blocks with back-edges to header
+  std::vector<uint64_t> BodyBlockPCs;  // All blocks in the loop body
+  unsigned TotalBackEdgeCount;         // Sum of all back-edge counts
+  int ParentIdx;                       // Index of parent loop (-1 if top-level)
+};
+
+/// Loops detected from the CFG.
+struct LoopInfo {
+  std::vector<Loop> Loops;
+  std::map<uint64_t, uint64_t> Dominators; // Block -> immediate dominator
+
+  void print() const;
+};
+
+/// Detect loops from the reconstructed CFG.
+/// \param CFG The control flow graph.
+/// \returns Detected loops with nesting information.
+LoopInfo detectLoops(const TraceCFG &CFG);
 
 } // namespace tracecp
 } // namespace llvm

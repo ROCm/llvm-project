@@ -118,5 +118,13 @@ int main(int argc, char **argv) {
       tracecp::simulateTrace(*EntriesOrErr, *MII, *MRI, Verbose);
   Metrics.print();
 
+  // Reconstruct and print CFG
+  tracecp::TraceCFG CFG = tracecp::reconstructCFG(*EntriesOrErr, *MII);
+  CFG.print();
+
+  // Detect and print loops
+  tracecp::LoopInfo LI = tracecp::detectLoops(CFG);
+  LI.print();
+
   return 0;
 }
