@@ -1733,11 +1733,13 @@ void ControlFlowRewriter::prepareWaveCfg() {
 
     bool ZVariant = false;
     // Detect INLINEASM_BR instructions in the block.
-    Info.HasInlineAsmBr = llvm::any_of(
-        make_range(Node->Block->begin(), Node->Block->getFirstTerminator()),
-        [](const MachineInstr &MI) {
-          return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
-        });
+    Info.HasInlineAsmBr =
+        Node->Block->mayHaveInlineAsmBr() &&
+        llvm::any_of(
+            make_range(Node->Block->begin(), Node->Block->getFirstTerminator()),
+            [](const MachineInstr &MI) {
+              return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
+            });
 
     // Analyze original terminators.
     for (MachineInstr &Terminator : Node->Block->terminators()) {
