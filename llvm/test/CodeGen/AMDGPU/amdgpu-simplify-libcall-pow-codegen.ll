@@ -17,7 +17,7 @@ declare hidden half @_Z4pownDhi(half, i32)
 ; test pow
 ; --------------------------------------------------------------------
 
-define half @test_pow_fast_f16(half %x, half %y) {
+define half @test_pow_fast_f16(half %x, half %y) #0 {
 ; CHECK-LABEL: test_pow_fast_f16:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -29,7 +29,7 @@ define half @test_pow_fast_f16(half %x, half %y) {
   ret half %pow
 }
 
-define float @test_pow_fast_f32(float %x, float %y) {
+define float @test_pow_fast_f32(float %x, float %y) #0 {
 ; CHECK-LABEL: test_pow_fast_f32:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -43,7 +43,7 @@ define float @test_pow_fast_f32(float %x, float %y) {
   ret float %pow
 }
 
-define double @test_pow_fast_f64(double %x, double %y) {
+define double @test_pow_fast_f64(double %x, double %y) #0 {
 ; CHECK-LABEL: test_pow_fast_f64:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -55,7 +55,7 @@ define double @test_pow_fast_f64(double %x, double %y) {
   ret double %pow
 }
 
-define half @test_pow_fast_f16__integral_y(half %x, i32 %y.i) {
+define half @test_pow_fast_f16__integral_y(half %x, i32 %y.i) #0 {
 ; CHECK-LABEL: test_pow_fast_f16__integral_y:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -76,7 +76,7 @@ define half @test_pow_fast_f16__integral_y(half %x, i32 %y.i) {
   ret half %pow
 }
 
-define float @test_pow_fast_f32__integral_y(float %x, i32 %y.i) {
+define float @test_pow_fast_f32__integral_y(float %x, i32 %y.i) #0 {
 ; CHECK-LABEL: test_pow_fast_f32__integral_y:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -109,7 +109,7 @@ define float @test_pow_fast_f32__integral_y(float %x, i32 %y.i) {
   ret float %pow
 }
 
-define double @test_pow_fast_f64__integral_y(double %x, i32 %y.i) {
+define double @test_pow_fast_f64__integral_y(double %x, i32 %y.i) #0 {
 ; CHECK-LABEL: test_pow_fast_f64__integral_y:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -210,7 +210,7 @@ define double @test_pow_fast_f64__integral_y(double %x, i32 %y.i) {
 ; test powr
 ; --------------------------------------------------------------------
 
-define half @test_powr_fast_f16(half %x, half %y) {
+define half @test_powr_fast_f16(half %x, half %y) #0 {
 ; CHECK-LABEL: test_powr_fast_f16:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -222,7 +222,7 @@ define half @test_powr_fast_f16(half %x, half %y) {
   ret half %powr
 }
 
-define float @test_powr_fast_f32(float %x, float %y) {
+define float @test_powr_fast_f32(float %x, float %y) #0 {
 ; CHECK-LABEL: test_powr_fast_f32:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -249,7 +249,7 @@ define float @test_powr_fast_f32(float %x, float %y) {
   ret float %powr
 }
 
-define double @test_powr_fast_f64(double %x, double %y) {
+define double @test_powr_fast_f64(double %x, double %y) #0 {
 ; CHECK-LABEL: test_powr_fast_f64:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -344,7 +344,7 @@ define double @test_powr_fast_f64(double %x, double %y) {
 ; test pown
 ; --------------------------------------------------------------------
 
-define half @test_pown_fast_f16(half %x, i32 %y) {
+define half @test_pown_fast_f16(half %x, i32 %y) #0 {
 ; CHECK-LABEL: test_pown_fast_f16:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -361,7 +361,7 @@ define half @test_pown_fast_f16(half %x, i32 %y) {
   ret half %call
 }
 
-define float @test_pown_fast_f32(float %x, i32 %y) {
+define float @test_pown_fast_f32(float %x, i32 %y) #0 {
 ; CHECK-LABEL: test_pown_fast_f32:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -391,7 +391,7 @@ define float @test_pown_fast_f32(float %x, i32 %y) {
   ret float %call
 }
 
-define double @test_pown_fast_f64(double %x, i32 %y) {
+define double @test_pown_fast_f64(double %x, i32 %y) #0 {
 ; CHECK-LABEL: test_pown_fast_f64:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -487,7 +487,7 @@ define double @test_pown_fast_f64(double %x, i32 %y) {
   ret double %call
 }
 
-define half @test_pown_fast_f16_known_even(half %x, i32 %y.arg) {
+define half @test_pown_fast_f16_known_even(half %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f16_known_even:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -503,7 +503,7 @@ define half @test_pown_fast_f16_known_even(half %x, i32 %y.arg) {
   ret half %call
 }
 
-define float @test_pown_fast_f32_known_even(float %x, i32 %y.arg) {
+define float @test_pown_fast_f32_known_even(float %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f32_known_even:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -533,7 +533,7 @@ define float @test_pown_fast_f32_known_even(float %x, i32 %y.arg) {
   ret float %call
 }
 
-define double @test_pown_fast_f64_known_even(double %x, i32 %y.arg) {
+define double @test_pown_fast_f64_known_even(double %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f64_known_even:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -624,7 +624,7 @@ define double @test_pown_fast_f64_known_even(double %x, i32 %y.arg) {
   ret double %call
 }
 
-define half @test_pown_fast_f16_known_odd(half %x, i32 %y.arg) {
+define half @test_pown_fast_f16_known_odd(half %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f16_known_odd:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -642,7 +642,7 @@ define half @test_pown_fast_f16_known_odd(half %x, i32 %y.arg) {
   ret half %call
 }
 
-define float @test_pown_fast_f32_known_odd(float %x, i32 %y.arg) {
+define float @test_pown_fast_f32_known_odd(float %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f32_known_odd:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -674,7 +674,7 @@ define float @test_pown_fast_f32_known_odd(float %x, i32 %y.arg) {
   ret float %call
 }
 
-define double @test_pown_fast_f64_known_odd(double %x, i32 %y.arg) {
+define double @test_pown_fast_f64_known_odd(double %x, i32 %y.arg) #0 {
 ; CHECK-LABEL: test_pown_fast_f64_known_odd:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -771,3 +771,5 @@ define double @test_pown_fast_f64_known_odd(double %x, i32 %y.arg) {
   %call = tail call fast double @_Z4powndi(double %x, i32 %y)
   ret double %call
 }
+
+attributes #0 = { nounwind }

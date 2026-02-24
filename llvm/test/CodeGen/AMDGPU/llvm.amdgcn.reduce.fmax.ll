@@ -14,7 +14,7 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -global-isel=0 < %s | FileCheck -check-prefixes=GFX12DAGISEL %s
 
 
-define amdgpu_kernel void @uniform_value_float(ptr addrspace(1) %out, float %in) {
+define amdgpu_kernel void @uniform_value_float(ptr addrspace(1) %out, float %in) #0 {
 ; GFX8DAGISEL-LABEL: uniform_value_float:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -134,7 +134,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_float(ptr addrspace(1) %out, float %in) {
+define void @divergent_value_float(ptr addrspace(1) %out, float %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_float:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -399,7 +399,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
+define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_float_dpp:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -668,9 +668,7 @@ define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
 ; GFX1164DAGISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164DAGISEL-NEXT:    s_clause 0x2 ; 12-byte Folded Spill
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v3, s32
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:4
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:8
 ; GFX1164DAGISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164DAGISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -714,9 +712,7 @@ define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
 ; GFX1164GISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164GISEL-NEXT:    s_clause 0x2 ; 12-byte Folded Spill
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v3, s32
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:4
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:8
 ; GFX1164GISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164GISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -760,7 +756,6 @@ define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
 ; GFX1132DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132DAGISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
 ; GFX1132DAGISEL-NEXT:    scratch_store_b32 off, v3, s32
-; GFX1132DAGISEL-NEXT:    ; meta instruction
 ; GFX1132DAGISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:4
 ; GFX1132DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132DAGISEL-NEXT:    s_or_saveexec_b32 s0, -1
@@ -793,7 +788,6 @@ define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
 ; GFX1132GISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132GISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
 ; GFX1132GISEL-NEXT:    scratch_store_b32 off, v3, s32
-; GFX1132GISEL-NEXT:    ; meta instruction
 ; GFX1132GISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:4
 ; GFX1132GISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132GISEL-NEXT:    s_or_saveexec_b32 s0, -1
@@ -830,7 +824,6 @@ define void @divergent_value_float_dpp(ptr addrspace(1) %out, float %in) {
 ; GFX12DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX12DAGISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
 ; GFX12DAGISEL-NEXT:    scratch_store_b32 off, v3, s32
-; GFX12DAGISEL-NEXT:    ; meta instruction
 ; GFX12DAGISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:4
 ; GFX12DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
@@ -865,7 +858,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
+define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_double_dpp:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1424,11 +1417,8 @@ define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
 ; GFX1164DAGISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164DAGISEL-NEXT:    s_clause 0x3 ; 28-byte Folded Spill
 ; GFX1164DAGISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v6, s32 offset:16
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b64 off, v[7:8], s32 offset:20
 ; GFX1164DAGISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164DAGISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -1503,11 +1493,8 @@ define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
 ; GFX1164GISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164GISEL-NEXT:    s_clause 0x3 ; 28-byte Folded Spill
 ; GFX1164GISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v6, s32 offset:16
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b64 off, v[7:8], s32 offset:20
 ; GFX1164GISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164GISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -1582,7 +1569,6 @@ define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
 ; GFX1132DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132DAGISEL-NEXT:    s_clause 0x1 ; 16-byte Folded Spill
 ; GFX1132DAGISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1132DAGISEL-NEXT:    ; meta instruction
 ; GFX1132DAGISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
 ; GFX1132DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132DAGISEL-NEXT:    s_or_saveexec_b32 s2, -1
@@ -1637,7 +1623,6 @@ define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
 ; GFX1132GISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132GISEL-NEXT:    s_clause 0x1 ; 16-byte Folded Spill
 ; GFX1132GISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1132GISEL-NEXT:    ; meta instruction
 ; GFX1132GISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
 ; GFX1132GISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132GISEL-NEXT:    s_or_saveexec_b32 s2, -1
@@ -1696,7 +1681,6 @@ define void @divergent_value_double_dpp(ptr addrspace(1) %out, double %in) {
 ; GFX12DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX12DAGISEL-NEXT:    s_clause 0x1 ; 16-byte Folded Spill
 ; GFX12DAGISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX12DAGISEL-NEXT:    ; meta instruction
 ; GFX12DAGISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
 ; GFX12DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
@@ -1752,7 +1736,7 @@ entry:
   ret void
 }
 
-define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) {
+define void @divergent_cfg_float(ptr addrspace(1) %out, float %in, float %in2) #0 {
 ; GFX8DAGISEL-LABEL: divergent_cfg_float:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2393,7 +2377,7 @@ endif:
   ret void
 }
 
-define amdgpu_kernel void @uniform_value_double(ptr addrspace(1) %out, double %in) {
+define amdgpu_kernel void @uniform_value_double(ptr addrspace(1) %out, double %in) #0 {
 ; GFX8DAGISEL-LABEL: uniform_value_double:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
@@ -2508,7 +2492,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_double(ptr addrspace(1) %out, double %in) {
+define void @divergent_value_double(ptr addrspace(1) %out, double %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_double:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2830,7 +2814,7 @@ entry:
   ret void
 }
 
-define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2) {
+define void @divergent_cfg_double(ptr addrspace(1) %out, double %in, double %in2) #0 {
 ; GFX8DAGISEL-LABEL: divergent_cfg_double:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3597,3 +3581,5 @@ endif:
   store double %combine, ptr addrspace(1) %out
   ret void
 }
+
+attributes #0 = { nounwind }

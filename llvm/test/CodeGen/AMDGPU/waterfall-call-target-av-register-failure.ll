@@ -4,7 +4,7 @@
 ; Make sure SIFixSGPRCopies handles situations where it needs to fix
 ; up copies to physical registers from an AV virtual register.
 
-define i32 @fix_sgpr_copies_indirect_call(ptr addrspace(5) %ptr) {
+define i32 @fix_sgpr_copies_indirect_call(ptr addrspace(5) %ptr) #0 {
 ; CHECK-LABEL: fix_sgpr_copies_indirect_call:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -139,3 +139,5 @@ bb1:                                              ; preds = %bb
   tail call void %i()
   ret i32 0
 }
+
+attributes #0 = { nounwind }
