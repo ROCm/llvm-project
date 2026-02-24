@@ -87,6 +87,10 @@ add_custom_target(embed-resource-dir DEPENDS
 # the library here. This must create the library, add the dependency
 # on the custom target before adding the source to the library target.
 add_library(embed-resource-dir-lib OBJECT)
+set_target_properties(embed-resource-dir-lib PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No)
 add_dependencies(embed-resource-dir-lib embed-resource-dir)
 target_sources(embed-resource-dir-lib PRIVATE ${GEN_RESOURCE_DIR_FILE})
 
