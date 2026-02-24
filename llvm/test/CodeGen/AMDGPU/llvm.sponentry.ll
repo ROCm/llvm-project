@@ -247,12 +247,12 @@ define amdgpu_gfx ptr addrspace(5) @sponentry_gfx_dvgpr_realign(i32 %val) #0 {
 ; CHECK-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-NEXT:    s_and_b32 s33, s33, 0xffffff80
 ; CHECK-NEXT:    s_mov_b32 s34, s32
-; CHECK-NEXT:    s_addk_co_i32 s32, 0x180
 ; CHECK-NEXT:    s_wait_storecnt 0x0
 ; CHECK-NEXT:    scratch_store_b32 off, v0, s33 offset:128 scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_storecnt 0x0
 ; CHECK-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s34
+; CHECK-NEXT:    s_addk_co_i32 s32, 0x180
 ; CHECK-NEXT:    s_mov_b32 s32, s34
 ; CHECK-NEXT:    s_mov_b32 s34, s1
 ; CHECK-NEXT:    s_mov_b32 s33, s0
@@ -322,7 +322,6 @@ define amdgpu_gfx ptr addrspace(5) @sponentry_gfx_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; DAGISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
 ; DAGISEL-NEXT:    scratch_store_b32 off, v1, s33 offset:4
-; DAGISEL-NEXT:    ; meta instruction
 ; DAGISEL-NEXT:    scratch_store_b32 off, v2, s33 offset:8
 ; DAGISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
@@ -377,7 +376,6 @@ define amdgpu_gfx ptr addrspace(5) @sponentry_gfx_dyn_alloc(i32 %val) #0 {
 ; GISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GISEL-NEXT:    s_clause 0x1 ; 8-byte Folded Spill
 ; GISEL-NEXT:    scratch_store_b32 off, v1, s33 offset:4
-; GISEL-NEXT:    ; meta instruction
 ; GISEL-NEXT:    scratch_store_b32 off, v2, s33 offset:8
 ; GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GISEL-NEXT:    s_mov_b32 exec_lo, s0
@@ -502,11 +500,11 @@ define amdgpu_cs_chain void @sponentry_cs_chain_dvgpr_realign(i32 %val) #0 {
 ; CHECK-NEXT:    s_wait_samplecnt 0x0
 ; CHECK-NEXT:    s_wait_bvhcnt 0x0
 ; CHECK-NEXT:    s_wait_kmcnt 0x0
-; CHECK-NEXT:    s_add_co_i32 s33, s32, 0x7f
 ; CHECK-NEXT:    s_mov_b32 s34, s32
+; CHECK-NEXT:    s_add_co_i32 s33, s32, 0x7f
 ; CHECK-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; CHECK-NEXT:    s_and_b32 s33, s33, 0xffffff80
 ; CHECK-NEXT:    v_mov_b32_e32 v0, s34
+; CHECK-NEXT:    s_and_b32 s33, s33, 0xffffff80
 ; CHECK-NEXT:    s_addk_co_i32 s32, 0x180
 ; CHECK-NEXT:    s_wait_storecnt 0x0
 ; CHECK-NEXT:    scratch_store_b32 off, v8, s33 offset:128 scope:SCOPE_SYS
@@ -534,8 +532,8 @@ define amdgpu_cs_chain void @sponentry_cs_chain_dyn_alloc(i32 %val) #0 {
 ; DAGISEL-NEXT:    s_wait_samplecnt 0x0
 ; DAGISEL-NEXT:    s_wait_bvhcnt 0x0
 ; DAGISEL-NEXT:    s_wait_kmcnt 0x0
-; DAGISEL-NEXT:    s_mov_b32 s33, s32
 ; DAGISEL-NEXT:    v_lshl_add_u32 v2, v8, 2, 15
+; DAGISEL-NEXT:    s_mov_b32 s33, s32
 ; DAGISEL-NEXT:    s_add_co_i32 s32, s32, 16
 ; DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; DAGISEL-NEXT:    v_and_b32_e32 v2, -16, v2
@@ -574,26 +572,25 @@ define amdgpu_cs_chain void @sponentry_cs_chain_dyn_alloc(i32 %val) #0 {
 ; GISEL-NEXT:    s_wait_samplecnt 0x0
 ; GISEL-NEXT:    s_wait_bvhcnt 0x0
 ; GISEL-NEXT:    s_wait_kmcnt 0x0
-; GISEL-NEXT:    s_mov_b32 s33, s32
 ; GISEL-NEXT:    v_lshl_add_u32 v2, v8, 2, 15
+; GISEL-NEXT:    s_mov_b32 s33, s32
 ; GISEL-NEXT:    s_add_co_i32 s32, s32, 16
 ; GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GISEL-NEXT:    s_mov_b32 s0, s32
-; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GISEL-NEXT:    v_and_b32_e32 v2, -16, v2
 ; GISEL-NEXT:    s_or_saveexec_b32 s1, -1
 ; GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
+; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GISEL-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s1
-; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:1 row_mask:0xf bank_mask:0xf
-; GISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:2 row_mask:0xf bank_mask:0xf
 ; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:2 row_mask:0xf bank_mask:0xf
 ; GISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:4 row_mask:0xf bank_mask:0xf
+; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; GISEL-NEXT:    v_max_u32_dpp v0, v0, v0 row_shr:8 row_mask:0xf bank_mask:0xf
 ; GISEL-NEXT:    ds_swizzle_b32 v1, v0 offset:swizzle(BROADCAST,32,15)
 ; GISEL-NEXT:    s_wait_dscnt 0x0
 ; GISEL-NEXT:    v_max_u32_e32 v0, v0, v1
-; GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GISEL-NEXT:    v_readlane_b32 s2, v0, 31
 ; GISEL-NEXT:    s_mov_b32 exec_lo, s1
 ; GISEL-NEXT:    v_mov_b32_e32 v2, s33

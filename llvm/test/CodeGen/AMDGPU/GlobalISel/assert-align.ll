@@ -3,7 +3,7 @@
 
 declare hidden ptr addrspace(1) @ext(ptr addrspace(1))
 
-define ptr addrspace(1) @call_assert_align() {
+define ptr addrspace(1) @call_assert_align() #0 {
 ; CHECK-LABEL: call_assert_align:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -41,7 +41,7 @@ entry:
   ret ptr addrspace(1) %call
 }
 
-define ptr addrspace(1) @tail_call_assert_align() {
+define ptr addrspace(1) @tail_call_assert_align() #0 {
 ; CHECK-LABEL: tail_call_assert_align:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -55,3 +55,5 @@ entry:
   %call = tail call align 4 ptr addrspace(1) @ext(ptr addrspace(1) null)
   ret ptr addrspace(1) %call
 }
+
+attributes #0 = { nounwind }

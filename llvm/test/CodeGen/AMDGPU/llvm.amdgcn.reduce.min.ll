@@ -12,7 +12,7 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -global-isel=0 < %s | FileCheck -check-prefixes=GFX1132DAGISEL %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -global-isel=1 -new-reg-bank-select < %s | FileCheck -check-prefixes=GFX1132GISEL %s
 
-define amdgpu_kernel void @uniform_value(ptr addrspace(1) %out, i32 %in) {
+define amdgpu_kernel void @uniform_value(ptr addrspace(1) %out, i32 %in) #0 {
 ; GFX8DAGISEL-LABEL: uniform_value:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -124,7 +124,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @divergent_value(ptr addrspace(1) %out) {
+define amdgpu_kernel void @divergent_value(ptr addrspace(1) %out) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -367,7 +367,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @uniform_value_dpp(ptr addrspace(1) %out, i32 %in) {
+define amdgpu_kernel void @uniform_value_dpp(ptr addrspace(1) %out, i32 %in) #0 {
 ; GFX8DAGISEL-LABEL: uniform_value_dpp:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -479,7 +479,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @divergent_value_dpp(ptr addrspace(1) %out) {
+define amdgpu_kernel void @divergent_value_dpp(ptr addrspace(1) %out) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_dpp:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -816,7 +816,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) {
+define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_dpp_i64:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1479,13 +1479,9 @@ define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) {
 ; GFX1164DAGISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164DAGISEL-NEXT:    s_clause 0x4 ; 28-byte Folded Spill
 ; GFX1164DAGISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v8, s32 offset:16
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:20
-; GFX1164DAGISEL-NEXT:    ; meta instruction
 ; GFX1164DAGISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:24
 ; GFX1164DAGISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164DAGISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -1577,13 +1573,9 @@ define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) {
 ; GFX1164GISEL-NEXT:    s_xor_saveexec_b64 s[0:1], -1
 ; GFX1164GISEL-NEXT:    s_clause 0x4 ; 28-byte Folded Spill
 ; GFX1164GISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v8, s32 offset:16
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:20
-; GFX1164GISEL-NEXT:    ; meta instruction
 ; GFX1164GISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:24
 ; GFX1164GISEL-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX1164GISEL-NEXT:    s_or_saveexec_b64 s[0:1], -1
@@ -1675,11 +1667,8 @@ define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) {
 ; GFX1132DAGISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132DAGISEL-NEXT:    s_clause 0x3 ; 24-byte Folded Spill
 ; GFX1132DAGISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1132DAGISEL-NEXT:    ; meta instruction
 ; GFX1132DAGISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1132DAGISEL-NEXT:    ; meta instruction
 ; GFX1132DAGISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:16
-; GFX1132DAGISEL-NEXT:    ; meta instruction
 ; GFX1132DAGISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:20
 ; GFX1132DAGISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132DAGISEL-NEXT:    s_or_saveexec_b32 s2, -1
@@ -1741,11 +1730,8 @@ define void @divergent_value_dpp_i64(ptr addrspace(1) %out, i64 %in) {
 ; GFX1132GISEL-NEXT:    s_xor_saveexec_b32 s0, -1
 ; GFX1132GISEL-NEXT:    s_clause 0x3 ; 24-byte Folded Spill
 ; GFX1132GISEL-NEXT:    scratch_store_b64 off, v[4:5], s32
-; GFX1132GISEL-NEXT:    ; meta instruction
 ; GFX1132GISEL-NEXT:    scratch_store_b64 off, v[6:7], s32 offset:8
-; GFX1132GISEL-NEXT:    ; meta instruction
 ; GFX1132GISEL-NEXT:    scratch_store_b32 off, v4, s32 offset:16
-; GFX1132GISEL-NEXT:    ; meta instruction
 ; GFX1132GISEL-NEXT:    scratch_store_b32 off, v5, s32 offset:20
 ; GFX1132GISEL-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX1132GISEL-NEXT:    s_or_saveexec_b32 s2, -1
@@ -1806,7 +1792,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @default_stratergy(ptr addrspace(1) %out) {
+define amdgpu_kernel void @default_stratergy(ptr addrspace(1) %out) #0 {
 ; GFX8DAGISEL-LABEL: default_stratergy:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
@@ -2143,7 +2129,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @divergent_cfg(ptr addrspace(1) %out, i32 %in) {
+define amdgpu_kernel void @divergent_cfg(ptr addrspace(1) %out, i32 %in) #0 {
 ; GFX8DAGISEL-LABEL: divergent_cfg:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
@@ -2608,7 +2594,7 @@ endif:
   ret void
 }
 
-define amdgpu_kernel void @uniform_value_i64(ptr addrspace(1) %out, i64 %in) {
+define amdgpu_kernel void @uniform_value_i64(ptr addrspace(1) %out, i64 %in) #0 {
 ; GFX8DAGISEL-LABEL: uniform_value_i64:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
@@ -2714,7 +2700,7 @@ entry:
   ret void
 }
 
-define void @divergent_value_i64(ptr addrspace(1) %out, i64 %id.x) {
+define void @divergent_value_i64(ptr addrspace(1) %out, i64 %id.x) #0 {
 ; GFX8DAGISEL-LABEL: divergent_value_i64:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3012,7 +2998,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @divergent_cfg_i64(ptr addrspace(1) %out, i64 %in, i64 %in2) {
+define amdgpu_kernel void @divergent_cfg_i64(ptr addrspace(1) %out, i64 %in, i64 %in2) #0 {
 ; GFX8DAGISEL-LABEL: divergent_cfg_i64:
 ; GFX8DAGISEL:       ; %bb.0: ; %entry
 ; GFX8DAGISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
@@ -3348,3 +3334,5 @@ endif:
   store i64 %combine, ptr addrspace(1) %out
   ret void
 }
+
+attributes #0 = { nounwind }

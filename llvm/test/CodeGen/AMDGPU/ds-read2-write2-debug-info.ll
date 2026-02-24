@@ -9,7 +9,7 @@ define amdgpu_kernel void @simple_write2_one_val_f32(ptr addrspace(1) %C, ptr ad
 ; CHECK-NEXT:    .cfi_sections .debug_frame
 ; CHECK-NEXT:    .cfi_startproc
 ; CHECK-NEXT:  ; %bb.0:
-; CHECK-NEXT:    .cfi_escape 0x0f, 0x04, 0x30, 0x36, 0xe9, 0x02 ;
+; CHECK-NEXT:    .cfi_escape 0x0f, 0x04, 0x30, 0x36, 0xe9, 0x02 ; CFA is 0 in private_wave aspace
 ; CHECK-NEXT:    .cfi_undefined 16
 ; CHECK-NEXT:    .file 1 "/" "<stdin>"
 ; CHECK-NEXT:    .loc 1 1 1 prologue_end ; <stdin>:1:1
@@ -50,7 +50,7 @@ define amdgpu_kernel void @simple_read2_f32(ptr addrspace(1) %out) #0 {
 ; CHECK:       .Lfunc_begin1:
 ; CHECK-NEXT:    .cfi_startproc
 ; CHECK-NEXT:  ; %bb.0:
-; CHECK-NEXT:    .cfi_escape 0x0f, 0x04, 0x30, 0x36, 0xe9, 0x02 ;
+; CHECK-NEXT:    .cfi_escape 0x0f, 0x04, 0x30, 0x36, 0xe9, 0x02 ; CFA is 0 in private_wave aspace
 ; CHECK-NEXT:    .cfi_undefined 16
 ; CHECK-NEXT:    ;DEBUG_VALUE: simple_read2_f32:7 <- $vgpr0
 ; CHECK-NEXT:    ;DEBUG_VALUE: simple_read2_f32:10 <- [DW_OP_plus_uconst 8, DW_OP_stack_value] $vgpr0

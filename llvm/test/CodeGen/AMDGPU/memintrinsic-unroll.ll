@@ -9,7 +9,7 @@
 
 ; memcpy for address spaces 0, 1, 4, 5
 
-define void @memcpy_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align 1 readonly %src) {
+define void @memcpy_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memcpy_p0_p0_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -794,7 +794,7 @@ entry:
   ret void
 }
 
-define void @memcpy_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align 1 readonly %src) {
+define void @memcpy_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memcpy_p1_p1_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1547,7 +1547,7 @@ entry:
   ret void
 }
 
-define void @memcpy_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align 1 readonly %src) {
+define void @memcpy_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memcpy_p0_p4_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2161,7 +2161,7 @@ entry:
   ret void
 }
 
-define void @memcpy_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5) align 1 readonly %src) {
+define void @memcpy_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memcpy_p5_p5_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3608,7 +3608,7 @@ entry:
   ret void
 }
 
-define void @memcpy_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align 1 readonly %src) {
+define void @memcpy_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memcpy_p0_p5_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -5371,7 +5371,7 @@ entry:
 
 ; memmove for address spaces 0, 1, 4, 5
 
-define void @memmove_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align 1 readonly %src) {
+define void @memmove_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memmove_p0_p0_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -6916,7 +6916,7 @@ entry:
   ret void
 }
 
-define void @memmove_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align 1 readonly %src) {
+define void @memmove_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memmove_p1_p1_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -8431,7 +8431,7 @@ entry:
   ret void
 }
 
-define void @memmove_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align 1 readonly %src) {
+define void @memmove_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memmove_p0_p4_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -9674,7 +9674,7 @@ entry:
   ret void
 }
 
-define void @memmove_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5) align 1 readonly %src) {
+define void @memmove_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memmove_p5_p5_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -12475,7 +12475,7 @@ entry:
   ret void
 }
 
-define void @memmove_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align 1 readonly %src) {
+define void @memmove_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5) align 1 readonly %src) #1 {
 ; CHECK-LABEL: memmove_p0_p5_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -15939,7 +15939,7 @@ entry:
   ret void
 }
 
-define void @memset_p0_sz2048(ptr addrspace(0) %dst) {
+define void @memset_p0_sz2048(ptr addrspace(0) %dst) #1 {
 ; CHECK-LABEL: memset_p0_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -16370,7 +16370,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_sz2048(ptr addrspace(1) %dst) {
+define void @memset_p1_sz2048(ptr addrspace(1) %dst) #1 {
 ; CHECK-LABEL: memset_p1_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -16794,7 +16794,7 @@ entry:
   ret void
 }
 
-define void @memset_p3_sz2048(ptr addrspace(3) %dst) {
+define void @memset_p3_sz2048(ptr addrspace(3) %dst) #1 {
 ; CHECK-LABEL: memset_p3_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -17153,7 +17153,7 @@ entry:
   ret void
 }
 
-define void @memset_p5_sz2048(ptr addrspace(5) %dst) {
+define void @memset_p5_sz2048(ptr addrspace(5) %dst) #1 {
 ; CHECK-LABEL: memset_p5_sz2048:
 ; CHECK:       ; %bb.0: ; %entry
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -17569,5 +17569,6 @@ declare void @llvm.memset.p1.i64(ptr addrspace(1) nocapture writeonly, i8, i64, 
 declare void @llvm.memset.p3.i64(ptr addrspace(3) nocapture writeonly, i8, i64, i1 immarg) #3
 declare void @llvm.memset.p5.i64(ptr addrspace(5) nocapture writeonly, i8, i64, i1 immarg) #3
 
+attributes #1 = { nounwind }
 attributes #2 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
 attributes #3 = { nocallback nofree nounwind willreturn memory(argmem: write) }

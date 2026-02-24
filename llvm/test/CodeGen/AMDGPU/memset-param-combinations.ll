@@ -3,7 +3,7 @@
 ; RUN: llc -global-isel -new-reg-bank-select -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 %s -o - | FileCheck -check-prefixes=GFX942,GFX942-GISEL %s
 
 
-define void @memset_p0_varsize_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval, i64 %size) {
+define void @memset_p0_varsize_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p0_varsize_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -128,7 +128,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_varsize_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval, i64 %size) {
+define void @memset_p1_varsize_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p1_varsize_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -253,7 +253,7 @@ entry:
   ret void
 }
 
-define void @memset_p3_varsize_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval, i64 %size) {
+define void @memset_p3_varsize_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p3_varsize_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -372,7 +372,7 @@ entry:
   ret void
 }
 
-define void @memset_p5_varsize_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval, i64 %size) {
+define void @memset_p5_varsize_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p5_varsize_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -490,7 +490,7 @@ entry:
   ret void
 }
 
-define void @memset_p0_sz1055_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval) {
+define void @memset_p0_sz1055_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p0_sz1055_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -683,7 +683,7 @@ entry:
   ret void
 }
 
-define void @memset_p0_sz2048_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval) {
+define void @memset_p0_sz2048_align_4_varsetval(ptr addrspace(0) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p0_sz2048_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -843,7 +843,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_sz1055_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval) {
+define void @memset_p1_sz1055_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p1_sz1055_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -987,7 +987,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_sz2048_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval) {
+define void @memset_p1_sz2048_align_4_varsetval(ptr addrspace(1) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p1_sz2048_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1102,7 +1102,7 @@ entry:
   ret void
 }
 
-define void @memset_p3_sz1055_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval) {
+define void @memset_p3_sz1055_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p3_sz1055_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1263,7 +1263,7 @@ entry:
   ret void
 }
 
-define void @memset_p3_sz2048_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval) {
+define void @memset_p3_sz2048_align_4_varsetval(ptr addrspace(3) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p3_sz2048_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1390,7 +1390,7 @@ entry:
   ret void
 }
 
-define void @memset_p5_sz1055_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval) {
+define void @memset_p5_sz1055_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p5_sz1055_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1535,7 +1535,7 @@ entry:
   ret void
 }
 
-define void @memset_p5_sz2048_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval) {
+define void @memset_p5_sz2048_align_4_varsetval(ptr addrspace(5) align 4 %dst, i8 %setval) #0 {
 ; GFX942-SDAG-LABEL: memset_p5_sz2048_align_4_varsetval:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1646,7 +1646,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_varsz_align_4_set40(ptr addrspace(1) align 4 %dst, i64 %size) {
+define void @memset_p1_varsz_align_4_set40(ptr addrspace(1) align 4 %dst, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p1_varsz_align_4_set40:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1766,7 +1766,7 @@ entry:
   ret void
 }
 
-define void @memset_p1_varsz_align_4_set0(ptr addrspace(1) align 4 %dst, i64 %size) {
+define void @memset_p1_varsz_align_4_set0(ptr addrspace(1) align 4 %dst, i64 %size) #0 {
 ; GFX942-SDAG-LABEL: memset_p1_varsz_align_4_set0:
 ; GFX942-SDAG:       ; %bb.0: ; %entry
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1891,6 +1891,7 @@ declare void @llvm.memset.p1.i64(ptr addrspace(1) noalias nocapture writeonly, i
 declare void @llvm.memset.p3.i64(ptr addrspace(3) noalias nocapture writeonly, i8, i64, i1 immarg)
 declare void @llvm.memset.p5.i64(ptr addrspace(5) noalias nocapture writeonly, i8, i64, i1 immarg)
 
+attributes #0 = { nounwind }
 
 ;; NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
 ; GFX942: {{.*}}

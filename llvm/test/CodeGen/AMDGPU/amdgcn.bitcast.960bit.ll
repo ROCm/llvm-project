@@ -6,7 +6,7 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-TRUE16 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX11,GFX11-FAKE16 %s
 
-define <30 x float> @bitcast_v30i32_to_v30f32(<30 x i32> %a, i32 %b) {
+define <30 x float> @bitcast_v30i32_to_v30f32(<30 x i32> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v30f32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -196,7 +196,7 @@ end:
   ret <30 x float> %phi
 }
 
-define inreg <30 x float> @bitcast_v30i32_to_v30f32_scalar(<30 x i32> inreg %a, i32 inreg %b) {
+define inreg <30 x float> @bitcast_v30i32_to_v30f32_scalar(<30 x i32> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v30f32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -557,7 +557,7 @@ end:
   ret <30 x float> %phi
 }
 
-define <30 x i32> @bitcast_v30f32_to_v30i32(<30 x float> %a, i32 %b) {
+define <30 x i32> @bitcast_v30f32_to_v30i32(<30 x float> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v30i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -732,7 +732,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define inreg <30 x i32> @bitcast_v30f32_to_v30i32_scalar(<30 x float> inreg %a, i32 inreg %b) {
+define inreg <30 x i32> @bitcast_v30f32_to_v30i32_scalar(<30 x float> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v30i32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1308,7 +1308,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define <15 x i64> @bitcast_v30i32_to_v15i64(<30 x i32> %a, i32 %b) {
+define <15 x i64> @bitcast_v30i32_to_v15i64(<30 x i32> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v15i64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1498,7 +1498,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define inreg <15 x i64> @bitcast_v30i32_to_v15i64_scalar(<30 x i32> inreg %a, i32 inreg %b) {
+define inreg <15 x i64> @bitcast_v30i32_to_v15i64_scalar(<30 x i32> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v15i64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1859,7 +1859,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define <30 x i32> @bitcast_v15i64_to_v30i32(<15 x i64> %a, i32 %b) {
+define <30 x i32> @bitcast_v15i64_to_v30i32(<15 x i64> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v30i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2057,7 +2057,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define inreg <30 x i32> @bitcast_v15i64_to_v30i32_scalar(<15 x i64> inreg %a, i32 inreg %b) {
+define inreg <30 x i32> @bitcast_v15i64_to_v30i32_scalar(<15 x i64> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v30i32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2418,7 +2418,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define <15 x double> @bitcast_v30i32_to_v15f64(<30 x i32> %a, i32 %b) {
+define <15 x double> @bitcast_v30i32_to_v15f64(<30 x i32> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v15f64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2608,7 +2608,7 @@ end:
   ret <15 x double> %phi
 }
 
-define inreg <15 x double> @bitcast_v30i32_to_v15f64_scalar(<30 x i32> inreg %a, i32 inreg %b) {
+define inreg <15 x double> @bitcast_v30i32_to_v15f64_scalar(<30 x i32> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v15f64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2969,7 +2969,7 @@ end:
   ret <15 x double> %phi
 }
 
-define <30 x i32> @bitcast_v15f64_to_v30i32(<15 x double> %a, i32 %b) {
+define <30 x i32> @bitcast_v15f64_to_v30i32(<15 x double> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v30i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3099,7 +3099,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define inreg <30 x i32> @bitcast_v15f64_to_v30i32_scalar(<15 x double> inreg %a, i32 inreg %b) {
+define inreg <30 x i32> @bitcast_v15f64_to_v30i32_scalar(<15 x double> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v30i32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3615,7 +3615,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define <60 x i16> @bitcast_v30i32_to_v60i16(<30 x i32> %a, i32 %b) {
+define <60 x i16> @bitcast_v30i32_to_v60i16(<30 x i32> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v60i16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -4523,7 +4523,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define inreg <60 x i16> @bitcast_v30i32_to_v60i16_scalar(<30 x i32> inreg %a, i32 inreg %b) {
+define inreg <60 x i16> @bitcast_v30i32_to_v60i16_scalar(<30 x i32> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v60i16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -5564,7 +5564,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define <30 x i32> @bitcast_v60i16_to_v30i32(<60 x i16> %a, i32 %b) {
+define <30 x i32> @bitcast_v60i16_to_v30i32(<60 x i16> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v30i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -6909,7 +6909,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define inreg <30 x i32> @bitcast_v60i16_to_v30i32_scalar(<60 x i16> inreg %a, i32 inreg %b) {
+define inreg <30 x i32> @bitcast_v60i16_to_v30i32_scalar(<60 x i16> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v30i32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -8082,7 +8082,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define <60 x half> @bitcast_v30i32_to_v60f16(<30 x i32> %a, i32 %b) {
+define <60 x half> @bitcast_v30i32_to_v60f16(<30 x i32> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v60f16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -8990,7 +8990,7 @@ end:
   ret <60 x half> %phi
 }
 
-define inreg <60 x half> @bitcast_v30i32_to_v60f16_scalar(<30 x i32> inreg %a, i32 inreg %b) {
+define inreg <60 x half> @bitcast_v30i32_to_v60f16_scalar(<30 x i32> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30i32_to_v60f16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -10031,7 +10031,7 @@ end:
   ret <60 x half> %phi
 }
 
-define <30 x i32> @bitcast_v60f16_to_v30i32(<60 x half> %a, i32 %b) {
+define <30 x i32> @bitcast_v60f16_to_v30i32(<60 x half> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v30i32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -11520,7 +11520,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define inreg <30 x i32> @bitcast_v60f16_to_v30i32_scalar(<60 x half> inreg %a, i32 inreg %b) {
+define inreg <30 x i32> @bitcast_v60f16_to_v30i32_scalar(<60 x half> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v30i32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -12771,7 +12771,7 @@ end:
   ret <30 x i32> %phi
 }
 
-define <15 x i64> @bitcast_v30f32_to_v15i64(<30 x float> %a, i32 %b) {
+define <15 x i64> @bitcast_v30f32_to_v15i64(<30 x float> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v15i64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -12946,7 +12946,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define inreg <15 x i64> @bitcast_v30f32_to_v15i64_scalar(<30 x float> inreg %a, i32 inreg %b) {
+define inreg <15 x i64> @bitcast_v30f32_to_v15i64_scalar(<30 x float> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v15i64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -13522,7 +13522,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define <30 x float> @bitcast_v15i64_to_v30f32(<15 x i64> %a, i32 %b) {
+define <30 x float> @bitcast_v15i64_to_v30f32(<15 x i64> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v30f32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -13720,7 +13720,7 @@ end:
   ret <30 x float> %phi
 }
 
-define inreg <30 x float> @bitcast_v15i64_to_v30f32_scalar(<15 x i64> inreg %a, i32 inreg %b) {
+define inreg <30 x float> @bitcast_v15i64_to_v30f32_scalar(<15 x i64> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v30f32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -14081,7 +14081,7 @@ end:
   ret <30 x float> %phi
 }
 
-define <15 x double> @bitcast_v30f32_to_v15f64(<30 x float> %a, i32 %b) {
+define <15 x double> @bitcast_v30f32_to_v15f64(<30 x float> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v15f64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -14256,7 +14256,7 @@ end:
   ret <15 x double> %phi
 }
 
-define inreg <15 x double> @bitcast_v30f32_to_v15f64_scalar(<30 x float> inreg %a, i32 inreg %b) {
+define inreg <15 x double> @bitcast_v30f32_to_v15f64_scalar(<30 x float> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v15f64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -14832,7 +14832,7 @@ end:
   ret <15 x double> %phi
 }
 
-define <30 x float> @bitcast_v15f64_to_v30f32(<15 x double> %a, i32 %b) {
+define <30 x float> @bitcast_v15f64_to_v30f32(<15 x double> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v30f32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -14962,7 +14962,7 @@ end:
   ret <30 x float> %phi
 }
 
-define inreg <30 x float> @bitcast_v15f64_to_v30f32_scalar(<15 x double> inreg %a, i32 inreg %b) {
+define inreg <30 x float> @bitcast_v15f64_to_v30f32_scalar(<15 x double> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v30f32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -15478,7 +15478,7 @@ end:
   ret <30 x float> %phi
 }
 
-define <60 x i16> @bitcast_v30f32_to_v60i16(<30 x float> %a, i32 %b) {
+define <60 x i16> @bitcast_v30f32_to_v60i16(<30 x float> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v60i16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -16356,7 +16356,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define inreg <60 x i16> @bitcast_v30f32_to_v60i16_scalar(<30 x float> inreg %a, i32 inreg %b) {
+define inreg <60 x i16> @bitcast_v30f32_to_v60i16_scalar(<30 x float> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v60i16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -17833,7 +17833,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define <30 x float> @bitcast_v60i16_to_v30f32(<60 x i16> %a, i32 %b) {
+define <30 x float> @bitcast_v60i16_to_v30f32(<60 x i16> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v30f32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -19178,7 +19178,7 @@ end:
   ret <30 x float> %phi
 }
 
-define inreg <30 x float> @bitcast_v60i16_to_v30f32_scalar(<60 x i16> inreg %a, i32 inreg %b) {
+define inreg <30 x float> @bitcast_v60i16_to_v30f32_scalar(<60 x i16> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v30f32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -20351,7 +20351,7 @@ end:
   ret <30 x float> %phi
 }
 
-define <60 x half> @bitcast_v30f32_to_v60f16(<30 x float> %a, i32 %b) {
+define <60 x half> @bitcast_v30f32_to_v60f16(<30 x float> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v60f16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -21229,7 +21229,7 @@ end:
   ret <60 x half> %phi
 }
 
-define inreg <60 x half> @bitcast_v30f32_to_v60f16_scalar(<30 x float> inreg %a, i32 inreg %b) {
+define inreg <60 x half> @bitcast_v30f32_to_v60f16_scalar(<30 x float> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v30f32_to_v60f16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -22706,7 +22706,7 @@ end:
   ret <60 x half> %phi
 }
 
-define <30 x float> @bitcast_v60f16_to_v30f32(<60 x half> %a, i32 %b) {
+define <30 x float> @bitcast_v60f16_to_v30f32(<60 x half> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v30f32:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -24195,7 +24195,7 @@ end:
   ret <30 x float> %phi
 }
 
-define inreg <30 x float> @bitcast_v60f16_to_v30f32_scalar(<60 x half> inreg %a, i32 inreg %b) {
+define inreg <30 x float> @bitcast_v60f16_to_v30f32_scalar(<60 x half> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v30f32_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -25446,7 +25446,7 @@ end:
   ret <30 x float> %phi
 }
 
-define <15 x double> @bitcast_v15i64_to_v15f64(<15 x i64> %a, i32 %b) {
+define <15 x double> @bitcast_v15i64_to_v15f64(<15 x i64> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v15f64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -25644,7 +25644,7 @@ end:
   ret <15 x double> %phi
 }
 
-define inreg <15 x double> @bitcast_v15i64_to_v15f64_scalar(<15 x i64> inreg %a, i32 inreg %b) {
+define inreg <15 x double> @bitcast_v15i64_to_v15f64_scalar(<15 x i64> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v15f64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -26004,7 +26004,7 @@ end:
   ret <15 x double> %phi
 }
 
-define <15 x i64> @bitcast_v15f64_to_v15i64(<15 x double> %a, i32 %b) {
+define <15 x i64> @bitcast_v15f64_to_v15i64(<15 x double> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v15i64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -26134,7 +26134,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define inreg <15 x i64> @bitcast_v15f64_to_v15i64_scalar(<15 x double> inreg %a, i32 inreg %b) {
+define inreg <15 x i64> @bitcast_v15f64_to_v15i64_scalar(<15 x double> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v15i64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -26650,7 +26650,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define <60 x i16> @bitcast_v15i64_to_v60i16(<15 x i64> %a, i32 %b) {
+define <60 x i16> @bitcast_v15i64_to_v60i16(<15 x i64> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v60i16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -27574,7 +27574,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define inreg <60 x i16> @bitcast_v15i64_to_v60i16_scalar(<15 x i64> inreg %a, i32 inreg %b) {
+define inreg <60 x i16> @bitcast_v15i64_to_v60i16_scalar(<15 x i64> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v60i16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -28615,7 +28615,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define <15 x i64> @bitcast_v60i16_to_v15i64(<60 x i16> %a, i32 %b) {
+define <15 x i64> @bitcast_v60i16_to_v15i64(<60 x i16> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v15i64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -29960,7 +29960,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define inreg <15 x i64> @bitcast_v60i16_to_v15i64_scalar(<60 x i16> inreg %a, i32 inreg %b) {
+define inreg <15 x i64> @bitcast_v60i16_to_v15i64_scalar(<60 x i16> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v15i64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -31133,7 +31133,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define <60 x half> @bitcast_v15i64_to_v60f16(<15 x i64> %a, i32 %b) {
+define <60 x half> @bitcast_v15i64_to_v60f16(<15 x i64> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v60f16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -32057,7 +32057,7 @@ end:
   ret <60 x half> %phi
 }
 
-define inreg <60 x half> @bitcast_v15i64_to_v60f16_scalar(<15 x i64> inreg %a, i32 inreg %b) {
+define inreg <60 x half> @bitcast_v15i64_to_v60f16_scalar(<15 x i64> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15i64_to_v60f16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -33098,7 +33098,7 @@ end:
   ret <60 x half> %phi
 }
 
-define <15 x i64> @bitcast_v60f16_to_v15i64(<60 x half> %a, i32 %b) {
+define <15 x i64> @bitcast_v60f16_to_v15i64(<60 x half> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v15i64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -34587,7 +34587,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define inreg <15 x i64> @bitcast_v60f16_to_v15i64_scalar(<60 x half> inreg %a, i32 inreg %b) {
+define inreg <15 x i64> @bitcast_v60f16_to_v15i64_scalar(<60 x half> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v15i64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -35838,7 +35838,7 @@ end:
   ret <15 x i64> %phi
 }
 
-define <60 x i16> @bitcast_v15f64_to_v60i16(<15 x double> %a, i32 %b) {
+define <60 x i16> @bitcast_v15f64_to_v60i16(<15 x double> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v60i16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -36671,7 +36671,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define inreg <60 x i16> @bitcast_v15f64_to_v60i16_scalar(<15 x double> inreg %a, i32 inreg %b) {
+define inreg <60 x i16> @bitcast_v15f64_to_v60i16_scalar(<15 x double> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v60i16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -38080,7 +38080,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define <15 x double> @bitcast_v60i16_to_v15f64(<60 x i16> %a, i32 %b) {
+define <15 x double> @bitcast_v60i16_to_v15f64(<60 x i16> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v15f64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -39425,7 +39425,7 @@ end:
   ret <15 x double> %phi
 }
 
-define inreg <15 x double> @bitcast_v60i16_to_v15f64_scalar(<60 x i16> inreg %a, i32 inreg %b) {
+define inreg <15 x double> @bitcast_v60i16_to_v15f64_scalar(<60 x i16> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v15f64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -40598,7 +40598,7 @@ end:
   ret <15 x double> %phi
 }
 
-define <60 x half> @bitcast_v15f64_to_v60f16(<15 x double> %a, i32 %b) {
+define <60 x half> @bitcast_v15f64_to_v60f16(<15 x double> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v60f16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -41431,7 +41431,7 @@ end:
   ret <60 x half> %phi
 }
 
-define inreg <60 x half> @bitcast_v15f64_to_v60f16_scalar(<15 x double> inreg %a, i32 inreg %b) {
+define inreg <60 x half> @bitcast_v15f64_to_v60f16_scalar(<15 x double> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v15f64_to_v60f16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -42840,7 +42840,7 @@ end:
   ret <60 x half> %phi
 }
 
-define <15 x double> @bitcast_v60f16_to_v15f64(<60 x half> %a, i32 %b) {
+define <15 x double> @bitcast_v60f16_to_v15f64(<60 x half> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v15f64:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -44329,7 +44329,7 @@ end:
   ret <15 x double> %phi
 }
 
-define inreg <15 x double> @bitcast_v60f16_to_v15f64_scalar(<60 x half> inreg %a, i32 inreg %b) {
+define inreg <15 x double> @bitcast_v60f16_to_v15f64_scalar(<60 x half> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v15f64_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -45580,7 +45580,7 @@ end:
   ret <15 x double> %phi
 }
 
-define <60 x half> @bitcast_v60i16_to_v60f16(<60 x i16> %a, i32 %b) {
+define <60 x half> @bitcast_v60i16_to_v60f16(<60 x i16> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v60f16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -47053,7 +47053,7 @@ end:
   ret <60 x half> %phi
 }
 
-define inreg <60 x half> @bitcast_v60i16_to_v60f16_scalar(<60 x i16> inreg %a, i32 inreg %b) {
+define inreg <60 x half> @bitcast_v60i16_to_v60f16_scalar(<60 x i16> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60i16_to_v60f16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -48853,7 +48853,7 @@ end:
   ret <60 x half> %phi
 }
 
-define <60 x i16> @bitcast_v60f16_to_v60i16(<60 x half> %a, i32 %b) {
+define <60 x i16> @bitcast_v60f16_to_v60i16(<60 x half> %a, i32 %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v60i16:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -49880,7 +49880,7 @@ end:
   ret <60 x i16> %phi
 }
 
-define inreg <60 x i16> @bitcast_v60f16_to_v60i16_scalar(<60 x half> inreg %a, i32 inreg %b) {
+define inreg <60 x i16> @bitcast_v60f16_to_v60i16_scalar(<60 x half> inreg %a, i32 inreg %b) #0 {
 ; SI-LABEL: bitcast_v60f16_to_v60i16_scalar:
 ; SI:       ; %bb.0:
 ; SI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -51524,3 +51524,5 @@ end:
   %phi = phi <60 x i16> [ %a2, %cmp.true ], [ %a3, %cmp.false ]
   ret <60 x i16> %phi
 }
+
+attributes #0 = { nounwind }

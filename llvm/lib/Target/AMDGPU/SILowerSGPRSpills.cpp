@@ -125,14 +125,13 @@ char &llvm::SILowerSGPRSpillsLegacyID = SILowerSGPRSpillsLegacy::ID;
 
 /// Insert spill code for the callee-saved registers used in the function.
 static void insertCSRSaves(const GCNSubtarget &ST, MachineBasicBlock &SaveBlock,
-                           ArrayRef<CalleeSavedInfo> CSI,
-                           SlotIndexes *Indexes,
+                           ArrayRef<CalleeSavedInfo> CSI, SlotIndexes *Indexes,
                            LiveIntervals *LIS) {
   const TargetFrameLowering *TFI = ST.getFrameLowering();
-  const SIRegisterInfo *RI = ST.getRegisterInfo();
+  const TargetRegisterInfo *TRI = ST.getRegisterInfo();
   MachineBasicBlock::iterator I = SaveBlock.begin();
   MachineInstrSpan MIS(I, &SaveBlock);
-  bool Success = TFI->spillCalleeSavedRegisters(SaveBlock, I, CSI, RI);
+  bool Success = TFI->spillCalleeSavedRegisters(SaveBlock, I, CSI, TRI);
   assert(Success && "spillCalleeSavedRegisters should always succeed");
   (void)Success;
 
@@ -254,15 +253,16 @@ bool SILowerSGPRSpills::spillCalleeSavedRegs(
 
     std::vector<CalleeSavedInfo> CSI;
     const MCPhysReg *CSRegs = MRI.getCalleeSavedRegs();
-    Register RetAddrReg = TRI->getReturnAddressReg(MF);
+    MCRegister RetAddrReg = TRI->getReturnAddressReg(MF);
+    MCRegister RetAddrRegSub0 = TRI->getSubReg(RetAddrReg, AMDGPU::sub0);
+    MCRegister RetAddrRegSub1 = TRI->getSubReg(RetAddrReg, AMDGPU::sub1);
     bool SpillRetAddrReg = false;
 
     for (unsigned I = 0; CSRegs[I]; ++I) {
       MCRegister Reg = CSRegs[I];
 
       if (SavedRegs.test(Reg)) {
-        if (Reg == TRI->getSubReg(RetAddrReg, AMDGPU::sub0) ||
-            Reg == TRI->getSubReg(RetAddrReg, AMDGPU::sub1)) {
+        if (Reg == RetAddrRegSub0 || Reg == RetAddrRegSub1) {
           SpillRetAddrReg = true;
           continue;
         }

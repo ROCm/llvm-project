@@ -322,8 +322,7 @@ public:
   void storeRegToStackSlotCFI(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MI, Register SrcReg,
                               bool isKill, int FrameIndex,
-                              const TargetRegisterClass *RC,
-                              const TargetRegisterInfo *TRI) const;
+                              const TargetRegisterClass *RC) const;
 
   bool getConstValDefinedInReg(const MachineInstr &MI, const Register Reg,
                                int64_t &ImmVal) const override;
