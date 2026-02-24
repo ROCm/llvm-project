@@ -548,6 +548,12 @@ constexpr size_t OffloadBundleMagicLen =
 } // namespace
 
 bool isCompatibleIsaName(StringRef IsaName, StringRef CodeObjectIsaName) {
+  // Trim trailing null terminators that may be present in binary data, so that
+  // we don't get false negatives because of only one of the args having null
+  // terminator.
+  IsaName = IsaName.rtrim('\0');
+  CodeObjectIsaName = CodeObjectIsaName.rtrim('\0');
+
   if (IsaName == CodeObjectIsaName) {
     return true;
   }
