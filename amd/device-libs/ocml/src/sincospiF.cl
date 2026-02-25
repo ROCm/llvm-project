@@ -16,7 +16,7 @@ MATH_MANGLE(sincospi)(float x, __private float *cp)
     struct redret r = MATH_PRIVATE(trigpired)(ax);
     struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
 
-    int flip = r.i > 1 ? 0x80000000 : 0;
+    int flip = r.i > 1 ? SIGNBIT_SP32 : 0;
     bool odd = (r.i & 1) != 0;
     float s = odd ? sc.c : sc.s;
     s = AS_FLOAT(AS_INT(s) ^ flip ^ (AS_INT(ax) ^ AS_INT(x)));

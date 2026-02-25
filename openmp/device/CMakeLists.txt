@@ -40,7 +40,12 @@ set(src_files
   ${emissary_sources}
 
 )
-if(NOT LLVM_TARGETS_TO_BUILD OR "AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
+# Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
+# The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
+# (e.g. X86;AMDGPU;NVPTX), causing ockl.bc/ocml.bc to be linked into NVPTX builds
+# and contaminating the NVPTX DeviceRTL bitcode with AMDGCN intrinsics.
+if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
+   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
   find_package(AMDDeviceLibs REQUIRED CONFIG
                HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
                      ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
@@ -87,7 +92,10 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
 elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^nvptx" OR
        "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^nvptx")
   set(target_name "nvptx")
-  list(APPEND compile_flags --cuda-feature=+ptx63)
+  list(APPEND compile_options --cuda-feature=+ptx63)
+elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" OR
+       "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  set(target_name "spirv") 
 endif()
 
 # Trick to combine these into a bitcode file via the linker's LTO pass.
@@ -110,8 +118,15 @@ target_include_directories(libompdevice PRIVATE
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../libc
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../offload/include)
 target_compile_options(libompdevice PRIVATE ${compile_options} ${compile_flags})
-target_link_options(libompdevice PRIVATE
-                    "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+if(NOT "${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" AND
+   NOT "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  target_link_options(libompdevice PRIVATE
+                  "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+else()
+  target_link_options(libompdevice PRIVATE
+                  "-nostdlib" "-emit-llvm")
+endif()
+
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   target_link_options(libompdevice PRIVATE "--target=${LLVM_DEFAULT_TARGET_TRIPLE}")
 endif()

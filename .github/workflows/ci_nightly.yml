@@ -4,7 +4,7 @@
 # In the scheduled run, we run all targets from amdgpu_family_matrix.py and amdgpu_family_matrix_xfail.py
 # As some of these builds are xfail, we allow errors to occur with `continue-on-error`, where the job will fail but the workflow is green
 
-name: CI Nightly
+name: CI amd-staging Nightly
 
 on:
   # For AMD GPU families that expect_failure, we run builds and tests from this scheduled trigger
@@ -61,8 +61,7 @@ jobs:
     needs: setup
     if: >-
       ${{
-        needs.setup.outputs.linux_variants != '[]' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        needs.setup.outputs.linux_variants != '[]'
       }}
     strategy:
       fail-fast: false
@@ -82,7 +81,7 @@ jobs:
       expect_failure: ${{ matrix.variant.expect_failure == true }}
       use_prebuilt_artifacts: ${{ inputs.linux_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
+      test_type: "full"
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
     permissions:
       contents: read
@@ -93,8 +92,7 @@ jobs:
     needs: setup
     if: >-
       ${{
-        needs.setup.outputs.windows_variants != '[]' &&
-        needs.setup.outputs.enable_build_jobs == 'true'
+        needs.setup.outputs.windows_variants != '[]'
       }}
     strategy:
       fail-fast: false
@@ -113,11 +111,52 @@ jobs:
       expect_failure: ${{ matrix.variant.expect_failure == true }}
       use_prebuilt_artifacts: ${{ inputs.windows_use_prebuilt_artifacts == true && 'true' || 'false' }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
+      test_type: "full"
       sanity_check_only_for_family: ${{ matrix.variant.sanity_check_only_for_family == true }}
     permissions:
       contents: read
       id-token: write
+
+  notify_build_status:
+    name: Notify amd-staging nightly status
+    if: always()
+    needs:
+      - windows_build_and_test
+      - linux_build_and_test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Notify status
+        env:
+          TZ: 'America/Chicago'
+        run: |
+          START_DATE=$(date +"%Y-%m-%d")  # Use the current date for the report
+          
+          # Initialize the status to success
+          STATUS="failure"
+  
+          # Check the results of the dependent jobs
+          if [ "${{ needs.windows_build_and_test.result }}" = "failure" ] || [ "${{ needs.linux_build_and_test.result }}" = "failure" ]; then
+            STATUS="failure"
+          elif [ "${{ needs.windows_build_and_test.result }}" = "cancelled" ] || [ "${{ needs.linux_build_and_test.result }}" = "cancelled" ]; then
+            STATUS="failure"
+          elif [ "${{ needs.windows_build_and_test.result }}" = "success" ] && [ "${{ needs.linux_build_and_test.result }}" = "success" ]; then
+            STATUS="success"
+          fi
+          
+          # Determine the icon based on the status
+          ICON="ℹ️"
+          if [ "$STATUS" = "success" ]; then ICON="✅"; fi
+          if [ "$STATUS" = "failure" ]; then ICON="❌"; fi      
+  
+          WEBHOOK_URL="${{ secrets.AMD_STAGING_NIGHTLY_TEAMS_WEBHOOK_URL }}"      
+          # Sending notification
+          curl -H "Content-Type: application/json" \
+          -d "{
+            \"title\": \"$START_DATE - $ICON Build $STATUS\",
+            \"text\": \"**Repository:** ${{ github.repository }}  \n**Branch:** ${{ github.ref_name }}  \n**Status:** $STATUS  \n🔗 [Build Link](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"
+          }" \
+          "$WEBHOOK_URL"
+
 
   # build_python_packages:
   #   name: Build Python Packages

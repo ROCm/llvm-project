@@ -3,7 +3,8 @@
 // of the Xteam Scan Kernel. 
 // It verifies that the reduction kernel is of Xteam-Scan type 
 // and is launched with 85x256 and 85x512 combinations for teamsXthrds. 
-// It also verifies the output without the num_teams() and num_threads() clauses.
+// It also verifies the output without the num_teams() and num_threads() clauses,
+// where the workgroup size is determined by the runtime (captured as ConstWGSize).
 // 
 
 // RUN: %libomptarget-compile-generic -fopenmp-target-ignore-env-vars -fopenmp-target-xteam-scan -fopenmp-assume-no-nested-parallelism -fopenmp-assume-no-thread-state -lm -latomic
@@ -164,35 +165,35 @@ int main() {
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args:10 teamsXthrds:( 85X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l49
+/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l50
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args:10 teamsXthrds:( 85X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l49_1
+/// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l50_1
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args:10 teamsXthrds:( 85X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l73
+/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l74
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK: args:10 teamsXthrds:( 85X 256)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l73_1
+/// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l74_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l109
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE:[0-9]+]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS:[0-9]+]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l110
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l109_1
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l110_1
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l133
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l134
 
-/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 104X1024)
-/// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l133_1
+/// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
+/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l134_1
 
 /// CHECK: Inclusive Scan: Success!
 /// CHECK: Exclusive Scan: Success!
@@ -201,19 +202,19 @@ int main() {
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l49
+/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l50
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l49_1
+/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l50_1
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l73
+/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l74
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
 /// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
-/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l73_1
+/// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l74_1
 
 /// CHECK-512WGSize: Inclusive Scan: Success!
 /// CHECK-512WGSize: Exclusive Scan: Success!

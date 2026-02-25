@@ -61,6 +61,7 @@ endif()
 
 # Following variables are required for ROCM backwards compatibility,
 # and should be removed in ROCM 7.0 release.
+set(ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_CLANG_RESOURCE_DIR OFF CACHE STRING "Install bitcode to clang resource directory")
 set(ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW "" CACHE STRING "New bitcode install location relative to CMAKE_INSTALL_PREFIX")
 set(ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD "" CACHE STRING "Old bitcode install location relative to CMAKE_INSTALL_PREFIX")
 

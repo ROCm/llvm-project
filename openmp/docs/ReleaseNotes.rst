@@ -34,3 +34,7 @@ Non-comprehensive list of changes in this release
   always build support for AMDGPU and NVPTX targets.
 - Updated the offloading entry format but retained backwards compatibility with
   the old format.
+- The LLVM_ENABLE_PROJECTS=openmp build mode has been removed.
+
+- Removed the standalone build mode. It is redundant with the runtimes default
+    build.

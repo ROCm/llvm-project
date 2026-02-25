@@ -1,4 +1,3 @@
-// XFAIL: amdgcn-amd-amdhsa
 // clang-format off
 // This test verifies correctness of Xteam Reduction for reduced precision types.
 //

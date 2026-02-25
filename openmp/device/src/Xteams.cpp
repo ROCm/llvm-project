@@ -123,7 +123,11 @@ __attribute__((flatten, always_inline)) void _xteam_scan(
   // The offset value which is required to access the computed team-wise scan 
   // based upon the workgroup size.
   uint32_t offset = is_odd_power(_NT) ? total_num_threads : 0;
-  storage[k] = storage[offset + k];  
+  storage[k] = storage[offset + k];
+
+  // Thread 0 reads storage[..._NT-1] below, which was written by thread _NT-1
+  // above.
+  ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
 
   // The teams_done_ptr will be read using this
   static __XTEAM_SHARED_LDS uint32_t td;

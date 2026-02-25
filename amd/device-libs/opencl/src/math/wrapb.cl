@@ -93,7 +93,6 @@ F(T##2 x, T##2 y) \
 
 WRAP(atan2)
 WRAP(atan2pi)
-WRAP(copysign)
 WRAP(fdim)
 WRAP(fmod)
 WRAP(hypot)
@@ -104,3 +103,20 @@ WRAP(pow)
 WRAP(powr)
 WRAP(remainder)
 
+#define WRAP_ELEMENTWISE_TYPE(F, T, N, B)                                      \
+    ATTR T##N F(T##N x, T##N y) { return B(x, y); }
+
+#define WRAP_ELEMENTWISE_SCALAR(F, T, B)                                       \
+    ATTR T F(T x, T y) { return B(x, y); }
+
+#define WRAP_ELEMENTWISE(F, T, B)                                              \
+    WRAP_ELEMENTWISE_TYPE(F, T, 16, B)                                         \
+    WRAP_ELEMENTWISE_TYPE(F, T, 8, B)                                          \
+    WRAP_ELEMENTWISE_TYPE(F, T, 4, B)                                          \
+    WRAP_ELEMENTWISE_TYPE(F, T, 3, B)                                          \
+    WRAP_ELEMENTWISE_TYPE(F, T, 2, B)                                          \
+    WRAP_ELEMENTWISE_SCALAR(F, T, B)
+
+WRAP_ELEMENTWISE(copysign, float, __builtin_elementwise_copysign)
+WRAP_ELEMENTWISE(copysign, double, __builtin_elementwise_copysign)
+WRAP_ELEMENTWISE(copysign, half, __builtin_elementwise_copysign)

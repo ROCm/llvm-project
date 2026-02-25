@@ -155,6 +155,7 @@
 #define BUILTIN_EXP2_F16 __builtin_exp2f16
 
 #define BUILTIN_EXP_F32 __builtin_expf
+#define BUILTIN_EXP10_F32 __builtin_exp10f
 
 #define BUILTIN_AMDGPU_LOG2_F32 __builtin_amdgcn_logf
 #define BUILTIN_LOG2_F32 __builtin_log2f
@@ -232,6 +233,7 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
 #define BUILTIN_FLDEXP_F32 __builtin_ldexpf
 #define BUILTIN_FLDEXP_F64 __builtin_ldexp
 #define BUILTIN_FLDEXP_F16 __builtin_ldexpf16
+#define BUILTIN_FLDEXP_2F16 __builtin_elementwise_ldexp
 
 #define BUILTIN_FREXP_F32 __builtin_frexpf
 #define BUILTIN_FREXP_F64 __builtin_frexp
@@ -240,7 +242,7 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
 #define BUILTIN_FREXP_EXP_F32(X)                                               \
     ({                                                                         \
         int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
+        __builtin_frexpf(X, &_exp);                                            \
         _exp;                                                                  \
     })
 

@@ -1,4 +1,4 @@
-; RUN: opt -passes=openmp-opt -S < %s | FileCheck %s
+; RUN: opt -passes=openmp-opt -openmp-opt-disable-callback-spmdization=false -S < %s | FileCheck %s
 
 %struct.ident_t = type { i32, i32, i32, i32, ptr }
 %struct.DynamicEnvironmentTy = type { i16 }

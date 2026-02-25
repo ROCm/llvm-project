@@ -1153,6 +1153,8 @@ private:
           NumGroups = std::min(MaxNumGroups, LowTripCountBlocks);
         }
       }
+      ODBG(ODT_Tool) << "xteam-red:NumCUs=" << DeviceNumCUs
+                     << " xteam-red:NumGroups=" << NumGroups;
       return NumGroups;
     }
 

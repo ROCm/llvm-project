@@ -204,6 +204,20 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,
                                      "failed to load binary %p", Img);
 
+  AsyncInfoTy AsyncInfo(*this);
+  // From the image, read whether fast reduction is enabled (optional symbol).
+  void *IsFastReductionEnabledPtr;
+  if (!RTL->get_global(Binary, sizeof(int8_t),
+                       "__omp_plugin_enable_fast_reduction",
+                       &IsFastReductionEnabledPtr)) {
+    int8_t IsFastReductionEnabled;
+    if (!retrieveData(&IsFastReductionEnabled, IsFastReductionEnabledPtr,
+                      sizeof(int8_t), AsyncInfo) &&
+        !synchronize(AsyncInfo))
+      RTL->getDevice(RTLDeviceID)
+          .setIsFastReductionEnabled(IsFastReductionEnabled);
+  }
+
   // This symbol is optional.
   void *DeviceEnvironmentPtr;
   if (RTL->get_global(Binary, sizeof(DeviceEnvironmentTy),
@@ -229,7 +243,6 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
   DeviceEnvironment.HardwareParallelism =
       GenericDevice.getHardwareParallelism();
 
-  AsyncInfoTy AsyncInfo(*this);
   if (submitData(DeviceEnvironmentPtr, &DeviceEnvironment,
                  sizeof(DeviceEnvironment), AsyncInfo))
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,

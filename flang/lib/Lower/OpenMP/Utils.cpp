@@ -565,6 +565,13 @@ mlir::Value createParentSymAndGenIntermediateMaps(
         interimMapType &= ~mlir::omp::ClauseMapFlags::to;
         interimMapType &= ~mlir::omp::ClauseMapFlags::from;
         interimMapType &= ~mlir::omp::ClauseMapFlags::return_param;
+        // We do not want to carry over the separation of descriptor and pointer
+        // mapping of any intermediate components we emit maps for as this can
+        // result in very odd differing behaviour when either ref_ptr/ptee is
+        // specified.
+        interimMapType &= ~mlir::omp::ClauseMapFlags::ref_ptr;
+        interimMapType &= ~mlir::omp::ClauseMapFlags::ref_ptee;
+        interimMapType &= ~mlir::omp::ClauseMapFlags::ref_ptr_ptee;
 
         // Create a map for the intermediate member and insert it and it's
         // indices into the parentMemberIndices list to track it.
@@ -713,6 +720,11 @@ void insertChildMapInfoIntoParent(
       // from device.
       mlir::omp::ClauseMapFlags mapType = mlir::omp::ClauseMapFlags::storage;
 
+      for (mlir::omp::MapInfoOp memberMap : indices.second.memberMap)
+        if ((memberMap.getMapType() & mlir::omp::ClauseMapFlags::present) ==
+            mlir::omp::ClauseMapFlags::present)
+          mapType |= mlir::omp::ClauseMapFlags::present;
+
       llvm::SmallVector<mlir::Value> members;
       members.reserve(indices.second.memberMap.size());
       for (mlir::omp::MapInfoOp memberMap : indices.second.memberMap)
@@ -837,13 +849,14 @@ void collectTileSizesFromOpenMPConstruct(
 
 int64_t collectLoopRelatedInfo(
     lower::AbstractConverter &converter, mlir::Location currentLocation,
-    lower::pft::Evaluation &eval, const omp::List<omp::Clause> &clauses,
+    lower::pft::Evaluation &eval, lower::pft::Evaluation *nestedEval,
+    const omp::List<omp::Clause> &clauses,
     mlir::omp::LoopRelatedClauseOps &result,
     llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
   int64_t numCollapse = 1;
 
   // Collect the loops to collapse.
-  lower::pft::Evaluation *doConstructEval = getNestedDoConstruct(eval);
+  lower::pft::Evaluation *doConstructEval = nestedEval;
   if (doConstructEval->getIf<parser::DoConstruct>()->IsDoConcurrent()) {
     TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }
@@ -855,21 +868,21 @@ int64_t collectLoopRelatedInfo(
     numCollapse = collapseValue;
   }
 
-  collectLoopRelatedInfo(converter, currentLocation, eval, numCollapse, result,
-                         iv);
+  collectLoopRelatedInfo(converter, currentLocation, eval, nestedEval,
+                         numCollapse, result, iv);
   return numCollapse;
 }
 
 void collectLoopRelatedInfo(
     lower::AbstractConverter &converter, mlir::Location currentLocation,
-    lower::pft::Evaluation &eval, int64_t numCollapse,
-    mlir::omp::LoopRelatedClauseOps &result,
+    lower::pft::Evaluation &eval, lower::pft::Evaluation *nestedEval,
+    int64_t numCollapse, mlir::omp::LoopRelatedClauseOps &result,
     llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
 
   fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
 
   // Collect the loops to collapse.
-  lower::pft::Evaluation *doConstructEval = getNestedDoConstruct(eval);
+  lower::pft::Evaluation *doConstructEval = nestedEval;
   if (doConstructEval->getIf<parser::DoConstruct>()->IsDoConcurrent()) {
     TODO(currentLocation, "Do Concurrent in Worksharing loop construct");
   }

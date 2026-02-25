@@ -1320,8 +1320,13 @@ SILoadStoreOptimizer::checkAndPrepareMerge(CombineInfo &CI,
   // correct for the new instruction.  This should return true, because
   // this function should only be called on CombineInfo objects that
   // have already been confirmed to be mergeable.
-  if (CI.InstClass == DS_READ || CI.InstClass == DS_WRITE)
+  if (CI.InstClass == DS_READ || CI.InstClass == DS_WRITE) {
+    if (STM->hasUnalignedDS2Bug() &&
+        (CI.I->memoperands_empty() ||
+         (*CI.I->memoperands_begin())->getAlign().value() < CI.Width * 4))
+      return nullptr;
     offsetsCanBeCombined(CI, *STM, Paired, true);
+  }
 
   if (CI.InstClass == DS_WRITE) {
     // Both data operands must be AGPR or VGPR, so the data registers needs to
@@ -2382,24 +2387,30 @@ void SILoadStoreOptimizer::processBaseWithConstOffset(const MachineOperand &Base
   Addr.Offset = (*Offset0P & 0x00000000ffffffff) | (Offset1 << 32);
 }
 
-// Maintain the correct LDS address for async loads.
-// It becomes incorrect when promoteConstantOffsetToImm
-// adds an offset only meant for the src operand.
+// Maintain the correct LDS address for async loads and stores.
+// It becomes incorrect when promoteConstantOffsetToImm adds an offset only
+// meant for the global address operand. For async loads the LDS address is in
+// vdst. For async stores, the LDS address is in vdata.
 void SILoadStoreOptimizer::updateAsyncLDSAddress(MachineInstr &MI,
                                                  int32_t OffsetDiff) const {
   if (!TII->usesASYNC_CNT(MI) || OffsetDiff == 0)
     return;
 
-  Register OldVDst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst)->getReg();
-  Register NewVDst = MRI->createVirtualRegister(MRI->getRegClass(OldVDst));
+  MachineOperand *LDSAddr = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
+  if (!LDSAddr)
+    LDSAddr = TII->getNamedOperand(MI, AMDGPU::OpName::vdata);
+  assert(LDSAddr);
+
+  Register OldReg = LDSAddr->getReg();
+  Register NewReg = MRI->createVirtualRegister(MRI->getRegClass(OldReg));
   MachineBasicBlock &MBB = *MI.getParent();
   const DebugLoc &DL = MI.getDebugLoc();
-  BuildMI(MBB, MI, DL, TII->get(AMDGPU::V_ADD_U32_e64), NewVDst)
-      .addReg(OldVDst)
+  BuildMI(MBB, MI, DL, TII->get(AMDGPU::V_ADD_U32_e64), NewReg)
+      .addReg(OldReg)
       .addImm(-OffsetDiff)
       .addImm(0);
 
-  MI.getOperand(0).setReg(NewVDst);
+  LDSAddr->setReg(NewReg);
 }
 
 bool SILoadStoreOptimizer::promoteConstantOffsetToImm(

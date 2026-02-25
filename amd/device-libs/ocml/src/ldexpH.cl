@@ -10,7 +10,7 @@
 CONSTATTR half2
 MATH_MANGLE2(ldexp)(half2 x, int2 n)
 {
-    return (half2)(MATH_MANGLE(ldexp)(x.lo, n.lo), MATH_MANGLE(ldexp)(x.hi, n.hi));
+    return BUILTIN_FLDEXP_2F16(x, n);
 }
 
 CONSTATTR half

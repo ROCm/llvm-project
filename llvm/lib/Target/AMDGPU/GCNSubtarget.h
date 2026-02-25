@@ -396,6 +396,10 @@ public:
     return isMesa3DOS() && AMDGPU::isShader(F.getCallingConv());
   }
 
+  bool isGFX1170() const {
+    return getGeneration() == GFX11 && hasWMMA128bInsts();
+  }
+
   bool hasMad64_32() const { return getGeneration() >= SEA_ISLANDS; }
 
   bool hasAtomicFaddInsts() const {
@@ -469,10 +473,8 @@ public:
   /// \returns true if the subtarget has the v_permlane64_b32 instruction.
   bool hasPermLane64() const { return getGeneration() >= GFX11; }
 
-  bool hasDPPBroadcasts() const { return HasDPP && getGeneration() < GFX10; }
-
-  bool hasDPPWavefrontShifts() const {
-    return HasDPP && getGeneration() < GFX10;
+  bool hasDPPRowShare() const {
+    return HasDPP && (HasGFX90AInsts || getGeneration() >= GFX10);
   }
 
   // Has V_PK_MOV_B32 opcode
@@ -571,6 +573,12 @@ public:
   }
 
   bool hasCvtScaleForwardingHazard() const { return HasGFX950Insts; }
+
+  // All GFX9 targets experience a fetch delay when an instruction at the start
+  // of a loop header is split by a 32-byte fetch window boundary, but GFX950
+  // is uniquely sensitive to this: the delay triggers further performance
+  // degradation beyond the fetch latency itself.
+  bool hasLoopHeadInstSplitSensitivity() const { return HasGFX950Insts; }
 
   bool requiresCodeObjectV6() const { return RequiresCOV6; }
 
@@ -971,6 +979,11 @@ public:
   bool hasFlatScratchHiInB64InstHazard() const {
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
+
+  // TODO: Remove this when we replace all A0 GFX1250 with B0.
+  // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
+  // payload size.
+  bool hasUnalignedDS2Bug() const { return HasGFX1250Insts; }
 
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.
