@@ -16,8 +16,7 @@ int main(int argc, char *argv[]) {
   char *BufSource;
   size_t SizeSource;
   amd_comgr_data_t DataSource;
-  amd_comgr_data_set_t DataSetIn, DataSetBc, DataSetLinked, DataSetReloc,
-      DataSetExec;
+  amd_comgr_data_set_t DataSetIn, DataSetBc, DataSetReloc, DataSetExec;
   amd_comgr_action_info_t DataAction;
   size_t Count;
   const char *CompileOptions[] = {"-nogpuinc"};
@@ -54,22 +53,10 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  amd_comgr_(create_data_set(&DataSetLinked));
-
-  amd_comgr_(do_action(AMD_COMGR_ACTION_LINK_BC_TO_BC, DataAction, DataSetBc,
-                       DataSetLinked));
-  amd_comgr_(action_data_count(DataSetLinked, AMD_COMGR_DATA_KIND_BC, &Count));
-  if (Count != 1) {
-    printf("AMD_COMGR_ACTION_LINK_BC_TO_BC Failed: "
-           "produced %zu BC objects (expected 1)\n",
-           Count);
-    exit(1);
-  }
-
   amd_comgr_(create_data_set(&DataSetReloc));
 
   amd_comgr_(do_action(AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE, DataAction,
-                       DataSetLinked, DataSetReloc));
+                       DataSetBc, DataSetReloc));
 
   amd_comgr_(
       action_data_count(DataSetReloc, AMD_COMGR_DATA_KIND_RELOCATABLE, &Count));
@@ -107,7 +94,6 @@ int main(int argc, char *argv[]) {
   amd_comgr_(release_data(DataExec));
   amd_comgr_(destroy_data_set(DataSetIn));
   amd_comgr_(destroy_data_set(DataSetBc));
-  amd_comgr_(destroy_data_set(DataSetLinked));
   amd_comgr_(destroy_data_set(DataSetReloc));
   amd_comgr_(destroy_data_set(DataSetExec));
   amd_comgr_(destroy_action_info(DataAction));
