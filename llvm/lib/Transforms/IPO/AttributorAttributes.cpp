@@ -3663,6 +3663,13 @@ struct AAIntraFnReachabilityFunction final
     assert(FromBB->getParent() == ToBB->getParent() &&
            "Not an intra-procedural query!");
 
+    // Check if we have already established that FromBB cannot reach ToBB.
+    // If we know these blocks are unreachable in the general case (no exclusions),
+    // they are definitely unreachable with exclusions.
+    if (UnreachableBlockCache.count({FromBB, ToBB}))
+      return rememberResult(A, RQITy::Reachable::No, RQI, UsedExclusionSet,
+                            IsTemporaryRQI);
+
     // Check intra-block reachability, however, other reaching paths are still
     // possible.
     if (FromBB == ToBB &&
@@ -3689,6 +3696,17 @@ struct AAIntraFnReachabilityFunction final
                           RQI.ExclusionSet))
       return rememberResult(A, RQITy::Reachable::No, RQI, true, IsTemporaryRQI);
 
+    // If we are not using an exclusion set (common case), we can use the cache.
+    // If an exclusion set is present, the cached "reachable" status might be invalid
+    // because the path might go through an excluded block.
+    if (ExclusionBlocks.empty()) {
+        // Check if we have already established that FromBB can reach ToBB.
+        if (ReachableBlockCache.count({FromBB, ToBB})) {
+            return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
+                                  IsTemporaryRQI);
+        }
+    }
+
     auto *LivenessAA =
         A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
     if (LivenessAA && LivenessAA->isAssumedDead(ToBB)) {
@@ -3712,12 +3730,17 @@ struct AAIntraFnReachabilityFunction final
           continue;
         }
         // We checked before if we just need to reach the ToBB block.
-        if (SuccBB == ToBB)
+        if (SuccBB == ToBB) {
+          if (ExclusionBlocks.empty())
+             ReachableBlockCache.insert({FromBB, ToBB});
           return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
                                 IsTemporaryRQI);
-        if (DT && ExclusionBlocks.empty() && DT->dominates(BB, ToBB))
+        }
+        if (DT && ExclusionBlocks.empty() && DT->dominates(BB, ToBB)) {
+          ReachableBlockCache.insert({FromBB, ToBB});
           return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
                                 IsTemporaryRQI);
+        }
 
         if (ExclusionBlocks.count(SuccBB)) {
           UsedExclusionSet = true;
@@ -3725,6 +3748,12 @@ struct AAIntraFnReachabilityFunction final
         }
         Worklist.push_back(SuccBB);
       }
+    }
+
+    // If we failed to find a path and we didn't have any exclusions,
+    // then this pair is globally unreachable.
+    if (ExclusionBlocks.empty()) {
+        UnreachableBlockCache.insert({FromBB, ToBB});
     }
 
     DeadEdges.insert_range(LocalDeadEdges);
@@ -3746,6 +3775,17 @@ private:
 
   /// The dominator tree of the function to short-circuit reasoning.
   const DominatorTree *DT = nullptr;
+
+  /// A cache for block-level reachability.
+  /// Stores pairs {FromBB, ToBB} where a path is known to exist.
+  /// This avoids redundant graph traversals when querying different instructions
+  /// within the same basic blocks.
+  DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> ReachableBlockCache;
+
+  /// A cache for block-level unreachability.
+  /// Stores pairs {FromBB, ToBB} where NO path exists (in the absence of exclusion sets).
+  /// If a path doesn't exist without exclusions, it certainly won't exist with them.
+  DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> UnreachableBlockCache;
 };
 } // namespace
 
