@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_(action_data_count(DataSetBc, AMD_COMGR_DATA_KIND_BC, &Count));
 
   if (Count != 1) {
-    printf("AMD_COMGR_ACTION_COMPILE_SOURCE_WITH_DEVICE_LIBS_TO_BC Failed: "
+    printf("AMD_COMGR_ACTION_COMPILE_SOURCE_TO_BC Failed: "
            "produced %zu BC objects (expected 1)\n",
            Count);
     exit(1);
