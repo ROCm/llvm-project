@@ -54,13 +54,10 @@ int main(int argc, char *argv[]) {
   }
 
   amd_comgr_(create_data_set(&DataSetReloc));
-
   amd_comgr_(do_action(AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE, DataAction,
                        DataSetBc, DataSetReloc));
-
   amd_comgr_(
       action_data_count(DataSetReloc, AMD_COMGR_DATA_KIND_RELOCATABLE, &Count));
-
   if (Count != 1) {
     printf("AMD_COMGR_ACTION_CODEGEN_BC_TO_RELOCATABLE Failed: "
            "produced %zu relocatable objects (expected 1)\n",
@@ -69,15 +66,12 @@ int main(int argc, char *argv[]) {
   }
 
   amd_comgr_(create_data_set(&DataSetExec));
-
   amd_comgr_(action_info_set_option_list(DataAction, NULL, 0));
-
   amd_comgr_(do_action(AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_EXECUTABLE,
                        DataAction, DataSetReloc, DataSetExec));
 
   amd_comgr_(
       action_data_count(DataSetExec, AMD_COMGR_DATA_KIND_EXECUTABLE, &Count));
-
   if (Count != 1) {
     printf("AMD_COMGR_ACTION_LINK_RELOCATABLE_TO_EXECUTABLE Failed: "
            "produced %zu executable objects (expected 1)\n",
