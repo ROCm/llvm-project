@@ -188,7 +188,8 @@ public:
                                llvm::Value *DBlockPrefixes,
                                llvm::Value *ThreadStartIndex,
                                llvm::Value *NumElements, int BlockSize,
-                               bool IsInclusiveScan);
+                               bool IsInclusiveScan,
+                               CodeGenModule::XteamRedOpKind RedOp);
 
   // Returns whether the hint expressions for an architecture should be
   // evaluated to decide which kind of atomic ops should be generated.

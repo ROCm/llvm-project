@@ -3037,7 +3037,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
     llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
     llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex,
-    llvm::Value *NumElements, int BlockSize, bool IsInclusiveScan) {
+    llvm::Value *NumElements, int BlockSize, bool IsInclusiveScan,
+    CodeGenModule::XteamRedOpKind RedOp) {
   // TODO handle more types
   // As soon as more types are supported, need to align the result array in the
   // combined memory field that is passed to the device function.
@@ -3048,17 +3049,48 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
                                    SumType->getPrimitiveSizeInBits() == 64))) &&
       "Unhandled type");
 
-  llvm::Type *Int32Ty = llvm::Type::getInt32Ty(CGM.getLLVMContext());
-  llvm::Type *Int64Ty = llvm::Type::getInt64Ty(CGM.getLLVMContext());
   llvm::Type *Int1Ty = llvm::Type::getInt1Ty(CGM.getLLVMContext());
 
   std::pair<llvm::Value *, llvm::Value *> RfunPair =
-      getXteamRedFunctionPtrs(CGF, SumType, CodeGenModule::XR_OP_add);
-  llvm::Value *ZeroVal = (SumType->isFloatTy() || SumType->isDoubleTy())
-                             ? llvm::ConstantFP::getZero(SumType)
-                         : SumType->getPrimitiveSizeInBits() == 32
-                             ? llvm::ConstantInt::get(Int32Ty, 0)
-                             : llvm::ConstantInt::get(Int64Ty, 0);
+      getXteamRedFunctionPtrs(CGF, SumType, RedOp);
+
+  llvm::Value *NeutralVal;
+  unsigned Bits = SumType->getPrimitiveSizeInBits();
+  bool IsFP = SumType->isFloatTy() || SumType->isDoubleTy();
+  switch (RedOp) {
+  case CodeGenModule::XR_OP_add:
+    NeutralVal = IsFP ? llvm::ConstantFP::getZero(SumType)
+                      : llvm::ConstantInt::get(SumType, 0);
+    break;
+  case CodeGenModule::XR_OP_max: {
+    if (IsFP) {
+      const llvm::fltSemantics &Sem = SumType->isFloatTy()
+                                          ? llvm::APFloat::IEEEsingle()
+                                          : llvm::APFloat::IEEEdouble();
+      NeutralVal = llvm::ConstantFP::get(
+          SumType, llvm::APFloat::getLargest(Sem, /*Negative=*/true));
+    } else {
+      NeutralVal = llvm::ConstantInt::get(
+          SumType, llvm::APInt::getSignedMinValue(Bits));
+    }
+    break;
+  }
+  case CodeGenModule::XR_OP_min: {
+    if (IsFP) {
+      const llvm::fltSemantics &Sem = SumType->isFloatTy()
+                                          ? llvm::APFloat::IEEEsingle()
+                                          : llvm::APFloat::IEEEdouble();
+      NeutralVal = llvm::ConstantFP::get(
+          SumType, llvm::APFloat::getLargest(Sem, /*Negative=*/false));
+    } else {
+      NeutralVal = llvm::ConstantInt::get(
+          SumType, llvm::APInt::getSignedMaxValue(Bits));
+    }
+    break;
+  }
+  default:
+    llvm_unreachable("Unsupported reduction opcode for scan");
+  }
 
   llvm::Value *IsInclusiveVal = llvm::ConstantInt::get(Int1Ty, IsInclusiveScan);
 
@@ -3070,7 +3102,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
                          DBlockAggregates,
                          DBlockPrefixes,
                          RfunPair.first,
-                         ZeroVal,
+                         NeutralVal,
                          ThreadStartIndex,
                          NumElements,
                          IsInclusiveVal};

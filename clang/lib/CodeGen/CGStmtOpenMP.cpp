@@ -235,8 +235,11 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
         // EmitStmt skips any OMPCapturedExprDecls, but needs to be emitted
         // here.
         if (auto *PreInitDecl = dyn_cast<DeclStmt>(S)) {
-          for (Decl *I : PreInitDecl->decls())
-            CGF.EmitVarDecl(cast<VarDecl>(*I));
+          for (Decl *I : PreInitDecl->decls()) {
+            auto *VD = cast<VarDecl>(I);
+            if (!CGF.hasAddrOfLocalVar(VD))
+              CGF.EmitVarDecl(*VD);
+          }
           continue;
         }
         CGF.EmitStmt(S);
@@ -2436,6 +2439,26 @@ void CodeGenFunction::EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D) {
   OMPPrivateScope InscanScope(*this);
   EmitOMPReductionClauseInit(D, InscanScope, /*ForInscan=*/true);
 
+  // For xteam scan on device: remap reduction variables in LocalDeclMap so
+  // that body code (reads AND writes, e.g. "if (in[i] > m) m = in[i]")
+  // accesses the xteam local aggregator directly.  This is needed for
+  // max/min scans where the user's accumulation pattern isn't recognized
+  // by EmitXteamRedStmt; for sum (handled by EmitXteamRedStmt via
+  // RedVarMap) the remapping is a harmless no-op.
+  SmallVector<std::pair<const VarDecl *, Address>, 2> SavedRedVarAddrs;
+  if (CGM.getLangOpts().OpenMPIsTargetDevice && CGM.isXteamScanKernel()) {
+    const CodeGenModule::XteamRedVarMap &RedVarMap =
+        CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
+    for (const auto &MapPair : RedVarMap) {
+      const VarDecl *VD = MapPair.first;
+      auto it = LocalDeclMap.find(VD);
+      if (it != LocalDeclMap.end()) {
+        SavedRedVarAddrs.emplace_back(VD, it->second);
+        it->second = MapPair.second.RedVarAddr;
+      }
+    }
+  }
+
   // Need to remember the block before and after scan directive
   // to dispatch them correctly depending on the clause used in
   // this directive, inclusive or exclusive. For inclusive scan the natural
@@ -2459,6 +2482,13 @@ void CodeGenFunction::EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D) {
            OMPLoopBasedDirective::tryToFindNextInnerLoop(
                Body, /*TryImperfectlyNestedLoops=*/true),
            D.getLoopsNumber());
+
+  // Restore original LocalDeclMap entries for reduction variables.
+  for (const auto &Saved : SavedRedVarAddrs) {
+    auto it = LocalDeclMap.find(Saved.first);
+    if (it != LocalDeclMap.end())
+      it->second = Saved.second;
+  }
 
   // Jump to the dispatcher at the end of the loop body.
   EmitBranch(OMPScanExitBlock);
@@ -4323,7 +4353,7 @@ static void emitScanBasedDirectiveDecls(
             CGF.MakeAddrLValue(TempVDAddr, TempVarDecl->getType());
         CGF.EmitStoreOfScalar(TempVLAInst, TempVDAddrLValue,
                               /* isInitialization */ false);
-      } else
+      } else if (!CGF.hasAddrOfLocalVar(TempVarDecl))
         CGF.EmitVarDecl(*TempVarDecl);
       ++ITA;
       ++Count;

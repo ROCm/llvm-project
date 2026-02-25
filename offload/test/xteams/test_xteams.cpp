@@ -131,9 +131,7 @@ template <typename T> T* sim_dot(T *a, T *b, uint64_t array_size) {
     d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
-    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
-                      0, 0, devid, omp_get_initial_device());
+    omp_target_memset(d_status, 0, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
   }
 
   #pragma omp target data map(tofrom: dot[0:array_size])
@@ -192,9 +190,7 @@ template <typename T> T* sim_max(T *c, uint64_t array_size) {
     d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
-    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
-                      0, 0, devid, omp_get_initial_device());
+    omp_target_memset(d_status, 0, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
   }
 
   #pragma omp target data map(tofrom: scanned_max[0:array_size])
@@ -253,9 +249,7 @@ template <typename T> T* sim_min(T *c, uint64_t array_size) {
     d_prefixes = (T *)omp_target_alloc(sizeof(T) * _XTEAM_NUM_TEAMS, devid);
     d_scan_out =
         (T *)omp_target_alloc(sizeof(T) * _XTEAM_TOTAL_NUM_THREADS, devid);
-    static uint32_t h_zeros[_XTEAM_NUM_TEAMS + 1] = {};
-    omp_target_memcpy(d_status, h_zeros, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1),
-                      0, 0, devid, omp_get_initial_device());
+    omp_target_memset(d_status, 0, sizeof(uint32_t) * (_XTEAM_NUM_TEAMS + 1), devid);
   }
 
   #pragma omp target data map(tofrom: scanned_min[0:array_size])

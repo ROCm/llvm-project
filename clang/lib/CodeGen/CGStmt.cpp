@@ -853,7 +853,8 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
                        DBlockStatus, DBlockAggregates, DBlockPrefixes,
-                       ThreadStartIdx, NumElements, BlockSize, IsInclusiveScan);
+                       ThreadStartIdx, NumElements, BlockSize, IsInclusiveScan,
+                       RVI.Opcode);
 
     // Load scan result back into the reduction variable so the
     // AfterScanBlock can consume it: RedVar = result_array[k]
@@ -974,6 +975,14 @@ bool CodeGenFunction::EmitXteamRedStmt(const Stmt *S) {
     RedRHSExpr = RedBO->getRHS()->IgnoreImpCasts();
   } else {
     const Expr *L1RhsExpr = RedBO->getRHS()->IgnoreImpCasts();
+    if (CGM.isXteamScanKernel() && !isa<BinaryOperator>(L1RhsExpr) &&
+        !isa<CallExpr>(L1RhsExpr) && !isa<PseudoObjectExpr>(L1RhsExpr)) {
+      // For inscan reductions the user's accumulation code (e.g.
+      // "if (in[i] > m) m = in[i]") doesn't match the patterns expected by
+      // xteam reduction codegen.  The reduction variable is remapped in
+      // LocalDeclMap to the xteam local, so normal codegen handles it.
+      return false;
+    }
     assert((isa<BinaryOperator>(L1RhsExpr) || isa<CallExpr>(L1RhsExpr) ||
             isa<PseudoObjectExpr>(L1RhsExpr)) &&
            "Expected rhs to be a binary operator");
@@ -2353,23 +2362,26 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
         cast<DeclRefExpr>(BigJumpLoopLD->getLowerBoundVariable())); // GlobalLB
     GlobalUpperBound =
         Builder.CreateLoad(UBLValue.getAddress(), "global_upper_bound");
+    llvm::Type *BoundTy = GlobalUpperBound->getType();
     NumElements = Builder.CreateAdd(
         Builder.CreateSub(GlobalUpperBound,
                           Builder.CreateLoad(LBLValue.getAddress())),
-        llvm::ConstantInt::get(Int32Ty, 1),
+        llvm::ConstantInt::get(BoundTy, 1),
         "num_elements"); // GlobalUB - GlobalLB + 1
     auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGM.getOpenMPRuntime());
 
-    // Compute Global thread ID (GlobalTID) = (WorkGroupID * WorkGroupSize) +
-    // GpuThreadId
-    llvm::Value *GpuThreadId = RT.getGPUThreadID(*this);
-    llvm::Value *WorkGroupSize = RT.getGPUNumThreads(*this);
-    llvm::Value *WorkGroupId = RT.getGPUBlockID(*this);
+    // GPU intrinsics return i32; widen to match the loop bound type.
+    llvm::Value *GpuThreadId =
+        Builder.CreateIntCast(RT.getGPUThreadID(*this), BoundTy, false);
+    llvm::Value *WorkGroupSize =
+        Builder.CreateIntCast(RT.getGPUNumThreads(*this), BoundTy, false);
+    llvm::Value *WorkGroupId =
+        Builder.CreateIntCast(RT.getGPUBlockID(*this), BoundTy, false);
     llvm::Value *WorkGroup = Builder.CreateMul(WorkGroupId, WorkGroupSize);
     llvm::Value *GlobalGpuThreadId = Builder.CreateAdd(WorkGroup, GpuThreadId);
 
-    // Compute Grid Size (Total number of threads T) = WorkGroupSize * NumTeams
-    llvm::Value *NumTeams = RT.getGPUNumBlocks(*this);
+    llvm::Value *NumTeams =
+        Builder.CreateIntCast(RT.getGPUNumBlocks(*this), BoundTy, false);
     auto TotalNumThreads = Builder.CreateMul(WorkGroupSize, NumTeams);
 
     // Create a conditional break to the end of the kernel if the iteration
@@ -2386,7 +2398,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     // Compute Segment size required for a work-item to loop through
     llvm::Value *SegmentSizeForScan =
         Builder.CreateAdd(Builder.CreateUDiv(NumElements, TotalNumThreads),
-                          llvm::ConstantInt::get(Int32Ty, 1),
+                          llvm::ConstantInt::get(BoundTy, 1),
                           "padded_segment_size"); // Seg_Size = ceil(N / T)
 
     // Every thread starts looping from the lower bound: GlobalTID * Seg_Size
@@ -2399,7 +2411,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     SegmentLoopUB = Builder.CreateMul(
         SegmentSizeForScan,
         Builder.CreateAdd(GlobalGpuThreadId,
-                          llvm::ConstantInt::get(Int32Ty, 1)));
+                          llvm::ConstantInt::get(BoundTy, 1)));
 
     XteamVD = *(CGM.getXteamOrderedRedVar(&S).begin());
     RedVarType = ConvertTypeForMem(XteamVD->getType());
@@ -2415,14 +2427,18 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       Address DScanStorageAddr = GetAddrOfLocalVar((*Args)[RVI.ArgPos + 2]);
       llvm::Value *DScanStorageP2 = Builder.CreateLoad(DScanStorageAddr);
 
-      // scan_result starts at byte offset NumTeams * sizeof(T)
+      // scan_result starts at byte offset 2 * NumTeams * sizeof(T)
+      // (after block_aggregates[NumTeams] and block_prefixes[NumTeams])
       uint64_t RedVarSzBytes =
           CGM.getDataLayout().getTypeSizeInBits(RedVarType) / 8;
       llvm::Value *RedVarTySzP2 =
           llvm::ConstantInt::get(Int64Ty, RedVarSzBytes);
       llvm::Value *NumTeamsI64 =
           Builder.CreateIntCast(NumTeams, Int64Ty, /*isSigned=*/false);
-      llvm::Value *ValuesBytesP2 = Builder.CreateMul(NumTeamsI64, RedVarTySzP2);
+      llvm::Value *TwoTimesNumTeams =
+          Builder.CreateMul(NumTeamsI64, llvm::ConstantInt::get(Int64Ty, 2));
+      llvm::Value *ValuesBytesP2 =
+          Builder.CreateMul(TwoTimesNumTeams, RedVarTySzP2);
       llvm::Value *ScanResultBase =
           Builder.CreateGEP(llvm::Type::getInt8Ty(getLLVMContext()),
                             DScanStorageP2, ValuesBytesP2);
@@ -2569,17 +2585,27 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
         CodeGenFunction::ParentLoopDirectiveForScanRegion ScanRegion(
             *this, *BigJumpLoopLD);
         if (!CGM.isXteamScanPhaseOne) {
-          // Phase 2: re-read original inputs via the before-scan block to
-          // accumulate into RedVarAddr (initialized to CrossTeamPrefix
-          // before the loop), then emit the after-scan block to write the
-          // per-element result.  No intermediate d_segment_vals needed.
+          // Phase 2: within each BigJumpLoop iteration, run both the
+          // input phase (accumulation) and the output phase (write result).
+          //
+          // EmitOMPScanDirective dispatches using:
+          //   (OMPFirstScanLoop == IsInclusive) ? BeforeScan : AfterScan
+          //
+          // For inclusive: before-scan = input, after-scan = output
+          //   → input first (OMPFirstScanLoop=true), then output (false)
+          // For exclusive: before-scan = output, after-scan = input
+          //   → output first (OMPFirstScanLoop=false), then input (true)
+          bool IsInclusiveScan =
+              CGM.OMPPresentScanDirective &&
+              CGM.OMPPresentScanDirective
+                  ->hasClausesOfKind<OMPInclusiveClause>();
           {
-            OMPFirstScanLoop = true;
+            OMPFirstScanLoop = IsInclusiveScan;
             CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
             EmitOMPXteamScanNoLoopBody(*BigJumpLoopLD);
           }
           {
-            OMPFirstScanLoop = false;
+            OMPFirstScanLoop = !IsInclusiveScan;
             CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
             EmitOMPXteamScanNoLoopBody(*BigJumpLoopLD);
           }
@@ -2606,9 +2632,10 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       (CGM.isXteamRedKernel(&S) || CGM.isBigJumpLoopKernel(&S))) {
     if (CGM.isXteamSegmentedScanKernel()) {
       EmitBlock(Continue.getBlock());
+      llvm::Value *IvLoad = Builder.CreateLoad(BigJumpLoopIvAddr);
       llvm::Value *SegmentScanLoopInc =
-          Builder.CreateAdd(llvm::ConstantInt::get(Int32Ty, 1),
-                            Builder.CreateLoad(BigJumpLoopIvAddr));
+          Builder.CreateAdd(llvm::ConstantInt::get(IvLoad->getType(), 1),
+                            IvLoad);
       Builder.CreateStore(SegmentScanLoopInc,
                           BigJumpLoopIvAddr); // *iv = *iv + 1
     } else {
@@ -2651,8 +2678,6 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       // handled in Phase 2 by re-emitting the before-scan block (to
       // recompute running sums on top of the cross-team prefix) and the
       // after-scan block (to write the per-element result).
-      // NumElements is i32 here (from loop bounds); widen to i64 for the
-      // runtime
       llvm::Value *NumElementsI64 =
           Builder.CreateIntCast(NumElements, Int64Ty, /*isSigned=*/false);
       EmitXteamScanSum(&S, *Args, CGM.getXteamRedBlockSize(*BigJumpLoopLD),

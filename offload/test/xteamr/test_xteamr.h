@@ -132,7 +132,7 @@ void _INLINE_ATTR_ __kmpc_iteamr_ul(_UL v, _UL *r_ptr, void (*_rf)(_UL *, _UL),
                                                     _RF_LDS _UL *),
                                     const _UL rnv, const uint64_t k);
 
-// rfun declarations (unchanged)
+// rfun declarations
 void __kmpc_rfun_sum_d(double *val, double otherval);
 void __kmpc_rfun_sum_lds_d(_RF_LDS double *val, _RF_LDS double *otherval);
 void __kmpc_rfun_sum_f(float *val, float otherval);
