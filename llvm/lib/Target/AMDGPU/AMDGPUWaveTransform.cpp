@@ -1731,6 +1731,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         // TODO: These opcodes should be handled. They must either be avoided
         // entirely by pre-wave-transform codegen passes or wave-transform pass
         // should handle them.
+        const GCNSubtarget &ST = Function.getSubtarget<GCNSubtarget>();
         assert(Opcode != AMDGPU::S_CBRANCH_EXECZ &&
                Opcode != AMDGPU::S_CBRANCH_EXECNZ &&
                Opcode != AMDGPU::S_CBRANCH_VCCZ &&
@@ -1738,6 +1739,10 @@ void ControlFlowRewriter::prepareWaveCfg() {
                Opcode != AMDGPU::S_CBRANCH_SCC0 &&
                Opcode != AMDGPU::S_CBRANCH_SCC1 &&
                Opcode != AMDGPU::SI_WATERFALL_LOOP &&
+               (AMDGPU::isGFX10_GFX11(ST) &&
+                Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN) &&
+               (AMDGPU::isGFX10_GFX11(ST) &&
+                Opcode != AMDGPU::S_SUBVECTOR_LOOP_END) &&
                "wave-transform: unhandled branch opcode");
       }
     }
