@@ -630,7 +630,7 @@ amd_comgr_status_t linkWithLLVMLink(
     llvm::ArrayRef<const char *> Args,
     llvm::raw_ostream &LogS) {
 
-  // Parse arguments to extract input/output files
+  // Parse arguments to extract input/output files.
   SmallVector<StringRef, 8> InputFiles;
   StringRef OutputFile;
   SmallVector<StringRef, 8> UnsupportedArgs;
@@ -647,7 +647,7 @@ amd_comgr_status_t linkWithLLVMLink(
     }
   }
 
-  // Warn about unsupported arguments
+  // Warn about unsupported arguments.
   if (!UnsupportedArgs.empty()) {
     LogS << "Warning: llvm-link in-process mode ignoring unsupported arguments:";
     for (StringRef Arg : UnsupportedArgs) {
@@ -666,7 +666,7 @@ amd_comgr_status_t linkWithLLVMLink(
     return AMD_COMGR_STATUS_ERROR;
   }
 
-  // Use LLVM Linker API (in-process)
+  // Use LLVM Linker API (in-process).
   LLVMContext Context;
   Context.setDiagnosticHandler(
       std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
@@ -704,7 +704,7 @@ amd_comgr_status_t linkWithLLVMLink(
     }
   }
 
-  // Write linked bitcode to output file
+  // Write linked bitcode to output file.
   std::error_code EC;
   raw_fd_ostream OS(OutputFile, EC);
   if (EC) {
@@ -726,7 +726,7 @@ amd_comgr_status_t translateBitcodeToSpirv(
     llvm::ArrayRef<const char *> Args,
     llvm::raw_ostream &LogS) {
 
-  // Parse arguments
+  // Parse arguments.
   StringRef InputFile;
   StringRef OutputFile;
   SmallVector<StringRef, 16> SpirvOpts;
@@ -746,12 +746,12 @@ amd_comgr_status_t translateBitcodeToSpirv(
       }
       InputFile = Arg;
     } else if (Arg.starts_with("-")) {
-      // Track unsupported flags
+      // Track unsupported flags.
       UnsupportedArgs.push_back(Arg);
     }
   }
 
-  // Warn about unsupported SPIR-V options
+  // Warn about unsupported SPIR-V options.
   if (!SpirvOpts.empty()) {
     LogS << "Warning: SPIR-V translator in-process mode ignoring --spirv-* options:";
     for (StringRef Opt : SpirvOpts) {
@@ -760,7 +760,7 @@ amd_comgr_status_t translateBitcodeToSpirv(
     LogS << " (using default OpenCL 2.0 settings)\n";
   }
 
-  // Warn about other unsupported arguments
+  // Warn about other unsupported arguments.
   if (!UnsupportedArgs.empty()) {
     LogS << "Warning: SPIR-V translator in-process mode ignoring unsupported arguments:";
     for (StringRef Arg : UnsupportedArgs) {
@@ -774,7 +774,7 @@ amd_comgr_status_t translateBitcodeToSpirv(
     return AMD_COMGR_STATUS_ERROR;
   }
 
-  // Load input bitcode
+  // Load input bitcode.
   LLVMContext Context;
   Context.setDiagnosticHandler(
       std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
@@ -914,7 +914,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     // Check basename to route to the correct handler.
     StringRef BaseName = llvm::sys::path::filename(Job.getExecutable());
     if (BaseName == "llvm-spirv" || BaseName == "amd-llvm-spirv") {
-      // SPIR-V translator: converts LLVM bitcode to SPIR-V
+      // SPIR-V translator: converts LLVM bitcode to SPIR-V.
       if (env::shouldEmitVerboseLogs()) {
         logArgv(LogS, "llvm-spirv", Argv);
       }
@@ -922,7 +922,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
         return Status;
       }
     } else if (BaseName == "llvm-link") {
-      // AMDGCN linker for SPIR-V: uses llvm-link to merge bitcode files
+      // AMDGCN linker for SPIR-V: uses llvm-link to merge bitcode files.
       if (env::shouldEmitVerboseLogs()) {
         logArgv(LogS, "llvm-link", Argv);
       }
