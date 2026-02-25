@@ -35,6 +35,8 @@ public:
   bool checkCoopAtomicFunctionCall(CallExpr *TheCall, bool IsStore);
   bool checkAtomicMonitorLoad(CallExpr *TheCall);
 
+  bool checkScopedMemAccessFunctionCall(CallExpr *TheCall);
+
   bool checkMovDPPFunctionCall(CallExpr *TheCall, unsigned NumArgs,
                                unsigned NumDataArgs);
 

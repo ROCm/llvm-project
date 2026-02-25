@@ -387,6 +387,9 @@ bool SemaAMDGPU::CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID,
     }
     return false;
   }
+  case AMDGPU::BI__builtin_amdgcn_global_load_b128:
+  case AMDGPU::BI__builtin_amdgcn_global_store_b128:
+    return checkScopedMemAccessFunctionCall(TheCall);
   default:
     return false;
   }
@@ -472,6 +475,19 @@ bool SemaAMDGPU::checkAtomicMonitorLoad(CallExpr *TheCall) {
     }
   }
 
+  return Fail;
+}
+
+bool SemaAMDGPU::checkScopedMemAccessFunctionCall(CallExpr *TheCall) {
+  bool Fail = false;
+  // Last argument is a string literal
+  Expr *Arg = TheCall->getArg(TheCall->getNumArgs() - 1);
+  auto Scope = dyn_cast<StringLiteral>(Arg->IgnoreParenCasts());
+  if (!Scope) {
+    Fail = true;
+    Diag(TheCall->getBeginLoc(), diag::err_expr_not_string_literal)
+        << Arg->getSourceRange();
+  }
   return Fail;
 }
 
