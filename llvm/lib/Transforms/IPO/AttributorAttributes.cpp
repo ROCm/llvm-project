@@ -3632,8 +3632,10 @@ struct AAIntraFnReachabilityFunction final
   ChangeStatus updateImpl(Attributor &A) override {
     // We only depend on liveness. DeadEdges is all we care about, check if any
     // of them changed.
-    auto *LivenessAA =
+    CachedLivenessAA =
         A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    auto *LivenessAA = CachedLivenessAA;
+
     if (LivenessAA &&
         llvm::all_of(DeadEdges,
                      [&](const auto &DeadEdge) {
@@ -3645,8 +3647,19 @@ struct AAIntraFnReachabilityFunction final
         })) {
       return ChangeStatus::UNCHANGED;
     }
+
     DeadEdges.clear();
     DeadBlocks.clear();
+    // Note: We do NOT clear ReachableBlockCache. Reachability is monotonic with
+    // respect to liveness (adding live edges can only make things reachable,
+    // not unreachable). So cached "Yes" results remain valid.
+
+    // Clear the visited map query ID to force re-traversal if needed.
+    // Actually, we don't need to clear the map itself, just increment the ID
+    // which happens on next query. But if we wanted to be safe we could.
+    // However, since we cleared DeadEdges/DeadBlocks, the next isReachableImpl
+    // will re-check things.
+
     return Base::updateImpl(A);
   }
 
@@ -3699,35 +3712,89 @@ struct AAIntraFnReachabilityFunction final
                           RQI.ExclusionSet))
       return rememberResult(A, RQITy::Reachable::No, RQI, true, IsTemporaryRQI);
 
-    auto *LivenessAA =
-        A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    // If we are not using an exclusion set (common case), we can use the cache.
+    // If an exclusion set is present, the cached "reachable" status might be invalid
+    // because the path might go through an excluded block.
+    if (ExclusionBlocks.empty()) {
+        // Check if we have already established that FromBB can reach ToBB.
+        if (ReachableBlockCache.count({FromBB, ToBB})) {
+            return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
+                                  IsTemporaryRQI);
+        }
+    }
+
+    if (!CachedLivenessAA)
+      CachedLivenessAA =
+          A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    auto *LivenessAA = CachedLivenessAA;
     if (LivenessAA && LivenessAA->isAssumedDead(ToBB)) {
       DeadBlocks.insert(ToBB);
       return rememberResult(A, RQITy::Reachable::No, RQI, UsedExclusionSet,
                             IsTemporaryRQI);
     }
 
-    SmallPtrSet<const BasicBlock *, 16> Visited;
+    // Optimization: Use DT DFS numbers for visited set if available.
+    // This avoids SmallPtrSet allocation and hashing overhead.
+    if (DT) {
+      if (VisitedMap.empty()) {
+        // Resize once.
+        if (auto *Root = DT->getRootNode())
+          VisitedMap.resize(Root->getDFSNumOut() + 1, 0);
+      }
+      // Increment query ID.
+      CurrentQueryID++;
+      if (CurrentQueryID == 0) {
+        // Wrap around handling: clear map.
+        std::fill(VisitedMap.begin(), VisitedMap.end(), 0);
+        CurrentQueryID = 1;
+      }
+    }
+
     SmallVector<const BasicBlock *, 16> Worklist;
     Worklist.push_back(FromBB);
+
+    // Fallback visited set if DT is not available.
+    SmallPtrSet<const BasicBlock *, 16> VisitedFallback;
 
     DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> LocalDeadEdges;
     while (!Worklist.empty()) {
       const BasicBlock *BB = Worklist.pop_back_val();
-      if (!Visited.insert(BB).second)
-        continue;
+
+      bool IsVisited;
+      if (DT) {
+        unsigned DFSNum = DT->getNode(BB)->getDFSNumIn();
+        if (DFSNum < VisitedMap.size()) {
+          if (VisitedMap[DFSNum] == CurrentQueryID)
+            continue;
+          VisitedMap[DFSNum] = CurrentQueryID;
+          IsVisited = false; // Just marked it.
+        } else {
+          // Should not happen if DT is consistent, but fallback safely.
+          if (!VisitedFallback.insert(BB).second)
+            continue;
+        }
+      } else {
+        if (!VisitedFallback.insert(BB).second)
+          continue;
+      }
+
       for (const BasicBlock *SuccBB : successors(BB)) {
         if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB)) {
           LocalDeadEdges.insert({BB, SuccBB});
           continue;
         }
         // We checked before if we just need to reach the ToBB block.
-        if (SuccBB == ToBB)
+        if (SuccBB == ToBB) {
+          if (ExclusionBlocks.empty())
+             ReachableBlockCache.insert({FromBB, ToBB});
           return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
                                 IsTemporaryRQI);
-        if (DT && ExclusionBlocks.empty() && DT->dominates(BB, ToBB))
+        }
+        if (DT && ExclusionBlocks.empty() && DT->dominates(BB, ToBB)) {
+          ReachableBlockCache.insert({FromBB, ToBB});
           return rememberResult(A, RQITy::Reachable::Yes, RQI, UsedExclusionSet,
                                 IsTemporaryRQI);
+        }
 
         if (ExclusionBlocks.count(SuccBB)) {
           UsedExclusionSet = true;
@@ -3756,6 +3823,21 @@ private:
 
   /// The dominator tree of the function to short-circuit reasoning.
   const DominatorTree *DT = nullptr;
+
+  /// A cache for block-level reachability.
+  /// Stores pairs {FromBB, ToBB} where a path is known to exist.
+  /// This avoids redundant graph traversals when querying different instructions
+  /// within the same basic blocks.
+  DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> ReachableBlockCache;
+
+  /// Cached pointer to the AAIsDead attribute.
+  /// This avoids repeated map lookups in Attributor::getAAFor.
+  const AAIsDead *CachedLivenessAA = nullptr;
+
+  /// Visited map for graph traversal using DT DFS numbers.
+  std::vector<unsigned> VisitedMap;
+  /// Current query ID for VisitedMap.
+  unsigned CurrentQueryID = 0;
 };
 } // namespace
 
