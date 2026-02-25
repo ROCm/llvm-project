@@ -85,7 +85,8 @@ using namespace COMGR::TimeStatistics;
 namespace COMGR {
 
 namespace {
-constexpr llvm::StringLiteral LinkerJobName = "amdgpu::Linker";
+constexpr llvm::StringLiteral AMDGPULinkerJobName = "amdgpu::Linker";
+constexpr llvm::StringLiteral AMDGCNLinkerJobName = "AMDGCN::Linker";
 
 /// \brief Helper class for representing a single invocation of the assembler.
 struct AssemblerInvocation {
@@ -625,6 +626,208 @@ amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
+amd_comgr_status_t linkWithLLVMLink(
+    llvm::ArrayRef<const char *> Args,
+    llvm::raw_ostream &LogS) {
+
+  // Parse arguments to extract input/output files
+  SmallVector<StringRef, 8> InputFiles;
+  StringRef OutputFile;
+  SmallVector<StringRef, 8> UnsupportedArgs;
+
+  for (size_t i = 0; i < Args.size(); ++i) {
+    StringRef Arg = Args[i];
+    if (Arg == "-o" && i + 1 < Args.size()) {
+      OutputFile = Args[++i];
+    } else if (Arg.ends_with(".bc")) {
+      InputFiles.push_back(Arg);
+    } else if (Arg.starts_with("-")) {
+      // Track unsupported flags
+      UnsupportedArgs.push_back(Arg);
+    }
+  }
+
+  // Warn about unsupported arguments
+  if (!UnsupportedArgs.empty()) {
+    LogS << "Warning: llvm-link in-process mode ignoring unsupported arguments:";
+    for (StringRef Arg : UnsupportedArgs) {
+      LogS << " " << Arg;
+    }
+    LogS << "\n";
+  }
+
+  if (OutputFile.empty()) {
+    LogS << "No output file specified for llvm-link\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  if (InputFiles.empty()) {
+    LogS << "No input files specified for llvm-link\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  // Use LLVM Linker API (in-process)
+  LLVMContext Context;
+  Context.setDiagnosticHandler(
+      std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
+
+  SMDiagnostic SMDiag;
+  auto Composite = std::make_unique<llvm::Module>("llvm-link", Context);
+  Linker L(*Composite);
+
+  for (StringRef InputFile : InputFiles) {
+    auto BufferOrErr = MemoryBuffer::getFile(InputFile);
+    if (!BufferOrErr) {
+      LogS << "Failed to read input file: " << InputFile << '\n';
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    auto Mod = getLazyIRModule(MemoryBuffer::getMemBuffer(
+                                  BufferOrErr.get()->getBuffer(), InputFile, false),
+                               SMDiag, Context, true);
+    if (!Mod) {
+      LogS << "Failed to load module: " << InputFile << '\n';
+      SMDiag.print("llvm-link", LogS);
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    // Verify module for consistency with existing COMGR pattern.
+    // Note: This can be expensive, consider making verification conditional in the future.
+    if (verifyModule(*Mod, &LogS)) {
+      LogS << "Module verification failed: " << InputFile << '\n';
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    if (L.linkInModule(std::move(Mod), Linker::Flags::None)) {
+      LogS << "Failed to link module: " << InputFile << '\n';
+      return AMD_COMGR_STATUS_ERROR;
+    }
+  }
+
+  // Write linked bitcode to output file
+  std::error_code EC;
+  raw_fd_ostream OS(OutputFile, EC);
+  if (EC) {
+    LogS << "Failed to open output file: " << EC.message() << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  WriteBitcodeToFile(*Composite, OS);
+  OS.close();
+  if (OS.has_error()) {
+    LogS << "Failed to write output file: " << OS.error().message() << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
+amd_comgr_status_t translateBitcodeToSpirv(
+    llvm::ArrayRef<const char *> Args,
+    llvm::raw_ostream &LogS) {
+
+  // Parse arguments
+  StringRef InputFile;
+  StringRef OutputFile;
+  SmallVector<StringRef, 16> SpirvOpts;
+  SmallVector<StringRef, 16> UnsupportedArgs;
+
+  for (size_t i = 0; i < Args.size(); ++i) {
+    StringRef Arg = Args[i];
+    if (Arg == "-o" && i + 1 < Args.size()) {
+      OutputFile = Args[++i];
+    } else if (Arg.starts_with("--spirv-")) {
+      SpirvOpts.push_back(Arg);
+    } else if (Arg.ends_with(".bc")) {
+      if (!InputFile.empty()) {
+        LogS << "Error: SPIR-V translator accepts only one input file, got: "
+             << InputFile << " and " << Arg << "\n";
+        return AMD_COMGR_STATUS_ERROR;
+      }
+      InputFile = Arg;
+    } else if (Arg.starts_with("-")) {
+      // Track unsupported flags
+      UnsupportedArgs.push_back(Arg);
+    }
+  }
+
+  // Warn about unsupported SPIR-V options
+  if (!SpirvOpts.empty()) {
+    LogS << "Warning: SPIR-V translator in-process mode ignoring --spirv-* options:";
+    for (StringRef Opt : SpirvOpts) {
+      LogS << " " << Opt;
+    }
+    LogS << " (using default OpenCL 2.0 settings)\n";
+  }
+
+  // Warn about other unsupported arguments
+  if (!UnsupportedArgs.empty()) {
+    LogS << "Warning: SPIR-V translator in-process mode ignoring unsupported arguments:";
+    for (StringRef Arg : UnsupportedArgs) {
+      LogS << " " << Arg;
+    }
+    LogS << "\n";
+  }
+
+  if (InputFile.empty() || OutputFile.empty()) {
+    LogS << "Missing input or output file for SPIR-V translation\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  // Load input bitcode
+  LLVMContext Context;
+  Context.setDiagnosticHandler(
+      std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
+
+  SMDiagnostic SMDiag;
+  auto BufferOrErr = MemoryBuffer::getFile(InputFile);
+  if (!BufferOrErr) {
+    LogS << "Failed to read input bitcode: " << InputFile << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  auto Mod = parseIR(BufferOrErr.get()->getMemBufferRef(), SMDiag, Context);
+  if (!Mod) {
+    LogS << "Failed to parse bitcode module\n";
+    SMDiag.print("llvm-spirv", LogS);
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  // Configure SPIR-V translator options
+  SPIRV::TranslatorOpts Opts;
+  Opts.enableAllExtensions();
+  Opts.setDesiredBIsRepresentation(SPIRV::BIsRepresentation::OpenCL20);
+
+  // Parse additional options from SpirvOpts
+  // TODO: Parse --spirv-max-version, --spirv-ext, etc. and configure Opts
+
+  // Translate to SPIR-V
+  std::string ErrMsg;
+  std::ostringstream SpirvOS;
+
+  if (!llvm::writeSpirv(Mod.get(), Opts, SpirvOS, ErrMsg)) {
+    LogS << "Failed to translate to SPIR-V: " << ErrMsg << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  // Write SPIR-V output
+  std::error_code EC;
+  raw_fd_ostream OutOS(OutputFile, EC, sys::fs::OF_None);
+  if (EC) {
+    LogS << "Failed to open output file: " << EC.message() << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  OutOS << SpirvOS.str();
+  OutOS.close();
+  if (OutOS.has_error()) {
+    LogS << "Failed to write output file: " << OutOS.error().message() << '\n';
+    return AMD_COMGR_STATUS_ERROR;
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
+}
+
 void logArgv(raw_ostream &OS, StringRef ProgramName,
              ArrayRef<const char *> Argv) {
   OS << "     Driver Job Args: " << ProgramName;
@@ -699,14 +902,41 @@ executeCommand(const Command &Job, raw_ostream &LogS,
     if (executeAssembler(Asm, Diags, LogS)) {
       return AMD_COMGR_STATUS_ERROR;
     }
-  } else if (Job.getCreator().getName() == LinkerJobName) {
+  } else if (Job.getCreator().getName() == AMDGPULinkerJobName) {
     if (env::shouldEmitVerboseLogs()) {
       logArgv(LogS, "lld", Argv);
     }
     if (auto Status = linkWithLLD(Arguments, LogS, LogS)) {
       return Status;
     }
+  } else if (Job.getCreator().getName() == AMDGCNLinkerJobName) {
+    // AMDGCN linker jobs share the same creator name but use different executables.
+    // Check basename to route to the correct handler.
+    StringRef BaseName = llvm::sys::path::filename(Job.getExecutable());
+    if (BaseName == "llvm-spirv" || BaseName == "amd-llvm-spirv") {
+      // SPIR-V translator: converts LLVM bitcode to SPIR-V
+      if (env::shouldEmitVerboseLogs()) {
+        logArgv(LogS, "llvm-spirv", Argv);
+      }
+      if (auto Status = translateBitcodeToSpirv(Arguments, LogS)) {
+        return Status;
+      }
+    } else if (BaseName == "llvm-link") {
+      // AMDGCN linker for SPIR-V: uses llvm-link to merge bitcode files
+      if (env::shouldEmitVerboseLogs()) {
+        logArgv(LogS, "llvm-link", Argv);
+      }
+      if (auto Status = linkWithLLVMLink(Arguments, LogS)) {
+        return Status;
+      }
+    } else {
+      LogS << "Unexpected executable for " << AMDGCNLinkerJobName
+           << ": " << Job.getExecutable() << "\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
   } else {
+    LogS << "Unknown job type: " << Job.getCreator().getName()
+         << " (executable: " << Job.getExecutable() << ")\n";
     return AMD_COMGR_STATUS_ERROR;
   }
   return AMD_COMGR_STATUS_SUCCESS;
