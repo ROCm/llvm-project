@@ -1024,6 +1024,28 @@ struct AAPointerInfoImpl
   using BaseTy = StateWrapper<AA::PointerInfo::State, AAPointerInfo>;
   AAPointerInfoImpl(const IRPosition &IRP, Attributor &A) : BaseTy(IRP) {}
 
+  /// Cache for isKernel check of the associated function.
+  mutable std::optional<bool> IsAssociatedFunctionKernel;
+
+  bool isKernelCached(Attributor &A, const Function &Fn) const {
+    if (&Fn == getAssociatedFunction()) {
+      if (!IsAssociatedFunctionKernel.has_value())
+        IsAssociatedFunctionKernel = A.getInfoCache().isKernel(Fn);
+      return *IsAssociatedFunctionKernel;
+    }
+    
+    static thread_local const Function *LastFn = nullptr;
+    static thread_local bool LastRes = false;
+    
+    if (LastFn == &Fn)
+      return LastRes;
+
+    bool Result = A.getInfoCache().isKernel(Fn);
+    LastFn = &Fn;
+    LastRes = Result;
+    return Result;
+  }
+
   /// See AbstractAttribute::getAsStr().
   const std::string getAsStr(Attributor *A) const override {
     return std::string("PointerInfo ") +
@@ -1171,7 +1193,14 @@ struct AAPointerInfoImpl
     // TODO: Use reaching kernels from AAKernelInfo (or move it to
     // AAExecutionDomain) such that we allow scopes other than kernels as long
     // as the reaching kernels are disjoint.
-    bool InstInKernel = A.getInfoCache().isKernel(Scope);
+    bool InstInKernel;
+    if (getAssociatedFunction() == &Scope) {
+      if (!IsAssociatedFunctionKernel.has_value())
+        IsAssociatedFunctionKernel = A.getInfoCache().isKernel(Scope);
+      InstInKernel = *IsAssociatedFunctionKernel;
+    } else {
+      InstInKernel = A.getInfoCache().isKernel(Scope);
+    }
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
         FindInterferingWrites && IsKnownNoRecurse;
@@ -1205,7 +1234,13 @@ struct AAPointerInfoImpl
       // If the alloca containing function is not recursive the alloca
       // must be dead in the callee.
       const Function *AIFn = AI->getFunction();
-      ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
+      if (getAssociatedFunction() == AIFn) {
+        if (!IsAssociatedFunctionKernel.has_value())
+          IsAssociatedFunctionKernel = A.getInfoCache().isKernel(*AIFn);
+        ObjHasKernelLifetime = *IsAssociatedFunctionKernel;
+      } else {
+        ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
+      }
       bool IsKnownNoRecurse;
       if (AA::hasAssumedIRAttr<Attribute::NoRecurse>(
               A, this, IRPosition::function(*AIFn), DepClassTy::OPTIONAL,
@@ -1217,8 +1252,8 @@ struct AAPointerInfoImpl
       // as it is "dead" in the (unknown) callees.
       ObjHasKernelLifetime = HasKernelLifetime(GV, *GV->getParent());
       if (ObjHasKernelLifetime)
-        IsLiveInCalleeCB = [&A](const Function &Fn) {
-          return !A.getInfoCache().isKernel(Fn);
+        IsLiveInCalleeCB = [&](const Function &Fn) {
+          return !isKernelCached(A, Fn);
         };
     }
 
@@ -1226,15 +1261,29 @@ struct AAPointerInfoImpl
     // therefore blockers in the reachability traversal.
     AA::InstExclusionSetTy ExclusionSet;
 
+    // Cache for isKernel check to avoid repeated map lookups for the same function.
+    const Function *LastCheckedFn = nullptr;
+    bool LastCheckedResult = false;
+
     auto AccessCB = [&](const Access &Acc, bool Exact) {
       Function *AccScope = Acc.getRemoteInst()->getFunction();
       bool AccInSameScope = AccScope == &Scope;
 
       // If the object has kernel lifetime we can ignore accesses only reachable
       // by other kernels. For now we only skip accesses *in* other kernels.
-      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope &&
-          A.getInfoCache().isKernel(*AccScope))
-        return true;
+      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
+        bool AccScopeIsKernel;
+        if (AccScope == LastCheckedFn) {
+          AccScopeIsKernel = LastCheckedResult;
+        } else {
+          AccScopeIsKernel = isKernelCached(A, *AccScope);
+          LastCheckedFn = AccScope;
+          LastCheckedResult = AccScopeIsKernel;
+        }
+        
+        if (AccScopeIsKernel)
+          return true;
+      }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
         if (Acc.isWrite() || (isa<LoadInst>(I) && Acc.isWriteOrAssumption()))
@@ -3632,8 +3681,10 @@ struct AAIntraFnReachabilityFunction final
   ChangeStatus updateImpl(Attributor &A) override {
     // We only depend on liveness. DeadEdges is all we care about, check if any
     // of them changed.
-    auto *LivenessAA =
+    CachedLivenessAA =
         A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    auto *LivenessAA = CachedLivenessAA;
+
     if (LivenessAA &&
         llvm::all_of(DeadEdges,
                      [&](const auto &DeadEdge) {
@@ -3645,8 +3696,19 @@ struct AAIntraFnReachabilityFunction final
         })) {
       return ChangeStatus::UNCHANGED;
     }
+
     DeadEdges.clear();
     DeadBlocks.clear();
+    // Note: We do NOT clear ReachableBlockCache. Reachability is monotonic with
+    // respect to liveness (adding live edges can only make things reachable,
+    // not unreachable). So cached "Yes" results remain valid.
+    
+    // Clear the visited map query ID to force re-traversal if needed.
+    // Actually, we don't need to clear the map itself, just increment the ID
+    // which happens on next query. But if we wanted to be safe we could.
+    // However, since we cleared DeadEdges/DeadBlocks, the next isReachableImpl
+    // will re-check things.
+
     return Base::updateImpl(A);
   }
 
@@ -3672,13 +3734,6 @@ struct AAIntraFnReachabilityFunction final
     const BasicBlock *ToBB = RQI.To->getParent();
     assert(FromBB->getParent() == ToBB->getParent() &&
            "Not an intra-procedural query!");
-
-    // Check if we have already established that FromBB cannot reach ToBB.
-    // If we know these blocks are unreachable in the general case (no exclusions),
-    // they are definitely unreachable with exclusions.
-    if (UnreachableBlockCache.count({FromBB, ToBB}))
-      return rememberResult(A, RQITy::Reachable::No, RQI, UsedExclusionSet,
-                            IsTemporaryRQI);
 
     // Check intra-block reachability, however, other reaching paths are still
     // possible.
@@ -3717,23 +3772,61 @@ struct AAIntraFnReachabilityFunction final
         }
     }
 
-    auto *LivenessAA =
-        A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    if (!CachedLivenessAA)
+      CachedLivenessAA =
+          A.getAAFor<AAIsDead>(*this, getIRPosition(), DepClassTy::OPTIONAL);
+    auto *LivenessAA = CachedLivenessAA;
     if (LivenessAA && LivenessAA->isAssumedDead(ToBB)) {
       DeadBlocks.insert(ToBB);
       return rememberResult(A, RQITy::Reachable::No, RQI, UsedExclusionSet,
                             IsTemporaryRQI);
     }
 
-    SmallPtrSet<const BasicBlock *, 16> Visited;
+    // Optimization: Use DT DFS numbers for visited set if available.
+    // This avoids SmallPtrSet allocation and hashing overhead.
+    if (DT) {
+      if (VisitedMap.empty()) {
+        // Resize once.
+        if (auto *Root = DT->getRootNode())
+          VisitedMap.resize(Root->getDFSNumOut() + 1, 0);
+      }
+      // Increment query ID.
+      CurrentQueryID++;
+      if (CurrentQueryID == 0) {
+        // Wrap around handling: clear map.
+        std::fill(VisitedMap.begin(), VisitedMap.end(), 0);
+        CurrentQueryID = 1;
+      }
+    }
+
     SmallVector<const BasicBlock *, 16> Worklist;
     Worklist.push_back(FromBB);
+
+    // Fallback visited set if DT is not available.
+    SmallPtrSet<const BasicBlock *, 16> VisitedFallback;
 
     DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> LocalDeadEdges;
     while (!Worklist.empty()) {
       const BasicBlock *BB = Worklist.pop_back_val();
-      if (!Visited.insert(BB).second)
-        continue;
+      
+      bool IsVisited;
+      if (DT) {
+        unsigned DFSNum = DT->getNode(BB)->getDFSNumIn();
+        if (DFSNum < VisitedMap.size()) {
+          if (VisitedMap[DFSNum] == CurrentQueryID)
+            continue;
+          VisitedMap[DFSNum] = CurrentQueryID;
+          IsVisited = false; // Just marked it.
+        } else {
+          // Should not happen if DT is consistent, but fallback safely.
+          if (!VisitedFallback.insert(BB).second)
+            continue;
+        }
+      } else {
+        if (!VisitedFallback.insert(BB).second)
+          continue;
+      }
+
       for (const BasicBlock *SuccBB : successors(BB)) {
         if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB)) {
           LocalDeadEdges.insert({BB, SuccBB});
@@ -3758,12 +3851,6 @@ struct AAIntraFnReachabilityFunction final
         }
         Worklist.push_back(SuccBB);
       }
-    }
-
-    // If we failed to find a path and we didn't have any exclusions,
-    // then this pair is globally unreachable.
-    if (ExclusionBlocks.empty()) {
-        UnreachableBlockCache.insert({FromBB, ToBB});
     }
 
     DeadEdges.insert_range(LocalDeadEdges);
@@ -3792,10 +3879,14 @@ private:
   /// within the same basic blocks.
   DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> ReachableBlockCache;
 
-  /// A cache for block-level unreachability.
-  /// Stores pairs {FromBB, ToBB} where NO path exists (in the absence of exclusion sets).
-  /// If a path doesn't exist without exclusions, it certainly won't exist with them.
-  DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> UnreachableBlockCache;
+  /// Cached pointer to the AAIsDead attribute.
+  /// This avoids repeated map lookups in Attributor::getAAFor.
+  const AAIsDead *CachedLivenessAA = nullptr;
+  
+  /// Visited map for graph traversal using DT DFS numbers.
+  std::vector<unsigned> VisitedMap;
+  /// Current query ID for VisitedMap.
+  unsigned CurrentQueryID = 0;
 };
 } // namespace
 
