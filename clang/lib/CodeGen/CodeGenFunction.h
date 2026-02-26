@@ -4753,6 +4753,19 @@ public:
   /// Emit IR for __builtin_align_up/__builtin_align_down.
   RValue EmitBuiltinAlignTo(const CallExpr *E, bool AlignUp);
 
+  /// Maps memory order constant value to AtomicOrdering.
+  static llvm::AtomicOrdering getAtomicOrdering(const llvm::ConstantInt *Order);
+
+  /// Maps scope constant value to SyncScope::ID.
+  llvm::SyncScope::ID getSyncScopeID(const llvm::ConstantInt *Scope,
+                                     llvm::AtomicOrdering Ordering,
+                                     const AtomicScopeModel *ScopeModel);
+
+  /// Overload for runtime scope values.
+  llvm::SyncScope::ID getSyncScopeID(unsigned ScopeVal,
+                                     llvm::AtomicOrdering Ordering,
+                                     const AtomicScopeModel *ScopeModel);
+
   llvm::Function *generateBuiltinOSLogHelperFunction(
       const analyze_os_log::OSLogBufferLayout &Layout,
       CharUnits BufferAlignment);
