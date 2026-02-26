@@ -62,13 +62,36 @@ bool CheckScopeStringArg(const Expr *Scope, unsigned BuiltinID,
   return false;
 }
 
+bool CheckScopeEnumArg(const Expr *Scope, unsigned BuiltinID, SemaAMDGPU &Sema) {
+  Expr::EvalResult ArgResult;
+  if (!Scope->EvaluateAsInt(ArgResult, Sema.getASTContext()))
+    return Sema.Diag(Scope->getExprLoc(), diag::err_typecheck_expect_int)
+           << Scope->getType();
+  uint64_t ScopeInt = ArgResult.Val.getInt().getZExtValue();
+
+  // Check that the operand is a compile-time constant int for a valid scope.
+  auto ScopeModel = AtomicScopeModel::create(AtomicScopeModelKind::Generic);
+  if (!ScopeModel->isValid(ScopeInt))
+    return Sema.Diag(Scope->getExprLoc(), diag::err_expr_not_string_literal)
+      << Scope->getType();
+  return false;
+}
+
 bool CheckOrderAndScope(unsigned BuiltinID, CallExpr *TheCall,
                         SemaAMDGPU &Sema) {
   const Expr *Order = nullptr;
   const Expr *ScopeString = nullptr;
+  const Expr *ScopeEnum = nullptr;
+
   switch (BuiltinID) {
   default:
     return false;
+  case AMDGPU::BI__builtin_amdgcn_global_load_b128:
+    ScopeEnum = TheCall->getArg(1);
+    break;
+  case AMDGPU::BI__builtin_amdgcn_global_store_b128:
+    ScopeEnum = TheCall->getArg(2);
+    break;
   case AMDGPU::BI__builtin_amdgcn_atomic_inc32:
   case AMDGPU::BI__builtin_amdgcn_atomic_inc64:
   case AMDGPU::BI__builtin_amdgcn_atomic_dec32:
@@ -81,8 +104,10 @@ bool CheckOrderAndScope(unsigned BuiltinID, CallExpr *TheCall,
     ScopeString = TheCall->getArg(1);
     break;
   }
-  return (Order && CheckOrderArg(Order, BuiltinID, Sema)) ||
-         (ScopeString && CheckScopeStringArg(Order, BuiltinID, Sema));
+
+  return (Order && CheckOrderArg(Order,BuiltinID, Sema)) ||
+    (ScopeString && CheckScopeStringArg(Order, BuiltinID, Sema)) ||
+    (ScopeEnum && CheckScopeEnumArg(ScopeEnum, BuiltinID, Sema));
 }
 
 } // end anonymous namespace
@@ -387,9 +412,6 @@ bool SemaAMDGPU::CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID,
     }
     return false;
   }
-  case AMDGPU::BI__builtin_amdgcn_global_load_b128:
-  case AMDGPU::BI__builtin_amdgcn_global_store_b128:
-    return checkScopedMemAccessFunctionCall(TheCall);
   default:
     return false;
   }
@@ -475,19 +497,6 @@ bool SemaAMDGPU::checkAtomicMonitorLoad(CallExpr *TheCall) {
     }
   }
 
-  return Fail;
-}
-
-bool SemaAMDGPU::checkScopedMemAccessFunctionCall(CallExpr *TheCall) {
-  bool Fail = false;
-  // Last argument is a string literal
-  Expr *Arg = TheCall->getArg(TheCall->getNumArgs() - 1);
-  auto Scope = dyn_cast<StringLiteral>(Arg->IgnoreParenCasts());
-  if (!Scope) {
-    Fail = true;
-    Diag(TheCall->getBeginLoc(), diag::err_expr_not_string_literal)
-        << Arg->getSourceRange();
-  }
   return Fail;
 }
 

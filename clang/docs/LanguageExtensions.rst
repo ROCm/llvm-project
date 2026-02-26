@@ -5596,10 +5596,10 @@ cache behavior specified by `scope` which must be a string literal.
 
 Valid values for `scope` are:
 
-* ``"wavefront"``       
-* ``"workgroup"``       
-* ``"agent"``           
-* ``""`` (empty string) 
+* ``"wavefront"``
+* ``"workgroup"``
+* ``"agent"``
+* ``""`` (empty string)
 
 These builtins are supported on gfx9, gfx10, gfx11, and gfx12 targets.
 
