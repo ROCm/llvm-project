@@ -24,29 +24,27 @@ using namespace clang;
 
 namespace {
 
-bool CheckOrderArg(ExprResult Arg, unsigned BuiltinID, SemaAMDGPU &Sema) {
-  const Expr *ArgExpr = Arg.get();
+bool CheckOrderArg(const Expr *Order, unsigned BuiltinID, SemaAMDGPU &Sema) {
   Expr::EvalResult ArgResult;
+  if (!Order->EvaluateAsInt(ArgResult, Sema.getASTContext()))
+    return Sema.Diag(Order->getExprLoc(), diag::err_typecheck_expect_int)
+           << Order->getType();
+  auto OrderInt = ArgResult.Val.getInt().getZExtValue();
 
-  if (!ArgExpr->EvaluateAsInt(ArgResult, Sema.getASTContext()))
-    return Sema.Diag(ArgExpr->getExprLoc(), diag::err_typecheck_expect_int)
-           << ArgExpr->getType();
-  auto Ord = ArgResult.Val.getInt().getZExtValue();
-
-  if (!llvm::isValidAtomicOrderingCABI(Ord))
-    return Sema.Diag(ArgExpr->getBeginLoc(),
+  if (!llvm::isValidAtomicOrderingCABI(OrderInt))
+    return Sema.Diag(Order->getBeginLoc(),
                      diag::warn_atomic_op_has_invalid_memory_order)
-           << 0 << ArgExpr->getSourceRange();
+           << 0 << Order->getSourceRange();
 
   // Check validity of memory ordering as per C11 / C++11's memory model.
   // Only fence needs check. Atomic dec/inc allow all memory orders.
-  switch (static_cast<llvm::AtomicOrderingCABI>(Ord)) {
+  switch (static_cast<llvm::AtomicOrderingCABI>(OrderInt)) {
   case llvm::AtomicOrderingCABI::relaxed:
   case llvm::AtomicOrderingCABI::consume:
     if (BuiltinID == AMDGPU::BI__builtin_amdgcn_fence)
-      return Sema.Diag(ArgExpr->getBeginLoc(),
+      return Sema.Diag(Order->getBeginLoc(),
                        diag::warn_atomic_op_has_invalid_memory_order)
-             << 0 << ArgExpr->getSourceRange();
+             << 0 << Order->getSourceRange();
     break;
   default:
     break;
@@ -54,19 +52,20 @@ bool CheckOrderArg(ExprResult Arg, unsigned BuiltinID, SemaAMDGPU &Sema) {
   return false;
 }
 
-bool CheckScopeStringArg(ExprResult Arg, SemaAMDGPU &Sema) {
-  const Expr *ArgExpr = Arg.get();
-  Expr::EvalResult ArgResult1;
-  // Check that sync scope is a constant literal
-  if (!ArgExpr->EvaluateAsConstantExpr(ArgResult1, Sema.getASTContext()))
-    return Sema.Diag(ArgExpr->getExprLoc(), diag::err_expr_not_string_literal)
-           << ArgExpr->getType();
+bool CheckScopeStringArg(const Expr *Scope, unsigned BuiltinID,
+                         SemaAMDGPU &Sema) {
+  Expr::EvalResult ArgResult;
+  // Check that the operand is a compile-time constant string for a valid scope.
+  if (!Scope->EvaluateAsConstantExpr(ArgResult, Sema.getASTContext()))
+    return Sema.Diag(Scope->getExprLoc(), diag::err_expr_not_string_literal)
+           << Scope->getType();
   return false;
 }
 
 bool CheckOrderAndScope(unsigned BuiltinID, CallExpr *TheCall,
                         SemaAMDGPU &Sema) {
-  unsigned OrderIndex, ScopeIndex;
+  const Expr *Order = nullptr;
+  const Expr *ScopeString = nullptr;
   switch (BuiltinID) {
   default:
     return false;
@@ -74,16 +73,16 @@ bool CheckOrderAndScope(unsigned BuiltinID, CallExpr *TheCall,
   case AMDGPU::BI__builtin_amdgcn_atomic_inc64:
   case AMDGPU::BI__builtin_amdgcn_atomic_dec32:
   case AMDGPU::BI__builtin_amdgcn_atomic_dec64:
-    OrderIndex = 2;
-    ScopeIndex = 3;
+    Order = TheCall->getArg(2);
+    ScopeString = TheCall->getArg(3);
     break;
   case AMDGPU::BI__builtin_amdgcn_fence:
-    OrderIndex = 0;
-    ScopeIndex = 1;
+    Order = TheCall->getArg(0);
+    ScopeString = TheCall->getArg(1);
     break;
   }
-  return CheckOrderArg(TheCall->getArg(OrderIndex), BuiltinID, Sema) ||
-         CheckScopeStringArg(TheCall->getArg(ScopeIndex), Sema);
+  return (Order && CheckOrderArg(Order, BuiltinID, Sema)) ||
+         (ScopeString && CheckScopeStringArg(Order, BuiltinID, Sema));
 }
 
 } // end anonymous namespace
