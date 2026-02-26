@@ -1738,6 +1738,8 @@ void ControlFlowRewriter::prepareWaveCfg() {
                Opcode != AMDGPU::S_CBRANCH_SCC0 &&
                Opcode != AMDGPU::S_CBRANCH_SCC1 &&
                Opcode != AMDGPU::SI_WATERFALL_LOOP &&
+               Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN &&
+               Opcode != AMDGPU::S_SUBVECTOR_LOOP_END &&
                "wave-transform: unhandled branch opcode");
       }
     }
