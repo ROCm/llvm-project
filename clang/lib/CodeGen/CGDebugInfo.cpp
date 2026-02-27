@@ -744,7 +744,9 @@ static llvm::dwarf::SourceLanguage GetSourceLanguage(const CodeGenModule &CGM) {
 
   llvm::dwarf::SourceLanguage LangTag;
   if (LO.CPlusPlus) {
-    if (LO.ObjC)
+    if (LO.HIP)
+      LangTag = llvm::dwarf::DW_LANG_HIP;
+    else if (LO.ObjC)
       LangTag = llvm::dwarf::DW_LANG_ObjC_plus_plus;
     else if (CGO.DebugStrictDwarf && CGO.DwarfVersion < 5)
       LangTag = llvm::dwarf::DW_LANG_C_plus_plus;
@@ -780,7 +782,9 @@ GetDISourceLanguageName(const CodeGenModule &CGM) {
   uint32_t LangVersion = 0;
   llvm::dwarf::SourceLanguageName LangTag;
   if (LO.CPlusPlus) {
-    if (LO.ObjC) {
+    if (LO.HIP) {
+      LangTag = llvm::dwarf::DW_LNAME_HIP;
+    } else if (LO.ObjC) {
       LangTag = llvm::dwarf::DW_LNAME_ObjC_plus_plus;
     } else {
       LangTag = llvm::dwarf::DW_LNAME_C_plus_plus;
@@ -1255,6 +1259,11 @@ llvm::DIType *CGDebugInfo::CreateType(const BitIntType *Ty) {
                                   Ty->getNumBits());
 }
 
+llvm::DIType *CGDebugInfo::CreateType(const OverflowBehaviorType *Ty,
+                                      llvm::DIFile *U) {
+  return getOrCreateType(Ty->getUnderlyingType(), U);
+}
+
 llvm::DIType *CGDebugInfo::CreateType(const ComplexType *Ty) {
   // Bit size and offset of the type.
   llvm::dwarf::TypeKind Encoding = llvm::dwarf::DW_ATE_complex_float;
@@ -1374,6 +1383,7 @@ static bool hasCXXMangling(llvm::dwarf::SourceLanguage Lang, bool IsTagDecl) {
   case llvm::dwarf::DW_LANG_C_plus_plus:
   case llvm::dwarf::DW_LANG_C_plus_plus_11:
   case llvm::dwarf::DW_LANG_C_plus_plus_14:
+  case llvm::dwarf::DW_LANG_HIP:
     return true;
   case llvm::dwarf::DW_LANG_ObjC_plus_plus:
     return IsTagDecl;
@@ -1386,6 +1396,7 @@ static bool hasCXXMangling(llvm::dwarf::SourceLanguageName Lang,
                            bool IsTagDecl) {
   switch (Lang) {
   case llvm::dwarf::DW_LNAME_C_plus_plus:
+  case llvm::dwarf::DW_LNAME_HIP:
     return true;
   case llvm::dwarf::DW_LNAME_ObjC_plus_plus:
     return IsTagDecl;
@@ -2383,6 +2394,12 @@ CGDebugInfo::GetMethodLinkageName(const CXXMethodDecl *Method) const {
     return CGM.getMangledName(GlobalDecl(Dtor, CXXDtorType::Dtor_Unified));
 
   return CGM.getMangledName(Method);
+}
+
+bool CGDebugInfo::shouldGenerateVirtualCallSite() const {
+  // Check general conditions for call site generation.
+  return ((getCallSiteRelatedAttrs() != llvm::DINode::FlagZero) &&
+          (CGM.getCodeGenOpts().DwarfVersion >= 5));
 }
 
 llvm::DISubprogram *CGDebugInfo::CreateCXXMemberFunction(
@@ -4261,6 +4278,8 @@ llvm::DIType *CGDebugInfo::CreateTypeNode(QualType Ty, llvm::DIFile *Unit) {
 
   case Type::BitInt:
     return CreateType(cast<BitIntType>(Ty));
+  case Type::OverflowBehavior:
+    return CreateType(cast<OverflowBehaviorType>(Ty), Unit);
   case Type::Pipe:
     return CreateType(cast<PipeType>(Ty), Unit);
 
@@ -5038,6 +5057,23 @@ void CGDebugInfo::EmitFunctionDecl(GlobalDecl GD, SourceLocation Loc,
 
   if (IsDeclForCallSite)
     Fn->setSubprogram(SP);
+}
+
+void CGDebugInfo::addCallTargetIfVirtual(const FunctionDecl *FD,
+                                         llvm::CallBase *CI) {
+  if (!shouldGenerateVirtualCallSite())
+    return;
+
+  if (!FD)
+    return;
+
+  assert(CI && "Invalid Call Instruction.");
+  if (!CI->isIndirectCall())
+    return;
+
+  // Always get the method declaration.
+  if (llvm::DISubprogram *MD = getFunctionDeclaration(FD))
+    CI->setMetadata(llvm::LLVMContext::MD_call_target, MD);
 }
 
 void CGDebugInfo::EmitFuncDeclForCallSite(llvm::CallBase *CallOrInvoke,
@@ -6744,14 +6780,27 @@ void CGDebugInfo::EmitGlobalVariableForHeterogeneousDwarf(
     }
 
   llvm::DIExprBuilder ExprBuilder(CGM.getLLVMContext());
-  // FIXME: There isn't general support for getting a Constant from an APValue,
-  // but we should be able to support all possibilities here.
-  if (Init.isInt())
-    ExprBuilder.append<llvm::DIOp::Constant>(
-        llvm::ConstantInt::get(CGM.getLLVMContext(), Init.getInt()));
-  else if (Init.isFloat())
-    ExprBuilder.append<llvm::DIOp::Constant>(
-        llvm::ConstantFP::get(CGM.getLLVMContext(), Init.getFloat()));
+  QualType VDQualTy = VD->getType();
+  llvm::Type *VDTy = CGM.getTypes().ConvertType(VDQualTy);
+
+  llvm::Constant *C = nullptr;
+  // As a special case, handle null pointers directly, even in cases where
+  // ConstantEmitter does not fold them to ConstantData.
+  if (Init.isLValue() && Init.isNullPointer() && isa<llvm::PointerType>(VDTy)) {
+    assert(!Init.getLValueBase() && "null pointer should be absolute");
+    auto *PtrTy = cast<llvm::PointerType>(VDTy);
+    unsigned NumBits = CGM.getDataLayout().getPointerTypeSizeInBits(PtrTy);
+    auto *IntPtrTy = CGM.getDataLayout().getIntPtrType(PtrTy);
+    uint64_t NullValue = CGM.getContext().getTargetNullPointerValue(VDQualTy);
+    uint64_t MaskedNullValue =
+        NullValue & llvm::maskTrailingOnes<uint64_t>(NumBits);
+    C = llvm::ConstantInt::get(IntPtrTy, MaskedNullValue);
+  } else {
+    C = ConstantEmitter(CGM).emitAbstract(SourceLocation(), Init, VDQualTy);
+  }
+  if (!isa_and_present<llvm::ConstantData>(C))
+    return;
+  ExprBuilder.append<llvm::DIOp::Constant>(cast<llvm::ConstantData>(C));
 
   GV.reset(DBuilder.createGlobalVariableExpression(
       DContext, Name, StringRef(), Unit, getLineNumber(VD->getLocation()), Ty,

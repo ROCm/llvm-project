@@ -112,6 +112,10 @@ void SIFrameLowering::emitDefCFA(MachineBasicBlock &MBB,
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   const MCRegisterInfo *MCRI = MF.getContext().getRegisterInfo();
 
+  // For MIR test cases without MFI we just skip emitting. These
+  // shouldn't be testing CFI anyway.
+  if (StackPtrReg == AMDGPU::SP_REG)
+    return;
   MCRegister DwarfStackPtrReg = MCRI->getDwarfRegNum(StackPtrReg, false);
   MCCFIInstruction CFIInst =
       ST.hasFlatScratchEnabled()
@@ -2015,8 +2019,7 @@ void SIFrameLowering::determineCalleeSaves(MachineFunction &MF,
     assert(!NeedExecCopyReservedReg &&
            "Whole wave functions can use the reg mapped for their i1 argument");
 
-    // FIXME: Be more efficient!
-    unsigned NumArchVGPRs = ST.has1024AddressableVGPRs() ? 1024 : 256;
+    unsigned NumArchVGPRs = ST.getAddressableNumArchVGPRs();
     for (MCRegister Reg :
          AMDGPU::VGPR_32RegClass.getRegisters().take_front(NumArchVGPRs))
       if (MF.getRegInfo().isPhysRegModified(Reg)) {
