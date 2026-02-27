@@ -1717,11 +1717,6 @@ void GCNPassConfig::addFastRegAlloc() {
   TargetPassConfig::addFastRegAlloc();
 }
 
-// void GCNPassConfig::addPreRegAlloc() {
-//   if (LateWaveTransform && getOptLevel() == CodeGenOptLevel::None)
-//     addPass(&AMDGPUPreWaveTransformID);
-// }
-
 void GCNPassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(&AMDGPUPrepareAGPRAllocLegacyID);
@@ -1761,14 +1756,6 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   // compilation time, so we only enable it from O2.
   if (TM->getOptLevel() > CodeGenOptLevel::Less)
     insertPass(&MachineSchedulerID, &SIFormMemoryClausesID);
-
-  // TODO-WAVETRANSFORM:
-  // We need to do some preparation pass with MachineUniformityInfo analysis
-  // right before PHIElimination in order to set up information we need
-  // for WaveTransform.
-  // if (LateWaveTransform) {
-  //   insertPass(&LiveVariablesID, &AMDGPUPreWaveTransformID);
-  // }
 
   TargetPassConfig::addOptimizedRegAlloc();
 }
@@ -1853,6 +1840,9 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
     // Perlane VGPR allocation pipeline.
     addPass(createVGPRAllocPass(false));
 
+    // Prepare the machine function for WaveTransform.
+    addPass(createAMDGPUPreWaveTransformPass());
+
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
@@ -1919,6 +1909,9 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     addPass(createVGPRAllocPass(true));
     addPreRewrite();
     addPass(createVirtRegRewriter(false));
+
+    // Prepare the machine function for WaveTransform.
+    addPass(createAMDGPUPreWaveTransformPass());
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());

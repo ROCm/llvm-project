@@ -7,13 +7,13 @@
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// This pass just schedules MachineUniformityAnalysisPass at the moment.
+/// This pass prepares the machine function for wave transform.
 ///
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "SIMachineFunctionInfo.h"
-#include "llvm/CodeGen/MachineUniformityAnalysis.h"
+#include "GCNSubtarget.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/InitializePasses.h"
 
 using namespace llvm;
@@ -33,25 +33,20 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  StringRef getPassName() const override { return "AMDGPU Pre Wave Transform"; }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<MachineUniformityAnalysisPass>();
-    AU.setPreservesAll();
-    MachineFunctionPass::getAnalysisUsage(AU);
+  StringRef getPassName() const override {
+    return "AMDGPU Pre Wave Transform";
   }
 
-private:
-  MachineUniformityInfo *UI = nullptr;
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.setPreservesCFG();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
 };
 
 } // End anonymous namespace.
 
-INITIALIZE_PASS_BEGIN(AMDGPUPreWaveTransform, DEBUG_TYPE,
-                      "AMDGPU Pre Wave Transform", false, false)
-INITIALIZE_PASS_DEPENDENCY(MachineUniformityAnalysisPass)
-INITIALIZE_PASS_END(AMDGPUPreWaveTransform, DEBUG_TYPE,
-                    "AMDGPU Pre Wave Transform", false, false)
+INITIALIZE_PASS(AMDGPUPreWaveTransform, DEBUG_TYPE,
+                "AMDGPU Pre Wave Transform", false, false)
 
 char AMDGPUPreWaveTransform::ID = 0;
 char &llvm::AMDGPUPreWaveTransformID = AMDGPUPreWaveTransform::ID;
@@ -60,12 +55,18 @@ FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
   return new AMDGPUPreWaveTransform();
 }
 
-/// \brief Run the AMDGPU Pre Wave Transform.
 bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
-  SIMachineFunctionInfo &MFI = *MF.getInfo<SIMachineFunctionInfo>();
-  UI = &getAnalysis<MachineUniformityAnalysisPass>().getUniformityInfo();
-  LLVM_DEBUG(UI->print(dbgs()));
-  MFI.setMachineUniformityInfo(UI);
+  const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
+  bool Changed = false;
 
-  return false;
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB.terminators()) {
+      if (MI.getOpcode() == AMDGPU::SI_WATERFALL_LOOP) {
+        MI.setDesc(TII->get(AMDGPU::S_CBRANCH_EXECNZ));
+        Changed = true;
+      }
+    }
+  }
+
+  return Changed;
 }
