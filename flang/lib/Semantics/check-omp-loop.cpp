@@ -186,22 +186,7 @@ void OmpStructureChecker::HasInvalidLoopBinding(
   }
 }
 
-static bool IsLoopTransforming(llvm::omp::Directive dir) {
-  switch (dir) {
-  // TODO case llvm::omp::Directive::OMPD_flatten:
-  case llvm::omp::Directive::OMPD_fuse:
-  case llvm::omp::Directive::OMPD_interchange:
-  case llvm::omp::Directive::OMPD_nothing:
-  case llvm::omp::Directive::OMPD_reverse:
-  // TODO case llvm::omp::Directive::OMPD_split:
-  case llvm::omp::Directive::OMPD_stripe:
-  case llvm::omp::Directive::OMPD_tile:
-  case llvm::omp::Directive::OMPD_unroll:
-    return true;
-  default:
-    return false;
-  }
-}
+
 
 void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
   // Check the following:
