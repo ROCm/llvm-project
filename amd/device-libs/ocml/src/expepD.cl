@@ -33,7 +33,7 @@ MATH_PRIVATE(expep)(double2 x)
     z = x.hi > 710.0 ? PINF_F64 : z;
     z = x.hi < -745.0 ? 0.0 : z;
 #else
-    double z = MATH_MANGLE(exp)(x.hi);
+    double z = BUILTIN_EXP_F64(x.hi);
     double zz = MATH_MAD(z, x.lo, z);
     z = BUILTIN_ISINF_F64(z)? z : zz;
 #endif
