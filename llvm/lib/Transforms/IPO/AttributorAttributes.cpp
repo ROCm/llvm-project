@@ -86,6 +86,10 @@ static cl::opt<bool> ManifestInternal(
     cl::desc("Manifest Attributor internal string attributes."),
     cl::init(false));
 
+static cl::opt<bool> EnableBatchReachability(
+    "attributor-enable-batch-reachability", cl::Hidden, cl::init(false),
+    cl::desc("Enable batch reachability queries in Attributor"));
+
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
                                        cl::Hidden);
 
@@ -1392,13 +1396,225 @@ struct AAPointerInfoImpl
       return LeastDominatingWriteInst != Acc.getRemoteInst();
     };
 
-    // Run the user callback on all accesses we cannot skip and return if
-    // that succeeded for all or not.
-    for (auto &It : InterferingAccesses) {
-      if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
-          !CanSkipAccess(*It.first, It.second)) {
-        if (!UserCB(*It.first, It.second))
+    if (EnableBatchReachability) {
+      // Pre-compute reachable blocks from I if we have many queries.
+      DenseSet<const BasicBlock *> ReachableFromI;
+      bool ReachableFromIComputed = false;
+
+      // Pre-compute reachable blocks to I (backward reachability)
+      DenseSet<const BasicBlock *> ReachableToI;
+      bool ReachableToIComputed = false;
+
+      // Helper to perform the batch query lazily
+      auto EnsureReachableFromI = [&]() {
+        if (ReachableFromIComputed)
+          return;
+
+        // 1. Pre-process ExclusionSet into a set of blocks for O(1) lookup
+        DenseSet<const BasicBlock *> ExcludedBlocks;
+        if (!ExclusionSet.empty()) {
+          for (const Instruction *ExclI : ExclusionSet)
+            ExcludedBlocks.insert(ExclI->getParent());
+        }
+
+        // 2. Perform Batch Traversal
+        const BasicBlock *FromBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(FromBB);
+        ReachableFromI.insert(FromBB);
+
+        // Check if FromBB is blocked (cannot exit)
+        bool FromBBBlocked = false;
+        if (ExcludedBlocks.count(FromBB)) {
+          for (const Instruction *ExclI : ExclusionSet) {
+            if (ExclI->getParent() == FromBB && I.comesBefore(ExclI)) {
+              FromBBBlocked = true;
+              break;
+            }
+          }
+        }
+
+        // Get AAIsDead for liveness
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          // Special check for start block
+          if (BB == FromBB) {
+            if (FromBBBlocked)
+              continue;
+          } else {
+            // For other blocks, any exclusion blocks flow
+            if (ExcludedBlocks.count(BB))
+              continue;
+          }
+
+          for (const BasicBlock *SuccBB : successors(BB)) {
+            // Check liveness
+            if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB))
+              continue;
+
+            if (ReachableFromI.insert(SuccBB).second)
+              Worklist.push_back(SuccBB);
+          }
+        }
+        ReachableFromIComputed = true;
+      };
+
+      // Helper to perform the backward batch query lazily
+      auto EnsureReachableToI = [&]() {
+        if (ReachableToIComputed)
+          return;
+
+        // 1. Pre-process ExclusionSet into a set of blocks for O(1) lookup
+        DenseSet<const BasicBlock *> ExcludedBlocks;
+        if (!ExclusionSet.empty()) {
+          for (const Instruction *ExclI : ExclusionSet)
+            ExcludedBlocks.insert(ExclI->getParent());
+        }
+
+        const BasicBlock *ToBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(ToBB);
+        ReachableToI.insert(ToBB);
+
+        // Check if ToBB is blocked (cannot enter)
+        bool ToBBBlocked = false;
+        if (ExcludedBlocks.count(ToBB)) {
+          for (const Instruction *ExclI : ExclusionSet) {
+            if (ExclI->getParent() == ToBB && ExclI->comesBefore(&I)) {
+              ToBBBlocked = true;
+              break;
+            }
+          }
+        }
+
+        // Get AAIsDead for liveness
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          for (const BasicBlock *PredBB : predecessors(BB)) {
+            // Check liveness
+            if (LivenessAA && LivenessAA->isEdgeDead(PredBB, BB))
+              continue;
+
+            // Insert into set. If already there, skip.
+            if (!ReachableToI.insert(PredBB).second)
+              continue;
+
+            // Check if we should continue traversing from PredBB
+            bool Blocked = false;
+            // Special check for start block (as a predecessor in a loop)
+            if (PredBB == ToBB) {
+              if (ToBBBlocked)
+                Blocked = true;
+            } else {
+              // For other blocks, any exclusion blocks flow from predecessors
+              if (ExcludedBlocks.count(PredBB))
+                Blocked = true;
+            }
+
+            if (!Blocked)
+              Worklist.push_back(PredBB);
+          }
+        }
+        ReachableToIComputed = true;
+      };
+
+      auto CanSkipAccessBatch = [&](const Access &Acc, bool Exact) {
+        if (SkipCB && SkipCB(Acc))
+          return true;
+        if (!CanIgnoreThreading(Acc))
           return false;
+
+        bool ReadChecked = !FindInterferingReads;
+        bool WriteChecked = !FindInterferingWrites;
+
+        // If the instruction cannot reach the access, the former does not
+        // interfere with what the access reads.
+        if (!ReadChecked) {
+          EnsureReachableFromI();
+          // If Acc's block is not in the reachable set, I cannot reach Acc.
+          if (!ReachableFromI.count(Acc.getRemoteInst()->getParent()))
+            ReadChecked = true;
+
+          // Fallback to original query if needed (e.g., for instruction-level
+          // precision within the same block)
+          if (!ReadChecked) {
+            if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB))
+              ReadChecked = true;
+          }
+        }
+        // If the instruction cannot be reach from the access, the latter does not
+        // interfere with what the instruction reads.
+        if (!WriteChecked) {
+          EnsureReachableToI();
+          // If Acc's block is not in the backward reachable set, Acc cannot reach
+          // I.
+          if (!ReachableToI.count(Acc.getRemoteInst()->getParent()))
+            WriteChecked = true;
+
+          if (!WriteChecked) {
+            if (!AA::isPotentiallyReachable(A, *Acc.getRemoteInst(), I,
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB))
+              WriteChecked = true;
+          }
+        }
+
+        if (!WriteChecked && HasBeenWrittenTo &&
+            Acc.getRemoteInst()->getFunction() != &Scope) {
+
+          const auto *FnReachabilityAA = A.getAAFor<AAInterFnReachability>(
+              QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+          if (FnReachabilityAA) {
+            bool Inserted = ExclusionSet.insert(&I).second;
+
+            if (!FnReachabilityAA->instructionCanReach(
+                    A, *LeastDominatingWriteInst,
+                    *Acc.getRemoteInst()->getFunction(), &ExclusionSet))
+              WriteChecked = true;
+
+            if (Inserted)
+              ExclusionSet.erase(&I);
+          }
+        }
+
+        if (ReadChecked && WriteChecked)
+          return true;
+
+        if (!DT || !UseDominanceReasoning)
+          return false;
+        if (!DominatingWrites.count(&Acc))
+          return false;
+        return LeastDominatingWriteInst != Acc.getRemoteInst();
+      };
+
+      // Run the user callback on all accesses we cannot skip and return if
+      // that succeeded for all or not.
+      for (auto &It : InterferingAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccessBatch(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
+      }
+    } else {
+      // Run the user callback on all accesses we cannot skip and return if
+      // that succeeded for all or not.
+      for (auto &It : InterferingAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccess(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
       }
     }
     return true;
