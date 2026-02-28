@@ -1028,8 +1028,8 @@ private:
   void CollectNumAffectedLoopsFromInnerLoopContruct(
       const parser::OpenMPLoopConstruct &, llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
-  void CollectNumAffectedLoopsFromClauses(const parser::OmpClauseList &,
-      llvm::SmallVector<std::int64_t> &,
+  void CollectNumAffectedLoopsFromClauses(const parser::OpenMPLoopConstruct &x,
+      const parser::OmpClauseList &, llvm::SmallVector<std::int64_t> &,
       llvm::SmallVector<const parser::OmpClause *> &);
 
   Symbol::Flags dataSharingAttributeFlags{Symbol::Flag::OmpShared,
@@ -2127,7 +2127,7 @@ bool OmpAttributeVisitor::Pre(const parser::DoConstruct &x) {
 }
 
 static bool isSizesClause(const parser::OmpClause *clause) {
-  return std::holds_alternative<parser::OmpClause::Sizes>(clause->u);
+  return clause && std::holds_alternative<parser::OmpClause::Sizes>(clause->u);
 }
 
 std::int64_t OmpAttributeVisitor::SetAssociatedMaxClause(
@@ -2178,7 +2178,7 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromLoopConstruct(
     llvm::SmallVector<const parser::OmpClause *> &clauses) {
   const auto &clauseList{x.BeginDir().Clauses()};
 
-  CollectNumAffectedLoopsFromClauses(clauseList, levels, clauses);
+  CollectNumAffectedLoopsFromClauses(x, clauseList, levels, clauses);
   CollectNumAffectedLoopsFromInnerLoopContruct(x, levels, clauses);
 }
 
@@ -2195,8 +2195,13 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromInnerLoopContruct(
 }
 
 void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
-    const parser::OmpClauseList &x, llvm::SmallVector<std::int64_t> &levels,
+    const parser::OpenMPLoopConstruct &y, const parser::OmpClauseList &x,
+    llvm::SmallVector<std::int64_t> &levels,
     llvm::SmallVector<const parser::OmpClause *> &clauses) {
+  const auto &beginLoopDir{y.BeginDir()};
+  const auto &dirClauses{beginLoopDir.Clauses()};
+  auto ytv = Fortran::parser::omp::GetOmpDirectiveName(y).v;
+
   for (const auto &clause : x.v) {
     if (const auto oclause{
             std::get_if<parser::OmpClause::Ordered>(&clause.u)}) {
@@ -2222,6 +2227,20 @@ void OmpAttributeVisitor::CollectNumAffectedLoopsFromClauses(
       levels.push_back(tclause->v.size());
       clauses.push_back(&clause);
     }
+  }
+
+  if (ytv == llvm::omp::OMPD_interchange) {
+    for (const auto &clause : dirClauses.v) {
+      if (const auto tclause{
+              std::get_if<parser::OmpClause::Permutation>(&clause.u)}) {
+        levels.push_back(tclause->v.size());
+        clauses.push_back(&clause);
+        return;
+      }
+    }
+
+    levels.push_back(2);
+    clauses.push_back(nullptr);
   }
 }
 

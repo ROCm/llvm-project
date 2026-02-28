@@ -186,6 +186,8 @@ void OmpStructureChecker::HasInvalidLoopBinding(
   }
 }
 
+
+
 void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
   // Check the following:
   //  The only OpenMP constructs that can be encountered during execution of
@@ -233,7 +235,8 @@ void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
             const auto &beginName{c.BeginDir().DirName()};
             if (beginName.v == llvm::omp::Directive::OMPD_simd ||
                 beginName.v == llvm::omp::Directive::OMPD_do_simd ||
-                beginName.v == llvm::omp::Directive::OMPD_loop) {
+                beginName.v == llvm::omp::Directive::OMPD_loop ||
+                IsLoopTransforming(beginName.v)) {
               eligibleSIMD = true;
             }
           },

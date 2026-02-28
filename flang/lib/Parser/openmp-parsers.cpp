@@ -2487,6 +2487,7 @@ static constexpr DirectiveSet GetLoopDirectives() {
       unsigned(Directive::OMPD_fuse),
       unsigned(Directive::OMPD_tile),
       unsigned(Directive::OMPD_unroll),
+      unsigned(Directive::OMPD_interchange),
   };
   return loopDirectives;
 }

@@ -57,6 +57,10 @@ bool isLastItemInQueue(ConstructQueue::const_iterator item,
 bool matchLeafSequence(ConstructQueue::const_iterator item,
                        const ConstructQueue &queue,
                        llvm::omp::Directive directive);
+
+llvm::iterator_range<ConstructQueue::const_iterator> getNonTransformQueue(
+    llvm::iterator_range<ConstructQueue::const_iterator> range);
+
 } // namespace Fortran::lower::omp
 
 #endif // FORTRAN_LOWER_OPENMP_DECOMPOSER_H
