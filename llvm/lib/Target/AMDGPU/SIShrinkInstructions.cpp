@@ -806,8 +806,8 @@ MachineInstr *SIShrinkInstructions::matchSwap(MachineInstr &MovT) const {
       }
     }
   }
-  dbgs() << "YYYYYYYYYYYYYYYYYYYYYYY bingo\n";
   if (MovY) {
+    dbgs() << "YYYYYYYYYYYYYYYYYYYYYYY bingo\n";
     LLVM_DEBUG(dbgs() << "Matched v_swap:\n" << MovT << *MovX << *MovY);
 
     MachineBasicBlock &MBB = *MovT.getParent();
