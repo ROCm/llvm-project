@@ -20,7 +20,7 @@ using namespace llvm::ELF;
 using namespace lld;
 using namespace lld::elf;
 
-namespace {
+namespace local_elf {
 class AMDGPU final : public TargetInfo {
 private:
   uint32_t calcEFlagsV3() const;
@@ -38,6 +38,8 @@ public:
   int64_t getImplicitAddend(const uint8_t *buf, RelType type) const override;
 };
 } // namespace
+
+using namespace local_elf;
 
 AMDGPU::AMDGPU(Ctx &ctx) : TargetInfo(ctx) {
   relativeRel = R_AMDGPU_RELATIVE64;
