@@ -1591,8 +1591,7 @@ genLoopNestClauses(lower::AbstractConverter &converter,
                    semantics::SemanticsContext &semaCtx,
                    lower::pft::Evaluation &eval, const List<Clause> &clauses,
                    mlir::Location loc, mlir::omp::LoopNestOperands &clauseOps,
-                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv,
-                   bool enableInterchange = false) {
+                   llvm::SmallVectorImpl<const semantics::Symbol *> &iv) {
   ClauseProcessor cp(converter, semaCtx, clauses);
 
   HostEvalInfo *hostEvalInfo = getHostEvalInfoStackTop(converter);
