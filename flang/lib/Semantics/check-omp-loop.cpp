@@ -186,8 +186,6 @@ void OmpStructureChecker::HasInvalidLoopBinding(
   }
 }
 
-
-
 void OmpStructureChecker::CheckSIMDNest(const parser::OpenMPConstruct &c) {
   // Check the following:
   //  The only OpenMP constructs that can be encountered during execution of
