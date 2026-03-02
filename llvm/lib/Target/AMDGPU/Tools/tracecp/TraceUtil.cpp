@@ -674,7 +674,8 @@ LoopInfo detectLoops(const TraceCFG &CFG,
   return LI;
 }
 
-void LoopInfo::print() const {
+void LoopInfo::print(const TraceCFG *CFG,
+                     const std::vector<InstEntry> *Entries) const {
   outs() << "\n";
   outs() << "============================================================\n";
   outs() << "LOOP ANALYSIS\n";
@@ -685,6 +686,19 @@ void LoopInfo::print() const {
     outs() << "No loops detected.\n";
     outs() << "============================================================\n";
     return;
+  }
+
+  // Build PC -> block mapping if we have entries to print
+  std::map<uint64_t, uint64_t> PCToBlock;
+  if (CFG && Entries) {
+    for (const auto &E : *Entries) {
+      auto It = CFG->Blocks.upper_bound(E.PC);
+      if (It != CFG->Blocks.begin()) {
+        --It;
+        if (E.PC >= It->second.StartPC && E.PC <= It->second.EndPC)
+          PCToBlock[E.PC] = It->first;
+      }
+    }
   }
 
   // Print dominator info
@@ -716,6 +730,25 @@ void LoopInfo::print() const {
                        L.ParentIdx, IterPerParent);
     }
     outs() << "\n";
+
+    // Print instructions in this loop (first iteration only)
+    if (Entries) {
+      std::set<uint64_t> BodySet(L.BodyBlockPCs.begin(), L.BodyBlockPCs.end());
+      outs() << "  Instructions:\n";
+      bool SeenHeader = false;
+      for (const InstEntry &E : *Entries) {
+        auto It = PCToBlock.find(E.PC);
+        if (It != PCToBlock.end() && BodySet.count(It->second)) {
+          if (E.PC == L.HeaderPC) {
+            if (SeenHeader)
+              break;  // Second time at header = end of first iteration
+            SeenHeader = true;
+          }
+          outs() << format("    0x%04x: %s\n", E.PC, E.InstructionText.c_str());
+        }
+      }
+      outs() << "\n";
+    }
 
     if (L.Metrics.NumInstructions > 0) {
       outs() << format("--- Loop %zu Metrics (Iterations: %u) ---\n", I,

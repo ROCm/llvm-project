@@ -54,6 +54,11 @@ static cl::opt<int64_t> WaveId("wave-id", cl::desc("Filter by wave_id"),
 static cl::opt<bool> Verbose("verbose", cl::desc("Enable verbose output"),
                              cl::init(false), cl::cat(TraceCPCategory));
 
+static cl::opt<bool> PrintLoopInstructions(
+    "print-loop-instructions",
+    cl::desc("Print instructions for each detected loop"),
+    cl::init(false), cl::cat(TraceCPCategory));
+
 int main(int argc, char **argv) {
   cl::HideUnrelatedOptions(TraceCPCategory);
   cl::ParseCommandLineOptions(argc, argv, "tracecp - trace simulation tool\n");
@@ -140,7 +145,10 @@ int main(int argc, char **argv) {
 
   // Detect loops and compute per-loop metrics
   tracecp::LoopInfo LI = tracecp::detectLoops(CFG, Entries);
-  LI.print();
+  if (PrintLoopInstructions)
+    LI.print(&CFG, &Entries);
+  else
+    LI.print();
 
   return 0;
 }

@@ -183,7 +183,9 @@ struct LoopInfo {
   std::vector<Loop> Loops;
   std::map<uint64_t, uint64_t> Dominators; // Block -> immediate dominator
 
-  void print() const;
+  /// Print loop info. If CFG and Entries are provided, also prints instructions.
+  void print(const TraceCFG *CFG = nullptr,
+             const std::vector<InstEntry> *Entries = nullptr) const;
 };
 
 /// Detect loops from the reconstructed CFG and compute per-loop metrics.
