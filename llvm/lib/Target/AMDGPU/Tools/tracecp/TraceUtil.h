@@ -102,13 +102,21 @@ struct TraceMetrics {
   void addInstruction(const InstEntry &Entry);
 };
 
+/// Filter criteria for trace entries.
+struct TraceFilter {
+  int64_t DispatchId;
+  int64_t ClusterId;
+  int64_t WorkgroupId;
+  int64_t WaveId;
+};
+
 /// Parse a trace file and disassemble the instructions.
 /// \param FilePath Path to the JSON trace file.
-/// \param SelectWaveId Only include entries with this wave_id.
+/// \param Filter Only include entries matching these criteria.
 /// \param DisAsm The disassembler to use.
 /// \returns A vector of InstEntry on success, or an error.
 Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
-                                                      int64_t SelectWaveId,
+                                                      const TraceFilter &Filter,
                                                       MCDisassembler &DisAsm);
 
 /// Simulate a trace and populate per-instruction metrics in each entry.

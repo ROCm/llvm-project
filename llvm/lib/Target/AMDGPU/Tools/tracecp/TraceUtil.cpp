@@ -46,7 +46,7 @@ static bool parseHexBytes(StringRef HexStr, SmallVectorImpl<uint8_t> &Bytes) {
 }
 
 Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
-                                                      int64_t SelectWaveId,
+                                                      const TraceFilter &Filter,
                                                       MCDisassembler &DisAsm) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
       MemoryBuffer::getFile(FilePath);
@@ -74,22 +74,27 @@ Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
     if (!Obj)
       continue;
 
-    std::optional<int64_t> WaveId = Obj->getInteger("wave_id");
     std::optional<StringRef> InstructionText =
         Obj->getString("instruction_text");
-
-    if (!WaveId || !InstructionText)
+    if (!InstructionText)
       continue;
 
-    if (*WaveId != SelectWaveId)
+    // Apply filters
+    int64_t DispatchId = Obj->getInteger("dispatch_id").value_or(0);
+    int64_t ClusterId = Obj->getInteger("cluster_id").value_or(0);
+    int64_t WorkgroupId = Obj->getInteger("workgroup_id").value_or(0);
+    int64_t WaveId = Obj->getInteger("wave_id").value_or(0);
+
+    if (DispatchId != Filter.DispatchId || ClusterId != Filter.ClusterId ||
+        WorkgroupId != Filter.WorkgroupId || WaveId != Filter.WaveId)
       continue;
 
     InstEntry Entry;
-    Entry.DispatchId = Obj->getInteger("dispatch_id").value_or(0);
-    Entry.ClusterId = Obj->getInteger("cluster_id").value_or(0);
-    Entry.WorkgroupId = Obj->getInteger("workgroup_id").value_or(0);
+    Entry.DispatchId = DispatchId;
+    Entry.ClusterId = ClusterId;
+    Entry.WorkgroupId = WorkgroupId;
     Entry.WavegroupId = Obj->getInteger("wavegroup_id").value_or(0);
-    Entry.WaveId = *WaveId;
+    Entry.WaveId = WaveId;
     Entry.InstructionId = Obj->getInteger("instruction_id").value_or(0);
     Entry.PC = static_cast<uint64_t>(Obj->getInteger("pc").value_or(0));
     Entry.Opcode = Obj->getInteger("opcode").value_or(0);

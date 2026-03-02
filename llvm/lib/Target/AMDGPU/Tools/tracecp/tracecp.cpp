@@ -36,8 +36,20 @@ static cl::opt<std::string> MTriple("mtriple", cl::desc("Target triple"),
 static cl::opt<std::string> MCPU("mcpu", cl::desc("Target CPU"),
                                  cl::init("gfx1250"), cl::cat(TraceCPCategory));
 
+static cl::opt<int64_t> DispatchId("dispatch-id",
+                                    cl::desc("Filter by dispatch_id"),
+                                    cl::Required, cl::cat(TraceCPCategory));
+
+static cl::opt<int64_t> ClusterId("cluster-id",
+                                   cl::desc("Filter by cluster_id"),
+                                   cl::Required, cl::cat(TraceCPCategory));
+
+static cl::opt<int64_t> WorkgroupId("workgroup-id",
+                                     cl::desc("Filter by workgroup_id"),
+                                     cl::init(0), cl::cat(TraceCPCategory));
+
 static cl::opt<int64_t> WaveId("wave-id", cl::desc("Filter by wave_id"),
-                               cl::init(0), cl::cat(TraceCPCategory));
+                               cl::Required, cl::cat(TraceCPCategory));
 
 static cl::opt<bool> Verbose("verbose", cl::desc("Enable verbose output"),
                              cl::init(false), cl::cat(TraceCPCategory));
@@ -106,8 +118,9 @@ int main(int argc, char **argv) {
   }
 
   // Parse and disassemble
+  tracecp::TraceFilter Filter{DispatchId, ClusterId, WorkgroupId, WaveId};
   Expected<std::vector<tracecp::InstEntry>> EntriesOrErr =
-      tracecp::parseAndDisassemble(InputFilePath, WaveId, *DisAsm);
+      tracecp::parseAndDisassemble(InputFilePath, Filter, *DisAsm);
   if (!EntriesOrErr) {
     errs() << toString(EntriesOrErr.takeError()) << "\n";
     return 1;
