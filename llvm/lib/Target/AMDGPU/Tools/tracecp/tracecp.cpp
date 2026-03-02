@@ -106,24 +106,27 @@ int main(int argc, char **argv) {
   }
 
   // Parse and disassemble
-  Expected<std::vector<tracecp::TraceEntry>> EntriesOrErr =
+  Expected<std::vector<tracecp::InstEntry>> EntriesOrErr =
       tracecp::parseAndDisassemble(InputFilePath, WaveId, *DisAsm);
   if (!EntriesOrErr) {
     errs() << toString(EntriesOrErr.takeError()) << "\n";
     return 1;
   }
+  std::vector<tracecp::InstEntry> &Entries = *EntriesOrErr;
 
-  // Run simulation
-  tracecp::TraceMetrics Metrics =
-      tracecp::simulateTrace(*EntriesOrErr, *MII, *MRI, Verbose);
+  // Run simulation (populates metrics in each entry)
+  tracecp::simulateTrace(Entries, *MII, *MRI, Verbose);
+
+  // Compute and print aggregate metrics
+  tracecp::TraceMetrics Metrics(Entries);
   Metrics.print();
 
   // Reconstruct and print CFG
-  tracecp::TraceCFG CFG = tracecp::reconstructCFG(*EntriesOrErr, *MII);
+  tracecp::TraceCFG CFG = tracecp::reconstructCFG(Entries, *MII);
   CFG.print();
 
-  // Detect and print loops
-  tracecp::LoopInfo LI = tracecp::detectLoops(CFG);
+  // Detect loops and compute per-loop metrics
+  tracecp::LoopInfo LI = tracecp::detectLoops(CFG, Entries);
   LI.print();
 
   return 0;

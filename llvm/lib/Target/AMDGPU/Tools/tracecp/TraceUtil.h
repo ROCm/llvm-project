@@ -22,7 +22,8 @@
 namespace llvm {
 namespace tracecp {
 
-struct TraceEntry {
+struct InstEntry {
+  // Parsed from trace file
   int64_t DispatchId;
   int64_t ClusterId;
   int64_t WorkgroupId;
@@ -30,13 +31,19 @@ struct TraceEntry {
   int64_t WaveId;
   int64_t InstructionId;
   uint64_t PC;
-  uint64_t Opcode;
+  int64_t Opcode;
   uint64_t InstSize;
   std::string InstructionText;
   MCInst Inst;
+
+  // Simulation metrics (populated by simulateTrace)
+  unsigned InstClass = 0;
+  unsigned Cycles = 0;
+  unsigned StallCycles = 0;
+  unsigned StallReason = 0;
 };
 
-/// Metrics collected from simulating a trace.
+/// Metrics collected from simulating a trace (or a subset like a loop).
 struct TraceMetrics {
   unsigned NumInstructions = 0;
   unsigned TotalCycles = 0;
@@ -70,6 +77,11 @@ struct TraceMetrics {
   unsigned StallMSBExposed = 0;
   unsigned StallOther = 0;
 
+  TraceMetrics() = default;
+
+  /// Construct metrics from trace entries (after simulation).
+  explicit TraceMetrics(const std::vector<InstEntry> &Entries);
+
   float getIPC() const {
     return TotalCycles > 0 ? static_cast<float>(NumInstructions) / TotalCycles
                            : 0.0f;
@@ -81,26 +93,31 @@ struct TraceMetrics {
   }
 
   void print() const;
+
+  /// Print metrics body (without banner). If Iterations > 0, also prints
+  /// per-iteration averages.
+  void printBody(unsigned Iterations = 0) const;
+
+  /// Add metrics from a single trace entry.
+  void addInstruction(const InstEntry &Entry);
 };
 
 /// Parse a trace file and disassemble the instructions.
 /// \param FilePath Path to the JSON trace file.
 /// \param SelectWaveId Only include entries with this wave_id.
 /// \param DisAsm The disassembler to use.
-/// \returns A vector of TraceEntry on success, or an error.
-Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
+/// \returns A vector of InstEntry on success, or an error.
+Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
                                                       int64_t SelectWaveId,
                                                       MCDisassembler &DisAsm);
 
-/// Simulate a trace and collect metrics.
-/// \param Entries The trace entries to simulate.
+/// Simulate a trace and populate per-instruction metrics in each entry.
+/// \param Entries The trace entries to simulate (metrics fields will be filled).
 /// \param MCII The MCInstrInfo for the target.
 /// \param MRI The MCRegisterInfo for the target.
 /// \param Verbose Enable verbose per-instruction logging.
-/// \returns Metrics collected from the simulation.
-TraceMetrics simulateTrace(const std::vector<TraceEntry> &Entries,
-                           const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
-                           bool Verbose = false);
+void simulateTrace(std::vector<InstEntry> &Entries, const MCInstrInfo &MCII,
+                   const MCRegisterInfo &MRI, bool Verbose = false);
 
 /// CFG Analysis.
 struct BasicBlock {
@@ -129,7 +146,7 @@ struct TraceCFG {
 /// \param Entries The trace entries to analyze.
 /// \param MCII The MCInstrInfo to identify branch instructions.
 /// \returns The reconstructed CFG.
-TraceCFG reconstructCFG(const std::vector<TraceEntry> &Entries,
+TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
                         const MCInstrInfo &MCII);
 
 /// A natural loop detected via dominator analysis.
@@ -137,8 +154,21 @@ struct Loop {
   uint64_t HeaderPC;                   // Loop header (dominates all body nodes)
   std::vector<uint64_t> LatchPCs;      // Blocks with back-edges to header
   std::vector<uint64_t> BodyBlockPCs;  // All blocks in the loop body
-  unsigned TotalBackEdgeCount;         // Sum of all back-edge counts
+  unsigned TotalBackEdgeCount;         // Sum of all back-edge counts (iterations)
   int ParentIdx;                       // Index of parent loop (-1 if top-level)
+  TraceMetrics Metrics;                // Metrics for this loop
+
+  // Per-iteration averages
+  float getAvgInstructions() const {
+    return TotalBackEdgeCount > 0
+               ? static_cast<float>(Metrics.NumInstructions) / TotalBackEdgeCount
+               : 0.0f;
+  }
+  float getAvgStallCycles() const {
+    return TotalBackEdgeCount > 0
+               ? static_cast<float>(Metrics.StallCycles) / TotalBackEdgeCount
+               : 0.0f;
+  }
 };
 
 /// Loops detected from the CFG.
@@ -149,10 +179,12 @@ struct LoopInfo {
   void print() const;
 };
 
-/// Detect loops from the reconstructed CFG.
+/// Detect loops from the reconstructed CFG and compute per-loop metrics.
 /// \param CFG The control flow graph.
-/// \returns Detected loops with nesting information.
-LoopInfo detectLoops(const TraceCFG &CFG);
+/// \param Entries The trace entries (with simulation metrics populated).
+/// \returns Detected loops with nesting information and metrics.
+LoopInfo detectLoops(const TraceCFG &CFG,
+                     const std::vector<InstEntry> &Entries);
 
 } // namespace tracecp
 } // namespace llvm

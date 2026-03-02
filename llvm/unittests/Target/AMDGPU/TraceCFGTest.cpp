@@ -46,7 +46,7 @@ TEST(TraceCFGTest, NoLoops) {
       {{0x100, 0x104}, {0x108, 0x10c}, {0x110, 0x114}},
       {{0x100, 0x104, 0x108}, {0x108, 0x10c, 0x110}});
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   EXPECT_EQ(LI.Loops.size(), 0u);
 }
@@ -57,7 +57,7 @@ TEST(TraceCFGTest, SingleBlockLoop) {
   // Block A[0x100-0x108] loops back to itself
   TraceCFG CFG = makeCFG({{0x100, 0x108}}, {{0x100, 0x108, 0x100}});
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   ASSERT_EQ(LI.Loops.size(), 1u);
   EXPECT_EQ(LI.Loops[0].HeaderPC, 0x100u);
@@ -78,7 +78,7 @@ TEST(TraceCFGTest, SimpleLoop) {
                {0x108, 0x10c, 0x110},   // B -> C
                {0x110, 0x114, 0x100}}); // C -> A (back-edge)
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   ASSERT_EQ(LI.Loops.size(), 1u);
   EXPECT_EQ(LI.Loops[0].HeaderPC, 0x100u);
@@ -101,7 +101,7 @@ TEST(TraceCFGTest, NestedLoops) {
                {0x110, 0x114, 0x118},   // C -> D
                {0x118, 0x11c, 0x100}}); // D -> A (outer back-edge)
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   ASSERT_EQ(LI.Loops.size(), 2u);
 
@@ -153,7 +153,7 @@ TEST(TraceCFGTest, MultipleLatches) {
                {0x100, 0x104, 0x110},   // A -> C
                {0x110, 0x114, 0x100}}); // C -> A (back-edge 2)
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   ASSERT_EQ(LI.Loops.size(), 1u);
   EXPECT_EQ(LI.Loops[0].HeaderPC, 0x100u);
@@ -180,7 +180,7 @@ TEST(TraceCFGTest, LoopWithIfElse) {
        {0x110, 0x114, 0x118},   // C -> D
        {0x118, 0x11c, 0x100}}); // D -> A (back-edge)
 
-  LoopInfo LI = detectLoops(CFG);
+  LoopInfo LI = detectLoops(CFG, {});
 
   ASSERT_EQ(LI.Loops.size(), 1u);
   EXPECT_EQ(LI.Loops[0].HeaderPC, 0x100u);

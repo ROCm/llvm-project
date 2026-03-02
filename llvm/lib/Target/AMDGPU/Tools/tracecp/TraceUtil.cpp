@@ -45,7 +45,7 @@ static bool parseHexBytes(StringRef HexStr, SmallVectorImpl<uint8_t> &Bytes) {
   return true;
 }
 
-Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
+Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
                                                       int64_t SelectWaveId,
                                                       MCDisassembler &DisAsm) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
@@ -54,7 +54,7 @@ Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
     return createStringError(EC, "Error opening file '%s': %s",
                              FilePath.str().c_str(), EC.message().c_str());
 
-  std::vector<TraceEntry> Results;
+  std::vector<InstEntry> Results;
   StringRef Content = FileOrErr.get()->getBuffer();
   SmallVector<StringRef, 0> Lines;
   Content.split(Lines, '\n');
@@ -84,7 +84,7 @@ Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
     if (*WaveId != SelectWaveId)
       continue;
 
-    TraceEntry Entry;
+    InstEntry Entry;
     Entry.DispatchId = Obj->getInteger("dispatch_id").value_or(0);
     Entry.ClusterId = Obj->getInteger("cluster_id").value_or(0);
     Entry.WorkgroupId = Obj->getInteger("workgroup_id").value_or(0);
@@ -92,7 +92,7 @@ Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
     Entry.WaveId = *WaveId;
     Entry.InstructionId = Obj->getInteger("instruction_id").value_or(0);
     Entry.PC = static_cast<uint64_t>(Obj->getInteger("pc").value_or(0));
-    Entry.Opcode = static_cast<uint64_t>(Obj->getInteger("opcode").value_or(0));
+    Entry.Opcode = Obj->getInteger("opcode").value_or(0);
     Entry.InstructionText = InstructionText->trim().str();
 
     // Parse the hex encoding from the comment section
@@ -133,102 +133,8 @@ Expected<std::vector<TraceEntry>> parseAndDisassemble(StringRef FilePath,
   return Results;
 }
 
-static void countInstruction(InstClass IC, TraceMetrics &Metrics) {
-  Metrics.NumInstructions++;
-
-  switch (IC) {
-  case InstClass::VALU:
-    Metrics.NumVALU++;
-    break;
-  case InstClass::SALU:
-    Metrics.NumSALU++;
-    break;
-  case InstClass::TRANS:
-    Metrics.NumTRANS++;
-    break;
-  case InstClass::WMMA:
-    Metrics.NumWMMA++;
-    break;
-  case InstClass::DS_READ:
-    Metrics.NumDSRead++;
-    break;
-  case InstClass::DS_WRITE:
-    Metrics.NumDSWrite++;
-    break;
-  case InstClass::VMEM_READ:
-  case InstClass::VMEM_WRITE:
-    Metrics.NumVMEM++;
-    break;
-  case InstClass::SMEM:
-    Metrics.NumSMEM++;
-    break;
-  case InstClass::BRANCH:
-    Metrics.NumBranch++;
-    break;
-  case InstClass::WAITCNT:
-    Metrics.NumWaitcnt++;
-    break;
-  default:
-    Metrics.NumOther++;
-    break;
-  }
-}
-
-static void attributeStall(const InstrSimInfo &Info, TraceMetrics &Metrics) {
-  unsigned TotalStall = Info.StallCycles;
-  if (TotalStall == 0)
-    return;
-
-  Metrics.StallCycles += TotalStall;
-
-  // Attribute based on the dominant stall reason computed by the simulator
-  switch (Info.Reason) {
-  case StallReason::FU_BUSY:
-    Metrics.StallFU += TotalStall;
-    break;
-  case StallReason::COEXEC_BLOCKED:
-  case StallReason::LONG_LAT_VALU:
-    Metrics.StallCoExec += TotalStall;
-    break;
-  case StallReason::DELAY_ALU:
-    Metrics.StallDelayAlu += TotalStall;
-    break;
-  case StallReason::WAITCNT:
-    Metrics.StallWaitCnt += TotalStall;
-    break;
-  case StallReason::MEM_FIFO:
-    Metrics.StallMemFIFO += TotalStall;
-    break;
-  case StallReason::REG_BANK:
-    Metrics.StallRegBank += TotalStall;
-    break;
-  case StallReason::RAW_HAZARD:
-    Metrics.StallRAW += TotalStall;
-    break;
-  case StallReason::LOLVALU_TRANS_HAZARD:
-    Metrics.StallTrans += TotalStall;
-    break;
-  case StallReason::VA_SSRC_STALL:
-    Metrics.StallVASSrc += TotalStall;
-    break;
-  case StallReason::VA_VDST_WAIT:
-    Metrics.StallVAVDst += TotalStall;
-    break;
-  case StallReason::IS_FETCH:
-    Metrics.StallISFetch += TotalStall;
-    break;
-  case StallReason::MSB_SET_EXPOSED:
-    Metrics.StallMSBExposed += TotalStall;
-    break;
-  case StallReason::NONE:
-    Metrics.StallOther += TotalStall;
-    break;
-  }
-}
-
-TraceMetrics simulateTrace(const std::vector<TraceEntry> &Entries,
-                           const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
-                           bool Verbose) {
+void simulateTrace(std::vector<InstEntry> &Entries, const MCInstrInfo &MCII,
+                   const MCRegisterInfo &MRI, bool Verbose) {
   MCInstInfo InstInfo(MCII, MRI);
   HWModel Model = createHWModel(GPUTarget::GFX1250);
 
@@ -239,15 +145,18 @@ TraceMetrics simulateTrace(const std::vector<TraceEntry> &Entries,
   Cfg.EnableISCache = false;
 
   Simulator Sim(InstInfo, Model, Cfg);
-  unsigned StartCycle = Sim.getState().CurrentCycle;
+  unsigned PrevCycle = Sim.getState().CurrentCycle;
 
-  TraceMetrics Metrics;
-  for (const TraceEntry &Entry : Entries) {
+  for (InstEntry &Entry : Entries) {
     SimInst SI = InstInfo.createSimInst(Entry.Inst);
-    countInstruction(SI.Class, Metrics);
-
     InstrSimInfo Info = Sim.simulateInst(SI);
-    attributeStall(Info, Metrics);
+    unsigned CurrentCycle = Sim.getState().CurrentCycle;
+
+    Entry.InstClass = static_cast<unsigned>(SI.Class);
+    Entry.Cycles = CurrentCycle - PrevCycle;
+    Entry.StallCycles = Info.StallCycles;
+    Entry.StallReason = static_cast<unsigned>(Info.Reason);
+    PrevCycle = CurrentCycle;
 
     if (Verbose) {
       errs() << "[" << Sim.getState().CurrentCycle << "] "
@@ -259,9 +168,11 @@ TraceMetrics simulateTrace(const std::vector<TraceEntry> &Entries,
       errs() << "\n";
     }
   }
+}
 
-  Metrics.TotalCycles = Sim.getState().CurrentCycle - StartCycle;
-  return Metrics;
+TraceMetrics::TraceMetrics(const std::vector<InstEntry> &Entries) {
+  for (const auto &Entry : Entries)
+    addInstruction(Entry);
 }
 
 void TraceMetrics::print() const {
@@ -271,6 +182,12 @@ void TraceMetrics::print() const {
   outs() << "============================================================\n";
   outs() << "\n";
 
+  printBody();
+
+  outs() << "============================================================\n";
+}
+
+void TraceMetrics::printBody(unsigned Iterations) const {
   outs() << "=== Summary ===\n";
   outs() << format("  Instructions: %u\n", NumInstructions);
   outs() << format("  Total Cycles: %u\n", TotalCycles);
@@ -319,10 +236,112 @@ void TraceMetrics::print() const {
     outs() << "\n";
   }
 
-  outs() << "============================================================\n";
+  if (Iterations > 0) {
+    outs() << "=== Per Iteration (average) ===\n";
+    float N = static_cast<float>(Iterations);
+    outs() << format("  Instructions: %.1f\n", NumInstructions / N);
+    outs() << format("  Stall Cycles: %.1f\n", StallCycles / N);
+    outs() << format("  VALU: %.1f | SALU: %.1f | TRANS: %.1f | WMMA: %.1f\n",
+                     NumVALU / N, NumSALU / N, NumTRANS / N, NumWMMA / N);
+    outs() << format("  DS_RD: %.1f | DS_WR: %.1f | VMEM: %.1f | SMEM: %.1f\n",
+                     NumDSRead / N, NumDSWrite / N, NumVMEM / N, NumSMEM / N);
+    outs() << "\n";
+  }
 }
 
-TraceCFG reconstructCFG(const std::vector<TraceEntry> &Entries,
+void TraceMetrics::addInstruction(const InstEntry &E) {
+  NumInstructions++;
+  TotalCycles += E.Cycles;
+
+  // Count instruction class
+  switch (static_cast<InstClass>(E.InstClass)) {
+  case InstClass::VALU:
+    NumVALU++;
+    break;
+  case InstClass::SALU:
+    NumSALU++;
+    break;
+  case InstClass::TRANS:
+    NumTRANS++;
+    break;
+  case InstClass::WMMA:
+    NumWMMA++;
+    break;
+  case InstClass::DS_READ:
+    NumDSRead++;
+    break;
+  case InstClass::DS_WRITE:
+    NumDSWrite++;
+    break;
+  case InstClass::VMEM_READ:
+  case InstClass::VMEM_WRITE:
+    NumVMEM++;
+    break;
+  case InstClass::SMEM:
+    NumSMEM++;
+    break;
+  case InstClass::BRANCH:
+    NumBranch++;
+    break;
+  case InstClass::WAITCNT:
+    NumWaitcnt++;
+    break;
+  default:
+    NumOther++;
+    break;
+  }
+
+  // Attribute stall cycles
+  if (E.StallCycles == 0)
+    return;
+
+  StallCycles += E.StallCycles;
+
+  switch (static_cast<StallReason>(E.StallReason)) {
+  case StallReason::FU_BUSY:
+    StallFU += E.StallCycles;
+    break;
+  case StallReason::COEXEC_BLOCKED:
+  case StallReason::LONG_LAT_VALU:
+    StallCoExec += E.StallCycles;
+    break;
+  case StallReason::DELAY_ALU:
+    StallDelayAlu += E.StallCycles;
+    break;
+  case StallReason::WAITCNT:
+    StallWaitCnt += E.StallCycles;
+    break;
+  case StallReason::MEM_FIFO:
+    StallMemFIFO += E.StallCycles;
+    break;
+  case StallReason::REG_BANK:
+    StallRegBank += E.StallCycles;
+    break;
+  case StallReason::RAW_HAZARD:
+    StallRAW += E.StallCycles;
+    break;
+  case StallReason::LOLVALU_TRANS_HAZARD:
+    StallTrans += E.StallCycles;
+    break;
+  case StallReason::VA_SSRC_STALL:
+    StallVASSrc += E.StallCycles;
+    break;
+  case StallReason::VA_VDST_WAIT:
+    StallVAVDst += E.StallCycles;
+    break;
+  case StallReason::IS_FETCH:
+    StallISFetch += E.StallCycles;
+    break;
+  case StallReason::MSB_SET_EXPOSED:
+    StallMSBExposed += E.StallCycles;
+    break;
+  case StallReason::NONE:
+    StallOther += E.StallCycles;
+    break;
+  }
+}
+
+TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
                         const MCInstrInfo &MCII) {
   TraceCFG CFG;
 
@@ -338,7 +357,7 @@ TraceCFG reconstructCFG(const std::vector<TraceEntry> &Entries,
   BlockStartPCs.insert(Entries[0].PC);
 
   for (size_t I = 0; I + 1 < Entries.size(); ++I) {
-    const TraceEntry &E = Entries[I];
+    const InstEntry &E = Entries[I];
     uint64_t NextPC = Entries[I + 1].PC;
 
     if (NextPC != E.PC + E.InstSize) {
@@ -376,7 +395,7 @@ TraceCFG reconstructCFG(const std::vector<TraceEntry> &Entries,
   };
 
   for (size_t I = 0; I < Entries.size(); ++I) {
-    const TraceEntry &E = Entries[I];
+    const InstEntry &E = Entries[I];
 
     // Check if this instruction starts a new block
     if (I > 0 && BlockStartPCs.count(E.PC)) {
@@ -456,11 +475,23 @@ static bool dominates(uint64_t A, uint64_t B,
   }
 }
 
-LoopInfo detectLoops(const TraceCFG &CFG) {
+LoopInfo detectLoops(const TraceCFG &CFG,
+                     const std::vector<InstEntry> &Entries) {
   LoopInfo LI;
 
   if (CFG.Blocks.empty())
     return LI;
+
+  // Build PC -> block mapping for fast lookup
+  std::map<uint64_t, uint64_t> PCToBlock;  // PC -> BlockStartPC
+  for (const auto &E : Entries) {
+    auto It = CFG.Blocks.upper_bound(E.PC);
+    assert(It != CFG.Blocks.begin() && "PC before first block");
+    --It;
+    assert(E.PC >= It->second.StartPC && E.PC <= It->second.EndPC &&
+           "PC not within block bounds");
+    PCToBlock[E.PC] = It->first;
+  }
 
   // Build predecessors and successors lists
   std::map<uint64_t, std::vector<uint64_t>> Preds, Succs;
@@ -595,6 +626,15 @@ LoopInfo detectLoops(const TraceCFG &CFG) {
     }
 
     L.BodyBlockPCs.assign(Body.begin(), Body.end());
+
+    // Compute metrics for this loop by iterating through trace instructions
+    for (const InstEntry &Entry : Entries) {
+      auto It = PCToBlock.find(Entry.PC);
+      if (It != PCToBlock.end() && Body.count(It->second)) {
+        L.Metrics.addInstruction(Entry);
+      }
+    }
+
     LI.Loops.push_back(L);
   }
 
@@ -672,6 +712,12 @@ void LoopInfo::print() const {
                        L.ParentIdx, IterPerParent);
     }
     outs() << "\n";
+
+    if (L.Metrics.NumInstructions > 0) {
+      outs() << format("--- Loop %zu Metrics (Iterations: %u) ---\n", I,
+                       L.TotalBackEdgeCount);
+      L.Metrics.printBody(L.TotalBackEdgeCount);
+    }
   }
 
   outs() << "============================================================\n";
