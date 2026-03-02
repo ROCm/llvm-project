@@ -54,49 +54,49 @@ define i32 @caller_passes_42() {
 ; CHECK-NEXT:    s_xor_saveexec_b64 s[16:17], -1
 ; CHECK-NEXT:    buffer_store_dword v18, off, s[0:3], s33 ; 4-byte Folded Spill
 ; CHECK-NEXT:    s_mov_b64 exec, s[16:17]
+; CHECK-NEXT:    v_writelane_b32 v14, s30, 0
 ; CHECK-NEXT:    s_addk_i32 s32, 0x400
+; CHECK-NEXT:    v_writelane_b32 v14, s31, 1
 ; CHECK-NEXT:    s_getpc_b64 s[16:17]
 ; CHECK-NEXT:    s_add_u32 s16, s16, callee_returns_arg0@gotpcrel32@lo+4
 ; CHECK-NEXT:    s_addc_u32 s17, s17, callee_returns_arg0@gotpcrel32@hi+12
 ; CHECK-NEXT:    s_load_dwordx2 s[40:41], s[16:17], 0x0
-; CHECK-NEXT:    v_writelane_b32 v18, s30, 0
-; CHECK-NEXT:    s_mov_b32 s16, 42
-; CHECK-NEXT:    s_mov_b32 s17, 1
-; CHECK-NEXT:    s_mov_b32 s18, 2
-; CHECK-NEXT:    s_mov_b32 s19, 3
-; CHECK-NEXT:    s_mov_b32 s20, 4
-; CHECK-NEXT:    s_mov_b32 s21, 5
-; CHECK-NEXT:    s_mov_b32 s22, 6
-; CHECK-NEXT:    s_mov_b32 s23, 7
-; CHECK-NEXT:    s_mov_b32 s24, 8
-; CHECK-NEXT:    s_mov_b32 s25, 9
-; CHECK-NEXT:    s_mov_b32 s26, 10
-; CHECK-NEXT:    s_mov_b32 s27, 11
-; CHECK-NEXT:    s_mov_b32 s28, 12
-; CHECK-NEXT:    s_mov_b32 s29, 13
-; CHECK-NEXT:    v_mov_b32_e32 v0, 14
-; CHECK-NEXT:    v_mov_b32_e32 v1, 15
-; CHECK-NEXT:    v_mov_b32_e32 v2, 16
-; CHECK-NEXT:    v_mov_b32_e32 v3, 17
-; CHECK-NEXT:    v_mov_b32_e32 v4, 18
-; CHECK-NEXT:    v_mov_b32_e32 v5, 19
-; CHECK-NEXT:    v_mov_b32_e32 v6, 20
-; CHECK-NEXT:    v_mov_b32_e32 v7, 21
-; CHECK-NEXT:    v_mov_b32_e32 v8, 22
-; CHECK-NEXT:    v_mov_b32_e32 v9, 23
-; CHECK-NEXT:    v_mov_b32_e32 v10, 24
-; CHECK-NEXT:    v_mov_b32_e32 v11, 25
-; CHECK-NEXT:    v_mov_b32_e32 v12, 26
-; CHECK-NEXT:    v_mov_b32_e32 v13, 27
-; CHECK-NEXT:    v_mov_b32_e32 v14, 28
-; CHECK-NEXT:    v_mov_b32_e32 v15, 29
-; CHECK-NEXT:    v_mov_b32_e32 v16, 30
-; CHECK-NEXT:    v_mov_b32_e32 v17, 31
-; CHECK-NEXT:    v_writelane_b32 v18, s31, 1
+; CHECK-NEXT:    s_mov_b32 s0, 42
+; CHECK-NEXT:    s_mov_b32 s1, 1
+; CHECK-NEXT:    s_mov_b32 s2, 2
+; CHECK-NEXT:    s_mov_b32 s3, 3
+; CHECK-NEXT:    s_mov_b32 s16, 4
+; CHECK-NEXT:    s_mov_b32 s17, 5
+; CHECK-NEXT:    s_mov_b32 s18, 6
+; CHECK-NEXT:    s_mov_b32 s19, 7
+; CHECK-NEXT:    s_mov_b32 s20, 8
+; CHECK-NEXT:    s_mov_b32 s21, 9
+; CHECK-NEXT:    s_mov_b32 s22, 10
+; CHECK-NEXT:    s_mov_b32 s23, 11
+; CHECK-NEXT:    s_mov_b32 s24, 12
+; CHECK-NEXT:    s_mov_b32 s25, 13
+; CHECK-NEXT:    s_mov_b32 s26, 14
+; CHECK-NEXT:    s_mov_b32 s27, 15
+; CHECK-NEXT:    s_mov_b32 s28, 16
+; CHECK-NEXT:    s_mov_b32 s29, 17
+; CHECK-NEXT:    v_mov_b32_e32 v0, 18
+; CHECK-NEXT:    v_mov_b32_e32 v1, 19
+; CHECK-NEXT:    v_mov_b32_e32 v2, 20
+; CHECK-NEXT:    v_mov_b32_e32 v3, 21
+; CHECK-NEXT:    v_mov_b32_e32 v4, 22
+; CHECK-NEXT:    v_mov_b32_e32 v5, 23
+; CHECK-NEXT:    v_mov_b32_e32 v6, 24
+; CHECK-NEXT:    v_mov_b32_e32 v7, 25
+; CHECK-NEXT:    v_mov_b32_e32 v8, 26
+; CHECK-NEXT:    v_mov_b32_e32 v9, 27
+; CHECK-NEXT:    v_mov_b32_e32 v10, 28
+; CHECK-NEXT:    v_mov_b32_e32 v11, 29
+; CHECK-NEXT:    v_mov_b32_e32 v12, 30
+; CHECK-NEXT:    v_mov_b32_e32 v13, 31
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[40:41]
-; CHECK-NEXT:    v_readlane_b32 s31, v18, 1
-; CHECK-NEXT:    v_readlane_b32 s30, v18, 0
+; CHECK-NEXT:    v_readlane_b32 s30, v14, 0
+; CHECK-NEXT:    v_readlane_b32 s31, v14, 1
 ; CHECK-NEXT:    s_mov_b32 s32, s33
 ; CHECK-NEXT:    s_xor_saveexec_b64 s[4:5], -1
 ; CHECK-NEXT:    buffer_load_dword v18, off, s[0:3], s33 ; 4-byte Folded Reload
