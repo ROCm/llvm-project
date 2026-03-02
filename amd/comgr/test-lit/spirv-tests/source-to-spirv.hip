@@ -10,7 +10,7 @@
 // RUN: spirv-translator %t.spv -o %t.bc
 
 // COM: Disassemble LLVM IR bitcode to text
-// RUN: llvm-dis %t.bc -o - | FileCheck %s
+// RUN: llvm-dis %t.bc -o - | %FileCheck %s
 
 // COM: Verify LLVM IR contains expected functions and target triple
 // CHECK: target triple = "amdgcn-amd-amdhsa"
