@@ -750,7 +750,7 @@ void LoopInfo::print(const TraceCFG *CFG,
           std::string Prefix = formatv("    0x{0:X4}: [{1} cy={2} stall={3}{4}]",
                                         E.PC, ClassName, E.Cycles, E.StallCycles,
                                         StallName ? formatv(" reason={0}", StallName).str() : "").str();
-          outs() << format("%-60s %s\n", Prefix.c_str(), E.InstructionText.c_str());
+          outs() << format("%-65s %s\n", Prefix.c_str(), E.InstructionText.c_str());
         }
       }
       outs() << "\n";
