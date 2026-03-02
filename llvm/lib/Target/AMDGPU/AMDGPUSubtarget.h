@@ -46,7 +46,7 @@ public:
   };
 
 private:
-  const Triple &TargetTriple;
+  Triple TargetTriple;
 
 protected:
   bool HasMulI24 = true;
@@ -61,7 +61,7 @@ protected:
   char WavefrontSizeLog2 = 0;
 
 public:
-  AMDGPUSubtarget(const Triple &TT) : TargetTriple(TT) {}
+  AMDGPUSubtarget(Triple TT) : TargetTriple(std::move(TT)) {}
 
   static const AMDGPUSubtarget &get(const MachineFunction &MF);
   static const AMDGPUSubtarget &get(const TargetMachine &TM,
