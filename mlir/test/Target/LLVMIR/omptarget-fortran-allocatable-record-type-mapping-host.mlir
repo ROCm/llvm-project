@@ -129,16 +129,17 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[LOAD_ALLOCATABLE_MEMBER_BADDR:.*]] = load ptr, ptr %[[ALLOCATABLE_MEMBER_BADDR]], align 8
 // CHECK: %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[LOAD_ALLOCATABLE_MEMBER_BADDR]], i64 0
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_1:.*]] = getelementptr i32, ptr %[[ALLOCATABLE_MEMBER_BADDR]], i64 1
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_ALLOCATABLE_MEMBER_GEP]] to i64
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE_SEGMENT_CALC_2]], %[[DTYPE_SIZE_SEGMENT_CALC_3]]
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 // CHECK:  store ptr %[[DTYPE_ALLOCATABLE_MEMBER_GEP]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [3 x i64], ptr %.offload_sizes, i32 0, i32 0
-// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_ptrs, i32 0, i32 1
@@ -169,38 +170,43 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_LOAD:.*]] = load ptr, ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR]], align 8
 // CHECK: %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_LOAD]], i64 0
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_1:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, ptr, [1 x i64] }, ptr %[[ARG]], i32 1
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[ARG]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[ARG]] to i64
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE_SEGMENT_CALC_2]], %[[DTYPE_SIZE_SEGMENT_CALC_3]]
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, ptr, [1 x i64] }, ptr %[[ARG]], i32 1
 // CHECK: %[[DTYPE_OFFLOAD_PTR_1:.*]] = getelementptr ptr, ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_2]], i32 1
-// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_ACCESS]] to i64
-// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_1]] to i64
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC:.*]] = ptrtoint ptr %[[DTYPE_ALLOCATABLE_MEMBER_ACCESS]] to i64
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_1]] to i64
 // CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_3:.*]] = sub i64 %[[DTYPE_SIZE2_SEGMENT_CALC]], %[[DTYPE_SIZE2_SEGMENT_CALC_2]]
-// CHECK: %[[DTYPE_NON_ZERO_SZ:.*]] = icmp ne i64 0, %[[DTYPE_SIZE2_SEGMENT_CALC_3]]
-// CHECK: %[[SEL_SZ:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ]], i64 %[[DTYPE_SIZE2_SEGMENT_CALC_3]], i64 48
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_4:.*]] = sdiv exact i64 %[[DTYPE_SIZE2_SEGMENT_CALC_3]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[DTYPE_NON_ZERO_SZ:.*]] = icmp ne i64 0, %[[DTYPE_SIZE2_SEGMENT_CALC_4]]
+// CHECK: %[[SEL_SZ:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ]], i64 %[[DTYPE_SIZE2_SEGMENT_CALC_4]], i64 48
 // CHECK: %[[DTYPE_OFFLOAD_PTR_2:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[DTYPE_ALLOCATABLE_MEMBER_ACCESS]], i32 1
-// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR]] to i64
-// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_2]] to i64
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC:.*]] = ptrtoint ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR]] to i64
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_2]] to i64
 // CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_3:.*]] = sub i64 %[[DTYPE_SIZE3_SEGMENT_CALC]], %[[DTYPE_SIZE3_SEGMENT_CALC_2]]
-// CHECK: %[[DTYPE_NON_ZERO_SZ2:.*]] = icmp ne i64 0, %[[DTYPE_SIZE3_SEGMENT_CALC_3]]
-// CHECK: %[[SEL_SZ2:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ2]], i64 %[[DTYPE_SIZE3_SEGMENT_CALC_3]], i64 ptrtoint (ptr getelementptr (ptr, ptr null, i32 1) to i64)
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_4:.*]] = sdiv exact i64 %[[DTYPE_SIZE3_SEGMENT_CALC_3]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[DTYPE_NON_ZERO_SZ2:.*]] = icmp ne i64 0, %[[DTYPE_SIZE3_SEGMENT_CALC_4]]
+// CHECK: %[[SEL_SZ2:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ2]], i64 %[[DTYPE_SIZE3_SEGMENT_CALC_4]], i64 ptrtoint (ptr getelementptr (ptr, ptr null, i32 1) to i64)
 // CHECK: %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP:.*]] = getelementptr ptr, ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR]], i32 1
-// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_REGULAR_MEMBER_ACCESS]] to i64
-// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_REGULAR_MEMBER_ACCESS]] to i64
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
 // CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE4_SEGMENT_CALC_2]], %[[DTYPE_SIZE4_SEGMENT_CALC_3]]
-// CHECK: %[[DTYPE_NON_ZERO_SZ3:.*]] = icmp ne i64 0, %[[DTYPE_SIZE4_SEGMENT_CALC_4]]
-// CHECK: %[[SEL_SZ3:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ3]], i64 %[[DTYPE_SIZE4_SEGMENT_CALC_4]], i64 4
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE4_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[DTYPE_NON_ZERO_SZ3:.*]] = icmp ne i64 0, %[[DTYPE_SIZE4_SEGMENT_CALC_5]]
+// CHECK: %[[SEL_SZ3:.*]] = select i1 %[[DTYPE_NON_ZERO_SZ3]], i64 %[[DTYPE_SIZE4_SEGMENT_CALC_5]], i64 4
 // CHECK: %[[DTYPE_OFFLOAD_PTR_3:.*]] = getelementptr i32, ptr %[[DTYPE_REGULAR_MEMBER_ACCESS]], i32 1
-// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE5_SEGMENT_CALC]] to i64
-// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_3]] to i64
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_SIZE5_SEGMENT_CALC]] to i64
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_3]] to i64
 // CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE5_SEGMENT_CALC_2]], %[[DTYPE_SIZE5_SEGMENT_CALC_3]]
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE5_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [10 x i64], ptr %.offload_sizes, i32 0, i32 0
-// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 1
@@ -228,7 +234,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 5
 // CHECK:  store ptr %[[DTYPE_OFFLOAD_PTR_3]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [10 x i64], ptr %.offload_sizes, i32 0, i32 5
-// CHECK:  store i64 %[[DTYPE_SIZE5_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[DTYPE_SIZE5_SEGMENT_CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 6
@@ -268,38 +274,43 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_LOAD:.*]] = load ptr, ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], align 8
 // CHECK: %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_LOAD]], i64 0
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_1:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, ptr, [1 x i64] }, ptr %[[ARG]], i32 1
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[ARG]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[ARG]] to i64
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE_SEGMENT_CALC_2]], %[[DTYPE_SIZE_SEGMENT_CALC_3]]
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_1:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, ptr, [1 x i64] }, ptr %[[ARG]], i32 1
 // CHECK: %[[DTYPE_OFFLOAD_PTR_1:.*]] = getelementptr ptr, ptr %[[DTYPE_ALLOCATABLE_BADDR_GEP]], i32 1
-// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC:.*]] = ptrtoaddr ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_GEP]] to i64
-// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_1]] to i64
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC:.*]] = ptrtoint ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_1]] to i64
 // CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_3:.*]] = sub i64 %[[DTYPE_SIZE2_SEGMENT_CALC]], %[[DTYPE_SIZE2_SEGMENT_CALC_2]]
-// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE2_SEGMENT_CALC_3]]
-// CHECK: %[[SZ_SEL:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE2_SEGMENT_CALC_3]], i64 48
+// CHECK: %[[DTYPE_SIZE2_SEGMENT_CALC_4:.*]] = sdiv exact i64 %[[DTYPE_SIZE2_SEGMENT_CALC_3]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE2_SEGMENT_CALC_4]]
+// CHECK: %[[SZ_SEL:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE2_SEGMENT_CALC_4]], i64 48
 // CHECK: %[[DTYPE_OFFLOAD_PTR_2:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_GEP]], i32 1
-// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC:.*]] = ptrtoaddr ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
-// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_2]] to i64
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC:.*]] = ptrtoint ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_2]] to i64
 // CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_3:.*]] = sub i64 %[[DTYPE_SIZE3_SEGMENT_CALC]], %[[DTYPE_SIZE3_SEGMENT_CALC_2]]
-// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE3_SEGMENT_CALC_3]]
-// CHECK: %[[SZ_SEL2:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE3_SEGMENT_CALC_3]], i64 ptrtoint (ptr getelementptr (ptr, ptr null, i32 1) to i64)
+// CHECK: %[[DTYPE_SIZE3_SEGMENT_CALC_4:.*]] = sdiv exact i64 %[[DTYPE_SIZE3_SEGMENT_CALC_3]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE3_SEGMENT_CALC_4]]
+// CHECK: %[[SZ_SEL2:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE3_SEGMENT_CALC_4]], i64 ptrtoint (ptr getelementptr (ptr, ptr null, i32 1) to i64)
 // CHECK: %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP:.*]] = getelementptr ptr, ptr %[[DTYPE_NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], i32 1
-// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_NESTED_REGULAR_MEMBER_GEP]] to i64
-// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_NESTED_REGULAR_MEMBER_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_ALLOCATABLE_MEMBER_BADDR_GEP]] to i64
 // CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE4_SEGMENT_CALC_2]], %[[DTYPE_SIZE4_SEGMENT_CALC_3]]
-// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE4_SEGMENT_CALC_4]]
-// CHECK: %[[SZ_SEL3:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE4_SEGMENT_CALC_4]], i64 4
+// CHECK: %[[DTYPE_SIZE4_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE4_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
+// CHECK: %[[SZ_CMP:.*]] = icmp ne i64 0, %[[DTYPE_SIZE4_SEGMENT_CALC_5]]
+// CHECK: %[[SZ_SEL3:.*]] = select i1 %[[SZ_CMP]], i64 %[[DTYPE_SIZE4_SEGMENT_CALC_5]], i64 4
 // CHECK: %[[DTYPE_OFFLOAD_PTR_3:.*]] = getelementptr i32, ptr %[[DTYPE_NESTED_REGULAR_MEMBER_GEP]], i32 1
-// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE5_SEGMENT_CALC_1]] to i64
-// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_OFFLOAD_PTR_3]] to i64
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_2:.*]] = ptrtoint ptr %[[DTYPE_SIZE5_SEGMENT_CALC_1]] to i64
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_3:.*]] = ptrtoint ptr %[[DTYPE_OFFLOAD_PTR_3]] to i64
 // CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE5_SEGMENT_CALC_2]], %[[DTYPE_SIZE5_SEGMENT_CALC_3]]
+// CHECK: %[[DTYPE_SIZE5_SEGMENT_CALC_5:.*]] = sdiv exact i64 %[[DTYPE_SIZE5_SEGMENT_CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [10 x i64], ptr %.offload_sizes, i32 0, i32 0
-// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 1
@@ -327,7 +338,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 5
 // CHECK:  store ptr %[[DTYPE_OFFLOAD_PTR_3]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [10 x i64], ptr %.offload_sizes, i32 0, i32 5
-// CHECK:  store i64 %[[DTYPE_SIZE5_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[DTYPE_SIZE5_SEGMENT_CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_baseptrs, i32 0, i32 6
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [10 x ptr], ptr %.offload_ptrs, i32 0, i32 6
@@ -352,9 +363,10 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK:  %[[LOAD_CALC_1:.*]] = load ptr, ptr %[[NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], align 8
 // CHECK:  %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[LOAD_CALC_1]], i64 0
 // CHECK:  %[[CALC_1:.*]] = getelementptr i32, ptr %[[NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], i64 1
-// CHECK:  %[[CALC_2:.*]] = ptrtoaddr ptr %[[CALC_1]] to i64
-// CHECK:  %[[CALC_3:.*]] = ptrtoaddr ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]] to i64
+// CHECK:  %[[CALC_2:.*]] = ptrtoint ptr %[[CALC_1]] to i64
+// CHECK:  %[[CALC_3:.*]] = ptrtoint ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]] to i64
 // CHECK:  %[[CALC_4:.*]] = sub i64 %[[CALC_2]], %[[CALC_3]]
+// CHECK:  %[[CALC_5:.*]] = sdiv exact i64 %[[CALC_4]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK:  %[[CMP:.*]] = icmp eq ptr %[[ARR_OFFSET]], null
 // CHECK:  %[[SEL:.*]] = select i1 %[[CMP]], i64 0, i64 20
 
@@ -363,7 +375,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_ptrs, i32 0, i32 0
 // CHECK:  store ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [3 x i64], ptr %.offload_sizes, i32 0, i32 0
-// CHECK:  store i64 %[[CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
+// CHECK:  store i64 %[[CALC_5]], ptr %[[OFFLOAD_SIZES]], align 8
 
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [3 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8

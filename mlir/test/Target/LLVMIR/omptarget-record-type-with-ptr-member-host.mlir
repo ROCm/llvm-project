@@ -86,9 +86,10 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[NULL_CMP2:.*]] = icmp eq ptr %[[ARR_SECT_PTR]], null
 // CHECK: %[[IS_NULL2:.*]] = select i1 %[[NULL_CMP2]], i64 0, i64 %[[ARR_SECT_SIZE]]
 // CHECK: %[[SCALAR_DESC_SZ4:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8 }, ptr %[[SCALAR_ALLOCA]], i32 1
-// CHECK: %[[SCALAR_DESC_SZ3:.*]] = ptrtoaddr ptr %[[SCALAR_DESC_SZ4]] to i64
-// CHECK: %[[SCALAR_DESC_SZ2:.*]] = ptrtoaddr ptr %[[SCALAR_ALLOCA]] to i64
+// CHECK: %[[SCALAR_DESC_SZ3:.*]] = ptrtoint ptr %[[SCALAR_DESC_SZ4]] to i64
+// CHECK: %[[SCALAR_DESC_SZ2:.*]] = ptrtoint ptr %[[SCALAR_ALLOCA]] to i64
 // CHECK: %[[SCALAR_DESC_SZ1:.*]] = sub i64 %[[SCALAR_DESC_SZ3]], %[[SCALAR_DESC_SZ2]]
+// CHECK: %[[SCALAR_DESC_SZ:.*]] = sdiv exact i64 %[[SCALAR_DESC_SZ1]], ptrtoint (ptr getelementptr (i8, ptr null, i32 1) to i64)
 // CHECK: %[[NULL_CMP3:.*]] = icmp eq ptr %[[SCALAR_PTR_LOAD]], null
 // CHECK: %[[SZ_SEL:.*]] = select i1 %[[NULL_CMP3]], i64 0, i64 4
 // CHECK: %[[OFFLOADBASEPTRS:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
@@ -122,7 +123,7 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[OFFLOADPTRS:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 6
 // CHECK: store ptr %[[SCALAR_ALLOCA]], ptr %[[OFFLOADPTRS]], align 8
 // CHECK: %[[OFFLOADSIZES:.*]] = getelementptr inbounds [9 x i64], ptr %.offload_sizes, i32 0, i32 6
-// CHECK: store i64 %[[SCALAR_DESC_SZ1]], ptr %[[OFFLOADSIZES]], align 8
+// CHECK: store i64 %[[SCALAR_DESC_SZ]], ptr %[[OFFLOADSIZES]], align 8
 // CHECK: %[[OFFLOADBASEPTRS:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_baseptrs, i32 0, i32 7
 // CHECK: store ptr %[[SCALAR_ALLOCA]], ptr %[[OFFLOADBASEPTRS]], align 8
 // CHECK: %[[OFFLOADPTRS:.*]] = getelementptr inbounds [9 x ptr], ptr %.offload_ptrs, i32 0, i32 7
