@@ -234,6 +234,10 @@ GCNHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
       checkMAIVALUHazards(MI) > 0)
     return HazardType;
 
+  if (SIInstrInfo::isVALU(*MI) && !SIInstrInfo::isMFMA(*MI) &&
+      checkVALUImmediatelyAfterMFMAHazard(*MI) > 0)
+    return NoopHazard;
+
   if (isSGetReg(MI->getOpcode()) && checkGetRegHazards(MI) > 0)
     return HazardType;
 
@@ -2462,6 +2466,27 @@ int GCNHazardRecognizer::checkMAIHazards(MachineInstr *MI) {
   assert(SIInstrInfo::isMAI(*MI));
 
   return ST.hasGFX90AInsts() ? checkMAIHazards90A(MI) : checkMAIHazards908(MI);
+}
+
+int GCNHazardRecognizer::checkVALUImmediatelyAfterMFMAHazard(const MachineInstr &MI) {
+  assert(SIInstrInfo::isVALU(MI) && !SIInstrInfo::isMFMA(MI));
+
+  // Find the most recently emitted instruction. Count leading nullptrs (stall
+  // cycles); one or more means we've had at least one cycle of separation.
+  int LeadingNullptrs = 0;
+  for (MachineInstr *EmittedMI : EmittedInstrs) {
+    if (!EmittedMI) {
+      ++LeadingNullptrs;
+      continue;
+    }
+    // Found the most recent instruction.
+    if (LeadingNullptrs >= 1)
+      return 0; // At least one stall cycle since MFMA, separation achieved
+    if (SIInstrInfo::isMFMA(*EmittedMI))
+      return 1; // MFMA is most recent with no intervening cycle, block VALU
+    return 0;   // Most recent is not MFMA
+  }
+  return 0; // Empty, no preceding MFMA
 }
 
 int GCNHazardRecognizer::checkMFMAPadding(MachineInstr *MI) {
