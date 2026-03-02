@@ -44,6 +44,41 @@ enum class StallReason : uint8_t {
   IS_FETCH              // Instruction Store cache miss
 };
 
+/// Get enum name for StallReason.
+inline const char *getStallReasonName(StallReason Reason) {
+  switch (Reason) {
+  case StallReason::NONE:
+    return nullptr;
+  case StallReason::FU_BUSY:
+    return "FU_BUSY";
+  case StallReason::COEXEC_BLOCKED:
+    return "COEXEC_BLOCKED";
+  case StallReason::LONG_LAT_VALU:
+    return "LONG_LAT_VALU";
+  case StallReason::LOLVALU_TRANS_HAZARD:
+    return "LOLVALU_TRANS_HAZARD";
+  case StallReason::VA_SSRC_STALL:
+    return "VA_SSRC_STALL";
+  case StallReason::VA_VDST_WAIT:
+    return "VA_VDST_WAIT";
+  case StallReason::RAW_HAZARD:
+    return "RAW_HAZARD";
+  case StallReason::WAITCNT:
+    return "WAITCNT";
+  case StallReason::DELAY_ALU:
+    return "DELAY_ALU";
+  case StallReason::MEM_FIFO:
+    return "MEM_FIFO";
+  case StallReason::MSB_SET_EXPOSED:
+    return "MSB_SET_EXPOSED";
+  case StallReason::REG_BANK:
+    return "REG_BANK";
+  case StallReason::IS_FETCH:
+    return "IS_FETCH";
+  }
+  return "UNKNOWN";
+}
+
 /// Get human-readable reason string.
 inline const char *getStallReasonString(StallReason Reason) {
   switch (Reason) {

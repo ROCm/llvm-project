@@ -13,6 +13,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
 #include <set>
 #include "llvm/Support/MemoryBuffer.h"
@@ -744,7 +745,12 @@ void LoopInfo::print(const TraceCFG *CFG,
               break;  // Second time at header = end of first iteration
             SeenHeader = true;
           }
-          outs() << format("    0x%04x: %s\n", E.PC, E.InstructionText.c_str());
+          const char *ClassName = getInstClassName(static_cast<InstClass>(E.InstClass));
+          const char *StallName = getStallReasonName(static_cast<StallReason>(E.StallReason));
+          std::string Prefix = formatv("    0x{0:X4}: [{1} cy={2} stall={3}{4}]",
+                                        E.PC, ClassName, E.Cycles, E.StallCycles,
+                                        StallName ? formatv(" reason={0}", StallName).str() : "").str();
+          outs() << format("%-60s %s\n", Prefix.c_str(), E.InstructionText.c_str());
         }
       }
       outs() << "\n";
