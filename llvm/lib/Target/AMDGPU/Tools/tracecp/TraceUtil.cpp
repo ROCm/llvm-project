@@ -245,6 +245,7 @@ void TraceMetrics::printBody(unsigned Iterations) const {
     outs() << "=== Per Iteration (average) ===\n";
     float N = static_cast<float>(Iterations);
     outs() << format("  Instructions: %.1f\n", NumInstructions / N);
+    outs() << format("  Total Cycles: %.1f\n", TotalCycles / N);
     outs() << format("  Stall Cycles: %.1f\n", StallCycles / N);
     outs() << format("  VALU: %.1f | SALU: %.1f | TRANS: %.1f | WMMA: %.1f\n",
                      NumVALU / N, NumSALU / N, NumTRANS / N, NumWMMA / N);
@@ -710,9 +711,7 @@ void LoopInfo::print() const {
 
     if (L.ParentIdx >= 0) {
       const Loop &Parent = Loops[L.ParentIdx];
-      unsigned IterPerParent = 0;
-      if (Parent.TotalBackEdgeCount > 0)
-        IterPerParent = L.TotalBackEdgeCount / Parent.TotalBackEdgeCount;
+      unsigned IterPerParent = L.getIterations() / Parent.getIterations();
       outs() << format("  Nested in loop %d (~%u iters per parent)\n",
                        L.ParentIdx, IterPerParent);
     }
@@ -720,8 +719,8 @@ void LoopInfo::print() const {
 
     if (L.Metrics.NumInstructions > 0) {
       outs() << format("--- Loop %zu Metrics (Iterations: %u) ---\n", I,
-                       L.TotalBackEdgeCount);
-      L.Metrics.printBody(L.TotalBackEdgeCount);
+                       L.getIterations());
+      L.Metrics.printBody(L.getIterations());
     }
   }
 

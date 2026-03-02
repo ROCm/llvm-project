@@ -162,20 +162,19 @@ struct Loop {
   uint64_t HeaderPC;                   // Loop header (dominates all body nodes)
   std::vector<uint64_t> LatchPCs;      // Blocks with back-edges to header
   std::vector<uint64_t> BodyBlockPCs;  // All blocks in the loop body
-  unsigned TotalBackEdgeCount;         // Sum of all back-edge counts (iterations)
+  unsigned TotalBackEdgeCount;         // Sum of all back-edge counts
   int ParentIdx;                       // Index of parent loop (-1 if top-level)
   TraceMetrics Metrics;                // Metrics for this loop
 
+  /// Number of iterations (back edges + 1 for initial entry).
+  unsigned getIterations() const { return TotalBackEdgeCount + 1; }
+
   // Per-iteration averages
   float getAvgInstructions() const {
-    return TotalBackEdgeCount > 0
-               ? static_cast<float>(Metrics.NumInstructions) / TotalBackEdgeCount
-               : 0.0f;
+    return static_cast<float>(Metrics.NumInstructions) / getIterations();
   }
   float getAvgStallCycles() const {
-    return TotalBackEdgeCount > 0
-               ? static_cast<float>(Metrics.StallCycles) / TotalBackEdgeCount
-               : 0.0f;
+    return static_cast<float>(Metrics.StallCycles) / getIterations();
   }
 };
 
