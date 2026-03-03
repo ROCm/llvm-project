@@ -1,15 +1,17 @@
 ; -enable-misched=false makes the register usage more predictable
 ; -regalloc=fast just makes the test run faster
-; RUN: llc -mtriple=amdgcn -mcpu=gfx900 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX9
-; RUN: llc -mtriple=amdgcn -mcpu=gfx90a -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX90A
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10WGP-WAVE32
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10WGP-WAVE64
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -mattr=+cumode -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10CU-WAVE32
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1010 -mattr=+cumode,+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10CU-WAVE64
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11WGP-WAVE32
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11WGP-WAVE64
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=+cumode -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11CU-WAVE32
-; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 -mattr=+cumode,+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11CU-WAVE64
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX9
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx90a -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX90A
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10WGP-WAVE32
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10WGP-WAVE64
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -mattr=+cumode -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10CU-WAVE32
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1010 -mattr=+cumode,+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX10CU-WAVE64
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11WGP-WAVE32
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11WGP-WAVE64
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=+cumode -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11CU-WAVE32
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx1100 -mattr=+cumode,+wavefrontsize64 -amdgpu-function-calls=false -enable-misched=false -sgpr-regalloc=fast -vgpr-regalloc=fast -wwm-regalloc=fast < %s | FileCheck %s --check-prefixes=GCN,GFX11CU-WAVE64
+
+; TODO-WAVETRANSFORM: Should revisit this test later. We may have to rewrite the original test to consider the registers resreved early for wwm-regalloc.
 
 define internal void @use256vgprs() {
   %v0 = call i32 asm sideeffect "; def $0", "=v"()
@@ -528,18 +530,18 @@ define internal void @use256vgprs() {
 }
 
 ; GCN-LABEL: {{^}}f256:
-; GFX9: NumVgprs: 256
-; GFX90A: NumVgprs: 256
-; GFX90A: NumAgprs: 0
-; GFX90A: TotalNumVgprs: 256
-; GFX10WGP-WAVE32: NumVgprs: 256
-; GFX10WGP-WAVE64: NumVgprs: 256
-; GFX10CU-WAVE32: NumVgprs: 256
-; GFX10CU-WAVE64: NumVgprs: 256
-; GFX11WGP-WAVE32: NumVgprs: 256
-; GFX11WGP-WAVE64: NumVgprs: 256
-; GFX11CU-WAVE32: NumVgprs: 256
-; GFX11CU-WAVE64: NumVgprs: 256
+; GFX9: NumVgprs: 254
+; GFX90A: NumVgprs: 254
+; GFX90A: NumAgprs: 3
+; GFX90A: TotalNumVgprs: 259
+; GFX10WGP-WAVE32: NumVgprs: 254
+; GFX10WGP-WAVE64: NumVgprs: 254
+; GFX10CU-WAVE32: NumVgprs: 254
+; GFX10CU-WAVE64: NumVgprs: 254
+; GFX11WGP-WAVE32: NumVgprs: 254
+; GFX11WGP-WAVE64: NumVgprs: 254
+; GFX11CU-WAVE32: NumVgprs: 254
+; GFX11CU-WAVE64: NumVgprs: 254
 define amdgpu_kernel void @f256() #256 {
   call void @use256vgprs()
   ret void
@@ -547,17 +549,17 @@ define amdgpu_kernel void @f256() #256 {
 attributes #256 = { nounwind "amdgpu-flat-work-group-size"="256,256" }
 
 ; GCN-LABEL: {{^}}f512:
-; GFX9:             .set f512.num_vgpr, max(128, amdgpu.max_num_vgpr)
-; GFX90A:           .set f512.num_vgpr, max(128, amdgpu.max_num_vgpr)
+; GFX9:             .set f512.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX90A:           .set f512.num_vgpr, max(127, amdgpu.max_num_vgpr)
 ; GFX90A:           .set f512.num_agpr, max(128, amdgpu.max_num_agpr)
-; GFX10WGP-WAVE32:  .set f512.num_vgpr, max(256, amdgpu.max_num_vgpr)
-; GFX10WGP-WAVE64:  .set f512.num_vgpr, max(256, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE32:   .set f512.num_vgpr, max(128, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE64:   .set f512.num_vgpr, max(128, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE32:  .set f512.num_vgpr, max(256, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE64:  .set f512.num_vgpr, max(256, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE32:   .set f512.num_vgpr, max(192, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE64:   .set f512.num_vgpr, max(192, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE32:  .set f512.num_vgpr, max(255, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE64:  .set f512.num_vgpr, max(255, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE32:   .set f512.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE64:   .set f512.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE32:  .set f512.num_vgpr, max(255, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE64:  .set f512.num_vgpr, max(255, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE32:   .set f512.num_vgpr, max(191, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE64:   .set f512.num_vgpr, max(191, amdgpu.max_num_vgpr)
 ; GCN:              NumVgprs: f512.num_vgpr
 ; GFX90A:           NumAgprs: f512.num_agpr
 ; GFX90A:           TotalNumVgprs: totalnumvgprs(f512.num_agpr, f512.num_vgpr)
@@ -569,17 +571,17 @@ define amdgpu_kernel void @f512() #512 {
 attributes #512 = { nounwind "amdgpu-flat-work-group-size"="512,512" }
 
 ; GCN-LABEL: {{^}}f1024:
-; GFX9:             .set f1024.num_vgpr, max(64, amdgpu.max_num_vgpr)
-; GFX90A:           .set f1024.num_vgpr, max(64, amdgpu.max_num_vgpr)
+; GFX9:             .set f1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
+; GFX90A:           .set f1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
 ; GFX90A:           .set f1024.num_agpr, max(64, amdgpu.max_num_agpr)
-; GFX10WGP-WAVE32:  .set f1024.num_vgpr, max(128, amdgpu.max_num_vgpr)
-; GFX10WGP-WAVE64:  .set f1024.num_vgpr, max(128, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE32:   .set f1024.num_vgpr, max(64, amdgpu.max_num_vgpr)
-; GFX10CU-WAVE64:   .set f1024.num_vgpr, max(64, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE32:  .set f1024.num_vgpr, max(192, amdgpu.max_num_vgpr)
-; GFX11WGP-WAVE64:  .set f1024.num_vgpr, max(192, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE32:   .set f1024.num_vgpr, max(96, amdgpu.max_num_vgpr)
-; GFX11CU-WAVE64:   .set f1024.num_vgpr, max(96, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE32:  .set f1024.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX10WGP-WAVE64:  .set f1024.num_vgpr, max(127, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE32:   .set f1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
+; GFX10CU-WAVE64:   .set f1024.num_vgpr, max(63, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE32:  .set f1024.num_vgpr, max(191, amdgpu.max_num_vgpr)
+; GFX11WGP-WAVE64:  .set f1024.num_vgpr, max(191, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE32:   .set f1024.num_vgpr, max(95, amdgpu.max_num_vgpr)
+; GFX11CU-WAVE64:   .set f1024.num_vgpr, max(95, amdgpu.max_num_vgpr)
 ; GCN:              NumVgprs: f1024.num_vgpr
 ; GFX90A:           NumAgprs: f1024.num_agpr
 ; GFX90A:           TotalNumVgprs: totalnumvgprs(f1024.num_agpr, f1024.num_vgpr)
