@@ -631,6 +631,7 @@ amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
 
 // Execute llvm-link in-process using llvm::Linker
 // Args format: -o <output.bc> <input1.bc> <input2.bc> ...
+// TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
 amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
                                    raw_ostream &LogS) {
   // Parse args: find -o <output> and collect input .bc files
