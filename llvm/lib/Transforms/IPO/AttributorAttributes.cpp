@@ -86,6 +86,11 @@ static cl::opt<bool> ManifestInternal(
     cl::desc("Manifest Attributor internal string attributes."),
     cl::init(false));
 
+// When enabled, forallInterferingAccesses pre-computes forward and backward
+// block-level reachability sets via BFS, then uses cheap set lookups to filter
+// intra-function accesses before falling back to full isPotentiallyReachable.
+// This amortizes repeated CFG traversals when many accesses are checked against
+// the same instruction I.
 static cl::opt<bool> EnableBatchReachability(
     "attributor-enable-batch-reachability", cl::Hidden, cl::init(true),
     cl::desc("Enable batch reachability queries in Attributor"));
@@ -1389,33 +1394,66 @@ struct AAPointerInfoImpl
     };
 
     if (EnableBatchReachability) {
-      // Pre-compute reachable blocks from I if we have many queries.
+      // Batch reachability optimization for CanSkipAccess.
+      //
+      // Without this optimization, each interfering access triggers an
+      // independent AA::isPotentiallyReachable call that traverses the CFG
+      // from scratch. With N interfering accesses, this is N independent
+      // BFS traversals over the same function's CFG — redundant work.
+      //
+      // This optimization pre-computes two block-level reachability sets:
+      //   ReachableFromI: all basic blocks reachable forward from I's block
+      //   ReachableToI:   all basic blocks that can reach I's block (backward)
+      //
+      // These are computed lazily (on first use) via a single BFS each,
+      // respecting the ExclusionSet (must-write barriers) and liveness
+      // (dead edges from AAIsDead). Then for each intra-function access,
+      // a cheap set lookup replaces the full isPotentiallyReachable call:
+      //   - ReadChecked:  if Acc's block is NOT in ReachableFromI, I can't
+      //                   reach Acc, so Acc's read can't observe I's write.
+      //   - WriteChecked: if Acc's block is NOT in ReachableToI, Acc can't
+      //                   reach I, so Acc's write can't affect I's read.
+      //
+      // If the block-level check is inconclusive (block is reachable but
+      // we need instruction-level precision, e.g. two instructions in the
+      // same block), we fall back to isPotentiallyReachable.
+      //
+      // IMPORTANT: These sets only contain blocks from I's function (Scope).
+      // For cross-function accesses (RemoteI in a different function), the
+      // block-level check is skipped entirely (guarded by IntraFnCheck) and
+      // we fall through to isPotentiallyReachable which handles inter-fn
+      // reachability via AAInterFnReachability.
       DenseSet<const BasicBlock *> ReachableFromI;
       bool ReachableFromIComputed = false;
 
-      // Pre-compute reachable blocks to I (backward reachability)
       DenseSet<const BasicBlock *> ReachableToI;
       bool ReachableToIComputed = false;
 
-      // Helper to perform the batch query lazily
+      // Lazily compute forward reachability from I's block.
+      // BFS over successor edges within Scope, skipping dead edges (AAIsDead)
+      // and not traversing past ExclusionSet blocks (must-write barriers).
+      // The start block (I's block) is included in the set but traversal
+      // from it is blocked if an ExclusionSet instruction comes after I in
+      // the same block (meaning the path is "cut" by that must-write).
       auto EnsureReachableFromI = [&]() {
         if (ReachableFromIComputed)
           return;
 
-        // 1. Pre-process ExclusionSet into a set of blocks for O(1) lookup
         DenseSet<const BasicBlock *> ExcludedBlocks;
         if (!ExclusionSet.empty()) {
           for (const Instruction *ExclI : ExclusionSet)
             ExcludedBlocks.insert(ExclI->getParent());
         }
 
-        // 2. Perform Batch Traversal
         const BasicBlock *FromBB = I.getParent();
         SmallVector<const BasicBlock *, 16> Worklist;
         Worklist.push_back(FromBB);
         ReachableFromI.insert(FromBB);
 
-        // Check if FromBB is blocked (cannot exit)
+        // If an ExclusionSet instruction is in FromBB and comes AFTER I,
+        // then I cannot "exit" FromBB past that barrier. We still include
+        // FromBB itself in the reachable set (I is in it), but we don't
+        // follow its successors.
         bool FromBBBlocked = false;
         if (ExcludedBlocks.count(FromBB)) {
           for (const Instruction *ExclI : ExclusionSet) {
@@ -1426,25 +1464,23 @@ struct AAPointerInfoImpl
           }
         }
 
-        // Get AAIsDead for liveness
         const auto *LivenessAA = A.getAAFor<AAIsDead>(
             QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
 
         while (!Worklist.empty()) {
           const BasicBlock *BB = Worklist.pop_back_val();
 
-          // Special check for start block
           if (BB == FromBB) {
             if (FromBBBlocked)
               continue;
           } else {
-            // For other blocks, any exclusion blocks flow
+            // Don't traverse past ExclusionSet blocks — a must-write there
+            // overwrites the value, so anything beyond it is irrelevant.
             if (ExcludedBlocks.count(BB))
               continue;
           }
 
           for (const BasicBlock *SuccBB : successors(BB)) {
-            // Check liveness
             if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB))
               continue;
 
@@ -1455,12 +1491,20 @@ struct AAPointerInfoImpl
         ReachableFromIComputed = true;
       };
 
-      // Helper to perform the backward batch query lazily
+      // Lazily compute backward reachability to I's block.
+      // BFS over predecessor edges within Scope, skipping dead edges and
+      // not traversing past ExclusionSet blocks. This is the mirror of
+      // EnsureReachableFromI: it answers "can Acc reach I?" rather than
+      // "can I reach Acc?".
+      //
+      // For the start block (ToBB = I's block): if an ExclusionSet
+      // instruction comes BEFORE I in the same block, then that barrier
+      // prevents anything from "entering" ToBB and reaching I through it.
+      // ToBB itself is still in the set, but we don't follow its predecessors.
       auto EnsureReachableToI = [&]() {
         if (ReachableToIComputed)
           return;
 
-        // 1. Pre-process ExclusionSet into a set of blocks for O(1) lookup
         DenseSet<const BasicBlock *> ExcludedBlocks;
         if (!ExclusionSet.empty()) {
           for (const Instruction *ExclI : ExclusionSet)
@@ -1472,7 +1516,6 @@ struct AAPointerInfoImpl
         Worklist.push_back(ToBB);
         ReachableToI.insert(ToBB);
 
-        // Check if ToBB is blocked (cannot enter)
         bool ToBBBlocked = false;
         if (ExcludedBlocks.count(ToBB)) {
           for (const Instruction *ExclI : ExclusionSet) {
@@ -1483,7 +1526,6 @@ struct AAPointerInfoImpl
           }
         }
 
-        // Get AAIsDead for liveness
         const auto *LivenessAA = A.getAAFor<AAIsDead>(
             QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
 
@@ -1491,22 +1533,19 @@ struct AAPointerInfoImpl
           const BasicBlock *BB = Worklist.pop_back_val();
 
           for (const BasicBlock *PredBB : predecessors(BB)) {
-            // Check liveness
             if (LivenessAA && LivenessAA->isEdgeDead(PredBB, BB))
               continue;
 
-            // Insert into set. If already there, skip.
             if (!ReachableToI.insert(PredBB).second)
               continue;
 
-            // Check if we should continue traversing from PredBB
             bool Blocked = false;
-            // Special check for start block (as a predecessor in a loop)
             if (PredBB == ToBB) {
               if (ToBBBlocked)
                 Blocked = true;
             } else {
-              // For other blocks, any exclusion blocks flow from predecessors
+              // Don't traverse past ExclusionSet blocks — a must-write
+              // there acts as a barrier for backward reachability.
               if (ExcludedBlocks.count(PredBB))
                 Blocked = true;
             }
@@ -1518,6 +1557,17 @@ struct AAPointerInfoImpl
         ReachableToIComputed = true;
       };
 
+      // Batch variant of CanSkipAccess. Uses the pre-computed block-level
+      // reachability sets (ReachableFromI, ReachableToI) as a fast filter
+      // before falling back to the full isPotentiallyReachable call.
+      //
+      // ReadChecked/WriteChecked track whether we've proven non-interference
+      // in each direction:
+      //   ReadChecked = true  => I cannot reach Acc, so Acc can't observe
+      //                          I's write (Acc's read is not interfered).
+      //   WriteChecked = true => Acc cannot reach I, so I can't observe
+      //                          Acc's write (I's read is not interfered).
+      // If both are true, the access can be skipped entirely.
       auto CanSkipAccessBatch = [&](const Access &Acc, bool Exact) {
         if (SkipCB && SkipCB(Acc))
           return true;
@@ -1526,21 +1576,31 @@ struct AAPointerInfoImpl
 
         bool ReadChecked = !FindInterferingReads;
         bool WriteChecked = !FindInterferingWrites;
+
+        // The batch BFS only traverses blocks within Scope (I's function).
+        // For cross-function accesses (RemoteI in a callee), the remote
+        // block won't appear in ReachableFromI/ReachableToI, so the set
+        // lookup would trivially (and incorrectly) say "not reachable",
+        // leading to wrongly skipped accesses. We must gate the block-level
+        // check on IntraFnCheck and fall through to isPotentiallyReachable
+        // for cross-function cases, which properly handles inter-procedural
+        // reachability via AAInterFnReachability.
         bool IntraFnCheck = Acc.getRemoteInst()->getFunction() == &Scope;
-        // If the instruction cannot reach the access, the former does not
-        // interfere with what the access reads.
+
+        // Forward reachability: can I reach Acc?
+        // If not, I's write cannot be observed by Acc's read.
         if (!ReadChecked) {
           EnsureReachableFromI();
-          // If Acc's block is not in the reachable set, I cannot reach Acc.
           if (IntraFnCheck &&
               !ReachableFromI.count(Acc.getRemoteInst()->getParent()))
             ReadChecked = true;
 
-          // Fallback to original query if needed (e.g., for instruction-level
-          // precision within the same block)
-          // PDB: Improvement - If you know that the block of Acc.getRemoteInst()
-          // is reachable from I, then don't let the origin of the query be I.
-          // Let it be Acc.getRemoteInst()->getParent()->front()
+          // Block-level was inconclusive (Acc's block IS reachable from I,
+          // or Acc is cross-function). Fall back to full isPotentiallyReachable
+          // for instruction-level precision or inter-fn reasoning.
+          // TODO: If the block IS in ReachableFromI, we know it's reachable at
+          // block granularity but need intra-block ordering. We could narrow the
+          // query origin to Acc.getRemoteInst()->getParent()->front() instead.
           if (!ReadChecked) {
             if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
                                             QueryingAA, &ExclusionSet,
@@ -1548,12 +1608,11 @@ struct AAPointerInfoImpl
               ReadChecked = true;
           }
         }
-        // If the instruction cannot be reach from the access, the latter does not
-        // interfere with what the instruction reads.
+
+        // Backward reachability: can Acc reach I?
+        // If not, Acc's write cannot be observed by I's read.
         if (!WriteChecked) {
           EnsureReachableToI();
-          // If Acc's block is not in the backward reachable set, Acc cannot reach
-          // I.
           if (IntraFnCheck &&
               !ReachableToI.count(Acc.getRemoteInst()->getParent()))
             WriteChecked = true;
@@ -1566,6 +1625,10 @@ struct AAPointerInfoImpl
           }
         }
 
+        // Cross-function write interference: if Acc is in a different function
+        // and the pointer has been written to, check whether the least
+        // dominating write in Scope can reach Acc's function. This uses
+        // AAInterFnReachability (call-graph level) rather than CFG traversal.
         if (!WriteChecked && HasBeenWrittenTo &&
             Acc.getRemoteInst()->getFunction() != &Scope) {
 
@@ -1587,6 +1650,8 @@ struct AAPointerInfoImpl
         if (ReadChecked && WriteChecked)
           return true;
 
+        // Last resort: dominance reasoning. If Acc is a dominating write
+        // but not the least-dominating one, it's overwritten before I.
         if (!DT || !UseDominanceReasoning)
           return false;
         if (!DominatingWrites.count(&Acc))
