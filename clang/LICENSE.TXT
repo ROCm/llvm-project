@@ -8,7 +8,7 @@ The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
 
     TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-    1. Definitions.
+    1. Definitions. Test
 
       "License" shall mean the terms and conditions for use, reproduction,
       and distribution as defined by Sections 1 through 9 of this document.
