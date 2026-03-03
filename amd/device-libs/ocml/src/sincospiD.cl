@@ -8,8 +8,8 @@
 #include "mathD.h"
 #include "trigpiredD.h"
 
-double
-MATH_MANGLE(sincospi)(double x, __private double * cp)
+__ocml_sincos_f64_result
+MATH_MANGLE(sincospi_stret)(double x)
 {
     if (!FINITE_ONLY_OPT())
         x = BUILTIN_ISINF_F64(x) ? QNAN_F64 : x;
@@ -28,7 +28,14 @@ MATH_MANGLE(sincospi)(double x, __private double * cp)
     double c = odd ? sc.s : sc.c;
     c = AS_DOUBLE(AS_LONG(c) ^ flip);
 
-    *cp = c;
-    return s;
+    __ocml_sincos_f64_result result = {s, c};
+    return result;
 }
 
+double
+MATH_MANGLE(sincospi)(double x, __private double *cp)
+{
+    __ocml_sincos_f64_result result = MATH_MANGLE(sincospi_stret)(x);
+    *cp = result.__cos;
+    return result.__sin;
+}

@@ -19,8 +19,8 @@ MATH_MANGLE2(sincos)(half2 x, __private half2 *cp)
     return s;
 }
 
-CONSTATTR half
-MATH_MANGLE(sincos)(half x, __private half *cp)
+CONSTATTR __ocml_sincos_f16_result
+MATH_MANGLE(sincos_stret)(half x)
 {
     if (!FINITE_ONLY_OPT())
         x = BUILTIN_ISINF_F16(x) ? QNAN_F16 : x;
@@ -39,7 +39,14 @@ MATH_MANGLE(sincos)(half x, __private half *cp)
     half c = odd ? sc.s : sc.c;
     c = AS_HALF((short)(AS_SHORT(c) ^ flip));
 
-    *cp = c;
-    return s;
+    __ocml_sincos_f16_result result = {s, c};
+    return result;
 }
 
+CONSTATTR half
+MATH_MANGLE(sincos)(half x, __private half *cp)
+{
+    __ocml_sincos_f16_result result = MATH_MANGLE(sincos_stret)(x);
+    *cp = result.__cos;
+    return result.__sin;
+}

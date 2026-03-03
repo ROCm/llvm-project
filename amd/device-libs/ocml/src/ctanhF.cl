@@ -15,8 +15,10 @@ extern CONSTATTR float2 MATH_PRIVATE(epexpep)(float2 z);
 CONSTATTR float2
 MATH_MANGLE(ctanh)(float2 z)
 {
-    float cy;
-    float sy = MATH_MANGLE(sincos)(z.y, &cy);
+    __ocml_sincos_f32_result scy = MATH_MANGLE(sincos_stret)(z.y);
+    float sy = scy.__sin;
+    float cy = scy.__cos;
+
     float cysy = cy*sy;
     float x = BUILTIN_ABS_F32(z.x);
 

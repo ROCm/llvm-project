@@ -8,8 +8,8 @@
 #include "mathF.h"
 #include "trigpiredF.h"
 
-float
-MATH_MANGLE(sincospi)(float x, __private float *cp)
+__ocml_sincos_f32_result
+MATH_MANGLE(sincospi_stret)(float x)
 {
     if (!FINITE_ONLY_OPT())
         x = BUILTIN_ISINF_F32(x) ? QNAN_F32 : x;
@@ -27,7 +27,14 @@ MATH_MANGLE(sincospi)(float x, __private float *cp)
     float c = odd ? sc.s : sc.c;
     c = AS_FLOAT(AS_INT(c) ^ flip);
 
-    *cp = c;
-    return s;
+    __ocml_sincos_f32_result result = {s, c};
+    return result;
 }
 
+float
+MATH_MANGLE(sincospi)(float x, __private float *cp)
+{
+    __ocml_sincos_f32_result result = MATH_MANGLE(sincospi_stret)(x);
+    *cp = result.__cos;
+    return result.__sin;
+}

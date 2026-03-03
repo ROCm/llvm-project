@@ -21,8 +21,10 @@ MATH_MANGLE(ccosh)(double2 z)
     er = ldx(er, -4);
     double2 cx = fadd(e, er);
     double2 sx = fsub(e, er);
-    double cy;
-    double sy = MATH_MANGLE(sincos)(z.y, &cy);
+
+    __ocml_sincos_f64_result scy = MATH_MANGLE(sincos_stret)(z.y);
+    double sy = scy.__sin;
+    double cy = scy.__cos;
 
     double cxhi, sxhi;
     if (FINITE_ONLY_OPT()) {

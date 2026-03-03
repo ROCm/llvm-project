@@ -12,8 +12,11 @@ MATH_MANGLE(cexp)(float2 z)
 {
     float x = z.s0;
     float y = z.s1;
-    float cy;
-    float sy = MATH_MANGLE(sincos)(y, &cy);
+
+    __ocml_sincos_f32_result scy = MATH_MANGLE(sincos_stret)(y);
+    float sy = scy.__sin;
+    float cy = scy.__cos;
+
     bool g = x > 88.0f;
     float ex = MATH_MANGLE(exp)(x - (g ? 1.0f : 0.0f));
     const float e1 =  0x1.5bf0a8p+1f;

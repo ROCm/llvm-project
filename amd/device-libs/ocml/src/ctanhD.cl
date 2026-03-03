@@ -15,8 +15,10 @@ extern CONSTATTR double2 MATH_PRIVATE(epexpep)(double2 z);
 CONSTATTR double2
 MATH_MANGLE(ctanh)(double2 z)
 {
-    double cy;
-    double sy = MATH_MANGLE(sincos)(z.y, &cy);
+    __ocml_sincos_f64_result scy = MATH_MANGLE(sincos_stret)(z.y);
+    double sy = scy.__sin;
+    double cy = scy.__cos;
+
     double cysy = cy*sy;
     double x = BUILTIN_ABS_F64(z.x);
 

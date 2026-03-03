@@ -213,6 +213,14 @@ DECL_CONST_OCML_UNARY_F32(sinh)
 DECL_CONST_OCML_UNARY_F32(sinpi)
 extern float OCML_MANGLE_F32(sincos)(float, __private float *);
 extern float OCML_MANGLE_F32(sincospi)(float, __private float *);
+
+typedef struct __ocml_sincos_f32_result {
+    float __sin, __cos;
+} __ocml_sincos_f32_result;
+
+extern __ocml_sincos_f32_result OCML_MANGLE_F32(sincos_stret)(float);
+extern __ocml_sincos_f32_result OCML_MANGLE_F32(sincospi_stret)(float);
+
 DECL_CONST_OCML_UNARY_F32(sqrt)
 DECL_CONST_OCML_UNARY_F32(succ)
 DECL_OCML_UNARY_F32(tan)
@@ -352,6 +360,14 @@ DECL_CONST_OCML_UNARYPRED_F64(signbit)
 DECL_CONST_OCML_UNARY_F64(sin)
 extern double OCML_MANGLE_F64(sincos)(double, __private double *);
 extern double OCML_MANGLE_F64(sincospi)(double, __private double *);
+
+typedef struct __ocml_sincos_f64_result {
+    double __sin, __cos;
+} __ocml_sincos_f64_result;
+
+extern __ocml_sincos_f64_result OCML_MANGLE_F64(sincos_stret)(double);
+extern __ocml_sincos_f64_result OCML_MANGLE_F64(sincospi_stret)(double);
+
 DECL_CONST_OCML_UNARY_F64(sinh)
 DECL_CONST_OCML_UNARY_F64(sinpi)
 DECL_CONST_OCML_UNARY_F64(sqrt)
@@ -526,6 +542,14 @@ DECL_CONST_OCML_UNARY_F16(sinh)
 DECL_CONST_OCML_UNARY_F16(sinpi)
 extern half OCML_MANGLE_F16(sincos)(half, __private half *);
 extern half OCML_MANGLE_F16(sincospi)(half, __private half *);
+
+typedef struct __ocml_sincos_f16_result {
+    half __sin, __cos;
+} __ocml_sincos_f16_result;
+
+extern __ocml_sincos_f16_result OCML_MANGLE_F16(sincos_stret)(half);
+extern __ocml_sincos_f16_result OCML_MANGLE_F16(sincospi_stret)(half);
+
 DECL_CONST_OCML_UNARY_F16(sqrt)
 DECL_CONST_OCML_UNARY_F16(sqrt_rte)
 DECL_CONST_OCML_UNARY_F16(sqrt_rtp)
