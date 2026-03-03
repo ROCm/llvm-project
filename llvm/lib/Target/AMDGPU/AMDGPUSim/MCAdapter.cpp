@@ -19,6 +19,8 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSchedule.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 
 namespace llvm {
 namespace AMDGPUSim {
@@ -27,8 +29,9 @@ namespace AMDGPUSim {
 // Constructor
 //===----------------------------------------------------------------------===//
 
-MCInstInfo::MCInstInfo(const MCInstrInfo &MCII, const MCRegisterInfo &MRI)
-    : MCII(MCII), MRI(MRI) {}
+MCInstInfo::MCInstInfo(const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
+                       const MCSubtargetInfo *STI)
+    : MCII(MCII), MRI(MRI), STI(STI) {}
 
 //===----------------------------------------------------------------------===//
 // Helper Functions
@@ -50,7 +53,7 @@ static bool isMCInstWaitcnt(unsigned Opc) {
   case AMDGPU::S_WAIT_KMCNT:
   case AMDGPU::S_WAIT_TENSORCNT:
   case AMDGPU::S_WAIT_XCNT:
-  case AMDGPU::S_WAITCNT_DEPCTR:
+    // Note: S_WAITCNT_DEPCTR is classified as SALU, not WAITCNT
     return true;
   default:
     return false;
@@ -66,29 +69,34 @@ InstClass MCInstInfo::classifyInst(const MCInst &MI) const {
   const MCInstrDesc &Desc = MCII.get(Opc);
   uint64_t TSFlags = Desc.TSFlags;
 
-  // Check specific opcodes first
-  if (Opc == AMDGPU::S_DELAY_ALU)
+  // Get opcode name for pattern matching (handles encoding variants)
+  StringRef Name = MCII.getName(Opc);
+
+  // Check specific opcodes/names first
+  if (Opc == AMDGPU::S_DELAY_ALU || Name.starts_with("S_DELAY_ALU"))
     return InstClass::DELAY_ALU;
 
-  if (Opc == AMDGPU::S_SET_VGPR_MSB)
+  if (Opc == AMDGPU::S_SET_VGPR_MSB || Name.starts_with("S_SET_VGPR_MSB"))
     return InstClass::MSB_SET;
 
   // Check opcode name for V_NOP
-  StringRef Name = MCII.getName(Opc);
   if (Name.starts_with("V_NOP"))
     return InstClass::VALU;
 
-  if (Opc == AMDGPU::S_NOP || Name.starts_with("S_CLAUSE"))
+  if (Opc == AMDGPU::S_NOP || Name.starts_with("S_NOP") ||
+      Name.starts_with("S_CLAUSE"))
     return InstClass::SALU;
 
-  // Barrier instructions
-  if (Opc == AMDGPU::S_BARRIER || Opc == AMDGPU::S_BARRIER_SIGNAL_M0 ||
-      Opc == AMDGPU::S_BARRIER_SIGNAL_ISFIRST_M0 ||
-      Opc == AMDGPU::S_BARRIER_WAIT)
+  // Barrier instructions (use name matching for encoding variants)
+  if (Name.starts_with("S_BARRIER"))
     return InstClass::BARRIER;
 
+  // S_WAITCNT_DEPCTR is SALU (not WAITCNT) - it has latency 2 and computes VaVdst
+  if (Name.starts_with("S_WAITCNT_DEPCTR"))
+    return InstClass::SALU;
+
   // Wait instructions
-  if (isMCInstWaitcnt(Opc))
+  if (isMCInstWaitcnt(Opc) || Name.starts_with("S_WAIT"))
     return InstClass::WAITCNT;
 
   // Branch instructions
@@ -99,8 +107,8 @@ InstClass MCInstInfo::classifyInst(const MCInst &MI) const {
   if (isMCInstWMMA(TSFlags))
     return InstClass::WMMA;
 
-  // TDM instructions
-  if (Opc == AMDGPU::TENSOR_LOAD_TO_LDS || Opc == AMDGPU::TENSOR_LOAD_TO_LDS_D2)
+  // TDM instructions (use name matching for encoding variants)
+  if (Name.starts_with("TENSOR_LOAD_TO_LDS"))
     return InstClass::TDM;
 
   // DS (LDS) instructions
@@ -150,8 +158,118 @@ InstClass MCInstInfo::classifyInst(const MCInst &MI) const {
 //===----------------------------------------------------------------------===//
 
 unsigned MCInstInfo::getLatency(InstClass IC) const {
-  // At MC layer, we don't have access to SchedModel, so use defaults
+  // Fall back to default latencies when no SchedModel
   return getLatencyForClass(IC);
+}
+
+/// Get latency from the scheduling model for an MCInst.
+/// Since MC-layer scheduling classes often don't match MIR-level resolved classes
+/// (which can account for operand properties), we use opcode-based lookup for
+/// known instructions and fall back to the scheduling model when available.
+static unsigned getSchedModelLatency(const MCInst &MI, const MCInstrInfo &MCII,
+                                     const MCSubtargetInfo &STI) {
+  const MCInstrDesc &Desc = MCII.get(MI.getOpcode());
+  StringRef Name = MCII.getName(MI.getOpcode());
+
+  // S_WAITCNT_DEPCTR has latency 2 (not 1 like other wait instructions)
+  if (Name.starts_with("S_WAITCNT_DEPCTR"))
+    return 2;
+
+  // Wait/barrier/control flow instructions - latency 1
+  if (Name.starts_with("S_WAIT") || Name.starts_with("S_BARRIER") ||
+      Name.starts_with("S_NOP") || Name.starts_with("S_DELAY_ALU") ||
+      Name.starts_with("S_BRANCH") || Name.starts_with("S_CBRANCH") ||
+      Name.starts_with("S_SETPC") || Name.starts_with("S_SWAPPC") ||
+      Name.starts_with("S_ENDPGM"))
+    return 1;
+
+  // GFX1250 VALU latencies based on scheduling model and observed behavior.
+  // These hardcoded values provide more accurate results than the size heuristic.
+  // Latencies from SISchedule.td GFX1250SpeedModel:
+  //   Write32Bit = 5, Write64Bit = 7, WriteTrans32 = 7, WriteQuarterRate32 = 6,
+  //   WriteFloatCvt = 5, WriteFloatFMA = 5, WriteIntMul = 11
+
+  // Lane operations (READLANE/WRITELANE) - latency 6
+  // Note: Using 6 to match MIR adapter's scheduling model behavior
+  if (Name.starts_with("V_READLANE") || Name.starts_with("V_WRITELANE"))
+    return 6;
+
+  // Transcendental instructions - latency 7
+  if (Name.starts_with("V_EXP_") || Name.starts_with("V_LOG_") ||
+      Name.starts_with("V_RCP_") || Name.starts_with("V_RSQ_") ||
+      Name.starts_with("V_SQRT_") || Name.starts_with("V_SIN_") ||
+      Name.starts_with("V_COS_"))
+    return 7;
+
+  // Integer multiply - latency 11
+  if (Name.starts_with("V_MUL_HI") || Name.starts_with("V_MUL_LO") ||
+      Name.starts_with("V_MAD_U64") || Name.starts_with("V_MAD_I64"))
+    return 11;
+
+  // Double precision - latency 32
+  if (Name.contains("_F64"))
+    return 32;
+
+  // Specific VALU instruction overrides - latency 7
+  // Add instructions here as needed when discrepancies are found
+  if (Name.starts_with("V_MOV_B32") || Name.starts_with("V_ADD_U32") ||
+      Name.starts_with("V_ADD_NC_U32") || Name.starts_with("V_AND_B32") ||
+      Name.starts_with("V_OR_B32") || Name.starts_with("V_XOR_B32") ||
+      Name.starts_with("V_LSHL_OR_B32") || Name.starts_with("V_LSHLREV_B32") ||
+      Name.starts_with("V_CVT_SCALEF32") || Name.starts_with("V_DUAL_"))
+    return 7;
+
+  // VMEM instructions - use default 300 (scheduling model returns 320)
+  if (Name.starts_with("BUFFER_LOAD") || Name.starts_with("BUFFER_STORE") ||
+      Name.starts_with("GLOBAL_LOAD") || Name.starts_with("GLOBAL_STORE") ||
+      Name.starts_with("FLAT_LOAD") || Name.starts_with("FLAT_STORE") ||
+      Name.starts_with("SCRATCH_LOAD") || Name.starts_with("SCRATCH_STORE"))
+    return 0; // Fall back to class-based default (300)
+
+  // DS (LDS) instructions - use default 50/8 (scheduling model returns 20)
+  if (Name.starts_with("DS_READ") || Name.starts_with("DS_WRITE") ||
+      Name.starts_with("DS_LOAD") || Name.starts_with("DS_STORE"))
+    return 0; // Fall back to class-based default
+
+  // TDM (TENSOR_LOAD_TO_LDS) - latency 60
+  if (Name.starts_with("TENSOR_LOAD_TO_LDS"))
+    return 60;
+
+  // For non-VALU instructions, try the scheduling model
+  const MCSchedModel &SM = STI.getSchedModel();
+  if (SM.hasInstrSchedModel()) {
+    unsigned SchedClass = Desc.getSchedClass();
+    const MCSchedClassDesc *SCDesc = SM.getSchedClassDesc(SchedClass);
+    if (SCDesc && SCDesc->isValid() && !SCDesc->isVariant())
+      return MCSchedModel::computeInstrLatency(STI, *SCDesc);
+  }
+
+  // Default: return 0 to fall back to class-based defaults
+  return 0;
+}
+
+/// Get resource cycles (ReleaseAtCycle) from the scheduling model.
+static unsigned getSchedModelResourceCycles(const MCInst &MI,
+                                            const MCInstrInfo &MCII,
+                                            const MCSubtargetInfo &STI) {
+  const MCSchedModel &SM = STI.getSchedModel();
+  if (!SM.hasInstrSchedModel())
+    return 0;
+
+  unsigned SchedClass = MCII.get(MI.getOpcode()).getSchedClass();
+  const MCSchedClassDesc *SCDesc = SM.getSchedClassDesc(SchedClass);
+  if (!SCDesc || SCDesc->isVariant())
+    return 0;
+
+  // Return the maximum resource cycles (ReleaseAtCycle)
+  unsigned MaxCycles = 0;
+  for (const MCWriteProcResEntry *PRE = STI.getWriteProcResBegin(SCDesc),
+                                 *E = STI.getWriteProcResEnd(SCDesc);
+       PRE != E; ++PRE) {
+    if (PRE->ReleaseAtCycle > MaxCycles)
+      MaxCycles = PRE->ReleaseAtCycle;
+  }
+  return MaxCycles;
 }
 
 //===----------------------------------------------------------------------===//
@@ -160,8 +278,15 @@ unsigned MCInstInfo::getLatency(InstClass IC) const {
 
 SimInst MCInstInfo::createSimInst(const MCInst &MI) const {
   InstClass IC = classifyInst(MI);
-  unsigned Lat = getLatency(IC);
   FunctionalUnit Unit = getUnitForClass(IC);
+
+  // Try to get latency from scheduling model first
+  unsigned Lat = 0;
+  if (STI)
+    Lat = getSchedModelLatency(MI, MCII, *STI);
+  // Fall back to default latencies
+  if (Lat == 0)
+    Lat = getLatency(IC);
 
   return SimInst(const_cast<MCInst *>(&MI), IC, Lat, Unit);
 }
@@ -171,17 +296,15 @@ SimInst MCInstInfo::createSimInst(const MCInst &MI) const {
 //===----------------------------------------------------------------------===//
 
 unsigned MCInstInfo::getRepeatRate(const SimInst &SI) const {
-  // At MC layer we don't have access to TII.getRepeatRate().
-  // For now, return 1 (conservative - no LOLVALU detection).
-  // TODO: Could pattern-match opcode names for known LOLVALU patterns.
-  (void)SI;
-  return 1;
+  // Use resource cycles from scheduling model as repeat rate
+  return getResourceCycles(SI);
 }
 
 bool MCInstInfo::isLOLVALU(const SimInst &SI) const {
-  // Can't detect reliably at MC layer - would need opcode pattern matching
-  (void)SI;
-  return false;
+  // Long-latency VALU if it's a VALU instruction with repeat rate > 1
+  if (SI.Class != InstClass::VALU)
+    return false;
+  return getResourceCycles(SI) > 1;
 }
 
 bool MCInstInfo::isTRANS(const SimInst &SI) const {
@@ -189,9 +312,26 @@ bool MCInstInfo::isTRANS(const SimInst &SI) const {
 }
 
 unsigned MCInstInfo::getResourceCycles(const SimInst &SI) const {
-  InstClass IC = SI.Class;
+  const auto *MI = SI.getAs<MCInst>();
+  StringRef Name = MCII.getName(MI->getOpcode());
 
-  // Simplified resource cycles at MC layer
+  // VOPD (dual) instructions - resource cycles 1
+  if (Name.starts_with("V_DUAL_"))
+    return 1;
+
+  // Long-latency VALU (LOLVALU) instructions - resource cycles 4
+  if (Name.starts_with("V_CVT_SCALEF32"))
+    return 4;
+
+  // Try scheduling model first
+  if (STI) {
+    unsigned Cycles = getSchedModelResourceCycles(*MI, MCII, *STI);
+    if (Cycles > 0)
+      return Cycles;
+  }
+
+  // Fall back to simplified resource cycles
+  InstClass IC = SI.Class;
   if (IC == InstClass::WMMA)
     return 8;
   if (IC == InstClass::TRANS)
@@ -214,30 +354,35 @@ std::pair<WaitType, unsigned> MCInstInfo::getWaitInfo(const SimInst &SI) const {
   if (MI->getNumOperands() > 0 && MI->getOperand(0).isImm())
     WaitCount = MI->getOperand(0).getImm();
 
-  switch (Opc) {
-  case AMDGPU::S_WAIT_DSCNT:
+  // Use name-based matching for encoding variants (e.g., S_WAIT_DSCNT_gfx12)
+  StringRef Name = MCII.getName(Opc);
+
+  if (Opc == AMDGPU::S_WAIT_DSCNT || Name.starts_with("S_WAIT_DSCNT"))
     return {WaitType::DS, WaitCount};
-  case AMDGPU::S_WAIT_LOADCNT:
+  if (Opc == AMDGPU::S_WAIT_LOADCNT || Name.starts_with("S_WAIT_LOADCNT"))
     return {WaitType::VMEMLoad, WaitCount};
-  case AMDGPU::S_WAIT_STORECNT:
+  if (Opc == AMDGPU::S_WAIT_STORECNT || Name.starts_with("S_WAIT_STORECNT"))
     return {WaitType::VMEMStore, WaitCount};
-  case AMDGPU::S_WAIT_KMCNT:
+  if (Opc == AMDGPU::S_WAIT_KMCNT || Name.starts_with("S_WAIT_KMCNT"))
     return {WaitType::SMEM, WaitCount};
-  case AMDGPU::S_WAIT_TENSORCNT:
+  if (Opc == AMDGPU::S_WAIT_TENSORCNT || Name.starts_with("S_WAIT_TENSORCNT"))
     return {WaitType::Tensor, WaitCount};
-  case AMDGPU::S_WAIT_XCNT:
+  if (Opc == AMDGPU::S_WAIT_XCNT || Name.starts_with("S_WAIT_XCNT"))
     return {WaitType::XCnt, WaitCount};
-  case AMDGPU::S_WAITCNT_DEPCTR:
+  if (Opc == AMDGPU::S_WAITCNT_DEPCTR || Name.starts_with("S_WAITCNT_DEPCTR"))
     return {WaitType::DepCtr, WaitCount};
-  default:
-    return {WaitType::None, 0};
-  }
+
+  return {WaitType::None, 0};
 }
 
 unsigned MCInstInfo::getVaVdstTarget(const SimInst &SI) const {
   const auto *MI = SI.getAs<MCInst>();
-  if (MI->getOpcode() == AMDGPU::S_WAITCNT_DEPCTR && MI->getNumOperands() > 0 &&
-      MI->getOperand(0).isImm())
+  unsigned Opc = MI->getOpcode();
+  StringRef Name = MCII.getName(Opc);
+
+  // Use name-based matching for encoding variants (e.g., S_WAITCNT_DEPCTR_gfx12)
+  if ((Opc == AMDGPU::S_WAITCNT_DEPCTR || Name.starts_with("S_WAITCNT_DEPCTR")) &&
+      MI->getNumOperands() > 0 && MI->getOperand(0).isImm())
     return AMDGPU::DepCtr::decodeFieldVaVdst(MI->getOperand(0).getImm());
   return 15; // Default: don't wait
 }
@@ -256,23 +401,24 @@ WMMAVariant MCInstInfo::getWMMAVariant(const SimInst &SI) const {
   StringRef Name = MCII.getName(MI->getOpcode());
 
   // Check for specific patterns in the opcode name
-  if (Name.contains("IU8") && Name.contains("16x16x64"))
+  // Note: Tablegen names use uppercase X in dimensions (e.g., 16X16X128)
+  if (Name.contains("IU8") && Name.contains("16X16X64"))
     return WMMAVariant::IU8_16x16x64;
-  if (Name.contains("F4") && Name.contains("32x16x128"))
+  if (Name.contains("F4") && Name.contains("32X16X128"))
     return WMMAVariant::F4_32x16x128;
-  if (Name.contains("16x16x128")) {
+  if (Name.contains("16X16X128")) {
     if (Name.contains("FP8") || Name.contains("BF8"))
       return WMMAVariant::FP8_16x16x128;
     if (Name.contains("F8") || Name.contains("F6") || Name.contains("F4"))
       return WMMAVariant::F8F6F4_16x16x128;
   }
-  if (Name.contains("16x16x64")) {
+  if (Name.contains("16X16X64")) {
     if (Name.contains("FP8"))
       return WMMAVariant::FP8_16x16x64;
     if (Name.contains("BF8"))
       return WMMAVariant::BF8_16x16x64;
   }
-  if (Name.contains("16x16x32")) {
+  if (Name.contains("16X16X32")) {
     if (Name.contains("F16"))
       return WMMAVariant::F16_16x16x32;
     if (Name.contains("BF16"))
@@ -308,25 +454,35 @@ void MCInstInfo::getSrcRegs(const SimInst &SI,
     if (!Op.isReg())
       continue;
 
-    unsigned Reg = Op.getReg();
+    MCRegister Reg = Op.getReg();
     if (Reg == 0)
       continue;
 
-    // Determine register type based on register name
-    // At MC layer, we use MCRegisterInfo to get basic info
+    // Determine register type and size using AMDGPU utilities
     RegOperand::Type Type = RegOperand::Type::Other;
+    unsigned NumComponents = 1;
 
-    // Check if it's a VGPR or SGPR
-    StringRef RegName = MRI.getName(Reg);
-    if (RegName.starts_with("v") || RegName.starts_with("V"))
+    if (const MCRegisterClass *RC = AMDGPU::getVGPRPhysRegClass(Reg, MRI)) {
       Type = RegOperand::Type::VGPR;
-    else if (RegName.starts_with("s") || RegName.starts_with("S"))
+      NumComponents = RC->getSizeInBits() / 32;
+    } else if (AMDGPU::isSGPR(Reg, &MRI)) {
       Type = RegOperand::Type::SGPR;
+      // For SGPRs, get size from operand info if available
+      if (i < Desc.getNumOperands()) {
+        int16_t RCID = Desc.operands()[i].RegClass;
+        if (RCID >= 0) {
+          const MCRegisterClass &RC = MRI.getRegClass(RCID);
+          NumComponents = RC.getSizeInBits() / 32;
+        }
+      }
+    }
 
-    // Get HW register index (simplified - just use encoding value)
-    unsigned HWIndex = MRI.getEncodingValue(Reg);
+    // Get HW register index
+    unsigned HWIndex = MRI.getEncodingValue(Reg) & AMDGPU::HWEncoding::REG_IDX_MASK;
+    if (NumComponents == 0)
+      NumComponents = 1;
 
-    Regs.push_back(RegOperand(Type, HWIndex, 1)); // Assume 1 component at MC
+    Regs.push_back(RegOperand(Type, HWIndex, NumComponents));
   }
 }
 
@@ -346,35 +502,47 @@ void MCInstInfo::getDstRegs(const SimInst &SI,
     if (!Op.isReg())
       continue;
 
-    unsigned Reg = Op.getReg();
+    MCRegister Reg = Op.getReg();
     if (Reg == 0)
       continue;
 
-    // Determine register type based on register name
+    // Determine register type and size using AMDGPU utilities
     RegOperand::Type Type = RegOperand::Type::Other;
+    unsigned NumComponents = 1;
 
-    StringRef RegName = MRI.getName(Reg);
-    if (RegName.starts_with("v") || RegName.starts_with("V"))
+    if (const MCRegisterClass *RC = AMDGPU::getVGPRPhysRegClass(Reg, MRI)) {
       Type = RegOperand::Type::VGPR;
-    else if (RegName.starts_with("s") || RegName.starts_with("S"))
+      NumComponents = RC->getSizeInBits() / 32;
+    } else if (AMDGPU::isSGPR(Reg, &MRI)) {
       Type = RegOperand::Type::SGPR;
+      // For SGPRs, get size from operand info if available
+      if (i < Desc.getNumOperands()) {
+        int16_t RCID = Desc.operands()[i].RegClass;
+        if (RCID >= 0) {
+          const MCRegisterClass &RC = MRI.getRegClass(RCID);
+          NumComponents = RC.getSizeInBits() / 32;
+        }
+      }
+    }
 
-    unsigned HWIndex = MRI.getEncodingValue(Reg);
+    // Get HW register index
+    unsigned HWIndex = MRI.getEncodingValue(Reg) & AMDGPU::HWEncoding::REG_IDX_MASK;
+    if (NumComponents == 0)
+      NumComponents = 1;
 
-    Regs.push_back(RegOperand(Type, HWIndex, 1));
+    Regs.push_back(RegOperand(Type, HWIndex, NumComponents));
   }
 }
 
 bool MCInstInfo::waitsForVALU(const SimInst &SI) const {
-  // Conservative default based on InstClass at MC layer.
-  // Memory instructions implicitly wait for all VALU (VA_VDST==0).
+  // Match MIR adapter logic from AMDGPUInsertDelayAlu::instructionWaitsForVALU
+  // Only DS, FLAT, MIMG, MTBUF, MUBUF instructions implicitly wait (VA_VDST==0).
+  // Note: TDM (TENSOR_LOAD_TO_LDS) does NOT wait for VALU.
   switch (SI.Class) {
   case InstClass::DS_READ:
   case InstClass::DS_WRITE:
   case InstClass::VMEM_READ:
   case InstClass::VMEM_WRITE:
-  case InstClass::SMEM:
-  case InstClass::TDM:
     return true;
   default:
     return false;

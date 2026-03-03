@@ -22,18 +22,21 @@ namespace llvm {
 class MCInst;
 class MCInstrInfo;
 class MCRegisterInfo;
+class MCSubtargetInfo;
 
 namespace AMDGPUSim {
 
 /// Concrete implementation of SimInstInfo for MCInst.
-/// Provides instruction property queries using MCInstrInfo and MCRegisterInfo.
-/// Note: Some features are limited at the MC layer compared to MIR.
+/// Provides instruction property queries using MCInstrInfo, MCRegisterInfo,
+/// and MCSubtargetInfo (for scheduling model access).
 class MCInstInfo : public SimInstInfo {
   const MCInstrInfo &MCII;
   const MCRegisterInfo &MRI;
+  const MCSubtargetInfo *STI;
 
 public:
-  MCInstInfo(const MCInstrInfo &MCII, const MCRegisterInfo &MRI);
+  MCInstInfo(const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
+             const MCSubtargetInfo *STI = nullptr);
 
   /// Create a SimInst from an MCInst.
   /// Populates the cached basic properties (Class, Latency, Unit).

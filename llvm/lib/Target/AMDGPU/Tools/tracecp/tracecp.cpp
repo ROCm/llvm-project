@@ -54,10 +54,6 @@ static cl::opt<int64_t> WaveId("wave-id", cl::desc("Filter by wave_id"),
 static cl::opt<bool> Verbose("verbose", cl::desc("Enable verbose output"),
                              cl::init(false), cl::cat(TraceCPCategory));
 
-static cl::opt<bool> PrintLoopInstructions(
-    "print-loop-instructions",
-    cl::desc("Print instructions for each detected loop"),
-    cl::init(false), cl::cat(TraceCPCategory));
 
 int main(int argc, char **argv) {
   cl::HideUnrelatedOptions(TraceCPCategory);
@@ -132,23 +128,16 @@ int main(int argc, char **argv) {
   }
   std::vector<tracecp::InstEntry> &Entries = *EntriesOrErr;
 
-  // Run simulation (populates metrics in each entry)
-  tracecp::simulateTrace(Entries, *MII, *MRI, Verbose);
-
-  // Compute and print aggregate metrics
-  tracecp::TraceMetrics Metrics(Entries);
-  Metrics.print();
-
-  // Reconstruct and print CFG
+  // Reconstruct CFG first (needed for simulation)
   tracecp::TraceCFG CFG = tracecp::reconstructCFG(Entries, *MII);
   CFG.print();
 
-  // Detect loops and compute per-loop metrics
-  tracecp::LoopInfo LI = tracecp::detectLoops(CFG, Entries);
-  if (PrintLoopInstructions)
-    LI.print(&CFG, &Entries);
-  else
-    LI.print();
+  // Run simulation (collects BlockMetrics per block execution)
+  tracecp::TraceMetrics Metrics =
+      tracecp::simulateTrace(Entries, CFG, *MII, *MRI, *STI, Verbose);
+
+  // Print aggregate metrics
+  Metrics.print();
 
   return 0;
 }

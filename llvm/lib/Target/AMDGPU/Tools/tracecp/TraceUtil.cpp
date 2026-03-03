@@ -23,6 +23,7 @@ namespace llvm {
 namespace tracecp {
 
 using namespace AMDGPUSim;
+using AMDGPU::BlockMetrics;
 
 static bool parseHexBytes(StringRef HexStr, SmallVectorImpl<uint8_t> &Bytes) {
   SmallVector<StringRef, 8> HexParts;
@@ -139,229 +140,443 @@ Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
   return Results;
 }
 
-void simulateTrace(std::vector<InstEntry> &Entries, const MCInstrInfo &MCII,
-                   const MCRegisterInfo &MRI, bool Verbose) {
-  MCInstInfo InstInfo(MCII, MRI);
+/// Count an instruction into BlockMetrics (adapted from AMDGPUStaticSimulator).
+static void countInstruction(const SimInst &SI, MCInstInfo &InstInfo,
+                             BlockMetrics &Metrics) {
+  Metrics.NumInstructions++;
+
+  switch (SI.Class) {
+  case InstClass::VALU:
+    Metrics.NumVALU++;
+    break;
+  case InstClass::SALU:
+    Metrics.NumSALU++;
+    break;
+  case InstClass::TRANS:
+    Metrics.NumTRANS++;
+    break;
+  case InstClass::WMMA:
+    Metrics.NumWMMA++;
+    break;
+  case InstClass::DS_READ:
+    Metrics.NumDSRead++;
+    break;
+  case InstClass::DS_WRITE:
+    Metrics.NumDSWrite++;
+    break;
+  case InstClass::VMEM_READ:
+  case InstClass::VMEM_WRITE:
+    Metrics.NumVMEM++;
+    break;
+  case InstClass::SMEM:
+    Metrics.NumSMEM++;
+    break;
+  case InstClass::TDM:
+    Metrics.NumTDM++;
+    break;
+  case InstClass::BRANCH:
+    Metrics.NumBranch++;
+    break;
+  case InstClass::BARRIER:
+    Metrics.NumBarrier++;
+    break;
+  case InstClass::WAITCNT:
+    Metrics.NumWaitcnt++;
+    break;
+  case InstClass::DELAY_ALU:
+    Metrics.NumDelayAlu++;
+    break;
+  case InstClass::NOP:
+    Metrics.NumNop++;
+    break;
+  default:
+    break;
+  }
+}
+
+/// Attribute stall cycles to BlockMetrics (adapted from AMDGPUStaticSimulator).
+static void attributeStall(const StallBreakdown &B, FunctionalUnit Unit,
+                           InstClass IC, BlockMetrics &Metrics) {
+  if (B.RegBankInWMMAWindow && B.RegBank > 0)
+    Metrics.RegBankConflictsInWMMAWindow += B.RegBank;
+
+  unsigned TotalStall = B.total();
+  if (TotalStall == 0)
+    return;
+
+  if (B.WaitCnt == TotalStall) {
+    Metrics.StallWaitCnt += TotalStall;
+  } else if (B.MemFIFO == TotalStall) {
+    Metrics.StallMemFIFO += TotalStall;
+  } else if (B.FU == TotalStall) {
+    Metrics.StallFunctionalUnit += TotalStall;
+    switch (Unit) {
+    case FunctionalUnit::XDL:
+      Metrics.StallXDL += TotalStall;
+      break;
+    case FunctionalUnit::VALU:
+      Metrics.StallVALU += TotalStall;
+      break;
+    case FunctionalUnit::TRANS:
+      Metrics.StallTRANSUnit += TotalStall;
+      break;
+    case FunctionalUnit::SALU:
+      Metrics.StallSALU += TotalStall;
+      break;
+    case FunctionalUnit::LDS:
+      Metrics.StallLDS += TotalStall;
+      break;
+    case FunctionalUnit::VMEM:
+      Metrics.StallVMEMUnit += TotalStall;
+      break;
+    default:
+      break;
+    }
+  } else if (B.VALUSlot == TotalStall) {
+    Metrics.StallFunctionalUnit += TotalStall;
+    Metrics.StallVALU += TotalStall;
+  } else if (B.CoExec == TotalStall) {
+    Metrics.StallCoExec += TotalStall;
+    switch (IC) {
+    case InstClass::VALU:
+      Metrics.CoExecMissVALU += TotalStall;
+      break;
+    case InstClass::TRANS:
+      Metrics.CoExecMissTRANS += TotalStall;
+      break;
+    case InstClass::DS_READ:
+    case InstClass::DS_WRITE:
+    case InstClass::VMEM_READ:
+    case InstClass::VMEM_WRITE:
+    case InstClass::SMEM:
+    case InstClass::TDM:
+      Metrics.CoExecMissMemory += TotalStall;
+      break;
+    default:
+      Metrics.CoExecMissOther += TotalStall;
+      break;
+    }
+  } else if (B.DelayAlu == TotalStall) {
+    Metrics.StallDelayAlu += TotalStall;
+  } else if (B.LongLatVALU == TotalStall) {
+    Metrics.StallCoExec += TotalStall;
+    Metrics.StallLongLatVALU += TotalStall;
+  } else if (B.LOLVALUTRANSHazard == TotalStall) {
+    Metrics.StallLOLVALUTRANS += TotalStall;
+  } else if (B.SSRC == TotalStall) {
+    Metrics.StallVaSSRC += TotalStall;
+  } else if (B.VaVdst == TotalStall) {
+    Metrics.StallVaVdst += TotalStall;
+  } else if (B.RAW == TotalStall) {
+    Metrics.StallRAW += TotalStall;
+  } else if (B.RegBank == TotalStall && !B.RegBankInWMMAWindow) {
+    Metrics.StallRegBankConflict += TotalStall;
+  }
+}
+
+/// Log instruction header in pass-like format.
+static void logInstHeader(unsigned Cycle, const SimInst &SI,
+                          MCInstInfo &InstInfo, StringRef InstructionText) {
+  errs() << "\n[Cycle " << Cycle << "] " << InstructionText << "\n";
+
+  unsigned InstBytes = InstInfo.getInstBytes(SI);
+  errs() << "  Class: " << getInstClassName(SI.Class)
+         << " | Unit: " << getUnitName(SI.Unit) << " | Latency: " << SI.Latency
+         << " | ResourceCycles: " << InstInfo.getResourceCycles(SI)
+         << " | Size: " << InstBytes << " bytes\n";
+}
+
+/// Simulate a single instruction and update BlockMetrics.
+static void simulateInst(const MCInst &Inst, size_t EntryIdx,
+                         const std::vector<InstEntry> &Entries,
+                         Simulator &Sim, MCInstInfo &InstInfo,
+                         BlockMetrics &Metrics, bool Verbose,
+                         StringRef InstructionText) {
+  const GPUSimState &State = Sim.getState();
+  unsigned EntryCycle = State.CurrentCycle;
+  SimInst SI = InstInfo.createSimInst(Inst);
+
+  // Build lookahead for MSB_SET masking
+  SmallVector<SimInst, 1> Lookahead;
+  if (SI.Class == InstClass::MSB_SET && EntryIdx + 1 < Entries.size()) {
+    Lookahead.push_back(InstInfo.createSimInst(Entries[EntryIdx + 1].Inst));
+  }
+
+  // MSB_SET handling
+  if (SI.Class == InstClass::MSB_SET) {
+    InstrSimInfo Info = Sim.simulateInst(SI, Lookahead);
+
+    Metrics.NumInstructions++;
+    Metrics.NumMSBSet++;
+    if (Info.WasExposed) {
+      if (Info.WasMasked) {
+        Metrics.NumMSBSetMasked++;
+      } else {
+        Metrics.NumMSBSetExposed++;
+        if (Sim.getState().inWMMAWindow()) {
+          Metrics.StallCoExec++;
+          Metrics.CoExecMissOther++;
+        }
+      }
+    }
+
+    if (Verbose) {
+      unsigned DisplayCycle =
+          Info.WasFused ? (EntryCycle > 0 ? EntryCycle - 1 : 0) : EntryCycle;
+      errs() << "\n[Cycle " << DisplayCycle << "] " << InstructionText << "\n";
+      unsigned InstBytes = InstInfo.getInstBytes(SI);
+      errs() << "  Class: MSB_SET | Size: " << InstBytes << " bytes\n";
+      errs() << "  \xe2\x86\x92 MSB_SET ";
+      if (Info.WasFused) {
+        errs() << "fused with prev (free)";
+      } else if (Info.WasMasked) {
+        errs() << "exposed but MASKED (next instr stalls anyway)";
+      } else {
+        errs() << "EXPOSED (+1 cycle)";
+        if (Sim.getState().inWMMAWindow())
+          errs() << " [in WMMA window]";
+      }
+      errs() << "\n";
+    }
+    return;
+  }
+
+  // Regular instruction: log header before simulation
+  if (Verbose)
+    logInstHeader(EntryCycle, SI, InstInfo, InstructionText);
+
+  // Core simulation
+  InstrSimInfo Info = Sim.simulateInst(SI);
+
+  // Attribute stalls
+  attributeStall(Info.Breakdown, SI.Unit, SI.Class, Metrics);
+
+  // Count instruction
+  countInstruction(SI, InstInfo, Metrics);
+
+  // WMMA window tracking
+  if (Info.IsWMMA) {
+    Metrics.WMMAWindowCycles += Sim.getState().ActiveWMMA.Info.Occupancy;
+  }
+
+  // WMMA co-execution tracking
+  bool InWMMAWindow =
+      Sim.getState().inWMMAWindow() && SI.Class != InstClass::WMMA;
+  if (InWMMAWindow) {
+    if (Info.Breakdown.CoExec > 0)
+      Metrics.WMMACoExecBlocked++;
+    else
+      Metrics.WMMACoExecUsed++;
+  }
+
+  // Log next cycle (stall breakdown already printed by Simulator)
+  if (Verbose) {
+    errs() << "  \xe2\x86\x92 NextCycle: " << Sim.getState().CurrentCycle << "\n";
+  }
+}
+
+TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
+                              const TraceCFG &CFG, const MCInstrInfo &MCII,
+                              const MCRegisterInfo &MRI,
+                              const MCSubtargetInfo &STI, bool Verbose) {
+  TraceMetrics Result;
+
+  if (Entries.empty())
+    return Result;
+
+  MCInstInfo InstInfo(MCII, MRI, &STI);
   HWModel Model = createHWModel(GPUTarget::GFX1250);
 
   SimulatorConfig Cfg;
   Cfg.Verbose = Verbose;
   Cfg.Log = Verbose ? &errs() : nullptr;
-  Cfg.EnableScoreboard = false;
-  Cfg.EnableISCache = false;
+  Cfg.EnableScoreboard = true;  // Enable RAW hazard detection
+  Cfg.EnableISCache = true;     // Enable IS cache modeling
 
   Simulator Sim(InstInfo, Model, Cfg);
-  unsigned PrevCycle = Sim.getState().CurrentCycle;
 
-  for (size_t EntryIdx = 0; EntryIdx < Entries.size(); ++EntryIdx) {
-    InstEntry &Entry = Entries[EntryIdx];
-
-    // const GPUSimState &State = Sim.getState();
-    // unsigned EntryCycle = State.CurrentCycle;
-
-    SimInst SI = InstInfo.createSimInst(Entry.Inst);
-
-    SmallVector<SimInst, 1> Lookahead;
-    if (SI.Class == InstClass::MSB_SET) {
-      // Build lookahead for MSB_SET masking
-      if (EntryIdx + 1 < Entries.size()) {
-        InstEntry &NextEntry = Entries[EntryIdx + 1];
-        Lookahead.push_back(InstInfo.createSimInst(NextEntry.Inst));
-      }
-    }
-
-    InstrSimInfo Info = Sim.simulateInst(SI, Lookahead);
-    //InstrSimInfo Info = Sim.simulateInst(SI);
-    unsigned CurrentCycle = Sim.getState().CurrentCycle;
-
-    Entry.InstClass = static_cast<unsigned>(SI.Class);
-    Entry.Cycles = CurrentCycle - PrevCycle;
-    Entry.StallCycles = Info.StallCycles;
-    Entry.StallReason = static_cast<unsigned>(Info.Reason);
-    PrevCycle = CurrentCycle;
-
-    if (Verbose) {
-      errs() << "[" << Sim.getState().CurrentCycle << "] "
-             << Entry.InstructionText << "\n";
-      if (Info.StallCycles > 0) {
-        errs() << "  Stall: " << Info.StallCycles << " ("
-               << Info.getReasonString() << ")\n";
-      }
-      errs() << "\n";
+  // Build PC -> block mapping
+  std::map<uint64_t, uint64_t> PCToBlock;
+  for (const auto &E : Entries) {
+    auto It = CFG.Blocks.upper_bound(E.PC);
+    if (It != CFG.Blocks.begin()) {
+      --It;
+      if (E.PC >= It->second.StartPC && E.PC <= It->second.EndPC)
+        PCToBlock[E.PC] = It->first;
     }
   }
+
+  // Track current block and its metrics
+  uint64_t CurrentBlockPC = 0;
+  BlockMetrics CurrentMetrics;
+  unsigned BlockStartCycle = Sim.getState().CurrentCycle;
+  bool InBlock = false;
+
+  for (size_t EntryIdx = 0; EntryIdx < Entries.size(); ++EntryIdx) {
+    const InstEntry &Entry = Entries[EntryIdx];
+
+    // Find which block this instruction belongs to
+    auto BlockIt = PCToBlock.find(Entry.PC);
+    uint64_t BlockPC = (BlockIt != PCToBlock.end()) ? BlockIt->second : Entry.PC;
+
+    // Check if we're starting a new block execution.
+    // This happens when:
+    // 1. We haven't started any block yet (!InBlock)
+    // 2. We moved to a different block (BlockPC != CurrentBlockPC)
+    // 3. We're at the start of the same block again (loop back-edge)
+    bool IsBlockStart = (Entry.PC == BlockPC);
+    bool StartNewBlock = !InBlock || BlockPC != CurrentBlockPC ||
+                         (IsBlockStart && InBlock);
+
+    if (StartNewBlock) {
+      // Finish previous block if we had one
+      if (InBlock) {
+        CurrentMetrics.TotalCycles =
+            Sim.getState().CurrentCycle - BlockStartCycle;
+        Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
+
+        if (Verbose) {
+          errs() << format("\n=== End Block 0x%04x: %u instrs, %u cycles, "
+                           "%u stalls ===\n",
+                           CurrentBlockPC, CurrentMetrics.NumInstructions,
+                           CurrentMetrics.TotalCycles,
+                           CurrentMetrics.StallCycles());
+        }
+      }
+
+      // Start new block
+      CurrentBlockPC = BlockPC;
+      CurrentMetrics = BlockMetrics();
+      BlockStartCycle = Sim.getState().CurrentCycle;
+      InBlock = true;
+
+      if (Verbose) {
+        errs() << format("\n=== Block 0x%04x [Cycle %u] ===",
+                         CurrentBlockPC, BlockStartCycle);
+      }
+    }
+
+    // Simulate this instruction
+    simulateInst(Entry.Inst, EntryIdx, Entries, Sim, InstInfo, CurrentMetrics,
+                 Verbose, Entry.InstructionText);
+  }
+
+  // Finish last block
+  if (InBlock) {
+    CurrentMetrics.TotalCycles = Sim.getState().CurrentCycle - BlockStartCycle;
+    Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
+
+    if (Verbose) {
+      errs() << format("\n=== End Block 0x%04x: %u instrs, %u cycles, "
+                       "%u stalls ===\n",
+                       CurrentBlockPC, CurrentMetrics.NumInstructions,
+                       CurrentMetrics.TotalCycles,
+                       CurrentMetrics.StallCycles());
+    }
+  }
+
+  return Result;
 }
 
-TraceMetrics::TraceMetrics(const std::vector<InstEntry> &Entries) {
-  for (const auto &Entry : Entries)
-    addInstruction(Entry);
+/// Helper to print a BlockMetrics in the same format as AMDGPUAsmPrinter.
+static void printBlockMetricsLLVMStyle(raw_ostream &OS, const BlockMetrics &M,
+                                       const char *BlockName) {
+  // Header: ;=== Block: N cycles ===
+  OS << ";=== " << BlockName << ": " << M.TotalCycles << " cycles ===\n";
+
+  // Instruction breakdown
+  OS << ";  ";
+  M.printInstBreakdown(OS);
+  OS << "\n";
+
+  // Stall summary and breakdown
+  if (M.StallCycles() > 0) {
+    float StallPct = M.TotalCycles > 0
+                         ? 100.0f * M.StallCycles() / M.TotalCycles
+                         : 0.0f;
+    OS << format(";  Stall: %u cycles (%.0f%%)\n", M.StallCycles(), StallPct);
+    OS << ";    ";
+    M.printStallBreakdown(OS);
+    OS << "\n";
+
+    if (M.StallFunctionalUnit > 0) {
+      OS << ";      FU: ";
+      M.printFUBreakdown(OS);
+      OS << "\n";
+    }
+  }
+
+  // WMMA efficiency if applicable
+  if (M.WMMAWindowCycles > 0 && M.TotalCycles > 0) {
+    float WMMAEff = 100.0f * M.WMMAWindowCycles / M.TotalCycles;
+    OS << format(";  WMMA efficiency: %u / %u cycles (%.0f%%)\n",
+                 M.WMMAWindowCycles, M.TotalCycles, WMMAEff);
+  }
 }
 
 void TraceMetrics::print() const {
   outs() << "\n";
-  outs() << "============================================================\n";
-  outs() << "TRACE SIMULATION METRICS\n";
-  outs() << "============================================================\n";
-  outs() << "\n";
+  outs() << "; ============================================================\n";
+  outs() << "; TRACE SIMULATION METRICS\n";
+  outs() << "; ============================================================\n";
+  outs() << ";\n";
 
-  printBody();
+  // Print first execution of each block using LLVM-style format
+  unsigned BlockIdx = 0;
+  for (const auto &[BlockPC, Executions] : Blocks) {
+    if (Executions.empty())
+      continue;
 
-  outs() << "============================================================\n";
-}
+    // Only print the first execution
+    const BlockMetrics &BM = Executions[0];
+    std::string BlockName = formatv("Block {0} (PC {1:X})", BlockIdx, BlockPC);
+    printBlockMetricsLLVMStyle(outs(), BM, BlockName.c_str());
 
-void TraceMetrics::printBody(unsigned Iterations) const {
-  outs() << "=== Summary ===\n";
-  outs() << format("  Instructions: %u\n", NumInstructions);
-  outs() << format("  Total Cycles: %u\n", TotalCycles);
-  outs() << format("  Stall Cycles: %u (%.1f%%)\n", StallCycles,
-                   getStallRatio() * 100.0f);
-  outs() << format("  IPC: %.2f\n", getIPC());
-  outs() << "\n";
+    // For blocks with multiple executions, show average cycles and stalls
+    if (Executions.size() > 1) {
+      unsigned TotalCycles = 0, TotalStalls = 0;
+      for (const auto &M : Executions) {
+        TotalCycles += M.TotalCycles;
+        TotalStalls += M.StallCycles();
+      }
+      float AvgCycles = static_cast<float>(TotalCycles) / Executions.size();
+      float AvgStalls = static_cast<float>(TotalStalls) / Executions.size();
+      outs() << format(";  Avg over %zu executions: %.1f cycles, %.1f stalls\n",
+                       Executions.size(), AvgCycles, AvgStalls);
+    }
 
-  outs() << "=== Instruction Breakdown ===\n";
-  outs() << format("  VALU: %u | SALU: %u | TRANS: %u | WMMA: %u\n", NumVALU,
-                   NumSALU, NumTRANS, NumWMMA);
-  outs() << format("  DS_RD: %u | DS_WR: %u | VMEM: %u | SMEM: %u\n", NumDSRead,
-                   NumDSWrite, NumVMEM, NumSMEM);
-  outs() << format("  Branch: %u | Waitcnt: %u | Other: %u\n", NumBranch,
-                   NumWaitcnt, NumOther);
-  outs() << "\n";
-
-  if (StallCycles > 0) {
-    outs() << "=== Stall Breakdown ===\n";
-    if (StallFU > 0)
-      outs() << format("  FU Busy: %u\n", StallFU);
-    if (StallCoExec > 0)
-      outs() << format("  WMMA CoExec: %u\n", StallCoExec);
-    if (StallDelayAlu > 0)
-      outs() << format("  DelayAlu: %u\n", StallDelayAlu);
-    if (StallWaitCnt > 0)
-      outs() << format("  WaitCnt: %u\n", StallWaitCnt);
-    if (StallMemFIFO > 0)
-      outs() << format("  MemFIFO: %u\n", StallMemFIFO);
-    if (StallRegBank > 0)
-      outs() << format("  RegBank: %u\n", StallRegBank);
-    if (StallRAW > 0)
-      outs() << format("  RAW: %u\n", StallRAW);
-    if (StallTrans > 0)
-      outs() << format("  Trans Hazard: %u\n", StallTrans);
-    if (StallVASSrc > 0)
-      outs() << format("  VA SSrc: %u\n", StallVASSrc);
-    if (StallVAVDst > 0)
-      outs() << format("  VA VDst: %u\n", StallVAVDst);
-    if (StallISFetch > 0)
-      outs() << format("  IS Fetch: %u\n", StallISFetch);
-    if (StallMSBExposed > 0)
-      outs() << format("  MSB Exposed: %u\n", StallMSBExposed);
-    if (StallOther > 0)
-      outs() << format("  Other: %u\n", StallOther);
-    outs() << "\n";
+    outs() << ";\n";
+    BlockIdx++;
   }
 
-  if (Iterations > 0) {
-    outs() << "=== Per Iteration (average) ===\n";
-    float N = static_cast<float>(Iterations);
-    outs() << format("  Instructions: %.1f\n", NumInstructions / N);
-    outs() << format("  Total Cycles: %.1f\n", TotalCycles / N);
-    outs() << format("  Stall Cycles: %.1f\n", StallCycles / N);
-    outs() << format("  VALU: %.1f | SALU: %.1f | TRANS: %.1f | WMMA: %.1f\n",
-                     NumVALU / N, NumSALU / N, NumTRANS / N, NumWMMA / N);
-    outs() << format("  DS_RD: %.1f | DS_WR: %.1f | VMEM: %.1f | SMEM: %.1f\n",
-                     NumDSRead / N, NumDSWrite / N, NumVMEM / N, NumSMEM / N);
-    outs() << "\n";
-  }
-}
+  // Aggregate all block executions into total
+  BlockMetrics Total;
+  unsigned TotalExecutions = 0;
 
-void TraceMetrics::addInstruction(const InstEntry &E) {
-  NumInstructions++;
-  TotalCycles += E.Cycles;
-
-  // Count instruction class
-  switch (static_cast<InstClass>(E.InstClass)) {
-  case InstClass::VALU:
-    NumVALU++;
-    break;
-  case InstClass::SALU:
-    NumSALU++;
-    break;
-  case InstClass::TRANS:
-    NumTRANS++;
-    break;
-  case InstClass::WMMA:
-    NumWMMA++;
-    break;
-  case InstClass::DS_READ:
-    NumDSRead++;
-    break;
-  case InstClass::DS_WRITE:
-    NumDSWrite++;
-    break;
-  case InstClass::VMEM_READ:
-  case InstClass::VMEM_WRITE:
-    NumVMEM++;
-    break;
-  case InstClass::SMEM:
-    NumSMEM++;
-    break;
-  case InstClass::BRANCH:
-    NumBranch++;
-    break;
-  case InstClass::WAITCNT:
-    NumWaitcnt++;
-    break;
-  default:
-    NumOther++;
-    break;
+  for (const auto &[BlockPC, Executions] : Blocks) {
+    for (const auto &BM : Executions) {
+      Total = Total + BM;
+      TotalExecutions++;
+    }
   }
 
-  // Attribute stall cycles
-  if (E.StallCycles == 0)
-    return;
+  // Print aggregated total using same format
+  outs() << "; ============================================================\n";
+  printBlockMetricsLLVMStyle(outs(), Total, "TOTAL");
 
-  StallCycles += E.StallCycles;
+  // Additional summary info
+  float IPC = Total.TotalCycles > 0
+                  ? static_cast<float>(Total.NumInstructions) / Total.TotalCycles
+                  : 0.0f;
+  outs() << format(";  IPC: %.2f | Block Executions: %u\n", IPC, TotalExecutions);
 
-  switch (static_cast<StallReason>(E.StallReason)) {
-  case StallReason::FU_BUSY:
-    StallFU += E.StallCycles;
-    break;
-  case StallReason::COEXEC_BLOCKED:
-  case StallReason::LONG_LAT_VALU:
-    StallCoExec += E.StallCycles;
-    break;
-  case StallReason::DELAY_ALU:
-    StallDelayAlu += E.StallCycles;
-    break;
-  case StallReason::WAITCNT:
-    StallWaitCnt += E.StallCycles;
-    break;
-  case StallReason::MEM_FIFO:
-    StallMemFIFO += E.StallCycles;
-    break;
-  case StallReason::REG_BANK:
-    StallRegBank += E.StallCycles;
-    break;
-  case StallReason::RAW_HAZARD:
-    StallRAW += E.StallCycles;
-    break;
-  case StallReason::LOLVALU_TRANS_HAZARD:
-    StallTrans += E.StallCycles;
-    break;
-  case StallReason::VA_SSRC_STALL:
-    StallVASSrc += E.StallCycles;
-    break;
-  case StallReason::VA_VDST_WAIT:
-    StallVAVDst += E.StallCycles;
-    break;
-  case StallReason::IS_FETCH:
-    StallISFetch += E.StallCycles;
-    break;
-  case StallReason::MSB_SET_EXPOSED:
-    StallMSBExposed += E.StallCycles;
-    break;
-  case StallReason::NONE:
-    StallOther += E.StallCycles;
-    break;
+  if (Total.WMMAWindowCycles > 0) {
+    float CoExecEff = 100.0f * Total.WMMACoExecUsed / Total.WMMAWindowCycles;
+    outs() << format(";  WMMA Co-exec: %u used / %u window cycles (%.1f%% utilized)\n",
+                     Total.WMMACoExecUsed, Total.WMMAWindowCycles, CoExecEff);
   }
+
+  outs() << "; ============================================================\n";
 }
 
 TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
@@ -408,7 +623,7 @@ TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
       assert(It->second.EndPC == BlockEnd && "Block end PC mismatch");
       It->second.ExecutionCount++;
     } else {
-      BasicBlock BB;
+      TraceBlock BB;
       BB.StartPC = BlockStart;
       BB.EndPC = BlockEnd;
       BB.NumInstructions = BlockInstCount;
@@ -441,9 +656,9 @@ TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
     updateBlocks(CurrentBlockStart, CurrentBlockEnd, CurrentBlockInstCount);
   }
 
-  // Convert edge counts to CFGEdge vector
+  // Convert edge counts to TraceEdge vector
   for (const auto &[Edge, Count] : EdgeCounts) {
-    CFGEdge E;
+    TraceEdge E;
     E.FromBlockPC = std::get<0>(Edge);
     E.FromPC = std::get<1>(Edge);
     E.ToPC = std::get<2>(Edge);
@@ -474,310 +689,11 @@ void TraceCFG::print() const {
   outs() << "\n";
 
   outs() << "=== Edges ===\n";
-  for (const CFGEdge &E : Edges) {
+  for (const TraceEdge &E : Edges) {
     outs() << format("  [0x%04x] 0x%04x -> 0x%04x (%u time(s))\n", E.FromBlockPC,
                      E.FromPC, E.ToPC, E.Count);
   }
   outs() << "\n";
-
-  outs() << "============================================================\n";
-}
-
-/// Check if A dominates B using the dominator map.
-static bool dominates(uint64_t A, uint64_t B,
-                      const std::map<uint64_t, uint64_t> &Doms) {
-  // Walk up the dominator tree from B
-  uint64_t Current = B;
-  while (true) {
-    if (Current == A)
-      return true;
-    auto It = Doms.find(Current);
-    if (It == Doms.end() || It->second == Current)
-      return false;
-    Current = It->second;
-  }
-}
-
-LoopInfo detectLoops(const TraceCFG &CFG,
-                     const std::vector<InstEntry> &Entries) {
-  LoopInfo LI;
-
-  if (CFG.Blocks.empty())
-    return LI;
-
-  // Build PC -> block mapping for fast lookup
-  std::map<uint64_t, uint64_t> PCToBlock;  // PC -> BlockStartPC
-  for (const auto &E : Entries) {
-    auto It = CFG.Blocks.upper_bound(E.PC);
-    assert(It != CFG.Blocks.begin() && "PC before first block");
-    --It;
-    assert(E.PC >= It->second.StartPC && E.PC <= It->second.EndPC &&
-           "PC not within block bounds");
-    PCToBlock[E.PC] = It->first;
-  }
-
-  // Build predecessors and successors lists
-  std::map<uint64_t, std::vector<uint64_t>> Preds, Succs;
-  for (const auto &[StartPC, BB] : CFG.Blocks) {
-    Preds[StartPC] = {};
-    Succs[StartPC] = {};
-  }
-  for (const CFGEdge &E : CFG.Edges) {
-    Succs[E.FromBlockPC].push_back(E.ToPC);
-    Preds[E.ToPC].push_back(E.FromBlockPC);
-  }
-
-  // Find entry block (first block in trace, or block with no predecessors)
-  uint64_t EntryPC = CFG.Blocks.begin()->first;
-
-  // Compute dominators using iterative dataflow.
-  // Dom[n] = {n} union (intersect Dom[p] for all predecessors p)
-  std::map<uint64_t, uint64_t> &Doms = LI.Dominators;
-
-  for (const auto &[StartPC, BB] : CFG.Blocks) {
-    Doms[StartPC] = StartPC;
-  }
-  Doms[EntryPC] = EntryPC; // Entry's dominator is itself
-
-  bool Changed = true;
-  while (Changed) {
-    Changed = false;
-    for (const auto &[StartPC, BB] : CFG.Blocks) {
-      if (StartPC == EntryPC)
-        continue;
-
-      const auto &PredList = Preds[StartPC];
-      if (PredList.empty())
-        continue;
-
-      // Find common dominator of all predecessors
-      // Skip predecessors that haven't been processed yet (dom == self, except entry)
-      uint64_t NewDom = 0;
-      bool FoundFirst = false;
-      for (uint64_t Pred : PredList) {
-        // Skip unprocessed predecessors (except entry)
-        if (Pred != EntryPC && Doms[Pred] == Pred)
-          continue;
-
-        if (!FoundFirst) {
-          NewDom = Pred;
-          FoundFirst = true;
-          continue;
-        }
-
-        // Intersect dominator paths
-        uint64_t P = Pred;
-        // Walk up both paths to find common ancestor
-        std::set<uint64_t> Path1;
-        uint64_t N = NewDom;
-        while (true) {
-          Path1.insert(N);
-          if (N == EntryPC || N == Doms[N])
-            break;
-          N = Doms[N];
-        }
-        N = P;
-        while (Path1.find(N) == Path1.end()) {
-          if (N == EntryPC)
-            break;
-          auto It = Doms.find(N);
-          if (It == Doms.end() || It->second == N)
-            break;
-          N = It->second;
-        }
-        NewDom = N;
-      }
-
-      if (!FoundFirst)
-        continue;  // All predecessors unprocessed, skip for now
-
-      if (Doms[StartPC] != NewDom) {
-        Doms[StartPC] = NewDom;
-        Changed = true;
-      }
-    }
-  }
-
-  // Find back-edges: edge N -> H where H dominates N.
-  // Group by header and track edge counts
-  std::map<uint64_t, std::vector<std::pair<uint64_t, unsigned>>> BackEdgesByHeader;
-
-  for (const CFGEdge &E : CFG.Edges) {
-    // Check if this is a back-edge: target dominates source
-    if (dominates(E.ToPC, E.FromBlockPC, Doms)) {
-      BackEdgesByHeader[E.ToPC].push_back({E.FromBlockPC, E.Count});
-    }
-  }
-
-  // Build loops from back-edges
-  for (const auto &[HeaderPC, Latches] : BackEdgesByHeader) {
-    Loop L;
-    L.HeaderPC = HeaderPC;
-    L.ParentIdx = -1;
-    L.TotalBackEdgeCount = 0;
-
-    // Collect all latches and sum edge counts
-    for (const auto &[LatchPC, Count] : Latches) {
-      L.LatchPCs.push_back(LatchPC);
-      L.TotalBackEdgeCount += Count;
-    }
-
-    // Compute loop body: header + all nodes that can reach any latch without
-    // going through header
-    std::set<uint64_t> Body;
-    Body.insert(HeaderPC);
-
-    std::vector<uint64_t> Worklist;
-    for (uint64_t LatchPC : L.LatchPCs) {
-      if (Body.find(LatchPC) == Body.end())
-        Worklist.push_back(LatchPC);
-    }
-
-    while (!Worklist.empty()) {
-      uint64_t Node = Worklist.back();
-      Worklist.pop_back();
-
-      if (Body.find(Node) != Body.end())
-        continue;
-      Body.insert(Node);
-
-      // Add predecessors (except header, which stops the traversal)
-      for (uint64_t Pred : Preds[Node]) {
-        if (Pred != HeaderPC && Body.find(Pred) == Body.end())
-          Worklist.push_back(Pred);
-      }
-    }
-
-    L.BodyBlockPCs.assign(Body.begin(), Body.end());
-
-    // Compute metrics for this loop by iterating through trace instructions
-    for (const InstEntry &Entry : Entries) {
-      auto It = PCToBlock.find(Entry.PC);
-      if (It != PCToBlock.end() && Body.count(It->second)) {
-        L.Metrics.addInstruction(Entry);
-      }
-    }
-
-    LI.Loops.push_back(L);
-  }
-
-  // Detect nesting: inner loop's header is in outer loop's body
-  for (size_t I = 0; I < LI.Loops.size(); ++I) {
-    Loop &Inner = LI.Loops[I];
-    int BestParent = -1;
-    size_t SmallestParentSize = SIZE_MAX;
-
-    for (size_t J = 0; J < LI.Loops.size(); ++J) {
-      if (I == J)
-        continue;
-      const Loop &Outer = LI.Loops[J];
-
-      bool Found = false;
-      for (uint64_t PC : Outer.BodyBlockPCs) {
-        if (PC == Inner.HeaderPC) {
-          Found = true;
-          break;
-        }
-      }
-
-      if (Found && Outer.BodyBlockPCs.size() < SmallestParentSize) {
-        SmallestParentSize = Outer.BodyBlockPCs.size();
-        BestParent = static_cast<int>(J);
-      }
-    }
-    Inner.ParentIdx = BestParent;
-  }
-
-  return LI;
-}
-
-void LoopInfo::print(const TraceCFG *CFG,
-                     const std::vector<InstEntry> *Entries) const {
-  outs() << "\n";
-  outs() << "============================================================\n";
-  outs() << "LOOP ANALYSIS\n";
-  outs() << "============================================================\n";
-  outs() << "\n";
-
-  if (Loops.empty()) {
-    outs() << "No loops detected.\n";
-    outs() << "============================================================\n";
-    return;
-  }
-
-  // Build PC -> block mapping if we have entries to print
-  std::map<uint64_t, uint64_t> PCToBlock;
-  if (CFG && Entries) {
-    for (const auto &E : *Entries) {
-      auto It = CFG->Blocks.upper_bound(E.PC);
-      if (It != CFG->Blocks.begin()) {
-        --It;
-        if (E.PC >= It->second.StartPC && E.PC <= It->second.EndPC)
-          PCToBlock[E.PC] = It->first;
-      }
-    }
-  }
-
-  // Print dominator info
-  outs() << "=== Dominators ===\n";
-  for (const auto &[Block, Dom] : Dominators) {
-    if (Block != Dom)
-      outs() << format("  0x%04x dominated by 0x%04x\n", Block, Dom);
-  }
-  outs() << "\n";
-
-  outs() << format("Loops detected: %zu\n\n", Loops.size());
-
-  for (size_t I = 0; I < Loops.size(); ++I) {
-    const Loop &L = Loops[I];
-
-    outs() << format("Loop %zu:\n", I);
-    outs() << format("  Header: 0x%04x\n", L.HeaderPC);
-    outs() << "  Latches:";
-    for (uint64_t LatchPC : L.LatchPCs)
-      outs() << format(" 0x%04x", LatchPC);
-    outs() << "\n";
-    outs() << format("  Back-edge count: %u\n", L.TotalBackEdgeCount);
-    outs() << format("  Body blocks: %zu\n", L.BodyBlockPCs.size());
-
-    if (L.ParentIdx >= 0) {
-      const Loop &Parent = Loops[L.ParentIdx];
-      unsigned IterPerParent = L.getIterations() / Parent.getIterations();
-      outs() << format("  Nested in loop %d (~%u iters per parent)\n",
-                       L.ParentIdx, IterPerParent);
-    }
-    outs() << "\n";
-
-    // Print instructions in this loop (first iteration only)
-    if (Entries) {
-      std::set<uint64_t> BodySet(L.BodyBlockPCs.begin(), L.BodyBlockPCs.end());
-      outs() << "  Instructions:\n";
-      bool SeenHeader = false;
-      for (const InstEntry &E : *Entries) {
-        auto It = PCToBlock.find(E.PC);
-        if (It != PCToBlock.end() && BodySet.count(It->second)) {
-          if (E.PC == L.HeaderPC) {
-            if (SeenHeader)
-              break;  // Second time at header = end of first iteration
-            SeenHeader = true;
-          }
-          const char *ClassName = getInstClassName(static_cast<InstClass>(E.InstClass));
-          const char *StallName = getStallReasonName(static_cast<StallReason>(E.StallReason));
-          std::string Prefix = formatv("    0x{0:X4}: [{1} cy={2} stall={3}{4}]",
-                                        E.PC, ClassName, E.Cycles, E.StallCycles,
-                                        StallName ? formatv(" reason={0}", StallName).str() : "").str();
-          outs() << format("%-65s %s\n", Prefix.c_str(), E.InstructionText.c_str());
-        }
-      }
-      outs() << "\n";
-    }
-
-    if (L.Metrics.NumInstructions > 0) {
-      outs() << format("--- Loop %zu Metrics (Iterations: %u) ---\n", I,
-                       L.getIterations());
-      L.Metrics.printBody(L.getIterations());
-    }
-  }
 
   outs() << "============================================================\n";
 }
