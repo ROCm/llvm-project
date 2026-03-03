@@ -5,6 +5,7 @@ rocwmma and CK needs changes
 Emma: need to reland
 Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependency on isZeroSize (#96422)" (#156)"" (#2065)""
 ---
+lib team working on it
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
