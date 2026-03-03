@@ -33,6 +33,7 @@
 #include "AMDGPURemoveIncompatibleFunctions.h"
 #include "AMDGPUReserveWWMRegs.h"
 #include "AMDGPUResourceUsageAnalysis.h"
+#include "AMDGPUAsmPrinter.h"
 #include "AMDGPUSplitModule.h"
 #include "AMDGPUTargetObjectFile.h"
 #include "AMDGPUTargetTransformInfo.h"
@@ -165,7 +166,6 @@ public:
   Error addOptimizedRegAlloc(PassManagerWrapper &PMW) const;
   void addPreSched2(PassManagerWrapper &PMW) const;
   void addPostBBSections(PassManagerWrapper &PMW) const;
-
 private:
   Error validateRegAllocOptions() const;
 
@@ -957,6 +957,14 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
 
 #define GET_PASS_REGISTRY "AMDGPUPassRegistry.def"
 #include "llvm/Passes/TargetPassRegistry.inc"
+
+  if (PIC) {
+    PIC->addClassToPassName(AMDGPUAsmPrinterBeginPass::name(),
+                          "amdgpu-asm-printer-begin");
+    PIC->addClassToPassName(AMDGPUAsmPrinterPass::name(), "amdgpu-asm-printer");
+    PIC->addClassToPassName(AMDGPUAsmPrinterEndPass::name(),
+                          "amdgpu-asm-printer-end");
+   }
 
   PB.registerPipelineStartEPCallback(
       [this](ModulePassManager &PM, OptimizationLevel Level) {
@@ -2416,15 +2424,19 @@ void AMDGPUCodeGenPassBuilder::addILPOpts(PassManagerWrapper &PMW) const {
 
 void AMDGPUCodeGenPassBuilder::addAsmPrinterBegin(
     PassManagerWrapper &PMW) const {
-  // TODO: Add AsmPrinterBegin
+      addModulePass(AMDGPUAsmPrinterBeginPass(), PMW,
+      /*Force=*/true);
 }
 
-void AMDGPUCodeGenPassBuilder::addAsmPrinter(PassManagerWrapper &PMW) const {
-  // TODO: Add AsmPrinter.
+void AMDGPUCodeGenPassBuilder::addAsmPrinter(
+    PassManagerWrapper &PMW) const {
+      addMachineFunctionPass(AMDGPUAsmPrinterPass(), PMW);
 }
 
-void AMDGPUCodeGenPassBuilder::addAsmPrinterEnd(PassManagerWrapper &PMW) const {
-  // TODO: Add AsmPrinterEnd
+void AMDGPUCodeGenPassBuilder::addAsmPrinterEnd(
+    PassManagerWrapper &PMW) const {
+    addModulePass(AMDGPUAsmPrinterEndPass(), 
+    PMW, /*Force=*/true);
 }
 
 Error AMDGPUCodeGenPassBuilder::addInstSelector(PassManagerWrapper &PMW) const {

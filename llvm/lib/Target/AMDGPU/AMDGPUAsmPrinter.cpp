@@ -97,6 +97,11 @@ AMDGPUAsmPrinter::AMDGPUAsmPrinter(TargetMachine &TM,
                                    std::unique_ptr<MCStreamer> Streamer)
     : AsmPrinter(TM, std::move(Streamer)) {
   assert(OutStreamer && "AsmPrinter constructed without streamer");
+  GetResourceUsage = [this](MachineFunction &MF) -> const AMDGPUResourceUsageAnalysisImpl::SIFunctionResourceInfo* {
+    if (auto *ResourceUsageW = getAnalysisIfAvailable<AMDGPUResourceUsageAnalysisWrapperPass>())
+      return &ResourceUsageW->getResourceInfo();
+    return nullptr;
+  };
 }
 
 StringRef AMDGPUAsmPrinter::getPassName() const {
@@ -467,8 +472,7 @@ void AMDGPUAsmPrinter::validateMCResourceInfo(Function &F) {
         RI.getSymbol(FnSym->getName(), RIK::RIK_NumAGPR, OutContext, IsLocal);
     uint64_t NumVgpr, NumAgpr;
 
-    MachineModuleInfo &MMI =
-        getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
+    MachineModuleInfo &MMI = *GetMMI();
     MachineFunction *MF = MMI.getMachineFunction(F);
     if (MF && NumVgprSymbol->isVariable() && NumAgprSymbol->isVariable() &&
         TryGetMCExprValue(NumVgprSymbol->getVariableValue(), NumVgpr) &&
@@ -675,8 +679,7 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   if (!IsTargetStreamerInitialized)
     initTargetStreamer(*MF.getFunction().getParent());
 
-  ResourceUsage =
-      &getAnalysis<AMDGPUResourceUsageAnalysisWrapperPass>().getResourceInfo();
+  ResourceUsage = GetResourceUsage(MF);
   CurrentProgramInfo.reset(MF);
 
   const AMDGPUMachineFunctionInfo *MFI =
@@ -1785,6 +1788,39 @@ void AMDGPUAsmPrinter::emitResourceUsageRemarks(
   if (isModuleEntryFunction)
     EmitResourceUsageRemark("BytesLDS", "LDS Size [bytes/block]",
                             CurrentProgramInfo.LDSSize);
+}
+
+PreservedAnalyses AMDGPUAsmPrinterBeginPass::run(Module &M,
+                                              ModuleAnalysisManager &MAM) {
+
+  AMDGPUAsmPrinter &AsmPrinter = static_cast<AMDGPUAsmPrinter &>(
+               MAM.getResult<AsmPrinterAnalysis>(M).getPrinter());
+  setupModuleAsmPrinter(M, MAM, AsmPrinter);
+  AsmPrinter.doInitialization(M);
+  return PreservedAnalyses::all();
+}
+
+PreservedAnalyses AMDGPUAsmPrinterPass::run(MachineFunction &MF,
+                                         MachineFunctionAnalysisManager &MFAM) {
+  AMDGPUAsmPrinter &AsmPrinter = static_cast<AMDGPUAsmPrinter &>(
+             MFAM.getResult<ModuleAnalysisManagerMachineFunctionProxy>(MF)
+          .getCachedResult<AsmPrinterAnalysis>(*MF.getFunction().getParent())
+          ->getPrinter());
+  setupMachineFunctionAsmPrinter(MFAM, MF, AsmPrinter);
+  AsmPrinter.GetResourceUsage = [&MFAM](MachineFunction &MF) -> const AMDGPUResourceUsageAnalysisImpl::SIFunctionResourceInfo* {
+    return &MFAM.getResult<AMDGPUResourceUsageAnalysis>(MF);
+  };
+  AsmPrinter.runOnMachineFunction(MF);
+  return PreservedAnalyses::all();
+}
+
+PreservedAnalyses AMDGPUAsmPrinterEndPass::run(Module &M,
+                                            ModuleAnalysisManager &MAM) {
+  AMDGPUAsmPrinter &AsmPrinter = static_cast<AMDGPUAsmPrinter &>(
+             MAM.getResult<AsmPrinterAnalysis>(M).getPrinter());
+  setupModuleAsmPrinter(M, MAM, AsmPrinter);
+  AsmPrinter.doFinalization(M);
+  return PreservedAnalyses::all();
 }
 
 char AMDGPUAsmPrinter::ID = 0;
