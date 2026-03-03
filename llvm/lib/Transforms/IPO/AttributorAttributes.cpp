@@ -1431,6 +1431,14 @@ struct AAPointerInfoImpl
       // block-level check is skipped entirely (guarded by IntraFnCheck) and
       // we fall through to isPotentiallyReachable which handles inter-fn
       // reachability via AAInterFnReachability.
+      // Map each basic block to the ExclusionSet instructions it contains.
+      // Built once and shared across the BFS helpers and same-block checks
+      // in CanSkipAccessBatch, replacing per-use iteration over ExclusionSet.
+      DenseMap<const BasicBlock *, SmallVector<const Instruction *, 2>>
+          ExcludedBlockInsts;
+      for (const Instruction *ExclI : ExclusionSet)
+        ExcludedBlockInsts[ExclI->getParent()].push_back(ExclI);
+
       DenseSet<const BasicBlock *> ReachableFromI;
       bool ReachableFromIComputed = false;
 
@@ -1447,12 +1455,6 @@ struct AAPointerInfoImpl
         if (ReachableFromIComputed)
           return;
 
-        DenseSet<const BasicBlock *> ExcludedBlocks;
-        if (!ExclusionSet.empty()) {
-          for (const Instruction *ExclI : ExclusionSet)
-            ExcludedBlocks.insert(ExclI->getParent());
-        }
-
         const BasicBlock *FromBB = I.getParent();
         SmallVector<const BasicBlock *, 16> Worklist;
         Worklist.push_back(FromBB);
@@ -1463,9 +1465,10 @@ struct AAPointerInfoImpl
         // FromBB itself in the reachable set (I is in it), but we don't
         // follow its successors.
         bool FromBBBlocked = false;
-        if (ExcludedBlocks.count(FromBB)) {
-          for (const Instruction *ExclI : ExclusionSet) {
-            if (ExclI->getParent() == FromBB && I.comesBefore(ExclI)) {
+        auto FromIt = ExcludedBlockInsts.find(FromBB);
+        if (FromIt != ExcludedBlockInsts.end()) {
+          for (const Instruction *ExclI : FromIt->second) {
+            if (I.comesBefore(ExclI)) {
               FromBBBlocked = true;
               break;
             }
@@ -1484,7 +1487,7 @@ struct AAPointerInfoImpl
           } else {
             // Don't traverse past ExclusionSet blocks — a must-write there
             // overwrites the value, so anything beyond it is irrelevant.
-            if (ExcludedBlocks.count(BB))
+            if (ExcludedBlockInsts.count(BB))
               continue;
           }
 
@@ -1513,21 +1516,16 @@ struct AAPointerInfoImpl
         if (ReachableToIComputed)
           return;
 
-        DenseSet<const BasicBlock *> ExcludedBlocks;
-        if (!ExclusionSet.empty()) {
-          for (const Instruction *ExclI : ExclusionSet)
-            ExcludedBlocks.insert(ExclI->getParent());
-        }
-
         const BasicBlock *ToBB = I.getParent();
         SmallVector<const BasicBlock *, 16> Worklist;
         Worklist.push_back(ToBB);
         ReachableToI.insert(ToBB);
 
         bool ToBBBlocked = false;
-        if (ExcludedBlocks.count(ToBB)) {
-          for (const Instruction *ExclI : ExclusionSet) {
-            if (ExclI->getParent() == ToBB && ExclI->comesBefore(&I)) {
+        auto ToIt = ExcludedBlockInsts.find(ToBB);
+        if (ToIt != ExcludedBlockInsts.end()) {
+          for (const Instruction *ExclI : ToIt->second) {
+            if (ExclI->comesBefore(&I)) {
               ToBBBlocked = true;
               break;
             }
@@ -1554,7 +1552,7 @@ struct AAPointerInfoImpl
             } else {
               // Don't traverse past ExclusionSet blocks — a must-write
               // there acts as a barrier for backward reachability.
-              if (ExcludedBlocks.count(PredBB))
+              if (ExcludedBlockInsts.count(PredBB))
                 Blocked = true;
             }
 
@@ -1603,17 +1601,40 @@ struct AAPointerInfoImpl
               !ReachableFromI.count(Acc.getRemoteInst()->getParent()))
             ReadChecked = true;
 
-          // Block-level was inconclusive (Acc's block IS reachable from I,
-          // or Acc is cross-function). Fall back to full isPotentiallyReachable
-          // for instruction-level precision or inter-fn reasoning.
-          // TODO: If the block IS in ReachableFromI, we know it's reachable at
-          // block granularity but need intra-block ordering. We could narrow the
-          // query origin to Acc.getRemoteInst()->getParent()->front() instead.
           if (!ReadChecked) {
-            if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
-                                            QueryingAA, &ExclusionSet,
-                                            IsLiveInCalleeCB))
-              ReadChecked = true;
+            bool NeedFallback = true;
+            // Same-block optimization: when I and Acc are in the same block
+            // and I comes before Acc, we can resolve reachability with a
+            // simple intra-block check instead of calling isPotentiallyReachable.
+            // If I comes before Acc, the only question is whether an
+            // ExclusionSet instruction (must-write barrier) sits between them.
+            // If so, the path is blocked and ReadChecked = true.
+            // If not, I directly reaches Acc — ReadChecked stays false.
+            // Either way, no isPotentiallyReachable call is needed.
+            if (IntraFnCheck &&
+                I.getParent() == Acc.getRemoteInst()->getParent() &&
+                I.comesBefore(Acc.getRemoteInst())) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (I.comesBefore(ExclI) &&
+                      ExclI->comesBefore(Acc.getRemoteInst())) {
+                    ReadChecked = true;
+                    break;
+                  }
+                }
+              }
+              NeedFallback = false;
+            }
+            // For other cases (different blocks, cross-function, or Acc before
+            // I in the same block requiring loop analysis), fall back to
+            // isPotentiallyReachable.
+            if (NeedFallback && !ReadChecked) {
+              if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
+                                              QueryingAA, &ExclusionSet,
+                                              IsLiveInCalleeCB))
+                ReadChecked = true;
+            }
           }
         }
 
@@ -1626,10 +1647,31 @@ struct AAPointerInfoImpl
             WriteChecked = true;
 
           if (!WriteChecked) {
-            if (!AA::isPotentiallyReachable(A, *Acc.getRemoteInst(), I,
-                                            QueryingAA, &ExclusionSet,
-                                            IsLiveInCalleeCB))
-              WriteChecked = true;
+            bool NeedFallback = true;
+            // Same-block optimization (mirror of the ReadChecked case above):
+            // when Acc and I are in the same block and Acc comes before I,
+            // check whether an ExclusionSet barrier sits between them.
+            if (IntraFnCheck &&
+                I.getParent() == Acc.getRemoteInst()->getParent() &&
+                Acc.getRemoteInst()->comesBefore(&I)) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (Acc.getRemoteInst()->comesBefore(ExclI) &&
+                      ExclI->comesBefore(&I)) {
+                    WriteChecked = true;
+                    break;
+                  }
+                }
+              }
+              NeedFallback = false;
+            }
+            if (NeedFallback && !WriteChecked) {
+              if (!AA::isPotentiallyReachable(A, *Acc.getRemoteInst(), I,
+                                              QueryingAA, &ExclusionSet,
+                                              IsLiveInCalleeCB))
+                WriteChecked = true;
+            }
           }
         }
 
