@@ -143,9 +143,6 @@ MATH_MANGLE(remainder)(float x, float y)
 
     if (!FINITE_ONLY_OPT()) {
         ret = y == 0.0f ? QNAN_F32 : ret;
-#if defined(COMPILING_REMQUO)
-        q7 = y == 0.0f ? 0 : q7;
-#endif
 
         bool c = !BUILTIN_ISNAN_F32(y) && BUILTIN_ISFINITE_F32(x);
         ret = c ? ret : QNAN_F32;
