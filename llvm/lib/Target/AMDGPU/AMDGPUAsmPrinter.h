@@ -20,6 +20,7 @@
 #include "SIProgramInfo.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/Passes/CodeGenPassBuilder.h"
 
 namespace llvm {
 
@@ -104,6 +105,9 @@ private:
   void validateMCResourceInfo(Function &F);
 
 public:
+  std::function<const AMDGPUResourceUsageAnalysisImpl::SIFunctionResourceInfo *(
+      MachineFunction &)>
+      GetResourceUsage;
   explicit AMDGPUAsmPrinter(TargetMachine &TM,
                             std::unique_ptr<MCStreamer> Streamer);
 
@@ -160,6 +164,22 @@ protected:
   size_t DisasmLineMaxLen;
   bool IsTargetStreamerInitialized;
 };
+
+class AMDGPUAsmPrinterBeginPass : public PassInfoMixin<AMDGPUAsmPrinterBeginPass> {
+  public:  
+    PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  };
+  
+  class AMDGPUAsmPrinterPass : public PassInfoMixin<AMDGPUAsmPrinterPass> {
+  public:
+    PreservedAnalyses run(MachineFunction &MF,
+                          MachineFunctionAnalysisManager &MFAM);
+  };
+  
+  class AMDGPUAsmPrinterEndPass : public PassInfoMixin<AMDGPUAsmPrinterEndPass> {
+  public:
+    PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  };
 
 } // end namespace llvm
 
