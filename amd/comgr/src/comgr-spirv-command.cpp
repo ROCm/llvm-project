@@ -20,7 +20,6 @@
 #include <LLVMSPIRVLib.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
 
 #include <sstream>
 #endif
@@ -61,12 +60,6 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
   if (!readSpirv(Context, Opts, ISS, M, Err)) {
     LogS << "Failed to load SPIR-V as LLVM Module: " << Err << '\n';
     return AMD_COMGR_STATUS_ERROR;
-  }
-
-  // DO NOT review, testing
-  for (Function &F : *M) {
-    F.removeFnAttr("target-features");
-    F.removeFnAttr("target-cpu");
   }
 
   BitcodeWriter Writer(OutputBuffer);
