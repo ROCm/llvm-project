@@ -153,9 +153,25 @@ void simulateTrace(std::vector<InstEntry> &Entries, const MCInstrInfo &MCII,
   Simulator Sim(InstInfo, Model, Cfg);
   unsigned PrevCycle = Sim.getState().CurrentCycle;
 
-  for (InstEntry &Entry : Entries) {
+  for (size_t EntryIdx = 0; EntryIdx < Entries.size(); ++EntryIdx) {
+    InstEntry &Entry = Entries[EntryIdx];
+
+    // const GPUSimState &State = Sim.getState();
+    // unsigned EntryCycle = State.CurrentCycle;
+
     SimInst SI = InstInfo.createSimInst(Entry.Inst);
-    InstrSimInfo Info = Sim.simulateInst(SI);
+
+    SmallVector<SimInst, 1> Lookahead;
+    if (SI.Class == InstClass::MSB_SET) {
+      // Build lookahead for MSB_SET masking
+      if (EntryIdx + 1 < Entries.size()) {
+        InstEntry &NextEntry = Entries[EntryIdx + 1];
+        Lookahead.push_back(InstInfo.createSimInst(NextEntry.Inst));
+      }
+    }
+
+    InstrSimInfo Info = Sim.simulateInst(SI, Lookahead);
+    //InstrSimInfo Info = Sim.simulateInst(SI);
     unsigned CurrentCycle = Sim.getState().CurrentCycle;
 
     Entry.InstClass = static_cast<unsigned>(SI.Class);
