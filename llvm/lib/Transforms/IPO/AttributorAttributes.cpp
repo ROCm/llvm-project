@@ -87,7 +87,7 @@ static cl::opt<bool> ManifestInternal(
     cl::init(false));
 
 static cl::opt<bool> EnableBatchReachability(
-    "attributor-enable-batch-reachability", cl::Hidden, cl::init(false),
+    "attributor-enable-batch-reachability", cl::Hidden, cl::init(true),
     cl::desc("Enable batch reachability queries in Attributor"));
 
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
@@ -1526,17 +1526,21 @@ struct AAPointerInfoImpl
 
         bool ReadChecked = !FindInterferingReads;
         bool WriteChecked = !FindInterferingWrites;
-
+        bool IntraFnCheck = Acc.getRemoteInst()->getFunction() == &Scope;
         // If the instruction cannot reach the access, the former does not
         // interfere with what the access reads.
         if (!ReadChecked) {
           EnsureReachableFromI();
           // If Acc's block is not in the reachable set, I cannot reach Acc.
-          if (!ReachableFromI.count(Acc.getRemoteInst()->getParent()))
+          if (IntraFnCheck &&
+              !ReachableFromI.count(Acc.getRemoteInst()->getParent()))
             ReadChecked = true;
 
           // Fallback to original query if needed (e.g., for instruction-level
           // precision within the same block)
+          // PDB: Improvement - If you know that the block of Acc.getRemoteInst()
+          // is reachable from I, then don't let the origin of the query be I.
+          // Let it be Acc.getRemoteInst()->getParent()->front()
           if (!ReadChecked) {
             if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
                                             QueryingAA, &ExclusionSet,
@@ -1550,7 +1554,8 @@ struct AAPointerInfoImpl
           EnsureReachableToI();
           // If Acc's block is not in the backward reachable set, Acc cannot reach
           // I.
-          if (!ReachableToI.count(Acc.getRemoteInst()->getParent()))
+          if (IntraFnCheck &&
+              !ReachableToI.count(Acc.getRemoteInst()->getParent()))
             WriteChecked = true;
 
           if (!WriteChecked) {
