@@ -718,6 +718,11 @@ bool ClauseProcessor::processSimdlen(
   return false;
 }
 
+bool ClauseProcessor::processSimd(
+    mlir::omp::OrderedRegionOperands &result) const {
+  return markClauseOccurrence<omp::clause::Simd>(result.parLevelSimd);
+}
+
 bool ClauseProcessor::processThreadLimit(
     lower::StatementContext &stmtCtx,
     mlir::omp::ThreadLimitClauseOps &result) const {
@@ -1313,10 +1318,7 @@ bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
       result.linearVars.push_back(variable);
       mlir::Type ty = converter.genType(*sym);
       typeAttrs.push_back(mlir::TypeAttr::get(ty));
-    }
-    result.linearVarTypes =
-        mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);
-    if (objects.size()) {
+
       if (auto &mod =
               std::get<std::optional<omp::clause::Linear::StepComplexModifier>>(
                   clause.t)) {
@@ -1331,11 +1333,14 @@ bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
         // If nothing is present, add the default step of 1.
         fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
         mlir::Location currentLocation = converter.getCurrentLocation();
-        mlir::Value operand = firOpBuilder.createIntegerConstant(
-            currentLocation, firOpBuilder.getI32Type(), 1);
+        mlir::Type integerTy = ty.isInteger() ? ty : firOpBuilder.getI32Type();
+        mlir::Value operand =
+            firOpBuilder.createIntegerConstant(currentLocation, integerTy, 1);
         result.linearStepVars.append(objects.size(), operand);
       }
     }
+    result.linearVarTypes =
+        mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);
   });
 }
 
@@ -1534,8 +1539,6 @@ bool ClauseProcessor::processMap(
     mlir::Location clauseLocation = converter.genLocation(source);
     const auto &[mapType, typeMods, attachMod, refMod, mappers, iterator,
                  objects] = clause.t;
-    if (attachMod)
-      TODO(currentLocation, "ATTACH modifier is not implemented yet");
     mlir::omp::ClauseMapFlags mapTypeBits = mlir::omp::ClauseMapFlags::none;
     std::string mapperIdName = "__implicit_mapper";
     // If the map type is specified, then process it else set the appropriate
@@ -1578,6 +1581,34 @@ bool ClauseProcessor::processMap(
         mapTypeBits |= mlir::omp::ClauseMapFlags::del;
       if (llvm::is_contained(*typeMods, Map::MapTypeModifier::OmpxHold))
         mapTypeBits |= mlir::omp::ClauseMapFlags::ompx_hold;
+    }
+
+    if (refMod) {
+      switch (*refMod) {
+      case Map::RefModifier::RefPtee:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::ref_ptee;
+        break;
+      case Map::RefModifier::RefPtr:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::ref_ptr;
+        break;
+      case Map::RefModifier::RefPtrPtee:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::ref_ptr_ptee;
+        break;
+      }
+    }
+
+    if (attachMod) {
+      switch (*attachMod) {
+      case Map::AttachModifier::Always:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::attach_always;
+        break;
+      case Map::AttachModifier::Never:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::attach_never;
+        break;
+      case Map::AttachModifier::Auto:
+        mapTypeBits |= mlir::omp::ClauseMapFlags::attach_auto;
+        break;
+      }
     }
 
     if (iterator) {
