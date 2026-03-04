@@ -124,7 +124,7 @@ StringRef getLanguageName(amd_comgr_language_t Language) {
     return "AMD_COMGR_LANGUAGE_LLVM_IR";
   }
 
-  llvm_unreachable("invalid language");
+  return "<unknown>";
 }
 
 StringRef getStatusName(amd_comgr_status_t Status) {
@@ -139,7 +139,7 @@ StringRef getStatusName(amd_comgr_status_t Status) {
     return "AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES";
   }
 
-  llvm_unreachable("invalid status");
+  return "<unknown>";
 }
 
 /// Perform a simple quoting of an option to allow separating options with
@@ -199,7 +199,7 @@ StringRef getActionKindName(amd_comgr_action_kind_t ActionKind) {
     return "AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV";
   }
 
-  llvm_unreachable("invalid action");
+  return "<unknown>";
 }
 
 bool COMGR::isDataKindValid(amd_comgr_data_kind_t DataKind) {
@@ -1670,7 +1670,7 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
-  llvm_unreachable("invalid symbol info");
+  return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
 }
 
 amd_comgr_status_t AMD_COMGR_API
