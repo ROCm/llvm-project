@@ -254,12 +254,11 @@ _XTEAM_INLINE_ATTR float _Complex shfl_up(float _Complex var, int offset) {
 /// Reduces all values in a wave to a single value in lane 0
 template <typename T>
 _XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T)) {
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
   // If block is smaller than warp, start with block_size/2 to avoid
   // shuffling with inactive lanes
   const uint32_t start_offset =
-      block_size < warp_size ? block_size / 2 : warp_size / 2;
+      block_size < _XTEAM_WARP_SIZE ? block_size / 2 : _XTEAM_WARP_SIZE / 2;
   for (unsigned offset = start_offset; offset > 0; offset >>= 1)
     (*_rf)(&val, shfl_xor(val, offset));
   return val;
@@ -271,18 +270,14 @@ _XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T)) {
 /// \param val The input value for this lane
 /// \param _rf The reduction function
 /// \param rnv Reduction null value (used for exclusive scan)
-/// \param num_elements Number of active elements (0 = auto-detect from
-/// block_size)
+/// \param num_elements Number of active elements
 template <typename T, bool is_inclusive_scan>
-_XTEAM_INLINE_ATTR T wave_scan(T val, void (*_rf)(T *, T), const T rnv = T(),
-                               uint32_t num_elements = 0) {
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
+_XTEAM_INLINE_ATTR T wave_scan(T val, void (*_rf)(T *, T), const T rnv,
+                               uint32_t num_elements) {
   const uint32_t lane = mapping::getThreadIdInWarp();
 
   // Determine the scan limit
-  if (!num_elements)
-    num_elements = mapping::getNumberOfThreadsInBlock();
-  const uint32_t limit = num_elements < warp_size ? num_elements : warp_size;
+  const uint32_t limit = num_elements < _XTEAM_WARP_SIZE ? num_elements : _XTEAM_WARP_SIZE;
 
   // First do inclusive scan
   for (unsigned offset = 1; offset < limit; offset <<= 1) {
@@ -300,14 +295,14 @@ _XTEAM_INLINE_ATTR T wave_scan(T val, void (*_rf)(T *, T), const T rnv = T(),
 /// Convenience aliases for wave_scan
 template <typename T>
 _XTEAM_INLINE_ATTR T wave_inclusive_scan(T val, void (*_rf)(T *, T),
-                                         uint32_t num_elements = 0) {
+                                         uint32_t num_elements) {
   return wave_scan<T, true>(val, _rf, T(), num_elements);
 }
 
 template <typename T>
 _XTEAM_INLINE_ATTR T wave_exclusive_scan(T val, void (*_rf)(T *, T),
                                          const T rnv,
-                                         uint32_t num_elements = 0) {
+                                         uint32_t num_elements) {
   return wave_scan<T, false>(val, _rf, rnv, num_elements);
 }
 
@@ -323,9 +318,7 @@ _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
                                                   _XTEAM_RF_LDS T *),
                                   const T rnv, _XTEAM_RF_LDS T *wave_lds) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
-  const uint32_t num_waves = (block_size + warp_size - 1) / warp_size;
-  const uint32_t wave_num = mapping::getThreadIdInBlock() / warp_size;
+  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
   const uint32_t tid = mapping::getThreadIdInBlock();
 
@@ -333,18 +326,20 @@ _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
   val = wave_reduce(val, _rf);
 
   // Step 2: Lane 0 of each wave stores result to LDS
-  if (lane_num == 0)
+  if (lane_num == 0) {
+    const uint32_t wave_num = tid / _XTEAM_WARP_SIZE;
     wave_lds[wave_num] = val;
+  }
 
   // Step 3: Reduce wave results in LDS
   for (unsigned offset = num_waves / 2; offset > 0; offset >>= 1) {
-    synchronize::threadsAligned(atomic::seq_cst);
+    synchronize::threadsAligned(atomic::relaxed);
     if (tid < offset)
       (*_rf_lds)(&wave_lds[tid], &wave_lds[tid + offset]);
   }
 
   // Synchronize before reading final result
-  synchronize::threadsAligned(atomic::seq_cst);
+  synchronize::threadsAligned(atomic::relaxed);
   return wave_lds[0];
 }
 
@@ -355,18 +350,17 @@ _XTEAM_INLINE_ATTR T block_inclusive_scan(T val, void (*_rf)(T *, T),
                                           const T rnv,
                                           _XTEAM_RF_LDS T *wave_totals) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
-  const uint32_t num_waves = (block_size + warp_size - 1) / warp_size;
-  const uint32_t wave_num = mapping::getThreadIdInBlock() / warp_size;
+  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t wave_num = mapping::getThreadIdInBlock() / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
 
   // Step 1: Intra-wave inclusive scan using shuffles (no memory access)
-  val = wave_inclusive_scan(val, _rf);
+  val = wave_inclusive_scan(val, _rf, block_size);
 
   // Step 2: Last lane of each wave stores wave total to LDS
-  if (lane_num == warp_size - 1)
+  if (lane_num == _XTEAM_WARP_SIZE - 1)
     wave_totals[wave_num] = val;
-  synchronize::threadsAligned(atomic::seq_cst);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // Step 3: First wave scans the wave totals
   if (wave_num == 0 && lane_num < num_waves) {
@@ -379,7 +373,7 @@ _XTEAM_INLINE_ATTR T block_inclusive_scan(T val, void (*_rf)(T *, T),
     }
     wave_totals[lane_num] = wt;
   }
-  synchronize::threadsAligned(atomic::seq_cst);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // Step 4: Add prefix from previous waves to each thread's value
   if (wave_num > 0)
@@ -395,18 +389,17 @@ _XTEAM_INLINE_ATTR T block_exclusive_scan(T val, void (*_rf)(T *, T),
                                           const T rnv,
                                           _XTEAM_RF_LDS T *wave_totals) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
-  const uint32_t num_waves = (block_size + warp_size - 1) / warp_size;
-  const uint32_t wave_num = mapping::getThreadIdInBlock() / warp_size;
+  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t wave_num = mapping::getThreadIdInBlock() / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
 
   // Step 1: Intra-wave inclusive scan first
-  T inclusive_val = wave_inclusive_scan(val, _rf);
+  T inclusive_val = wave_inclusive_scan(val, _rf, block_size);
 
   // Step 2: Last lane stores wave total
-  if (lane_num == warp_size - 1)
+  if (lane_num == _XTEAM_WARP_SIZE - 1)
     wave_totals[wave_num] = inclusive_val;
-  synchronize::threadsAligned(atomic::seq_cst);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // Step 3: Exclusive scan of wave totals
   if (wave_num == 0 && lane_num < num_waves) {
@@ -420,7 +413,7 @@ _XTEAM_INLINE_ATTR T block_exclusive_scan(T val, void (*_rf)(T *, T),
     T exclusive_wt = shfl_up(wt, 1);
     wave_totals[lane_num] = (lane_num == 0) ? rnv : exclusive_wt;
   }
-  synchronize::threadsAligned(atomic::seq_cst);
+  synchronize::threadsAligned(atomic::relaxed);
 
   // Step 4: Convert to exclusive and add prefix from previous waves
   T exclusive_val = shfl_up(inclusive_val, 1);
@@ -429,26 +422,6 @@ _XTEAM_INLINE_ATTR T block_exclusive_scan(T val, void (*_rf)(T *, T),
     (*_rf)(&exclusive_val, wave_totals[wave_num]);
 
   return exclusive_val;
-}
-
-//===----------------------------------------------------------------------===//
-// Cross-team synchronization primitives
-//===----------------------------------------------------------------------===//
-
-/// Atomically increments teams_done counter and returns true if this is the
-/// last team to arrive.
-/// \param teams_done_ptr Pointer to global counter
-/// \param NumTeams Total number of teams
-/// \param td Reference to LDS variable for broadcasting result to all threads
-_XTEAM_INLINE_ATTR
-bool is_last_team(uint32_t *teams_done_ptr, uint32_t NumTeams,
-                  _XTEAM_RF_LDS uint32_t &td) {
-  if (mapping::getThreadIdInBlock() == 0) {
-    td = atomic::inc(teams_done_ptr, NumTeams - 1u, atomic::seq_cst,
-                     atomic::MemScopeTy::device);
-  }
-  synchronize::threadsAligned(atomic::seq_cst);
-  return td == (NumTeams - 1u);
 }
 
 //===----------------------------------------------------------------------===//

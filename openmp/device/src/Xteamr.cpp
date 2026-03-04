@@ -73,12 +73,12 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
   if constexpr (_IS_FAST) {
     // Fast path: use atomic add directly
     if (omp_thread_num == 0)
-      ompx::atomic::add(r_ptr, team_result, ompx::atomic::seq_cst, Scope);
+      ompx::atomic::add(r_ptr, team_result, ompx::atomic::relaxed, Scope);
   } else if (NumTeams == 1) {
     // Single team: just write result
     if (omp_thread_num == 0)
       *r_ptr = team_result;
-    synchronize::threadsAligned(atomic::seq_cst);
+    synchronize::threadsAligned(atomic::relaxed);
   } else {
     // No sync needed here from last reduction in LDS loop
     // because we only need xwave_lds[0] correct on thread 0.
@@ -86,18 +86,22 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
     // Save the teams reduced value in team_vals global array
     // and atomically increment teams_done counter.
     static _RF_LDS uint32_t td;
-    if (omp_thread_num == 0)
+    if (omp_thread_num == 0) {
       team_vals[omp_team_num] = team_result;
+      td = atomic::inc(teams_done_ptr, NumTeams - 1u, atomic::relaxed,
+                      atomic::MemScopeTy::device);
+    }
 
-    // Use shared is_last_team primitive
-    if (xteam::is_last_team(teams_done_ptr, NumTeams, td)) {
+    synchronize::threadsAligned(atomic::acq_rel);
+
+    if (td == (NumTeams - 1u)) {
       // Last team performs final reduction across all team values
 
-      // To use TLS shfl reduce, copy team values to TLS val.
+      // Acquire all teams' team_vals before TLS shfl reduce
       val = (omp_thread_num < NumTeams) ? team_vals[omp_thread_num] : rnv;
 
       // Need sync here to prepare for TLS shfl reduce.
-      synchronize::threadsAligned(atomic::seq_cst);
+      synchronize::threadsAligned(atomic::relaxed);
 
       // Use block_reduce again for final reduction
       T final_result = xteam::block_reduce(val, _rf, _rf_lds, rnv, xwave_lds);
