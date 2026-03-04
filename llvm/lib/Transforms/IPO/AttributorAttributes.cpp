@@ -1024,6 +1024,28 @@ struct AAPointerInfoImpl
   using BaseTy = StateWrapper<AA::PointerInfo::State, AAPointerInfo>;
   AAPointerInfoImpl(const IRPosition &IRP, Attributor &A) : BaseTy(IRP) {}
 
+  /// Cache for isKernel check of the associated function.
+  mutable std::optional<bool> IsAssociatedFunctionKernel;
+
+  bool isKernelCached(Attributor &A, const Function &Fn) const {
+    if (&Fn == getAssociatedFunction()) {
+      if (!IsAssociatedFunctionKernel.has_value())
+        IsAssociatedFunctionKernel = A.getInfoCache().isKernel(Fn);
+      return *IsAssociatedFunctionKernel;
+    }
+
+    static thread_local const Function *LastFn = nullptr;
+    static thread_local bool LastRes = false;
+
+    if (LastFn == &Fn)
+      return LastRes;
+
+    bool Result = A.getInfoCache().isKernel(Fn);
+    LastFn = &Fn;
+    LastRes = Result;
+    return Result;
+  }
+
   /// See AbstractAttribute::getAsStr().
   const std::string getAsStr(Attributor *A) const override {
     return std::string("PointerInfo ") +
@@ -1171,7 +1193,14 @@ struct AAPointerInfoImpl
     // TODO: Use reaching kernels from AAKernelInfo (or move it to
     // AAExecutionDomain) such that we allow scopes other than kernels as long
     // as the reaching kernels are disjoint.
-    bool InstInKernel = A.getInfoCache().isKernel(Scope);
+    bool InstInKernel;
+    if (getAssociatedFunction() == &Scope) {
+      if (!IsAssociatedFunctionKernel.has_value())
+        IsAssociatedFunctionKernel = A.getInfoCache().isKernel(Scope);
+      InstInKernel = *IsAssociatedFunctionKernel;
+    } else {
+      InstInKernel = A.getInfoCache().isKernel(Scope);
+    }
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
         FindInterferingWrites && IsKnownNoRecurse;
@@ -1205,7 +1234,13 @@ struct AAPointerInfoImpl
       // If the alloca containing function is not recursive the alloca
       // must be dead in the callee.
       const Function *AIFn = AI->getFunction();
-      ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
+      if (getAssociatedFunction() == AIFn) {
+        if (!IsAssociatedFunctionKernel.has_value())
+          IsAssociatedFunctionKernel = A.getInfoCache().isKernel(*AIFn);
+        ObjHasKernelLifetime = *IsAssociatedFunctionKernel;
+      } else {
+        ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
+      }
       bool IsKnownNoRecurse;
       if (AA::hasAssumedIRAttr<Attribute::NoRecurse>(
               A, this, IRPosition::function(*AIFn), DepClassTy::OPTIONAL,
@@ -1217,8 +1252,8 @@ struct AAPointerInfoImpl
       // as it is "dead" in the (unknown) callees.
       ObjHasKernelLifetime = HasKernelLifetime(GV, *GV->getParent());
       if (ObjHasKernelLifetime)
-        IsLiveInCalleeCB = [&A](const Function &Fn) {
-          return !A.getInfoCache().isKernel(Fn);
+        IsLiveInCalleeCB = [&](const Function &Fn) {
+          return !isKernelCached(A, Fn);
         };
     }
 
@@ -1226,15 +1261,30 @@ struct AAPointerInfoImpl
     // therefore blockers in the reachability traversal.
     AA::InstExclusionSetTy ExclusionSet;
 
+    // Cache for isKernel check to avoid repeated map lookups for the same
+    // function.
+    const Function *LastCheckedFn = nullptr;
+    bool LastCheckedResult = false;
+
     auto AccessCB = [&](const Access &Acc, bool Exact) {
       Function *AccScope = Acc.getRemoteInst()->getFunction();
       bool AccInSameScope = AccScope == &Scope;
 
       // If the object has kernel lifetime we can ignore accesses only reachable
       // by other kernels. For now we only skip accesses *in* other kernels.
-      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope &&
-          A.getInfoCache().isKernel(*AccScope))
-        return true;
+      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
+        bool AccScopeIsKernel;
+        if (AccScope == LastCheckedFn) {
+          AccScopeIsKernel = LastCheckedResult;
+        } else {
+          AccScopeIsKernel = isKernelCached(A, *AccScope);
+          LastCheckedFn = AccScope;
+          LastCheckedResult = AccScopeIsKernel;
+        }
+
+        if (AccScopeIsKernel)
+          return true;
+      }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
         if (Acc.isWrite() || (isa<LoadInst>(I) && Acc.isWriteOrAssumption()))
