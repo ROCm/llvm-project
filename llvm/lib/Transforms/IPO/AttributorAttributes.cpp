@@ -1126,6 +1126,16 @@ struct AAPointerInfoImpl
     SmallPtrSet<const Access *, 8> DominatingWrites;
     SmallVector<std::pair<const Access *, bool>, 8> InterferingAccesses;
 
+    // When batch reachability is enabled, accesses are partitioned directly
+    // in AccessCB rather than post-processing InterferingAccesses:
+    //   IntraFnAccesses: RemoteI is in the same function as I (Scope).
+    //   CrossFnGroups:   RemoteI is in a different function, grouped by that
+    //                    function. This allows one inter-fn reachability check
+    //                    per remote function instead of one per access.
+    SmallVector<std::pair<const Access *, bool>, 8> IntraFnAccesses;
+    DenseMap<Function *, SmallVector<std::pair<const Access *, bool>, 4>>
+        CrossFnGroups;
+
     Function &Scope = *I.getFunction();
     bool IsKnownNoSync;
     bool IsAssumedNoSync = AA::hasAssumedIRAttr<Attribute::NoSync>(
@@ -1311,9 +1321,16 @@ struct AAPointerInfoImpl
 
       // Track if all interesting accesses are in the same `nosync` function as
       // the given instruction.
-      AllInSameNoSyncFn &= Acc.getRemoteInst()->getFunction() == &Scope;
+      AllInSameNoSyncFn &= AccInSameScope;
 
-      InterferingAccesses.push_back({&Acc, Exact});
+      if (EnableBatchReachability) {
+        if (AccInSameScope)
+          IntraFnAccesses.push_back({&Acc, Exact});
+        else
+          CrossFnGroups[AccScope].push_back({&Acc, Exact});
+      } else {
+        InterferingAccesses.push_back({&Acc, Exact});
+      }
       return true;
     };
     if (!State::forallInterferingAccesses(I, AccessCB, Range))
@@ -1564,9 +1581,14 @@ struct AAPointerInfoImpl
         ReachableToIComputed = true;
       };
 
-      // Batch variant of CanSkipAccess. Uses the pre-computed block-level
-      // reachability sets (ReachableFromI, ReachableToI) as a fast filter
-      // before falling back to the full isPotentiallyReachable call.
+      // Batch variant of CanSkipAccess for intra-function accesses only.
+      // Uses the pre-computed block-level reachability sets (ReachableFromI,
+      // ReachableToI) as a fast filter before falling back to the full
+      // isPotentiallyReachable call.
+      //
+      // Cross-function accesses are handled separately in the CrossFnGroups
+      // loop below, which performs one inter-fn reachability check per
+      // remote function instead of one per access.
       //
       // ReadChecked/WriteChecked track whether we've proven non-interference
       // in each direction:
@@ -1584,22 +1606,11 @@ struct AAPointerInfoImpl
         bool ReadChecked = !FindInterferingReads;
         bool WriteChecked = !FindInterferingWrites;
 
-        // The batch BFS only traverses blocks within Scope (I's function).
-        // For cross-function accesses (RemoteI in a callee), the remote
-        // block won't appear in ReachableFromI/ReachableToI, so the set
-        // lookup would trivially (and incorrectly) say "not reachable",
-        // leading to wrongly skipped accesses. We must gate the block-level
-        // check on IntraFnCheck and fall through to isPotentiallyReachable
-        // for cross-function cases, which properly handles inter-procedural
-        // reachability via AAInterFnReachability.
-        bool IntraFnCheck = Acc.getRemoteInst()->getFunction() == &Scope;
-
         // Forward reachability: can I reach Acc?
         // If not, I's write cannot be observed by Acc's read.
         if (!ReadChecked) {
           EnsureReachableFromI();
-          if (IntraFnCheck &&
-              !ReachableFromI.count(Acc.getRemoteInst()->getParent()))
+          if (!ReachableFromI.count(Acc.getRemoteInst()->getParent()))
             ReadChecked = true;
 
           if (!ReadChecked) {
@@ -1612,8 +1623,7 @@ struct AAPointerInfoImpl
             // If so, the path is blocked and ReadChecked = true.
             // If not, I directly reaches Acc — ReadChecked stays false.
             // Either way, no isPotentiallyReachable call is needed.
-            if (IntraFnCheck &&
-                I.getParent() == Acc.getRemoteInst()->getParent() &&
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
                 I.comesBefore(Acc.getRemoteInst())) {
               auto It = ExcludedBlockInsts.find(I.getParent());
               if (It != ExcludedBlockInsts.end()) {
@@ -1627,8 +1637,8 @@ struct AAPointerInfoImpl
               }
               NeedFallback = false;
             }
-            // For other cases (different blocks, cross-function, or Acc before
-            // I in the same block requiring loop analysis), fall back to
+            // For other cases (different blocks or Acc before I in the same
+            // block requiring loop analysis), fall back to
             // isPotentiallyReachable.
             if (NeedFallback && !ReadChecked) {
               if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
@@ -1643,8 +1653,7 @@ struct AAPointerInfoImpl
         // If not, Acc's write cannot be observed by I's read.
         if (!WriteChecked) {
           EnsureReachableToI();
-          if (IntraFnCheck &&
-              !ReachableToI.count(Acc.getRemoteInst()->getParent()))
+          if (!ReachableToI.count(Acc.getRemoteInst()->getParent()))
             WriteChecked = true;
 
           if (!WriteChecked) {
@@ -1652,8 +1661,7 @@ struct AAPointerInfoImpl
             // Same-block optimization (mirror of the ReadChecked case above):
             // when Acc and I are in the same block and Acc comes before I,
             // check whether an ExclusionSet barrier sits between them.
-            if (IntraFnCheck &&
-                I.getParent() == Acc.getRemoteInst()->getParent() &&
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
                 Acc.getRemoteInst()->comesBefore(&I)) {
               auto It = ExcludedBlockInsts.find(I.getParent());
               if (It != ExcludedBlockInsts.end()) {
@@ -1676,28 +1684,6 @@ struct AAPointerInfoImpl
           }
         }
 
-        // Cross-function write interference: if Acc is in a different function
-        // and the pointer has been written to, check whether the least
-        // dominating write in Scope can reach Acc's function. This uses
-        // AAInterFnReachability (call-graph level) rather than CFG traversal.
-        if (!WriteChecked && HasBeenWrittenTo &&
-            Acc.getRemoteInst()->getFunction() != &Scope) {
-
-          const auto *FnReachabilityAA = A.getAAFor<AAInterFnReachability>(
-              QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
-          if (FnReachabilityAA) {
-            bool Inserted = ExclusionSet.insert(&I).second;
-
-            if (!FnReachabilityAA->instructionCanReach(
-                    A, *LeastDominatingWriteInst,
-                    *Acc.getRemoteInst()->getFunction(), &ExclusionSet))
-              WriteChecked = true;
-
-            if (Inserted)
-              ExclusionSet.erase(&I);
-          }
-        }
-
         if (ReadChecked && WriteChecked)
           return true;
 
@@ -1710,13 +1696,26 @@ struct AAPointerInfoImpl
         return LeastDominatingWriteInst != Acc.getRemoteInst();
       };
 
-      // Run the user callback on all accesses we cannot skip and return if
-      // that succeeded for all or not.
-      for (auto &It : InterferingAccesses) {
+      // Process intra-function accesses using the batch BFS optimization.
+      for (auto &It : IntraFnAccesses) {
         if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
             !CanSkipAccessBatch(*It.first, It.second)) {
           if (!UserCB(*It.first, It.second))
             return false;
+        }
+      }
+
+      // Process cross-function accesses using the original CanSkipAccess.
+      // The batch BFS is intra-function only, so cross-fn accesses don't
+      // benefit from it. By partitioning in AccessCB, we avoid triggering
+      // the unnecessary EnsureReachableFromI/ToI BFS for cross-fn accesses.
+      for (auto &[RemoteFn, Accesses] : CrossFnGroups) {
+        for (auto &It : Accesses) {
+          if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+              !CanSkipAccess(*It.first, It.second)) {
+            if (!UserCB(*It.first, It.second))
+              return false;
+          }
         }
       }
     } else {
