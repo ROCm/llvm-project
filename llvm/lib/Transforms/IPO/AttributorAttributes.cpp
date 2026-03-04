@@ -1194,13 +1194,8 @@ struct AAPointerInfoImpl
     // AAExecutionDomain) such that we allow scopes other than kernels as long
     // as the reaching kernels are disjoint.
     bool InstInKernel;
-    if (getAssociatedFunction() == &Scope) {
-      if (!IsAssociatedFunctionKernel.has_value())
-        IsAssociatedFunctionKernel = A.getInfoCache().isKernel(Scope);
-      InstInKernel = *IsAssociatedFunctionKernel;
-    } else {
-      InstInKernel = A.getInfoCache().isKernel(Scope);
-    }
+    InstInKernel = isKernelCached(A, Scope);
+
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
         FindInterferingWrites && IsKnownNoRecurse;
@@ -1234,13 +1229,8 @@ struct AAPointerInfoImpl
       // If the alloca containing function is not recursive the alloca
       // must be dead in the callee.
       const Function *AIFn = AI->getFunction();
-      if (getAssociatedFunction() == AIFn) {
-        if (!IsAssociatedFunctionKernel.has_value())
-          IsAssociatedFunctionKernel = A.getInfoCache().isKernel(*AIFn);
-        ObjHasKernelLifetime = *IsAssociatedFunctionKernel;
-      } else {
-        ObjHasKernelLifetime = A.getInfoCache().isKernel(*AIFn);
-      }
+      ObjHasKernelLifetime = isKernelCached(A, *AIFn);
+
       bool IsKnownNoRecurse;
       if (AA::hasAssumedIRAttr<Attribute::NoRecurse>(
               A, this, IRPosition::function(*AIFn), DepClassTy::OPTIONAL,
