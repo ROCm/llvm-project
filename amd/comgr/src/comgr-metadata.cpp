@@ -548,12 +548,6 @@ constexpr size_t OffloadBundleMagicLen =
 } // namespace
 
 bool isCompatibleIsaName(StringRef IsaName, StringRef CodeObjectIsaName) {
-  // Trim trailing null terminators that may be present in binary data, so that
-  // we don't get false negatives because of only one of the args having null
-  // terminator.
-  IsaName = IsaName.rtrim('\0');
-  CodeObjectIsaName = CodeObjectIsaName.rtrim('\0');
-
   if (IsaName == CodeObjectIsaName) {
     return true;
   }
@@ -690,6 +684,8 @@ amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
     if (Reader.readFixedString(BundleEntryID, BundleEntryIDSize)) {
       return AMD_COMGR_STATUS_ERROR;
     }
+    // The encoded size may include a null terminator; strip it.
+    BundleEntryID = BundleEntryID.rtrim('\0');
 
     const auto OffloadAndTargetId = BundleEntryID.split('-');
     if (OffloadAndTargetId.first != OffloadKindHip &&
