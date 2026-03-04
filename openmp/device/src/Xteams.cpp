@@ -83,15 +83,14 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status,
             bool is_inclusive) {
 
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
-  const uint32_t num_waves = (block_size + warp_size - 1) / warp_size;
+  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
 
   // Derive thread/team IDs from k (logical iteration index)
   // This is consistent with how the reduction code handles it
   const uint32_t omp_thread_num = k % block_size; // Thread ID within team
   const uint32_t omp_team_num = k / block_size;   // Team ID
-  const uint32_t wave_num = omp_thread_num / warp_size;
-  const uint32_t lane_num = omp_thread_num % warp_size;
+  const uint32_t wave_num = omp_thread_num / _XTEAM_WARP_SIZE;
+  const uint32_t lane_num = omp_thread_num % _XTEAM_WARP_SIZE;
 
   // LDS for wave totals during block scan
   static _RF_LDS T wave_totals[_XTEAM_MAX_NUM_WAVES];
@@ -106,10 +105,10 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status,
   const T scan_input = (k < num_elements) ? val : rnv;
 
   // Intra-wave inclusive scan using shuffles
-  T local_scan = xteam::wave_inclusive_scan(scan_input, _rf);
+  T local_scan = xteam::wave_inclusive_scan(scan_input, _rf, block_size);
 
   // Cross-wave scan within block
-  if (lane_num == warp_size - 1)
+  if (lane_num == _XTEAM_WARP_SIZE - 1)
     wave_totals[wave_num] = local_scan;
   synchronize::threadsAligned(atomic::relaxed);
 
