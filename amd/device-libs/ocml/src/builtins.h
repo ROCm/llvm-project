@@ -41,7 +41,7 @@
 #define BUILTIN_ABS_F16 __builtin_fabsf16
 #define BUILTIN_ABS_2F16 __builtin_elementwise_abs
 
-#define BUILTIN_BITALIGN_B32 __builtin_amdgcn_alignbit
+#define BUILTIN_FSHR_B32(x, y, z) __builtin_elementwise_fshr(x, y, z)
 
 #define BUILTIN_CEIL_F32 __builtin_ceilf
 #define BUILTIN_CEIL_F64 __builtin_ceil
@@ -129,7 +129,7 @@
 #define BUILTIN_MAX_F32 __builtin_fmaxf
 #define BUILTIN_MAX_F64 __builtin_fmax
 #define BUILTIN_MAX_F16 __builtin_fmaxf16
-#define BUILTIN_MAX_2F16 __builtin_elementwise_max
+#define BUILTIN_MAX_2F16 __builtin_elementwise_maximum
 
 #define BUILTIN_MAX_S32(A,B) ((A) < (B) ? (B) : (A))
 #define BUILTIN_MAX_U32(A,B) ((A) < (B) ? (B) : (A))
@@ -137,7 +137,7 @@
 #define BUILTIN_MIN_F32 __builtin_fminf
 #define BUILTIN_MIN_F64 __builtin_fmin
 #define BUILTIN_MIN_F16 __builtin_fminf16
-#define BUILTIN_MIN_2F16 __builtin_elementwise_min
+#define BUILTIN_MIN_2F16 __builtin_elementwise_minimum
 
 #define BUILTIN_MIN_S32(A,B) ((A) < (B) ? (A) : (B))
 #define BUILTIN_MIN_U32(A,B) ((A) < (B) ? (A) : (B))
@@ -260,33 +260,15 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
         _exp;                                                                  \
     })
 
-#define BUILTIN_FREXP_MANT_F32(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf(X, &_exp);                                            \
-    })
-
-#define BUILTIN_FREXP_MANT_F64(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
-    })
-
-#define BUILTIN_FREXP_MANT_F16(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf16(X, &_exp);                                          \
-    })
-
 #define BUILTIN_CMAX_F32 __builtin_fmaxf
 #define BUILTIN_CMAX_F64 __builtin_fmax
 #define BUILTIN_CMAX_F16 __builtin_fmaxf16
-#define BUILTIN_CMAX_2F16 __builtin_elementwise_max
+#define BUILTIN_CMAX_2F16 __builtin_elementwise_maximum
 
 #define BUILTIN_CMIN_F32 __builtin_fminf
 #define BUILTIN_CMIN_F64 __builtin_fmin
 #define BUILTIN_CMIN_F16 __builtin_fminf16
-#define BUILTIN_CMIN_2F16 __builtin_elementwise_min
+#define BUILTIN_CMIN_2F16 __builtin_elementwise_minimum
 
 #define BUILTIN_AMDGPU_TRIG_PREOP_F64 __builtin_amdgcn_trig_preop
 

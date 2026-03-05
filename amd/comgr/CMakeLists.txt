@@ -158,6 +158,15 @@ else()
   endif()
 endif()
 
+# Allow the super-project to force static linking of LLVM/Clang into comgr.
+# When ON, LLVM symbols are hidden by comgr's version script (local: *;),
+# avoiding symbol interposition issues without requiring namespace isolation.
+option(COMGR_STATIC_LLVM "Statically link LLVM/Clang into comgr (hides LLVM symbols)" OFF)
+if(COMGR_STATIC_LLVM)
+  set(LLVM_LINK_LLVM_DYLIB OFF)
+  set(CLANG_LINK_CLANG_DYLIB OFF)
+endif()
+
 target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -202,6 +211,18 @@ list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "AMD_COMGR_GIT_BRANCH=${AMD_CO
 message("----COMGR_GIT_COMMIT: ${AMD_COMGR_GIT_COMMIT}")
 message("----COMGR_GIT_BRANCH: ${AMD_COMGR_GIT_BRANCH}")
 message("")
+
+include(CheckEmbed)
+option(COMGR_USE_EMBED "Use the C++26 #embed directive"
+       ${HAVE_EMBED_SUPPORT})
+
+if(NOT ${COMGR_USE_EMBED} AND HAVE_INCBIN_SUPPORT)
+  set(default_use_incbin ON)
+else()
+  set(default_use_incbin OFF)
+endif()
+
+option(COMGR_USE_INCBIN "Use the gnu .incbin assembler directive" ${default_use_incbin})
 
 option(COMGR_DISABLE_SPIRV "To disable SPIRV in Comgr" OFF)
 
@@ -503,6 +524,10 @@ target_link_libraries(amd_comgr
     ${LLD_LIBS}
     ${LLVM_LIBS}
     ${CLANG_LIBS})
+
+if(TARGET embedded-resource-dir)
+  target_link_libraries(amd_comgr PRIVATE embedded-resource-dir)
+endif()
 
 if (NOT UNIX)
   target_link_libraries(amd_comgr

@@ -160,6 +160,10 @@ defm RelaxedBufferOOBMode : AMDGPUSubtargetFeature<"relaxed-buffer-oob-mode",
   "cause an adjacent access to be treated as if it were also OOB"
 >;
 
+defm DX10ClampAndIEEEMode : AMDGPUSubtargetFeature<"dx10-clamp-and-ieee-mode",
+  "Target has DX10_CLAMP and IEEE_MODE kernel descriptor bits"
+>;
+
 defm ApertureRegs : AMDGPUSubtargetFeature<"aperture-regs",
   "Has Memory Aperture Base and Size Registers",
   /*GenPredicate=*/0
@@ -1312,6 +1316,12 @@ def FeatureUseAddPC64Inst : SubtargetFeature<"use-add-pc64-inst",
   "Use s_add_pc_i64 instruction."
 >;
 
+def FeatureGFX1250B0 : SubtargetFeature<"gfx1250-b0-specific",
+  "HasGFX1250B0",
+  "true",
+  "Generate code for B0 flavor of gfx1250."
+>;
+
 //===----------------------------------------------------------------------===//
 
 class GCNSubtargetFeatureGeneration <string Value,
@@ -1328,7 +1338,7 @@ def FeatureSouthernIslands : GCNSubtargetFeatureGeneration<"SOUTHERN_ISLANDS",
   FeatureGDS, FeatureGWS, FeatureDefaultComponentZero,
   FeatureAtomicFMinFMaxF32GlobalInsts, FeatureAtomicFMinFMaxF64GlobalInsts,
   FeatureVmemWriteVgprInOrder, FeatureCubeInsts, FeatureLerpInst,
-  FeatureSadInsts, FeatureCvtPkNormVOP2Insts
+  FeatureSadInsts, FeatureCvtPkNormVOP2Insts, FeatureDX10ClampAndIEEEMode
   ]
 >;
 
@@ -1343,7 +1353,8 @@ def FeatureSeaIslands : GCNSubtargetFeatureGeneration<"SEA_ISLANDS",
   FeatureAtomicFMinFMaxF32GlobalInsts, FeatureAtomicFMinFMaxF64GlobalInsts,
   FeatureAtomicFMinFMaxF32FlatInsts, FeatureAtomicFMinFMaxF64FlatInsts,
   FeatureVmemWriteVgprInOrder, FeatureCubeInsts, FeatureLerpInst,
-  FeatureSadInsts, FeatureQsadInsts, FeatureCvtPkNormVOP2Insts
+  FeatureSadInsts, FeatureQsadInsts, FeatureCvtPkNormVOP2Insts,
+  FeatureDX10ClampAndIEEEMode
   ]
 >;
 
@@ -1362,7 +1373,7 @@ def FeatureVolcanicIslands : GCNSubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
    FeatureUnalignedBufferAccess, FeatureImageInsts, FeatureGDS, FeatureGWS,
    FeatureDefaultComponentZero, FeatureVmemWriteVgprInOrder, FeatureCubeInsts,
    FeatureLerpInst, FeatureSadInsts, FeatureQsadInsts,
-   FeatureCvtPkNormVOP2Insts
+   FeatureCvtPkNormVOP2Insts, FeatureDX10ClampAndIEEEMode
   ]
 >;
 
@@ -1384,7 +1395,7 @@ def FeatureGFX9 : GCNSubtargetFeatureGeneration<"GFX9",
    FeatureDefaultComponentZero,FeatureVmemWriteVgprInOrder, FeatureVMemToLDSLoad,
    FeatureCubeInsts, FeatureLerpInst, FeatureSadInsts, FeatureQsadInsts,
    FeatureCvtNormInsts, FeatureCvtPkNormVOP2Insts,
-   FeatureCvtPkNormVOP3Insts
+   FeatureCvtPkNormVOP3Insts, FeatureDX10ClampAndIEEEMode
   ]
 >;
 
@@ -1411,7 +1422,7 @@ def FeatureGFX10 : GCNSubtargetFeatureGeneration<"GFX10",
    FeatureVmemWriteVgprInOrder, FeatureVMemToLDSLoad, FeatureCubeInsts,
    FeatureLerpInst, FeatureSadInsts, FeatureQsadInsts,
    FeatureCvtNormInsts, FeatureCvtPkNormVOP2Insts,
-   FeatureCvtPkNormVOP3Insts
+   FeatureCvtPkNormVOP3Insts, FeatureDX10ClampAndIEEEMode
   ]
 >;
 
@@ -1849,7 +1860,8 @@ def FeatureISAVersion11_Generic: FeatureSet<
      FeatureRequiresCOV6,
      FeatureRequiredExportPriority,
      FeatureDot5Insts,
-     FeatureWMMA256bInsts])>;
+     FeatureWMMA256bInsts,
+     FeatureDX10ClampAndIEEEMode])>;
 
 def FeatureISAVersion11_0_Common : FeatureSet<
   !listconcat(FeatureISAVersion11_Common.Features,
@@ -1858,7 +1870,8 @@ def FeatureISAVersion11_0_Common : FeatureSet<
      FeatureMADIntraFwdBug,
      FeaturePrivEnabledTrap2NopBug,
      FeatureDot5Insts,
-     FeatureWMMA256bInsts])>;
+     FeatureWMMA256bInsts,
+     FeatureDX10ClampAndIEEEMode])>;
 
 def FeatureISAVersion11_0_0 : FeatureSet<
   !listconcat(FeatureISAVersion11_0_Common.Features,
@@ -1883,7 +1896,8 @@ def FeatureISAVersion11_5_Common : FeatureSet<
      FeatureDPPSrc1SGPR,
      FeatureRequiredExportPriority,
      FeatureDot5Insts,
-     FeatureWMMA256bInsts])>;
+     FeatureWMMA256bInsts,
+     FeatureDX10ClampAndIEEEMode])>;
 
 def FeatureISAVersion11_5_0 : FeatureSet<
   !listconcat(FeatureISAVersion11_5_Common.Features,
@@ -2511,7 +2525,7 @@ def HasExportInsts : Predicate<"Subtarget->hasExportInsts()">,
   AssemblerPredicate<(any_of FeatureGFX13Insts, (all_of (not FeatureGFX90AInsts), (not FeatureGFX1250Insts)))>;
 
 def HasVINTERPEncoding : Predicate<"Subtarget->hasVINTERPEncoding()">,
-  AssemblerPredicate<(all_of FeatureGFX11Insts, (not FeatureGFX1250Insts))>;
+  AssemblerPredicate<(any_of FeatureGFX13Insts, (all_of FeatureGFX11Insts, (not FeatureGFX1250Insts)))>;
 
 def HasDSAddTid : Predicate<"Subtarget->getGeneration() >= AMDGPUSubtarget::GFX9">,
   AssemblerPredicate<(all_of FeatureGFX9Insts)>;
@@ -2634,10 +2648,10 @@ def NotHasSALUFloatInsts : Predicate<"!Subtarget->hasSALUFloatInsts()">,
 def NotHasCvtFP8VOP1Bug : Predicate<"!Subtarget->hasCvtFP8VOP1Bug()">;
 
 def HasUnalignedDS2Bug : Predicate<"Subtarget->hasUnalignedDS2Bug()">,
- AssemblerPredicate<(all_of FeatureGFX1250Insts)>;
+ AssemblerPredicate<(all_of FeatureGFX1250Insts, (not FeatureGFX1250B0))>;
 
 def NotHasUnalignedDS2Bug : Predicate<"!Subtarget->hasUnalignedDS2Bug()">,
- AssemblerPredicate<(not FeatureGFX1250Insts)>;
+ AssemblerPredicate<(any_of (not FeatureGFX1250Insts), (not FeatureGFX1250B0))>;
 
 def NeedsAlignedVGPRs : Predicate<"Subtarget->needsAlignedVGPRs()">,
                       AssemblerPredicate<(all_of FeatureRequiresAlignedVGPRs)>;

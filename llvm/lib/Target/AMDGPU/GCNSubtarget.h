@@ -538,9 +538,7 @@ public:
 
   // Shift amount of a 64 bit shift cannot be a highest allocated register
   // if also at the end of the allocation block.
-  bool hasShift64HighRegBug() const {
-    return HasGFX90AInsts && !HasGFX940Insts;
-  }
+  bool hasShift64HighRegBug() const { return HasGFX90AInsts; }
 
   // Has one cycle hazard on transcendental instruction feeding a
   // non transcendental VALU.
@@ -684,12 +682,6 @@ public:
 
   // \returns true if the target has split barriers feature
   bool hasSplitBarriers() const { return getGeneration() >= GFX12; }
-
-  // \returns true if the target has DX10_CLAMP kernel descriptor mode bit
-  bool hasDX10ClampMode() const { return getGeneration() < GFX12; }
-
-  // \returns true if the target has IEEE kernel descriptor mode bit
-  bool hasIEEEMode() const { return getGeneration() < GFX12; }
 
   // \returns true if the target has WG_RR_MODE kernel descriptor mode bit
   bool hasRrWGMode() const { return getGeneration() >= GFX12; }
@@ -980,10 +972,12 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
+  bool hasGFX1250A0() const { return HasGFX1250Insts && !HasGFX1250B0; }
+
   // TODO: Remove this when we replace all A0 GFX1250 with B0.
   // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
   // payload size.
-  bool hasUnalignedDS2Bug() const { return HasGFX1250Insts; }
+  bool hasUnalignedDS2Bug() const { return hasGFX1250A0(); }
 
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.
