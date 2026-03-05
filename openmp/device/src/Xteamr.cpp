@@ -68,6 +68,7 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
 #endif
 
   // Use shared block_reduce primitive for intra-team reduction
+  // Note: this returns the reduced value *only* in thread 0
   T team_result = xteam::block_reduce(val, _rf, _rf_lds, rnv, xwave_lds);
 
   if constexpr (_IS_FAST) {
@@ -81,19 +82,23 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
     synchronize::threadsAligned(atomic::relaxed);
   } else {
     // No sync needed here from last reduction in LDS loop
-    // because we only need xwave_lds[0] correct on thread 0.
+    // because we only need team_result correct on thread 0.
 
     // Save the teams reduced value in team_vals global array
     // and atomically increment teams_done counter.
     static _RF_LDS uint32_t td;
     if (omp_thread_num == 0) {
       team_vals[omp_team_num] = team_result;
-      td = atomic::inc(teams_done_ptr, NumTeams - 1u, atomic::relaxed,
+      td = atomic::inc(teams_done_ptr, NumTeams - 1u, atomic::acq_rel,
                       atomic::MemScopeTy::device);
     }
 
+    // This sync needed so all threads from last team see the shared volatile
+    // value td (teams done counter) so they know they are in the last team.
     synchronize::threadsAligned(atomic::acq_rel);
 
+    // If td counter reaches NumTeams-1, this is the last team.
+    // The team number of this last team is nondeterministic.
     if (td == (NumTeams - 1u)) {
       // Last team performs final reduction across all team values
 
@@ -104,6 +109,7 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
       synchronize::threadsAligned(atomic::relaxed);
 
       // Use block_reduce again for final reduction
+      // Note: this returns the reduced value *only* in thread 0
       T final_result = xteam::block_reduce(val, _rf, _rf_lds, rnv, xwave_lds);
 
       if (omp_thread_num == 0) {
