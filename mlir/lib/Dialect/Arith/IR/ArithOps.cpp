@@ -459,6 +459,12 @@ arith::AddUIExtendedOp::fold(FoldAdaptor adaptor,
   if (Attribute sumAttr = constFoldBinaryOp<IntegerAttr>(
           adaptor.getOperands(),
           [](APInt a, const APInt &b) { return std::move(a) + b; })) {
+    // If any operand is poison, propagate poison to both results.
+    if (isa<ub::PoisonAttr>(sumAttr)) {
+      results.push_back(sumAttr);
+      results.push_back(sumAttr);
+      return success();
+    }
     Attribute overflowAttr = constFoldBinaryOp<IntegerAttr>(
         ArrayRef({sumAttr, adaptor.getLhs()}),
         getI1SameShape(llvm::cast<TypedAttr>(sumAttr).getType()),
@@ -2509,7 +2515,7 @@ OpFoldResult arith::SelectOp::fold(FoldAdaptor adaptor) {
       matchPattern(adaptor.getFalseValue(), m_Zero()))
     return condition;
 
-  if (auto cmp = dyn_cast_or_null<arith::CmpIOp>(condition.getDefiningOp())) {
+  if (auto cmp = condition.getDefiningOp<arith::CmpIOp>()) {
     auto pred = cmp.getPredicate();
     if (pred == arith::CmpIPredicate::eq || pred == arith::CmpIPredicate::ne) {
       auto cmpLhs = cmp.getLhs();

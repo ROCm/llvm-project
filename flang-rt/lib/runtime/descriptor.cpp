@@ -8,11 +8,10 @@
 
 #include "flang-rt/runtime/descriptor.h"
 #include "ISO_Fortran_util.h"
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
-#include "memory.h"
-#endif
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/derived.h"
+#include "flang-rt/runtime/environment.h"
+#include "flang-rt/runtime/memory.h"
 #include "flang-rt/runtime/stat.h"
 #include "flang-rt/runtime/terminator.h"
 #include "flang-rt/runtime/type-info.h"
@@ -29,7 +28,7 @@ RT_OFFLOAD_API_GROUP_BEGIN
 RT_API_ATTRS Descriptor::Descriptor(const Descriptor &that) { *this = that; }
 
 RT_API_ATTRS Descriptor &Descriptor::operator=(const Descriptor &that) {
-  runtime::memcpy(this, &that, that.SizeInBytes());
+  runtime::memcpy(reinterpret_cast<void *>(this), &that, that.SizeInBytes());
   return *this;
 }
 
@@ -178,7 +177,13 @@ RT_API_ATTRS int Descriptor::Allocate(std::int64_t *asyncObject) {
   // Zero size allocation is possible in Fortran and the resulting
   // descriptor must be allocated/associated. Since std::malloc(0)
   // result is implementation defined, always allocate at least one byte.
-  void *p{alloc(byteSize ? byteSize : 1, asyncObject)};
+  if (byteSize < 1) {
+    if (executionEnvironment.noEmptyAllocation) {
+      return CFI_ERROR_MEM_ALLOCATION;
+    }
+    byteSize = 1;
+  }
+  void *p{alloc(byteSize, asyncObject)};
   if (!p) {
     return CFI_ERROR_MEM_ALLOCATION;
   }

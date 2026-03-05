@@ -305,20 +305,6 @@ public:
                     MachineBasicBlock::iterator I, const DebugLoc &DL,
                     Register SrcReg, int Value)  const;
 
-private:
-  void storeRegToStackSlotImpl(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator MI, Register SrcReg,
-                               bool isKill, int FrameIndex,
-                               const TargetRegisterClass *RC, Register VReg,
-                               MachineInstr::MIFlag Flags, bool NeedsCFI) const;
-
-public:
-  void storeRegToStackSlotCFI(MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator MI, Register SrcReg,
-                              bool isKill, int FrameIndex,
-                              const TargetRegisterClass *RC,
-                              const TargetRegisterInfo *TRI) const;
-
   bool getConstValDefinedInReg(const MachineInstr &MI, const Register Reg,
                                int64_t &ImmVal) const override;
 
@@ -327,8 +313,7 @@ public:
   unsigned getVectorRegSpillSaveOpcode(Register Reg,
                                        const TargetRegisterClass *RC,
                                        unsigned Size,
-                                       const SIMachineFunctionInfo &MFI,
-                                       bool NeedsCFI) const;
+                                       const SIMachineFunctionInfo &MFI) const;
   unsigned
   getVectorRegSpillRestoreOpcode(Register Reg, const TargetRegisterClass *RC,
                                  unsigned Size,
@@ -739,7 +724,6 @@ public:
   static bool isBlockLoadStore(uint32_t Opcode) {
     switch (Opcode) {
     case AMDGPU::SI_BLOCK_SPILL_V1024_SAVE:
-    case AMDGPU::SI_BLOCK_SPILL_V1024_CFI_SAVE:
     case AMDGPU::SI_BLOCK_SPILL_V1024_RESTORE:
     case AMDGPU::SCRATCH_STORE_BLOCK_SADDR:
     case AMDGPU::SCRATCH_LOAD_BLOCK_SADDR:
@@ -843,8 +827,8 @@ public:
     unsigned Opc = MI.getOpcode();
     // Exclude instructions that read FROM LDS (not write to it)
     return isLDSDMA(MI) && Opc != AMDGPU::BUFFER_STORE_LDS_DWORD &&
-           Opc != AMDGPU::TENSOR_STORE_FROM_LDS &&
-           Opc != AMDGPU::TENSOR_STORE_FROM_LDS_D2;
+           Opc != AMDGPU::TENSOR_STORE_FROM_LDS_d2 &&
+           Opc != AMDGPU::TENSOR_STORE_FROM_LDS_d4;
   }
 
   static bool isSBarrierSCCWrite(unsigned Opcode) {
@@ -1598,7 +1582,8 @@ public:
                                  const ScheduleDAG *DAG) const override;
 
   ScheduleHazardRecognizer *
-  CreateTargetPostRAHazardRecognizer(const MachineFunction &MF) const override;
+  CreateTargetPostRAHazardRecognizer(const MachineFunction &MF,
+                                     MachineLoopInfo *MLI) const override;
 
   ScheduleHazardRecognizer *
   CreateTargetMIHazardRecognizer(const InstrItineraryData *II,

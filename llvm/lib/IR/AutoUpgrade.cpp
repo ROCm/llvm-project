@@ -5794,8 +5794,7 @@ bool llvm::UpgradeDebugInfo(Module &M) {
     }
   }
 
-  bool VersionSupported = Version == DEBUG_METADATA_VERSION;
-  if (VersionSupported) {
+  if (Version == DEBUG_METADATA_VERSION) {
     bool BrokenDebugInfo = false;
     if (verifyModule(M, &llvm::errs(), &BrokenDebugInfo))
       report_fatal_error("Broken module found, compilation aborted!");
@@ -5809,7 +5808,7 @@ bool llvm::UpgradeDebugInfo(Module &M) {
     }
   }
   bool Modified = StripDebugInfo(M);
-  if (Modified && !VersionSupported) {
+  if (Modified && Version != DEBUG_METADATA_VERSION) {
     // Diagnose a version mismatch.
     DiagnosticInfoDebugMetadataVersion DiagVersion(M, Version);
     M.getContext().diagnose(DiagVersion);
@@ -6353,6 +6352,16 @@ void llvm::UpgradeFunctionAttributes(Function &F) {
     AddingAttrs = RemovingAttrs = true;
   }
 
+  if (Attribute A = F.getFnAttribute("uniform-work-group-size");
+      A.isValid() && A.isStringAttribute() && !A.getValueAsString().empty()) {
+    AttrsToRemove.addAttribute("uniform-work-group-size");
+    RemovingAttrs = true;
+    if (A.getValueAsString() == "true") {
+      AttrsToAdd.addAttribute("uniform-work-group-size");
+      AddingAttrs = true;
+    }
+  }
+
   if (!F.empty()) {
     // For some reason this is called twice, and the first time is before any
     // instructions are loaded into the body.
@@ -6749,6 +6758,17 @@ void llvm::UpgradeAttributes(AttrBuilder &B) {
     B.removeAttribute("null-pointer-is-valid");
     if (NullPointerIsValid)
       B.addAttribute(Attribute::NullPointerIsValid);
+  }
+
+  A = B.getAttribute("uniform-work-group-size");
+  if (A.isValid()) {
+    StringRef Val = A.getValueAsString();
+    if (!Val.empty()) {
+      bool IsTrue = Val == "true";
+      B.removeAttribute("uniform-work-group-size");
+      if (IsTrue)
+        B.addAttribute("uniform-work-group-size");
+    }
   }
 }
 

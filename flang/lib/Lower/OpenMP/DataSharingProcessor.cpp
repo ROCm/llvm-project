@@ -12,8 +12,8 @@
 
 #include "DataSharingProcessor.h"
 
+#include "Utils.h"
 #include "flang/Lower/ConvertVariable.h"
-#include "flang/Lower/OpenMP/Utils.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Support/PrivateReductionUtils.h"
 #include "flang/Lower/Support/Utils.h"
@@ -89,25 +89,20 @@ DataSharingProcessor::DataSharingProcessor(lower::AbstractConverter &converter,
                            useDelayedPrivatization, symTable,
                            isTargetPrivatization) {}
 
-void DataSharingProcessor::processStep1() {
+void DataSharingProcessor::processStep1(
+    mlir::omp::PrivateClauseOps *clauseOps,
+    std::optional<llvm::omp::Directive> dir) {
   collectSymbolsForPrivatization();
   collectDefaultSymbols();
   collectImplicitSymbols();
   collectPreDeterminedSymbols();
-}
-
-void DataSharingProcessor::processStep2(
-    mlir::omp::PrivateClauseOps *clauseOps,
-    std::optional<llvm::omp::Directive> dir) {
-  if (privatizationDone)
-    return;
 
   privatize(clauseOps, dir);
+
   insertBarrier(clauseOps);
-  privatizationDone = true;
 }
 
-void DataSharingProcessor::processStep3(mlir::Operation *op, bool isLoop) {
+void DataSharingProcessor::processStep2(mlir::Operation *op, bool isLoop) {
   // 'sections' lastprivate is handled by genOMP()
   if (mlir::isa<mlir::omp::SectionOp>(op))
     return;
@@ -240,11 +235,6 @@ void DataSharingProcessor::collectSymbolsForPrivatization() {
   // Such cases are suggested to be clearly documented and explained
   // instead of being silently skipped
   auto isException = [&](const Fortran::semantics::Symbol *sym) -> bool {
-    // `OmpPreDetermined` symbols cannot be exceptions since
-    // their privatized symbols are heavily used in FIR.
-    if (sym->test(Fortran::semantics::Symbol::Flag::OmpPreDetermined))
-      return false;
-
     // The handling of linear clause is deferred to the OpenMP
     // IRBuilder which is responsible for all its aspects,
     // including privatization. Privatizing linear variables at this point would
@@ -268,6 +258,11 @@ void DataSharingProcessor::collectSymbolsForPrivatization() {
     // draw a relation between %linear and %arg0. Hence skip.
     if (sym->test(Fortran::semantics::Symbol::Flag::OmpLinear))
       return true;
+
+    // `OmpPreDetermined` symbols cannot be exceptions since
+    // their privatized symbols are heavily used in FIR.
+    if (sym->test(Fortran::semantics::Symbol::Flag::OmpPreDetermined))
+      return false;
     return false;
   };
 
@@ -300,7 +295,7 @@ bool DataSharingProcessor::needBarrier() {
   // Emit implicit barrier to synchronize threads and avoid data races on
   // initialization of firstprivate variables and post-update of lastprivate
   // variables.
-  // Emit implicit barrier for linear clause. Maybe on somewhere else.
+  // Emit implicit barrier for linear clause in the OpenMPIRBuilder.
   for (const semantics::Symbol *sym : allPrivatizedSymbols) {
     if (sym->test(semantics::Symbol::Flag::OmpLastPrivate) &&
         (sym->test(semantics::Symbol::Flag::OmpFirstPrivate) ||
@@ -513,7 +508,10 @@ void DataSharingProcessor::collectSymbols(
            !sym.GetUltimate().has<semantics::DerivedTypeDetails>() &&
            !sym.GetUltimate().has<semantics::NamelistDetails>() &&
            !semantics::IsImpliedDoIndex(sym.GetUltimate()) &&
-           !semantics::IsStmtFunction(sym);
+           !semantics::IsStmtFunction(sym) &&
+           // Linear symbols are privatized by OpenMP IRBuilder. See comments
+           // in collectSymbolsForPrivatization() for more details.
+           !sym.test(semantics::Symbol::Flag::OmpLinear);
   };
 
   auto shouldCollectSymbol = [&](const semantics::Symbol *sym) {

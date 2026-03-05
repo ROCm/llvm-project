@@ -129,14 +129,16 @@ set(ppc_htm_files
   )
 
 set(riscv_files
+  # Standard headers
   riscv_bitmanip.h
-  riscv_corev_alu.h
   riscv_crypto.h
-  riscv_nds.h
   riscv_ntlh.h
-  sifive_vector.h
+  # Vendor headers
   andes_vector.h
+  riscv_corev_alu.h
   riscv_mips.h
+  riscv_nds.h
+  sifive_vector.h
   )
 
 set(spirv_files
@@ -247,9 +249,6 @@ set(x86_files
   movrsintrin.h
   mwaitxintrin.h
   nmmintrin.h
-  omp_libmextras.h
-  opencl-c.h
-  opencl-c-base.h
   pconfigintrin.h
   pkuintrin.h
   pmmintrin.h
@@ -297,6 +296,7 @@ set(x86_files
   )
 
 set(gpu_files
+  amdhsa_abi.h
   gpuintrin.h
   nvptxintrin.h
   amdgpuintrin.h
@@ -382,7 +382,6 @@ set(openmp_wrapper_files
   openmp_wrappers/__clang_openmp_device_functions.h
   openmp_wrappers/complex_cmath.h
   openmp_wrappers/new
-  openmp_wrappers/hip/hip_runtime.h
 )
 
 set(llvm_offload_wrapper_files

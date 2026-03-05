@@ -34,17 +34,11 @@ void SPIRV::constructTranslateCommand(Compilation &C, const Tool &T,
 
   // Try to find "llvm-spirv-<LLVM_VERSION_MAJOR>". Otherwise, fall back to
   // plain "llvm-spirv".
-  // AMD FORK ONLY: instead of llvm-spirv we look for the amd-llvm-spirv, which
-  // is our ephemeral, temporary build of the translator that nests changes that
-  // are not in upstream. This will be removed in the future.
   using namespace std::string_literals;
   auto VersionedTool = "llvm-spirv-"s + std::to_string(LLVM_VERSION_MAJOR);
-  if (T.getToolChain().getTriple().getVendor() == llvm::Triple::VendorType::AMD)
-    VersionedTool.insert(0, "amd-");
   std::string ExeCand = T.getToolChain().GetProgramPath(VersionedTool.c_str());
   if (!llvm::sys::fs::can_execute(ExeCand))
-    ExeCand = T.getToolChain().GetProgramPath(
-        VersionedTool.substr(0, VersionedTool.find_last_of('-')).c_str());
+    ExeCand = T.getToolChain().GetProgramPath("llvm-spirv");
 
   const char *Exec = C.getArgs().MakeArgString(ExeCand);
   C.addCommand(std::make_unique<Command>(JA, T, ResponseFileSupport::None(),
@@ -153,17 +147,31 @@ void SPIRV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const ToolChain &ToolChain = getToolChain();
   std::string Linker = ToolChain.GetProgramPath(getShortName());
   ArgStringList CmdArgs;
-  AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
+  AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  // Use of --sycl-link will call the clang-sycl-linker instead of
-  // the default linker (spirv-link).
-  if (Args.hasArg(options::OPT_sycl_link))
+  // TODO: Consider moving SPIR-V linking to a separate tool.
+  if (C.getDriver().isUsingLTO()) {
+    // Implement limited LTO support through llvm-lto.
+    if (Args.hasArg(options::OPT_sycl_link)) {
+      // For unsupported cases, throw the same error as when LTO isn't supported
+      // at all.
+      C.getDriver().Diag(clang::diag::err_drv_no_linker_llvm_support)
+          << ToolChain.getTriple().getTriple();
+      return;
+    }
+    Linker = ToolChain.GetProgramPath("llvm-lto");
+    // Disable internalization, otherwise GlobalDCE will optimize everything
+    // out.
+    CmdArgs.push_back("-enable-lto-internalization=false");
+  } else if (Args.hasArg(options::OPT_sycl_link)) {
+    // Use of --sycl-link will call the clang-sycl-linker instead of
+    // the default linker (spirv-link).
     Linker = ToolChain.GetProgramPath("clang-sycl-linker");
-  else if (!llvm::sys::fs::can_execute(Linker) &&
-           !C.getArgs().hasArg(clang::options::OPT__HASH_HASH_HASH)) {
+  } else if (!llvm::sys::fs::can_execute(Linker) &&
+             !C.getArgs().hasArg(clang::options::OPT__HASH_HASH_HASH)) {
     C.getDriver().Diag(clang::diag::err_drv_no_spv_tools) << getShortName();
     return;
   }
@@ -177,7 +185,7 @@ SPIRVToolChain::SPIRVToolChain(const Driver &D, const llvm::Triple &Triple,
     : ToolChain(D, Triple, Args) {
   // TODO: Revisit need/use of --sycl-link option once SYCL toolchain is
   // available and SYCL linking support is moved there.
-  NativeLLVMSupport = Args.hasArg(options::OPT_sycl_link);
+  NativeLLVMSupport = Args.hasArg(options::OPT_sycl_link) || D.isUsingLTO();
 
   // Lookup binaries into the driver directory.
   getProgramPaths().push_back(getDriver().Dir);

@@ -1,4 +1,5 @@
 // RUN: mlir-opt -split-input-file -verify-diagnostics %s
+
 func.func @unknown_clause() {
   // expected-error@+1 {{expected '{' to begin a region}}
   omp.parallel invalid {
@@ -3164,5 +3165,45 @@ omp.declare_simd
 func.func @omp_declare_simd_branch() -> () {
   // expected-error @+1 {{'omp.declare_simd' op cannot have both 'inbranch' and 'notinbranch'}}
   omp.declare_simd inbranch notinbranch
+  return
+}
+
+// -----
+
+func.func @iterator_bad_result_type(%lb : index, %ub : index, %st : index) {
+  // expected-error@+1 {{result #0 must be OpenMP iterator-produced list handle, but got 'index'}}
+  %0 = omp.iterator(%i: index) = (%lb to %ub step %st) {
+    omp.yield(%i : index)
+  } -> index
+  return
+}
+
+// -----
+
+func.func @iterator_missing_yield(%lb : index, %ub : index, %st : index) {
+  // expected-error@+1 {{region must be terminated by omp.yield}}
+  %0 = omp.iterator(%i: index) = (%lb to %ub step %st) {
+    func.return
+  } -> !omp.iterated<index>
+  return
+}
+
+// -----
+
+func.func @iterator_yield_wrong_num_operands(%lb : index, %ub : index, %st : index) {
+  // expected-error@+1 {{omp.yield in omp.iterator region must yield exactly one value}}
+  %0 = omp.iterator(%i: index) = (%lb to %ub step %st) {
+    omp.yield(%i, %i : index, index)
+  } -> !omp.iterated<index>
+  return
+}
+
+// -----
+
+func.func @iterator_yield_type_mismatch(%lb : index, %ub : index, %st : index) {
+  // expected-error@+1 {{omp.iterated element type ('i64') does not match omp.yield operand type ('index')}}
+  %0 = omp.iterator(%i: index) = (%lb to %ub step %st) {
+    omp.yield(%i : index)
+  } -> !omp.iterated<i64>
   return
 }

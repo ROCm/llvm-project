@@ -404,6 +404,7 @@ enum Kind {
   kw_importType,
   kw_definition,
   kw_declaration,
+  kw_noRenameOnPromotion,
   kw_function,
   kw_insts,
   kw_funcFlags,
@@ -509,7 +510,6 @@ enum Kind {
   DwarfLang,           // DW_LANG_foo
   DwarfSourceLangName, // DW_LNAME_foo
   DwarfCC,             // DW_CC_foo
-  DwarfMSpaceLLVM,     // DW_MSPACE_LLVM_foo
   EmissionKind,        // lineTablesOnly
   NameTableKind,       // GNU
   FixedPointKind,      // Fixed point
@@ -518,7 +518,6 @@ enum Kind {
   DISPFlag,            // DISPFlagFoo
   DwarfMacinfo,        // DW_MACINFO_foo
   ChecksumKind,        // CSK_foo
-  DIOp,                // DIOpFoo
   DbgRecordType,       // dbg_foo
   DwarfEnumKind,       // DW_APPLE_ENUM_KIND_foo
 

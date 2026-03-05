@@ -23,7 +23,6 @@
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/DbgEntityHistoryCalculator.h"
 #include "llvm/CodeGen/LexicalScopes.h"
-#include "llvm/CodeGen/PseudoSourceValueManager.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/Support/Casting.h"
 #include <cstdint>
@@ -437,6 +436,10 @@ public:
   void addBaseTypeRef(DIEValueList &Die, int64_t Idx);
 
   MDNodeSetVector &getDeferredLocalDecls() { return DeferredLocalDecls; }
+
+  void addLinkageNamesToDeclarations(const DwarfDebug &DD,
+                                     const DISubprogram &CalleeSP,
+                                     DIE &CalleeDIE);
 };
 
 } // end namespace llvm

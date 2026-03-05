@@ -224,8 +224,6 @@ if config.clang_staticanalyzer:
         config.available_features.add("z3")
         if config.clang_staticanalyzer_z3_mock:
             config.available_features.add("z3-mock")
-    else:
-        config.available_features.add("no-z3")
 
     check_analyzer_fixit_path = os.path.join(
         config.test_source_root, "Analysis", "check-analyzer-fixit.py"
@@ -437,10 +435,6 @@ if "system-aix" in config.available_features:
 # possibly be present in system and user configuration files, so disable
 # default configs for the test runs.
 config.environment["CLANG_NO_DEFAULT_CONFIG"] = "1"
-
-if config.enable_amdclang:
-    config.available_features.add("amdclang")
-    llvm_config.add_tool_substitutions(["amdclang"], tool_dirs)
 
 if lit_config.update_tests:
     import sys

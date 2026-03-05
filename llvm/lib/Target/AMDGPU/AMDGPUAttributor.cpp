@@ -13,7 +13,6 @@
 #include "AMDGPU.h"
 #include "GCNSubtarget.h"
 #include "Utils/AMDGPUBaseInfo.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
 #include "llvm/Target/TargetMachine.h"
@@ -363,11 +362,7 @@ struct AAUniformWorkGroupSizeFunction : public AAUniformWorkGroupSize {
     if (CC != CallingConv::AMDGPU_KERNEL)
       return;
 
-    bool InitialValue = false;
-    if (F->hasFnAttribute("uniform-work-group-size"))
-      InitialValue =
-          F->getFnAttribute("uniform-work-group-size").getValueAsString() ==
-          "true";
+    bool InitialValue = F->hasFnAttribute("uniform-work-group-size");
 
     if (InitialValue)
       indicateOptimisticFixpoint();
@@ -402,13 +397,13 @@ struct AAUniformWorkGroupSizeFunction : public AAUniformWorkGroupSize {
   }
 
   ChangeStatus manifest(Attributor &A) override {
-    SmallVector<Attribute, 8> AttrList;
-    LLVMContext &Ctx = getAssociatedFunction()->getContext();
+    if (!getAssumed())
+      return ChangeStatus::UNCHANGED;
 
-    AttrList.push_back(Attribute::get(Ctx, "uniform-work-group-size",
-                                      getAssumed() ? "true" : "false"));
-    return A.manifestAttrs(getIRPosition(), AttrList,
-                           /* ForceReplace */ true);
+    LLVMContext &Ctx = getAssociatedFunction()->getContext();
+    return A.manifestAttrs(getIRPosition(),
+                           {Attribute::get(Ctx, "uniform-work-group-size")},
+                           /*ForceReplace=*/true);
   }
 
   bool isValidState() const override {
@@ -1595,17 +1590,10 @@ static bool runImpl(Module &M, AnalysisGetter &AG, TargetMachine &TM,
   AC.IsModulePass = true;
   AC.DefaultInitializeLiveInternals = false;
   AC.IndirectCalleeSpecializationCallback =
-      [&TM](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
-            Function &Callee, unsigned NumAssumedCallees) {
-        if (AMDGPU::isEntryFunctionCC(Callee.getCallingConv()))
-          return false;
-        // Singleton functions can be specialized.
-        if (NumAssumedCallees == 1)
-          return true;
-        // Otherwise specialize uniform values.
-        const auto &TTI = TM.getTargetTransformInfo(*CB.getCaller());
-        return TTI.getInstructionUniformity(CB.getCalledOperand()) ==
-               InstructionUniformity::AlwaysUniform;
+      [](Attributor &A, const AbstractAttribute &AA, CallBase &CB,
+         Function &Callee, unsigned NumAssumedCallees) {
+        return !AMDGPU::isEntryFunctionCC(Callee.getCallingConv()) &&
+               (NumAssumedCallees <= IndirectCallSpecializationThreshold);
       };
   AC.IPOAmendableCB = [](const Function &F) {
     return F.getCallingConv() == CallingConv::AMDGPU_KERNEL;

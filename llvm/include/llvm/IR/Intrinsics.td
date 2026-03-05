@@ -1535,12 +1535,6 @@ let IntrProperties = [IntrNoMem, IntrSpeculatable] in {
                                         llvm_metadata_ty]>;
   def int_dbg_label        : DefaultAttrsIntrinsic<[],
                                        [llvm_metadata_ty]>;
-  def int_dbg_def          : DefaultAttrsIntrinsic<[],
-                                       [llvm_metadata_ty,
-                                        llvm_metadata_ty]>;
-  def int_dbg_kill         : DefaultAttrsIntrinsic<[],
-                                        [llvm_metadata_ty]>;
-
 }
 
 //===------------------ Exception Handling Intrinsics----------------------===//
@@ -2715,7 +2709,7 @@ def int_memset_element_unordered_atomic
 
 //===------------------------ Reduction Intrinsics ------------------------===//
 //
-let IntrProperties = [IntrNoMem, IntrSpeculatable] in {
+let IntrProperties = [IntrNoMem, IntrSpeculatable, IntrNoCreateUndefOrPoison] in {
 
   def int_vector_reduce_fadd : DefaultAttrsIntrinsic<[LLVMVectorElementType<0>],
                                          [LLVMVectorElementType<0>,

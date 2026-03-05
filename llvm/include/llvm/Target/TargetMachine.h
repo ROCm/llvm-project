@@ -14,7 +14,6 @@
 #define LLVM_TARGET_TARGETMACHINE_H
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/Allocator.h"
@@ -368,15 +367,6 @@ public:
     return false;
   }
 
-  /// Returns the DWARF address space corresponding to the given LLVM address
-  /// space, or None if no such mapping exists.
-  virtual std::optional<dwarf::AddressSpace>
-  mapToDWARFAddrSpace(unsigned LLVMAddrSpace) const {
-    if (LLVMAddrSpace == DL.getDefaultGlobalsAddressSpace())
-      return dwarf::AddressSpace::DW_ASPACE_LLVM_none;
-    return std::nullopt;
-  }
-
   void setPGOOption(std::optional<PGOOptions> PGOOpt) { PGOOption = PGOOpt; }
   const std::optional<PGOOptions> &getPGOOption() const { return PGOOption; }
 
@@ -495,12 +485,11 @@ public:
     return nullptr;
   }
 
-  virtual Error buildCodeGenPipeline(ModulePassManager &MPM,
-                                     raw_pwrite_stream &Out,
-                                     raw_pwrite_stream *DwoOut,
-                                     CodeGenFileType FileType,
-                                     const CGPassBuilderOption &Opt,
-                                     PassInstrumentationCallbacks *PIC) {
+  virtual Error
+  buildCodeGenPipeline(ModulePassManager &MPM, raw_pwrite_stream &Out,
+                       raw_pwrite_stream *DwoOut, CodeGenFileType FileType,
+                       const CGPassBuilderOption &Opt, MCContext &Ctx,
+                       PassInstrumentationCallbacks *PIC) {
     return make_error<StringError>("buildCodeGenPipeline is not overridden",
                                    inconvertibleErrorCode());
   }

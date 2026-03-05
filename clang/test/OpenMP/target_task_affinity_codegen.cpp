@@ -70,18 +70,18 @@ int main() {
 
 //.
 // CHECK1: @.offload_sizes = private unnamed_addr constant [2 x i64] [i64 4096, i64 8]
-// CHECK1: @.offload_maptypes = private unnamed_addr constant [2 x i64] [i64 3, i64 32768]
+// CHECK1: @.offload_maptypes = private unnamed_addr constant [2 x i64] [i64 3, i64 16384]
 // CHECK1: @.offload_sizes.1 = private unnamed_addr constant [1 x i64] zeroinitializer
 // CHECK1: @.offload_maptypes.2 = private unnamed_addr constant [1 x i64] [i64 64]
 // CHECK1: @.offload_sizes.3 = private unnamed_addr constant [3 x i64] [i64 4096, i64 8, i64 8]
-// CHECK1: @.offload_maptypes.4 = private unnamed_addr constant [3 x i64] [i64 35, i64 32768, i64 288]
+// CHECK1: @.offload_maptypes.4 = private unnamed_addr constant [3 x i64] [i64 35, i64 16384, i64 288]
 //.
 // CHECK3: @.offload_sizes = private unnamed_addr constant [2 x i64] [i64 4096, i64 4]
-// CHECK3: @.offload_maptypes = private unnamed_addr constant [2 x i64] [i64 3, i64 32768]
+// CHECK3: @.offload_maptypes = private unnamed_addr constant [2 x i64] [i64 3, i64 16384]
 // CHECK3: @.offload_sizes.1 = private unnamed_addr constant [1 x i64] zeroinitializer
 // CHECK3: @.offload_maptypes.2 = private unnamed_addr constant [1 x i64] [i64 64]
 // CHECK3: @.offload_sizes.3 = private unnamed_addr constant [3 x i64] [i64 4096, i64 4, i64 4]
-// CHECK3: @.offload_maptypes.4 = private unnamed_addr constant [3 x i64] [i64 35, i64 32768, i64 288]
+// CHECK3: @.offload_maptypes.4 = private unnamed_addr constant [3 x i64] [i64 35, i64 16384, i64 288]
 //.
 // CHECK1-LABEL: define {{[^@]+}}@main
 // CHECK1-SAME: () #[[ATTR0:[0-9]+]] {
@@ -217,9 +217,9 @@ int main() {
 // CHECK1-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[A_ADDR]], align 8
 // CHECK1-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP5]], i64 1023
 // CHECK1-NEXT:    [[TMP6:%.*]] = getelementptr i32, ptr [[ARRAYIDX1]], i32 1
-// CHECK1-NEXT:    [[TMP7:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i64
-// CHECK1-NEXT:    [[TMP8:%.*]] = ptrtoint ptr [[TMP6]] to i64
-// CHECK1-NEXT:    [[TMP9:%.*]] = sub nuw i64 [[TMP8]], [[TMP7]]
+// CHECK1-NEXT:    [[TMP7:%.*]] = ptrtoaddr ptr [[TMP6]] to i64
+// CHECK1-NEXT:    [[TMP8:%.*]] = ptrtoaddr ptr [[ARRAYIDX]] to i64
+// CHECK1-NEXT:    [[TMP9:%.*]] = sub nuw i64 [[TMP7]], [[TMP8]]
 // CHECK1-NEXT:    [[TMP10:%.*]] = getelementptr [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP3]], i64 0
 // CHECK1-NEXT:    [[TMP11:%.*]] = getelementptr inbounds nuw [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP10]], i32 0, i32 0
 // CHECK1-NEXT:    [[TMP12:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i64
@@ -452,9 +452,9 @@ int main() {
 // CHECK3-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[A_ADDR]], align 4
 // CHECK3-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP5]], i32 1023
 // CHECK3-NEXT:    [[TMP6:%.*]] = getelementptr i32, ptr [[ARRAYIDX1]], i32 1
-// CHECK3-NEXT:    [[TMP7:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i32
-// CHECK3-NEXT:    [[TMP8:%.*]] = ptrtoint ptr [[TMP6]] to i32
-// CHECK3-NEXT:    [[TMP9:%.*]] = sub nuw i32 [[TMP8]], [[TMP7]]
+// CHECK3-NEXT:    [[TMP7:%.*]] = ptrtoaddr ptr [[TMP6]] to i32
+// CHECK3-NEXT:    [[TMP8:%.*]] = ptrtoaddr ptr [[ARRAYIDX]] to i32
+// CHECK3-NEXT:    [[TMP9:%.*]] = sub nuw i32 [[TMP7]], [[TMP8]]
 // CHECK3-NEXT:    [[TMP10:%.*]] = getelementptr [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP3]], i32 0
 // CHECK3-NEXT:    [[TMP11:%.*]] = getelementptr inbounds nuw [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP10]], i32 0, i32 0
 // CHECK3-NEXT:    [[TMP12:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i32
@@ -642,9 +642,9 @@ int main() {
 // CHECK9-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[A_ADDR]], align 8
 // CHECK9-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP5]], i64 1023
 // CHECK9-NEXT:    [[TMP6:%.*]] = getelementptr i32, ptr [[ARRAYIDX1]], i32 1
-// CHECK9-NEXT:    [[TMP7:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i64
-// CHECK9-NEXT:    [[TMP8:%.*]] = ptrtoint ptr [[TMP6]] to i64
-// CHECK9-NEXT:    [[TMP9:%.*]] = sub nuw i64 [[TMP8]], [[TMP7]]
+// CHECK9-NEXT:    [[TMP7:%.*]] = ptrtoaddr ptr [[TMP6]] to i64
+// CHECK9-NEXT:    [[TMP8:%.*]] = ptrtoaddr ptr [[ARRAYIDX]] to i64
+// CHECK9-NEXT:    [[TMP9:%.*]] = sub nuw i64 [[TMP7]], [[TMP8]]
 // CHECK9-NEXT:    [[TMP10:%.*]] = getelementptr [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP3]], i64 0
 // CHECK9-NEXT:    [[TMP11:%.*]] = getelementptr inbounds nuw [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP10]], i32 0, i32 0
 // CHECK9-NEXT:    [[TMP12:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i64
@@ -764,9 +764,9 @@ int main() {
 // CHECK11-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[A_ADDR]], align 4
 // CHECK11-NEXT:    [[ARRAYIDX1:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP5]], i32 1023
 // CHECK11-NEXT:    [[TMP6:%.*]] = getelementptr i32, ptr [[ARRAYIDX1]], i32 1
-// CHECK11-NEXT:    [[TMP7:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i32
-// CHECK11-NEXT:    [[TMP8:%.*]] = ptrtoint ptr [[TMP6]] to i32
-// CHECK11-NEXT:    [[TMP9:%.*]] = sub nuw i32 [[TMP8]], [[TMP7]]
+// CHECK11-NEXT:    [[TMP7:%.*]] = ptrtoaddr ptr [[TMP6]] to i32
+// CHECK11-NEXT:    [[TMP8:%.*]] = ptrtoaddr ptr [[ARRAYIDX]] to i32
+// CHECK11-NEXT:    [[TMP9:%.*]] = sub nuw i32 [[TMP7]], [[TMP8]]
 // CHECK11-NEXT:    [[TMP10:%.*]] = getelementptr [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP3]], i32 0
 // CHECK11-NEXT:    [[TMP11:%.*]] = getelementptr inbounds nuw [[STRUCT_KMP_TASK_AFFINITY_INFO_T]], ptr [[TMP10]], i32 0, i32 0
 // CHECK11-NEXT:    [[TMP12:%.*]] = ptrtoint ptr [[ARRAYIDX]] to i32

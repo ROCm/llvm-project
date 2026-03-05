@@ -22,6 +22,7 @@ Using Clang as a Compiler
    ClangCommandLineReference
    AttributeReference
    DiagnosticsReference
+   AMDGPUBuiltinReference
    WarningSuppressionMappings
    CrossCompilation
    ClangStaticAnalyzer
@@ -103,10 +104,8 @@ Using Clang Tools
    ClangFormat
    ClangFormatStyleOptions
    ClangLinkerWrapper
-   ClangNvlinkWrapper
-   ClangOffloadWrapper
+   ClangNVLinkWrapper
    ClangOffloadBundler
-   ClangOffloadWrapper
    ClangRepl
    ClangSYCLLinker
 

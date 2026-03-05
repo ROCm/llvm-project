@@ -765,10 +765,6 @@ bool MachineInstr::isIdenticalTo(const MachineInstr &Other,
 }
 
 bool MachineInstr::isEquivalentDbgInstr(const MachineInstr &Other) const {
-  // FIXME: Actually consider expression equality
-  if (getDebugExpression()->holdsNewElements() ||
-      Other.getDebugExpression()->holdsNewElements())
-    return false;
   if (!isDebugValueLike() || !Other.isDebugValueLike())
     return false;
   if (getDebugLoc() != Other.getDebugLoc())
@@ -1360,8 +1356,7 @@ bool MachineInstr::isSafeToMove(bool &SawStore) const {
   // Treat volatile loads as stores. This is not strictly necessary for
   // volatiles, but it is required for atomic loads. It is not allowed to move
   // a load across an atomic load with Ordering > Monotonic.
-  if (mayStore() || isCall() || isPHI() ||
-      (mayLoad() && hasOrderedMemoryRef())) {
+  if (mayStore() || isCall() || isPHI() || hasOrderedMemoryRef()) {
     SawStore = true;
     return false;
   }
@@ -2464,12 +2459,20 @@ static const DIExpression *computeExprForSpill(
          "Expected inlined-at fields to agree");
 
   const DIExpression *Expr = MI.getDebugExpression();
-  SmallBitVector SpilledOpIndexes(MI.getNumDebugOperands());
-  for (const MachineOperand *Op : SpilledOperands)
-    SpilledOpIndexes.set(MI.getDebugOperandIndex(Op));
-  unsigned SpillAddrSpace = MI.getMF()->getDataLayout().getAllocaAddrSpace();
-
-  return DIExpression::spillArgs(Expr, SpilledOpIndexes, SpillAddrSpace);
+  if (MI.isIndirectDebugValue()) {
+    assert(MI.getDebugOffset().getImm() == 0 &&
+           "DBG_VALUE with nonzero offset");
+    Expr = DIExpression::prepend(Expr, DIExpression::DerefBefore);
+  } else if (MI.isDebugValueList()) {
+    // We will replace the spilled register with a frame index, so
+    // immediately deref all references to the spilled register.
+    std::array<uint64_t, 1> Ops{{dwarf::DW_OP_deref}};
+    for (const MachineOperand *Op : SpilledOperands) {
+      unsigned OpIdx = MI.getDebugOperandIndex(Op);
+      Expr = DIExpression::appendOpsToArg(Expr, Ops, OpIdx);
+    }
+  }
+  return Expr;
 }
 static const DIExpression *computeExprForSpill(const MachineInstr &MI,
                                                Register SpillReg) {

@@ -1,16 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 set(LLVM_SUBPROJECT_TITLE "OpenMP")
 
-if(DEFINED LIBOMP_SHARED_LINKER_FLAGS)
-  set(CMAKE_SHARED_LINKER_FLAGS "${LIBOMP_SHARED_LINKER_FLAGS}")
-endif()
-
-if(DEFINED LIBOMP_INSTALL_RPATH)
-  set(CMAKE_INSTALL_RPATH "${LIBOMP_INSTALL_RPATH}")
-endif()
-
-# Add cmake directory to search for custom cmake functions.
-#set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
 
 # Add path for custom modules
@@ -31,6 +21,11 @@ endif()
 # Must go below project(..)
 include(GNUInstallDirs)
 
+# Usually <llvm-project>/runtimes/CMakeLists.txt sets LLVM_TREE_AVAILABLE and
+# we assume it is not available otherwise. The exception is that we are in an
+# LLVM_ENABLE_PROJECTS=openmp build, the LLVM tree is actually available.
+# Note that this build mode has been deprecated.
+# See https://github.com/llvm/llvm-project/issues/124014
 if (NOT LLVM_RUNTIMES_BUILD AND "openmp" IN_LIST LLVM_ENABLE_PROJECTS)
   set(LLVM_TREE_AVAILABLE True)
 endif ()
@@ -46,16 +41,26 @@ else()
       "Path where built OpenMP libraries should be installed.")
 endif()
 
-set(OPENMP_INSTALL_CFGDIR "lib/cmake" CACHE STRING
-      "Path where OpenMP config should be installed")
-
-if (NOT MSVC)
-  set(OPENMP_TEST_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang)
-  set(OPENMP_TEST_CXX_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang++)
-else()
-  set(OPENMP_TEST_C_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang.exe)
-  set(OPENMP_TEST_CXX_COMPILER ${LLVM_TOOLS_BINARY_DIR}/clang++.exe)
+set(OPENMP_TEST_C_COMPILER_default "${LLVM_TOOLS_BINARY_DIR}/clang${CMAKE_EXECUTABLE_SUFFIX}")
+set(OPENMP_TEST_CXX_COMPILER_default "${LLVM_TOOLS_BINARY_DIR}/clang++${CMAKE_EXECUTABLE_SUFFIX}")
+set(OPENMP_TEST_Fortran_COMPILER_default "${LLVM_TOOLS_BINARY_DIR}/flang${CMAKE_EXECUTABLE_SUFFIX}")
+if (NOT TARGET "clang")
+  set(OPENMP_TEST_C_COMPILER_default "${CMAKE_C_COMPILER}")
+  set(OPENMP_TEST_CXX_COMPILER_default "${CMAKE_CXX_COMPILER}")
 endif()
+if (NOT TARGET "flang")
+  if (CMAKE_Fortran_COMPILER)
+    set(OPENMP_TEST_Fortran_COMPILER_default "${CMAKE_Fortran_COMPILER}")
+  else()
+    unset(OPENMP_TEST_Fortran_COMPILER_default)
+  endif()
+endif()
+set(OPENMP_TEST_C_COMPILER "${OPENMP_TEST_C_COMPILER_default}" CACHE STRING
+  "C compiler to use for testing OpenMP runtime libraries.")
+set(OPENMP_TEST_CXX_COMPILER "${OPENMP_TEST_CXX_COMPILER_default}" CACHE STRING
+  "C++ compiler to use for testing OpenMP runtime libraries.")
+set(OPENMP_TEST_Fortran_COMPILER "${OPENMP_TEST_Fortran_COMPILER_default}" CACHE STRING
+  "Fortran compiler to use for testing OpenMP runtime libraries.")
 
 # Set fortran test compiler if flang is found
 if (EXISTS "${OPENMP_TEST_Fortran_COMPILER}")
@@ -92,14 +97,6 @@ math(EXPR LIBOMP_VERSION_BUILD_MONTH_DAY "${LIBOMP_VERSION_BUILD}%10000")
 # Currently don't record any timestamps
 set(LIBOMP_BUILD_DATE "No_Timestamp")
 
-
-# Check for flang
-set(OPENMP_TEST_Fortran_COMPILER_default "")
-if (CMAKE_Fortran_COMPILER)
-  set(OPENMP_TEST_Fortran_COMPILER_default "${CMAKE_Fortran_COMPILER}")
-endif ()
-set(OPENMP_TEST_Fortran_COMPILER "${OPENMP_TEST_Fortran_COMPILER_default}" CACHE STRING
-  "Fortran compiler to use for testing OpenMP runtime libraries.")
 
 set(LIBOMP_FORTRAN_MODULES FALSE CACHE BOOL
   "Create Fortran module files? (requires fortran compiler)")

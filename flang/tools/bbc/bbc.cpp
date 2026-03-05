@@ -142,12 +142,6 @@ static llvm::cl::opt<bool>
                        llvm::cl::desc("enable openmp device compilation"),
                        llvm::cl::init(false));
 
-static llvm::cl::opt<bool>
-    deferDescMap("fdefer-desc-map",
-                 llvm::cl::desc("disable or enable OpenMP deference of mapping "
-                                "for top-level descriptors"),
-                 llvm::cl::init(true));
-
 static llvm::cl::opt<std::string> enableDoConcurrentToOpenMPConversion(
     "fdo-concurrent-to-openmp",
     llvm::cl::desc(
@@ -175,7 +169,7 @@ static llvm::cl::list<std::string> targetTriplesOpenMP(
 static llvm::cl::opt<uint32_t>
     setOpenMPVersion("fopenmp-version",
                      llvm::cl::desc("OpenMP standard version"),
-                     llvm::cl::init(52));
+                     llvm::cl::init(31));
 
 static llvm::cl::opt<uint32_t> setOpenMPTargetDebug(
     "fopenmp-target-debug",
@@ -357,7 +351,6 @@ static llvm::LogicalResult runOpenMPPasses(mlir::ModuleOp mlirModule) {
           .Case("host", DoConcurrentMappingKind::DCMK_Host)
           .Case("device", DoConcurrentMappingKind::DCMK_Device)
           .Default(DoConcurrentMappingKind::DCMK_None);
-  opts.deferDescMap = deferDescMap;
 
   fir::createOpenMPFIRPassPipeline(pm, opts);
   (void)mlir::applyPassManagerCLOptions(pm);

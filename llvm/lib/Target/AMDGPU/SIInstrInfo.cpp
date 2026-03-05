@@ -1579,26 +1579,22 @@ SIInstrInfo::getIndirectRegWriteMovRelPseudo(unsigned VecSize, unsigned EltSize,
   return get(getIndirectVGPRWriteMovRelPseudoOpc(VecSize));
 }
 
-static unsigned getSGPRSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
+static unsigned getSGPRSpillSaveOpcode(unsigned Size) {
   switch (Size) {
   case 4:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S32_CFI_SAVE : AMDGPU::SI_SPILL_S32_SAVE;
+    return AMDGPU::SI_SPILL_S32_SAVE;
   case 8:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S64_CFI_SAVE : AMDGPU::SI_SPILL_S64_SAVE;
+    return AMDGPU::SI_SPILL_S64_SAVE;
   case 12:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S96_CFI_SAVE : AMDGPU::SI_SPILL_S96_SAVE;
+    return AMDGPU::SI_SPILL_S96_SAVE;
   case 16:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S128_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S128_SAVE;
+    return AMDGPU::SI_SPILL_S128_SAVE;
   case 20:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S160_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S160_SAVE;
+    return AMDGPU::SI_SPILL_S160_SAVE;
   case 24:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S192_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S192_SAVE;
+    return AMDGPU::SI_SPILL_S192_SAVE;
   case 28:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S224_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S224_SAVE;
+    return AMDGPU::SI_SPILL_S224_SAVE;
   case 32:
     return AMDGPU::SI_SPILL_S256_SAVE;
   case 36:
@@ -1610,87 +1606,69 @@ static unsigned getSGPRSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
   case 48:
     return AMDGPU::SI_SPILL_S384_SAVE;
   case 64:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S512_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S512_SAVE;
+    return AMDGPU::SI_SPILL_S512_SAVE;
   case 128:
-    return NeedsCFI ? AMDGPU::SI_SPILL_S1024_CFI_SAVE
-                    : AMDGPU::SI_SPILL_S1024_SAVE;
+    return AMDGPU::SI_SPILL_S1024_SAVE;
   default:
     llvm_unreachable("unknown register size");
   }
 }
 
-static unsigned getVGPRSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
+static unsigned getVGPRSpillSaveOpcode(unsigned Size) {
   switch (Size) {
   case 2:
     return AMDGPU::SI_SPILL_V16_SAVE;
   case 4:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V32_CFI_SAVE : AMDGPU::SI_SPILL_V32_SAVE;
+    return AMDGPU::SI_SPILL_V32_SAVE;
   case 8:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V64_CFI_SAVE : AMDGPU::SI_SPILL_V64_SAVE;
+    return AMDGPU::SI_SPILL_V64_SAVE;
   case 12:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V96_CFI_SAVE : AMDGPU::SI_SPILL_V96_SAVE;
+    return AMDGPU::SI_SPILL_V96_SAVE;
   case 16:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V128_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V128_SAVE;
+    return AMDGPU::SI_SPILL_V128_SAVE;
   case 20:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V160_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V160_SAVE;
+    return AMDGPU::SI_SPILL_V160_SAVE;
   case 24:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V192_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V192_SAVE;
+    return AMDGPU::SI_SPILL_V192_SAVE;
   case 28:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V224_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V224_SAVE;
+    return AMDGPU::SI_SPILL_V224_SAVE;
   case 32:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V256_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V256_SAVE;
+    return AMDGPU::SI_SPILL_V256_SAVE;
   case 36:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V288_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V288_SAVE;
+    return AMDGPU::SI_SPILL_V288_SAVE;
   case 40:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V320_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V320_SAVE;
+    return AMDGPU::SI_SPILL_V320_SAVE;
   case 44:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V352_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V352_SAVE;
+    return AMDGPU::SI_SPILL_V352_SAVE;
   case 48:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V384_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V384_SAVE;
+    return AMDGPU::SI_SPILL_V384_SAVE;
   case 64:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V512_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V512_SAVE;
+    return AMDGPU::SI_SPILL_V512_SAVE;
   case 128:
-    return NeedsCFI ? AMDGPU::SI_SPILL_V1024_CFI_SAVE
-                    : AMDGPU::SI_SPILL_V1024_SAVE;
+    return AMDGPU::SI_SPILL_V1024_SAVE;
   default:
     llvm_unreachable("unknown register size");
   }
 }
 
-static unsigned getAVSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
+static unsigned getAVSpillSaveOpcode(unsigned Size) {
   switch (Size) {
   case 4:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV32_CFI_SAVE : AMDGPU::SI_SPILL_AV32_SAVE;
+    return AMDGPU::SI_SPILL_AV32_SAVE;
   case 8:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV64_CFI_SAVE : AMDGPU::SI_SPILL_AV64_SAVE;
+    return AMDGPU::SI_SPILL_AV64_SAVE;
   case 12:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV96_CFI_SAVE : AMDGPU::SI_SPILL_AV96_SAVE;
+    return AMDGPU::SI_SPILL_AV96_SAVE;
   case 16:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV128_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV128_SAVE;
+    return AMDGPU::SI_SPILL_AV128_SAVE;
   case 20:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV160_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV160_SAVE;
+    return AMDGPU::SI_SPILL_AV160_SAVE;
   case 24:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV192_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV192_SAVE;
+    return AMDGPU::SI_SPILL_AV192_SAVE;
   case 28:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV224_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV224_SAVE;
+    return AMDGPU::SI_SPILL_AV224_SAVE;
   case 32:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV256_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV256_SAVE;
+    return AMDGPU::SI_SPILL_AV256_SAVE;
   case 36:
     return AMDGPU::SI_SPILL_AV288_SAVE;
   case 40:
@@ -1700,11 +1678,9 @@ static unsigned getAVSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
   case 48:
     return AMDGPU::SI_SPILL_AV384_SAVE;
   case 64:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV512_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV512_SAVE;
+    return AMDGPU::SI_SPILL_AV512_SAVE;
   case 128:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV1024_CFI_SAVE
-                    : AMDGPU::SI_SPILL_AV1024_SAVE;
+    return AMDGPU::SI_SPILL_AV1024_SAVE;
   default:
     llvm_unreachable("unknown register size");
   }
@@ -1724,7 +1700,7 @@ static unsigned getWWMRegSpillSaveOpcode(unsigned Size,
 
 unsigned SIInstrInfo::getVectorRegSpillSaveOpcode(
     Register Reg, const TargetRegisterClass *RC, unsigned Size,
-    const SIMachineFunctionInfo &MFI, bool NeedsCFI) const {
+    const SIMachineFunctionInfo &MFI) const {
   bool IsVectorSuperClass = RI.isVectorSuperClass(RC);
 
   // Choose the right opcode if spilling a WWM register.
@@ -1733,15 +1709,15 @@ unsigned SIInstrInfo::getVectorRegSpillSaveOpcode(
 
   // TODO: Check if AGPRs are available
   if (ST.hasMAIInsts())
-    return getAVSpillSaveOpcode(Size, NeedsCFI);
+    return getAVSpillSaveOpcode(Size);
 
-  return getVGPRSpillSaveOpcode(Size, NeedsCFI);
+  return getVGPRSpillSaveOpcode(Size);
 }
 
-void SIInstrInfo::storeRegToStackSlotImpl(
+void SIInstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
     bool isKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
-    MachineInstr::MIFlag Flags, bool NeedsCFI) const {
+    MachineInstr::MIFlag Flags) const {
   MachineFunction *MF = MBB.getParent();
   SIMachineFunctionInfo *MFI = MF->getInfo<SIMachineFunctionInfo>();
   MachineFrameInfo &FrameInfo = MF->getFrameInfo();
@@ -1763,8 +1739,7 @@ void SIInstrInfo::storeRegToStackSlotImpl(
 
     // We are only allowed to create one new instruction when spilling
     // registers, so we need to use pseudo instruction for spilling SGPRs.
-    const MCInstrDesc &OpDesc =
-        get(getSGPRSpillSaveOpcode(SpillSize, NeedsCFI));
+    const MCInstrDesc &OpDesc = get(getSGPRSpillSaveOpcode(SpillSize));
 
     // The SGPR spill/restore instructions only work on number sgprs, so we need
     // to make sure we are using the correct register class.
@@ -1783,8 +1758,8 @@ void SIInstrInfo::storeRegToStackSlotImpl(
     return;
   }
 
-  unsigned Opcode = getVectorRegSpillSaveOpcode(VReg ? VReg : SrcReg, RC,
-                                                SpillSize, *MFI, NeedsCFI);
+  unsigned Opcode =
+      getVectorRegSpillSaveOpcode(VReg ? VReg : SrcReg, RC, SpillSize, *MFI);
   MFI->setHasSpilledVGPRs();
 
   BuildMI(MBB, MI, DL, get(Opcode))
@@ -1793,24 +1768,6 @@ void SIInstrInfo::storeRegToStackSlotImpl(
     .addReg(MFI->getStackPtrOffsetReg())     // scratch_offset
     .addImm(0)                               // offset
     .addMemOperand(MMO);
-}
-
-void SIInstrInfo::storeRegToStackSlot(
-    MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
-    bool isKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
-    MachineInstr::MIFlag Flags) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, VReg,
-                         Flags, false);
-}
-
-void SIInstrInfo::storeRegToStackSlotCFI(MachineBasicBlock &MBB,
-                                         MachineBasicBlock::iterator MI,
-                                         Register SrcReg, bool isKill,
-                                         int FrameIndex,
-                                         const TargetRegisterClass *RC,
-                                         const TargetRegisterInfo *TRI) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC,
-                          Register(), MachineInstr::NoFlags, true);
 }
 
 static unsigned getSGPRSpillRestoreOpcode(unsigned Size) {
@@ -5031,7 +4988,6 @@ static void copyFlagsToImplicitVCC(MachineInstr &MI,
 MachineInstr *SIInstrInfo::buildShrunkInst(MachineInstr &MI,
                                            unsigned Op32) const {
   MachineBasicBlock *MBB = MI.getParent();
-  MachineFunction *MF = MBB->getParent();
 
   const MCInstrDesc &Op32Desc = get(Op32);
   MachineInstrBuilder Inst32 =
@@ -5043,15 +4999,8 @@ MachineInstr *SIInstrInfo::buildShrunkInst(MachineInstr &MI,
 
   // We assume the defs of the shrunk opcode are in the same order, and the
   // shrunk opcode loses the last def (SGPR def, in the VOP3->VOPC case).
-  for (int I = 0, E = Op32Desc.getNumDefs(); I != E; ++I) {
+  for (int I = 0, E = Op32Desc.getNumDefs(); I != E; ++I)
     Inst32.add(MI.getOperand(I));
-
-    // If this def is used by a DBG_INSTR_REF, create a substitution for the new
-    // instruction.
-    if (unsigned DINum = MI.peekDebugInstrNum())
-      MF->makeDebugValueSubstitution({DINum, I},
-                                     {Inst32->getDebugInstrNum(), I});
-  }
 
   const MachineOperand *Src2 = getNamedOperand(MI, AMDGPU::OpName::src2);
 
@@ -7250,11 +7199,11 @@ emitLoadScalarOpsFromVGPRLoop(const SIInstrInfo &TII,
 // with SGPRs by iterating over all unique values across all lanes.
 // Returns the loop basic block that now contains \p MI.
 static MachineBasicBlock *
-loadMBUFScalarOperandsFromVGPR(const SIInstrInfo &TII, MachineInstr &MI,
-                               ArrayRef<MachineOperand *> ScalarOps,
-                               MachineDominatorTree *MDT,
-                               MachineBasicBlock::iterator Begin = nullptr,
-                               MachineBasicBlock::iterator End = nullptr) {
+loadScalarOperandsFromVGPR(const SIInstrInfo &TII, MachineInstr &MI,
+                           ArrayRef<MachineOperand *> ScalarOps,
+                           MachineDominatorTree *MDT,
+                           MachineBasicBlock::iterator Begin = nullptr,
+                           MachineBasicBlock::iterator End = nullptr) {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
@@ -7529,13 +7478,13 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
                                     : AMDGPU::OpName::srsrc;
     MachineOperand *SRsrc = getNamedOperand(MI, RSrcOpName);
     if (SRsrc && !RI.isSGPRClass(MRI.getRegClass(SRsrc->getReg())))
-      CreatedBB = loadMBUFScalarOperandsFromVGPR(*this, MI, {SRsrc}, MDT);
+      CreatedBB = loadScalarOperandsFromVGPR(*this, MI, {SRsrc}, MDT);
 
     AMDGPU::OpName SampOpName =
         isMIMG(MI) ? AMDGPU::OpName::ssamp : AMDGPU::OpName::samp;
     MachineOperand *SSamp = getNamedOperand(MI, SampOpName);
     if (SSamp && !RI.isSGPRClass(MRI.getRegClass(SSamp->getReg())))
-      CreatedBB = loadMBUFScalarOperandsFromVGPR(*this, MI, {SSamp}, MDT);
+      CreatedBB = loadScalarOperandsFromVGPR(*this, MI, {SSamp}, MDT);
 
     return CreatedBB;
   }
@@ -7564,7 +7513,7 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
              MI.definesRegister(End->getOperand(1).getReg(), /*TRI=*/nullptr))
         ++End;
       CreatedBB =
-          loadMBUFScalarOperandsFromVGPR(*this, MI, {Dest}, MDT, Start, End);
+          loadScalarOperandsFromVGPR(*this, MI, {Dest}, MDT, Start, End);
     }
   }
 
@@ -7581,12 +7530,12 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
     return nullptr;
   }
 
-  // Legalize TENSOR_LOAD_TO_LDS, TENSOR_LOAD_TO_LDS_D2, TENSOR_STORE_FROM_LDS,
-  // TENSOR_STORE_FROM_LDS_D2. All their operands are scalar.
-  if (MI.getOpcode() == AMDGPU::TENSOR_LOAD_TO_LDS ||
-      MI.getOpcode() == AMDGPU::TENSOR_LOAD_TO_LDS_D2 ||
-      MI.getOpcode() == AMDGPU::TENSOR_STORE_FROM_LDS ||
-      MI.getOpcode() == AMDGPU::TENSOR_STORE_FROM_LDS_D2) {
+  // Legalize TENSOR_LOAD_TO_LDS_d2/_d4, TENSOR_STORE_FROM_LDS_d2/_d4. All their
+  // operands are scalar.
+  if (MI.getOpcode() == AMDGPU::TENSOR_LOAD_TO_LDS_d2 ||
+      MI.getOpcode() == AMDGPU::TENSOR_LOAD_TO_LDS_d4 ||
+      MI.getOpcode() == AMDGPU::TENSOR_STORE_FROM_LDS_d2 ||
+      MI.getOpcode() == AMDGPU::TENSOR_STORE_FROM_LDS_d4) {
     for (MachineOperand &Src : MI.explicit_operands()) {
       if (Src.isReg() && RI.hasVectorRegisters(MRI.getRegClass(Src.getReg())))
         Src.setReg(readlaneVGPRToSGPR(Src.getReg(), MI, MRI));
@@ -7746,11 +7695,10 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
       // Legalize a VGPR Rsrc and soffset together.
       if (!isSoffsetLegal) {
         MachineOperand *Soffset = getNamedOperand(MI, AMDGPU::OpName::soffset);
-        CreatedBB =
-            loadMBUFScalarOperandsFromVGPR(*this, MI, {Rsrc, Soffset}, MDT);
+        CreatedBB = loadScalarOperandsFromVGPR(*this, MI, {Rsrc, Soffset}, MDT);
         return CreatedBB;
       }
-      CreatedBB = loadMBUFScalarOperandsFromVGPR(*this, MI, {Rsrc}, MDT);
+      CreatedBB = loadScalarOperandsFromVGPR(*this, MI, {Rsrc}, MDT);
       return CreatedBB;
     }
   }
@@ -7758,7 +7706,7 @@ SIInstrInfo::legalizeOperands(MachineInstr &MI,
   // Legalize a VGPR soffset.
   if (!isSoffsetLegal) {
     MachineOperand *Soffset = getNamedOperand(MI, AMDGPU::OpName::soffset);
-    CreatedBB = loadMBUFScalarOperandsFromVGPR(*this, MI, {Soffset}, MDT);
+    CreatedBB = loadScalarOperandsFromVGPR(*this, MI, {Soffset}, MDT);
     return CreatedBB;
   }
   return CreatedBB;
@@ -7779,7 +7727,7 @@ bool SIInstrWorklist::isDeferred(MachineInstr *MI) {
 }
 
 // Legalize size mismatches between 16bit and 32bit registers in v2s copy
-// lowering (change spgr to vgpr).
+// lowering (change sgpr to vgpr).
 // This is mainly caused by 16bit SALU and 16bit VALU using reg with different
 // size. Need to legalize the size of the operands during the vgpr lowering
 // chain. This can be removed after we have sgpr16 in place
@@ -9962,8 +9910,9 @@ SIInstrInfo::CreateTargetPostRAHazardRecognizer(const InstrItineraryData *II,
 /// This is the hazard recognizer used at -O0 by the PostRAHazardRecognizer
 /// pass.
 ScheduleHazardRecognizer *
-SIInstrInfo::CreateTargetPostRAHazardRecognizer(const MachineFunction &MF) const {
-  return new GCNHazardRecognizer(MF);
+SIInstrInfo::CreateTargetPostRAHazardRecognizer(const MachineFunction &MF,
+                                                MachineLoopInfo *MLI) const {
+  return new GCNHazardRecognizer(MF, MLI);
 }
 
 // Called during:

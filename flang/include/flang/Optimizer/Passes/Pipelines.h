@@ -103,7 +103,9 @@ void addCompilerGeneratedNamesConversionPass(mlir::PassManager &pm);
 void addDebugInfoPass(mlir::PassManager &pm,
                       llvm::codegenoptions::DebugInfoKind debugLevel,
                       llvm::OptimizationLevel optLevel,
-                      llvm::StringRef inputFilename, int32_t dwarfVersion);
+                      llvm::StringRef inputFilename, int32_t dwarfVersion,
+                      llvm::StringRef splitDwarfFile,
+                      llvm::StringRef dwarfDebugFlags);
 
 /// Create FIRToLLVMPassOptions from pipeline configuration.
 FIRToLLVMPassOptions
@@ -140,12 +142,6 @@ struct OpenMPFIRPassPipelineOpts {
   /// Whether code is being generated for a target device rather than the host
   /// device
   bool isTargetDevice;
-  bool enableOffloadGlobalFiltering;
-
-  /// Deactivates or activates MapInfoFinalization passes removal of
-  /// top-level descriptor mapping for non-Target Data/Target region
-  /// directives.
-  bool deferDescMap;
 
   /// Controls how to map `do concurrent` loops; to device, host, or none at
   /// all.
@@ -170,7 +166,8 @@ void createDebugPasses(mlir::PassManager &pm,
                        llvm::codegenoptions::DebugInfoKind debugLevel,
                        llvm::OptimizationLevel OptLevel,
                        llvm::StringRef inputFilename, int32_t dwarfVersion,
-                       llvm::StringRef splitDwarfFile);
+                       llvm::StringRef splitDwarfFile,
+                       llvm::StringRef dwarfDebugFlags);
 
 void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
                                          MLIRToLLVMPassPipelineConfig config,

@@ -50,6 +50,7 @@
 #include "clang/Basic/AddressSpaces.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CommentOptions.h"
+#include "clang/Basic/DiagnosticAST.h"
 #include "clang/Basic/ExceptionSpecificationType.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
@@ -851,9 +852,9 @@ CXXABI *ASTContext::createCXXABI(const TargetInfo &T) {
   llvm_unreachable("Invalid CXXABI type!");
 }
 
-interp::Context &ASTContext::getInterpContext() {
+interp::Context &ASTContext::getInterpContext() const {
   if (!InterpContext) {
-    InterpContext.reset(new interp::Context(*this));
+    InterpContext.reset(new interp::Context(const_cast<ASTContext &>(*this)));
   }
   return *InterpContext;
 }
@@ -1425,12 +1426,7 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target,
   }
 
   if (Target.getTriple().isAMDGPU() ||
-      (Target.getTriple().isSPIRV() &&
-       Target.getTriple().getVendor() == llvm::Triple::AMD) ||
-      (AuxTarget &&
-       (AuxTarget->getTriple().isAMDGPU() ||
-        ((AuxTarget->getTriple().isSPIRV() &&
-          AuxTarget->getTriple().getVendor() == llvm::Triple::AMD))))) {
+      (AuxTarget && AuxTarget->getTriple().isAMDGPU())) {
 #define AMDGPU_TYPE(Name, Id, SingletonId, Width, Align)                       \
   InitBuiltinType(SingletonId, BuiltinType::Id);
 #include "clang/Basic/AMDGPUTypes.def"
@@ -7351,9 +7347,12 @@ TemplateName ASTContext::getCanonicalTemplateName(TemplateName Name,
     return TemplateName(cast<TemplateDecl>(Template->getCanonicalDecl()));
   }
 
-  case TemplateName::OverloadedTemplate:
   case TemplateName::AssumedTemplate:
-    llvm_unreachable("cannot canonicalize unresolved template");
+    // An assumed template is just a name, so it is already canonical.
+    return Name;
+
+  case TemplateName::OverloadedTemplate:
+    llvm_unreachable("cannot canonicalize overloaded template");
 
   case TemplateName::DependentTemplate: {
     DependentTemplateName *DTN = Name.getAsDependentTemplateName();
@@ -9225,9 +9224,8 @@ static char getObjCEncodingForPrimitiveType(const ASTContext *C,
 #include "clang/Basic/AMDGPUTypes.def"
       {
         DiagnosticsEngine &Diags = C->getDiagnostics();
-        unsigned DiagID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
-                                                "cannot yet @encode type %0");
-        Diags.Report(DiagID) << BT->getName(C->getPrintingPolicy());
+        Diags.Report(diag::err_unsupported_objc_primitive_encoding)
+            << QualType(BT, 0);
         return ' ';
       }
 
@@ -12749,10 +12747,6 @@ static QualType DecodeTypeFromStr(const char *&Str, const ASTContext &Context,
     }
     case 'b': {
       Type = Context.AMDGPUBufferRsrcTy;
-      break;
-    }
-    case 'c': {
-      Type = Context.AMDGPUFeaturePredicateTy;
       break;
     }
     case 't': {

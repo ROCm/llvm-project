@@ -3790,6 +3790,15 @@ def warn_dllimport_dropped_from_inline_function : Warning<
 def warn_nothrow_attribute_ignored : Warning<"'nothrow' attribute conflicts with"
   " exception specification; attribute ignored">,
   InGroup<IgnoredAttributes>;
+def warn_dllattr_ignored_exclusion_takes_precedence : Warning<
+  "%0 attribute ignored; %1 takes precedence">,
+  InGroup<IgnoredAttributes>;
+def warn_attribute_ignored_on_non_member :
+  Warning<"%0 attribute ignored on a non-member declaration">,
+  InGroup<IgnoredAttributes>;
+def warn_attribute_ignored_in_non_template :
+  Warning<"%0 attribute ignored in a non-template context">,
+  InGroup<IgnoredAttributes>;
 def warn_attribute_ignored_on_non_definition :
   Warning<"%0 attribute ignored on a non-definition declaration">,
   InGroup<IgnoredAttributes>;
@@ -6159,7 +6168,7 @@ def note_template_declared_here : Note<
   "%1 declared here">;
 def err_template_expansion_into_fixed_list : Error<
   "pack expansion used as argument for non-pack parameter of %select{alias "
-  "template|concept}0">;
+  "template|concept|builtin template}0">;
 def note_parameter_type : Note<
   "parameter of type %0 is declared here">;
 
@@ -6296,6 +6305,8 @@ def warn_unavailable_def : Warning<
   InGroup<DeprecatedImplementations>, DefaultIgnore;
 def warn_deprecated_builtin : Warning<
   "builtin %0 is deprecated; use %1 instead">,
+  InGroup<DeprecatedBuiltins>;
+def warn_deprecated_builtin_no_suggestion : Warning<"builtin %0 is deprecated">,
   InGroup<DeprecatedBuiltins>;
 def err_unavailable : Error<"%0 is unavailable">;
 def err_property_method_unavailable :
@@ -6663,6 +6674,8 @@ def err_block_extern_cant_init : Error<
   "declaration of block scope identifier with linkage cannot have an initializer">;
 def warn_extern_init : Warning<"'extern' variable has an initializer">,
   InGroup<DiagGroup<"extern-initializer">>;
+def warn_hlsl_groupshared_init : Warning<"initializer of groupshared variable will be ignored">,
+  InGroup<DiagGroup<"groupshared-initializer">>, DefaultError;
 def err_variable_object_no_init : Error<
   "variable-sized object may not be initialized">;
 def err_excess_initializers : Error<
@@ -12458,10 +12471,6 @@ def err_omp_inscan_reduction_expected : Error<
   "expected 'reduction' clause with the 'inscan' modifier">;
 def note_omp_previous_inscan_reduction : Note<
   "'reduction' clause with 'inscan' modifier is used here">;
-def err_omp_multivar_xteam_scan_unsupported : Error<
-  "multiple list items are not yet supported with the 'inclusive' or the 'exclusive' clauses that appear with the 'scan' directive">;
-def err_omp_xteam_scan_prohibited : Error<
-  "'scan' directive is not supported inside target regions. Use flag '-fopenmp-target-xteam-scan' to enable it">;
 def err_omp_expected_predefined_allocator : Error<
   "expected one of the predefined allocators for the variables with the static "
   "storage: 'omp_default_mem_alloc', 'omp_large_cap_mem_alloc', "
@@ -12626,6 +12635,10 @@ def err_omp_transparent_invalid_value : Error<"invalid value for transparent cla
   " expected one of: omp_not_impex, omp_import, omp_export, omp_impex">;
 def err_omp_transparent_invalid_type : Error<
   "transparent clause cannot be applied to type: %0">;
+def err_omp_num_teams_multi_expr_not_allowed
+    : Error<"only two expressions allowed in 'num_teams' clause">;
+def err_omp_num_teams_lower_bound_larger
+    : Error<"lower bound is greater than upper bound in 'num_teams' clause">;
 } // end of OpenMP category
 
 let CategoryName = "Related Result Type Issue" in {
@@ -13589,6 +13602,10 @@ def err_hlsl_incomplete_resource_array_in_function_param: Error<
   "incomplete resource array in a function parameter">;
 def err_hlsl_assign_to_global_resource: Error<
   "assignment to global resource variable %0 is not allowed">;
+def warn_hlsl_assigning_local_resource_is_not_unique
+    : Warning<"assignment of %0 to local resource %1 is not to the same "
+              "unique global resource">,
+      InGroup<HLSLExplicitBinding>;
 
 def err_hlsl_push_constant_unique
     : Error<"cannot have more than one push constant block">;
@@ -13633,8 +13650,12 @@ def note_unsafe_buffer_variable_fixit_together : Note<
 def note_safe_buffer_usage_suggestions_disabled : Note<
   "pass -fsafe-buffer-usage-suggestions to receive code hardening suggestions">;
 def warn_unsafe_buffer_usage_in_container : Warning<
-  "the two-parameter std::span construction is unsafe as it can introduce mismatch between buffer size and the bound information">,
+  "the two-parameter %0 construction is unsafe as it can introduce mismatch "
+  "between buffer size and the bound information">,
   InGroup<UnsafeBufferUsageInContainer>, DefaultIgnore;
+def warn_unsafe_buffer_usage_in_string_view : Warning<
+  "the two-parameter std::string_view construction is unsafe">,
+  InGroup<UnsafeBufferUsageInStringView>, DefaultIgnore;
 def warn_unsafe_buffer_usage_unique_ptr_array_access : Warning<"direct access using operator[] on std::unique_ptr<T[]> is unsafe due to lack of bounds checking">,
   InGroup<UnsafeBufferUsageInUniquePtrArrayAccess>, DefaultIgnore;
 def warn_unsafe_buffer_usage_in_static_sized_array : Warning<"direct access on T[N] is unsafe due to the lack of bounds checking">,
@@ -14014,27 +14035,6 @@ def note_acc_reduction_combiner_forming
 // AMDGCN builtins diagnostics
 def err_amdgcn_load_lds_size_invalid_value : Error<"invalid size value">;
 def note_amdgcn_load_lds_size_valid_value : Note<"size must be %select{1, 2, or 4|1, 2, 4, 12 or 16}0">;
-def err_amdgcn_processor_is_arg_not_literal
-    : Error<"the argument to __builtin_amdgcn_processor_is must be a string "
-            "literal">;
-def err_amdgcn_processor_is_arg_invalid_value
-    : Error<"the argument to __builtin_amdgcn_processor_is must be a valid "
-            "AMDGCN processor identifier; '%0' is not valid">;
-def note_amdgcn_processor_is_valid_options
-    : Note<"valid AMDGCN processor identifiers are: %0">;
-def err_amdgcn_is_invocable_arg_invalid_value
-    : Error<"the argument to __builtin_amdgcn_is_invocable must be either a "
-            "target agnostic builtin or an AMDGCN target specific builtin; `%0`"
-            " is not valid">;
-def err_amdgcn_predicate_type_is_not_constructible
-    : Error<"%0 has type __amdgpu_feature_predicate_t, which is not"
-            " constructible">;
-def err_amdgcn_predicate_type_needs_explicit_bool_cast
-    : Error<"%0 must be explicitly cast to %1; however, please note that this "
-            "is almost always an error and that it prevents the effective "
-            "guarding of target dependent code, and thus should be avoided">;
-def note_amdgcn_protected_by_predicate : Note<"jump enters statement controlled"
-                                              " by AMDGPU feature predicate">;
 
 def err_amdgcn_coop_atomic_invalid_as : Error<"cooperative atomic requires a global or generic pointer">;
 

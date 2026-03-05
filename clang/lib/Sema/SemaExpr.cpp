@@ -53,7 +53,6 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
-#include "clang/Sema/SemaAMDGPU.h"
 #include "clang/Sema/SemaARM.h"
 #include "clang/Sema/SemaCUDA.h"
 #include "clang/Sema/SemaFixItUtils.h"
@@ -2738,6 +2737,13 @@ bool Sema::DiagnoseEmptyLookup(Scope *S, CXXScopeSpec &SS, LookupResult &R,
                          << Name << computeDeclContext(SS, false)
                          << DroppedSpecifier << NameRange,
                      PDiag(NoteID), AcceptableWithRecovery);
+
+      if (Corrected.WillReplaceSpecifier()) {
+        NestedNameSpecifier NNS = Corrected.getCorrectionSpecifier();
+        // In order to be valid, a non-empty CXXScopeSpec needs a source range.
+        SS.MakeTrivial(Context, NNS,
+                       NNS ? NameRange.getBegin() : SourceRange());
+      }
 
       // Tell the callee whether to try to recover.
       return !AcceptableWithRecovery;
@@ -6752,22 +6758,6 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
   if (Result.isInvalid()) return ExprError();
   Fn = Result.get();
 
-  // The __builtin_amdgcn_is_invocable builtin is special, and will be resolved
-  // later, when we check boolean conditions, for now we merely forward it
-  // without any additional checking.
-  if (Fn->getType() == Context.BuiltinFnTy && ArgExprs.size() == 1 &&
-      ArgExprs[0]->getType() == Context.BuiltinFnTy) {
-    const auto *FD = cast<FunctionDecl>(Fn->getReferencedDeclOfCallee());
-
-    if (FD->getName() == "__builtin_amdgcn_is_invocable") {
-      QualType FnPtrTy = Context.getPointerType(FD->getType());
-      Expr *R = ImpCastExprToType(Fn, FnPtrTy, CK_BuiltinFnToFnPtr).get();
-      return CallExpr::Create(
-          Context, R, ArgExprs, Context.AMDGPUFeaturePredicateTy,
-          ExprValueKind::VK_PRValue, RParenLoc, FPOptionsOverride());
-    }
-  }
-
   if (CheckArgsForPlaceholders(ArgExprs))
     return ExprError();
 
@@ -6893,9 +6883,9 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
                rewriteBuiltinFunctionDecl(this, Context, FDecl, ArgExprs))) {
         NDecl = FDecl;
         Fn = DeclRefExpr::Create(
-            Context, FDecl->getQualifierLoc(), SourceLocation(), FDecl, false,
-            SourceLocation(), FDecl->getType(), Fn->getValueKind(), FDecl,
-            nullptr, DRE->isNonOdrUse());
+            Context, DRE->getQualifierLoc(), SourceLocation(), FDecl, false,
+            SourceLocation(), Fn->getType() /* BuiltinFnTy */,
+            Fn->getValueKind(), FDecl, nullptr, DRE->isNonOdrUse());
       }
     }
   } else if (auto *ME = dyn_cast<MemberExpr>(NakedFn))
@@ -7092,24 +7082,26 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
     }
   }
 
+  // Extract the return type from the builtin function pointer type.
+  QualType ResultTy;
+  if (BuiltinID)
+    ResultTy = FDecl->getCallResultType();
+  else
+    ResultTy = Context.BoolTy;
+
   // Promote the function operand.
   // We special-case function promotion here because we only allow promoting
   // builtin functions to function pointers in the callee of a call.
   ExprResult Result;
-  QualType ResultTy;
   if (BuiltinID &&
       Fn->getType()->isSpecificBuiltinType(BuiltinType::BuiltinFn)) {
-    // Extract the return type from the (builtin) function pointer type.
     // FIXME Several builtins still have setType in
     // Sema::CheckBuiltinFunctionCall. One should review their definitions in
     // Builtins.td to ensure they are correct before removing setType calls.
     QualType FnPtrTy = Context.getPointerType(FDecl->getType());
     Result = ImpCastExprToType(Fn, FnPtrTy, CK_BuiltinFnToFnPtr).get();
-    ResultTy = FDecl->getCallResultType();
-  } else {
+  } else
     Result = CallExprUnaryConversions(Fn);
-    ResultTy = Context.BoolTy;
-  }
   if (Result.isInvalid())
     return ExprError();
   Fn = Result.get();
@@ -8900,9 +8892,9 @@ QualType Sema::CheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
   // C99 6.5.15p5: "If both operands have void type, the result has void type."
   // The following || allows only one side to be void (a GCC-ism).
   if (LHSTy->isVoidType() || RHSTy->isVoidType()) {
-    QualType ResTy;
     if (LHSTy->isVoidType() && RHSTy->isVoidType()) {
-      ResTy = Context.getCommonSugaredType(LHSTy, RHSTy);
+      // UsualArithmeticConversions already handled the case where both sides
+      // are the same type.
     } else if (RHSTy->isVoidType()) {
       ResTy = RHSTy;
       Diag(RHS.get()->getBeginLoc(), diag::ext_typecheck_cond_one_void)
@@ -13803,20 +13795,6 @@ inline QualType Sema::CheckBitwiseOperands(ExprResult &LHS, ExprResult &RHS,
   return ResultTy;
 }
 
-static inline bool IsAMDGPUPredicateBI(Expr *E) {
-  if (!E->getType()->isVoidType())
-    return false;
-
-  if (auto *CE = dyn_cast<CallExpr>(E)) {
-    if (auto *BI = CE->getDirectCallee())
-      if (BI->getName() == "__builtin_amdgcn_processor_is" ||
-          BI->getName() == "__builtin_amdgcn_is_invocable")
-        return true;
-  }
-
-  return false;
-}
-
 // C99 6.5.[13,14]
 inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
                                            SourceLocation Loc,
@@ -13915,9 +13893,6 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
 
   // The following is safe because we only use this method for
   // non-overloadable operands.
-
-  if (IsAMDGPUPredicateBI(LHS.get()) && IsAMDGPUPredicateBI(RHS.get()))
-    return Context.VoidTy;
 
   // C++ [expr.log.and]p1
   // C++ [expr.log.or]p1
@@ -16318,10 +16293,6 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
 
         // Vector logical not returns the signed variant of the operand type.
         resultType = GetSignedVectorType(resultType);
-        break;
-      } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
-        resultType = Context.getLogicalOperationType();
-        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -19146,7 +19117,15 @@ MarkVarDeclODRUsed(ValueDecl *V, SourceLocation Loc, Sema &SemaRef,
                                ? diag::note_cuda_const_var_unpromoted
                                : diag::note_cuda_host_var);
       }
-    } else if (VarTarget == SemaCUDA::CVT_Device &&
+    } else if ((VarTarget == SemaCUDA::CVT_Device ||
+                // Also capture __device__ const variables, which are classified
+                // as CVT_Both due to an implicit CUDAConstantAttr. We check for
+                // an explicit CUDADeviceAttr to distinguish them from plain
+                // const variables (no __device__), which also get CVT_Both but
+                // only have an implicit CUDADeviceAttr.
+                (VarTarget == SemaCUDA::CVT_Both &&
+                 Var->hasAttr<CUDADeviceAttr>() &&
+                 !Var->getAttr<CUDADeviceAttr>()->isImplicit())) &&
                !Var->hasAttr<CUDASharedAttr>() &&
                (UserTarget == CUDAFunctionTarget::Host ||
                 UserTarget == CUDAFunctionTarget::HostDevice)) {
@@ -21169,9 +21148,6 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
   E = result.get();
 
   if (!E->isTypeDependent()) {
-    if (E->getType() == Context.AMDGPUFeaturePredicateTy)
-      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
-
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4
 
@@ -21753,7 +21729,7 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 
   switch (placeholderType->getKind()) {
   case BuiltinType::UnresolvedTemplate: {
-    auto *ULE = cast<UnresolvedLookupExpr>(E);
+    auto *ULE = cast<UnresolvedLookupExpr>(E->IgnoreParens());
     const DeclarationNameInfo &NameInfo = ULE->getNameInfo();
     // There's only one FoundDecl for UnresolvedTemplate type. See
     // BuildTemplateIdExpr.
@@ -21920,7 +21896,7 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
     // shouldn't need to do any further diagnostic here.
     if (!E->containsErrors())
       Diag(E->getBeginLoc(), diag::err_array_section_use)
-          << cast<ArraySectionExpr>(E)->isOMPArraySection();
+          << cast<ArraySectionExpr>(E->IgnoreParens())->isOMPArraySection();
     return ExprError();
 
   // Expressions of unknown type.

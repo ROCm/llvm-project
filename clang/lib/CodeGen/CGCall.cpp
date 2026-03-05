@@ -835,8 +835,7 @@ const CGFunctionInfo &CodeGenTypes::arrangeLLVMFunctionInfo(
     FunctionType::ExtInfo info,
     ArrayRef<FunctionProtoType::ExtParameterInfo> paramInfos,
     RequiredArgs required) {
-  if (!getContext().getLangOpts().OpenMP)
-    assert(llvm::all_of(argTypes,
+  assert(llvm::all_of(argTypes,
                       [](CanQualType T) { return T.isCanonicalAsParam(); }));
 
   // Lookup or create unique function info.
@@ -2620,22 +2619,21 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
       // OpenCL Kernel Stub
       if (getLangOpts().OpenCLVersion <= 120) {
         // OpenCL v1.2 Work groups are always uniform
-        FuncAttrs.addAttribute("uniform-work-group-size", "true");
+        FuncAttrs.addAttribute("uniform-work-group-size");
       } else {
         // OpenCL v2.0 Work groups may be whether uniform or not.
         // '-cl-uniform-work-group-size' compile option gets a hint
         // to the compiler that the global work-size be a multiple of
         // the work-group size specified to clEnqueueNDRangeKernel
         // (i.e. work groups are uniform).
-        FuncAttrs.addAttribute(
-            "uniform-work-group-size",
-            llvm::toStringRef(getLangOpts().OffloadUniformBlock));
+        if (getLangOpts().OffloadUniformBlock)
+          FuncAttrs.addAttribute("uniform-work-group-size");
       }
     }
 
     if (TargetDecl->hasAttr<CUDAGlobalAttr>() &&
         getLangOpts().OffloadUniformBlock)
-      FuncAttrs.addAttribute("uniform-work-group-size", "true");
+      FuncAttrs.addAttribute("uniform-work-group-size");
 
     if (TargetDecl->hasAttr<ArmLocallyStreamingAttr>())
       FuncAttrs.addAttribute("aarch64_pstate_sm_body");
@@ -3292,9 +3290,6 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       if (ArgI.getInAllocaIndirect())
         V = Address(Builder.CreateLoad(V), ConvertTypeForMem(Ty),
                     getContext().getTypeAlignInChars(Ty));
-      // FIXME: It seems like we would want to represent inalloca via
-      // ParamValue more directly, so the debug information can reflect it
-      // directly.
       ArgVals.push_back(ParamValue::forIndirect(V));
       break;
     }
@@ -3495,10 +3490,8 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
 
       llvm::StructType *STy =
           dyn_cast<llvm::StructType>(ArgI.getCoerceToType());
-
-      RawAddress DebugAddr = Address::invalid();
       Address Alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), Arg->getName(), &DebugAddr);
+          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), Arg->getName());
 
       // Pointer to store into.
       Address Ptr = emitAddressAtOffset(*this, Alloca, ArgI);
@@ -3580,17 +3573,15 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
           V = emitArgumentDemotion(*this, Arg, V);
         ArgVals.push_back(ParamValue::forDirect(V));
       } else {
-        ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
+        ArgVals.push_back(ParamValue::forIndirect(Alloca));
       }
       break;
     }
 
     case ABIArgInfo::CoerceAndExpand: {
       // Reconstruct into a temporary.
-      RawAddress DebugAddr = Address::invalid();
-      RawAddress alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), "tmp", &DebugAddr);
-      ArgVals.push_back(ParamValue::forIndirect(alloca, DebugAddr));
+      Address alloca = CreateMemTemp(Ty, getContext().getDeclAlign(Arg));
+      ArgVals.push_back(ParamValue::forIndirect(alloca));
 
       auto coercionType = ArgI.getCoerceAndExpandType();
       auto unpaddedCoercionType = ArgI.getUnpaddedCoerceAndExpandType();
@@ -3630,11 +3621,9 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       // If this structure was expanded into multiple arguments then
       // we need to create a temporary and reconstruct it from the
       // arguments.
-      RawAddress DebugAddr = Address::invalid();
-      RawAddress Alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), "tmp", &DebugAddr);
+      Address Alloca = CreateMemTemp(Ty, getContext().getDeclAlign(Arg));
       LValue LV = MakeAddrLValue(Alloca, Ty);
-      ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
+      ArgVals.push_back(ParamValue::forIndirect(Alloca));
 
       auto FnArgIter = Fn->arg_begin() + FirstIRArg;
       ExpandTypeFromArgs(Ty, LV, FnArgIter);
@@ -3669,9 +3658,7 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       assert(NumIRArgs == 0);
       // Initialize the local variable appropriately.
       if (!hasScalarEvaluationKind(Ty)) {
-        RawAddress DebugAddr = Address::invalid();
-        RawAddress Alloca = CreateMemTemp(Ty, "tmp", &DebugAddr);
-        ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
+        ArgVals.push_back(ParamValue::forIndirect(CreateMemTemp(Ty)));
       } else {
         llvm::Value *U = llvm::UndefValue::get(ConvertType(Arg->getType()));
         ArgVals.push_back(ParamValue::forDirect(U));
@@ -6450,6 +6437,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
       DI->EmitFuncDeclForCallSite(
           CI, DI->getFunctionType(CalleeDecl, ResTy, Args), CalleeGlobalDecl);
     }
+    // Generate call site target information.
+    DI->addCallTargetIfVirtual(CalleeDecl, CI);
   }
 
   return Ret;

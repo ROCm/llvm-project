@@ -462,7 +462,7 @@ public:
 
   void addDirectiveHandler(StringRef Directive,
                            ExtensionDirectiveHandler Handler) override {
-    ExtensionDirectiveMap[Directive] = Handler;
+    ExtensionDirectiveMap[Directive] = std::move(Handler);
     DirectiveKindMap.try_emplace(Directive, DK_HANDLER_DIRECTIVE);
   }
 
@@ -694,6 +694,7 @@ private:
     DK_ELSEIFIDNI,
     DK_ELSE,
     DK_ENDIF,
+
     DK_MACRO,
     DK_EXITM,
     DK_ENDM,
@@ -4097,7 +4098,7 @@ bool MasmParser::parseDirectiveEnds(StringRef Name, SMLoc NameLoc) {
   // and the size of its largest field.
   Structure.Size = llvm::alignTo(
       Structure.Size, std::min(Structure.Alignment, Structure.AlignmentSize));
-  Structs[Name.lower()] = Structure;
+  Structs[Name.lower()] = std::move(Structure);
 
   if (parseEOL())
     return addErrorSuffix(" in ENDS directive");
@@ -5270,10 +5271,6 @@ void MasmParser::initializeDirectiveKindMap() {
   // DirectiveKindMap[".cfi_def_cfa_register"] = DK_CFI_DEF_CFA_REGISTER;
   // DirectiveKindMap[".cfi_offset"] = DK_CFI_OFFSET;
   // DirectiveKindMap[".cfi_rel_offset"] = DK_CFI_REL_OFFSET;
-  // DirectiveKindMap[".cfi_llvm_register_pair"] = DK_CFI_LLVM_REGISTER_PAIR;
-  // DirectiveKindMap[".cfi_llvm_vector_registers"] =
-  //   DK_CFI_LLVM_VECTOR_REGISTERS;
-  // DirectiveKindMap[".cfi_llvm_vector_offset"] = DK_CFI_LLVM_VECTOR_OFFSET;
   // DirectiveKindMap[".cfi_personality"] = DK_CFI_PERSONALITY;
   // DirectiveKindMap[".cfi_lsda"] = DK_CFI_LSDA;
   // DirectiveKindMap[".cfi_remember_state"] = DK_CFI_REMEMBER_STATE;

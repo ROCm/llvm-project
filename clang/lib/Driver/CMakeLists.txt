@@ -5,7 +5,6 @@ set(LLVM_LINK_COMPONENTS
   Option
   ProfileData
   Support
-  Object
   TargetParser
   WindowsDriver
   )
@@ -23,6 +22,7 @@ add_clang_library(clangDriver
   Distro.cpp
   Driver.cpp
   Job.cpp
+  ModulesDriver.cpp
   Multilib.cpp
   MultilibBuilder.cpp
   OffloadBundler.cpp
@@ -105,5 +105,4 @@ add_clang_library(clangDriver
   clangLex
   clangOptions
   ${system_libs}
-  ${LLVM_PTHREAD_LIB}
   )

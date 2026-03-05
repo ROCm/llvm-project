@@ -110,6 +110,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
     }
     DwarfVersion = opts.DwarfVersion;
     SplitDwarfFile = opts.SplitDwarfFile;
+    DwarfDebugFlags = opts.DwarfDebugFlags;
   }
 
   llvm::OptimizationLevel OptLevel; ///< optimisation level
@@ -148,6 +149,7 @@ struct MLIRToLLVMPassPipelineConfig : public FlangEPCallBacks {
           CX_Full; ///< Method for calculating complex number division
   int32_t DwarfVersion = 0; ///< Version of DWARF debug info to generate
   std::string SplitDwarfFile = ""; ///< File name for the split debug info
+  std::string DwarfDebugFlags = ""; ///< Debug flags to append to DWARF producer
 };
 
 struct OffloadModuleOpts {
@@ -189,7 +191,7 @@ struct OffloadModuleOpts {
   bool OpenMPIsTargetDevice = false;
   bool OpenMPIsGPU = false;
   bool OpenMPForceUSM = false;
-  uint32_t OpenMPVersion = 52;
+  uint32_t OpenMPVersion = 31;
   std::string OMPHostIRFile = {};
   std::vector<llvm::Triple> OMPTargetTriples = {};
   bool NoGPULib = false;

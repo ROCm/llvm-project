@@ -12,8 +12,6 @@ find_package(Backtrace)
 set(HAVE_BACKTRACE ${Backtrace_FOUND})
 set(BACKTRACE_HEADER ${Backtrace_HEADER})
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
-
 # List of files that are buildable for all devices.
 set(supported_sources
   ${FLANG_SOURCE_DIR}/lib/Decimal/binary-to-decimal.cpp
@@ -45,6 +43,7 @@ set(supported_sources
   internal-unit.cpp
   io-api.cpp
   io-api-minimal.cpp
+  io-error.cpp
   io-stmt.cpp
   iostat.cpp
   matmul-transpose.cpp
@@ -82,7 +81,6 @@ set(host_sources
   exceptions.cpp
   execute.cpp
   extensions.cpp
-  io-error.cpp
   main.cpp
   random.cpp
   reduce.cpp
@@ -111,9 +109,11 @@ set(gpu_sources
   copy.cpp
   derived-api.cpp
   derived.cpp
+  descriptor.cpp
   dot-product.cpp
   edit-output.cpp
   extrema.cpp
+  environment.cpp
   findloc.cpp
   format.cpp
   inquiry.cpp
@@ -129,6 +129,7 @@ set(gpu_sources
   product.cpp
   ragged.cpp
   stat.cpp
+  stop.cpp
   sum.cpp
   support.cpp
   terminator.cpp
@@ -182,11 +183,7 @@ else ()
 endif ()
 
 if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-  if (FLANG_RT_EMBED_GPU_LLVM_IR)
-    set(sources ${supported_sources} ${gpu_sources})
-  else ()
-    set(sources ${gpu_sources})
-  endif ()
+  set(sources ${gpu_sources})
 elseif(FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   set(sources ${supported_sources})
 else ()

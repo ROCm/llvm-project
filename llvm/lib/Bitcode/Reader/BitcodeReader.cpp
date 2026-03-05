@@ -1175,6 +1175,7 @@ static GlobalValueSummary::GVFlags getDecodedGVSummaryFlags(uint64_t RawFlags,
   auto Linkage = GlobalValue::LinkageTypes(RawFlags & 0xF); // 4 bits
   auto Visibility = GlobalValue::VisibilityTypes((RawFlags >> 8) & 3); // 2 bits
   auto IK = GlobalValueSummary::ImportKind((RawFlags >> 10) & 1);      // 1 bit
+  bool NoRenameOnPromotion = ((RawFlags >> 11) & 1);                   // 1 bit
   RawFlags = RawFlags >> 4;
   bool NotEligibleToImport = (RawFlags & 0x1) || Version < 3;
   // The Live flag wasn't introduced until version 3. For dead stripping
@@ -1185,7 +1186,8 @@ static GlobalValueSummary::GVFlags getDecodedGVSummaryFlags(uint64_t RawFlags,
   bool AutoHide = (RawFlags & 0x8);
 
   return GlobalValueSummary::GVFlags(Linkage, Visibility, NotEligibleToImport,
-                                     Live, Local, AutoHide, IK);
+                                     Live, Local, AutoHide, IK,
+                                     NoRenameOnPromotion);
 }
 
 // Decode the flags for GlobalVariable in the summary
@@ -2168,8 +2170,6 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::NullPointerIsValid;
   case bitc::ATTR_KIND_OPTIMIZE_FOR_DEBUGGING:
     return Attribute::OptimizeForDebugging;
-  case bitc::ATTR_KIND_SANITIZED_PADDED_GLOBAL:
-    return Attribute::SanitizedPaddedGlobal;
   case bitc::ATTR_KIND_OPT_FOR_FUZZING:
     return Attribute::OptForFuzzing;
   case bitc::ATTR_KIND_OPTIMIZE_FOR_SIZE:
@@ -6772,7 +6772,8 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
         DIExpression *AddrExpr =
             cast<DIExpression>(getFnMetadataByID(Record[Slot++]));
         Metadata *Addr = getFnMetadataByID(Record[Slot++]);
-        DVR = new DbgVariableRecord(RawLocation, Var, Expr, ID, Addr, AddrExpr, DIL);
+        DVR = new DbgVariableRecord(RawLocation, Var, Expr, ID, Addr, AddrExpr,
+                                    DIL);
         break;
       }
       default:

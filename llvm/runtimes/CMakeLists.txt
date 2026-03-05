@@ -5,15 +5,18 @@
 
 set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
 foreach(proj ${LLVM_ENABLE_RUNTIMES})
-  set(proj_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
-  if(IS_DIRECTORY ${proj_dir} AND EXISTS ${proj_dir}/CMakeLists.txt)
-    list(APPEND runtimes ${proj_dir})
-  else()
-    message(FATAL_ERROR "LLVM_ENABLE_RUNTIMES requests ${proj} but directory not found: ${proj_dir}")
-  endif()
   string(TOUPPER "${proj}" canon_name)
   STRING(REGEX REPLACE "-" "_" canon_name ${canon_name})
-  set(LLVM_EXTERNAL_${canon_name}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
+  if(NOT LLVM_EXTERNAL_${canon_name}_SOURCE_DIR)
+    set(LLVM_EXTERNAL_${canon_name}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
+  endif()
+  set(proj_dir "${LLVM_EXTERNAL_${canon_name}_SOURCE_DIR}")
+  if(NOT IS_DIRECTORY ${proj_dir} OR NOT EXISTS ${proj_dir}/CMakeLists.txt)
+    message(FATAL_ERROR "LLVM_ENABLE_RUNTIMES requests ${proj} but directory not found: ${proj_dir}")
+  endif()
+  list(APPEND runtimes ${proj_dir})
+  list(APPEND RUNTIMES_CMAKE_ARGS
+    "-DLLVM_EXTERNAL_${canon_name}_SOURCE_DIR=${LLVM_EXTERNAL_${canon_name}_SOURCE_DIR}")
 endforeach()
 
 function(get_compiler_rt_path path)
@@ -521,6 +524,7 @@ if(build_runtimes)
                 llvm-symbolizer
                 llvm-xray
                 llvm-offload-binary
+                llvm-gpu-loader
                 not
                 obj2yaml
                 opt
@@ -539,18 +543,10 @@ if(build_runtimes)
   endif()
 
   # Forward user-provived system configuration to runtimes for requirement introspection.
-  # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
-  # the command line interface, the CMake semicolon separator needs to be replaced
-  # with $<SEMICOLON>
+  # CMAKE_PREFIX_PATH is the search path for CMake packages.
   if(CMAKE_PREFIX_PATH)
-    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
-    # Some projects require access to the LLVM lib/cmake directory
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
-      string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
-    endif()
-    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
+    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
   endif()
-
   # CMAKE_PROGRAM_PATH is the search path for executables such as python.
   if(CMAKE_PROGRAM_PATH)
     list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
@@ -577,53 +573,6 @@ if(build_runtimes)
     list(APPEND extra_args ENABLE_FORTRAN)
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
-    # No need to provide a separate path for ROCt.
-    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
-      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
-        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
-      endif()
-
-      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
-      ExternalProject_Add(rocr-runtime
-        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
-        DEPENDS clang llvm-link lld opt llvm-objcopy
-        INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
-                   -DIMAGE_SUPPORT=OFF
-                   -DLLVM_RUNTIME_OPENMP=ON
-                   ${extra_cmake_args})
-      set(HSA_DEP rocr-runtime)
-    endif()
-
-    # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
-    # Providing path to the sources enables to build them as part of compiler build, which
-    # removes the ciruclar dependency on the script-side.
-    if (DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
-      message(STATUS "Add external AMD device-libs: ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}")
-      if (NOT ${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH} STREQUAL "")
-        ExternalProject_Add(rocm-device-libs
-          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
-          DEPENDS clang llvm-link lld opt llvm-objcopy
-          CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH}
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
-                     -DCMAKE_INSTALL_LIBDIR=lib
-                     ${extra_cmake_args})
-      else()
-        ExternalProject_Add(rocm-device-libs
-          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
-          DEPENDS clang llvm-link lld opt llvm-objcopy
-          INSTALL_COMMAND ""
-          CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
-                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
-      endif()
-    endif()
-
-    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
-      set(AMDGPU_ARCH_DEP amdgpu-arch)
-    endif()
     if (${LLVM_TOOL_FLANG_BUILD})
       message(STATUS "Configuring build of omp_lib.mod and omp_lib_kinds.mod via flang")
       set(LIBOMP_FORTRAN_MODULES_COMPILER "${CMAKE_BINARY_DIR}/bin/flang")
@@ -635,11 +584,8 @@ if(build_runtimes)
       # that all .mod files are also properly build.
       list(APPEND extra_deps "flang" "module_files")
     endif()
-    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
-      set(FORTRT_DEP FortranRuntime)
-    endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
-      if(TARGET ${dep} AND OPENMP_ENABLE_LIBOMPTARGET)
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper)
+      if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
     endforeach()

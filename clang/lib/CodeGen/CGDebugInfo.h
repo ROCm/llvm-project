@@ -559,16 +559,8 @@ public:
   /// Emit information about a global variable.
   void EmitGlobalVariable(llvm::GlobalVariable *GV, const VarDecl *Decl);
 
-  /// Emit information about a global variable (-gheterogeneous-dwarf).
-  void EmitGlobalVariableForHeterogeneousDwarf(llvm::GlobalVariable *GV,
-                                               const VarDecl *Decl);
-
   /// Emit a constant global variable's debug info.
   void EmitGlobalVariable(const ValueDecl *VD, const APValue &Init);
-
-  /// Emit a constant global variable's debug info (-gheterogeneous-dwarf).
-  void EmitGlobalVariableForHeterogeneousDwarf(const ValueDecl *VD,
-                                               const APValue &Init);
 
   /// Emit information about an external variable.
   void EmitExternalVariable(llvm::GlobalVariable *GV, const VarDecl *Decl);
@@ -691,6 +683,9 @@ public:
   /// that it is supported and enabled.
   llvm::DINode::DIFlags getCallSiteRelatedAttrs() const;
 
+  /// Add call target information.
+  void addCallTargetIfVirtual(const FunctionDecl *FD, llvm::CallBase *CI);
+
 private:
   /// Amend \p I's DebugLoc with \p Group (its source atom group) and \p
   /// Rank (lower nonzero rank is higher precedence). Does nothing if \p I
@@ -707,20 +702,6 @@ private:
                                      CGBuilderTy &Builder,
                                      const bool UsePointerValue = false);
 
-  /// Emit call to llvm.dbg.declare for a variable definition.
-  /// Returns a pointer to the DILocalVariable associated with the
-  /// llvm.dbg.def, or nullptr otherwise.
-  llvm::DILocalVariable *EmitDeclareForHeterogeneousDwarf(
-      const VarDecl *decl, llvm::Value *AI, std::optional<unsigned> ArgNo,
-      CGBuilderTy &Builder, const bool UsePointerValue = false);
-
-  /// Emit call to llvm.dbg.declare for a structured binding definition.
-  /// Returns a pointer to the DILocalVariable associated with the
-  /// llvm.dbg.def, or nullptr otherwise.
-  llvm::DILocalVariable *EmitDeclareForHeterogeneousDwarf(
-      const BindingDecl *decl, llvm::Value *AI, std::optional<unsigned> ArgNo,
-      CGBuilderTy &Builder, const bool UsePointerValue = false);
-
   /// Emit call to llvm.dbg.declare for a binding declaration.
   /// Returns a pointer to the DILocalVariable associated with the
   /// llvm.dbg.declare, or nullptr otherwise.
@@ -728,8 +709,6 @@ private:
                                      std::optional<unsigned> ArgNo,
                                      CGBuilderTy &Builder,
                                      const bool UsePointerValue = false);
-
-  // FIXME: EmitDef(const BindingDecl *...
 
   struct BlockByRefType {
     /// The wrapper struct used inside the __block_literal struct.
@@ -855,20 +834,7 @@ private:
   llvm::DIGlobalVariableExpression *
   CollectAnonRecordDecls(const RecordDecl *RD, llvm::DIFile *Unit,
                          unsigned LineNo, StringRef LinkageName,
-                         llvm::dwarf::MemorySpace MS, llvm::GlobalVariable *Var,
-                         llvm::DIScope *DContext);
-
-  /// Return a global variable that represents one of the collection of global
-  /// variables created for an anonmyous union (-gheterogeneous-dwarf).
-  ///
-  /// Recursively collect all of the member fields of a global
-  /// anonymous decl and create static variables for them. The first
-  /// time this is called it needs to be on a union and then from
-  /// there we can have additional unnamed fields.
-  llvm::DIGlobalVariableExpression *CollectAnonRecordDeclsForHeterogeneousDwarf(
-      const RecordDecl *RD, llvm::DIFile *Unit, unsigned LineNo,
-      StringRef LinkageName, llvm::dwarf::MemorySpace MS,
-      llvm::GlobalVariable *Var, llvm::DIScope *DContext);
+                         llvm::GlobalVariable *Var, llvm::DIScope *DContext);
 
   /// Get the printing policy for producing names for debug info.
   PrintingPolicy getPrintingPolicy() const;
@@ -944,6 +910,9 @@ private:
   /// If one exists, returns the linkage name of the specified \
   /// (non-null) \c Method. Returns empty string otherwise.
   llvm::StringRef GetMethodLinkageName(const CXXMethodDecl *Method) const;
+
+  /// Returns true if we should generate call target information.
+  bool shouldGenerateVirtualCallSite() const;
 };
 
 /// A scoped helper to set the current debug location to the specified

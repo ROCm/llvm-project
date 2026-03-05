@@ -513,26 +513,6 @@ elseif(COMPILER_RT_HAS_G_FLAG)
   list(APPEND SANITIZER_COMMON_CFLAGS -g)
 endif()
 
-if(SANITIZER_AMDGPU)
-  list(APPEND SANITIZER_COMMON_CFLAGS -DSANITIZER_AMDGPU=1)
-  message(STATUS "Looking 'hsa' and 'amd_comgr' header")
-  find_path(HSA_INCLUDE NAMES hsa.h HINTS ${SANITIZER_HSA_INCLUDE_PATH} /opt/rocm/include PATH_SUFFIXES hsa)
-  if(NOT HSA_INCLUDE)
-    message(FATAL_ERROR "Required header 'hsa.h' not found in path ${HSA_INCLUDE}. Aborting SANITIZER_AMDGPU build")
-  endif()
-  message(STATUS "Found 'hsa.h' in ${HSA_INCLUDE}")
-  include_directories(${HSA_INCLUDE})
-  find_path(COMgr_INCLUDE NAMES amd_comgr.h.in HINTS ${SANITIZER_COMGR_INCLUDE_PATH} PATH_SUFFIXES amd_comgr)
-  if(NOT COMgr_INCLUDE)
-    find_path(COMgr_INCLUDE NAMES amd_comgr.h HINTS /opt/rocm/include PATH_SUFFIXES amd_comgr)
-    if(NOT COMgr_INCLUDE)
-      message(FATAL_ERROR "Required header 'amd_comgr.h/amd_comgr.h.in' not found in path ${COMgr_INCLUDE}. Aborting SANITIZER_AMDGPU build")
-    endif()
-  endif()
-  message(STATUS "Found 'amd_comgr.h.in/amd_comgr.h' in ${COMgr_INCLUDE}")
-  include_directories(${COMgr_INCLUDE})
-endif()
-
 if(LLVM_ENABLE_MODULES)
   # Sanitizers cannot be built with -fmodules. The interceptors intentionally
   # don't include system headers, which is incompatible with modules.
@@ -627,8 +607,8 @@ append_list_if(COMPILER_RT_HAS_NOSTDINCXX_FLAG -nostdinc++ SANITIZER_COMMON_CFLA
 append_list_if(COMPILER_RT_HAS_NOSTDLIBXX_FLAG -nostdlib++ SANITIZER_COMMON_LINK_FLAGS)
 
 # Remove -stdlib= which is unused when passing -nostdinc++...
-string(REGEX MATCHALL "-stdlib=[a-zA-Z+]*" stdlib_flag "${CMAKE_CXX_FLAGS}")
-string(REGEX REPLACE "-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REGEX MATCHALL "-?-stdlib=[a-zA-Z+]*" stdlib_flag "${CMAKE_CXX_FLAGS}")
+string(REGEX REPLACE "-?-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 # ...we need it to build some runtimes and tests so readd it where appropriate.
 list(APPEND COMPILER_RT_COMMON_CFLAGS ${stdlib_flag})

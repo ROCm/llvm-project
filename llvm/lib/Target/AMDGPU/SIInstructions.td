@@ -305,10 +305,25 @@ def : GCNPat <(f16 (fptrunc_round f32:$src0, (i32 SupportedRoundMode:$round))),
      (FPTRUNC_ROUND_F16_F32_PSEUDO_fake16_e32 $src0, (as_hw_round_mode $round))>;
 
 let True16Predicate = UseRealTrue16Insts in
-def : GCNPat <(f16 (fptrunc_round (f32 (VOP3OpSelMods f32:$src0, i32:$src0_modifiers)), (i32 SupportedRoundMode:$round))),
-     (FPTRUNC_ROUND_F16_F32_PSEUDO_t16_e64 $src0_modifiers, $src0, (as_hw_round_mode $round))>;
+def : GCNPat <(f16 (fptrunc_round (f32 (VOP3OpSelMods f32:$src0, i32:$src0_modifiers)), (i32 0))),
+     (V_CVT_PKRTZ_F16_F32_e32 $src0_modifiers, $src0)>;
+
+def : GCNPat <(v2f16 (build_vector (f16 (fptrunc_round f32:$src0, (i32 0))),
+                                 (f16 (fptrunc_round f32:$src1, (i32 0))))),
+     (V_CVT_PKRTZ_F16_F32_e32 $src0, $src1)>;
+
+let True16Predicate = NotUseRealTrue16Insts in
+def : GCNPat <(f16 (fptrunc_round f32:$src0, (i32 0))),
+     (V_CVT_PKRTZ_F16_F32_e32 $src0, (IMPLICIT_DEF))>;
+
+let True16Predicate = UseRealTrue16Insts in
+def : GCNPat <(f16 (fptrunc_round f32:$src0, (i32 0))),
+     (EXTRACT_SUBREG (V_CVT_PKRTZ_F16_F32_e32 $src0, (IMPLICIT_DEF)), lo16)>;
 
 def : GCNPat <(f32 (fptrunc_round f64:$src0, (i32 SupportedRoundMode:$round))),
+     (FPTRUNC_ROUND_F32_F64_PSEUDO $src0, (as_hw_round_mode $round))>;
+
+def : GCNPat <(f32 (fptrunc_round f64:$src0, (i32 RtzRoundMode:$round))),
      (FPTRUNC_ROUND_F32_F64_PSEUDO $src0, (as_hw_round_mode $round))>;
 
 // Invert the exec mask and overwrite the inactive lanes of dst with inactive,
@@ -610,15 +625,13 @@ multiclass PseudoInstKill <dag ins> {
   // required in degenerate cases (when V_CMPX cannot be used due to constant
   // bus limitations) and because it allows us to avoid having to track SCC
   // liveness across basic blocks.
-  let Defs = [EXEC,SCC] in
-  def _PSEUDO : PseudoInstSI <(outs), ins> {
-    let isConvergent = 1;
-    let usesCustomInserter = 1;
-  }
-
-  let Defs = [EXEC,SCC] in
-  def _TERMINATOR : SPseudoInstSI <(outs), ins> {
-    let isTerminator = 1;
+  let isConvergent = 1, Defs = [EXEC,SCC] in {
+    def _PSEUDO : PseudoInstSI <(outs), ins> {
+      let usesCustomInserter = 1;
+    }
+    def _TERMINATOR : SPseudoInstSI <(outs), ins> {
+      let isTerminator = 1;
+    }
   }
 }
 
@@ -1135,13 +1148,6 @@ multiclass SI_SPILL_SGPR <RegisterClass sgpr_class> {
       let mayLoad = 0;
     }
 
-    def _CFI_SAVE : PseudoInstSI <
-      (outs),
-      (ins sgpr_class:$data, i32imm:$addr)> {
-      let mayStore = 1;
-      let mayLoad = 0;
-    }
-
     def _RESTORE : PseudoInstSI <
       (outs sgpr_class:$data),
       (ins i32imm:$addr)> {
@@ -1179,7 +1185,6 @@ def SI_SPILL_S32_TO_VGPR : PseudoInstSI <(outs VGPR_32:$vdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraDefRegAllocReq = 1;
   let Constraints = "$vdst = $vdst_in";
 }
@@ -1191,7 +1196,6 @@ def SI_RESTORE_S32_FROM_VGPR : PseudoInstSI <(outs SReg_32:$sdst),
   let hasSideEffects = 0;
   let mayLoad = 0;
   let mayStore = 0;
-  let VALU = 1;
   let hasExtraSrcRegAllocReq = 1;
 }
 } // End Spill = 1, VALU = 1, isConvergent = 1
@@ -1204,20 +1208,6 @@ multiclass SI_SPILL_VGPR <SIRegisterClassLike vgpr_class,
   let UseNamedOperandTable = 1, Spill = 1, VALU = 1,
        SchedRW = [WriteVMEM] in {
     def _SAVE : VPseudoInstSI <
-      (outs),
-      !con(
-        (ins vgpr_class:$vdata, i32imm:$vaddr,
-             SReg_32:$soffset, i32imm:$offset),
-        !if(HasMask, (ins SReg_32:$mask), (ins)))> {
-      let mayStore = 1;
-      let mayLoad = 0;
-      // (2 * 4) + (8 * num_subregs) bytes maximum
-      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), !add(UsesTmp, 3)), 8);
-      // Size field is unsigned char and cannot fit more.
-      let Size = !if(!le(MaxSize, 256), MaxSize, 252);
-    }
-
-    def _CFI_SAVE : VPseudoInstSI <
       (outs),
       !con(
         (ins vgpr_class:$vdata, i32imm:$vaddr,
@@ -4167,15 +4157,26 @@ def IMMZeroBasedBitfieldMask : ImmLeaf <i32, [{
   return isMask_32(Imm);
 }]>;
 
-def IMMPopCount : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(llvm::popcount(N->getZExtValue()), SDLoc(N),
-                                   MVT::i32);
+def IMMZeroBasedBitfieldMask16 : ImmLeaf <i16, [{
+  return isUInt<16>(Imm) && isMask_32(Imm);
+}]>;
+
+def IMMCountTrailingOnes : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(llvm::countr_one(N->getZExtValue()),
+                                   SDLoc(N), MVT::i32);
 }]>;
 
 def : AMDGPUPat <
   (DivergentBinFrag<and> (i32 (srl i32:$src, i32:$rshift)),
                          IMMZeroBasedBitfieldMask:$mask),
-  (V_BFE_U32_e64 $src, $rshift, (i32 (IMMPopCount $mask)))
+  (V_BFE_U32_e64 $src, $rshift, (i32 (IMMCountTrailingOnes $mask)))
+>;
+
+let True16Predicate = NotUseRealTrue16Insts in
+def : AMDGPUPat <
+  (i16 (DivergentBinFrag<and> (srl_oneuse i16:$src, (i16 imm:$rshift)),
+                              IMMZeroBasedBitfieldMask16:$mask)),
+  (V_BFE_U32_e64 $src, (i32 (as_i32timm $rshift)), (i32 (IMMCountTrailingOnes $mask)))
 >;
 
 // x & ((1 << y) - 1)

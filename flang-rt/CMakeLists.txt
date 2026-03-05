@@ -27,7 +27,7 @@ set(FLANG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../flang")
 # LLVM's requirement is only CMake 3.20, teach CMake 3.20-3.23 how to use Flang.
 if (CMAKE_VERSION VERSION_LESS "3.24")
   cmake_path(GET CMAKE_Fortran_COMPILER STEM _Fortran_COMPILER_STEM)
-  if (_Fortran_COMPILER_STEM STREQUAL "flang")
+  if (_Fortran_COMPILER_STEM STREQUAL "flang-new" OR _Fortran_COMPILER_STEM STREQUAL "flang")
     include(CMakeForceCompiler)
     CMAKE_FORCE_Fortran_COMPILER("${CMAKE_Fortran_COMPILER}" "LLVMFlang")
 
@@ -159,8 +159,6 @@ if (NOT "${FLANG_RT_LIBCXX_PROVIDER}" IN_LIST FLANG_RT_SUPPORTED_PROVIDERS)
 endif ()
 
 option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." ON)
-option(FLANG_RT_EMBED_GPU_LLVM_IR "Build Flang-RT as GPU LLVM IR library" ON)
-
 if (WIN32)
   # Windows DLL currently not implemented.
   set(FLANG_RT_ENABLE_SHARED OFF)
@@ -225,7 +223,6 @@ if (FLANG_RT_INCLUDE_CUF)
   find_package(CUDAToolkit REQUIRED)
 endif()
 
-option(FLANG_RT_INCLUDE_AMD "Build Fortran runtime with special support for AMD GPUs" OFF)
 
 ########################
 # System Introspection #
@@ -286,10 +283,14 @@ endif()
 find_package(Threads)
 
 # function checks
-find_package(Backtrace)
+# FIXME: The NVPTX target will erroneously report it has backtrace support. This
+#        is caused by using "-c -flto" in the required flags to suppress CUDA
+#        tools from being required for the CMake flag checks to succeed.
+if (NOT "${LLVM_RUNTIMES_TARGET}" MATCHES "^nvptx")
+  find_package(Backtrace)
+endif()
 set(HAVE_BACKTRACE ${Backtrace_FOUND})
 set(BACKTRACE_HEADER ${Backtrace_HEADER})
-
 
 #####################
 # Build Preparation #
@@ -336,9 +337,7 @@ endif ()
 
 if (FLANG_RT_INCLUDE_TESTS)
   add_subdirectory(test)
-  if (NOT "${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-    add_subdirectory(unittests)
-  endif()
+  add_subdirectory(unittests)
 else ()
   add_custom_target(check-flang-rt)
 endif()

@@ -1,7 +1,7 @@
 # Keep track if we have all dependencies.
 set(ENABLE_CHECK_TARGETS TRUE)
 
-if (TARGET "FileCheck")
+if (TARGET FileCheck)
   set(OPENMP_FILECHECK_EXECUTABLE ${LLVM_TOOLS_BINARY_DIR}/FileCheck)
 else()
   message(STATUS "Cannot find 'FileCheck'.")
@@ -127,19 +127,23 @@ function(add_openmp_testsuite target comment)
     set_property(GLOBAL APPEND PROPERTY OPENMP_LIT_DEPENDS ${ARG_DEPENDS})
   endif()
 
+  set(EXTRA_CHECK_DEPENDS "")
+  if (TARGET "clang")
+    list(APPEND EXTRA_CHECK_DEPENDS clang)
+  endif()
   if (ARG_EXCLUDE_FROM_CHECK_ALL)
     add_lit_testsuite(${target}
       ${comment}
       ${ARG_UNPARSED_ARGUMENTS}
       EXCLUDE_FROM_CHECK_ALL
-      DEPENDS clang FileCheck not ${ARG_DEPENDS}
+      DEPENDS ${EXTRA_CHECK_DEPENDS} FileCheck not ${ARG_DEPENDS}
       ARGS ${ARG_ARGS}
     )
   else()
     add_lit_testsuite(${target}
       ${comment}
       ${ARG_UNPARSED_ARGUMENTS}
-      DEPENDS clang FileCheck not ${ARG_DEPENDS}
+      DEPENDS ${EXTRA_CHECK_DEPENDS} FileCheck not ${ARG_DEPENDS}
       ARGS ${ARG_ARGS}
     )
   endif()

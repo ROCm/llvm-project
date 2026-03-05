@@ -30,8 +30,6 @@ class DwarfCompileUnit;
 class MCDwarfDwoLineTable;
 class MCSymbol;
 
-extern bool DisableDwarfLocations;
-
 //===----------------------------------------------------------------------===//
 /// This dwarf writer support class manages information associated with a
 /// source file.
@@ -333,9 +331,6 @@ public:
   /// Get context owner's DIE.
   DIE *createTypeDIE(const DICompositeType *Ty);
 
-  /// Adds the DW_AT_memory_space tag to a DIE
-  void addMemorySpaceAttribute(DIE &D, dwarf::MemorySpace MS);
-
   /// If this is a named finished type then include it in the list of types for
   /// the accelerator tables.
   void updateAcceleratorTables(const DIScope *Context, const DIType *Ty,
@@ -355,7 +350,7 @@ protected:
   void emitCommonHeader(bool UseOffsets, dwarf::UnitType UT);
 
   bool shouldPlaceInUnitDIE(const DISubprogram *SP, bool Minimal) {
-    // Add subprogram declarations to the CU die directly.
+    // Add subprogram definitions to the CU die directly.
     return Minimal || SP->getDeclaration();
   }
 

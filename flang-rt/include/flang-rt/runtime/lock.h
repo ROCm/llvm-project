@@ -16,16 +16,14 @@
 
 // Avoid <mutex> if possible to avoid introduction of C++ runtime
 // library dependence.
-#ifndef _WIN32
+#if !defined(_WIN32) && !RT_GPU_TARGET
 #define USE_PTHREADS 1
 #else
 #undef USE_PTHREADS
 #endif
 
 #if USE_PTHREADS
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
 #include <pthread.h>
-#endif
 #elif defined(_WIN32)
 #include "flang/Common/windows-include.h"
 #else
@@ -47,7 +45,6 @@ public:
   RT_API_ATTRS void Drop() {}
   RT_API_ATTRS bool TakeIfNoDeadlock() { return true; }
 #elif USE_PTHREADS
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
   Lock() { pthread_mutex_init(&mutex_, nullptr); }
   ~Lock() { pthread_mutex_destroy(&mutex_); }
   void Take() {
@@ -71,14 +68,6 @@ public:
     isBusy_ = false;
     pthread_mutex_unlock(&mutex_);
   }
-#else
-  RT_API_ATTRS void Take(){}
-  RT_API_ATTRS bool TakeIfNoDeadlock() {return true;}
-  RT_API_ATTRS bool Try() {return true;}
-  RT_API_ATTRS void Drop() {}
-  Lock() {}
-  ~Lock() {}
-#endif
 #elif defined(_WIN32)
   Lock() { InitializeCriticalSection(&cs_); }
   ~Lock() { DeleteCriticalSection(&cs_); }
@@ -102,11 +91,9 @@ private:
 #if RT_USE_PSEUDO_FILE_UNIT
   // No state.
 #elif USE_PTHREADS
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
   pthread_mutex_t mutex_{};
   volatile bool isBusy_{false};
   volatile pthread_t holder_;
-#endif
 #elif defined(_WIN32)
   CRITICAL_SECTION cs_;
 #else

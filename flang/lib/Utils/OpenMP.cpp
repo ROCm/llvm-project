@@ -155,5 +155,4 @@ void cloneOrMapRegionOutsiders(
     mlir::getUsedValuesDefinedAbove(region, valuesDefinedAbove);
   }
 }
-
 } // namespace Fortran::utils::openmp

@@ -6727,7 +6727,7 @@ static QualType TryToFixInvalidVariablyModifiedType(QualType T,
           ? ConstantArrayType::getNumAddressingBits(Context, ElemTy, Res)
           : Res.getActiveBits();
   if (ActiveSizeBits > ConstantArrayType::getMaxSizeBits(Context)) {
-    Oversized = Res;
+    Oversized = std::move(Res);
     return QualType();
   }
 
@@ -13865,26 +13865,6 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
     return;
   }
 
-  // __amdgpu_feature_predicate_t cannot be initialised
-  if (VDecl->getType().getDesugaredType(Context) ==
-      Context.AMDGPUFeaturePredicateTy) {
-    Diag(VDecl->getLocation(),
-         diag::err_amdgcn_predicate_type_is_not_constructible)
-        << VDecl;
-    VDecl->setInvalidDecl();
-    return;
-  }
-
-  // __amdgpu_feature_predicate_t cannot be initialised
-  if (VDecl->getType().getDesugaredType(Context) ==
-      Context.AMDGPUFeaturePredicateTy) {
-    Diag(VDecl->getLocation(),
-         diag::err_amdgcn_predicate_type_is_not_constructible)
-        << VDecl;
-    VDecl->setInvalidDecl();
-    return;
-  }
-
   // WebAssembly tables can't be used to initialise a variable.
   if (!Init->getType().isNull() && Init->getType()->isWebAssemblyTableType()) {
     Diag(Init->getExprLoc(), diag::err_wasm_table_art) << 0;
@@ -13913,6 +13893,12 @@ void Sema::AddInitializerToDecl(Decl *RealDecl, Expr *Init, bool DirectInit) {
   }
 
   this->CheckAttributesOnDeducedType(RealDecl);
+
+  // we don't initialize groupshared variables so warn and return
+  if (VDecl->hasAttr<HLSLGroupSharedAddressSpaceAttr>()) {
+    Diag(VDecl->getLocation(), diag::warn_hlsl_groupshared_init);
+    return;
+  }
 
   // dllimport cannot be used on variable definitions.
   if (VDecl->hasAttr<DLLImportAttr>() && !VDecl->isStaticDataMember()) {
@@ -14401,13 +14387,6 @@ void Sema::ActOnUninitializedDecl(Decl *RealDecl) {
   if (VarDecl *Var = dyn_cast<VarDecl>(RealDecl)) {
     QualType Type = Var->getType();
 
-    if (Type.getDesugaredType(Context) == Context.AMDGPUFeaturePredicateTy) {
-      Diag(Var->getLocation(),
-           diag::err_amdgcn_predicate_type_is_not_constructible)
-          << Var;
-      Var->setInvalidDecl();
-      return;
-    }
     // C++1z [dcl.dcl]p1 grammar implies that an initializer is mandatory.
     if (isa<DecompositionDecl>(RealDecl)) {
       Diag(Var->getLocation(), diag::err_decomp_decl_requires_init) << Var;

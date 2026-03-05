@@ -60,9 +60,6 @@ public:
 
   bool isNoopAddrSpaceCast(unsigned SrcAS, unsigned DestAS) const override;
 
-  std::optional<dwarf::AddressSpace>
-  mapToDWARFAddrSpace(unsigned LLVMAddrSpace) const override;
-
   unsigned getAssumedAddrSpace(const Value *V) const override;
 
   std::pair<const Value *, unsigned>
@@ -103,7 +100,7 @@ public:
   Error buildCodeGenPipeline(ModulePassManager &MPM, raw_pwrite_stream &Out,
                              raw_pwrite_stream *DwoOut,
                              CodeGenFileType FileType,
-                             const CGPassBuilderOption &Opts,
+                             const CGPassBuilderOption &Opts, MCContext &Ctx,
                              PassInstrumentationCallbacks *PIC) override;
 
   void registerMachineRegisterInfoCallback(MachineFunction &MF) const override;

@@ -4,16 +4,9 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-# Define the list of Fortran module files that need to be compiled
-# to produce an object file for inclusion into the flang_rt.runtime
-# library.
-set(MODULES_WITH_IMPLEMENTATION
-  "iso_fortran_env_impl"
-)
-
 # Define the list of Fortran module files for which it is
 # sufficient to generate the module file via -fsyntax-only.
-set(MODULES_WITHOUT_IMPLEMENTATION
+set(MODULES
   "__fortran_builtins"
   "__fortran_ieee_exceptions"
   "__fortran_type_info"
@@ -30,12 +23,9 @@ set(MODULES_WITHOUT_IMPLEMENTATION
   "ieee_features"
   "iso_c_binding"
   "iso_fortran_env"
-  "f90deviceio"
   "iso_fortran_env_impl"
   "flang_debug"
 )
-
-set(MODULES ${MODULES_WITH_IMPLEMENTATION} ${MODULES_WITHOUT_IMPLEMENTATION})
 
 # Check if 128-bit float computations can be done via long double.
 check_cxx_source_compiles(
@@ -120,11 +110,6 @@ if (NOT CMAKE_CROSSCOMPILING)
     set(compile_with "-fsyntax-only")
     set(object_output "")
     set(include_in_link FALSE)
-    if(${filename} IN_LIST MODULES_WITH_IMPLEMENTATION AND FLANG_INCLUDE_RUNTIME)
-      set(object_output "${CMAKE_CURRENT_BINARY_DIR}/${filename}${CMAKE_CXX_OUTPUT_EXTENSION}")
-      set(compile_with -c -o ${object_output})
-      set(include_in_link TRUE)
-    endif()
 
     set(base ${FLANG_INTRINSIC_MODULES_DIR}/${filename})
     # TODO: We may need to flag this with conditional, in case Flang is built w/o OpenMP support
@@ -157,8 +142,10 @@ if (NOT CMAKE_CROSSCOMPILING)
   else()
     message(WARNING "Not building omp_lib.mod, no OpenMP runtime in either LLVM_ENABLE_PROJECTS or LLVM_ENABLE_RUNTIMES")
   endif()
+  add_custom_target(flang-module-interfaces ALL DEPENDS module_files)
   add_llvm_install_targets(install-flang-module-interfaces
     COMPONENT flang-module-interfaces)
+  add_dependencies(install-flang-module-interfaces flang-module-interfaces)
 endif()
 
 add_custom_target(module_files ALL DEPENDS ${MODULE_FILES})

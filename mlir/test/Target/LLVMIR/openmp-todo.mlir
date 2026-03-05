@@ -1,5 +1,6 @@
 // RUN: mlir-translate -mlir-to-llvmir -split-input-file -verify-diagnostics %s
 
+
 llvm.func @atomic_hint(%v : !llvm.ptr, %x : !llvm.ptr, %expr : i32) {
   // expected-warning@below {{hint clause discarded}}
   omp.atomic.capture hint(uncontended) {
@@ -45,17 +46,6 @@ llvm.func @distribute_order(%lb : i32, %ub : i32, %step : i32) {
     omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
       omp.yield
     }
-  }
-  llvm.return
-}
-
-// -----
-
-llvm.func @ordered_region_par_level_simd() {
-  // expected-error@below {{not yet implemented: Unhandled clause parallelization-level in omp.ordered.region operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.ordered.region}}
-  omp.ordered.region par_level_simd {
-    omp.terminator
   }
   llvm.return
 }
@@ -462,7 +452,6 @@ llvm.func @wsloop_allocate(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
 }
 
 // -----
-
 llvm.func @wsloop_order(%lb : i32, %ub : i32, %step : i32) {
   // expected-error@below {{not yet implemented: Unhandled clause order in omp.wsloop operation}}
   // expected-error@below {{LLVM Translation failed for operation: omp.wsloop}}

@@ -526,11 +526,17 @@ public:
     /// Callee type ids.
     SmallVector<ConstantInt *, 4> CalleeTypeIds;
 
+    /// 'call_target' metadata for the DISubprogram. It is the declaration
+    /// or definition of the target function and might be indirect.
+    MDNode *CallTarget = nullptr;
+
     CallSiteInfo() = default;
 
     /// Extracts the numeric type id from the CallBase's callee_type Metadata,
     /// and sets CalleeTypeIds. This is used as type id for the indirect call in
     /// the call graph section.
+    /// Extracts the MDNode from the CallBase's call_target Metadata to be used
+    /// during the construction of the debug info call site entries.
     LLVM_ABI CallSiteInfo(const CallBase &CB);
   };
 
@@ -651,8 +657,6 @@ public:
   void substituteDebugValuesForInst(const MachineInstr &Old, MachineInstr &New,
                                     unsigned MaxOperand = UINT_MAX);
 
-  using SalvageCopySSAResult = std::pair<DebugInstrOperandPair, MachineInstr *>;
-
   /// Find the underlying  defining instruction / operand for a COPY instruction
   /// while in SSA form. Copies do not actually define values -- they move them
   /// between registers. Labelling a COPY-like instruction with an instruction
@@ -664,11 +668,11 @@ public:
   /// \p MI The copy-like instruction to salvage.
   /// \p DbgPHICache A container to cache already-solved COPYs.
   /// \returns An instruction/operand pair identifying the defining value.
-  SalvageCopySSAResult
+  DebugInstrOperandPair
   salvageCopySSA(MachineInstr &MI,
-                 DenseMap<Register, SalvageCopySSAResult> &DbgPHICache);
+                 DenseMap<Register, DebugInstrOperandPair> &DbgPHICache);
 
-  SalvageCopySSAResult salvageCopySSAImpl(MachineInstr &MI);
+  DebugInstrOperandPair salvageCopySSAImpl(MachineInstr &MI);
 
   /// Finalise any partially emitted debug instructions. These are DBG_INSTR_REF
   /// instructions where we only knew the vreg of the value they use, not the
@@ -1247,10 +1251,6 @@ public:
   }
 
   [[nodiscard]] unsigned addFrameInst(const MCCFIInstruction &Inst);
-
-  /// Replace all references to register \param From with register \param To in
-  /// frame instructions. Note that .cfi_escape instructions will be left as-is.
-  void replaceFrameInstRegister(Register From, Register To);
 
   /// Returns a reference to a list of symbols immediately following calls to
   /// _setjmp in the function. Used to construct the longjmp target table used
