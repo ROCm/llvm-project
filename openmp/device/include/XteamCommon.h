@@ -253,8 +253,7 @@ _XTEAM_INLINE_ATTR float _Complex shfl_up(float _Complex var, int offset) {
 /// Intra-wave reduction using butterfly pattern (shfl_xor)
 /// Reduces all values in a wave to a single value in lane 0
 template <typename T>
-_XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T)) {
-  const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
+_XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T), uint32_t block_size) {
   // If block is smaller than warp, start with block_size/2 to avoid
   // shuffling with inactive lanes
   const uint32_t start_offset =
@@ -311,7 +310,7 @@ _XTEAM_INLINE_ATTR T wave_exclusive_scan(T val, void (*_rf)(T *, T),
 //===----------------------------------------------------------------------===//
 
 /// Block-level reduction: wave reduce → LDS → single value
-/// Returns the reduced value (valid in all threads, but canonical in thread 0)
+/// Returns the reduced value (valid *only* in thread 0)
 template <typename T>
 _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
                                   void (*_rf_lds)(_XTEAM_RF_LDS T *,
@@ -323,7 +322,7 @@ _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
   const uint32_t tid = mapping::getThreadIdInBlock();
 
   // Step 1: Intra-wave reduction using shuffles (no memory access)
-  val = wave_reduce(val, _rf);
+  val = wave_reduce(val, _rf, block_size);
 
   // Step 2: Lane 0 of each wave stores result to LDS
   if (lane_num == 0) {
@@ -333,13 +332,13 @@ _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
 
   // Step 3: Reduce wave results in LDS
   for (unsigned offset = num_waves / 2; offset > 0; offset >>= 1) {
-    synchronize::threadsAligned(atomic::relaxed);
+    synchronize::threadsAligned(atomic::acq_rel);
     if (tid < offset)
       (*_rf_lds)(&wave_lds[tid], &wave_lds[tid + offset]);
   }
 
-  // Synchronize before reading final result
-  synchronize::threadsAligned(atomic::relaxed);
+  // We only need the return value in thread 0, so no need to synchronize all
+  // threads here.
   return wave_lds[0];
 }
 
