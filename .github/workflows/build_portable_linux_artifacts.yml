@@ -221,7 +221,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPILER=ON  -DTHEROCK_ENABLE_CORE_RUNTIME=ON -DTHEROCK_ENABLE_HIP_RUNTIME=ON -DTHEROCK_ENABLE_RCCL=ON -DTHEROCK_ENABLE_PRIM=ON -DTHEROCK_ENABLE_BLAS=ON -DTHEROCK_ENABLE_RAND=ON -DTHEROCK_ENABLE_SOLVER=ON -DTHEROCK_ENABLE_SPARSE=ON -DTHEROCK_ENABLE_SYSDEPS=OFF  -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_OCL_RUNTIME=ON  -DTHEROCK_ENABLE_MATH_LIBS=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPILER=ON  -DTHEROCK_ENABLE_CORE_RUNTIME=ON -DTHEROCK_ENABLE_HIP_RUNTIME=ON -DTHEROCK_ENABLE_RCCL=ON -DTHEROCK_ENABLE_PRIM=ON -DTHEROCK_ENABLE_BLAS=ON -DTHEROCK_ENABLE_RAND=ON -DTHEROCK_ENABLE_SOLVER=ON -DTHEROCK_ENABLE_SPARSE=ON -DTHEROCK_ENABLE_SYSDEPS=OFF  -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_OCL_RUNTIME=ON  -DTHEROCK_ENABLE_LLVM_TESTS=ON  -DTHEROCK_ENABLE_MATH_LIBS=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
           BUILD_DIR: build
         run: |
           python3 build_tools/github_actions/build_configure.py --manylinux
@@ -232,7 +232,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_ENABLE_LLVM_TESTS=ON"
           BUILD_DIR: build
         run: |
           python3 build_tools/github_actions/build_configure.py --manylinux
@@ -240,6 +240,27 @@ jobs:
       - name: Build therock-archives and therock-dist
         run: |
           cmake --build build --target therock-archives therock-dist -- -j32
+
+      - name: llvm Lit Tests
+        run: |
+         ninja -C build/compiler/amd-llvm/build check-llvm
+
+      - name: clang Lit Tests
+        run: |
+         ninja -C build/compiler/amd-llvm/build check-clang
+
+      - name: flang Lit Tests
+        run: |
+         ninja -C build/compiler/amd-llvm/build check-flang
+
+      - name: mlir Lit Tests
+        run: |
+         ninja -C build/compiler/amd-llvm/build check-mlir
+
+      - name: lld Lit Tests
+        run: |
+         ninja -C build/compiler/amd-llvm/build check-lld
+
 
       - name: Test Packaging
         if: ${{ github.event.repository.name == 'TheRock' }}
