@@ -10173,9 +10173,8 @@ CodeGenModule::checkAndSetNoLoopKernel(const OMPExecutableDirective &D) {
   const ForStmt *FStmt = getSingleForStmt(InnermostDir.getAssociatedStmt());
   assert(FStmt && "For stmt cannot be null");
 
-  if ((getLangOpts().OpenMPTargetIgnoreEnvVars ||
-       (getLangOpts().OpenMPTeamSubscription &&
-        getLangOpts().OpenMPThreadSubscription)) &&
+  if ((getLangOpts().OpenMPTeamSubscription &&
+       getLangOpts().OpenMPThreadSubscription) &&
       ((getLangOpts().OpenMPNoNestedParallelism &&
         getLangOpts().OpenMPNoThreadState) ||
        !HasNestedGenericCall) &&
