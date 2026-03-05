@@ -86,14 +86,6 @@ static cl::opt<bool> ManifestInternal(
     cl::desc("Manifest Attributor internal string attributes."),
     cl::init(false));
 
-// When enabled, forallInterferingAccesses pre-computes forward and backward
-// block-level reachability sets via BFS, then uses cheap set lookups to filter
-// intra-function accesses before falling back to full isPotentiallyReachable.
-// This amortizes repeated CFG traversals when many accesses are checked against
-// the same instruction I.
-static cl::opt<bool> EnableBatchReachability(
-    "attributor-enable-batch-reachability", cl::Hidden, cl::init(true),
-    cl::desc("Enable batch reachability queries in Attributor"));
 
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
                                        cl::Hidden);
@@ -1124,14 +1116,12 @@ struct AAPointerInfoImpl
     HasBeenWrittenTo = false;
 
     SmallPtrSet<const Access *, 8> DominatingWrites;
-    SmallVector<std::pair<const Access *, bool>, 8> InterferingAccesses;
 
-    // When batch reachability is enabled, accesses are partitioned directly
-    // in AccessCB rather than post-processing InterferingAccesses:
-    //   IntraFnAccesses: RemoteI is in the same function as I (Scope).
-    //   CrossFnGroups:   RemoteI is in a different function, grouped by that
-    //                    function. This allows one inter-fn reachability check
-    //                    per remote function instead of one per access.
+    // All Accesses are not equal. AccessCB partitions them into two groups.
+    // IntraFnAccesses: When RemoteI is in the same function as I (Scope).
+    // See CanSkipAccessBatch below (Batch Reachability Optiimization)
+    // CrossFnGroups: When RemoteI is in a different function, grouped by
+    // that function. Processed by CanSkipAccess.
     SmallVector<std::pair<const Access *, bool>, 8> IntraFnAccesses;
     DenseMap<Function *, SmallVector<std::pair<const Access *, bool>, 4>>
         CrossFnGroups;
@@ -1314,14 +1304,10 @@ struct AAPointerInfoImpl
       // the given instruction.
       AllInSameNoSyncFn &= AccInSameScope;
 
-      if (EnableBatchReachability) {
-        if (AccInSameScope)
-          IntraFnAccesses.push_back({&Acc, Exact});
-        else
-          CrossFnGroups[AccScope].push_back({&Acc, Exact});
-      } else {
-        InterferingAccesses.push_back({&Acc, Exact});
-      }
+      if (AccInSameScope)
+        IntraFnAccesses.push_back({&Acc, Exact});
+      else
+        CrossFnGroups[AccScope].push_back({&Acc, Exact});
       return true;
     };
     if (!State::forallInterferingAccesses(I, AccessCB, Range))
@@ -1410,7 +1396,7 @@ struct AAPointerInfoImpl
       return LeastDominatingWriteInst != Acc.getRemoteInst();
     };
 
-    if (EnableBatchReachability) {
+    {
       // Batch reachability optimization for CanSkipAccess.
       //
       // Without this optimization, each interfering access triggers an
@@ -1431,15 +1417,9 @@ struct AAPointerInfoImpl
       //   - WriteChecked: if Acc's block is NOT in ReachableToI, Acc can't
       //                   reach I, so Acc's write can't affect I's read.
       //
-      // If the block-level check is inconclusive (block is reachable but
-      // we need instruction-level precision, e.g. two instructions in the
-      // same block), we fall back to isPotentiallyReachable.
+      // If the block-level check is inconclusive, we fall back to
+      // isPotentiallyReachable.
       //
-      // IMPORTANT: These sets only contain blocks from I's function (Scope).
-      // For cross-function accesses (RemoteI in a different function), the
-      // block-level check is skipped entirely (guarded by IntraFnCheck) and
-      // we fall through to isPotentiallyReachable which handles inter-fn
-      // reachability via AAInterFnReachability.
       // Map each basic block to the ExclusionSet instructions it contains.
       // Built once and shared across the BFS helpers and same-block checks
       // in CanSkipAccessBatch, replacing per-use iteration over ExclusionSet.
@@ -1696,7 +1676,7 @@ struct AAPointerInfoImpl
         }
       }
 
-      // Process cross-function accesses using the original CanSkipAccess.
+      // Process cross-function accesses.
       // The batch BFS is intra-function only, so cross-fn accesses don't
       // benefit from it. By partitioning in AccessCB, we avoid triggering
       // the unnecessary EnsureReachableFromI/ToI BFS for cross-fn accesses.
@@ -1707,16 +1687,6 @@ struct AAPointerInfoImpl
             if (!UserCB(*It.first, It.second))
               return false;
           }
-        }
-      }
-    } else {
-      // Run the user callback on all accesses we cannot skip and return if
-      // that succeeded for all or not.
-      for (auto &It : InterferingAccesses) {
-        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
-            !CanSkipAccess(*It.first, It.second)) {
-          if (!UserCB(*It.first, It.second))
-            return false;
         }
       }
     }
