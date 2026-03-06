@@ -882,12 +882,6 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
 
   // -ffast-amd-memory-allocator
   if (args.hasArg(clang::options::OPT_ffast_amd_memory_allocator)) {
-    opts.features.Enable(
-        (Fortran::common::LanguageFeature::AmdMemoryAllocator));
-  }
-
-  // -ffast-amd-memory-allocator
-  if (args.hasArg(clang::options::OPT_ffast_amd_memory_allocator)) {
     opts.features.Enable(Fortran::common::LanguageFeature::AmdMemoryAllocator);
   }
 
