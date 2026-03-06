@@ -1625,6 +1625,11 @@ private:
 
     Register PrimarySuccessorExec;
 
+    // Initialzized to opcode for uniform implicit conditional branches :
+    // S_CBRANCH_EXECZ S_CBRANCH_EXECNZ S_CBRANCH_VCCZ S_CBRANCH_VCCNZ
+    // S_CBRANCH_SCC0 S_CBRANCH_SCC1
+    unsigned UniformImplicitCondBranchOpc = 0;
+
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
   };
 
@@ -1721,6 +1726,16 @@ void ControlFlowRewriter::prepareWaveCfg() {
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
+      } else if (Opcode == AMDGPU::S_CBRANCH_EXECZ ||
+                 Opcode == AMDGPU::S_CBRANCH_EXECNZ ||
+                 Opcode == AMDGPU::S_CBRANCH_VCCZ ||
+                 Opcode == AMDGPU::S_CBRANCH_VCCNZ ||
+                 Opcode == AMDGPU::S_CBRANCH_SCC0 ||
+                 Opcode == AMDGPU::S_CBRANCH_SCC1) {
+        assert(!Info.OrigCondition);
+        Info.UniformImplicitCondBranchOpc = Opcode;
+        Info.OrigSuccCond =
+            ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Opcode == AMDGPU::S_BRANCH) {
         Info.OrigSuccFinal =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
@@ -1731,15 +1746,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         // TODO: These opcodes should be handled. They must either be avoided
         // entirely by pre-wave-transform codegen passes or wave-transform pass
         // should handle them.
-        assert(Opcode != AMDGPU::S_CBRANCH_EXECZ &&
-               Opcode != AMDGPU::S_CBRANCH_EXECNZ &&
-               Opcode != AMDGPU::S_CBRANCH_VCCZ &&
-               Opcode != AMDGPU::S_CBRANCH_VCCNZ &&
-               Opcode != AMDGPU::S_CBRANCH_SCC0 &&
-               Opcode != AMDGPU::S_CBRANCH_SCC1 &&
-               Opcode != AMDGPU::SI_WATERFALL_LOOP &&
-               Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN &&
-               Opcode != AMDGPU::S_SUBVECTOR_LOOP_END &&
+        assert(Opcode != AMDGPU::SI_WATERFALL_LOOP &&
                "wave-transform: unhandled branch opcode");
       }
     }
@@ -1876,7 +1883,7 @@ void ControlFlowRewriter::rewrite() {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
-    if (!Info.OrigExit) {
+    if (!Info.OrigExit && !Info.UniformImplicitCondBranchOpc) {
       // Remove original terminators.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
              !isArtificialTerminator(Node->Block->back()))
@@ -1897,7 +1904,7 @@ void ControlFlowRewriter::rewrite() {
 
     assert(Node->Successors.size() == 2);
 
-    if (!Node->IsDivergent) {
+    if (!Node->IsDivergent && !Info.UniformImplicitCondBranchOpc) {
       // Uniform block with two successors: we must have had two original
       // successors, and one of the current successors leads to the original
       // conditional successor.
@@ -1998,7 +2005,10 @@ void ControlFlowRewriter::rewrite() {
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
 
-      if (!LaneOrigin.CondReg) {
+      CFGNodeInfo &LaneOriginNodeInfo = NodeInfo.find(LaneOrigin.Node)->second;
+
+      if (!LaneOrigin.CondReg ||
+          LaneOriginNodeInfo.UniformImplicitCondBranchOpc) {
         assert(!LaneOrigin.InvertCondition);
         CondReg = getAllOnes();
       } else if (LaneOrigin.CondReg == AMDGPU::SCC) {
