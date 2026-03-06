@@ -1313,7 +1313,16 @@ struct AAPointerInfoImpl
       // the given instruction.
       AllInSameNoSyncFn &= AccInSameScope;
 
-      if (AccInSameScope)
+      // Only truly local accesses (LocalI == RemoteI) use the batch BFS path.
+      // Imported accesses (from translateAndAddStateFromCallee) have
+      // LocalI != RemoteI: LocalI is the call site, RemoteI is the actual
+      // instruction in the callee. For recursive calls, RemoteI is in the
+      // same function but at a different invocation context. The batch BFS
+      // would incorrectly check block-level reachability between I and
+      // RemoteI, missing the call-site indirection. These must go through
+      // CanSkipAccess with isPotentiallyReachable, which correctly handles
+      // cross-invocation reachability via the call graph.
+      if (AccInSameScope && Acc.getLocalInst() == Acc.getRemoteInst())
         IntraFnAccesses.push_back({&Acc, Exact});
       else
         CrossFnGroups[AccScope].push_back({&Acc, Exact});
