@@ -129,7 +129,7 @@ void RTDEF(AMDRegisterAllocator)() {
 #endif
 
   // Determine what allocator to register via very simplistic parsing of syntax
-  // ALLOCATOR:MEMORY_KIND.  Proper values are: Umpire:host, Umpire:device.
+  // ALLOCATOR:MEMORY_KIND.  Proper values are: OPENMP
   const char *allocator_env = getStringFromEnvironment("AMD_ALLOC", "openmp");
   char allocator[256];
   std::strncpy(allocator, allocator_env, sizeof(allocator) - 1);
@@ -143,7 +143,7 @@ void RTDEF(AMDRegisterAllocator)() {
 #endif // ALLOC_DEBUG
   std::pair<std::string_view, std::string_view> allocSpec{
       splitAtColon(allocator)};
-  if (allocSpec.first != "UMPIRE" && allocSpec.first != "OPENMP") {
+  if (allocSpec.first != "OPENMP") {
     std::fprintf(stderr,
         "[AMD_ALLOC] warning: wrong allocator ('%.*s') specified for AMD "
         "allocator, using 'OPENMP' instead.\n",
@@ -163,7 +163,7 @@ void RTDEF(AMDRegisterAllocator)() {
 
 void RTDEF(AMDAllocatableSetAllocIdx)(Descriptor &descriptor, int pos) {
   if (descriptor.IsAllocatable() && !descriptor.IsAllocated()) {
-#if AMD_ALLOC_DEBUG
+#if ALLOC_DEBUG
     if (debugEnabled) {
       std::fprintf(
           stderr, "[AMD_ALLOC] AMDAllocatableSetAllocIdx = %d \n", pos);
