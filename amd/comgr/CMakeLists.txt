@@ -87,6 +87,7 @@ set(SOURCES
 
 # Add Windows resource file for version info
 if(WIN32)
+  set(COMGR_DLL_NAME "amd_comgr.dll")
   string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
   set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
   configure_file(
