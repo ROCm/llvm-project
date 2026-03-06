@@ -35,7 +35,7 @@ static bool debugEnabled;
 // OpenMP runtime library code).
 extern "C" int omp_get_default_device(void);
 extern "C" void *omp_target_alloc(std::size_t, int);
-extern "C" void *omp_target_free(void *, int);
+extern "C" void omp_target_free(void *, int);
 
 static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 #if ALLOC_DEBUG
