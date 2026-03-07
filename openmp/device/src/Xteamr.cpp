@@ -57,8 +57,7 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
 
 // Cuda may restrict max threads, so clear unused wave values
 #ifdef __NVPTX__
-  const uint32_t warp_size = _XTEAM_WARP_SIZE;
-  const uint32_t number_of_waves = (block_size - 1) / warp_size + 1;
+  const uint32_t number_of_waves = (block_size - 1) / _XTEAM_WARP_SIZE + 1;
   if (number_of_waves == 32) {
     if (omp_thread_num == 0) {
       for (uint32_t i = (omp_get_num_threads() / 32); i < number_of_waves; i++)
