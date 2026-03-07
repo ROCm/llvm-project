@@ -245,61 +245,23 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
 #define _UL unsigned long
 
 // Single-pass scan functions using decoupled look-back
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_d(double v, double *result, uint32_t *status, double *aggregates,
-                double *prefixes, void (*rf)(double *, double),
-                const double rnv, const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
+#define _XTEAMS_DEF(T, TS)                                                     \
+  extern "C" _XTEAM_EXTERN_ATTR void __kmpc_xteams_##TS(                       \
+      T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
+      void (*rf)(T *, T), const T rnv, const uint64_t k) {                     \
+    _xteam_scan<T>(v, result, status, aggregates, prefixes, rf, rnv, k);       \
+  }
 
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_f(float v, float *result, uint32_t *status, float *aggregates,
-                float *prefixes, void (*rf)(float *, float), const float rnv,
-                const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
+_XTEAMS_DEF(_CD, cd)
+_XTEAMS_DEF(_CF, cf)
+_XTEAMS_DEF(double, d)
+_XTEAMS_DEF(float, f)
+_XTEAMS_DEF(int, i)
+_XTEAMS_DEF(_UI, ui)
+_XTEAMS_DEF(long, l)
+_XTEAMS_DEF(_UL, ul)
 
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_i(int v, int *result, uint32_t *status, int *aggregates,
-                int *prefixes, void (*rf)(int *, int), const int rnv,
-                const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status, _UI *aggregates,
-                 _UI *prefixes, void (*rf)(_UI *, _UI), const _UI rnv,
-                 const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_l(long v, long *result, uint32_t *status, long *aggregates,
-                long *prefixes, void (*rf)(long *, long), const long rnv,
-                const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *aggregates,
-                 _UL *prefixes, void (*rf)(_UL *, _UL), const _UL rnv,
-                 const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status, _CD *aggregates,
-                 _CD *prefixes, void (*rf)(_CD *, _CD), const _CD rnv,
-                 const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status, _CF *aggregates,
-                 _CF *prefixes, void (*rf)(_CF *, _CF), const _CF rnv,
-                 const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
+#undef _XTEAMS_DEF
 
 #undef _CF
 #undef _CD

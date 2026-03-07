@@ -35,16 +35,15 @@
 #endif
 const uint64_t ARRAY_SIZE = _ARRAY_SIZE;
 unsigned int repeat_num_times = 12;
-unsigned int ignore_times =
-    2; // ignore this many timings first
+unsigned int ignore_times = 2; // ignore this many timings first
 
 // If we know at compile time that we have 0 index with 1 stride,
 // then generate an optimized _BIG_JUMP_LOOP.
 // This test case has index 0 and stride 1, so we set this here.
 #define __OPTIMIZE_INDEX0_STRIDE1
 
-//  Extern Xteamr functions are designed for 1024, 512, and 256 thread blocks.
-//  The default here is 512.
+// Extern Xteamr functions are designed for 1024, 512, and 256 thread blocks.
+// The default here is 512.
 
 #ifndef _XTEAM_NUM_THREADS
 #define _XTEAM_NUM_THREADS 512
@@ -53,23 +52,9 @@ unsigned int ignore_times =
 #define _XTEAM_NUM_TEAMS 80
 #endif
 
-// New interface uses single overload per reduction kind (no block-size suffix)
-#if _XTEAM_NUM_THREADS == 1024 || _XTEAM_NUM_THREADS == 512 ||                 \
-    _XTEAM_NUM_THREADS == 256 || _XTEAM_NUM_THREADS == 128 ||                  \
-    _XTEAM_NUM_THREADS == 64
-#define _SUM_OVERLOAD_64_FCT _overload_to_extern_sum
-#define _SUM_OVERLOAD_32_FCT _overload_to_extern_sum
-#define _MAX_OVERLOAD_64_FCT _overload_to_extern_max
-#define _MAX_OVERLOAD_32_FCT _overload_to_extern_max
-#define _MIN_OVERLOAD_64_FCT _overload_to_extern_min
-#define _MIN_OVERLOAD_32_FCT _overload_to_extern_min
-#else
-#error Invalid value for _XTEAM_NUM_THREADS. Must be 1024, 512, 256, 128, or 64
-#endif
-
 // Question to Dhruva, should the limiter include the stride?
 #if defined(__NVPTX__) && _XTEAM_NUM_THREADS == 1024
-       // Cuda may restrict max threads when requesting 1024, so the bigjump
+// Cuda may restrict max threads when requesting 1024, so the bigjump
 // on the inner loop depends on the actual limited number of threads
 // determined by omp_get_num_threads(). It also requires we only call
 // the helper reducer function when k is in this range. Lastly, the
@@ -88,12 +73,12 @@ unsigned int ignore_times =
        i += (nteams * omp_get_num_threads() * stride))
 #endif
 #else
-       // Assume AMDGPU or NVIDIA=512|256 always gets requested number of
-       // threads.
+// Assume AMDGPU or NVIDIA=512|256 always gets requested number of
+// threads.
 // So no conditional needed to limit reductions.
 #define _LIMIT_JUMP_TO_CUDA_REDUCED_THREADS(nteams)
 
-//  Format of BIG_JUMP_LOOP depends on if we optimize for 0 index 1 stride
+// Format of BIG_JUMP_LOOP depends on if we optimize for 0 index 1 stride
 #if _XTEAM_NUM_THREADS == 1024
 
 #ifdef __OPTIMIZE_INDEX0_STRIDE1
@@ -154,45 +139,6 @@ unsigned int ignore_times =
 
 unsigned int test_run_rc = 0;
 
-template <typename T, bool> void run_tests(const uint64_t);
-template <typename TC, typename T> void run_tests_complex(const uint64_t);
-
-int main(int argc, char *argv[]) {
-  std::cout << std::endl
-            << "TEST DOUBLE " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
-  run_tests<double, false>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST FLOAT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
-  run_tests<float, false>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST INT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
-  run_tests<int, true>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"
-            << std::endl;
-  run_tests<unsigned, true>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST LONG " << _XTEAM_NUM_THREADS << " THREADS " << std::endl;
-  run_tests<long, true>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST UNSIGNED LONG " << _XTEAM_NUM_THREADS << " THREADS"
-            << std::endl;
-  run_tests<unsigned long, true>(ARRAY_SIZE);
-  // Complex type tests disabled: __kmpc_xteamr_cd and __kmpc_xteamr_cf
-  // are declared in Xteamr.h but not yet implemented in Xteamr.cpp.
-  // std::cout << std::endl
-  //           << "TEST DOUBLE COMPLEX " << _XTEAM_NUM_THREADS << " THREADS"
-  //           << std::endl;
-  // run_tests_complex<double _Complex, double>(ARRAY_SIZE);
-  // std::cout << std::endl
-  //           << "TEST FLOAT COMPLEX " << _XTEAM_NUM_THREADS << " THREADS"
-  //           << std::endl;
-  // run_tests_complex<float _Complex, float>(ARRAY_SIZE);
-  if (test_run_rc == 0)
-    printf("ALL TESTS PASSED\n");
-  return test_run_rc;
-}
-
 template <typename T> T omp_dot(T *a, T *b, uint64_t array_size) {
   T sum = 0.0;
 #pragma omp target teams distribute parallel for map(tofrom: sum) reduction(+:sum)
@@ -203,10 +149,8 @@ template <typename T> T omp_dot(T *a, T *b, uint64_t array_size) {
 
 template <typename T> T omp_max(T *c, uint64_t array_size) {
   T maxval = std::numeric_limits<T>::lowest();
-#pragma omp target teams distribute parallel for map(tofrom                    \
-                                                     : maxval)                 \
-    reduction(max                                                              \
-              : maxval)
+#pragma omp target teams distribute parallel for map(tofrom : maxval)          \
+    reduction(max : maxval)
   for (int64_t i = 0; i < array_size; i++)
     maxval = (c[i] > maxval) ? c[i] : maxval;
   return maxval;
@@ -214,17 +158,15 @@ template <typename T> T omp_max(T *c, uint64_t array_size) {
 
 template <typename T> T omp_min(T *c, uint64_t array_size) {
   T minval = std::numeric_limits<T>::max();
-#pragma omp target teams distribute parallel for map(tofrom                    \
-                                                     : minval)                 \
-    reduction(min                                                              \
-              : minval)
+#pragma omp target teams distribute parallel for map(tofrom : minval)          \
+    reduction(min : minval)
   for (int64_t i = 0; i < array_size; i++) {
     minval = (c[i] < minval) ? c[i] : minval;
   }
   return minval;
 }
 
-template <typename T> T sim_dot(T *a, T *b, int warp_size) {
+template <typename T> T sim_dot(T *a, T *b) {
   T sum = T(0);
   int devid = 0;
   struct loop_ctl_t {
@@ -248,36 +190,21 @@ template <typename T> T sim_dot(T *a, T *b, int warp_size) {
                       omp_get_initial_device());
   }
 
-  if (warp_size == 64) {
 #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : sum) map(to                          \
-                                                   : lc0)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val0 = lc0.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc0.size, lc0.stride, lc0.offset)
-      val0 += a[i] * b[i];
-      _SUM_OVERLOAD_64_FCT(val0, &sum, lc0.team_vals, lc0.td_ptr, lc0.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
-  } else {
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : sum) map(to                          \
-                                                   : lc0)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val0 = lc0.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc0.size, lc0.stride, lc0.offset)
-      val0 += a[i] * b[i];
-      _LIMIT_JUMP_TO_CUDA_REDUCED_THREADS(_XTEAM_NUM_TEAMS)
-      _SUM_OVERLOAD_32_FCT(val0, &sum, lc0.team_vals, lc0.td_ptr, lc0.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
+    num_threads(_XTEAM_NUM_THREADS) map(tofrom : sum) map(to : lc0)
+  for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
+    T val0 = lc0.rnv;
+    _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc0.size, lc0.stride, lc0.offset)
+    val0 += a[i] * b[i];
+    get_kmpc_xteamr_func<T>()(
+        val0, &sum, lc0.team_vals, lc0.td_ptr, get_kmpc_rfun_sum_func<T>(),
+        get_kmpc_rfun_sum_lds_func<T>(), lc0.rnv, k, _XTEAM_NUM_TEAMS,
+        _XTEAMR_SCOPE);
   }
   return sum;
 }
 
-template <typename T> T sim_max(T *c, int warp_size) {
+template <typename T> T sim_max(T *c) {
   T retval = std::numeric_limits<T>::lowest();
   int devid = 0;
   struct loop_ctl_t {
@@ -301,36 +228,21 @@ template <typename T> T sim_max(T *c, int warp_size) {
     omp_target_memcpy(lc1.td_ptr, &zero, sizeof(uint32_t), 0, 0, devid,
                       omp_get_initial_device());
   }
-  if (warp_size == 64) {
 #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : retval) map(to                       \
-                                                      : lc1)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val1 = lc1.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc1.size, lc1.stride, lc1.offset)
-      val1 = (c[i] > val1) ? c[i] : val1;
-      _MAX_OVERLOAD_64_FCT(val1, &retval, lc1.team_vals, lc1.td_ptr, lc1.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
-  } else {
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : retval) map(to                       \
-                                                      : lc1)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val1 = lc1.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc1.size, lc1.stride, lc1.offset)
-      val1 = (c[i] > val1) ? c[i] : val1;
-      _LIMIT_JUMP_TO_CUDA_REDUCED_THREADS(_XTEAM_NUM_TEAMS)
-      _MAX_OVERLOAD_32_FCT(val1, &retval, lc1.team_vals, lc1.td_ptr, lc1.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
+    num_threads(_XTEAM_NUM_THREADS) map(tofrom : retval) map(to : lc1)
+  for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
+    T val1 = lc1.rnv;
+    _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc1.size, lc1.stride, lc1.offset)
+    val1 = (c[i] > val1) ? c[i] : val1;
+    get_kmpc_xteamr_func<T>()(
+        val1, &retval, lc1.team_vals, lc1.td_ptr, get_kmpc_rfun_max_func<T>(),
+        get_kmpc_rfun_max_lds_func<T>(), lc1.rnv, k, _XTEAM_NUM_TEAMS,
+        _XTEAMR_SCOPE);
   }
   return retval;
 }
 
-template <typename T> T sim_min(T *c, int warp_size) {
+template <typename T> T sim_min(T *c) {
   T retval = std::numeric_limits<T>::max();
   int devid = 0;
   struct loop_ctl_t {
@@ -354,31 +266,16 @@ template <typename T> T sim_min(T *c, int warp_size) {
     omp_target_memcpy(lc2.td_ptr, &zero, sizeof(uint32_t), 0, 0, devid,
                       omp_get_initial_device());
   }
-  if (warp_size == 64) {
 #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : retval) map(to                       \
-                                                      : lc2)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val2 = lc2.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc2.size, lc2.stride, lc2.offset)
-      val2 = (c[i] < val2) ? c[i] : val2;
-      _MIN_OVERLOAD_64_FCT(val2, &retval, lc2.team_vals, lc2.td_ptr, lc2.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
-  } else {
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : retval) map(to                       \
-                                                      : lc2)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val2 = lc2.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc2.size, lc2.stride, lc2.offset)
-      val2 = (c[i] < val2) ? c[i] : val2;
-      _LIMIT_JUMP_TO_CUDA_REDUCED_THREADS(_XTEAM_NUM_TEAMS)
-      _MIN_OVERLOAD_32_FCT(val2, &retval, lc2.team_vals, lc2.td_ptr, lc2.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
+    num_threads(_XTEAM_NUM_THREADS) map(tofrom : retval) map(to : lc2)
+  for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
+    T val2 = lc2.rnv;
+    _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc2.size, lc2.stride, lc2.offset)
+    val2 = (c[i] < val2) ? c[i] : val2;
+    get_kmpc_xteamr_func<T>()(
+        val2, &retval, lc2.team_vals, lc2.td_ptr, get_kmpc_rfun_min_func<T>(),
+        get_kmpc_rfun_min_lds_func<T>(), lc2.rnv, k, _XTEAM_NUM_TEAMS,
+        _XTEAMR_SCOPE);
   }
   return retval;
 }
@@ -411,18 +308,12 @@ void _check_val(T computed_val, T gold_val, const char *msg) {
 template <typename T, bool DATA_TYPE_IS_INT>
 void run_tests(uint64_t array_size) {
 
-  // FIXME: How do we get warpsize of a device from host?
-  int warp_size = 64;
-#pragma omp target map(tofrom : warp_size)
-  warp_size = __kmpc_get_warp_size();
-
-  //  Align on 2M boundaries
+  // Align on 2M boundaries
   T *a = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T *b = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T *c = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
-#pragma omp target enter data map(alloc                                        \
-                                  : a [0:array_size], b [0:array_size],        \
-                                    c [0:array_size])
+#pragma omp target enter data map(alloc : a[0 : array_size],                   \
+                                      b[0 : array_size], c[0 : array_size])
 #pragma omp target teams distribute parallel for
   for (int64_t i = 0; i < array_size; i++) {
     a[i] = 2;
@@ -444,7 +335,6 @@ void run_tests(uint64_t array_size) {
       std::cout << "Precision: double" << std::endl;
   }
 
-  std::cout << "Warp size:" << warp_size << std::endl;
   // int num_teams = ompx_get_device_num_units(omp_get_default_device());
   int num_teams = _XTEAM_NUM_TEAMS;
   std::cout << "Array elements: " << array_size << std::endl;
@@ -476,7 +366,7 @@ void run_tests(uint64_t array_size) {
     _check_val<T, DATA_TYPE_IS_INT>(omp_sum, goldDot, "omp_dot");
 
     t1 = std::chrono::high_resolution_clock::now();
-    T sim_sum = sim_dot<T>(a, b, warp_size);
+    T sim_sum = sim_dot<T>(a, b);
     t2 = std::chrono::high_resolution_clock::now();
     timings[1].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
@@ -492,7 +382,7 @@ void run_tests(uint64_t array_size) {
     _check_val<T, DATA_TYPE_IS_INT>(omp_max_val, goldMax, "omp_max");
 
     t1 = std::chrono::high_resolution_clock::now();
-    T sim_max_val = sim_max<T>(c, warp_size);
+    T sim_max_val = sim_max<T>(c);
     t2 = std::chrono::high_resolution_clock::now();
     timings[3].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
@@ -508,7 +398,7 @@ void run_tests(uint64_t array_size) {
     _check_val<T, DATA_TYPE_IS_INT>(omp_min_val, goldMin, "omp_min");
 
     t1 = std::chrono::high_resolution_clock::now();
-    T sim_min_val = sim_min<T>(c, warp_size);
+    T sim_min_val = sim_min<T>(c);
     t2 = std::chrono::high_resolution_clock::now();
     timings[5].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
@@ -587,7 +477,7 @@ template <typename TC> TC omp_dot_complex(TC *a, TC *b, uint64_t array_size) {
   return dot;
 }
 
-template <typename T> T sim_dot_complex(T *a, T *b, int warp_size) {
+template <typename T> T sim_dot_complex(T *a, T *b) {
   int devid = 0;
   T zero_c;
   __real__(zero_c) = 0.0;
@@ -615,42 +505,22 @@ template <typename T> T sim_dot_complex(T *a, T *b, int warp_size) {
                       omp_get_initial_device());
   }
 
-  if (warp_size == 64) {
 #pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : sum) map(to                          \
-                                                   : lc3)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val3 = lc3.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc3.size, lc3.stride, lc3.offset)
-      val3 += a[i] * b[i];
-      _SUM_OVERLOAD_64_FCT(val3, &sum, lc3.team_vals, lc3.td_ptr, lc3.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
-  } else {
-#pragma omp target teams distribute parallel for num_teams(_XTEAM_NUM_TEAMS)   \
-    num_threads(_XTEAM_NUM_THREADS) map(tofrom                                 \
-                                        : sum) map(to                          \
-                                                   : lc3)
-    for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
-      T val3 = lc3.rnv;
-      _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc3.size, lc3.stride, lc3.offset)
-      val3 += a[i] * b[i];
-      _LIMIT_JUMP_TO_CUDA_REDUCED_THREADS(_XTEAM_NUM_TEAMS)
-      _SUM_OVERLOAD_32_FCT(val3, &sum, lc3.team_vals, lc3.td_ptr, lc3.rnv, k,
-                           _XTEAM_NUM_TEAMS);
-    }
+    num_threads(_XTEAM_NUM_THREADS) map(tofrom : sum) map(to : lc3)
+  for (uint64_t k = 0; k < (_XTEAM_NUM_TEAMS * _XTEAM_NUM_THREADS); k++) {
+    T val3 = lc3.rnv;
+    _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc3.size, lc3.stride, lc3.offset)
+    val3 += a[i] * b[i];
+    get_kmpc_xteamr_func<T>()(val3, &sum, lc3.team_vals, lc3.td_ptr,
+                              get_kmpc_rfun_sum_func<T>(),
+                              get_kmpc_rfun_sum_lds_func<T>(), lc3.rnv, k,
+                              _XTEAM_NUM_TEAMS, _XTEAMR_SCOPE);
   }
   return sum;
 }
 
 template <typename TC, typename T>
 void run_tests_complex(const uint64_t array_size) {
-
-  // FIXME: How do we get warpsize of a device from host?
-  int warp_size = 64;
-#pragma omp target map(tofrom : warp_size)
-  warp_size = __kmpc_get_warp_size();
 
   TC *a = (TC *)aligned_alloc(ALIGNMENT, sizeof(TC) * array_size);
   TC *b = (TC *)aligned_alloc(ALIGNMENT, sizeof(TC) * array_size);
@@ -680,7 +550,6 @@ void run_tests_complex(const uint64_t array_size) {
   else
     std::cout << "Precision: double _Complex" << std::endl;
 
-  std::cout << "Warp size:" << warp_size << std::endl;
   std::cout << "Array elements: " << array_size << std::endl;
   std::cout << "Array size:     " << ((array_size * sizeof(TC)) / (1024 * 1024))
             << " MB" << std::endl;
@@ -709,7 +578,7 @@ void run_tests_complex(const uint64_t array_size) {
     _check_val_complex<TC, T>(omp_sum, goldDot, "omp_dot");
 
     t1 = std::chrono::high_resolution_clock::now();
-    TC sim_sum = sim_dot_complex<TC>(a, b, warp_size);
+    TC sim_sum = sim_dot_complex<TC>(a, b);
     t2 = std::chrono::high_resolution_clock::now();
     timings[1].push_back(
         std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1)
@@ -748,4 +617,40 @@ void run_tests_complex(const uint64_t array_size) {
 #pragma omp target exit data map(release : a [0:array_size], b [0:array_size])
   free(a);
   free(b);
+}
+
+int main(int argc, char *argv[]) {
+  std::cout << std::endl
+            << "TEST DOUBLE " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
+  run_tests<double, false>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST FLOAT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
+  run_tests<float, false>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST INT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
+  run_tests<int, true>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"
+            << std::endl;
+  run_tests<unsigned, true>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST LONG " << _XTEAM_NUM_THREADS << " THREADS " << std::endl;
+  run_tests<long, true>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST UNSIGNED LONG " << _XTEAM_NUM_THREADS << " THREADS"
+            << std::endl;
+  run_tests<unsigned long, true>(ARRAY_SIZE);
+  // Complex type tests disabled: __kmpc_xteamr_cd and __kmpc_xteamr_cf
+  // are declared in Xteamr.h but not yet implemented in Xteamr.cpp.
+  // std::cout << std::endl
+  //           << "TEST DOUBLE COMPLEX " << _XTEAM_NUM_THREADS << " THREADS"
+  //           << std::endl;
+  // run_tests_complex<double _Complex, double>(ARRAY_SIZE);
+  // std::cout << std::endl
+  //           << "TEST FLOAT COMPLEX " << _XTEAM_NUM_THREADS << " THREADS"
+  //           << std::endl;
+  // run_tests_complex<float _Complex, float>(ARRAY_SIZE);
+  if (test_run_rc == 0)
+    printf("ALL TESTS PASSED\n");
+  return test_run_rc;
 }

@@ -170,81 +170,46 @@ float _Complex shfl_up_cf(float _Complex var, int offset, uint32_t width) {
 //===----------------------------------------------------------------------===//
 
 // XOR shuffles for reduction (butterfly pattern)
-_XTEAM_INLINE_ATTR double shfl_xor(double var, int lane_mask) {
-  return shfl_xor_double(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR float shfl_xor(float var, int lane_mask) {
-  return shfl_xor_float(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR int shfl_xor(int var, int lane_mask) {
-  return shfl_xor_int(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned int shfl_xor(unsigned int var, int lane_mask) {
-  return shfl_xor_int(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR long shfl_xor(long var, int lane_mask) {
-  return shfl_xor_double(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned long shfl_xor(unsigned long var, int lane_mask) {
-  return shfl_xor_double(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR short shfl_xor(short var, int lane_mask) {
-  return shfl_xor_int(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned short shfl_xor(unsigned short var, int lane_mask) {
-  return shfl_xor_int(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR _Float16 shfl_xor(_Float16 var, int lane_mask) {
-  return shfl_xor_float(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR __bf16 shfl_xor(__bf16 var, int lane_mask) {
-  return shfl_xor_float(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR double _Complex shfl_xor(double _Complex var,
-                                            int lane_mask) {
-  return shfl_xor_cd(var, lane_mask, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR float _Complex shfl_xor(float _Complex var, int lane_mask) {
-  return shfl_xor_cf(var, lane_mask, _XTEAM_WARP_SIZE);
-}
+#define _SHFL_XOR_DEF(T, TS)                                                   \
+  _XTEAM_INLINE_ATTR T shfl_xor(T var, int lane_mask) {                        \
+    return shfl_xor_##TS(var, lane_mask, _XTEAM_WARP_SIZE);                    \
+  }
+
+_SHFL_XOR_DEF(double, double)
+_SHFL_XOR_DEF(float, float)
+_SHFL_XOR_DEF(int, int)
+_SHFL_XOR_DEF(unsigned int, int)
+_SHFL_XOR_DEF(long, double)
+_SHFL_XOR_DEF(unsigned long, double)
+_SHFL_XOR_DEF(short, int)
+_SHFL_XOR_DEF(unsigned short, int)
+_SHFL_XOR_DEF(__bf16, float)
+_SHFL_XOR_DEF(_Float16, float)
+_SHFL_XOR_DEF(double _Complex, cd)
+_SHFL_XOR_DEF(float _Complex, cf)
+
+#undef _SHFL_XOR_DEF
 
 // UP shuffles for scan (prefix pattern)
-_XTEAM_INLINE_ATTR double shfl_up(double var, int offset) {
-  return shfl_up_double(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR float shfl_up(float var, int offset) {
-  return shfl_up_float(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR int shfl_up(int var, int offset) {
-  return shfl_up_int(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned int shfl_up(unsigned int var, int offset) {
-  return shfl_up_int(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR long shfl_up(long var, int offset) {
-  return shfl_up_double(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned long shfl_up(unsigned long var, int offset) {
-  return shfl_up_double(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR short shfl_up(short var, int offset) {
-  return shfl_up_int(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR unsigned short shfl_up(unsigned short var, int offset) {
-  return shfl_up_int(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR _Float16 shfl_up(_Float16 var, int offset) {
-  return shfl_up_float(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR __bf16 shfl_up(__bf16 var, int offset) {
-  return shfl_up_float(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR double _Complex shfl_up(double _Complex var, int offset) {
-  return shfl_up_cd(var, offset, _XTEAM_WARP_SIZE);
-}
-_XTEAM_INLINE_ATTR float _Complex shfl_up(float _Complex var, int offset) {
-  return shfl_up_cf(var, offset, _XTEAM_WARP_SIZE);
-}
+#define _SHFL_UP_DEF(T, TS)                                                    \
+  _XTEAM_INLINE_ATTR T shfl_up(T var, int offset) {                            \
+    return shfl_up_##TS(var, offset, _XTEAM_WARP_SIZE);                        \
+  }
+
+_SHFL_UP_DEF(double, double)
+_SHFL_UP_DEF(float, float)
+_SHFL_UP_DEF(int, int)
+_SHFL_UP_DEF(unsigned int, int)
+_SHFL_UP_DEF(long, double)
+_SHFL_UP_DEF(unsigned long, double)
+_SHFL_UP_DEF(short, int)
+_SHFL_UP_DEF(unsigned short, int)
+_SHFL_UP_DEF(__bf16, float)
+_SHFL_UP_DEF(_Float16, float)
+_SHFL_UP_DEF(double _Complex, cd)
+_SHFL_UP_DEF(float _Complex, cf)
+
+#undef _SHFL_UP_DEF
 
 //===----------------------------------------------------------------------===//
 // Wave-level primitives

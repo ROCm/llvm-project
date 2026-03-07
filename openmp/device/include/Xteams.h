@@ -58,47 +58,21 @@ extern "C" {
 /// \param rnv Reduction null value (identity element)
 /// \param k Global thread index (0 to NumTeams * BlockSize - 1)
 
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_d(double v, double *result,
-                                        uint32_t *status, double *aggregates,
-                                        double *prefixes,
-                                        void (*rf)(double *, double),
-                                        const double rnv, const uint64_t k);
+#define _XTEAMS_DECL(T, TS)                                                     \
+  void _XTEAM_EXTERN_ATTR __kmpc_xteams_##TS(                                  \
+      T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
+      void (*rf)(T *, T), const T rnv, const uint64_t k);
 
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_f(float v, float *result,
-                                        uint32_t *status, float *aggregates,
-                                        float *prefixes,
-                                        void (*rf)(float *, float),
-                                        const float rnv, const uint64_t k);
+_XTEAMS_DECL(_CD, cd)
+_XTEAMS_DECL(_CF, cf)
+_XTEAMS_DECL(double, d)
+_XTEAMS_DECL(float, f)
+_XTEAMS_DECL(int, i)
+_XTEAMS_DECL(_UI, ui)
+_XTEAMS_DECL(long, l)
+_XTEAMS_DECL(_UL, ul)
 
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_i(int v, int *result, uint32_t *status,
-                                        int *aggregates, int *prefixes,
-                                        void (*rf)(int *, int), const int rnv,
-                                        const uint64_t k);
-
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status,
-                                         _UI *aggregates, _UI *prefixes,
-                                         void (*rf)(_UI *, _UI), const _UI rnv,
-                                         const uint64_t k);
-
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_l(long v, long *result, uint32_t *status,
-                                        long *aggregates, long *prefixes,
-                                        void (*rf)(long *, long),
-                                        const long rnv, const uint64_t k);
-
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status,
-                                         _UL *aggregates, _UL *prefixes,
-                                         void (*rf)(_UL *, _UL), const _UL rnv,
-                                         const uint64_t k);
-
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status,
-                                         _CD *aggregates, _CD *prefixes,
-                                         void (*rf)(_CD *, _CD), const _CD rnv,
-                                         const uint64_t k);
-
-void _XTEAM_EXTERN_ATTR __kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status,
-                                         _CF *aggregates, _CF *prefixes,
-                                         void (*rf)(_CF *, _CF), const _CF rnv,
-                                         const uint64_t k);
+#undef _XTEAMS_DECL
 
 } // extern "C"
 
