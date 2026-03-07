@@ -829,9 +829,8 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
         Builder.CreateGEP(Int8Ty, DScanStorage, OneArrayBytes);
 
     // scan_result starts after both arrays (2 * NumTeams * sizeof(T))
-    llvm::Value *TwoArrayBytes =
-        Builder.CreateMul(OneArrayBytes, llvm::ConstantInt::get(Int64Ty, 2),
-                          "two_array_bytes");
+    llvm::Value *TwoArrayBytes = Builder.CreateMul(
+        OneArrayBytes, llvm::ConstantInt::get(Int64Ty, 2), "two_array_bytes");
     llvm::Value *DResult =
         Builder.CreateGEP(Int8Ty, DScanStorage, TwoArrayBytes);
 
@@ -847,8 +846,7 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
                        DBlockStatus, DBlockAggregates, DBlockPrefixes,
-                       ThreadStartIdx, BlockSize,
-                       RVI.Opcode);
+                       ThreadStartIdx, BlockSize, RVI.Opcode);
 
     // Load scan result back into the reduction variable so the
     // AfterScanBlock can consume it: RedVar = result_array[k]
@@ -2602,10 +2600,9 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
           //   → input first (OMPFirstScanLoop=true), then output (false)
           // For exclusive: before-scan = output, after-scan = input
           //   → output first (OMPFirstScanLoop=false), then input (true)
-          bool IsInclusiveScan =
-              CGM.OMPPresentScanDirective &&
-              CGM.OMPPresentScanDirective
-                  ->hasClausesOfKind<OMPInclusiveClause>();
+          bool IsInclusiveScan = CGM.OMPPresentScanDirective &&
+                                 CGM.OMPPresentScanDirective
+                                     ->hasClausesOfKind<OMPInclusiveClause>();
           {
             OMPFirstScanLoop = IsInclusiveScan;
             CodeGenFunction::OMPLocalDeclMapRAII Scope(*this);
@@ -2640,9 +2637,8 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
     if (CGM.isXteamSegmentedScanKernel()) {
       EmitBlock(Continue.getBlock());
       llvm::Value *IvLoad = Builder.CreateLoad(BigJumpLoopIvAddr);
-      llvm::Value *SegmentScanLoopInc =
-          Builder.CreateAdd(llvm::ConstantInt::get(IvLoad->getType(), 1),
-                            IvLoad);
+      llvm::Value *SegmentScanLoopInc = Builder.CreateAdd(
+          llvm::ConstantInt::get(IvLoad->getType(), 1), IvLoad);
       Builder.CreateStore(SegmentScanLoopInc,
                           BigJumpLoopIvAddr); // *iv = *iv + 1
     } else {
