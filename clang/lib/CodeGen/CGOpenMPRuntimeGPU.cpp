@@ -3037,7 +3037,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
     llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
     llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex,
-    llvm::Value *NumElements, int BlockSize, bool IsInclusiveScan,
+    int BlockSize,
     CodeGenModule::XteamRedOpKind RedOp) {
   // TODO handle more types
   // As soon as more types are supported, need to align the result array in the
@@ -3048,8 +3048,6 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
        (SumType->isIntegerTy() && (SumType->getPrimitiveSizeInBits() == 32 ||
                                    SumType->getPrimitiveSizeInBits() == 64))) &&
       "Unhandled type");
-
-  llvm::Type *Int1Ty = llvm::Type::getInt1Ty(CGM.getLLVMContext());
 
   std::pair<llvm::Value *, llvm::Value *> RfunPair =
       getXteamRedFunctionPtrs(CGF, SumType, RedOp);
@@ -3092,10 +3090,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     llvm_unreachable("Unsupported reduction opcode for scan");
   }
 
-  llvm::Value *IsInclusiveVal = llvm::ConstantInt::get(Int1Ty, IsInclusiveScan);
-
   // Args for __kmpc_xteams_X:
-  // (val, result, status, aggregates, prefixes, rf, rnv, k, n, is_inclusive)
+  // (val, result, status, aggregates, prefixes, rf, rnv, k)
   llvm::Value *Args[] = {Val,
                          DResult,
                          DBlockStatus,
@@ -3103,9 +3099,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
                          DBlockPrefixes,
                          RfunPair.first,
                          NeutralVal,
-                         ThreadStartIndex,
-                         NumElements,
-                         IsInclusiveVal};
+                         ThreadStartIndex};
 
   unsigned WarpSize = CGF.getTarget().getGridValue().GV_Warp_Size;
   assert(WarpSize == 32 || WarpSize == 64);
