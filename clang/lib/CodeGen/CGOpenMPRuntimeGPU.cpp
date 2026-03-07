@@ -3036,8 +3036,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamRedOperation(
 llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
     llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
-    llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex,
-    int BlockSize,
+    llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex, int BlockSize,
     CodeGenModule::XteamRedOpKind RedOp) {
   // TODO handle more types
   // As soon as more types are supported, need to align the result array in the
@@ -3068,8 +3067,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
       NeutralVal = llvm::ConstantFP::get(
           SumType, llvm::APFloat::getLargest(Sem, /*Negative=*/true));
     } else {
-      NeutralVal = llvm::ConstantInt::get(
-          SumType, llvm::APInt::getSignedMinValue(Bits));
+      NeutralVal =
+          llvm::ConstantInt::get(SumType, llvm::APInt::getSignedMinValue(Bits));
     }
     break;
   }
@@ -3081,8 +3080,8 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
       NeutralVal = llvm::ConstantFP::get(
           SumType, llvm::APFloat::getLargest(Sem, /*Negative=*/false));
     } else {
-      NeutralVal = llvm::ConstantInt::get(
-          SumType, llvm::APInt::getSignedMaxValue(Bits));
+      NeutralVal =
+          llvm::ConstantInt::get(SumType, llvm::APInt::getSignedMaxValue(Bits));
     }
     break;
   }

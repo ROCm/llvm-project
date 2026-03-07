@@ -11010,8 +11010,7 @@ static void emitTargetCallKernelLaunch(
     // array and `teams_done_ptr`.
     // 2. The Xteam Scan Reduction kernels require a third helper variable -
     // `scan_storage` array.
-    size_t ExpectedNumArgs =
-        CGF.CGM.isXteamScanKernel() ? 3 : 2;
+    size_t ExpectedNumArgs = CGF.CGM.isXteamScanKernel() ? 3 : 2;
     assert((CapturedVars.size() ==
             CapturedCount + ExpectedNumArgs * XteamRVM.size()) &&
            "Unexpected number of captured vars");
@@ -11138,7 +11137,7 @@ static void emitTargetCallKernelLaunch(
           if (CGF.CGM.isXteamScanKernel()) {
             // d_scan_storage layout (uniform for both NoLoop and segmented):
             //   [block_aggregates][block_prefixes][scan_result][block_status]
-            //    T[NumTeams]       T[NumTeams]     T[Grid]      uint32_t[NumTeams+1]
+            //    T[NumTeams]       T[NumTeams]     T[Grid] uint32_t[NumTeams+1]
             // No alignment padding needed since T is at least 4 bytes.
             llvm::Value *NumTeams = XteamRedNumTeamsFromClauseVal
                                         ? XteamRedNumTeamsFromClauseVal
@@ -11153,9 +11152,8 @@ static void emitTargetCallKernelLaunch(
             // size of block_aggregates + block_prefixes (2 * NumTeams each)
             llvm::Value *TwoTimesNumTeams = CGF.Builder.CreateMul(
                 NumTeams, llvm::ConstantInt::get(CGF.Int64Ty, 2));
-            llvm::Value *ValuesBytes =
-                CGF.Builder.CreateMul(TwoTimesNumTeams, RedVarTySz,
-                                      "values_bytes");
+            llvm::Value *ValuesBytes = CGF.Builder.CreateMul(
+                TwoTimesNumTeams, RedVarTySz, "values_bytes");
             // size of block_status (uint32_t per team, plus one done-counter)
             uint64_t StatusElemSz =
                 CGF.CGM.getDataLayout().getTypeAllocSize(CGF.Int32Ty);
@@ -11209,7 +11207,6 @@ static void emitTargetCallKernelLaunch(
                       CGF.CGM.getModule(), OMPRTL_omp_target_memcpy),
                   MemcpyArgs);
             }
-
           }
         }
         CGF.CGM.ReductionVars.push_back(DTeamValsInst);

@@ -89,7 +89,7 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
     if (omp_thread_num == 0) {
       team_vals[omp_team_num] = team_result;
       td = atomic::inc(teams_done_ptr, NumTeams - 1u, atomic::acq_rel,
-                      atomic::MemScopeTy::device);
+                       atomic::MemScopeTy::device);
     }
 
     // This sync needed so all threads from last team see the shared volatile

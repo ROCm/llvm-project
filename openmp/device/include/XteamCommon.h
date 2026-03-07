@@ -253,7 +253,8 @@ _XTEAM_INLINE_ATTR float _Complex shfl_up(float _Complex var, int offset) {
 /// Intra-wave reduction using butterfly pattern (shfl_xor)
 /// Reduces all values in a wave to a single value in lane 0
 template <typename T>
-_XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T), uint32_t block_size) {
+_XTEAM_INLINE_ATTR T wave_reduce(T val, void (*_rf)(T *, T),
+                                 uint32_t block_size) {
   // If block is smaller than warp, start with block_size/2 to avoid
   // shuffling with inactive lanes
   const uint32_t start_offset =
@@ -276,7 +277,8 @@ _XTEAM_INLINE_ATTR T wave_scan(T val, void (*_rf)(T *, T), const T rnv,
   const uint32_t lane = mapping::getThreadIdInWarp();
 
   // Determine the scan limit
-  const uint32_t limit = num_elements < _XTEAM_WARP_SIZE ? num_elements : _XTEAM_WARP_SIZE;
+  const uint32_t limit =
+      num_elements < _XTEAM_WARP_SIZE ? num_elements : _XTEAM_WARP_SIZE;
 
   // First do inclusive scan
   for (unsigned offset = 1; offset < limit; offset <<= 1) {
@@ -300,8 +302,7 @@ _XTEAM_INLINE_ATTR T wave_inclusive_scan(T val, void (*_rf)(T *, T),
 
 template <typename T>
 _XTEAM_INLINE_ATTR T wave_exclusive_scan(T val, void (*_rf)(T *, T),
-                                         const T rnv,
-                                         uint32_t num_elements) {
+                                         const T rnv, uint32_t num_elements) {
   return wave_scan<T, false>(val, _rf, rnv, num_elements);
 }
 
@@ -317,7 +318,8 @@ _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
                                                   _XTEAM_RF_LDS T *),
                                   const T rnv, _XTEAM_RF_LDS T *wave_lds) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t num_waves =
+      (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
   const uint32_t tid = mapping::getThreadIdInBlock();
 
@@ -349,7 +351,8 @@ _XTEAM_INLINE_ATTR T block_inclusive_scan(T val, void (*_rf)(T *, T),
                                           const T rnv,
                                           _XTEAM_RF_LDS T *wave_totals) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t num_waves =
+      (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
   const uint32_t wave_num = mapping::getThreadIdInBlock() / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
 
@@ -388,7 +391,8 @@ _XTEAM_INLINE_ATTR T block_exclusive_scan(T val, void (*_rf)(T *, T),
                                           const T rnv,
                                           _XTEAM_RF_LDS T *wave_totals) {
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t num_waves =
+      (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
   const uint32_t wave_num = mapping::getThreadIdInBlock() / _XTEAM_WARP_SIZE;
   const uint32_t lane_num = mapping::getThreadIdInWarp();
 

@@ -52,7 +52,8 @@ enum BlockStatus : uint32_t {
 /// as soon as its predecessors are ready, without waiting for all blocks.
 ///
 /// Memory layout:
-/// - block_status[NumTeams + 1]: Status of each block (INVALID/PARTIAL/COMPLETE)
+/// - block_status[NumTeams + 1]: Status of each block
+/// (INVALID/PARTIAL/COMPLETE)
 ///     The extra entry is an atomic done-counter for self-reset.
 /// - block_aggregates[NumTeams]: Written once at PARTIAL, never overwritten.
 /// - block_prefixes[NumTeams]: Written once when transitioning to COMPLETE.
@@ -60,17 +61,20 @@ enum BlockStatus : uint32_t {
 ///   single location is overwritten during PARTIAL-to-COMPLETE transitions.
 ///
 /// \param val Input thread local value (use rnv for out-of-bounds threads)
-/// \param result_array Output array for per-thread scan results (size >= num_elements)
+/// \param result_array Output array for per-thread scan results (size >=
+/// num_elements)
 /// \param block_status Array of block status values
 /// \param block_aggregates Array for per-block aggregates (size: NumTeams)
-/// \param block_prefixes Array for per-block inclusive prefixes (size: NumTeams)
+/// \param block_prefixes Array for per-block inclusive prefixes (size:
+/// NumTeams)
 /// \param _rf Function pointer to reduction function
 /// \param rnv Reduction null value (identity element)
 /// \param k Global thread index
 ///
 /// Note:
 /// - block=team and warp=wave.
-/// - callers must pass rnv for out-of-bounds threads (k >= actual element count).
+/// - callers must pass rnv for out-of-bounds threads (k >= actual element
+/// count).
 /// - this always calculates the exclusive scan; inclusiveness/exclusiveness
 ///   is handled by the caller when writing to the output array.
 ///
@@ -81,7 +85,8 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
             const uint64_t k) {
 
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
-  const uint32_t num_waves = (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
+  const uint32_t num_waves =
+      (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
 
   // Derive thread/team IDs from k (logical iteration index)
   // This is consistent with how the reduction code handles it
@@ -218,8 +223,7 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
 
   if (omp_thread_num == 0) {
     const uint32_t num_blocks = mapping::getNumberOfBlocksInKernel();
-    uint32_t done = atomic::add(&block_status[num_blocks], 1u,
-                                atomic::relaxed,
+    uint32_t done = atomic::add(&block_status[num_blocks], 1u, atomic::relaxed,
                                 atomic::MemScopeTy::device);
     if (done + 1 == num_blocks) {
       // Last block: reset all status entries and the counter for next use
@@ -242,65 +246,57 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
 
 // Single-pass scan functions using decoupled look-back
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_d(double v, double *result, uint32_t *status,
-                double *aggregates, double *prefixes,
-                void (*rf)(double *, double), const double rnv,
+__kmpc_xteams_d(double v, double *result, uint32_t *status, double *aggregates,
+                double *prefixes, void (*rf)(double *, double),
+                const double rnv, const uint64_t k) {
+  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
+}
+
+extern "C" _XTEAM_EXTERN_ATTR void
+__kmpc_xteams_f(float v, float *result, uint32_t *status, float *aggregates,
+                float *prefixes, void (*rf)(float *, float), const float rnv,
                 const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_f(float v, float *result, uint32_t *status,
-                float *aggregates, float *prefixes,
-                void (*rf)(float *, float), const float rnv,
+__kmpc_xteams_i(int v, int *result, uint32_t *status, int *aggregates,
+                int *prefixes, void (*rf)(int *, int), const int rnv,
                 const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_i(int v, int *result, uint32_t *status,
-                int *aggregates, int *prefixes,
-                void (*rf)(int *, int), const int rnv,
-                const uint64_t k) {
-  _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
-}
-
-extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status,
-                 _UI *aggregates, _UI *prefixes,
-                 void (*rf)(_UI *, _UI), const _UI rnv,
+__kmpc_xteams_ui(_UI v, _UI *result, uint32_t *status, _UI *aggregates,
+                 _UI *prefixes, void (*rf)(_UI *, _UI), const _UI rnv,
                  const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_l(long v, long *result, uint32_t *status,
-                long *aggregates, long *prefixes,
-                void (*rf)(long *, long), const long rnv,
+__kmpc_xteams_l(long v, long *result, uint32_t *status, long *aggregates,
+                long *prefixes, void (*rf)(long *, long), const long rnv,
                 const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status,
-                 _UL *aggregates, _UL *prefixes,
-                 void (*rf)(_UL *, _UL), const _UL rnv,
+__kmpc_xteams_ul(_UL v, _UL *result, uint32_t *status, _UL *aggregates,
+                 _UL *prefixes, void (*rf)(_UL *, _UL), const _UL rnv,
                  const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status,
-                 _CD *aggregates, _CD *prefixes,
-                 void (*rf)(_CD *, _CD), const _CD rnv,
+__kmpc_xteams_cd(_CD v, _CD *result, uint32_t *status, _CD *aggregates,
+                 _CD *prefixes, void (*rf)(_CD *, _CD), const _CD rnv,
                  const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }
 
 extern "C" _XTEAM_EXTERN_ATTR void
-__kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status,
-                 _CF *aggregates, _CF *prefixes,
-                 void (*rf)(_CF *, _CF), const _CF rnv,
+__kmpc_xteams_cf(_CF v, _CF *result, uint32_t *status, _CF *aggregates,
+                 _CF *prefixes, void (*rf)(_CF *, _CF), const _CF rnv,
                  const uint64_t k) {
   _xteam_scan(v, result, status, aggregates, prefixes, rf, rnv, k);
 }

@@ -950,12 +950,13 @@ module.exports = grammar({
                                   // If this expression has "await", this
                                   // triggers some special-cased logic to prefer
                                   // function calls. We prefer
-                              // the opposite, though, since function calls may
-                              // contain trailing code blocks, which are
-                              // undesirable here.
-                              //
-                              // To fix that, we simply undo the special casing
-                              // by defining our own `await_expression`.
+                                  // the opposite, though, since function calls
+                                  // may contain trailing code blocks, which are
+                                  // undesirable here.
+                                  //
+                                  // To fix that, we simply undo the special
+                                  // casing by defining our own
+                                  // `await_expression`.
                               choice($._expression, alias($.for_statement_await,
                                                           $.await_expression)),
     for_statement_await : ($) => seq($._await_operator, $._expression),
