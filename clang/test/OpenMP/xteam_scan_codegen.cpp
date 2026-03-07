@@ -180,7 +180,7 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 true)
+// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-64WAVE-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -334,7 +334,7 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 false)
+// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-64WAVE-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -494,7 +494,7 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 true)
+// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -648,7 +648,7 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 false)
+// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -808,7 +808,7 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 true)
+// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-32WAVE-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -962,7 +962,7 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 false)
+// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-32WAVE-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -1122,7 +1122,7 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 true)
+// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -1276,7 +1276,7 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[NUM_ELEMENTS]], i1 false)
+// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP16]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP8]], align 4
@@ -1457,7 +1457,6 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
-// SEGMENTED-64WAVE-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -1467,7 +1466,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-64WAVE-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -1769,7 +1768,6 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
-// SEGMENTED-64WAVE-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -1779,7 +1777,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-64WAVE-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -2096,7 +2094,6 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -2106,7 +2103,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -2408,7 +2405,6 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -2418,7 +2414,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -2735,7 +2731,6 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
-// SEGMENTED-32WAVE-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -2745,7 +2740,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-32WAVE-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -3047,7 +3042,6 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
-// SEGMENTED-32WAVE-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -3057,7 +3051,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-32WAVE-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -3374,7 +3368,6 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -3384,7 +3377,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4
@@ -3686,7 +3679,6 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP17]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -3696,7 +3688,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP9]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]], i64 [[TMP51]], i1 false)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP18]])
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP18]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP9]], align 4

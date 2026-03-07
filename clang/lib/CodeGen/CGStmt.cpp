@@ -539,10 +539,7 @@ void CodeGenFunction::EmitNoLoopXteamScanCode(const OMPExecutableDirective &D,
   // Generate call to the DeviceRTL single-pass scan
   // ALL threads participate; the runtime handles k >= N internally
   EmitBlock(ScanBB);
-  bool IsInclusiveScan =
-      CGM.OMPPresentScanDirective->hasClausesOfKind<OMPInclusiveClause>();
-  EmitXteamScanSum(CapturedForStmt, *Args, CGM.getXteamRedBlockSize(D),
-                   NumElements, IsInclusiveScan);
+  EmitXteamScanSum(CapturedForStmt, *Args, CGM.getXteamRedBlockSize(D));
 
   // Valid threads: execute after scan block
   // Invalid threads: skip to done
@@ -784,8 +781,7 @@ void CodeGenFunction::EmitXteamRedOperation(const ForStmt *FStmt,
 
 void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
                                        const FunctionArgList &Args,
-                                       int BlockSize, llvm::Value *NumElements,
-                                       bool IsInclusiveScan) {
+                                       int BlockSize) {
   auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGM.getOpenMPRuntime());
   const CodeGenModule::XteamRedVarMap &RedVarMap = CGM.getXteamRedVarMap(FStmt);
   llvm::Type *Int8Ty = llvm::Type::getInt8Ty(getLLVMContext());
@@ -796,7 +792,6 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
   llvm::Value *NumTeams = Builder.CreateIntCast(CGM.getXteamRedNumTeams(FStmt),
                                                 Int64Ty, /*isSigned=*/false);
   assert(NumTeams && "Number of teams cannot be null");
-  assert(NumElements && "NumElements cannot be null");
 
   auto XteamOrdVars = CGM.getXteamOrderedRedVar(FStmt);
   // Always emit calls to Xteam device functions in the same order as
@@ -852,7 +847,7 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
                        DBlockStatus, DBlockAggregates, DBlockPrefixes,
-                       ThreadStartIdx, NumElements, BlockSize, IsInclusiveScan,
+                       ThreadStartIdx, BlockSize,
                        RVI.Opcode);
 
     // Load scan result back into the reduction variable so the
@@ -2690,10 +2685,7 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       // handled in Phase 2 by re-emitting the before-scan block (to
       // recompute running sums on top of the cross-team prefix) and the
       // after-scan block (to write the per-element result).
-      llvm::Value *NumElementsI64 =
-          Builder.CreateIntCast(NumElements, Int64Ty, /*isSigned=*/false);
-      EmitXteamScanSum(&S, *Args, CGM.getXteamRedBlockSize(*BigJumpLoopLD),
-                       NumElementsI64, /*IsInclusiveScan=*/false);
+      EmitXteamScanSum(&S, *Args, CGM.getXteamRedBlockSize(*BigJumpLoopLD));
     }
     // DoneBB was created before and referenced by the thread-guard conditional
     // branch. It must be emitted for both phases.

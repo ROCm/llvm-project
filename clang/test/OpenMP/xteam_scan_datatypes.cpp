@@ -203,7 +203,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP31:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -213,7 +212,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -515,7 +514,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP34:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -525,7 +523,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -842,7 +840,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP36:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -852,7 +849,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -1154,7 +1151,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP38:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -1164,7 +1160,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i32, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i32, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i32, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store i32 [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -1481,7 +1477,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP41:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 8
@@ -1491,7 +1486,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i64, ptr addrspace(5) [[TMP7]], align 8
-// CHECK-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i64, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i64, ptr [[TMP58]], align 8
 // CHECK-NEXT:    store i64 [[TMP59]], ptr addrspace(5) [[TMP7]], align 8
@@ -1793,7 +1788,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP43:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 8
@@ -1803,7 +1797,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load i64, ptr addrspace(5) [[TMP7]], align 8
-// CHECK-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr i64, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load i64, ptr [[TMP58]], align 8
 // CHECK-NEXT:    store i64 [[TMP59]], ptr addrspace(5) [[TMP7]], align 8
@@ -2120,7 +2114,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP45:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 8
@@ -2130,7 +2123,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load double, ptr addrspace(5) [[TMP7]], align 8
-// CHECK-NEXT:    call void @__kmpc_xteams_d(double [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_d(double [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr double, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load double, ptr [[TMP58]], align 8
 // CHECK-NEXT:    store double [[TMP59]], ptr addrspace(5) [[TMP7]], align 8
@@ -2432,7 +2425,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP47:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 8
@@ -2442,7 +2434,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load double, ptr addrspace(5) [[TMP7]], align 8
-// CHECK-NEXT:    call void @__kmpc_xteams_d(double [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_d(double [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr double, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load double, ptr [[TMP58]], align 8
 // CHECK-NEXT:    store double [[TMP59]], ptr addrspace(5) [[TMP7]], align 8
@@ -2759,7 +2751,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP49:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -2769,7 +2760,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load float, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_f(float [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_f(float [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr float, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load float, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store float [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -3071,7 +3062,6 @@ int main() {
 // CHECK-NEXT:    store i32 [[TMP50]], ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP51:![0-9]+]]
 // CHECK:       for.end:
-// CHECK-NEXT:    [[TMP51:%.*]] = zext i32 [[NUM_ELEMENTS]] to i64
 // CHECK-NEXT:    [[TMP52:%.*]] = zext i32 [[TMP15]] to i64
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    [[VALUES_BYTES:%.*]] = mul i64 [[TMP52]], 4
@@ -3081,7 +3071,7 @@ int main() {
 // CHECK-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // CHECK-NEXT:    [[TMP56:%.*]] = getelementptr i8, ptr [[TMP53]], i64 [[STATUS_OFFSET]]
 // CHECK-NEXT:    [[TMP57:%.*]] = load float, ptr addrspace(5) [[TMP7]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteams_f(float [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP16]], i64 [[TMP51]], i1 false)
+// CHECK-NEXT:    call void @__kmpc_xteams_f(float [[TMP57]], ptr [[TMP54]], ptr [[TMP56]], ptr [[TMP53]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP16]])
 // CHECK-NEXT:    [[TMP58:%.*]] = getelementptr float, ptr [[TMP54]], i64 [[TMP16]]
 // CHECK-NEXT:    [[TMP59:%.*]] = load float, ptr [[TMP58]], align 4
 // CHECK-NEXT:    store float [[TMP59]], ptr addrspace(5) [[TMP7]], align 4
@@ -3377,7 +3367,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 true)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
@@ -3533,7 +3523,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 false)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
@@ -3695,7 +3685,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 true)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
@@ -3851,7 +3841,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i32, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 false)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i32, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i32, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store i32 [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
@@ -4013,7 +4003,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i64, ptr addrspace(5) [[TMP6]], align 8
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 true)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i64, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i64, ptr [[TMP38]], align 8
 // NO-LOOP-NEXT:    store i64 [[TMP39]], ptr addrspace(5) [[TMP6]], align 8
@@ -4169,7 +4159,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load i64, ptr addrspace(5) [[TMP6]], align 8
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 false)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_l(i64 [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_l, i64 0, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr i64, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load i64, ptr [[TMP38]], align 8
 // NO-LOOP-NEXT:    store i64 [[TMP39]], ptr addrspace(5) [[TMP6]], align 8
@@ -4331,7 +4321,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load double, ptr addrspace(5) [[TMP6]], align 8
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_d(double [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 true)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_d(double [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr double, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load double, ptr [[TMP38]], align 8
 // NO-LOOP-NEXT:    store double [[TMP39]], ptr addrspace(5) [[TMP6]], align 8
@@ -4487,7 +4477,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load double, ptr addrspace(5) [[TMP6]], align 8
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_d(double [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 false)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_d(double [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_d, double 0.000000e+00, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr double, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load double, ptr [[TMP38]], align 8
 // NO-LOOP-NEXT:    store double [[TMP39]], ptr addrspace(5) [[TMP6]], align 8
@@ -4649,7 +4639,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load float, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_f(float [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 true)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_f(float [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr float, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load float, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store float [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
@@ -4805,7 +4795,7 @@ int main() {
 // NO-LOOP-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[VALUES_BYTES]], [[RESULT_BYTES]]
 // NO-LOOP-NEXT:    [[TMP36:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
 // NO-LOOP-NEXT:    [[TMP37:%.*]] = load float, ptr addrspace(5) [[TMP6]], align 4
-// NO-LOOP-NEXT:    call void @__kmpc_xteams_f(float [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP14]], i64 [[NUM_ELEMENTS]], i1 false)
+// NO-LOOP-NEXT:    call void @__kmpc_xteams_f(float [[TMP37]], ptr [[TMP34]], ptr [[TMP36]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, float 0.000000e+00, i64 [[TMP14]])
 // NO-LOOP-NEXT:    [[TMP38:%.*]] = getelementptr float, ptr [[TMP34]], i64 [[TMP14]]
 // NO-LOOP-NEXT:    [[TMP39:%.*]] = load float, ptr [[TMP38]], align 4
 // NO-LOOP-NEXT:    store float [[TMP39]], ptr addrspace(5) [[TMP6]], align 4
