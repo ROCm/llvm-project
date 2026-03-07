@@ -54,24 +54,10 @@ unsigned int ignore_times = 2; // ignore this many timings first
 
 unsigned int test_run_rc = 0;
 
-template <typename T, bool> void run_tests(const uint64_t);
+// FIXME: Template functions for **host**-side parallelism don't compile.
+// Therefore pragmas are commented. Therefore we essentially have sequential
+// execution on host.
 
-int main(int argc, char *argv[]) {
-  std::cout << std::endl
-            << "TEST INT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
-  run_tests<int, true>(ARRAY_SIZE);
-  std::cout << std::endl
-            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"
-            << std::endl;
-  run_tests<unsigned, true>(ARRAY_SIZE);
-  if (test_run_rc == 0)
-    printf("ALL TESTS PASSED\n");
-  return test_run_rc;
-}
-
-// FIXME: Template function for omp_dot doesn't compile. Therefore pragmas are
-// commented. Therefore `omp_dot` essentially represents sequential execution on
-// host.
 template <typename T> T *omp_dot(T *a, T *b, uint64_t array_size) {
   T *dot_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T sum = 0;
@@ -84,9 +70,6 @@ template <typename T> T *omp_dot(T *a, T *b, uint64_t array_size) {
   return dot_arr;
 }
 
-// FIXME: Template function for omp_max doesn't compile. Therefore pragmas are
-// commented. Therefore `omp_max` essentially represents sequential execution on
-// host.
 template <typename T> T *omp_max(T *a, uint64_t array_size) {
   T *max_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T max_val = std::numeric_limits<T>::lowest();
@@ -99,9 +82,6 @@ template <typename T> T *omp_max(T *a, uint64_t array_size) {
   return max_arr;
 }
 
-// FIXME: Template function for omp_min doesn't compile. Therefore pragmas are
-// commented. Therefore `omp_min` essentially represents sequential execution on
-// host.
 template <typename T> T *omp_min(T *a, uint64_t array_size) {
   T *min_arr = (T *)aligned_alloc(ALIGNMENT, sizeof(T) * array_size);
   T min_val = std::numeric_limits<T>::max();
@@ -151,9 +131,9 @@ template <typename T> T *sim_dot(T *a, T *b, uint64_t array_size) {
            i++) {
         val0 += a[k * stride + i] * b[k * stride + i];
       }
-      _overload_to_extern_scan_sum(val0, d_scan_out, d_status, d_aggregates,
-                                   d_prefixes, T(0), k,
-                                   (uint64_t)_XTEAM_TOTAL_NUM_THREADS, false);
+      get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
+                                d_prefixes, get_kmpc_rfun_sum_func<T>(), T(0),
+                                k);
     }
 
 // K2: redistribution
@@ -206,9 +186,8 @@ template <typename T> T *sim_max(T *c, uint64_t array_size) {
            i++) {
         val0 = std::max(val0, c[k * stride + i]);
       }
-      _overload_to_extern_scan_max(val0, d_scan_out, d_status, d_aggregates,
-                                   d_prefixes, rnv, k,
-                                   (uint64_t)_XTEAM_TOTAL_NUM_THREADS, false);
+      get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
+                                d_prefixes, get_kmpc_rfun_max_func<T>(), rnv, k);
     }
 
 // K2: redistribution
@@ -261,9 +240,8 @@ template <typename T> T *sim_min(T *c, uint64_t array_size) {
            i++) {
         val0 = std::min(val0, c[k * stride + i]);
       }
-      _overload_to_extern_scan_min(val0, d_scan_out, d_status, d_aggregates,
-                                   d_prefixes, rnv, k,
-                                   (uint64_t)_XTEAM_TOTAL_NUM_THREADS, false);
+      get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
+                                d_prefixes, get_kmpc_rfun_min_func<T>(), rnv, k);
     }
 
 // K2: redistribution
@@ -472,4 +450,17 @@ void run_tests(uint64_t array_size) {
   free(a);
   free(b);
   free(c);
+}
+
+int main(int argc, char *argv[]) {
+  std::cout << std::endl
+            << "TEST INT " << _XTEAM_NUM_THREADS << " THREADS" << std::endl;
+  run_tests<int, true>(ARRAY_SIZE);
+  std::cout << std::endl
+            << "TEST UNSIGNED INT " << _XTEAM_NUM_THREADS << " THREADS"
+            << std::endl;
+  run_tests<unsigned, true>(ARRAY_SIZE);
+  if (test_run_rc == 0)
+    printf("ALL TESTS PASSED\n");
+  return test_run_rc;
 }
