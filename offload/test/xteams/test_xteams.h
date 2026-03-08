@@ -25,7 +25,8 @@
 #define _XTEAMS_FUNC(T, TS, ATTR, BODY)                                        \
   ATTR void __kmpc_xteams_##TS(T v, T *result, uint32_t *status,               \
                                T *aggregates, T *prefixes, void (*rf)(T *, T), \
-                               const T rnv, const uint64_t k) BODY
+                               const T rnv, const uint64_t k,                  \
+                               bool is_inclusive) BODY
 
 #if defined(__AMDGCN__) || defined(__NVPTX__)
 extern "C" {

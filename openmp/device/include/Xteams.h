@@ -57,11 +57,12 @@ extern "C" {
 /// \param rf Function pointer to reduction function
 /// \param rnv Reduction null value (identity element)
 /// \param k Global thread index (0 to NumTeams * BlockSize - 1)
+/// \param is_inclusive True for inclusive scan, false for exclusive
 
-#define _XTEAMS_DECL(T, TS)                                                     \
+#define _XTEAMS_DECL(T, TS)                                                    \
   void _XTEAM_EXTERN_ATTR __kmpc_xteams_##TS(                                  \
       T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
-      void (*rf)(T *, T), const T rnv, const uint64_t k);
+      void (*rf)(T *, T), const T rnv, const uint64_t k, bool is_inclusive);
 
 _XTEAMS_DECL(_CD, cd)
 _XTEAMS_DECL(_CF, cf)

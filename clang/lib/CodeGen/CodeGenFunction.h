@@ -5712,7 +5712,7 @@ private:
                              int BlockSize);
   /// For every scan reduction variable, emit a call to the DeviceRTL API.
   void EmitXteamScanSum(const ForStmt *FStmt, const FunctionArgList &Args,
-                        int BlockSize);
+                        int BlockSize, bool IsInclusiveScan);
   /// Emit reduction into local variable for a statement within the BigJumpLoop.
   bool EmitXteamRedStmt(const Stmt *S);
   /// Emit reduction into local variable for a statement within the BigJumpLoop.

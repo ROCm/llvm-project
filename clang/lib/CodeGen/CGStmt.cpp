@@ -540,7 +540,10 @@ void CodeGenFunction::EmitNoLoopXteamScanCode(const OMPExecutableDirective &D,
   // Generate call to the DeviceRTL single-pass scan
   // ALL threads participate; the runtime handles k >= N internally
   EmitBlock(ScanBB);
-  EmitXteamScanSum(CapturedForStmt, *Args, CGM.getXteamRedBlockSize(D));
+  bool IsInclusiveScan =
+      CGM.OMPPresentScanDirective->hasClausesOfKind<OMPInclusiveClause>();
+  EmitXteamScanSum(CapturedForStmt, *Args, CGM.getXteamRedBlockSize(D),
+                   IsInclusiveScan);
 
   // Valid threads: execute after scan block
   // Invalid threads: skip to done
@@ -627,13 +630,11 @@ void CodeGenFunction::EmitXteamRedCode(const OMPExecutableDirective &D,
     //    be generated.
     //
     // 2. NoLoop Scan Kernel: This is a special case when the number of
-    //    iterations in the captured 'For' Stmt(i.e. total number of elements in
-    //    the input array that has to be scanned) is smaller than or equal to
+    //    iterations in the captured 'For' stmt (i.e. total number of elements
+    //    in the input array that has to be scanned) is smaller than or equal to
     //    the total number of parallel work-items available during the kernel
     //    execution. This will generate a more time and space efficient kernel
     //    for this case.
-    //
-    // Both variants now use the single-pass decoupled look-back algorithm.
     //
     if (CGM.isXteamSegmentedScanKernel()) {
       // Follow the Xteam Segmented Scan Kernel Codegen
@@ -782,7 +783,8 @@ void CodeGenFunction::EmitXteamRedOperation(const ForStmt *FStmt,
 
 void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
                                        const FunctionArgList &Args,
-                                       int BlockSize) {
+                                       int BlockSize,
+                                       bool IsInclusiveScan) {
   auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGM.getOpenMPRuntime());
   const CodeGenModule::XteamRedVarMap &RedVarMap = CGM.getXteamRedVarMap(FStmt);
   llvm::Type *Int8Ty = llvm::Type::getInt8Ty(getLLVMContext());
@@ -847,7 +849,7 @@ void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
 
     RT.getXteamScanSum(*this, Builder.CreateLoad(RVI.RedVarAddr), DResult,
                        DBlockStatus, DBlockAggregates, DBlockPrefixes,
-                       ThreadStartIdx, BlockSize, RVI.Opcode);
+                       ThreadStartIdx, BlockSize, IsInclusiveScan, RVI.Opcode);
 
     // Load scan result back into the reduction variable so the
     // AfterScanBlock can consume it: RedVar = result_array[k]
@@ -2669,7 +2671,8 @@ void CodeGenFunction::EmitForStmtWithArgs(const ForStmt &S,
       // handled in Phase 2 by re-emitting the before-scan block (to
       // recompute running sums on top of the cross-team prefix) and the
       // after-scan block (to write the per-element result).
-      EmitXteamScanSum(&S, *Args, CGM.getXteamRedBlockSize(*BigJumpLoopLD));
+      EmitXteamScanSum(&S, *Args, CGM.getXteamRedBlockSize(*BigJumpLoopLD),
+                       /*IsInclusiveScan=*/false);
     }
     // DoneBB was created before and referenced by the thread-guard conditional
     // branch. It must be emitted for both phases.
