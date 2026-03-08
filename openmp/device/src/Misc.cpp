@@ -149,8 +149,9 @@ __attribute__((noinline)) void *__alt_libc_malloc(size_t sz) {
 __attribute__((noinline)) void __alt_libc_free(void *ptr) {
   unsigned long long Ret;
   rpc::Client::Port Port = ompx::impl::Client.open<ALT_LIBC_FREE>();
-  Port.send(
-      [=](rpc::Buffer *buffer, uint32_t) { buffer->data[0] = (uint64_t)ptr; });
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = (uint64_t)ptr;
+  });
   return;
 }
 // Calls to __llvm_omp_emissary_rpc and __llvm_omp_emissary_premalloc are
@@ -172,8 +173,9 @@ void *__llvm_omp_emissary_premalloc(uint32_t sz32) {
 __attribute__((noinline)) void __llvm_omp_emissary_free(void *ptr) {
   unsigned long long Ret;
   rpc::Client::Port Port = ompx::impl::Client.open<EMISSARY_FREE>();
-  Port.send(
-      [=](rpc::Buffer *buffer, uint32_t) { buffer->data[0] = (uint64_t)ptr; });
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = (uint64_t)ptr;
+  });
   return;
 }
 __attribute__((noinline)) unsigned long long
