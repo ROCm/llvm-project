@@ -782,8 +782,7 @@ void CodeGenFunction::EmitXteamRedOperation(const ForStmt *FStmt,
 
 void CodeGenFunction::EmitXteamScanSum(const ForStmt *FStmt,
                                        const FunctionArgList &Args,
-                                       int BlockSize,
-                                       bool IsInclusiveScan) {
+                                       int BlockSize, bool IsInclusiveScan) {
   auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGM.getOpenMPRuntime());
   const CodeGenModule::XteamRedVarMap &RedVarMap = CGM.getXteamRedVarMap(FStmt);
   llvm::Type *Int8Ty = llvm::Type::getInt8Ty(getLLVMContext());

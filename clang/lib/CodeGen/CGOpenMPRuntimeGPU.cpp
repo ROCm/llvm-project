@@ -3038,8 +3038,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
     llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
     llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex, int BlockSize,
-    bool IsInclusiveScan,
-    CodeGenModule::XteamRedOpKind RedOp) {
+    bool IsInclusiveScan, CodeGenModule::XteamRedOpKind RedOp) {
   // TODO handle more types
   // As soon as more types are supported, need to align the result array in the
   // combined memory field that is passed to the device function.

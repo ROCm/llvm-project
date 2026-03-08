@@ -176,12 +176,12 @@ _XTEAMR_DEF(_US, us)
 
 #undef _XTEAMR_DEF
 
-#define _XTEAMR_DEF_FAST_SUM(T, TS)                                                     \
-  _EXT_ATTR __kmpc_xteamr_##TS##_fast_sum(                                                \
+#define _XTEAMR_DEF_FAST_SUM(T, TS)                                            \
+  _EXT_ATTR __kmpc_xteamr_##TS##_fast_sum(                                     \
       T v, T *r_p, T *tvs, uint32_t *td, void (*rf)(T *, T),                   \
       void (*rflds)(_RF_LDS T *, _RF_LDS T *), const T rnv, const uint64_t k,  \
       const uint32_t nt, ompx::atomic::MemScopeTy Scope) {                     \
-    _xteam_reduction<T, true>(v, r_p, tvs, td, rf, rflds, rnv, k, nt, Scope);        \
+    _xteam_reduction<T, true>(v, r_p, tvs, td, rf, rflds, rnv, k, nt, Scope);  \
   }
 
 _XTEAMR_DEF_FAST_SUM(__bf16, bf)
