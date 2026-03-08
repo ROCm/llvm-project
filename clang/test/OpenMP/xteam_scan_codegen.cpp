@@ -105,11 +105,11 @@ int main() {
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -137,81 +137,76 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-64WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-64WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-64WAVE-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-64WAVE-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-64WAVE:       omp.before.scan:
 // CHECK-64WAVE-NEXT:    store i32 0, ptr [[SUM15_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-64WAVE:       omp.before.scan.bb:
-// CHECK-64WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM]]
-// CHECK-64WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
-// CHECK-64WAVE-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP28:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP29:%.*]] = zext i32 [[TMP28]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP22:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], [[TMP21]]
+// CHECK-64WAVE-NEXT:    store i32 [[TMP23]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP25:%.*]] = zext i32 [[TMP24]] to i64
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-64WAVE:       omp.exit.inscan.bb:
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-64WAVE:       omp.inscan.dispatch:
 // CHECK-64WAVE-NEXT:    br label [[OMP_BEFORE_SCAN_BB:%.*]]
 // CHECK-64WAVE:       omp.after.scan.bb:
-// CHECK-64WAVE-NEXT:    [[TMP30:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP30]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP26]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-64WAVE-NEXT:    [[TMP31:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP31]], ptr [[ARRAYIDX7]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP27:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP27]], ptr [[ARRAYIDX7]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-64WAVE:       omp.body.continue:
 // CHECK-64WAVE-NEXT:    br label [[OMP_SCAN]]
 // CHECK-64WAVE:       omp.scan:
-// CHECK-64WAVE-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-64WAVE-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-64WAVE-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-64WAVE-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-64WAVE-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-64WAVE-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-64WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 256
-// CHECK-64WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-64WAVE-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-64WAVE-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 256
+// CHECK-64WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
-// CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-64WAVE-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-64WAVE-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
+// CHECK-64WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-64WAVE:       omp.after.scan:
 // CHECK-64WAVE-NEXT:    store i32 0, ptr [[SUM18_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-64WAVE:       omp.before.scan.bb9:
-// CHECK-64WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM10]]
-// CHECK-64WAVE-NEXT:    [[TMP42:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP44:%.*]] = add i32 [[TMP43]], [[TMP42]]
-// CHECK-64WAVE-NEXT:    store i32 [[TMP44]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP40:%.*]] = add i32 [[TMP39]], [[TMP38]]
+// CHECK-64WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-64WAVE:       omp.exit.inscan.bb12:
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-64WAVE:       omp.inscan.dispatch13:
-// CHECK-64WAVE-NEXT:    [[TMP45:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP45]] to i64
-// CHECK-64WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-64WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP42:%.*]] = zext i32 [[TMP41]] to i64
+// CHECK-64WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-64WAVE-NEXT:    br label [[OMP_AFTER_SCAN_BB15:%.*]]
 // CHECK-64WAVE:       omp.after.scan.bb15:
-// CHECK-64WAVE-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-64WAVE-NEXT:    [[TMP48:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP48]], ptr [[ARRAYIDX17]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP44]], ptr [[ARRAYIDX17]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-64WAVE:       omp.body.continue18:
 // CHECK-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -261,11 +256,11 @@ int main() {
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -293,87 +288,82 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-64WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-64WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-64WAVE-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-64WAVE-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-64WAVE:       omp.before.scan:
 // CHECK-64WAVE-NEXT:    store i32 0, ptr [[SUM25_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-64WAVE:       omp.before.scan.bb:
-// CHECK-64WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM]]
-// CHECK-64WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP25]], ptr [[ARRAYIDX]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP21]], ptr [[ARRAYIDX]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-64WAVE:       omp.exit.inscan.bb:
-// CHECK-64WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP27:%.*]] = zext i32 [[TMP26]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP22:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP23:%.*]] = zext i32 [[TMP22]] to i64
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-64WAVE:       omp.inscan.dispatch:
 // CHECK-64WAVE-NEXT:    br label [[OMP_AFTER_SCAN_BB:%.*]]
 // CHECK-64WAVE:       omp.after.scan.bb:
-// CHECK-64WAVE-NEXT:    [[TMP28:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP28]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP24]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-64WAVE-NEXT:    [[TMP29:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP30:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP31:%.*]] = add i32 [[TMP30]], [[TMP29]]
-// CHECK-64WAVE-NEXT:    store i32 [[TMP31]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
+// CHECK-64WAVE-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-64WAVE:       omp.body.continue:
 // CHECK-64WAVE-NEXT:    br label [[OMP_SCAN]]
 // CHECK-64WAVE:       omp.scan:
-// CHECK-64WAVE-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-64WAVE-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-64WAVE-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-64WAVE-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-64WAVE-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-64WAVE-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-64WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 256
-// CHECK-64WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-64WAVE-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-64WAVE-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 256
+// CHECK-64WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-64WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
-// CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-64WAVE-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-64WAVE-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
+// CHECK-64WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-64WAVE-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-64WAVE:       omp.after.scan:
 // CHECK-64WAVE-NEXT:    store i32 0, ptr [[SUM28_ASCAST]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-64WAVE:       omp.before.scan.bb9:
-// CHECK-64WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM10]]
-// CHECK-64WAVE-NEXT:    [[TMP42:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    store i32 [[TMP42]], ptr [[ARRAYIDX11]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    store i32 [[TMP38]], ptr [[ARRAYIDX11]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-64WAVE:       omp.exit.inscan.bb12:
 // CHECK-64WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-64WAVE:       omp.inscan.dispatch13:
-// CHECK-64WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP44:%.*]] = zext i32 [[TMP43]] to i64
-// CHECK-64WAVE-NEXT:    [[TMP45:%.*]] = icmp eq i64 [[TMP44]], 0
-// CHECK-64WAVE-NEXT:    br i1 [[TMP45]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
+// CHECK-64WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP40:%.*]] = zext i32 [[TMP39]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP41:%.*]] = icmp eq i64 [[TMP40]], 0
+// CHECK-64WAVE-NEXT:    br i1 [[TMP41]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
 // CHECK-64WAVE:       omp.exclusive.dec:
-// CHECK-64WAVE-NEXT:    [[TMP46:%.*]] = sub nuw i64 [[TMP44]], 1
-// CHECK-64WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-64WAVE-NEXT:    [[TMP42:%.*]] = sub nuw i64 [[TMP40]], 1
+// CHECK-64WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-64WAVE-NEXT:    br label [[OMP_EXCLUSIVE_COPY_EXIT]]
 // CHECK-64WAVE:       omp.exclusive.copy.exit:
 // CHECK-64WAVE-NEXT:    br label [[OMP_BEFORE_SCAN_BB9:%.*]]
 // CHECK-64WAVE:       omp.after.scan.bb15:
-// CHECK-64WAVE-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-64WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-64WAVE-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-64WAVE-NEXT:    [[TMP48:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP49:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-NEXT:    [[TMP50:%.*]] = add i32 [[TMP49]], [[TMP48]]
-// CHECK-64WAVE-NEXT:    store i32 [[TMP50]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP45:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-NEXT:    [[TMP46:%.*]] = add i32 [[TMP45]], [[TMP44]]
+// CHECK-64WAVE-NEXT:    store i32 [[TMP46]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-64WAVE:       omp.body.continue18:
 // CHECK-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -423,11 +413,11 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -455,81 +445,76 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-64WAVE-512WGSize-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan:
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM15_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan.bb:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = zext i32 [[TMP28]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], [[TMP21]]
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP23]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = zext i32 [[TMP24]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.exit.inscan.bb:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-64WAVE-512WGSize:       omp.inscan.dispatch:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BEFORE_SCAN_BB:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan.bb:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP30]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP26]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP31]], ptr [[ARRAYIDX7]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr [[ARRAYIDX7]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.body.continue:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_SCAN]]
 // CHECK-64WAVE-512WGSize:       omp.scan:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 512
-// CHECK-64WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 512
+// CHECK-64WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan:
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM18_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan.bb9:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM10]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = add i32 [[TMP43]], [[TMP42]]
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP44]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = add i32 [[TMP39]], [[TMP38]]
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.exit.inscan.bb12:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-64WAVE-512WGSize:       omp.inscan.dispatch13:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP45]] to i64
-// CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = zext i32 [[TMP41]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_AFTER_SCAN_BB15:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan.bb15:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP48:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP48]], ptr [[ARRAYIDX17]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP44]], ptr [[ARRAYIDX17]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.body.continue18:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -579,11 +564,11 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -611,87 +596,82 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-64WAVE-512WGSize-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan:
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM25_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan.bb:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP25]], ptr [[ARRAYIDX]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP21]], ptr [[ARRAYIDX]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.exit.inscan.bb:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = zext i32 [[TMP26]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = zext i32 [[TMP22]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-64WAVE-512WGSize:       omp.inscan.dispatch:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_AFTER_SCAN_BB:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan.bb:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP28]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP24]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = add i32 [[TMP30]], [[TMP29]]
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP31]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.body.continue:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_SCAN]]
 // CHECK-64WAVE-512WGSize:       omp.scan:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 512
-// CHECK-64WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 512
+// CHECK-64WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-64WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan:
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM28_ASCAST]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.before.scan.bb9:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM10]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP42]], ptr [[ARRAYIDX11]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP38]], ptr [[ARRAYIDX11]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.exit.inscan.bb12:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-64WAVE-512WGSize:       omp.inscan.dispatch13:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = zext i32 [[TMP43]] to i64
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = icmp eq i64 [[TMP44]], 0
-// CHECK-64WAVE-512WGSize-NEXT:    br i1 [[TMP45]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = zext i32 [[TMP39]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = icmp eq i64 [[TMP40]], 0
+// CHECK-64WAVE-512WGSize-NEXT:    br i1 [[TMP41]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.exclusive.dec:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = sub nuw i64 [[TMP44]], 1
-// CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = sub nuw i64 [[TMP40]], 1
+// CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_EXCLUSIVE_COPY_EXIT]]
 // CHECK-64WAVE-512WGSize:       omp.exclusive.copy.exit:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_BEFORE_SCAN_BB9:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.after.scan.bb15:
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-64WAVE-512WGSize-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP48:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP49:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = add i32 [[TMP49]], [[TMP48]]
-// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = add i32 [[TMP45]], [[TMP44]]
+// CHECK-64WAVE-512WGSize-NEXT:    store i32 [[TMP46]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-64WAVE-512WGSize:       omp.body.continue18:
 // CHECK-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -741,11 +721,11 @@ int main() {
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -773,81 +753,76 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-32WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-32WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-32WAVE-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-32WAVE-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-32WAVE:       omp.before.scan:
 // CHECK-32WAVE-NEXT:    store i32 0, ptr [[SUM15_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-32WAVE:       omp.before.scan.bb:
-// CHECK-32WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM]]
-// CHECK-32WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
-// CHECK-32WAVE-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP28:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP29:%.*]] = zext i32 [[TMP28]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP22:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], [[TMP21]]
+// CHECK-32WAVE-NEXT:    store i32 [[TMP23]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP25:%.*]] = zext i32 [[TMP24]] to i64
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-32WAVE:       omp.exit.inscan.bb:
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-32WAVE:       omp.inscan.dispatch:
 // CHECK-32WAVE-NEXT:    br label [[OMP_BEFORE_SCAN_BB:%.*]]
 // CHECK-32WAVE:       omp.after.scan.bb:
-// CHECK-32WAVE-NEXT:    [[TMP30:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP30]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP26]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-32WAVE-NEXT:    [[TMP31:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP31]], ptr [[ARRAYIDX7]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP27:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP27]], ptr [[ARRAYIDX7]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-32WAVE:       omp.body.continue:
 // CHECK-32WAVE-NEXT:    br label [[OMP_SCAN]]
 // CHECK-32WAVE:       omp.scan:
-// CHECK-32WAVE-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-32WAVE-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-32WAVE-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-32WAVE-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-32WAVE-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-32WAVE-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-32WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 256
-// CHECK-32WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-32WAVE-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-32WAVE-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 256
+// CHECK-32WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
-// CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-32WAVE-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-32WAVE-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
+// CHECK-32WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-32WAVE:       omp.after.scan:
 // CHECK-32WAVE-NEXT:    store i32 0, ptr [[SUM18_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-32WAVE:       omp.before.scan.bb9:
-// CHECK-32WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM10]]
-// CHECK-32WAVE-NEXT:    [[TMP42:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP44:%.*]] = add i32 [[TMP43]], [[TMP42]]
-// CHECK-32WAVE-NEXT:    store i32 [[TMP44]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP40:%.*]] = add i32 [[TMP39]], [[TMP38]]
+// CHECK-32WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-32WAVE:       omp.exit.inscan.bb12:
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-32WAVE:       omp.inscan.dispatch13:
-// CHECK-32WAVE-NEXT:    [[TMP45:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP45]] to i64
-// CHECK-32WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-32WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP42:%.*]] = zext i32 [[TMP41]] to i64
+// CHECK-32WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-32WAVE-NEXT:    br label [[OMP_AFTER_SCAN_BB15:%.*]]
 // CHECK-32WAVE:       omp.after.scan.bb15:
-// CHECK-32WAVE-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-32WAVE-NEXT:    [[TMP48:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP48]], ptr [[ARRAYIDX17]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP44]], ptr [[ARRAYIDX17]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-32WAVE:       omp.body.continue18:
 // CHECK-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -897,11 +872,11 @@ int main() {
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -929,87 +904,82 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-32WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-32WAVE-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-32WAVE-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-32WAVE-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-32WAVE:       omp.before.scan:
 // CHECK-32WAVE-NEXT:    store i32 0, ptr [[SUM25_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-32WAVE:       omp.before.scan.bb:
-// CHECK-32WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM]]
-// CHECK-32WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP25]], ptr [[ARRAYIDX]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP21:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP21]], ptr [[ARRAYIDX]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-32WAVE:       omp.exit.inscan.bb:
-// CHECK-32WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP27:%.*]] = zext i32 [[TMP26]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP22:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP23:%.*]] = zext i32 [[TMP22]] to i64
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-32WAVE:       omp.inscan.dispatch:
 // CHECK-32WAVE-NEXT:    br label [[OMP_AFTER_SCAN_BB:%.*]]
 // CHECK-32WAVE:       omp.after.scan.bb:
-// CHECK-32WAVE-NEXT:    [[TMP28:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP28]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP24]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-32WAVE-NEXT:    [[TMP29:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP30:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP31:%.*]] = add i32 [[TMP30]], [[TMP29]]
-// CHECK-32WAVE-NEXT:    store i32 [[TMP31]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
+// CHECK-32WAVE-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-32WAVE:       omp.body.continue:
 // CHECK-32WAVE-NEXT:    br label [[OMP_SCAN]]
 // CHECK-32WAVE:       omp.scan:
-// CHECK-32WAVE-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-32WAVE-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-32WAVE-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-32WAVE-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-32WAVE-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-32WAVE-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-32WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 256
-// CHECK-32WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-32WAVE-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-32WAVE-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 256
+// CHECK-32WAVE-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-32WAVE-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
-// CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-32WAVE-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-32WAVE-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
+// CHECK-32WAVE-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-32WAVE-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-32WAVE:       omp.after.scan:
 // CHECK-32WAVE-NEXT:    store i32 0, ptr [[SUM28_ASCAST]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-32WAVE:       omp.before.scan.bb9:
-// CHECK-32WAVE-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM10]]
-// CHECK-32WAVE-NEXT:    [[TMP42:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    store i32 [[TMP42]], ptr [[ARRAYIDX11]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    store i32 [[TMP38]], ptr [[ARRAYIDX11]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-32WAVE:       omp.exit.inscan.bb12:
 // CHECK-32WAVE-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-32WAVE:       omp.inscan.dispatch13:
-// CHECK-32WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP44:%.*]] = zext i32 [[TMP43]] to i64
-// CHECK-32WAVE-NEXT:    [[TMP45:%.*]] = icmp eq i64 [[TMP44]], 0
-// CHECK-32WAVE-NEXT:    br i1 [[TMP45]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
+// CHECK-32WAVE-NEXT:    [[TMP39:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP40:%.*]] = zext i32 [[TMP39]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP41:%.*]] = icmp eq i64 [[TMP40]], 0
+// CHECK-32WAVE-NEXT:    br i1 [[TMP41]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
 // CHECK-32WAVE:       omp.exclusive.dec:
-// CHECK-32WAVE-NEXT:    [[TMP46:%.*]] = sub nuw i64 [[TMP44]], 1
-// CHECK-32WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-32WAVE-NEXT:    [[TMP42:%.*]] = sub nuw i64 [[TMP40]], 1
+// CHECK-32WAVE-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-32WAVE-NEXT:    br label [[OMP_EXCLUSIVE_COPY_EXIT]]
 // CHECK-32WAVE:       omp.exclusive.copy.exit:
 // CHECK-32WAVE-NEXT:    br label [[OMP_BEFORE_SCAN_BB9:%.*]]
 // CHECK-32WAVE:       omp.after.scan.bb15:
-// CHECK-32WAVE-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-32WAVE-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-32WAVE-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [64000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-32WAVE-NEXT:    [[TMP48:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP49:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-NEXT:    [[TMP50:%.*]] = add i32 [[TMP49]], [[TMP48]]
-// CHECK-32WAVE-NEXT:    store i32 [[TMP50]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP45:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-NEXT:    [[TMP46:%.*]] = add i32 [[TMP45]], [[TMP44]]
+// CHECK-32WAVE-NEXT:    store i32 [[TMP46]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-32WAVE:       omp.body.continue18:
 // CHECK-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -1059,11 +1029,11 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META7:![0-9]+]], !align [[META8:![0-9]+]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META6:![0-9]+]], !align [[META7:![0-9]+]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1091,81 +1061,76 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-32WAVE-512WGSize-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan:
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM15_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan.bb:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = zext i32 [[TMP28]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], [[TMP21]]
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP23]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = zext i32 [[TMP24]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.exit.inscan.bb:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-32WAVE-512WGSize:       omp.inscan.dispatch:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BEFORE_SCAN_BB:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan.bb:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP30]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP26]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP31]], ptr [[ARRAYIDX7]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr [[ARRAYIDX7]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.body.continue:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_SCAN]]
 // CHECK-32WAVE-512WGSize:       omp.scan:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 512
-// CHECK-32WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 512
+// CHECK-32WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 true)
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan:
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM18_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan.bb9:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP4]], i64 0, i64 [[IDXPROM10]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = add i32 [[TMP43]], [[TMP42]]
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP44]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr [[ARRAYIDX11]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = add i32 [[TMP39]], [[TMP38]]
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.exit.inscan.bb12:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-32WAVE-512WGSize:       omp.inscan.dispatch13:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP45]] to i64
-// CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = zext i32 [[TMP41]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_AFTER_SCAN_BB15:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan.bb15:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP48:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP48]], ptr [[ARRAYIDX17]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP44]], ptr [[ARRAYIDX17]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.body.continue18:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -1215,11 +1180,11 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META7]], !align [[META8]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META6]], !align [[META7]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1247,87 +1212,82 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP18:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP19:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[CMP:%.*]] = icmp sle i32 [[TMP18]], [[TMP19]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[DOTOMP_UB_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr [[DOTOMP_LB_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = sub i32 [[TMP20]], [[TMP21]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = add i32 [[TMP22]], 1
-// CHECK-32WAVE-512WGSize-NEXT:    [[NUM_ELEMENTS:%.*]] = zext i32 [[TMP23]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_BEFORE_SCAN:%.*]], label [[OMP_SCAN:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan:
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM25_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan.bb:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP24]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP20:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM:%.*]] = sext i32 [[TMP20]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP25]], ptr [[ARRAYIDX]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP21:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP21]], ptr [[ARRAYIDX]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.exit.inscan.bb:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = zext i32 [[TMP26]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP22:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP23:%.*]] = zext i32 [[TMP22]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE]]
 // CHECK-32WAVE-512WGSize:       omp.inscan.dispatch:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_AFTER_SCAN_BB:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan.bb:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP28]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP24:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM6:%.*]] = sext i32 [[TMP24]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX7:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM6]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = add i32 [[TMP30]], [[TMP29]]
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP31]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP25:%.*]] = load i32, ptr [[ARRAYIDX7]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP26:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP27:%.*]] = add i32 [[TMP26]], [[TMP25]]
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP27]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.body.continue:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_SCAN]]
 // CHECK-32WAVE-512WGSize:       omp.scan:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = zext i32 [[TMP15]] to i64
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP32]], 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[ONE_ARRAY_BYTES]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP28:%.*]] = zext i32 [[TMP15]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP29:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[ONE_ARRAY_BYTES:%.*]] = mul i64 [[TMP28]], 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP30:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[ONE_ARRAY_BYTES]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TWO_ARRAY_BYTES:%.*]] = mul i64 [[ONE_ARRAY_BYTES]], 2
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[TWO_ARRAY_BYTES]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = mul i64 [[TMP32]], 512
-// CHECK-32WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP36]], 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP31:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[TWO_ARRAY_BYTES]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP32:%.*]] = mul i64 [[TMP28]], 512
+// CHECK-32WAVE-512WGSize-NEXT:    [[RESULT_BYTES:%.*]] = mul i64 [[TMP32]], 4
 // CHECK-32WAVE-512WGSize-NEXT:    [[STATUS_OFFSET:%.*]] = add i64 [[TWO_ARRAY_BYTES]], [[RESULT_BYTES]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = getelementptr i8, ptr [[TMP33]], i64 [[STATUS_OFFSET]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP38]], ptr [[TMP35]], ptr [[TMP37]], ptr [[TMP33]], ptr [[TMP34]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = getelementptr i32, ptr [[TMP35]], i64 [[TMP16]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = load i32, ptr [[TMP39]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP40]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP33:%.*]] = getelementptr i8, ptr [[TMP29]], i64 [[STATUS_OFFSET]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP34:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_xteams_i(i32 [[TMP34]], ptr [[TMP31]], ptr [[TMP33]], ptr [[TMP29]], ptr [[TMP30]], ptr @__kmpc_rfun_sum_i, i32 0, i64 [[TMP16]], i1 false)
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP35:%.*]] = getelementptr i32, ptr [[TMP31]], i64 [[TMP16]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP36:%.*]] = load i32, ptr [[TMP35]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP36]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br i1 [[CMP]], label [[OMP_AFTER_SCAN:%.*]], label [[OMP_KERNEL_DONE:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan:
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr [[SUM28_ASCAST]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_INSCAN_DISPATCH13:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.before.scan.bb9:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP41]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP37:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM10:%.*]] = sext i32 [[TMP37]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX11:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP3]], i64 0, i64 [[IDXPROM10]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP42]], ptr [[ARRAYIDX11]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP38:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP38]], ptr [[ARRAYIDX11]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.exit.inscan.bb12:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BODY_CONTINUE18]]
 // CHECK-32WAVE-512WGSize:       omp.inscan.dispatch13:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = zext i32 [[TMP43]] to i64
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = icmp eq i64 [[TMP44]], 0
-// CHECK-32WAVE-512WGSize-NEXT:    br i1 [[TMP45]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP39:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP40:%.*]] = zext i32 [[TMP39]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP41:%.*]] = icmp eq i64 [[TMP40]], 0
+// CHECK-32WAVE-512WGSize-NEXT:    br i1 [[TMP41]], label [[OMP_EXCLUSIVE_COPY_EXIT:%.*]], label [[OMP_EXCLUSIVE_DEC:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.exclusive.dec:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = sub nuw i64 [[TMP44]], 1
-// CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP46]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP42:%.*]] = sub nuw i64 [[TMP40]], 1
+// CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX14:%.*]] = getelementptr inbounds nuw i32, ptr [[TMP7]], i64 [[TMP42]]
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_EXCLUSIVE_COPY_EXIT]]
 // CHECK-32WAVE-512WGSize:       omp.exclusive.copy.exit:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_BEFORE_SCAN_BB9:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.after.scan.bb15:
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load i32, ptr [[I_ASCAST]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP47]] to i64
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP43:%.*]] = load i32, ptr [[I_ASCAST]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[IDXPROM16:%.*]] = sext i32 [[TMP43]] to i64
 // CHECK-32WAVE-512WGSize-NEXT:    [[ARRAYIDX17:%.*]] = getelementptr inbounds [128000 x i32], ptr [[TMP5]], i64 0, i64 [[IDXPROM16]]
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP48:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP49:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = add i32 [[TMP49]], [[TMP48]]
-// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP50]], ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[ARRAYIDX17]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = load i32, ptr addrspace(5) [[TMP8]], align 4
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = add i32 [[TMP45]], [[TMP44]]
+// CHECK-32WAVE-512WGSize-NEXT:    store i32 [[TMP46]], ptr addrspace(5) [[TMP8]], align 4
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_EXIT_INSCAN_BB12:%.*]]
 // CHECK-32WAVE-512WGSize:       omp.body.continue18:
 // CHECK-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
@@ -1375,11 +1335,11 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9:![0-9]+]], !align [[META10:![0-9]+]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1463,7 +1423,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -1527,11 +1487,11 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1652,7 +1612,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP61:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP62:%.*]] = add i32 1, [[TMP61]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP62]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE:       omp.kernel.done:
@@ -1699,11 +1659,11 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1787,7 +1747,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-64WAVE-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -1851,11 +1811,11 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1982,7 +1942,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP63:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP64:%.*]] = add i32 1, [[TMP63]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP64]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE:       omp.kernel.done:
@@ -2029,11 +1989,11 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9:![0-9]+]], !align [[META10:![0-9]+]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2117,7 +2077,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -2181,11 +2141,11 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2306,7 +2266,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP61:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP62:%.*]] = add i32 1, [[TMP61]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP62]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE-512WGSize:       omp.kernel.done:
@@ -2353,11 +2313,11 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2441,7 +2401,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -2505,11 +2465,11 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2636,7 +2596,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP63:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP64:%.*]] = add i32 1, [[TMP63]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP64]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE-512WGSize:       omp.kernel.done:
@@ -2683,11 +2643,11 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9:![0-9]+]], !align [[META10:![0-9]+]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2771,7 +2731,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -2835,11 +2795,11 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -2960,7 +2920,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP61:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP62:%.*]] = add i32 1, [[TMP61]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP62]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE:       omp.kernel.done:
@@ -3007,11 +2967,11 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3095,7 +3055,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-32WAVE-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -3159,11 +3119,11 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3290,7 +3250,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP63:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP64:%.*]] = add i32 1, [[TMP63]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP64]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE:       omp.kernel.done:
@@ -3337,11 +3297,11 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9:![0-9]+]], !align [[META10:![0-9]+]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3425,7 +3385,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP11:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -3489,11 +3449,11 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3614,7 +3574,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP61:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP62:%.*]] = add i32 1, [[TMP61]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP62]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE-512WGSize:       omp.kernel.done:
@@ -3661,11 +3621,11 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3749,7 +3709,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP44:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP45:%.*]] = add i32 1, [[TMP44]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP45]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP46:%.*]] = zext i32 [[TMP16]] to i64
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP47:%.*]] = load ptr, ptr [[DOTADDR4_ASCAST]], align 8
@@ -3813,11 +3773,11 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META9]], !align [[META10]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -3944,7 +3904,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP63:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP64:%.*]] = add i32 1, [[TMP63]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP64]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE-512WGSize:       omp.kernel.done:

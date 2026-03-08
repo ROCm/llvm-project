@@ -11005,11 +11005,13 @@ static void emitTargetCallKernelLaunch(
     CodeGenModule::XteamRedVarMap &XteamRVM = CGF.CGM.getXteamRedVarMap(FStmt);
     auto &XteamOrdVars = CGF.CGM.getXteamOrderedRedVar(FStmt);
 
-    // Note Regarding the ExpectedNumArgs:
+    // Note Regarding the ExpectedNumArgs (used for Xteam Scan kernels):
     // 1. The Xteam Reduction kernels require two helper variables - `team_vals`
     // array and `teams_done_ptr`.
     // 2. The Xteam Scan Reduction kernels require a third helper variable -
-    // `scan_storage` array.
+    // `scan_storage` array (a single allocation containing the sub-arrays
+    // needed by the decoupled look-back algorithm: block_aggregates,
+    // block_prefixes, scan_result, and block_status).
     size_t ExpectedNumArgs = CGF.CGM.isXteamScanKernel() ? 3 : 2;
     assert((CapturedVars.size() ==
             CapturedCount + ExpectedNumArgs * XteamRVM.size()) &&
@@ -11139,6 +11141,7 @@ static void emitTargetCallKernelLaunch(
             //   [block_aggregates][block_prefixes][scan_result][block_status]
             //    T[NumTeams]       T[NumTeams]     T[Grid] uint32_t[NumTeams+1]
             // No alignment padding needed since T is at least 4 bytes.
+            // FIXME: this might change as supported types change.
             llvm::Value *NumTeams = XteamRedNumTeamsFromClauseVal
                                         ? XteamRedNumTeamsFromClauseVal
                                         : XteamRedNumTeamsFromOccupancy;

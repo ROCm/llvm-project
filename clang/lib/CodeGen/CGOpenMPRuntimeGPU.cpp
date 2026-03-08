@@ -3033,7 +3033,7 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamRedOperation(
   llvm_unreachable("No support for other types currently.");
 }
 
-llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
+llvm::Value *CGOpenMPRuntimeGPU::getXteamScanOp(
     CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *DResult,
     llvm::Value *DBlockStatus, llvm::Value *DBlockAggregates,
     llvm::Value *DBlockPrefixes, llvm::Value *ThreadStartIndex, int BlockSize,
@@ -3128,10 +3128,6 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanSum(
                                    CGM.getModule(), OMPRTL___kmpc_xteams_d),
                                Args);
   if (SumType->isFloatTy())
-    // FIXME: The Xteam Scan Implementation exhibits unpredictable behavior for
-    // 'float' datatype when number of elements to be scanned goes beyond 1
-    // million. This issue requires further debugging.
-    // Check if this is still an issue with the new implementation.
     return CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
                                    CGM.getModule(), OMPRTL___kmpc_xteams_f),
                                Args);
