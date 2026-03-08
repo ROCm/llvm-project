@@ -82,6 +82,8 @@ _XTEAM_INLINE_ATTR
 double shfl_xor_double(double var, int lane_mask, uint32_t width) {
   static_assert(sizeof(double) == 2 * sizeof(int), "");
   static_assert(sizeof(double) == sizeof(uint64_t), "");
+  static_assert(sizeof(long) == 2 * sizeof(int), "");
+  static_assert(sizeof(long) == sizeof(uint64_t), "");
 
   int tmp[2];
   __builtin_memcpy(tmp, &var, sizeof(tmp));
@@ -99,6 +101,8 @@ _XTEAM_INLINE_ATTR
 double shfl_up_double(double var, int offset, uint32_t width) {
   static_assert(sizeof(double) == 2 * sizeof(int), "");
   static_assert(sizeof(double) == sizeof(uint64_t), "");
+  static_assert(sizeof(long) == 2 * sizeof(int), "");
+  static_assert(sizeof(long) == sizeof(uint64_t), "");
 
   int tmp[2];
   __builtin_memcpy(tmp, &var, sizeof(tmp));
@@ -277,6 +281,8 @@ _XTEAM_INLINE_ATTR T wave_exclusive_scan(T val, void (*_rf)(T *, T),
 
 /// Block-level reduction: wave reduce → LDS → single value
 /// Returns the reduced value (valid *only* in thread 0)
+/// PRECONDITION: block_size (num_waves) is a power of two; enforced by
+/// codegen's block size selection.
 template <typename T>
 _XTEAM_INLINE_ATTR T block_reduce(T val, void (*_rf)(T *, T),
                                   void (*_rf_lds)(_XTEAM_RF_LDS T *,

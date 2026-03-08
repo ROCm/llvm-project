@@ -34,8 +34,6 @@ extern "C" {
 ///    IS_FAST There is an optional template boolean type (defaulting to false)
 ///    that indicates if an atomic add should be used instead of the last
 ///    reduction round. This applies to only sum reduction currently.
-/// Example: __kmpc_xteamr_d_16x64 is the reduction helper function
-///          for all reductions with data type double for warp size 64.
 /// All xteamr helper functions are defined in Xteamr.cpp. They each call the
 /// internal templated function _xteam_reduction also defined in Xteamr.cpp.
 /// Clang/flang code generation for C, C++, and FORTRAN instantiate a call to
@@ -65,8 +63,8 @@ extern "C" {
 
 _XTEAMR_DECL_ALL(__bf16, bf)
 _XTEAMR_DECL_ALL(_Float16, h)
-_XTEAMR_DECL_ALL(_CD, cd)
-_XTEAMR_DECL_ALL(_CF, cf)
+// _XTEAMR_DECL_ALL(_CD, cd)
+// _XTEAMR_DECL_ALL(_CF, cf)
 _XTEAMR_DECL_ALL(double, d)
 _XTEAMR_DECL_ALL(float, f)
 _XTEAMR_DECL_ALL(int, i)
@@ -102,8 +100,8 @@ _XTEAMR_DECL_ALL(_US, us)
 
 _ITEAMR_DEF(__bf16, bf)
 _ITEAMR_DEF(_Float16, h)
-_ITEAMR_DEF(_CD, cd)
-_ITEAMR_DEF(_CF, cf)
+// _ITEAMR_DEF(_CD, cd)
+// _ITEAMR_DEF(_CF, cf)
 _ITEAMR_DEF(double, d)
 _ITEAMR_DEF(float, f)
 _ITEAMR_DEF(int, i)
@@ -123,8 +121,6 @@ _ITEAMR_DEF(_US, us)
 #define _REDUCTION_FUNCTION_ALL(OP)                                            \
   _REDUCTION_FUNCTION(__bf16, OP, bf)                                          \
   _REDUCTION_FUNCTION(_Float16, OP, h)                                         \
-  _REDUCTION_FUNCTION(_CD, OP, cd)                                             \
-  _REDUCTION_FUNCTION(_CF, OP, cf)                                             \
   _REDUCTION_FUNCTION(double, OP, d)                                           \
   _REDUCTION_FUNCTION(float, OP, f)                                            \
   _REDUCTION_FUNCTION(int, OP, i)                                              \
@@ -133,6 +129,8 @@ _ITEAMR_DEF(_US, us)
   _REDUCTION_FUNCTION(_UL, OP, ul)                                             \
   _REDUCTION_FUNCTION(short, OP, s)                                            \
   _REDUCTION_FUNCTION(_US, OP, us)
+// _REDUCTION_FUNCTION(_CD, OP, cd)
+// _REDUCTION_FUNCTION(_CF, OP, cf)
 
 _REDUCTION_FUNCTION_ALL(sum)
 _REDUCTION_FUNCTION_ALL(max)

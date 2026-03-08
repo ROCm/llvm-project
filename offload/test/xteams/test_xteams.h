@@ -12,8 +12,6 @@
 
 #include "../xteamr/test_xteamr.h" // include reduction helper functions rfun_*
 
-#define _CD double _Complex
-#define _CF float _Complex
 #define _UI unsigned int
 #define _UL unsigned long
 #define _INLINE_ATTR_ __attribute__((flatten, always_inline))
@@ -32,8 +30,6 @@
 extern "C" {
 _XTEAMS_FUNC(double, d, _INLINE_ATTR_, ;)
 _XTEAMS_FUNC(float, f, _INLINE_ATTR_, ;)
-_XTEAMS_FUNC(_CD, cd, _INLINE_ATTR_, ;)
-_XTEAMS_FUNC(_CF, cf, _INLINE_ATTR_, ;)
 _XTEAMS_FUNC(int, i, _INLINE_ATTR_, ;)
 _XTEAMS_FUNC(_UI, ui, _INLINE_ATTR_, ;)
 _XTEAMS_FUNC(long, l, _INLINE_ATTR_, ;)
@@ -47,8 +43,6 @@ _XTEAMS_FUNC(_UL, ul, _INLINE_ATTR_, ;)
 extern "C" {
 _XTEAMS_FUNC(double, d, , {})
 _XTEAMS_FUNC(float, f, , {})
-_XTEAMS_FUNC(_CD, cd, , {})
-_XTEAMS_FUNC(_CF, cf, , {})
 _XTEAMS_FUNC(int, i, , {})
 _XTEAMS_FUNC(_UI, ui, , {})
 _XTEAMS_FUNC(long, l, , {})
@@ -65,10 +59,6 @@ template <typename T> constexpr auto get_kmpc_xteams_func() {
     return __kmpc_xteams_d;
   } else if constexpr (std::is_same_v<T, float>) {
     return __kmpc_xteams_f;
-  } else if constexpr (std::is_same_v<T, _CD>) {
-    return __kmpc_xteams_cd;
-  } else if constexpr (std::is_same_v<T, _CF>) {
-    return __kmpc_xteams_cf;
   } else if constexpr (std::is_same_v<T, int>) {
     return __kmpc_xteams_i;
   } else if constexpr (std::is_same_v<T, _UI>) {
@@ -82,8 +72,6 @@ template <typename T> constexpr auto get_kmpc_xteams_func() {
   }
 }
 
-#undef _CD
-#undef _CF
 #undef _UI
 #undef _UL
 #undef _INLINE_ATTR_

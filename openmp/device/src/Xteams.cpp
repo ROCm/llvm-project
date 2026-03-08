@@ -210,25 +210,11 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
     (*_rf)(&final_value, prefix_from_predecessors);
 
   // =========================================================================
-  // Step 4: Self-reset block status for next invocation
+  // (Step 4: Self-reset block status for next invocation)
+  // Would be useful if we would have multiple invocations of this function in
+  // the same kernel or re-use the block status allocation for multiple kernels.
+  // Since that's not the case at the moment, we'll skip it for now.
   // =========================================================================
-  // The last block to finish resets all status entries to BLOCK_INVALID (0),
-  // eliminating the need for a host-side memcpy between scan invocations.
-  // Requires block_status to have NumBlocks + 1 entries; the extra entry
-  // at index NumBlocks serves as an atomic done-counter.
-
-  synchronize::threadsAligned(atomic::relaxed);
-
-  if (omp_thread_num == 0) {
-    const uint32_t num_blocks = mapping::getNumberOfBlocksInKernel();
-    uint32_t done = atomic::add(&block_status[num_blocks], 1u, atomic::relaxed,
-                                atomic::MemScopeTy::device);
-    if (done + 1 == num_blocks) {
-      // Last block: reset all status entries and the counter for next use
-      for (uint32_t i = 0; i <= num_blocks; i++)
-        block_status[i] = BLOCK_INVALID;
-    }
-  }
 
   result_array[k] = final_value;
 }

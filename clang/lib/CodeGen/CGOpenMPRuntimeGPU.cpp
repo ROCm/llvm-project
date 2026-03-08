@@ -3105,9 +3105,6 @@ llvm::Value *CGOpenMPRuntimeGPU::getXteamScanOp(
                          ThreadStartIndex,
                          IsInclusiveVal};
 
-  unsigned WarpSize = CGF.getTarget().getGridValue().GV_Warp_Size;
-  assert(WarpSize == 32 || WarpSize == 64);
-
   assert(BlockSize > 0 && BlockSize <= llvm::omp::xteam_red::MaxBlockSize &&
          "XTeam Reduction blocksize outside expected range");
   assert(((BlockSize & (BlockSize - 1)) == 0) &&

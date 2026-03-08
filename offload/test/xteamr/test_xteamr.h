@@ -8,8 +8,6 @@
 #include <cstdint>
 #include <type_traits>
 
-#define _CD double _Complex
-#define _CF float _Complex
 #define _UI unsigned int
 #define _UL unsigned long
 #define _INLINE_ATTR_ __attribute__((flatten, always_inline))
@@ -32,8 +30,6 @@
   void __kmpc_rfun_##OP##_lds_##TS(_RF_LDS T *val, _RF_LDS T *otherval) BODY
 
 #define _REDUCTION_FUNC_ALL(OP, BODY)                                          \
-  _REDUCTION_FUNC(_CD, OP, cd, BODY)                                           \
-  _REDUCTION_FUNC(_CF, OP, cf, BODY)                                           \
   _REDUCTION_FUNC(double, OP, d, BODY)                                         \
   _REDUCTION_FUNC(float, OP, f, BODY)                                          \
   _REDUCTION_FUNC(int, OP, i, BODY)                                            \
@@ -48,8 +44,6 @@ extern "C" {
 // Cross-team reduction
 _XTEAMR_FUNC(double, d, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(float, f, _INLINE_ATTR_, ;)
-_XTEAMR_FUNC(_CD, cd, _INLINE_ATTR_, ;)
-_XTEAMR_FUNC(_CF, cf, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(int, i, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(_UI, ui, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(long, l, _INLINE_ATTR_, ;)
@@ -58,8 +52,6 @@ _XTEAMR_FUNC(_UL, ul, _INLINE_ATTR_, ;)
 // Fast sum (uses atomic add)
 _XTEAMR_FUNC(double, d_fast_sum, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(float, f_fast_sum, _INLINE_ATTR_, ;)
-_XTEAMR_FUNC(_CD, cd_fast_sum, _INLINE_ATTR_, ;)
-_XTEAMR_FUNC(_CF, cf_fast_sum, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(int, i_fast_sum, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(_UI, ui_fast_sum, _INLINE_ATTR_, ;)
 _XTEAMR_FUNC(long, l_fast_sum, _INLINE_ATTR_, ;)
@@ -85,8 +77,6 @@ extern "C" {
 // Cross-team reduction stubs
 _XTEAMR_FUNC(double, d, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(float, f, _INLINE_ATTR_, {})
-_XTEAMR_FUNC(_CD, cd, _INLINE_ATTR_, {})
-_XTEAMR_FUNC(_CF, cf, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(int, i, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(_UI, ui, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(long, l, _INLINE_ATTR_, {})
@@ -95,8 +85,6 @@ _XTEAMR_FUNC(_UL, ul, _INLINE_ATTR_, {})
 // Fast sum stubs
 _XTEAMR_FUNC(double, d_fast_sum, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(float, f_fast_sum, _INLINE_ATTR_, {})
-_XTEAMR_FUNC(_CD, cd_fast_sum, _INLINE_ATTR_, {})
-_XTEAMR_FUNC(_CF, cf_fast_sum, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(int, i_fast_sum, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(_UI, ui_fast_sum, _INLINE_ATTR_, {})
 _XTEAMR_FUNC(long, l_fast_sum, _INLINE_ATTR_, {})
@@ -125,10 +113,6 @@ template <typename T> constexpr auto get_kmpc_xteamr_func() {
     return __kmpc_xteamr_d;
   } else if constexpr (std::is_same_v<T, float>) {
     return __kmpc_xteamr_f;
-  } else if constexpr (std::is_same_v<T, _CD>) {
-    return __kmpc_xteamr_cd;
-  } else if constexpr (std::is_same_v<T, _CF>) {
-    return __kmpc_xteamr_cf;
   } else if constexpr (std::is_same_v<T, int>) {
     return __kmpc_xteamr_i;
   } else if constexpr (std::is_same_v<T, _UI>) {
@@ -147,10 +131,6 @@ template <typename T> constexpr auto get_kmpc_rfun_sum_func() {
     return __kmpc_rfun_sum_d;
   } else if constexpr (std::is_same_v<T, float>) {
     return __kmpc_rfun_sum_f;
-  } else if constexpr (std::is_same_v<T, _CD>) {
-    return __kmpc_rfun_sum_cd;
-  } else if constexpr (std::is_same_v<T, _CF>) {
-    return __kmpc_rfun_sum_cf;
   } else if constexpr (std::is_same_v<T, int>) {
     return __kmpc_rfun_sum_i;
   } else if constexpr (std::is_same_v<T, _UI>) {
@@ -206,10 +186,6 @@ template <typename T> constexpr auto get_kmpc_rfun_sum_lds_func() {
     return __kmpc_rfun_sum_lds_d;
   } else if constexpr (std::is_same_v<T, float>) {
     return __kmpc_rfun_sum_lds_f;
-  } else if constexpr (std::is_same_v<T, _CD>) {
-    return __kmpc_rfun_sum_lds_cd;
-  } else if constexpr (std::is_same_v<T, _CF>) {
-    return __kmpc_rfun_sum_lds_cf;
   } else if constexpr (std::is_same_v<T, int>) {
     return __kmpc_rfun_sum_lds_i;
   } else if constexpr (std::is_same_v<T, _UI>) {
@@ -260,8 +236,6 @@ template <typename T> constexpr auto get_kmpc_rfun_min_lds_func() {
   }
 }
 
-#undef _CD
-#undef _CF
 #undef _UI
 #undef _UL
 #undef _INLINE_ATTR_

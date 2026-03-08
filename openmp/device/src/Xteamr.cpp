@@ -56,7 +56,8 @@ _xteam_reduction(T val, T *r_ptr, T *team_vals, uint32_t *teams_done_ptr,
   const uint32_t number_of_waves = (block_size - 1) / _XTEAM_WARP_SIZE + 1;
   if (number_of_waves == 32) {
     if (omp_thread_num == 0) {
-      for (uint32_t i = (omp_get_num_threads() / 32); i < number_of_waves; i++)
+      for (uint32_t i = (omp_get_num_threads() / _XTEAM_WARP_SIZE);
+           i < number_of_waves; i++)
         xwave_lds[i] = rnv;
     }
   }
