@@ -187,6 +187,7 @@ public:
                                llvm::Value *DBlockAggregates,
                                llvm::Value *DBlockPrefixes,
                                llvm::Value *ThreadStartIndex, int BlockSize,
+                               bool IsInclusiveScan,
                                CodeGenModule::XteamRedOpKind RedOp);
 
   // Returns whether the hint expressions for an architecture should be

@@ -133,7 +133,7 @@ template <typename T> T *sim_dot(T *a, T *b, uint64_t array_size) {
       }
       get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
                                 d_prefixes, get_kmpc_rfun_sum_func<T>(), T(0),
-                                k);
+                                k, false);
     }
 
 // K2: redistribution
@@ -187,7 +187,8 @@ template <typename T> T *sim_max(T *c, uint64_t array_size) {
         val0 = std::max(val0, c[k * stride + i]);
       }
       get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
-                                d_prefixes, get_kmpc_rfun_max_func<T>(), rnv, k);
+                                d_prefixes, get_kmpc_rfun_max_func<T>(), rnv, k,
+                                false);
     }
 
 // K2: redistribution
@@ -241,7 +242,8 @@ template <typename T> T *sim_min(T *c, uint64_t array_size) {
         val0 = std::min(val0, c[k * stride + i]);
       }
       get_kmpc_xteams_func<T>()(val0, d_scan_out, d_status, d_aggregates,
-                                d_prefixes, get_kmpc_rfun_min_func<T>(), rnv, k);
+                                d_prefixes, get_kmpc_rfun_min_func<T>(), rnv, k,
+                                false);
     }
 
 // K2: redistribution

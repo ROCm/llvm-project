@@ -70,19 +70,18 @@ enum BlockStatus : uint32_t {
 /// \param _rf Function pointer to reduction function
 /// \param rnv Reduction null value (identity element)
 /// \param k Global thread index
+/// \param is_inclusive True for inclusive scan, false for exclusive
 ///
 /// Note:
 /// - block=team and warp=wave.
 /// - callers must pass rnv for out-of-bounds threads (k >= actual element
 /// count).
-/// - this always calculates the exclusive scan; inclusiveness/exclusiveness
-///   is handled by the caller when writing to the output array.
 ///
 template <typename T>
 __attribute__((flatten, always_inline)) void
 _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
             T *block_prefixes, void (*_rf)(T *, T), const T rnv,
-            const uint64_t k) {
+            const uint64_t k, bool is_inclusive) {
 
   const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
   const uint32_t num_waves =
@@ -101,16 +100,26 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
   static _RF_LDS T block_prefix_lds;
 
   // =========================================================================
-  // Step 1: Compute local inclusive scan within this block
+  // Step 1: Compute block-level scan (inclusive or exclusive)
   // =========================================================================
 
-  // Intra-wave inclusive scan using shuffles
+  // Intra-wave inclusive scan (always inclusive, needed for wave totals)
   // Callers must pass rnv for out-of-bounds threads (k >= num_elements).
-  T local_scan = xteam::wave_inclusive_scan(val, _rf, block_size);
+  T local_inclusive = xteam::wave_inclusive_scan(val, _rf, block_size);
 
-  // Cross-wave scan within block
+  // Derive per-thread scan value (exclusive = shift inclusive right by 1 lane)
+  T local_scan;
+  if (is_inclusive) {
+    local_scan = local_inclusive;
+  } else {
+    local_scan = xteam::shfl_up(local_inclusive, 1);
+    if (lane_num == 0)
+      local_scan = rnv;
+  }
+
+  // Cross-wave scan within block (wave totals always use inclusive values)
   if (lane_num == _XTEAM_WARP_SIZE - 1)
-    wave_totals[wave_num] = local_scan;
+    wave_totals[wave_num] = local_inclusive;
   synchronize::threadsAligned(atomic::relaxed);
 
   // First wave scans wave totals
@@ -195,21 +204,10 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
   if (omp_team_num > 0)
     prefix_from_predecessors = block_prefix_lds;
 
-  // Compute final scan value
-  T local_exclusive = xteam::shfl_up(local_scan, 1);
-  if (lane_num == 0) {
-    // First lane of each wave gets from previous wave or prefix
-    if (wave_num == 0)
-      local_exclusive = prefix_from_predecessors;
-    else {
-      local_exclusive = wave_totals[wave_num - 1];
-      if (omp_team_num > 0)
-        (*_rf)(&local_exclusive, prefix_from_predecessors);
-    }
-  } else if (omp_team_num > 0) {
-    (*_rf)(&local_exclusive, prefix_from_predecessors);
-  }
-  T final_value = local_exclusive;
+  // Compute final scan value (inclusive/exclusive already resolved in Step 1)
+  T final_value = local_scan;
+  if (omp_team_num > 0)
+    (*_rf)(&final_value, prefix_from_predecessors);
 
   // =========================================================================
   // Step 4: Self-reset block status for next invocation
@@ -248,8 +246,9 @@ _xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
 #define _XTEAMS_DEF(T, TS)                                                     \
   extern "C" _XTEAM_EXTERN_ATTR void __kmpc_xteams_##TS(                       \
       T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
-      void (*rf)(T *, T), const T rnv, const uint64_t k) {                     \
-    _xteam_scan<T>(v, result, status, aggregates, prefixes, rf, rnv, k);       \
+      void (*rf)(T *, T), const T rnv, const uint64_t k, bool is_inclusive) {  \
+    _xteam_scan<T>(v, result, status, aggregates, prefixes, rf, rnv, k,        \
+                   is_inclusive);                                              \
   }
 
 _XTEAMS_DEF(_CD, cd)

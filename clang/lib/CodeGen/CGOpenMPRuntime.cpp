@@ -11380,8 +11380,9 @@ static void emitTargetCallKernelLaunch(
 
   if (HasXTeamReduction) {
     if (!CGF.CGM.isXteamRedFast(FStmt) &&
-        !(CGF.CGM.isXteamScanKernel() && CGF.CGM.isXteamScanPhaseOne)) {
-      // Deallocate XTeam reduction variables:
+        !(CGF.CGM.isXteamSegmentedScanKernel() && CGF.CGM.isXteamScanPhaseOne)) {
+      // Deallocate XTeam reduction variables (skip if it's a segmented scan
+      // kernel and phase 2 is pending):
       for (uint32_t I = 0; I < CGF.CGM.ReductionVars.size(); ++I) {
         llvm::Value *FreeArgs[] = {CGF.CGM.ReductionVars[I], DevIdVal};
         CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
