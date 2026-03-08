@@ -12,7 +12,7 @@
 // References:
 // - Merrill & Garland, "Single-pass Parallel Prefix Scan with Decoupled
 //   Look-back", 2016
-// - rocPRIM / CUB implementations
+//   https://research.nvidia.com/sites/default/files/pubs/2016-03_Single-pass-Parallel-Prefix/nvr-2016-002.pdf
 //
 //===----------------------------------------------------------------------===//
 
