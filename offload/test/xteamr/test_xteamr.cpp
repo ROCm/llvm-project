@@ -196,10 +196,10 @@ template <typename T> T sim_dot(T *a, T *b) {
     T val0 = lc0.rnv;
     _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc0.size, lc0.stride, lc0.offset)
     val0 += a[i] * b[i];
-    get_kmpc_xteamr_func<T>()(
-        val0, &sum, lc0.team_vals, lc0.td_ptr, get_kmpc_rfun_sum_func<T>(),
-        get_kmpc_rfun_sum_lds_func<T>(), lc0.rnv, k, _XTEAM_NUM_TEAMS,
-        _XTEAMR_SCOPE);
+    get_kmpc_xteamr_func<T>()(val0, &sum, lc0.team_vals, lc0.td_ptr,
+                              get_kmpc_rfun_sum_func<T>(),
+                              get_kmpc_rfun_sum_lds_func<T>(), lc0.rnv, k,
+                              _XTEAM_NUM_TEAMS, _XTEAMR_SCOPE);
   }
   return sum;
 }
@@ -234,10 +234,10 @@ template <typename T> T sim_max(T *c) {
     T val1 = lc1.rnv;
     _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc1.size, lc1.stride, lc1.offset)
     val1 = (c[i] > val1) ? c[i] : val1;
-    get_kmpc_xteamr_func<T>()(
-        val1, &retval, lc1.team_vals, lc1.td_ptr, get_kmpc_rfun_max_func<T>(),
-        get_kmpc_rfun_max_lds_func<T>(), lc1.rnv, k, _XTEAM_NUM_TEAMS,
-        _XTEAMR_SCOPE);
+    get_kmpc_xteamr_func<T>()(val1, &retval, lc1.team_vals, lc1.td_ptr,
+                              get_kmpc_rfun_max_func<T>(),
+                              get_kmpc_rfun_max_lds_func<T>(), lc1.rnv, k,
+                              _XTEAM_NUM_TEAMS, _XTEAMR_SCOPE);
   }
   return retval;
 }
@@ -272,10 +272,10 @@ template <typename T> T sim_min(T *c) {
     T val2 = lc2.rnv;
     _BIG_JUMP_LOOP(_XTEAM_NUM_TEAMS, lc2.size, lc2.stride, lc2.offset)
     val2 = (c[i] < val2) ? c[i] : val2;
-    get_kmpc_xteamr_func<T>()(
-        val2, &retval, lc2.team_vals, lc2.td_ptr, get_kmpc_rfun_min_func<T>(),
-        get_kmpc_rfun_min_lds_func<T>(), lc2.rnv, k, _XTEAM_NUM_TEAMS,
-        _XTEAMR_SCOPE);
+    get_kmpc_xteamr_func<T>()(val2, &retval, lc2.team_vals, lc2.td_ptr,
+                              get_kmpc_rfun_min_func<T>(),
+                              get_kmpc_rfun_min_lds_func<T>(), lc2.rnv, k,
+                              _XTEAM_NUM_TEAMS, _XTEAMR_SCOPE);
   }
   return retval;
 }

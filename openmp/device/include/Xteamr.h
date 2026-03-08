@@ -52,7 +52,7 @@ extern "C" {
 /// \param numteams Number of teams
 /// \param Scope Memory scope
 
-#define _XTEAMR_DECL(T, TS)                                                     \
+#define _XTEAMR_DECL(T, TS)                                                    \
   void _XTEAM_EXTERN_ATTR __kmpc_xteamr_##TS(                                  \
       T v, T *r_ptr, T *tvs, uint32_t *td, void (*_rf)(T *, T),                \
       void (*_rf_lds)(_RF_LDS T *, _RF_LDS T *), const T rnv,                  \
@@ -75,7 +75,6 @@ _XTEAMR_DECL_ALL(long, l)
 _XTEAMR_DECL_ALL(_UL, ul)
 _XTEAMR_DECL_ALL(short, s)
 _XTEAMR_DECL_ALL(_US, us)
-
 
 #undef _XTEAMR_DECL
 #undef _XTEAMR_DECL_ALL
