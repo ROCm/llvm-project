@@ -1625,9 +1625,15 @@ private:
 
     Register PrimarySuccessorExec;
 
-    // Initialzized to opcode for uniform implicit conditional branches :
+    // Initialzized to opcode for implicit conditional branches :
     // S_CBRANCH_EXECZ S_CBRANCH_EXECNZ S_CBRANCH_VCCZ S_CBRANCH_VCCNZ
     // S_CBRANCH_SCC0 S_CBRANCH_SCC1
+    // All active threads branch on some implicit condition for the above
+    // opcodes. Since SI_BRCOND_UNIFORM SI_BRCOND_UNIFORM_Z branch all active
+    // threads on some explicit condition register, we need to identify the
+    // above branch instrs and handle them appropridately.
+    // S_SUBVECTOR_LOOP_BEGIN S_SUBVECTOR_LOOP_END are lowered to corresponding
+    // asm instructions and are treated the same as above opcodes by WT.
     unsigned UniformImplicitCondBranchOpc = 0;
 
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
@@ -1731,7 +1737,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  Opcode == AMDGPU::S_CBRANCH_VCCZ ||
                  Opcode == AMDGPU::S_CBRANCH_VCCNZ ||
                  Opcode == AMDGPU::S_CBRANCH_SCC0 ||
-                 Opcode == AMDGPU::S_CBRANCH_SCC1) {
+                 Opcode == AMDGPU::S_CBRANCH_SCC1 ||
+                 Opcode == AMDGPU::S_SUBVECTOR_LOOP_BEGIN ||
+                 Opcode == AMDGPU::S_SUBVECTOR_LOOP_END) {
         assert(!Info.OrigCondition);
         Info.UniformImplicitCondBranchOpc = Opcode;
         Info.OrigSuccCond =
@@ -1743,11 +1751,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         assert(!Info.OrigCondition);
         Info.OrigExit = true;
       } else {
-        // TODO: These opcodes should be handled. They must either be avoided
-        // entirely by pre-wave-transform codegen passes or wave-transform pass
-        // should handle them.
-        assert(Opcode != AMDGPU::SI_WATERFALL_LOOP &&
-               "wave-transform: unhandled branch opcode");
+        assert("wave-transform: unhandled branch opcode");
       }
     }
 
@@ -1883,7 +1887,7 @@ void ControlFlowRewriter::rewrite() {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
-    if (!Info.OrigExit && !Info.UniformImplicitCondBranchOpc) {
+    if (!Info.OrigExit) {
       // Remove original terminators.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
              !isArtificialTerminator(Node->Block->back()))
@@ -1904,11 +1908,10 @@ void ControlFlowRewriter::rewrite() {
 
     assert(Node->Successors.size() == 2);
 
-    if (!Node->IsDivergent && !Info.UniformImplicitCondBranchOpc) {
+    if (!Node->IsDivergent) {
       // Uniform block with two successors: we must have had two original
       // successors, and one of the current successors leads to the original
       // conditional successor.
-      assert(Info.OrigCondition);
 
       auto LaneSucc =
           llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
@@ -1916,33 +1919,44 @@ void ControlFlowRewriter::rewrite() {
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
 
-      unsigned Opcode;
+      if (!Info.UniformImplicitCondBranchOpc) { // SI_BRCOND_UNIFORM
+                                                // SI_BRCOND_UNIFORM_Z
+        assert(Info.OrigCondition);
 
-      if (Info.OrigCondition == AMDGPU::SCC) {
-        Opcode = AMDGPU::S_CBRANCH_SCC1;
-      } else {
-        Register CondReg = Info.OrigCondition;
-        if (!Info.OrigConditionUndef &&
-            !LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
-          CondReg = LMU.createLaneMaskReg();
-          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
-              .addReg(LMC.ExecReg)
-              .addReg(Info.OrigCondition);
+        unsigned Opcode;
+
+        if (Info.OrigCondition == AMDGPU::SCC) {
+          Opcode = AMDGPU::S_CBRANCH_SCC1;
+        } else {
+          Register CondReg = Info.OrigCondition;
+          if (!Info.OrigConditionUndef &&
+              !LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
+            CondReg = LMU.createLaneMaskReg();
+            BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
+                .addReg(LMC.ExecReg)
+                .addReg(Info.OrigCondition);
+          }
+          MachineInstr *CopyMI = BuildMI(*Node->Block, MBBINodeEnd, {},
+                                         TII.get(AMDGPU::COPY), LMC.VccReg)
+                                     .addReg(CondReg);
+          // Preserve undef flag if the condition register was undef
+          if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
+            CopyMI->getOperand(1).setIsUndef();
+
+          Opcode = AMDGPU::S_CBRANCH_VCCNZ;
         }
-        MachineInstr *CopyMI = BuildMI(*Node->Block, MBBINodeEnd, {},
-                                       TII.get(AMDGPU::COPY), LMC.VccReg)
-                                   .addReg(CondReg);
-        // Preserve undef flag if the condition register was undef
-        if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
-          CopyMI->getOperand(1).setIsUndef();
 
-        Opcode = AMDGPU::S_CBRANCH_VCCNZ;
+        MachineInstr *CondBrMI =
+            BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
+                .addMBB(LaneSucc->Wave->Block);
+        TII.fixImplicitOperands(*CondBrMI);
+      } else {
+        MachineInstr *CondBrMI =
+            BuildMI(*Node->Block, MBBINodeEnd, {},
+                    TII.get(Info.UniformImplicitCondBranchOpc))
+                .addMBB(LaneSucc->Wave->Block);
+        TII.fixImplicitOperands(*CondBrMI);
       }
-
-      MachineInstr *CondBrMI =
-          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
-              .addMBB(LaneSucc->Wave->Block);
-      TII.fixImplicitOperands(*CondBrMI);
 
       // The _other_ successor may be a flow block instead of an original
       // successor.
@@ -2005,10 +2019,7 @@ void ControlFlowRewriter::rewrite() {
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
 
-      CFGNodeInfo &LaneOriginNodeInfo = NodeInfo.find(LaneOrigin.Node)->second;
-
-      if (!LaneOrigin.CondReg ||
-          LaneOriginNodeInfo.UniformImplicitCondBranchOpc) {
+      if (!LaneOrigin.CondReg) {
         assert(!LaneOrigin.InvertCondition);
         CondReg = getAllOnes();
       } else if (LaneOrigin.CondReg == AMDGPU::SCC) {
