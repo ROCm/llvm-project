@@ -882,8 +882,7 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
 
   // -ffast-amd-memory-allocator
   if (args.hasArg(clang::options::OPT_ffast_amd_memory_allocator)) {
-    opts.features.Enable(
-        (Fortran::common::LanguageFeature::AmdMemoryAllocator));
+    opts.features.Enable(Fortran::common::LanguageFeature::AmdMemoryAllocator);
   }
 
   if (args.hasArg(clang::options::OPT_falternative_parameter_statement)) {
@@ -1683,6 +1682,12 @@ bool CompilerInvocation::createFromArgs(
     invoc.loweringOpts.setRepackArraysWhole(arg->getValue() ==
                                             llvm::StringRef{"whole"});
 
+  if (auto *arg = args.getLastArg(clang::options::OPT_ffp_maxmin_behavior_EQ)) {
+    auto value = Fortran::common::parseFPMaxminBehavior(arg->getValue());
+    invoc.getCodeGenOpts().setFPMaxminBehavior(value);
+    invoc.loweringOpts.setFPMaxminBehavior(value);
+  }
+
   success &= parseFrontendArgs(invoc.getFrontendOpts(), args, diags);
   parseTargetArgs(invoc.getTargetOpts(), args);
   parsePreprocessorArgs(invoc.getPreprocessorOpts(), args);
@@ -1922,7 +1927,7 @@ CompilerInvocation::getSemanticsCtx(
 
   auto semanticsContext = std::make_unique<semantics::SemanticsContext>(
       getDefaultKinds(), fortranOptions.features, getLangOpts(),
-      allCookedSources);
+      allCookedSources, getCodeGenOpts().getFPMaxminBehavior());
 
   semanticsContext->set_moduleDirectory(getModuleDir())
       .set_searchDirectories(fortranOptions.searchDirectories)
