@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ABIInfoImpl.h"
 #include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
@@ -758,7 +759,7 @@ bool ConstStructBuilder::Build(const InitListExpr *ILE, bool AllowOverwrite) {
 
     // Zero-sized fields are not emitted, but their initializers may still
     // prevent emission of this struct as a constant.
-    if (Field->isZeroSize(CGM.getContext())) {
+    if (isEmptyFieldForLayout(CGM.getContext(), Field)) {
       if (Init && Init->HasSideEffects(CGM.getContext()))
         return false;
       continue;
@@ -893,7 +894,8 @@ bool ConstStructBuilder::Build(const APValue &Val, const RecordDecl *RD,
       continue;
 
     // Don't emit anonymous bitfields or zero-sized fields.
-    if (Field->isUnnamedBitField() || Field->isZeroSize(CGM.getContext()))
+    if (Field->isUnnamedBitField() ||
+        isEmptyFieldForLayout(CGM.getContext(), *Field))
       continue;
 
     // Emit the value of the initializer.
@@ -2546,6 +2548,35 @@ ConstantEmitter::tryEmitPrivate(const APValue &Value, QualType DestType,
     }
     return llvm::ConstantVector::get(Inits);
   }
+  case APValue::Matrix: {
+    const auto *MT = DestType->castAs<ConstantMatrixType>();
+    unsigned NumRows = Value.getMatrixNumRows();
+    unsigned NumCols = Value.getMatrixNumColumns();
+    unsigned NumElts = NumRows * NumCols;
+    SmallVector<llvm::Constant *, 16> Inits(NumElts);
+
+    bool IsRowMajor = CGM.getLangOpts().getDefaultMatrixMemoryLayout() ==
+                      LangOptions::MatrixMemoryLayout::MatrixRowMajor;
+
+    for (unsigned Row = 0; Row != NumRows; ++Row) {
+      for (unsigned Col = 0; Col != NumCols; ++Col) {
+        const APValue &Elt = Value.getMatrixElt(Row, Col);
+        unsigned Idx = MT->getFlattenedIndex(Row, Col, IsRowMajor);
+        if (Elt.isInt())
+          Inits[Idx] =
+              llvm::ConstantInt::get(CGM.getLLVMContext(), Elt.getInt());
+        else if (Elt.isFloat())
+          Inits[Idx] =
+              llvm::ConstantFP::get(CGM.getLLVMContext(), Elt.getFloat());
+        else if (Elt.isIndeterminate())
+          Inits[Idx] = llvm::PoisonValue::get(
+              CGM.getTypes().ConvertType(MT->getElementType()));
+        else
+          llvm_unreachable("unsupported matrix element type");
+      }
+    }
+    return llvm::ConstantVector::get(Inits);
+  }
   case APValue::AddrLabelDiff: {
     const AddrLabelExpr *LHSExpr = Value.getAddrLabelDiffLHS();
     const AddrLabelExpr *RHSExpr = Value.getAddrLabelDiffRHS();
@@ -2680,8 +2711,10 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
 
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty() ||
-          CGM.getContext().getASTRecordLayout(base).getNonVirtualSize()
+      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()) ||
+          CGM.getContext()
+              .getASTRecordLayout(base)
+              .getNonVirtualSize()
               .isZero())
         continue;
 
@@ -2695,7 +2728,8 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   for (const auto *Field : record->fields()) {
     // Fill in non-bitfields. (Bitfields always use a zero pattern, which we
     // will fill in later.)
-    if (!Field->isBitField() && !Field->isZeroSize(CGM.getContext())) {
+    if (!Field->isBitField() &&
+        !isEmptyFieldForLayout(CGM.getContext(), Field)) {
       unsigned fieldIndex = layout.getLLVMFieldNo(Field);
       elements[fieldIndex] = CGM.EmitNullConstant(Field->getType());
     }
@@ -2715,7 +2749,7 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
     for (const auto &I : CXXR->vbases()) {
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (base->isEmpty())
+      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()))
         continue;
 
       unsigned fieldIndex = layout.getVirtualBaseIndex(base);

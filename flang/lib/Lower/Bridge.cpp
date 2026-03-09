@@ -559,12 +559,14 @@ public:
     // Generate the `main` entry point if necessary
     if (hasMainProgram)
       createBuilderOutsideOfFuncOpAndDo([&]() {
-        fir::runtime::genMain(*builder, toLocation(),
-                              bridge.getEnvironmentDefaults(),
-                              getFoldingContext().languageFeatures().IsEnabled(
-                                  Fortran::common::LanguageFeature::CUDA),
-                              getFoldingContext().languageFeatures().IsEnabled(
-                                  Fortran::common::LanguageFeature::Coarray));
+        fir::runtime::genMain(
+            *builder, toLocation(), bridge.getEnvironmentDefaults(),
+            getFoldingContext().languageFeatures().IsEnabled(
+                Fortran::common::LanguageFeature::CUDA),
+            getFoldingContext().languageFeatures().IsEnabled(
+                Fortran::common::LanguageFeature::AmdMemoryAllocator),
+            getFoldingContext().languageFeatures().IsEnabled(
+                Fortran::common::LanguageFeature::Coarray));
       });
 
     finalizeOpenMPLowering(globalOmpRequiresSymbol);
@@ -5374,6 +5376,12 @@ private:
                            bool keepLhsLengthInAllocatableAssignment) {
     bool lhsIsDevice = Fortran::evaluate::HasCUDADeviceAttrs(assign.lhs);
     bool rhsIsDevice = Fortran::evaluate::HasCUDADeviceAttrs(assign.rhs);
+    mlir::UnitAttr hasManagedOrUnifedSymbols =
+        (Fortran::evaluate::GetNbOfCUDAManagedOrUnifiedSymbols(assign.lhs) >
+             0 ||
+         Fortran::evaluate::GetNbOfCUDAManagedOrUnifiedSymbols(assign.rhs) > 0)
+            ? mlir::UnitAttr::get(builder.getContext())
+            : nullptr;
 
     auto getRefFromValue = [](mlir::Value val) -> mlir::Value {
       if (auto loadOp =
@@ -5419,17 +5427,20 @@ private:
         // Special case if the rhs is a constant.
         if (matchPattern(base.getDefiningOp(), mlir::m_Constant())) {
           cuf::DataTransferOp::create(builder, loc, base, lhsVal, shape,
-                                      transferKindAttr);
+                                      transferKindAttr,
+                                      hasManagedOrUnifedSymbols);
         } else {
           auto associate = hlfir::genAssociateExpr(
               loc, builder, rhs, rhs.getType(), ".cuf_host_tmp");
           cuf::DataTransferOp::create(builder, loc, associate.getBase(), lhsVal,
-                                      shape, transferKindAttr);
+                                      shape, transferKindAttr,
+                                      hasManagedOrUnifedSymbols);
           hlfir::EndAssociateOp::create(builder, loc, associate);
         }
       } else {
         cuf::DataTransferOp::create(builder, loc, rhsVal, lhsVal, shape,
-                                    transferKindAttr);
+                                    transferKindAttr,
+                                    hasManagedOrUnifedSymbols);
       }
       return;
     }
@@ -5448,7 +5459,8 @@ private:
         auto transferKindAttr = cuf::DataTransferKindAttr::get(
             builder.getContext(), cuf::DataTransferKind::DeviceHost);
         cuf::DataTransferOp::create(builder, loc, designateOp.getMemref(), temp,
-                                    /*shape=*/mlir::Value{}, transferKindAttr);
+                                    /*shape=*/mlir::Value{}, transferKindAttr,
+                                    hasManagedOrUnifedSymbols);
         designateOp.getMemrefMutable().assign(temp);
         builder.setInsertionPointAfter(elOp);
         hlfir::AssignOp::create(builder, loc, elOp, lhs,
@@ -5459,7 +5471,7 @@ private:
       auto transferKindAttr = cuf::DataTransferKindAttr::get(
           builder.getContext(), cuf::DataTransferKind::DeviceHost);
       cuf::DataTransferOp::create(builder, loc, rhsVal, lhsVal, shape,
-                                  transferKindAttr);
+                                  transferKindAttr, hasManagedOrUnifedSymbols);
       return;
     }
 
@@ -5468,7 +5480,7 @@ private:
       auto transferKindAttr = cuf::DataTransferKindAttr::get(
           builder.getContext(), cuf::DataTransferKind::DeviceDevice);
       cuf::DataTransferOp::create(builder, loc, rhsVal, lhsVal, shape,
-                                  transferKindAttr);
+                                  transferKindAttr, hasManagedOrUnifedSymbols);
       return;
     }
     llvm_unreachable("Unhandled CUDA data transfer");
@@ -6454,6 +6466,8 @@ private:
     builder->setComplexDivisionToRuntimeFlag(
         bridge.getLoweringOptions().getComplexDivisionToRuntime());
     builder->setFastMathFlags(bridge.getLoweringOptions().getMathOptions());
+    builder->setFPMaxminBehavior(
+        bridge.getLoweringOptions().getFPMaxminBehavior());
     builder->setInsertionPointToStart(&func.front());
     if (funit.parent.isA<Fortran::lower::pft::FunctionLikeUnit>()) {
       // Give internal linkage to internal functions. There are no name clash
@@ -6737,6 +6751,8 @@ private:
     builder = new fir::FirOpBuilder(func, bridge.getKindMap(), symbolTable);
     assert(builder && "FirOpBuilder did not instantiate");
     builder->setFastMathFlags(bridge.getLoweringOptions().getMathOptions());
+    builder->setFPMaxminBehavior(
+        bridge.getLoweringOptions().getFPMaxminBehavior());
     createGlobals();
     if (mlir::Region *region = func.getCallableRegion())
       region->dropAllReferences();
