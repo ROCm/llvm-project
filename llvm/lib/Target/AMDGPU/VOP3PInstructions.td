@@ -750,7 +750,8 @@ class VOPProfileMAI<VOPProfile P, RegisterOperand _SrcRC, RegisterOperand _DstRC
   // and with the earlyclobber flag on the dst. This is stricter than the
   // actual HW restriction. In particular earlyclobber also affects src0 and
   // src1 allocation which is not required.
-  bit NoDstOverlap = !gt(DstVT.Size, 128);
+  bit NoDstOverlap = !ge(DstVT.Size, 128);
+  bit HasEarlyClobberForm = !gt(DstVT.Size, 128);
 }
 
 class VOPProfileSMFMAC<VOPProfile P, RegisterOperand _DstRC,
@@ -1030,6 +1031,7 @@ multiclass MAIInst<string OpName, string P, SDPatternOperator node = null_frag,
                    bit HasAbid = true,
                    bit Scaled = false> {
   defvar NoDstOverlap = !cast<VOPProfileMAI>("VOPProfileMAI_" # P).NoDstOverlap;
+  defvar HasEarlyClobberForm = !cast<VOPProfileMAI>("VOPProfileMAI_" # P).HasEarlyClobberForm;
   defvar ProfileAGPR = !cast<VOPProfileMAI>("VOPProfileMAI_" # P);
   defvar ProfileVGPR = !cast<VOPProfileMAI>("VOPProfileMAI_" # P # "_VCD");
 
@@ -1049,7 +1051,7 @@ multiclass MAIInst<string OpName, string P, SDPatternOperator node = null_frag,
 
     if NoDstOverlap then {
       let Constraints = !if(NoDstOverlap, "$vdst = $src2", ""),
-          isConvertibleToThreeAddress = NoDstOverlap,
+          isConvertibleToThreeAddress = HasEarlyClobberForm,
           Mnemonic = OpName in {
         def "_mac_e64" : MAIInst<OpName # "_mac", ProfileAGPR,
                                  !if(!eq(node, null_frag), null_frag, AgprMAIFrag<node, ProfileAGPR.DstVT, HasAbid, Scaled>), Scaled>,
@@ -1072,6 +1074,7 @@ multiclass ScaledMAIInst_mc<string OpName, string UnscaledOpName_, SDPatternOper
   defvar HasAbid = false;
   defvar Profile = !cast<VOPProfileMAI>(!cast<MAIInst>(UnscaledOpName#"_e64").Pfl);
   defvar NoDstOverlap = Profile.NoDstOverlap;
+  defvar HasEarlyClobberForm = Profile.HasEarlyClobberForm;
 
   def _e64 : ScaledMAIInst<OpName,
         !cast<MAIInst>(UnscaledOpName#"_e64"), !if(NoDstOverlap, null_frag, AgprMAIFrag<node, Profile.DstVT, HasAbid, true>)>,
@@ -1083,7 +1086,7 @@ multiclass ScaledMAIInst_mc<string OpName, string UnscaledOpName_, SDPatternOper
 
  if NoDstOverlap then {
    let Constraints = !if(NoDstOverlap, "$vdst = $src2", ""),
-       isConvertibleToThreeAddress = NoDstOverlap,
+       isConvertibleToThreeAddress = HasEarlyClobberForm,
        Mnemonic = UnscaledOpName_ in {
      def _mac_e64 : ScaledMAIInst<OpName # "_mac",
           !cast<MAIInst>(UnscaledOpName # "_mac_e64"), AgprMAIFrag<node, Profile.DstVT, HasAbid, true>>,

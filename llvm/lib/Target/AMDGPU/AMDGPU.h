@@ -167,6 +167,9 @@ private:
 void initializeAMDGPUPrepareAGPRAllocLegacyPass(PassRegistry &);
 extern char &AMDGPUPrepareAGPRAllocLegacyID;
 
+void initializeAMDGPUPreferAGPRForDSReadLegacyPass(PassRegistry &);
+extern char &AMDGPUPreferAGPRForDSReadLegacyID;
+
 void initializeAMDGPUReserveWWMRegsLegacyPass(PassRegistry &);
 extern char &AMDGPUReserveWWMRegsLegacyID;
 

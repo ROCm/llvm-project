@@ -27,6 +27,7 @@
 #include "AMDGPULowerVGPREncoding.h"
 #include "AMDGPUMacroFusion.h"
 #include "AMDGPUPerfHintAnalysis.h"
+#include "AMDGPUPreferAGPRForDSRead.h"
 #include "AMDGPUPreloadKernArgProlog.h"
 #include "AMDGPUPrepareAGPRAlloc.h"
 #include "AMDGPURemoveIncompatibleFunctions.h"
@@ -559,6 +560,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUAsmPrinterPass(*PR);
   initializeAMDGPUDAGToDAGISelLegacyPass(*PR);
   initializeAMDGPUPrepareAGPRAllocLegacyPass(*PR);
+  initializeAMDGPUPreferAGPRForDSReadLegacyPass(*PR);
   initializeGCNDPPCombineLegacyPass(*PR);
   initializeSILowerI1CopiesLegacyPass(*PR);
   initializeAMDGPUGlobalISelDivergenceLoweringPass(*PR);
@@ -1592,8 +1594,10 @@ void GCNPassConfig::addFastRegAlloc() {
 }
 
 void GCNPassConfig::addPreRegAlloc() {
-  if (getOptLevel() != CodeGenOptLevel::None)
+  if (getOptLevel() != CodeGenOptLevel::None) {
     addPass(&AMDGPUPrepareAGPRAllocLegacyID);
+    addPass(&AMDGPUPreferAGPRForDSReadLegacyID);
+  }
 }
 
 void GCNPassConfig::addOptimizedRegAlloc() {
@@ -2389,8 +2393,10 @@ void AMDGPUCodeGenPassBuilder::addOptimizedRegAlloc(
 }
 
 void AMDGPUCodeGenPassBuilder::addPreRegAlloc(PassManagerWrapper &PMW) const {
-  if (getOptLevel() != CodeGenOptLevel::None)
+  if (getOptLevel() != CodeGenOptLevel::None) {
     addMachineFunctionPass(AMDGPUPrepareAGPRAllocPass(), PMW);
+    addMachineFunctionPass(AMDGPUPreferAGPRForDSReadPass(), PMW);
+  }
 }
 
 Error AMDGPUCodeGenPassBuilder::addRegAssignmentOptimized(

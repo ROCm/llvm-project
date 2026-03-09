@@ -3887,6 +3887,17 @@ bool SIRegisterInfo::getRegAllocationHints(Register VirtReg,
     }
     return false;
   }
+  case AMDGPURI::PreferAGPR: {
+    const TargetRegisterClass *RC = MRI.getRegClass(VirtReg);
+    const TargetRegisterClass *ARC = getEquivalentAGPRClass(RC);
+    if (ARC) {
+      for (MCPhysReg PhysReg : Order) {
+        if (ARC->contains(PhysReg))
+          Hints.push_back(PhysReg);
+      }
+    }
+    return false;
+  }
   default:
     return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF,
                                                      VRM);
