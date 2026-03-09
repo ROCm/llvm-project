@@ -600,7 +600,7 @@ private:
           return true;
 
         if (asRecordType(fieldType))
-          TODO(liveIn.getLoc(), "Nested record types are not supported yet.");
+          return true;
       }
 
       return false;
@@ -610,9 +610,9 @@ private:
     if (requiresImplcitMapper) {
       std::string mapperIdName =
           recordType.getName().str() + llvm::omp::OmpDefaultMapperName;
-      // TODO Add a mangler callback once nested record types are supported.
       mapperId = Fortran::utils::openmp::getOrGenImplicitDefaultDeclareMapper(
-          builder, liveIn.getLoc(), recordType, mapperIdName);
+          builder, liveIn.getLoc(), recordType, mapperIdName,
+          [](std::string &, llvm::StringRef) {});
     }
 
     return Fortran::utils::openmp::createMapInfoOp(

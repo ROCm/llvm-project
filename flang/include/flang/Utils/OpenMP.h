@@ -67,7 +67,7 @@ using RecordMemberMapperMangler =
 mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
     fir::FirOpBuilder &firOpBuilder, mlir::Location loc,
     fir::RecordType recordType, llvm::StringRef mapperNameStr,
-    RecordMemberMapperMangler mangler = {});
+    RecordMemberMapperMangler mangler);
 } // namespace Fortran::utils::openmp
 
 #endif // FORTRAN_UTILS_OPENMP_H_
