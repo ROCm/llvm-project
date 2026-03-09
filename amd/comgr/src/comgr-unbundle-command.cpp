@@ -111,6 +111,7 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
     break;
   }
   default:
+    assert(false && "invalid bundle type");
     LogS << "Unbundle Error: invalid bundle type\n";
     return AMD_COMGR_STATUS_ERROR;
   }
