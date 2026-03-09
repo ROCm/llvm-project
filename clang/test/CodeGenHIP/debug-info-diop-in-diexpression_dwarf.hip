@@ -38,6 +38,90 @@ __device__ void func1(int Arg) {
 // CHECK: .debug_info contents:
 // CHECK: DW_TAG_compile_unit
 
+// CHECK: DW_TAG_subprogram
+// CHECK: DW_AT_linkage_name ("_Z7kernel1i")
+// CHECK: DW_AT_name ("kernel1")
+// CHECK: DW_AT_external (true)
+
+// CHECK: DW_TAG_formal_parameter
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("Arg")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarA")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarB")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarSharedAPointer")
+// CHECK: DW_AT_type ("int *")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarSharedBPointer")
+// CHECK: DW_AT_type ("int *")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_constu 0x20, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarAPointer")
+// CHECK: DW_AT_type ("int *")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_constu 0x28, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("KernelVarBPointer")
+// CHECK: DW_AT_type ("int *")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_name ("KernelVarSharedA")
+// CHECK: DW_AT_type ("int")
+// CHECK: DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_group)
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit0, DW_OP_plus, DW_OP_lit3, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_name ("KernelVarSharedB")
+// CHECK: DW_AT_type ("int")
+// CHECK: DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_group)
+// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit4, DW_OP_plus, DW_OP_lit3, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: NULL
+
+// CHECK: DW_TAG_subprogram
+// CHECK: DW_AT_linkage_name ("_Z5func1i")
+// CHECK: DW_AT_name ("func1")
+// CHECK: DW_AT_external (true)
+
+// CHECK: DW_TAG_formal_parameter
+// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("Arg")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("FuncVarA")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("FuncVarB")
+// CHECK: DW_AT_type ("int")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("FuncVarAPointer")
+// CHECK: DW_AT_type ("int *")
+
+// CHECK: DW_TAG_variable
+// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+// CHECK: DW_AT_name ("FuncVarBPointer")
+// CHECK: DW_AT_type ("int *")
+// CHECK: NULL
+
 // CHECK: DW_TAG_variable
 // CHECK: DW_AT_name ("GlobalSharedA")
 // CHECK: DW_AT_type ("int")
@@ -84,90 +168,6 @@ __device__ void func1(int Arg) {
 // CHECK: DW_AT_external (true)
 // CHECK: DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_constant)
 // CHECK: DW_AT_location (DW_OP_addr 0x0, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-
-// CHECK: DW_TAG_subprogram
-// CHECK: DW_AT_linkage_name ("_Z7kernel1i")
-// CHECK: DW_AT_name ("kernel1")
-// CHECK: DW_AT_external (true)
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_name ("KernelVarSharedA")
-// CHECK: DW_AT_type ("int")
-// CHECK: DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_group)
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit0, DW_OP_plus, DW_OP_lit3, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_name ("KernelVarSharedB")
-// CHECK: DW_AT_type ("int")
-// CHECK: DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_group)
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit4, DW_OP_plus, DW_OP_lit3, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-
-// CHECK: DW_TAG_formal_parameter
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("Arg")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarA")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarB")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarSharedAPointer")
-// CHECK: DW_AT_type ("int *")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarSharedBPointer")
-// CHECK: DW_AT_type ("int *")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_constu 0x20, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarAPointer")
-// CHECK: DW_AT_type ("int *")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_lit0, DW_OP_lit6, DW_OP_shr, DW_OP_constu 0x28, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("KernelVarBPointer")
-// CHECK: DW_AT_type ("int *")
-// CHECK: NULL
-
-// CHECK: DW_TAG_subprogram
-// CHECK: DW_AT_linkage_name ("_Z5func1i")
-// CHECK: DW_AT_name ("func1")
-// CHECK: DW_AT_external (true)
-
-// CHECK: DW_TAG_formal_parameter
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit0, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("Arg")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit4, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("FuncVarA")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit8, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("FuncVarB")
-// CHECK: DW_AT_type ("int")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit16, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("FuncVarAPointer")
-// CHECK: DW_AT_type ("int *")
-
-// CHECK: DW_TAG_variable
-// CHECK: DW_AT_location (DW_OP_regx 0x40, DW_OP_deref_size 0x4, DW_OP_lit6, DW_OP_shr, DW_OP_lit24, DW_OP_plus, DW_OP_lit5, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-// CHECK: DW_AT_name ("FuncVarBPointer")
-// CHECK: DW_AT_type ("int *")
-// CHECK: NULL
 
 // CHECK: DW_TAG_pointer_type
 // CHECK: DW_AT_type ("int")
