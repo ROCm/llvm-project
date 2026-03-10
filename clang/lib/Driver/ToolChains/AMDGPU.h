@@ -141,11 +141,6 @@ public:
     return true;
   }
 
-  /// Get the Rocm Installation path
-  StringRef getRocmInstallationPath() const {
-    return RocmInstallation->getInstallPath();
-  }
-
   /// Needed for translating LTO options.
   const char *getDefaultLinker() const override { return "ld.lld"; }
 
@@ -164,6 +159,8 @@ public:
   /// if unable to find one.
   virtual Expected<SmallVector<std::string>>
   getSystemGPUArchs(const llvm::opt::ArgList &Args) const override;
+
+  void checkAndAddAMDGPUSanLibPaths(const llvm::opt::ArgList &Args);
 
 protected:
   /// Check and diagnose invalid target ID specified by -mcpu.
