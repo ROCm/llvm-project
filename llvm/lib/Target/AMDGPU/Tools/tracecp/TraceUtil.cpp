@@ -377,14 +377,13 @@ static void simulateInst(const MCInst &Inst, size_t EntryIdx,
 
 TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
                               const TraceCFG &CFG, const MCInstrInfo &MCII,
-                              const MCRegisterInfo &MRI,
-                              const MCSubtargetInfo &STI, bool Verbose) {
+                              const MCRegisterInfo &MRI, bool Verbose) {
   TraceMetrics Result;
 
   if (Entries.empty())
     return Result;
 
-  MCInstInfo InstInfo(MCII, MRI, &STI);
+  MCInstInfo InstInfo(MCII, MRI);
   HWModel Model = createHWModel(GPUTarget::GFX1250);
 
   SimulatorConfig Cfg;

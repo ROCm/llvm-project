@@ -101,13 +101,11 @@ struct TraceMetrics {
 /// \param CFG The reconstructed CFG (needed to know block boundaries).
 /// \param MCII The MCInstrInfo for the target.
 /// \param MRI The MCRegisterInfo for the target.
-/// \param STI The MCSubtargetInfo for the target (for scheduling model access).
 /// \param Verbose Enable verbose per-instruction logging.
 /// \returns TraceMetrics with per-block metrics.
 TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
                            const TraceCFG &CFG, const MCInstrInfo &MCII,
-                           const MCRegisterInfo &MRI, const MCSubtargetInfo &STI,
-                           bool Verbose = false);
+                           const MCRegisterInfo &MRI, bool Verbose = false);
 
 } // namespace tracecp
 } // namespace llvm
