@@ -133,6 +133,24 @@ unsigned long long __llvm_omp_host_call(void *fn, void *data, size_t size) {
   });
   return Ret;
 }
+
+__attribute__((noinline)) void *__alt_libc_malloc(size_t sz) {
+  void *ptr = nullptr;
+  rpc::Client::Port Port = ompx::impl::Client.open<ALT_LIBC_MALLOC>();
+  Port.send_and_recv(
+      [=](rpc::Buffer *buffer, uint32_t) { buffer->data[0] = (uint64_t)sz; },
+      [&](rpc::Buffer *buffer, uint32_t) {
+        ptr = reinterpret_cast<void *>(buffer->data[0]);
+      });
+  return ptr;
+}
+
+__attribute__((noinline)) void __alt_libc_free(void *ptr) {
+  rpc::Client::Port Port = ompx::impl::Client.open<ALT_LIBC_FREE>();
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = reinterpret_cast<uintptr_t>(ptr);
+  });
+}
 }
 
 // C++ ABI helpers.

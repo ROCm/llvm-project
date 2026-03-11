@@ -67,6 +67,27 @@ rpc::Status handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     });
     break;
   }
+  case ALT_LIBC_MALLOC: {
+    Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
+      auto PtrOrErr =
+          Device.allocate(Buffer->data[0], nullptr, TARGET_ALLOC_DEVICE);
+      void *Ptr = nullptr;
+      if (!PtrOrErr)
+        llvm::consumeError(PtrOrErr.takeError());
+      else
+        Ptr = *PtrOrErr;
+      Buffer->data[0] = reinterpret_cast<uintptr_t>(Ptr);
+    });
+    break;
+  }
+  case ALT_LIBC_FREE: {
+    Port.recv([&](rpc::Buffer *Buffer, uint32_t) {
+      if (auto Err = Device.free(reinterpret_cast<void *>(Buffer->data[0]),
+                                 TARGET_ALLOC_DEVICE))
+        llvm::consumeError(std::move(Err));
+    });
+    break;
+  }
   default:
     return rpc::RPC_UNHANDLED_OPCODE;
     break;
