@@ -13,6 +13,7 @@
 #include "clang/Driver/Tool.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Path.h"
 
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
@@ -97,7 +98,18 @@ void AMDGPUOpenMPToolChain::AddClangCXXStdlibIncludeArgs(
 
 void AMDGPUOpenMPToolChain::AddClangSystemIncludeArgs(
     const ArgList &DriverArgs, ArgStringList &CC1Args) const {
+  const Driver &D = HostTC.getDriver();
+  CC1Args.push_back("-internal-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../include"));
+  CC1Args.push_back("-internal-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(D.Dir + "/../../../include"));
+
   HostTC.AddClangSystemIncludeArgs(DriverArgs, CC1Args);
+
+  CC1Args.push_back("-internal-isystem");
+  SmallString<128> P(HostTC.getDriver().ResourceDir);
+  llvm::sys::path::append(P, "include/cuda_wrappers");
+  CC1Args.push_back(DriverArgs.MakeArgString(P));
 }
 
 void AMDGPUOpenMPToolChain::AddIAMCUIncludeArgs(const ArgList &Args,

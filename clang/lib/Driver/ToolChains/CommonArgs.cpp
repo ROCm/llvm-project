@@ -1406,6 +1406,30 @@ void tools::addOpenMPRuntimeLibraryPath(const ToolChain &TC,
   CmdArgs.push_back(Args.MakeArgString("-L" + DefaultLibPath));
 }
 
+void tools::addOpenMPRuntimeSpecificRPath(const ToolChain &TC,
+                                          const ArgList &Args,
+                                          ArgStringList &CmdArgs) {
+  if (!Args.hasFlag(options::OPT_frtlib_add_rpath,
+                    options::OPT_fno_rtlib_add_rpath, false))
+    return;
+
+  if (TC.getTriple().isOSAIX()) // TODO: AIX doesn't support -rpath option.
+    return;
+
+  SmallString<256> DefaultLibPath =
+      llvm::sys::path::parent_path(TC.getDriver().Dir);
+  llvm::sys::path::append(DefaultLibPath, CLANG_INSTALL_LIBDIR_BASENAME);
+  CmdArgs.push_back("-rpath");
+  CmdArgs.push_back(Args.MakeArgString(DefaultLibPath));
+
+  std::string ROCmPath =
+      Args.getLastArgValue(options::OPT_rocm_path_EQ).str();
+  if (!ROCmPath.empty()) {
+    CmdArgs.push_back("-rpath");
+    CmdArgs.push_back(Args.MakeArgString(ROCmPath + "/lib"));
+  }
+}
+
 void tools::addArchSpecificRPath(const ToolChain &TC, const ArgList &Args,
                                  ArgStringList &CmdArgs) {
   if (!Args.hasFlag(options::OPT_frtlib_add_rpath,
@@ -1473,6 +1497,8 @@ bool tools::addOpenMPRuntime(const Compilation &C, ArgStringList &CmdArgs,
     CmdArgs.push_back("-lomptarget");
 
   addArchSpecificRPath(TC, Args, CmdArgs);
+  if (RTKind == Driver::OMPRT_OMP)
+    addOpenMPRuntimeSpecificRPath(TC, Args, CmdArgs);
 
   addOpenMPRuntimeLibraryPath(TC, Args, CmdArgs);
 
