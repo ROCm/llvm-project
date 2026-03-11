@@ -214,8 +214,8 @@ static Error getTargetTripleAndFeatures(hsa_agent_t Agent,
 
     llvm::StringRef TripleTarget(ISAName.begin(), Length);
     if (TripleTarget.consume_front("amdgcn-amd-amdhsa")) {
-      auto Target = TripleTarget.ltrim('-').rtrim('\0');
-      Targets.push_back(Target);
+      Targets.push_back(TripleTarget.ltrim('-').rtrim('\0'));
+      return HSA_STATUS_INFO_BREAK;
     }
     return HSA_STATUS_SUCCESS;
   });
