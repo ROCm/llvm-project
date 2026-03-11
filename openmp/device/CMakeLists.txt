@@ -25,6 +25,30 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Workshare.cpp
 )
 
+# Only link AMD device libraries when actually building for AMDGCN to avoid
+# contaminating other targets with AMD-specific intrinsics.
+set(compile_flags)
+if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
+   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
+  find_package(AMDDeviceLibs REQUIRED CONFIG
+               HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
+                     ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
+                     ${CMAKE_INSTALL_PREFIX})
+  get_target_property(_ocml_bc ocml IMPORTED_LOCATION)
+  get_target_property(_ockl_bc ockl IMPORTED_LOCATION)
+
+  if(NOT _ockl_bc)
+    message(FATAL_ERROR "Could not find ockl.bc")
+  endif()
+  if(NOT _ocml_bc)
+    message(FATAL_ERROR "Could not find ocml.bc")
+  endif()
+
+  list(APPEND compile_flags
+       "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc}"
+       "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ocml_bc}")
+endif()
+
 list(APPEND compile_options -flto)
 list(APPEND compile_options -fvisibility=hidden)
 list(APPEND compile_options -nogpulib)
@@ -33,6 +57,7 @@ list(APPEND compile_options -fno-rtti)
 list(APPEND compile_options -fno-exceptions)
 list(APPEND compile_options -fconvergent-functions)
 list(APPEND compile_options -Wno-unknown-cuda-version)
+list(APPEND compile_options -fno-sanitize=address)
 
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   list(APPEND compile_options --target=${LLVM_DEFAULT_TARGET_TRIPLE})
@@ -77,7 +102,7 @@ target_include_directories(libompdevice PRIVATE
                            ${CMAKE_CURRENT_SOURCE_DIR}/include
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../libc
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../offload/include)
-target_compile_options(libompdevice PRIVATE ${compile_options})
+target_compile_options(libompdevice PRIVATE ${compile_options} ${compile_flags})
 if(NOT "${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" AND
    NOT "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
   target_link_options(libompdevice PRIVATE
