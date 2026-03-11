@@ -21,6 +21,8 @@
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Function.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include <cassert>
 #include <optional>
 #include <vector>
@@ -43,6 +45,72 @@ static cl::opt<bool, true> MFMAVGPRFormOpt(
 const GCNTargetMachine &getTM(const GCNSubtarget *STI) {
   const SITargetLowering *TLI = STI->getTargetLowering();
   return static_cast<const GCNTargetMachine &>(TLI->getTargetMachine());
+}
+
+MCCFIInstruction replaceFrameInstRegister(const MCCFIInstruction &Inst,
+                                          unsigned FromReg, unsigned ToReg) {
+  auto ReplaceReg = [&](unsigned Reg) { return Reg == FromReg ? ToReg : Reg; };
+
+  switch (Inst.getOperation()) {
+  case MCCFIInstruction::OpDefCfa:
+    return MCCFIInstruction::cfiDefCfa(Inst.getLabel(),
+                                       ReplaceReg(Inst.getRegister()),
+                                       Inst.getOffset(), Inst.getLoc());
+  case MCCFIInstruction::OpDefCfaRegister:
+    return MCCFIInstruction::createDefCfaRegister(
+        Inst.getLabel(), ReplaceReg(Inst.getRegister()), Inst.getLoc());
+  case MCCFIInstruction::OpOffset:
+    return MCCFIInstruction::createOffset(Inst.getLabel(),
+                                          ReplaceReg(Inst.getRegister()),
+                                          Inst.getOffset(), Inst.getLoc());
+  case MCCFIInstruction::OpLLVMDefAspaceCfa:
+    return MCCFIInstruction::createLLVMDefAspaceCfa(
+        Inst.getLabel(), ReplaceReg(Inst.getRegister()), Inst.getOffset(),
+        Inst.getAddressSpace(), Inst.getLoc());
+  case MCCFIInstruction::OpRelOffset:
+    return MCCFIInstruction::createRelOffset(Inst.getLabel(),
+                                             ReplaceReg(Inst.getRegister()),
+                                             Inst.getOffset(), Inst.getLoc());
+  case MCCFIInstruction::OpRestore:
+    return MCCFIInstruction::createRestore(Inst.getLabel(),
+                                           ReplaceReg(Inst.getRegister()),
+                                           Inst.getLoc());
+  case MCCFIInstruction::OpUndefined:
+    return MCCFIInstruction::createUndefined(Inst.getLabel(),
+                                             ReplaceReg(Inst.getRegister()),
+                                             Inst.getLoc());
+  case MCCFIInstruction::OpSameValue:
+    return MCCFIInstruction::createSameValue(Inst.getLabel(),
+                                             ReplaceReg(Inst.getRegister()),
+                                             Inst.getLoc());
+  case MCCFIInstruction::OpRegister:
+    return MCCFIInstruction::createRegister(
+        Inst.getLabel(), ReplaceReg(Inst.getRegister()),
+        ReplaceReg(Inst.getRegister2()), Inst.getLoc());
+  case MCCFIInstruction::OpValOffset:
+    return MCCFIInstruction::createValOffset(Inst.getLabel(),
+                                             ReplaceReg(Inst.getRegister()),
+                                             Inst.getOffset(), Inst.getLoc());
+  default:
+    return Inst;
+  }
+}
+
+void replaceFrameInstRegister(MachineFunction &MF, Register FromReg,
+                              Register ToReg) {
+  const MCRegisterInfo *MCRI = MF.getContext().getRegisterInfo();
+  if (!MCRI)
+    return;
+
+  int64_t DwarfFromReg = MCRI->getDwarfRegNum(FromReg, false);
+  int64_t DwarfToReg = MCRI->getDwarfRegNum(ToReg, false);
+  if (DwarfFromReg < 0 || DwarfToReg < 0 || DwarfFromReg == DwarfToReg)
+    return;
+
+  auto &FrameInsts =
+      const_cast<std::vector<MCCFIInstruction> &>(MF.getFrameInstructions());
+  for (MCCFIInstruction &Inst : FrameInsts)
+    Inst = replaceFrameInstRegister(Inst, DwarfFromReg, DwarfToReg);
 }
 
 bool SIMachineFunctionInfo::MFMAVGPRForm = false;
@@ -376,6 +444,9 @@ void SIMachineFunctionInfo::shiftWwmVGPRsToLowestRange(
     if (RegItr != SpillPhysVGPRs.end()) {
       unsigned Idx = std::distance(SpillPhysVGPRs.begin(), RegItr);
       SpillPhysVGPRs[Idx] = NewReg;
+
+      // Keep frame instructions aligned with the shifted WWM spill register.
+      replaceFrameInstRegister(MF, Reg, NewReg);
     }
 
     // The generic `determineCalleeSaves` might have set the old register if it
