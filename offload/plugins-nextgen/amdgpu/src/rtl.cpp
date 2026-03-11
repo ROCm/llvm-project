@@ -407,12 +407,8 @@ struct AMDGPUMemoryManagerTy : public DeviceAllocatorTy {
     if (OMPX_AMDMemoryMgrThreshold > sizeof(size_t) * CHAR_BIT - 1) {
       // if user input is too large, trim it down to the upper limit of size_t.
       OMPX_AMDMemoryMgrThreshold = sizeof(size_t) * CHAR_BIT - 1;
-      DP("User input for AMDGPUMemoryManager threshhold is too larget and was "
-         "trimmed to: %u\n",
-         OMPX_AMDMemoryMgrThreshold.get());
     }
     const size_t Threshold = 1UL << OMPX_AMDMemoryMgrThreshold;
-    DP("AMDGPUMemoryManager threshhold was set to: %zu B\n", Threshold);
     this->MemoryManager = new MemoryManagerTy(*this, Threshold);
     this->MemoryPool = &MemoryPool;
     return Plugin::success();
