@@ -20,6 +20,28 @@
 namespace ompx {
 namespace impl {
 
+extern "C" omp_allocator_handle_t omp_get_default_allocator(void);
+extern "C" void *__kmpc_impl_alloc_aligned(size_t Size, size_t Align);
+extern "C" void __kmpc_impl_free_aligned(void *Ptr);
+
+static omp_allocator_handle_t resolveAllocator(omp_allocator_handle_t Allocator) {
+  return Allocator == omp_null_allocator ? omp_get_default_allocator()
+                                         : Allocator;
+}
+
+static bool isGlobalAllocator(omp_allocator_handle_t Allocator) {
+  switch (Allocator) {
+  case omp_default_mem_alloc:
+  case omp_large_cap_mem_alloc:
+  case omp_const_mem_alloc:
+  case omp_high_bw_mem_alloc:
+  case omp_low_lat_mem_alloc:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /// Lookup a device-side function using a host pointer /p HstPtr using the table
 /// provided by the device plugin. The table is an ordered pair of host and
 /// device pointers sorted on the value of the host pointer.
@@ -94,29 +116,16 @@ void *__llvm_omp_indirect_call_lookup(void *HstPtr) {
 }
 
 void *omp_alloc(size_t size, omp_allocator_handle_t allocator) {
-  switch (allocator) {
-  case omp_default_mem_alloc:
-  case omp_large_cap_mem_alloc:
-  case omp_const_mem_alloc:
-  case omp_high_bw_mem_alloc:
-  case omp_low_lat_mem_alloc:
-    return ompx::allocator::alloc(size);
-  default:
-    return nullptr;
-  }
+  allocator = ompx::impl::resolveAllocator(allocator);
+  if (ompx::impl::isGlobalAllocator(allocator))
+    return ompx::impl::__kmpc_impl_alloc_aligned(size, ompx::allocator::ALIGNMENT);
+  return nullptr;
 }
 
 void omp_free(void *ptr, omp_allocator_handle_t allocator) {
-  switch (allocator) {
-  case omp_default_mem_alloc:
-  case omp_large_cap_mem_alloc:
-  case omp_const_mem_alloc:
-  case omp_high_bw_mem_alloc:
-  case omp_low_lat_mem_alloc:
-    ompx::allocator::free(ptr);
-    return;
-  case omp_null_allocator:
-  default:
+  allocator = ompx::impl::resolveAllocator(allocator);
+  if (ompx::impl::isGlobalAllocator(allocator)) {
+    ompx::impl::__kmpc_impl_free_aligned(ptr);
     return;
   }
 }

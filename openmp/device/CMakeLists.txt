@@ -14,6 +14,7 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Kernel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/LibC.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Mapping.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/Memory.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Misc.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Parallelism.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Profiling.cpp
