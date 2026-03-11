@@ -1771,10 +1771,11 @@ bool ClauseProcessor::processMap(
     // For data-motion directives we avoid auto-attaching implicit default
     // mappers. Deep recursive mapping there can conflict with explicit
     // component enter/exit maps users commonly spell out.
-    std::string mapperIdName = "__implicit_mapper";
-    if (directive == llvm::omp::Directive::OMPD_target_enter_data ||
-        directive == llvm::omp::Directive::OMPD_target_exit_data ||
-        directive == llvm::omp::Directive::OMPD_target_update)
+    std::string mapperIdName = getMapperIdentifier(converter, mappers);
+    if ((directive == llvm::omp::Directive::OMPD_target_enter_data ||
+         directive == llvm::omp::Directive::OMPD_target_exit_data ||
+         directive == llvm::omp::Directive::OMPD_target_update) &&
+        mapperIdName == "__implicit_mapper")
       mapperIdName.clear();
     // If the map type is specified, then process it else set the appropriate
     // default value
@@ -1850,8 +1851,6 @@ bool ClauseProcessor::processMap(
       TODO(currentLocation,
            "Support for iterator modifiers is not implemented yet");
     }
-    mapperIdName = getMapperIdentifier(converter, mappers);
-
     processMapObjects(stmtCtx, clauseLocation,
                       std::get<omp::ObjectList>(clause.t), mapTypeBits,
                       parentMemberIndices, result.mapVars, *ptrMapSyms,
@@ -1883,6 +1882,8 @@ bool ClauseProcessor::processMotionClauses(lower::StatementContext &stmtCtx,
 
     // Support motion modifiers: mapper, iterator.
     std::string mapperIdName = getMapperIdentifier(converter, mapper);
+    if (mapperIdName == "__implicit_mapper")
+      mapperIdName.clear();
     if (iterator) {
       TODO(clauseLocation, "Iterator modifier is not supported yet");
     }
