@@ -587,8 +587,20 @@ struct AMDGPUKernelTy : public GenericKernelTy {
       return Plugin::error(ErrorCode::INVALID_BINARY,
                            "symbol %s is not a kernel function");
 
-    // TODO: Read the kernel descriptor for the max threads per block. May be
-    // read from the image.
+    // Specialized kernels may provide an exact work-group size via a generated
+    // global. Use it when present so launch policy stays aligned with codegen.
+    std::string WGSizeName = std::string(getName()) + "_wg_size";
+    GenericGlobalHandlerTy &GHandler = Device.Plugin.getGlobalHandler();
+    if (GHandler.isSymbolInImage(Device, AMDImage, WGSizeName)) {
+      StaticGlobalTy<uint16_t> HostConstWGSize(WGSizeName);
+      if (auto Err =
+              GHandler.readGlobalFromImage(Device, AMDImage, HostConstWGSize))
+        return Err;
+
+      ConstWGSize = HostConstWGSize.getValue();
+      PreferredNumThreads = ConstWGSize;
+      MaxNumThreads = ConstWGSize;
+    }
 
     ImplicitArgsSize =
         hsa_utils::getImplicitArgsSize(AMDImage.getELFABIVersion());
@@ -652,6 +664,9 @@ private:
 
   /// Additional Info for the AMD GPU Kernel
   std::optional<offloading::amdgpu::AMDGPUKernelMetaData> KernelInfo;
+
+  /// Exact work-group size when provided by codegen.
+  uint16_t ConstWGSize = 0;
 };
 
 /// Class representing an HSA signal. Signals are used to define dependencies
