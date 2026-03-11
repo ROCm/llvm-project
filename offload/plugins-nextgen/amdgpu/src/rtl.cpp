@@ -316,6 +316,16 @@ struct AMDGPUMemoryPoolTy {
     return Plugin::check(Status, "error in hsa_amd_memory_pool_allocate: %s");
   }
 
+  /// Zero initialize a pool allocation.
+  Error zeroInitializeMemory(void *Ptr, size_t Size) const {
+    if (Size % sizeof(uint32_t) != 0)
+      return Plugin::error(ErrorCode::INVALID_ARGUMENT,
+                           "memory fill requires a 4-byte multiple");
+    hsa_status_t Status =
+        hsa_amd_memory_fill(Ptr, /*value=*/0, Size / sizeof(uint32_t));
+    return Plugin::check(Status, "error in hsa_amd_memory_fill: %s");
+  }
+
   /// Return memory to the memory pool.
   Error deallocate(void *Ptr) {
     hsa_status_t Status = hsa_amd_memory_pool_free(Ptr);
@@ -2102,6 +2112,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = initMemoryPools())
       return Err;
 
+    if (auto Err = preAllocateDeviceMemoryPool())
+      return Err;
+
     char GPUName[64];
     if (auto Err = getDeviceAttr(HSA_AGENT_INFO_NAME, GPUName))
       return Err;
@@ -2237,6 +2250,14 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   /// Deinitialize the device and release its resources.
   Error deinitImpl() override {
+    if (DMHeapPtr && DMMemoryPool)
+      if (auto Err = DMMemoryPool->deallocate(DMHeapPtr))
+        return Err;
+    DMHeapPtr = nullptr;
+    DMSlabPtr = nullptr;
+    DMMemoryPool = nullptr;
+    DMInitialized = false;
+
     // Deinitialize the stream and event pools.
     if (auto Err = AMDGPUStreamManager.deinit())
       return Err;
@@ -2405,6 +2426,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     if (uint32_t WFS = AMDImage->getMaxWavefrontSize())
       MaxWavefrontSize = std::max(MaxWavefrontSize, WFS);
+
+    if (Error Err = launchDMInitKernel(*AMDImage))
+      return std::move(Err);
 
     return AMDImage;
   }
@@ -3243,6 +3267,99 @@ private:
     return Err;
   }
 
+  /// Allocate and zero initialize the heap/slab storage used by the OCKL
+  /// device allocator. The slab region must be 2MB aligned.
+  Error preAllocateDeviceMemoryPool() {
+    constexpr size_t DMHeapSize = 128 * 1024;
+    constexpr size_t SlabAlignment = 2 * 1024 * 1024;
+    const size_t PreAllocSize = DMHeapSize + DMSlabSize + SlabAlignment;
+
+    for (AMDGPUMemoryPoolTy *MemoryPool : AllMemoryPools) {
+      if (!MemoryPool->isGlobal() || !MemoryPool->isCoarseGrained())
+        continue;
+
+      void *Allocation = nullptr;
+      if (auto Err = MemoryPool->allocate(PreAllocSize, &Allocation))
+        return Plugin::error(ErrorCode::UNKNOWN,
+                             "device memory pool preallocation failed");
+
+      if (auto Err = MemoryPool->enableAccess(Allocation, PreAllocSize,
+                                              {getAgent()}))
+        return Plugin::error(ErrorCode::UNKNOWN,
+                             "preallocated device memory pool inaccessible");
+
+      if (auto Err = MemoryPool->zeroInitializeMemory(Allocation, PreAllocSize))
+        return Plugin::error(
+            ErrorCode::UNKNOWN,
+            "zero initialization of preallocated device memory pool failed");
+
+      const uintptr_t BaseAddr = reinterpret_cast<uintptr_t>(Allocation);
+      const uintptr_t HeapEnd = BaseAddr + DMHeapSize;
+      const uintptr_t AlignedSlabAddr =
+          (HeapEnd + SlabAlignment - 1) & ~(SlabAlignment - 1);
+      [[maybe_unused]] const uintptr_t SlabEnd = AlignedSlabAddr + DMSlabSize;
+      [[maybe_unused]] const uintptr_t AllocEnd = BaseAddr + PreAllocSize;
+
+      assert((AlignedSlabAddr % SlabAlignment) == 0 &&
+             "DMSlabPtr must be 2MB aligned");
+      assert(SlabEnd <= AllocEnd && "Slab region exceeds allocation");
+
+      DMMemoryPool = MemoryPool;
+      DMHeapPtr = Allocation;
+      DMSlabPtr = reinterpret_cast<void *>(AlignedSlabAddr);
+      return Plugin::success();
+    }
+
+    return Plugin::error(ErrorCode::OUT_OF_RESOURCES,
+                         "could not find a suitable memory pool for device "
+                         "memory allocation");
+  }
+
+  /// Launch the special kernel that seeds the OCKL device allocator for a
+  /// loaded image. It is enough to run it once per device.
+  Error launchDMInitKernel(AMDGPUDeviceImageTy &Image) {
+    if (DMInitialized)
+      return Plugin::success();
+    if (!DMHeapPtr || !DMSlabPtr)
+      return Plugin::error(
+          ErrorCode::UNKNOWN,
+          "device memory not allocated for launching DM init kernel");
+
+    constexpr const char *KernelName = "__omp_dm_init_kernel";
+    GenericGlobalHandlerTy &Handler = Plugin.getGlobalHandler();
+    if (!Handler.isSymbolInImage(*this, Image, KernelName))
+      return Plugin::success();
+
+    AMDGPUKernelTy DMInitKernel(KernelName);
+    if (auto Err = DMInitKernel.init(*this, Image))
+      return Err;
+
+    struct __attribute__((packed)) {
+      uint64_t HeapAddr;
+      uint64_t SlabAddr;
+    } Args = {reinterpret_cast<uint64_t>(DMHeapPtr),
+              reinterpret_cast<uint64_t>(DMSlabPtr)};
+
+    KernelArgsTy KernelArgs = {};
+    KernelLaunchParamsTy LaunchParams;
+    LaunchParams.Data = &Args;
+    LaunchParams.Size = sizeof(Args);
+
+    AsyncInfoWrapperTy AsyncInfoWrapper(*this, nullptr);
+    uint32_t NumThreads[3] = {256u, 1u, 1u};
+    uint32_t NumBlocks[3] = {1u, 1u, 1u};
+    if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks,
+                                           KernelArgs, LaunchParams,
+                                           AsyncInfoWrapper))
+      return Err;
+
+    Error Err = Plugin::success();
+    AsyncInfoWrapper.finalize(Err);
+    if (!Err)
+      DMInitialized = true;
+    return Err;
+  }
+
   /// Detect if current architecture is an APU.
   Error checkIfAPU() {
     // TODO: replace with ROCr API once it becomes available.
@@ -3362,6 +3479,14 @@ private:
 
   /// The largest wavefront size across all loaded images, used for RPC.
   uint32_t MaxWavefrontSize = 0;
+
+  /// Preallocated storage for the OCKL device allocator.
+  AMDGPUMemoryPoolTy *DMMemoryPool = nullptr;
+  void *DMHeapPtr = nullptr;
+  void *DMSlabPtr = nullptr;
+  bool DMInitialized = false;
+  static constexpr uint32_t DMNumSlabs = 4;
+  static constexpr size_t DMSlabSize = DMNumSlabs * (2 * 1024 * 1024);
 
   /// Reference to the host device.
   AMDHostDeviceTy &HostDevice;

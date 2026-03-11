@@ -31,6 +31,7 @@ set(src_files
 set(compile_flags)
 if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
    "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
+  list(APPEND src_files ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceMemInit.cpp)
   find_package(AMDDeviceLibs REQUIRED CONFIG
                HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
                      ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
