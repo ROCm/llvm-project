@@ -701,6 +701,35 @@ static bool supportsSPMDExecutionMode(ASTContext &Ctx,
       "Unknown programming model for OpenMP directive on NVPTX target.");
 }
 
+static bool supportsSPMDNoLoopExecutionMode(const CodeGenModule &CGM,
+                                            const OMPExecutableDirective &D) {
+  if (!CGM.getLangOpts().OpenMPTeamSubscription ||
+      !CGM.getLangOpts().OpenMPThreadSubscription)
+    return false;
+
+  switch (D.getDirectiveKind()) {
+  case OMPD_target_teams_distribute_parallel_for:
+  case OMPD_target_teams_distribute_parallel_for_simd:
+    break;
+  case OMPD_target_teams_loop: {
+    const auto *TTLD = dyn_cast<OMPTargetTeamsGenericLoopDirective>(&D);
+    if (!TTLD || !TTLD->canBeParallelFor())
+      return false;
+    break;
+  }
+  default:
+    return false;
+  }
+
+  if (D.getSingleClause<OMPNumTeamsClause>())
+    return false;
+
+  if (!D.getClausesOfKind<OMPReductionClause>().empty())
+    return false;
+
+  return true;
+}
+
 void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
                                              StringRef ParentName,
                                              llvm::Function *&OutlinedFn,
@@ -747,8 +776,11 @@ void CGOpenMPRuntimeGPU::emitKernelInit(const OMPExecutableDirective &D,
                                         EntryFunctionState &EST, bool IsSPMD) {
   llvm::OpenMPIRBuilder::TargetKernelDefaultAttrs Attrs;
   Attrs.ExecFlags =
-      IsSPMD ? llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD
-             : llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_GENERIC;
+      IsSPMD
+          ? (supportsSPMDNoLoopExecutionMode(CGM, D)
+                 ? llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD_NO_LOOP
+                 : llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_SPMD)
+          : llvm::omp::OMPTgtExecModeFlags::OMP_TGT_EXEC_MODE_GENERIC;
   computeMinAndMaxThreadsAndTeams(D, CGF, Attrs);
 
   CGBuilderTy &Bld = CGF.Builder;
