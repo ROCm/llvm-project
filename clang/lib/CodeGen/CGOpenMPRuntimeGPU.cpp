@@ -2621,6 +2621,7 @@ bool CGOpenMPRuntimeGPU::canEmitSPMDNoLoop(
 
   switch (D.getDirectiveKind()) {
   case OMPD_target_teams_distribute_parallel_for:
+  case OMPD_target_teams_distribute_parallel_for_simd:
     break;
   case OMPD_target_teams_loop: {
     const auto *TTLD = dyn_cast<OMPTargetTeamsGenericLoopDirective>(&D);

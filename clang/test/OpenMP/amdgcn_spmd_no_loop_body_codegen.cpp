@@ -9,6 +9,12 @@ void direct_body(int *a, int n) {
     a[i] = i;
 }
 
+void direct_body_simd(int *a, int n) {
+#pragma omp target teams distribute parallel for simd map(tofrom : a[0:n])
+  for (int i = 0; i < n; ++i)
+    a[i] = i;
+}
+
 void fallback_num_threads(int *a, int n) {
 #pragma omp target teams distribute parallel for num_threads(32) map(tofrom : a[0:n])
   for (int i = 0; i < n; ++i)
@@ -16,6 +22,14 @@ void fallback_num_threads(int *a, int n) {
 }
 
 // CHECK-LABEL: define weak_odr protected amdgpu_kernel void @{{.*}}__Z11direct_bodyPii
+// CHECK: call void @__kmpc_specialized_kernel_init()
+// CHECK-DAG: call i32 @__kmpc_get_hardware_thread_id_in_block()
+// CHECK-DAG: call i32 @llvm.amdgcn.workgroup.id.x()
+// CHECK-NOT: __kmpc_parallel_60
+// CHECK-NOT: __kmpc_distribute_static_init
+// CHECK: ret void
+
+// CHECK-LABEL: define weak_odr protected amdgpu_kernel void @{{.*}}__Z16direct_body_simdPii
 // CHECK: call void @__kmpc_specialized_kernel_init()
 // CHECK-DAG: call i32 @__kmpc_get_hardware_thread_id_in_block()
 // CHECK-DAG: call i32 @llvm.amdgcn.workgroup.id.x()

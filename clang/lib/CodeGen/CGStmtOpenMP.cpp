@@ -7593,6 +7593,8 @@ static void emitTargetTeamsDistributeParallelForSimdRegion(
     const OMPTargetTeamsDistributeParallelForSimdDirective &S,
     PrePostActionTy &Action) {
   Action.Enter(CGF);
+  if (tryEmitAMDGPUNoLoopRegion(CGF, S))
+    return;
   auto &&CodeGenDistribute = [&S](CodeGenFunction &CGF, PrePostActionTy &) {
     CGF.EmitOMPDistributeLoop(S, emitInnerParallelForWhenCombined,
                               S.getDistInc());
