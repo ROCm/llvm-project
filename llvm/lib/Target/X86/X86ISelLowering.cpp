@@ -28477,11 +28477,12 @@ static SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, const X86Subtarget &Subtarget,
       SDValue Addr = Op.getOperand(2);
       SDValue Src1 = Op.getOperand(3);
       SDValue Src2 = Op.getOperand(4);
-      SDValue CC = Op.getOperand(5);
+      X86::CondCode X86CondCode = (X86::CondCode)Op.getConstantOperandVal(5);
+      SDValue CC = DAG.getTargetConstant(X86CondCode, DL, MVT::i8);
       MachineMemOperand *MMO = cast<MemIntrinsicSDNode>(Op)->getMemOperand();
-      SDValue Operation = DAG.getMemIntrinsicNode(
-          X86ISD::CMPCCXADD, DL, Op->getVTList(), {Chain, Addr, Src1, Src2, CC},
-          MVT::i32, MMO);
+      SDValue Operation =
+          DAG.getMemIntrinsicNode(X86ISD::CMPCCXADD, DL, Op->getVTList(),
+                                  {Chain, Addr, Src1, Src2, CC}, MVT::i32, MMO);
       return Operation;
     }
     case Intrinsic::x86_aadd32:
@@ -58627,6 +58628,28 @@ static SDValue combineX86AddSub(SDNode *N, SelectionDAG &DAG,
       SDValue NegC = DAG.getConstant(-Const->getAPIntValue(), DL, VT);
       // Negate X86ISD::SUB(C, RHS) and replace generic add(RHS, -C).
       MatchGeneric(ISD::ADD, RHS, NegC, true);
+    }
+  }
+
+  // Fold ADD(ADC(Y, C1, CF), C2) -> ADC(Y, C1 + C2, CF) and
+  //      ADD(ADC(Y, 0, CF), X) -> ADC(Y, X, CF)
+  if (!IsSub && LHS.getOpcode() == X86ISD::ADC && LHS.hasOneUse() &&
+      !needCarryOrOverflowFlag(SDValue(N, 1))) {
+
+    auto *C1 = dyn_cast<ConstantSDNode>(LHS.getOperand(1));
+    auto *C2 = dyn_cast<ConstantSDNode>(RHS);
+
+    // Both are constants: fold C1 + C2
+    if (C1 && C2) {
+      APInt Sum = C1->getAPIntValue() + C2->getAPIntValue();
+      return DAG.getNode(X86ISD::ADC, DL, N->getVTList(), LHS.getOperand(0),
+                         DAG.getConstant(Sum, DL, VT), LHS.getOperand(2));
+    }
+
+    // Case: ADC(Y, 0, CF) + X -> ADC(Y, X, CF)
+    if (C1 && C1->isZero()) {
+      return DAG.getNode(X86ISD::ADC, DL, N->getVTList(), LHS.getOperand(0),
+                         RHS, LHS.getOperand(2));
     }
   }
 
