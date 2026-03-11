@@ -21,8 +21,10 @@
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Cuda.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Frontend/OpenMP/OMPDeviceConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -85,6 +87,140 @@ public:
   }
   ~ExecutionRuntimeModesRAII() { ExecMode = SavedExecMode; }
 };
+
+static const VarDecl *getDeclRefVar(const Expr *E) {
+  if (!E)
+    return nullptr;
+  E = E->IgnoreParenImpCasts();
+  const auto *DRE = dyn_cast<DeclRefExpr>(E);
+  if (!DRE)
+    return nullptr;
+  return dyn_cast<VarDecl>(DRE->getDecl());
+}
+
+class NoLoopStepChecker final : public ConstStmtVisitor<NoLoopStepChecker> {
+  const VarDecl *LoopVar;
+  bool Unsupported = false;
+
+public:
+  explicit NoLoopStepChecker(const VarDecl *LoopVar) : LoopVar(LoopVar) {}
+
+  bool isUnsupported() const { return Unsupported; }
+
+  void VisitDeclRefExpr(const DeclRefExpr *DRE) {
+    if (DRE && DRE->getDecl() == LoopVar)
+      Unsupported = true;
+  }
+
+  void VisitStmt(const Stmt *S) {
+    if (!S || Unsupported)
+      return;
+    for (const Stmt *Child : S->children()) {
+      if (!Child)
+        continue;
+      Visit(Child);
+      if (Unsupported)
+        return;
+    }
+  }
+};
+
+class NoLoopBodyChecker final : public ConstStmtVisitor<NoLoopBodyChecker> {
+  bool Unsupported = false;
+
+public:
+  bool isUnsupported() const { return Unsupported; }
+
+  void VisitOMPExecutableDirective(const OMPExecutableDirective *) {
+    Unsupported = true;
+  }
+
+  void VisitCallExpr(const CallExpr *CE) {
+    if (!CE || Unsupported)
+      return;
+    if (const FunctionDecl *FD = CE->getDirectCallee()) {
+      StringRef Name = FD->getName();
+      if (Name.starts_with("omp_") || Name.starts_with("__kmpc_")) {
+        Unsupported = true;
+        return;
+      }
+    }
+    VisitStmt(CE);
+  }
+
+  void VisitStmt(const Stmt *S) {
+    if (!S || Unsupported)
+      return;
+    for (const Stmt *Child : S->children()) {
+      if (!Child)
+        continue;
+      Visit(Child);
+      if (Unsupported)
+        return;
+    }
+  }
+};
+
+static const ForStmt *getSingleForStmt(const Stmt *S) {
+  if (!S)
+    return nullptr;
+  S = S->IgnoreContainers();
+  while (true) {
+    if (!S)
+      return nullptr;
+    if (const auto *CS = dyn_cast<CapturedStmt>(S)) {
+      S = CS->getCapturedDecl()->getBody()->IgnoreContainers();
+      continue;
+    }
+    if (const auto *FS = dyn_cast<ForStmt>(S))
+      return FS;
+    const auto *CompStmt = dyn_cast<CompoundStmt>(S);
+    if (!CompStmt || CompStmt->size() != 1)
+      return nullptr;
+    S = CompStmt->body_front()->IgnoreContainers();
+  }
+}
+
+static const VarDecl *getNoLoopIndexVar(const OMPLoopDirective &LD) {
+  const auto *VD = getDeclRefVar(LD.getIterationVariable());
+  if (!VD || !VD->getType()->isIntegerType())
+    return nullptr;
+  return VD;
+}
+
+static bool checkNoLoopStep(const Expr *Inc, const VarDecl *VD) {
+  if (!Inc)
+    return false;
+  Inc = Inc->IgnoreParenImpCasts();
+  if (const auto *UO = dyn_cast<UnaryOperator>(Inc))
+    return UO->isIncrementOp() && getDeclRefVar(UO->getSubExpr()) == VD;
+
+  if (const auto *CAO = dyn_cast<CompoundAssignOperator>(Inc))
+    return CAO->getOpcode() == BO_AddAssign && getDeclRefVar(CAO->getLHS()) == VD;
+
+  const auto *BO = dyn_cast<BinaryOperator>(Inc);
+  if (!BO || BO->getOpcode() != BO_Assign || getDeclRefVar(BO->getLHS()) != VD)
+    return false;
+
+  const auto *StepBO =
+      dyn_cast<BinaryOperator>(BO->getRHS()->IgnoreParenImpCasts());
+  if (!StepBO || StepBO->getOpcode() != BO_Add)
+    return false;
+
+  const Expr *LHS = StepBO->getLHS()->IgnoreParenImpCasts();
+  const Expr *RHS = StepBO->getRHS()->IgnoreParenImpCasts();
+  const Expr *StepExpr = nullptr;
+  if (getDeclRefVar(LHS) == VD)
+    StepExpr = RHS;
+  else if (getDeclRefVar(RHS) == VD)
+    StepExpr = LHS;
+  else
+    return false;
+
+  NoLoopStepChecker Checker(VD);
+  Checker.Visit(StepExpr);
+  return !Checker.isUnsupported();
+}
 
 static const ValueDecl *getPrivateItem(const Expr *RefExpr) {
   RefExpr = RefExpr->IgnoreParens();
@@ -703,31 +839,37 @@ static bool supportsSPMDExecutionMode(ASTContext &Ctx,
 
 static bool supportsSPMDNoLoopExecutionMode(const CodeGenModule &CGM,
                                             const OMPExecutableDirective &D) {
-  if (!CGM.getLangOpts().OpenMPTeamSubscription ||
-      !CGM.getLangOpts().OpenMPThreadSubscription)
-    return false;
-
-  switch (D.getDirectiveKind()) {
-  case OMPD_target_teams_distribute_parallel_for:
-  case OMPD_target_teams_distribute_parallel_for_simd:
-    break;
-  case OMPD_target_teams_loop: {
-    const auto *TTLD = dyn_cast<OMPTargetTeamsGenericLoopDirective>(&D);
-    if (!TTLD || !TTLD->canBeParallelFor())
+  if (!CGM.getTriple().isAMDGCN()) {
+    if (!CGM.getLangOpts().OpenMPTeamSubscription ||
+        !CGM.getLangOpts().OpenMPThreadSubscription)
       return false;
-    break;
+
+    switch (D.getDirectiveKind()) {
+    case OMPD_target_teams_distribute_parallel_for:
+    case OMPD_target_teams_distribute_parallel_for_simd:
+      break;
+    case OMPD_target_teams_loop: {
+      const auto *TTLD = dyn_cast<OMPTargetTeamsGenericLoopDirective>(&D);
+      if (!TTLD || !TTLD->canBeParallelFor())
+        return false;
+      break;
+    }
+    default:
+      return false;
+    }
+
+    if (D.getSingleClause<OMPNumTeamsClause>())
+      return false;
+
+    if (!D.getClausesOfKind<OMPReductionClause>().empty())
+      return false;
+
+    return true;
   }
-  default:
-    return false;
-  }
 
-  if (D.getSingleClause<OMPNumTeamsClause>())
-    return false;
-
-  if (!D.getClausesOfKind<OMPReductionClause>().empty())
-    return false;
-
-  return true;
+  return static_cast<const CGOpenMPRuntimeGPU &>(
+             const_cast<CodeGenModule &>(CGM).getOpenMPRuntime())
+      .canEmitSPMDNoLoop(D);
 }
 
 void CGOpenMPRuntimeGPU::emitNonSPMDKernel(const OMPExecutableDirective &D,
@@ -2445,4 +2587,81 @@ llvm::Value *CGOpenMPRuntimeGPU::getGPUThreadID(CodeGenFunction &CGF) {
       OMPBuilder.getOrCreateRuntimeFunction(
           CGM.getModule(), OMPRTL___kmpc_get_hardware_thread_id_in_block),
       Args);
+}
+
+llvm::Value *CGOpenMPRuntimeGPU::getGPUBlockID(CodeGenFunction &CGF) {
+  llvm::Function *F =
+      CGF.CGM.getIntrinsic(llvm::Intrinsic::amdgcn_workgroup_id_x);
+  return CGF.Builder.CreateCall(F, {}, "gpu_block_id");
+}
+
+llvm::Value *CGOpenMPRuntimeGPU::getGPUNumBlocks(CodeGenFunction &CGF) {
+  return CGF.EmitRuntimeCall(OMPBuilder.getOrCreateRuntimeFunction(
+      CGM.getModule(), OMPRTL___kmpc_get_hardware_num_blocks));
+}
+
+llvm::Value *CGOpenMPRuntimeGPU::initSpecializedKernel(CodeGenFunction &CGF) {
+  llvm::Module &M = CGM.getModule();
+  llvm::Function *F = M.getFunction("__kmpc_specialized_kernel_init");
+  if (!F) {
+    F = llvm::Function::Create(llvm::FunctionType::get(CGF.VoidTy, {}, false),
+                               llvm::GlobalValue::ExternalLinkage,
+                               "__kmpc_specialized_kernel_init", &M);
+  }
+  return CGF.Builder.CreateCall(F, {});
+}
+
+bool CGOpenMPRuntimeGPU::canEmitSPMDNoLoop(
+    const OMPExecutableDirective &D) const {
+  if (!CGM.getTriple().isAMDGCN())
+    return false;
+  if (!CGM.getLangOpts().OpenMPTeamSubscription ||
+      !CGM.getLangOpts().OpenMPThreadSubscription)
+    return false;
+
+  switch (D.getDirectiveKind()) {
+  case OMPD_target_teams_distribute_parallel_for:
+    break;
+  case OMPD_target_teams_loop: {
+    const auto *TTLD = dyn_cast<OMPTargetTeamsGenericLoopDirective>(&D);
+    if (!TTLD || !TTLD->canBeParallelFor())
+      return false;
+    break;
+  }
+  default:
+    return false;
+  }
+
+  if (!D.hasAssociatedStmt())
+    return false;
+  if (D.getSingleClause<OMPNumTeamsClause>() ||
+      D.getSingleClause<OMPNumThreadsClause>() ||
+      D.getSingleClause<OMPThreadLimitClause>() ||
+      D.getSingleClause<OMPOrderedClause>() ||
+      D.getSingleClause<OMPDistScheduleClause>())
+    return false;
+  if (!D.getClausesOfKind<OMPReductionClause>().empty() ||
+      !D.getClausesOfKind<OMPInReductionClause>().empty() ||
+      !D.getClausesOfKind<OMPLastprivateClause>().empty() ||
+      !D.getClausesOfKind<OMPCopyinClause>().empty())
+    return false;
+
+  const auto *LD = dyn_cast<OMPLoopDirective>(&D);
+  if (!LD || LD->getLoopsNumber() != 1)
+    return false;
+
+  const ForStmt *FStmt = getSingleForStmt(LD->getInnermostCapturedStmt());
+  if (!FStmt || FStmt->getConditionVariable() != nullptr)
+    return false;
+
+  const VarDecl *VD = getNoLoopIndexVar(*LD);
+  if (!VD || !LD->getCond() || !checkNoLoopStep(LD->getInc(), VD))
+    return false;
+
+  const Stmt *Body = LD->getInnermostCapturedStmt()->getCapturedStmt();
+  if (!Body)
+    return false;
+  NoLoopBodyChecker Checker;
+  Checker.Visit(Body->IgnoreContainers());
+  return !Checker.isUnsupported();
 }

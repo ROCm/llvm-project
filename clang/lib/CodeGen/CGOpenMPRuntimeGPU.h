@@ -156,6 +156,18 @@ public:
   /// Get the maximum number of threads in a block of the GPU.
   llvm::Value *getGPUNumThreads(CodeGenFunction &CGF);
 
+  /// Get the block id of the current thread on AMDGPU.
+  llvm::Value *getGPUBlockID(CodeGenFunction &CGF);
+
+  /// Get the number of launched blocks on AMDGPU.
+  llvm::Value *getGPUNumBlocks(CodeGenFunction &CGF);
+
+  /// Initialize a specialized AMDGPU kernel.
+  llvm::Value *initSpecializedKernel(CodeGenFunction &CGF);
+
+  /// Return true if the directive can use direct SPMD no-loop lowering.
+  bool canEmitSPMDNoLoop(const OMPExecutableDirective &D) const;
+
   /// Emit call to void __kmpc_push_proc_bind(ident_t *loc, kmp_int32
   /// global_tid, int proc_bind) to generate code for 'proc_bind' clause.
   void emitProcBindClause(CodeGenFunction &CGF,

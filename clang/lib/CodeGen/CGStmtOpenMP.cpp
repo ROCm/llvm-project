@@ -13,6 +13,7 @@
 #include "CGCleanup.h"
 #include "CGDebugInfo.h"
 #include "CGOpenMPRuntime.h"
+#include "CGOpenMPRuntimeGPU.h"
 #include "CodeGenFunction.h"
 #include "CodeGenModule.h"
 #include "CodeGenPGO.h"
@@ -49,6 +50,8 @@ using namespace llvm::omp;
 static const VarDecl *getBaseDecl(const Expr *Ref);
 static OpenMPDirectiveKind
 getEffectiveDirectiveKind(const OMPExecutableDirective &S);
+static bool tryEmitAMDGPUNoLoopRegion(CodeGenFunction &CGF,
+                                      const OMPLoopDirective &D);
 
 namespace {
 /// Lexical scope for OpenMP executable constructs, that handles correct codegen
@@ -2012,6 +2015,130 @@ static void emitBody(CodeGenFunction &CGF, const Stmt *S, const Stmt *NextLoop,
     }
   }
   CGF.EmitStmt(S);
+}
+
+static const VarDecl *getNoLoopVarDecl(const Expr *E) {
+  if (!E)
+    return nullptr;
+  E = E->IgnoreParenImpCasts();
+  const auto *DRE = dyn_cast<DeclRefExpr>(E);
+  if (!DRE)
+    return nullptr;
+  return dyn_cast<VarDecl>(DRE->getDecl());
+}
+
+static const Expr *getNoLoopStepExpr(const Expr *Inc, const VarDecl *IVDecl) {
+  Inc = Inc->IgnoreParenImpCasts();
+  if (isa<UnaryOperator>(Inc))
+    return nullptr;
+
+  if (const auto *CAO = dyn_cast<CompoundAssignOperator>(Inc)) {
+    assert(CAO->getOpcode() == BO_AddAssign && "unexpected no-loop step");
+    return CAO->getRHS();
+  }
+
+  const auto *BO = cast<BinaryOperator>(Inc);
+  assert(BO->getOpcode() == BO_Assign && "unexpected no-loop step");
+  const auto *AddBO =
+      cast<BinaryOperator>(BO->getRHS()->IgnoreParenImpCasts());
+  const Expr *LHS = AddBO->getLHS()->IgnoreParenImpCasts();
+  const Expr *RHS = AddBO->getRHS()->IgnoreParenImpCasts();
+  if (getNoLoopVarDecl(LHS) == IVDecl)
+    return RHS;
+  if (getNoLoopVarDecl(RHS) == IVDecl)
+    return LHS;
+  llvm_unreachable("validated no-loop step must reference the induction var");
+}
+
+static llvm::Value *applyNoLoopInc(CodeGenFunction &CGF, const Expr *Inc,
+                                   const VarDecl *IVDecl,
+                                   llvm::Value *CurrVal) {
+  const Expr *StepExpr = getNoLoopStepExpr(Inc, IVDecl);
+  if (!StepExpr)
+    return CurrVal;
+  llvm::Value *StepVal = CGF.EmitScalarExpr(StepExpr);
+  return CGF.Builder.CreateMul(
+      CGF.Builder.CreateIntCast(CurrVal, CGF.ConvertTypeForMem(StepExpr->getType()),
+                                false),
+      StepVal);
+}
+
+static std::pair<const VarDecl *, Address>
+emitNoLoopIV(CodeGenFunction &CGF, const OMPLoopDirective &LD) {
+  for (const Expr *CE : LD.counters()) {
+    const auto *CEDecl = cast<VarDecl>(cast<DeclRefExpr>(CE)->getDecl());
+    CGF.EmitVarDecl(*CEDecl);
+  }
+
+  if (const auto *PreInits = cast_or_null<DeclStmt>(LD.getPreInits())) {
+    for (const auto *I : PreInits->decls())
+      CGF.EmitVarDecl(cast<VarDecl>(*I));
+  }
+
+  for (const Expr *InitExpr : LD.inits())
+    CGF.EmitIgnoredExpr(InitExpr);
+
+  const auto *LBDecl =
+      cast<VarDecl>(cast<DeclRefExpr>(LD.getLowerBoundVariable())->getDecl());
+  CGF.EmitVarDecl(*LBDecl);
+
+  const auto *UBDecl =
+      cast<VarDecl>(cast<DeclRefExpr>(LD.getUpperBoundVariable())->getDecl());
+  CGF.EmitVarDecl(*UBDecl);
+
+  const auto *IVDecl =
+      cast<VarDecl>(cast<DeclRefExpr>(LD.getIterationVariable())->getDecl());
+  CGF.EmitVarDecl(*IVDecl);
+  CGF.EmitIgnoredExpr(LD.getInit());
+
+  return {IVDecl, CGF.GetAddrOfLocalVar(IVDecl)};
+}
+
+static bool tryEmitAMDGPUNoLoopRegion(CodeGenFunction &CGF,
+                                      const OMPLoopDirective &D) {
+  if (!CGF.CGM.getTriple().isAMDGCN())
+    return false;
+
+  auto &RT = static_cast<CGOpenMPRuntimeGPU &>(CGF.CGM.getOpenMPRuntime());
+  if (!RT.canEmitSPMDNoLoop(D))
+    return false;
+
+  CodeGenFunction::OMPPrivateScope PrivateScope(CGF);
+  (void)CGF.EmitOMPFirstprivateClause(D, PrivateScope);
+  CGF.EmitOMPPrivateClause(D, PrivateScope);
+  (void)PrivateScope.Privatize();
+  CGF.CGM.getOpenMPRuntime().adjustTargetSpecificDataForLambdas(CGF, D);
+
+  RT.initSpecializedKernel(CGF);
+
+  auto IVPair = emitNoLoopIV(CGF, D);
+  const VarDecl *IVDecl = IVPair.first;
+  Address IvAddr = IVPair.second;
+
+  llvm::Value *GpuThreadId = RT.getGPUThreadID(CGF);
+  llvm::Value *WorkGroupSize = RT.getGPUNumThreads(CGF);
+  llvm::Value *WorkGroupId = RT.getGPUBlockID(CGF);
+  llvm::Value *GlobalGpuThreadId =
+      CGF.Builder.CreateAdd(CGF.Builder.CreateMul(WorkGroupId, WorkGroupSize),
+                            GpuThreadId);
+  GlobalGpuThreadId =
+      applyNoLoopInc(CGF, D.getInc(), IVDecl, GlobalGpuThreadId);
+
+  llvm::Value *Gtid =
+      CGF.Builder.CreateIntCast(GlobalGpuThreadId, IvAddr.getElementType(), false);
+  llvm::Value *Iv = CGF.Builder.CreateAdd(Gtid, CGF.Builder.CreateLoad(IvAddr));
+  CGF.Builder.CreateStore(Iv, IvAddr);
+
+  llvm::BasicBlock *ExecBB = CGF.createBasicBlock("omp.kernel.body");
+  llvm::BasicBlock *DoneBB = CGF.createBasicBlock("omp.kernel.done");
+  llvm::Value *IvCmp = CGF.EvaluateExprAsBool(D.getCond());
+  CGF.Builder.CreateCondBr(IvCmp, ExecBB, DoneBB);
+
+  CGF.EmitBlock(ExecBB);
+  CGF.EmitOMPLoopBody(D, CGF.getJumpDestInCurrentScope(DoneBB));
+  CGF.EmitBranch(DoneBB);
+  CGF.EmitBlock(DoneBB);
+  return true;
 }
 
 void CodeGenFunction::EmitOMPLoopBody(const OMPLoopDirective &D,
@@ -7412,6 +7539,8 @@ static void emitTargetTeamsDistributeParallelForRegion(
     CodeGenFunction &CGF, const OMPTargetTeamsDistributeParallelForDirective &S,
     PrePostActionTy &Action) {
   Action.Enter(CGF);
+  if (tryEmitAMDGPUNoLoopRegion(CGF, S))
+    return;
   auto &&CodeGenDistribute = [&S](CodeGenFunction &CGF, PrePostActionTy &) {
     CGF.EmitOMPDistributeLoop(S, emitInnerParallelForWhenCombined,
                               S.getDistInc());
@@ -8383,6 +8512,8 @@ static void emitTargetTeamsGenericLoopRegionAsParallel(
     CodeGenFunction &CGF, PrePostActionTy &Action,
     const OMPTargetTeamsGenericLoopDirective &S) {
   Action.Enter(CGF);
+  if (tryEmitAMDGPUNoLoopRegion(CGF, S))
+    return;
   // Emit 'teams loop' as if its constituent constructs are 'distribute,
   // 'parallel, and 'for'.
   auto &&CodeGenDistribute = [&S](CodeGenFunction &CGF, PrePostActionTy &) {
