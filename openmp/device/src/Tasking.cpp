@@ -91,6 +91,13 @@ void __kmpc_taskloop(IdentTy *Loc, uint32_t TId,
   __kmpc_omp_task_with_deps(Loc, TId, TaskDescriptor, 0, 0, 0, 0);
 }
 
+// All tasks on GPU devices are immediately executed, so completion events are
+// never materialized and fulfilling them becomes a no-op.
+void *__kmpc_task_allow_completion_event(IdentTy *, uint32_t,
+                                         TaskDescriptorTy *) {
+  return nullptr;
+}
+
 int omp_in_final(void) {
   // treat all tasks as final... Specs may expect runtime to keep
   // track more precisely if a task was actively set by users... This
@@ -100,4 +107,6 @@ int omp_in_final(void) {
 }
 
 int omp_get_max_task_priority(void) { return 0; }
+
+void omp_fulfill_event(uint64_t) {}
 }
