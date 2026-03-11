@@ -397,6 +397,8 @@ struct GenericKernelTy {
     case OMP_TGT_EXEC_MODE_GENERIC:
     case OMP_TGT_EXEC_MODE_GENERIC_SPMD:
     case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
+    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+    case OMP_TGT_EXEC_MODE_XTEAM_RED:
       return true;
     }
     return false;
@@ -416,6 +418,10 @@ protected:
       return "Generic-SPMD";
     case OMP_TGT_EXEC_MODE_SPMD_NO_LOOP:
       return "SPMD-No-Loop";
+    case OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP:
+      return "SPMD-Big-Jump-Loop";
+    case OMP_TGT_EXEC_MODE_XTEAM_RED:
+      return "XTeam-Reductions";
     }
     llvm_unreachable("Unknown execution mode!");
   }
@@ -472,6 +478,14 @@ private:
   bool isNoLoopMode() const {
     return KernelEnvironment.Configuration.ExecMode ==
            OMP_TGT_EXEC_MODE_SPMD_NO_LOOP;
+  }
+  bool isBigJumpLoopMode() const {
+    return KernelEnvironment.Configuration.ExecMode ==
+           OMP_TGT_EXEC_MODE_SPMD_BIG_JUMP_LOOP;
+  }
+  bool isXTeamReductionsMode() const {
+    return KernelEnvironment.Configuration.ExecMode ==
+           OMP_TGT_EXEC_MODE_XTEAM_RED;
   }
 
   /// The kernel name.
@@ -1001,6 +1015,7 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Get target compute unit kind (e.g., sm_80, or gfx908).
   virtual std::string getComputeUnitKind() const { return "unknown"; }
+  virtual uint32_t getNumComputeUnits() const { return 0; }
 
   /// Post processing after jit backend. The ownership of \p MB will be taken.
   virtual Expected<std::unique_ptr<MemoryBuffer>>

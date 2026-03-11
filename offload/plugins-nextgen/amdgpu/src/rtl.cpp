@@ -2179,6 +2179,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
             getDeviceAttr(HSA_AMD_AGENT_INFO_COMPUTE_UNIT_COUNT, ComputeUnits))
       return Err;
     GridValues.GV_Default_Num_Teams = ComputeUnits * OMPX_DefaultTeamsPerCU;
+    NumComputeUnits = ComputeUnits;
 
     uint32_t WavesPerCU = 0;
     if (auto Err =
@@ -2386,6 +2387,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   uint64_t getHardwareParallelism() const override {
     return HardwareParallelism;
   }
+
+  uint32_t getNumComputeUnits() const override { return NumComputeUnits; }
 
   /// We want to set up the RPC server for host services to the GPU if it is
   /// available.
@@ -3476,6 +3479,9 @@ private:
 
   /// The total number of concurrent work items that can be running on the GPU.
   uint64_t HardwareParallelism;
+
+  /// The number of compute units available on the device.
+  uint32_t NumComputeUnits = 0;
 
   /// The largest wavefront size across all loaded images, used for RPC.
   uint32_t MaxWavefrontSize = 0;

@@ -613,6 +613,59 @@ uint32_t GenericKernelTy::getNumBlocks(GenericDeviceTy &GenericDevice,
   assert(NumTeamsClause[1] == 1 && NumTeamsClause[2] == 1 &&
          "Multi dimensional launch not supported yet.");
 
+  const auto getNumGroupsFromThreadsAndTripCount =
+      [](const uint64_t TripCount, const uint32_t Threads) {
+        return ((TripCount - 1) / Threads) + 1;
+      };
+  uint64_t DeviceNumCUs = GenericDevice.getNumComputeUnits();
+
+  if (isNoLoopMode())
+    return LoopTripCount > 0
+               ? getNumGroupsFromThreadsAndTripCount(LoopTripCount, NumThreads)
+               : 1;
+
+  if (isBigJumpLoopMode()) {
+    uint64_t NumGroups = 1;
+    if (LoopTripCount > 0)
+      NumGroups =
+          getNumGroupsFromThreadsAndTripCount(LoopTripCount, NumThreads);
+
+    if (NumTeamsClause[0] > 0 &&
+        NumTeamsClause[0] <= GenericDevice.getBlockLimit()) {
+      NumGroups = std::min(static_cast<uint64_t>(NumTeamsClause[0]), NumGroups);
+    } else {
+      uint64_t NumWavesInGroup = NumThreads / GenericDevice.getWarpSize();
+      uint64_t MaxOccupancyFactor =
+          NumWavesInGroup ? (32 / NumWavesInGroup) : 32;
+      NumGroups = std::min(NumGroups, MaxOccupancyFactor * DeviceNumCUs);
+    }
+    return NumGroups;
+  }
+
+  if (isXTeamReductionsMode()) {
+    uint64_t NumGroups = 0;
+    if (NumTeamsClause[0] > 0 &&
+        NumTeamsClause[0] <= GenericDevice.getBlockLimit()) {
+      NumGroups = NumTeamsClause[0];
+    } else {
+      if (NumThreads > 0) {
+        const uint64_t MaxCUMultiplier = 2;
+        NumGroups = DeviceNumCUs *
+                    std::min(MaxCUMultiplier,
+                             static_cast<uint64_t>(1024 / NumThreads));
+      } else {
+        NumGroups = DeviceNumCUs;
+      }
+
+      uint64_t NumGroupsFromTripCount = 1;
+      if (LoopTripCount > 0)
+        NumGroupsFromTripCount =
+            getNumGroupsFromThreadsAndTripCount(LoopTripCount, NumThreads);
+      NumGroups = std::min(NumGroups, NumGroupsFromTripCount);
+    }
+    return std::min<uint64_t>(512, NumGroups);
+  }
+
   if (NumTeamsClause[0] > 0) {
     // TODO: We need to honor any value and consequently allow more than the
     // block limit. For this we might need to start multiple kernels or let the
