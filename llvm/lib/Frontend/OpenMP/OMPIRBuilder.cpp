@@ -400,7 +400,7 @@ BasicBlock *llvm::splitBBWithSuffix(IRBuilderBase &Builder, bool CreateBranch,
 // This function creates a fake integer value and a fake use for the integer
 // value. It returns the fake value created. This is useful in modeling the
 // extra arguments to the outlined functions.
-Value *createFakeIntVal(IRBuilderBase &Builder,
+Value *createFakeIntVal(IRBuilderBase &Builder, Module &M,
                         OpenMPIRBuilder::InsertPointTy OuterAllocaIP,
                         llvm::SmallVectorImpl<Instruction *> &ToBeDeleted,
                         OpenMPIRBuilder::InsertPointTy InnerAllocaIP,
@@ -413,9 +413,15 @@ Value *createFakeIntVal(IRBuilderBase &Builder,
       Builder.CreateAlloca(IntTy, nullptr, Name + ".addr");
   ToBeDeleted.push_back(FakeValAddr);
 
-  if (AsPtr) {
-    FakeVal = FakeValAddr;
-  } else {
+  FakeVal = FakeValAddr;
+  if (M.getDataLayout().getAllocaAddrSpace() != 0) {
+    FakeVal = cast<Instruction>(Builder.CreateAddrSpaceCast(
+        FakeValAddr, PointerType::get(M.getContext(), 0),
+        Name + ".addr.ascast"));
+    ToBeDeleted.push_back(FakeVal);
+  }
+
+  if (!AsPtr) {
     FakeVal = Builder.CreateLoad(IntTy, FakeValAddr, Name + ".val");
     ToBeDeleted.push_back(FakeVal);
   }
@@ -2142,13 +2148,14 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTaskloop(
   // Add the thread ID argument.
   SmallVector<Instruction *> ToBeDeleted;
   // dummy instruction to be used as a fake argument
-  OI.ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, AllocaIP, ToBeDeleted, TaskloopAllocaIP, "global.tid", false));
-  Value *FakeLB = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
+  OI.ExcludeArgsFromAggregate.push_back(
+      createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted, TaskloopAllocaIP,
+                       "global.tid", false));
+  Value *FakeLB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
                                    TaskloopAllocaIP, "lb", false, true);
-  Value *FakeUB = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
+  Value *FakeUB = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
                                    TaskloopAllocaIP, "ub", false, true);
-  Value *FakeStep = createFakeIntVal(Builder, AllocaIP, ToBeDeleted,
+  Value *FakeStep = createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted,
                                      TaskloopAllocaIP, "step", false, true);
   // For Taskloop, we want to force the bounds being the first 3 inputs in the
   // aggregate struct
@@ -2478,7 +2485,7 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::createTask(
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
   OI.ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, AllocaIP, ToBeDeleted, TaskAllocaIP, "global.tid", false));
+      Builder, M, AllocaIP, ToBeDeleted, TaskAllocaIP, "global.tid", false));
 
   OI.PostOutlineCB = [this, Ident, Tied, Final, IfCondition, Dependencies,
                       Mergeable, Priority, EventHandle, TaskAllocaBB,
@@ -8882,8 +8889,9 @@ OpenMPIRBuilder::InsertPointOrErrorTy OpenMPIRBuilder::emitTargetTask(
 
   // Add the thread ID argument.
   SmallVector<Instruction *, 4> ToBeDeleted;
-  OI.ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, AllocaIP, ToBeDeleted, TargetTaskAllocaIP, "global.tid", false));
+  OI.ExcludeArgsFromAggregate.push_back(
+      createFakeIntVal(Builder, M, AllocaIP, ToBeDeleted, TargetTaskAllocaIP,
+                       "global.tid", false));
 
   // Generate the task body which will subsequently be outlined.
   Builder.restoreIP(TargetTaskBodyIP);
@@ -10891,9 +10899,9 @@ OpenMPIRBuilder::createTeams(const LocationDescription &Loc,
   SmallVector<Instruction *, 8> ToBeDeleted;
   InsertPointTy OuterAllocaIP(&OuterAllocaBB, OuterAllocaBB.begin());
   OI.ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, OuterAllocaIP, ToBeDeleted, AllocaIP, "gid", true));
+      Builder, M, OuterAllocaIP, ToBeDeleted, AllocaIP, "gid", true));
   OI.ExcludeArgsFromAggregate.push_back(createFakeIntVal(
-      Builder, OuterAllocaIP, ToBeDeleted, AllocaIP, "tid", true));
+      Builder, M, OuterAllocaIP, ToBeDeleted, AllocaIP, "tid", true));
 
   auto HostPostOutlineCB = [this, Ident,
                             ToBeDeleted](Function &OutlinedFn) mutable {
