@@ -2685,8 +2685,10 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
     Arg.getAnyValue()->setName(D.getName());
 
   QualType Ty = D.getType();
+  const llvm::Triple &TargetTriple =
+      CGM.getContext().getTargetInfo().getTriple();
   assert((getLangOpts().OpenCL || Ty.getAddressSpace() == LangAS::Default ||
-          CGM.getContext().getTargetInfo().getTriple().isAMDGCN()) &&
+          TargetTriple.isAMDGCN() || TargetTriple.isNVPTX()) &&
          "parameter has non-default address space in non-OpenCL mode");
 
   // Use better IR generation for certain implicit parameters.
