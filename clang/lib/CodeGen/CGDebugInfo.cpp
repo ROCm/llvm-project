@@ -6661,6 +6661,18 @@ CGDebugInfo::createConstantValueExpression(const clang::ValueDecl *VD,
   if (CGM.getContext().getTypeSize(VD->getType()) > 64)
     return nullptr;
 
+  QualType VDQualTy = VD->getType();
+  llvm::Type *VDTy = CGM.getTypes().ConvertType(VDQualTy);
+  if (Val.isLValue() && Val.isNullPointer() && isa<llvm::PointerType>(VDTy)) {
+    assert(!Val.getLValueBase() && "null pointer should be absolute");
+    auto *PtrTy = cast<llvm::PointerType>(VDTy);
+    unsigned NumBits = CGM.getDataLayout().getPointerTypeSizeInBits(PtrTy);
+    uint64_t NullValue = CGM.getContext().getTargetNullPointerValue(VDQualTy);
+    uint64_t MaskedNullValue =
+        NullValue & llvm::maskTrailingOnes<uint64_t>(NumBits);
+    return DBuilder.createConstantValueExpression(MaskedNullValue);
+  }
+
   if (Val.isFloat())
     return DBuilder.createConstantValueExpression(
         Val.getFloat().bitcastToAPInt().getZExtValue());
