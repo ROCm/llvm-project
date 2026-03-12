@@ -61,9 +61,8 @@ enum BlockStatus : uint32_t {
 ///   single location is overwritten during PARTIAL-to-COMPLETE transitions.
 ///
 /// \param val Input thread local value (use rnv for out-of-bounds threads)
-/// \param result_array Output array for per-thread scan results (size >=
-/// num_elements)
-/// \param block_status Array of block status values
+/// \param result_array Output array for per-thread scan results (size: Grid)
+/// \param block_status Array of block status values (size: NumTeams + 1)
 /// \param block_aggregates Array for per-block aggregates (size: NumTeams)
 /// \param block_prefixes Array for per-block inclusive prefixes (size:
 /// NumTeams)
