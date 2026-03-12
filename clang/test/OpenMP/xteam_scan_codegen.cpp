@@ -64,14 +64,14 @@ int main() {
   return 0;
 }
 // CHECK-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// CHECK-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
+// CHECK-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-64WAVE-NEXT:  entry:
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -80,12 +80,12 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -94,20 +94,20 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -173,14 +173,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// CHECK-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-NEXT:  entry:
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -189,12 +189,12 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -203,20 +203,20 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -283,14 +283,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// CHECK-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-NEXT:  entry:
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -299,12 +299,12 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -313,20 +313,20 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -392,14 +392,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// CHECK-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-NEXT:  entry:
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -408,12 +408,12 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -422,20 +422,20 @@ int main() {
 // CHECK-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -508,14 +508,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// CHECK-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
+// CHECK-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-64WAVE-512WGSize-NEXT:  entry:
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -524,12 +524,12 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -538,20 +538,20 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -617,14 +617,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// CHECK-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-512WGSize-NEXT:  entry:
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -633,12 +633,12 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -647,20 +647,20 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -727,14 +727,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// CHECK-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-512WGSize-NEXT:  entry:
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -743,12 +743,12 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -757,20 +757,20 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -836,14 +836,14 @@ int main() {
 //
 //
 // CHECK-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// CHECK-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-64WAVE-512WGSize-NEXT:  entry:
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -852,12 +852,12 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -866,20 +866,20 @@ int main() {
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-64WAVE-512WGSize-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -952,14 +952,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// CHECK-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
+// CHECK-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-32WAVE-NEXT:  entry:
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -968,12 +968,12 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -982,20 +982,20 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1061,14 +1061,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// CHECK-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-NEXT:  entry:
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1077,12 +1077,12 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1091,20 +1091,20 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1171,14 +1171,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// CHECK-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-NEXT:  entry:
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1187,12 +1187,12 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1201,20 +1201,20 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1280,14 +1280,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// CHECK-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-NEXT:  entry:
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1296,12 +1296,12 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1310,20 +1310,20 @@ int main() {
 // CHECK-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1396,14 +1396,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// CHECK-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
+// CHECK-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-32WAVE-512WGSize-NEXT:  entry:
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1412,12 +1412,12 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1426,20 +1426,20 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1505,14 +1505,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// CHECK-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-512WGSize-NEXT:  entry:
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1521,12 +1521,12 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM15:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1535,20 +1535,20 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM15_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM15]] to ptr
-// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1615,14 +1615,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// CHECK-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-512WGSize-NEXT:  entry:
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1631,12 +1631,12 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1645,20 +1645,20 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1724,14 +1724,14 @@ int main() {
 //
 //
 // CHECK-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// CHECK-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// CHECK-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // CHECK-32WAVE-512WGSize-NEXT:  entry:
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1740,12 +1740,12 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM25:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// CHECK-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1754,20 +1754,20 @@ int main() {
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-32WAVE-512WGSize-NEXT:    [[SUM25_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM25]] to ptr
-// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// CHECK-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // CHECK-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP8]], align 4
@@ -1840,14 +1840,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// SEGMENTED-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
+// SEGMENTED-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
 // SEGMENTED-64WAVE-NEXT:  entry:
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1857,12 +1857,12 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1872,21 +1872,21 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -1975,7 +1975,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -1988,14 +1988,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// SEGMENTED-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-NEXT:  entry:
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2005,12 +2005,12 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2020,21 +2020,21 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2135,7 +2135,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE:       omp.kernel.done:
@@ -2143,14 +2143,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// SEGMENTED-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-NEXT:  entry:
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2160,12 +2160,12 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2175,21 +2175,21 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2278,7 +2278,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP16:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2291,14 +2291,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// SEGMENTED-64WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-NEXT:  entry:
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2308,12 +2308,12 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-64WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2323,21 +2323,21 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2444,7 +2444,7 @@ int main() {
 // SEGMENTED-64WAVE-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // SEGMENTED-64WAVE-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP17:![0-9]+]]
+// SEGMENTED-64WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE:       for.end:
 // SEGMENTED-64WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE:       omp.kernel.done:
@@ -2452,14 +2452,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
+// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
 // SEGMENTED-64WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2469,12 +2469,12 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2484,21 +2484,21 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2587,7 +2587,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2600,14 +2600,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2617,12 +2617,12 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2632,21 +2632,21 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2747,7 +2747,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE-512WGSize:       omp.kernel.done:
@@ -2755,14 +2755,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2772,12 +2772,12 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2787,21 +2787,21 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -2890,7 +2890,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP16:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2903,14 +2903,14 @@ int main() {
 //
 //
 // SEGMENTED-64WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-64WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-64WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2920,12 +2920,12 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2935,21 +2935,21 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3056,7 +3056,7 @@ int main() {
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-64WAVE-512WGSize-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // SEGMENTED-64WAVE-512WGSize-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP17:![0-9]+]]
+// SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-64WAVE-512WGSize:       for.end:
 // SEGMENTED-64WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-64WAVE-512WGSize:       omp.kernel.done:
@@ -3064,14 +3064,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// SEGMENTED-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
+// SEGMENTED-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
 // SEGMENTED-32WAVE-NEXT:  entry:
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3081,12 +3081,12 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3096,21 +3096,21 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3199,7 +3199,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -3212,14 +3212,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// SEGMENTED-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-NEXT:  entry:
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3229,12 +3229,12 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3244,21 +3244,21 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3359,7 +3359,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE:       omp.kernel.done:
@@ -3367,14 +3367,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// SEGMENTED-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-NEXT:  entry:
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3384,12 +3384,12 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3399,21 +3399,21 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3502,7 +3502,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP16:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -3515,14 +3515,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// SEGMENTED-32WAVE-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-SAME: (ptr noundef nonnull align 4 dereferenceable(256000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(256000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-NEXT:  entry:
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3532,12 +3532,12 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-32WAVE-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3547,21 +3547,21 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3668,7 +3668,7 @@ int main() {
 // SEGMENTED-32WAVE-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // SEGMENTED-32WAVE-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP17:![0-9]+]]
+// SEGMENTED-32WAVE-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE:       for.end:
 // SEGMENTED-32WAVE-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE:       omp.kernel.done:
@@ -3676,14 +3676,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47
-// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
+// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
 // SEGMENTED-32WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3693,12 +3693,12 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3708,21 +3708,21 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8:![0-9]+]], !align [[META9:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3811,7 +3811,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP10:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -3824,14 +3824,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l47_1
-// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT1:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM11:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3841,12 +3841,12 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM18:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT1_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT1_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM1_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM1_ADDR2]] to ptr
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3856,21 +3856,21 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM18_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM18]] to ptr
-// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM1]], ptr [[SUM1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[OUT1]], ptr [[OUT1_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM11]], ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[OUT1_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM1_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -3971,7 +3971,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP15:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP12:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE-512WGSize:       omp.kernel.done:
@@ -3979,14 +3979,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57
-// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3996,12 +3996,12 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4011,21 +4011,21 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -4114,7 +4114,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP16:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP13:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -4127,14 +4127,14 @@ int main() {
 //
 //
 // SEGMENTED-32WAVE-512WGSize-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}_main_l57_1
-// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// SEGMENTED-32WAVE-512WGSize-SAME: (ptr noundef nonnull align 4 dereferenceable(512000) [[OUT2:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM2:%.*]], ptr noundef nonnull align 4 dereferenceable(512000) [[IN:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM21:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // SEGMENTED-32WAVE-512WGSize-NEXT:  entry:
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4144,12 +4144,12 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM28:%.*]] = alloca i32, align 4, addrspace(5)
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[OUT2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[OUT2_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[IN_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[IN_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM2_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM2_ADDR2]] to ptr
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4159,21 +4159,21 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[SUM28_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM28]] to ptr
-// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[OUT2]], ptr [[OUT2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM2]], ptr [[SUM2_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[IN]], ptr [[IN_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[SUM21]], ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[OUT2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM2_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[IN_ADDR_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP7:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8
+// SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP8:%.*]] = load ptr, ptr [[SUM2_ADDR2_ASCAST]], align 8, !nonnull [[META8]], !align [[META9]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    call void @__kmpc_specialized_kernel_init()
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP9:%.*]] = alloca i32, align 4, addrspace(5)
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 0, ptr addrspace(5) [[TMP9]], align 4
@@ -4280,7 +4280,7 @@ int main() {
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // SEGMENTED-32WAVE-512WGSize-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // SEGMENTED-32WAVE-512WGSize-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP17:![0-9]+]]
+// SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP14:![0-9]+]]
 // SEGMENTED-32WAVE-512WGSize:       for.end:
 // SEGMENTED-32WAVE-512WGSize-NEXT:    br label [[OMP_KERNEL_DONE]]
 // SEGMENTED-32WAVE-512WGSize:       omp.kernel.done:

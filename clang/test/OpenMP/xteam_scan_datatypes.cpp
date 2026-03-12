@@ -66,14 +66,14 @@ int main() {
   return 0;
 }
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l35
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0:[0-9]+]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -83,12 +83,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -98,19 +98,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29:![0-9]+]], !align [[META30:![0-9]+]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28:![0-9]+]], !align [[META29:![0-9]+]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -201,7 +201,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP31:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP30:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -214,14 +214,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l35_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -231,12 +231,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -246,19 +246,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -361,7 +361,7 @@ int main() {
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // CHECK-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP33:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP32:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -369,14 +369,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l47
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -386,12 +386,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -401,19 +401,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -504,7 +504,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP34:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP33:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -517,14 +517,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l47_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -534,12 +534,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -549,19 +549,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -670,7 +670,7 @@ int main() {
 // CHECK-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // CHECK-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP35:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP34:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -678,14 +678,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l35
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -695,12 +695,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -710,19 +710,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -813,7 +813,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP36:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP35:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -826,14 +826,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l35_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -843,12 +843,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -858,19 +858,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -973,7 +973,7 @@ int main() {
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // CHECK-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP37:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP36:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -981,14 +981,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l47
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -998,12 +998,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1013,19 +1013,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -1116,7 +1116,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP38:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP37:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -1129,14 +1129,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l47_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1146,12 +1146,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1161,19 +1161,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    store i32 0, ptr addrspace(5) [[TMP7]], align 4
@@ -1282,7 +1282,7 @@ int main() {
 // CHECK-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // CHECK-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP39:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP38:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -1290,14 +1290,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l35
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1307,12 +1307,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1322,19 +1322,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40:![0-9]+]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39:![0-9]+]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    store i64 0, ptr addrspace(5) [[TMP7]], align 8
@@ -1425,7 +1425,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP41:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP40:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -1438,14 +1438,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l35_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1455,12 +1455,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1470,19 +1470,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    store i64 0, ptr addrspace(5) [[TMP7]], align 8
@@ -1585,7 +1585,7 @@ int main() {
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // CHECK-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP42:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP41:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -1593,14 +1593,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l47
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1610,12 +1610,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1625,19 +1625,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    store i64 0, ptr addrspace(5) [[TMP7]], align 8
@@ -1728,7 +1728,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP43:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP42:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -1741,14 +1741,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l47_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1758,12 +1758,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1773,19 +1773,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    store i64 0, ptr addrspace(5) [[TMP7]], align 8
@@ -1894,7 +1894,7 @@ int main() {
 // CHECK-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // CHECK-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP44:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP43:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -1902,14 +1902,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l35
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -1919,12 +1919,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca double, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -1934,19 +1934,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP7]], align 8
@@ -2037,7 +2037,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP45:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP44:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2050,14 +2050,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l35_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2067,12 +2067,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca double, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2082,19 +2082,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP7]], align 8
@@ -2197,7 +2197,7 @@ int main() {
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // CHECK-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP46:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP45:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -2205,14 +2205,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l47
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2222,12 +2222,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca double, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2237,19 +2237,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP7]], align 8
@@ -2340,7 +2340,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP47:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP46:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2353,14 +2353,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l47_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2370,12 +2370,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca double, align 8, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2385,19 +2385,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META40]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META39]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca double, align 8, addrspace(5)
 // CHECK-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP7]], align 8
@@ -2506,7 +2506,7 @@ int main() {
 // CHECK-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // CHECK-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP48:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP47:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -2514,14 +2514,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l35
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2531,12 +2531,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca float, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2546,19 +2546,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP7]], align 4
@@ -2649,7 +2649,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP49:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP48:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2662,14 +2662,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l35_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2679,12 +2679,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca float, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2694,19 +2694,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP7]], align 4
@@ -2809,7 +2809,7 @@ int main() {
 // CHECK-NEXT:    [[TMP58:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP59:%.*]] = add i32 1, [[TMP58]]
 // CHECK-NEXT:    store i32 [[TMP59]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP50:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP49:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -2817,14 +2817,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l47
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2834,12 +2834,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca float, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2849,19 +2849,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP7]], align 4
@@ -2952,7 +2952,7 @@ int main() {
 // CHECK-NEXT:    [[TMP50:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP51:%.*]] = add i32 1, [[TMP50]]
 // CHECK-NEXT:    store i32 [[TMP51]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP51:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP50:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    [[TMP52:%.*]] = load ptr, ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP53:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
@@ -2965,14 +2965,14 @@ int main() {
 //
 //
 // CHECK-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l47_1
-// CHECK-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
+// CHECK-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]], ptr noundef [[TMP3:%.*]]) #[[ATTR0]] {
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// CHECK-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -2982,12 +2982,12 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[SUM8:%.*]] = alloca float, align 4, addrspace(5)
-// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // CHECK-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // CHECK-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // CHECK-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// CHECK-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -2997,19 +2997,19 @@ int main() {
 // CHECK-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // CHECK-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // CHECK-NEXT:    [[SUM8_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM8]] to ptr
-// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// CHECK-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
 // CHECK-NEXT:    store ptr [[TMP3]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP4:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    [[TMP5:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// CHECK-NEXT:    [[TMP6:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // CHECK-NEXT:    call void @__kmpc_specialized_kernel_init()
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca float, align 4, addrspace(5)
 // CHECK-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP7]], align 4
@@ -3118,7 +3118,7 @@ int main() {
 // CHECK-NEXT:    [[TMP60:%.*]] = load i32, ptr [[DOTOMP_IV_ASCAST]], align 4
 // CHECK-NEXT:    [[TMP61:%.*]] = add i32 1, [[TMP60]]
 // CHECK-NEXT:    store i32 [[TMP61]], ptr [[DOTOMP_IV_ASCAST]], align 4
-// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP52:![0-9]+]]
+// CHECK-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP51:![0-9]+]]
 // CHECK:       for.end:
 // CHECK-NEXT:    br label [[OMP_KERNEL_DONE]]
 // CHECK:       omp.kernel.done:
@@ -3126,14 +3126,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l33
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0:[0-9]+]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3142,12 +3142,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3156,18 +3156,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29:![0-9]+]], !align [[META30:![0-9]+]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28:![0-9]+]], !align [[META29:![0-9]+]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3235,14 +3235,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l33_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3251,12 +3251,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3265,18 +3265,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3345,14 +3345,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l45
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3361,12 +3361,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3375,18 +3375,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3454,14 +3454,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIiEvv_l45_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3470,12 +3470,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3484,18 +3484,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3570,14 +3570,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l33
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3586,12 +3586,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3600,18 +3600,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3679,14 +3679,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l33_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3695,12 +3695,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3709,18 +3709,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3789,14 +3789,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l45
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3805,12 +3805,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3819,18 +3819,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -3898,14 +3898,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIjEvv_l45_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -3914,12 +3914,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i32, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -3928,18 +3928,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store i32 0, ptr addrspace(5) [[TMP6]], align 4
@@ -4014,14 +4014,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l33
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4030,12 +4030,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i64, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4044,18 +4044,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31:![0-9]+]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30:![0-9]+]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store i64 0, ptr addrspace(5) [[TMP6]], align 8
@@ -4123,14 +4123,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l33_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4139,12 +4139,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i64, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4153,18 +4153,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store i64 0, ptr addrspace(5) [[TMP6]], align 8
@@ -4233,14 +4233,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l45
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4249,12 +4249,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i64, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4263,18 +4263,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store i64 0, ptr addrspace(5) [[TMP6]], align 8
@@ -4342,14 +4342,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIlEvv_l45_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4358,12 +4358,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca i64, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4372,18 +4372,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store i64 0, ptr addrspace(5) [[TMP6]], align 8
@@ -4458,14 +4458,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l33
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4474,12 +4474,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca double, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4488,18 +4488,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca double, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP6]], align 8
@@ -4567,14 +4567,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l33_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4583,12 +4583,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca double, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4597,18 +4597,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca double, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP6]], align 8
@@ -4677,14 +4677,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l45
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4693,12 +4693,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca double, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4707,18 +4707,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca double, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP6]], align 8
@@ -4786,14 +4786,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIdEvv_l45_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 8 dereferenceable(8) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4802,12 +4802,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca double, align 8, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4816,18 +4816,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META31]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META30]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca double, align 8, addrspace(5)
 // NO-LOOP-NEXT:    store double 0.000000e+00, ptr addrspace(5) [[TMP6]], align 8
@@ -4902,14 +4902,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l33
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -4918,12 +4918,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca float, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -4932,18 +4932,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca float, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP6]], align 4
@@ -5011,14 +5011,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l33_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], ptr noundef [[B:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -5027,12 +5027,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca float, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -5041,18 +5041,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca float, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP6]], align 4
@@ -5121,14 +5121,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l45
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -5137,12 +5137,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca float, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -5151,18 +5151,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca float, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP6]], align 4
@@ -5230,14 +5230,14 @@ int main() {
 //
 //
 // NO-LOOP-LABEL: define {{[^@]+}}@{{__omp_offloading_[0-9a-z]+_[0-9a-z]+}}__Z8run_testIfEvv_l45_1
-// NO-LOOP-SAME: (ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
+// NO-LOOP-SAME: (ptr noundef [[B:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM:%.*]], ptr noundef [[A:%.*]], i64 noundef [[VLA:%.*]], ptr noundef nonnull align 4 dereferenceable(4) [[SUM1:%.*]], ptr noalias noundef [[DYN_PTR:%.*]], ptr noundef [[TMP0:%.*]], ptr noundef [[TMP1:%.*]], ptr noundef [[TMP2:%.*]]) #[[ATTR0]] {
 // NO-LOOP-NEXT:  entry:
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[B_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[A_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[VLA_ADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM_ADDR2:%.*]] = alloca ptr, align 8, addrspace(5)
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR3:%.*]] = alloca ptr, align 8, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTADDR4:%.*]] = alloca ptr, align 8, addrspace(5)
@@ -5246,12 +5246,12 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[DOTOMP_IV:%.*]] = alloca i32, align 4, addrspace(5)
 // NO-LOOP-NEXT:    [[SUM5:%.*]] = alloca float, align 4, addrspace(5)
-// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[B_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[B_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[A_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[A_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[VLA_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[VLA_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[SUM_ADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM_ADDR2]] to ptr
+// NO-LOOP-NEXT:    [[DYN_PTR_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DYN_PTR_ADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR3_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR3]] to ptr
 // NO-LOOP-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
@@ -5260,18 +5260,18 @@ int main() {
 // NO-LOOP-NEXT:    [[DOTOMP_UB_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_UB]] to ptr
 // NO-LOOP-NEXT:    [[DOTOMP_IV_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTOMP_IV]] to ptr
 // NO-LOOP-NEXT:    [[SUM5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[SUM5]] to ptr
-// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[B]], ptr [[B_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM]], ptr [[SUM_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[A]], ptr [[A_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store i64 [[VLA]], ptr [[VLA_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[SUM1]], ptr [[SUM_ADDR2_ASCAST]], align 8
+// NO-LOOP-NEXT:    store ptr [[DYN_PTR]], ptr [[DYN_PTR_ADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR3_ASCAST]], align 8
 // NO-LOOP-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR4_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[SUM_ADDR_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    [[TMP4:%.*]] = load i64, ptr [[VLA_ADDR_ASCAST]], align 8
-// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META29]], !align [[META30]]
+// NO-LOOP-NEXT:    [[TMP5:%.*]] = load ptr, ptr [[SUM_ADDR2_ASCAST]], align 8, !nonnull [[META28]], !align [[META29]]
 // NO-LOOP-NEXT:    call void @__kmpc_specialized_kernel_init()
 // NO-LOOP-NEXT:    [[TMP6:%.*]] = alloca float, align 4, addrspace(5)
 // NO-LOOP-NEXT:    store float 0.000000e+00, ptr addrspace(5) [[TMP6]], align 4
