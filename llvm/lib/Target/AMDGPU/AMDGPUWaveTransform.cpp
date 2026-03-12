@@ -1589,11 +1589,15 @@ private:
     /// Whether the condition register use was marked as undef.
     bool CondIsUndef = false;
 
+    /// Opcode of implicit branch instruction
+    unsigned ImplicitBranchOpc = 0;
+
     explicit LaneOriginInfo(WaveNode *Node, Register CondReg = {},
                             bool InvertCondition = false,
-                            bool CondIsUndef = false)
+                            bool CondIsUndef = false,
+                            unsigned ImplicitBranchOpc = 0)
         : Node(Node), CondReg(CondReg), InvertCondition(InvertCondition),
-          CondIsUndef(CondIsUndef) {}
+          CondIsUndef(CondIsUndef), ImplicitBranchOpc(ImplicitBranchOpc) {}
   };
 
   struct CFGNodeInfo {
@@ -1629,12 +1633,8 @@ private:
     // S_CBRANCH_EXECZ S_CBRANCH_EXECNZ S_CBRANCH_VCCZ S_CBRANCH_VCCNZ
     // S_CBRANCH_SCC0 S_CBRANCH_SCC1
     // All active threads branch on some implicit condition for the above
-    // opcodes. Since SI_BRCOND_UNIFORM SI_BRCOND_UNIFORM_Z branch all active
-    // threads on some explicit condition register, we need to identify the
-    // above branch instrs and handle them appropridately.
-    // S_SUBVECTOR_LOOP_BEGIN S_SUBVECTOR_LOOP_END are lowered to corresponding
-    // asm instructions and are treated the same as above opcodes by WT.
-    unsigned UniformImplicitCondBranchOpc = 0;
+    // opcodes.
+    unsigned ImplicitBranchOpc = 0;
 
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
   };
@@ -1737,11 +1737,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  Opcode == AMDGPU::S_CBRANCH_VCCZ ||
                  Opcode == AMDGPU::S_CBRANCH_VCCNZ ||
                  Opcode == AMDGPU::S_CBRANCH_SCC0 ||
-                 Opcode == AMDGPU::S_CBRANCH_SCC1 ||
-                 Opcode == AMDGPU::S_SUBVECTOR_LOOP_BEGIN ||
-                 Opcode == AMDGPU::S_SUBVECTOR_LOOP_END) {
+                 Opcode == AMDGPU::S_CBRANCH_SCC1) {
         assert(!Info.OrigCondition);
-        Info.UniformImplicitCondBranchOpc = Opcode;
+        Info.ImplicitBranchOpc = Opcode;
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Opcode == AMDGPU::S_BRANCH) {
@@ -1810,16 +1808,19 @@ void ControlFlowRewriter::prepareWaveCfg() {
                               [&](const LaneOriginInfo &origin) {
                                 return origin.Node == LaneEdge.Wave;
                               }))
-              succInfo.origins.emplace_back(LaneEdge.Wave);
+              succInfo.origins.emplace_back(LaneEdge.Wave, Register(), false,
+                                            false, Info.ImplicitBranchOpc);
           }
         }
       } else {
         NodeInfo.find(Info.OrigSuccCond)
             ->second.origins.emplace_back(Node, Info.OrigCondition, false,
-                                          Info.OrigConditionUndef);
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
         NodeInfo.find(Info.OrigSuccFinal)
             ->second.origins.emplace_back(Node, Info.OrigCondition, true,
-                                          Info.OrigConditionUndef);
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
       }
     }
   }
@@ -1879,9 +1880,19 @@ void ControlFlowRewriter::rewrite() {
     }
     return RegAllOnes;
   };
-  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n");
-  LLVM_DEBUG(Function.dump());
-  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
+  Register RegZero;
+  auto getZero = [&]() {
+    if (!RegZero) {
+      RegZero = LMU.createLaneMaskReg();
+      BuildMI(Function.front(), Function.front().getFirstTerminator(), {},
+              TII.get(LMC.MovOpc), RegZero)
+          .addImm(0);
+    }
+    return RegZero;
+  };
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_pre\n";
+             Function.dump();
+             dbgs() << "CFG_END:" << Function.getName().str() << "_pre\n");
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
@@ -1919,11 +1930,9 @@ void ControlFlowRewriter::rewrite() {
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
 
-      if (!Info.UniformImplicitCondBranchOpc) { // SI_BRCOND_UNIFORM
-                                                // SI_BRCOND_UNIFORM_Z
+      unsigned Opcode = Info.ImplicitBranchOpc;
+      if (!Opcode) { // SI_BRCOND_UNIFORM SI_BRCOND_UNIFORM_Z
         assert(Info.OrigCondition);
-
-        unsigned Opcode;
 
         if (Info.OrigCondition == AMDGPU::SCC) {
           Opcode = AMDGPU::S_CBRANCH_SCC1;
@@ -1945,18 +1954,12 @@ void ControlFlowRewriter::rewrite() {
 
           Opcode = AMDGPU::S_CBRANCH_VCCNZ;
         }
-
-        MachineInstr *CondBrMI =
-            BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
-                .addMBB(LaneSucc->Wave->Block);
-        TII.fixImplicitOperands(*CondBrMI);
-      } else {
-        MachineInstr *CondBrMI =
-            BuildMI(*Node->Block, MBBINodeEnd, {},
-                    TII.get(Info.UniformImplicitCondBranchOpc))
-                .addMBB(LaneSucc->Wave->Block);
-        TII.fixImplicitOperands(*CondBrMI);
       }
+
+      MachineInstr *CondBrMI =
+          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
+              .addMBB(LaneSucc->Wave->Block);
+      TII.fixImplicitOperands(*CondBrMI);
 
       // The _other_ successor may be a flow block instead of an original
       // successor.
@@ -2020,8 +2023,65 @@ void ControlFlowRewriter::rewrite() {
           LaneOrigin.Node->Block->getFirstTerminator();
 
       if (!LaneOrigin.CondReg) {
-        assert(!LaneOrigin.InvertCondition);
-        CondReg = getAllOnes();
+        switch (LaneOrigin.ImplicitBranchOpc) {
+        case 0: // Unconditional branch
+          assert(!LaneOrigin.InvertCondition);
+          CondReg = getAllOnes();
+          break;
+        // Uniform branch with implicit condition (VCC/EXEC/SCC), or
+        // unconditional (ImplicitBranchOpc == 0).
+        // All active lanes go the same direction, so the lane
+        // contribution is either EXEC (all lanes) or 0 (no lanes).
+        case AMDGPU::S_CBRANCH_EXECNZ:
+          CondReg = LaneOrigin.InvertCondition ? getZero() : getAllOnes();
+          break;
+        case AMDGPU::S_CBRANCH_EXECZ:
+          CondReg = LaneOrigin.InvertCondition ? getAllOnes() : getZero();
+          break;
+        case AMDGPU::S_CBRANCH_SCC1: {
+          CondReg = LMU.createLaneMaskReg();
+          auto MIB =
+              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                      TII.get(LMC.CSelectOpc), CondReg);
+          if (!LaneOrigin.InvertCondition)
+            MIB.addReg(LMC.ExecReg).addImm(0);
+          else
+            MIB.addImm(0).addReg(LMC.ExecReg);
+          break;
+        }
+        case AMDGPU::S_CBRANCH_SCC0: {
+          CondReg = LMU.createLaneMaskReg();
+          auto MIB =
+              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                      TII.get(LMC.CSelectOpc), CondReg);
+          if (!LaneOrigin.InvertCondition)
+            MIB.addImm(0).addReg(LMC.ExecReg);
+          else
+            MIB.addReg(LMC.ExecReg).addImm(0);
+          break;
+        }
+        case AMDGPU::S_CBRANCH_VCCNZ:
+        case AMDGPU::S_CBRANCH_VCCZ: {
+          BuildMI(
+              *LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+              TII.get(LaneOrigin.ImplicitBranchOpc == AMDGPU::S_CBRANCH_VCCNZ
+                          ? AMDGPU::S_CMP_LG_U32
+                          : AMDGPU::S_CMP_EQ_U32))
+              .addReg(LMC.VccReg)
+              .addImm(0);
+          CondReg = LMU.createLaneMaskReg();
+          auto MIB =
+              BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                      TII.get(LMC.CSelectOpc), CondReg);
+          if (!LaneOrigin.InvertCondition)
+            MIB.addReg(LMC.ExecReg).addImm(0);
+          else
+            MIB.addImm(0).addReg(LMC.ExecReg);
+          break;
+        }
+        default:
+          llvm_unreachable("unhandled implicit branch opcode");
+        }
       } else if (LaneOrigin.CondReg == AMDGPU::SCC) {
         assert(LaneOrigin.Node->Successors.size() == 1);
 
