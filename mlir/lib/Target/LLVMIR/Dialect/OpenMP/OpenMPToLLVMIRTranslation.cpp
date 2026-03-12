@@ -5278,10 +5278,13 @@ static void processIndividualMap(MapInfoData &mapData, size_t mapDataIdx,
       !isPtrTy)
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL;
 
-  // if we're provided a mapDataParentIdx, then the data being mapped is
-  // part of a larger object (in a parent <-> member mapping) and in this
-  // case our BasePointer should be the parent.
-  if (mapDataParentIdx >= 0)
+  // If we're provided a mapDataParentIdx, then the data being mapped is part
+  // of a larger object (in a parent <-> member mapping) and in this case the
+  // base pointer is usually the parent. Declare mapper members are the
+  // exception: keep their own base pointer so mapper callbacks are not invoked
+  // on partial parent ranges.
+  if (!mapInfoOp->getParentOfType<omp::DeclareMapperOp>() &&
+      mapDataParentIdx >= 0)
     combinedInfo.BasePointers.emplace_back(
         mapData.BasePointers[mapDataParentIdx]);
   else
