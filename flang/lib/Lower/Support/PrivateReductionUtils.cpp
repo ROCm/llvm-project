@@ -27,13 +27,13 @@
 #include "flang/Optimizer/HLFIR/HLFIROps.h"
 #include "flang/Optimizer/Support/FatalError.h"
 #include "flang/Semantics/symbol.h"
-#include "llvm/Support/CommandLine.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/IR/Location.h"
+#include "llvm/Support/CommandLine.h"
 
-static llvm::cl::opt<bool> enableGPUHeapAlloc("enable-gpu-heap-alloc",
-    llvm::cl::desc(
-        "Allow to use heap alloc for adjustable arrays on GPU"),
+static llvm::cl::opt<bool> enableGPUHeapAlloc(
+    "enable-gpu-heap-alloc",
+    llvm::cl::desc("Allow to use heap alloc for adjustable arrays on GPU"),
     llvm::cl::init(false));
 
 static bool hasFinalization(const Fortran::semantics::Symbol &sym) {
@@ -483,19 +483,20 @@ void PopulateInitAndCleanupRegionsHelper::initAndCleanupBoxedScalar(
   createYield(allocatedPrivVarArg);
 }
 
-bool PopulateInitAndCleanupRegionsHelper::shouldAllocateTempOnStack(fir::BaseBoxType boxTy) const {
+bool PopulateInitAndCleanupRegionsHelper::shouldAllocateTempOnStack(
+    fir::BaseBoxType boxTy) const {
   auto offloadMod =
       llvm::dyn_cast<mlir::omp::OffloadModuleInterface>(*builder.getModule());
   // On the GPU, always allocate on the stack unless the user explicitly
   // specifies otherwise since heap allocatins are very expensive.
   bool isGPU = offloadMod && offloadMod.getIsGPU();
   if (isGPU && enableGPUHeapAlloc) {
-     // Check if it is adjustable array
-     if(auto seqTy = mlir::dyn_cast<fir::SequenceType>(boxTy.getEleTy())) {
-        if (seqTy.hasUnknownShape()|| seqTy.hasDynamicExtents()) {
-           return false;
-        }
-     }
+    // Check if it is adjustable array
+    if (auto seqTy = mlir::dyn_cast<fir::SequenceType>(boxTy.getEleTy())) {
+      if (seqTy.hasUnknownShape() || seqTy.hasDynamicExtents()) {
+        return false;
+      }
+    }
   }
   return isGPU;
 }
