@@ -50,6 +50,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -102,6 +103,12 @@ static cl::opt<bool> DisableOpenMPOptSPMDization(
     "openmp-opt-disable-spmdization",
     cl::desc("Disable OpenMP optimizations involving SPMD-ization."),
     cl::Hidden, cl::init(false));
+
+static cl::opt<bool> DisableOpenMPOptCallbackSPMDization(
+    "openmp-opt-disable-callback-spmdization",
+    cl::desc("Disable OpenMP optimizations involving SPMD-ization in runtime "
+             "functions taking callbacks."),
+    cl::Hidden, cl::init(true));
 
 static cl::opt<bool> DisableOpenMPOptFolding(
     "openmp-opt-disable-folding",
@@ -544,6 +551,21 @@ struct OMPInformationCache : public InformationCache {
     collectUses(RFI, /*CollectStats*/ false);
   }
 
+  void setCallbackMetadata(Function *F, unsigned ArgNo, ArrayRef<int> Indices,
+                           bool IsVarArg) {
+    if (!F)
+      return;
+
+    LLVMContext &Ctx = F->getContext();
+    MDBuilder MDB(Ctx);
+    MDNode *NewCallbackEncoding =
+        MDB.createCallbackEncoding(ArgNo, Indices, IsVarArg);
+
+    if (!F->getMetadata(LLVMContext::MD_callback))
+      F->addMetadata(LLVMContext::MD_callback,
+                     *MDNode::get(Ctx, {NewCallbackEncoding}));
+  }
+
   // Helper function to recollect uses of all runtime functions.
   void recollectUses() {
     for (int Idx = 0; Idx < RFIs.size(); ++Idx)
@@ -627,6 +649,13 @@ struct OMPInformationCache : public InformationCache {
       });                                                                      \
     }                                                                          \
   }
+
+#define OMP_RTL_CB_INFO(_Enum, _Name, _ArgNo, _ArgIndices, _IsVarArg)          \
+  {                                                                            \
+    Function *F = M.getFunction(_Name);                                        \
+    setCallbackMetadata(F, _ArgNo, _ArgIndices, _IsVarArg);                    \
+  }
+
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
 
     // Remove the `noinline` attribute from `__kmpc`, `ompx::` and `omp_`
@@ -4751,6 +4780,36 @@ struct AAKernelInfoFunction : AAKernelInfo {
     bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
+      auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
+      Function *Callee = CB.getCalledFunction();
+      const auto &It = OMPInfoCache.RuntimeFunctionIDMap.find(Callee);
+      if (It != OMPInfoCache.RuntimeFunctionIDMap.end()) {
+        MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
+        if (CallbackMD && CallbackMD->getNumOperands() > 0) {
+          MDNode *OpMD = cast<MDNode>(CallbackMD->getOperand(0).get());
+          if (OpMD && OpMD->getNumOperands() > 0) {
+            auto *CBArgCM = cast<ConstantAsMetadata>(OpMD->getOperand(0));
+            const unsigned ArgNo =
+                cast<ConstantInt>(CBArgCM->getValue())->getZExtValue();
+            auto *LoopRegion = dyn_cast<Function>(
+                CB.getArgOperand(ArgNo)->stripPointerCasts());
+            if (LoopRegion && !LoopRegion->isDeclaration()) {
+              auto *FnAA = A.getAAFor<AAKernelInfo>(
+                  *this, IRPosition::function(*LoopRegion),
+                  DepClassTy::OPTIONAL);
+              if (FnAA) {
+                getState() ^= FnAA->getState();
+                AllSPMDStatesWereFixed &=
+                    FnAA->SPMDCompatibilityTracker.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedKnownParallelRegions.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedUnknownParallelRegions.isAtFixpoint();
+              }
+            }
+          }
+        }
+      }
       auto *CBAA = A.getAAFor<AAKernelInfo>(
           *this, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
       if (!CBAA)
@@ -4926,7 +4985,7 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         // state based on the callee state in updateImpl.
         return;
       }
-      if (NumCallees > 1) {
+      if (NumCallees > 1 && !Callee->hasMetadata(LLVMContext::MD_callback)) {
         indicatePessimisticFixpoint();
         return;
       }
@@ -4947,6 +5006,7 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_barrier:
       case OMPRTL___kmpc_nvptx_parallel_reduce_nowait_v2:
       case OMPRTL___kmpc_nvptx_teams_reduce_nowait_v2:
+      case OMPRTL___kmpc_reduction_get_fixed_buffer:
       case OMPRTL___kmpc_error:
       case OMPRTL___kmpc_flush:
       case OMPRTL___kmpc_get_hardware_thread_id_in_block:
@@ -5012,6 +5072,23 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         if (!handleParallel60(A, CB))
           indicatePessimisticFixpoint();
         return;
+      case OMPRTL___kmpc_distribute_static_loop_4:
+      case OMPRTL___kmpc_distribute_static_loop_4u:
+      case OMPRTL___kmpc_distribute_static_loop_8:
+      case OMPRTL___kmpc_distribute_static_loop_8u:
+      case OMPRTL___kmpc_distribute_for_static_loop_4:
+      case OMPRTL___kmpc_distribute_for_static_loop_4u:
+      case OMPRTL___kmpc_distribute_for_static_loop_8:
+      case OMPRTL___kmpc_distribute_for_static_loop_8u:
+      case OMPRTL___kmpc_for_static_loop_4:
+      case OMPRTL___kmpc_for_static_loop_4u:
+      case OMPRTL___kmpc_for_static_loop_8:
+      case OMPRTL___kmpc_for_static_loop_8u:
+        if (DisableOpenMPOptCallbackSPMDization) {
+          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+          SPMDCompatibilityTracker.insert(&CB);
+        }
+        break;
       case OMPRTL___kmpc_omp_task:
         // We do not look into tasks right now, just give up.
         SPMDCompatibilityTracker.indicatePessimisticFixpoint();
@@ -5073,7 +5150,7 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         getState() = FnAA->getState();
         return ChangeStatus::CHANGED;
       }
-      if (NumCallees > 1)
+      if (NumCallees > 1 && !F->hasMetadata(LLVMContext::MD_callback))
         return indicatePessimisticFixpoint();
 
       CallBase &CB = cast<CallBase>(getAssociatedValue());
