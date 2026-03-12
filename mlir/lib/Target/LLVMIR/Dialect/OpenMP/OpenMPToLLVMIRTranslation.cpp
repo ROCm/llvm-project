@@ -7073,6 +7073,9 @@ static bool isHostDeviceOp(Operation *op) {
   if (op->getParentOfType<omp::TargetOp>())
     return false;
 
+  if (mlir::isa<omp::TargetAllocMemOp, omp::TargetFreeMemOp>(op))
+    return false;
+
   if (auto parentFn = op->getParentOfType<LLVM::LLVMFuncOp>()) {
     if (auto declareTargetIface =
             llvm::dyn_cast<mlir::omp::DeclareTargetInterface>(
