@@ -321,8 +321,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
         // Convert vgpr_32 back to lane mask in the predecessor block.
         MachineBasicBlock *PredMBB = MI.getOperand(I + 1).getMBB();
         Register LaneMaskReg = MRI->createVirtualRegister(
-            IsWave32 ? &AMDGPU::SReg_32_XM0_XEXECRegClass
-                     : &AMDGPU::SReg_64_XEXECRegClass);
+            TII->getRegisterInfo().getWaveMaskRegClass());
         BuildMI(*PredMBB, PredMBB->getFirstTerminator(), DebugLoc(),
                 TII->get(AMDGPU::V_CMP_NE_U32_e64), LaneMaskReg)
             .addReg(MI.getOperand(I).getReg())
