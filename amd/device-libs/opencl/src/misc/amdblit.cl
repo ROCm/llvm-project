@@ -470,6 +470,53 @@ __amd_copyBufferExt(
   }
 }
 
+   __kernel void __amd_rocclr_fillBufferUnAligned(__global void* __restrict buf,
+                                                     __constant uchar* __restrict pattern,
+                                                     int body_pattern, ulong2 body_tile_pattern,
+                                                     ulong body_tile_count, ulong body_tile_passes,
+                                                     ulong stride, ulong pattern_size,
+                                                     ulong tail_offset, __global uchar* __restrict body_ptr,
+                                                     __global uchar* __restrict body_tail_ptr,
+                                                     __global uchar* __restrict tail_ptr,
+                                                     __global ulong2* __restrict element_tiled,
+                                                     ushort4 counts, int isAligned) {
+      uint l = __builtin_amdgcn_workitem_id_x();
+      uint g = __builtin_amdgcn_workgroup_id_x();
+      ulong id = (g * 256 + l);
+
+      // Handle head, body and tail - each store in a separate warp to reduce divergence
+      // Skip when buffer is 16-byte aligned (no head/body/body_tail/tail regions)
+      if (!isAligned) {
+        __global uchar* head_ptr = (__global uchar*)buf;
+        const uint wave_64_id = l >> 6;  // warp size 64, block size 256 -> 4 warps
+        if (wave_64_id == 0 && g == 0) {
+          if (id < counts.s0) {
+            head_ptr[id] = pattern[id & (pattern_size - 1)];
+          }
+        } else if (wave_64_id == 1 && g == 0) {
+          if (id < 64 + counts.s1) {
+            ((__global int*)body_ptr)[id - 64] = body_pattern;
+          }
+        } else if (wave_64_id == 2 && g == 0) {
+          if (id < 128 + counts.s2) {
+            ((__global int*)body_tail_ptr)[id - 128] = body_pattern;
+          }
+        } else if (wave_64_id == 3 && g == 0) {
+          if (id < 192 + counts.s3) {
+            const ulong tail_byte_idx = (id - 192);
+            tail_ptr[tail_byte_idx] =
+                pattern[(tail_offset + tail_byte_idx) & (pattern_size - 1)];
+          }
+        }
+      }
+
+      // We pass in the number of passes from the CPU to get the best code-gen
+      // We use the number of passes and the size to get correct behiaviour
+      for (ulong j = 0; (j < body_tile_passes) && (j * stride + id < body_tile_count); ++j) {
+        element_tiled[j * stride + id] = body_tile_pattern;
+      }
+    }
+
 __attribute__((always_inline)) void
 __amd_fillBuffer(
     __global uchar* bufUChar,
