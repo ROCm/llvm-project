@@ -2263,8 +2263,12 @@ FunctionPass *llvm::createAMDGPUWaveTransformPass() {
 
 /// \brief Run the wave transform.
 bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
-  if (MF.size() <= 1)
-    return false; // skip MFs without control flow
+  SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
+  if (MF.size() <= 1) {
+    // Skip this pass for MFs without control flow; set WaveCFG property first.
+    MFI->setWaveCFG(true);
+    return false;
+  }
 
   LLVM_DEBUG(dbgs() << "AMDGPU Wave Transformnsform: " << MF.getName() << '\n');
 
@@ -2348,7 +2352,7 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
     PostOrder.push_back(MBB);
   fullyRecomputeLiveIns(PostOrder);
 
-  MF.getInfo<SIMachineFunctionInfo>()->setWaveCFG(true);
+  MFI->setWaveCFG(true);
 
   return true; // assume that we changed something
 }
