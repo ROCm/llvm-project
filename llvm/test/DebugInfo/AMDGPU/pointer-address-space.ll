@@ -43,11 +43,11 @@
 
 ; CHECK:      0x[[LOCAL]]: DW_TAG_pointer_type
 ; CHECK-NEXT:                DW_AT_type
-; CHECK-NEXT:                DW_AT_address_class [DW_FORM_data4] (0x00000002)
+; CHECK-NEXT:                DW_AT_LLVM_address_space [DW_FORM_data4] (0x00000002)
 
 ; CHECK:      0x[[PRIVATE]]: DW_TAG_pointer_type
 ; CHECK-NEXT:                  DW_AT_type
-; CHECK-NEXT:                  DW_AT_address_class [DW_FORM_data4] (0x00000001)
+; CHECK-NEXT:                  DW_AT_LLVM_address_space [DW_FORM_data4] (0x00000001)
 
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 
