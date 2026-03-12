@@ -13,7 +13,7 @@
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Endian.h"
 
-using namespace llvm;
+using llvm::ArrayRef;
 using namespace llvm::object;
 using namespace llvm::support::endian;
 using namespace llvm::ELF;
