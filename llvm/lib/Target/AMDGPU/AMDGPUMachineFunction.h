@@ -101,7 +101,9 @@ public:
   bool isChainFunction() const { return IsChainFunction; }
 
   // The stack is empty upon entry to this function.
-  bool isBottomOfStack() const { return isEntryFunction(); }
+  bool isBottomOfStack() const {
+    return isEntryFunction() || isChainFunction();
+  }
 
   bool isMemoryBound() const {
     return MemoryBound;
