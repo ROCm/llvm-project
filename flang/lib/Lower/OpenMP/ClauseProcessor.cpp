@@ -325,10 +325,6 @@ static void collectIteratorIVs(
 // ClauseProcessor unique clauses
 //===----------------------------------------------------------------------===//
 
-bool ClauseProcessor::processBare(mlir::omp::BareClauseOps &result) const {
-  return markClauseOccurrence<omp::clause::OmpxBare>(result.bare);
-}
-
 bool ClauseProcessor::processBind(mlir::omp::BindClauseOps &result) const {
   if (auto *clause = findUniqueClause<omp::clause::Bind>()) {
     fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();

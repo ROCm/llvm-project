@@ -7,7 +7,7 @@ module attributes {dlti.dl_spec = #dlti.dl_spec<#dlti.dl_entry<"dlti.alloca_memo
   }
 
   llvm.func @test_target_simd() {
-    omp.target {
+    omp.target kernel_type(generic) {
       %5 = llvm.mlir.constant(1 : i32) : i32
       %x = llvm.alloca %5 x i32 {bindc_name = "x"} : (i32) -> !llvm.ptr<5>
       omp.simd private(@simd_privatizer %x -> %arg1 : !llvm.ptr<5>) {

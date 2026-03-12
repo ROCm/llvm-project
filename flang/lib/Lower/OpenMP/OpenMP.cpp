@@ -67,23 +67,12 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
                            const ConstructQueue &queue,
                            ConstructQueue::const_iterator item);
 
-static void processHostEvalClauses(lower::AbstractConverter &converter,
-                                   semantics::SemanticsContext &semaCtx,
-                                   lower::StatementContext &stmtCtx,
-                                   lower::pft::Evaluation &eval,
-                                   mlir::Location loc);
-
 namespace {
 /// Structure holding information that is needed to pass host-evaluated
 /// information to later lowering stages.
 class HostEvalInfo {
 public:
-  // Allow this function access to private members in order to initialize them.
-  friend void ::processHostEvalClauses(lower::AbstractConverter &,
-                                       semantics::SemanticsContext &,
-                                       lower::StatementContext &,
-                                       lower::pft::Evaluation &,
-                                       mlir::Location);
+  friend class HostEvalPatternProcessor;
 
   /// Fill \c vars with values stored in \c ops.
   ///
@@ -201,6 +190,393 @@ private:
   llvm::SmallVector<const semantics::Symbol *> iv;
   bool loopNestApplied = false, parallelApplied = false;
 };
+
+class OpenMPPatternProcessor {
+public:
+  OpenMPPatternProcessor(semantics::SemanticsContext &semaCtx)
+      : semaCtx(semaCtx) {}
+  virtual ~OpenMPPatternProcessor() = default;
+
+  /// Run the pattern from the given evaluation.
+  void process(lower::pft::Evaluation &eval) {
+    dirsToProcess = initialDirsToProcess();
+    processEval(eval);
+  }
+
+protected:
+  /// Returns the set of directives of interest at the beginning of the pattern.
+  virtual OmpDirectiveSet initialDirsToProcess() const = 0;
+
+  /// Processes a single directive and, based on it, returns the set of other
+  /// directives of interest that would be part of the pattern if nested inside
+  /// of it.
+  virtual OmpDirectiveSet processDirective(lower::pft::Evaluation &eval,
+                                           llvm::omp::Directive dir) = 0;
+
+  /// Obtain the list of clauses of the given OpenMP block or loop construct
+  /// evaluation. If it's not an OpenMP construct, no modifications are made to
+  /// the \c clauses output argument.
+  void extractClauses(lower::pft::Evaluation &eval, List<Clause> &clauses) {
+    const auto *ompEval = eval.getIf<parser::OpenMPConstruct>();
+    if (!ompEval)
+      return;
+
+    const parser::OmpClauseList *beginClauseList = nullptr;
+    const parser::OmpClauseList *endClauseList = nullptr;
+    common::visit(
+        [&](const auto &construct) {
+          using Type = llvm::remove_cvref_t<decltype(construct)>;
+          if constexpr (std::is_same_v<Type, parser::OmpBlockConstruct> ||
+                        std::is_same_v<Type, parser::OpenMPLoopConstruct>) {
+            beginClauseList = &construct.BeginDir().Clauses();
+            if (auto &endSpec = construct.EndDir())
+              endClauseList = &endSpec->Clauses();
+          }
+        },
+        ompEval->u);
+
+    assert(beginClauseList && "expected begin directive");
+    clauses.append(makeClauses(*beginClauseList, semaCtx));
+
+    if (endClauseList)
+      clauses.append(makeClauses(*endClauseList, semaCtx));
+  }
+
+private:
+  /// Decide whether an evaluation must be processed as part of the pattern.
+  ///
+  /// This is the case whenever it's an OpenMP construct and the associated
+  /// directive is part of the current set of directives of interest.
+  bool shouldProcessEval(lower::pft::Evaluation &eval) const {
+    const auto *ompEval = eval.getIf<parser::OpenMPConstruct>();
+    if (!ompEval)
+      return false;
+
+    return dirsToProcess.test(parser::omp::GetOmpDirectiveName(*ompEval).v);
+  }
+
+  /// Processes an evaluation and, potentially, recursively process a single
+  /// nested evaluation.
+  ///
+  /// For a nested evaluation to be recursively processed, it must be an OpenMP
+  /// construct, have no sibling evaluations and match one of the
+  /// next-directives of interest set returned by a call to \c processDirective
+  /// on the parent evaluation.
+  void processEval(lower::pft::Evaluation &eval) {
+    if (!shouldProcessEval(eval))
+      return;
+
+    const auto &ompEval = eval.get<parser::OpenMPConstruct>();
+    OmpDirectiveSet processNested =
+        processDirective(eval, parser::omp::GetOmpDirectiveName(ompEval).v);
+
+    if (processNested.empty())
+      return;
+
+    if (lower::pft::Evaluation *nestedEval = extractOnlyOmpNestedEval(eval)) {
+      OmpDirectiveSet prevDirs = dirsToProcess;
+      dirsToProcess = processNested;
+      processEval(*nestedEval);
+      dirsToProcess = prevDirs;
+    }
+  }
+
+  /// Return the directive that is immediately nested inside of the given
+  /// \c parent evaluation, if it is its only non-end-statement nested
+  /// evaluation and it represents an OpenMP construct.
+  lower::pft::Evaluation *
+  extractOnlyOmpNestedEval(lower::pft::Evaluation &parent) {
+    if (!parent.hasNestedEvaluations())
+      return nullptr;
+
+    auto &nested = parent.getFirstNestedEvaluation();
+    if (!nested.isA<parser::OpenMPConstruct>())
+      return nullptr;
+
+    for (auto &sibling : parent.getNestedEvaluations())
+      if (&sibling != &nested && !sibling.isEndStmt())
+        return nullptr;
+
+    return &nested;
+  }
+
+protected:
+  semantics::SemanticsContext &semaCtx;
+
+private:
+  OmpDirectiveSet dirsToProcess;
+};
+
+/// Helper pattern to navigate target SPMD patterns.
+class TargetSPMDPatternProcessor : public OpenMPPatternProcessor {
+public:
+  using OpenMPPatternProcessor::OpenMPPatternProcessor;
+  virtual ~TargetSPMDPatternProcessor() = default;
+
+protected:
+  virtual OmpDirectiveSet initialDirsToProcess() const override {
+    return llvm::omp::allTargetSet;
+  }
+
+  virtual OmpDirectiveSet processDirective(lower::pft::Evaluation &,
+                                           llvm::omp::Directive dir) override {
+    using namespace llvm::omp;
+
+    // The default implementation does nothing, except it returns the allowed
+    // single nested directives for an SPMD kernel. If called by subclasses, it
+    // helps navigate SPMD patterns.
+    //
+    // Patterns considered SPMD:
+    //   - target teams distribute parallel do [simd]
+    //   - target teams loop
+    //   - target parallel do [simd]
+    //   - target parallel loop
+    switch (dir) {
+    case OMPD_target:
+      return topTeamsSet | topParallelSet;
+    case OMPD_target_teams:
+    case OMPD_teams:
+      return topDistributeSet | topLoopSet;
+    case OMPD_target_parallel:
+    case OMPD_parallel:
+      return topLoopSet | topDoSet;
+    default:
+      return {};
+    }
+  }
+};
+
+/// Populates the given host eval info structure after processing clauses for
+/// the given \p eval OpenMP target construct, or nested constructs, if these
+/// must be evaluated outside of the target region per the spec.
+///
+/// In particular, this will ensure that in 'target teams' and equivalent nested
+/// constructs, the \c thread_limit, \c num_teams and \c num_threads clauses
+/// will be evaluated in the host. Additionally, loop bounds and steps will also
+/// be evaluated in the host if a 'target teams distribute' or target SPMD
+/// construct is detected (i.e. 'target teams distribute parallel do [simd]',
+/// 'target parallel do [simd]' or equivalent nesting).
+///
+/// The resulting updated \c HostEvalInfo structure is intended to be used to
+/// populate the \c host_eval operands of the associated \c omp.target
+/// operation, and also to be checked and used by later lowering steps to
+/// populate the corresponding operands of the \c omp.teams, \c omp.parallel or
+/// \c omp.loop_nest operations.
+class HostEvalPatternProcessor : public TargetSPMDPatternProcessor {
+public:
+  HostEvalPatternProcessor(lower::AbstractConverter &converter,
+                           semantics::SemanticsContext &semaCtx,
+                           lower::StatementContext &stmtCtx, mlir::Location loc,
+                           HostEvalInfo &hostEvalInfo)
+      : TargetSPMDPatternProcessor(semaCtx), converter(converter),
+        stmtCtx(stmtCtx), loc(loc), hostEvalInfo(hostEvalInfo) {}
+  virtual ~HostEvalPatternProcessor() = default;
+
+protected:
+  virtual OmpDirectiveSet processDirective(lower::pft::Evaluation &eval,
+                                           llvm::omp::Directive dir) override {
+    using namespace llvm::omp;
+
+    List<lower::omp::Clause> clauses;
+    extractClauses(eval, clauses);
+    ClauseProcessor cp(converter, semaCtx, clauses);
+
+    // Currently, we deal differently with e.g. `target parallel workshare` to
+    // `target parallel` with a single nested `workshare`. The first case would
+    // result in no clauses being evaluated in the host, as there's not a case
+    // for it in the below switch statement. The second case would evaluate
+    // `num_threads` clauses in the host, because `target parallel` could be
+    // followed by a `do` construct, which would make this an SPMD target
+    // region.
+    //
+    // TODO: We don't probably want to have such divergent behavior when dealing
+    // with combined directives. We need to revisit this logic without listing
+    // every possible combined directive containing a clause we'd otherwise
+    // evaluate in the host if the directive was split into its leafs.
+    switch (dir) {
+    case OMPD_teams_distribute_parallel_do:
+    case OMPD_teams_distribute_parallel_do_simd:
+      cp.processThreadLimit(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_target_teams_distribute_parallel_do:
+    case OMPD_target_teams_distribute_parallel_do_simd:
+      cp.processNumTeams(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_distribute_parallel_do:
+    case OMPD_distribute_parallel_do_simd:
+    case OMPD_target_parallel_do:
+    case OMPD_target_parallel_do_simd:
+    case OMPD_target_parallel_loop:
+    case OMPD_parallel_do:
+    case OMPD_parallel_do_simd:
+    case OMPD_parallel_loop:
+      cp.processNumThreads(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_distribute:
+    case OMPD_distribute_simd:
+    case OMPD_do:
+    case OMPD_do_simd:
+      cp.processCollapse(loc, eval, hostEvalInfo.ops, hostEvalInfo.ops,
+                         hostEvalInfo.iv);
+      return {};
+
+    case OMPD_teams:
+      cp.processThreadLimit(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_target_teams:
+      cp.processNumTeams(stmtCtx, hostEvalInfo.ops);
+      break;
+
+    case OMPD_teams_distribute:
+    case OMPD_teams_distribute_simd:
+      cp.processThreadLimit(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_target_teams_distribute:
+    case OMPD_target_teams_distribute_simd:
+      cp.processCollapse(loc, eval, hostEvalInfo.ops, hostEvalInfo.ops,
+                         hostEvalInfo.iv);
+      cp.processNumTeams(stmtCtx, hostEvalInfo.ops);
+      return {};
+
+    case OMPD_teams_loop:
+      cp.processThreadLimit(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_target_teams_loop:
+      cp.processNumTeams(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_loop:
+      cp.processCollapse(loc, eval, hostEvalInfo.ops, hostEvalInfo.ops,
+                         hostEvalInfo.iv);
+      return {};
+
+    case OMPD_teams_workdistribute:
+      cp.processThreadLimit(stmtCtx, hostEvalInfo.ops);
+      [[fallthrough]];
+    case OMPD_target_teams_workdistribute:
+      cp.processNumTeams(stmtCtx, hostEvalInfo.ops);
+      break;
+
+    case OMPD_target_parallel:
+    case OMPD_parallel:
+      cp.processNumThreads(stmtCtx, hostEvalInfo.ops);
+      break;
+
+    case OMPD_target:
+      break;
+
+    default:
+      return {};
+    }
+
+    // Visit nested directives as per the SPMD pattern.
+    return TargetSPMDPatternProcessor::processDirective(eval, dir);
+  }
+
+private:
+  lower::AbstractConverter &converter;
+  lower::StatementContext &stmtCtx;
+  mlir::Location loc;
+  HostEvalInfo &hostEvalInfo;
+};
+
+/// Checks target regions and, based on the directives and clauses encountered,
+/// determines its associated kernel type.
+class KernelTypePatternProcessor : protected TargetSPMDPatternProcessor {
+public:
+  KernelTypePatternProcessor(semantics::SemanticsContext &semaCtx,
+                             mlir::ModuleOp moduleOp)
+      : TargetSPMDPatternProcessor(semaCtx), moduleOp(moduleOp) {}
+  virtual ~KernelTypePatternProcessor() = default;
+
+  /// Executes the pattern and returns the kernel type of the given target
+  /// region, or \c mlir::omp::TargetExecMode::generic by default for non-target
+  /// evaluations.
+  mlir::omp::TargetExecMode getKernelType(lower::pft::Evaluation &eval) {
+    execMode = mlir::omp::TargetExecMode::generic;
+    process(eval);
+    return execMode;
+  }
+
+protected:
+  virtual OmpDirectiveSet processDirective(lower::pft::Evaluation &eval,
+                                           llvm::omp::Directive dir) override {
+    using namespace llvm::omp;
+
+    switch (dir) {
+    case OMPD_target:
+    case OMPD_target_parallel:
+    case OMPD_parallel:
+    case OMPD_teams:
+      break;
+    case OMPD_target_teams:
+      if (hasOmpxBareClause(eval)) {
+        execMode = mlir::omp::TargetExecMode::bare;
+        return {};
+      }
+      break;
+    case OMPD_target_teams_distribute_parallel_do:
+    case OMPD_target_teams_distribute_parallel_do_simd:
+    case OMPD_target_teams_loop:
+    case OMPD_target_parallel_do:
+    case OMPD_target_parallel_do_simd:
+    case OMPD_target_parallel_loop:
+    case OMPD_teams_distribute_parallel_do:
+    case OMPD_teams_distribute_parallel_do_simd:
+    case OMPD_teams_loop:
+    case OMPD_distribute_parallel_do:
+    case OMPD_distribute_parallel_do_simd:
+    case OMPD_loop:
+    case OMPD_parallel_do:
+    case OMPD_parallel_do_simd:
+    case OMPD_do:
+    case OMPD_do_simd:
+      execMode = canPromoteSPMDToNoLoop(eval)
+                     ? mlir::omp::TargetExecMode::spmd_no_loop
+                     : mlir::omp::TargetExecMode::spmd;
+      return {};
+    default:
+      return {};
+    }
+
+    // Visit nested directives as per the SPMD pattern.
+    return TargetSPMDPatternProcessor::processDirective(eval, dir);
+  }
+
+private:
+  bool canPromoteSPMDToNoLoop(lower::pft::Evaluation &eval) {
+    List<lower::omp::Clause> clauses;
+    extractClauses(eval, clauses);
+
+    // First make sure the proper module attributes are present in order to
+    // perform this optimization.
+    auto ompFlags =
+        llvm::cast<mlir::omp::OffloadModuleInterface>(*moduleOp).getFlags();
+    if (!ompFlags || !ompFlags.getAssumeTeamsOversubscription() ||
+        !ompFlags.getAssumeThreadsOversubscription())
+      return false;
+
+    // The num_teams clause can break no-loop assumptions, and reductions are
+    // slower in no-loop mode.
+    return llvm::find_if(clauses, [](const Clause &clause) {
+             return std::holds_alternative<clause::NumTeams>(clause.u) ||
+                    std::holds_alternative<clause::Reduction>(clause.u);
+           }) == clauses.end();
+  }
+
+  bool hasOmpxBareClause(lower::pft::Evaluation &eval) {
+    List<lower::omp::Clause> clauses;
+    extractClauses(eval, clauses);
+
+    return llvm::find_if(clauses, [](const Clause &clause) {
+             return std::holds_alternative<clause::OmpxBare>(clause.u);
+           }) != clauses.end();
+  }
+
+private:
+  mlir::ModuleOp moduleOp;
+  mlir::omp::TargetExecMode execMode;
+};
+
 } // namespace
 
 /// Stack of \see HostEvalInfo to represent the current nest of \c omp.target
@@ -382,187 +758,6 @@ extractMappedBaseValues(llvm::ArrayRef<mlir::Value> vars,
 
     return varPtr;
   });
-}
-
-/// Populate the global \see hostEvalInfo after processing clauses for the given
-/// \p eval OpenMP target construct, or nested constructs, if these must be
-/// evaluated outside of the target region per the spec.
-///
-/// In particular, this will ensure that in 'target teams' and equivalent nested
-/// constructs, the \c thread_limit and \c num_teams clauses will be evaluated
-/// in the host. Additionally, loop bounds, steps and the \c num_threads clause
-/// will also be evaluated in the host if a target SPMD construct is detected
-/// (i.e. 'target teams distribute parallel do [simd]' or equivalent nesting).
-///
-/// The result, stored as a global, is intended to be used to populate the \c
-/// host_eval operands of the associated \c omp.target operation, and also to be
-/// checked and used by later lowering steps to populate the corresponding
-/// operands of the \c omp.teams, \c omp.parallel or \c omp.loop_nest
-/// operations.
-static void processHostEvalClauses(lower::AbstractConverter &converter,
-                                   semantics::SemanticsContext &semaCtx,
-                                   lower::StatementContext &stmtCtx,
-                                   lower::pft::Evaluation &eval,
-                                   mlir::Location loc) {
-  // Obtain the list of clauses of the given OpenMP block or loop construct
-  // evaluation. Other evaluations passed to this lambda keep `clauses`
-  // unchanged.
-  auto extractClauses = [&semaCtx](lower::pft::Evaluation &eval,
-                                   List<Clause> &clauses) {
-    const auto *ompEval = eval.getIf<parser::OpenMPConstruct>();
-    if (!ompEval)
-      return;
-
-    const parser::OmpClauseList *beginClauseList = nullptr;
-    const parser::OmpClauseList *endClauseList = nullptr;
-    common::visit(
-        [&](const auto &construct) {
-          using Type = llvm::remove_cvref_t<decltype(construct)>;
-          if constexpr (std::is_same_v<Type, parser::OmpBlockConstruct> ||
-                        std::is_same_v<Type, parser::OpenMPLoopConstruct>) {
-            beginClauseList = &construct.BeginDir().Clauses();
-            if (auto &endSpec = construct.EndDir())
-              endClauseList = &endSpec->Clauses();
-          }
-        },
-        ompEval->u);
-
-    assert(beginClauseList && "expected begin directive");
-    clauses.append(makeClauses(*beginClauseList, semaCtx));
-
-    if (endClauseList)
-      clauses.append(makeClauses(*endClauseList, semaCtx));
-  };
-
-  // Return the directive that is immediately nested inside of the given
-  // `parent` evaluation, if it is its only non-end-statement nested evaluation
-  // and it represents an OpenMP construct.
-  auto extractOnlyOmpNestedDir = [](lower::pft::Evaluation &parent)
-      -> std::optional<llvm::omp::Directive> {
-    if (!parent.hasNestedEvaluations())
-      return std::nullopt;
-
-    llvm::omp::Directive dir;
-    auto &nested = parent.getFirstNestedEvaluation();
-    if (const auto *ompEval = nested.getIf<parser::OpenMPConstruct>())
-      dir = parser::omp::GetOmpDirectiveName(*ompEval).v;
-    else
-      return std::nullopt;
-
-    for (auto &sibling : parent.getNestedEvaluations())
-      if (&sibling != &nested && !sibling.isEndStmt())
-        return std::nullopt;
-
-    return dir;
-  };
-
-  // Process the given evaluation assuming it's part of a 'target' construct or
-  // captured by one, and store results in the global `hostEvalInfo`.
-  std::function<void(lower::pft::Evaluation &, const List<Clause> &)>
-      processEval;
-  processEval = [&](lower::pft::Evaluation &eval, const List<Clause> &clauses) {
-    using namespace llvm::omp;
-    ClauseProcessor cp(converter, semaCtx, clauses);
-
-    // Call `processEval` recursively with the immediately nested evaluation and
-    // its corresponding clauses if there is a single nested evaluation
-    // representing an OpenMP directive that passes the given test.
-    auto processSingleNestedIf = [&](llvm::function_ref<bool(Directive)> test) {
-      std::optional<Directive> nestedDir = extractOnlyOmpNestedDir(eval);
-      if (!nestedDir || !test(*nestedDir))
-        return;
-
-      lower::pft::Evaluation &nestedEval = eval.getFirstNestedEvaluation();
-      List<lower::omp::Clause> nestedClauses;
-      extractClauses(nestedEval, nestedClauses);
-      processEval(nestedEval, nestedClauses);
-    };
-
-    const auto *ompEval = eval.getIf<parser::OpenMPConstruct>();
-    if (!ompEval)
-      return;
-
-    HostEvalInfo *hostInfo = getHostEvalInfoStackTop(converter);
-    assert(hostInfo && "expected HOST_EVAL info structure");
-
-    switch (parser::omp::GetOmpDirectiveName(*ompEval).v) {
-    case OMPD_teams_distribute_parallel_do:
-    case OMPD_teams_distribute_parallel_do_simd:
-      cp.processThreadLimit(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_target_teams_distribute_parallel_do:
-    case OMPD_target_teams_distribute_parallel_do_simd:
-      cp.processNumTeams(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_distribute_parallel_do:
-    case OMPD_distribute_parallel_do_simd:
-      cp.processNumThreads(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_distribute:
-    case OMPD_distribute_simd:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
-      break;
-
-    case OMPD_teams:
-      cp.processThreadLimit(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_target_teams:
-      cp.processNumTeams(stmtCtx, hostInfo->ops);
-      processSingleNestedIf([](Directive nestedDir) {
-        return topDistributeSet.test(nestedDir) || topLoopSet.test(nestedDir);
-      });
-      break;
-
-    case OMPD_teams_distribute:
-    case OMPD_teams_distribute_simd:
-      cp.processThreadLimit(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_target_teams_distribute:
-    case OMPD_target_teams_distribute_simd:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
-      cp.processNumTeams(stmtCtx, hostInfo->ops);
-      break;
-
-    case OMPD_teams_loop:
-      cp.processThreadLimit(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_target_teams_loop:
-      cp.processNumTeams(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_loop:
-      cp.processCollapse(loc, eval, hostInfo->ops, hostInfo->ops, hostInfo->iv);
-      break;
-
-    case OMPD_teams_workdistribute:
-      cp.processThreadLimit(stmtCtx, hostInfo->ops);
-      [[fallthrough]];
-    case OMPD_target_teams_workdistribute:
-      cp.processNumTeams(stmtCtx, hostInfo->ops);
-      break;
-
-    // Standalone 'target' case.
-    case OMPD_target: {
-      processSingleNestedIf(
-          [](Directive nestedDir) { return topTeamsSet.test(nestedDir); });
-      break;
-    }
-    default:
-      break;
-    }
-  };
-
-  const auto *ompEval = eval.getIf<parser::OpenMPConstruct>();
-  assert(ompEval &&
-         llvm::omp::allTargetSet.test(
-             parser::omp::GetOmpDirectiveName(*ompEval).v) &&
-         "expected TARGET construct evaluation");
-  (void)ompEval;
-
-  // Use the whole list of clauses passed to the construct here, rather than the
-  // ones only applied to omp.target.
-  List<lower::omp::Clause> clauses;
-  extractClauses(eval, clauses);
-  processEval(eval, clauses);
 }
 
 static lower::pft::Evaluation *
@@ -1722,20 +1917,21 @@ static void genTargetClauses(
     lower::AbstractConverter &converter, semantics::SemanticsContext &semaCtx,
     lower::SymMap &symTable, lower::StatementContext &stmtCtx,
     lower::pft::Evaluation &eval, const List<Clause> &clauses,
-    mlir::Location loc, mlir::omp::TargetOperands &clauseOps,
+    mlir::Location loc, mlir::omp::TargetExtOperands &clauseOps,
     DefaultMapsTy &defaultMaps,
     llvm::SmallVectorImpl<const semantics::Symbol *> &hasDeviceAddrSyms,
     llvm::SmallVectorImpl<const semantics::Symbol *> &isDevicePtrSyms,
     llvm::SmallVectorImpl<const semantics::Symbol *> &mapSyms) {
   ClauseProcessor cp(converter, semaCtx, clauses);
-  cp.processBare(clauseOps);
   cp.processDefaultMap(stmtCtx, defaultMaps);
   cp.processDepend(symTable, stmtCtx, clauseOps);
   cp.processDevice(stmtCtx, clauseOps);
   cp.processHasDeviceAddr(stmtCtx, clauseOps, hasDeviceAddrSyms);
   if (HostEvalInfo *hostEvalInfo = getHostEvalInfoStackTop(converter)) {
     // Only process host_eval if compiling for the host device.
-    processHostEvalClauses(converter, semaCtx, stmtCtx, eval, loc);
+    HostEvalPatternProcessor processor(converter, semaCtx, stmtCtx, loc,
+                                       *hostEvalInfo);
+    processor.process(eval);
     hostEvalInfo->collectValues(clauseOps.hostEvalVars);
   }
   cp.processIf(llvm::omp::Directive::OMPD_target, clauseOps);
@@ -2722,13 +2918,17 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
   if (!isTargetDevice)
     converter.getStateStack().stackPush<HostEvalInfoStackFrame>();
 
-  mlir::omp::TargetOperands clauseOps;
+  mlir::omp::TargetExtOperands clauseOps;
   DefaultMapsTy defaultMaps;
   llvm::SmallVector<const semantics::Symbol *> mapSyms, isDevicePtrSyms,
       hasDeviceAddrSyms;
   genTargetClauses(converter, semaCtx, symTable, stmtCtx, eval, item->clauses,
                    loc, clauseOps, defaultMaps, hasDeviceAddrSyms,
                    isDevicePtrSyms, mapSyms);
+
+  KernelTypePatternProcessor processor(semaCtx, converter.getModuleOp());
+  clauseOps.kernelType = mlir::omp::TargetExecModeAttr::get(
+      &converter.getMLIRContext(), processor.getKernelType(eval));
 
   if (!isDevicePtrSyms.empty()) {
     // is_device_ptr maps get duplicated so the clause and synthesized
