@@ -62,6 +62,10 @@
 
 using namespace llvm;
 
+namespace llvm {
+void dumpAttributorFnTiming();
+}
+
 #define DEBUG_TYPE "attributor"
 #define VERBOSE_DEBUG_TYPE DEBUG_TYPE "-verbose"
 
@@ -168,6 +172,12 @@ static cl::opt<bool>
     PrintCallGraph("attributor-print-call-graph", cl::Hidden,
                    cl::desc("Print Attributor's internal call graph"),
                    cl::init(false));
+
+static cl::opt<bool> DumpAAPointerInfoStats(
+    "attributor-dump-pi-stats", cl::Hidden,
+    cl::desc("Dump per-function AAPointerInfo access count statistics at the "
+             "end of the fixpoint"),
+    cl::init(false));
 
 static cl::opt<bool> SimplifyAllLoads("attributor-simplify-all-loads",
                                       cl::Hidden,
@@ -2663,6 +2673,228 @@ ChangeStatus Attributor::run() {
 
   if (PrintDependencies)
     DG.print();
+
+  dumpAttributorFnTiming();
+
+  if (DumpAAPointerInfoStats) {
+    struct FnPIStats {
+      uint64_t TotalAccesses = 0;
+      uint64_t RemoteAccesses = 0;
+      uint64_t NumAAInstances = 0;
+      StringMap<uint64_t> RemoteSources;
+    };
+    StringMap<FnPIStats> PIStatsMap;
+
+    struct GlobalPIStats {
+      std::string ValueName;
+      uint64_t TotalAccesses = 0;
+      uint64_t NumAAInstances = 0;
+      StringMap<uint64_t> AccessSourceFns;
+    };
+    StringMap<GlobalPIStats> GlobalPIStatsMap;
+
+    for (auto &[Key, AA] : AAMap) {
+      if (Key.first != &AAPointerInfo::ID)
+        continue;
+      auto *PI = cast<AAPointerInfo>(AA);
+      if (!PI->getState().isValidState())
+        continue;
+      Function *AssocFn = PI->getIRPosition().getAssociatedFunction();
+
+      if (!AssocFn) {
+        const Value &V = PI->getIRPosition().getAssociatedValue();
+        std::string Name = V.hasName() ? V.getName().str() : "<unnamed>";
+        GlobalPIStats &GStats = GlobalPIStatsMap[Name];
+        GStats.ValueName = Name;
+        GStats.NumAAInstances++;
+
+        SmallPtrSet<const AAPointerInfo::Access *, 32> Seen;
+        PI->forallInterferingAccesses(
+            AA::RangeTy::getUnknown(),
+            [&](const AAPointerInfo::Access &Acc, bool) {
+              if (!Seen.insert(&Acc).second)
+                return true;
+              GStats.TotalAccesses++;
+              if (auto *F = Acc.getRemoteInst()->getFunction())
+                GStats.AccessSourceFns[F->getName()]++;
+              else
+                GStats.AccessSourceFns["<no-function>"]++;
+              return true;
+            });
+        continue;
+      }
+
+      FnPIStats &Stats = PIStatsMap[AssocFn->getName()];
+      Stats.NumAAInstances++;
+
+      SmallPtrSet<const AAPointerInfo::Access *, 32> Seen;
+      PI->forallInterferingAccesses(
+          AA::RangeTy::getUnknown(),
+          [&](const AAPointerInfo::Access &Acc, bool) {
+            if (!Seen.insert(&Acc).second)
+              return true;
+            Stats.TotalAccesses++;
+            if (Acc.getRemoteInst() != Acc.getLocalInst()) {
+              Stats.RemoteAccesses++;
+              if (auto *F = Acc.getRemoteInst()->getFunction())
+                Stats.RemoteSources[F->getName()]++;
+            }
+            return true;
+          });
+    }
+
+    SmallVector<std::pair<StringRef, FnPIStats *>> Sorted;
+    for (auto &Entry : PIStatsMap)
+      Sorted.push_back({Entry.getKey(), &Entry.getValue()});
+    llvm::sort(Sorted, [](const auto &A, const auto &B) {
+      return A.second->TotalAccesses > B.second->TotalAccesses;
+    });
+
+    errs() << "\n=== AAPointerInfo Final State Statistics ===\n";
+    errs() << llvm::format("%-80s %8s %12s %12s %10s\n", "Function", "AAs",
+                           "TotalAcc", "RemoteAcc", "%Remote");
+    errs() << std::string(125, '-') << "\n";
+
+    uint64_t GrandTotal = 0, GrandRemote = 0;
+    for (auto &[Name, S] : Sorted) {
+      GrandTotal += S->TotalAccesses;
+      GrandRemote += S->RemoteAccesses;
+      double Pct =
+          S->TotalAccesses ? 100.0 * S->RemoteAccesses / S->TotalAccesses : 0;
+      errs() << llvm::format("%-80s %8lu %12lu %12lu %9.1f%%\n",
+                             Name.str().c_str(),
+                             (unsigned long)S->NumAAInstances,
+                             (unsigned long)S->TotalAccesses,
+                             (unsigned long)S->RemoteAccesses, Pct);
+    }
+
+    errs() << std::string(125, '-') << "\n";
+    {
+      double Pct = GrandTotal ? 100.0 * GrandRemote / GrandTotal : 0;
+      errs() << llvm::format("%-80s %8s %12lu %12lu %9.1f%%\n", "TOTAL", "",
+                             (unsigned long)GrandTotal,
+                             (unsigned long)GrandRemote, Pct);
+    }
+    errs() << "=== End AAPointerInfo Statistics ===\n\n";
+
+    StringMap<uint64_t> GlobalRemoteSources;
+    for (auto &[Name, S] : PIStatsMap)
+      for (auto &[Src, Count] : S.RemoteSources)
+        GlobalRemoteSources[Src] += Count;
+
+    SmallVector<std::pair<StringRef, uint64_t>> SourceSorted;
+    for (auto &Entry : GlobalRemoteSources)
+      SourceSorted.push_back({Entry.getKey(), Entry.getValue()});
+    llvm::sort(SourceSorted,
+               [](const auto &A, const auto &B) { return A.second > B.second; });
+
+    errs() << "=== AAPointerInfo: Top Remote Access Sources (Global) ===\n";
+    errs() << llvm::format("%-80s %15s\n", "Source Function", "TotalAccesses");
+    errs() << std::string(100, '-') << "\n";
+    uint64_t SrcTotal = 0;
+    for (auto &[Name, Count] : SourceSorted) {
+      SrcTotal += Count;
+      errs() << llvm::format("%-80s %15lu\n", Name.str().c_str(),
+                             (unsigned long)Count);
+    }
+    errs() << std::string(100, '-') << "\n";
+    errs() << llvm::format("%-80s %15lu\n", "GRAND TOTAL",
+                           (unsigned long)SrcTotal);
+    errs() << "=== End Top Remote Access Sources ===\n\n";
+
+    // Per-function breakdown: for the top 20 functions by remote access count,
+    // show which source functions contribute the most remote accesses.
+    errs()
+        << "=== AAPointerInfo: Per-Function Remote Access Breakdown (Top 20) "
+           "===\n";
+    SmallVector<std::pair<StringRef, FnPIStats *>> SortedByRemote;
+    for (auto &Entry : PIStatsMap)
+      SortedByRemote.push_back({Entry.getKey(), &Entry.getValue()});
+    llvm::sort(SortedByRemote, [](const auto &A, const auto &B) {
+      return A.second->RemoteAccesses > B.second->RemoteAccesses;
+    });
+    unsigned Count = 0;
+    for (auto &[FnName, S] : SortedByRemote) {
+      if (++Count > 20 || S->RemoteAccesses == 0)
+        break;
+      errs() << "\n  Function: " << FnName << " (remote=" << S->RemoteAccesses
+             << ", total=" << S->TotalAccesses << ")\n";
+      SmallVector<std::pair<StringRef, uint64_t>> FnSources;
+      for (auto &[Src, Cnt] : S->RemoteSources)
+        FnSources.push_back({Src, Cnt});
+      llvm::sort(FnSources,
+                 [](const auto &A, const auto &B) { return A.second > B.second; });
+      unsigned Shown = 0;
+      for (auto &[Src, Cnt] : FnSources) {
+        if (++Shown > 10)
+          break;
+        errs() << llvm::format("    %-76s %10lu\n", Src.str().c_str(),
+                               (unsigned long)Cnt);
+      }
+      if (FnSources.size() > 10)
+        errs() << "    ... and " << (FnSources.size() - 10) << " more\n";
+    }
+    errs() << "=== End Per-Function Remote Access Breakdown ===\n\n";
+
+    // Global-level AAPointerInfo instances (getAssociatedFunction() == null)
+    SmallVector<std::pair<StringRef, GlobalPIStats *>> GlobalSorted;
+    for (auto &Entry : GlobalPIStatsMap)
+      GlobalSorted.push_back({Entry.getKey(), &Entry.getValue()});
+    llvm::sort(GlobalSorted, [](const auto &A, const auto &B) {
+      return A.second->TotalAccesses > B.second->TotalAccesses;
+    });
+
+    errs() << "=== AAPointerInfo: Global-Level Instances (no associated "
+              "function) ===\n";
+    errs() << llvm::format("%-80s %8s %12s %10s\n", "Global Value", "AAs",
+                           "TotalAcc", "NumSrcFns");
+    errs() << std::string(115, '-') << "\n";
+
+    uint64_t GlobalGrandTotal = 0;
+    uint64_t GlobalInstanceCount = 0;
+    for (auto &[Name, GS] : GlobalSorted) {
+      GlobalGrandTotal += GS->TotalAccesses;
+      GlobalInstanceCount += GS->NumAAInstances;
+      errs() << llvm::format("%-80s %8lu %12lu %10lu\n",
+                             Name.str().c_str(),
+                             (unsigned long)GS->NumAAInstances,
+                             (unsigned long)GS->TotalAccesses,
+                             (unsigned long)GS->AccessSourceFns.size());
+    }
+    errs() << std::string(115, '-') << "\n";
+    errs() << llvm::format("%-80s %8lu %12lu\n", "TOTAL",
+                           (unsigned long)GlobalInstanceCount,
+                           (unsigned long)GlobalGrandTotal);
+    errs() << "=== End Global-Level Instances ===\n\n";
+
+    // Per-global breakdown: for top 20 globals by access count, show
+    // which functions contribute accesses.
+    errs() << "=== AAPointerInfo: Global-Level Per-Value Breakdown (Top 20) "
+              "===\n";
+    unsigned GCount = 0;
+    for (auto &[GName, GS] : GlobalSorted) {
+      if (++GCount > 20 || GS->TotalAccesses == 0)
+        break;
+      errs() << "\n  Global: " << GName << " (AAs=" << GS->NumAAInstances
+             << ", accesses=" << GS->TotalAccesses
+             << ", source_fns=" << GS->AccessSourceFns.size() << ")\n";
+      SmallVector<std::pair<StringRef, uint64_t>> GSources;
+      for (auto &[Src, Cnt] : GS->AccessSourceFns)
+        GSources.push_back({Src, Cnt});
+      llvm::sort(GSources,
+                 [](const auto &A, const auto &B) { return A.second > B.second; });
+      unsigned GShown = 0;
+      for (auto &[Src, Cnt] : GSources) {
+        if (++GShown > 20)
+          break;
+        errs() << llvm::format("    %-76s %10lu\n", Src.str().c_str(),
+                               (unsigned long)Cnt);
+      }
+      if (GSources.size() > 20)
+        errs() << "    ... and " << (GSources.size() - 20) << " more\n";
+    }
+    errs() << "=== End Global-Level Per-Value Breakdown ===\n\n";
+  }
 
   Phase = AttributorPhase::MANIFEST;
   ChangeStatus ManifestChange = manifestAttributes();

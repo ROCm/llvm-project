@@ -62,6 +62,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Format.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/InterleavedRange.h"
 #include "llvm/Support/KnownFPClass.h"
@@ -73,6 +74,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 #include <cassert>
+#include <chrono>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -110,6 +112,105 @@ static cl::opt<int> MaxPotentialValuesIterations(
 
 STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
+
+static cl::opt<bool> DumpFnTiming(
+    "attributor-dump-fn-timing", cl::Hidden,
+    cl::desc("Dump per-function timing for Attributor analysis"),
+    cl::init(false));
+
+static cl::opt<bool> SkipKmpcImport(
+    "attributor-skip-kmpc-import", cl::Hidden,
+    cl::desc("Skip importing accesses from __kmpc_* runtime functions "
+             "(experimental, for profiling)"),
+    cl::init(false));
+
+static cl::opt<bool> LimitImportDepth(
+    "attributor-limit-import-depth", cl::Hidden,
+    cl::desc("Only import direct callee accesses, skip transitively imported "
+             "accesses (experimental)"),
+    cl::init(false));
+
+static cl::opt<bool> FilterKmpcImports(
+    "attributor-filter-kmpc-imports", cl::Hidden,
+    cl::desc("Filter AAPointerInfo imports from __kmpc_parallel_60 to only "
+             "include accesses reachable from the specific callback at each "
+             "call site"),
+    cl::init(false));
+
+namespace {
+struct FnTimingEntry {
+  double TotalTimeSec = 0.0;
+  uint64_t NumCalls = 0;
+  uint64_t NumIntraFnAccesses = 0;
+  uint64_t NumCrossFnAccesses = 0;
+};
+} // namespace
+
+static StringMap<FnTimingEntry> AttributorFnTimingMap;
+static StringMap<uint64_t> CrossFnAccessSourceMap;
+
+namespace llvm {
+void dumpAttributorFnTiming();
+}
+
+void llvm::dumpAttributorFnTiming() {
+  if (!DumpFnTiming || AttributorFnTimingMap.empty())
+    return;
+
+  SmallVector<std::pair<StringRef, const FnTimingEntry *>> Sorted;
+  for (auto &Entry : AttributorFnTimingMap)
+    Sorted.push_back({Entry.getKey(), &Entry.getValue()});
+
+  llvm::sort(Sorted,
+             [](const auto &A, const auto &B) {
+               return A.second->TotalTimeSec > B.second->TotalTimeSec;
+             });
+
+  errs() << "\n=== Attributor Per-Function Timing (forallInterferingAccesses) ===\n";
+  errs() << llvm::format("%-80s %12s %10s %12s %12s\n",
+                          "Function", "Time(s)", "Calls",
+                          "IntraFnAcc", "CrossFnAcc");
+  errs() << std::string(130, '-') << "\n";
+
+  double TotalTime = 0.0;
+  for (auto &[Name, E] : Sorted) {
+    TotalTime += E->TotalTimeSec;
+    errs() << llvm::format("%-80s %12.4f %10lu %12lu %12lu\n",
+                           Name.str().c_str(), E->TotalTimeSec,
+                           (unsigned long)E->NumCalls,
+                           (unsigned long)E->NumIntraFnAccesses,
+                           (unsigned long)E->NumCrossFnAccesses);
+  }
+
+  errs() << std::string(130, '-') << "\n";
+  errs() << llvm::format("%-80s %12.4f\n", "TOTAL", TotalTime);
+  errs() << "=== End Attributor Per-Function Timing ===\n\n";
+
+  if (!CrossFnAccessSourceMap.empty()) {
+    SmallVector<std::pair<StringRef, uint64_t>> SourceSorted;
+    for (auto &Entry : CrossFnAccessSourceMap)
+      SourceSorted.push_back({Entry.getKey(), Entry.getValue()});
+    llvm::sort(SourceSorted,
+               [](const auto &A, const auto &B) { return A.second > B.second; });
+
+    errs() << "=== Cross-Fn Access Sources (which remote functions contribute most) ===\n";
+    errs() << llvm::format("%-80s %15s\n", "Remote Function", "TotalAccesses");
+    errs() << std::string(100, '-') << "\n";
+    uint64_t GrandTotal = 0;
+    for (auto &[Name, Count] : SourceSorted) {
+      GrandTotal += Count;
+      errs() << llvm::format("%-80s %15lu\n", Name.str().c_str(),
+                             (unsigned long)Count);
+    }
+    errs() << std::string(100, '-') << "\n";
+    errs() << llvm::format("%-80s %15lu\n", "GRAND TOTAL",
+                           (unsigned long)GrandTotal);
+    errs() << "=== End Cross-Fn Access Sources ===\n\n";
+    CrossFnAccessSourceMap.clear();
+  }
+
+  AttributorFnTimingMap.clear();
+}
 
 // Some helper macros to deal with statistics tracking.
 //
@@ -1127,6 +1228,35 @@ struct AAPointerInfoImpl
         CrossFnGroups;
 
     Function &Scope = *I.getFunction();
+
+    auto FnTimingStart = DumpFnTiming
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point();
+    struct FnTimingRAII {
+      const Function &Scope;
+      std::chrono::steady_clock::time_point Start;
+      const SmallVector<std::pair<const Access *, bool>, 8> &IntraFnAccesses;
+      const DenseMap<Function *,
+                     SmallVector<std::pair<const Access *, bool>, 4>>
+          &CrossFnGroups;
+      ~FnTimingRAII() {
+        if (!DumpFnTiming)
+          return;
+        auto Elapsed = std::chrono::steady_clock::now() - Start;
+        double Secs =
+            std::chrono::duration<double>(Elapsed).count();
+        auto &Entry = AttributorFnTimingMap[Scope.getName()];
+        Entry.TotalTimeSec += Secs;
+        Entry.NumCalls++;
+        Entry.NumIntraFnAccesses += IntraFnAccesses.size();
+        uint64_t CrossFnCount = 0;
+        for (auto &[RemoteFn, Accesses] : CrossFnGroups) {
+          CrossFnCount += Accesses.size();
+          CrossFnAccessSourceMap[RemoteFn->getName()] += Accesses.size();
+        }
+        Entry.NumCrossFnAccesses += CrossFnCount;
+      }
+    } FnTimingGuard{Scope, FnTimingStart, IntraFnAccesses, CrossFnGroups};
     bool IsKnownNoSync;
     bool IsAssumedNoSync = AA::hasAssumedIRAttr<Attribute::NoSync>(
         A, &QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL,
@@ -1710,10 +1840,82 @@ struct AAPointerInfoImpl
     if (!OtherAA.getState().isValidState() || !isValidState())
       return indicatePessimisticFixpoint();
 
+    if (SkipKmpcImport) {
+      if (auto *CalledFn = CB.getCalledFunction()) {
+        if (CalledFn->getName().starts_with("__kmpc_") ||
+            CalledFn->getName().starts_with("_omp_reduction"))
+          return ChangeStatus::UNCHANGED;
+      }
+    }
+
+    // Context-sensitive filtering for __kmpc_parallel_60.
+    // Its AAPointerInfo is contaminated with accesses from ALL inner parallel
+    // functions in the module. At each call site we know the specific callback
+    // (arg 5), so only import accesses reachable from that callback.
+    std::optional<DenseSet<const Function *>> AllowedRemoteFns;
+    if (FilterKmpcImports) {
+      if (auto *CalledFn = CB.getCalledFunction()) {
+        if (CalledFn->getName() == "__kmpc_parallel_60") {
+          constexpr unsigned CallbackArgNo = 5;
+          if (CB.arg_size() > CallbackArgNo) {
+            if (auto *CallbackFn = dyn_cast<Function>(
+                    CB.getArgOperand(CallbackArgNo)->stripPointerCasts())) {
+              AllowedRemoteFns.emplace();
+              AllowedRemoteFns->insert(CalledFn);
+
+              SmallVector<Function *, 16> Worklist;
+              bool HasUnknownCallees = false;
+              Worklist.push_back(CallbackFn);
+
+              // The wrapper (arg 6) is a separate Function with a (i16, i32)
+              // signature used by workers in the generic state machine. It has
+              // its own copy of the parallel body, so its accesses would have
+              // RemoteInst in the wrapper, not in fn.
+              constexpr unsigned WrapperArgNo = 6;
+              if (CB.arg_size() > WrapperArgNo) {
+                if (auto *WrapperFn = dyn_cast<Function>(
+                        CB.getArgOperand(WrapperArgNo)->stripPointerCasts()))
+                  Worklist.push_back(WrapperFn);
+              }
+
+              while (!Worklist.empty()) {
+                Function *F = Worklist.pop_back_val();
+                if (F->isIntrinsic())
+                  continue;
+                if (!AllowedRemoteFns->insert(F).second)
+                  continue;
+                auto *CE = A.getAAFor<AACallEdges>(
+                    *this, IRPosition::function(*F), DepClassTy::OPTIONAL);
+                if (!CE || !CE->getState().isValidState()) {
+                  HasUnknownCallees = true;
+                  break;
+                }
+                if (CE->hasUnknownCallee()) {
+                  HasUnknownCallees = true;
+                  break;
+                }
+                for (auto *Callee : CE->getOptimisticEdges())
+                  Worklist.push_back(Callee);
+              }
+
+              if (auto *IMT = CB.getModule()->getFunction("invokeMicrotask"))
+                if (!IMT->isDeclaration())
+                  AllowedRemoteFns->insert(IMT);
+
+              if (HasUnknownCallees)
+                AllowedRemoteFns.reset();
+            }
+          }
+        }
+      }
+    }
+
     ChangeStatus Changed = ChangeStatus::UNCHANGED;
     const auto &OtherAAImpl = static_cast<const AAPointerInfoImpl &>(OtherAA);
     bool IsByval = OtherAAImpl.getAssociatedArgument()->hasByValAttr();
     Changed |= setReachesReturn(OtherAAImpl.ReturnedOffsets);
+
+    const Function *CalleeFn = OtherAAImpl.getAssociatedArgument()->getParent();
 
     // Combine the accesses bin by bin.
     const auto &State = OtherAAImpl.getState();
@@ -1722,6 +1924,19 @@ struct AAPointerInfoImpl
         const auto &RAcc = State.getAccess(Index);
         if (IsByval && !RAcc.isRead())
           continue;
+
+        if (AllowedRemoteFns) {
+          const Function *RemoteFn = RAcc.getRemoteInst()->getFunction();
+          if (!AllowedRemoteFns->contains(RemoteFn))
+            continue;
+        }
+
+        if (LimitImportDepth) {
+          const Function *RemoteFn = RAcc.getRemoteInst()->getFunction();
+          if (RemoteFn != CalleeFn)
+            continue;
+        }
+
         bool UsedAssumedInformation = false;
         AccessKind AK = RAcc.getKind();
         auto Content = A.translateArgumentToCallSiteContent(
