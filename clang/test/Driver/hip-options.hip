@@ -249,7 +249,15 @@
 // RUN: %clang -### -Werror --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1100 --offload-new-driver --offload-jobs=4 %s 2>&1 | \
 // RUN:   FileCheck -check-prefix=JOBS %s
+// RUN: %clang -### -Werror --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
+// RUN:   --offload-arch=gfx1100 --offload-new-driver -parallel-jobs=4 %s 2>&1 | \
+// RUN:   FileCheck -check-prefix=JOBS %s
 // JOBS: clang-linker-wrapper{{.*}} "--wrapper-jobs=4"
+
+// RUN: not %clang -### --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
+// RUN:   --offload-arch=gfx1100 --offload-new-driver -parallel-jobs=0x4 %s 2>&1 | \
+// RUN:   FileCheck -check-prefix=INVPARJOBS %s
+// INVPARJOBS: clang: error: invalid integral value '0x4' in '-parallel-jobs=0x4'
 
 // RUN: not %clang -### --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
 // RUN:   --offload-arch=gfx1100 --offload-new-driver --offload-jobs=0x4 %s 2>&1 | \
@@ -260,4 +268,3 @@
 // RUN:   --offload-arch=gfx1100 --offload-new-driver --offload-jobs=jobserver %s 2>&1 | \
 // RUN:   FileCheck -check-prefix=JOBSV %s
 // JOBSV: clang-linker-wrapper{{.*}} "--wrapper-jobs=jobserver"
-
