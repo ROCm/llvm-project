@@ -846,6 +846,15 @@ void ToolChain::addFortranRuntimeLibs(const ArgList &Args,
         addAsNeededOption(*this, Args, CmdArgs, /*as_needed=*/false);
     }
     addFlangRTLibPath(Args, CmdArgs);
+    if (Args.hasArg(options::OPT_ffast_amd_memory_allocator)) {
+      if (Args.hasFlag(options::OPT_static_libflangrt,
+                       options::OPT_shared_libflangrt, getTriple().isOSAIX()))
+        CmdArgs.push_back(
+            getCompilerRTArgString(Args, "amd", ToolChain::FT_Static, true));
+      else
+        CmdArgs.push_back("-lflang_rt.amd");
+      CmdArgs.push_back("-lomptarget");
+    }
 
     // needs libexecinfo for backtrace functions
     if (getTriple().isOSFreeBSD() || getTriple().isOSNetBSD() ||
