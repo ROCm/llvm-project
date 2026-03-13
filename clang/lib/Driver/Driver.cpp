@@ -2397,11 +2397,11 @@ void Driver::PrintHelp(bool ShowHidden) const {
 
 void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   if (IsFlangMode()) {
-    OS << getClangToolFullVersion("flang") << '\n';
+    OS << getClangToolFullVersion("AFAR drop #23.1.0 03/12/26 flang") << '\n';
   } else {
     // FIXME: The following handlers should use a callback mechanism, we don't
     // know what the client would like to do.
-    OS << getClangFullVersion() << '\n';
+    OS << getClangToolFullVersion("AFAR drop #23.1.0 03/12/26 clang") << '\n';
   }
   const ToolChain &TC = C.getDefaultToolChain();
   OS << "Target: " << TC.getTripleString() << '\n';
