@@ -524,26 +524,7 @@ void PopulateInitAndCleanupRegionsHelper::initAndCleanupBoxedArray(
     return;
   }
 
-  // TODO: Allocate on the heap if the whole reduction/privatization is nested
-  // inside of a loop
-  auto temp = [&]() {
-    if (shouldAllocateTempOnStack())
-      return createStackTempFromMold(loc, builder, source);
-
-    auto [temp, needsDealloc] = createTempFromMold(loc, builder, source);
-    // if needsDealloc, add cleanup region. Always
-    // do this for allocatable boxes because they might have been re-allocated
-    // in the body of the loop/parallel region
-    if (needsDealloc) {
-      mlir::OpBuilder::InsertionGuard guard(builder);
-      createCleanupRegion(converter, loc, argType, cleanupRegion, sym,
-                          isDoConcurrent);
-    } else {
-      assert(!isAllocatableOrPointer &&
-             "Pointer-like arrays must be heap allocated");
-    }
-    return temp;
-  }();
+  auto [temp, needsDealloc] = createTempFromMold(loc, builder, source);
 
   // Put the temporary inside of a box:
   // hlfir::genVariableBox doesn't handle non-default lower bounds
