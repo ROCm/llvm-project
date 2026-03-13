@@ -235,8 +235,11 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
         // EmitStmt skips any OMPCapturedExprDecls, but needs to be emitted
         // here.
         if (auto *PreInitDecl = dyn_cast<DeclStmt>(S)) {
-          for (Decl *I : PreInitDecl->decls())
-            CGF.EmitVarDecl(cast<VarDecl>(*I));
+          for (Decl *I : PreInitDecl->decls()) {
+            auto *VD = cast<VarDecl>(I);
+            if (!CGF.hasAddrOfLocalVar(VD))
+              CGF.EmitVarDecl(*VD);
+          }
           continue;
         }
         CGF.EmitStmt(S);
@@ -451,20 +454,6 @@ void CodeGenFunction::InitializeXteamRedCapturedVars(
 
     assert(DScanStorageInst && "Device scan storage pointer cannot be null");
     CapturedVars.push_back(DScanStorageInst);
-    if (CGM.isXteamSegmentedScanKernel()) {
-      // Placeholder for d_segment_vals initialized to nullptr
-      llvm::Value *DSegmentValsInst =
-          Builder.CreateAlloca(RedVarType, nullptr, "d_segment_vals");
-      Address DSegmentValsAddr(
-          DSegmentValsInst, RedVarType,
-          Context.getTypeAlignInChars(Context.UnsignedIntTy));
-      llvm::Value *NullPtrDSegmentVals = llvm::ConstantPointerNull::get(
-          llvm::PointerType::get(getLLVMContext(), /*AddressSpace=*/0));
-      Builder.CreateStore(NullPtrDSegmentVals, DSegmentValsAddr);
-
-      assert(DSegmentValsInst && "Segment Vals Array pointer cannot be null");
-      CapturedVars.push_back(DSegmentValsInst);
-    }
   }
 }
 
@@ -805,12 +794,6 @@ static llvm::Function *emitOutlinedFunctionPrologue(
             Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
         Args.emplace_back(DScanStorageVD);
         TargetArgs.emplace_back(DScanStorageVD);
-        if (CGM.isXteamSegmentedScanKernel()) {
-          VarDecl *DSegmentValsVD = ImplicitParamDecl::Create(
-              Ctx, Ctx.VoidPtrTy, ImplicitParamKind::CapturedContext);
-          Args.emplace_back(DSegmentValsVD);
-          TargetArgs.emplace_back(DSegmentValsVD);
-        }
       }
     }
   }
@@ -2456,6 +2439,26 @@ void CodeGenFunction::EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D) {
   OMPPrivateScope InscanScope(*this);
   EmitOMPReductionClauseInit(D, InscanScope, /*ForInscan=*/true);
 
+  // For xteam scan on device: remap reduction variables in LocalDeclMap so
+  // that body code (reads AND writes, e.g. "if (in[i] > m) m = in[i]")
+  // accesses the xteam local aggregator directly.  This is needed for
+  // max/min scans where the user's accumulation pattern isn't recognized
+  // by EmitXteamRedStmt; for sum (handled by EmitXteamRedStmt via
+  // RedVarMap) the remapping is a harmless no-op.
+  SmallVector<std::pair<const VarDecl *, Address>, 2> SavedRedVarAddrs;
+  if (CGM.getLangOpts().OpenMPIsTargetDevice && CGM.isXteamScanKernel()) {
+    const CodeGenModule::XteamRedVarMap &RedVarMap =
+        CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
+    for (const auto &MapPair : RedVarMap) {
+      const VarDecl *VD = MapPair.first;
+      auto it = LocalDeclMap.find(VD);
+      if (it != LocalDeclMap.end()) {
+        SavedRedVarAddrs.emplace_back(VD, it->second);
+        it->second = MapPair.second.RedVarAddr;
+      }
+    }
+  }
+
   // Need to remember the block before and after scan directive
   // to dispatch them correctly depending on the clause used in
   // this directive, inclusive or exclusive. For inclusive scan the natural
@@ -2479,6 +2482,13 @@ void CodeGenFunction::EmitOMPXteamScanNoLoopBody(const OMPLoopDirective &D) {
            OMPLoopBasedDirective::tryToFindNextInnerLoop(
                Body, /*TryImperfectlyNestedLoops=*/true),
            D.getLoopsNumber());
+
+  // Restore original LocalDeclMap entries for reduction variables.
+  for (const auto &Saved : SavedRedVarAddrs) {
+    auto it = LocalDeclMap.find(Saved.first);
+    if (it != LocalDeclMap.end())
+      it->second = Saved.second;
+  }
 
   // Jump to the dispatcher at the end of the loop body.
   EmitBranch(OMPScanExitBlock);
@@ -4343,7 +4353,7 @@ static void emitScanBasedDirectiveDecls(
             CGF.MakeAddrLValue(TempVDAddr, TempVarDecl->getType());
         CGF.EmitStoreOfScalar(TempVLAInst, TempVDAddrLValue,
                               /* isInitialization */ false);
-      } else
+      } else if (!CGF.hasAddrOfLocalVar(TempVarDecl))
         CGF.EmitVarDecl(*TempVarDecl);
       ++ITA;
       ++Count;
@@ -6457,17 +6467,23 @@ void CodeGenFunction::EmitOMPScanDirective(const OMPScanDirective &S) {
 
       if (CGM.getLangOpts().OpenMPIsTargetDevice &&
           CGM.isXteamRedKernel(ParentDir) && CGM.isXteamScanKernel()) {
-        // Store the updated value of reduction variable(in the second phase of
-        // Xteam scan) to the OrigExpr(aka Red_Var). This will be consumed by
-        // the AfterScanBlock later on.
-        const CodeGenModule::XteamRedVarMap &RedVarMap =
-            CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
-        const VarDecl *RedVarDecl =
-            cast<VarDecl>(cast<DeclRefExpr>(OrigExpr)->getDecl());
-        Address XteamRedLocalAddr =
-            RedVarMap.find(RedVarDecl)->second.RedVarAddr;
-        Builder.CreateStore(Builder.CreateLoad(XteamRedLocalAddr),
-                            DestLVal.getAddress());
+        // For Xteam scan: propagate the scan result from the per-thread
+        // reduction variable to OrigExpr so the AfterScanBlock can consume it.
+        // For segmented scans this stores to OrigExpr (shared variable).
+        // For NoLoop scans we skip this store because OrigExpr is a single
+        // global scalar shared by all threads -- writing per-thread results
+        // to it would race.  Instead, EmitXteamRedStmt intercepts the
+        // after-scan user code and reads directly from RVI.RedVarAddr.
+        if (CGM.isXteamSegmentedScanKernel()) {
+          const CodeGenModule::XteamRedVarMap &RedVarMap =
+              CGM.getXteamRedVarMap(CGM.getCurrentXteamRedStmt());
+          const VarDecl *RedVarDecl =
+              cast<VarDecl>(cast<DeclRefExpr>(OrigExpr)->getDecl());
+          Address XteamRedLocalAddr =
+              RedVarMap.find(RedVarDecl)->second.RedVarAddr;
+          Builder.CreateStore(Builder.CreateLoad(XteamRedLocalAddr),
+                              DestLVal.getAddress());
+        }
       } else {
         EmitOMPCopy(
             PrivateExpr->getType(), DestLVal.getAddress(), SrcLVal.getAddress(),
@@ -8276,13 +8292,14 @@ void CodeGenFunction::EmitOMPTargetTeamsDistributeParallelForDirective(
     auto LPCRegion =
         CGOpenMPRuntime::LastprivateConditionalRAII::disable(*this, S);
     emitCommonOMPTargetDirective(*this, S, CodeGen);
-    this->CGM.isXteamScanPhaseOne = false;
-    if (this->CGM.isXteamScanKernel()) {
+    if (this->CGM.isXteamSegmentedScanKernel()) {
+      // Segmented scan still needs a second kernel for the after-scan loop
+      this->CGM.isXteamScanPhaseOne = false;
       emitCommonOMPTargetDirective(*this, S, CodeGen);
       this->CGM.isXteamScanPhaseOne = true;
     }
 
-    if (IsInscan)
+    if (IsInscan && !this->CGM.isXteamScanKernel())
       emitScanBasedDirectiveFinals(*this, S, NumIteratorsGen);
   }
 }

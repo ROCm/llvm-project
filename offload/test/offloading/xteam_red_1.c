@@ -1,6 +1,6 @@
 // clang-format off
 // This test verifies that the reduction kernel is of Xteam-reduction type
-// and is launched with 460 teams and 32 threads in each team. 
+// and is launched with 480 teams and 32 threads in each team.
 // 
 // RUN: %libomptarget-compile-generic -fopenmp-target-fast -fopenmp-target-fast-reduction
 // RUN: env LIBOMPTARGET_KERNEL_TRACE=1 LIBOMPTARGET_AMDGPU_LOW_TRIPCOUNT=15360 LIBOMPTARGET_AMDGPU_ADJUST_XTEAM_RED_TEAMS=32 \

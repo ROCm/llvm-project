@@ -937,6 +937,6 @@ int main()
 // CHECK-NEXT:    [[TMP32:%.*]] = load ptr, ptr [[DOTADDR2_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP33:%.*]] = load ptr, ptr [[DOTADDR3_ASCAST]], align 8
 // CHECK-NEXT:    [[TMP34:%.*]] = load float, ptr addrspace(5) [[TMP6]], align 4
-// CHECK-NEXT:    call void @__kmpc_xteamr_f_16x64_fast_sum(float [[TMP34]], ptr [[TMP4]], ptr [[TMP32]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, ptr @__kmpc_rfun_sum_lds_f, float 0.000000e+00, i64 [[TMP20]], i32 [[TMP19]], i32 0)
+// CHECK-NEXT:    call void @__kmpc_xteamr_f_fast_sum(float [[TMP34]], ptr [[TMP4]], ptr [[TMP32]], ptr [[TMP33]], ptr @__kmpc_rfun_sum_f, ptr @__kmpc_rfun_sum_lds_f, float 0.000000e+00, i64 [[TMP20]], i32 [[TMP19]], i32 0)
 // CHECK-NEXT:    ret void
 //

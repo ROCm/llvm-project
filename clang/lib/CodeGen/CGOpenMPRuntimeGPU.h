@@ -181,21 +181,15 @@ public:
                                     llvm::Value *NumTeams, int BlockSize,
                                     CodeGenModule::XteamRedOpKind, bool IsFast);
 
-  /// Emit call to Cross-team scan entry points
-  llvm::Value *
-  getXteamScanSum(CodeGenFunction &CGF, llvm::Value *Val, llvm::Value *SumPtr,
-                  llvm::Value *DTeamVals, llvm::Value *DTeamsDonePtr,
-                  llvm::Value *DScanStorage, llvm::Value *ThreadStartIndex,
-                  llvm::Value *NumTeams, int BlockSize, bool IsFast);
-
-  /// Emit calls to Cross-team scan Phase 2 entry points
-  llvm::Value *getXteamScanPhaseTwo(CodeGenFunction &CGF, llvm::Value *Val,
-                                    llvm::Value *SegmentSize,
-                                    llvm::Value *DTeamVals,
-                                    llvm::Value *DScanStorage,
-                                    llvm::Value *DSegmentVals,
-                                    llvm::Value *ThreadStartIndex,
-                                    int BlockSize, bool IsInclusiveScan);
+  /// Emit call to cross-team scan for the given reduction operation
+  /// (sum/min/max).
+  llvm::Value *getXteamScanOp(CodeGenFunction &CGF, llvm::Value *Val,
+                              llvm::Value *DResult, llvm::Value *DBlockStatus,
+                              llvm::Value *DBlockAggregates,
+                              llvm::Value *DBlockPrefixes,
+                              llvm::Value *ThreadStartIndex, int BlockSize,
+                              bool IsInclusiveScan,
+                              CodeGenModule::XteamRedOpKind RedOp);
 
   // Returns whether the hint expressions for an architecture should be
   // evaluated to decide which kind of atomic ops should be generated.

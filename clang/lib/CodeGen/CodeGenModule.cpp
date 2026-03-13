@@ -9599,6 +9599,7 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
   // equivalently regardless the nesting level it is at -- this is
   // because Xteam reduction is applied today for a nest that
   // satisfies target-teams-distribute-parallel-for.
+  isXteamScanCandidate = false;
   XteamRedVarMap VarMap;
 
   // This vector defines the order in which Xteam metadata will always be
@@ -9742,14 +9743,6 @@ CodeGenModule::collectXteamRedVars(const OptKernelNestDirectives &NestDirs) {
               NxFastReductionMinMaxNotSupported,
               XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
         }
-        // Scan kernel codegen is not compatible with min/max, so
-        // disable Xteam codegen if a scan reduction variable is found.
-        if (OpKindsFound > XR_OP_add && isXteamScanKernel()) {
-          return std::make_pair(
-              NxScanMinMaxNotSupported,
-              XteamRedCollectionInfo(VarMap, VarVec, OpKindsFound));
-        }
-
         // Now check for sum reduction
         OpKindsFound |= isSumReduction(BinExprRhs);
         // Unrecognized reduction operator
@@ -10020,11 +10013,25 @@ CodeGenModule::checkAndSetXteamRedKernel(const OMPExecutableDirective &D) {
   if (!InnermostDir.hasAssociatedStmt())
     return NxNoStmt;
 
-  auto ForStmtStatus =
-      getXteamRedForStmtStatus(InnermostDir, InnermostDir.getAssociatedStmt(),
-                               &RedPair.second.RedVarMap);
-  if ((NxStatus = ForStmtStatus.first))
-    return NxStatus;
+  bool HasNestedGenericCall = false;
+  if (isXteamScanCandidate) {
+    // For inscan reductions the loop body contains user-written accumulation
+    // code (e.g. "if (in[i] > m) m = in[i]") that doesn't follow the strict
+    // patterns expected by XteamRedExprChecker.  The reduction operation is
+    // already determined from the clause, so only run the structural check.
+    auto [StructStatus, NestedCall] =
+        getNoLoopForStmtStatus(InnermostDir, InnermostDir.getAssociatedStmt());
+    if ((NxStatus = StructStatus))
+      return NxStatus;
+    HasNestedGenericCall = NestedCall;
+  } else {
+    auto ForStmtStatus =
+        getXteamRedForStmtStatus(InnermostDir, InnermostDir.getAssociatedStmt(),
+                                 &RedPair.second.RedVarMap);
+    if ((NxStatus = ForStmtStatus.first))
+      return NxStatus;
+    HasNestedGenericCall = ForStmtStatus.second;
+  }
 
   // Ensure that every reduction variable has a valid kind. Otherwise bail out.
   for (auto &MapPair : RedPair.second.RedVarMap) {
@@ -10042,8 +10049,6 @@ CodeGenModule::checkAndSetXteamRedKernel(const OMPExecutableDirective &D) {
       return NxAmbiguousRedKind;
     MapPair.second.Opcode = static_cast<XteamRedOpKind>(KernelRedOps);
   }
-
-  bool HasNestedGenericCall = ForStmtStatus.second;
   if (((getLangOpts().OpenMPNoNestedParallelism &&
         getLangOpts().OpenMPNoThreadState) ||
        !HasNestedGenericCall)) {

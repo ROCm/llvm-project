@@ -162,37 +162,38 @@ int main() {
 }
 
 // clang-format off
+// Segmented scan uses two kernels: phase 1 (scan) + phase 2 (write-back).
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 85X 256)
+/// CHECK: args: 9 teamsXthrds:( 85X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l50
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 85X 256)
+/// CHECK: args: 9 teamsXthrds:( 85X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l50_1
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 85X 256)
+/// CHECK: args: 9 teamsXthrds:( 85X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l74
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK: args:10 teamsXthrds:( 85X 256)
+/// CHECK: args: 9 teamsXthrds:( 85X 256)
 /// CHECK: n:__omp_offloading_[[MANGLED]]_with_clauses_l74_1
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE:[0-9]+]]
-/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS:[0-9]+]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: args: 9 teamsXthrds:({{[ ]*}}[[TEAMS:[0-9]+]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l110
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
-/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: args: 9 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l110_1
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
-/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: args: 9 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: n:__omp_offloading_[[MANGLED:.*]]_without_clauses_l134
 
 /// CHECK: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8 ConstWGSize:[[WGSIZE]]
-/// CHECK: args:10 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
+/// CHECK: args: 9 teamsXthrds:({{[ ]*}}[[TEAMS]]X{{[ ]*}}[[WGSIZE]])
 /// CHECK: n:__omp_offloading_[[MANGLED]]_without_clauses_l134_1
 
 /// CHECK: Inclusive Scan: Success!
@@ -201,19 +202,19 @@ int main() {
 /// CHECK: Exclusive Scan: Success!
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
+/// CHECK-512WGSize: args: 9 teamsXthrds:( 85X 512)
 /// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l50
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
+/// CHECK-512WGSize: args: 9 teamsXthrds:( 85X 512)
 /// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l50_1
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
+/// CHECK-512WGSize: args: 9 teamsXthrds:( 85X 512)
 /// CHECK-512WGSize: n:__omp_offloading_[[MANGLED:.*]]_with_clauses_l74
 
 /// CHECK-512WGSize: DEVID:[[S:[ ]*]][[DEVID:[0-9]+]] SGN:8
-/// CHECK-512WGSize: args:10 teamsXthrds:( 85X 512)
+/// CHECK-512WGSize: args: 9 teamsXthrds:( 85X 512)
 /// CHECK-512WGSize: n:__omp_offloading_[[MANGLED]]_with_clauses_l74_1
 
 /// CHECK-512WGSize: Inclusive Scan: Success!

@@ -1,4 +1,5 @@
-//===---------------- Xteams.h - OpenMP interface ----------------- C++ -*-===//
+//===-------- Xteams.h - Cross team scan --------------------------- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,501 +8,78 @@
 //===----------------------------------------------------------------------===//
 //
 // DeviceRTL Header file: Xteams.h
-//     External __kmpc headers for cross team scan functions are defined
-//     in DeviceRTL/src/Xteams.cpp. Clang will generate a call to one
-//     of these functions as it encounters the scan directive. The 
-//     specific function depends on datatype, warpsize, and number of waves
-//     in the teamsize. The number of teams should not be more than
-//     the teamsize. Teamsize 64 is not supported yet.
+//     External __kmpc headers for single-pass cross-team scan functions using
+//     the decoupled look-back algorithm.
+//
+// Memory requirements per kernel invocation:
+//   - block_status[NumTeams + 1]: uint32_t array, initialized to 0 (INVALID)
+//       The extra entry at index NumTeams is an atomic done-counter used by
+//       the self-reset logic (Step 4): the last block to finish resets all
+//       status entries to 0, so callers only need to zero-initialize once.
+//   - block_aggregates[NumTeams]: T array (uninitialized), written once at
+//   PARTIAL
+//   - block_prefixes[NumTeams]: T array (uninitialized), written once at
+//   COMPLETE
+//   - result[Grid]: T array -- output for per-thread scan results
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef OMPTARGET_DEVICERTL_XTEAMS_H
-#define OMPTARGET_DEVICERTL_XTEAMS_H
+#ifndef OMPTARGET_DEVICERTL_XTEAMS_LOOKBACK_H
+#define OMPTARGET_DEVICERTL_XTEAMS_LOOKBACK_H
+
 #include "DeviceTypes.h"
+#include "XteamCommon.h"
 
 #define _CD double _Complex
 #define _CF float _Complex
 #define _UI unsigned int
 #define _UL unsigned long
-#define _INLINE_ATTR_ __attribute__((flatten, always_inline))
-#define _RF_LDS volatile __gpu_local
 
 extern "C" {
-/// External cross team scan (xteams) helper functions
-///
-/// The template for name of xteams helper function is:
-/// __kmpc_xteams_<dtype>_<waves>x<WSZ> where
-///    <dtype> is letter(s) representing data type, e.g. d=double
-///    <waves> number of waves in thread block
-///    <WSZ>   warp size, 32 or 64
-/// So <waves> x <WSZ> is the number of threads per team.
-/// Example: __kmpc_xteams_i_4x64 is the scan helper function
-///          for all scan with data type double using 256 threads
-///          per team.
-/// All xteams helper functions are defined in Xteamr.cpp. They each call the
-/// internal templated function _xteam_scan which is defined in Xteams.cpp.
-/// Clang code generation for C/C++ shall instantiate a call to a helper 
-/// function for the operator(addition, max and min) used for a scan directive
-/// used in a OpenMP target region.
-///
-/// \param v Input thread local scanned value
-/// \param storage Pointer to a global shared storage used by all the threads
-/// \param r_array Pointer to the result scan array (output)
-/// \param tvs Global array of team values for this reduction instance (team_vals)
-/// \param td Pointer to atomic counter of completed teams (teams_done_ptr)
-/// \param _rf Function pointer to reduction function (sum,min,max)
-/// \param _rf_lds Function pointer to reduction function on LDS memory
-/// \param iv Reduction null value (e.g. 0 for addition)
-/// \param k Outer loop iteration value, 0 to numteams*numthreads
-/// \param numteams Number of teams
-/// Cross team scan (xteams) functions, see documentation above.
-void _INLINE_ATTR_  __kmpc_xteams_d_16x64
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_16x64
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_16x64
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_16x64
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_16x64
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_16x64
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_16x64
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_16x64
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_8x64
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_8x64
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_8x64
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_8x64
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_8x64
-   (int v, int* storage, int* r_array, int* tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_8x64
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_8x64
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_8x64
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_4x64
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_4x64
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_4x64
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_4x64
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_4x64
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_4x64
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_4x64
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_4x64
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_2x64
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_2x64
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_2x64
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_2x64
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_2x64
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_2x64
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_2x64
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_2x64
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_1x64
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_1x64
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_1x64
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_1x64
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_1x64
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_1x64
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_1x64
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_1x64
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_32x32
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_32x32
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_32x32
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_32x32
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_32x32
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_32x32
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_32x32
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_32x32
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_16x32
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_16x32
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_16x32
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_16x32
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_16x32
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_16x32
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_16x32
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_16x32
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_8x32
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_8x32
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_8x32
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_8x32
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_8x32
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_8x32
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_8x32
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_8x32
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_4x32
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_4x32
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_4x32
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_4x32
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_4x32
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_4x32
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_4x32
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_4x32
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_d_2x32
-   (double v, double* storage, double* r_array, double *tvs, uint32_t *td, void (*_rf)(double *, double),
-      void (*_rf_lds)(_RF_LDS double *, _RF_LDS double *), const double iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_f_2x32
-   (float v, float* storage, float* r_array, float *tvs, uint32_t *td, void (*_rf)(float *, float),
-      void (*_rf_lds)(_RF_LDS float *, _RF_LDS float *), const float iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cd_2x32
-   (_CD v, _CD* storage, _CD* r_array, _CD *tvs, uint32_t *td, void (*_rf)(_CD *, _CD),
-      void (*_rf_lds)(_RF_LDS _CD *, _RF_LDS _CD *), const _CD iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_cf_2x32
-   (_CF v, _CF* storage, _CF* r_array, _CF *tvs, uint32_t *td, void (*_rf)(_CF *, _CF),
-      void (*_rf_lds)(_RF_LDS _CF *, _RF_LDS _CF *), const _CF iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_i_2x32
-   (int v, int* storage, int* r_array, int *tvs, uint32_t *td, void (*_rf)(int *, int),
-      void (*_rf_lds)(_RF_LDS int *, _RF_LDS int *), const int iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ui_2x32
-   (_UI v, _UI* storage, _UI* r_array, _UI *tvs, uint32_t *td, void (*_rf)(_UI *, _UI),
-      void (*_rf_lds)(_RF_LDS _UI *, _RF_LDS _UI *), const _UI iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_l_2x32
-   (long v, long* storage, long* r_array, long *tvs, uint32_t *td, void (*_rf)(long *, long),
-      void (*_rf_lds)(_RF_LDS long *, _RF_LDS long *), const long iv,
-      const uint64_t k, const uint32_t numteams);
-void _INLINE_ATTR_  __kmpc_xteams_ul_2x32
-   (_UL v, _UL* storage, _UL* r_array, _UL *tvs, uint32_t *td, void (*_rf)(_UL *, _UL),
-      void (*_rf_lds)(_RF_LDS _UL *, _RF_LDS _UL *), const _UL iv,
-      const uint64_t k, const uint32_t numteams);
 
-// Phase Two Entry points
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_16x64(int *storage, int segment_size,
-                                               int *tvs, int *seg_vals,
-                                               void (*rf)(int *, int),
-                                               const int rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_8x64(int *storage, int segment_size,
-                                               int *tvs, int *seg_vals,
-                                               void (*rf)(int *, int),
-                                               const int rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_4x64(int *storage, int segment_size,
-                                               int *tvs, int *seg_vals,
-                                               void (*rf)(int *, int),
-                                               const int rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_8x32(int *storage, int segment_size,
-                                               int *tvs, int *seg_vals,
-                                               void (*rf)(int *, int),
-                                               const int rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_16x32(int *storage, int segment_size,
-                                                int *tvs, int *seg_vals,
-                                                void (*rf)(int *, int),
-                                                const int rnv, const uint64_t k,
-                                                bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_i_32x32(int *storage, int segment_size,
-                                                int *tvs, int *seg_vals,
-                                                void (*rf)(int *, int),
-                                                const int rnv, const uint64_t k,
-                                                bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_16x64(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_8x64(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_4x64(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_8x32(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_16x32(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_d_32x32(
-    double *storage, int segment_size, double *tvs, double *seg_vals,
-    void (*rf)(double *, double), const double rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_16x64(long *storage, int segment_size,
-                                                long *tvs, long *seg_vals,
-                                                void (*rf)(long *, long),
-                                                const long rnv,
-                                                const uint64_t k,
-                                                bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_8x64(long *storage, int segment_size,
-                                               long *tvs, long *seg_vals,
-                                               void (*rf)(long *, long),
-                                               const long rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_4x64(long *storage, int segment_size,
-                                               long *tvs, long *seg_vals,
-                                               void (*rf)(long *, long),
-                                               const long rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_8x32(long *storage, int segment_size,
-                                               long *tvs, long *seg_vals,
-                                               void (*rf)(long *, long),
-                                               const long rnv, const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_16x32(long *storage, int segment_size,
-                                                long *tvs, long *seg_vals,
-                                                void (*rf)(long *, long),
-                                                const long rnv,
-                                                const uint64_t k,
-                                                bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_l_32x32(long *storage, int segment_size,
-                                                long *tvs, long *seg_vals,
-                                                void (*rf)(long *, long),
-                                                const long rnv,
-                                                const uint64_t k,
-                                                bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_16x64(
-    float *storage, int segment_size, float *tvs, float *seg_vals,
-    void (*rf)(float *, float), const float rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_8x64(float *storage, int segment_size,
-                                               float *tvs, float *seg_vals,
-                                               void (*rf)(float *, float),
-                                               const float rnv,
-                                               const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_4x64(float *storage, int segment_size,
-                                               float *tvs, float *seg_vals,
-                                               void (*rf)(float *, float),
-                                               const float rnv,
-                                               const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_8x32(float *storage, int segment_size,
-                                               float *tvs, float *seg_vals,
-                                               void (*rf)(float *, float),
-                                               const float rnv,
-                                               const uint64_t k,
-                                               bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_16x32(
-    float *storage, int segment_size, float *tvs, float *seg_vals,
-    void (*rf)(float *, float), const float rnv, const uint64_t k,
-    bool is_inclusive_scan);
-void _INLINE_ATTR_ __kmpc_xteams_phase2_f_32x32(
-    float *storage, int segment_size, float *tvs, float *seg_vals,
-    void (*rf)(float *, float), const float rnv, const uint64_t k,
-    bool is_inclusive_scan);
-} // end extern C
+/// Single-pass cross-team scan using decoupled look-back algorithm
+///
+/// This is a single-kernel scan that completes the entire operation without
+/// needing a separate Phase 2 call. Each block:
+///   1. Computes its local inclusive scan
+///   2. Publishes its aggregate with PARTIAL status
+///   3. Looks back at predecessor blocks to compute its prefix
+///   4. Marks itself COMPLETE and writes final results
+///
+/// Out-of-bounds threads should pass rnv as v. They participate in block
+/// status publishing.
+///
+/// \param v Input thread local value (use rnv for out-of-bounds threads)
+/// \param result Output array for per-thread scan results (size: Grid)
+/// \param status Block status array (size: NumTeams + 1, init to 0)
+/// \param aggregates Block aggregates array (size: NumTeams)
+/// \param prefixes Block prefixes array (size: NumTeams)
+/// \param rf Function pointer to reduction function
+/// \param rnv Reduction null value (identity element)
+/// \param k Global thread index (0 to NumTeams * BlockSize - 1)
+/// \param is_inclusive True for inclusive scan, false for exclusive
+
+#define _XTEAMS_DECL(T, TS)                                                    \
+  void _XTEAM_EXTERN_ATTR __kmpc_xteams_##TS(                                  \
+      T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
+      void (*rf)(T *, T), const T rnv, const uint64_t k, bool is_inclusive);
+
+_XTEAMS_DECL(_CD, cd)
+_XTEAMS_DECL(_CF, cf)
+_XTEAMS_DECL(double, d)
+_XTEAMS_DECL(float, f)
+_XTEAMS_DECL(int, i)
+_XTEAMS_DECL(_UI, ui)
+_XTEAMS_DECL(long, l)
+_XTEAMS_DECL(_UL, ul)
+
+#undef _XTEAMS_DECL
+
+} // extern "C"
 
 #undef _CD
 #undef _CF
 #undef _UI
 #undef _UL
-#undef _INLINE_ATTR_
-#undef _RF_LDS
 
-#endif // of ifndef OMPTARGET_DEVICERTL_XTEAMS_H
+#endif // OMPTARGET_DEVICERTL_XTEAMS_LOOKBACK_H

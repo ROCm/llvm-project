@@ -1,4 +1,4 @@
-//===---- Xteams.cpp - OpenMP cross team helper functions ---- C++ -*-===//
+//===---- Xteams.cpp - Cross team scan --------------------------- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,1039 +6,248 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains helper functions for cross team scan
+// This file implements cross-team scan using the decoupled look-back algorithm.
+// (single-pass algorithm)
+//
+// References:
+// - Merrill & Garland, "Single-pass Parallel Prefix Scan with Decoupled
+//   Look-back", 2016
+//   https://research.nvidia.com/sites/default/files/pubs/2016-03_Single-pass-Parallel-Prefix/nvr-2016-002.pdf
 //
 //===----------------------------------------------------------------------===//
 
 #include "Xteams.h"
-#include "Debug.h"
-#include "Interface.h"
 #include "Mapping.h"
-#include "State.h"
 #include "Synchronization.h"
-#include "DeviceTypes.h"
-#include "DeviceUtils.h"
 
-#define __XTEAM_SHARED_LDS volatile __gpu_local
+using namespace ompx;
 
-using namespace ompx::mapping;
+//===----------------------------------------------------------------------===//
+// Block state for decoupled look-back
+//===----------------------------------------------------------------------===//
 
-// tag dispatching of type specific shfl_xor, get_low, and get_high
-struct _d_tag {};
-struct _f_tag {};
-struct _cd_tag {};
-struct _cf_tag {};
-struct _i_tag {};
-struct _ui_tag {};
-struct _l_tag {};
-struct _ul_tag {};
-template <typename T> struct __dispatch_tag;
-template <> struct __dispatch_tag<double> {
-  typedef _d_tag type;
-};
-template <> struct __dispatch_tag<float> {
-  typedef _f_tag type;
-};
-template <> struct __dispatch_tag<double _Complex> {
-  typedef _cd_tag type;
-};
-template <> struct __dispatch_tag<float _Complex> {
-  typedef _cf_tag type;
-};
-template <> struct __dispatch_tag<int> {
-  typedef _i_tag type;
-};
-template <> struct __dispatch_tag<unsigned int> {
-  typedef _ui_tag type;
-};
-template <> struct __dispatch_tag<long> {
-  typedef _l_tag type;
-};
-template <> struct __dispatch_tag<unsigned long> {
-  typedef _ul_tag type;
+namespace {
+
+/// Status values for block state (stored in separate block_status array)
+enum BlockStatus : uint32_t {
+  BLOCK_INVALID = 0, // Block hasn't started processing
+  BLOCK_PARTIAL = 1, // Block has computed local aggregate, not final prefix
+  BLOCK_COMPLETE = 2 // Block has computed final inclusive prefix
 };
 
-// Returns true if num is an odd power of two 
-bool is_odd_power(uint32_t num) {
-  bool is_odd = false;
-  while(num != 1) {
-    num >>= 1;
-    is_odd = !is_odd;
-  }
-  return is_odd;
-}
+#define load_relaxed_device(status_ptr)                                        \
+  atomic::load(status_ptr, atomic::relaxed, atomic::MemScopeTy::device)
+#define store_relaxed_device(status_ptr, status)                               \
+  atomic::store(status_ptr, status, atomic::relaxed, atomic::MemScopeTy::device)
 
-// Returns the smallest power of two which is >= `num`
-uint32_t get_ceiled_num(uint32_t num) {
-  // return num;
-  uint32_t ceil_num = 1;
-  while(ceil_num < num) 
-    ceil_num <<= 1;
-  return ceil_num;
-}
+} // anonymous namespace
 
-/// Templated internal function used by all extern typed scans
+//===----------------------------------------------------------------------===//
+// Decoupled look-back scan implementation
+//===----------------------------------------------------------------------===//
+
+/// Single-pass cross-team scan using decoupled look-back algorithm
 ///
-/// \param  Template typename parameter T
-/// \param  Template parameter for number of waves, must be power of two
-/// \param  Template parameter for warp size, 32 o 64
+/// This algorithm allows each block to complete its portion of the scan
+/// as soon as its predecessors are ready, without waiting for all blocks.
 ///
-/// \param val Input thread local (TLS) value for intra team scan
-/// \param storage Pointer to global shared storage used by all the threads
-/// \param r_array Pointer to result scan array (output)
-/// \param team_vals Global array storing reduction computed after per team scan
-/// \param teams_done_ptr Pointer to atomically access teams done counter
-/// \param _rf Function pointer to TLS pair reduction function
-/// \param _rf_lds Function pointer to LDS pair reduction function
-/// \param rnv Reduction null value (e.g. 0 for addition)
-/// \param k The iteration value from 0 to (NumTeams*_NUM_THREADS)-1
-/// \param NumTeams The number of teams 
-
-template <typename T, const int32_t _NW, const int32_t _WSZ>
-__attribute__((flatten, always_inline)) void _xteam_scan(
-    T val, T* storage, T* r_array, T *team_vals, 
-    uint32_t *teams_done_ptr, void (*_rf)(T *, T),
-    void (*_rf_lds)(__XTEAM_SHARED_LDS T *, __XTEAM_SHARED_LDS T *),
-    const T rnv, const uint64_t k, const uint32_t NumTeams) {
-
-  storage[k] = val;
-  // More efficient to derive these constants than get from mapped API
-  constexpr uint32_t _NT = _NW * _WSZ;      // number of threads within a team
-  const uint32_t omp_thread_num = k % _NT;  // thread ID within a team
-  const uint32_t omp_team_num = k / _NT;    // team ID
-  const uint32_t total_num_threads = NumTeams * _NT;
-  uint32_t first = 0;
-
-  // Computing Scan within each Team (Intra-Team Scan)
-  ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-
-  for(int offset = 1; offset < _NT; offset <<= 1) {
-    if(omp_thread_num >= offset) 
-      (*_rf)(&val, storage[first + k - offset]);   // val += storage[first + k - offset];
-    first = total_num_threads - first;
-    storage[first + k] = val;
-    ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-  }
-
-  // The offset value which is required to access the computed team-wise scan 
-  // based upon the workgroup size.
-  uint32_t offset = is_odd_power(_NT) ? total_num_threads : 0;
-  storage[k] = storage[offset + k];
-
-  // Thread 0 reads storage[..._NT-1] below, which was written by thread _NT-1
-  // above.
-  ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-
-  // The teams_done_ptr will be read using this
-  static __XTEAM_SHARED_LDS uint32_t td;
-  if(omp_thread_num == 0) {
-    // store the team-level reduction in team_vals[]
-    team_vals[omp_team_num] = storage[omp_team_num*_NT + _NT - 1];
-    td = ompx::atomic::inc(teams_done_ptr, NumTeams - 1u, ompx::atomic::seq_cst,
-                           ompx::atomic::MemScopeTy::device);
-  }
-
-  // This sync is needed because all threads of the last team which reaches
-  // this part of code need to know that they are in the last team by 
-  // reading the shared volatile value `td`.
-  ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-
-  // If td counter reaches NumTeams-1, this is the last team. Threads of the
-  // last team enter here.
-  if (td == (NumTeams - 1u)) {
-    // Shared memory for the last team to compute scan of the Intra-Team reductions.
-    // Assuming that NumTeams <= _NT
-    // TODO: This assumption needs to be get rid of by introducing some serial 
-    // work here. This is required to support arbitrary NumTeams. This is the
-    // reason why we do not test for teamsize 64 yet.
-    static __XTEAM_SHARED_LDS T partial_sums[2*_NT + 1]; 
-    
-    // To make sure the scan algorithm works, ceiling the NumTeams to the next power 
-    // of two is required.
-    const uint32_t ceiledNumTeams = get_ceiled_num(NumTeams);
-    
-    // preparing `val` to hold the per team reductions from Intra-Team scan
-    // for Cross-Team Scan operation
-    val = omp_thread_num < ceiledNumTeams ? team_vals[omp_thread_num] : rnv;
-    partial_sums[omp_thread_num] = val;
-    first = 0;
-    
-    // Computing Scan across teams (Cross-Team Scan)
-    ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-
-    for(int offset = 1; offset < ceiledNumTeams; offset <<= 1) {
-      if(omp_thread_num >= offset) 
-        (*_rf)(&val, partial_sums[first + omp_thread_num - offset]); // val += partial_sums[first + omp_thread_num - offset]
-      first = ceiledNumTeams - first;
-      partial_sums[first + omp_thread_num] = val;
-      ompx::synchronize::threadsAligned(ompx::atomic::seq_cst);
-    }
-
-    // updating the `team_vals` to hold the cross-team scanned result 
-    if(omp_thread_num < ceiledNumTeams) {
-      // The offset required to access the computed scan of Intra-Team reductions
-      offset = is_odd_power(ceiledNumTeams) ? ceiledNumTeams : 0;
-      team_vals[omp_thread_num] = partial_sums[offset + omp_thread_num]; 
-    }
-  }
-}
-
-/// Templated internal function used by all extern typed scans for phase 2 of
-/// segmented scan
+/// Memory layout:
+/// - block_status[NumTeams + 1]: Status of each block
+/// (INVALID/PARTIAL/COMPLETE)
+///     The extra entry is an atomic done-counter for self-reset.
+/// - block_aggregates[NumTeams]: Written once at PARTIAL, never overwritten.
+/// - block_prefixes[NumTeams]: Written once when transitioning to COMPLETE.
+///   Using separate arrays eliminates the TOCTOU race that occurs when a
+///   single location is overwritten during PARTIAL-to-COMPLETE transitions.
 ///
-/// \param  Template typename parameter T
-/// \param  Template parameter for number of waves, must be power of two
-/// \param  Template parameter for warp size, 32 o 64
+/// \param val Input thread local value (use rnv for out-of-bounds threads)
+/// \param result_array Output array for per-thread scan results (size: Grid)
+/// \param block_status Array of block status values (size: NumTeams + 1)
+/// \param block_aggregates Array for per-block aggregates (size: NumTeams)
+/// \param block_prefixes Array for per-block inclusive prefixes (size:
+/// NumTeams)
+/// \param _rf Function pointer to reduction function
+/// \param rnv Reduction null value (identity element)
+/// \param k Global thread index
+/// \param is_inclusive True for inclusive scan, false for exclusive
 ///
-/// \param storage Pointer to global shared storage array used by all the
-/// threads. Stores reduction computed at the segment level 
-/// \param segment_size The length of a segment of the array assigned to one thread 
-/// \param team_vals Pointer to global shared array storing reduction computed
-/// after per team scan 
-/// \param segment_vals Pointer to global shared array that maintains the
-/// intermediate scanned values per for every segment 
-/// \param _rf Function pointer to TLS pair reduction function 
-/// \param rnv Reduction null value (e.g. 0 for addition) 
-/// \param k The iteration value from 0 to (NumTeams*_NUM_THREADS)-1 
-/// \param is_inclusive_scan Specifies the inclusive/exclusive kind of scan
-
-template <typename T, const int32_t _NW, const int32_t _WSZ>
+/// Note:
+/// - block=team and warp=wave.
+/// - callers must pass rnv for out-of-bounds threads (k >= actual element
+/// count).
+///
+template <typename T>
 __attribute__((flatten, always_inline)) void
-_xteam_scan_phase2(T *storage, int segment_size, T *team_vals, T *segment_vals,
-                   void (*_rf)(T *, T), const T rnv, const uint64_t k,
-                   bool is_inclusive_scan) {
+_xteam_scan(T val, T *result_array, uint32_t *block_status, T *block_aggregates,
+            T *block_prefixes, void (*_rf)(T *, T), const T rnv,
+            const uint64_t k, bool is_inclusive) {
 
-  constexpr uint32_t _NT = _NW * _WSZ;     // number of threads within a team
-  const uint32_t omp_thread_num = k % _NT; // thread ID within a team
-  uint32_t omp_team_num = k / _NT;         // team ID
+  const uint32_t block_size = mapping::getNumberOfThreadsInBlock();
+  const uint32_t num_waves =
+      (block_size + _XTEAM_WARP_SIZE - 1) / _XTEAM_WARP_SIZE;
 
-  T thread_level_result = rnv;
-  uint32_t NumTeams = ompx::mapping::getNumberOfBlocksInKernel();
+  // Derive thread/team IDs from k (logical iteration index)
+  // This is consistent with how the reduction code handles it
+  const uint32_t omp_thread_num = k % block_size; // Thread ID within team
+  const uint32_t omp_team_num = k / block_size;   // Team ID
+  const uint32_t wave_num = omp_thread_num / _XTEAM_WARP_SIZE;
+  const uint32_t lane_num = omp_thread_num % _XTEAM_WARP_SIZE;
 
-  if (segment_size == 1) {
-    // Reconstructing the Final Results for No-Loop Scan
-    if (is_inclusive_scan) {
-      thread_level_result = storage[k];
-      if (omp_team_num >= 1)
-        thread_level_result += team_vals[omp_team_num - 1];
+  // LDS for wave totals during block scan
+  static _RF_LDS T wave_totals[_XTEAM_MAX_NUM_WAVES];
+  // LDS for broadcasting prefix to all threads
+  static _RF_LDS T block_prefix_lds;
+
+  // =========================================================================
+  // Step 1: Compute block-level scan (inclusive or exclusive)
+  // =========================================================================
+
+  // Intra-wave inclusive scan (always inclusive, needed for wave totals)
+  // Callers must pass rnv for out-of-bounds threads (k >= num_elements).
+  T local_inclusive = xteam::wave_inclusive_scan(val, _rf, block_size);
+
+  // Derive per-thread scan value (exclusive = shift inclusive right by 1 lane)
+  T local_scan;
+  if (is_inclusive) {
+    local_scan = local_inclusive;
+  } else {
+    local_scan = xteam::shfl_up(local_inclusive, 1);
+    if (lane_num == 0)
+      local_scan = rnv;
+  }
+
+  // Cross-wave scan within block (wave totals always use inclusive values)
+  if (lane_num == _XTEAM_WARP_SIZE - 1)
+    wave_totals[wave_num] = local_inclusive;
+  synchronize::threadsAligned(atomic::relaxed);
+
+  // First wave scans wave totals
+  if (wave_num == 0) {
+    T wt = (lane_num < num_waves) ? wave_totals[lane_num] : rnv;
+    wt = xteam::wave_inclusive_scan(wt, _rf, num_waves);
+    if (lane_num < num_waves)
+      wave_totals[lane_num] = wt;
+  }
+  synchronize::threadsAligned(atomic::relaxed);
+
+  // Add prefix from previous waves
+  if (wave_num > 0)
+    (*_rf)(&local_scan, wave_totals[wave_num - 1]);
+
+  // Block aggregate is the last thread's inclusive scan value
+  T block_aggregate = wave_totals[num_waves - 1];
+
+  // =========================================================================
+  // Step 2: Publish our aggregate and look back at predecessors
+  // =========================================================================
+
+  T prefix_from_predecessors = rnv;
+
+  if (omp_thread_num == 0) {
+    if (omp_team_num == 0) {
+      // Block 0 has no predecessors - immediately complete
+      block_prefixes[0] = block_aggregate;
+      fence::kernel(atomic::release);
+      store_relaxed_device(&block_status[0], BLOCK_COMPLETE);
     } else {
-      if (k >= 1) {
-        thread_level_result = storage[k - 1];
-        if (omp_team_num >= 1) {
-          if (omp_thread_num >= 1)
-            thread_level_result += team_vals[omp_team_num - 1];
-          else if (omp_team_num >= 2)
-            thread_level_result += team_vals[omp_team_num - 2];
+      // Publish our aggregate with PARTIAL status
+      block_aggregates[omp_team_num] = block_aggregate;
+      fence::kernel(atomic::release);
+      store_relaxed_device(&block_status[omp_team_num], BLOCK_PARTIAL);
+
+      // Look back at predecessor blocks.
+      // Aggregates and prefixes are in separate arrays, so no TOCTOU race:
+      // block_aggregates[b] is written once (at PARTIAL) and never changed.
+      // block_prefixes[b] is written once (at COMPLETE) in a separate location.
+      int pred = omp_team_num - 1;
+
+      while (pred >= 0) {
+        uint32_t pred_status;
+        do {
+          pred_status = load_relaxed_device(&block_status[pred]);
+        } while (pred_status == BLOCK_INVALID);
+        fence::kernel(atomic::acquire);
+
+        if (pred_status == BLOCK_COMPLETE) {
+          T pred_val = block_prefixes[pred];
+          (*_rf)(&prefix_from_predecessors, pred_val);
+          break;
         }
+
+        // PARTIAL: accumulate aggregate and continue looking back
+        T pred_val = block_aggregates[pred];
+        (*_rf)(&prefix_from_predecessors, pred_val);
+        pred--;
       }
+
+      // Compute our inclusive prefix and mark complete
+      T our_prefix = prefix_from_predecessors;
+      (*_rf)(&our_prefix, block_aggregate);
+      block_prefixes[omp_team_num] = our_prefix;
+      fence::kernel(atomic::release);
+      store_relaxed_device(&block_status[omp_team_num], BLOCK_COMPLETE);
+
+      // Broadcast prefix to all threads via LDS
+      block_prefix_lds = prefix_from_predecessors;
     }
-    // Store the thread_level_result in the second half of the storage[] array
-    // to avoid any data races that might happen due to a 'write' performed at
-    // storage[k].
-    // Reason: The immediate next thread might attempt a read using the
-    // expression storage[k-1]
-    storage[NumTeams * _NT + k] = thread_level_result;
-    return;
   }
 
-  // Reconstructing the Final Results for Segment Scan (the default)
-  if (omp_thread_num >= 1)
-    thread_level_result = storage[k - 1];
-  if (omp_team_num >= 1)
-    (*_rf)(&thread_level_result, team_vals[omp_team_num - 1]);
+  // All threads wait for thread 0 to complete look-back
+  synchronize::threadsAligned(atomic::relaxed);
 
-  if (is_inclusive_scan) { 
-    for (int i = 0; i < segment_size; i++)
-      (*_rf)(segment_vals + (k * segment_size) + i, thread_level_result);
-  } else { // Exclusive scan
-    // Populate the non-first element in every segment with scanned result
-    for (int i = segment_size - 1; i > 0; i--)
-      segment_vals[(k * segment_size) + i] =
-          segment_vals[(k * segment_size) + i - 1] + thread_level_result;
+  // =========================================================================
+  // Step 3: Compute final result for each thread
+  // =========================================================================
 
-    // Populate the first element in every segment.
-    // Compute thread_level_result for the previous thread because the
-    // first index(that is, i==0) will always consume the result from the
-    // previous thread.
-    T prev_thread_level_result = rnv;
-    if (omp_thread_num >= 1)
-      prev_thread_level_result = storage[k - 1];
-    if (omp_team_num >= 1) {
-      if (omp_thread_num == 0) // the previous thread is in the previous team
-        prev_thread_level_result = team_vals[omp_team_num - 1];
-      else
-        (*_rf)(&prev_thread_level_result, team_vals[omp_team_num - 1]);
-    }
-    segment_vals[k * segment_size] = prev_thread_level_result;
-  }
+  // Get prefix from predecessors (broadcast from thread 0)
+  if (omp_team_num > 0)
+    prefix_from_predecessors = block_prefix_lds;
+
+  // Compute final scan value (inclusive/exclusive already resolved in Step 1)
+  T final_value = local_scan;
+  if (omp_team_num > 0)
+    (*_rf)(&final_value, prefix_from_predecessors);
+
+  // =========================================================================
+  // (Step 4: Self-reset block status for next invocation)
+  // Would be useful if we would have multiple invocations of this function in
+  // the same kernel or re-use the block status allocation for multiple kernels.
+  // Since that's not the case at the moment, we'll skip it for now.
+  // =========================================================================
+
+  result_array[k] = final_value;
 }
 
-//  Calls to these __kmpc extern C functions will be created in clang codegen
-//  for C and C++. They may also be used for simulation and testing.
-//  The headers for these extern C functions are in ../include/Xteams.h
-//  The compiler builds the name based on the data type,
-//  number of waves in the team and warpsize.
+//===----------------------------------------------------------------------===//
+// Extern C wrapper functions
+//===----------------------------------------------------------------------===//
 
-#define _EXT_ATTR extern "C" __attribute__((flatten, always_inline)) void
 #define _CD double _Complex
 #define _CF float _Complex
 #define _UI unsigned int
 #define _UL unsigned long
-#define _LDS volatile __gpu_local
-_EXT_ATTR
-__kmpc_xteams_d_16x64(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                      void (*rf)(double *, double),
-                      void (*rflds)(_LDS double *, _LDS double *),
-                      const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_16x64(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                      void (*rf)(float *, float),
-                      void (*rflds)(_LDS float *, _LDS float *),
-                      const float rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_16x64(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                       void (*rf)(_CD *, _CD),
-                       void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_16x64(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                       void (*rf)(_CF *, _CF),
-                       void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_16x64(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                      void (*rf)(int *, int),
-                      void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_16x64(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                       void (*rf)(_UI *, _UI),
-                       void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_16x64(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                      void (*rf)(long *, long),
-                      void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_16x64(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                       void (*rf)(_UL *, _UL),
-                       void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 16, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_8x64(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_8x64(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_8x64(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_8x64(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_8x64(int v, int* storage, int* r_p, int* tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_8x64(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_8x64(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_8x64(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 8, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_4x64(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_4x64(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_4x64(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_4x64(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_4x64(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_4x64(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_4x64(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_4x64(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 4, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_2x64(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_2x64(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_2x64(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_2x64(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_2x64(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_2x64(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_2x64(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_2x64(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 2, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_1x64(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_1x64(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_1x64(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_1x64(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_1x64(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_1x64(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_1x64(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_1x64(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 1, 64>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_32x32(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                      void (*rf)(double *, double),
-                      void (*rflds)(_LDS double *, _LDS double *),
-                      const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_32x32(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                      void (*rf)(float *, float),
-                      void (*rflds)(_LDS float *, _LDS float *),
-                      const float rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_32x32(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                       void (*rf)(_CD *, _CD),
-                       void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_32x32(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                       void (*rf)(_CF *, _CF),
-                       void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_32x32(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                      void (*rf)(int *, int),
-                      void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_32x32(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                       void (*rf)(_UI *, _UI),
-                       void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_32x32(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                      void (*rf)(long *, long),
-                      void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_32x32(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                       void (*rf)(_UL *, _UL),
-                       void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 32, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_16x32(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                      void (*rf)(double *, double),
-                      void (*rflds)(_LDS double *, _LDS double *),
-                      const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_16x32(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                      void (*rf)(float *, float),
-                      void (*rflds)(_LDS float *, _LDS float *),
-                      const float rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_16x32(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                       void (*rf)(_CD *, _CD),
-                       void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_16x32(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                       void (*rf)(_CF *, _CF),
-                       void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_16x32(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                      void (*rf)(int *, int),
-                      void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_16x32(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                       void (*rf)(_UI *, _UI),
-                       void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_16x32(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                      void (*rf)(long *, long),
-                      void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_16x32(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                       void (*rf)(_UL *, _UL),
-                       void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                       const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 16, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_8x32(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_8x32(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_8x32(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_8x32(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_8x32(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_8x32(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_8x32(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_8x32(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 8, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_4x32(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_4x32(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_4x32(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_4x32(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_4x32(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_4x32(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_4x32(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_4x32(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 4, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_d_2x32(double v, double* storage, double* r_p, double *tvs, uint32_t *td,
-                     void (*rf)(double *, double),
-                     void (*rflds)(_LDS double *, _LDS double *),
-                     const double rnv, const uint64_t k, const uint32_t nt) {
-  _xteam_scan<double, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_f_2x32(float v, float* storage, float* r_p, float *tvs, uint32_t *td,
-                     void (*rf)(float *, float),
-                     void (*rflds)(_LDS float *, _LDS float *), const float rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<float, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cd_2x32(_CD v, _CD* storage, _CD* r_p, _CD *tvs, uint32_t *td,
-                      void (*rf)(_CD *, _CD),
-                      void (*rflds)(_LDS _CD *, _LDS _CD *), const _CD rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CD, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_cf_2x32(_CF v, _CF* storage, _CF* r_p, _CF *tvs, uint32_t *td,
-                      void (*rf)(_CF *, _CF),
-                      void (*rflds)(_LDS _CF *, _LDS _CF *), const _CF rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_CF, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_i_2x32(int v, int* storage, int* r_p, int *tvs, uint32_t *td,
-                     void (*rf)(int *, int),
-                     void (*rflds)(_LDS int *, _LDS int *), const int rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<int, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ui_2x32(_UI v, _UI* storage, _UI* r_p, _UI *tvs, uint32_t *td,
-                      void (*rf)(_UI *, _UI),
-                      void (*rflds)(_LDS _UI *, _LDS _UI *), const _UI rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UI, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_l_2x32(long v, long* storage, long* r_p, long *tvs, uint32_t *td,
-                     void (*rf)(long *, long),
-                     void (*rflds)(_LDS long *, _LDS long *), const long rnv,
-                     const uint64_t k, const uint32_t nt) {
-  _xteam_scan<long, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_ul_2x32(_UL v, _UL* storage, _UL* r_p, _UL *tvs, uint32_t *td,
-                      void (*rf)(_UL *, _UL),
-                      void (*rflds)(_LDS _UL *, _LDS _UL *), const _UL rnv,
-                      const uint64_t k, const uint32_t nt) {
-  _xteam_scan<_UL, 2, 32>(v, storage, r_p, tvs, td, rf, rflds, rnv, k, nt);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_16x64(int *storage, int segment_size, int *tvs,
-                            int *seg_vals, void (*rf)(int *, int),
-                            const int rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 16, 64>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                 k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_8x64(int *storage, int segment_size, int *tvs,
-                            int *seg_vals, void (*rf)(int *, int),
-                            const int rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 8, 64>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                 k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_4x64(int *storage, int segment_size, int *tvs,
-                            int *seg_vals, void (*rf)(int *, int),
-                            const int rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 4, 64>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                 k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_16x32(int *storage, int segment_size, int *tvs,
-                             int *seg_vals, void (*rf)(int *, int),
-                             const int rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 16, 32>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                  k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_8x32(int *storage, int segment_size, int *tvs,
-                            int *seg_vals, void (*rf)(int *, int),
-                            const int rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 8, 32>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                 k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_i_32x32(int *storage, int segment_size, int *tvs,
-                             int *seg_vals, void (*rf)(int *, int),
-                             const int rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<int, 32, 32>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                  k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_16x64(double *storage, int segment_size, double *tvs,
-                             double *seg_vals, void (*rf)(double *, double),
-                             const double rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 16, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                     rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_8x64(double *storage, int segment_size, double *tvs,
-                            double *seg_vals, void (*rf)(double *, double),
-                            const double rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 8, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_4x64(double *storage, int segment_size, double *tvs,
-                            double *seg_vals, void (*rf)(double *, double),
-                            const double rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 4, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_8x32(double *storage, int segment_size, double *tvs,
-                            double *seg_vals, void (*rf)(double *, double),
-                            const double rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 8, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_16x32(double *storage, int segment_size, double *tvs,
-                             double *seg_vals, void (*rf)(double *, double),
-                             const double rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 16, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                     rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_d_32x32(double *storage, int segment_size, double *tvs,
-                             double *seg_vals, void (*rf)(double *, double),
-                             const double rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<double, 32, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                     rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_16x64(long *storage, int segment_size, long *tvs,
-                             long *seg_vals, void (*rf)(long *, long),
-                             const long rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 16, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_8x64(long *storage, int segment_size, long *tvs,
-                            long *seg_vals, void (*rf)(long *, long),
-                            const long rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 8, 64>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                  k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_4x64(long *storage, int segment_size, long *tvs,
-                            long *seg_vals, void (*rf)(long *, long),
-                            const long rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 4, 64>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                  k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_8x32(long *storage, int segment_size, long *tvs,
-                            long *seg_vals, void (*rf)(long *, long),
-                            const long rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 8, 32>(storage, segment_size, tvs, seg_vals, rf, rnv,
-                                  k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_16x32(long *storage, int segment_size, long *tvs,
-                             long *seg_vals, void (*rf)(long *, long),
-                             const long rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 16, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_l_32x32(long *storage, int segment_size, long *tvs,
-                             long *seg_vals, void (*rf)(long *, long),
-                             const long rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<long, 32, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_16x64(float *storage, int segment_size, float *tvs,
-                             float *seg_vals, void (*rf)(float *, float),
-                             const float rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 16, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_8x64(float *storage, int segment_size, float *tvs,
-                            float *seg_vals, void (*rf)(float *, float),
-                            const float rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 8, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_4x64(float *storage, int segment_size, float *tvs,
-                            float *seg_vals, void (*rf)(float *, float),
-                            const float rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 4, 64>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_8x32(float *storage, int segment_size, float *tvs,
-                            float *seg_vals, void (*rf)(float *, float),
-                            const float rnv, const uint64_t k,
-                            bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 8, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                   rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_16x32(float *storage, int segment_size, float *tvs,
-                             float *seg_vals, void (*rf)(float *, float),
-                             const float rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 16, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
-_EXT_ATTR
-__kmpc_xteams_phase2_f_32x32(float *storage, int segment_size, float *tvs,
-                             float *seg_vals, void (*rf)(float *, float),
-                             const float rnv, const uint64_t k,
-                             bool is_inclusive_scan) {
-  _xteam_scan_phase2<float, 32, 32>(storage, segment_size, tvs, seg_vals, rf,
-                                    rnv, k, is_inclusive_scan);
-}
+
+// Single-pass scan functions using decoupled look-back
+#define _XTEAMS_DEF(T, TS)                                                     \
+  extern "C" _XTEAM_EXTERN_ATTR void __kmpc_xteams_##TS(                       \
+      T v, T *result, uint32_t *status, T *aggregates, T *prefixes,            \
+      void (*rf)(T *, T), const T rnv, const uint64_t k, bool is_inclusive) {  \
+    _xteam_scan<T>(v, result, status, aggregates, prefixes, rf, rnv, k,        \
+                   is_inclusive);                                              \
+  }
+
+_XTEAMS_DEF(_CD, cd)
+_XTEAMS_DEF(_CF, cf)
+_XTEAMS_DEF(double, d)
+_XTEAMS_DEF(float, f)
+_XTEAMS_DEF(int, i)
+_XTEAMS_DEF(_UI, ui)
+_XTEAMS_DEF(long, l)
+_XTEAMS_DEF(_UL, ul)
+
+#undef _XTEAMS_DEF
+
 #undef _CF
+#undef _CD
 #undef _UI
 #undef _UL
-#undef _LDS
-#undef _EXT_ATTR
