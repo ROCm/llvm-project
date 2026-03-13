@@ -1398,6 +1398,15 @@ void tools::addLTOOptions(const ToolChain &ToolChain, const ArgList &Args,
 void tools::addOpenMPRuntimeLibraryPath(const ToolChain &TC,
                                         const ArgList &Args,
                                         ArgStringList &CmdArgs) {
+  // In an in-tree runtimes build, libomp lives under runtimes-bins instead of
+  // the installed-style lib directory beside the driver.
+  SmallString<256> BuildTreeOpenMPLibPath =
+      llvm::sys::path::parent_path(TC.getDriver().Dir);
+  llvm::sys::path::append(BuildTreeOpenMPLibPath, "runtimes", "runtimes-bins",
+                          "openmp", "runtime/src");
+  if (llvm::sys::fs::is_directory(BuildTreeOpenMPLibPath))
+    CmdArgs.push_back(Args.MakeArgString("-L" + BuildTreeOpenMPLibPath));
+
   // Default to clang lib / lib64 folder, i.e. the same location as device
   // runtime.
   SmallString<256> DefaultLibPath =
@@ -1415,6 +1424,15 @@ void tools::addOpenMPRuntimeSpecificRPath(const ToolChain &TC,
 
   if (TC.getTriple().isOSAIX()) // TODO: AIX doesn't support -rpath option.
     return;
+
+  SmallString<256> BuildTreeOpenMPLibPath =
+      llvm::sys::path::parent_path(TC.getDriver().Dir);
+  llvm::sys::path::append(BuildTreeOpenMPLibPath, "runtimes", "runtimes-bins",
+                          "openmp", "runtime/src");
+  if (llvm::sys::fs::is_directory(BuildTreeOpenMPLibPath)) {
+    CmdArgs.push_back("-rpath");
+    CmdArgs.push_back(Args.MakeArgString(BuildTreeOpenMPLibPath));
+  }
 
   SmallString<256> DefaultLibPath =
       llvm::sys::path::parent_path(TC.getDriver().Dir);
