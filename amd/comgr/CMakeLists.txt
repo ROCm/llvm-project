@@ -87,7 +87,8 @@ set(SOURCES
 
 # Add Windows resource file for version info
 if(WIN32)
-  set(COMGR_DLL_NAME "amd_comgr.dll")
+  # Allow users to override the DLL name via -DCOMGR_DLL_NAME
+  set(COMGR_DLL_NAME "amd_comgr.dll" CACHE STRING "Windows DLL output name")
   string(TIMESTAMP COMGR_BUILD_YEAR "%Y")
   set(COMGR_MANIFEST_NAME "AMD.ROCM.Comgr")
   configure_file(
