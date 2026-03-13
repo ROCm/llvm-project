@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <vector>
 
 using llvm::SmallVector;
 
@@ -434,6 +435,7 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
   if (KernelArgs->Version >= OMP_KERNEL_ARG_MIN_VERSION_WITH_DYN_PTR &&
       UserArgCount > 0)
     --UserArgCount;
+
 
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
     printKernelArguments(Loc, DeviceId, UserArgCount, KernelArgs->ArgSizes,

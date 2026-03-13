@@ -806,7 +806,7 @@ GenericKernelTy::prepareArgs(GenericDeviceTy &GenericDevice, void **ArgPtrs,
 
   // Version 3 device kernels have dyn_ptr baked in at position 0. Rotate the
   // last element to the front to match the device ABI.
-  if (Version == OMP_KERNEL_ARG_MIN_VERSION_WITH_DYN_PTR &&
+  if (Version <= OMP_KERNEL_ARG_MIN_VERSION_WITH_DYN_PTR &&
       KernelLaunchEnvironment)
     std::rotate(Args.begin(), Args.end() - 1, Args.end());
 
