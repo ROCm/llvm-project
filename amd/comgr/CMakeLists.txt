@@ -321,6 +321,12 @@ if (CMAKE_SIZEOF_VOID_P EQUAL 4)
   set_target_properties(amd_comgr PROPERTIES OUTPUT_NAME "amd_comgr32")
 endif()
 
+# Set the DLL output name on Windows based on COMGR_DLL_NAME
+if (WIN32)
+  string(REGEX REPLACE "\\.dll$" "" COMGR_OUTPUT_NAME "${COMGR_DLL_NAME}")
+  set_target_properties(amd_comgr PROPERTIES OUTPUT_NAME "${COMGR_OUTPUT_NAME}")
+endif()
+
 option(LLVM_BUILD_INSTRUMENTED_COVERAGE "Build LLVM and tools with Code Coverage instrumentation" Off)
 mark_as_advanced(LLVM_BUILD_INSTRUMENTED_COVERAGE)
 if(LLVM_BUILD_INSTRUMENTED_COVERAGE)
