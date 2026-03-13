@@ -20,9 +20,9 @@ define void @test() #0 {
 ; GCN-NEXT:    s_mov_b32 s33, s32
 ; GCN-NEXT:    s_or_saveexec_b64 s[18:19], -1
 ; GCN-NEXT:    buffer_store_dword v40, off, s[0:3], s33 offset:8 ; 4-byte Folded Spill
+; GCN-NEXT:    buffer_store_dword v41, off, s[0:3], s33 offset:12 ; 4-byte Folded Spill
 ; GCN-NEXT:    s_mov_b64 exec, s[18:19]
-; GCN-NEXT:    v_mov_b32_e32 v2, s16
-; GCN-NEXT:    buffer_store_dword v2, off, s[0:3], s33 offset:12 ; 4-byte Folded Spill
+; GCN-NEXT:    v_writelane_b32 v41, s16, 0
 ; GCN-NEXT:    s_addk_i32 s32, 0x800
 ; GCN-NEXT:    s_mov_b64 s[16:17], exec
 ; GCN-NEXT:    s_mov_b64 exec, 3
@@ -58,12 +58,11 @@ define void @test() #0 {
 ; GCN-NEXT:    buffer_load_dword v2, off, s[0:3], s33 offset:16
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_mov_b64 exec, s[4:5]
-; GCN-NEXT:    buffer_load_dword v2, off, s[0:3], s33 offset:12 ; 4-byte Folded Reload
 ; GCN-NEXT:    s_mov_b32 s32, s33
-; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_readfirstlane_b32 s4, v2
+; GCN-NEXT:    v_readlane_b32 s4, v41, 0
 ; GCN-NEXT:    s_or_saveexec_b64 s[6:7], -1
 ; GCN-NEXT:    buffer_load_dword v40, off, s[0:3], s33 offset:8 ; 4-byte Folded Reload
+; GCN-NEXT:    buffer_load_dword v41, off, s[0:3], s33 offset:12 ; 4-byte Folded Reload
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
 ; GCN-NEXT:    s_mov_b32 s33, s4
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
@@ -151,4 +150,4 @@ define void @test() #0 {
 
 declare void @ext_func();
 
-attributes #0 = { nounwind "amdgpu-num-vgpr"="41" "amdgpu-num-sgpr"="34"}
+attributes #0 = { nounwind "amdgpu-num-vgpr"="42" "amdgpu-num-sgpr"="34"}
