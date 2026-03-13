@@ -401,6 +401,10 @@ public:
 
   virtual mlir::StateStack &getStateStack() = 0;
 
+  virtual void
+  genPermutatedLoops(llvm::ArrayRef<Fortran::lower::pft::Evaluation *> doStmts,
+                     Fortran::lower::pft::Evaluation *innermostDo) = 0;
+
 private:
   /// Options controlling lowering behavior.
   const Fortran::lower::LoweringOptions &loweringOptions;

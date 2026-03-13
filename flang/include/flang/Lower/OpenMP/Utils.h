@@ -229,6 +229,11 @@ std::optional<llvm::SmallVector<mlir::Value>> getIteratorElementIndices(
     Fortran::lower::AbstractConverter &converter, const omp::Object &object,
     Fortran::lower::StatementContext &stmtCtx, mlir::Location loc);
 
+void collectPermutationFromOpenMPConstruct(
+    const parser::OpenMPConstruct *ompCons,
+    llvm::SmallVectorImpl<int64_t> &permuation,
+    Fortran::semantics::SemanticsContext &semaCtx);
+
 } // namespace omp
 } // namespace lower
 } // namespace Fortran

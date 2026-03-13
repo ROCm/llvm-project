@@ -98,14 +98,49 @@ ConstructQueue buildConstructQueue(
   return decompose.output;
 }
 
+// from clang
+// There is a copy in check-omp-loops.cpp
+static bool isOpenMPLoopTransformationDirective(llvm::omp::Directive dir) {
+  switch (dir) {
+  // TODO case llvm::omp::Directive::OMPD_flatten:
+  case llvm::omp::Directive::OMPD_fuse:
+  case llvm::omp::Directive::OMPD_interchange:
+    // case llvm::omp::Directive::OMPD_nothing:
+  case llvm::omp::Directive::OMPD_reverse:
+  // TODO case llvm::omp::Directive::OMPD_split:
+  case llvm::omp::Directive::OMPD_stripe:
+  case llvm::omp::Directive::OMPD_tile:
+  case llvm::omp::Directive::OMPD_unroll:
+    return true;
+  default:
+    return false;
+  }
+}
+
+llvm::iterator_range<ConstructQueue::const_iterator> getNonTransformQueue(
+    llvm::iterator_range<ConstructQueue::const_iterator> range) {
+  // remove trailing loop transformations
+  auto b = range.begin();
+  auto e = range.end();
+  while (e != b) {
+    auto e2 = e - 1;
+    if (!isOpenMPLoopTransformationDirective(e2->id))
+      break;
+    e = e2;
+  }
+
+  return llvm::make_range(b, e);
+}
+
 bool matchLeafSequence(ConstructQueue::const_iterator item,
                        const ConstructQueue &queue,
                        llvm::omp::Directive directive) {
   llvm::ArrayRef<llvm::omp::Directive> leafDirs =
       llvm::omp::getLeafConstructsOrSelf(directive);
 
-  for (auto [dir, leaf] :
-       llvm::zip_longest(leafDirs, llvm::make_range(item, queue.end()))) {
+  for (auto [dir, leaf] : llvm::zip_longest(
+           leafDirs,
+           getNonTransformQueue(llvm::make_range(item, queue.end())))) {
     if (!dir.has_value() || !leaf.has_value())
       return false;
 

@@ -2387,6 +2387,124 @@ private:
     // so no clean-up needs to be generated for these entities.
   }
 
+  void
+  genPermutatedLoops(llvm::ArrayRef<Fortran::lower::pft::Evaluation *> doStmts,
+                     Fortran::lower::pft::Evaluation *innermostDo) override {
+    // Fortran::lower::pft::Evaluation &eval = getEval();
+    // bool unstructuredContext = eval.lowerAsUnstructured();
+
+    llvm::SmallVector<mlir::Block *> headerBlocks;
+    llvm::SmallVector<IncrementLoopNestInfo, 1> loopInfos;
+
+    auto enterLoop = [&](Fortran::lower::pft::Evaluation &eval) {
+      bool unstructuredContext = eval.lowerAsUnstructured();
+
+      // Collect loop nest information.
+      // Generate begin loop code directly for infinite and while loops.
+      Fortran::lower::pft::Evaluation &doStmtEval =
+          eval.getFirstNestedEvaluation();
+      auto *doStmt = doStmtEval.getIf<Fortran::parser::NonLabelDoStmt>();
+      const auto &loopControl =
+          std::get<std::optional<Fortran::parser::LoopControl>>(doStmt->t);
+      mlir::Block *preheaderBlock = doStmtEval.block;
+      mlir::Block *beginBlock =
+          preheaderBlock ? preheaderBlock : builder->getBlock();
+      auto createNextBeginBlock = [&]() {
+        // Step beginBlock through unstructured preheader, header, and mask
+        // blocks, created in outermost to innermost order.
+        return beginBlock = beginBlock->splitBlock(beginBlock->end());
+      };
+      mlir::Block *headerBlock =
+          unstructuredContext ? createNextBeginBlock() : nullptr;
+      headerBlocks.push_back(headerBlock);
+      mlir::Block *bodyBlock = doStmtEval.lexicalSuccessor->block;
+      mlir::Block *exitBlock = doStmtEval.parentConstruct->constructExit->block;
+      IncrementLoopNestInfo &incrementLoopNestInfo = loopInfos.emplace_back();
+      const Fortran::parser::ScalarLogicalExpr *whileCondition = nullptr;
+      bool infiniteLoop = !loopControl.has_value();
+      if (infiniteLoop) {
+        assert(unstructuredContext && "infinite loop must be unstructured");
+        startBlock(headerBlock);
+      } else if ((whileCondition =
+                      std::get_if<Fortran::parser::ScalarLogicalExpr>(
+                          &loopControl->u))) {
+        assert(unstructuredContext && "while loop must be unstructured");
+        maybeStartBlock(preheaderBlock); // no block or empty block
+        startBlock(headerBlock);
+        genConditionalBranch(*whileCondition, bodyBlock, exitBlock);
+      } else if (const auto *bounds =
+                     std::get_if<Fortran::parser::LoopControl::Bounds>(
+                         &loopControl->u)) {
+        // Non-concurrent increment loop.
+        IncrementLoopInfo &info = incrementLoopNestInfo.emplace_back(
+            *bounds->Name().thing.symbol, bounds->Lower(), bounds->Upper(),
+            bounds->Step());
+        if (unstructuredContext) {
+          maybeStartBlock(preheaderBlock);
+          info.hasRealControl = info.loopVariableSym->GetType()->IsNumeric(
+              Fortran::common::TypeCategory::Real);
+          info.headerBlock = headerBlock;
+          info.bodyBlock = bodyBlock;
+          info.exitBlock = exitBlock;
+        }
+      } else {
+        llvm_unreachable("Cannot permute DO CONCURRENT");
+      }
+
+      // Increment loop begin code. (Infinite/while code was already generated.)
+      if (!infiniteLoop && !whileCondition)
+        genFIRIncrementLoopBegin(incrementLoopNestInfo, doStmtEval.dirs);
+    };
+
+    auto leaveLoop = [&](Fortran::lower::pft::Evaluation &eval,
+                         mlir::Block *headerBlock,
+                         IncrementLoopNestInfo &incrementLoopNestInfo) {
+      bool unstructuredContext = eval.lowerAsUnstructured();
+
+      Fortran::lower::pft::Evaluation &doStmtEval =
+          eval.getFirstNestedEvaluation();
+      auto *doStmt = doStmtEval.getIf<Fortran::parser::NonLabelDoStmt>();
+
+      const auto &loopControl =
+          std::get<std::optional<Fortran::parser::LoopControl>>(doStmt->t);
+      bool infiniteLoop = !loopControl.has_value();
+      const Fortran::parser::ScalarLogicalExpr *whileCondition =
+          std::get_if<Fortran::parser::ScalarLogicalExpr>(&loopControl->u);
+
+      auto iter = std::prev(eval.getNestedEvaluations().end());
+
+      // An EndDoStmt in unstructured code may start a new block.
+      Fortran::lower::pft::Evaluation &endDoEval = *iter;
+      assert(endDoEval.getIf<Fortran::parser::EndDoStmt>() && "no enddo stmt");
+      if (unstructuredContext)
+        maybeStartBlock(endDoEval.block);
+
+      // Loop end code.
+      if (infiniteLoop || whileCondition)
+        genBranch(headerBlock);
+      else
+        genFIRIncrementLoopEnd(incrementLoopNestInfo);
+
+      // This call may generate a branch in some contexts.
+      genFIR(endDoEval, unstructuredContext);
+    };
+
+    for (auto l : doStmts)
+      enterLoop(*l);
+
+    // Loop body code.
+    bool innermostUnstructuredContext = innermostDo->lowerAsUnstructured();
+
+    auto iter = innermostDo->getNestedEvaluations().begin();
+    for (auto end = --innermostDo->getNestedEvaluations().end(); iter != end;
+         ++iter)
+      genFIR(*iter, innermostUnstructuredContext);
+
+    for (auto &&[l, headerBlock, li] :
+         llvm::zip_equal(doStmts, headerBlocks, loopInfos))
+      leaveLoop(*l, headerBlock, li);
+  }
+
   void attachInlineAttributes(
       mlir::Operation &op,
       const llvm::ArrayRef<const Fortran::parser::CompilerDirective *> &dirs) {

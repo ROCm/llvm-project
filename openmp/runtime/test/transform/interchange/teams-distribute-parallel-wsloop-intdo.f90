@@ -1,0 +1,33 @@
+
+! RUN: %flang %flags %openmp_flags -fopenmp-version=60 %s -o %t.exe
+! RUN: %t.exe | FileCheck %s --match-full-lines
+
+program teams_distribute_parallel_do
+  integer :: i, j
+  print *, 'do'
+
+  !$OMP TEAMS DISTRIBUTE PARALLEL DO SCHEDULE(static,2) NUM_TEAMS(1) NUM_THREADS(1)
+  !$OMP INTERCHANGE
+  do i = 7, 15, 3
+    do j = -1, 1
+      print '("i=", I0, " j=", I0)', i, j
+    end do
+  end do
+  !$OMP END INTERCHANGE
+  !$OMP END TEAMS DISTRIBUTE PARALLEL DO
+
+  print *, 'done'
+end program
+
+
+! CHECK:      do
+! CHECK-NEXT: i=7 j=-1
+! CHECK-NEXT: i=10 j=-1
+! CHECK-NEXT: i=13 j=-1
+! CHECK-NEXT: i=7 j=0
+! CHECK-NEXT: i=10 j=0
+! CHECK-NEXT: i=13 j=0
+! CHECK-NEXT: i=7 j=1
+! CHECK-NEXT: i=10 j=1
+! CHECK-NEXT: i=13 j=1
+! CHECK-NEXT: done
