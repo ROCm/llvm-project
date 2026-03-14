@@ -7651,6 +7651,11 @@ def fhermetic_module_files : Flag<["-"], "fhermetic-module-files">, Group<f_Grou
 def fdo_concurrent_to_openmp_EQ : Joined<["-"], "fdo-concurrent-to-openmp=">,
   HelpText<"Try to map `do concurrent` loops to OpenMP [none|host|device]">,
       Values<"none, host, device">;
+def famd_allow_threadprivate_equivalence
+    : Flag<["-"], "famd-allow-threadprivate-equivalence">,
+      Flags<[HelpHidden]>, Group<f_Group>,
+      Visibility<[FlangOption, FC1Option]>,
+      HelpText<"Allow to use veriables in EQUIVALENCE statements with THREADPRIVATE">;
 } // let Visibility = [FC1Option, FlangOption]
 
 def J : JoinedOrSeparate<["-"], "J">,
