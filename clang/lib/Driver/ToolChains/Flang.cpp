@@ -138,6 +138,11 @@ void Flang::addDebugOptions(const llvm::opt::ArgList &Args, const JobAction &JA,
                    options::OPT_funsigned, options::OPT_fno_unsigned,
                    options::OPT_finstrument_functions});
 
+  if (Args.hasArg(options::OPT_fopenacc)) {
+    const Driver &D = getToolChain().getDriver();
+    D.Diag(diag::warn_openacc_experimental);
+  }
+
   llvm::codegenoptions::DebugInfoKind DebugInfoKind;
   bool hasDwarfNArg = getDwarfNArg(Args) != nullptr;
   if (Args.hasArg(options::OPT_gN_Group)) {

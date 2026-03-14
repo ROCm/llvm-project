@@ -3789,6 +3789,7 @@ static void RenderOpenACCOptions(const Driver &D, const ArgList &Args,
   if (!Args.hasArg(options::OPT_fopenacc))
     return;
 
+  D.Diag(diag::warn_openacc_experimental);
   CmdArgs.push_back("-fopenacc");
 }
 
