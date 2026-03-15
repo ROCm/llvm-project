@@ -1772,6 +1772,10 @@ void ControlFlowRewriter::prepareWaveCfg() {
     assert(!Info.OrigSuccCond || Info.OrigSuccFinal);
     assert(Info.OrigExit == Node->Successors.empty() &&
            "TODO: exit unification");
+    assert((!Info.ImplicitBranchOpc || !Info.OrigCondition) &&
+           "ImplicitBranchOpc and OrigCondition are mutually exclusive");
+    assert((!Info.ImplicitBranchOpc || Info.OrigSuccCond) &&
+           "Implicit conditional branch requires OrigSuccCond");
 
     // Record information for reconstructing lane masks.
     if (!Info.OrigSuccCond) {
