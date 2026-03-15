@@ -53,7 +53,7 @@ namespace llvm::AMDGPU {
 // code. This is only for making it possible to write reasonably small tests for
 // long branches.
 static cl::opt<unsigned>
-BranchOffsetBits("amdgpu-s-branch-bits", cl::ReallyHidden, cl::init(16),
+BranchOffsetBits("amdgpu-s-branch-bits", cl::ReallyHidden, cl::init(15),
                  cl::desc("Restrict range of branch instructions (DEBUG)"));
 
 static cl::opt<bool> Fix16BitCopies(
