@@ -50,7 +50,7 @@ int main(void) {
 // CHECK-NOPE-NEXT:    [[TMP4:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 2
 // CHECK-NOPE-NEXT:    store i32 786496, ptr addrspace(1) [[TMP4]], align 4
 // CHECK-NOPE-NEXT:    [[TMP5:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 3
-// CHECK-NOPE-NEXT:    store i32 917505, ptr addrspace(1) [[TMP5]], align 4
+// CHECK-NOPE-NEXT:    store i32 983041, ptr addrspace(1) [[TMP5]], align 4
 // CHECK-NOPE-NEXT:    [[TMP6:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 4
 // CHECK-NOPE-NEXT:    store i64 8589934593, ptr addrspace(1) [[TMP6:%.*]], align 8
 // CHECK-NOPE-NEXT:    [[TMP7:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 5
@@ -84,7 +84,7 @@ int main(void) {
 // CHECK-NEXT:    [[TMP4:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 2
 // CHECK-NEXT:    store i32 786496, ptr addrspace(1) [[TMP4]], align 4
 // CHECK-NEXT:    [[TMP5:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 3
-// CHECK-NEXT:    store i32 917505, ptr addrspace(1) [[TMP5]], align 4
+// CHECK-NEXT:    store i32 983041, ptr addrspace(1) [[TMP5]], align 4
 // CHECK-NEXT:    [[TMP6:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 4
 // CHECK-NEXT:    store i64 8589934593, ptr addrspace(1) [[TMP6:%.*]], align 8
 // CHECK-NEXT:    [[TMP7:%.*]] = getelementptr inbounds nuw [[VARFN_ARGS_STORE]], ptr addrspace(1) [[VARFN_ARGS_STORE_CASTED]], i32 0, i32 5
