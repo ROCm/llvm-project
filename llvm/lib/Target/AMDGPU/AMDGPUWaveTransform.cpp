@@ -1629,7 +1629,7 @@ private:
 
     Register PrimarySuccessorExec;
 
-    // Initialzized to opcode for implicit conditional branches :
+    // initialized to opcode for implicit conditional branches :
     // S_CBRANCH_EXECZ S_CBRANCH_EXECNZ S_CBRANCH_VCCZ S_CBRANCH_VCCNZ
     // S_CBRANCH_SCC0 S_CBRANCH_SCC1
     // All active threads branch on some implicit condition for the above
@@ -1812,8 +1812,10 @@ void ControlFlowRewriter::prepareWaveCfg() {
                               [&](const LaneOriginInfo &origin) {
                                 return origin.Node == LaneEdge.Wave;
                               }))
-              succInfo.origins.emplace_back(LaneEdge.Wave, Register(), false,
-                                            false, Info.ImplicitBranchOpc);
+              succInfo.origins.emplace_back(
+                  LaneEdge.Wave, /*CondReg=*/Register(),
+                  /*InvertCondition=*/false, /*CondIsUndef=*/false,
+                  Info.ImplicitBranchOpc);
           }
         }
       } else {

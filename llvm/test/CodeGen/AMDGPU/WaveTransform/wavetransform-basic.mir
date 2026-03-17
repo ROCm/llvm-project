@@ -874,7 +874,9 @@ body:             |
 #    \ /
 #     4
 #
-
+# The following tests contain a V_CMP operation on scalar operands.
+# This is done to initialize the implicit branch condition EXEC and VCC.
+# Compiler will not be generating a V_CMP over scalars.
 name: simple_implicit_brn_exec
 tracksRegLiveness: true
 body:             |
