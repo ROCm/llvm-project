@@ -186,12 +186,12 @@ add_llvm_target(AMDGPUCodeGen
   SIRegisterInfo.cpp
   SIShrinkInstructions.cpp
   SIWholeQuadMode.cpp
+  AMDGPUSim/MIRAdapter.cpp
 
   LINK_COMPONENTS
   AMDGPUDesc
   AMDGPUInfo
   AMDGPUSim
-  AMDGPUSimMIRAdapter
   AMDGPUUtils
   Analysis
   AsmPrinter
