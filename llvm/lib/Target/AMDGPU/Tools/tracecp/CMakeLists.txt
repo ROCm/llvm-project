@@ -18,6 +18,7 @@ target_link_libraries(tracecp PRIVATE
   LLVMMC
   LLVMMCDisassembler
   LLVMSupport
+  LLVMTargetParser
 )
 
 set_target_properties(tracecp PROPERTIES
