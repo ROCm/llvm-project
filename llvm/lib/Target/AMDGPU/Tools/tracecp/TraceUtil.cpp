@@ -387,7 +387,6 @@ TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
   HWModel Model = createHWModel(GPUTarget::GFX1250);
 
   SimulatorConfig Cfg;
-  Cfg.Verbose = Verbose;
   Cfg.Log = Verbose ? &errs() : nullptr;
   Cfg.EnableScoreboard = true;  // Enable RAW hazard detection
   Cfg.EnableISCache = true;     // Enable IS cache modeling

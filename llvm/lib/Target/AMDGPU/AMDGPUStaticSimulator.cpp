@@ -931,7 +931,6 @@ analyzeFunction(MachineFunction &MF, const SIInstrInfo &TII,
   Model.VaVdstMultiplier = VaVdstMultiplierOpt;
 
   SimulatorConfig Cfg;
-  Cfg.Verbose = VerboseSimulation;
   Cfg.Log = VerboseSimulation ? &dbgs() : nullptr;
   Cfg.EnableScoreboard = EnableScoreboardOpt;
   Cfg.EnableISCache = EnableISCacheModel;

@@ -942,8 +942,7 @@ class Simulator::Impl {
 
 public:
   Impl(const SimInstInfo &II, const HWModel &M, SimulatorConfig C)
-      : InstInfo(II), Model(M), Config(C),
-        Log((C.Verbose && C.Log) ? C.Log : nullptr) {
+      : InstInfo(II), Model(M), Config(C), Log(C.Log) {
     State.reset();
     if (Config.EnableISCache)
       State.ISCache.init(Model.ISCacheNumLines, Model.ISCacheLineSize);

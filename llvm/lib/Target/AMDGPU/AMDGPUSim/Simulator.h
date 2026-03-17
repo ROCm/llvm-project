@@ -29,11 +29,8 @@ namespace AMDGPUSim {
 
 /// Configuration for the Simulator.
 struct SimulatorConfig {
-  /// Enable verbose logging of stall breakdown, WMMA window, unit state.
-  bool Verbose = false;
-
-  /// Output stream for verbose logging. Only used when Verbose=true.
-  /// If nullptr and Verbose=true, logging is suppressed.
+  /// Output stream for verbose logging.
+  /// If Log == nullptr, logging is suppressed.
   raw_ostream *Log = nullptr;
 
   /// Enable scoreboard-based RAW hazard tracking.
