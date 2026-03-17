@@ -170,7 +170,7 @@ struct InstrSimInfo {
   bool WasExposed = false;
   bool WasMasked = false; // MSB_SET exposed but masked by next instr stall
   bool IsWMMA = false;
-  const char *WMMAPattern = nullptr;
+  std::string_view WMMAPattern;
 
   //--- Cache/register bank analysis ---
   std::string CachePattern;

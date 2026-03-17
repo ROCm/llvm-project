@@ -127,19 +127,16 @@ WMMACoExecInfo::findNextAllowedStage(InstClass IC,
 // WMMA Co-execution Info Factory
 //===----------------------------------------------------------------------===//
 
-static WMMACoExecInfo makeWMMACoExecInfo(unsigned Occupancy,
-                                         unsigned TotalWindow,
-                                         const char *Pattern,
-                                         unsigned LastIStage,
+static WMMACoExecInfo makeWMMACoExecInfo(std::string_view Pattern,
                                          bool HasScaling) {
   WMMACoExecInfo Info;
-  Info.Occupancy = Occupancy;
-  Info.TotalWindow = TotalWindow;
-  Info.LastIStage = LastIStage;
+  Info.Occupancy = Pattern.find_last_not_of('V') + 1;
+  Info.TotalWindow = Pattern.size();
+  Info.LastIStage = Pattern.find_last_not_of('I');
   Info.HasScaling = HasScaling;
   Info.Pattern = Pattern;
 
-  for (unsigned i = 0; i < TotalWindow && Pattern[i]; ++i) {
+  for (unsigned i = 0; i < Info.TotalWindow; ++i) {
     switch (Pattern[i]) {
     case '0':
       Info.StageMask[i] = CoExecMask::StageE0;
@@ -157,7 +154,7 @@ static WMMACoExecInfo makeWMMACoExecInfo(unsigned Occupancy,
       Info.StageMask[i] = CoExecMask::All;
       break;
     default:
-      Info.StageMask[i] = CoExecMask::All;
+      llvm_unreachable("Invalid character in pattern");
       break;
     }
   }
@@ -167,24 +164,24 @@ static WMMACoExecInfo makeWMMACoExecInfo(unsigned Occupancy,
 WMMACoExecInfo getWMMACoExecInfo(WMMAVariant Variant, bool HasScaling) {
   switch (Variant) {
   case WMMAVariant::IU8_16x16x64:
-    return makeWMMACoExecInfo(16, 17, "0EIIEEIIEEIIEEIIV", 15, HasScaling);
+    return makeWMMACoExecInfo("0EIIEEIIEEIIEEIIV", HasScaling);
   case WMMAVariant::F8F6F4_16x16x128:
-    return makeWMMACoExecInfo(8, 10, "0EEIEEIIVV", 7, HasScaling);
+    return makeWMMACoExecInfo("0EEIEEIIVV", HasScaling);
   case WMMAVariant::F8F6F4_16x16x128_BothF4:
-    return makeWMMACoExecInfo(4, 6, "0EEIVV", 3, HasScaling);
+    return makeWMMACoExecInfo("0EEIVV", HasScaling);
   case WMMAVariant::FP8_16x16x64:
   case WMMAVariant::BF8_16x16x64:
-    return makeWMMACoExecInfo(4, 6, "0EEIVV", 3, HasScaling);
+    return makeWMMACoExecInfo("0EEIVV", HasScaling);
   case WMMAVariant::F16_16x16x32:
   case WMMAVariant::BF16_16x16x32:
-    return makeWMMACoExecInfo(8, 9, "0EIIEEIIV", 7, HasScaling);
+    return makeWMMACoExecInfo("0EIIEEIIV", HasScaling);
   case WMMAVariant::FP8_16x16x128:
   case WMMAVariant::BF8_16x16x128:
-    return makeWMMACoExecInfo(8, 10, "0EEIEEIIVV", 7, HasScaling);
+    return makeWMMACoExecInfo("0EEIEEIIVV", HasScaling);
   case WMMAVariant::F4_32x16x128:
-    return makeWMMACoExecInfo(4, 6, "0EEIVV", 3, HasScaling);
+    return makeWMMACoExecInfo("0EEIVV", HasScaling);
   case WMMAVariant::Default:
-    return makeWMMACoExecInfo(8, 9, "AAAAAAAAA", 7, HasScaling);
+    return makeWMMACoExecInfo("AAAAAAAIV", HasScaling);
   }
   llvm_unreachable("Unknown WMMAVariant");
 }

@@ -18,6 +18,7 @@
 #include "SimInst.h"
 #include <array>
 #include <optional>
+#include <string_view>
 
 namespace llvm {
 namespace AMDGPUSim {
@@ -90,7 +91,7 @@ struct WMMACoExecInfo {
   std::array<uint8_t, MaxWMMAStages> StageMask = {};
   unsigned LastIStage = 0;
   bool HasScaling = false;
-  const char *Pattern = "";
+  std::string_view Pattern;
 
   WMMACoExecInfo() { StageMask.fill(CoExecMask::All); }
 
