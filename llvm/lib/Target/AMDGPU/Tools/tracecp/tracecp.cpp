@@ -18,6 +18,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -61,8 +62,8 @@ int main(int argc, char **argv) {
 
   // Currently supporting only gfx1250
   if (MCPU != "gfx1250") {
-    errs() << "Error: unsupported --mcpu value '" << MCPU << "'. "
-           << "Supported: gfx1250\n";
+    WithColor::error(errs(), argv[0])
+        << "unsupported --mcpu value '" << MCPU << "'. Supported: gfx1250\n";
     return 1;
   }
 
@@ -77,14 +78,14 @@ int main(int argc, char **argv) {
   const Target *TheTarget =
       TargetRegistry::lookupTarget(MTriple, TheTriple, Error);
   if (!TheTarget) {
-    errs() << "Error: " << Error << "\n";
+    WithColor::error(errs(), argv[0]) << Error << "\n";
     return 1;
   }
 
   // Create MC components
   std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(TheTriple));
   if (!MRI) {
-    errs() << "Error: no register info\n";
+    WithColor::error(errs(), argv[0]) << "no register info\n";
     return 1;
   }
 
@@ -92,20 +93,20 @@ int main(int argc, char **argv) {
   std::unique_ptr<MCAsmInfo> MAI(
       TheTarget->createMCAsmInfo(*MRI, TheTriple, MCOptions));
   if (!MAI) {
-    errs() << "Error: no asm info\n";
+    WithColor::error(errs(), argv[0]) << "no asm info\n";
     return 1;
   }
 
   std::unique_ptr<MCSubtargetInfo> STI(
       TheTarget->createMCSubtargetInfo(TheTriple, MCPU, ""));
   if (!STI) {
-    errs() << "Error: no subtarget info\n";
+    WithColor::error(errs(), argv[0]) << "no subtarget info\n";
     return 1;
   }
 
   std::unique_ptr<MCInstrInfo> MII(TheTarget->createMCInstrInfo());
   if (!MII) {
-    errs() << "Error: no instr info\n";
+    WithColor::error(errs(), argv[0]) << "no instr info\n";
     return 1;
   }
 
@@ -114,7 +115,7 @@ int main(int argc, char **argv) {
   std::unique_ptr<MCDisassembler> DisAsm(
       TheTarget->createMCDisassembler(*STI, Ctx));
   if (!DisAsm) {
-    errs() << "Error: no disassembler\n";
+    WithColor::error(errs(), argv[0]) << "no disassembler\n";
     return 1;
   }
 
@@ -123,7 +124,8 @@ int main(int argc, char **argv) {
   Expected<std::vector<tracecp::InstEntry>> EntriesOrErr =
       tracecp::parseAndDisassemble(InputFilePath, Filter, *DisAsm);
   if (!EntriesOrErr) {
-    errs() << toString(EntriesOrErr.takeError()) << "\n";
+    WithColor::error(errs(), argv[0])
+        << toString(EntriesOrErr.takeError()) << "\n";
     return 1;
   }
   std::vector<tracecp::InstEntry> &Entries = *EntriesOrErr;
