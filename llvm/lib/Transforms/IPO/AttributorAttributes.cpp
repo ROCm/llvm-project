@@ -92,7 +92,7 @@ static cl::opt<unsigned> MaxAccessesPerAAPointerInfo(
     "attributor-max-pi-accesses", cl::Hidden,
     cl::desc("Maximum number of accesses in a single AAPointerInfo instance "
              "before going pessimistic (0 = unlimited)"),
-    cl::init(0));
+    cl::init(512));
 
 template <>
 unsigned llvm::PotentialConstantIntValuesState::MaxPotentialValues = 0;
