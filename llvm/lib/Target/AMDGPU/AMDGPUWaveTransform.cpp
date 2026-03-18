@@ -1739,6 +1739,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  Opcode == AMDGPU::S_CBRANCH_SCC0 ||
                  Opcode == AMDGPU::S_CBRANCH_SCC1) {
         assert(!Info.OrigCondition);
+        assert(!Info.ImplicitBranchOpc);
         Info.ImplicitBranchOpc = Opcode;
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
@@ -1749,7 +1750,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
         assert(!Info.OrigCondition);
         Info.OrigExit = true;
       } else {
-        assert("wave-transform: unhandled branch opcode");
+        assert(Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN &&
+               Opcode != AMDGPU::S_SUBVECTOR_LOOP_END &&
+               "wave-transform: unhandled branch opcode");
       }
     }
 
@@ -1820,13 +1823,13 @@ void ControlFlowRewriter::prepareWaveCfg() {
         }
       } else {
         NodeInfo.find(Info.OrigSuccCond)
-            ->second.origins.emplace_back(Node, Info.OrigCondition, false,
-                                          Info.OrigConditionUndef,
-                                          Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(
+                Node, Info.OrigCondition, /*InvertCondition=*/false,
+                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
         NodeInfo.find(Info.OrigSuccFinal)
-            ->second.origins.emplace_back(Node, Info.OrigCondition, true,
-                                          Info.OrigConditionUndef,
-                                          Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(
+                Node, Info.OrigCondition, /*InvertCondition=*/true,
+                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
       }
     }
   }
