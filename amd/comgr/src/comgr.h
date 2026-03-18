@@ -228,6 +228,10 @@ struct MetaDocument {
   // The MsgPack parser is zero-copy, so we retain a copy of the input buffer.
   std::string RawDocument;
   std::vector<std::string> RawDocumentList;
+  // Additional documents for parsed notes. When merging multiple notes,
+  // DocNodes from these documents may be referenced by the main Document's
+  // root, so they must persist for the lifetime of the MetaDocument.
+  std::vector<std::unique_ptr<llvm::msgpack::Document>> MergedDocuments;
   // The old YAML parser would produce the strings "true" and "false" for
   // booleans, whereas the old MsgPack parser produced "0" and "1". The new
   // universal parser produces "true" and "false", but we need to remain

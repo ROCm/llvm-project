@@ -169,16 +169,32 @@ bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
     MetaP->MetaDoc->EmitIntegerBooleans = true;
     MetaP->MetaDoc->RawDocumentList.push_back(std::string(DescString));
 
-    /* TODO add support for merge using readFromBlob merge function */
-    auto &Document = MetaP->MetaDoc->Document;
-
-    Document.clear();
-    if (!Document.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(), false)) {
-      return false;
+    if (Root.isEmpty()) {
+      // First note: parse directly into the main Document and set Root.
+      auto &Document = MetaP->MetaDoc->Document;
+      Document.clear();
+      if (!Document.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(),
+                                 false)) {
+        return false;
+      }
+      return mergeNoteRecords(Document.getRoot(), Root, "amdhsa.version",
+                              "amdhsa.printf", "amdhsa.kernels");
+    } else {
+      // Subsequent notes: parse into a separate document to avoid
+      // invalidating Root (which points into the main Document's memory).
+      // The document is stored in MergedDocuments to persist for the
+      // lifetime of MetaDoc, since merged DocNodes reference its memory.
+      auto MergedDoc = std::make_unique<llvm::msgpack::Document>();
+      if (!MergedDoc->readFromBlob(MetaP->MetaDoc->RawDocumentList.back(),
+                                   false)) {
+        return false;
+      }
+      bool Result = mergeNoteRecords(MergedDoc->getRoot(), Root,
+                                     "amdhsa.version", "amdhsa.printf",
+                                     "amdhsa.kernels");
+      MetaP->MetaDoc->MergedDocuments.push_back(std::move(MergedDoc));
+      return Result;
     }
-
-    return mergeNoteRecords(Document.getRoot(), Root, "amdhsa.version",
-                            "amdhsa.printf", "amdhsa.kernels");
   }
   return false;
 }
