@@ -76,7 +76,13 @@ static cl::opt<bool>
 static cl::opt<bool> GCNTrackers(
     "amdgpu-use-amdgpu-trackers", cl::Hidden,
     cl::desc("Use the AMDGPU specific RPTrackers during scheduling"),
-    cl::init(false));
+    cl::init(true));
+
+static cl::opt<bool> TrackPhysRegInTrackers(
+    "amdgpu-trackers-physical-register-tracking", cl::Hidden,
+    cl::desc("When using GCN trackers, count physical registers (e.g. from "
+             "inline asm) in pressure."),
+    cl::init(true));
 
 static cl::opt<unsigned> PendingQueueLimit(
     "amdgpu-scheduler-pending-queue-limit", cl::Hidden,
@@ -107,14 +113,13 @@ const unsigned ScheduleMetrics::ScaleFactor = 100;
 
 GCNSchedStrategy::GCNSchedStrategy(const MachineSchedContext *C)
     : GenericScheduler(C), TargetOccupancy(0), MF(nullptr),
-      DownwardTracker(*C->LIS), UpwardTracker(*C->LIS), HasHighPressure(false) {
-}
+      DownwardTracker(*C->LIS, C->MF->getRegInfo()),
+      UpwardTracker(*C->LIS, C->MF->getRegInfo()), HasHighPressure(false) {}
 
 void GCNSchedStrategy::initialize(ScheduleDAGMI *DAG) {
   GenericScheduler::initialize(DAG);
 
   MF = &DAG->MF;
-
   const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
 
   SGPRExcessLimit =
@@ -162,6 +167,14 @@ void GCNSchedStrategy::initialize(ScheduleDAGMI *DAG) {
                     << ", VGPRExcessLimit = " << VGPRExcessLimit
                     << ", SGPRCriticalLimit = " << SGPRCriticalLimit
                     << ", SGPRExcessLimit = " << SGPRExcessLimit << "\n\n");
+}
+
+void GCNRPTracker::setPhysRegTracking() {
+  if (!GCNTrackers || !TrackPhysRegInTrackers) {
+    TrackPhysRegs = false;
+    return;
+  }
+  TrackPhysRegs = true;
 }
 
 /// Checks whether \p SU can use the cached DAG pressure diffs to compute the
@@ -988,7 +1001,7 @@ GCNRegPressure
 GCNScheduleDAGMILive::getRealRegPressure(unsigned RegionIdx) const {
   if (Regions[RegionIdx].first == Regions[RegionIdx].second)
     return llvm::getRegPressure(MRI, LiveIns[RegionIdx]);
-  GCNDownwardRPTracker RPTracker(*LIS);
+  GCNDownwardRPTracker RPTracker(*LIS, MF.getRegInfo());
   RPTracker.advance(Regions[RegionIdx].first, Regions[RegionIdx].second,
                     &LiveIns[RegionIdx]);
   return RPTracker.moveMaxPressure();
@@ -1002,7 +1015,7 @@ static MachineInstr *getLastMIForRegion(MachineBasicBlock::iterator RegionBegin,
 
 void GCNScheduleDAGMILive::computeBlockPressure(unsigned RegionIdx,
                                                 const MachineBasicBlock *MBB) {
-  GCNDownwardRPTracker RPTracker(*LIS);
+  GCNDownwardRPTracker RPTracker(*LIS, MF.getRegInfo());
 
   // If the block has the only successor then live-ins of that successor are
   // live-outs of the current block. We can reuse calculated live set if the
@@ -1135,7 +1148,6 @@ void GCNScheduleDAGMILive::finalizeSchedule() {
 
 void GCNScheduleDAGMILive::runSchedStages() {
   LLVM_DEBUG(dbgs() << "All regions recorded, starting actual scheduling.\n");
-
   if (!Regions.empty()) {
     BBLiveInMap = getRegionLiveInMap();
     if (GCNTrackers)
