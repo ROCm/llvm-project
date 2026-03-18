@@ -19,11 +19,23 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_set_t DataSetSource, DataSetSpirv;
   amd_comgr_action_info_t DataAction;
   const char *Options[] = {"-nogpuinc"};
+  const char *OptionsWithSpirvBackend[] = {"-nogpuinc", "-use-spirv-backend"};
   size_t OptionsCount = sizeof(Options) / sizeof(Options[0]);
+  int UseSpirvBackend = 0;
 
-  if (argc != 3) {
-    fprintf(stderr, "Usage: source-to-spirv file.hip file.spv\n");
+  if (argc < 3 || argc > 4) {
+    fprintf(stderr,
+            "Usage: source-to-spirv file.hip file.spv [--use-spirv-backend]\n");
     exit(1);
+  }
+
+  if (argc == 4) {
+    if (strcmp(argv[3], "--use-spirv-backend") == 0) {
+      UseSpirvBackend = 1;
+    } else {
+      fprintf(stderr, "Unknown option: %s\n", argv[3]);
+      exit(1);
+    }
   }
 
   SizeSource = setBuf(argv[1], &BufSource);
@@ -37,7 +49,13 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(action_info_set_language(DataAction, AMD_COMGR_LANGUAGE_HIP));
-  amd_comgr_(action_info_set_option_list(DataAction, Options, OptionsCount));
+  if (UseSpirvBackend) {
+    amd_comgr_(action_info_set_option_list(
+        DataAction, OptionsWithSpirvBackend,
+        sizeof(OptionsWithSpirvBackend) / sizeof(OptionsWithSpirvBackend[0])));
+  } else {
+    amd_comgr_(action_info_set_option_list(DataAction, Options, OptionsCount));
+  }
 
   amd_comgr_(create_data_set(&DataSetSpirv));
 
