@@ -82,7 +82,8 @@ jobs:
       matrix:
         variant: ${{ fromJSON(needs.setup.outputs.linux_variants) }}
         exclude:  # families that should not run linux_build_and_test
-          - family: 'gfx950-dcgpu'          
+          - variant:
+              family: gfx950-dcgpu          
     uses: ./.github/workflows/ci_linux.yml
     secrets: inherit
     with:
