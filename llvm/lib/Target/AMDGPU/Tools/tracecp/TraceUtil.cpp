@@ -82,13 +82,25 @@ Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
       continue;
 
     // Apply filters
-    int64_t DispatchId = Obj->getInteger("dispatch_id").value_or(0);
-    int64_t ClusterId = Obj->getInteger("cluster_id").value_or(0);
-    int64_t WorkgroupId = Obj->getInteger("workgroup_id").value_or(0);
-    int64_t WaveId = Obj->getInteger("wave_id").value_or(0);
+    int64_t DispatchId;
+    int64_t ClusterId;
+    int64_t WorkgroupId;
+    int64_t WaveId;
+    const char *EntryLabels[] = {"dispatch_id", "cluster_id", "workgroup_id",
+                                 "wave_id"};
+    int64_t *EntryValues[] = {&DispatchId, &ClusterId, &WorkgroupId, &WaveId};
 
-    if (DispatchId != Filter.DispatchId || ClusterId != Filter.ClusterId ||
-        WorkgroupId != Filter.WorkgroupId || WaveId != Filter.WaveId)
+    for (auto [Label, Value] : zip(EntryLabels, EntryValues)) {
+      std::optional<int64_t> EntryValue = Obj->getInteger(Label);
+      if (!EntryValue)
+        return createStringError(inconvertibleErrorCode(),
+                                 "Line %zu: Missing \"%s\"", LineNum + 1,
+                                 Label);
+
+      *Value = *EntryValue;
+    }
+
+    if (!Filter.match(DispatchId, ClusterId, WorkgroupId, WaveId))
       continue;
 
     InstEntry Entry;

@@ -44,7 +44,22 @@ struct TraceFilter {
   int64_t DispatchId;
   int64_t ClusterId;
   int64_t WorkgroupId;
-  int64_t WaveId;
+  std::vector<int64_t> WaveIds;
+
+  TraceFilter(int64_t DispatchId, int64_t ClusterId, int64_t WorkgroupId,
+              ArrayRef<int64_t> WaveIds)
+      : DispatchId(DispatchId), ClusterId(ClusterId), WorkgroupId(WorkgroupId),
+        WaveIds(WaveIds.begin(), WaveIds.end()) {
+    sort(this->WaveIds);
+  }
+
+  bool match(int64_t OtherDispatchId, int64_t OtherClusterId,
+             int64_t OtherWorkgroupId, int64_t OtherWaveId) const {
+    if (OtherDispatchId != DispatchId || OtherClusterId != ClusterId ||
+        OtherWorkgroupId != WorkgroupId)
+      return false;
+    return binary_search(WaveIds, OtherWaveId);
+  }
 };
 
 /// Parse a trace file and disassemble the instructions.

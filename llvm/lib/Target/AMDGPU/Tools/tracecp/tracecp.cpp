@@ -49,8 +49,9 @@ static cl::opt<int64_t> WorkgroupId("workgroup-id",
                                      cl::desc("Filter by workgroup_id"),
                                      cl::init(0), cl::cat(TraceCPCategory));
 
-static cl::opt<int64_t> WaveId("wave-id", cl::desc("Filter by wave_id"),
-                               cl::Required, cl::cat(TraceCPCategory));
+static cl::list<int64_t> WaveIds("wave-id", cl::CommaSeparated,
+                                 cl::desc("Filter by wave_id"), cl::Required,
+                                 cl::cat(TraceCPCategory));
 
 static cl::opt<bool> Verbose("verbose", cl::desc("Enable verbose output"),
                              cl::init(false), cl::cat(TraceCPCategory));
@@ -120,7 +121,7 @@ int main(int argc, char **argv) {
   }
 
   // Parse and disassemble
-  tracecp::TraceFilter Filter{DispatchId, ClusterId, WorkgroupId, WaveId};
+  tracecp::TraceFilter Filter{DispatchId, ClusterId, WorkgroupId, WaveIds};
   Expected<std::vector<tracecp::InstEntry>> EntriesOrErr =
       tracecp::parseAndDisassemble(InputFilePath, Filter, *DisAsm);
   if (!EntriesOrErr) {
