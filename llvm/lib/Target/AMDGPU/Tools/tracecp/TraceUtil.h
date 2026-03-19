@@ -62,6 +62,17 @@ struct TraceFilter {
   }
 };
 
+class WaveView {
+  llvm::DenseMap<int64_t, ArrayRef<InstEntry>> WaveToEntries;
+
+public:
+  WaveView(ArrayRef<InstEntry> Entries);
+
+  auto entries_per_wave() const {
+    return llvm::make_range(WaveToEntries.begin(), WaveToEntries.end());
+  }
+};
+
 /// Parse a trace file and disassemble the instructions.
 /// \param FilePath Path to the JSON trace file.
 /// \param Filter Only include entries matching these criteria.
@@ -98,8 +109,7 @@ struct TraceCFG {
 /// \param Entries The trace entries to analyze.
 /// \param MCII The MCInstrInfo to identify branch instructions.
 /// \returns The reconstructed CFG.
-TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
-                        const MCInstrInfo &MCII);
+TraceCFG reconstructCFG(const WaveView &WaveView, const MCInstrInfo &MCII);
 
 /// Result of trace simulation: maps block start PC to a vector of BlockMetrics,
 /// one per execution of that block.

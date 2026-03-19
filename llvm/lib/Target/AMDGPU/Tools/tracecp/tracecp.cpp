@@ -130,9 +130,10 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::vector<tracecp::InstEntry> &Entries = *EntriesOrErr;
+  tracecp::WaveView WaveView(Entries);
 
   // Reconstruct CFG first (needed for simulation)
-  tracecp::TraceCFG CFG = tracecp::reconstructCFG(Entries, *MII);
+  tracecp::TraceCFG CFG = tracecp::reconstructCFG(WaveView, *MII);
   CFG.print();
 
   // Run simulation (collects BlockMetrics per block execution)

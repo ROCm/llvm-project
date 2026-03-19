@@ -9,18 +9,30 @@
 #include "TraceUtil.h"
 #include "AMDGPUSim/AMDGPUSim.h"
 #include "AMDGPUSim/MCAdapter.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/JSON.h"
-#include <set>
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 namespace tracecp {
+
+WaveView::WaveView(ArrayRef<InstEntry> Entries) {
+  auto It = Entries.begin();
+  while (It != Entries.end()) {
+    unsigned WaveId = It->WaveId;
+    auto IsInstructonFromSameWave = [WaveId](const InstEntry &Entry) {
+      return Entry.WaveId != WaveId;
+    };
+    auto End = std::find_if(It + 1, Entries.end(), IsInstructonFromSameWave);
+    WaveToEntries[WaveId] = ArrayRef<InstEntry>(It, End);
+    It = End;
+  }
+}
 
 using namespace AMDGPUSim;
 using AMDGPU::BlockMetrics;
@@ -587,39 +599,33 @@ void TraceMetrics::print() const {
   outs() << "; ============================================================\n";
 }
 
-TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
-                        const MCInstrInfo &MCII) {
+TraceCFG reconstructCFG(const WaveView &WaveView, const MCInstrInfo &MCII) {
   TraceCFG CFG;
-
-  if (Entries.empty())
-    return CFG;
 
   // Collect all block start PCs.
   // A PC is a block start if:
   // 1. It's the first instruction
   // 2. It's the target of a non-sequential transition (branch target)
   // 3. It follows a branch/terminator instruction (even if fall-through)
-  std::set<uint64_t> BlockStartPCs;
-  BlockStartPCs.insert(Entries[0].PC);
+  DenseSet<uint64_t> BlockStartPCs;
 
-  for (size_t I = 0; I + 1 < Entries.size(); ++I) {
-    const InstEntry &E = Entries[I];
-    uint64_t NextPC = Entries[I + 1].PC;
+  for (const auto &[_, Entries] : WaveView.entries_per_wave()) {
+    bool LastInstMayAffectControlFlow = true;
+    for (const InstEntry &E : Entries) {
+      if (LastInstMayAffectControlFlow)
+        BlockStartPCs.insert(E.PC);
 
-    if (NextPC != E.PC + E.InstSize) {
-      BlockStartPCs.insert(NextPC);
-    }
-
-    const MCInstrDesc &Desc = MCII.get(E.Inst.getOpcode());
-    if (Desc.isBranch() || Desc.isTerminator()) {
-      BlockStartPCs.insert(NextPC);
+      const MCInstrDesc &Desc = MCII.get(E.Inst.getOpcode());
+      LastInstMayAffectControlFlow = Desc.isBranch() || Desc.isTerminator() ||
+                                     Desc.isCall() || Desc.isReturn() ||
+                                     Desc.isIndirectBranch();
     }
   }
 
   // Build blocks using known block starts.
-  uint64_t CurrentBlockStart = Entries[0].PC;
-  uint64_t CurrentBlockEnd = Entries[0].PC;
-  unsigned CurrentBlockInstCount = 0;
+  uint64_t CurrentBlockStart;
+  uint64_t CurrentBlockEnd;
+  unsigned CurrentBlockInstCount;
 
   // Track edge counts: (FromBlockPC, FromPC, ToPC) -> count
   std::map<std::tuple<uint64_t, uint64_t, uint64_t>, unsigned> EdgeCounts;
@@ -640,28 +646,32 @@ TraceCFG reconstructCFG(const std::vector<InstEntry> &Entries,
     }
   };
 
-  for (size_t I = 0; I < Entries.size(); ++I) {
-    const InstEntry &E = Entries[I];
+  for (const auto &[_, Entries] : WaveView.entries_per_wave()) {
+    const InstEntry &FirstEntry = Entries.front();
+    CurrentBlockStart = FirstEntry.PC;
+    CurrentBlockEnd = FirstEntry.PC + FirstEntry.InstSize;
+    CurrentBlockInstCount = 1;
 
-    // Check if this instruction starts a new block
-    if (I > 0 && BlockStartPCs.count(E.PC)) {
-      updateBlocks(CurrentBlockStart, CurrentBlockEnd, CurrentBlockInstCount);
+    for (const InstEntry &E : drop_begin(Entries)) {
+      // Check if this instruction starts a new block
+      if (BlockStartPCs.contains(E.PC)) {
+        updateBlocks(CurrentBlockStart, CurrentBlockEnd, CurrentBlockInstCount);
 
-      // Record edge from previous block to this one
-      EdgeCounts[{CurrentBlockStart, CurrentBlockEnd, E.PC}]++;
+        // Record edge from previous block to this one
+        EdgeCounts[{CurrentBlockStart, CurrentBlockEnd, E.PC}]++;
 
-      // Start new block
-      CurrentBlockStart = E.PC;
-      CurrentBlockInstCount = 0;
+        // Start new block
+        CurrentBlockStart = E.PC;
+        CurrentBlockInstCount = 0;
+      }
+      CurrentBlockEnd = E.PC + E.InstSize;
+      CurrentBlockInstCount++;
     }
 
-    CurrentBlockEnd = E.PC;
-    CurrentBlockInstCount++;
-  }
-
-  // Handle last block
-  if (CurrentBlockInstCount > 0) {
-    updateBlocks(CurrentBlockStart, CurrentBlockEnd, CurrentBlockInstCount);
+    // Handle last block
+    if (CurrentBlockInstCount > 0) {
+      updateBlocks(CurrentBlockStart, CurrentBlockEnd, CurrentBlockInstCount);
+    }
   }
 
   // Convert edge counts to TraceEdge vector
