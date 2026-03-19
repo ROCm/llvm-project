@@ -4378,7 +4378,7 @@ add_entrypoint_object(
   HDRS
     ../fmaf.h
   DEPENDS
-    libc.src.__support.FPUtil.fma
+    libc.src.__support.math.fmaf
 )
 
 add_entrypoint_object(
@@ -4388,8 +4388,7 @@ add_entrypoint_object(
   HDRS
     ../fmaf16.h
   DEPENDS
-    libc.src.__support.FPUtil.fma
-    libc.src.__support.macros.properties.types
+    libc.src.__support.math.fmaf16
 )
 
 add_entrypoint_object(
@@ -4399,7 +4398,7 @@ add_entrypoint_object(
   HDRS
     ../fma.h
   DEPENDS
-    libc.src.__support.FPUtil.fma
+    libc.src.__support.math.fma
 )
 
 add_entrypoint_object(
@@ -5126,11 +5125,7 @@ add_entrypoint_object(
   HDRS
     ../bf16divf128.h
   DEPENDS
-    libc.src.__support.common
-    libc.src.__support.FPUtil.bfloat16
-    libc.src.__support.FPUtil.generic.div
-    libc.src.__support.macros.config
-    libc.src.__support.macros.properties.types
+    libc.src.__support.math.bf16divf128
 )
 
 add_entrypoint_object(
