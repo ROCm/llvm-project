@@ -41,8 +41,7 @@ static bool parseHexBytes(StringRef HexStr, SmallVectorImpl<uint8_t> &Bytes) {
       WordBytes.push_back(static_cast<uint8_t>(ByteVal));
     }
     // Reverse for little-endian
-    for (auto It = WordBytes.rbegin(); It != WordBytes.rend(); ++It)
-      Bytes.push_back(*It);
+    append_range(Bytes, reverse(WordBytes));
   }
   return true;
 }
