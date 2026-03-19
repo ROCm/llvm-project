@@ -137,9 +137,8 @@ Expected<std::vector<InstEntry>> parseAndDisassemble(StringRef FilePath,
                                "Line %zu: Failed to parse hex bytes: %s",
                                LineNum + 1, HexStr.str().c_str());
 
-    ArrayRef<uint8_t> BytesRef(Bytes);
     MCDisassembler::DecodeStatus Status =
-        DisAsm.getInstruction(Entry.Inst, Entry.InstSize, BytesRef, 0, nulls());
+        DisAsm.getInstruction(Entry.Inst, Entry.InstSize, Bytes, 0, nulls());
     if (Status != MCDisassembler::Success)
       return createStringError(
           inconvertibleErrorCode(),
