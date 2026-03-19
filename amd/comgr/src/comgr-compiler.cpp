@@ -2369,8 +2369,6 @@ amd_comgr_status_t AMDGPUCompiler::compileSourceToSpirv() {
   // Add SPIRV-specific compilation flags
   Args.push_back("--offload-arch=amdgcnspirv");
   Args.push_back("--no-gpu-bundle-output");
-  Args.push_back("-c");
-
 
 #if _WIN32
   Args.push_back("-fshort-wchar");
