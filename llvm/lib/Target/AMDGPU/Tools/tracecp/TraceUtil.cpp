@@ -397,12 +397,12 @@ static void simulateInst(const MCInst &Inst, size_t EntryIdx,
   }
 }
 
-TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
-                              const TraceCFG &CFG, const MCInstrInfo &MCII,
-                              const MCRegisterInfo &MRI, bool Verbose) {
+TraceMetrics simulateTrace(const WaveView &WaveView, const TraceCFG &CFG,
+                           const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
+                           bool Verbose) {
   TraceMetrics Result;
 
-  if (Entries.empty())
+  if (WaveView.empty())
     return Result;
 
   MCInstInfo InstInfo(MCII, MRI);
@@ -415,42 +415,22 @@ TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
 
   Simulator Sim(InstInfo, Model, Cfg);
 
-  // Build PC -> block mapping
-  std::map<uint64_t, uint64_t> PCToBlock;
-  for (const auto &E : Entries) {
-    auto It = CFG.Blocks.upper_bound(E.PC);
-    if (It != CFG.Blocks.begin()) {
-      --It;
-      if (E.PC >= It->second.StartPC && E.PC <= It->second.EndPC)
-        PCToBlock[E.PC] = It->first;
-    }
-  }
-
   // Track current block and its metrics
-  uint64_t CurrentBlockPC = 0;
+  uint64_t CurrentBlockPC;
   BlockMetrics CurrentMetrics;
   unsigned BlockStartCycle = Sim.getState().CurrentCycle;
-  bool InBlock = false;
 
-  for (size_t EntryIdx = 0; EntryIdx < Entries.size(); ++EntryIdx) {
-    const InstEntry &Entry = Entries[EntryIdx];
+  ArrayRef<InstEntry> Entries = WaveView.entries_per_wave().begin()->second;
+  for (const auto &[EntryIdx, Entry] : enumerate(Entries)) {
 
     // Find which block this instruction belongs to
-    auto BlockIt = PCToBlock.find(Entry.PC);
-    uint64_t BlockPC = (BlockIt != PCToBlock.end()) ? BlockIt->second : Entry.PC;
+    const TraceBlock &Block = CFG.getBlockForPC(Entry.PC);
+    uint64_t BlockStartPC = Block.StartPC;
 
     // Check if we're starting a new block execution.
-    // This happens when:
-    // 1. We haven't started any block yet (!InBlock)
-    // 2. We moved to a different block (BlockPC != CurrentBlockPC)
-    // 3. We're at the start of the same block again (loop back-edge)
-    bool IsBlockStart = (Entry.PC == BlockPC);
-    bool StartNewBlock = !InBlock || BlockPC != CurrentBlockPC ||
-                         (IsBlockStart && InBlock);
-
-    if (StartNewBlock) {
+    if (Entry.PC == Block.StartPC) {
       // Finish previous block if we had one
-      if (InBlock) {
+      if (EntryIdx != 0) {
         CurrentMetrics.TotalCycles =
             Sim.getState().CurrentCycle - BlockStartCycle;
         Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
@@ -465,10 +445,9 @@ TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
       }
 
       // Start new block
-      CurrentBlockPC = BlockPC;
+      CurrentBlockPC = BlockStartPC;
       CurrentMetrics = BlockMetrics();
       BlockStartCycle = Sim.getState().CurrentCycle;
-      InBlock = true;
 
       if (Verbose) {
         errs() << format("\n=== Block 0x%04x [Cycle %u] ===",
@@ -481,18 +460,14 @@ TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
                  Verbose, Entry.InstructionText);
   }
 
-  // Finish last block
-  if (InBlock) {
-    CurrentMetrics.TotalCycles = Sim.getState().CurrentCycle - BlockStartCycle;
-    Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
+  CurrentMetrics.TotalCycles = Sim.getState().CurrentCycle - BlockStartCycle;
+  Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
 
-    if (Verbose) {
-      errs() << format("\n=== End Block 0x%04x: %u instrs, %u cycles, "
-                       "%u stalls ===\n",
-                       CurrentBlockPC, CurrentMetrics.NumInstructions,
-                       CurrentMetrics.TotalCycles,
-                       CurrentMetrics.StallCycles());
-    }
+  if (Verbose) {
+    errs() << format("\n=== End Block 0x%04x: %u instrs, %u cycles, "
+                     "%u stalls ===\n",
+                     CurrentBlockPC, CurrentMetrics.NumInstructions,
+                     CurrentMetrics.TotalCycles, CurrentMetrics.StallCycles());
   }
 
   return Result;
@@ -649,7 +624,7 @@ TraceCFG reconstructCFG(const WaveView &WaveView, const MCInstrInfo &MCII) {
   for (const auto &[_, Entries] : WaveView.entries_per_wave()) {
     const InstEntry &FirstEntry = Entries.front();
     CurrentBlockStart = FirstEntry.PC;
-    CurrentBlockEnd = FirstEntry.PC + FirstEntry.InstSize;
+    CurrentBlockEnd = FirstEntry.PC;
     CurrentBlockInstCount = 1;
 
     for (const InstEntry &E : drop_begin(Entries)) {
@@ -664,7 +639,7 @@ TraceCFG reconstructCFG(const WaveView &WaveView, const MCInstrInfo &MCII) {
         CurrentBlockStart = E.PC;
         CurrentBlockInstCount = 0;
       }
-      CurrentBlockEnd = E.PC + E.InstSize;
+      CurrentBlockEnd = E.PC;
       CurrentBlockInstCount++;
     }
 
@@ -708,8 +683,8 @@ void TraceCFG::print() const {
 
   outs() << "=== Edges ===\n";
   for (const TraceEdge &E : Edges) {
-    outs() << format("  [0x%04x] 0x%04x -> 0x%04x (%u time(s))\n", E.FromBlockPC,
-                     E.FromPC, E.ToPC, E.Count);
+    outs() << format("  [0x%04x - 0x%04x] -> 0x%04x (%u time(s))\n",
+                     E.FromBlockPC, E.FromPC, E.ToPC, E.Count);
   }
   outs() << "\n";
 

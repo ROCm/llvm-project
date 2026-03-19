@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
 
   // Run simulation (collects BlockMetrics per block execution)
   tracecp::TraceMetrics Metrics =
-      tracecp::simulateTrace(Entries, CFG, *MII, *MRI, Verbose);
+      tracecp::simulateTrace(WaveView, CFG, *MII, *MRI, Verbose);
 
   // Print aggregate metrics
   Metrics.print();

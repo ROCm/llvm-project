@@ -71,6 +71,8 @@ public:
   auto entries_per_wave() const {
     return llvm::make_range(WaveToEntries.begin(), WaveToEntries.end());
   }
+
+  bool empty() const { return WaveToEntries.empty(); }
 };
 
 /// Parse a trace file and disassemble the instructions.
@@ -88,6 +90,8 @@ struct TraceBlock {
   uint64_t EndPC;
   unsigned NumInstructions;
   unsigned ExecutionCount;
+
+  bool contains(uint64_t PC) const { return StartPC <= PC && PC <= EndPC; }
 };
 
 struct TraceEdge {
@@ -101,6 +105,21 @@ struct TraceEdge {
 struct TraceCFG {
   std::map<uint64_t, TraceBlock> Blocks; // Keyed by StartPC
   std::vector<TraceEdge> Edges;
+
+  const TraceBlock &getBlockForPC(uint64_t PC) const {
+    auto It = Blocks.upper_bound(PC);
+    if (It == Blocks.end()) {
+      const TraceBlock &Last = Blocks.rbegin()->second;
+      assert(Last.contains(PC) && "PC out of range, too large");
+      return Last;
+    }
+    assert(It != Blocks.begin() && "PC out of range, too small");
+    // The previous node contains the block
+    --It;
+    const TraceBlock &Block = It->second;
+    assert(Block.contains(PC) && "PC out of range, not in block");
+    return Block;
+  }
 
   void print() const;
 };
@@ -128,9 +147,9 @@ struct TraceMetrics {
 /// \param MRI The MCRegisterInfo for the target.
 /// \param Verbose Enable verbose per-instruction logging.
 /// \returns TraceMetrics with per-block metrics.
-TraceMetrics simulateTrace(const std::vector<InstEntry> &Entries,
-                           const TraceCFG &CFG, const MCInstrInfo &MCII,
-                           const MCRegisterInfo &MRI, bool Verbose = false);
+TraceMetrics simulateTrace(const WaveView &WaveView, const TraceCFG &CFG,
+                           const MCInstrInfo &MCII, const MCRegisterInfo &MRI,
+                           bool Verbose = false);
 
 } // namespace tracecp
 } // namespace llvm
