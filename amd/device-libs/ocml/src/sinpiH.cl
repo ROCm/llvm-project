@@ -19,7 +19,11 @@ MATH_MANGLE(sinpi)(half x)
     struct redret r = MATH_PRIVATE(trigpired)(BUILTIN_ABS_F16(x));
     struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
 
-    half s = (r.i & 1) == 0 ? sc.s : sc.c;
-    return AS_HALF((short)(AS_SHORT(s) ^ (r.i > 1 ? SIGNBIT_HP16 : 0) ^ (AS_SHORT(x) & SIGNBIT_HP16)));
+    half s = (r.i & (short)1) == (short)0 ? sc.s : sc.c;
+    short flip = r.i > (short)1 ? (short)SIGNBIT_HP16 : (short)0;
+
+    s = AS_HALF((short)(AS_SHORT(s) ^ (flip ^ (AS_SHORT(x) ^ (short)SIGNBIT_HP16))));
+
+    return s;
 }
 
