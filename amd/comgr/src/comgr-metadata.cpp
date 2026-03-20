@@ -59,6 +59,48 @@ getELFObjectFileBase(DataObject *DataP) {
 // FIXME: Unify with HSA note types?
 #define PAL_METADATA_NOTE_TYPE 13
 
+// Deep copy a DocNode from one document to another.
+// This is needed when merging nodes from a temporary parsing document
+// into the main document, since DocNode contains pointers to memory
+// owned by its source Document.
+llvm::msgpack::DocNode deepCopyNode(llvm::msgpack::Document &DestDoc,
+                                    llvm::msgpack::DocNode Src) {
+  if (Src.isEmpty())
+    return DestDoc.getEmptyNode();
+
+  switch (Src.getKind()) {
+  case msgpack::Type::Nil:
+    return DestDoc.getNode();
+  case msgpack::Type::Int:
+    return DestDoc.getNode(Src.getInt());
+  case msgpack::Type::UInt:
+    return DestDoc.getNode(Src.getUInt());
+  case msgpack::Type::Boolean:
+    return DestDoc.getNode(Src.getBool());
+  case msgpack::Type::Float:
+    return DestDoc.getNode(Src.getFloat());
+  case msgpack::Type::String:
+    return DestDoc.getNode(Src.getString(), /*Copy=*/true);
+  case msgpack::Type::Binary:
+    return DestDoc.getNode(Src.getBinary(), /*Copy=*/true);
+  case msgpack::Type::Map: {
+    auto NewMap = DestDoc.getMapNode();
+    for (auto &Entry : Src.getMap())
+      NewMap[deepCopyNode(DestDoc, Entry.first)] =
+          deepCopyNode(DestDoc, Entry.second);
+    return NewMap;
+  }
+  case msgpack::Type::Array: {
+    auto NewArray = DestDoc.getArrayNode();
+    for (auto &Elem : Src.getArray())
+      NewArray.push_back(deepCopyNode(DestDoc, Elem));
+    return NewArray;
+  }
+  default:
+    return DestDoc.getEmptyNode();
+  }
+}
+
 // Try to merge "amdhsa.kernels" from DocNode @p From to @p To.
 // The merge is allowed only if
 // 1. "amdhsa.version" exists and is same.
@@ -71,16 +113,18 @@ getELFObjectFileBase(DataObject *DataP) {
 //
 // If merge is possible the function merges Kernel records
 // to @p To and returns @c true.
+// @p DestDoc is the document that owns @p To, used for deep copying nodes.
 bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
                       const StringRef VersionStrKey,
                       const StringRef PrintfStrKey,
-                      const StringRef KernelStrKey) {
+                      const StringRef KernelStrKey,
+                      llvm::msgpack::Document &DestDoc) {
   if (!From.isMap()) {
     return false;
   }
 
   if (To.isEmpty()) {
-    To = From;
+    To = deepCopyNode(DestDoc, From);
     return true;
   }
 
@@ -91,7 +135,7 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
       if (From.getMap()[PrintfStrKey] != To.getMap()[PrintfStrKey])
         return false;
     } else {
-      To.getMap()[PrintfStrKey] = From.getMap()[PrintfStrKey];
+      To.getMap()[PrintfStrKey] = deepCopyNode(DestDoc, From.getMap()[PrintfStrKey]);
     }
   }
 
@@ -132,7 +176,7 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
 
   auto &ToKernelRecords = ToKernelArray->second.getArray();
   for (auto Kernel : FromKernelArray->second.getArray()) {
-    ToKernelRecords.push_back(Kernel);
+    ToKernelRecords.push_back(deepCopyNode(DestDoc, Kernel));
   }
 
   return true;
@@ -169,16 +213,17 @@ bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
     MetaP->MetaDoc->EmitIntegerBooleans = true;
     MetaP->MetaDoc->RawDocumentList.push_back(std::string(DescString));
 
-    /* TODO add support for merge using readFromBlob merge function */
-    auto &Document = MetaP->MetaDoc->Document;
-
-    Document.clear();
-    if (!Document.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(), false)) {
+    // Use a temporary document for parsing to avoid invalidating Root.
+    // DocNode contains pointers to memory owned by its Document, so reusing
+    // the same Document for parsing would invalidate nodes accumulated in Root.
+    llvm::msgpack::Document TempDoc;
+    if (!TempDoc.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(), false)) {
       return false;
     }
 
-    return mergeNoteRecords(Document.getRoot(), Root, "amdhsa.version",
-                            "amdhsa.printf", "amdhsa.kernels");
+    return mergeNoteRecords(TempDoc.getRoot(), Root, "amdhsa.version",
+                            "amdhsa.printf", "amdhsa.kernels",
+                            MetaP->MetaDoc->Document);
   }
   return false;
 }
@@ -187,7 +232,7 @@ template <class ELFT>
 amd_comgr_status_t getElfMetadataRoot(const ELFObjectFile<ELFT> *Obj,
                                       DataMeta *MetaP) {
   bool Found = false;
-  llvm::msgpack::DocNode Root;
+  llvm::msgpack::DocNode Root = MetaP->MetaDoc->Document.getEmptyNode();
   const ELFFile<ELFT> &ELFFile = Obj->getELFFile();
 
   auto ProgramHeadersOrError = ELFFile.program_headers();
