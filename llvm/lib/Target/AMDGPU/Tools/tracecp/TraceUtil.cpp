@@ -309,8 +309,8 @@ static void logInstHeader(unsigned Cycle, const SimInst &SI,
 }
 
 /// Simulate a single instruction and update BlockMetrics.
-static void simulateInst(const MCInst &Inst, size_t EntryIdx,
-                         const std::vector<InstEntry> &Entries,
+static void simulateInst(const MCInst &Inst,
+                         ArrayRef<InstEntry> NextEntries,
                          Simulator &Sim, MCInstInfo &InstInfo,
                          BlockMetrics &Metrics, bool Verbose,
                          StringRef InstructionText) {
@@ -318,14 +318,14 @@ static void simulateInst(const MCInst &Inst, size_t EntryIdx,
   unsigned EntryCycle = State.CurrentCycle;
   SimInst SI = InstInfo.createSimInst(Inst);
 
-  // Build lookahead for MSB_SET masking
-  SmallVector<SimInst, 1> Lookahead;
-  if (SI.Class == InstClass::MSB_SET && EntryIdx + 1 < Entries.size()) {
-    Lookahead.push_back(InstInfo.createSimInst(Entries[EntryIdx + 1].Inst));
-  }
-
   // MSB_SET handling
   if (SI.Class == InstClass::MSB_SET) {
+    // Build lookahead for MSB_SET masking
+    SmallVector<SimInst, 1> Lookahead;
+    if (SI.Class == InstClass::MSB_SET && !NextEntries.empty()) {
+      Lookahead.push_back(InstInfo.createSimInst(NextEntries.front().Inst));
+    }
+
     InstrSimInfo Info = Sim.simulateInst(SI, Lookahead);
 
     Metrics.NumInstructions++;
@@ -420,17 +420,24 @@ TraceMetrics simulateTrace(const WaveView &WaveView, const TraceCFG &CFG,
   BlockMetrics CurrentMetrics;
   unsigned BlockStartCycle = Sim.getState().CurrentCycle;
 
-  ArrayRef<InstEntry> Entries = WaveView.entries_per_wave().begin()->second;
-  for (const auto &[EntryIdx, Entry] : enumerate(Entries)) {
+  SmallVector<ArrayRef<InstEntry>, 16> WaveContexts;
+  for(auto [_, WaveTrace] : WaveView.entries_per_wave())
+    WaveContexts.emplace_back(WaveTrace);
+
+  bool EntryInst = true;
+  unsigned WaveIdx = 0;
+  while(!WaveContexts.front().empty()) {
+    ArrayRef<InstEntry> &WaveTrace = WaveContexts.front();
+    const InstEntry &Entry = WaveTrace.front();
+    WaveTrace = WaveTrace.drop_front();
 
     // Find which block this instruction belongs to
     const TraceBlock &Block = CFG.getBlockForPC(Entry.PC);
-    uint64_t BlockStartPC = Block.StartPC;
 
     // Check if we're starting a new block execution.
     if (Entry.PC == Block.StartPC) {
       // Finish previous block if we had one
-      if (EntryIdx != 0) {
+      if (!EntryInst) {
         CurrentMetrics.TotalCycles =
             Sim.getState().CurrentCycle - BlockStartCycle;
         Result.Blocks[CurrentBlockPC].push_back(CurrentMetrics);
@@ -443,9 +450,10 @@ TraceMetrics simulateTrace(const WaveView &WaveView, const TraceCFG &CFG,
                            CurrentMetrics.StallCycles());
         }
       }
+      EntryInst = false;
 
       // Start new block
-      CurrentBlockPC = BlockStartPC;
+      CurrentBlockPC = Block.StartPC;
       CurrentMetrics = BlockMetrics();
       BlockStartCycle = Sim.getState().CurrentCycle;
 
@@ -456,7 +464,7 @@ TraceMetrics simulateTrace(const WaveView &WaveView, const TraceCFG &CFG,
     }
 
     // Simulate this instruction
-    simulateInst(Entry.Inst, EntryIdx, Entries, Sim, InstInfo, CurrentMetrics,
+    simulateInst(Entry.Inst, WaveTrace, Sim, InstInfo, CurrentMetrics,
                  Verbose, Entry.InstructionText);
   }
 
