@@ -1,0 +1,29 @@
+RUN: split-file %s %t
+RUN: tracecp --dispatch-id 0 --cluster-id 0 --wave-id 0 %t/ite.json | FileCheck %s --check-prefixes=CHECK,SINGLE,WAVE-0
+RUN: tracecp --dispatch-id 0 --cluster-id 0 --wave-id 1 %t/ite.json | FileCheck %s --check-prefixes=CHECK,SINGLE,WAVE-1
+RUN: tracecp --dispatch-id 0 --cluster-id 0 --wave-id 0,1 %t/ite.json | FileCheck %s --check-prefixes=CHECK,WAVE-0,WAVE-1,DOUBLE
+
+SINGLE: Basic Blocks: 2
+SINGLE: Edges: 1
+DOUBLE: Basic Blocks: 3
+DOUBLE: Edges: 2
+
+CHECK:  === Basic Blocks ===
+SINGLE: [0x0000 - 0x0004] 2 instrs, executed 1 time(s)
+DOUBLE: [0x0000 - 0x0004] 2 instrs, executed 2 time(s)
+WAVE-0: [0x0008 - 0x000c] 2 instrs, executed 1 time(s)
+WAVE-1: [0x0010 - 0x0014] 2 instrs, executed 1 time(s)
+
+CHECK:  === Edges ===
+WAVE-0: [0x0000 - 0x0004] -> 0x0008 (1 time(s))
+WAVE-1: [0x0000 - 0x0004] -> 0x0010 (1 time(s))
+
+#--- ite.json
+{"timestamp":0,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":0,"pc":0,"opcode":385,"instruction_text":"  v_mov_b32     v3, s5                                  // 000200024140: 7E060205\n"}
+{"timestamp":1,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":1,"pc":4,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":2,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":2,"pc":8,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":3,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":3,"pc":12,"opcode":3215982592,"instruction_text":"  s_endpgm                                              // 000200024310: BFB00000\n"}
+{"timestamp":4,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":1,"instruction_id":4,"pc":0,"opcode":385,"instruction_text":"  v_mov_b32     v3, s5                                  // 000200024140: 7E060205\n"}
+{"timestamp":5,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":1,"instruction_id":5,"pc":4,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":6,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":1,"instruction_id":6,"pc":16,"opcode":2214758005,"instruction_text":"  s_lshl_b32    s2, ttmp9, 6                            // 000200024134: 84028675\n"}
+{"timestamp":7,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":1,"instruction_id":7,"pc":20,"opcode":3215982592,"instruction_text":"  s_endpgm                                              // 000200024310: BFB00000\n"}

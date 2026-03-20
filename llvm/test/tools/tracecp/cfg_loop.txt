@@ -1,0 +1,36 @@
+RUN: split-file %s %t
+RUN: tracecp --dispatch-id 0 --cluster-id 0 --wave-id 0 %t/loop_once.json | FileCheck %s --check-prefixes=CHECK,ONCE
+RUN: tracecp --dispatch-id 0 --cluster-id 0 --wave-id 0 %t/loop_twice.json | FileCheck %s --check-prefixes=CHECK,TWICE
+
+CHECK: Basic Blocks: 3
+CHECK: Edges: 3
+
+CHECK: === Basic Blocks ===
+CHECK:   [0x0000 - 0x0000] 1 instrs, executed 1 time(s)
+ONCE:   [0x0004 - 0x0008] 2 instrs, executed 2 time(s)
+TWICE:   [0x0004 - 0x0008] 2 instrs, executed 3 time(s)
+CHECK:   [0x000c - 0x000c] 1 instrs, executed 1 time(s)
+
+CHECK: === Edges ===
+CHECK:   [0x0000 - 0x0000] -> 0x0004 (1 time(s))
+ONCE:   [0x0004 - 0x0008] -> 0x0004 (1 time(s))
+TWICE:   [0x0004 - 0x0008] -> 0x0004 (2 time(s))
+CHECK:   [0x0004 - 0x0008] -> 0x000c (1 time(s))
+
+#--- loop_once.json
+{"timestamp":0,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":0,"pc":0,"opcode":385,"instruction_text":"  v_mov_b32     v3, s5                                  // 000200024140: 7E060205\n"}
+{"timestamp":1,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":1,"pc":4,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":2,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":2,"pc":8,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":3,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":3,"pc":4,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":4,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":4,"pc":8,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":5,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":6,"pc":12,"opcode":3215982592,"instruction_text":"  s_endpgm                                              // 000200024310: BFB00000\n"}
+
+#--- loop_twice.json
+{"timestamp":0,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":0,"pc":0,"opcode":385,"instruction_text":"  v_mov_b32     v3, s5                                  // 000200024140: 7E060205\n"}
+{"timestamp":1,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":1,"pc":4,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":2,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":2,"pc":8,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":3,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":3,"pc":4,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":4,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":4,"pc":8,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":5,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":5,"pc":4,"opcode":768,"instruction_text":"  v_add_co_u32  v2, vcc, v0, s4                         // 000200024144: D7006A02 00000900\n"}
+{"timestamp":6,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":6,"pc":8,"opcode":3215130641,"instruction_text":"  s_cbranch_vccz  label_241B8                           // 000200024170: BFA30011\n"}
+{"timestamp":7,"dispatch_id":0,"cluster_id":0,"workgroup_id":0,"wavegroup_id":0,"wave_id":0,"instruction_id":7,"pc":12,"opcode":3215982592,"instruction_text":"  s_endpgm                                              // 000200024310: BFB00000\n"}
