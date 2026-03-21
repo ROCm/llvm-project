@@ -2,19 +2,15 @@
 rocwmma and CK needs changes
 [AMDGPU][NFC] Change AMDGPU builtins to use ExtVector (#176033)
 ---
-Emma: need to reland
-Revert "Revert "Revert "Reland "Revert "[clang][CGRecordLayout] Remove dependency on isZeroSize (#96422)" (#156)"" (#2065)""
----
-breaks build of aqlprofiler
+breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks clang-358841
-[SimplifyLibCalls] Avoid simplifying pow(x, 2.0) -> x * x with math-errno. (#183099)
+breaks comgr builds
+[comgr] Auto-discover and embed libc++ headers for HIPRTC (#1696)
 ---
-breaks windows build libelf
-[CMake][IR] Add PCH (#183303)
-[CMake][CodeGen] Add PCH (#183346)
+breaks smoke*
+[Reland][IR] Add initial support for the byte type (#186888)
 ---
-breaks 50 openmp tests
-[OpenMP] Remove NVPTX local addrspace on parameters
+breaks rocgdb UT
+[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
 ---

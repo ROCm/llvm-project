@@ -45,6 +45,7 @@ set(supported_sources
   internal-unit.cpp
   io-api.cpp
   io-api-minimal.cpp
+  io-error.cpp
   io-stmt.cpp
   iostat.cpp
   matmul-transpose.cpp
@@ -82,7 +83,6 @@ set(host_sources
   exceptions.cpp
   execute.cpp
   extensions.cpp
-  io-error.cpp
   main.cpp
   random.cpp
   reduce.cpp
@@ -90,6 +90,7 @@ set(host_sources
   stop.cpp
   temporary-stack.cpp
   time-intrinsic.cpp
+  trampoline.cpp
   unit-map.cpp
 )
 if (TARGET llvm-libc-common-utilities)
@@ -185,11 +186,7 @@ else ()
 endif ()
 
 if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-  if (FLANG_RT_EMBED_GPU_LLVM_IR)
-    set(sources ${supported_sources} ${gpu_sources})
-  else ()
-    set(sources ${gpu_sources})
-  endif ()
+  set(sources ${gpu_sources})
 elseif(FLANG_RT_EXPERIMENTAL_OFFLOAD_SUPPORT STREQUAL "CUDA")
   set(sources ${supported_sources})
 else ()
@@ -206,7 +203,6 @@ if (NOT WIN32)
   )
 
   enable_cuda_compilation(flang_rt.runtime "${supported_sources}")
-  enable_omp_offload_compilation(flang_rt.runtime "${supported_sources}")
 
   # Select a default runtime, which is used for unit and regression tests.
   get_target_property(default_target flang_rt.runtime.default ALIASED_TARGET)
@@ -240,7 +236,6 @@ else()
       )
 
     enable_cuda_compilation(${name} "${supported_sources}")
-    enable_omp_offload_compilation(${name} "${supported_sources}")
     add_dependencies(flang_rt.runtime ${name})
   endfunction ()
 

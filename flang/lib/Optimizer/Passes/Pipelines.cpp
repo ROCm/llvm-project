@@ -143,9 +143,16 @@ void addLLVMDialectToLLVMPass(mlir::PassManager &pm,
   });
 }
 
-void addBoxedProcedurePass(mlir::PassManager &pm) {
-  addPassConditionally(pm, disableBoxedProcedureRewrite,
-                       [&]() { return fir::createBoxedProcedurePass(); });
+void addBoxedProcedurePass(mlir::PassManager &pm,
+                           bool enableSafeTrampolineFromConfig) {
+  addPassConditionally(pm, disableBoxedProcedureRewrite, [&]() {
+    fir::BoxedProcedurePassOptions opts;
+    // Support both the frontend -fsafe-trampoline flag (via config)
+    // and the cl::opt --safe-trampoline (for fir-opt/tco tools).
+    opts.useSafeTrampoline =
+        enableSafeTrampolineFromConfig || enableSafeTrampoline;
+    return fir::createBoxedProcedurePass(opts);
+  });
 }
 
 void addExternalNameConversionPass(mlir::PassManager &pm,
@@ -256,19 +263,22 @@ void createDefaultFIROptimizerPassPipeline(mlir::PassManager &pm,
 /// Create a pass pipeline for lowering from HLFIR to FIR
 ///
 /// \param pm - MLIR pass manager that will hold the pipeline definition
-/// \param optLevel - optimization level used for creating FIR optimization
-///   passes pipeline
+/// \param enableOpenMP - whether OpenMP lowering is enabled
+/// \param config - pipeline config (OptLevel, etc.)
 void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
                                   EnableOpenMP enableOpenMP,
-                                  llvm::OptimizationLevel optLevel) {
+                                  const MLIRToLLVMPassPipelineConfig &config) {
+  llvm::OptimizationLevel optLevel = config.OptLevel;
   if (optLevel.getSizeLevel() > 0 || optLevel.getSpeedupLevel() > 0) {
     addNestedPassToAllTopLevelOperations<PassConstructor>(
         pm, hlfir::createExpressionSimplification);
   }
   if (optLevel.isOptimizingForSpeed()) {
     addCanonicalizerPassWithoutRegionSimplification(pm);
-    addNestedPassToAllTopLevelOperations<PassConstructor>(
-        pm, hlfir::createSimplifyHLFIRIntrinsics);
+    addNestedPassToAllTopLevelOperations(pm, [&]() {
+      return hlfir::createSimplifyHLFIRIntrinsics(
+          {/*allowNewSideEffects=*/false, config.fpMaxminBehavior});
+    });
   }
   addNestedPassToAllTopLevelOperations<PassConstructor>(
       pm, hlfir::createInlineElementals);
@@ -277,9 +287,9 @@ void createHLFIRToFIRPassPipeline(mlir::PassManager &pm,
     pm.addPass(mlir::createCSEPass());
     // Run SimplifyHLFIRIntrinsics pass late after CSE,
     // and allow introducing operations with new side effects.
-    addNestedPassToAllTopLevelOperations<PassConstructor>(pm, []() {
+    addNestedPassToAllTopLevelOperations(pm, [&]() {
       return hlfir::createSimplifyHLFIRIntrinsics(
-          {/*allowNewSideEffects=*/true});
+          {/*allowNewSideEffects=*/true, config.fpMaxminBehavior});
     });
     addNestedPassToAllTopLevelOperations<PassConstructor>(
         pm, hlfir::createPropagateFortranVariableAttributes);
@@ -379,7 +389,7 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
                                          MLIRToLLVMPassPipelineConfig config,
                                          llvm::StringRef inputFilename) {
   pm.addPass(fir::createMIFOpConversion());
-  fir::addBoxedProcedurePass(pm);
+  fir::addBoxedProcedurePass(pm, config.EnableSafeTrampoline);
   if (config.OptLevel.isOptimizingForSpeed() && config.AliasAnalysis &&
       !disableFirAliasTags && !useOldAliasTags)
     pm.addPass(fir::createAddAliasTags());
@@ -450,7 +460,7 @@ void createMLIRToLLVMPassPipeline(mlir::PassManager &pm,
     enableOpenMP = fir::EnableOpenMP::Full;
   if (config.EnableOpenMPSimd)
     enableOpenMP = fir::EnableOpenMP::Simd;
-  fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config.OptLevel);
+  fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config);
 
   // Add default optimizer pass pipeline.
   fir::createDefaultFIROptimizerPassPipeline(pm, config);

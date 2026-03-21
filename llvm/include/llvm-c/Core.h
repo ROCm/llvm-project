@@ -61,7 +61,9 @@ LLVM_C_EXTERN_C_BEGIN
 typedef enum {
   /* Terminator Instructions */
   LLVMRet            = 1,
-  LLVMBr             = 2,
+  /* removed 2 due to API changes */
+  LLVMUncondBr       = 70,
+  LLVMCondBr         = 71,
   LLVMSwitch         = 3,
   LLVMIndirectBr     = 4,
   LLVMInvoke         = 5,
@@ -399,6 +401,12 @@ typedef enum {
                            original using an floating point comparison and
                            return the old one */
   LLVMAtomicRMWBinOpFMinimum, /**< Sets the value if it's smaller than the
+                           original using an floating point comparison and
+                           return the old one */
+  LLVMAtomicRMWBinOpFMaximumNum, /**< Sets the value if it's greater than the
+                           original using an floating point comparison and
+                           return the old one */
+  LLVMAtomicRMWBinOpFMinimumNum, /**< Sets the value if it's smaller than the
                            original using an floating point comparison and
                            return the old one */
 } LLVMAtomicRMWBinOp;
@@ -2050,7 +2058,8 @@ LLVM_C_ABI unsigned LLVMGetTargetExtTypeIntParam(LLVMTypeRef TargetExtTy,
       macro(SelectInst)                     \
       macro(ShuffleVectorInst)              \
       macro(StoreInst)                      \
-      macro(BranchInst)                     \
+      macro(UncondBrInst)                   \
+      macro(CondBrInst)                     \
       macro(IndirectBrInst)                 \
       macro(InvokeInst)                     \
       macro(ReturnInst)                     \
@@ -2196,6 +2205,10 @@ LLVM_C_ABI LLVMBool LLVMIsPoison(LLVMValueRef Val);
 #define LLVM_DECLARE_VALUE_CAST(name)                                          \
   LLVM_C_ABI LLVMValueRef LLVMIsA##name(LLVMValueRef Val);
 LLVM_FOR_EACH_VALUE_SUBCLASS(LLVM_DECLARE_VALUE_CAST)
+
+LLVM_C_ABI LLVM_ATTRIBUTE_C_DEPRECATED(
+    LLVMValueRef LLVMIsABranchInst(LLVMValueRef Val),
+    "Use LLVMIsAUncondBrInst/LLVMIsACondBrInst instead");
 
 LLVM_C_ABI LLVMValueRef LLVMIsAMDNode(LLVMValueRef Val);
 LLVM_C_ABI LLVMValueRef LLVMIsAValueAsMetadata(LLVMValueRef Val);
@@ -4295,29 +4308,27 @@ LLVM_C_ABI void LLVMSetSuccessor(LLVMValueRef Term, unsigned i,
                                  LLVMBasicBlockRef block);
 
 /**
- * Return if a branch is conditional.
+ * Return if an instruction is a conditional branch.
  *
- * This only works on llvm::BranchInst instructions.
- *
- * @see llvm::BranchInst::isConditional
+ * Deprecated: Use LLVMIsACondBrInst instead.
  */
 LLVM_C_ABI LLVMBool LLVMIsConditional(LLVMValueRef Branch);
 
 /**
  * Return the condition of a branch instruction.
  *
- * This only works on llvm::BranchInst instructions.
+ * This only works on llvm::CondBrInst instructions.
  *
- * @see llvm::BranchInst::getCondition
+ * @see llvm::CondBrInst::getCondition
  */
 LLVM_C_ABI LLVMValueRef LLVMGetCondition(LLVMValueRef Branch);
 
 /**
  * Set the condition of a branch instruction.
  *
- * This only works on llvm::BranchInst instructions.
+ * This only works on llvm::CondBrInst instructions.
  *
- * @see llvm::BranchInst::setCondition
+ * @see llvm::CondBrInst::setCondition
  */
 LLVM_C_ABI void LLVMSetCondition(LLVMValueRef Branch, LLVMValueRef Cond);
 

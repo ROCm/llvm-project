@@ -53,13 +53,14 @@ ENUM_CLASS(LanguageFeature, BackslashEscapes, OldDebugLines,
     PolymorphicActualAllocatableOrPointerToMonomorphicDummy, RelaxedPureDummy,
     UndefinableAsynchronousOrVolatileActual, AutomaticInMainProgram, PrintCptr,
     SavedLocalInSpecExpr, PrintNamelist, AssumedRankPassedToNonAssumedRank,
-    IgnoreIrrelevantAttributes, Unsigned,
-    ContiguousOkForSeqAssociation, ForwardRefExplicitTypeDummy,
-    InaccessibleDeferredOverride,
-    AmdMemoryAllocator, CudaWarpMatchFunction,
-    DoConcurrentOffload, TransferBOZ, Coarray, PointerPassObject,
-    MultipleIdenticalDATA, DefaultStructConstructorNullPointer,
-    AssumedRankIoItem)
+    IgnoreIrrelevantAttributes, Unsigned, ContiguousOkForSeqAssociation,
+    ForwardRefExplicitTypeDummy, InaccessibleDeferredOverride,
+    AmdMemoryAllocator,
+    CudaWarpMatchFunction, DoConcurrentOffload, TransferBOZ, Coarray,
+    PointerPassObject, MultipleIdenticalDATA,
+    DefaultStructConstructorNullPointer, AssumedRankIoItem,
+    MultipleProgramUnitsOnSameLine, AllocatedForAssociated,
+    OpenMPThreadprivateEquivalence)
 
 // Portability and suspicious usage warnings
 ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
@@ -84,7 +85,7 @@ ENUM_CLASS(UsageWarning, Portability, PointerToUndefinable,
     HostAssociatedIntentOutInSpecExpr, NonVolatilePointerToVolatile,
     RealConstantWidening, VolatileOrAsynchronousTemporary, UnusedVariable,
     UsedUndefinedVariable, BadValueInDeadCode, AssumedTypeSizeDummy,
-    MisplacedIgnoreTKR)
+    MisplacedIgnoreTKR, NamelistParameter, ImpureFinalInPure)
 
 using LanguageFeatures = EnumSet<LanguageFeature, LanguageFeature_enumSize>;
 using UsageWarnings = EnumSet<UsageWarning, UsageWarning_enumSize>;

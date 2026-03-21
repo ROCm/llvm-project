@@ -41,7 +41,7 @@
 #define BUILTIN_ABS_F16 __builtin_fabsf16
 #define BUILTIN_ABS_2F16 __builtin_elementwise_abs
 
-#define BUILTIN_BITALIGN_B32 __builtin_amdgcn_alignbit
+#define BUILTIN_FSHR_B32(x, y, z) __builtin_elementwise_fshr(x, y, z)
 
 #define BUILTIN_CEIL_F32 __builtin_ceilf
 #define BUILTIN_CEIL_F64 __builtin_ceil
@@ -102,16 +102,31 @@
     _f;                                                         \
 })
 
-#define BUILTIN_FRACTION_F64(X) ({                                      \
-    const double _x = X;                                                \
-    const double _floor_x = BUILTIN_FLOOR_F64(_x);                       \
-    double _f = BUILTIN_MIN_F64(_x - _floor_x, 0x1.fffffffffffffp-1);   \
-    if (!FINITE_ONLY_OPT()) {                                           \
-        _f = BUILTIN_ISNAN_F64(_x) ? _x : _f;                            \
-        _f = BUILTIN_ISINF_F64(_x) ? 0.0 : _f;                           \
-    }                                                                   \
-    _f;                                                                 \
-})
+// Perform the non-finite component of fract
+#define BUILTIN_FRACTION_F64_IMPL(X)                                                                                   \
+    ({                                                                                                                 \
+        const double _x = X;                                                                                           \
+        const double _floor_x = BUILTIN_FLOOR_F64(_x);                                                                 \
+        double _f = BUILTIN_MIN_F64(_x - _floor_x, 0x1.fffffffffffffp-1);                                              \
+        _f;                                                                                                            \
+    })
+
+// Apply the edge case fixups of BUILTIN_FRACTION_F64. \p F should be the result
+// of BUILTIN_FRACTION_F64_IMPL, \p X should be a value that is known to have
+// the same finiteness as \p F. i.e., if isnan(X) == isnan(F), and isinf(X) ==
+// isinf(F).
+#define BUILTIN_FRACTION_F64_FIXUP(F, X)                                                                               \
+    ({                                                                                                                 \
+        const double _x = X;                                                                                           \
+        double _f = F;                                                                                                 \
+        if (!FINITE_ONLY_OPT()) {                                                                                      \
+            _f = BUILTIN_ISNAN_F64(_x) ? _x : _f;                                                                      \
+            _f = BUILTIN_ISINF_F64(_x) ? 0.0 : _f;                                                                     \
+        }                                                                                                              \
+        _f;                                                                                                            \
+    })
+
+#define BUILTIN_FRACTION_F64(X) BUILTIN_FRACTION_F64_FIXUP(BUILTIN_FRACTION_F64_IMPL(X), X)
 
 #define BUILTIN_FRACTION_F16(X) ({                                      \
     const half _x = X;                                                  \
@@ -258,24 +273,6 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
         int _exp;                                                              \
         __builtin_frexpf16(X, &_exp);                                          \
         _exp;                                                                  \
-    })
-
-#define BUILTIN_FREXP_MANT_F32(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf(X, &_exp);                                            \
-    })
-
-#define BUILTIN_FREXP_MANT_F64(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
-    })
-
-#define BUILTIN_FREXP_MANT_F16(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf16(X, &_exp);                                          \
     })
 
 #define BUILTIN_CMAX_F32 __builtin_fmaxf

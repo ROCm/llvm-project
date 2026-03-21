@@ -569,11 +569,7 @@ static RT_API_ATTRS void RaiseFPExceptions(
 #ifdef feraisexcept // a macro in some environments; omit std::
 #define RAISE feraiseexcept
 #else
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined (EMBED_FLANG_RT_GPU_LLVM_IR)
 #define RAISE std::feraiseexcept
-#else
-#define RAISE
-#endif
 #endif
 #endif // !defined(RT_DEVICE_COMPILATION)
 
@@ -974,6 +970,11 @@ RT_API_ATTRS bool EditLogicalInput(
     // not list-directed.
     char32_t comma{edit.modes.GetSeparatorChar()};
     while (next && *next != comma) {
+      if (*next == '!') {
+        if (!io.AdvanceRecord()) { // skip namelist comment
+          return false;
+        }
+      }
       next = io.NextInField(remaining, edit);
     }
   }

@@ -20,6 +20,7 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtSYCL.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/DiagnosticSema.h"
@@ -113,7 +114,7 @@ CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
   if (CGM.isMultiDeviceKernel(&FStmt)) {
     Iv = Builder.CreateAdd(
         Gtid,
-        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
                               IvAddr.getElementType(), false));
   } else {
     Iv = Builder.CreateAdd(Gtid, Builder.CreateLoad(IvAddr));
@@ -228,16 +229,16 @@ CodeGenFunction::EmitNoLoopIV(const OMPLoopDirective &LD,
   EmitIgnoredExpr(LD.getInit());
 
   // If multi-device targets are enabled, overwrite the LB and UB
-  // initialization with the values passed in as arguments in positions 1 and 2
+  // initialization with the values passed in as arguments in positions 0 and 1
   // respectively:
   if (CGM.isMultiDeviceKernel(LD)) {
     llvm::Value *LBMultiTarget = Builder.CreateIntCast(
-        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
         GetAddrOfLocalVar(IVDecl).getElementType(), false);
     Builder.CreateStore(LBMultiTarget, GetAddrOfLocalVar(LBDecl));
     Builder.CreateStore(LBMultiTarget, GetAddrOfLocalVar(IVDecl));
     llvm::Value *UBMultiTarget = Builder.CreateIntCast(
-        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[2])),
+        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
         GetAddrOfLocalVar(IVDecl).getElementType(), false);
     Builder.CreateStore(UBMultiTarget, GetAddrOfLocalVar(UBDecl));
   }
@@ -382,7 +383,7 @@ void CodeGenFunction::EmitNoLoopCode(const OMPExecutableDirective &D,
   if (CGM.isMultiDeviceKernel(D)) {
     llvm::Value *Iv = Builder.CreateAdd(
         Gtid,
-        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
                               IvAddr.getElementType(), false));
     Builder.CreateStore(Iv, IvAddr);
   } else {
@@ -1178,6 +1179,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   case Stmt::SEHExceptStmtClass:
   case Stmt::SEHFinallyStmtClass:
   case Stmt::MSDependentExistsStmtClass:
+  case Stmt::UnresolvedSYCLKernelCallStmtClass:
     llvm_unreachable("invalid statement class to emit generically");
   case Stmt::NullStmtClass:
   case Stmt::CompoundStmtClass:
@@ -1623,21 +1625,7 @@ bool CodeGenFunction::EmitSimpleStmt(const Stmt *S,
     EmitSEHLeaveStmt(cast<SEHLeaveStmt>(*S));
     break;
   case Stmt::SYCLKernelCallStmtClass:
-    // SYCL kernel call statements are generated as wrappers around the body
-    // of functions declared with the sycl_kernel_entry_point attribute. Such
-    // functions are used to specify how a SYCL kernel (a function object) is
-    // to be invoked; the SYCL kernel call statement contains a transformed
-    // variation of the function body and is used to generate a SYCL kernel
-    // caller function; a function that serves as the device side entry point
-    // used to execute the SYCL kernel. The sycl_kernel_entry_point attributed
-    // function is invoked by host code in order to trigger emission of the
-    // device side SYCL kernel caller function and to generate metadata needed
-    // by SYCL run-time library implementations; the function is otherwise
-    // intended to have no effect. As such, the function body is not evaluated
-    // as part of the invocation during host compilation (and the function
-    // should not be called or emitted during device compilation); the SYCL
-    // kernel call statement is thus handled as a null statement for the
-    // purpose of code generation.
+    EmitSYCLKernelCallStmt(cast<SYCLKernelCallStmt>(*S));
     break;
   }
   return true;
@@ -1708,7 +1696,7 @@ CodeGenFunction::EmitCompoundStmtWithoutScope(const CompoundStmt &S,
 }
 
 void CodeGenFunction::SimplifyForwardingBlocks(llvm::BasicBlock *BB) {
-  llvm::BranchInst *BI = dyn_cast<llvm::BranchInst>(BB->getTerminator());
+  llvm::UncondBrInst *BI = dyn_cast<llvm::UncondBrInst>(BB->getTerminator());
 
   // If there is a cleanup stack, then we it isn't worth trying to
   // simplify this block (we would need to remove it from the scope map
@@ -1717,14 +1705,14 @@ void CodeGenFunction::SimplifyForwardingBlocks(llvm::BasicBlock *BB) {
     return;
 
   // Can only simplify direct branches.
-  if (!BI || !BI->isUnconditional())
+  if (!BI)
     return;
 
   // Can only simplify empty blocks.
   if (BI->getIterator() != BB->begin())
     return;
 
-  BB->replaceAllUsesWith(BI->getSuccessor(0));
+  BB->replaceAllUsesWith(BI->getSuccessor());
   BI->eraseFromParent();
   BB->eraseFromParent();
 }

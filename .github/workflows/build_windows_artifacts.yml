@@ -48,6 +48,8 @@ on:
         type: boolean
       extra_cmake_options:
         type: string
+      test_type:
+        type: string
 
 permissions:
   contents: read
@@ -230,9 +232,6 @@ jobs:
           ccache --zero-stats
           python ./build_tools/health_status.py
 
-      - name: Test build_tools
-        run: |
-          python -m pytest build_tools/tests build_tools/github_actions/tests
 
       - name: Remove ununsed existing patchces
         run: |
@@ -261,7 +260,7 @@ jobs:
              cd -
 
       - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }} 
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -275,7 +274,7 @@ jobs:
           python3 build_tools/github_actions/build_configure.py
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' && github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -325,7 +324,7 @@ jobs:
           get-disk | Select-object @{Name="Size(GB)";Expression={$_.Size/1GB}} | Write-Host
 
       - name: Configure AWS Credentials for non-forked repos
-        if: always()
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: us-east-2

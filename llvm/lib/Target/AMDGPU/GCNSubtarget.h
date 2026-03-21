@@ -66,6 +66,9 @@ protected:
   int LDSBankCount = 0;
   unsigned MaxPrivateElementSize = 0;
 
+  // Instruction cache line size in bytes; set from TableGen subtarget features.
+  unsigned InstCacheLineSize = 0;
+
   // Dynamically set bits that enable features.
   bool DynamicVGPR = false;
   bool DynamicVGPRBlockSize32 = false;
@@ -169,6 +172,9 @@ public:
   }
 
   int getLDSBankCount() const { return LDSBankCount; }
+
+  /// Instruction cache line size in bytes (64 for pre-GFX11, 128 for GFX11+).
+  unsigned getInstCacheLineSize() const { return InstCacheLineSize; }
 
   unsigned getMaxPrivateElementSize(bool ForBufferRSrc = false) const {
     return (ForBufferRSrc || !hasFlatScratchEnabled()) ? MaxPrivateElementSize
@@ -396,10 +402,6 @@ public:
     return isMesa3DOS() && AMDGPU::isShader(F.getCallingConv());
   }
 
-  bool isGFX1170() const {
-    return getGeneration() == GFX11 && hasWMMA128bInsts();
-  }
-
   bool hasMad64_32() const { return getGeneration() >= SEA_ISLANDS; }
 
   bool hasAtomicFaddInsts() const {
@@ -538,9 +540,7 @@ public:
 
   // Shift amount of a 64 bit shift cannot be a highest allocated register
   // if also at the end of the allocation block.
-  bool hasShift64HighRegBug() const {
-    return HasGFX90AInsts && !HasGFX940Insts;
-  }
+  bool hasShift64HighRegBug() const { return HasGFX90AInsts; }
 
   // Has one cycle hazard on transcendental instruction feeding a
   // non transcendental VALU.
@@ -622,12 +622,6 @@ public:
   /// and STOREcnt rather than VMcnt, LGKMcnt and VScnt respectively.
   bool hasExtendedWaitCounts() const { return getGeneration() >= GFX12; }
 
-  /// \returns true if inline constants are not supported for F16 pseudo
-  /// scalar transcendentals.
-  bool hasNoF16PseudoScalarTransInlineConstants() const {
-    return getGeneration() == GFX12;
-  }
-
   /// \returns true if the target has packed f32 instructions that only read 32
   /// bits from a scalar operand (SGPR or literal) and replicates the bits to
   /// both channels.
@@ -684,12 +678,6 @@ public:
 
   // \returns true if the target has split barriers feature
   bool hasSplitBarriers() const { return getGeneration() >= GFX12; }
-
-  // \returns true if the target has DX10_CLAMP kernel descriptor mode bit
-  bool hasDX10ClampMode() const { return getGeneration() < GFX12; }
-
-  // \returns true if the target has IEEE kernel descriptor mode bit
-  bool hasIEEEMode() const { return getGeneration() < GFX12; }
 
   // \returns true if the target has WG_RR_MODE kernel descriptor mode bit
   bool hasRrWGMode() const { return getGeneration() >= GFX12; }
@@ -915,7 +903,7 @@ public:
 
   /// \returns Maximum flat work group size supported by the subtarget.
   unsigned getMaxFlatWorkGroupSize() const override {
-    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize(this);
+    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize();
   }
 
   /// \returns Number of waves per execution unit required to support the given
@@ -980,10 +968,14 @@ public:
     return HasGFX1250Insts && getGeneration() == GFX12;
   }
 
+  bool hasGFX1250A0() const {
+    return getGeneration() == GFX12 && HasGFX1250Insts && !HasGFX1250B0;
+  }
+
   // TODO: Remove this when we replace all A0 GFX1250 with B0.
   // DS_READ2 and DS_WRITE2 instructions must have addresses aligned to the
   // payload size.
-  bool hasUnalignedDS2Bug() const { return HasGFX1250Insts; }
+  bool hasUnalignedDS2Bug() const { return hasGFX1250A0(); }
 
   /// \returns true if the subtarget requires a wait for xcnt before VMEM
   /// accesses that must never be repeated in the event of a page fault/re-try.

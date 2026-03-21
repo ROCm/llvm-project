@@ -731,8 +731,12 @@ void MetadataStreamerMsgPackV5::emitKernelAttrs(const AMDGPUTargetMachine &TM,
   MetadataStreamerMsgPackV4::emitKernelAttrs(TM, MF, Kern);
 
   const Function &Func = MF.getFunction();
-  if (Func.getFnAttribute("uniform-work-group-size").getValueAsBool())
+  if (Func.hasFnAttribute("uniform-work-group-size"))
     Kern[".uniform_work_group_size"] = Kern.getDocument()->getNode(1);
+
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
+  if (ST.hasGFX1250A0() || ST.hasGFX1250B0())
+    Kern[".gfx1250_revision"] = ST.hasGFX1250A0() ? "A0" : "B0";
 }
 
 //===----------------------------------------------------------------------===//
