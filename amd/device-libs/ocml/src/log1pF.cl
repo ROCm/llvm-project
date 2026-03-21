@@ -23,6 +23,6 @@ MATH_MANGLE(log1p)(float x)
         z = x == -1.0f ? NINF_F32 : z;
     }
 
-    return BUILTIN_ABS_F32(x) < 0x1.0p-24f ? x : z;
+    return z;
 }
 
