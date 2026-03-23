@@ -1611,9 +1611,6 @@ private:
 
     bool OrigExit = false;
 
-    /// Whether the block has an inline asm branch.
-    bool HasInlineAsmBr = false;
-
     /// Branch condition, if the block originally had a conditional branch.
     Register OrigCondition;
 
@@ -1800,13 +1797,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
            "Implicit conditional branch requires OrigSuccCond");
 
     // Record information for reconstructing lane masks.
-    if (Info.HasInlineAsmBr) {
-      // INLINEASM_BR is opaque and uniform. Record all successors as
-      // unconditional origins.
-      for (WaveNode *Succ : Node->Successors) {
-        NodeInfo.find(Succ)->second.origins.emplace_back(Node);
-      }
-    } else if (!Info.OrigSuccCond) {
+    if (!Info.OrigSuccCond) {
       if (Info.OrigSuccFinal) {
         NodeInfo.find(Info.OrigSuccFinal)->second.origins.emplace_back(Node);
       }
@@ -1929,9 +1920,7 @@ void ControlFlowRewriter::rewrite() {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
-    // INLINEASM_BR blocks are preserved as they have their own branches encoded
-    // inside inline asm which are always uniform.
-    if (!Info.OrigExit && !Info.HasInlineAsmBr) {
+    if (!Info.OrigExit) {
       // Remove original terminators.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
              !isArtificialTerminator(Node->Block->back()))
@@ -1947,13 +1936,6 @@ void ControlFlowRewriter::rewrite() {
       if (Node->Block->empty() || !isArtificialTerminator(Node->Block->back()))
         BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
             .addMBB(Node->Successors[0]->Block);
-      continue;
-    }
-
-    if (Info.HasInlineAsmBr) {
-      // The original INLINEASM_BR block and its terminators are preserved.
-      // Uniform edges are never rerouted by the reconvergence algorithm, so
-      // wave-level successors match the original MBB successors.
       continue;
     }
 
