@@ -235,11 +235,12 @@ bool PHIEliminationImpl::run(MachineFunction &MF) {
 
   bool Changed = false;
 
+  // A set of live-in regs for each MBB which is used to update LV
+  // efficiently also with large functions.
+  std::vector<SparseBitVector<>> LiveInSets;
+
   // Split critical edges to help the coalescer.
   if (!DisableEdgeSplitting && (LV || LIS)) {
-    // A set of live-in regs for each MBB which is used to update LV
-    // efficiently also with large functions.
-    std::vector<SparseBitVector<>> LiveInSets;
     if (LV) {
       LiveInSets.resize(MF.size());
       for (unsigned Index = 0, e = MRI->getNumVirtRegs(); Index != e; ++Index) {
@@ -273,6 +274,9 @@ bool PHIEliminationImpl::run(MachineFunction &MF) {
 
   // This pass takes the function out of SSA form.
   MRI->leaveSSA();
+
+  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+  Changed |= TII->eliminateI1PHIs(MF, MDT, MLI, LV, LIS, (LV ? &LiveInSets : nullptr));
 
   // Populate VRegPHIUseCount
   if (LV || LIS)

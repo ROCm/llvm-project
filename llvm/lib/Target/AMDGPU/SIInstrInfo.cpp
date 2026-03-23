@@ -24,8 +24,10 @@
 #include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveVariables.h"
+#include "llvm/CodeGen/MachineDomTreeUpdater.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
@@ -10689,6 +10691,359 @@ MachineInstr *SIInstrInfo::createPHISourceCopy(
   }
   return TargetInstrInfo::createPHISourceCopy(MBB, InsPt, DL, Src, SrcSubReg,
                                               Dst);
+}
+
+bool SIInstrInfo::eliminateI1PHIs(
+    MachineFunction &MF, MachineDominatorTree *MDT, MachineLoopInfo *MLI,
+    LiveVariables *LV, LiveIntervals *LIS,
+    std::vector<SparseBitVector<>> *LiveInSets) const {
+
+  const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
+  // Only perform this transform in WaveTransform setting.
+  // In non-wave-transform mode, this flag is always true at MIR-level.
+  // In wave-transform mode, this flag should be false during PHIElimiation
+  // since it happens before WaveTransform.
+  if (MFI->isWaveCFG())
+    return false;
+  // This is an optional optimization.
+  if (MF.getTarget().getOptLevel() < CodeGenOptLevel::Default)
+    return false;
+
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  const GCNSubtarget *ST = &MF.getSubtarget<GCNSubtarget>();
+  const SIRegisterInfo &TRI = *ST->getRegisterInfo();
+
+  // Collect all phi nodes that represents expanded i1 values.
+  SmallVector<MachineInstr *, 8> CandidatePHIs;
+  DenseSet<MachineInstr *> I1PHISet;
+  // The mapping from the expanded-i1 value to its selecting source.
+  DenseMap<Register, Register> SimpleV2S;
+  for (auto &BB : MF) {
+    for (auto &MI : BB) {
+      if (!MI.isPHI())
+        break;
+
+      if (MRI.getRegClass(MI.getOperand(0).getReg()) !=
+          &AMDGPU::VGPR_32RegClass)
+        continue;
+
+      // Loop through all the incoming values of the phi node.
+      // To be qualifeid, the incoming values of the phi node must be originated
+      // either from a v_cnd_mask_b32_e64 instruction that has one source as
+      // all-one and the other source as zero, or from another phi-node.
+      bool IsI1PHI = true;
+      for (unsigned i = 1, e = MI.getNumOperands(); i < e; i += 2) {
+        if (MI.getOperand(i).isUndef())
+          continue;
+
+        Register IncomingReg = MI.getOperand(i).getReg();
+        MachineInstr *IncomingDef = MRI.getVRegDef(IncomingReg);
+        if (!IncomingDef) {
+          IsI1PHI = false;
+          break;
+        }
+
+        if (IncomingDef->getOpcode() != AMDGPU::V_CNDMASK_B32_e64 &&
+            !IncomingDef->isPHI() && !IncomingDef->isImplicitDef()) {
+          IsI1PHI = false;
+          break;
+        }
+        if (IncomingDef->getOpcode() == AMDGPU::V_CNDMASK_B32_e64) {
+          // Check the validity of the selecting-source.
+          auto &SelOp = IncomingDef->getOperand(5);
+          if (!SelOp.isReg() || !TRI.isSGPRReg(MRI, SelOp.getReg()) ||
+              TRI.getRegSizeInBits(SelOp.getReg(), MRI) !=
+                  ST->getWavefrontSize()) {
+            IsI1PHI = false;
+            break;
+          }
+          // Check the validity of the two data-sources
+          MachineOperand &Mod0 = IncomingDef->getOperand(1);
+          MachineOperand &Src0 = IncomingDef->getOperand(2);
+          MachineOperand &Mod1 = IncomingDef->getOperand(3);
+          MachineOperand &Src1 = IncomingDef->getOperand(4);
+          if (!(Src0.isImm() && Src0.getImm() == 0 && Mod0.isImm() &&
+                Mod0.getImm() == 0 && Src1.isImm() && Src1.getImm() == -1 &&
+                Mod1.isImm() && Mod1.getImm() == 0)) {
+            IsI1PHI = false;
+            break;
+          }
+          SimpleV2S[IncomingReg] = SelOp.getReg();
+        }
+      }
+      if (IsI1PHI) {
+        CandidatePHIs.push_back(&MI);
+        I1PHISet.insert(&MI);
+      }
+    }
+  }
+  if (SimpleV2S.empty() || I1PHISet.empty())
+    return false;
+  // Need dominator-tree and machine-loop in order to insert i1-inits.
+  // TODO-WAVERTRANSFORM: when MDT and MLI are created in this way,
+  // do we also need to handle the related memory management?
+  if (!MDT) {
+    MDT = new MachineDominatorTree(MF);
+  }
+  MachineDomTreeUpdater MDTU(MDT, MachineDomTreeUpdater::UpdateStrategy::Lazy);
+  if (!MLI) {
+    MLI = new MachineLoopInfo(*MDT);
+  }
+  // Iterate through candidates, check its sources that are also phi nodes.
+  // Those phi nodes must also be in the PHISet. If not, remove the
+  // current phi node from the PHISet. This should be rare.
+  // Also need to split critial edge on those phi-incoming in order to insert
+  // those i1-update at the right place.
+  bool SetReduced = true;
+  while (SetReduced) {
+    SetReduced = false;
+    for (auto PHI : CandidatePHIs) {
+      if (I1PHISet.count(PHI) == 0)
+        continue;
+      // Loop through all the incoming values of the phi node.
+      for (unsigned i = 1, e = PHI->getNumOperands(); i < e; i += 2) {
+        if (PHI->getOperand(i).isUndef())
+          continue;
+        Register IncomingReg = PHI->getOperand(i).getReg();
+        MachineInstr *IncomingDef = MRI.getVRegDef(IncomingReg);
+        assert(IncomingDef);
+        if (IncomingDef->isImplicitDef())
+          continue;
+        if (IncomingDef->isPHI() && !I1PHISet.count(IncomingDef)) {
+          I1PHISet.erase(PHI);
+          SetReduced = true;
+          break;
+        }
+        // Split critical edge.
+        MachineBasicBlock *PreBB = PHI->getOperand(i + 1).getMBB();
+        if (PreBB->succ_size() > 1) {
+          if (PreBB->canSplitCriticalEdge(PHI->getParent())) {
+            PreBB->SplitCriticalEdge(PHI->getParent(), {LIS, nullptr, LV, MLI},
+                                     LiveInSets, &MDTU);
+          } else {
+            // If we cannot split the critical edge, we cannot eliminate this
+            // phi.
+            I1PHISet.erase(PHI);
+            SetReduced = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (SimpleV2S.empty() || I1PHISet.empty())
+    return false;
+
+  // Recollect those phi nodes that are still in the PHISet.
+  // Create two lanemask registers for each phi node.
+  // These are the virtual sgprs to be used to replace the phi node.
+  // Start creating the mask-computing instructions corresponding to the phi
+  // nodes.
+  MachineRegisterInfo::VRegAttrs LaneMaskAttrs =
+      MRI.getVRegAttrs(SimpleV2S.begin()->second);
+  DenseMap<Register, Register> PhiIncomingS;
+  DenseMap<Register, Register> PhiReplacingS;
+  SmallVector<MachineInstr *, 8> I1PHIs;
+  DenseMap<MachineInstr *, MachineInstr *> PHI2SelectMap;
+  for (auto PHI : CandidatePHIs) {
+    if (I1PHISet.count(PHI) == 0)
+      continue;
+
+    Register PhiReg = PHI->getOperand(0).getReg();
+    // This sgpr is used to accumulate the active-lane mask.
+    Register SrcSReg = MRI.createVirtualRegister(LaneMaskAttrs);
+    // This sgpr is used to replace the phi node destination.
+    Register DstSReg = MRI.createVirtualRegister(LaneMaskAttrs);
+    PhiIncomingS[PhiReg] = SrcSReg;
+    PhiReplacingS[PhiReg] = DstSReg;
+    I1PHIs.push_back(PHI);
+
+    // Create an instruction that initializes the SrcSReg to zero in
+    // a dominator block. Initialization needs to cover temporal updates.
+    auto *MBB = PHI->getParent();
+    auto *InitMBB = MDT->getNode(MBB)->getIDom()->getBlock();
+    assert(InitMBB && "Immediate dominator block must exist");
+    auto CurLoop = MLI->getLoopFor(MBB);
+    auto IDomLoop = MLI->getLoopFor(InitMBB);
+    while (IDomLoop && IDomLoop != CurLoop && !IDomLoop->contains(CurLoop)) {
+      InitMBB = MDT->getNode(InitMBB)->getIDom()->getBlock();
+      IDomLoop = MLI->getLoopFor(InitMBB);
+    }
+    DebugLoc DL;
+    MachineInstr *ZeroMI =
+        BuildMI(*InitMBB, InitMBB->getFirstTerminator(), DL,
+                get(isWave32() ? AMDGPU::S_MOV_B32 : AMDGPU::S_MOV_B64),
+                SrcSReg)
+            .addImm(0);
+    // Create a copy instruction on the phi-dest side.
+    DL = PHI->getDebugLoc();
+    auto PHICopy = createPHIDestinationCopy(
+        *MBB, MBB->SkipPHIsAndLabels(MBB->begin()), DL, SrcSReg, DstSReg);
+
+    if (LV)
+      LV->recomputeForSingleDefVirtReg(SrcSReg);
+    if (LIS) {
+      LIS->InsertMachineInstrInMaps(*ZeroMI);
+      LIS->InsertMachineInstrInMaps(*PHICopy);
+      LIS->createAndComputeVirtRegInterval(SrcSReg);
+    }
+    // Loop through each use of the phi destination register:
+    // If it is a v_cmp, replace the use of its destination with the
+    // PHIReplacingS. If it is a PHI in the I1PHISet, do nothing. Otherwise, we
+    // need to create a v_cnd_mask_b32_e64 instruction to replace remaining
+    // uses, which should be rare.
+    bool HasOtherUses = false;
+    SmallVector<MachineInstr *, 4> DeadUses;
+    for (auto &Use : MRI.use_nodbg_instructions(PhiReg)) {
+      if (Use.isPHI() && I1PHISet.count(&Use))
+        continue;
+
+      if (Use.getOpcode() == AMDGPU::V_CMP_NE_U32_e64 &&
+          Use.getOperand(2).isReg() && Use.getOperand(2).getReg() == PhiReg &&
+          Use.getOperand(1).isImm() && Use.getOperand(1).getImm() == 0) {
+        auto UseBB = Use.getParent();
+        if (UseBB == MBB) {
+          MRI.replaceRegWith(Use.getOperand(0).getReg(), DstSReg);
+        } else {
+          MachineInstr *AndMI =
+              BuildMI(*UseBB, Use, DL,
+                      get(isWave32() ? AMDGPU::S_AND_B32 : AMDGPU::S_AND_B64),
+                      Use.getOperand(0).getReg())
+                  .addReg(DstSReg)
+                  .addReg(isWave32() ? AMDGPU::EXEC_LO : AMDGPU::EXEC);
+          if (LIS)
+            LIS->InsertMachineInstrInMaps(*AndMI);
+        }
+        DeadUses.push_back(&Use);
+        continue;
+      }
+
+      HasOtherUses = true;
+    }
+    for (auto Use : DeadUses)
+      Use->eraseFromParent();
+
+    if (HasOtherUses) {
+      MachineInstr *SelMI = BuildMI(*MBB, std::next(PHICopy->getIterator()), DL,
+                                    get(AMDGPU::V_CNDMASK_B32_e64), PhiReg)
+                                .addImm(0)
+                                .addImm(0)
+                                .addImm(0)
+                                .addImm(-1)
+                                .addReg(DstSReg);
+      PHI2SelectMap[PHI] = SelMI;
+      if (LIS)
+        LIS->InsertMachineInstrInMaps(*SelMI);
+    }
+    if (LV)
+      LV->recomputeForSingleDefVirtReg(DstSReg);
+    if (LIS)
+      LIS->createAndComputeVirtRegInterval(DstSReg);
+  }
+  assert(!I1PHIs.empty());
+
+  DenseSet<MachineInstr *> MaybeErased;
+  for (auto PHI : I1PHIs) {
+    Register PhiReg = PHI->getOperand(0).getReg();
+    Register SrcSReg = PhiIncomingS[PhiReg];
+    auto DL = PHI->getDebugLoc();
+
+    // Create the "SSrcReg |= (InSReg & Exec)" in each phi node's predecessor.
+    for (unsigned i = 1, e = PHI->getNumOperands(); i < e; i += 2) {
+      if (PHI->getOperand(i).isUndef())
+        continue;
+      Register SrcVReg = PHI->getOperand(i).getReg();
+      MachineInstr *SrcVDef = MRI.getVRegDef(SrcVReg);
+      assert(SrcVDef && "The source register must be defined");
+      if (SrcVDef->isImplicitDef()) {
+        MaybeErased.insert(SrcVDef);
+        continue;
+      }
+
+      MachineBasicBlock *PreBB = PHI->getOperand(i + 1).getMBB();
+      Register InSReg = 0;
+      if (!SrcVDef->isPHI()) {
+        assert(SimpleV2S.find(SrcVReg) != SimpleV2S.end() &&
+               "The source register must be in the SimpleV2S map");
+        InSReg = SimpleV2S[SrcVReg];
+        MaybeErased.insert(SrcVDef);
+      } else {
+        assert(PhiReplacingS.find(SrcVReg) != PhiReplacingS.end() &&
+               "The source register must be in the PhiReplacingS map");
+        InSReg = PhiReplacingS[SrcVReg];
+      }
+      auto AndSReg = MRI.createVirtualRegister(LaneMaskAttrs);
+      MachineInstr *AndMI =
+          BuildMI(*PreBB, PreBB->getFirstTerminator(), DL,
+                  get(isWave32() ? AMDGPU::S_AND_B32 : AMDGPU::S_AND_B64),
+                  AndSReg)
+              .addReg(InSReg)
+              .addReg(isWave32() ? AMDGPU::EXEC_LO : AMDGPU::EXEC);
+      MachineInstr *OrMI =
+          BuildMI(*PreBB, PreBB->getFirstTerminator(), DL,
+                  get(isWave32() ? AMDGPU::S_OR_B32 : AMDGPU::S_OR_B64),
+                  SrcSReg)
+              .addReg(AndSReg)
+              .addReg(SrcSReg);
+      if (LV) {
+        LV->recomputeForSingleDefVirtReg(InSReg);
+        LV->recomputeForSingleDefVirtReg(AndSReg);
+        // SrcSReg no longer lives all of the way through PreBB since
+        // it is used and update by OrMI
+        LV->getVarInfo(SrcSReg).AliveBlocks.reset(PreBB->getNumber());
+      }
+      if (LIS) {
+        LIS->InsertMachineInstrInMaps(*AndMI);
+        LIS->InsertMachineInstrInMaps(*OrMI);
+        LIS->createAndComputeVirtRegInterval(AndSReg);
+      }
+      // These phi nodes should be deleted later. In order to untangle the
+      // circular cases, we want to replace the src operand.
+      PHI->getOperand(i).substVirtReg(SrcSReg, 0, TRI);
+    }
+  }
+
+  for (auto PHI : I1PHIs) {
+    if (LIS)
+      LIS->RemoveMachineInstrFromMaps(*PHI);
+    if (MachineInstr *SelMI = PHI2SelectMap.lookup(PHI)) {
+      PHI->eraseFromParent();
+      auto PhiReg = SelMI->getOperand(0).getReg();
+      if (LV)
+        LV->recomputeForSingleDefVirtReg(PhiReg);
+      if (LIS) {
+        LIS->removeInterval(PhiReg);
+        LIS->createAndComputeVirtRegInterval(PhiReg);
+      }
+    } else {
+      auto PhiReg = PHI->getOperand(0).getReg();
+      if (LV)
+        LV->getVarInfo(PhiReg).AliveBlocks.clear();
+      if (LIS)
+        LIS->removeInterval(PhiReg);
+      PHI->eraseFromParent();
+    }
+  }
+
+  for (auto MI : MaybeErased) {
+    auto DstReg = MI->getOperand(0).getReg();
+    if (MRI.use_nodbg_empty(DstReg)) {
+      if (LV)
+        LV->getVarInfo(DstReg).AliveBlocks.clear();
+      if (LIS)
+        LIS->RemoveMachineInstrFromMaps(*MI);
+      MI->eraseFromParent();
+    } else {
+      if (LV)
+        LV->recomputeForSingleDefVirtReg(DstReg);
+      if (LIS) {
+        LIS->removeInterval(DstReg);
+        LIS->createAndComputeVirtRegInterval(DstReg);
+      }
+    }
+  }
+
+  return true;
 }
 
 bool llvm::SIInstrInfo::isWave32() const { return ST.isWave32(); }

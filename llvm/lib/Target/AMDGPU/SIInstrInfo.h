@@ -1628,6 +1628,11 @@ public:
                                     unsigned SrcSubReg,
                                     Register Dst) const override;
 
+  bool
+  eliminateI1PHIs(MachineFunction &MF, MachineDominatorTree *MDT,
+                  MachineLoopInfo *MLI, LiveVariables *LV, LiveIntervals *LIS,
+                  std::vector<SparseBitVector<>> *LiveInSets) const override;
+
   bool isWave32() const;
 
   /// Return a partially built integer add instruction without carry.
