@@ -8,7 +8,10 @@
 
 // COM: Verify ASAN runtime symbols are present
 // RUN: %llvm-objdump -t %t.bin | %FileCheck %s --check-prefix=ASAN
-// ASAN: __asan_register_elf_globals
+// ASAN: __asan_memcpy
+// ASAN: __asan_memmove
+// ASAN: __asan_load1
+// ASAN: __asan_store1
 
 __attribute__((global))
 void add(float *A, float *B, float *C) {
