@@ -817,6 +817,13 @@ public:
     return LDSDMAStores;
   }
 
+  void clearLDSDMATracking() {
+    LDSDMAStores.clear();
+    for (VMEMID ID = LDSDMA_BEGIN; ID < LDSDMA_END;
+         ID = static_cast<VMEMID>(ID + 1))
+      VMem.erase(ID);
+  }
+
   bool hasPointSampleAccel(const MachineInstr &MI) const;
   bool hasPointSamplePendingVmemTypes(const MachineInstr &MI,
                                       MCPhysReg RU) const;
@@ -3025,6 +3032,9 @@ bool SIInsertWaitcnts::insertWaitcntInBlock(MachineFunction &MF,
     }
 
     updateEventWaitcntAfter(Inst, &ScoreBrackets);
+
+    if (Inst.getOpcode() == AMDGPU::SCHED_BARRIER)
+      ScoreBrackets.clearLDSDMATracking();
 
     Modified |= insertForcedWaitAfter(Inst, Block, ScoreBrackets);
 

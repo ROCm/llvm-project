@@ -493,7 +493,6 @@ def SCHED_BARRIER : SPseudoInstSI<(outs), (ins i32imm:$mask),
   let isConvergent = 1;
   let FixedSize = 1;
   let Size = 0;
-  let isMeta = 1;
 }
 
 def SCHED_GROUP_BARRIER : SPseudoInstSI<

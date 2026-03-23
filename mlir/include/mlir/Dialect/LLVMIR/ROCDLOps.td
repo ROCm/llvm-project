@@ -591,7 +591,8 @@ def ROCDL_SetPrioOp : ROCDL_ConcreteNonMemIntrOp<"s.setprio", [], 0, [0], ["prio
   let assemblyFormat = "$priority attr-dict";
 }
 
-def ROCDL_SchedBarrier : ROCDL_ConcreteNonMemIntrOp<"sched.barrier", [], 0, [0],["mask"]>,
+def ROCDL_SchedBarrier : ROCDL_ConcreteNonMemIntrOp<"sched.barrier",
+    [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>], 0, [0],["mask"]>,
   Arguments<(ins I32Attr:$mask)> {
   let assemblyFormat = "$mask attr-dict";
 }
