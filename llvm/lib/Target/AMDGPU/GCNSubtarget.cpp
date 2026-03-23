@@ -55,7 +55,7 @@ static cl::opt<unsigned>
 static cl::opt<bool>
     EnableGFX1250B0Specific("amdgpu-gfx1250-b0-specific", cl::Hidden,
                             cl::desc("Generate code for B0 flavor of gfx1250"),
-                            cl::init(true));
+                            cl::init(false));
 
 GCNSubtarget::~GCNSubtarget() = default;
 
