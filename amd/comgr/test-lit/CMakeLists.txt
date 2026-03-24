@@ -11,11 +11,20 @@ cannonicalize_cmake_boolean(COMGR_DISABLE_SPIRV)
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
 if (NOT DEFINED LLVM_LIT_PATH)
-  # Comgr source build
-  if (EXISTS "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-    set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-  # LLVM external projects build
-  else()
+  # On Windows, llvm-lit is generated as llvm-lit.py (Python multiprocessing
+  # needs the .py suffix). Also check for .cmd wrapper installed by TheRock.
+  foreach(_lit_suffix "" ".py" ".cmd")
+    foreach(_lit_prefix "${LLVM_TOOLS_BINARY_DIR}/../../bin" "${LLVM_TOOLS_BINARY_DIR}")
+      if (EXISTS "${_lit_prefix}/llvm-lit${_lit_suffix}")
+        set(LLVM_LIT_PATH "${_lit_prefix}/llvm-lit${_lit_suffix}")
+        break()
+      endif()
+    endforeach()
+    if (DEFINED LLVM_LIT_PATH)
+      break()
+    endif()
+  endforeach()
+  if (NOT DEFINED LLVM_LIT_PATH)
     set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
   endif()
 endif()
