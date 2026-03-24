@@ -7,14 +7,6 @@ tablegen(OFFLOAD include/OffloadErrcodes.inc -gen-errcodes -I ${CMAKE_CURRENT_SO
 tablegen(OFFLOAD include/OffloadInfo.inc -gen-info -I ${CMAKE_CURRENT_SOURCE_DIR}/../../liboffload/API)
 add_public_tablegen_target(PluginErrcodes)
 
-if(OFFLOAD_ENABLE_EMISSARY_APIS)
-  set(emissary_sources
-    src/Emissary.cpp
-    src/EmissaryFortrt.cpp
-    src/EmissaryPrint.cpp
-  )
-endif()
-
 # NOTE: Don't try to build `PluginInterface` using `add_llvm_library` because we
 # don't want to export `PluginInterface` while `add_llvm_library` requires that.
 add_library(PluginCommon OBJECT
@@ -25,7 +17,6 @@ add_library(PluginCommon OBJECT
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
-  ${emissary_sources}
 )
 add_dependencies(PluginCommon intrinsics_gen PluginErrcodes)
 
@@ -44,19 +35,6 @@ endif()
 # Include the RPC server from the `libc` project.
 include(FindLibcCommonUtils)
 target_link_libraries(PluginCommon PRIVATE llvm-libc-common-utilities)
-if(OFFLOAD_ENABLE_EMISSARY_APIS AND TARGET flang_rt.runtime.static)
-  target_link_libraries(PluginCommon PRIVATE flang_rt.runtime.static
-    -L${CMAKE_BINARY_DIR}/../../lib  -L${CMAKE_INSTALL_PREFIX}/lib)
-else()
-  # This applies to runtimes standalone offload build.
-  # When we set LLVM_LIBDIR_SUFFIX for asan and perf builds, clang resource dir will
-  # use this suffix and it will not be a valid location for the flang_rt library. Replace
-  # the suffix with empty string to look in 'lib'.
-  get_clang_resource_dir(CLANG_RESOURCE_LIBDIR PREFIX ${LLVM_BINARY_DIR} SUBDIR "lib/${LLVM_DEFAULT_TARGET_TRIPLE}")
-  string(REPLACE ${LLVM_LIBDIR_SUFFIX} "" CLANG_RESOURCE_LIBDIR_NORMALIZED ${CLANG_RESOURCE_LIBDIR})
-  find_library(LIBFLANG_RT flang_rt.runtime PATHS "${CLANG_RESOURCE_LIBDIR_NORMALIZED}" REQUIRED)
-  target_link_libraries(PluginCommon PRIVATE ${LIBFLANG_RT})
-endif()
 
 if (OMPT_TARGET_DEFAULT AND LIBOMPTARGET_OMPT_SUPPORT)
   add_library(PluginOmpt STATIC OMPT/OmptTracing.cpp OMPT/OmptProfiler.cpp)
