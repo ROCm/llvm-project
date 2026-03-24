@@ -1084,9 +1084,8 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
   if (!EnvOptions.empty()) {
     SmallVector<StringRef, 8> Options;
     EnvOptions.split(Options, ' ', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
-    for (StringRef Opt : Options) {
+    for (StringRef Opt : Options)
       Argv.push_back(Saver.save(Opt).data());
-    }
   }
 
   Argv.push_back(InputFilePath);
