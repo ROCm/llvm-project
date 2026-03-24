@@ -59,5 +59,8 @@ _bare_tools = [
 
 for _name in _bare_tools:
     _resolved = _resolve_tool(_name)
-    _pattern = r"\b" + re.escape(_name) + r"\b"
+    # Match the tool name at word boundaries but NOT when preceded by a path
+    # separator (inside a path) or followed by '.' or '-' (inside a filename
+    # like spirv-translator.cl).  Modeled after LLVM's ToolSubst patterns.
+    _pattern = r"(?<![/\\])\b" + re.escape(_name) + r"\b(?![.-])"
     config.substitutions.append((_pattern, _resolved))
