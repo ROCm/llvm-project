@@ -39,15 +39,19 @@ config.substitutions.append(('%llvm-objdump', _fwd(config.llvm_tools_dir, 'llvm-
 config.substitutions.append(('%FileCheck', _fwd(config.llvm_tools_dir, 'FileCheck')))
 config.substitutions.append(('%amd-llvm-spirv', _fwd(config.llvm_tools_dir, 'amd-llvm-spirv')))
 
-# Resolve bare tool names used in RUN lines.  On Windows, shell PATH
-# resolution via os.path.join introduces backslashes; resolving here
-# with forward slashes avoids that.
+# Resolve bare tool names to their full paths with forward slashes.
 _tool_dirs = os.pathsep.join([config.llvm_tools_dir, config.comgr_obj_dir])
 
 def _resolve_tool(name):
     path = lit.util.which(name, _tool_dirs)
     if path:
-        return path.replace("\\", "/")
+        path = path.replace("\\", "/")
+        # lit.util.which calls os.path.normcase which lowercases the drive
+        # letter on Windows (B: -> b:).  Git Bash cannot execute paths with
+        # a lowercased drive letter (exit code 127).
+        if len(path) >= 2 and path[1] == ':':
+            path = path[0].upper() + path[1:]
+        return path
     return name
 
 _bare_tools = [
