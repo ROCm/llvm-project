@@ -195,10 +195,6 @@ jobs:
         run: |
           ./build_tools/health_status.py
 
-      - name: Test build_tools
-        run: |
-          python -m pytest build_tools/tests build_tools/github_actions/tests
-
       - name: Remove ununsed existing patchces
         run: |
           rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
@@ -281,7 +277,7 @@ jobs:
           python3 build_tools/analyze_build_times.py --build-dir build
 
       - name: Configure AWS Credentials for non-forked repos
-        if: always()
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: us-east-2

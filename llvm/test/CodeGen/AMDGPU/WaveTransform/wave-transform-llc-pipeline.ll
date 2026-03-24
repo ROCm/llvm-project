@@ -258,6 +258,9 @@
 ; GCN-O3-NEXT:      Dominator Tree Construction
 ; GCN-O3-NEXT:      AMDGPU Lower Kernel Arguments
 ; GCN-O3-NEXT:      Natural Loop Information
+; GCN-O3-NEXT:      Post-Dominator Tree Construction
+; GCN-O3-NEXT:      Branch Probability Analysis
+; GCN-O3-NEXT:      Block Frequency Analysis
 ; GCN-O3-NEXT:      CodeGen Prepare
 ; GCN-O3-NEXT:      Dominator Tree Construction
 ; GCN-O3-NEXT:      Basic Alias Analysis (stateless AA impl)

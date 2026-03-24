@@ -50,8 +50,7 @@ public:
   bool cleanConstrainRegs(bool Changed) {
     assert(Changed || ConstrainRegs.empty());
     for (Register Reg : ConstrainRegs)
-      MRI->constrainRegClass(Reg, IsWave32 ? &AMDGPU::SReg_32_XM0_XEXECRegClass
-                                           : &AMDGPU::SReg_64_XEXECRegClass);
+      MRI->constrainRegClass(Reg, TII->getRegisterInfo().getWaveMaskRegClass());
     ConstrainRegs.clear();
     return Changed;
   }
