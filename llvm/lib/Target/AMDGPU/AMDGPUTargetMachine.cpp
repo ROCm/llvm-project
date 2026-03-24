@@ -946,6 +946,17 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
         PM.addPass(AMDGPUExpandFeaturePredicatesPass(*this));
       });
 
+  PB.registerPipelineParsingCallback(
+      [this](StringRef Name, CGSCCPassManager &PM,
+             ArrayRef<PassBuilder::PipelineElement> Pipeline) {
+        if (Name == "amdgpu-attributor-cgscc" && getTargetTriple().isAMDGCN()) {
+          PM.addPass(AMDGPUAttributorCGSCCPass(
+              *static_cast<GCNTargetMachine *>(this)));
+          return true;
+        }
+        return false;
+      });
+
   PB.registerScalarOptimizerLateEPCallback(
       [](FunctionPassManager &FPM, OptimizationLevel Level) {
         if (Level == OptimizationLevel::O0)
@@ -1118,14 +1129,6 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
           return onlyAllocateWWMRegs;
         return nullptr;
       });
-}
-
-int64_t AMDGPUTargetMachine::getNullPointerValue(unsigned AddrSpace) {
-  return (AddrSpace == AMDGPUAS::LOCAL_ADDRESS ||
-          AddrSpace == AMDGPUAS::PRIVATE_ADDRESS ||
-          AddrSpace == AMDGPUAS::REGION_ADDRESS)
-             ? -1
-             : 0;
 }
 
 bool AMDGPUTargetMachine::isNoopAddrSpaceCast(unsigned SrcAS,

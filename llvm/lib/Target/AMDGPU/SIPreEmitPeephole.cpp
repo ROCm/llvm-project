@@ -777,8 +777,6 @@ MachineInstrBuilder SIPreEmitPeephole::createUnpackedMI(MachineInstr &I,
 PreservedAnalyses
 llvm::SIPreEmitPeepholePass::run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM) {
-  auto *MDT = MFAM.getCachedResult<MachineDominatorTreeAnalysis>(MF);
-  auto *MPDT = MFAM.getCachedResult<MachinePostDominatorTreeAnalysis>(MF);
   auto *MLI = MFAM.getCachedResult<MachineLoopAnalysis>(MF);
   SIPreEmitPeephole Impl;
 
@@ -788,10 +786,6 @@ llvm::SIPreEmitPeepholePass::run(MachineFunction &MF,
     return PA;
   }
 
-  if (MDT)
-    MDT->updateBlockNumbers();
-  if (MPDT)
-    MPDT->updateBlockNumbers();
   return PreservedAnalyses::all();
 }
 

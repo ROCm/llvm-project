@@ -4219,6 +4219,19 @@ static void RenderObjCOptions(const ToolChain &TC, const Driver &D,
           << "-fobjc-direct-precondition-thunk" << Runtime.getAsString();
     }
   }
+
+  if (types::isObjC(Input.getType())) {
+    // Pass down -fobjc-msgsend-selector-stubs if present.
+    if (Args.hasFlag(options::OPT_fobjc_msgsend_selector_stubs,
+                     options::OPT_fno_objc_msgsend_selector_stubs, false))
+      CmdArgs.push_back("-fobjc-msgsend-selector-stubs");
+
+    // Pass down -fobjc-msgsend-class-selector-stubs if present.
+    if (Args.hasFlag(options::OPT_fobjc_msgsend_class_selector_stubs,
+                     options::OPT_fno_objc_msgsend_class_selector_stubs, false))
+      CmdArgs.push_back("-fobjc-msgsend-class-selector-stubs");
+  }
+
   // When ObjectiveC legacy runtime is in effect on MacOSX, turn on the option
   // to do Array/Dictionary subscripting by default.
   if (Arch == llvm::Triple::x86 && T.isMacOSX() &&
@@ -6948,13 +6961,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       if (Args.hasArg(options::OPT_fopenmp_force_usm))
         CmdArgs.push_back("-fopenmp-force-usm");
 
-      if (Args.hasFlag(options::OPT_fno_openmp_allow_kernel_io,
-                       options::OPT_fopenmp_allow_kernel_io,
-                       isTargetFastUsed(Args)))
-        CmdArgs.push_back("-fno-openmp-allow-kernel-io");
-      else
-        CmdArgs.push_back("-fopenmp-allow-kernel-io");
-
       break;
     default:
       // By default, if Clang doesn't know how to generate useful OpenMP code
@@ -7855,6 +7861,9 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   Args.AddLastArg(CmdArgs, options::OPT_dI);
 
   Args.AddLastArg(CmdArgs, options::OPT_fmax_tokens_EQ);
+
+  Args.AddLastArg(CmdArgs, options::OPT__ssaf_extract_summaries);
+  Args.AddLastArg(CmdArgs, options::OPT__ssaf_tu_summary_file);
 
   // Handle serialized diagnostics.
   if (Arg *A = Args.getLastArg(options::OPT__serialize_diags)) {
@@ -9524,9 +9533,23 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       OPT_flto_partitions_EQ,
       OPT_flto_EQ,
       OPT_hipspv_pass_plugin_EQ,
-      OPT_use_spirv_backend};
+      OPT_use_spirv_backend,
+      OPT_fprofile_generate,
+      OPT_fprofile_generate_EQ,
+      OPT_fprofile_instr_generate,
+      OPT_fprofile_instr_generate_EQ};
   const llvm::DenseSet<unsigned> LinkerOptions{OPT_mllvm, OPT_Zlinker_input};
   auto ShouldForwardForToolChain = [&](Arg *A, const ToolChain &TC) {
+    auto HasProfileRT = TC.getVFS().exists(
+        TC.getCompilerRT(Args, "profile", ToolChain::FT_Static));
+    // Don't forward profiling arguments if the toolchain doesn't support it.
+    // Without this check using it on the host would result in linker errors.
+    if (!HasProfileRT &&
+        (A->getOption().matches(OPT_fprofile_generate) ||
+         A->getOption().matches(OPT_fprofile_generate_EQ) ||
+         A->getOption().matches(OPT_fprofile_instr_generate) ||
+         A->getOption().matches(OPT_fprofile_instr_generate_EQ)))
+      return false;
     // Don't forward -mllvm to toolchains that don't support LLVM.
     return TC.HasNativeLLVMSupport() || A->getOption().getID() != OPT_mllvm;
   };
@@ -9751,6 +9774,13 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
 
   addOffloadCompressArgs(Args, CmdArgs);
 
+  if (Arg *A = Args.getLastArg(options::OPT_offload_jobs_EQ))
+    if (StringRef(Args.getArgString(A->getIndex()))
+            .starts_with("-parallel-jobs="))
+      C.getDriver().Diag(diag::warn_drv_deprecated_arg)
+          << A->getAsString(Args) << /*hasReplacement=*/true
+          << "--offload-jobs=<N>";
+
   if (Arg *A = Args.getLastArg(options::OPT_offload_jobs_EQ)) {
     StringRef Val = A->getValue();
 
@@ -9780,4 +9810,3 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
   LinkCommand->replaceExecutable(Exec);
   LinkCommand->replaceArguments(CmdArgs);
 }
-

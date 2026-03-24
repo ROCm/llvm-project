@@ -833,10 +833,10 @@ void AsmPrinter::emitGlobalVariable(const GlobalVariable *GV) {
   if (GV->isTagged()) {
     Triple T = TM.getTargetTriple();
 
-    if (T.getArch() != Triple::aarch64 || !T.isAndroid())
+    if (T.getArch() != Triple::aarch64)
       OutContext.reportError(SMLoc(),
                              "tagged symbols (-fsanitize=memtag-globals) are "
-                             "only supported on AArch64 Android");
+                             "only supported on AArch64");
     OutStreamer->emitSymbolAttribute(EmittedSym, MCSA_Memtag);
   }
 
@@ -1528,7 +1528,7 @@ getBBAddrMapFeature(const MachineFunction &MF, int NumMBBSectionRanges,
        PgoAnalysisMapFeatures.isSet(PGOMapFeaturesEnum::All)) &&
       popcount(PgoAnalysisMapFeatures.getBits()) != 1) {
     MF.getFunction().getContext().emitError(
-        "-pgo-anaylsis-map can accept only all or none with no additional "
+        "-pgo-analysis-map can accept only all or none with no additional "
         "values.");
   }
 
@@ -2064,6 +2064,42 @@ void AsmPrinter::handleCallsiteForCallgraph(
   }
 }
 
+/// Helper to emit a symbol for the prefetch target associated with the given
+/// BBID and callsite index.
+void AsmPrinter::emitPrefetchTargetSymbol(unsigned BaseID,
+                                          unsigned CallsiteIndex) {
+  SmallString<128> FunctionName;
+  getNameWithPrefix(FunctionName, &MF->getFunction());
+  MCSymbol *PrefetchTargetSymbol = OutContext.getOrCreateSymbol(
+      "__llvm_prefetch_target_" + FunctionName + "_" + Twine(BaseID) + "_" +
+      Twine(CallsiteIndex));
+  // If the function is weak-linkage it may be replaced by a strong
+  // version, in which case the prefetch targets should also be replaced.
+  OutStreamer->emitSymbolAttribute(
+      PrefetchTargetSymbol,
+      MF->getFunction().isWeakForLinker() ? MCSA_Weak : MCSA_Global);
+  OutStreamer->emitLabel(PrefetchTargetSymbol);
+}
+
+/// Emit dangling prefetch targets that were not mapped to any basic block.
+void AsmPrinter::emitDanglingPrefetchTargets() {
+  const DenseMap<UniqueBBID, SmallVector<unsigned>> &MFPrefetchTargets =
+      MF->getPrefetchTargets();
+  if (MFPrefetchTargets.empty())
+    return;
+  DenseSet<UniqueBBID> MFBBIDs;
+  for (const MachineBasicBlock &MBB : *MF)
+    if (std::optional<UniqueBBID> BBID = MBB.getBBID())
+      MFBBIDs.insert(*BBID);
+
+  for (const auto &[BBID, CallsiteIndexes] : MFPrefetchTargets) {
+    if (MFBBIDs.contains(BBID))
+      continue;
+    for (unsigned CallsiteIndex : CallsiteIndexes)
+      emitPrefetchTargetSymbol(BBID.BaseID, CallsiteIndex);
+  }
+}
+
 /// EmitFunctionBody - This method emits the body and trailer for a
 /// function.
 void AsmPrinter::emitFunctionBody() {
@@ -2110,34 +2146,32 @@ void AsmPrinter::emitFunctionBody() {
 
   FunctionCallGraphInfo FuncCGInfo;
   const auto &CallSitesInfoMap = MF->getCallSitesInfo();
+
+  // Dangling targets are not mapped to any blocks and must be emitted at the
+  // beginning of the function.
+  emitDanglingPrefetchTargets();
+
+  const auto &MFPrefetchTargets = MF->getPrefetchTargets();
   for (auto &MBB : *MF) {
     // Print a label for the basic block.
     emitBasicBlockStart(MBB);
     DenseMap<StringRef, unsigned> MnemonicCounts;
 
-    // Helper to emit a symbol for the prefetch target associated with the given
-    // callsite index in the current MBB.
-    auto EmitPrefetchTargetSymbol = [&](unsigned CallsiteIndex) {
-      MCSymbol *PrefetchTargetSymbol = OutContext.getOrCreateSymbol(
-          Twine("__llvm_prefetch_target_") + MF->getName() + Twine("_") +
-          Twine(MBB.getBBID()->BaseID) + Twine("_") +
-          Twine(static_cast<unsigned>(CallsiteIndex)));
-      // If the function is weak-linkage it may be replaced by a strong
-      // version, in which case the prefetch targets should also be replaced.
-      OutStreamer->emitSymbolAttribute(
-          PrefetchTargetSymbol,
-          MF->getFunction().isWeakForLinker() ? MCSA_Weak : MCSA_Global);
-      OutStreamer->emitLabel(PrefetchTargetSymbol);
-    };
-    SmallVector<unsigned> PrefetchTargets =
-        MBB.getPrefetchTargetCallsiteIndexes();
-    auto PrefetchTargetIt = PrefetchTargets.begin();
+    const SmallVector<unsigned> *PrefetchTargets = nullptr;
+    if (auto BBID = MBB.getBBID()) {
+      auto R = MFPrefetchTargets.find(*BBID);
+      if (R != MFPrefetchTargets.end())
+        PrefetchTargets = &R->second;
+    }
+    auto PrefetchTargetIt =
+        PrefetchTargets ? PrefetchTargets->begin() : nullptr;
+    auto PrefetchTargetEnd = PrefetchTargets ? PrefetchTargets->end() : nullptr;
     unsigned LastCallsiteIndex = 0;
 
     for (auto &MI : MBB) {
-      if (PrefetchTargetIt != PrefetchTargets.end() &&
+      if (PrefetchTargetIt != PrefetchTargetEnd &&
           *PrefetchTargetIt == LastCallsiteIndex) {
-        EmitPrefetchTargetSymbol(*PrefetchTargetIt);
+        emitPrefetchTargetSymbol(MBB.getBBID()->BaseID, *PrefetchTargetIt);
         ++PrefetchTargetIt;
       }
 
@@ -2159,6 +2193,11 @@ void AsmPrinter::emitFunctionBody() {
 
       if (isVerbose())
         emitComments(MI, STI, OutStreamer->getCommentOS());
+
+#ifndef NDEBUG
+      MCFragment *OldFragment = OutStreamer->getCurrentFragment();
+      size_t OldFragSize = OldFragment->getFixedSize();
+#endif
 
       switch (MI.getOpcode()) {
       case TargetOpcode::CFI_INSTRUCTION:
@@ -2272,6 +2311,54 @@ void AsmPrinter::emitFunctionBody() {
         break;
       }
 
+#ifndef NDEBUG
+      // Verify that the instruction size reported by InstrInfo matches the
+      // actually emitted size. Many backends performing branch relaxation
+      // on the MIR level rely on this for correctness.
+      // TODO: We currently can't distinguish whether a parse error occurred
+      // when handling INLINEASM.
+      if (OutStreamer->isObj() && !OutContext.hadError() &&
+          (MI.getOpcode() != TargetOpcode::INLINEASM &&
+           MI.getOpcode() != TargetOpcode::INLINEASM_BR)) {
+        const TargetInstrInfo *TII = MF->getSubtarget().getInstrInfo();
+        MCFragment *NewFragment = OutStreamer->getCurrentFragment();
+        TargetInstrInfo::InstSizeVerifyMode Mode =
+            TII->getInstSizeVerifyMode(MI);
+        // Don't try to handle fragment splitting cases.
+        if (NewFragment == OldFragment &&
+            Mode != TargetInstrInfo::InstSizeVerifyMode::NoVerify) {
+          unsigned ExpectedSize = TII->getInstSizeInBytes(MI);
+          if (MI.isBundled()) {
+            // Bundled instructions are emitted together.
+            auto It = MI.getIterator(), End = MBB.instr_end();
+            for (++It; It != End && It->isInsideBundle(); ++It)
+              ExpectedSize += TII->getInstSizeInBytes(*It);
+          }
+
+          unsigned ActualSize = NewFragment->getFixedSize() - OldFragSize;
+          bool AllowOverEstimate =
+              Mode == TargetInstrInfo::InstSizeVerifyMode::AllowOverEstimate;
+          bool Valid = AllowOverEstimate ? ActualSize <= ExpectedSize
+                                         : ActualSize == ExpectedSize;
+          if (!Valid) {
+            dbgs() << "In function: " << MF->getName() << "\n";
+            dbgs() << "Size mismatch for: " << MI;
+            if (MI.isBundled()) {
+              dbgs() << "{\n";
+              auto It = MI.getIterator(), End = MBB.instr_end();
+              for (++It; It != End && It->isInsideBundle(); ++It)
+                dbgs().indent(2) << *It;
+              dbgs() << "}\n";
+            }
+            dbgs() << "Expected " << (AllowOverEstimate ? "maximum" : "exact")
+                   << " size: " << ExpectedSize << "\n";
+            dbgs() << "Actual size: " << ActualSize << "\n";
+            abort();
+          }
+        }
+      }
+#endif
+
       if (MI.isCall()) {
         if (MF->getTarget().Options.BBAddrMap)
           OutStreamer->emitLabel(createCallsiteEndSymbol(MBB));
@@ -2288,10 +2375,10 @@ void AsmPrinter::emitFunctionBody() {
       for (auto &Handler : Handlers)
         Handler->endInstruction();
     }
-    // Emit the last prefetch target in case the last instruction was a call.
-    if (PrefetchTargetIt != PrefetchTargets.end() &&
-        *PrefetchTargetIt == LastCallsiteIndex) {
-      EmitPrefetchTargetSymbol(*PrefetchTargetIt);
+    // Emit the remaining prefetch targets for this block. This includes
+    // nonexisting callsite indexes.
+    while (PrefetchTargetIt != PrefetchTargetEnd) {
+      emitPrefetchTargetSymbol(MBB.getBBID()->BaseID, *PrefetchTargetIt);
       ++PrefetchTargetIt;
     }
 
@@ -2723,19 +2810,19 @@ void AsmPrinter::emitGlobalIFunc(Module &M, const GlobalIFunc &GI) {
 }
 
 void AsmPrinter::emitRemarksSection(remarks::RemarkStreamer &RS) {
-  if (!RS.needsSection())
+  if (!RS.wantsSection())
     return;
   if (!RS.getFilename())
     return;
 
   MCSection *RemarksSection =
       OutContext.getObjectFileInfo()->getRemarksSection();
-  if (!RemarksSection) {
+  if (!RemarksSection && RS.needsSection()) {
     OutContext.reportWarning(SMLoc(), "Current object file format does not "
-                                      "support remarks sections. Use the yaml "
-                                      "remark format instead.");
-    return;
+                                      "support remarks sections.");
   }
+  if (!RemarksSection)
+    return;
 
   SmallString<128> Filename = *RS.getFilename();
   sys::fs::make_absolute(Filename);
@@ -4569,7 +4656,7 @@ MCSymbol *AsmPrinter::GetCPISymbol(unsigned CPID) const {
   }
 
   const DataLayout &DL = getDataLayout();
-  return OutContext.getOrCreateSymbol(Twine(DL.getPrivateGlobalPrefix()) +
+  return OutContext.getOrCreateSymbol(Twine(DL.getInternalSymbolPrefix()) +
                                       "CPI" + Twine(getFunctionNumber()) + "_" +
                                       Twine(CPID));
 }
@@ -4583,7 +4670,7 @@ MCSymbol *AsmPrinter::GetJTISymbol(unsigned JTID, bool isLinkerPrivate) const {
 /// FIXME: privatize to AsmPrinter.
 MCSymbol *AsmPrinter::GetJTSetSymbol(unsigned UID, unsigned MBBID) const {
   const DataLayout &DL = getDataLayout();
-  return OutContext.getOrCreateSymbol(Twine(DL.getPrivateGlobalPrefix()) +
+  return OutContext.getOrCreateSymbol(Twine(DL.getInternalSymbolPrefix()) +
                                       Twine(getFunctionNumber()) + "_" +
                                       Twine(UID) + "_set_" + Twine(MBBID));
 }

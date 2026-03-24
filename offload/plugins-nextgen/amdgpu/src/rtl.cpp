@@ -660,6 +660,16 @@ struct AMDGPUDeviceImageTy : public DeviceImageTy {
   /// Does device image contain Symbol
   bool hasDeviceSymbol(GenericDeviceTy &Device, StringRef SymbolName) const;
 
+  /// Return the maximum wavefront size across all known kernels in this image.
+  uint32_t getMaxWavefrontSize() const {
+    uint32_t Max = 0;
+    for (const auto &[Name, Info] : KernelInfoMap)
+      if (Info.WavefrontSize !=
+          offloading::amdgpu::AMDGPUKernelMetaData::KInvalidValue)
+        Max = std::max(Max, Info.WavefrontSize);
+    return Max;
+  }
+
 private:
   /// The executable loaded on the agent.
   hsa_executable_t Executable;
@@ -717,6 +727,9 @@ struct AMDGPUKernelTy : public GenericKernelTy {
         return Err;
     }
 
+    // Set the static block memory size required by the kernel.
+    StaticBlockMemSize = GroupSize;
+
     // Make sure it is a kernel symbol.
     if (SymbolType != HSA_SYMBOL_KIND_KERNEL)
       return Plugin::error(ErrorCode::INVALID_BINARY,
@@ -771,8 +784,8 @@ struct AMDGPUKernelTy : public GenericKernelTy {
 
   /// Launch the AMDGPU kernel function.
   Error launchImpl(GenericDeviceTy &GenericDevice, uint32_t NumThreads[3],
-                   uint32_t NumBlocks[3], KernelArgsTy &KernelArgs,
-                   KernelLaunchParamsTy LaunchParams,
+                   uint32_t NumBlocks[3], uint32_t DynBlockMemSize,
+                   KernelArgsTy &KernelArgs, KernelLaunchParamsTy LaunchParams,
                    AsyncInfoWrapperTy &AsyncInfoWrapper) const override;
 
   /// Return maximum block size for maximum occupancy
@@ -1942,7 +1955,7 @@ private:
     // Set the output signal of the current slot.
     Slots[Curr].Signal = OutputSignal;
 
-    return std::make_pair(Curr, InputSignal);
+    return {Curr, InputSignal};
   }
 
   /// Complete all pending post actions and reset the stream after synchronizing
@@ -2989,7 +3002,7 @@ struct AMDHostDeviceTy : public AMDGenericDeviceTy {
                   const llvm::SmallVector<hsa_agent_t> &HostAgents)
       : AMDGenericDeviceTy(), Agents(HostAgents), ArgsMemoryManager(Plugin),
         PinnedMemoryManager(Plugin) {
-    assert(HostAgents.size() && "No host agent found");
+    assert(!HostAgents.empty() && "No host agent found");
   }
 
   /// Initialize the host device memory pools and the memory managers for
@@ -3633,6 +3646,11 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     return getHardwareParallelism();
   }
 
+  /// In cases of mixed wave32 and wave64 code we need to over-alloacte memory.
+  uint32_t getRPCNumLanes() const override {
+    return MaxWavefrontSize ? MaxWavefrontSize : getWarpSize();
+  }
+
   /// Get the stream of the asynchronous info structure or get a new one.
   Error getStream(AsyncInfoWrapperTy &AsyncInfoWrapper,
                   AMDGPUStreamTy *&Stream) {
@@ -3659,6 +3677,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     // Launch the special kernel for device memory initialization
     if (Error Err = launchDMInitKernel(*AMDImage))
       return std::move(Err);
+
+    if (uint32_t WFS = AMDImage->getMaxWavefrontSize())
+      MaxWavefrontSize = std::max(MaxWavefrontSize, WFS);
 
     return AMDImage;
   }
@@ -4757,7 +4778,7 @@ private:
     KernelArgsTy KernelArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
     if (auto Err = AMDGPUKernel.launchImpl(
-            *this, NumBlocksAndThreads, NumBlocksAndThreads, KernelArgs,
+            *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
             KernelLaunchParamsTy{}, AsyncInfoWrapper))
       return Err;
 
@@ -5079,6 +5100,9 @@ private:
   /// The total number of concurrent work items that can be running on the GPU.
   uint64_t HardwareParallelism;
 
+  /// The largest wavefront size across all loaded images, used for RPC.
+  uint32_t MaxWavefrontSize = 0;
+
   /// Reference to the host device.
   AMDHostDeviceTy &HostDevice;
 
@@ -5277,7 +5301,7 @@ private:
     uint32_t NumBlocks[3] = {1u, 1u, 1u};
 
     // Launch kernel with 256 threads and 1 block
-    if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks,
+    if (auto Err = DMInitKernel.launchImpl(*this, NumThreads, NumBlocks, 0,
                                            KernelArgs, LaunchParams, AsyncInfo))
       return Err;
 
@@ -5742,6 +5766,7 @@ private:
 
 Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
                                  uint32_t NumThreads[3], uint32_t NumBlocks[3],
+                                 uint32_t DynBlockMemSize,
                                  KernelArgsTy &KernelArgs,
                                  KernelLaunchParamsTy LaunchParams,
                                  AsyncInfoWrapperTy &AsyncInfoWrapper) const {
@@ -5753,13 +5778,6 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   void *AllArgs = nullptr;
   if (auto Err = ArgsMemoryManager.allocate(ArgsSize, &AllArgs))
     return Err;
-
-  // Account for user requested dynamic shared memory.
-  uint32_t GroupSize = getGroupSize();
-  if (uint32_t MaxDynCGroupMem = std::max(
-          KernelArgs.DynCGroupMem, GenericDevice.getDynamicMemorySize())) {
-    GroupSize += MaxDynCGroupMem;
-  }
 
   uint64_t StackSize;
   if (auto Err = GenericDevice.getDeviceStackSize(StackSize))
@@ -5815,10 +5833,13 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   // Get required OMPT-related data
   auto ProfilerSpecificData = getOrNullProfilerSpecificData(AsyncInfoWrapper);
 
+  uint32_t TotalBlockMemSize = getStaticBlockMemSize() + DynBlockMemSize;
+
   // Push the kernel launch into the stream.
   return Stream->pushKernelLaunch(*this, AllArgs, NumThreads, NumBlocks,
-                                  GroupSize, static_cast<uint32_t>(StackSize),
+                                  TotalBlockMemSize, StackSize,
                                   ArgsMemoryManager, ProfilerSpecificData);
+  // Push the kernel launch into the stream.
 }
 
 void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
