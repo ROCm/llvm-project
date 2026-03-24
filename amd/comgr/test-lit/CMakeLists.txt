@@ -49,5 +49,6 @@ add_comgr_lit_binary(get-version c)
 add_comgr_lit_binary(status-string c)
 add_comgr_lit_binary(data-action c)
 add_comgr_lit_binary(lookup-code-object c)
+add_comgr_lit_binary(check-gfx1250-revision c)
 
 add_dependencies(check-comgr test-lit)
