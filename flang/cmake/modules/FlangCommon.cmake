@@ -27,6 +27,20 @@ if (FLANG_RUNTIME_F128_MATH_LIB)
   add_compile_definitions(FLANG_RUNTIME_F128_MATH_LIB="${FLANG_RUNTIME_F128_MATH_LIB}")
 endif()
 
+# On Linux, link libquadmath.a into the compiler when possible so the flang
+# driver does not need libquadmath.so at runtime (minimal envs without gcc).
+# Redistribution is subject to the GCC Runtime Library Exception; see discussion
+# in https://github.com/ROCm/TheRock/pull/2977 for the analogous libatomic case.
+set(_flang_static_link_quadm_default OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(_flang_static_link_quadm_default ON)
+endif()
+option(FLANG_STATIC_LINK_QUADMATH
+  "Link libquadmath.a instead of -lquadmath when building FortranEvaluate, if the \
+build compiler reports a path via -print-file-name=libquadmath.a. Avoids a \
+runtime dependency on libquadmath.so on minimal Linux installs."
+  ${_flang_static_link_quadm_default})
+
 # Check if 128-bit float computations can be done via long double
 # Note that '-nostdinc++' might be implied when this code kicks in
 # (see 'runtimes/CMakeLists.txt'), so we cannot use 'cfloat' C++ header

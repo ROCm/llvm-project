@@ -26,6 +26,31 @@ if (FLANG_INCLUDE_QUADMATH_H AND FOUND_QUADMATH_LIB)
   configure_file("${FLANG_SOURCE_DIR}/cmake/quadmath_wrapper.h.in" "${CMAKE_CURRENT_BINARY_DIR}/quadmath_wrapper.h")
   add_compile_definitions(HAS_QUADMATHLIB)
   set(QUADMATHLIB quadmath)
+  # Prefer the static archive so the flang executable does not record DT_NEEDED on
+  # libquadmath.so (see FLANG_STATIC_LINK_QUADMATH in FlangCommon.cmake).
+  if(FLANG_STATIC_LINK_QUADMATH)
+    execute_process(
+      COMMAND ${CMAKE_CXX_COMPILER} -print-file-name=libquadmath.a
+      OUTPUT_VARIABLE FLANG_LIBQUADMATH_STATIC
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    if(FLANG_LIBQUADMATH_STATIC AND NOT IS_ABSOLUTE "${FLANG_LIBQUADMATH_STATIC}")
+      get_filename_component(_flang_cxx_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+      get_filename_component(
+        FLANG_LIBQUADMATH_STATIC
+        "${FLANG_LIBQUADMATH_STATIC}"
+        ABSOLUTE
+        BASE_DIR "${_flang_cxx_dir}")
+    endif()
+    if(FLANG_LIBQUADMATH_STATIC AND EXISTS "${FLANG_LIBQUADMATH_STATIC}")
+      set(QUADMATHLIB "${FLANG_LIBQUADMATH_STATIC}")
+      message(STATUS "FortranEvaluate: using static libquadmath at ${QUADMATHLIB}")
+    else()
+      message(STATUS
+        "FortranEvaluate: static libquadmath.a not found (${FLANG_LIBQUADMATH_STATIC}); using -lquadmath")
+    endif()
+  endif()
 endif ()
 
 add_flang_library(FortranEvaluate
