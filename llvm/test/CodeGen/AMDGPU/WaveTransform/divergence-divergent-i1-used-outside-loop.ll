@@ -83,7 +83,7 @@ define void @divergent_i1_phi_used_outside_loop_larger_loop_body(float %val, ptr
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_]], %bb.0, %6, %bb.3
   ; CHECK-NEXT:   [[PHI1:%[0-9]+]]:vreg_64 = PHI [[COPY4]], %bb.0, %5, %bb.3
-  ; CHECK-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.0, %54, %bb.3
+  ; CHECK-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.0, %52, %bb.3
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 0, [[PHI2]], implicit $exec
   ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, killed [[V_CMP_NE_U32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 1, killed [[V_CNDMASK_B32_e64_1]], implicit $exec
@@ -102,12 +102,11 @@ define void @divergent_i1_phi_used_outside_loop_larger_loop_body(float %val, ptr
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI3:%[0-9]+]]:vgpr_32 = PHI [[PHI2]], %bb.1, [[V_CNDMASK_B32_e64_2]], %bb.2
   ; CHECK-NEXT:   [[V_ADD_CO_U32_e64_:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 [[PHI1]].sub0, 4, 0, implicit $exec
-  ; CHECK-NEXT:   %57:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 0, killed [[PHI1]].sub1, killed [[V_ADD_CO_U32_e64_1]], 0, implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_]], %subreg.sub0, killed %57, %subreg.sub1
+  ; CHECK-NEXT:   %55:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 0, killed [[PHI1]].sub1, killed [[V_ADD_CO_U32_e64_1]], 0, implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE2:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_]], %subreg.sub0, killed %55, %subreg.sub1
   ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = nsw S_ADD_I32 killed [[PHI]], 1, implicit-def dead $scc
   ; CHECK-NEXT:   S_CMP_GT_I32 [[S_ADD_I32_]], 9, implicit-def $scc
-  ; CHECK-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_CSELECT_B32 -1, 0, implicit killed $scc
-  ; CHECK-NEXT:   SI_BRCOND_UNIFORM %bb.1, killed [[S_CSELECT_B32_]]
+  ; CHECK-NEXT:   S_CBRANCH_SCC1 %bb.1, implicit killed $scc
   ; CHECK-NEXT:   S_BRANCH %bb.4
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.4.exit:
@@ -542,8 +541,8 @@ define amdgpu_cs void @loop_with_1break(ptr addrspace(1) %x, ptr addrspace(1) %a
   ; CHECK-NEXT:   [[REG_SEQUENCE3:%[0-9]+]]:sreg_64 = REG_SEQUENCE killed [[PHI]], %subreg.sub0, killed [[S_ASHR_I32_]], %subreg.sub1
   ; CHECK-NEXT:   [[S_LSHL_B64_:%[0-9]+]]:sreg_64 = nsw S_LSHL_B64 [[REG_SEQUENCE3]], 2, implicit-def dead $scc
   ; CHECK-NEXT:   [[V_ADD_CO_U32_e64_:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 [[REG_SEQUENCE1]].sub0, [[S_LSHL_B64_]].sub0, 0, implicit $exec
-  ; CHECK-NEXT:   %55:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 [[S_LSHL_B64_]].sub1, [[REG_SEQUENCE1]].sub1, killed [[V_ADD_CO_U32_e64_1]], 0, implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_]], %subreg.sub0, killed %55, %subreg.sub1
+  ; CHECK-NEXT:   %53:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 [[S_LSHL_B64_]].sub1, [[REG_SEQUENCE1]].sub1, killed [[V_ADD_CO_U32_e64_1]], 0, implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE4:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_]], %subreg.sub0, killed %53, %subreg.sub1
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD killed [[REG_SEQUENCE4]], 0, 0, implicit $exec :: (load (s32) from %ir.a.plus.counter, addrspace 1)
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 0, killed [[GLOBAL_LOAD_DWORD]], implicit $exec
   ; CHECK-NEXT:   SI_BRCOND %bb.5, killed [[V_CMP_EQ_U32_e64_]]
@@ -560,15 +559,14 @@ define amdgpu_cs void @loop_with_1break(ptr addrspace(1) %x, ptr addrspace(1) %a
   ; CHECK-NEXT:   successors: %bb.5(0x04000000), %bb.1(0x7c000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[V_ADD_CO_U32_e64_2:%[0-9]+]]:vgpr_32, [[V_ADD_CO_U32_e64_3:%[0-9]+]]:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 [[REG_SEQUENCE2]].sub0, [[S_LSHL_B64_]].sub0, 0, implicit $exec
-  ; CHECK-NEXT:   %63:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 killed [[S_LSHL_B64_]].sub1, [[REG_SEQUENCE2]].sub1, killed [[V_ADD_CO_U32_e64_3]], 0, implicit $exec
-  ; CHECK-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_2]], %subreg.sub0, killed %63, %subreg.sub1
+  ; CHECK-NEXT:   %61:vgpr_32, dead $sgpr_null = V_ADDC_U32_e64 killed [[S_LSHL_B64_]].sub1, [[REG_SEQUENCE2]].sub1, killed [[V_ADD_CO_U32_e64_3]], 0, implicit $exec
+  ; CHECK-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64 = REG_SEQUENCE killed [[V_ADD_CO_U32_e64_2]], %subreg.sub0, killed %61, %subreg.sub1
   ; CHECK-NEXT:   [[GLOBAL_LOAD_DWORD1:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[REG_SEQUENCE5]], 0, 0, implicit $exec :: (load (s32) from %ir.x.plus.counter, addrspace 1)
   ; CHECK-NEXT:   [[V_ADD_U32_e64_:%[0-9]+]]:vgpr_32 = V_ADD_U32_e64 1, killed [[GLOBAL_LOAD_DWORD1]], 0, implicit $exec
   ; CHECK-NEXT:   GLOBAL_STORE_DWORD killed [[REG_SEQUENCE5]], killed [[V_ADD_U32_e64_]], 0, 0, implicit $exec :: (store (s32) into %ir.x.plus.counter, addrspace 1)
   ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 [[REG_SEQUENCE3]].sub0, 1, implicit-def dead $scc
   ; CHECK-NEXT:   S_CMP_LT_U32 killed [[REG_SEQUENCE3]].sub0, 100, implicit-def $scc
-  ; CHECK-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_CSELECT_B32 -1, 0, implicit killed $scc
-  ; CHECK-NEXT:   SI_BRCOND_UNIFORM %bb.5, killed [[S_CSELECT_B32_]]
+  ; CHECK-NEXT:   S_CBRANCH_SCC1 %bb.5, implicit killed $scc
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.4.exit:

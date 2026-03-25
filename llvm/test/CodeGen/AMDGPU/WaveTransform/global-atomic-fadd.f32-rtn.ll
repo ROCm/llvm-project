@@ -244,10 +244,10 @@ define amdgpu_ps float @global_atomic_fadd_f32_saddr_rtn_atomicrmw(ptr addrspace
   ; ITERATE-NEXT: bb.3 (%ir-block.6):
   ; ITERATE-NEXT:   successors: %bb.4(0x80000000)
   ; ITERATE-NEXT: {{  $}}
-  ; ITERATE-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI %33, %bb.6, [[GLOBAL_ATOMIC_ADD_F32_SADDR_RTN]], %bb.2
+  ; ITERATE-NEXT:   [[PHI:%[0-9]+]]:vgpr_32 = PHI %32, %bb.6, [[GLOBAL_ATOMIC_ADD_F32_SADDR_RTN]], %bb.2
   ; ITERATE-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[PHI]], implicit $exec
   ; ITERATE-NEXT:   [[V_ADD_F32_e64_:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e64 0, [[V_READFIRSTLANE_B32_]], 0, %11, 0, 0, implicit $mode, implicit $exec
-  ; ITERATE-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 %43, 0, implicit $exec
+  ; ITERATE-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 %41, 0, implicit $exec
   ; ITERATE-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, killed [[V_ADD_F32_e64_]], 0, [[V_READFIRSTLANE_B32_]], [[V_CMP_NE_U32_e64_1]], implicit $exec
   ; ITERATE-NEXT: {{  $}}
   ; ITERATE-NEXT: bb.4 (%ir-block.11):
@@ -270,9 +270,7 @@ define amdgpu_ps float @global_atomic_fadd_f32_saddr_rtn_atomicrmw(ptr addrspace
   ; ITERATE-NEXT:   [[S_ANDN2_B32_:%[0-9]+]]:sreg_32 = S_ANDN2_B32 [[PHI4]], killed [[S_LSHL_B32_]], implicit-def dead $scc
   ; ITERATE-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; ITERATE-NEXT:   S_CMP_LG_U32 [[S_ANDN2_B32_]], killed [[S_MOV_B32_3]], implicit-def $scc
-  ; ITERATE-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_CSELECT_B32 -1, 0, implicit $scc
-  ; ITERATE-NEXT:   [[COPY7:%[0-9]+]]:sreg_32 = COPY [[S_CSELECT_B32_]]
-  ; ITERATE-NEXT:   SI_BRCOND_UNIFORM %bb.5, killed [[COPY7]]
+  ; ITERATE-NEXT:   S_CBRANCH_SCC1 %bb.5, implicit $scc
   ; ITERATE-NEXT:   S_BRANCH %bb.6
   ; ITERATE-NEXT: {{  $}}
   ; ITERATE-NEXT: bb.6.ComputeEnd:

@@ -22,7 +22,8 @@ define hidden void @widget() {
   ; GFX90A-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[GLOBAL_LOAD_DWORD]], implicit $exec
   ; GFX90A-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 21
   ; GFX90A-NEXT:   [[V_CMP_LT_I32_e64_:%[0-9]+]]:sreg_64_xexec = V_CMP_LT_I32_e64 [[GLOBAL_LOAD_DWORD]], killed [[S_MOV_B32_]], implicit $exec
-  ; GFX90A-NEXT:   SI_BRCOND_UNIFORM %bb.2, killed [[V_CMP_LT_I32_e64_]]
+  ; GFX90A-NEXT:   $vcc = S_AND_B64 $exec, [[V_CMP_LT_I32_e64_]], implicit-def $scc
+  ; GFX90A-NEXT:   S_CBRANCH_VCCNZ %bb.2, implicit $vcc
   ; GFX90A-NEXT:   S_BRANCH %bb.1
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.1.bb2:
@@ -30,9 +31,7 @@ define hidden void @widget() {
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 21
   ; GFX90A-NEXT:   S_CMP_EQ_U32 [[V_READFIRSTLANE_B32_]], killed [[S_MOV_B32_1]], implicit-def $scc
-  ; GFX90A-NEXT:   [[S_CSELECT_B64_:%[0-9]+]]:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
-  ; GFX90A-NEXT:   [[COPY9:%[0-9]+]]:sreg_64 = COPY [[S_CSELECT_B64_]]
-  ; GFX90A-NEXT:   SI_BRCOND_UNIFORM %bb.5, killed [[COPY9]]
+  ; GFX90A-NEXT:   S_CBRANCH_SCC1 %bb.5, implicit $scc
   ; GFX90A-NEXT:   S_BRANCH %bb.4
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.2.bb4:
@@ -40,9 +39,7 @@ define hidden void @widget() {
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 9
   ; GFX90A-NEXT:   S_CMP_LG_U32 [[V_READFIRSTLANE_B32_]], killed [[S_MOV_B32_2]], implicit-def $scc
-  ; GFX90A-NEXT:   [[S_CSELECT_B64_1:%[0-9]+]]:sreg_64_xexec = S_CSELECT_B64 -1, 0, implicit $scc
-  ; GFX90A-NEXT:   [[COPY10:%[0-9]+]]:sreg_64 = COPY [[S_CSELECT_B64_1]]
-  ; GFX90A-NEXT:   SI_BRCOND_UNIFORM %bb.4, killed [[COPY10]]
+  ; GFX90A-NEXT:   S_CBRANCH_SCC1 %bb.4, implicit $scc
   ; GFX90A-NEXT:   S_BRANCH %bb.3
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.3.bb7:
@@ -50,6 +47,27 @@ define hidden void @widget() {
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
   ; GFX90A-NEXT:   [[SI_PC_ADD_REL_OFFSET:%[0-9]+]]:sreg_64 = SI_PC_ADD_REL_OFFSET target-flags(amdgpu-rel32-lo) @wibble, target-flags(amdgpu-rel32-hi) @wibble, implicit-def dead $scc
+  ; GFX90A-NEXT:   [[COPY9:%[0-9]+]]:sgpr_128 = COPY $sgpr0_sgpr1_sgpr2_sgpr3
+  ; GFX90A-NEXT:   $sgpr4_sgpr5 = COPY [[COPY8]]
+  ; GFX90A-NEXT:   $sgpr6_sgpr7 = COPY [[COPY7]]
+  ; GFX90A-NEXT:   $sgpr8_sgpr9 = COPY [[COPY6]]
+  ; GFX90A-NEXT:   $sgpr10_sgpr11 = COPY [[COPY5]]
+  ; GFX90A-NEXT:   $sgpr12 = COPY [[COPY4]]
+  ; GFX90A-NEXT:   $sgpr13 = COPY [[COPY3]]
+  ; GFX90A-NEXT:   $sgpr14 = COPY [[COPY2]]
+  ; GFX90A-NEXT:   $sgpr15 = COPY [[COPY1]]
+  ; GFX90A-NEXT:   $vgpr31 = COPY [[COPY]]
+  ; GFX90A-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY9]]
+  ; GFX90A-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[SI_PC_ADD_REL_OFFSET]], @wibble, csr_amdgpu_gfx90ainsts, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3, implicit-def $vgpr0
+  ; GFX90A-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
+  ; GFX90A-NEXT:   [[COPY10:%[0-9]+]]:av_32 = COPY $vgpr0
+  ; GFX90A-NEXT:   S_BRANCH %bb.6
+  ; GFX90A-NEXT: {{  $}}
+  ; GFX90A-NEXT: bb.4.bb9:
+  ; GFX90A-NEXT:   successors: %bb.6(0x40000000), %bb.5(0x40000000)
+  ; GFX90A-NEXT: {{  $}}
+  ; GFX90A-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
+  ; GFX90A-NEXT:   [[SI_PC_ADD_REL_OFFSET1:%[0-9]+]]:sreg_64 = SI_PC_ADD_REL_OFFSET target-flags(amdgpu-rel32-lo) @wibble, target-flags(amdgpu-rel32-hi) @wibble, implicit-def dead $scc
   ; GFX90A-NEXT:   [[COPY11:%[0-9]+]]:sgpr_128 = COPY $sgpr0_sgpr1_sgpr2_sgpr3
   ; GFX90A-NEXT:   $sgpr4_sgpr5 = COPY [[COPY8]]
   ; GFX90A-NEXT:   $sgpr6_sgpr7 = COPY [[COPY7]]
@@ -61,32 +79,11 @@ define hidden void @widget() {
   ; GFX90A-NEXT:   $sgpr15 = COPY [[COPY1]]
   ; GFX90A-NEXT:   $vgpr31 = COPY [[COPY]]
   ; GFX90A-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY11]]
-  ; GFX90A-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[SI_PC_ADD_REL_OFFSET]], @wibble, csr_amdgpu_gfx90ainsts, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3, implicit-def $vgpr0
-  ; GFX90A-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
-  ; GFX90A-NEXT:   [[COPY12:%[0-9]+]]:av_32 = COPY $vgpr0
-  ; GFX90A-NEXT:   S_BRANCH %bb.6
-  ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT: bb.4.bb9:
-  ; GFX90A-NEXT:   successors: %bb.6(0x40000000), %bb.5(0x40000000)
-  ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
-  ; GFX90A-NEXT:   [[SI_PC_ADD_REL_OFFSET1:%[0-9]+]]:sreg_64 = SI_PC_ADD_REL_OFFSET target-flags(amdgpu-rel32-lo) @wibble, target-flags(amdgpu-rel32-hi) @wibble, implicit-def dead $scc
-  ; GFX90A-NEXT:   [[COPY13:%[0-9]+]]:sgpr_128 = COPY $sgpr0_sgpr1_sgpr2_sgpr3
-  ; GFX90A-NEXT:   $sgpr4_sgpr5 = COPY [[COPY8]]
-  ; GFX90A-NEXT:   $sgpr6_sgpr7 = COPY [[COPY7]]
-  ; GFX90A-NEXT:   $sgpr8_sgpr9 = COPY [[COPY6]]
-  ; GFX90A-NEXT:   $sgpr10_sgpr11 = COPY [[COPY5]]
-  ; GFX90A-NEXT:   $sgpr12 = COPY [[COPY4]]
-  ; GFX90A-NEXT:   $sgpr13 = COPY [[COPY3]]
-  ; GFX90A-NEXT:   $sgpr14 = COPY [[COPY2]]
-  ; GFX90A-NEXT:   $sgpr15 = COPY [[COPY1]]
-  ; GFX90A-NEXT:   $vgpr31 = COPY [[COPY]]
-  ; GFX90A-NEXT:   $sgpr0_sgpr1_sgpr2_sgpr3 = COPY [[COPY13]]
   ; GFX90A-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[SI_PC_ADD_REL_OFFSET1]], @wibble, csr_amdgpu_gfx90ainsts, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3, implicit-def $vgpr0
   ; GFX90A-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
-  ; GFX90A-NEXT:   [[COPY14:%[0-9]+]]:vgpr_32 = COPY $vgpr0
+  ; GFX90A-NEXT:   [[COPY12:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; GFX90A-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sgpr_32 = S_MOV_B32 0
-  ; GFX90A-NEXT:   [[V_CMP_GT_F32_e64_:%[0-9]+]]:sreg_64 = nsz nofpexcept V_CMP_GT_F32_e64 0, [[COPY14]], 0, killed [[S_MOV_B32_3]], 0, implicit $mode, implicit $exec
+  ; GFX90A-NEXT:   [[V_CMP_GT_F32_e64_:%[0-9]+]]:sreg_64 = nsz nofpexcept V_CMP_GT_F32_e64 0, [[COPY12]], 0, killed [[S_MOV_B32_3]], 0, implicit $mode, implicit $exec
   ; GFX90A-NEXT:   SI_BRCOND %bb.6, killed [[V_CMP_GT_F32_e64_]]
   ; GFX90A-NEXT:   S_BRANCH %bb.5
   ; GFX90A-NEXT: {{  $}}
@@ -119,7 +116,8 @@ define hidden void @widget() {
   ; GFX1200-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 [[GLOBAL_LOAD_DWORD]], implicit $exec
   ; GFX1200-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 21
   ; GFX1200-NEXT:   [[V_CMP_LT_I32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_LT_I32_e64 [[GLOBAL_LOAD_DWORD]], killed [[S_MOV_B32_]], implicit $exec
-  ; GFX1200-NEXT:   SI_BRCOND_UNIFORM %bb.2, killed [[V_CMP_LT_I32_e64_]]
+  ; GFX1200-NEXT:   $vcc_lo = S_AND_B32 $exec_lo, [[V_CMP_LT_I32_e64_]], implicit-def $scc
+  ; GFX1200-NEXT:   S_CBRANCH_VCCNZ %bb.2, implicit $vcc_lo
   ; GFX1200-NEXT:   S_BRANCH %bb.1
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.1.bb2:
@@ -127,9 +125,7 @@ define hidden void @widget() {
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 21
   ; GFX1200-NEXT:   S_CMP_EQ_U32 [[V_READFIRSTLANE_B32_]], killed [[S_MOV_B32_1]], implicit-def $scc
-  ; GFX1200-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_CSELECT_B32 -1, 0, implicit $scc
-  ; GFX1200-NEXT:   [[COPY9:%[0-9]+]]:sreg_32 = COPY [[S_CSELECT_B32_]]
-  ; GFX1200-NEXT:   SI_BRCOND_UNIFORM %bb.5, killed [[COPY9]]
+  ; GFX1200-NEXT:   S_CBRANCH_SCC1 %bb.5, implicit $scc
   ; GFX1200-NEXT:   S_BRANCH %bb.4
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.2.bb4:
@@ -137,9 +133,7 @@ define hidden void @widget() {
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 9
   ; GFX1200-NEXT:   S_CMP_LG_U32 [[V_READFIRSTLANE_B32_]], killed [[S_MOV_B32_2]], implicit-def $scc
-  ; GFX1200-NEXT:   [[S_CSELECT_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_CSELECT_B32 -1, 0, implicit $scc
-  ; GFX1200-NEXT:   [[COPY10:%[0-9]+]]:sreg_32 = COPY [[S_CSELECT_B32_1]]
-  ; GFX1200-NEXT:   SI_BRCOND_UNIFORM %bb.4, killed [[COPY10]]
+  ; GFX1200-NEXT:   S_CBRANCH_SCC1 %bb.4, implicit $scc
   ; GFX1200-NEXT:   S_BRANCH %bb.3
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.3.bb7:
@@ -158,7 +152,7 @@ define hidden void @widget() {
   ; GFX1200-NEXT:   $vgpr31 = COPY [[COPY]]
   ; GFX1200-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[SI_PC_ADD_REL_OFFSET]], @wibble, csr_amdgpu, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit-def $vgpr0
   ; GFX1200-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
-  ; GFX1200-NEXT:   [[COPY11:%[0-9]+]]:vgpr_32 = COPY $vgpr0
+  ; GFX1200-NEXT:   [[COPY9:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; GFX1200-NEXT:   S_BRANCH %bb.6
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.4.bb9:
@@ -177,9 +171,9 @@ define hidden void @widget() {
   ; GFX1200-NEXT:   $vgpr31 = COPY [[COPY]]
   ; GFX1200-NEXT:   $sgpr30_sgpr31 = SI_CALL killed [[SI_PC_ADD_REL_OFFSET1]], @wibble, csr_amdgpu, implicit $sgpr4_sgpr5, implicit $sgpr6_sgpr7, implicit $sgpr8_sgpr9, implicit $sgpr10_sgpr11, implicit $sgpr12, implicit $sgpr13, implicit $sgpr14, implicit $sgpr15, implicit $vgpr31, implicit-def $vgpr0
   ; GFX1200-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def dead $scc, implicit-def $sgpr32, implicit $sgpr32
-  ; GFX1200-NEXT:   [[COPY12:%[0-9]+]]:vgpr_32 = COPY $vgpr0
+  ; GFX1200-NEXT:   [[COPY10:%[0-9]+]]:vgpr_32 = COPY $vgpr0
   ; GFX1200-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sgpr_32 = S_MOV_B32 0
-  ; GFX1200-NEXT:   [[V_CMP_GT_F32_e64_:%[0-9]+]]:sreg_32 = nsz nofpexcept V_CMP_GT_F32_e64 0, [[COPY12]], 0, killed [[S_MOV_B32_3]], 0, implicit $mode, implicit $exec
+  ; GFX1200-NEXT:   [[V_CMP_GT_F32_e64_:%[0-9]+]]:sreg_32 = nsz nofpexcept V_CMP_GT_F32_e64 0, [[COPY10]], 0, killed [[S_MOV_B32_3]], 0, implicit $mode, implicit $exec
   ; GFX1200-NEXT:   SI_BRCOND %bb.6, killed [[V_CMP_GT_F32_e64_]]
   ; GFX1200-NEXT:   S_BRANCH %bb.5
   ; GFX1200-NEXT: {{  $}}
@@ -323,7 +317,9 @@ define hidden void @blam() {
   ; GFX90A-NEXT:   [[V_MOV_B32_e32_3:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 2143289344, implicit $exec
   ; GFX90A-NEXT:   BUFFER_STORE_DWORD_OFFSET killed [[V_MOV_B32_e32_3]], $sgpr0_sgpr1_sgpr2_sgpr3, 0, 0, 0, 0, implicit $exec :: (store (s32) into `ptr addrspace(5) null`, align 16, addrspace 5)
   ; GFX90A-NEXT:   [[S_MOV_B64_:%[0-9]+]]:sreg_64 = S_MOV_B64 0
-  ; GFX90A-NEXT:   SI_BRCOND_UNIFORM %bb.10, killed [[S_MOV_B64_]]
+  ; GFX90A-NEXT:   [[S_AND_B64_:%[0-9]+]]:sreg_64 = S_AND_B64 $exec, killed [[S_MOV_B64_]], implicit-def dead $scc
+  ; GFX90A-NEXT:   $vcc = COPY [[S_AND_B64_]]
+  ; GFX90A-NEXT:   S_CBRANCH_VCCNZ %bb.10, implicit $vcc
   ; GFX90A-NEXT:   S_BRANCH %bb.8
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.8.bb17:
@@ -440,7 +436,9 @@ define hidden void @blam() {
   ; GFX1200-NEXT:   [[V_MOV_B32_e32_2:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 2143289344, implicit $exec
   ; GFX1200-NEXT:   SCRATCH_STORE_DWORD_SADDR killed [[V_MOV_B32_e32_2]], killed [[S_MOV_B32_9]], 0, 0, implicit $exec, implicit $flat_scr :: (store (s32) into `ptr addrspace(5) null`, align 16, addrspace 5)
   ; GFX1200-NEXT:   [[S_MOV_B32_10:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; GFX1200-NEXT:   SI_BRCOND_UNIFORM %bb.10, killed [[S_MOV_B32_10]]
+  ; GFX1200-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32 = S_AND_B32 $exec_lo, killed [[S_MOV_B32_10]], implicit-def dead $scc
+  ; GFX1200-NEXT:   $vcc_lo = COPY [[S_AND_B32_]]
+  ; GFX1200-NEXT:   S_CBRANCH_VCCNZ %bb.10, implicit $vcc_lo
   ; GFX1200-NEXT:   S_BRANCH %bb.8
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.8.bb17:
