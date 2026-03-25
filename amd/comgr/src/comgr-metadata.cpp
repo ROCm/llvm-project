@@ -65,9 +65,9 @@ getELFObjectFileBase(DataObject *DataP) {
 // 2. "amdhsa.kernels" exists in both nodes.
 //
 // "amdhsa.printf" is copied from @p From if @p To doesn't have it.
-// If both have it, the merge is allowed only if they are identical
-// (as expected from LTO partitions sharing the same module-level
-// llvm.printf.fmts metadata).
+// If both have it, the merge assumes they are identical (as expected
+// from LTO partitions sharing the same module-level llvm.printf.fmts
+// metadata) and keeps To's copy.
 //
 // If merge is possible the function merges Kernel records
 // to @p To and returns @c true.
@@ -86,11 +86,10 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
 
   assert(To.isMap());
 
+  // Copy printf from From if To doesn't have it. If both have it, keep To's
+  // copy (they are assumed identical from LTO partitions).
   if (From.getMap().find(PrintfStrKey) != From.getMap().end()) {
-    if (To.getMap().find(PrintfStrKey) != To.getMap().end()) {
-      if (From.getMap()[PrintfStrKey] != To.getMap()[PrintfStrKey])
-        return false;
-    } else {
+    if (To.getMap().find(PrintfStrKey) == To.getMap().end()) {
       To.getMap()[PrintfStrKey] = From.getMap()[PrintfStrKey];
     }
   }
