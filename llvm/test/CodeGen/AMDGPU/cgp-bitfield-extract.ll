@@ -27,7 +27,7 @@
 
 ; GCN-LABEL: {{^}}sink_ubfe_i32:
 ; GCN-NOT: lshr
-; GCN: s_cbranch_vccnz
+; GCN: s_cbranch_scc{{[0-1]}}
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80008
@@ -122,7 +122,7 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i16:
 ; GCN-NOT: lshr
-; GCN: s_cbranch_vccz
+; GCN: s_cbranch_scc{{[0-1]}}
 
 ; GCN: ; %bb.1:
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x70004
@@ -176,11 +176,10 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_span_midpoint:
 
-; GCN-TONGA: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[[[LO2:[0-9]+]]:[[HI2:[0-9]+]]], 30
-; GCN: s_cbranch_vccnz .LBB3_2
+; GCN: s_cbranch_scc{{[0-1]}} .LBB3_2
 
 ; GCN: ; %bb0
-; GCN-DEFAULT: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[[[LO2:[0-9]+]]:[[HI2:[0-9]+]]], 30
+; GCN: s_lshr_b64 s[[[LO:[0-9]+]]:[[HI:[0-9]+]]], s[[[LO2:[0-9]+]]:[[HI2:[0-9]+]]], 30
 ; GCN: s_and_b32 s{{[0-9]+}},  s[[LO]], 0xff
 
 ; GCN: .LBB3_2:
@@ -230,7 +229,7 @@ ret:
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_low32:
 
-; GCN: s_cbranch_vccnz .LBB4_2
+; GCN: s_cbranch_scc{{[0-1]}} .LBB4_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x8000f
@@ -279,7 +278,7 @@ ret:
 ; OPT: ret
 
 ; GCN-LABEL: {{^}}sink_ubfe_i64_high32:
-; GCN: s_cbranch_vccnz .LBB5_2
+; GCN: s_cbranch_scc{{[0-1]}} .LBB5_2
 
 ; GCN: ; %bb0
 ; GCN: s_bfe_u32 s{{[0-9]+}}, s{{[0-9]+}}, 0x80003

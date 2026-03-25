@@ -157,7 +157,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      dynamic_stack_loop:
 ; GCN-NEXT:        .backend_stack_size: 0x10{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; SDAG-NEXT:        .sgpr_count:     0x29{{$}}
+; SDAG-NEXT:        .sgpr_count:     0x25{{$}}
 ; GISEL-NEXT:        .sgpr_count:     0x26{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x10{{$}}
 ; SDAG-NEXT:        .vgpr_count:     0x3{{$}}
