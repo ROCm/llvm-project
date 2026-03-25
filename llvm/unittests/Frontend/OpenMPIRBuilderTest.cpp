@@ -6801,7 +6801,7 @@ TEST_F(OpenMPIRBuilderTest, TargetRegionDevice) {
   EXPECT_EQ(Value1->getNextNode(), TargetStore);
 
   auto *TargetExitBlockBr = TargetStore->getNextNode();
-  EXPECT_TRUE(isa<BranchInst>(TargetExitBlockBr));
+  EXPECT_TRUE(isa<UncondBrInst>(TargetExitBlockBr));
 
   auto *TargetExitBlock = TargetExitBlockBr->getSuccessor(0);
   EXPECT_EQ(TargetExitBlock->getName(), "target.exit");
@@ -7214,7 +7214,7 @@ TEST_F(OpenMPIRBuilderTest, ConstantAllocaRaise) {
   EXPECT_EQ(Load2->getNextNode(), TargetStore);
 
   auto *TargetExitBlockBr = TargetStore->getNextNode();
-  EXPECT_TRUE(isa<BranchInst>(TargetExitBlockBr));
+  EXPECT_TRUE(isa<UncondBrInst>(TargetExitBlockBr));
 
   auto *TargetExitBlock = TargetExitBlockBr->getSuccessor(0);
   EXPECT_EQ(TargetExitBlock->getName(), "target.exit");
@@ -7287,7 +7287,7 @@ TEST_F(OpenMPIRBuilderTest, DebugRecordLoc) {
   auto CustomMapperCB = [&](unsigned int I) { return nullptr; };
   auto BodyGenCB = [&](OpenMPIRBuilder::InsertPointTy AllocaIP,
                        OpenMPIRBuilder::InsertPointTy CodeGenIP,
-                       ArrayRef<OpenMPIRBuilder::InsertPointTy> DeallocIPs)
+                       ArrayRef<BasicBlock *> DeallocBlocks)
       -> OpenMPIRBuilder::InsertPointTy {
     IRBuilderBase::InsertPointGuard guard(Builder);
     Builder.SetCurrentDebugLocation(llvm::DebugLoc());
@@ -7818,6 +7818,7 @@ TEST_F(OpenMPIRBuilderTest, CreateTaskAffinity) {
   using InsertPointTy = OpenMPIRBuilder::InsertPointTy;
   OpenMPIRBuilder OMPBuilder(*M);
   OMPBuilder.Config.IsTargetDevice = false;
+  OMPBuilder.Config.IsGPU = false;
   OMPBuilder.initialize();
   F->setName("func");
   IRBuilder<> Builder(BB);

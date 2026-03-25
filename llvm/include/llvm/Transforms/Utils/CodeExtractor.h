@@ -170,8 +170,6 @@ public:
 
   virtual ~CodeExtractor() = default;
 
-  virtual ~CodeExtractor() = default;
-
   /// Perform the extraction, returning the new function.
   ///
   /// Returns zero when called on a CodeExtractor instance where isEligible

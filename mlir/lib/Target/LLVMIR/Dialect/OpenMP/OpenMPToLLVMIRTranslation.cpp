@@ -4274,11 +4274,11 @@ convertOmpLoopNest(Operation &opInst, llvm::IRBuilderBase &builder,
       // Use the loop body entry for allocations
       // For deallocations, use empty array for now - the deallocation will be
       // handled by the outlined function's exit blocks
-      SmallVector<llvm::OpenMPIRBuilder::InsertPointTy> deallocIPs;
+      SmallVector<llvm::BasicBlock *> deallocBlocks;
       llvm::BasicBlock *allocBlock = ip.getBlock();
-      llvm::OpenMPIRBuilder::InsertPointTy AllocaIP(
+      llvm::OpenMPIRBuilder::InsertPointTy allocaIP(
           allocBlock, allocBlock->getFirstInsertionPt());
-      allocFrame.emplace(moduleTranslation, AllocaIP, deallocIPs);
+      allocFrame.emplace(moduleTranslation, allocaIP, deallocBlocks);
     }
 
     if (loopInfos.size() != loopOp.getNumLoops() - 1)
@@ -6987,7 +6987,7 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
       capture = mapOp.getMapCaptureType();
       // Get information of alignment of mapped object
       alignmentValue = typeToLLVMIRTranslator.getPreferredAlignment(
-          mapOp.getVarType(), ompBuilder.M.getDataLayout());
+          mapOp.getVarPtrType(), ompBuilder.M.getDataLayout());
 
       // Find the corresponding entry block argument, which can be associated to
       // a map, use_device* or has_device* clause.
