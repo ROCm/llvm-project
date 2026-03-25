@@ -187,14 +187,6 @@ By default, the cache is enabled.
   termination. The string format aligns with [Clang's ThinLTO cache pruning policy](https://clang.llvm.org/docs/ThinLTO.html#cache-pruning).
   The default policy is set as: "prune_interval=1h:prune_expiration=0h:cache_size=75%:cache_size_bytes=30g:cache_size_files=0".
 
-### Compiler Options
-Comgr supports environment variables to modify clang driver invocations:
-
-* `AMD_COMGR_DRIVER_OPTIONS_APPEND`: If set, the space-separated options are
-  appended to all clang driver invocations. This can be used to inject
-  additional compiler flags for debugging or experimentation without modifying
-  the application code.
-
 ### Debugging
 Comgr supports some environment variables to aid in debugging. These
 include:
@@ -215,6 +207,10 @@ include:
   include additional Comgr-specific informational messages.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
+* `AMD_COMGR_DRIVER_OPTIONS_APPEND`: If set, the space-separated options are
+  appended to all clang driver invocations. This can be used to inject
+  additional compiler flags for debugging or experimentation without modifying
+  the application code.
 
 ### VFS
 Comgr implements support for an in-memory, virtual filesystem (VFS) for storing
