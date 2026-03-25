@@ -1,9 +1,7 @@
 import os
 import platform
-import re
 
 import lit.formats
-import lit.util
 
 config.name = "Comgr"
 config.suffixes = {".hip", ".cl", ".c", ".cpp"}
@@ -38,33 +36,3 @@ config.substitutions.append(('%llvm-dis', _fwd(config.llvm_tools_dir, 'llvm-dis'
 config.substitutions.append(('%llvm-objdump', _fwd(config.llvm_tools_dir, 'llvm-objdump')))
 config.substitutions.append(('%FileCheck', _fwd(config.llvm_tools_dir, 'FileCheck')))
 config.substitutions.append(('%amd-llvm-spirv', _fwd(config.llvm_tools_dir, 'amd-llvm-spirv')))
-
-# Resolve bare tool names to their full paths with forward slashes.
-_tool_dirs = os.pathsep.join([config.llvm_tools_dir, config.comgr_obj_dir])
-
-def _resolve_tool(name):
-    path = lit.util.which(name, _tool_dirs)
-    if path:
-        path = path.replace("\\", "/")
-        # lit.util.which calls os.path.normcase which lowercases the drive
-        # letter on Windows (B: -> b:).  Git Bash cannot execute paths with
-        # a lowercased drive letter (exit code 127).
-        if len(path) >= 2 and path[1] == ':':
-            path = path[0].upper() + path[1:]
-        return path
-    return name
-
-_bare_tools = [
-    "unbundle", "source-to-bc-with-dev-libs", "compile-opencl-minimal",
-    "compile-hip-minimal", "spirv-translator", "spirv-to-reloc",
-    "source-to-spirv", "lookup-code-object",
-    "get-version", "status-string", "data-action",
-]
-
-for _name in _bare_tools:
-    _resolved = _resolve_tool(_name)
-    # Match the tool name at word boundaries but NOT when preceded by a path
-    # separator (inside a path) or followed by '.' or '-' (inside a filename
-    # like spirv-translator.cl).  Modeled after LLVM's ToolSubst patterns.
-    _pattern = r"(?<![/\\])\b" + re.escape(_name) + r"\b(?![.-])"
-    config.substitutions.append((_pattern, _resolved))
