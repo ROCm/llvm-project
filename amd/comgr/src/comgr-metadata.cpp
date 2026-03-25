@@ -59,6 +59,63 @@ getELFObjectFileBase(DataObject *DataP) {
 // FIXME: Unify with HSA note types?
 #define PAL_METADATA_NOTE_TYPE 13
 
+// Deep compare two DocNodes for equality.
+// This is needed because DocNode::operator== doesn't support comparing
+// Array or Map nodes - it was designed only for map key comparison and
+// hits llvm_unreachable for non-scalar types.
+bool deepCompareNodes(llvm::msgpack::DocNode Lhs, llvm::msgpack::DocNode Rhs) {
+  if (Lhs.isEmpty() && Rhs.isEmpty())
+    return true;
+  if (Lhs.isEmpty() || Rhs.isEmpty())
+    return false;
+  if (Lhs.getKind() != Rhs.getKind())
+    return false;
+
+  switch (Lhs.getKind()) {
+  case msgpack::Type::Nil:
+    return true;
+  case msgpack::Type::Int:
+    return Lhs.getInt() == Rhs.getInt();
+  case msgpack::Type::UInt:
+    return Lhs.getUInt() == Rhs.getUInt();
+  case msgpack::Type::Boolean:
+    return Lhs.getBool() == Rhs.getBool();
+  case msgpack::Type::Float:
+    return Lhs.getFloat() == Rhs.getFloat();
+  case msgpack::Type::String:
+    return Lhs.getString() == Rhs.getString();
+  case msgpack::Type::Binary:
+    return Lhs.getBinary().getBuffer() == Rhs.getBinary().getBuffer();
+  case msgpack::Type::Map: {
+    auto &LhsMap = Lhs.getMap();
+    auto &RhsMap = Rhs.getMap();
+    if (LhsMap.size() != RhsMap.size())
+      return false;
+    for (auto &Entry : LhsMap) {
+      auto It = RhsMap.find(Entry.first);
+      if (It == RhsMap.end())
+        return false;
+      if (!deepCompareNodes(Entry.second, It->second))
+        return false;
+    }
+    return true;
+  }
+  case msgpack::Type::Array: {
+    auto &LhsArray = Lhs.getArray();
+    auto &RhsArray = Rhs.getArray();
+    if (LhsArray.size() != RhsArray.size())
+      return false;
+    for (size_t I = 0, E = LhsArray.size(); I != E; ++I) {
+      if (!deepCompareNodes(LhsArray[I], RhsArray[I]))
+        return false;
+    }
+    return true;
+  }
+  default:
+    return false;
+  }
+}
+
 // Deep copy a DocNode from one document to another.
 // This is needed when merging nodes from a temporary parsing document
 // into the main document, since DocNode contains pointers to memory
@@ -132,7 +189,7 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
 
   if (From.getMap().find(PrintfStrKey) != From.getMap().end()) {
     if (To.getMap().find(PrintfStrKey) != To.getMap().end()) {
-      if (From.getMap()[PrintfStrKey] != To.getMap()[PrintfStrKey])
+      if (!deepCompareNodes(From.getMap()[PrintfStrKey], To.getMap()[PrintfStrKey]))
         return false;
     } else {
       To.getMap()[PrintfStrKey] = deepCopyNode(DestDoc, From.getMap()[PrintfStrKey]);
