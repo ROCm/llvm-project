@@ -1,3 +1,4 @@
+// UNSUPPORTED: system-windows
 // RUN: export AMD_COMGR_CACHE=1
 //
 // COM: fail to create the cache, but still produce something valid
