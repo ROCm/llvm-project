@@ -61,20 +61,6 @@ public:
   bool isVreg32(Register Reg) const {
     return Reg.isVirtual() && MRI->getRegClass(Reg) == &AMDGPU::VGPR_32RegClass;
   }
-  bool isGenericSreg(Register Reg) const {
-    // return (MRI->getRegClass(Reg) == &AMDGPU::SGPR_32RegClass ||
-    //         MRI->getRegClass(Reg) == &AMDGPU::SGPR_64RegClass);
-    return PhiLoweringHelper::isLaneMaskReg(Reg);
-  }
-  bool isActualLaneMaskReg(Register Reg) const {
-    // return Reg.isVirtual() && MRI->getRegClass(Reg) ==
-    //                               TII->getRegisterInfo().getWaveMaskRegClass();
-    const TargetRegisterClass *WaveMaskRC =
-        TII->getRegisterInfo().getWaveMaskRegClass();
-    if (Reg.isVirtual())
-      return MRI->getRegClass(Reg) == WaveMaskRC;
-    return WaveMaskRC->contains(Reg);
-  }
 };
 
 Vreg1WideningHelper::Vreg1WideningHelper(MachineFunction *MF)
