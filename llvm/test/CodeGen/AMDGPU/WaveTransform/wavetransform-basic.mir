@@ -1194,7 +1194,7 @@ body:             |
   ; POSTWT-LABEL: name: divergent_incoming_to_waterfall_preheader
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.7(0x40000000)
-  ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr5, $vgpr0_vgpr1, $vgpr2_vgpr3
+  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 0, killed $vgpr5, implicit $exec
   ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], -1, implicit-def $scc
@@ -1214,7 +1214,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.1:
   ; POSTWT-NEXT:   successors: %bb.2(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr0_vgpr1, $vgpr2_vgpr3
+  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32_xm0_xexec = S_MOV_B32 $exec_lo
@@ -1222,31 +1222,31 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.2:
   ; POSTWT-NEXT:   successors: %bb.3(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr0_vgpr1, $vgpr2_vgpr3
+  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr1, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr2, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr3, implicit $exec
-  ; POSTWT-NEXT:   undef [[COPY:%[0-9]+]].sub0:sgpr_64 = COPY [[V_READFIRSTLANE_B32_]]
-  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub1:sgpr_64 = COPY [[V_READFIRSTLANE_B32_1]]
-  ; POSTWT-NEXT:   undef [[COPY1:%[0-9]+]].sub0:sgpr_64 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; POSTWT-NEXT:   [[COPY1:%[0-9]+]].sub1:sgpr_64 = COPY [[V_READFIRSTLANE_B32_3]]
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U64_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[COPY]], $vgpr0_vgpr1, implicit $exec
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U64_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[COPY1]], killed $vgpr2_vgpr3, implicit $exec
-  ; POSTWT-NEXT:   undef [[COPY2:%[0-9]+]].sub0:sgpr_128 = COPY [[V_READFIRSTLANE_B32_]]
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub1:sgpr_128 = COPY [[V_READFIRSTLANE_B32_1]]
-  ; POSTWT-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U64_e64_]], [[V_CMP_EQ_U64_e64_1]], implicit-def dead $scc
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub2:sgpr_128 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub3:sgpr_128 = COPY [[V_READFIRSTLANE_B32_3]]
-  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[S_AND_B32_]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_]], $vgpr0, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_2:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_1]], $vgpr1, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_3:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_2]], $vgpr2, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_4:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_3]], $vgpr3, implicit $exec
+  ; POSTWT-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U32_e64_1]], [[V_CMP_EQ_U32_e64_2]], implicit-def dead $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U32_e64_3]], [[V_CMP_EQ_U32_e64_4]], implicit-def dead $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[S_AND_B32_]], [[S_AND_B32_1]], implicit-def dead $scc
+  ; POSTWT-NEXT:   undef [[COPY:%[0-9]+]].sub0:sgpr_128 = COPY [[V_READFIRSTLANE_B32_]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub1:sgpr_128 = COPY [[V_READFIRSTLANE_B32_1]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub2:sgpr_128 = COPY [[V_READFIRSTLANE_B32_2]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub3:sgpr_128 = COPY [[V_READFIRSTLANE_B32_3]]
+  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[S_AND_B32_2]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.3
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.3:
   ; POSTWT-NEXT:   successors: %bb.2(0x40000000), %bb.4(0x40000000)
   ; POSTWT-NEXT:   liveins: $vgpr4
   ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   dead renamable $vgpr0 = BUFFER_LOAD_FORMAT_X_IDXEN killed renamable $vgpr4, [[COPY2]], 0, 0, 0, 0, implicit $exec
+  ; POSTWT-NEXT:   dead renamable $vgpr0 = BUFFER_LOAD_FORMAT_X_IDXEN killed renamable $vgpr4, [[COPY]], 0, 0, 0, 0, implicit $exec
   ; POSTWT-NEXT:   renamable $vgpr0_vgpr1_vgpr2_vgpr3 = IMPLICIT_DEF
   ; POSTWT-NEXT:   renamable $vgpr4 = IMPLICIT_DEF
   ; POSTWT-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, [[S_AND_SAVEEXEC_B32_]], implicit-def dead $scc
@@ -1264,8 +1264,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_2]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_2:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_3]], [[S_AND_B32_1]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_3]], [[S_AND_B32_3]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_1]]
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -1305,15 +1305,15 @@ body:             |
     %27:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr1, implicit $exec
     %30:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr2, implicit $exec
     %31:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr3, implicit $exec
-    undef %28.sub0:sgpr_64 = COPY %26
-    %28.sub1:sgpr_64 = COPY %27
-    undef %32.sub0:sgpr_64 = COPY %30
-    %32.sub1:sgpr_64 = COPY %31
-    %29:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 %28, $vgpr0_vgpr1, implicit $exec
-    %33:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 %32, killed $vgpr2_vgpr3, implicit $exec
+    %28:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %26, $vgpr0, implicit $exec
+    %29:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %27, $vgpr1, implicit $exec
+    %32:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %30, $vgpr2, implicit $exec
+    %33:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %31, $vgpr3, implicit $exec
+    %37:sreg_32_xm0_xexec = S_AND_B32 %28, %29, implicit-def dead $scc
+    %38:sreg_32_xm0_xexec = S_AND_B32 %32, %33, implicit-def dead $scc
+    %34:sreg_32_xm0_xexec = S_AND_B32 %37, %38, implicit-def dead $scc
     undef %35.sub0:sgpr_128 = COPY %26
     %35.sub1:sgpr_128 = COPY %27
-    %34:sreg_32_xm0_xexec = S_AND_B32 %29, %33, implicit-def dead $scc
     %35.sub2:sgpr_128 = COPY %30
     %35.sub3:sgpr_128 = COPY %31
     %36:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %34, implicit-def $exec, implicit-def dead $scc, implicit $exec
@@ -1364,7 +1364,7 @@ body:             |
   ; POSTWT-LABEL: name: divergent_waterfall_loop_remainder_block
   ; POSTWT: bb.0:
   ; POSTWT-NEXT:   successors: %bb.1(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr5, $vgpr0_vgpr1, $vgpr2_vgpr3
+  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_MOV_B32 $exec_lo
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -1375,31 +1375,31 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.1:
   ; POSTWT-NEXT:   successors: %bb.2(0x80000000)
-  ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr5, $vgpr0_vgpr1, $vgpr2_vgpr3
+  ; POSTWT-NEXT:   liveins: $vgpr0, $vgpr1, $vgpr2, $vgpr3, $vgpr4, $vgpr5
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_1:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr1, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_2:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr2, implicit $exec
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_3:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr3, implicit $exec
-  ; POSTWT-NEXT:   undef [[COPY:%[0-9]+]].sub0:sgpr_64 = COPY [[V_READFIRSTLANE_B32_]]
-  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub1:sgpr_64 = COPY [[V_READFIRSTLANE_B32_1]]
-  ; POSTWT-NEXT:   undef [[COPY1:%[0-9]+]].sub0:sgpr_64 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; POSTWT-NEXT:   [[COPY1:%[0-9]+]].sub1:sgpr_64 = COPY [[V_READFIRSTLANE_B32_3]]
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U64_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[COPY]], $vgpr0_vgpr1, implicit $exec
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U64_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 [[COPY1]], killed $vgpr2_vgpr3, implicit $exec
-  ; POSTWT-NEXT:   undef [[COPY2:%[0-9]+]].sub0:sgpr_128 = COPY [[V_READFIRSTLANE_B32_]]
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub1:sgpr_128 = COPY [[V_READFIRSTLANE_B32_1]]
-  ; POSTWT-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U64_e64_]], [[V_CMP_EQ_U64_e64_1]], implicit-def dead $scc
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub2:sgpr_128 = COPY [[V_READFIRSTLANE_B32_2]]
-  ; POSTWT-NEXT:   [[COPY2:%[0-9]+]].sub3:sgpr_128 = COPY [[V_READFIRSTLANE_B32_3]]
-  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[S_AND_B32_]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_]], $vgpr0, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_1]], $vgpr1, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_2:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_2]], $vgpr2, implicit $exec
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_3:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_3]], $vgpr3, implicit $exec
+  ; POSTWT-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U32_e64_]], [[V_CMP_EQ_U32_e64_1]], implicit-def dead $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[V_CMP_EQ_U32_e64_2]], [[V_CMP_EQ_U32_e64_3]], implicit-def dead $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 [[S_AND_B32_]], [[S_AND_B32_1]], implicit-def dead $scc
+  ; POSTWT-NEXT:   undef [[COPY:%[0-9]+]].sub0:sgpr_128 = COPY [[V_READFIRSTLANE_B32_]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub1:sgpr_128 = COPY [[V_READFIRSTLANE_B32_1]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub2:sgpr_128 = COPY [[V_READFIRSTLANE_B32_2]]
+  ; POSTWT-NEXT:   [[COPY:%[0-9]+]].sub3:sgpr_128 = COPY [[V_READFIRSTLANE_B32_3]]
+  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[S_AND_B32_2]], implicit-def $exec, implicit-def dead $scc, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.2
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.2:
   ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.3(0x40000000)
   ; POSTWT-NEXT:   liveins: $vgpr4, $vgpr5
   ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   dead renamable $vgpr0 = BUFFER_LOAD_FORMAT_X_IDXEN killed renamable $vgpr4, [[COPY2]], 0, 0, 0, 0, implicit $exec
+  ; POSTWT-NEXT:   dead renamable $vgpr0 = BUFFER_LOAD_FORMAT_X_IDXEN killed renamable $vgpr4, [[COPY]], 0, 0, 0, 0, implicit $exec
   ; POSTWT-NEXT:   renamable $vgpr0_vgpr1_vgpr2_vgpr3 = IMPLICIT_DEF
   ; POSTWT-NEXT:   renamable $vgpr4 = IMPLICIT_DEF
   ; POSTWT-NEXT:   $exec_lo = S_XOR_B32_term $exec_lo, [[S_AND_SAVEEXEC_B32_]], implicit-def dead $scc
@@ -1411,14 +1411,14 @@ body:             |
   ; POSTWT-NEXT:   liveins: $vgpr5
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_]]
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 0, killed $vgpr5, implicit $exec
-  ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_]], -1, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_1]], [[S_AND_B32_1]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_2]], [[V_CMP_EQ_U32_e64_]], implicit-def $scc
+  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_4:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 0, killed $vgpr5, implicit $exec
+  ; POSTWT-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 [[V_CMP_EQ_U32_e64_4]], -1, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_1]], [[S_AND_B32_3]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_2]], [[V_CMP_EQ_U32_e64_4]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_1:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_1]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_3]], [[S_AND_B32_2]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_4:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_1]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_3]], [[S_AND_B32_4]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_1]]
   ; POSTWT-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
@@ -1436,8 +1436,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_3]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_2:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_2]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_3]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_5:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_5]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_2]]
   ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -1469,15 +1469,15 @@ body:             |
     %28:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr1, implicit $exec
     %31:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr2, implicit $exec
     %32:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr3, implicit $exec
-    undef %29.sub0:sgpr_64 = COPY %27
-    %29.sub1:sgpr_64 = COPY %28
-    undef %33.sub0:sgpr_64 = COPY %31
-    %33.sub1:sgpr_64 = COPY %32
-    %30:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 %29, $vgpr0_vgpr1, implicit $exec
-    %34:sreg_32_xm0_xexec = V_CMP_EQ_U64_e64 %33, killed $vgpr2_vgpr3, implicit $exec
+    %29:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %27, $vgpr0, implicit $exec
+    %30:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %28, $vgpr1, implicit $exec
+    %33:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %31, $vgpr2, implicit $exec
+    %34:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %32, $vgpr3, implicit $exec
+    %38:sreg_32_xm0_xexec = S_AND_B32 %29, %30, implicit-def dead $scc
+    %39:sreg_32_xm0_xexec = S_AND_B32 %33, %34, implicit-def dead $scc
+    %35:sreg_32_xm0_xexec = S_AND_B32 %38, %39, implicit-def dead $scc
     undef %36.sub0:sgpr_128 = COPY %27
     %36.sub1:sgpr_128 = COPY %28
-    %35:sreg_32_xm0_xexec = S_AND_B32 %30, %34, implicit-def dead $scc
     %36.sub2:sgpr_128 = COPY %31
     %36.sub3:sgpr_128 = COPY %32
     %37:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %35, implicit-def $exec, implicit-def dead $scc, implicit $exec
