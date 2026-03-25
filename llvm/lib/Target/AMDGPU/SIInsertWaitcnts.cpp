@@ -1172,13 +1172,12 @@ void WaitcntBrackets::updateByEvent(WaitEventType E, MachineInstr &Inst) {
     for (const MachineOperand &Op : Inst.all_uses())
       setScoreByOperand(Op, T, CurrScore);
   } else if (T == VA_VDST || T == VM_VSRC) {
-    // Match the score to the VGPR destination or source registers as
-    // appropriate
     for (const MachineOperand &Op : Inst.operands()) {
-      if (!Op.isReg() || (T == VA_VDST && Op.isUse()) ||
-          (T == VM_VSRC && Op.isDef()))
+      if (!Op.isReg() || !TRI.isVectorRegister(MRI, Op.getReg()))
         continue;
-      if (TRI.isVectorRegister(Context->MRI, Op.getReg()))
+      // VA_VDST: track all operands (dest for RAW, source for WAR)
+      // VM_VSRC: track only source operands
+      if (T == VA_VDST || Op.isUse())
         setScoreByOperand(Op, T, CurrScore);
     }
   } else /* LGKM_CNT || EXP_CNT || VS_CNT || NUM_INST_CNTS */ {
