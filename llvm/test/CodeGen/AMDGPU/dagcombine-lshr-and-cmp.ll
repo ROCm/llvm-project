@@ -57,8 +57,7 @@ define amdgpu_kernel void @uniform_opt_lshr_and_cmp(ptr addrspace(1) %out, i32 %
   ; GCN-NEXT:   [[COPY3:%[0-9]+]]:sreg_64_xexec = COPY [[COPY2]]
   ; GCN-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; GCN-NEXT:   S_CMP_EQ_U32 killed [[S_AND_B32_]], killed [[S_MOV_B32_1]], implicit-def $scc
-  ; GCN-NEXT:   [[COPY4:%[0-9]+]]:sreg_64 = COPY $scc
-  ; GCN-NEXT:   SI_BRCOND_UNIFORM %bb.2, killed [[COPY4]]
+  ; GCN-NEXT:   S_CBRANCH_SCC1 %bb.2, implicit $scc
   ; GCN-NEXT:   S_BRANCH %bb.1
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.1.out.true:
