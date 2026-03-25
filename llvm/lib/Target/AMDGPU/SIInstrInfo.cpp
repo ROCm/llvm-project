@@ -3484,6 +3484,45 @@ bool SIInstrInfo::canInsertSelect(const MachineBasicBlock &MBB,
     CondCycles = TrueCycles = FalseCycles = NumInsts; // ???
     return RI.isSGPRClass(RC);
   }
+  case DIVERGE_NZ:
+  case DIVERGE_Z: {
+    const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+    const TargetRegisterClass *RC = MRI.getRegClass(TrueReg);
+    if (MRI.getRegClass(FalseReg) != RC)
+      return false;
+
+    int NumInsts = AMDGPU::getRegBitWidth(*RC) / 32;
+    CondCycles = TrueCycles = FalseCycles = NumInsts;
+    // +1 for V_CMP_NE_U32_e32 converting the vgpr_32 condition to VCC.
+    CondCycles += 1;
+
+    return RI.hasVGPRs(RC) && NumInsts <= 6;
+  }
+  case UNIFORM_NZ:
+  case UNIFORM_Z: {
+    const MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+    const TargetRegisterClass *RC = MRI.getRegClass(TrueReg);
+    if (MRI.getRegClass(FalseReg) != RC)
+      return false;
+
+    int NumInsts = AMDGPU::getRegBitWidth(*RC) / 32;
+
+    if (RI.isSGPRClass(RC)) {
+      if (NumInsts % 2 == 0)
+        NumInsts /= 2;
+      CondCycles = TrueCycles = FalseCycles = NumInsts;
+      // +1 for S_AND_B{32|64} setting SCC from the lane mask condition.
+      CondCycles += 1;
+      return true;
+    }
+    if (RI.hasVGPRs(RC)) {
+      CondCycles = TrueCycles = FalseCycles = NumInsts;
+      // +1 for COPY to VCC from the lane mask condition.
+      CondCycles += 1;
+      return NumInsts <= 6;
+    }
+    return false;
+  }
   default:
     return false;
   }
@@ -3494,9 +3533,52 @@ void SIInstrInfo::insertSelect(MachineBasicBlock &MBB,
                                Register DstReg, ArrayRef<MachineOperand> Cond,
                                Register TrueReg, Register FalseReg) const {
   BranchPredicate Pred = static_cast<BranchPredicate>(Cond[0].getImm());
-  if (Pred == VCCZ || Pred == SCC_FALSE) {
+  if (Pred == VCCZ || Pred == SCC_FALSE || Pred == DIVERGE_Z || Pred == UNIFORM_Z) {
     Pred = static_cast<BranchPredicate>(-Pred);
     std::swap(TrueReg, FalseReg);
+  }
+
+  // DIVERGE_NZ: the condition is a lane mask (SReg_1 for direct V_CMP results,
+  // or vgpr_32 after AMDGPUFinalizeISelWaveTransform widens vreg_1). Move it
+  // into VCC so the rest of this function can use V_CNDMASK_B32_e32.
+  if (Pred == DIVERGE_NZ) {
+    Register CondReg = Cond[1].getReg();
+    MachineRegisterInfo &MRI0 = MBB.getParent()->getRegInfo();
+    const GCNSubtarget &ST = MBB.getParent()->getSubtarget<GCNSubtarget>();
+    MCRegister VCCReg = ST.isWave32() ? AMDGPU::VCC_LO : AMDGPU::VCC;
+
+    if (CondReg.isVirtual() && RI.hasVGPRs(MRI0.getRegClass(CondReg))) {
+      // vgpr_32 condition from vreg_1 widening — convert to VCC.
+      BuildMI(MBB, I, DL, get(AMDGPU::V_CMP_NE_U32_e32))
+          .addImm(0)
+          .addReg(CondReg);
+    } else {
+      // SGPR lane mask — copy directly to VCC.
+      BuildMI(MBB, I, DL, get(AMDGPU::COPY), VCCReg)
+          .addReg(CondReg);
+    }
+    Pred = VCCNZ;
+  }
+
+  if (Pred == UNIFORM_NZ) {
+    Register CondReg = Cond[1].getReg();
+    MachineRegisterInfo &MRI0 = MBB.getParent()->getRegInfo();
+    const GCNSubtarget &ST = MBB.getParent()->getSubtarget<GCNSubtarget>();
+    const TargetRegisterClass *DstRC0 = MRI0.getRegClass(DstReg);
+
+    if (RI.hasVGPRs(DstRC0)) {
+      MCRegister VCCReg = ST.isWave32() ? AMDGPU::VCC_LO : AMDGPU::VCC;
+      BuildMI(MBB, I, DL, get(AMDGPU::COPY), VCCReg).addReg(CondReg);
+      Pred = VCCNZ;
+    } else {
+      unsigned AndOpc = ST.isWave32() ? AMDGPU::S_AND_B32 : AMDGPU::S_AND_B64;
+      const TargetRegisterClass *LaneMaskRC = ST.getBoolRC();
+      Register Scratch = MRI0.createVirtualRegister(LaneMaskRC);
+      BuildMI(MBB, I, DL, get(AndOpc), Scratch)
+          .addReg(CondReg)
+          .addReg(CondReg);
+      Pred = SCC_TRUE;
+    }
   }
 
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();

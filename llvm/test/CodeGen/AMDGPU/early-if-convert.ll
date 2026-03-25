@@ -1,5 +1,5 @@
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=verde -amdgpu-early-ifcvt=1 -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck -check-prefix=GCN %s
-; XUN: llc -mtriple=amdgcn -mcpu=tonga -amdgpu-early-ifcvt=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=verde -amdgpu-early-ifcvt=1 -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck -check-prefix=GCN %s
+; XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -amdgpu-early-ifcvt=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; Note: breaking up large PHIs is disabled to prevent some testcases from becoming
 ;  branchless.
@@ -31,9 +31,10 @@ endif:
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_diamond:
 ; GCN: buffer_load_dword [[VAL:v[0-9]+]]
 ; GCN: v_cmp_neq_f32_e32 vcc, 1.0, [[VAL]]
-; GCN-DAG: v_add_f32_e32 [[ADD:v[0-9]+]], [[VAL]], [[VAL]]
 ; GCN-DAG: v_mul_f32_e32 [[MUL:v[0-9]+]], [[VAL]], [[VAL]]
-; GCN: buffer_store_dword [[MUL]]
+; GCN-DAG: v_add_f32_e32 [[ADD:v[0-9]+]], [[VAL]], [[VAL]]
+; GCN: v_cndmask_b32_e32 [[RESULT:v[0-9]+]], [[ADD]], [[MUL]], vcc
+; GCN: buffer_store_dword [[RESULT]]
 define amdgpu_kernel void @test_vccnz_ifcvt_diamond(ptr addrspace(1) %out, ptr addrspace(1) %in) #0 {
 entry:
   %v = load float, ptr addrspace(1) %in
@@ -55,7 +56,7 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_triangle_vcc_clobber:
-; GCN: s_cbranch_vccnz
+; GCN: s_cbranch_vccz
 ; GCN: ; clobber vcc
 define amdgpu_kernel void @test_vccnz_ifcvt_triangle_vcc_clobber(ptr addrspace(1) %out, ptr addrspace(1) %in, float %k) #0 {
 entry:
@@ -112,7 +113,7 @@ endif:
 
 ; Short chain of cheap instructions to not convert
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_triangle_min_expensive:
-; GCN: s_cbranch_vccnz [[ENDIF:.LBB[0-9]+_[0-9]+]]
+; GCN: s_cbranch_vccz [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: v_mul_f32
 ; GCN: v_mul_f32
@@ -155,7 +156,7 @@ endif:
 ; Should still branch over fdiv expansion
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_triangle_expensive:
 ; GCN: v_cmp_neq_f32_e32
-; GCN: s_cbranch_vccnz [[ENDIF:.LBB[0-9]+_[0-9]+]]
+; GCN: s_cbranch_vccz [[ENDIF:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: v_div_scale_f32
 
@@ -180,12 +181,9 @@ endif:
 ; vcc branch with SGPR inputs
 ; GCN-LABEL: {{^}}test_vccnz_sgpr_ifcvt_triangle:
 ; GCN: v_cmp_neq_f32_e64
-; GCN: s_cbranch_vccnz [[ENDIF:.LBB[0-9]+_[0-9]+]]
-
 ; GCN: s_add_i32
-
-; GCN: [[ENDIF]]:
-; GCN: buffer_store_dword
+; GCN: s_and_b64
+; GCN: s_cselect_b32
 define amdgpu_kernel void @test_vccnz_sgpr_ifcvt_triangle(ptr addrspace(1) %out, ptr addrspace(4) %in, float %cnd) #0 {
 entry:
   %v = load i32, ptr addrspace(4) %in
@@ -243,10 +241,11 @@ endif:
 
 ; Scalar branch and scalar inputs
 ; GCN-LABEL: {{^}}test_scc1_sgpr_ifcvt_triangle:
-; GCN: s_load_dword [[VAL:s[0-9]+]], s{{\[[0-9]+:[0-9]+\]}}, 0x0
-; GCN: s_add_i32 [[ADD:s[0-9]+]], [[VAL]], [[VAL]]
 ; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 1
-; GCN-NEXT: s_cselect_b32 [[SELECT:s[0-9]+]], [[VAL]], [[ADD]]
+; GCN: s_cselect_b64
+; GCN: s_add_i32
+; GCN: s_and_b64
+; GCN: s_cselect_b32
 define amdgpu_kernel void @test_scc1_sgpr_ifcvt_triangle(ptr addrspace(4) %in, i32 %cond) #0 {
 entry:
   %v = load i32, ptr addrspace(4) %in
@@ -267,11 +266,9 @@ endif:
 ; Scalar branch but VGPR select operands
 ; GCN-LABEL: {{^}}test_scc1_vgpr_ifcvt_triangle:
 ; GCN: s_cmp_lg_u32
-; GCN: s_cbranch_scc1 [[ENDIF:.LBB[0-9]+_[0-9]+]]
-
+; GCN: s_cselect_b64 vcc
 ; GCN: v_add_f32_e32
-
-; GCN: [[ENDIF]]:
+; GCN: v_cndmask_b32_e32
 ; GCN: buffer_store_dword
 define amdgpu_kernel void @test_scc1_vgpr_ifcvt_triangle(ptr addrspace(1) %out, ptr addrspace(1) %in, i32 %cond) #0 {
 entry:
@@ -290,10 +287,12 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}test_scc1_sgpr_ifcvt_triangle64:
+; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 1
+; GCN: s_cselect_b64 s{{\[[0-9]+:[0-9]+\]}}, -1, 0
 ; GCN: s_add_u32
 ; GCN: s_addc_u32
-; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 1
-; GCN-NEXT: s_cselect_b64 s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}
+; GCN: s_and_b64
+; GCN: s_cselect_b64 s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}
 define amdgpu_kernel void @test_scc1_sgpr_ifcvt_triangle64(ptr addrspace(4) %in, i32 %cond) #0 {
 entry:
   %v = load i64, ptr addrspace(4) %in
@@ -312,10 +311,12 @@ endif:
 
 ; TODO: Can do s_cselect_b64; s_cselect_b32
 ; GCN-LABEL: {{^}}test_scc1_sgpr_ifcvt_triangle96:
-; GCN: s_add_i32
-; GCN: s_add_i32
-; GCN: s_add_i32
 ; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 1
+; GCN: s_cselect_b64
+; GCN: s_add_i32
+; GCN: s_add_i32
+; GCN: s_add_i32
+; GCN: s_and_b64
 ; GCN-NEXT: s_cselect_b32 s
 ; GCN-NEXT: s_cselect_b32 s
 ; GCN-NEXT: s_cselect_b32 s
@@ -337,11 +338,13 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}test_scc1_sgpr_ifcvt_triangle128:
-; GCN: s_add_i32
-; GCN: s_add_i32
-; GCN: s_add_i32
-; GCN: s_add_i32
 ; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 1
+; GCN: s_cselect_b64
+; GCN: s_add_i32
+; GCN: s_add_i32
+; GCN: s_add_i32
+; GCN: s_add_i32
+; GCN: s_and_b64
 ; GCN-NEXT: s_cselect_b64 s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}
 ; GCN-NEXT: s_cselect_b64 s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}
 define amdgpu_kernel void @test_scc1_sgpr_ifcvt_triangle128(ptr addrspace(4) %in, i32 %cond) #0 {
@@ -360,9 +363,10 @@ endif:
   ret void
 }
 
+; Under LWT, cost model rejects if-conversion ("Not enough available ILP")
 ; GCN-LABEL: {{^}}uniform_if_swap_br_targets_scc_constant_select:
 ; GCN: s_cmp_lg_u32 s{{[0-9]+}}, 0
-; GCN: s_cselect_b32 s{{[0-9]+}}, 0, 1{{$}}
+; GCN: s_cbranch_vccnz
 define amdgpu_kernel void @uniform_if_swap_br_targets_scc_constant_select(i32 %cond, ptr addrspace(1) %out) {
 entry:
   %cmp0 = icmp eq i32 %cond, 0
@@ -383,6 +387,7 @@ done:
 ; GCN-LABEL: {{^}}ifcvt_undef_scc:
 ; GCN: {{^}}; %bb.0:
 ; GCN-NEXT: s_load_dwordx2
+; GCN: s_and_b64
 ; GCN-NEXT: s_cselect_b32 s{{[0-9]+}}, 0, 1{{$}}
 define amdgpu_kernel void @ifcvt_undef_scc(i32 %cond, ptr addrspace(1) %out) {
 entry:
