@@ -1116,7 +1116,8 @@ std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Constant Constant,
 
 std::optional<NewOpResult> DwarfExpression::traverse(DIOp::PushLane PushLane,
                                                      ChildrenT Children) {
-  return std::nullopt;
+  emitUserOp(dwarf::DW_OP_LLVM_push_lane);
+  return NewOpResult{PushLane.getResultType(), ValueKind::Value};
 }
 
 std::optional<NewOpResult> DwarfExpression::traverse(DIOp::Referrer ReferrerOp,
