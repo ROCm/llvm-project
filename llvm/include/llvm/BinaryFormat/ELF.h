@@ -835,7 +835,8 @@ enum {
   X(0x5a, EF_AMDGPU_MACH_AMDGCN_GFX1251, "gfx1251")                            \
   X(0x5b, EF_AMDGPU_MACH_AMDGCN_GFX12_5_GENERIC, "gfx12-5-generic")            \
   X(0x5d, EF_AMDGPU_MACH_AMDGCN_GFX1170, "gfx1170")                            \
-  X(0x5f, EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC, "gfx9-4-generic")
+  X(0x5f, EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC, "gfx9-4-generic")              \
+  X(0xeb, EF_AMDGPU_MACH_AMDGCN_GFX125F, "gfx125f")
 
 enum : unsigned {
   // clang-format off
@@ -866,7 +867,7 @@ enum : unsigned {
 
   // First/last AMDGCN-based processors.
   EF_AMDGPU_MACH_AMDGCN_FIRST = EF_AMDGPU_MACH_AMDGCN_GFX600,
-  EF_AMDGPU_MACH_AMDGCN_LAST = EF_AMDGPU_MACH_AMDGCN_GFX9_4_GENERIC,
+  EF_AMDGPU_MACH_AMDGCN_LAST = EF_AMDGPU_MACH_AMDGCN_GFX125F,
 
   // Indicates if the "xnack" target feature is enabled for all code contained
   // in the object.

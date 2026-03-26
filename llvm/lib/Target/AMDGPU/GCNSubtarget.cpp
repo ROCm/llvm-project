@@ -52,11 +52,6 @@ static cl::opt<unsigned>
                  cl::desc("Number of addresses from which to enable MIMG NSA."),
                  cl::init(2), cl::Hidden);
 
-static cl::opt<bool>
-    EnableGFX1250B0Specific("amdgpu-gfx1250-b0-specific", cl::Hidden,
-                            cl::desc("Generate code for B0 flavor of gfx1250"),
-                            cl::init(true));
-
 GCNSubtarget::~GCNSubtarget() = default;
 
 GCNSubtarget &GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
@@ -134,13 +129,6 @@ GCNSubtarget &GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
     ToggleFeature(AMDGPU::FeatureUseFlatForGlobal);
     UseFlatForGlobal = false;
   }
-
-  // Hack to enable gfx1250 A0/B0 codegen. Remove when A0 is decomissioned.
-  if ((EnableGFX1250B0Specific && !hasFeature(AMDGPU::FeatureGFX1250B0)) ||
-      (!EnableGFX1250B0Specific && hasFeature(AMDGPU::FeatureGFX1250B0))) {
-    ToggleFeature(AMDGPU::FeatureGFX1250B0);
-  }
-  HasGFX1250B0 = hasFeature(AMDGPU::FeatureGFX1250B0);
 
   // Set defaults if needed.
   if (MaxPrivateElementSize == 0)

@@ -250,6 +250,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
   AMDGPU::GPUKind Kind = parseArchAMDGCN(GPU);
   switch (Kind) {
   case GK_GFX1251:
+  case GK_GFX125F:
   case GK_GFX1250:
   case GK_GFX12_5_GENERIC:
     Features["swmmac-gfx1200-insts"] = true;
