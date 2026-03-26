@@ -1724,9 +1724,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
       unsigned Opcode = Terminator.getOpcode();
 
       assert(!Info.OrigSuccFinal);
-      if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_UNIFORM ||
-          Opcode == AMDGPU::SI_BRCOND_Z ||
-          Opcode == AMDGPU::SI_BRCOND_UNIFORM_Z) {
+      if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
         assert(!Info.OrigCondition);
         Info.OrigCondition = Terminator.getOperand(1).getReg();
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
@@ -1940,7 +1938,7 @@ void ControlFlowRewriter::rewrite() {
       assert(LaneSucc != Node->LaneSuccessors.end());
 
       unsigned Opcode = Info.ImplicitBranchOpc;
-      if (!Opcode) { // SI_BRCOND_UNIFORM SI_BRCOND_UNIFORM_Z
+      if (!Opcode) { // For uniform branch cases.
         assert(Info.OrigCondition);
 
         if (Info.OrigCondition == AMDGPU::SCC) {

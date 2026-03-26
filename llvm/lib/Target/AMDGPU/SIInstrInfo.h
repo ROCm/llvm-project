@@ -110,10 +110,8 @@ private:
     VCCZ = -2,
     EXECNZ = -3,
     EXECZ = 3,
-    UNIFORM_NZ = 4,
-    UNIFORM_Z = -4,
-    DIVERGE_NZ = 5,
-    DIVERGE_Z = -5
+    DIVERGE_NZ = 4,
+    DIVERGE_Z = -4
   };
 
   using SetVectorType = SmallSetVector<MachineInstr *, 32>;
