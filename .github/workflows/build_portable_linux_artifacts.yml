@@ -232,7 +232,8 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          extra_cmake_options: ${{ inputs.extra_cmake_options }} 
+          CCC_OVERRIDE_OPTIONS: "+-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"
           BUILD_DIR: build
         run: |
           python3 build_tools/github_actions/build_configure.py --manylinux

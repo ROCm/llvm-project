@@ -280,6 +280,7 @@ jobs:
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          CCC_OVERRIDE_OPTIONS: "+-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"
         run: |
           # clear cache before build and after download
           cd L:
