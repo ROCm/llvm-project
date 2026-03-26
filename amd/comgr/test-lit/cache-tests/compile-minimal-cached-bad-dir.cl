@@ -1,4 +1,3 @@
-// UNSUPPORTED: system-windows
 // RUN: export AMD_COMGR_CACHE=1
 //
 // COM: fail to create the cache, but still produce something valid
@@ -10,5 +9,5 @@
 // RUN:     compile-opencl-minimal %S/../compile-minimal.cl %t.bin 1.2
 // RUN: %llvm-objdump -d %t.bin | %FileCheck %S/../compile-minimal.cl
 // RUN: %FileCheck --check-prefix=BAD %s < %t.log
-// BAD: Failed to open cache file
-// BAD-SAME: Not a directory
+// BAD: Comgr cache,
+// BAD-SAME: {{Not a directory|no such file or directory}}
