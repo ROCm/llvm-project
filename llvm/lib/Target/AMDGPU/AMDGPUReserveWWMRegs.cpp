@@ -108,5 +108,14 @@ bool AMDGPUReserveWWMRegs::run(MachineFunction &MF) {
   // Now clear the VGPR register allocation mask.
   MFI->clearVGPRAllocMask();
 
+  // Refresh the cached reserved register set to reflect the newly reserved
+  // WWM registers and cleared VGPRAllocMask. Without this, passes like PEI
+  // that check MRI.isAllocatable() would see stale reservation state when
+  // no subsequent register allocation round refreshes it for the late WT flow.
+  //
+  // In the structurizer-enabled flow, this is harmless as the subsequent
+  // perlane VGPRregister allocation round would refresh it anyway.
+  MF.getRegInfo().freezeReservedRegs();
+
   return Changed;
 }
