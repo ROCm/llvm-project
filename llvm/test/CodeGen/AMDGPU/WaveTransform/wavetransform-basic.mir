@@ -681,8 +681,8 @@ body:             |
   ; POSTWT-NEXT:   successors: %bb.5(0x40000000), %bb.6(0x40000000)
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY2]], [[S_MOV_B32_]], implicit-def $scc
-  ; POSTWT-NEXT:   S_CBRANCH_SCC1 %bb.6, implicit $scc
+  ; POSTWT-NEXT:   S_CMP_LG_U32 killed [[COPY2]], [[S_MOV_B32_]], implicit-def $scc
+  ; POSTWT-NEXT:   S_CBRANCH_SCC0 %bb.6, implicit $scc
   ; POSTWT-NEXT:   S_BRANCH %bb.5
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.3:
@@ -731,8 +731,8 @@ body:             |
   bb.2:
     successors: %bb.5, %bb.6
 
-    S_CMP_EQ_U32 killed %10, %15, implicit-def $scc
-    S_CBRANCH_SCC1 %bb.6, implicit killed $scc
+    S_CMP_LG_U32 killed %10, %15, implicit-def $scc
+    S_CBRANCH_SCC0 %bb.6, implicit killed $scc
     S_BRANCH %bb.5
 
   bb.3:
