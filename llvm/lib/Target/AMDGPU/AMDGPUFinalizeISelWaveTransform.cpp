@@ -13,6 +13,7 @@
 
 #include "AMDGPU.h"
 #include "SILowerI1Copies.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/InitializePasses.h"
@@ -86,6 +87,7 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
     AU.setPreservesAll();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
@@ -97,6 +99,7 @@ private:
 
 INITIALIZE_PASS_BEGIN(AMDGPUFinalizeISelWaveTransform, DEBUG_TYPE,
                       "AMDGPU Finalize ISel Wave Transform", false, false)
+INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
 INITIALIZE_PASS_END(AMDGPUFinalizeISelWaveTransform, DEBUG_TYPE,
                     "AMDGPU Finalize ISel Wave Transform", false, false)
 
@@ -106,6 +109,113 @@ char &llvm::AMDGPUFinalizeISelWaveTransformID =
 
 FunctionPass *llvm::createAMDGPUFinalizeISelWaveTransformPass() {
   return new AMDGPUFinalizeISelWaveTransform();
+}
+
+//===----------------------------------------------------------------------===//
+// MIR-level PHI simplification for uniform (SGPR) PHIs, analogous to
+// simplifyPHINode() in InstructionSimplify.cpp for LLVM IR.
+//
+// Detect PHIs that even though UA identifies them as uniform, they actually
+// merge values through divergent control flow.
+//
+// The only possible scenario for such PHIs is when all incoming edges carry
+// either undef/poison (IMPLICIT_DEF) or the same uniquely defined value.
+// This case is only observable in -O0 mode for the late wave-transform
+// pipeline (for other modes, codegen would already have optimized such PHIs
+// before ISel).  As for the default pipeline, the structurizer pass would
+// optimize such PHIs after restructurizing the CFG, irrespective of the
+// optimization level.
+//
+// Only SGPR (scalar) PHIs are candidates: every source and destination
+// register must reside in an SGPR register class.
+//===----------------------------------------------------------------------===//
+
+/// Return the single common register that a uniform machine PHI folds to, or
+/// an invalid Register if the PHI cannot be simplified.  Only PHIs whose
+/// destination and all source registers are SGPRs are considered.
+static Register simplifyMachinePHI(MachineInstr &PHI, MachineRegisterInfo &MRI,
+                                   MachineDominatorTree &MDT,
+                                   const TargetRegisterClass *WaveMaskRC) {
+  assert(PHI.isPHI());
+  Register DstReg = PHI.getOperand(0).getReg();
+
+  if (!DstReg.isVirtual())
+    return Register();
+  const TargetRegisterClass *DstRC = MRI.getRegClass(DstReg);
+  if (!SIRegisterInfo::isSGPRClass(DstRC) || WaveMaskRC == DstRC)
+    return Register();
+
+  Register CommonReg;
+  bool HasImplicitDefInput = false;
+
+  for (unsigned i = 1, e = PHI.getNumOperands(); i < e; i += 2) {
+    Register Incoming = PHI.getOperand(i).getReg();
+
+    if (!Incoming.isVirtual() ||
+        !SIRegisterInfo::isSGPRClass(MRI.getRegClass(Incoming)))
+      return Register();
+
+    if (Incoming == DstReg)
+      continue;
+
+    if (MachineInstr *Def = MRI.getVRegDef(Incoming);
+        Def && Def->isImplicitDef()) {
+      HasImplicitDefInput = true;
+      continue;
+    }
+
+    if (CommonReg && CommonReg != Incoming)
+      return Register();
+    CommonReg = Incoming;
+  }
+
+  if (!CommonReg)
+    return Register();
+
+  // When IMPLICIT_DEF inputs are present the common value must dominate the
+  // PHI block, otherwise the replacement would be invalid on paths that
+  // originally carried IMPLICIT_DEF.
+  if (HasImplicitDefInput) {
+    MachineInstr *DefCommonReg = MRI.getVRegDef(CommonReg);
+    MachineBasicBlock *DefMBB = DefCommonReg->getParent();
+    MachineBasicBlock *PHIBB = PHI.getParent();
+    if (DefCommonReg && MDT.dominates(DefMBB, PHIBB))
+      return CommonReg;
+  }
+
+  return Register();
+}
+
+/// Walk every PHI in the function and try to replace uniform (SGPR) PHIs that
+/// merge values through divergent control flow with their single real incoming
+/// value.
+static bool simplifyMachinePHIs(MachineFunction &MF,
+                                MachineDominatorTree &MDT) {
+  const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
+  const TargetRegisterClass *WaveMaskRC =
+      ST.getRegisterInfo()->getWaveMaskRegClass();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  bool Changed = false;
+
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : make_early_inc_range(MBB.phis())) {
+      Register NewReg = simplifyMachinePHI(MI, MRI, MDT, WaveMaskRC);
+      if (!NewReg.isValid())
+        continue;
+
+      Register OldReg = MI.getOperand(0).getReg();
+
+      LLVM_DEBUG(dbgs() << "Simplifying PHI: " << MI << "  -> "
+                        << printReg(NewReg) << "\n");
+
+      if (!MRI.hasOneUse(OldReg))
+        MRI.clearKillFlags(NewReg);
+      MRI.replaceRegWith(OldReg, NewReg);
+      MI.eraseFromParent();
+      Changed = true;
+    }
+  }
+  return Changed;
 }
 
 //===----------------------------------------------------------------------===//
@@ -213,7 +323,10 @@ bool AMDGPUFinalizeISelWaveTransform::runOnMachineFunction(
           MachineFunctionProperties::Property::Selected))
     return false;
 
+  auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
+  bool Changed = simplifyMachinePHIs(MF, MDT);
+
   Vreg1WideningHelper Helper(&MF);
-  bool Changed = Helper.widenVreg1s();
+  Changed |= Helper.widenVreg1s();
   return Helper.cleanConstrainRegs(Changed);
 }
