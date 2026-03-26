@@ -280,9 +280,10 @@ jobs:
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
-          CCC_OVERRIDE_OPTIONS: "+-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"
         run: |
           # clear cache before build and after download
+          # The below CCC is temp fix for CK build. This will/shall be removed when fix gets added
+          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions' >>"%GITHUB_ENV%"
           cd L:
           ccache -z
           cmake -B 'B:\build' -GNinja -S 'L:\' --preset windows-release -DTHEROCK_AMDGPU_FAMILIES=gfx1151 '-DCMAKE_C_COMPILER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/cl.exe' '-DCMAKE_CXX_COMPILER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/cl.exe' '-DCMAKE_LINKER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/link.exe' -DTHEROCK_BACKGROUND_BUILD_JOBS=4
