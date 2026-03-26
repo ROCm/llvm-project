@@ -25,6 +25,9 @@ endmacro()
 # TEST_INPUT_BITCODES target list.
 set(TEST_INPUT_WCHAR_FLAG)
 if(WIN32)
+  # Match -fshort-wchar used by device libs on Windows (see
+  # amd/device-libs/cmake/OCL.cmake). Without this, linking fails with
+  # conflicting wchar_size module flags.
   set(TEST_INPUT_WCHAR_FLAG -fshort-wchar)
 endif()
 
