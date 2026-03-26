@@ -1605,9 +1605,6 @@ private:
 
     bool OrigExit = false;
 
-    /// Opcode of the branch instruction
-    unsigned BranchOpc = 0;
-
     /// Branch condition, if the block originally had a conditional branch.
     Register OrigCondition;
 
@@ -1721,6 +1718,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
 
     if (!Node->Block)
       continue;
+
+    bool ZVariant = false;
+
     // Analyze original terminators.
     for (MachineInstr &Terminator : Node->Block->terminators()) {
       unsigned Opcode = Terminator.getOpcode();
@@ -1728,7 +1728,8 @@ void ControlFlowRewriter::prepareWaveCfg() {
       assert(!Info.OrigSuccFinal);
       if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
         assert(!Info.OrigCondition);
-        Info.BranchOpc = Opcode;
+        ZVariant = (Opcode == AMDGPU::SI_BRCOND_Z ||
+                    Opcode == AMDGPU::SI_BRCOND_UNIFORM_Z);
         Info.OrigCondition = Terminator.getOperand(1).getReg();
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
@@ -1822,17 +1823,15 @@ void ControlFlowRewriter::prepareWaveCfg() {
                   Info.ImplicitBranchOpc);
           }
         }
-      } else { // Conditional uniform with one succ, OR divergent
-        bool ZVariant = Info.BranchOpc == AMDGPU::SI_BRCOND_Z ||
-                        Info.BranchOpc == AMDGPU::SI_BRCOND_UNIFORM_Z;
+      } else {
         NodeInfo.find(Info.OrigSuccCond)
-            ->second.origins.emplace_back(
-                Node, Info.OrigCondition, /*InvertCondition=*/ZVariant,
-                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, ZVariant,
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
         NodeInfo.find(Info.OrigSuccFinal)
-            ->second.origins.emplace_back(
-                Node, Info.OrigCondition, /*InvertCondition=*/!ZVariant,
-                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, !ZVariant,
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
       }
     }
   }
@@ -1947,9 +1946,7 @@ void ControlFlowRewriter::rewrite() {
         assert(Info.OrigCondition);
 
         if (Info.OrigCondition == AMDGPU::SCC) {
-          Opcode = (Info.BranchOpc == AMDGPU::SI_BRCOND_UNIFORM_Z)
-                       ? AMDGPU::S_CBRANCH_SCC0
-                       : AMDGPU::S_CBRANCH_SCC1;
+          Opcode = AMDGPU::S_CBRANCH_SCC1;
         } else {
           Register CondReg = Info.OrigCondition;
           if (!Info.OrigConditionUndef &&
@@ -1965,9 +1962,7 @@ void ControlFlowRewriter::rewrite() {
           if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
             CopyMI->getOperand(1).setIsUndef();
 
-          Opcode = (Info.BranchOpc == AMDGPU::SI_BRCOND_UNIFORM_Z)
-                       ? AMDGPU::S_CBRANCH_VCCZ
-                       : AMDGPU::S_CBRANCH_VCCNZ;
+          Opcode = AMDGPU::S_CBRANCH_VCCNZ;
         }
       }
 

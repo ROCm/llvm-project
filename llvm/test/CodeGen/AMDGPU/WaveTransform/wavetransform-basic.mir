@@ -295,59 +295,6 @@ body:             |
   bb.3:
     S_ENDPGM 0
 ...
-
----
-
-
-name: if_then_else_uniform_z
-tracksRegLiveness: true
-body:             |
-  ; POSTWT-LABEL: name: if_then_else_uniform_z
-  ; POSTWT: bb.0:
-  ; POSTWT-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
-  ; POSTWT-NEXT:   liveins: $sgpr0
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   [[COPY:%[0-9]+]]:sgpr_32 = COPY $sgpr0
-  ; POSTWT-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
-  ; POSTWT-NEXT:   $vcc_lo = COPY [[V_CMP_EQ_U32_e64_]]
-  ; POSTWT-NEXT:   S_CBRANCH_VCCZ %bb.2, implicit $vcc_lo
-  ; POSTWT-NEXT:   S_BRANCH %bb.1
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT: bb.1:
-  ; POSTWT-NEXT:   successors: %bb.3(0x80000000)
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   S_BRANCH %bb.3
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT: bb.2:
-  ; POSTWT-NEXT:   successors: %bb.3(0x80000000)
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   S_BRANCH %bb.3
-  ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT: bb.3:
-  ; POSTWT-NEXT:   S_ENDPGM 0
-  bb.0:
-    successors: %bb.1, %bb.2
-    liveins: $sgpr0
-    %8:sgpr_32 = COPY $sgpr0
-    %15:sreg_32 = S_MOV_B32 0
-    %16:sreg_32 = V_CMP_EQ_U32_e64 %8, killed %15, implicit $exec
-    SI_BRCOND_UNIFORM_Z %bb.2, killed %16
-    S_BRANCH %bb.1
-
-  bb.1:
-    successors: %bb.3
-
-    S_BRANCH %bb.3
-
-  bb.2:
-    successors: %bb.3
-
-    S_BRANCH %bb.3
-
-  bb.3:
-    S_ENDPGM 0
-...
 ---
 
 #
