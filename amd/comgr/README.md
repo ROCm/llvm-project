@@ -98,8 +98,8 @@ with `make install`) rather than the build path.
 
 Comgr SPIRV-related APIs can be disabled by passing
 `-DCOMGR_DISABLE_SPIRV=1` during the Comgr `cmake` step. This removes any
-dependency on LLVM SPIRV libraries or the llvm-spirv tool.
-If `-DCOMGR_DISABLE_SPIRV=1` is set, the LLVM build must include the SPIR-V backend
+dependency on LLVM SPIRV libraries, the llvm-spirv tool or the SPIRV backend in LLVM.
+If `-DCOMGR_DISABLE_SPIRV=0` is set, the LLVM build must include the SPIRV backend
 (-DLLVM_TARGETS_TO_BUILD="AMDGPU;X86;SPIRV" when configuring LLVM).
 
 **Code Coverage Instrumentation:** Comgr supports source-based [code coverage

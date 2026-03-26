@@ -221,6 +221,13 @@ option(COMGR_USE_INCBIN "Use the gnu .incbin assembler directive" ${default_use_
 option(COMGR_DISABLE_SPIRV "To disable SPIRV in Comgr" OFF)
 
 if (NOT COMGR_DISABLE_SPIRV)
+  if (NOT "SPIRV" IN_LIST LLVM_TARGETS_TO_BUILD)
+    message("-- LLVM SPIRV target not found, disabling Comgr SPIRV")
+    message("-- LLVM targets configured: ${LLVM_TARGETS_TO_BUILD}")
+    message("-- SPIRV must be set in -DLLVM_TARGETS_TO_BUILD when building LLVM")
+    set(COMGR_DISABLE_SPIRV ON)
+  endif()
+
   # Candidate include paths for LLVMSPIRVLib.h:
   # 1. ${LLVM_INCLUDE_DIRS}/LLVMSPIRVLib (standalone build)
   # 2. ${LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR}/include (external project)
