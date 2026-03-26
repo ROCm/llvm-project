@@ -3221,10 +3221,6 @@ unsigned SIInstrInfo::getBranchOpcode(SIInstrInfo::BranchPredicate Cond) {
     return AMDGPU::S_CBRANCH_EXECNZ;
   case SIInstrInfo::EXECZ:
     return AMDGPU::S_CBRANCH_EXECZ;
-  case SIInstrInfo::UNIFORM_NZ:
-    return AMDGPU::SI_BRCOND_UNIFORM;
-  case SIInstrInfo::UNIFORM_Z:
-    return AMDGPU::SI_BRCOND_UNIFORM_Z;
   case SIInstrInfo::DIVERGE_NZ:
     return AMDGPU::SI_BRCOND;
   case SIInstrInfo::DIVERGE_Z:
@@ -3252,10 +3248,6 @@ SIInstrInfo::BranchPredicate SIInstrInfo::getBranchPredicate(unsigned Opcode) {
     return DIVERGE_NZ;
   case AMDGPU::SI_BRCOND_Z:
     return DIVERGE_Z;
-  case AMDGPU::SI_BRCOND_UNIFORM:
-    return UNIFORM_NZ;
-  case AMDGPU::SI_BRCOND_UNIFORM_Z:
-    return UNIFORM_Z;
   default:
     return INVALID_BR;
   }
@@ -3393,9 +3385,7 @@ unsigned SIInstrInfo::insertBranch(MachineBasicBlock &MBB,
       BuildMI(&MBB, DL, get(Opcode))
       .addMBB(TBB);
 
-    if (Opcode == AMDGPU::SI_BRCOND_UNIFORM ||
-        Opcode == AMDGPU::SI_BRCOND_UNIFORM_Z || Opcode == AMDGPU::SI_BRCOND ||
-        Opcode == AMDGPU::SI_BRCOND_Z) {
+    if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
       assert(Cond.size() == 2 && "Branch should have two operands");
       CondBr->addOperand(Cond[1]); // Add the condition register.
     }
@@ -3413,9 +3403,7 @@ unsigned SIInstrInfo::insertBranch(MachineBasicBlock &MBB,
   MachineInstr *CondBr =
     BuildMI(&MBB, DL, get(Opcode))
     .addMBB(TBB);
-  if (Opcode == AMDGPU::SI_BRCOND_UNIFORM ||
-      Opcode == AMDGPU::SI_BRCOND_UNIFORM_Z || Opcode == AMDGPU::SI_BRCOND ||
-      Opcode == AMDGPU::SI_BRCOND_Z) {
+  if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
     assert(Cond.size() == 2 && "Branch should have two operands");
     CondBr->addOperand(Cond[1]); // Add the condition register.
   }
