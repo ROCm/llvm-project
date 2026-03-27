@@ -1635,9 +1635,9 @@ private:
 
     Register PrimarySuccessorExec;
 
-    // initialized to opcode for implicit conditional branches :
-    // S_CBRANCH_EXECZ S_CBRANCH_EXECNZ S_CBRANCH_VCCZ S_CBRANCH_VCCNZ
-    // S_CBRANCH_SCC0 S_CBRANCH_SCC1 -- all active threads branch uniformly.
+    // Opcode for branches with implicit or opaque conditions:
+    // S_CBRANCH_EXECZ/NZ S_CBRANCH_VCCZ/NZ S_CBRANCH_SCC0/1
+    //   -- all active threads branch uniformly.
     // INLINEASM_BR -- opaque callbr; exec assumed invariant.
     unsigned ImplicitBranchOpc = 0;
 
@@ -1727,18 +1727,27 @@ void ControlFlowRewriter::prepareWaveCfg() {
     if (!Node->Block)
       continue;
 
-    bool ZVariant = false;
-    // Detect INLINEASM_BR instructions in the block.
-    // INLINEASM_BR is opaque; exec is assumed invariant across callbr.
-    // Treated as uniform.
+    // Parse the indirect target from INLINEASM_BR to populate OrigSuccCond, so
+    // the block participates in the lane mask framework as a uniform
+    // conditional.
     if (Node->Block->mayHaveInlineAsmBr()) {
       for (const MachineInstr &MI : *Node->Block) {
         if (MI.getOpcode() == TargetOpcode::INLINEASM_BR) {
-          Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
+          for (const MachineOperand &MO : MI.operands()) {
+            if (MO.isMBB()) {
+              assert(!Info.OrigSuccCond &&
+                     "Multiple INLINEASM_BR indirect targets not yet "
+                     "supported");
+              Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
+              Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
+            }
+          }
           break;
         }
       }
     }
+
+    bool ZVariant = false;
 
     // Analyze original terminators.
     for (MachineInstr &Terminator : Node->Block->terminators()) {
@@ -1797,17 +1806,11 @@ void ControlFlowRewriter::prepareWaveCfg() {
            "TODO: exit unification");
     assert((!Info.ImplicitBranchOpc || !Info.OrigCondition) &&
            "ImplicitBranchOpc and OrigCondition are mutually exclusive");
-    assert((!Info.ImplicitBranchOpc || Info.OrigSuccCond ||
-            Info.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR) &&
+    assert((!Info.ImplicitBranchOpc || Info.OrigSuccCond) &&
            "Implicit conditional branch requires OrigSuccCond");
 
     // Record information for reconstructing lane masks.
-    if (Info.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR) {
-      // All successors receive unconditional full-EXEC lane contributions.
-      for (WaveNode *Succ : Node->Successors) {
-        NodeInfo.find(Succ)->second.origins.emplace_back(Node);
-      }
-    } else if (!Info.OrigSuccCond) {
+    if (!Info.OrigSuccCond) {
       if (Info.OrigSuccFinal) {
         NodeInfo.find(Info.OrigSuccFinal)->second.origins.emplace_back(Node);
       }
@@ -1930,10 +1933,6 @@ void ControlFlowRewriter::rewrite() {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
-    // INLINEASM_BR: opaque callbr with exec assumed invariant. Skip rewrite.
-    if (Info.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR)
-      continue;
-
     if (!Info.OrigExit) {
       // Remove original terminators.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
@@ -1965,11 +1964,16 @@ void ControlFlowRewriter::rewrite() {
             return succ.Lane == Info.OrigSuccCond;
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
-      assert(Info.ImplicitBranchOpc && "Implict Branch Opcode not set");
-      MachineInstr *CondBrMI = BuildMI(*Node->Block, MBBINodeEnd, {},
-                                       TII.get(Info.ImplicitBranchOpc))
-                                   .addMBB(LaneSucc->Wave->Block);
-      TII.fixImplicitOperands(*CondBrMI);
+
+      // INLINEASM_BR is not a terminator and was preserved during
+      // terminator removal; skip re-emitting the conditional branch.
+      if (Info.ImplicitBranchOpc != TargetOpcode::INLINEASM_BR) {
+        assert(Info.ImplicitBranchOpc && "Implicit Branch Opcode not set");
+        MachineInstr *CondBrMI = BuildMI(*Node->Block, MBBINodeEnd, {},
+                                         TII.get(Info.ImplicitBranchOpc))
+                                     .addMBB(LaneSucc->Wave->Block);
+        TII.fixImplicitOperands(*CondBrMI);
+      }
 
       // The _other_ successor may be a flow block instead of an original
       // successor.
@@ -2020,6 +2024,11 @@ void ControlFlowRewriter::rewrite() {
         switch (LaneOrigin.ImplicitBranchOpc) {
         case 0: // Unconditional branch
           assert(!LaneOrigin.InvertCondition);
+          CondReg = getAllOnes();
+          break;
+        case TargetOpcode::INLINEASM_BR:
+          // Opaque callbr; exec assumed invariant. Conservatively
+          // contribute all active lanes regardless of branch direction.
           CondReg = getAllOnes();
           break;
         // Uniform branch with implicit condition (VCC/EXEC/SCC), or
