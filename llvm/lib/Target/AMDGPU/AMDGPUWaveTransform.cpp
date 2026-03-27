@@ -1728,7 +1728,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
       assert(!Info.OrigSuccFinal);
       if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
         assert(!Info.OrigCondition);
-        ZVariant = (Opcode == AMDGPU::SI_BRCOND_Z);
+        ZVariant = Opcode == AMDGPU::SI_BRCOND_Z;
         Info.OrigCondition = Terminator.getOperand(1).getReg();
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
