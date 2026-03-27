@@ -122,7 +122,7 @@ FunctionPass *llvm::createAMDGPUFinalizeISelWaveTransformPass() {
 // either undef/poison (IMPLICIT_DEF) or the same uniquely defined value.
 // This case is only observable in -O0 mode for the late wave-transform
 // pipeline (for other modes, codegen would already have optimized such PHIs
-// before ISel).  As for the default pipeline, the structurizer pass would
+// before ISel).  As for the early structurizer-enabled pipeline, the structurizer pass would
 // optimize such PHIs after restructurizing the CFG, irrespective of the
 // optimization level.
 //
@@ -138,10 +138,10 @@ static Register simplifyMachinePHI(MachineInstr &PHI, MachineRegisterInfo &MRI,
                                    const TargetRegisterClass *WaveMaskRC) {
   assert(PHI.isPHI());
   Register DstReg = PHI.getOperand(0).getReg();
-
   if (!DstReg.isVirtual())
     return Register();
   const TargetRegisterClass *DstRC = MRI.getRegClass(DstReg);
+
   if (!SIRegisterInfo::isSGPRClass(DstRC) || WaveMaskRC == DstRC)
     return Register();
 
@@ -151,15 +151,14 @@ static Register simplifyMachinePHI(MachineInstr &PHI, MachineRegisterInfo &MRI,
   for (unsigned i = 1, e = PHI.getNumOperands(); i < e; i += 2) {
     Register Incoming = PHI.getOperand(i).getReg();
 
-    if (!Incoming.isVirtual() ||
-        !SIRegisterInfo::isSGPRClass(MRI.getRegClass(Incoming)))
+    if (!SIRegisterInfo::isSGPRClass(MRI.getRegClass(Incoming)))
       return Register();
 
     if (Incoming == DstReg)
       continue;
 
-    if (MachineInstr *Def = MRI.getVRegDef(Incoming);
-        Def && Def->isImplicitDef()) {
+    MachineInstr *Def = MRI.getVRegDef(Incoming);
+    if (Def && Def->isImplicitDef()) {
       HasImplicitDefInput = true;
       continue;
     }
@@ -200,7 +199,7 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : make_early_inc_range(MBB.phis())) {
       Register NewReg = simplifyMachinePHI(MI, MRI, MDT, WaveMaskRC);
-      if (!NewReg.isValid())
+      if (!NewReg)
         continue;
 
       Register OldReg = MI.getOperand(0).getReg();
@@ -211,6 +210,7 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
       if (!MRI.hasOneUse(OldReg))
         MRI.clearKillFlags(NewReg);
       MRI.replaceRegWith(OldReg, NewReg);
+      
       MI.eraseFromParent();
       Changed = true;
     }
