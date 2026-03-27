@@ -2292,7 +2292,7 @@ void ControlFlowRewriter::rewrite() {
 }
 
 /// This function fixes virtual register uses that have no dominating definition
-/// in the restructured the CFG by inserting IMPLICIT_DEF at the nearest
+/// in the restructured CFG by inserting IMPLICIT_DEF at the nearest
 /// common ancestor (NCA) of all its defining blocks.
 static void fixMissingDominatingDefs(MachineFunction &MF,
                                      MachineDominatorTree &DomTree,
