@@ -505,11 +505,27 @@ ModRefInfo AAResults::getModRefInfo(const StoreInst *S,
 ModRefInfo AAResults::getModRefInfo(const FenceInst *S,
                                     const MemoryLocation &Loc,
                                     AAQueryInfo &AAQI) {
-  // All we know about a fence instruction is what we get from the ModRef
-  // mask: if Loc is a constant memory location, the fence definitely could
-  // not modify it.
-  if (Loc.Ptr)
-    return getModRefInfoMask(Loc);
+  if (Loc.Ptr) {
+    // If Loc is a constant memory location, the fence definitely could
+    // not modify it.
+    ModRefInfo Result = getModRefInfoMask(Loc);
+    if (isNoModRef(Result))
+      return ModRefInfo::NoModRef;
+
+    // Check scoped noalias metadata: if the fence's !noalias metadata
+    // covers the location's !alias.scope, the fence cannot affect it.
+    // This mirrors the analogous check for CallBase instructions.
+    if (ScopedNoAliasAAResult::isEnabled()) {
+      if (!ScopedNoAliasAAResult::mayAliasInScopes(
+              Loc.AATags.Scope, S->getMetadata(LLVMContext::MD_noalias)))
+        return ModRefInfo::NoModRef;
+      if (!ScopedNoAliasAAResult::mayAliasInScopes(
+              S->getMetadata(LLVMContext::MD_alias_scope), Loc.AATags.NoAlias))
+        return ModRefInfo::NoModRef;
+    }
+
+    return Result;
+  }
   return ModRefInfo::ModRef;
 }
 

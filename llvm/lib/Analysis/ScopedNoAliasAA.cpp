@@ -130,6 +130,8 @@ void ScopedNoAliasAAResult::collectScopedDomains(
         Domains.insert(Domain);
 }
 
+bool ScopedNoAliasAAResult::isEnabled() { return EnableScopedNoAlias; }
+
 bool ScopedNoAliasAAResult::mayAliasInScopes(const MDNode *Scopes,
                                              const MDNode *NoAlias) {
   if (!Scopes || !NoAlias)

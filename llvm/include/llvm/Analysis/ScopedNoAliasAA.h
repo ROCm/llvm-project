@@ -54,6 +54,9 @@ public:
 
   LLVM_ABI static bool mayAliasInScopes(const MDNode *Scopes,
                                         const MDNode *NoAlias);
+
+  /// Whether scoped noalias analysis is enabled (-enable-scoped-noalias).
+  LLVM_ABI static bool isEnabled();
 };
 
 /// Analysis pass providing a never-invalidated alias analysis result.
