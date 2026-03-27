@@ -577,6 +577,9 @@ static struct {
 void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
                        const char *device_name, s64 vma_adjust, int fd,
                        u64 file_extent_size, u64 file_extent_start) {
+  if (!common_flags()->detect_leaks)
+    return;
+
   if (device_id == -1) {
     for (int i = 0; i < 16; i++) {
       if (device_leak_totals[i].count > 0) {
