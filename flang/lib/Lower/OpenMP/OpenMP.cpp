@@ -1656,6 +1656,7 @@ static void genSimdClauses(
 // linear semantics on IV. Process the same here.
 static void
 genSimdImplicitLinear(lower::AbstractConverter &converter,
+                      semantics::SemanticsContext &semaCtx,
                       mlir::omp::SimdOperands &clauseOps,
                       mlir::omp::LoopNestOperands loopNestClauseOps,
                       llvm::SmallVector<const semantics::Symbol *> iv) {
@@ -1674,11 +1675,15 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
   }
 
   std::vector<mlir::Attribute> typeAttrs;
+  std::vector<mlir::Attribute> linearModAttrs;
   // If attributes from explicit `linear(...)` clause are present,
   // carry them forward.
   if (clauseOps.linearVarTypes && !clauseOps.linearVarTypes.empty())
     typeAttrs.assign(clauseOps.linearVarTypes.begin(),
                      clauseOps.linearVarTypes.end());
+  if (clauseOps.linearModifiers && !clauseOps.linearModifiers.empty())
+    linearModAttrs.assign(clauseOps.linearModifiers.begin(),
+                          clauseOps.linearModifiers.end());
 
   for (auto [loopVar, loopStep] : llvm::zip(iv, loopNestClauseOps.loopSteps)) {
     const mlir::Value variable = converter.getSymbolAddress(*loopVar);
@@ -1699,13 +1704,22 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
           Fortran::semantics::IsAllocatableOrPointer(loopVar->GetUltimate()))) {
       mlir::Type ty = converter.genType(*loopVar);
       typeAttrs.push_back(mlir::TypeAttr::get(ty));
+      if (semaCtx.langOptions().OpenMPVersion >= 52)
+        linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
+            &converter.getMLIRContext(), mlir::omp::LinearModifier::val));
+      else
+        linearModAttrs.push_back(
+            mlir::UnitAttr::get(&converter.getMLIRContext()));
       clauseOps.linearVars.push_back(variable);
       clauseOps.linearStepVars.push_back(loopStep);
     }
   }
-  if (!typeAttrs.empty())
+  if (!typeAttrs.empty()) {
     clauseOps.linearVarTypes =
         mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);
+    clauseOps.linearModifiers =
+        mlir::ArrayAttr::get(&converter.getMLIRContext(), linearModAttrs);
+  }
 }
 
 static void genSingleClauses(lower::AbstractConverter &converter,
@@ -2252,6 +2266,16 @@ static void genCanonicalLoopNest(
   }
 
   firOpBuilder.setInsertionPointAfter(loops.front());
+}
+
+static void genInterchangeOp(Fortran::lower::AbstractConverter &converter,
+                             Fortran::lower::SymMap &symTable,
+                             lower::StatementContext &stmtCtx,
+                             Fortran::semantics::SemanticsContext &semaCtx,
+                             Fortran::lower::pft::Evaluation &eval,
+                             mlir::Location loc, const ConstructQueue &queue,
+                             ConstructQueue::const_iterator item) {
+  TODO(converter.getCurrentLocation(), "OpenMP Interchange");
 }
 
 static void genTileOp(Fortran::lower::AbstractConverter &converter,
@@ -2868,7 +2892,12 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
                 if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
                         converter.genType(*typeSpec)))
                   mapperId = getOrGenImplicitDefaultDeclareMapper(
-                      converter, loc, recordType, mapperIdName);
+                      converter.getFirOpBuilder(), loc, recordType,
+                      mapperIdName,
+                      [&](std::string &mapperIdName,
+                          llvm::StringRef memberName) {
+                        defaultMangler(converter, mapperIdName, memberName);
+                      });
               } else {
                 mapperId = mlir::FlatSymbolRefAttr::get(
                     &converter.getMLIRContext(), mapperIdName);
@@ -3232,7 +3261,8 @@ genStandaloneSimd(lower::AbstractConverter &converter, lower::SymMap &symTable,
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, item->clauses, loc,
                      loopNestClauseOps, iv);
-  genSimdImplicitLinear(converter, simdClauseOps, loopNestClauseOps, iv);
+  genSimdImplicitLinear(converter, semaCtx, simdClauseOps, loopNestClauseOps,
+                        iv);
 
   EntryBlockArgs simdArgs;
   simdArgs.priv.syms = dsp.getDelayedPrivSymbols();
@@ -3415,7 +3445,8 @@ static mlir::omp::DistributeOp genCompositeDistributeParallelDoSimd(
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
                      loopNestClauseOps, iv);
-  genSimdImplicitLinear(converter, simdClauseOps, loopNestClauseOps, iv);
+  genSimdImplicitLinear(converter, semaCtx, simdClauseOps, loopNestClauseOps,
+                        iv);
 
   // Operation creation.
   EntryBlockArgs distributeArgs;
@@ -3490,7 +3521,8 @@ static mlir::omp::DistributeOp genCompositeDistributeSimd(
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
                      loopNestClauseOps, iv);
-  genSimdImplicitLinear(converter, simdClauseOps, loopNestClauseOps, iv);
+  genSimdImplicitLinear(converter, semaCtx, simdClauseOps, loopNestClauseOps,
+                        iv);
 
   // Operation creation.
   EntryBlockArgs distributeArgs;
@@ -3555,7 +3587,8 @@ static mlir::omp::WsloopOp genCompositeDoSimd(
   llvm::SmallVector<const semantics::Symbol *> iv;
   genLoopNestClauses(converter, semaCtx, eval, simdItem->clauses, loc,
                      loopNestClauseOps, iv);
-  genSimdImplicitLinear(converter, simdClauseOps, loopNestClauseOps, iv);
+  genSimdImplicitLinear(converter, semaCtx, simdClauseOps, loopNestClauseOps,
+                        iv);
 
   // Operation creation.
   EntryBlockArgs wsloopArgs;
@@ -3760,6 +3793,10 @@ static void genOMPDispatch(lower::AbstractConverter &converter,
   case llvm::omp::Directive::OMPD_teams:
     newOp = genTeamsOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue,
                        item);
+    break;
+  case llvm::omp::Directive::OMPD_interchange:
+    genInterchangeOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue,
+                     item);
     break;
   case llvm::omp::Directive::OMPD_tile:
     genTileOp(converter, symTable, stmtCtx, semaCtx, eval, loc, queue, item);
@@ -4036,7 +4073,7 @@ genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
   ClauseProcessor cp(converter, semaCtx, clauses);
   cp.processAligned(clauseOps);
   cp.processInbranch(clauseOps);
-  cp.processLinear(clauseOps);
+  cp.processLinear(clauseOps, /*isDeclareSimd=*/true);
   cp.processNotinbranch(clauseOps);
   cp.processSimdlen(clauseOps);
   cp.processUniform(clauseOps);

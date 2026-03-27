@@ -3408,6 +3408,9 @@ as follows:
 ``v<size>:<abi>[:<pref>]``
     This specifies the alignment for a vector type of a given bit
     ``<size>``. The value of ``<size>`` must be in the range [1,2^24).
+``ve``
+    Specifies that vectors are element-aligned by default, rather than having
+    natural alignment.
 ``f<size>:<abi>[:<pref>]``
     This specifies the alignment for a floating-point type of a given bit
     ``<size>``. Only values of ``<size>`` that are supported by the target
@@ -12073,6 +12076,8 @@ operation. The operation must be one of the following keywords:
 -  fmin
 -  fmaximum
 -  fminimum
+-  fmaximumnum
+-  fminimumnum
 -  uinc_wrap
 -  udec_wrap
 -  usub_cond
@@ -12082,7 +12087,7 @@ For most of these operations, the type of '<value>' must be an integer
 type whose bit width is a power of two greater than or equal to eight.
 For xchg, this
 may also be a floating point or a pointer type with the same size constraints
-as integers.  For fadd/fsub/fmax/fmin/fmaximum/fminimum, this must be a floating-point
+as integers.  For fadd/fsub/fmax/fmin/fmaximum/fminimum/fmaximumnum/fminimumnum, this must be a floating-point
 or fixed vector of floating-point type.  The type of the '``<pointer>``'
 operand must be a pointer to that type. If the ``atomicrmw`` is marked
 as ``volatile``, then the optimizer is not allowed to modify the
@@ -12127,6 +12132,8 @@ operation argument:
 -  fmin: ``*ptr = minnum(*ptr, val)`` (match the `llvm.minnum.*` intrinsic)
 -  fmaximum: ``*ptr = maximum(*ptr, val)`` (match the `llvm.maximum.*` intrinsic)
 -  fminimum: ``*ptr = minimum(*ptr, val)`` (match the `llvm.minimum.*` intrinsic)
+-  fmaximumnum: ``*ptr = maximumnum(*ptr, val)`` (match the `llvm.maximumnum.*` intrinsic)
+-  fminimumnum: ``*ptr = minimumnum(*ptr, val)`` (match the `llvm.minimumnum.*` intrinsic)
 -  uinc_wrap: ``*ptr = (*ptr u>= val) ? 0 : (*ptr + 1)`` (increment value with wraparound to zero when incremented above input value)
 -  udec_wrap: ``*ptr = ((*ptr == 0) || (*ptr u> val)) ? val : (*ptr - 1)`` (decrement with wraparound to input value when decremented below zero).
 -  usub_cond: ``*ptr = (*ptr u>= val) ? *ptr - val : *ptr`` (subtract only if no unsigned overflow).
@@ -13909,8 +13916,9 @@ ensures that each ``catchpad`` has exactly one predecessor block, and it always
 terminates in a ``catchswitch``.
 
 The ``args`` correspond to whatever information the personality routine
-requires to determine if this is an appropriate handler for the exception. Control
-will transfer to the ``catchpad`` if this is the first appropriate handler for
+requires to determine if this is an appropriate handler for the exception.
+Each operand must be an alloca or a constant.
+Control will transfer to the ``catchpad`` if this is the first appropriate handler for
 the exception.
 
 The ``resultval`` has the type :ref:`token <t_token>` and is used to match the
@@ -18307,15 +18315,15 @@ support all types however.
 
       declare i32 @llvm.lround.i32.f32(float %Val)
       declare i32 @llvm.lround.i32.f64(double %Val)
-      declare i32 @llvm.lround.i32.f80(float %Val)
-      declare i32 @llvm.lround.i32.f128(double %Val)
-      declare i32 @llvm.lround.i32.ppcf128(double %Val)
+      declare i32 @llvm.lround.i32.f80(x86_fp80 %Val)
+      declare i32 @llvm.lround.i32.f128(fp128 %Val)
+      declare i32 @llvm.lround.i32.ppcf128(ppc_fp128 %Val)
 
       declare i64 @llvm.lround.i64.f32(float %Val)
       declare i64 @llvm.lround.i64.f64(double %Val)
-      declare i64 @llvm.lround.i64.f80(float %Val)
-      declare i64 @llvm.lround.i64.f128(double %Val)
-      declare i64 @llvm.lround.i64.ppcf128(double %Val)
+      declare i64 @llvm.lround.i64.f80(x86_fp80 %Val)
+      declare i64 @llvm.lround.i64.f128(fp128 %Val)
+      declare i64 @llvm.lround.i64.ppcf128(ppc_fp128 %Val)
 
 Overview:
 """""""""
@@ -18351,9 +18359,9 @@ floating-point type. Not all targets support all types however.
 
       declare i64 @llvm.llround.i64.f32(float %Val)
       declare i64 @llvm.llround.i64.f64(double %Val)
-      declare i64 @llvm.llround.i64.f80(float %Val)
-      declare i64 @llvm.llround.i64.f128(double %Val)
-      declare i64 @llvm.llround.i64.ppcf128(double %Val)
+      declare i64 @llvm.llround.i64.f80(x86_fp80 %Val)
+      declare i64 @llvm.llround.i64.f128(fp128 %Val)
+      declare i64 @llvm.llround.i64.ppcf128(ppc_fp128 %Val)
 
 Overview:
 """""""""
@@ -18391,15 +18399,15 @@ support all types however.
 
       declare i32 @llvm.lrint.i32.f32(float %Val)
       declare i32 @llvm.lrint.i32.f64(double %Val)
-      declare i32 @llvm.lrint.i32.f80(float %Val)
-      declare i32 @llvm.lrint.i32.f128(double %Val)
-      declare i32 @llvm.lrint.i32.ppcf128(double %Val)
+      declare i32 @llvm.lrint.i32.f80(x86_fp80 %Val)
+      declare i32 @llvm.lrint.i32.f128(fp128 %Val)
+      declare i32 @llvm.lrint.i32.ppcf128(ppc_fp128 %Val)
 
       declare i64 @llvm.lrint.i64.f32(float %Val)
       declare i64 @llvm.lrint.i64.f64(double %Val)
-      declare i64 @llvm.lrint.i64.f80(float %Val)
-      declare i64 @llvm.lrint.i64.f128(double %Val)
-      declare i64 @llvm.lrint.i64.ppcf128(double %Val)
+      declare i64 @llvm.lrint.i64.f80(x86_fp80 %Val)
+      declare i64 @llvm.lrint.i64.f128(fp128 %Val)
+      declare i64 @llvm.lrint.i64.ppcf128(ppc_fp128 %Val)
 
 Overview:
 """""""""
@@ -18438,9 +18446,9 @@ support all types however.
 
       declare i64 @llvm.llrint.i64.f32(float %Val)
       declare i64 @llvm.llrint.i64.f64(double %Val)
-      declare i64 @llvm.llrint.i64.f80(float %Val)
-      declare i64 @llvm.llrint.i64.f128(double %Val)
-      declare i64 @llvm.llrint.i64.ppcf128(double %Val)
+      declare i64 @llvm.llrint.i64.f80(x86_fp80 %Val)
+      declare i64 @llvm.llrint.i64.f128(fp128 %Val)
+      declare i64 @llvm.llrint.i64.ppcf128(ppc_fp128 %Val)
 
 Overview:
 """""""""

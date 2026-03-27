@@ -543,6 +543,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(true);    KEYWORD(false);
   KEYWORD(declare); KEYWORD(define);
   KEYWORD(global);  KEYWORD(constant);
+  KEYWORD(br);
 
   KEYWORD(dso_local);
   KEYWORD(dso_preemptable);
@@ -711,6 +712,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(argmem);
   KEYWORD(target_mem0);
   KEYWORD(target_mem1);
+  KEYWORD(target_mem);
   KEYWORD(inaccessiblemem);
   KEYWORD(errnomem);
   KEYWORD(argmemonly);
@@ -767,6 +769,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(umin); KEYWORD(fmax); KEYWORD(fmin);
   KEYWORD(fmaximum);
   KEYWORD(fminimum);
+  KEYWORD(fmaximumnum);
+  KEYWORD(fminimumnum);
   KEYWORD(uinc_wrap);
   KEYWORD(udec_wrap);
   KEYWORD(usub_cond);
@@ -952,7 +956,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   INSTKEYWORD(select,      Select);
   INSTKEYWORD(va_arg,      VAArg);
   INSTKEYWORD(ret,         Ret);
-  INSTKEYWORD(br,          Br);
   INSTKEYWORD(switch,      Switch);
   INSTKEYWORD(indirectbr,  IndirectBr);
   INSTKEYWORD(invoke,      Invoke);

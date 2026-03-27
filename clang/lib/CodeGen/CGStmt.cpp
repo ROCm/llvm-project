@@ -114,7 +114,7 @@ CodeGenFunction::EmitBigJumpLoopStartingIndex(const ForStmt &FStmt,
   if (CGM.isMultiDeviceKernel(&FStmt)) {
     Iv = Builder.CreateAdd(
         Gtid,
-        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
                               IvAddr.getElementType(), false));
   } else {
     Iv = Builder.CreateAdd(Gtid, Builder.CreateLoad(IvAddr));
@@ -229,16 +229,16 @@ CodeGenFunction::EmitNoLoopIV(const OMPLoopDirective &LD,
   EmitIgnoredExpr(LD.getInit());
 
   // If multi-device targets are enabled, overwrite the LB and UB
-  // initialization with the values passed in as arguments in positions 1 and 2
+  // initialization with the values passed in as arguments in positions 0 and 1
   // respectively:
   if (CGM.isMultiDeviceKernel(LD)) {
     llvm::Value *LBMultiTarget = Builder.CreateIntCast(
-        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
         GetAddrOfLocalVar(IVDecl).getElementType(), false);
     Builder.CreateStore(LBMultiTarget, GetAddrOfLocalVar(LBDecl));
     Builder.CreateStore(LBMultiTarget, GetAddrOfLocalVar(IVDecl));
     llvm::Value *UBMultiTarget = Builder.CreateIntCast(
-        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[2])),
+        Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
         GetAddrOfLocalVar(IVDecl).getElementType(), false);
     Builder.CreateStore(UBMultiTarget, GetAddrOfLocalVar(UBDecl));
   }
@@ -383,7 +383,7 @@ void CodeGenFunction::EmitNoLoopCode(const OMPExecutableDirective &D,
   if (CGM.isMultiDeviceKernel(D)) {
     llvm::Value *Iv = Builder.CreateAdd(
         Gtid,
-        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[1])),
+        Builder.CreateIntCast(Builder.CreateLoad(GetAddrOfLocalVar((*Args)[0])),
                               IvAddr.getElementType(), false));
     Builder.CreateStore(Iv, IvAddr);
   } else {
@@ -1696,7 +1696,7 @@ CodeGenFunction::EmitCompoundStmtWithoutScope(const CompoundStmt &S,
 }
 
 void CodeGenFunction::SimplifyForwardingBlocks(llvm::BasicBlock *BB) {
-  llvm::BranchInst *BI = dyn_cast<llvm::BranchInst>(BB->getTerminator());
+  llvm::UncondBrInst *BI = dyn_cast<llvm::UncondBrInst>(BB->getTerminator());
 
   // If there is a cleanup stack, then we it isn't worth trying to
   // simplify this block (we would need to remove it from the scope map
@@ -1705,14 +1705,14 @@ void CodeGenFunction::SimplifyForwardingBlocks(llvm::BasicBlock *BB) {
     return;
 
   // Can only simplify direct branches.
-  if (!BI || !BI->isUnconditional())
+  if (!BI)
     return;
 
   // Can only simplify empty blocks.
   if (BI->getIterator() != BB->begin())
     return;
 
-  BB->replaceAllUsesWith(BI->getSuccessor(0));
+  BB->replaceAllUsesWith(BI->getSuccessor());
   BI->eraseFromParent();
   BB->eraseFromParent();
 }

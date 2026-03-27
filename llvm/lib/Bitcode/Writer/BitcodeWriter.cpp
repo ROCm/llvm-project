@@ -716,6 +716,10 @@ static unsigned getEncodedRMWOperation(AtomicRMWInst::BinOp Op) {
     return bitc::RMW_FMAXIMUM;
   case AtomicRMWInst::FMinimum:
     return bitc::RMW_FMINIMUM;
+  case AtomicRMWInst::FMaximumNum:
+    return bitc::RMW_FMAXIMUMNUM;
+  case AtomicRMWInst::FMinimumNum:
+    return bitc::RMW_FMINIMUMNUM;
   case AtomicRMWInst::UIncWrap:
     return bitc::RMW_UINC_WRAP;
   case AtomicRMWInst::UDecWrap:
@@ -779,6 +783,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_DISABLE_SANITIZER_INSTRUMENTATION;
   case Attribute::FnRetThunkExtern:
     return bitc::ATTR_KIND_FNRETTHUNK_EXTERN;
+  case Attribute::Flatten:
+    return bitc::ATTR_KIND_FLATTEN;
   case Attribute::Hot:
     return bitc::ATTR_KIND_HOT;
   case Attribute::ElementType:
@@ -3341,19 +3347,20 @@ void ModuleBitcodeWriter::writeInstruction(const Instruction &I,
       }
     }
     break;
-  case Instruction::Br:
-    {
+    case Instruction::UncondBr: {
       Code = bitc::FUNC_CODE_INST_BR;
       AbbrevToUse = FUNCTION_INST_BR_UNCOND_ABBREV;
-      const BranchInst &II = cast<BranchInst>(I);
+      const UncondBrInst &II = cast<UncondBrInst>(I);
       Vals.push_back(VE.getValueID(II.getSuccessor(0)));
-      if (II.isConditional()) {
-        Vals.push_back(VE.getValueID(II.getSuccessor(1)));
-        pushValue(II.getCondition(), InstID, Vals);
-        AbbrevToUse = FUNCTION_INST_BR_COND_ABBREV;
-      }
-    }
-    break;
+    } break;
+    case Instruction::CondBr: {
+      Code = bitc::FUNC_CODE_INST_BR;
+      AbbrevToUse = FUNCTION_INST_BR_COND_ABBREV;
+      const CondBrInst &II = cast<CondBrInst>(I);
+      Vals.push_back(VE.getValueID(II.getSuccessor(0)));
+      Vals.push_back(VE.getValueID(II.getSuccessor(1)));
+      pushValue(II.getCondition(), InstID, Vals);
+    } break;
   case Instruction::Switch:
     {
       Code = bitc::FUNC_CODE_INST_SWITCH;
@@ -4642,13 +4649,6 @@ void ModuleBitcodeWriterBase::writePerModuleFunctionSummaryRecord(
         return {VE.getValueID(VI.getValue())};
       });
 
-  writeFunctionHeapProfileRecords(
-      Stream, FS, CallsiteAbbrev, AllocAbbrev, ContextIdAbbvId,
-      /*PerModule*/ true,
-      /*GetValueId*/ [&](const ValueInfo &VI) { return getValueId(VI); },
-      /*GetStackIndex*/ [&](unsigned I) { return I; },
-      /*WriteContextSizeInfoIndex*/ true, CallStackPos, CallStackCount);
-
   auto SpecialRefCnts = FS->specialRefCounts();
   NameVals.push_back(getEncodedGVSummaryFlags(FS->flags()));
   NameVals.push_back(FS->instCount());
@@ -4668,6 +4668,13 @@ void ModuleBitcodeWriterBase::writePerModuleFunctionSummaryRecord(
   // Emit the finished record.
   Stream.EmitRecord(bitc::FS_PERMODULE_PROFILE, NameVals, FSCallsProfileAbbrev);
   NameVals.clear();
+
+  writeFunctionHeapProfileRecords(
+      Stream, FS, CallsiteAbbrev, AllocAbbrev, ContextIdAbbvId,
+      /*PerModule*/ true,
+      /*GetValueId*/ [&](const ValueInfo &VI) { return getValueId(VI); },
+      /*GetStackIndex*/ [&](unsigned I) { return I; },
+      /*WriteContextSizeInfoIndex*/ true, CallStackPos, CallStackCount);
 }
 
 // Collect the global value references in the given variable's initializer,
@@ -5220,30 +5227,6 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
     writeFunctionTypeMetadataRecords(Stream, FS, GetValueId);
     getReferencedTypeIds(FS, ReferencedTypeIds);
 
-    writeFunctionHeapProfileRecords(
-        Stream, FS, CallsiteAbbrev, AllocAbbrev, /*ContextIdAbbvId*/ 0,
-        /*PerModule*/ false,
-        /*GetValueId*/
-        [&](const ValueInfo &VI) -> unsigned {
-          std::optional<unsigned> ValueID = GetValueId(VI);
-          // This can happen in shared index files for distributed ThinLTO if
-          // the callee function summary is not included. Record 0 which we
-          // will have to deal with conservatively when doing any kind of
-          // validation in the ThinLTO backends.
-          if (!ValueID)
-            return 0;
-          return *ValueID;
-        },
-        /*GetStackIndex*/
-        [&](unsigned I) {
-          // Get the corresponding index into the list of StackIds actually
-          // being written for this combined index (which may be a subset in
-          // the case of distributed indexes).
-          assert(StackIdIndicesToIndex.contains(I));
-          return StackIdIndicesToIndex[I];
-        },
-        /*WriteContextSizeInfoIndex*/ false, CallStackPos, CallStackCount);
-
     NameVals.push_back(*ValueId);
     assert(ModuleIdMap.count(FS->modulePath()));
     NameVals.push_back(ModuleIdMap[FS->modulePath()]);
@@ -5289,6 +5272,31 @@ void IndexBitcodeWriter::writeCombinedGlobalValueSummary() {
     Stream.EmitRecord(bitc::FS_COMBINED_PROFILE, NameVals,
                       FSCallsProfileAbbrev);
     NameVals.clear();
+
+    writeFunctionHeapProfileRecords(
+        Stream, FS, CallsiteAbbrev, AllocAbbrev, /*ContextIdAbbvId*/ 0,
+        /*PerModule*/ false,
+        /*GetValueId*/
+        [&](const ValueInfo &VI) -> unsigned {
+          std::optional<unsigned> ValueID = GetValueId(VI);
+          // This can happen in shared index files for distributed ThinLTO if
+          // the callee function summary is not included. Record 0 which we
+          // will have to deal with conservatively when doing any kind of
+          // validation in the ThinLTO backends.
+          if (!ValueID)
+            return 0;
+          return *ValueID;
+        },
+        /*GetStackIndex*/
+        [&](unsigned I) {
+          // Get the corresponding index into the list of StackIds actually
+          // being written for this combined index (which may be a subset in
+          // the case of distributed indexes).
+          assert(StackIdIndicesToIndex.contains(I));
+          return StackIdIndicesToIndex[I];
+        },
+        /*WriteContextSizeInfoIndex*/ false, CallStackPos, CallStackCount);
+
     MaybeEmitOriginalName(*S);
   });
 

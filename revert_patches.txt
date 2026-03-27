@@ -5,6 +5,15 @@ rocwmma and CK needs changes
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-break build of aomp, srock rock
-[copmiler-rt] Initial support for building profile  library on the GPU (#185552)
+breaks comgr builds
+[comgr] Auto-discover and embed libc++ headers for HIPRTC (#1696)
+---
+breaks smoke*
+[Reland][IR] Add initial support for the byte type (#186888)
+---
+breaks rocgdb UT
+[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+---
+aborts in its lit test
+[OpenMP][flang] Fix crash in host offload (#187847)
 ---
