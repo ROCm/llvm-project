@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn--amdpal -mcpu=verde < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -mtriple=amdgcn--amdpal -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=verde < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}fold_mi_v_and_0:
 ; GCN: v_mov_b32_e32 [[RESULT:v[0-9]+]], 0{{$}}
@@ -90,7 +90,7 @@ define amdgpu_kernel void @fold_mi_s_not_0(ptr addrspace(1) %out, i32 %x) #0 {
 ; GCN: v_bcnt_u32_b32{{(_e32)*(_e64)*}} v[[RESULT_LO:[0-9]+]], v{{[0-9]+}}, v[[RESULT_LO]]{{$}}
 ; GCN-NEXT: v_not_b32_e32 v[[RESULT_LO]]
 ; GCN-NEXT: v_mov_b32_e32 v[[RESULT_HI:[0-9]+]], -1{{$}}
-; GCN-NEXT: buffer_store_dwordx2 v[[[RESULT_LO]]:[[RESULT_HI]]]
+; GCN: buffer_store_dwordx2 v[[[RESULT_LO]]:[[RESULT_HI]]]
 define amdgpu_kernel void @fold_mi_v_not_0(ptr addrspace(1) %out) {
   %vreg = load volatile i64, ptr addrspace(1) poison
   %ctpop = call i64 @llvm.ctpop.i64(i64 %vreg)
