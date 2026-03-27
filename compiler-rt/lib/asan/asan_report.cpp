@@ -569,6 +569,52 @@ void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
   }
 }
 
+static struct {
+  u64 bytes;
+  u64 count;
+} device_leak_totals[16];
+
+void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
+                       const char *device_name, s64 vma_adjust, int fd,
+                       u64 file_extent_size, u64 file_extent_start) {
+  if (device_id == -1) {
+    for (int i = 0; i < 16; i++) {
+      if (device_leak_totals[i].count > 0) {
+        Printf(
+            "SUMMARY: AddressSanitizer: %llu byte(s) leaked in %llu "
+            "allocation(s) on %s device %d.\n",
+            device_leak_totals[i].bytes, device_leak_totals[i].count,
+            device_name ? device_name : "unknown", i);
+        device_leak_totals[i].bytes = 0;
+        device_leak_totals[i].count = 0;
+      }
+    }
+    return;
+  }
+
+  Printf("Leak of %llu byte(s) on %s device %d allocated from:\n", alloc_size,
+         device_name ? device_name : "unknown", device_id);
+
+  InternalScopedString source_location;
+  source_location.AppendF("    #0 0x%llx", alloc_pc);
+#if SANITIZER_AMDGPU
+  source_location.Append(" in ");
+  __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
+  symbolizer.Init(fd, file_extent_start, file_extent_size);
+  if (!symbolizer.SymbolizePC(alloc_pc - vma_adjust, source_location))
+    source_location.Append("<unavailable>\n");
+  symbolizer.Release();
+#else
+  source_location.Append(" (<unavailable>)\n");
+#endif
+  Printf("%s", source_location.data());
+
+  if (device_id >= 0 && device_id < 16) {
+    device_leak_totals[device_id].bytes += alloc_size;
+    device_leak_totals[device_id].count++;
+  }
+}
+
 }  // namespace __asan
 
 // --------------------------- Interface --------------------- {{{1
