@@ -1719,6 +1719,8 @@ void ControlFlowRewriter::prepareWaveCfg() {
     if (!Node->Block)
       continue;
 
+    bool ZVariant = false;
+
     // Analyze original terminators.
     for (MachineInstr &Terminator : Node->Block->terminators()) {
       unsigned Opcode = Terminator.getOpcode();
@@ -1726,6 +1728,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
       assert(!Info.OrigSuccFinal);
       if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
         assert(!Info.OrigCondition);
+        ZVariant = Opcode == AMDGPU::SI_BRCOND_Z;
         Info.OrigCondition = Terminator.getOperand(1).getReg();
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
         Info.OrigSuccCond =
@@ -1821,13 +1824,13 @@ void ControlFlowRewriter::prepareWaveCfg() {
         }
       } else {
         NodeInfo.find(Info.OrigSuccCond)
-            ->second.origins.emplace_back(
-                Node, Info.OrigCondition, /*InvertCondition=*/false,
-                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, ZVariant,
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
         NodeInfo.find(Info.OrigSuccFinal)
-            ->second.origins.emplace_back(
-                Node, Info.OrigCondition, /*InvertCondition=*/true,
-                Info.OrigConditionUndef, Info.ImplicitBranchOpc);
+            ->second.origins.emplace_back(Node, Info.OrigCondition, !ZVariant,
+                                          Info.OrigConditionUndef,
+                                          Info.ImplicitBranchOpc);
       }
     }
   }
@@ -1936,36 +1939,10 @@ void ControlFlowRewriter::rewrite() {
             return succ.Lane == Info.OrigSuccCond;
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
-
-      unsigned Opcode = Info.ImplicitBranchOpc;
-      if (!Opcode) { // For uniform branch cases.
-        assert(Info.OrigCondition);
-
-        if (Info.OrigCondition == AMDGPU::SCC) {
-          Opcode = AMDGPU::S_CBRANCH_SCC1;
-        } else {
-          Register CondReg = Info.OrigCondition;
-          if (!Info.OrigConditionUndef &&
-              !LMA.isSubsetOfExec(CondReg, *Node->Block, MBBINodeEnd)) {
-            CondReg = LMU.createLaneMaskReg();
-            BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(LMC.AndOpc), CondReg)
-                .addReg(LMC.ExecReg)
-                .addReg(Info.OrigCondition);
-          }
-          MachineInstr *CopyMI = BuildMI(*Node->Block, MBBINodeEnd, {},
-                                         TII.get(AMDGPU::COPY), LMC.VccReg)
-                                     .addReg(CondReg);
-          // Preserve undef flag if the condition register was undef
-          if (Info.OrigConditionUndef && CondReg == Info.OrigCondition)
-            CopyMI->getOperand(1).setIsUndef();
-
-          Opcode = AMDGPU::S_CBRANCH_VCCNZ;
-        }
-      }
-
-      MachineInstr *CondBrMI =
-          BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(Opcode))
-              .addMBB(LaneSucc->Wave->Block);
+      assert(Info.ImplicitBranchOpc && "Implict Branch Opcode not set");
+      MachineInstr *CondBrMI = BuildMI(*Node->Block, MBBINodeEnd, {},
+                                       TII.get(Info.ImplicitBranchOpc))
+                                   .addMBB(LaneSucc->Wave->Block);
       TII.fixImplicitOperands(*CondBrMI);
 
       // The _other_ successor may be a flow block instead of an original
