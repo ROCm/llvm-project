@@ -2289,6 +2289,58 @@ void ControlFlowRewriter::rewrite() {
   LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_clean\n");
 }
 
+/// This function fixes virtual register uses that have no dominating definition
+/// in the restructured CFG by inserting IMPLICIT_DEF at the nearest
+/// common ancestor (NCA) of all its defining blocks.
+static void fixMissingDominatingDefs(MachineFunction &MF,
+                                     MachineDominatorTree &DomTree,
+                                     const TargetInstrInfo &TII) {
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  unsigned NumVirtRegs = MRI.getNumVirtRegs();
+
+  for (unsigned VRI = 0; VRI < NumVirtRegs; ++VRI) {
+    Register Reg = Register::index2VirtReg(VRI);
+
+    SmallPtrSet<MachineBasicBlock *, 4> DefBlocks;
+    for (MachineOperand &DefMO : MRI.def_operands(Reg))
+      DefBlocks.insert(DefMO.getParent()->getParent());
+
+    if (DefBlocks.empty())
+      continue;
+
+    MachineBasicBlock *NCA = nullptr;
+    bool NeedImplicitDef = false;
+
+    for (MachineOperand &UseMO : MRI.use_nodbg_operands(Reg)) {
+      if (UseMO.isUndef())
+        continue;
+
+      MachineBasicBlock *UseBlock = UseMO.getParent()->getParent();
+
+      bool AnyDefDominates =
+          llvm::any_of(DefBlocks, [&](MachineBasicBlock *DB) {
+            return DB == UseBlock || DomTree.dominates(DB, UseBlock);
+          });
+
+      if (!AnyDefDominates) {
+        NeedImplicitDef = true;
+        NCA =
+            NCA ? DomTree.findNearestCommonDominator(NCA, UseBlock) : UseBlock;
+      }
+    }
+
+    if (!NeedImplicitDef)
+      continue;
+
+    for (MachineBasicBlock *DefBlock : DefBlocks)
+      NCA = DomTree.findNearestCommonDominator(NCA, DefBlock);
+
+    auto InsertPt = NCA->getFirstTerminator();
+    BuildMI(*NCA, InsertPt, NCA->findDebugLoc(InsertPt),
+            TII.get(TargetOpcode::IMPLICIT_DEF), Reg);
+  }
+}
+
 namespace {
 
 /// \brief Wave transform machine function pass.
@@ -2427,6 +2479,12 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName() << "\n");
   LLVM_DEBUG(ReconvergeHelper.dumpNodes());
   LLVM_DEBUG(dbgs() << "RCFG_END:" << MF.getName() << "\n");
+
+  // Step 4: Fix missing dominating defs (non-SSA).
+  // The wave transform inserts flow blocks and reroutes edges, which can
+  // create CFG paths to a use that bypass all defs of a register, violating
+  // the CFG dominance relations.
+  fixMissingDominatingDefs(MF, *DomTree, *TII);
 
   // FIXME: restore the following 1 line:
   // UI.clear();
