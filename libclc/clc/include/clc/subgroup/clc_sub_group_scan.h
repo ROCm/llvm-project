@@ -6,14 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clc/subgroup/clc_sub_group_non_uniform_reduce.h"
-#include "clc/subgroup/clc_sub_group_reduce.h"
+#ifndef __CLC_SUBGROUP_CLC_SUB_GROUP_SCAN_H__
+#define __CLC_SUBGROUP_CLC_SUB_GROUP_SCAN_H__
 
-// The implementation is the same as the nonuniform case, so just call the
-// nonuniform versions of every function.
+#include "clc/internal/clc.h"
 
-#define __CLC_BODY "clc_sub_group_reduce.inc"
+#define __CLC_BODY "clc/subgroup/clc_sub_group_scan.inc"
 #include "clc/integer/gentype.inc"
 
-#define __CLC_BODY "clc_sub_group_reduce.inc"
+#define __CLC_BODY "clc/subgroup/clc_sub_group_scan.inc"
 #include "clc/math/gentype.inc"
+
+#endif // __CLC_SUBGROUP_CLC_SUB_GROUP_SCAN_H__
