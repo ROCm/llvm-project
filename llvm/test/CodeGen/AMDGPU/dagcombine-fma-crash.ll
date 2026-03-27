@@ -12,7 +12,7 @@ define void @main(float %arg) {
   ; CHECK-NEXT:   [[S_MOV_B32_:%[0-9]+]]:sgpr_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 -1
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_AND_B32 $exec_lo, %16, implicit-def dead $scc
+  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_AND_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def dead $scc
   ; CHECK-NEXT:   $vcc_lo = COPY [[COPY1]]
   ; CHECK-NEXT:   S_CBRANCH_VCCNZ %bb.2, implicit $vcc
   ; CHECK-NEXT:   S_BRANCH %bb.1
