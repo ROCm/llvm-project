@@ -12,7 +12,9 @@ config.libc_gpu_loader = path(r"@LIBC_GPU_LOADER_EXECUTABLE@")
 
 # If running GPU tests and no explicit test command is set, use the GPU loader.
 if not config.libc_test_cmd and config.libc_gpu_loader:
-    config.libc_test_cmd = config.libc_gpu_loader + " @BINARY@"
+    # Placeholder must not use raw at-sign CMake tokens; configure_file would eat them.
+    _libc_lit_exe = chr(64) + "BINARY" + chr(64)
+    config.libc_test_cmd = config.libc_gpu_loader + " " + _libc_lit_exe
 
 # Add libc's utils directory to the path so we can import the test format.
 site.addsitedir(os.path.join(config.libc_src_root, "utils"))

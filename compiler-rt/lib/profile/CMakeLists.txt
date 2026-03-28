@@ -89,6 +89,7 @@ if (NOT COMPILER_RT_PROFILE_BAREMETAL)
   list(APPEND PROFILE_SOURCES
     GCDAProfiling.c
     InstrProfilingFile.c
+    InstrProfilingPlatformROCm.c
     InstrProfilingRuntime.cpp
     InstrProfilingUtil.c
     InstrProfilingValue.c

@@ -30,6 +30,7 @@
 #include "llvm/Support/BalancedPartitioning.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Discriminator.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
@@ -825,6 +826,22 @@ loadInput(const WeightedFile &Input, SymbolRemapper *Remapper,
       I.Name = (*Remapper)(I.Name);
     const StringRef FuncName = I.Name;
     bool Reported = false;
+
+    if (!I.UniformCounts.empty()) {
+      size_t NumBlocks = I.Counts.size();
+      I.UniformityBits.resize((NumBlocks + 7) / 8, 0xFF);
+
+      for (size_t BlockIdx = 0; BlockIdx < NumBlocks; ++BlockIdx) {
+        uint64_t TotalCount = I.Counts[BlockIdx];
+        uint64_t UniformCount = I.UniformCounts[BlockIdx];
+
+        bool IsUniform =
+            (TotalCount == 0) || ((double)UniformCount / TotalCount >= 0.9);
+        if (!IsUniform)
+          I.UniformityBits[BlockIdx / 8] &= ~(1 << (BlockIdx % 8));
+      }
+    }
+
     WC->Writer.addRecord(std::move(I), Input.Weight, [&](Error E) {
       if (Reported) {
         consumeError(std::move(E));
@@ -2979,6 +2996,16 @@ static int showInstrProfile(ShowFormat SFormat, raw_fd_ostream &OS) {
           OS << (I == Start ? "" : ", ") << Func.Counts[I];
         }
         OS << "]\n";
+
+        // Show uniformity bits if present
+        if (!Func.UniformityBits.empty()) {
+          OS << "    Block uniformity: [";
+          for (size_t I = Start, E = Func.Counts.size(); I < E; ++I) {
+            bool IsUniform = Func.isBlockUniform(I);
+            OS << (I == Start ? "" : ", ") << (IsUniform ? "U" : "D");
+          }
+          OS << "]\n";
+        }
       }
 
       if (ShowIndirectCallTargets) {

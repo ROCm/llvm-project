@@ -412,6 +412,108 @@ Example Usage
    __host__ __device__ int Four(void) __attribute__((weak, alias("_Z6__Fourv")));
    __host__ __device__ float Four(float f) __attribute__((weak, alias("_Z6__Fourf")));
 
+Profile Guided Optimization (PGO)
+=================================
+
+Clang supports Profile Guided Optimization (PGO) for HIP, enabling optimization
+of both host and device code based on runtime execution profiles.
+
+Build Requirements
+------------------
+
+Device PGO requires ``libclang_rt.profile.a`` built for the AMDGPU target. This
+library provides the GPU profiling runtime (warp-aggregate counter increment with
+uniformity tracking). Building it requires LLVM libc for AMDGPU to provide
+standard C headers:
+
+.. code-block:: text
+
+   # Add to your LLVM cmake configuration:
+   -DLLVM_RUNTIME_TARGETS="default;amdgcn-amd-amdhsa"
+   -DRUNTIMES_amdgcn-amd-amdhsa_CACHE_FILES="<src>/compiler-rt/cmake/caches/GPU.cmake"
+   -DRUNTIMES_amdgcn-amd-amdhsa_LLVM_ENABLE_RUNTIMES="compiler-rt;libc"
+
+The ``pyyaml`` Python package is also required (for LLVM libc header generation).
+The resulting library is installed at
+``<resource-dir>/lib/amdgcn-amd-amdhsa/libclang_rt.profile.a`` and linked
+automatically when ``-fprofile-generate`` is used.
+
+Workflow
+--------
+
+The PGO workflow consists of four steps:
+
+1. **Instrumented Build**: Compile with ``-fprofile-generate`` to create an
+   instrumented binary that collects execution profiles:
+
+   .. code-block:: shell
+
+      clang++ -O2 -fprofile-generate --offload-arch=gfx1200 -xhip app.hip -o app_instrumented
+
+2. **Profile Collection**: Run the instrumented binary with representative
+   workloads. This generates separate profile files for host and each GPU
+   architecture:
+
+   .. code-block:: shell
+
+      ./app_instrumented
+      # Creates: default_<id>.profraw (host)
+      #          default_<id>.<arch>.<tu>.profraw (device, e.g. default_12345.gfx1200.0.profraw)
+
+3. **Merge Profiles**: Use ``llvm-profdata`` to merge the raw profiles:
+
+   .. code-block:: shell
+
+      # Merge host profiles
+      llvm-profdata merge -o app.profdata default_*_0.profraw
+
+      # Merge device profiles (use the GPU arch name from your target)
+      llvm-profdata merge -o app.device.profdata \
+          default_*.gfx1200.*.profraw
+
+4. **Optimized Build**: Rebuild with ``-fprofile-use``, specifying separate
+   profile files for host and device using ``-Xarch_host`` and ``-Xarch_device``:
+
+   .. code-block:: shell
+
+      clang++ -O2 --offload-arch=gfx1200 -xhip app.hip -o app_optimized \
+          -Xarch_host -fprofile-use=app.profdata \
+          -Xarch_device -fprofile-use=app.device.profdata
+
+Sampling
+--------
+
+By default, device instrumentation samples 12.5% of thread blocks to reduce
+overhead (``-mllvm -offload-pgo-sampling=3``). This can be tuned:
+
+- ``-mllvm -offload-pgo-sampling=0`` — instrument all blocks (highest accuracy, ~3.4x overhead)
+- ``-mllvm -offload-pgo-sampling=3`` — instrument 12.5% of blocks (default, ~1.9x overhead)
+- ``-mllvm -offload-pgo-sampling=7`` — instrument ~0.8% of blocks (lowest overhead, ~1.7x)
+
+Higher sampling values reduce instrumentation overhead at the cost of sparser
+profiles. For kernels with uniform control flow (e.g., GEMM), even very sparse
+profiles produce the same PGO gains.
+
+Debug Output
+------------
+
+Set ``LLVM_PROFILE_VERBOSE=1`` to see diagnostic messages during profile
+collection:
+
+.. code-block:: shell
+
+   LLVM_PROFILE_VERBOSE=1 ./app_instrumented
+
+This shows information about profile data registration, device memory
+operations, and profile file creation.
+
+Limitations
+-----------
+
+- Device PGO is supported only on AMD GPUs with HIP.
+- Value profiling is not supported for device code.
+- Building the GPU profile library requires LLVM libc for AMDGPU (see Build Requirements).
+
 C++17 Class Template Argument Deduction (CTAD) Support
 ======================================================
 

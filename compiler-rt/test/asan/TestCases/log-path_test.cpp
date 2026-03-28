@@ -12,8 +12,8 @@
 // RUN: %env_asan_opts=log_path=%t.log not %run %t 2> %t.out
 // RUN: FileCheck %s --check-prefix=CHECK-ERROR < %t.log.*
 
-// Invalid log_path in existing directory.
-// RUN: %env_asan_opts=log_path=/INVALID not %run %t 2> %t.out
+// Invalid log_path (see memprof log_path_test.cpp: /INVALID.<pid> is creatable as root).
+// RUN: %env_asan_opts=log_path=/proc/self/mem not %run %t 2> %t.out
 // RUN: FileCheck %s --check-prefix=CHECK-INVALID < %t.out
 
 // Directory of log_path can't be created.
@@ -45,6 +45,6 @@ int main(int argc, char **argv) {
   return res;
 }
 // CHECK-ERROR: ERROR: AddressSanitizer
-// CHECK-INVALID: ERROR: Can't open file: /INVALID
+// CHECK-INVALID: ERROR: Can't open file: /proc/self/mem.
 // CHECK-BAD-DIR: ERROR: Can't create directory: /dev/null
 // CHECK-LONG: ERROR: Path is too long: 01234

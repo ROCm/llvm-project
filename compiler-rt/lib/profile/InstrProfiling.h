@@ -308,10 +308,12 @@ uint64_t __llvm_profile_get_vtable_section_size(const VTableProfData *Begin,
  */
 int __llvm_profile_get_padding_sizes_for_counters(
     uint64_t DataSize, uint64_t CountersSize, uint64_t NumBitmapBytes,
-    uint64_t NamesSize, uint64_t VTableSize, uint64_t VNameSize,
-    uint64_t *PaddingBytesBeforeCounters, uint64_t *PaddingBytesAfterCounters,
-    uint64_t *PaddingBytesAfterBitmap, uint64_t *PaddingBytesAfterNames,
-    uint64_t *PaddingBytesAfterVTable, uint64_t *PaddingBytesAfterVNames);
+    uint64_t NumUniformCounters, uint64_t NamesSize, uint64_t VTableSize,
+    uint64_t VNameSize, uint64_t *PaddingBytesBeforeCounters,
+    uint64_t *PaddingBytesAfterCounters, uint64_t *PaddingBytesAfterBitmap,
+    uint64_t *PaddingBytesAfterUniformCounters,
+    uint64_t *PaddingBytesAfterNames, uint64_t *PaddingBytesAfterVTable,
+    uint64_t *PaddingBytesAfterVNames);
 
 /*!
  * \brief Set the flag that profile data has been dumped to the file.
@@ -323,14 +325,28 @@ void __llvm_profile_set_dumped(void);
 
 /*!
  * \brief Write custom target-specific profiling data to a separate file.
- * Used by offload PGO.
+ * Used by offload PGO (HIP and OpenMP).
+ *
+ * \param Target Target triple (e.g., "amdgcn-amd-amdhsa")
+ * \param TUSuffix TU index suffix (e.g., "0", "1") or NULL for no suffix
+ * \param DataBegin Start of profile data records
+ * \param DataEnd End of profile data records
+ * \param CountersBegin Start of counter data
+ * \param CountersEnd End of counter data
+ * \param UniformCountersBegin Start of uniform counters (NULL if not used)
+ * \param UniformCountersEnd End of uniform counters (NULL if not used)
+ * \param NamesBegin Start of names data
+ * \param NamesEnd End of names data
+ * \param VersionOverride Profile version override (NULL to use default)
  */
-int __llvm_write_custom_profile(const char *Target,
+int __llvm_write_custom_profile(const char *Target, const char *TUSuffix,
                                 const __llvm_profile_data *DataBegin,
                                 const __llvm_profile_data *DataEnd,
                                 const char *CountersBegin,
-                                const char *CountersEnd, const char *NamesBegin,
-                                const char *NamesEnd,
+                                const char *CountersEnd,
+                                const char *UniformCountersBegin,
+                                const char *UniformCountersEnd,
+                                const char *NamesBegin, const char *NamesEnd,
                                 const uint64_t *VersionOverride);
 
 /*!
@@ -364,4 +380,24 @@ extern char INSTR_PROF_PROFILE_NAME_VAR[1]; /* __llvm_profile_filename. */
 
 const __llvm_gcov_init_func_struct *__llvm_profile_begin_covinit();
 const __llvm_gcov_init_func_struct *__llvm_profile_end_covinit();
+
+/* A struct to hold the device pointers and sizes for the profile sections. */
+typedef struct OffloadProfileSectionInfo {
+  void *CountersBegin;
+  size_t CountersSize;
+  void *DataBegin;
+  size_t DataSize;
+  void *NamesBegin;
+  size_t NamesSize;
+} OffloadProfileSectionInfo;
+
+/*!
+ * \brief Register an offload module's device-side profile data sections.
+ *
+ * This function is called by the host-side instrumentation code to provide
+ * the runtime with the necessary information to collect profile data from
+ * the device.
+ */
+void __llvm_profile_offload_register_module(OffloadProfileSectionInfo *Info);
+
 #endif /* PROFILE_INSTRPROFILING_H_ */

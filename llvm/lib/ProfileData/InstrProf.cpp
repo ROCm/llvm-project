@@ -950,7 +950,8 @@ void InstrProfRecord::mergeValueProfData(
 }
 
 void InstrProfRecord::merge(InstrProfRecord &Other, uint64_t Weight,
-                            function_ref<void(instrprof_error)> Warn) {
+                            function_ref<void(instrprof_error)> Warn,
+                            unsigned WaveSize) {
   // If the number of counters doesn't match we either have bad data
   // or a hash collision.
   if (Counts.size() != Other.Counts.size()) {
@@ -975,7 +976,7 @@ void InstrProfRecord::merge(InstrProfRecord &Other, uint64_t Weight,
       setPseudoCount(PseudoWarm);
     return;
   }
-
+  OffloadDeviceWaveSize = Other.OffloadDeviceWaveSize;
   for (size_t I = 0, E = Other.Counts.size(); I < E; ++I) {
     bool Overflowed;
     uint64_t Value =
@@ -1685,7 +1686,7 @@ Expected<Header> Header::readFromBuffer(const unsigned char *Buffer) {
       IndexedInstrProf::ProfVersion::CurrentVersion)
     return make_error<InstrProfError>(instrprof_error::unsupported_version);
 
-  static_assert(IndexedInstrProf::ProfVersion::CurrentVersion == Version13,
+  static_assert(IndexedInstrProf::ProfVersion::CurrentVersion == Version14,
                 "Please update the reader as needed when a new field is added "
                 "or when indexed profile version gets bumped.");
 
@@ -1718,10 +1719,11 @@ size_t Header::size() const {
     // of the header, and byte offset of existing fields shouldn't change when
     // indexed profile version gets incremented.
     static_assert(
-        IndexedInstrProf::ProfVersion::CurrentVersion == Version13,
+        IndexedInstrProf::ProfVersion::CurrentVersion == Version14,
         "Please update the size computation below if a new field has "
         "been added to the header; for a version bump without new "
         "fields, add a case statement to fall through to the latest version.");
+  case 14ull: // UniformityBits added in record data, no header change
   case 13ull:
   case 12ull:
     return 72;

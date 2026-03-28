@@ -291,11 +291,13 @@ Error GPUProfGlobals::write() const {
         reinterpret_cast<intptr_t>(Records[I].CounterPtr) + Adjustment);
 
   int Result = __llvm_write_custom_profile(
-      TargetTriple.str().c_str(),
+      TargetTriple.str().c_str(), /*TUSuffix=*/nullptr,
       reinterpret_cast<const __llvm_profile_data *>(DataBegin),
       reinterpret_cast<const __llvm_profile_data *>(DataBegin +
                                                     DataSection.size()),
-      CountersBegin, CountersBegin + CountersSection.size(), NamesBegin,
+      CountersBegin, CountersBegin + CountersSection.size(),
+      /*UniformCountersBegin=*/nullptr,
+      /*UniformCountersEnd=*/nullptr, NamesBegin,
       NamesBegin + NamesSection.size(), &Version);
   if (Result != 0)
     return Plugin::error(ErrorCode::HOST_IO,
