@@ -379,13 +379,11 @@ getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
   auto InsertionPt = MBB.getFirstTerminator();
 
   // INLINEASM_BR is not marked as a terminator, but lane mask contributions
-  // must be placed before it. Walk back past any INLINEASM_BR.
-  while (InsertionPt != MBB.begin()) {
-    auto Prev = std::prev(InsertionPt);
-    if (Prev->getOpcode() != TargetOpcode::INLINEASM_BR)
-      break;
-    InsertionPt = Prev;
-  }
+  // must be placed before it. Walk back past the INLINEASM_BR.
+  if (InsertionPt != MBB.begin() &&
+      std::prev(InsertionPt)->getOpcode() == TargetOpcode::INLINEASM_BR)
+    --InsertionPt;
+
   bool TerminatorsUseSCC = false;
   for (auto I = InsertionPt, E = MBB.end(); I != E; ++I) {
     bool DefsSCC;
