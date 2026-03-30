@@ -314,7 +314,9 @@ bool Vreg1WideningHelper::widenVreg1s() {
       // Skip instructions with no lane mask destination register (SGPR).
       if (!isLaneMaskReg(MI.getOperand(0).getReg()))
         continue;
+
       for (unsigned I = 1; I < MI.getNumOperands(); I += 2) {
+        assert(I + 1 < MI.getNumOperands());
         // Skip operands that were not widened by Round#1.
         if (!Vreg32Set.count(MI.getOperand(I).getReg()))
           continue;
