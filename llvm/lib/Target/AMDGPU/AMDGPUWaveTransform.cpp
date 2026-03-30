@@ -2045,17 +2045,6 @@ void ControlFlowRewriter::rewrite() {
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
 
-      // INLINEASM_BR is not a terminator but lane mask instructions must be
-      // placed before it.
-      if (LaneOrigin.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR) {
-        while (MBBILaneOriginNodeFirstTerm != LaneOrigin.Node->Block->begin()) {
-          auto Prev = std::prev(MBBILaneOriginNodeFirstTerm);
-          if (Prev->getOpcode() != TargetOpcode::INLINEASM_BR)
-            break;
-          MBBILaneOriginNodeFirstTerm = Prev;
-        }
-      }
-
       if (!LaneOrigin.CondReg) {
         switch (LaneOrigin.ImplicitBranchOpc) {
         case 0: // Unconditional branch
