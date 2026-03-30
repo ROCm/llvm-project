@@ -1727,9 +1727,9 @@ void ControlFlowRewriter::prepareWaveCfg() {
     if (!Node->Block)
       continue;
 
-    // Parse the indirect target from INLINEASM_BR to populate OrigSuccCond, so
-    // the block participates in the lane mask framework as a uniform
-    // conditional.
+    // Identify the indirect MBB target from the operands of INLINEASM_BR
+    // (OrigSuccCond). The block participates in lane mask building as a uniform
+    // conditional, conservatively contributing all active lanes.
     if (Node->Block->mayHaveInlineAsmBr()) {
       for (const MachineInstr &MI : *Node->Block) {
         if (MI.getOpcode() == TargetOpcode::INLINEASM_BR) {
@@ -1940,6 +1940,29 @@ void ControlFlowRewriter::rewrite() {
         Node->Block->back().eraseFromParent();
     }
 
+    // INLINEASM_BR is not a terminator and was preserved during terminator
+    // removal. After reconvergence the original indirect target may no longer
+    // be a direct MBB successor (a flow node could've been inserted).
+    // So, retarget the MBB operand in such cases.
+    if (Info.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR) {
+      for (MachineInstr &MI : *Node->Block) {
+        if (MI.getOpcode() != TargetOpcode::INLINEASM_BR)
+          continue;
+        for (MachineOperand &MO : MI.operands()) {
+          if (!MO.isMBB())
+            continue;
+          MachineBasicBlock *Target = MO.getMBB();
+          if (!Node->Block->isSuccessor(Target)) {
+            assert(Node->Block->succ_size() > 0);
+            MachineBasicBlock *NewTarget = *Node->Block->succ_begin();
+            NewTarget->setIsInlineAsmBrIndirectTarget();
+            MO.setMBB(NewTarget);
+          }
+        }
+        break;
+      }
+    }
+
     if (Node->Successors.size() == 0)
       continue;
 
@@ -1965,8 +1988,17 @@ void ControlFlowRewriter::rewrite() {
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
 
-      // INLINEASM_BR is not a terminator and was preserved during
-      // terminator removal; skip re-emitting the conditional branch.
+      // The _other_ successor may be a flow block instead of an original
+      // successor.
+      WaveNode *Other;
+      if (Node->Successors[0] == LaneSucc->Wave)
+        Other = Node->Successors[1];
+      else
+        Other = Node->Successors[0];
+
+      // Re-emit the implicit conditional branch for the lane successor.
+      // INLINEASM_BR is skipped: it is not a terminator, was preserved
+      // during terminator removal, and retargeted above.
       if (Info.ImplicitBranchOpc != TargetOpcode::INLINEASM_BR) {
         assert(Info.ImplicitBranchOpc && "Implicit Branch Opcode not set");
         MachineInstr *CondBrMI = BuildMI(*Node->Block, MBBINodeEnd, {},
@@ -1975,13 +2007,6 @@ void ControlFlowRewriter::rewrite() {
         TII.fixImplicitOperands(*CondBrMI);
       }
 
-      // The _other_ successor may be a flow block instead of an original
-      // successor.
-      WaveNode *Other;
-      if (Node->Successors[0] == LaneSucc->Wave)
-        Other = Node->Successors[1];
-      else
-        Other = Node->Successors[0];
       BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Other->Block);
     }
@@ -2019,6 +2044,17 @@ void ControlFlowRewriter::rewrite() {
       Register CondReg;
       MachineBasicBlock::iterator MBBILaneOriginNodeFirstTerm =
           LaneOrigin.Node->Block->getFirstTerminator();
+
+      // INLINEASM_BR is not a terminator but lane mask instructions must be
+      // placed before it.
+      if (LaneOrigin.ImplicitBranchOpc == TargetOpcode::INLINEASM_BR) {
+        while (MBBILaneOriginNodeFirstTerm != LaneOrigin.Node->Block->begin()) {
+          auto Prev = std::prev(MBBILaneOriginNodeFirstTerm);
+          if (Prev->getOpcode() != TargetOpcode::INLINEASM_BR)
+            break;
+          MBBILaneOriginNodeFirstTerm = Prev;
+        }
+      }
 
       if (!LaneOrigin.CondReg) {
         switch (LaneOrigin.ImplicitBranchOpc) {
