@@ -576,7 +576,7 @@ static llvm::OpenMPIRBuilder::InsertPointTy findAllocInsertPoints(
   // this case.
   if (deallocIPs) {
     for (llvm::BasicBlock &block : *builder.GetInsertBlock()->getParent()) {
-      llvm::Instruction *terminator = block.getTerminator();
+      llvm::Instruction *terminator = block.getTerminatorOrNull();
       if (isa_and_present<llvm::ReturnInst>(terminator))
         deallocIPs->emplace_back(&block, terminator->getIterator());
     }
@@ -1308,7 +1308,7 @@ setInsertPointForPossiblyEmptyBlock(llvm::IRBuilderBase &builder,
   if (block == nullptr)
     block = builder.GetInsertBlock();
 
-  if (block->empty() || block->getTerminator() == nullptr)
+  if (!block->hasTerminator())
     builder.SetInsertPoint(block);
   else
     builder.SetInsertPoint(block->getTerminator());
