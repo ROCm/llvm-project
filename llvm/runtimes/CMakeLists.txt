@@ -605,9 +605,9 @@ if(build_runtimes)
     if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
 
       set(rocr_extra_cmake_args "")
-      if(THEROCK_AMDGPU_TARGETS)
+      if(AMDGPU_TARGETS)
         # Pass the list of AMDGPU targets to ROCr runtime
-        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
+        list(APPEND rocr_extra_cmake_args "-DTHEROCK_DIST_AMDGPU_TARGETS=${AMDGPU_TARGETS}")
       endif()
 
       if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
