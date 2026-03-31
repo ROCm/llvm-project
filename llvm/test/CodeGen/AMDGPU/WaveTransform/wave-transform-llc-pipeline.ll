@@ -148,8 +148,8 @@
 ; GCN-O3-NEXT:Target Pass Configuration
 ; GCN-O3-NEXT:Machine Module Information
 ; GCN-O3-NEXT:Target Transform Information
-; GCN-O3-NEXT:Library Function Lowering Analysis
 ; GCN-O3-NEXT:Assumption Cache Tracker
+; GCN-O3-NEXT:Library Function Lowering Analysis
 ; GCN-O3-NEXT:Profile summary info
 ; GCN-O3-NEXT:AMDGPU Address space based Alias Analysis
 ; GCN-O3-NEXT:External Alias Analysis
@@ -161,6 +161,11 @@
 ; GCN-O3-NEXT:Default Regalloc Eviction Advisor
 ; GCN-O3-NEXT:Default Regalloc Priority Advisor
 ; GCN-O3-NEXT:  ModulePass Manager
+; GCN-O3-NEXT:    FunctionPass Manager
+; GCN-O3-NEXT:      Dominator Tree Construction
+; GCN-O3-NEXT:      Basic Alias Analysis (stateless AA impl)
+; GCN-O3-NEXT:      Function Alias Analysis Results
+; GCN-O3-NEXT:      ObjC ARC contraction
 ; GCN-O3-NEXT:    Pre-ISel Intrinsic Lowering
 ; GCN-O3-NEXT:    FunctionPass Manager
 ; GCN-O3-NEXT:      Expand IR instructions
@@ -304,13 +309,10 @@
 ; GCN-O3-NEXT:      Analysis if a function is memory bound
 ; GCN-O3-NEXT:      DummyCGSCCPass
 ; GCN-O3-NEXT:      FunctionPass Manager
-; GCN-O3-NEXT:        Dominator Tree Construction
-; GCN-O3-NEXT:        Basic Alias Analysis (stateless AA impl)
-; GCN-O3-NEXT:        Function Alias Analysis Results
-; GCN-O3-NEXT:        ObjC ARC contraction
 ; GCN-O3-NEXT:        Prepare inline asm insts
 ; GCN-O3-NEXT:        Safe Stack instrumentation pass
 ; GCN-O3-NEXT:        Insert stack protectors
+; GCN-O3-NEXT:        Dominator Tree Construction
 ; GCN-O3-NEXT:        Cycle Info Analysis
 ; GCN-O3-NEXT:        Uniformity Analysis
 ; GCN-O3-NEXT:        Basic Alias Analysis (stateless AA impl)

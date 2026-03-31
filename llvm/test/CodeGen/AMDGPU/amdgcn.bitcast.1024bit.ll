@@ -182305,8 +182305,6 @@ define inreg <128 x i8> @bitcast_v64f16_to_v128i8_scalar(<64 x half> inreg %a, i
 ; SI-NEXT:    v_readlane_b32 s16, v36, 44
 ; SI-NEXT:    v_mov_b32_e32 v27, s16
 ; SI-NEXT:    v_readlane_b32 s16, v36, 45
-; SI-NEXT:    v_mov_b32_e32 v28, s16
-; SI-NEXT:    v_readlane_b32 s16, v36, 46
 ; SI-NEXT:    v_mov_b32_e32 v10, s90
 ; SI-NEXT:    v_mov_b32_e32 v11, s89
 ; SI-NEXT:    v_mov_b32_e32 v13, s88
@@ -182314,51 +182312,43 @@ define inreg <128 x i8> @bitcast_v64f16_to_v128i8_scalar(<64 x half> inreg %a, i
 ; SI-NEXT:    v_mov_b32_e32 v20, s78
 ; SI-NEXT:    v_mov_b32_e32 v23, s77
 ; SI-NEXT:    v_mov_b32_e32 v26, s76
-; SI-NEXT:    v_mov_b32_e32 v29, s16
-; SI-NEXT:    v_readlane_b32 s16, v36, 47
+; SI-NEXT:    v_mov_b32_e32 v28, s16
+; SI-NEXT:    v_readlane_b32 s16, v36, 46
 ; SI-NEXT:    v_readlane_b32 s76, v37, 33
 ; SI-NEXT:    v_readlane_b32 s78, v37, 31
 ; SI-NEXT:    v_readlane_b32 s88, v37, 27
 ; SI-NEXT:    v_readlane_b32 s90, v37, 29
-; SI-NEXT:    v_mov_b32_e32 v30, s16
-; SI-NEXT:    v_readlane_b32 s16, v36, 48
+; SI-NEXT:    v_mov_b32_e32 v29, s16
+; SI-NEXT:    v_readlane_b32 s16, v36, 47
 ; SI-NEXT:    v_readlane_b32 s77, v37, 34
 ; SI-NEXT:    v_readlane_b32 s79, v37, 32
 ; SI-NEXT:    v_readlane_b32 s89, v37, 28
 ; SI-NEXT:    v_readlane_b32 s91, v37, 30
 ; SI-NEXT:    v_writelane_b32 v37, s98, 0
-; SI-NEXT:    v_readlane_b32 s20, v36, 39
-; SI-NEXT:    v_mov_b32_e32 v31, s16
-; SI-NEXT:    v_readlane_b32 s16, v36, 49
+; SI-NEXT:    v_mov_b32_e32 v30, s16
+; SI-NEXT:    v_readlane_b32 s16, v36, 48
 ; SI-NEXT:    v_writelane_b32 v37, s99, 1
-; SI-NEXT:    v_readlane_b32 s21, v36, 40
 ; SI-NEXT:    v_mov_b32_e32 v7, s36
 ; SI-NEXT:    v_mov_b32_e32 v8, s94
-; SI-NEXT:    v_mov_b32_e32 v32, s16
-; SI-NEXT:    v_readlane_b32 s16, v36, 50
-; SI-NEXT:    v_readlane_b32 s22, v36, 51
-; SI-NEXT:    v_readlane_b32 s17, v36, 52
-; SI-NEXT:    v_readlane_b32 s18, v36, 53
-; SI-NEXT:    v_readlane_b32 s23, v36, 54
-; SI-NEXT:    v_readlane_b32 s26, v36, 55
-; SI-NEXT:    v_readlane_b32 s24, v36, 56
-; SI-NEXT:    v_readlane_b32 s19, v36, 57
-; SI-NEXT:    v_readlane_b32 s27, v36, 58
-; SI-NEXT:    v_readlane_b32 s28, v36, 59
-; SI-NEXT:    v_readlane_b32 s29, v36, 60
+; SI-NEXT:    v_mov_b32_e32 v31, s16
+; SI-NEXT:    v_readlane_b32 s16, v36, 49
 ; SI-NEXT:    v_readlane_b32 s94, v37, 25
-; SI-NEXT:    v_writelane_b32 v36, s20, 39
 ; SI-NEXT:    v_readlane_b32 s36, v37, 23
 ; SI-NEXT:    v_mov_b32_e32 v15, s50
+; SI-NEXT:    v_mov_b32_e32 v32, s16
+; SI-NEXT:    v_readlane_b32 s16, v36, 50
+; SI-NEXT:    v_readlane_b32 s17, v36, 52
 ; SI-NEXT:    v_readlane_b32 s95, v37, 26
-; SI-NEXT:    v_writelane_b32 v36, s21, 40
 ; SI-NEXT:    v_readlane_b32 s37, v37, 24
 ; SI-NEXT:    v_readlane_b32 s34, v37, 45
 ; SI-NEXT:    v_readlane_b32 s50, v37, 43
 ; SI-NEXT:    v_mov_b32_e32 v14, s87
 ; SI-NEXT:    v_mov_b32_e32 v17, s86
 ; SI-NEXT:    v_mov_b32_e32 v18, s38
+; SI-NEXT:    v_readlane_b32 s22, v36, 51
+; SI-NEXT:    v_readlane_b32 s23, v36, 54
 ; SI-NEXT:    s_mov_b32 s95, s16
+; SI-NEXT:    v_readlane_b32 s20, v36, 39
 ; SI-NEXT:    s_mov_b32 s37, s17
 ; SI-NEXT:    v_readlane_b32 s38, v37, 19
 ; SI-NEXT:    v_readlane_b32 s16, v37, 15
@@ -182366,6 +182356,9 @@ define inreg <128 x i8> @bitcast_v64f16_to_v128i8_scalar(<64 x half> inreg %a, i
 ; SI-NEXT:    v_readlane_b32 s86, v36, 23
 ; SI-NEXT:    v_readlane_b32 s35, v37, 46
 ; SI-NEXT:    v_readlane_b32 s51, v37, 44
+; SI-NEXT:    v_readlane_b32 s18, v36, 53
+; SI-NEXT:    v_readlane_b32 s24, v36, 56
+; SI-NEXT:    v_readlane_b32 s21, v36, 40
 ; SI-NEXT:    v_readlane_b32 s39, v37, 20
 ; SI-NEXT:    v_readlane_b32 s17, v37, 16
 ; SI-NEXT:    v_readlane_b32 s53, v37, 18
@@ -182405,6 +182398,11 @@ define inreg <128 x i8> @bitcast_v64f16_to_v128i8_scalar(<64 x half> inreg %a, i
 ; SI-NEXT:    v_readlane_b32 s80, v37, 55
 ; SI-NEXT:    v_readlane_b32 s48, v37, 53
 ; SI-NEXT:    v_mov_b32_e32 v19, s85
+; SI-NEXT:    v_readlane_b32 s26, v36, 55
+; SI-NEXT:    v_readlane_b32 s19, v36, 57
+; SI-NEXT:    v_readlane_b32 s27, v36, 58
+; SI-NEXT:    v_readlane_b32 s28, v36, 59
+; SI-NEXT:    v_readlane_b32 s29, v36, 60
 ; SI-NEXT:    v_readlane_b32 vcc_hi, v37, 22
 ; SI-NEXT:    v_readlane_b32 s77, v36, 61
 ; SI-NEXT:    v_readlane_b32 s55, v37, 14
