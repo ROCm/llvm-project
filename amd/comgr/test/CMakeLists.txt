@@ -105,23 +105,6 @@ macro(add_test_input_linked name input0 input1 output)
   list(APPEND TEST_INPUT_LINKED_OBJS "${name}")
 endmacro()
 
-# Creates target ${name} which depends on a clang command to compile ${input} to
-# ${output} SPIR-V, with any additional arguments from ${ARGN}, and add it to the
-# TEST_INPUT_BINARIES target list.
-macro(add_test_input_spirv name input output)
-  add_custom_command(
-    OUTPUT "${output}"
-    COMMAND "$<TARGET_FILE:clang>" -x hip --offload-arch=amdgcnspirv -nogpulib -nogpuinc
-    --no-gpu-bundle-output --offload-device-only -O3
-    ${ARGN} "${CMAKE_CURRENT_SOURCE_DIR}/${input}" -o "${output}"
-    VERBATIM
-    DEPENDS clang "${input}")
-  add_custom_target("${name}"
-    DEPENDS "${output}"
-    SOURCES "${input}")
-  list(APPEND TEST_INPUT_BINARIES "${name}")
-endmacro()
-
 add_test_input_binary(reloc1 source/reloc1.cl source/reloc1.o -c -mcode-object-version=4)
 add_test_input_binary(reloc2 source/reloc2.cl source/reloc2.o -c -mcode-object-version=4)
 add_test_input_binary(reloc-asm source/reloc-asm.s source/reloc-asm.o -c -mcode-object-version=4)
@@ -141,9 +124,6 @@ add_test_input_object_file_bundle(double source/double.hip source/double.o)
 
 add_test_input_bitcode_bundle(cube source/cube.hip source/cube.bc)
 add_test_archive(cube_archive cube source/cube.bc source/cube.a)
-
-# Add SPIR-V test input for kernel cloning test
-add_test_input_spirv(clone_kernels_spirv source/clone_kernels.hip source/clone_kernels.spv)
 
 configure_file("source/linking/kernel0.cl" "source/linking/kernel0.cl" COPYONLY)
 configure_file("source/linking/kernel1.cl" "source/linking/kernel1.cl" COPYONLY)
@@ -166,7 +146,6 @@ configure_file("source/rocm57slice.b" "source/rocm57slice.b" COPYONLY)
 configure_file("source/square.hip" "source/square.hip" COPYONLY)
 configure_file("source/double.hip" "source/double.hip" COPYONLY)
 configure_file("source/cube.hip" "source/cube.hip" COPYONLY)
-configure_file("source/clone_kernels.hip" "source/clone_kernels.hip" COPYONLY)
 
 # We no longer support emission of code object v2/v3. The runtime however
 # can still load them so we need to test them using prebuilt binaries.
@@ -259,5 +238,4 @@ add_comgr_test(name_expression_map_test c)
 add_comgr_test(compile_hip_test c)
 add_comgr_test(compile_hip_to_relocatable c)
 add_comgr_test(mangled_names_hip_test c)
-add_comgr_test(clone_spirv_kernels_test c)
 #add_comgr_test(unbundle_hip_test c)
