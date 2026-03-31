@@ -2288,12 +2288,6 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
 }
 
 amd_comgr_status_t AMDGPUCompiler::cloneKernelsInBitcode(DataSet *BcSet) {
-#ifdef COMGR_DISABLE_SPIRV
-  LogS << "Calling AMDGPUCompiler::cloneKernelsInBitcode() not "
-       << "supported. Comgr is built with -DCOMGR_DISABLE_SPIRV. Re-build LLVM "
-       << "and Comgr with LLVM-SPIRV-Translator support to continue.\n";
-  return AMD_COMGR_STATUS_ERROR;
-#else
   if (ActionInfo->BlockSizes.empty()) {
     // Nothing to do
     return AMD_COMGR_STATUS_SUCCESS;
@@ -2318,9 +2312,8 @@ amd_comgr_status_t AMDGPUCompiler::cloneKernelsInBitcode(DataSet *BcSet) {
 
   for (auto *Input : OriginalBitcodes) {
     if (Input->DataKind != AMD_COMGR_DATA_KIND_BC) {
-      // Re-add non-bitcode objects as-is
-      BcSet->DataObjects.insert(Input);
-      continue;
+      LogS << "Unexpected input data kind for " << Input->Name << "\n";
+      return AMD_COMGR_STATUS_ERROR;
     }
 
     // Parse the bitcode module
@@ -2441,7 +2434,6 @@ amd_comgr_status_t AMDGPUCompiler::cloneKernelsInBitcode(DataSet *BcSet) {
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
-#endif
 }
 
 amd_comgr_status_t AMDGPUCompiler::compileSpirvToRelocatable() {

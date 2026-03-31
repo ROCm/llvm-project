@@ -23,9 +23,34 @@ int main(int argc, char *argv[]) {
   amd_comgr_action_info_t DataAction;
   size_t Count;
 
-  if (argc != 4) {
-    fprintf(stderr, "Usage: spirv-translator file.spv -o file.spv.bc\n");
+  if (argc < 4 || argc > 5) {
+    fprintf(stderr, "Usage: spirv-translator file.spv -o file.spv.bc "
+                    "[<comma-separated block sizes>]\n");
     exit(1);
+  }
+
+  // Parse the block sizes if provided
+  size_t BlockSizeCount = 0;
+  size_t *BlockSizes = NULL;
+  if (argc == 5) {
+    char *BlockSizesStr = argv[4];
+    // First count the number of block sizes
+    BlockSizeCount = 1;
+    for (char *p = BlockSizesStr; *p; p++)
+      if (*p == ',')
+        BlockSizeCount++;
+    BlockSizes = (size_t *)malloc(BlockSizeCount * sizeof(size_t));
+    size_t Index = 0;
+    char *Token = strtok(BlockSizesStr, ",");
+    while (Token) {
+      size_t BlockSize = strtoul(Token, NULL, 10);
+      if (BlockSize == 0) {
+        fprintf(stderr, "Invalid block size: '%s'\n", Token);
+        exit(1);
+      }
+      BlockSizes[Index++] = BlockSize;
+      Token = strtok(NULL, ",");
+    }
   }
 
   SizeSpirv = setBuf(argv[1], &BufSpirv);
@@ -38,6 +63,10 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_(create_action_info(&DataAction));
   amd_comgr_(create_data_set(&DataSetBc));
+
+  if (BlockSizeCount)
+    amd_comgr_(action_info_set_block_sizes(DataAction, BlockSizes,
+                                           BlockSizeCount));
 
   amd_comgr_(do_action(AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC, DataAction,
                        DataSetSpirv, DataSetBc));
@@ -65,5 +94,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_(destroy_data_set(DataSetBc));
   amd_comgr_(destroy_action_info(DataAction));
   free(BufSpirv);
+  if (BlockSizes)
+    free(BlockSizes);
   return 0;
 }
