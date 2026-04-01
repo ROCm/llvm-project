@@ -1526,9 +1526,95 @@ hsa_status_t asan_hsa_amd_agents_allow_access(
   uint32_t num_agents, const hsa_agent_t *agents, const uint32_t *flags,
   const void *ptr,
   BufferedStackTrace *stack) {
-  void *p = get_allocator().GetBlockBegin(ptr);
-  return REAL(hsa_amd_agents_allow_access)(num_agents, agents, flags,
-                                           p ? p : ptr);
+  // Check for debug output via environment variable
+  static int asan_p2p_debug = -1;
+  if (asan_p2p_debug == -1) {
+    const char *env = GetEnv("ASAN_P2P_DEBUG");
+    asan_p2p_debug = (env && (env[0] == '1' || env[0] == 'y' || env[0] == 'Y'));
+    if (asan_p2p_debug) {
+      Printf("ASAN P2P: Debug output enabled via ASAN_P2P_DEBUG\n");
+    }
+  }
+
+  // Get the block begin for ASAN-managed allocations
+  void *block_begin = get_allocator().GetBlockBegin(ptr);
+  const void *actual_ptr = block_begin ? block_begin : ptr;
+
+  if (asan_p2p_debug) {
+    Printf("ASAN P2P: asan_hsa_amd_agents_allow_access called\n");
+    Printf("ASAN P2P:   ptr=%p, block_begin=%p, actual_ptr=%p\n",
+           ptr, block_begin, actual_ptr);
+    Printf("ASAN P2P:   num_agents=%u\n", num_agents);
+  }
+
+  // First, allow access to the actual data memory
+  hsa_status_t status = REAL(hsa_amd_agents_allow_access)(
+      num_agents, agents, flags, actual_ptr);
+
+  if (asan_p2p_debug) {
+    Printf("ASAN P2P:   data access grant status=%d (%s)\n",
+           (int)status, status == HSA_STATUS_SUCCESS ? "SUCCESS" : "FAILED");
+  }
+
+  if (status != HSA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  // For ASAN-managed allocations, we also need to allow access to shadow memory
+  // so that remote GPUs can perform ASAN shadow checks on P2P memory accesses.
+  //
+  // Without this, when GPU B accesses GPU A's memory via P2P:
+  // 1. The data access succeeds (P2P is enabled for data)
+  // 2. ASAN instrumentation on GPU B tries to check shadow memory
+  // 3. Shadow address is computed but points to GPU A's shadow region
+  // 4. GPU B cannot access GPU A's shadow -> Memory fault
+  if (block_begin) {
+    uptr alloc_size = get_allocator().GetActuallyAllocatedSize(block_begin);
+
+    if (asan_p2p_debug) {
+      Printf("ASAN P2P:   ASAN-managed allocation, size=%zu\n", alloc_size);
+    }
+
+    if (alloc_size > 0) {
+      // Compute shadow memory range for this allocation
+      // Shadow formula: shadow_addr = (mem_addr >> 3) + SHADOW_OFFSET
+      uptr data_begin = reinterpret_cast<uptr>(block_begin);
+      uptr data_end = data_begin + alloc_size;
+
+      // Align to shadow granularity (8 bytes)
+      uptr aligned_begin = RoundDownTo(data_begin, ASAN_SHADOW_GRANULARITY);
+      uptr aligned_end = RoundUpTo(data_end, ASAN_SHADOW_GRANULARITY);
+
+      // Calculate shadow addresses using the standard ASAN mapping
+      uptr shadow_begin = MEM_TO_SHADOW(aligned_begin);
+      uptr shadow_end = MEM_TO_SHADOW(aligned_end);
+
+      if (shadow_end > shadow_begin) {
+        if (asan_p2p_debug) {
+          Printf("ASAN P2P:   data range: [0x%zx - 0x%zx]\n",
+                 data_begin, data_end);
+          Printf("ASAN P2P:   shadow range: [0x%zx - 0x%zx] (size=%zu bytes)\n",
+                 shadow_begin, shadow_end, shadow_end - shadow_begin);
+        }
+
+        // Allow P2P access to the shadow memory region
+        // Ignore failures - shadow may be in system memory (already accessible)
+        hsa_status_t shadow_status = REAL(hsa_amd_agents_allow_access)(
+            num_agents, agents, flags,
+            reinterpret_cast<const void *>(shadow_begin));
+
+        if (asan_p2p_debug) {
+          Printf("ASAN P2P:   shadow access grant status=%d (%s)\n",
+                 (int)shadow_status,
+                 shadow_status == HSA_STATUS_SUCCESS ? "SUCCESS" : "FAILED (ignored)");
+        }
+      }
+    }
+  } else if (asan_p2p_debug) {
+    Printf("ASAN P2P:   non-ASAN allocation, no shadow access needed\n");
+  }
+
+  return status;
 }
 
 // For asan allocator, kMetadataSize is 0 and maximum redzone size is 2048. This
