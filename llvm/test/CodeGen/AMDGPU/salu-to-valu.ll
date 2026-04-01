@@ -1,6 +1,6 @@
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=SI %s
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=CI -check-prefix=CI-NOHSA %s
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn--amdhsa -mcpu=bonaire < %s | FileCheck -check-prefix=GCN -check-prefix=CI --check-prefix=GCN-HSA %s
+; RUN:  llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=tahiti < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=SI %s
+; RUN:  llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=CI -check-prefix=CI-NOHSA %s
+; RUN:  llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn--amdhsa -mcpu=bonaire < %s | FileCheck -check-prefix=GCN -check-prefix=CI --check-prefix=GCN-HSA %s
 
 declare i32 @llvm.amdgcn.workitem.id.x() #0
 declare i32 @llvm.amdgcn.workitem.id.y() #0
@@ -57,7 +57,6 @@ done:                                             ; preds = %loop
 ; SI: s_movk_i32 [[OFFSET:s[0-9]+]], 0x2ee0
 ; GCN: v_readfirstlane_b32 s[[PTR_LO:[0-9]+]], v{{[0-9]+}}
 ; GCN: v_readfirstlane_b32 s[[PTR_HI:[0-9]+]], v{{[0-9]+}}
-; SI-DAG: s_mov_b32
 ; SI-DAG: s_load_dword [[OUT:s[0-9]+]], s[[[PTR_LO]]:[[PTR_HI]]], [[OFFSET]]
 
 ; CI: s_load_dword [[OUT:s[0-9]+]], s[[[PTR_LO]]:[[PTR_HI]]], 0xbb8

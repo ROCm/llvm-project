@@ -1,6 +1,6 @@
 ; RUN: opt -mtriple=amdgcn-- -S -structurizecfg -si-annotate-control-flow %s | FileCheck -check-prefix=OPT %s
 ; RUN: opt -mtriple=amdgcn-- -S -passes=structurizecfg,si-annotate-control-flow %s | FileCheck -check-prefix=OPT %s
-; RUN: llc -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
 
 
 ; OPT-LABEL: @annotate_unreachable(
@@ -9,7 +9,7 @@
 
 
 ; GCN-LABEL: {{^}}annotate_unreachable:
-; GCN: s_and_saveexec_b64
+; GCN: s_and_b64
 ; GCN-NOT: s_endpgm
 ; GCN: .Lfunc_end0
 define amdgpu_kernel void @annotate_unreachable(ptr addrspace(1) noalias nocapture readonly %arg, i1 %c0) #0 {

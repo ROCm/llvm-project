@@ -1,14 +1,16 @@
-; RUN: llc -mtriple=amdgcn--amdhsa < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdhsa < %s | FileCheck -enable-var-scope -check-prefix=GCN %s
 
 ; FIXME: merge with trap.ll
 
 ; An s_cbranch_execnz is required to avoid trapping if all lanes are 0
 ; GCN-LABEL: {{^}}trap_divergent_branch:
-; GCN: s_and_saveexec_b64
+; GCN: v_cmp_ne_u32
+; GCN: s_xor_b64
+; GCN: s_mov_b64 exec
 ; GCN: s_cbranch_execnz [[TRAP:.LBB[0-9]+_[0-9]+]]
-; GCN: ; %bb.{{[0-9]+}}:
+; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %end
 ; GCN-NEXT: s_endpgm
-; GCN: [[TRAP]]:
+; GCN: [[TRAP]]: ; %bb
 ; GCN: s_trap 2
 ; GCN-NEXT: s_endpgm
 define amdgpu_kernel void @trap_divergent_branch(ptr addrspace(1) nocapture readonly %arg) {
@@ -27,11 +29,14 @@ end:
 }
 
 ; GCN-LABEL: {{^}}debugtrap_divergent_branch:
-; GCN: s_and_saveexec_b64
-; GCN: s_cbranch_execz [[ENDPGM:.LBB[0-9]+_[0-9]+]]
-; GCN: ; %bb.{{[0-9]+}}:
+; GCN: v_cmp_ne_u32
+; GCN: s_xor_b64
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execnz [[TRAP:.LBB[0-9]+_[0-9]+]]
+; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %end
+; GCN-NEXT: s_endpgm
+; GCN: [[TRAP]]: ; %bb
 ; GCN: s_trap 3
-; GCN-NEXT: [[ENDPGM]]:
 ; GCN-NEXT: s_endpgm
 define amdgpu_kernel void @debugtrap_divergent_branch(ptr addrspace(1) nocapture readonly %arg) {
   %id = call i32 @llvm.amdgcn.workitem.id.x()

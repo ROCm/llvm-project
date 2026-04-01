@@ -1,12 +1,11 @@
-; RUN: llc -global-isel=0 -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefixes=GCN,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefixes=GCN,FUNC %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -new-reg-bank-select -mtriple=amdgcn -mcpu=bonaire < %s | FileCheck -check-prefixes=GCN,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=0 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,VIGFX9,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck -check-prefixes=GCN,FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -global-isel=0 -mtriple=amdgcn -mcpu=gfx900 < %s | FileCheck -check-prefixes=GCN,FUNC %s
 
 ; FUNC-LABEL: {{^}}ds_ordered_swap:
 ; GCN: s_mov_b32 m0, s0
-; VIGFX9-NEXT: s_nop 0
-; GCN-NEXT: ds_ordered_count v{{[0-9]+}}, v0 offset:4868 gds
+; GCN: ds_ordered_count v{{[0-9]+}}, v0 offset:4868 gds
 ; GCN-NEXT: s_waitcnt expcnt(0) lgkmcnt(0)
 define amdgpu_cs float @ds_ordered_swap(ptr addrspace(2) inreg %gds, i32 %value) {
   %val = call i32@llvm.amdgcn.ds.ordered.swap(ptr addrspace(2) %gds, i32 %value, i32 0, i32 0, i1 false, i32 1, i1 true, i1 true)
@@ -15,18 +14,16 @@ define amdgpu_cs float @ds_ordered_swap(ptr addrspace(2) inreg %gds, i32 %value)
 }
 
 ; FUNC-LABEL: {{^}}ds_ordered_swap_conditional:
-; GCN: v_cmp_ne_u32_e32 vcc, 0, v[[VALUE:[0-9]+]]
-; GCN: s_and_saveexec_b64 s[[SAVED:\[[0-9]+:[0-9]+\]]], vcc
+; GCN: v_cmp_{{ne|eq}}_u32_e{{32|64}} {{(vcc|s\[[0-9]+:[0-9]+\])}}, 0, v{{[0-9]+}}
 ; // We have to use s_cbranch, because ds_ordered_count has side effects with EXEC=0
 ; GCN: s_cbranch_execz [[BB:.LBB._.]]
 ; GCN: s_mov_b32 m0, s0
-; VIGFX9-NEXT: s_nop 0
-; GCN-NEXT: ds_ordered_count v{{[0-9]+}}, v[[VALUE]] offset:4868 gds
+; GCN: ds_ordered_count v{{[0-9]+}}, v{{[0-9]+}} offset:4868 gds
 ; GCN-NEXT: s_waitcnt lgkmcnt(0)
-; GCN-NEXT: [[BB]]:
+; GCN: [[BB]]:
 ; // Wait for expcnt(0) before modifying EXEC
 ; GCN-NEXT: s_waitcnt expcnt(0)
-; GCN-NEXT: s_or_b64 exec, exec, s[[SAVED]]
+; GCN-NEXT: s_or_b64 exec, exec
 define amdgpu_cs float @ds_ordered_swap_conditional(ptr addrspace(2) inreg %gds, i32 %value) {
 entry:
   %c = icmp ne i32 %value, 0

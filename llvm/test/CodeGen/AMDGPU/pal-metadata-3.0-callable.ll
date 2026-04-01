@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn--amdpal -mcpu=gfx1100 < %s | FileCheck --check-prefixes=CHECK,GFX11 %s
-; RUN: llc -mtriple=amdgcn--amdpal -mcpu=gfx1200 < %s | FileCheck --check-prefixes=CHECK,GFX12 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1100 < %s | FileCheck --check-prefixes=CHECK,GFX11 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal -mcpu=gfx1200 < %s | FileCheck --check-prefixes=CHECK,GFX12 %s
 
 ; CHECK:           .amdgpu_pal_metadata
 ; CHECK-NEXT: ---
@@ -70,7 +70,7 @@
 ; CHECK-NEXT:      dynamic_stack:
 ; CHECK-NEXT:        .backend_stack_size: 0x10
 ; CHECK-NEXT:        .lds_size:       0
-; CHECK-NEXT:        .sgpr_count:     0x22
+; CHECK-NEXT:        .sgpr_count:     0x24
 ; CHECK-NEXT:        .stack_frame_size_in_bytes: 0x10
 ; CHECK-NEXT:        .vgpr_count:     0x2
 ; CHECK-NEXT:      dynamic_stack_loop:
