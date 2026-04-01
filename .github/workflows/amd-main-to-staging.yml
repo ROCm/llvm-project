@@ -71,10 +71,11 @@ jobs:
             MERGE_TARGET=""
 
             # Walk first-parent history of amd-main, newest to oldest
-            # Find the most recent commit that doesn't introduce new upstream
+            # Find the most recent commit whose upstream merge-base is
+            # still an ancestor of amd-staging's upstream merge-base
             for commit in $(git rev-list amd-staging..origin/amd-main --first-parent); do
               COMMIT_UPSTREAM=$(git merge-base upstream/main $commit)
-              if [ "$COMMIT_UPSTREAM" == "$UPSTREAM_IN_STAGING" ]; then
+              if git merge-base --is-ancestor $COMMIT_UPSTREAM $UPSTREAM_IN_STAGING; then
                 MERGE_TARGET=$commit
                 break
               fi
