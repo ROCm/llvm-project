@@ -303,7 +303,7 @@ define amdgpu_ps void @flat_store_b16_idxprom(ptr align 2 inreg %p, i32 %idx) {
 ; GCN-LABEL: flat_store_b16_idxprom:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GCN-NEXT:    v_mov_b32_e32 v1, 1
+; GCN-NEXT:    v_mov_b16_e32 v1.l, 1
 ; GCN-NEXT:    flat_store_b16 v0, v1, s[0:1] scale_offset
 ; GCN-NEXT:    s_endpgm
 entry:

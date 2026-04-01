@@ -229,10 +229,8 @@ define amdgpu_kernel void @v_insertelement_v2bf16_0(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b32 v1, v0, s[2:3] scale_offset
-; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_movk_i32 s2, 0x40a0
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_bfi_b32 v1, 0xffff, s2, v1
+; GFX1250-NEXT:    v_mov_b16_e32 v1.l, 0x40a0
 ; GFX1250-NEXT:    global_store_b32 v0, v1, s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -317,7 +315,7 @@ define amdgpu_kernel void @v_insertelement_v2bf16_0_inlineimm(ptr addrspace(1) %
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b32 v1, v0, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_bfi_b32 v1, 0xffff, 53, v1
+; GFX1250-NEXT:    v_mov_b16_e32 v1.l, 53
 ; GFX1250-NEXT:    global_store_b32 v0, v1, s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -403,10 +401,8 @@ define amdgpu_kernel void @v_insertelement_v2bf16_1(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b32 v1, v0, s[2:3] scale_offset
-; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_movk_i32 s2, 0x40a0
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_perm_b32 v1, s2, v1, 0x5040100
+; GFX1250-NEXT:    v_mov_b16_e32 v1.h, 0x40a0
 ; GFX1250-NEXT:    global_store_b32 v0, v1, s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -491,7 +487,7 @@ define amdgpu_kernel void @v_insertelement_v2bf16_1_inlineimm(ptr addrspace(1) %
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b32 v1, v0, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_perm_b32 v1, 35, v1, 0x5040100
+; GFX1250-NEXT:    v_mov_b16_e32 v1.h, 35
 ; GFX1250-NEXT:    global_store_b32 v0, v1, s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -708,7 +704,7 @@ define amdgpu_kernel void @v_insertelement_v4bf16_0(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b64 v[0:1], v2, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_bfi_b32 v0, 0xffff, s4, v0
+; GFX1250-NEXT:    v_mov_b16_e32 v0.l, s4
 ; GFX1250-NEXT:    global_store_b64 v2, v[0:1], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -803,7 +799,7 @@ define amdgpu_kernel void @v_insertelement_v4bf16_1(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b64 v[0:1], v2, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_perm_b32 v0, s4, v0, 0x5040100
+; GFX1250-NEXT:    v_mov_b16_e32 v0.h, s4
 ; GFX1250-NEXT:    global_store_b64 v2, v[0:1], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -900,7 +896,7 @@ define amdgpu_kernel void @v_insertelement_v4bf16_2(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b64 v[0:1], v2, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_bfi_b32 v1, 0xffff, s4, v1
+; GFX1250-NEXT:    v_mov_b16_e32 v1.l, s4
 ; GFX1250-NEXT:    global_store_b64 v2, v[0:1], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -995,7 +991,7 @@ define amdgpu_kernel void @v_insertelement_v4bf16_3(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b64 v[0:1], v2, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_perm_b32 v1, s4, v1, 0x5040100
+; GFX1250-NEXT:    v_mov_b16_e32 v1.h, s4
 ; GFX1250-NEXT:    global_store_b64 v2, v[0:1], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -1214,7 +1210,7 @@ define amdgpu_kernel void @v_insertelement_v8bf16_3(ptr addrspace(1) %out, ptr a
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    global_load_b128 v[0:3], v4, s[2:3] scale_offset
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_perm_b32 v1, s4, v1, 0x5040100
+; GFX1250-NEXT:    v_mov_b16_e32 v1.h, s4
 ; GFX1250-NEXT:    global_store_b128 v4, v[0:3], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -1447,35 +1443,28 @@ define amdgpu_kernel void @v_insertelement_v8bf16_dynamic(ptr addrspace(1) %out,
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 7
-; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_cndmask_b32_e64 v5, v3, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 4
-; GFX1250-NEXT:    v_dual_lshrrev_b32 v3, 16, v3 :: v_dual_lshrrev_b32 v6, 16, v2
-; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s6, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 5
-; GFX1250-NEXT:    v_cndmask_b32_e64 v2, v2, s4, s3
-; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s7, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 2
-; GFX1250-NEXT:    v_dual_lshrrev_b32 v7, 16, v1 :: v_dual_lshrrev_b32 v8, 16, v0
-; GFX1250-NEXT:    v_cndmask_b32_e64 v3, v3, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s8, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 3
-; GFX1250-NEXT:    v_cndmask_b32_e64 v1, v1, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s9, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 0
-; GFX1250-NEXT:    v_cndmask_b32_e64 v7, v7, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s10, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 1
-; GFX1250-NEXT:    v_cndmask_b32_e64 v0, v0, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
-; GFX1250-NEXT:    v_cndmask_b32_e64 v6, v6, s4, s3
-; GFX1250-NEXT:    v_cndmask_b32_e64 v8, v8, s4, s2
-; GFX1250-NEXT:    v_perm_b32 v3, v3, v5, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v1, v7, v1, 0x5040100
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
-; GFX1250-NEXT:    v_perm_b32 v2, v6, v2, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v0, v8, v0, 0x5040100
+; GFX1250-NEXT:    s_cselect_b32 s5, -1, 0
+; GFX1250-NEXT:    s_wait_loadcnt 0x0
+; GFX1250-NEXT:    v_cndmask_b16 v3.l, v3.l, s4, s2
+; GFX1250-NEXT:    v_cndmask_b16 v3.h, v3.h, s4, s3
+; GFX1250-NEXT:    v_cndmask_b16 v2.l, v2.l, s4, s6
+; GFX1250-NEXT:    v_cndmask_b16 v2.h, v2.h, s4, s7
+; GFX1250-NEXT:    v_cndmask_b16 v1.l, v1.l, s4, s8
+; GFX1250-NEXT:    v_cndmask_b16 v1.h, v1.h, s4, s9
+; GFX1250-NEXT:    v_cndmask_b16 v0.l, v0.l, s4, s10
+; GFX1250-NEXT:    v_cndmask_b16 v0.h, v0.h, s4, s5
 ; GFX1250-NEXT:    global_store_b128 v4, v[0:3], s[0:1] scale_offset
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
@@ -1588,14 +1577,13 @@ define amdgpu_kernel void @v_insertelement_v16bf16_3(ptr addrspace(1) %out, ptr 
 ; GFX1250-NEXT:    v_lshlrev_b32_e32 v8, 5, v0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_clause 0x1
-; GFX1250-NEXT:    global_load_b128 v[0:3], v8, s[2:3]
-; GFX1250-NEXT:    global_load_b128 v[4:7], v8, s[2:3] offset:16
-; GFX1250-NEXT:    s_wait_loadcnt 0x1
-; GFX1250-NEXT:    v_perm_b32 v1, s4, v1, 0x5040100
+; GFX1250-NEXT:    global_load_b128 v[0:3], v8, s[2:3] offset:16
+; GFX1250-NEXT:    global_load_b128 v[4:7], v8, s[2:3]
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
+; GFX1250-NEXT:    v_mov_b16_e32 v5.h, s4
 ; GFX1250-NEXT:    s_clause 0x1
-; GFX1250-NEXT:    global_store_b128 v8, v[4:7], s[0:1] offset:16
-; GFX1250-NEXT:    global_store_b128 v8, v[0:3], s[0:1]
+; GFX1250-NEXT:    global_store_b128 v8, v[0:3], s[0:1] offset:16
+; GFX1250-NEXT:    global_store_b128 v8, v[4:7], s[0:1]
 ; GFX1250-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
@@ -1988,66 +1976,53 @@ define amdgpu_kernel void @v_insertelement_v16bf16_dynamic(ptr addrspace(1) %out
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
 ; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 7
-; GFX1250-NEXT:    s_wait_loadcnt 0x1
-; GFX1250-NEXT:    v_cndmask_b32_e64 v9, v3, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 4
-; GFX1250-NEXT:    v_lshrrev_b32_e32 v3, 16, v3
-; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s6, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 5
-; GFX1250-NEXT:    v_dual_lshrrev_b32 v10, 16, v2 :: v_dual_lshrrev_b32 v11, 16, v1
-; GFX1250-NEXT:    v_cndmask_b32_e64 v2, v2, s4, s3
-; GFX1250-NEXT:    s_cselect_b32 s3, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s7, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 2
-; GFX1250-NEXT:    v_cndmask_b32_e64 v3, v3, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s8, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 3
-; GFX1250-NEXT:    v_cndmask_b32_e64 v1, v1, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s9, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 0
-; GFX1250-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-NEXT:    v_dual_lshrrev_b32 v12, 16, v0 :: v_dual_lshrrev_b32 v13, 16, v7
-; GFX1250-NEXT:    v_cndmask_b32_e64 v11, v11, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s10, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 1
-; GFX1250-NEXT:    v_cndmask_b32_e64 v0, v0, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s11, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 14
-; GFX1250-NEXT:    v_cndmask_b32_e64 v10, v10, s4, s3
-; GFX1250-NEXT:    v_perm_b32 v3, v3, v9, 0x5040100
-; GFX1250-NEXT:    v_cndmask_b32_e64 v9, v12, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s12, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 15
-; GFX1250-NEXT:    v_cndmask_b32_e64 v7, v7, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s13, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 12
-; GFX1250-NEXT:    v_dual_lshrrev_b32 v14, 16, v6 :: v_dual_lshrrev_b32 v15, 16, v5
-; GFX1250-NEXT:    v_perm_b32 v2, v10, v2, 0x5040100
-; GFX1250-NEXT:    v_cndmask_b32_e64 v10, v13, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s14, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 13
-; GFX1250-NEXT:    v_cndmask_b32_e64 v6, v6, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s15, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 10
-; GFX1250-NEXT:    v_cndmask_b32_e64 v12, v14, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s16, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 11
-; GFX1250-NEXT:    v_cndmask_b32_e64 v5, v5, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s17, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 8
-; GFX1250-NEXT:    v_lshrrev_b32_e32 v16, 16, v4
-; GFX1250-NEXT:    v_cndmask_b32_e64 v13, v15, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
+; GFX1250-NEXT:    s_cselect_b32 s18, -1, 0
 ; GFX1250-NEXT:    s_cmp_eq_u32 s5, 9
-; GFX1250-NEXT:    v_cndmask_b32_e64 v4, v4, s4, s2
-; GFX1250-NEXT:    s_cselect_b32 s2, -1, 0
-; GFX1250-NEXT:    v_perm_b32 v7, v10, v7, 0x5040100
-; GFX1250-NEXT:    v_cndmask_b32_e64 v14, v16, s4, s2
-; GFX1250-NEXT:    v_perm_b32 v6, v12, v6, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v5, v13, v5, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v1, v11, v1, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v0, v9, v0, 0x5040100
-; GFX1250-NEXT:    v_perm_b32 v4, v14, v4, 0x5040100
+; GFX1250-NEXT:    s_cselect_b32 s5, -1, 0
+; GFX1250-NEXT:    s_wait_loadcnt 0x1
+; GFX1250-NEXT:    v_cndmask_b16 v3.l, v3.l, s4, s2
+; GFX1250-NEXT:    s_wait_loadcnt 0x0
+; GFX1250-NEXT:    v_cndmask_b16 v7.l, v7.l, s4, s12
+; GFX1250-NEXT:    v_cndmask_b16 v7.h, v7.h, s4, s13
+; GFX1250-NEXT:    v_cndmask_b16 v6.l, v6.l, s4, s14
+; GFX1250-NEXT:    v_cndmask_b16 v6.h, v6.h, s4, s15
+; GFX1250-NEXT:    v_cndmask_b16 v5.l, v5.l, s4, s16
+; GFX1250-NEXT:    v_cndmask_b16 v5.h, v5.h, s4, s17
+; GFX1250-NEXT:    v_cndmask_b16 v4.l, v4.l, s4, s18
+; GFX1250-NEXT:    v_cndmask_b16 v4.h, v4.h, s4, s5
+; GFX1250-NEXT:    v_cndmask_b16 v3.h, v3.h, s4, s3
+; GFX1250-NEXT:    v_cndmask_b16 v2.l, v2.l, s4, s6
+; GFX1250-NEXT:    v_cndmask_b16 v2.h, v2.h, s4, s7
+; GFX1250-NEXT:    v_cndmask_b16 v1.l, v1.l, s4, s8
+; GFX1250-NEXT:    v_cndmask_b16 v1.h, v1.h, s4, s9
+; GFX1250-NEXT:    v_cndmask_b16 v0.l, v0.l, s4, s10
+; GFX1250-NEXT:    v_cndmask_b16 v0.h, v0.h, s4, s11
 ; GFX1250-NEXT:    s_clause 0x1
 ; GFX1250-NEXT:    global_store_b128 v8, v[4:7], s[0:1] offset:16
 ; GFX1250-NEXT:    global_store_b128 v8, v[0:3], s[0:1]

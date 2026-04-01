@@ -499,12 +499,12 @@ define signext i16 @clpeak_imad_pat_i16(i16 signext %x, i16 signext %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.l, v0.l, v1.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v1.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v0
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v0.h, v0.l
 ; GFX1250-SDAG-NEXT:    v_bfe_i32 v0, v0, 0, 16
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -512,16 +512,16 @@ define signext i16 @clpeak_imad_pat_i16(i16 signext %x, i16 signext %y) {
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v2, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v2, v3, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v0.h
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-GISEL-NEXT:    v_bfe_i32 v0, v0, 0, 16
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
@@ -1879,31 +1879,30 @@ define zeroext i16 @clpeak_umad_pat_i16(i16 zeroext %x, i16 zeroext %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.l, v0.l, v1.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v1.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
 ; GFX1250-GISEL-LABEL: clpeak_umad_pat_i16:
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v2, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v2, v3, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v0.h
+; GFX1250-GISEL-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
 entry:
   %conv33 = add i16 %x, 1
@@ -5235,12 +5234,12 @@ define signext i8 @clpeak_imad_pat_i8(i8 signext %x, i8 signext %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.l, v0.l, v1.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v1.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v0
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v0.h, v0.l
 ; GFX1250-SDAG-NEXT:    v_bfe_i32 v0, v0, 0, 8
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -5248,16 +5247,16 @@ define signext i8 @clpeak_imad_pat_i8(i8 signext %x, i8 signext %y) {
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v2, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v2, v3, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v0.h
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-GISEL-NEXT:    v_bfe_i32 v0, v0, 0, 8
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
@@ -5685,50 +5684,50 @@ define <2 x i8> @clpeak_imad_pat_v2i8(<2 x i8> %x, <2 x i8> %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_add_nc_u16 v1, v1, 1
-; GFX1250-SDAG-NEXT:    v_add_nc_u16 v0, v0, 1
+; GFX1250-SDAG-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
+; GFX1250-SDAG-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v4, v1, v3, v1
-; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v1, v1, v3
-; GFX1250-SDAG-NEXT:    v_mad_u16 v5, v0, v2, v0
-; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v0, v0, v2
+; GFX1250-SDAG-NEXT:    v_mad_u16 v1.l, v0.h, v3.l, v0.h
+; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v0.h, v0.h, v3.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v1.h, v0.l, v2.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v0.l, v0.l, v2.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_3)
-; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v3, v4, v3
-; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v2, v5, v2
+; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v1.l, v1.l, v3.l
+; GFX1250-SDAG-NEXT:    v_mul_lo_u16 v1.h, v1.h, v2.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v3, v1, v3
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v2, v0, v2
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v1.l, v0.h, v1.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.h, v0.l, v1.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v1, v3, v1
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v2, v0
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-SDAG-NEXT:    v_lshlrev_b16 v2, 8, v1
-; GFX1250-SDAG-NEXT:    v_and_b32_e32 v1, 0xff, v1
-; GFX1250-SDAG-NEXT:    v_bitop3_b16 v0, v0, v2, 0xff bitop3:0xec
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.h, v1.l, v0.h
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v1.h, v0.l
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-SDAG-NEXT:    v_lshlrev_b16 v1.l, 8, v0.h
+; GFX1250-SDAG-NEXT:    v_bitop3_b16 v0.l, v0.l, v1.l, 0xff bitop3:0xec
+; GFX1250-SDAG-NEXT:    v_and_b16 v1.l, 0xff, v0.h
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
 ; GFX1250-GISEL-LABEL: clpeak_imad_pat_v2i8:
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v1, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mad_u16 v4, v0, v2, v0
-; GFX1250-GISEL-NEXT:    v_mad_u16 v5, v1, v3, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v2, 1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v1, v3, 1
+; GFX1250-GISEL-NEXT:    v_mad_u16 v1.l, v0.l, v2.l, v0.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v1.h, v0.h, v3.l, v0.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v2.l, 1
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v3.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v6, v4, v2
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v7, v5, v3
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v4, v2, 1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v3, v5, v3, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v2.h, v1.l, v2.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3.h, v1.h, v3.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v1.l, v1.l, v2.l, 1
+; GFX1250-GISEL-NEXT:    v_mad_u16 v1.h, v1.h, v3.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v6, v0
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v7, v1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v2.h, v0.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.h, v3.h, v0.h
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v2
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v1, v3
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
 entry:
   %y18 = add <2 x i8> %x, <i8 1, i8 1>
@@ -9194,18 +9193,18 @@ define signext i16 @clpeak_imad_pat_i16_x2(i16 signext %x, i16 signext %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.l, v0.l, v1.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v1.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v0
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v0.h, v0.l
 ; GFX1250-SDAG-NEXT:    v_bfe_i32 v0, v0, 0, 16
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
@@ -9213,26 +9212,26 @@ define signext i16 @clpeak_imad_pat_i16_x2(i16 signext %x, i16 signext %y) {
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v2, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v2, v3, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v2, v3, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v2, v3, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v0.h
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1250-GISEL-NEXT:    v_bfe_i32 v0, v0, 0, 16
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
@@ -9596,47 +9595,46 @@ define zeroext i16 @clpeak_umad_pat_i16_x2(i16 zeroext %x, i16 zeroext %y) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v1.l, v0.l, v1.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v1.l, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v1, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v1, v0, v1
-; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v0
-; GFX1250-SDAG-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v0.l, v0.h
+; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.l, v0.h, v0.l
+; GFX1250-SDAG-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
 ; GFX1250-GISEL-LABEL: clpeak_umad_pat_i16_x2:
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0, v0, 1
-; GFX1250-GISEL-NEXT:    v_add_nc_u16 v2, v1, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.l, v0.l, 1
+; GFX1250-GISEL-NEXT:    v_add_nc_u16 v0.h, v1.l, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v2, v3, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v2, v3, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
 ; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_2)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v3, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1, v2, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    v_mad_u16 v1, v2, v3, 1
-; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0, v0, v1
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_and_b32_e32 v0, 0xffff, v0
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.h, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, 1
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v1.l, v0.h, v1.h
+; GFX1250-GISEL-NEXT:    v_mad_u16 v0.h, v0.h, v1.h, 1
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v1.l
+; GFX1250-GISEL-NEXT:    v_mul_lo_u16 v0.l, v0.l, v0.h
+; GFX1250-GISEL-NEXT:    v_mov_b16_e32 v0.h, 0
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
 entry:
   %conv69 = add i16 %x, 1
@@ -10601,21 +10599,20 @@ define <2 x i16> @multi_use_mul_mad_i16_var(i16 %x, i16 %y, i16 %z0, i16 %z1) {
 ; GFX1250-SDAG:       ; %bb.0: ; %entry
 ; GFX1250-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-SDAG-NEXT:    v_mad_u16 v2, v0, v1, v2
-; GFX1250-SDAG-NEXT:    v_mad_u16 v0, v0, v1, v3
+; GFX1250-SDAG-NEXT:    v_mov_b16_e32 v0.h, v0.l
 ; GFX1250-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1250-SDAG-NEXT:    v_perm_b32 v0, v0, v2, 0x5040100
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.l, v0.h, v1.l, v2.l
+; GFX1250-SDAG-NEXT:    v_mad_u16 v0.h, v0.h, v1.l, v3.l
 ; GFX1250-SDAG-NEXT:    s_set_pc_i64 s[30:31]
 ;
 ; GFX1250-GISEL-LABEL: multi_use_mul_mad_i16_var:
 ; GFX1250-GISEL:       ; %bb.0: ; %entry
 ; GFX1250-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-GISEL-NEXT:    v_mad_u16 v2, v0, v1, v2
-; GFX1250-GISEL-NEXT:    v_mad_u16 v0, v0, v1, v3
-; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX1250-GISEL-NEXT:    v_and_b32_e32 v1, 0xffff, v2
-; GFX1250-GISEL-NEXT:    v_lshl_or_b32 v0, v0, 16, v1
+; GFX1250-GISEL-NEXT:    v_mad_u16 v2.l, v0.l, v1.l, v2.l
+; GFX1250-GISEL-NEXT:    v_mad_u16 v2.h, v0.l, v1.l, v3.l
+; GFX1250-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1250-GISEL-NEXT:    v_mov_b32_e32 v0, v2
 ; GFX1250-GISEL-NEXT:    s_set_pc_i64 s[30:31]
 entry:
   %mul = mul i16 %x, %y
@@ -10839,9 +10836,9 @@ define i16 @other_use_mul_mad_i16_var(i16 %x, i16 %y, i16 %z, ptr addrspace(3) %
 ; GFX1250:       ; %bb.0: ; %entry
 ; GFX1250-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    v_mul_lo_u16 v4, v0, v1
-; GFX1250-NEXT:    v_mad_u16 v0, v0, v1, v2
-; GFX1250-NEXT:    ds_store_b16 v3, v4
+; GFX1250-NEXT:    v_mul_lo_u16 v0.h, v0.l, v1.l
+; GFX1250-NEXT:    v_mad_u16 v0.l, v0.l, v1.l, v2.l
+; GFX1250-NEXT:    ds_store_b16_d16_hi v3, v0
 ; GFX1250-NEXT:    s_wait_dscnt 0x0
 ; GFX1250-NEXT:    s_set_pc_i64 s[30:31]
 entry:

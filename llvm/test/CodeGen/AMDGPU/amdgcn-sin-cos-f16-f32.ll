@@ -20,7 +20,7 @@ define amdgpu_ps float @s_sin_f32(float inreg %src) #1 {
 define amdgpu_ps half @v_sin_f16(half %src) #1 {
 ; GCN-LABEL: v_sin_f16:
 ; GCN:  ; %bb.0:
-; GCN:    v_sin_f16_e32 v0, v0
+; GCN:    v_sin_f16_e32 v0.l, v0.l
   %sin = call half @llvm.amdgcn.sin.f16(half %src) #0
   ret half %sin
 }
@@ -28,7 +28,7 @@ define amdgpu_ps half @v_sin_f16(half %src) #1 {
 define amdgpu_ps half @s_sin_f16(half inreg %src) #1 {
 ; GCN-LABEL: s_sin_f16:
 ; GCN:  ; %bb.0:
-; GCN:    v_sin_f16_e32 v0, s0
+; GCN:    v_sin_f16_e32 v0.l, s0
   %sin = call half @llvm.amdgcn.sin.f16(half %src) #0
   ret half %sin
 }
@@ -52,7 +52,7 @@ define amdgpu_ps float @s_cos_f32(float inreg %src) #1 {
 define amdgpu_ps half @v_cos_f16(half %src) #1 {
 ; GCN-LABEL: v_cos_f16:
 ; GCN:  ; %bb.0:
-; GCN:    v_cos_f16_e32 v0, v0
+; GCN:    v_cos_f16_e32 v0.l, v0.l
   %cos = call half @llvm.amdgcn.cos.f16(half %src) #0
   ret half %cos
 }
@@ -60,7 +60,7 @@ define amdgpu_ps half @v_cos_f16(half %src) #1 {
 define amdgpu_ps half @s_cos_f16(half inreg %src) #1 {
 ; GCN-LABEL: s_cos_f16:
 ; GCN:  ; %bb.0:
-; GCN:    v_cos_f16_e32 v0, s0
+; GCN:    v_cos_f16_e32 v0.l, s0
   %cos = call half @llvm.amdgcn.cos.f16(half %src) #0
   ret half %cos
 }

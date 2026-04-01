@@ -14,7 +14,10 @@ define amdgpu_ps float @v_test_cvt_bf16_f32_v(bfloat %v) {
 ; GFX1250-LABEL: v_test_cvt_bf16_f32_v:
 ; GFX1250:       ; %bb.0:
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
+; GFX1250-NEXT:    v_mov_b16_e32 v1.l, 0
+; GFX1250-NEXT:    v_mov_b16_e32 v1.h, v0.l
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1250-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX1250-NEXT:    ; return to shader part epilog
   %cvt = fpext bfloat %v to float
   ret float %cvt
@@ -134,9 +137,10 @@ define amdgpu_ps float @v_test_cvt_f32_bf16_v(float %src) {
 ; GFX1250-LABEL: v_test_cvt_f32_bf16_v:
 ; GFX1250:       ; %bb.0:
 ; GFX1250-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
-; GFX1250-NEXT:    v_cvt_pk_bf16_f32 v0, v0, s0
-; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1250-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
+; GFX1250-NEXT:    v_cvt_pk_bf16_f32 v1, v0, s0
+; GFX1250-NEXT:    v_mov_b16_e32 v0.l, 0
+; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_2)
+; GFX1250-NEXT:    v_mov_b16_e32 v0.h, v1.l
 ; GFX1250-NEXT:    ; return to shader part epilog
   %trunc = fptrunc float %src to bfloat
   %ext = fpext bfloat %trunc to float

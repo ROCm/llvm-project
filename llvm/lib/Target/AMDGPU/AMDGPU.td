@@ -2112,6 +2112,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureD16Writes32BitVgpr,
    FeatureMcastLoadInsts,
    FeatureNoF16PseudoScalarTransInlineConstants,
+   FeatureRealTrue16Insts,
 ]>;
 
 def FeatureISAVersion12_50 : FeatureSet<
