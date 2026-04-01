@@ -5,12 +5,18 @@ rocwmma and CK needs changes
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks comgr builds
-[comgr] Auto-discover and embed libc++ headers for HIPRTC (#1696)
----
 breaks smoke*
 [Reland][IR] Add initial support for the byte type (#186888)
 ---
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+---
+mlir tests breaking
+[IR] Require well-formed IR for BasicBlock::getTerminator (#189416)
+---
+LTO LLD merge issue
+8b21fe60b43f [LTO][LLD] Prevent invalid LTO libfunc transforms (#164916)
+---
+needs SPIRV/COMGR
+18e695890306 [SPIRV][AMDGPU][clang][CodeGen][opt] Add late-resolved 
 ---

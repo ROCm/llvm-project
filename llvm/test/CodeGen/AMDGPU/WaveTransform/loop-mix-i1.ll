@@ -271,10 +271,11 @@ define amdgpu_kernel void @loop_mix_i1(ptr addrspace(1) %filter.coerce, ptr addr
   ; GISEL-NEXT:   successors: %bb.4(0x80000000)
   ; GISEL-NEXT: {{  $}}
   ; GISEL-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[V_XOR_B32_e64_]], %bb.5
-  ; GISEL-NEXT:   [[V_AND_B32_e32_:%[0-9]+]]:vgpr_32 = V_AND_B32_e32 1, [[PHI4]], implicit $exec
-  ; GISEL-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 0, [[V_AND_B32_e32_]], implicit $exec
+  ; GISEL-NEXT:   [[COPY18:%[0-9]+]]:vgpr_16 = COPY [[PHI4]].lo16
+  ; GISEL-NEXT:   [[V_AND_B16_t16_e64_:%[0-9]+]]:vgpr_16 = V_AND_B16_t16_e64 0, 1, 0, [[COPY18]], 0, implicit $exec
+  ; GISEL-NEXT:   [[V_CMP_NE_U16_t16_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U16_t16_e64 0, 0, 0, [[V_AND_B16_t16_e64_]], 0, implicit $exec
   ; GISEL-NEXT:   [[S_ANDN2_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_ANDN2_B32 [[COPY6]], $exec_lo, implicit-def $scc
-  ; GISEL-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 $exec_lo, [[V_CMP_NE_U32_e64_1]], implicit-def $scc
+  ; GISEL-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_B32 $exec_lo, [[V_CMP_NE_U16_t16_e64_]], implicit-def $scc
   ; GISEL-NEXT:   [[S_OR_B32_1:%[0-9]+]]:sreg_32_xm0_xexec = S_OR_B32 [[S_ANDN2_B32_1]], [[S_AND_B32_2]], implicit-def $scc
   ; GISEL-NEXT:   S_BRANCH %bb.4
   ; GISEL-NEXT: {{  $}}
@@ -287,13 +288,13 @@ define amdgpu_kernel void @loop_mix_i1(ptr addrspace(1) %filter.coerce, ptr addr
   ; GISEL-NEXT: bb.9.if.then11:
   ; GISEL-NEXT:   successors: %bb.10(0x80000000)
   ; GISEL-NEXT: {{  $}}
-  ; GISEL-NEXT:   [[COPY18:%[0-9]+]]:sreg_64 = COPY [[S_LOAD_DWORDX4_IMM]].sub0_sub1
-  ; GISEL-NEXT:   [[COPY19:%[0-9]+]]:sreg_64 = COPY [[S_LOAD_DWORDX4_IMM]].sub2_sub3
-  ; GISEL-NEXT:   [[COPY20:%[0-9]+]]:sreg_64_xexec_xnull = COPY [[COPY19]]
+  ; GISEL-NEXT:   [[COPY19:%[0-9]+]]:sreg_64 = COPY [[S_LOAD_DWORDX4_IMM]].sub0_sub1
+  ; GISEL-NEXT:   [[COPY20:%[0-9]+]]:sreg_64 = COPY [[S_LOAD_DWORDX4_IMM]].sub2_sub3
+  ; GISEL-NEXT:   [[COPY21:%[0-9]+]]:sreg_64_xexec_xnull = COPY [[COPY20]]
   ; GISEL-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 2
-  ; GISEL-NEXT:   [[COPY21:%[0-9]+]]:vgpr_32 = COPY [[S_MOV_B32_7]]
-  ; GISEL-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = nuw nsw V_LSHLREV_B32_e64 [[COPY21]], [[V_AND_B32_e64_]], implicit $exec
-  ; GISEL-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_LSHLREV_B32_e64_1]], [[V_AND_B32_e64_]], [[COPY20]], 0, 0, implicit $exec :: (store (s32) into %ir.arrayidx13, addrspace 1)
+  ; GISEL-NEXT:   [[COPY22:%[0-9]+]]:vgpr_32 = COPY [[S_MOV_B32_7]]
+  ; GISEL-NEXT:   [[V_LSHLREV_B32_e64_1:%[0-9]+]]:vgpr_32 = nuw nsw V_LSHLREV_B32_e64 [[COPY22]], [[V_AND_B32_e64_]], implicit $exec
+  ; GISEL-NEXT:   GLOBAL_STORE_DWORD_SADDR [[V_LSHLREV_B32_e64_1]], [[V_AND_B32_e64_]], [[COPY21]], 0, 0, implicit $exec :: (store (s32) into %ir.arrayidx13, addrspace 1)
   ; GISEL-NEXT: {{  $}}
   ; GISEL-NEXT: bb.10.if.end14:
   ; GISEL-NEXT:   SI_END_CF [[SI_IF1]], implicit-def $exec, implicit-def $scc, implicit $exec
