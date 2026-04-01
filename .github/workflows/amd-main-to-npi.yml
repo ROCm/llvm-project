@@ -1,0 +1,252 @@
+name: Merge amd-main into amd-main-npi
+
+on:
+  schedule:
+    # 11am EST (16:00 UTC)
+    - cron: '0 16 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write       # Push branches
+  pull-requests: write  # Create PRs
+
+jobs:
+  merge-amd-main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: amd-main-npi
+          fetch-depth: 0
+          token: ${{ secrets.PAT_LAMB }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch amd-main and upstream
+        run: |
+          git fetch origin amd-main
+          git remote add upstream https://github.com/llvm/llvm-project.git
+          git fetch upstream main
+
+      - name: Get timestamp
+        id: timestamp
+        run: |
+          echo "datetime=$(TZ='America/New_York' date +'%Y-%m-%d %H:%M %Z')" >> $GITHUB_OUTPUT
+
+      - name: Find safe merge target
+        id: check-commits
+        run: |
+          AMD_MAIN_SHA=$(git rev-parse origin/amd-main)
+
+          # Check if amd-main has any new commits at all
+          if git merge-base --is-ancestor $AMD_MAIN_SHA HEAD; then
+            echo "No new commits on amd-main"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Compare upstream content between amd-main-npi and amd-main
+          UPSTREAM_IN_NPI=$(git merge-base upstream/main HEAD)
+          UPSTREAM_IN_AMD_MAIN=$(git merge-base upstream/main origin/amd-main)
+
+          if [ "$UPSTREAM_IN_NPI" == "$UPSTREAM_IN_AMD_MAIN" ]; then
+            echo "No new upstream commits, using amd-main HEAD"
+            echo "merge_target=$AMD_MAIN_SHA" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "skipped_upstream=false" >> $GITHUB_OUTPUT
+          else
+            echo "amd-main has new upstream commits, finding safe merge point..."
+            MERGE_TARGET=""
+
+            # Walk first-parent history of amd-main, newest to oldest
+            # Find the most recent commit that doesn't introduce new upstream
+            for commit in $(git rev-list amd-main-npi..origin/amd-main --first-parent); do
+              COMMIT_UPSTREAM=$(git merge-base upstream/main $commit)
+              if [ "$COMMIT_UPSTREAM" == "$UPSTREAM_IN_NPI" ]; then
+                MERGE_TARGET=$commit
+                break
+              fi
+            done
+
+            if [ -z "$MERGE_TARGET" ]; then
+              echo "No safe merge target found (all new commits include upstream changes)"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            elif git merge-base --is-ancestor $MERGE_TARGET HEAD; then
+              echo "Safe merge target is already in amd-main-npi"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            else
+              echo "Using safe merge target: $MERGE_TARGET"
+              echo "merge_target=$MERGE_TARGET" >> $GITHUB_OUTPUT
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Create merge branch
+        id: merge
+        if: steps.check-commits.outputs.has_changes == 'true'
+        run: |
+          MERGE_TARGET="${{ steps.check-commits.outputs.merge_target }}"
+          BRANCH_NAME="amd-main-npi-merge-$(date +%Y%m%d%H%M%S)"
+          PR_TITLE="merge amd-main into amd-main-npi ${{ steps.timestamp.outputs.datetime }}"
+          git checkout -b $BRANCH_NAME
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+
+          if git merge $MERGE_TARGET --no-edit; then
+            echo "Merge successful"
+            echo "conflict=false" >> $GITHUB_OUTPUT
+          else
+            echo "Merge has conflicts"
+            # Capture conflicting files before aborting
+            CONFLICTS=$(git diff --name-only --diff-filter=U | head -10)
+            CONFLICT_COUNT=$(git diff --name-only --diff-filter=U | wc -l)
+            echo "conflict_files<<EOF" >> $GITHUB_OUTPUT
+            echo "$CONFLICTS" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "conflict_count=$CONFLICT_COUNT" >> $GITHUB_OUTPUT
+            git merge --abort
+            echo "conflict=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Push branch
+        if: steps.merge.outputs.conflict == 'false'
+        run: |
+          git push origin ${{ steps.merge.outputs.branch }}
+
+      - name: Create Pull Request
+        id: create-pr
+        if: steps.merge.outputs.conflict == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_LAMB }}
+        run: |
+          PR_URL=$(gh pr create \
+            --repo ${{ github.repository }} \
+            --base amd-main-npi \
+            --head ${{ steps.merge.outputs.branch }} \
+            --title "${{ steps.merge.outputs.pr_title }}" \
+            --body "$(cat <<'EOF'
+          Automated merge of amd-main into amd-main-npi (AMD-only changes).
+
+          This PR was created automatically by the amd-main-to-npi workflow.
+          EOF
+          )")
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+
+      - name: Notify Teams - PR Created
+        if: steps.merge.outputs.conflict == 'false'
+        run: |
+          curl -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "themeColor": "00FF00",
+            "summary": "amd-main to amd-main-npi PR created",
+            "sections": [{
+              "activityTitle": "✅ amd-main → amd-main-npi PR Created",
+              "facts": [{
+                "name": "Time",
+                "value": "${{ steps.timestamp.outputs.datetime }}"
+              }, {
+                "name": "Branch",
+                "value": "${{ steps.merge.outputs.branch }}"
+              }],
+              "markdown": true
+            }],
+            "potentialAction": [{
+              "@type": "OpenUri",
+              "name": "View PR",
+              "targets": [{
+                "os": "default",
+                "uri": "${{ steps.create-pr.outputs.pr_url }}"
+              }]
+            }]
+          }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
+
+      - name: Notify Teams - No Changes
+        if: steps.check-commits.outputs.has_changes == 'false' && steps.check-commits.outputs.skipped_upstream != 'true'
+        run: |
+          curl -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "themeColor": "808080",
+            "summary": "No new amd-main changes",
+            "sections": [{
+              "activityTitle": "ℹ️ No New amd-main Commits (amd-main-npi)",
+              "facts": [{
+                "name": "Time",
+                "value": "${{ steps.timestamp.outputs.datetime }}"
+              }],
+              "text": "amd-main-npi is already up to date with amd-main.",
+              "markdown": true
+            }]
+          }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
+
+      - name: Notify Teams - Skipped (upstream only)
+        if: steps.check-commits.outputs.has_changes == 'false' && steps.check-commits.outputs.skipped_upstream == 'true'
+        run: |
+          curl -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "themeColor": "FFA500",
+            "summary": "amd-main-npi merge skipped",
+            "sections": [{
+              "activityTitle": "⏭️ amd-main → amd-main-npi Merge Skipped",
+              "facts": [{
+                "name": "Time",
+                "value": "${{ steps.timestamp.outputs.datetime }}"
+              }],
+              "text": "amd-main has new upstream commits not yet in amd-main-npi. No AMD-only commits to merge without also bringing in upstream changes. Waiting for upstream to be merged into amd-main-npi first (via amd-grimlock).",
+              "markdown": true
+            }]
+          }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
+
+      - name: Notify Teams - Merge Conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          CONFLICT_FILES: ${{ steps.merge.outputs.conflict_files }}
+        run: |
+          # Format conflict files for display (replace newlines with <br>)
+          FORMATTED_FILES=$(echo "$CONFLICT_FILES" | sed ':a;N;$!ba;s/\n/<br>/g')
+          CONFLICT_COUNT="${{ steps.merge.outputs.conflict_count }}"
+
+          # Add note if there are more than 10 files
+          if [ "$CONFLICT_COUNT" -gt 10 ]; then
+            FORMATTED_FILES="${FORMATTED_FILES}<br>... and $((CONFLICT_COUNT - 10)) more"
+          fi
+
+          curl -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "themeColor": "FF0000",
+            "summary": "amd-main to amd-main-npi merge conflict",
+            "sections": [{
+              "activityTitle": "⚠️ Merge Conflicts Detected (amd-main → amd-main-npi)",
+              "facts": [{
+                "name": "Time",
+                "value": "${{ steps.timestamp.outputs.datetime }}"
+              }, {
+                "name": "Conflicting Files",
+                "value": "'"$FORMATTED_FILES"'"
+              }, {
+                "name": "Total Conflicts",
+                "value": "'"$CONFLICT_COUNT"' file(s)"
+              }],
+              "text": "Automatic merge of amd-main into amd-main-npi failed due to conflicts. Manual intervention required.",
+              "markdown": true
+            }],
+            "potentialAction": [{
+              "@type": "OpenUri",
+              "name": "View Repository",
+              "targets": [{
+                "os": "default",
+                "uri": "${{ github.server_url }}/${{ github.repository }}"
+              }]
+            }]
+          }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
