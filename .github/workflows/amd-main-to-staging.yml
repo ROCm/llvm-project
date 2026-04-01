@@ -30,37 +30,79 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Fetch amd-main
+      - name: Fetch amd-main and upstream
         run: |
           git fetch origin amd-main
+          git remote add upstream https://github.com/llvm/llvm-project.git
+          git fetch upstream main
 
       - name: Get timestamp
         id: timestamp
         run: |
           echo "datetime=$(TZ='America/New_York' date +'%Y-%m-%d %H:%M %Z')" >> $GITHUB_OUTPUT
 
-      - name: Check for new commits
+      - name: Find safe merge target
         id: check-commits
         run: |
           AMD_MAIN_SHA=$(git rev-parse origin/amd-main)
+
+          # Check if amd-main has any new commits at all
           if git merge-base --is-ancestor $AMD_MAIN_SHA HEAD; then
             echo "No new commits on amd-main"
             echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "New amd-main commits found"
+            exit 0
+          fi
+
+          # Compare upstream content between amd-staging and amd-main
+          UPSTREAM_IN_STAGING=$(git merge-base upstream/main HEAD)
+          UPSTREAM_IN_AMD_MAIN=$(git merge-base upstream/main origin/amd-main)
+
+          if [ "$UPSTREAM_IN_STAGING" == "$UPSTREAM_IN_AMD_MAIN" ]; then
+            echo "No new upstream commits, using amd-main HEAD"
+            echo "merge_target=$AMD_MAIN_SHA" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "skipped_upstream=false" >> $GITHUB_OUTPUT
+          else
+            echo "amd-main has new upstream commits, finding safe merge point..."
+            MERGE_TARGET=""
+
+            # Walk first-parent history of amd-main, newest to oldest
+            # Find the most recent commit that doesn't introduce new upstream
+            for commit in $(git rev-list amd-staging..origin/amd-main --first-parent); do
+              COMMIT_UPSTREAM=$(git merge-base upstream/main $commit)
+              if [ "$COMMIT_UPSTREAM" == "$UPSTREAM_IN_STAGING" ]; then
+                MERGE_TARGET=$commit
+                break
+              fi
+            done
+
+            if [ -z "$MERGE_TARGET" ]; then
+              echo "No safe merge target found (all new commits include upstream changes)"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            elif git merge-base --is-ancestor $MERGE_TARGET HEAD; then
+              echo "Safe merge target is already in amd-staging"
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            else
+              echo "Using safe merge target: $MERGE_TARGET"
+              echo "merge_target=$MERGE_TARGET" >> $GITHUB_OUTPUT
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "skipped_upstream=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Create merge branch
         id: merge
         if: steps.check-commits.outputs.has_changes == 'true'
         run: |
+          MERGE_TARGET="${{ steps.check-commits.outputs.merge_target }}"
           BRANCH_NAME="amd-main-merge-$(date +%Y%m%d%H%M%S)"
           PR_TITLE="merge amd-main into amd-staging ${{ steps.timestamp.outputs.datetime }}"
           git checkout -b $BRANCH_NAME
           echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
 
-          if git merge origin/amd-main --no-edit; then
+          if git merge $MERGE_TARGET --no-edit; then
             echo "Merge successful"
             echo "conflict=false" >> $GITHUB_OUTPUT
           else
@@ -131,7 +173,7 @@ jobs:
           }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
 
       - name: Notify Teams - No Changes
-        if: steps.check-commits.outputs.has_changes == 'false'
+        if: steps.check-commits.outputs.has_changes == 'false' && steps.check-commits.outputs.skipped_upstream != 'true'
         run: |
           curl -H "Content-Type: application/json" -d '{
             "@type": "MessageCard",
@@ -144,6 +186,24 @@ jobs:
                 "value": "${{ steps.timestamp.outputs.datetime }}"
               }],
               "text": "amd-staging is already up to date with amd-main.",
+              "markdown": true
+            }]
+          }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
+
+      - name: Notify Teams - Skipped (upstream only)
+        if: steps.check-commits.outputs.has_changes == 'false' && steps.check-commits.outputs.skipped_upstream == 'true'
+        run: |
+          curl -H "Content-Type: application/json" -d '{
+            "@type": "MessageCard",
+            "themeColor": "FFA500",
+            "summary": "amd-main merge skipped",
+            "sections": [{
+              "activityTitle": "⏭️ amd-main → amd-staging Merge Skipped",
+              "facts": [{
+                "name": "Time",
+                "value": "${{ steps.timestamp.outputs.datetime }}"
+              }],
+              "text": "amd-main has new upstream commits not yet in amd-staging. No AMD-only commits to merge without also bringing in upstream changes. Waiting for upstream to be merged into amd-staging first.",
               "markdown": true
             }]
           }' "${{ secrets.TEAMS_WEBHOOK_URL_AMD_MAIN_GARDEN }}"
