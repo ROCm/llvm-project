@@ -256,5 +256,12 @@ ROCDLTargetAttr::verify(function_ref<InFlightDiagnostic()> emitError,
 #define GET_OP_CLASSES
 #include "mlir/Dialect/LLVMIR/ROCDLOps.cpp.inc"
 
+void SchedBarrier::getEffects(
+    SmallVectorImpl<SideEffects::EffectInstance<MemoryEffects::Effect>>
+        &effects) {
+  effects.emplace_back(MemoryEffects::Write::get());
+  effects.emplace_back(MemoryEffects::Read::get());
+}
+
 #define GET_ATTRDEF_CLASSES
 #include "mlir/Dialect/LLVMIR/ROCDLOpsAttributes.cpp.inc"

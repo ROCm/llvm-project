@@ -13,6 +13,7 @@
 #include "llvm/IR/Function.h"
 #include "SymbolTableListTraitsImpl.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -804,16 +805,47 @@ void Function::addRangeRetAttr(const ConstantRange &CR) {
 
 DenormalMode Function::getDenormalMode(const fltSemantics &FPType) const {
   Attribute Attr = getFnAttribute(Attribute::DenormalFPEnv);
-  if (!Attr.isValid())
-    return DenormalMode::getDefault();
+  if (Attr.isValid()) {
+    DenormalFPEnv FPEnv = Attr.getDenormalFPEnv();
+    return &FPType == &APFloat::IEEEsingle() ? FPEnv.F32Mode
+                                             : FPEnv.DefaultMode;
+  }
 
-  DenormalFPEnv FPEnv = Attr.getDenormalFPEnv();
-  return &FPType == &APFloat::IEEEsingle() ? FPEnv.F32Mode : FPEnv.DefaultMode;
+  DenormalMode Result = DenormalMode::getDefault();
+  StringRef DenormAttr =
+      getFnAttribute("denormal-fp-math").getValueAsString();
+  if (!DenormAttr.empty())
+    Result = parseDenormalFPAttribute(DenormAttr);
+
+  if (&FPType == &APFloat::IEEEsingle()) {
+    StringRef DenormF32Attr =
+        getFnAttribute("denormal-fp-math-f32").getValueAsString();
+    if (!DenormF32Attr.empty())
+      Result = parseDenormalFPAttribute(DenormF32Attr);
+  }
+
+  return Result;
 }
 
 DenormalFPEnv Function::getDenormalFPEnv() const {
   Attribute Attr = getFnAttribute(Attribute::DenormalFPEnv);
-  return Attr.isValid() ? Attr.getDenormalFPEnv() : DenormalFPEnv::getDefault();
+  if (Attr.isValid())
+    return Attr.getDenormalFPEnv();
+
+  DenormalMode BaseMode = DenormalMode::getDefault();
+  DenormalMode F32Mode = DenormalMode::getInvalid();
+
+  StringRef DenormAttr =
+      getFnAttribute("denormal-fp-math").getValueAsString();
+  if (!DenormAttr.empty())
+    BaseMode = parseDenormalFPAttribute(DenormAttr);
+
+  StringRef DenormF32Attr =
+      getFnAttribute("denormal-fp-math-f32").getValueAsString();
+  if (!DenormF32Attr.empty())
+    F32Mode = parseDenormalFPAttribute(DenormF32Attr);
+
+  return DenormalFPEnv(BaseMode, F32Mode);
 }
 
 const std::string &Function::getGC() const {
