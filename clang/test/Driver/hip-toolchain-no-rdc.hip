@@ -4,7 +4,7 @@
 // RUN:   --hip-device-lib=lib1.bc --hip-device-lib=lib2.bc \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib1 \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib2 \
-// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc --no-offload-new-driver \
+// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc \
 // RUN:   %S/Inputs/hip_multiple_inputs/a.cu \
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=CHECK,LINK,OLD %s
@@ -14,7 +14,7 @@
 // RUN:   --hip-device-lib=lib1.bc --hip-device-lib=lib2.bc \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib1 \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib2 \
-// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc -c --no-offload-new-driver \
+// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc -c \
 // RUN:   %S/Inputs/hip_multiple_inputs/a.cu \
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=CHECK,OLD %s
@@ -36,22 +36,10 @@
 // RUN:   %t/a.o %t/b.o \
 // RUN: 2>&1 | FileCheck -check-prefixes=LKONLY %s
 
-// RUN: %clang -### --target=x86_64-linux-gnu --no-offload-new-driver \
+// RUN: %clang -### --target=x86_64-linux-gnu \
 // RUN:   --offload-arch=amdgcnspirv --offload-arch=gfx900 \
 // RUN:   %s -nogpuinc -nogpulib \
 // RUN: 2>&1 | FileCheck -check-prefixes=AMDGCNSPIRV %s
-
-// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver \
-// RUN:   --offload-arch=amdgcnspirv --offload-arch=gfx900 \
-// RUN:   %s -nogpuinc -nogpulib \
-// RUN: 2>&1 | FileCheck -check-prefixes=AMDGCNSPIRV-NEW %s
-
-// Profile generation needs LTO, so the linker wrapper must not get --no-lto.
-// RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc -fprofile-generate \
-// RUN:   -x hip --cuda-gpu-arch=gfx900 -nogpuinc -nogpulib --offload-new-driver \
-// RUN:   %s 2>&1 | FileCheck -check-prefixes=PGO -implicit-check-not="--no-lto" %s
-// PGO: {{".*clang-linker-wrapper}}
-// PGO-SAME: "--emit-fatbin-only"
 
 //
 // Compile device code in a.cu to code object for gfx803.
@@ -229,7 +217,6 @@
 // AMDGCNSPIRV: {{".*clang-offload-bundler.*"}} "-type=o"
 // AMDGCNSPIRV-SAME: "-targets={{.*}}hip-spirv64-amd-amdhsa--amdgcnspirv,hip-amdgcn-amd-amdhsa--gfx900"
 // AMDGCNSPIRV-SAME: "-input=[[AMDGCNSPV_CO]]" "-input=[[GFX900_CO]]"
-// AMDGCNSPIRV-NEW: "-cc1" "-triple" "spirv64-amd-amdhsa" {{.*}}"-emit-llvm-bc" {{.*}} "-o" "[[AMDGCNSPV_BC:.*bc]]"
 
 // Check verbose printing with the new driver.
 // RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc -nogpulib -nogpuinc \
