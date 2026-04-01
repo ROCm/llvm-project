@@ -500,9 +500,11 @@ public:
 };
 
 // Flags indicating which counters should be flushed in a loop preheader.
+// When set, the optional value is the waitcnt target (e.g. FlushVmCnt = 0
+// means emit vmcnt(0); FlushVmCnt = 1 means emit vmcnt(1)).
 struct PreheaderFlushFlags {
-  bool FlushVmCnt = false;
-  bool FlushDsCnt = false;
+  std::optional<unsigned> FlushVmCnt;
+  std::optional<unsigned> FlushDsCnt;
 };
 
 class SIInsertWaitcnts {
@@ -707,6 +709,8 @@ public:
 // wait count may get decreased out of order, therefore we need to put in
 // "s_waitcnt 0" before use.
 class WaitcntBrackets {
+  friend class SIInsertWaitcnts;
+
 public:
   WaitcntBrackets(const SIInsertWaitcnts *Context) : Context(Context) {
     assert(Context->TRI.getNumRegUnits() < REGUNITS_END);
@@ -2446,8 +2450,9 @@ bool WaitcntGeneratorGFX12Plus::createNewWaitcnt(
 ///  and if so what the value of each counter is.
 ///  The "score bracket" is bound by the lower bound and upper bound
 ///  scores (*_score_LB and *_score_ub respectively).
-///  If FlushFlags.FlushVmCnt is true, we want to flush the vmcnt counter here.
-///  If FlushFlags.FlushDsCnt is true, we want to flush the dscnt counter here
+///  If FlushFlags.FlushVmCnt has a value, we want to flush the vmcnt counter
+///  here to the specified target.
+///  If FlushFlags.FlushDsCnt has a value, we want to flush the dscnt counter
 ///  (GFX12+ only, where DS_CNT is a separate counter).
 bool SIInsertWaitcnts::generateWaitcntInstBefore(
     MachineInstr &MI, WaitcntBrackets &ScoreBrackets,
@@ -2733,11 +2738,11 @@ bool SIInsertWaitcnts::generateWaitcntInstBefore(
   if (FlushFlags.FlushVmCnt) {
     for (AMDGPU::InstCounterType T :
          {AMDGPU::LOAD_CNT, AMDGPU::SAMPLE_CNT, AMDGPU::BVH_CNT})
-      Wait.set(T, 0);
+      Wait.set(T, *FlushFlags.FlushVmCnt);
   }
 
   if (FlushFlags.FlushDsCnt && ScoreBrackets.hasPendingEvent(AMDGPU::DS_CNT))
-    Wait.set(AMDGPU::DS_CNT, 0);
+    Wait.set(AMDGPU::DS_CNT, *FlushFlags.FlushDsCnt);
 
   if (ForceEmitZeroLoadFlag && Wait.get(AMDGPU::LOAD_CNT) != ~0u)
     Wait.set(AMDGPU::LOAD_CNT, 0);
@@ -3370,14 +3375,14 @@ bool SIInsertWaitcnts::insertWaitcntInBlock(MachineFunction &MF,
     PreheaderFlushFlags FlushFlags = isPreheaderToFlush(Block, ScoreBrackets);
     if (FlushFlags.FlushVmCnt) {
       if (ScoreBrackets.hasPendingEvent(AMDGPU::LOAD_CNT))
-        Wait.set(AMDGPU::LOAD_CNT, 0);
+        Wait.set(AMDGPU::LOAD_CNT, *FlushFlags.FlushVmCnt);
       if (ScoreBrackets.hasPendingEvent(AMDGPU::SAMPLE_CNT))
-        Wait.set(AMDGPU::SAMPLE_CNT, 0);
+        Wait.set(AMDGPU::SAMPLE_CNT, *FlushFlags.FlushVmCnt);
       if (ScoreBrackets.hasPendingEvent(AMDGPU::BVH_CNT))
-        Wait.set(AMDGPU::BVH_CNT, 0);
+        Wait.set(AMDGPU::BVH_CNT, *FlushFlags.FlushVmCnt);
     }
     if (FlushFlags.FlushDsCnt && ScoreBrackets.hasPendingEvent(AMDGPU::DS_CNT))
-      Wait.set(AMDGPU::DS_CNT, 0);
+      Wait.set(AMDGPU::DS_CNT, *FlushFlags.FlushDsCnt);
   }
 
   // Combine or remove any redundant waitcnts at the end of the block.
@@ -3520,18 +3525,63 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
   bool TrackDSFlushPoint = ST.hasExtendedWaitCounts() && IsSingleBlock;
   unsigned LastDSFlushPosition = 0;
 
+  // Preheader hoist simulation: for single-block loops, simulate counter
+  // queues on iter 1+ to check if loop-invariant registers benefit from
+  // flushing. Tracks both LOAD_CNT and DS_CNT independently.
+  bool TrackHoist = IsSingleBlock;
+  bool HasInLoopVMEMDefUse = false;
+  bool HasInLoopDSDefUse = false;
+  unsigned LoadCntEvents = 0;
+  unsigned DSCntEvents = 0;
+  unsigned HoistInstrPos = 0;
+  struct OutsideRegUseInfo {
+    unsigned InstrPos;
+    unsigned LoadCntEventsAt;
+    unsigned DSCntEventsAt;
+  };
+  DenseMap<MCRegUnit, OutsideRegUseInfo> OutsideLoadUseInfo;
+
   for (MachineBasicBlock *MBB : ML->blocks()) {
     for (MachineInstr &MI : *MBB) {
+      bool IsLoadCntEvent = false;
+      bool IsDSCntEvent = false;
       if (isVMEMOrFlatVMEM(MI)) {
         HasVMemLoad |= MI.mayLoad();
         HasVMemStore |= MI.mayStore();
+        if (TrackHoist) {
+          // Mirror getEventType routing: on GFX10+ atomic-noret goes to
+          // STORE_CNT despite mayLoad, and on GFX12+ image samples / BVH go
+          // to SAMPLE_CNT / BVH_CNT.  Only count events that truly land on
+          // LOAD_CNT.
+          bool IsStoreCntEvent =
+              ST.hasVscnt() && MI.mayStore() &&
+              (!MI.mayLoad() || SIInstrInfo::isAtomicNoRet(MI));
+          if (!IsStoreCntEvent) {
+            bool IsSampleOrBVH = false;
+            if (ST.hasExtendedWaitCounts() && !TII.isFLAT(MI)) {
+              VmemType V = getVmemType(MI);
+              IsSampleOrBVH = (V == VMEM_SAMPLER || V == VMEM_BVH);
+            }
+            if (!IsSampleOrBVH)
+              IsLoadCntEvent = true;
+          }
+        }
+      }
+      if (TrackHoist) {
+        if (isDSRead(MI) || mayStoreIncrementingDSCNT(MI))
+          IsDSCntEvent = true;
+        // FLAT that may access LDS: conservatively count as DS_CNT event
+        // (it increments exactly one counter, but we don't know which).
+        if (TII.isFLAT(MI) && TII.mayAccessLDSThroughFlat(MI) &&
+            (MI.mayLoad() || MI.mayStore()))
+          IsDSCntEvent = true;
       }
       // TODO: Can we relax DSStore check? There may be cases where
       // these DS stores are drained prior to the end of MBB (or loop).
       if (mayStoreIncrementingDSCNT(MI)) {
         // Early exit if none of the optimizations are feasible.
         // Otherwise, set tracking status appropriately and continue.
-        if (VMemInvalidated)
+        if (VMemInvalidated && !TrackHoist)
           return Flags;
         TrackSimpleDSOpt = false;
         TrackDSFlushPoint = false;
@@ -3560,15 +3610,20 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
         for (MCRegUnit RU : TRI.regunits(Op.getReg().asMCReg())) {
           // If we find a register that is loaded inside the loop, 1. and 2.
           // are invalidated.
-          if (VgprDefVMEM.contains(RU))
+          if (VgprDefVMEM.contains(RU)) {
             VMemInvalidated = true;
+            HasInLoopVMEMDefUse = true;
+          }
 
           // Check for DS reads used inside the loop
-          if (VgprDefDS.contains(RU))
+          if (VgprDefDS.contains(RU)) {
             TrackSimpleDSOpt = false;
+            HasInLoopDSDefUse = true;
+          }
 
           // Early exit if all optimizations are invalidated
-          if (VMemInvalidated && !TrackSimpleDSOpt && !TrackDSFlushPoint)
+          if (VMemInvalidated && !TrackHoist &&
+              !TrackSimpleDSOpt && !TrackDSFlushPoint)
             return Flags;
 
           // Check for flush points (DS read used in same iteration)
@@ -3578,15 +3633,20 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
           // Check if this register has a pending VMEM load from outside the
           // loop (value loaded outside and used inside).
           VMEMID ID = toVMEMID(RU);
-          if (Brackets.hasPendingVMEM(ID, AMDGPU::LOAD_CNT) ||
+          bool HasPendingLoadCnt =
+              Brackets.hasPendingVMEM(ID, AMDGPU::LOAD_CNT) ||
               Brackets.hasPendingVMEM(ID, AMDGPU::SAMPLE_CNT) ||
-              Brackets.hasPendingVMEM(ID, AMDGPU::BVH_CNT))
+              Brackets.hasPendingVMEM(ID, AMDGPU::BVH_CNT);
+          bool HasPendingDSCnt = Brackets.hasPendingVMEM(ID, AMDGPU::DS_CNT);
+          if (HasPendingLoadCnt) {
             UsesVgprVMEMLoadedOutside = true;
-          // Check if loaded outside the loop via DS (not VMEM/FLAT).
-          // Only consider it a DS read if there's no pending VMEM load for
-          // this register, since FLAT can set both counters.
-          else if (Brackets.hasPendingVMEM(ID, AMDGPU::DS_CNT))
+          } else if (HasPendingDSCnt) {
             UsesVgprDSReadOutside = true;
+          }
+          if (TrackHoist && (HasPendingLoadCnt || HasPendingDSCnt))
+            OutsideLoadUseInfo.try_emplace(
+                RU,
+                OutsideRegUseInfo{HoistInstrPos, LoadCntEvents, DSCntEvents});
         }
       }
 
@@ -3602,7 +3662,8 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
           }
         }
         // Early exit if all optimizations are invalidated
-        if (VMemInvalidated && !TrackSimpleDSOpt && !TrackDSFlushPoint)
+        if (VMemInvalidated && !TrackHoist &&
+            !TrackSimpleDSOpt && !TrackDSFlushPoint)
           return Flags;
       }
 
@@ -3613,22 +3674,28 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
       // in preheader so iteration 1 doesn't need to wait inside the loop.
       // Only invalidate when DEF comes before USE (same-iteration consumption,
       // checked above when processing uses).
-      if (IsDSRead || TrackDSFlushPoint) {
+      if (IsDSCntEvent || TrackDSFlushPoint) {
         for (const MachineOperand &Op : MI.all_defs()) {
           if (!TRI.isVectorRegister(MRI, Op.getReg()))
             continue;
           for (MCRegUnit RU : TRI.regunits(Op.getReg().asMCReg())) {
-            // Check for overwrite of pending DS read (flush point) by any
-            // instruction
             updateDSReadFlushTracking(RU);
-            if (IsDSRead) {
+            if (IsDSCntEvent) {
               VgprDefDS.insert(RU);
-              if (TrackDSFlushPoint)
-                LastDSReadPositionMap[RU] = DSReadPosition;
             }
+            if (IsDSRead && TrackDSFlushPoint)
+              LastDSReadPositionMap[RU] = DSReadPosition;
           }
         }
       }
+
+      // Update hoist tracking counters after processing the instruction.
+      if (IsLoadCntEvent)
+        ++LoadCntEvents;
+      if (IsDSCntEvent)
+        ++DSCntEvents;
+      if (TrackHoist)
+        ++HoistInstrPos;
     }
   }
 
@@ -3636,7 +3703,88 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
   if (!VMemInvalidated && UsesVgprVMEMLoadedOutside &&
       ((!ST.hasVscnt() && HasVMemStore && !HasVMemLoad) ||
        (HasVMemLoad && ST.hasVmemWriteVgprInOrder())))
-    Flags.FlushVmCnt = true;
+    Flags.FlushVmCnt = 0;
+
+  // Preheader hoist for single-block loops: simulate the counter queue state
+  // on iter 1+ to check if loop-invariant registers benefit from flushing.
+  //
+  // For each invariant (outside-loaded, not redefined in-loop) on counter T:
+  //   N = preheader UB(T) - register score(T)  (the waitcnt target)
+  //   C = outstanding events on T at the register's use on iter 1+
+  // If C > N, the invariant's in-loop wait stalls on back-edge traffic.
+  //
+  // C is computed from a simple model: after any use of a reloaded register
+  // (drain point), the counter resets to EventsAt(drain). For points before
+  // the first drain, C = TotalEvents + EventsAt(point).
+  //
+  // Bail when in-loop-defined loads are consumed in-loop (def-before-use),
+  // since those create drain points we can't easily model.
+  // TODO: Model drain points from in-loop loads used in-loop to handle
+  // mixed reload + in-loop-compute patterns.
+  if (TrackHoist && !OutsideLoadUseInfo.empty()) {
+    // Helper: run the C > N profitability check for one counter.
+    // Returns the flush value (UB - HighestProfitableScore) or nullopt.
+    auto checkCounter = [&](AMDGPU::InstCounterType T, unsigned TotalEvents,
+                            bool HasDefUse,
+                            const DenseSet<MCRegUnit> &DefSet)
+        -> std::optional<unsigned> {
+      if (HasDefUse)
+        return std::nullopt;
+
+      unsigned EarliestReloadUsePos = UINT_MAX;
+      for (const auto &[RU, Info] : OutsideLoadUseInfo) {
+        if (DefSet.contains(RU) && Info.InstrPos < EarliestReloadUsePos)
+          EarliestReloadUsePos = Info.InstrPos;
+      }
+
+      unsigned UB = Brackets.getScoreUB(T);
+      unsigned LB = Brackets.getScoreLB(T);
+      unsigned HighestProfitableScore = 0;
+      bool HasProfitable = false;
+
+      for (const auto &[RU, Info] : OutsideLoadUseInfo) {
+        if (DefSet.contains(RU))
+          continue;
+
+        VMEMID ID = toVMEMID(RU);
+        unsigned S = Brackets.getVMemScore(ID, T);
+        if (S <= LB)
+          continue;
+        unsigned N = UB - S;
+
+        unsigned EventsAt = (T == AMDGPU::LOAD_CNT) ? Info.LoadCntEventsAt
+                                             : Info.DSCntEventsAt;
+        bool HasDrainBefore = EarliestReloadUsePos < Info.InstrPos;
+        unsigned C =
+            HasDrainBefore ? EventsAt : TotalEvents + EventsAt;
+
+        if (C > N) {
+          if (!HasProfitable || S > HighestProfitableScore) {
+            HighestProfitableScore = S;
+            HasProfitable = true;
+          }
+        }
+      }
+
+      if (HasProfitable)
+        return UB - HighestProfitableScore;
+      return std::nullopt;
+    };
+
+    // LOAD_CNT check (VMEM / FLAT-VMEM path)
+    if (!Flags.FlushVmCnt && VMemInvalidated) {
+      if (auto Val = checkCounter(AMDGPU::LOAD_CNT, LoadCntEvents,
+                                  HasInLoopVMEMDefUse, VgprDefVMEM))
+        Flags.FlushVmCnt = *Val;
+    }
+
+    // DS_CNT check (DS / FLAT-LDS path)
+    if (!Flags.FlushDsCnt) {
+      if (auto Val = checkCounter(AMDGPU::DS_CNT, DSCntEvents,
+                                  HasInLoopDSDefUse, VgprDefDS))
+        Flags.FlushDsCnt = *Val;
+    }
+  }
 
   // DS flush decision:
   // Simple DS Opt: flush if loop uses DS read values from outside
@@ -3650,7 +3798,7 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
       TrackDSFlushPoint && UsesVgprDSReadOutside && HasUnflushedDSReads;
 
   if (SimpleDSOpt || DSFlushPointPrefetch)
-    Flags.FlushDsCnt = true;
+    Flags.FlushDsCnt = 0;
 
   return Flags;
 }
