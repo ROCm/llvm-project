@@ -132,15 +132,7 @@ Clang Frontend Potentially Breaking Changes
   default. The replacement for the option is
   `--offload-targets=spirv{32,64}-unknown-chipstar` when using the new
   offload driver (`--offload-new-driver`).
-- The new driver (`--offload-new-driver`) is now default for all offloading
-  compilations. This changes the ABI for relocatable device code. Currently,
-  libraries will need to be recompiled, or used with
-  (`--no-offload-new-driver`). This option will be removed in the next release.
 
-- Clang no longer defines the ``__cpp_impl_coroutine`` feature test macro under the 32-bit x86 Microsoft ABI,
-  as support for coroutines on this target is incomplete.
-  When using coroutines on this target a warning is emmitted to indicate the lack of full support.
-  That warning can be disabled with ``-Wno-coroutines-unsupported-target``. (see #GH59382)
 
 Clang Python Bindings Potentially Breaking Changes
 --------------------------------------------------
@@ -854,9 +846,6 @@ RISC-V Support
 
 CUDA/HIP Language Changes
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-- The new offloading driver is now the default for HIP. Use
-  `--no-oflfoad-new-driver` to return to the old behavior.
 
 CUDA Support
 ^^^^^^^^^^^^
