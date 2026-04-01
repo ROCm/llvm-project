@@ -57,13 +57,17 @@ jobs:
           UPSTREAM_IN_STAGING=$(git merge-base upstream/main HEAD)
           UPSTREAM_IN_AMD_MAIN=$(git merge-base upstream/main origin/amd-main)
 
-          if [ "$UPSTREAM_IN_STAGING" == "$UPSTREAM_IN_AMD_MAIN" ]; then
-            echo "No new upstream commits, using amd-main HEAD"
+          # Safe to merge all of amd-main if:
+          # - upstream content is the same in both branches, OR
+          # - amd-main's upstream is an ancestor of amd-staging's (amd-staging is ahead)
+          if [ "$UPSTREAM_IN_STAGING" == "$UPSTREAM_IN_AMD_MAIN" ] || \
+             git merge-base --is-ancestor $UPSTREAM_IN_AMD_MAIN $UPSTREAM_IN_STAGING; then
+            echo "amd-staging has same or newer upstream content, using amd-main HEAD"
             echo "merge_target=$AMD_MAIN_SHA" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
             echo "skipped_upstream=false" >> $GITHUB_OUTPUT
           else
-            echo "amd-main has new upstream commits, finding safe merge point..."
+            echo "amd-main has newer upstream commits than amd-staging, finding safe merge point..."
             MERGE_TARGET=""
 
             # Walk first-parent history of amd-main, newest to oldest
