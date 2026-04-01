@@ -144,6 +144,10 @@ jobs:
             --body "$(cat <<'EOF'
           Automated merge of amd-main into amd-staging.
 
+          **Merge this PR using "Create a merge commit" — do NOT squash.**
+          Squash-merging destroys upstream ancestry tracking and will cause
+          conflicts on every future merge.
+
           This PR was created automatically by the amd-main-to-staging workflow.
           EOF
           )")

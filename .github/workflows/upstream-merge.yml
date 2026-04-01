@@ -98,6 +98,10 @@ jobs:
             --body "$(cat <<'EOF'
           Automated merge of upstream llvm/llvm-project main branch.
 
+          **Merge this PR using "Create a merge commit" — do NOT squash.**
+          Squash-merging destroys upstream ancestry tracking and will cause
+          conflicts on every future merge.
+
           This PR was created automatically by the upstream-merge workflow.
           EOF
           )")
