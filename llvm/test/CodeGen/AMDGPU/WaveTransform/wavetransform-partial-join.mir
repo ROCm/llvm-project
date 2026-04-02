@@ -603,11 +603,9 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY2]], [[S_MOV_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32 = S_CSELECT_B32 0, $exec_lo, implicit $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_CSELECT_B32_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_3]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_CSELECT_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_CSELECT_B32_1:%[0-9]+]]:sreg_32 = S_CSELECT_B32 $exec_lo, 0, implicit $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_4:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_CSELECT_B32_1]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_5]], [[S_AND_B32_4]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_5]], [[S_CSELECT_B32_1]], implicit-def $scc
   ; POSTWT-NEXT:   S_BRANCH %bb.8
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.3:
@@ -621,8 +619,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_7]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_5:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_4]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_5:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_5]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_8]], [[S_AND_B32_5]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_5]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_8]], [[S_AND_B32_3]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_4]]
   ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -641,8 +639,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_8]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_6:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_5]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_6:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_6]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_9:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_9]], [[S_AND_B32_6]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_4:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_6]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_9:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_9]], [[S_AND_B32_4]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_5]]
   ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -776,11 +774,9 @@ body:             |
   ; POSTWT-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   S_CMP_EQ_U32 killed [[COPY2]], [[S_MOV_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_CSELECT_B32_:%[0-9]+]]:sreg_32 = S_CSELECT_B32 0, $exec_lo, implicit $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_CSELECT_B32_]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_1]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_CSELECT_B32_]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_CSELECT_B32_1:%[0-9]+]]:sreg_32 = S_CSELECT_B32 $exec_lo, 0, implicit $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_CSELECT_B32_1]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_5]], [[S_AND_B32_2]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_5]], [[S_CSELECT_B32_1]], implicit-def $scc
   ; POSTWT-NEXT:   S_BRANCH %bb.9
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.3:
@@ -793,8 +789,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_7]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_3:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_4]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_3]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_8]], [[S_AND_B32_3]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_3]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_8]], [[S_AND_B32_1]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_4]]
   ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -813,8 +809,8 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_8]], implicit-def $scc
   ; POSTWT-NEXT:   [[S_XOR_B32_4:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[S_MOV_B32_5]], implicit-def $scc
-  ; POSTWT-NEXT:   [[S_AND_B32_4:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_4]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_9:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_9]], [[S_AND_B32_4]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_2:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_4]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_9:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_9]], [[S_AND_B32_2]], implicit-def $scc
   ; POSTWT-NEXT:   $exec_lo = S_MOV_B32 [[S_MOV_B32_5]]
   ; POSTWT-NEXT:   [[S_MOV_B32_5:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; POSTWT-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_MOV_B32 0
@@ -836,8 +832,8 @@ body:             |
   ; POSTWT-NEXT: bb.7:
   ; POSTWT-NEXT:   successors: %bb.10(0x80000000)
   ; POSTWT-NEXT: {{  $}}
-  ; POSTWT-NEXT:   [[S_AND_B32_5:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_MOV_B32_3]], $exec_lo, implicit-def $scc
-  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_5]], implicit-def $scc
+  ; POSTWT-NEXT:   [[S_AND_B32_3:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_MOV_B32_3]], $exec_lo, implicit-def $scc
+  ; POSTWT-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_OR_B32 [[S_MOV_B32_4]], [[S_AND_B32_3]], implicit-def $scc
   ; POSTWT-NEXT:   S_BRANCH %bb.10
   bb.0:
     successors: %bb.1, %bb.2
