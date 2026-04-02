@@ -1543,8 +1543,7 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v15
 ; GCN-NEXT:    buffer_store_dword v5, v[16:17], s[4:7], 0 addr64
 ; GCN-NEXT:    buffer_store_dwordx4 v[5:8], v[18:19], s[4:7], 0 addr64
-; GCN-NEXT:    s_xor_b64 s[10:11], vcc, -1
-; GCN-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; GCN-NEXT:    s_xor_b64 s[10:11], vcc, exec
 ; GCN-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
 ; GCN-NEXT:    s_mov_b64 exec, s[10:11]
@@ -1573,8 +1572,7 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8-NEXT:    v_add_u32_e32 v15, vcc, -1, v15
 ; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v15
-; GFX8-NEXT:    s_xor_b64 s[6:7], vcc, -1
-; GFX8-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; GFX8-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; GFX8-NEXT:    v_mad_u32_u24 v4, v5, v0, v14
 ; GFX8-NEXT:    v_mad_u32_u24 v6, v6, v1, v10
 ; GFX8-NEXT:    v_mad_u32_u24 v7, v7, v2, v11
