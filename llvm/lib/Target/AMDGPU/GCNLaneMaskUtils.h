@@ -64,8 +64,6 @@ class GCNLaneMaskAnalysis {
 private:
   GCNLaneMaskUtils LMU;
 
-  DenseMap<Register, bool> SubsetOfExec;
-
 public:
   GCNLaneMaskAnalysis(MachineFunction &MF) : LMU(MF) {}
 
