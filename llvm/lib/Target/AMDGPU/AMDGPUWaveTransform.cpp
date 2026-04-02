@@ -2123,10 +2123,15 @@ void ControlFlowRewriter::rewrite() {
           Register Prev = CondReg;
           if (!LaneOrigin.CondIsUndef) {
             CondReg = LMU.createLaneMaskReg();
-            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-                    TII.get(LMC.XorOpc), CondReg)
-                .addReg(LaneOrigin.CondReg)
-                .addImm(-1);
+            auto FlipCondReg =
+                BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm,
+                        {}, TII.get(LMC.XorOpc), CondReg)
+                    .addReg(LaneOrigin.CondReg);
+            if (LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
+                                   MBBILaneOriginNodeFirstTerm))
+              FlipCondReg.addReg(LMC.ExecReg);
+            else
+              FlipCondReg.addImm(-1);
           }
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]
