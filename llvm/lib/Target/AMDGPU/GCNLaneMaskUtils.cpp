@@ -230,16 +230,22 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
   if (!RemainingDepth--)
     return false;
 
+  auto IsOperandSubsetOfExec = [&](const MachineOperand &MO) -> bool {
+    if (MO.isImm())
+      return MO.getImm() == 0;
+    if (MO.isReg())
+      return isSubsetOfExec(MO.getReg(), UseBlock, DefInstr->getIterator(),
+                            RemainingDepth);
+    return false;
+  };
+
   bool LikeOr = DefInstr->getOpcode() == LMC.OrOpc ||
                 DefInstr->getOpcode() == LMC.XorOpc ||
                 DefInstr->getOpcode() == LMC.CSelectOpc;
   bool IsAnd = DefInstr->getOpcode() == LMC.AndOpc;
   bool IsAndN2 = DefInstr->getOpcode() == LMC.AndN2Opc;
-  if ((LikeOr || IsAnd || IsAndN2) &&
-      (DefInstr->getOperand(1).isReg() && DefInstr->getOperand(2).isReg())) {
-    bool FirstIsSubset =
-        isSubsetOfExec(DefInstr->getOperand(1).getReg(), UseBlock,
-                       DefInstr->getIterator(), RemainingDepth);
+  if (LikeOr || IsAnd || IsAndN2) {
+    bool FirstIsSubset = IsOperandSubsetOfExec(DefInstr->getOperand(1));
     if (!FirstIsSubset && (LikeOr || IsAndN2))
       return SubsetOfExec.try_emplace(Reg, false).first->second;
 
@@ -248,9 +254,7 @@ bool GCNLaneMaskAnalysis::isSubsetOfExec(Register Reg,
       return true;
     }
 
-    bool SecondIsSubset =
-        isSubsetOfExec(DefInstr->getOperand(2).getReg(), UseBlock,
-                       DefInstr->getIterator(), RemainingDepth);
+    bool SecondIsSubset = IsOperandSubsetOfExec(DefInstr->getOperand(2));
     if (!SecondIsSubset)
       return SubsetOfExec.try_emplace(Reg, false).first->second;
 
