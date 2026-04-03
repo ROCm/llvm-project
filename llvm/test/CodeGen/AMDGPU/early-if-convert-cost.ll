@@ -1,5 +1,5 @@
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -stress-early-ifcvt -amdgpu-early-ifcvt=1 -mtriple=amdgcn -mcpu=verde < %s | FileCheck -check-prefixes=GCN,SI %s
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -stress-early-ifcvt -amdgpu-early-ifcvt=1 -mtriple=amdgcn -mcpu=gfx700 < %s | FileCheck -check-prefixes=GCN,GCNX3 %s
+; RUN:  llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -stress-early-ifcvt -amdgpu-early-ifcvt=1 -mtriple=amdgcn -mcpu=verde < %s | FileCheck -check-prefixes=GCN,SI %s
+; RUN:  llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -stress-early-ifcvt -amdgpu-early-ifcvt=1 -mtriple=amdgcn -mcpu=gfx700 < %s | FileCheck -check-prefixes=GCN,GCNX3 %s
 
 ; FIXME: Most of these cases that don't trigger because of broken cost
 ; heuristics. Should not need -stress-early-ifcvt
@@ -51,11 +51,12 @@ endif:
 
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_triangle96:
 ; GCN: v_cmp_neq_f32_e64 [[CMP:s\[[0-9]+:[0-9]+\]]], s{{[0-9]+}}, 1.0
+; GCN: s_and_b64 [[TAKEN_LANES:s\[[0-9]+:[0-9]+\]]], exec, [[CMP]]
 
 ; GCN: v_add_i32_e32
 ; GCN: v_add_i32_e32
 ; GCN: v_add_i32_e32
-; GCN: s_mov_b64 vcc, [[CMP]]
+; GCN: s_mov_b64 vcc, [[TAKEN_LANES]]
 
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc
@@ -82,12 +83,13 @@ endif:
 
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_triangle128:
 ; GCN: v_cmp_neq_f32_e64 [[CMP:s\[[0-9]+:[0-9]+\]]], s{{[0-9]+}}, 1.0
+; GCN: s_and_b64 [[TAKEN_LANES:s\[[0-9]+:[0-9]+\]]], exec, [[CMP]]
 
 ; GCN: v_add_i32_e32
 ; GCN: v_add_i32_e32
 ; GCN: v_add_i32_e32
 ; GCN: v_add_i32_e32
-; GCN: s_mov_b64 vcc, [[CMP]]
+; GCN: s_mov_b64 vcc, [[TAKEN_LANES]]
 
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}}, vcc

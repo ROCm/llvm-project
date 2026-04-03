@@ -1,11 +1,11 @@
-; RUN: llc -mtriple=amdgcn--amdhsa < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdhsa < %s | FileCheck -check-prefix=GCN %s
 
 declare i32 @llvm.amdgcn.workitem.id.x() #0
 ; GCN-LABEL: {{^}}convergent_inlineasm:
 ; GCN: %bb.0:
 ; GCN: v_cmp_ne_u32_e64
 ; GCN: s_cbranch_execz
-; GCN: ; %bb.{{[0-9]+}}:
+; GCN: .LBB{{[0-9]+_[0-9]+}}: ; %bb{{[0-9]+}}
 define amdgpu_kernel void @convergent_inlineasm(ptr addrspace(1) nocapture %arg) {
 bb:
   %tmp = call i32 @llvm.amdgcn.workitem.id.x()

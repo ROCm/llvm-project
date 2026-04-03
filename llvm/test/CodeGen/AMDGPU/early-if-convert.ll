@@ -1,5 +1,5 @@
-; RUN:  llc -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=verde -amdgpu-early-ifcvt=1 -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck -check-prefix=GCN %s
-; XUN: llc -mtriple=amdgcn -mcpu=tonga -amdgpu-early-ifcvt=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -amdgpu-scalarize-global-loads=false  -mtriple=amdgcn -mcpu=verde -amdgpu-early-ifcvt=1 -amdgpu-codegenprepare-break-large-phis=0 < %s | FileCheck -check-prefix=GCN %s
+; XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -amdgpu-early-ifcvt=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; Note: breaking up large PHIs is disabled to prevent some testcases from becoming
 ;  branchless.
@@ -31,9 +31,10 @@ endif:
 ; GCN-LABEL: {{^}}test_vccnz_ifcvt_diamond:
 ; GCN: buffer_load_dword [[VAL:v[0-9]+]]
 ; GCN: v_cmp_neq_f32_e32 vcc, 1.0, [[VAL]]
-; GCN-DAG: v_add_f32_e32 [[ADD:v[0-9]+]], [[VAL]], [[VAL]]
 ; GCN-DAG: v_mul_f32_e32 [[MUL:v[0-9]+]], [[VAL]], [[VAL]]
-; GCN: buffer_store_dword [[MUL]]
+; GCN-DAG: v_add_f32_e32 [[ADD:v[0-9]+]], [[VAL]], [[VAL]]
+; GCN: v_cndmask_b32_e32 [[RESULT:v[0-9]+]], [[ADD]], [[MUL]], vcc
+; GCN: buffer_store_dword [[RESULT]]
 define amdgpu_kernel void @test_vccnz_ifcvt_diamond(ptr addrspace(1) %out, ptr addrspace(1) %in) #0 {
 entry:
   %v = load float, ptr addrspace(1) %in
