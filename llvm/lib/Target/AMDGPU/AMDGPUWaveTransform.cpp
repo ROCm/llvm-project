@@ -1660,6 +1660,7 @@ private:
 
   DenseMap<WaveNode *, CFGNodeInfo> NodeInfo;
   std::vector<WaveNode *> NodeOrder;
+  SmallDenseSet<Register, 4> AccumulatorRegs;
 
 public:
   ControlFlowRewriter(MachineFunction &function,
@@ -1670,6 +1671,10 @@ public:
 
   void prepareWaveCfg();
   void rewrite();
+
+  const SmallDenseSet<Register, 4> &getAccumulatorRegs() const {
+    return AccumulatorRegs;
+  }
 };
 
 } // anonymous namespace
@@ -2264,11 +2269,12 @@ void ControlFlowRewriter::rewrite() {
                       << printMBBReference(*Secondary->Block) << ".rejoin\n");
   }
   Updater.insertAccumulatorResets();
+  AccumulatorRegs = Updater.getAllAccumulators();
   Updater.cleanup();
 
-  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_clean\n");
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_accs\n");
   LLVM_DEBUG(Function.dump());
-  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_clean\n");
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_accs\n");
 }
 
 /// This function fixes virtual register uses that have no dominating definition
@@ -2362,6 +2368,9 @@ public:
   }
 
 private:
+  void cleanup(MachineFunction &MF,
+               const SmallDenseSet<Register, 4> &AccumulatorRegs);
+
   MachineDominatorTree *DomTree = nullptr;
   // MachineConvergenceInfo ConvergenceInfo;
   MachineCycleInfo *CycleInfo;
@@ -2457,6 +2466,7 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
 
   // Step 3: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();
+  cleanup(MF, CFRewriter.getAccumulatorRegs());
 
   LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName() << "\n");
   LLVM_DEBUG(ReconvergeHelper.dumpNodes());
@@ -2483,4 +2493,73 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   MFI->setWaveCFG(true);
 
   return true; // assume that we changed something
+}
+
+/// Build a per-MBB program-order list of accumulator instructions and
+/// identify dead defs (overwritten before any use).
+static void buildAccInstMap(
+    MachineFunction &MF,
+    const SmallDenseSet<Register, 4> &AccumulatorRegs,
+    DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap,
+    SmallVectorImpl<MachineInstr *> &DeadDefs) {
+  for (MachineBasicBlock &MBB : MF) {
+    DenseMap<Register, MachineInstr *> LastUnusedDef;
+    SmallVector<MachineInstr *, 8> OrderedAccInsts;
+
+    for (MachineInstr &MI : MBB) {
+      bool IsAccInst = false;
+
+      // Check uses first: a use makes the pending def live.
+      for (const MachineOperand &MO : MI.uses()) {
+        if (MO.isReg() && MO.getReg().isVirtual() &&
+            AccumulatorRegs.count(MO.getReg())) {
+          LastUnusedDef.erase(MO.getReg());
+          IsAccInst = true;
+        }
+      }
+
+      for (const MachineOperand &MO : MI.defs()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual() ||
+            !AccumulatorRegs.count(MO.getReg()))
+          continue;
+
+        Register Reg = MO.getReg();
+        auto It = LastUnusedDef.find(Reg);
+        if (It != LastUnusedDef.end()) {
+          MachineInstr *PrevDef = It->second;
+          bool HasPhysRegDef =
+              llvm::any_of(PrevDef->operands(), [](const MachineOperand &Op) {
+                return Op.isReg() && Op.isDef() && Op.getReg().isPhysical();
+              });
+          if (!HasPhysRegDef) {
+            llvm::erase(OrderedAccInsts, PrevDef);
+            DeadDefs.push_back(PrevDef);
+          }
+        }
+        LastUnusedDef[Reg] = &MI;
+        IsAccInst = true;
+      }
+
+      if (IsAccInst)
+        OrderedAccInsts.push_back(&MI);
+    }
+
+    if (!OrderedAccInsts.empty())
+      AccInstMap[&MBB] = std::move(OrderedAccInsts);
+  }
+}
+
+void AMDGPUWaveTransform::cleanup(
+    MachineFunction &MF, const SmallDenseSet<Register, 4> &AccumulatorRegs) {
+  if (AccumulatorRegs.empty())
+    return;
+
+  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> AccInstMap;
+  SmallVector<MachineInstr *, 8> DeadDefs;
+
+  buildAccInstMap(MF, AccumulatorRegs, AccInstMap, DeadDefs);
+
+  for (MachineInstr *MI : DeadDefs)
+    MI->eraseFromParent();
+
 }
