@@ -128,9 +128,14 @@ private:
   DenseSet<MachineInstr *> PotentiallyDead;
   DenseMap<MachineBasicBlock *, SmallVector<std::pair<Register, unsigned>, 2>>
       AccumulatorResetBlocks;
+  SmallDenseSet<Register, 4> AllAccumulators;
 
 public:
   Register Accumulator;
+
+  const SmallDenseSet<Register, 4> &getAllAccumulators() const {
+    return AllAccumulators;
+  }
 
   GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
