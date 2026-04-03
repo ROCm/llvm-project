@@ -9,7 +9,6 @@
 ; GCN-NOT: s_sub_u32
 
 ; GCN: s_xor_b64
-; GCN: s_and_b64
 ; GCN: s_xor_b64
 ; GCN: s_mov_b64
 ; GCN: s_cbranch_execz [[BB1:.LBB[0-9]+_[0-9]+]]
