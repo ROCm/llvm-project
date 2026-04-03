@@ -20,7 +20,7 @@ define i32 @calls_defined() convergent {
 ; CGSCC: Function Attrs: convergent mustprogress nofree nosync nounwind willreturn memory(none)
 ; CGSCC-LABEL: define {{[^@]+}}@calls_defined
 ; CGSCC-SAME: () #[[ATTR1:[0-9]+]] {
-; CGSCC-NEXT:    [[A:%.*]] = call noundef i32 @defined() #[[ATTR6:[0-9]+]]
+; CGSCC-NEXT:    [[A:%.*]] = call noundef i32 @defined() #[[ATTR5:[0-9]+]]
 ; CGSCC-NEXT:    ret i32 [[A]]
 ;
   %a = call i32 @defined()
@@ -90,16 +90,16 @@ define i32 @calls_defined_with_asm(i32 %a, i32 %b) convergent {
 declare void @llvm.convergent.copy.p0.p0.i64(ptr %dest, ptr %src, i64 %size, i1 %isVolatile) #0
 
 define void @calls_convergent_intrinsic(ptr %dest, ptr %src, i64 %size) convergent {
-; TUNIT: Function Attrs: convergent mustprogress nofree nosync nounwind willreturn memory(argmem: readwrite)
+; TUNIT: Function Attrs: convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
 ; TUNIT-LABEL: define {{[^@]+}}@calls_convergent_intrinsic
-; TUNIT-SAME: (ptr nofree [[DEST:%.*]], ptr nofree [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR3:[0-9]+]] {
-; TUNIT-NEXT:    call void @llvm.convergent.copy.p0.p0.i64(ptr nofree [[DEST]], ptr nofree [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR5:[0-9]+]]
+; TUNIT-SAME: (ptr nofree [[DEST:%.*]], ptr nofree [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR2:[0-9]+]] {
+; TUNIT-NEXT:    call void @llvm.convergent.copy.p0.p0.i64(ptr nofree [[DEST]], ptr nofree [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR4:[0-9]+]]
 ; TUNIT-NEXT:    ret void
 ;
-; CGSCC: Function Attrs: convergent mustprogress nofree nosync nounwind willreturn memory(argmem: readwrite)
+; CGSCC: Function Attrs: convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
 ; CGSCC-LABEL: define {{[^@]+}}@calls_convergent_intrinsic
-; CGSCC-SAME: (ptr nofree [[DEST:%.*]], ptr nofree [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR4:[0-9]+]] {
-; CGSCC-NEXT:    call void @llvm.convergent.copy.p0.p0.i64(ptr nofree [[DEST]], ptr nofree [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR7:[0-9]+]]
+; CGSCC-SAME: (ptr nofree [[DEST:%.*]], ptr nofree [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR3:[0-9]+]] {
+; CGSCC-NEXT:    call void @llvm.convergent.copy.p0.p0.i64(ptr nofree [[DEST]], ptr nofree [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR6:[0-9]+]]
 ; CGSCC-NEXT:    ret void
 ;
   call void @llvm.convergent.copy.p0.p0.i64(ptr %dest, ptr %src, i64 %size, i1 false)
@@ -111,14 +111,14 @@ declare void @llvm.memcpy.p0.p0.i64(ptr %dest, ptr %src, i64 %size, i1 %isVolati
 define void @calls_intrinsic(ptr %dest, ptr %src, i64 %size) convergent {
 ; TUNIT: Function Attrs: convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
 ; TUNIT-LABEL: define {{[^@]+}}@calls_intrinsic
-; TUNIT-SAME: (ptr nofree writeonly captures(none) [[DEST:%.*]], ptr nofree readonly captures(none) [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR2:[0-9]+]] {
-; TUNIT-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr nofree writeonly captures(none) [[DEST]], ptr nofree readonly captures(none) [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR5]]
+; TUNIT-SAME: (ptr nofree writeonly captures(none) [[DEST:%.*]], ptr nofree readonly captures(none) [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR2]] {
+; TUNIT-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr nofree writeonly captures(none) [[DEST]], ptr nofree readonly captures(none) [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR4]]
 ; TUNIT-NEXT:    ret void
 ;
 ; CGSCC: Function Attrs: convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
 ; CGSCC-LABEL: define {{[^@]+}}@calls_intrinsic
-; CGSCC-SAME: (ptr nofree writeonly captures(none) [[DEST:%.*]], ptr nofree readonly captures(none) [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR3:[0-9]+]] {
-; CGSCC-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr nofree writeonly captures(none) [[DEST]], ptr nofree readonly captures(none) [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR7]]
+; CGSCC-SAME: (ptr nofree writeonly captures(none) [[DEST:%.*]], ptr nofree readonly captures(none) [[SRC:%.*]], i64 [[SIZE:%.*]]) #[[ATTR3]] {
+; CGSCC-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr nofree writeonly captures(none) [[DEST]], ptr nofree readonly captures(none) [[SRC]], i64 [[SIZE]], i1 noundef false) #[[ATTR6]]
 ; CGSCC-NEXT:    ret void
 ;
   call void @llvm.memcpy.p0.p0.i64(ptr %dest, ptr %src, i64 %size, i1 false)
@@ -131,16 +131,14 @@ attributes #0 = { convergent mustprogress nofree norecurse nosync nounwind willr
 ; TUNIT: attributes #[[ATTR0]] = { mustprogress nofree norecurse nosync nounwind willreturn memory(none) }
 ; TUNIT: attributes #[[ATTR1]] = { convergent }
 ; TUNIT: attributes #[[ATTR2]] = { convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite) }
-; TUNIT: attributes #[[ATTR3]] = { convergent mustprogress nofree nosync nounwind willreturn memory(argmem: readwrite) }
-; TUNIT: attributes #[[ATTR4:[0-9]+]] = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
-; TUNIT: attributes #[[ATTR5]] = { nofree willreturn }
+; TUNIT: attributes #[[ATTR3:[0-9]+]] = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
+; TUNIT: attributes #[[ATTR4]] = { nofree willreturn }
 ;.
 ; CGSCC: attributes #[[ATTR0]] = { mustprogress nofree norecurse nosync nounwind willreturn memory(none) }
 ; CGSCC: attributes #[[ATTR1]] = { convergent mustprogress nofree nosync nounwind willreturn memory(none) }
 ; CGSCC: attributes #[[ATTR2]] = { convergent }
 ; CGSCC: attributes #[[ATTR3]] = { convergent mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite) }
-; CGSCC: attributes #[[ATTR4]] = { convergent mustprogress nofree nosync nounwind willreturn memory(argmem: readwrite) }
-; CGSCC: attributes #[[ATTR5:[0-9]+]] = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
-; CGSCC: attributes #[[ATTR6]] = { nofree nosync willreturn }
-; CGSCC: attributes #[[ATTR7]] = { nofree willreturn }
+; CGSCC: attributes #[[ATTR4:[0-9]+]] = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
+; CGSCC: attributes #[[ATTR5]] = { nofree nosync willreturn }
+; CGSCC: attributes #[[ATTR6]] = { nofree willreturn }
 ;.

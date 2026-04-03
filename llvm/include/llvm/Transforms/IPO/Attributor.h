@@ -492,6 +492,10 @@ struct DenseMapInfo<const AA::InstExclusionSetTy *>
 /// chain length.
 LLVM_ABI extern unsigned MaxInitializationChainLength;
 
+/// Flag to enable printing of InformationCache::getFunctionInfo() statistics.
+/// Controlled by -attributor-print-getfunctioninfo-stats flag.
+LLVM_ABI extern bool AttributorPrintGetFunctionInfoStats;
+
 ///{
 enum class ChangeStatus {
   CHANGED,
@@ -1231,6 +1235,8 @@ struct InformationCache {
   }
 
   virtual ~InformationCache() {
+    // Print instrumentation stats
+    printGetFunctionInfoStats();
     // The FunctionInfo objects are allocated via a BumpPtrAllocator, we call
     // the destructor manually.
     for (auto &It : FuncInfoMap)
@@ -1383,14 +1389,29 @@ private:
   /// A map type from functions to informatio about it.
   DenseMap<const Function *, FunctionInfo *> FuncInfoMap;
 
+  /// Total calls to getFunctionInfo for instrumentation
+  mutable uint64_t TotalGetFunctionInfoCalls = 0;
+
   /// Return information about the function \p F, potentially by creating it.
   FunctionInfo &getFunctionInfo(const Function &F) {
+    ++TotalGetFunctionInfoCalls;
     FunctionInfo *&FI = FuncInfoMap[&F];
     if (!FI) {
       FI = new (Allocator) FunctionInfo();
       initializeInformationCache(F, *FI);
     }
     return *FI;
+  }
+
+  /// Print getFunctionInfo call statistics (enabled by
+  /// -attributor-print-getfunctioninfo-stats flag)
+  void printGetFunctionInfoStats() const {
+    if (AttributorPrintGetFunctionInfoStats && TotalGetFunctionInfoCalls > 0) {
+      llvm::errs() << "[InformationCache] Total getFunctionInfo calls: "
+                   << TotalGetFunctionInfoCalls << "\n";
+      llvm::errs() << "[InformationCache] Unique functions: "
+                   << FuncInfoMap.size() << "\n";
+    }
   }
 
   /// Vector of functions that might be callable indirectly, i.a., via a
