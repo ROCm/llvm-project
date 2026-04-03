@@ -308,6 +308,31 @@ bool Vreg1WideningHelper::widenVreg1s() {
       assert(isVreg32(DstReg));
   }
 
+  // Round#2b, fix PHIs with lane mask dst that received widened vgpr_32 operands.
+  for (MachineBasicBlock &MBB : *MF) {
+    for (MachineInstr &MI : MBB.phis()) {
+      // Skip instructions with no lane mask destination register (SGPR).
+      if (!isLaneMaskReg(MI.getOperand(0).getReg()))
+        continue;
+
+      for (unsigned I = 1; I < MI.getNumOperands(); I += 2) {
+        assert(I + 1 < MI.getNumOperands());
+        // Skip operands that were not widened by Round#1.
+        if (!Vreg32Set.count(MI.getOperand(I).getReg()))
+          continue;
+        // Convert vgpr_32 back to lane mask in the predecessor block.
+        MachineBasicBlock *PredMBB = MI.getOperand(I + 1).getMBB();
+        Register LaneMaskReg = MRI->createVirtualRegister(
+            TII->getRegisterInfo().getWaveMaskRegClass());
+        BuildMI(*PredMBB, PredMBB->getFirstTerminator(), DebugLoc(),
+                TII->get(AMDGPU::V_CMP_NE_U32_e64), LaneMaskReg)
+            .addReg(MI.getOperand(I).getReg())
+            .addImm(0);
+        MI.getOperand(I).setReg(LaneMaskReg);
+      }
+    }
+  }
+
   for (MachineInstr *MI : DeadCopies)
     MI->eraseFromParent();
   DeadCopies.clear();
