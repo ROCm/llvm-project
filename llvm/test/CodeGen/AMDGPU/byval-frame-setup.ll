@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=fiji -enable-ipra=0 < %s | FileCheck -enable-var-scope --check-prefix=GCN %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=hawaii -enable-ipra=0 < %s | FileCheck -enable-var-scope --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=fiji -enable-ipra=0 < %s | FileCheck -enable-var-scope --check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=hawaii -enable-ipra=0 < %s | FileCheck -enable-var-scope --check-prefix=GCN %s
 
 %struct.ByValStruct = type { [4 x i32] }
 ; Make sure the offset is folded and function's frame register is used
@@ -8,7 +8,9 @@
 ; GCN-NOT: v_lshrrev_b32
 ; GCN-NOT: s_sub_u32
 
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; GCN: s_cbranch_execz [[BB1:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: buffer_load_dword [[LOAD0:v[0-9]+]], off, s[0:3], s32 glc{{$}}
