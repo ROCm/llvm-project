@@ -41,8 +41,7 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
 ; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; ISA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v4
-; ISA-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
-; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; ISA-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; ISA-NEXT:    s_or_b64 s[10:11], s[10:11], s[0:1]
 ; ISA-NEXT:    s_xor_b64 s[0:1], exec, s[10:11]
 ; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
@@ -83,8 +82,7 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v1
-; ISA-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; ISA-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; ISA-NEXT:    s_or_b64 s[4:5], s[4:5], s[0:1]
 ; ISA-NEXT:    s_xor_b64 s[0:1], exec, s[4:5]
 ; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
@@ -174,8 +172,7 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:  .LBB1_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB1_2 Depth=1
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; ISA-NEXT:    s_xor_b64 s[10:11], vcc, -1
-; ISA-NEXT:    s_and_b64 s[10:11], s[10:11], exec
+; ISA-NEXT:    s_xor_b64 s[10:11], vcc, exec
 ; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
 ; ISA-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
 ; ISA-NEXT:    s_and_b64 s[10:11], s[10:11], exec
