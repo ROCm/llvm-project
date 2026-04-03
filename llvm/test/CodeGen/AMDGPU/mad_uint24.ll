@@ -1526,10 +1526,8 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GCN-NEXT:    s_mov_b32 s5, s6
 ; GCN-NEXT:    s_mov_b64 s[8:9], -1
 ; GCN-NEXT:    s_mov_b64 s[8:9], 0
-; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:  .LBB9_1: ; %bb19
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    v_mad_u32_u24 v4, v5, v0, v14
 ; GCN-NEXT:    s_waitcnt expcnt(0)
 ; GCN-NEXT:    v_mad_u32_u24 v6, v6, v1, v10
@@ -1560,7 +1558,6 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8:       ; %bb.0: ; %bb
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    s_mov_b64 s[4:5], -1
-; GFX8-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX8-NEXT:    v_mov_b32_e32 v5, v0
 ; GFX8-NEXT:    v_and_b32_e32 v0, 0xffffff, v13
 ; GFX8-NEXT:    v_and_b32_e32 v1, 0xffffff, v2
@@ -1570,7 +1567,6 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8-NEXT:  .LBB9_1: ; %bb19
 ; GFX8-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX8-NEXT:    v_add_u32_e32 v15, vcc, -1, v15
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v15
 ; GFX8-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; GFX8-NEXT:    v_mad_u32_u24 v4, v5, v0, v14

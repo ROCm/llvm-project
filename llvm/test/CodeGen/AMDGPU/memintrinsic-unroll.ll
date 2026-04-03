@@ -5416,9 +5416,6 @@ define void @memmove_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
@@ -5594,9 +5591,6 @@ define void @memmove_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0
 ; ALIGNED-NEXT:    buffer_store_dword v58, off, s[0:3], s32 ; 4-byte Folded Spill
 ; ALIGNED-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; ALIGNED-NEXT:    s_mov_b32 s6, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
 ; ALIGNED-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; ALIGNED-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; ALIGNED-NEXT:    s_mov_b32 exec_lo, s4
@@ -6905,9 +6899,6 @@ define void @memmove_p0_p0_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(0
 ; UNROLL3-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; UNROLL3-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; UNROLL3-NEXT:    s_mov_b32 s6, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
 ; UNROLL3-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; UNROLL3-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; UNROLL3-NEXT:    s_mov_b32 exec_lo, s4
@@ -7010,9 +7001,6 @@ define void @memmove_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
@@ -7178,9 +7166,6 @@ define void @memmove_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1
 ; ALIGNED-NEXT:    buffer_store_dword v57, off, s[0:3], s32 ; 4-byte Folded Spill
 ; ALIGNED-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; ALIGNED-NEXT:    s_mov_b32 s6, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
 ; ALIGNED-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; ALIGNED-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; ALIGNED-NEXT:    s_mov_b32 exec_lo, s4
@@ -8470,9 +8455,6 @@ define void @memmove_p1_p1_sz2048(ptr addrspace(1) align 1 %dst, ptr addrspace(1
 ; UNROLL3-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; UNROLL3-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; UNROLL3-NEXT:    s_mov_b32 s6, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
 ; UNROLL3-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; UNROLL3-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; UNROLL3-NEXT:    s_mov_b32 exec_lo, s4
@@ -8574,9 +8556,6 @@ define void @memmove_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
@@ -8735,9 +8714,6 @@ define void @memmove_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4
 ; ALIGNED-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; ALIGNED-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; ALIGNED-NEXT:    s_mov_b32 s6, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
 ; ALIGNED-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; ALIGNED-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; ALIGNED-NEXT:    s_mov_b32 exec_lo, s4
@@ -9761,9 +9737,6 @@ define void @memmove_p0_p4_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(4
 ; UNROLL3-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; UNROLL3-NEXT:    v_cmp_lt_u64_e64 s4, v[2:3], v[0:1]
 ; UNROLL3-NEXT:    s_mov_b32 s6, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
 ; UNROLL3-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; UNROLL3-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; UNROLL3-NEXT:    s_mov_b32 exec_lo, s4
@@ -9866,9 +9839,6 @@ define void @memmove_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_lt_u32_e64 s4, v1, v0
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; CHECK-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; CHECK-NEXT:    s_mov_b32 exec_lo, s4
@@ -10348,9 +10318,6 @@ define void @memmove_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5
 ; ALIGNED-NEXT:    buffer_store_dword v125, off, s[0:3], s32 ; 4-byte Folded Spill
 ; ALIGNED-NEXT:    v_cmp_lt_u32_e64 s4, v1, v0
 ; ALIGNED-NEXT:    s_mov_b32 s6, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
 ; ALIGNED-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; ALIGNED-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; ALIGNED-NEXT:    s_mov_b32 exec_lo, s4
@@ -12542,9 +12509,6 @@ define void @memmove_p5_p5_sz2048(ptr addrspace(5) align 1 %dst, ptr addrspace(5
 ; UNROLL3-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; UNROLL3-NEXT:    v_cmp_lt_u32_e64 s4, v1, v0
 ; UNROLL3-NEXT:    s_mov_b32 s6, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
 ; UNROLL3-NEXT:    s_xor_b32 s7, s4, exec_lo
 ; UNROLL3-NEXT:    s_xor_b32 s8, exec_lo, s4
 ; UNROLL3-NEXT:    s_mov_b32 exec_lo, s4
@@ -12728,9 +12692,6 @@ define void @memmove_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[0:1]
 ; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
-; CHECK-NEXT:    s_mov_b32 s5, 0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc_lo
 ; CHECK-NEXT:    v_cmp_lt_u32_e64 s4, v2, v3
 ; CHECK-NEXT:    s_xor_b32 s7, s4, exec_lo
@@ -13018,9 +12979,6 @@ define void @memmove_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5
 ; ALIGNED-NEXT:    v_mov_b32_e32 v56, v1
 ; ALIGNED-NEXT:    v_mov_b32_e32 v55, v0
 ; ALIGNED-NEXT:    s_mov_b32 s6, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
-; ALIGNED-NEXT:    s_mov_b32 s5, 0
 ; ALIGNED-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[55:56]
 ; ALIGNED-NEXT:    v_cndmask_b32_e32 v3, -1, v55, vcc_lo
 ; ALIGNED-NEXT:    v_cmp_lt_u32_e64 s4, v2, v3
@@ -16112,9 +16070,6 @@ define void @memmove_p0_p5_sz2048(ptr addrspace(0) align 1 %dst, ptr addrspace(5
 ; UNROLL3-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; UNROLL3-NEXT:    v_cmp_ne_u64_e32 vcc_lo, 0, v[0:1]
 ; UNROLL3-NEXT:    s_mov_b32 s6, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
-; UNROLL3-NEXT:    s_mov_b32 s5, 0
 ; UNROLL3-NEXT:    v_cndmask_b32_e32 v3, -1, v0, vcc_lo
 ; UNROLL3-NEXT:    v_cmp_lt_u32_e64 s4, v2, v3
 ; UNROLL3-NEXT:    s_xor_b32 s7, s4, exec_lo

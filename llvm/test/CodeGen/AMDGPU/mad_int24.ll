@@ -167,10 +167,8 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; GCN-NEXT:    v_mov_b32_e32 v5, 1
 ; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_mov_b64 s[4:5], 0
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:  .LBB3_1: ; %bb6
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    v_mad_i32_i24 v0, v0, v5, v5
 ; GCN-NEXT:    v_add_i32_e32 v1, vcc, -1, v1
 ; GCN-NEXT:    v_mad_i32_i24 v5, v0, v5, v0
@@ -200,13 +198,11 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; VI:       ; %bb.0: ; %bb
 ; VI-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; VI-NEXT:    s_mov_b64 s[4:5], -1
-; VI-NEXT:    s_mov_b64 s[4:5], 0
 ; VI-NEXT:    v_mov_b32_e32 v5, 1
 ; VI-NEXT:    s_mov_b64 s[4:5], 0
 ; VI-NEXT:  .LBB3_1: ; %bb6
 ; VI-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, -1, v1
-; VI-NEXT:    s_mov_b64 s[6:7], 0
 ; VI-NEXT:    v_mad_i32_i24 v0, v0, v5, v5
 ; VI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
 ; VI-NEXT:    v_mad_i32_i24 v5, v0, v5, v0
