@@ -22,6 +22,7 @@
 
 namespace llvm {
 
+class FenceInst;
 class Function;
 class MDNode;
 class MemoryLocation;
@@ -47,6 +48,9 @@ public:
                                     AAQueryInfo &AAQI);
   LLVM_ABI ModRefInfo getModRefInfo(const CallBase *Call1,
                                     const CallBase *Call2, AAQueryInfo &AAQI);
+  LLVM_ABI ModRefInfo getModRefInfo(const FenceInst *S,
+                                    const MemoryLocation &Loc,
+                                    AAQueryInfo &AAQI);
 
   LLVM_ABI static void
   collectScopedDomains(const MDNode *NoAlias,
@@ -55,8 +59,6 @@ public:
   LLVM_ABI static bool mayAliasInScopes(const MDNode *Scopes,
                                         const MDNode *NoAlias);
 
-  /// Whether scoped noalias analysis is enabled (-enable-scoped-noalias).
-  LLVM_ABI static bool isEnabled();
 };
 
 /// Analysis pass providing a never-invalidated alias analysis result.

@@ -506,23 +506,20 @@ ModRefInfo AAResults::getModRefInfo(const FenceInst *S,
                                     const MemoryLocation &Loc,
                                     AAQueryInfo &AAQI) {
   if (Loc.Ptr) {
-    // If Loc is a constant memory location, the fence definitely could
-    // not modify it.
-    ModRefInfo Result = getModRefInfoMask(Loc);
-    if (isNoModRef(Result))
-      return ModRefInfo::NoModRef;
+    ModRefInfo Result = ModRefInfo::ModRef;
 
-    // Check scoped noalias metadata: if the fence's !noalias metadata
-    // covers the location's !alias.scope, the fence cannot affect it.
-    // This mirrors the analogous check for CallBase instructions.
-    if (ScopedNoAliasAAResult::isEnabled()) {
-      if (!ScopedNoAliasAAResult::mayAliasInScopes(
-              Loc.AATags.Scope, S->getMetadata(LLVMContext::MD_noalias)))
-        return ModRefInfo::NoModRef;
-      if (!ScopedNoAliasAAResult::mayAliasInScopes(
-              S->getMetadata(LLVMContext::MD_alias_scope), Loc.AATags.NoAlias))
+    for (const auto &AA : AAs) {
+      Result &= AA->getModRefInfo(S, Loc, AAQI);
+
+      if (isNoModRef(Result))
         return ModRefInfo::NoModRef;
     }
+
+    // Apply the ModRef mask. This ensures that if Loc is a constant memory
+    // location, we take into account the fact that the fence definitely could
+    // not modify the memory location.
+    if (!isNoModRef(Result))
+      Result &= getModRefInfoMask(Loc);
 
     return Result;
   }

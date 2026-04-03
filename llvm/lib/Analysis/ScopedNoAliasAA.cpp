@@ -36,6 +36,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/InitializePasses.h"
@@ -93,6 +94,23 @@ ModRefInfo ScopedNoAliasAAResult::getModRefInfo(const CallBase *Call,
   return ModRefInfo::ModRef;
 }
 
+ModRefInfo ScopedNoAliasAAResult::getModRefInfo(const FenceInst *S,
+                                                const MemoryLocation &Loc,
+                                                AAQueryInfo &AAQI) {
+  if (!EnableScopedNoAlias)
+    return ModRefInfo::ModRef;
+
+  if (!mayAliasInScopes(Loc.AATags.Scope,
+                        S->getMetadata(LLVMContext::MD_noalias)))
+    return ModRefInfo::NoModRef;
+
+  if (!mayAliasInScopes(S->getMetadata(LLVMContext::MD_alias_scope),
+                        Loc.AATags.NoAlias))
+    return ModRefInfo::NoModRef;
+
+  return ModRefInfo::ModRef;
+}
+
 ModRefInfo ScopedNoAliasAAResult::getModRefInfo(const CallBase *Call1,
                                                 const CallBase *Call2,
                                                 AAQueryInfo &AAQI) {
@@ -129,8 +147,6 @@ void ScopedNoAliasAAResult::collectScopedDomains(
       if (const MDNode *Domain = AliasScopeNode(NAMD).getDomain())
         Domains.insert(Domain);
 }
-
-bool ScopedNoAliasAAResult::isEnabled() { return EnableScopedNoAlias; }
 
 bool ScopedNoAliasAAResult::mayAliasInScopes(const MDNode *Scopes,
                                              const MDNode *NoAlias) {
