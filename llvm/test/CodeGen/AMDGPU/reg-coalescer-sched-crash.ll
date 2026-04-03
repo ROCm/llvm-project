@@ -11,9 +11,8 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6-LABEL: reg_coalescer_breaks_dead:
 ; GFX6:       ; %bb.0: ; %bb
 ; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX6-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
-; GFX6-NEXT:    s_and_b64 s[2:3], s[0:1], exec
+; GFX6-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX6-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX6-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
@@ -50,9 +49,8 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX8-LABEL: reg_coalescer_breaks_dead:
 ; GFX8:       ; %bb.0: ; %bb
 ; GFX8-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX8-NEXT:    s_xor_b64 s[0:1], vcc, -1
-; GFX8-NEXT:    s_mov_b64 s[2:3], 0
-; GFX8-NEXT:    s_and_b64 s[2:3], s[0:1], exec
+; GFX8-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX8-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX8-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX8-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX8-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]

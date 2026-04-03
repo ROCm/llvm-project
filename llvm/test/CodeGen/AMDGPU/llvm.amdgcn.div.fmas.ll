@@ -246,9 +246,8 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN-NEXT:    buffer_load_dwordx2 v[1:2], v[3:4], s[4:7], 0 addr64
 ; GCN-NEXT:    buffer_load_dword v3, v[3:4], s[4:7], 0 addr64 offset:8
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v0
-; GCN-NEXT:    s_xor_b64 s[2:3], s[4:5], -1
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
-; GCN-NEXT:    s_and_b64 s[10:11], s[2:3], exec
+; GCN-NEXT:    s_xor_b64 s[10:11], s[4:5], exec
+; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
