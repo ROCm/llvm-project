@@ -1,6 +1,6 @@
 ; Test generation of _dvgpr$ symbol for an amdgpu_cs_chain function with dynamic vgprs.
 
-; RUN: llc -mtriple=amdgcn-amd-amdpal -mcpu=gfx1200 < %s | FileCheck -check-prefixes=DVGPR %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdpal -mcpu=gfx1200 < %s | FileCheck -check-prefixes=DVGPR %s
 
 ; Function with 0 VGPRs, which counts as 1 block.
 ;
@@ -33,14 +33,14 @@ define amdgpu_cs_chain void @0(<79 x float> %arg) #0 {
   ret void
 }
 
-; Function with 128 VGPRs, which is 8 blocks.
+; Function with 120 VGPRs, which is 8 blocks.
 ;
-; DVGPR-LABEL: func128:
-; DVGPR: .set func128.num_vgpr, 128
-; DVGPR: .set _dvgpr$func128, func128+56
+; DVGPR-LABEL: func120:
+; DVGPR: .set func120.num_vgpr, 120
+; DVGPR: .set _dvgpr$func120, func120+56
 ;
-define amdgpu_cs_chain void @func128(<120 x float> %arg) #0 {
-  tail call void @func128(<120 x float> %arg)
+define amdgpu_cs_chain void @func120(<112 x float> %arg) #0 {
+  tail call void @func120(<112 x float> %arg)
   ret void
 }
 
