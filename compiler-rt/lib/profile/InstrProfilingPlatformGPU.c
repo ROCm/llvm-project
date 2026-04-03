@@ -88,6 +88,7 @@ extern __llvm_profile_data PROF_DATA_STOP[] COMPILER_RT_VISIBILITY
 extern char PROF_UCNTS_START[] COMPILER_RT_VISIBILITY COMPILER_RT_WEAK;
 extern char PROF_UCNTS_STOP[] COMPILER_RT_VISIBILITY COMPILER_RT_WEAK;
 
+// AMDGPU is a proper ELF target and exports the linker-defined section bounds.
 COMPILER_RT_GPU_VISIBILITY
 __llvm_profile_gpu_sections INSTR_PROF_SECT_BOUNDS_TABLE = {
     PROF_NAME_START,  PROF_NAME_STOP,  PROF_CNTS_START,
@@ -96,6 +97,10 @@ __llvm_profile_gpu_sections INSTR_PROF_SECT_BOUNDS_TABLE = {
 
 #elif defined(__NVPTX__)
 
+// NVPTX supports neither sections nor ELF symbols, we rely on the handling in
+// the 'InstrProfilingPlatformOther.c' file to fill this at initialization time.
+// FIXME: This will not work until we make the NVPTX backend emit section
+//        globals next to each other.
 COMPILER_RT_GPU_VISIBILITY
 __llvm_profile_gpu_sections INSTR_PROF_SECT_BOUNDS_TABLE = {
     NULL, NULL, NULL,

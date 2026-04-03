@@ -54,7 +54,6 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/TargetParser/TargetParser.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Instrumentation/PGOInstrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -259,11 +258,11 @@ static bool profDataReferencedByCode(const Module &M) {
 // identifies each translation unit. Returns empty string if not found.
 static std::string getCUIDFromModule(const Module &M) {
   for (const GlobalVariable &GV : M.globals()) {
+    if (!GV.hasExternalLinkage())
+      continue;
     StringRef Name = GV.getName();
-    if (Name.starts_with("__hip_cuid_")) {
-      // Extract the hash suffix after "__hip_cuid_"
-      return Name.drop_front(strlen("__hip_cuid_")).str();
-    }
+    if (Name.consume_front("__hip_cuid_"))
+      return Name.str();
   }
   return "";
 }
@@ -328,6 +327,7 @@ private:
   // points to avoid redundant IR and help the optimizer.
   struct AMDGPUPGOInvariants {
     Value *Matched = nullptr;
+    bool WaveSizeStored = false;
   };
   DenseMap<Function *, AMDGPUPGOInvariants> AMDGPUInvariantsCache;
 
@@ -1304,31 +1304,6 @@ void InstrLowerer::lowerIncrement(InstrProfIncrementInst *Inc) {
   Inc->eraseFromParent();
 }
 
-// Determine the wavefront size for an AMDGPU function.
-// Checks target-features attribute first (+wavefrontsize32/+wavefrontsize64),
-// then falls back to the default wavefront size for the target-cpu.
-// Returns 32 or 64. Defaults to 32 if undetermined.
-static unsigned getAMDGPUWavefrontSize(const Function &F) {
-  // Check target-features attribute for explicit wavefront size
-  StringRef Features = F.getFnAttribute("target-features").getValueAsString();
-  if (Features.contains("+wavefrontsize64"))
-    return 64;
-  if (Features.contains("+wavefrontsize32"))
-    return 32;
-
-  // Fall back to default wavefront size based on target-cpu
-  StringRef CPU = F.getFnAttribute("target-cpu").getValueAsString();
-  if (!CPU.empty()) {
-    AMDGPU::GPUKind Kind = AMDGPU::parseArchAMDGCN(CPU);
-    unsigned Features = AMDGPU::getArchAttrAMDGCN(Kind);
-    if (Features & AMDGPU::FEATURE_WAVE32)
-      return 32;
-    return 64; // gfx9 and older default to Wave64
-  }
-
-  return 32; // conservative default
-}
-
 InstrLowerer::AMDGPUPGOInvariants &
 InstrLowerer::getOrCreateAMDGPUInvariants(Function *F) {
   auto It = AMDGPUInvariantsCache.find(F);
@@ -1371,6 +1346,27 @@ void InstrLowerer::lowerIncrementAMDGPU(InstrProfIncrementInst *Inc) {
 
   // --- Counter address ---
   GlobalVariable *Counters = getOrCreateRegionCounters(Inc);
+
+  // Store wavefront size into the profile data struct once per function.
+  // Uses the llvm.amdgcn.wavefrontsize intrinsic which the backend folds
+  // to a constant based on the actual subtarget.
+  if (!Inv.WaveSizeStored) {
+    Inv.WaveSizeStored = true;
+    GlobalVariable *NamePtr = Inc->getName();
+    auto &PD = ProfileDataMap[NamePtr];
+    if (PD.DataVar) {
+      IRBuilder<> EntryBuilder(&*F->getEntryBlock().getFirstInsertionPt());
+      Function *WaveSizeFn =
+          Intrinsic::getOrInsertDeclaration(&M, Intrinsic::amdgcn_wavefrontsize);
+      Value *WaveSize = EntryBuilder.CreateCall(WaveSizeFn);
+      Value *WaveSize16 = EntryBuilder.CreateTrunc(
+          WaveSize, Type::getInt16Ty(Context), "wavesize.i16");
+      Value *WaveSizeAddr = EntryBuilder.CreateStructGEP(
+          PD.DataVar->getValueType(), PD.DataVar, 9, "profd.wavesize");
+      EntryBuilder.CreateStore(WaveSize16, WaveSizeAddr);
+    }
+  }
+
   Value *Indices[] = {Builder.getInt32(0), CounterIdx};
   Value *Addr = Builder.CreateInBoundsGEP(Counters->getValueType(), Counters,
                                           Indices, "ctr.addr");
@@ -1970,8 +1966,8 @@ InstrLowerer::getOrCreateUniformCounters(InstrProfCntrInstBase *Inc) {
 
   uint64_t NumCounters = Inc->getNumCounters()->getZExtValue();
 
-  auto &Ctx = M.getContext();
-  auto *CounterTy = ArrayType::get(Type::getInt64Ty(Ctx), NumCounters);
+  LLVMContext &Ctx = M.getContext();
+  ArrayType *CounterTy = ArrayType::get(Type::getInt64Ty(Ctx), NumCounters);
 
   bool Renamed;
   std::string VarName = getVarName(Inc, "__llvm_prf_unifcnt_", Renamed);
@@ -2073,8 +2069,6 @@ void InstrLowerer::createDataVariable(InstrProfCntrInstBase *Inc) {
     Int16ArrayVals[Kind] = ConstantInt::get(Int16Ty, PD.NumValueSites[Kind]);
 
   uint16_t OffloadDeviceWaveSizeVal = 0;
-  if (TT.isAMDGPU())
-    OffloadDeviceWaveSizeVal = getAMDGPUWavefrontSize(*Fn);
 
   if (isGPUProfTarget(M)) {
     // For GPU targets, weak functions need weak linkage for their profile data

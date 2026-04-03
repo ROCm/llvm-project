@@ -1830,7 +1830,7 @@ void PGOUseFunc::setBlockUniformityAttribute() {
   UniformityStr.reserve(InstrumentBBs.size());
   for (size_t I = 0, E = InstrumentBBs.size(); I < E; ++I)
     UniformityStr += ProfileRecord.isBlockUniform(I) ? 'U' : 'D';
-  F.addFnAttr("block-uniformity-profile", UniformityStr);
+  F.addFnAttr("block.uniformity.profile", UniformityStr);
 
   LLVM_DEBUG(dbgs() << "PGO: Set block uniformity profile for " << F.getName()
                     << ": " << UniformityStr << "\n");

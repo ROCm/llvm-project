@@ -15,11 +15,15 @@ declare void @llvm.instrprof.increment(ptr, i64, i32, i32)
 
 attributes #0 = { "target-cpu"="gfx908" }
 
-;; Per-function comdat counters; wave size 64 in profile data (gfx908)
+;; Per-function comdat counters
 ; CHECK: @__profc_kernel_w64 = linkonce_odr protected addrspace(1) global [1 x i64]
 ; CHECK: @__llvm_prf_unifcnt_kernel_w64 = linkonce_odr protected addrspace(1) global [1 x i64]
-; CHECK: @__profd_kernel_w64 = linkonce_odr protected addrspace(1) global { {{.*}} i16 64, i32 0 }
+; CHECK: @__profd_kernel_w64 = linkonce_odr protected addrspace(1) global { {{.*}} i16 0, i32 0 }
 ; CHECK: @__llvm_offload_prf_abcdef123 = addrspace(1) constant ptr addrspace(1) @__llvm_profile_sections
+
+;; Check wave size stored via intrinsic
+; CHECK: %wavesize.i16 = trunc i32 %{{.*}} to i16
+; CHECK: store i16 %wavesize.i16, ptr addrspace(1) getelementptr inbounds {{.*}} @__profd_kernel_w64
 
 ;; Check sampling guard
 ; CHECK: %pgo.sampled = call i32 @__llvm_profile_sampling_gpu(i32 3)

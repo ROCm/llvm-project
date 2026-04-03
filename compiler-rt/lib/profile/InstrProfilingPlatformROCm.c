@@ -293,7 +293,7 @@ static const void *UnwrapOffloadBundle(const void *Image) {
     }
   }
 
-  PROF_WARN("%s", "Offload bundle contains no valid ELF entries\n");
+  PROF_WARN("%s", "offload bundle contains no valid ELF entries\n");
   return NULL;
 }
 
@@ -362,12 +362,12 @@ static int RegisterPrfSymbol(const char *Name, void *UserData) {
   void *DevicePtrVar = NULL;
   size_t Bytes = 0;
   if (hipModuleGetGlobal(&DevicePtrVar, &Bytes, S->Module, Name) != 0) {
-    PROF_WARN("Failed to get symbol %s for module %p\n", Name, S->Module);
+    PROF_WARN("failed to get symbol %s for module %p\n", Name, S->Module);
     return 0; /* continue */
   }
   void *DeviceVar = NULL;
   if (hipMemcpy(&DeviceVar, DevicePtrVar, sizeof(void *), 2 /*DToH*/) != 0) {
-    PROF_WARN("Failed to read sections pointer for %s\n", Name);
+    PROF_WARN("failed to read sections pointer for %s\n", Name);
     return 0;
   }
 
@@ -377,7 +377,7 @@ static int RegisterPrfSymbol(const char *Name, void *UserData) {
     OffloadDynamicTUInfo *New = (OffloadDynamicTUInfo *)realloc(
         MI->TUs, NewCap * sizeof(OffloadDynamicTUInfo));
     if (!New) {
-      PROF_ERR("%s\n", "Failed to grow TU array");
+      PROF_ERR("%s\n", "failed to grow TU array");
       return 0;
     }
     MI->TUs = New;
@@ -441,7 +441,7 @@ void __llvm_profile_offload_register_dynamic_module(int ModuleLoadRc,
 #endif
 
   if (MI->NumTUs == 0) {
-    PROF_WARN("No __llvm_offload_prf_* symbols found in module %p\n", *Ptr);
+    PROF_WARN("no __llvm_offload_prf_* symbols found in module %p\n", *Ptr);
   } else if (IsVerboseMode()) {
     PROF_NOTE("Module %p: registered %d TU(s)\n", *Ptr, MI->NumTUs);
   }
@@ -475,7 +475,7 @@ void __llvm_profile_offload_unregister_dynamic_module(void *Ptr) {
         if (ProcessDeviceOffloadPrf(TU->DeviceVar, TUIndex, ArchName) == 0)
           TU->Processed = 1;
         else
-          PROF_WARN("Failed to process profile data for module %p TU %d\n", Ptr,
+          PROF_WARN("failed to process profile data for module %p TU %d\n", Ptr,
                     t);
       }
     }
@@ -483,7 +483,7 @@ void __llvm_profile_offload_unregister_dynamic_module(void *Ptr) {
   }
 
   if (IsVerboseMode())
-    PROF_WARN("Unregister called for unknown module %p\n", Ptr);
+    PROF_WARN("unregister called for unknown module %p\n", Ptr);
 }
 
 /* Grow a void* array, doubling capacity (or starting at InitCap). */
@@ -527,7 +527,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
 
   if (hipMemcpy(&HostSections, DeviceOffloadPrf, sizeof(HostSections),
                 2 /*DToH*/) != 0) {
-    PROF_ERR("%s\n", "Failed to copy offload prf structure from device");
+    PROF_ERR("%s\n", "failed to copy offload prf structure from device");
     return -1;
   }
 
@@ -627,7 +627,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
       (CountersSize > 0 && !HostCountersBegin) ||
       (NamesSize > 0 && !HostNamesBegin) ||
       (UniformCountersSize > 0 && !HostUniformCountersBegin)) {
-    PROF_ERR("%s\n", "Failed to allocate host memory for device sections");
+    PROF_ERR("%s\n", "failed to allocate host memory for device sections");
     goto cleanup;
   }
 
@@ -641,7 +641,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
       (UniformCountersSize > 0 && !UCntsReused &&
        memcpyDeviceToHost(HostUniformCountersBegin, DevUniformCntsBegin,
                           UniformCountersSize) != 0)) {
-    PROF_ERR("%s\n", "Failed to copy profile sections from device");
+    PROF_ERR("%s\n", "failed to copy profile sections from device");
     goto cleanup;
   }
 
@@ -688,7 +688,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
           &PaddingBytesAfterCounters, &PaddingBytesAfterBitmapBytes,
           &PaddingBytesAfterUniformCounters, &PaddingBytesAfterNames,
           &PaddingBytesAfterVTable, &PaddingBytesAfterVNames) != 0) {
-    PROF_ERR("%s\n", "Failed to get padding sizes");
+    PROF_ERR("%s\n", "failed to get padding sizes");
     goto cleanup;
   }
 
@@ -696,7 +696,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
       DataSize + PaddingBytesBeforeCounters + CountersSize + NamesSize;
   char *ContiguousBuffer = (char *)malloc(ContiguousBufferSize);
   if (!ContiguousBuffer) {
-    PROF_ERR("%s\n", "Failed to allocate contiguous buffer");
+    PROF_ERR("%s\n", "failed to allocate contiguous buffer");
     goto cleanup;
   }
   memset(ContiguousBuffer, 0, ContiguousBufferSize);
@@ -817,7 +817,7 @@ static int ProcessDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
   free(ReorderedUniformCounters);
 
   if (ret != 0) {
-    PROF_ERR("%s\n", "Failed to write device profile using shared API");
+    PROF_ERR("%s\n", "failed to write device profile using shared API");
   } else if (IsVerboseMode()) {
     PROF_NOTE("%s\n", "Successfully wrote device profile using shared API");
   }
@@ -838,7 +838,7 @@ static int ProcessShadowVariable(void *ShadowVar, int TUIndex,
                                  const char *Target) {
   void *DevicePtrVar = NULL;
   if (hipGetSymbolAddress(&DevicePtrVar, ShadowVar) != 0) {
-    PROF_WARN("Failed to get symbol address for shadow variable %p\n",
+    PROF_WARN("failed to get symbol address for shadow variable %p\n",
               ShadowVar);
     return -1;
   }
@@ -847,7 +847,7 @@ static int ProcessShadowVariable(void *ShadowVar, int TUIndex,
   void *DeviceOffloadPrf = NULL;
   if (hipMemcpy(&DeviceOffloadPrf, DevicePtrVar, sizeof(void *), 2 /*DToH*/) !=
       0) {
-    PROF_WARN("Failed to read sections pointer from shadow variable %p\n",
+    PROF_WARN("failed to read sections pointer from shadow variable %p\n",
               ShadowVar);
     return -1;
   }
@@ -904,7 +904,7 @@ int __llvm_profile_hip_collect_device_data(void) {
     OffloadDynamicModuleInfo *MI = &DynamicModules[i];
     for (int t = 0; t < MI->NumTUs; ++t) {
       if (!MI->TUs[t].Processed) {
-        PROF_WARN("Dynamic module %p TU %d was not processed before exit\n",
+        PROF_WARN("dynamic module %p TU %d was not processed before exit\n",
                   MI->ModulePtr, t);
         Ret = -1;
       }
