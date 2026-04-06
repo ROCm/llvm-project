@@ -49,24 +49,29 @@ COMPILER_RT_VISIBILITY void __llvm_profile_instrument_gpu(uint64_t *counter,
 // without losing PGO performance gains.
 //
 // Returns 1 if this block should be instrumented, 0 to skip. Samples by
-// matching lower bits of the linearized 3D block ID to zero.
+// matching lower bits of the x-dimension block ID to zero.
 //   sampling_bits=0: all blocks (100%)
-//   sampling_bits=3: every 8th block (12.5%, default)
+//   sampling_bits=3: every 8th block in x (12.5%, default)
+//
+// Note: We use only block_id_x rather than a fully linearized 3D block ID.
+// The 3D linearization requires __gpu_num_blocks_x/y which expands to
+// __builtin_amdgcn_workgroup_size_x/y. With -mcode-object-version=none (used
+// to build compiler-rt profile runtime), the compiler emits a load of
+// __oclc_ABI_version to select the correct ABI path. Since the profile runtime
+// is linked after device libs are internalized, __oclc_ABI_version is no longer
+// available. Using block_id_x directly avoids this dependency. For typical
+// kernels with large 1D or x-dominant grids this is sufficient; blocks sharing
+// the same x-index are sampled together in 3D grids (minor uniformity loss).
 COMPILER_RT_VISIBILITY int __llvm_profile_sampling_gpu(uint32_t sampling_bits) {
   if (sampling_bits == 0)
     return 1;
 
-  uint32_t gdx = __gpu_num_blocks_x();
-  uint32_t gdy = __gpu_num_blocks_y();
-  uint32_t block_id = __gpu_block_id_x() + __gpu_block_id_y() * gdx +
-                      __gpu_block_id_z() * gdx * gdy;
-
+  uint32_t block_id = __gpu_block_id_x();
   uint32_t mask = (1u << sampling_bits) - 1;
   return (block_id & mask) == 0;
 }
 
 #if defined(__AMDGPU__)
-__attribute__((weak)) const int __oclc_ABI_version = 600;
 
 #define PROF_NAME_START INSTR_PROF_SECT_START(INSTR_PROF_NAME_COMMON)
 #define PROF_NAME_STOP INSTR_PROF_SECT_STOP(INSTR_PROF_NAME_COMMON)
