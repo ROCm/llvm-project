@@ -23,8 +23,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sgt_true_sext_swap:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_sgt_true_sext_swap(ptr addrspace(1) nocapture %arg) {
@@ -45,8 +45,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ne_true_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_ne_true_sext(ptr addrspace(1) nocapture %arg) {
@@ -89,8 +89,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_eq_true_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_eq_true_sext(ptr addrspace(1) nocapture %arg) {
@@ -111,8 +111,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sle_true_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_sle_true_sext(ptr addrspace(1) nocapture %arg) {
@@ -133,8 +133,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_uge_true_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_uge_true_sext(ptr addrspace(1) nocapture %arg) {
@@ -155,8 +155,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_eq_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_eq_false_sext(ptr addrspace(1) nocapture %arg) {
@@ -177,8 +177,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_sge_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_sge_false_sext(ptr addrspace(1) nocapture %arg) {
@@ -199,8 +199,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ule_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_gt_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_ule_false_sext(ptr addrspace(1) nocapture %arg) {
@@ -221,8 +221,8 @@ endif:
 }
 
 ; GCN-LABEL: {{^}}setcc_ne_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_ne_false_sext(ptr addrspace(1) nocapture %arg) {
@@ -242,8 +242,8 @@ endif:
   ret void
 }
 ; GCN-LABEL: {{^}}setcc_ugt_false_sext:
-; GCN:      v_cmp_{{gt|le}}_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
-; GCN: s_{{and|xor}}_b64 {{[^,]+}}
+; GCN:      v_cmp_le_u32_e{{32|64}} {{[[CC:[^,]+]]|vcc}}, v{{[0-9]+}}, v{{[0-9]+}}
+; GCN: s_xor_b64 {{[^,]+}}
 ; GCN-NOT:  v_cndmask_
 
 define amdgpu_kernel void @setcc_ugt_false_sext(ptr addrspace(1) nocapture %arg) {

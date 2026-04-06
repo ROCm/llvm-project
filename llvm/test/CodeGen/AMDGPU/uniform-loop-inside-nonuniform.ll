@@ -3,8 +3,8 @@
 ; Test a simple uniform loop that lives inside non-uniform control flow.
 
 ; CHECK-LABEL: {{^}}test1:
-; CHECK: v_cmp_{{eq|ne}}_u32_e32 vcc, 0
-; CHECK: s_{{xor|and}}_b64
+; CHECK: v_cmp_eq_u32_e32 vcc, 0
+; CHECK: s_xor_b64
 ; CHECK: s_cbranch_execz
 
 ; CHECK: {{^}}.LBB{{[0-9]+}}_{{[0-9]+}}: ; %loop_body
@@ -32,7 +32,7 @@ out:
 }
 
 ; CHECK-LABEL: {{^}}test2:
-; CHECK: s_{{and|xor}}_b64
+; CHECK: s_xor_b64
 ; CHECK: s_cbranch_execz
 define amdgpu_kernel void @test2(ptr addrspace(1) %out, i32 %a, i32 %b) {
 main_body:
