@@ -611,26 +611,27 @@ define amdgpu_kernel void @shuffle8i8(ptr addrspace(1) %in0, ptr addrspace(1) %i
 ; GFX10-NEXT:    v_mov_b32_e32 v0, 0xc0c0106
 ; GFX10-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-NEXT:    s_load_dwordx2 s[4:5], s[0:1], 0x0
-; GFX10-NEXT:    s_load_dwordx2 s[8:9], s[2:3], 0x0
+; GFX10-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
+; GFX10-NEXT:    s_nop 0
+; GFX10-NEXT:    s_load_dwordx2 s[2:3], s[2:3], 0x0
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-NEXT:    s_bfe_u32 s0, s4, 0x80008
-; GFX10-NEXT:    v_perm_b32 v0, s4, s8, v0
-; GFX10-NEXT:    s_lshl_b32 s1, s9, 8
-; GFX10-NEXT:    s_bfe_u32 s2, s5, 0x80008
-; GFX10-NEXT:    s_lshl_b32 s3, s8, 8
-; GFX10-NEXT:    s_bfe_u32 s9, s9, 0x100010
-; GFX10-NEXT:    s_and_b32 s5, s4, 0xff
-; GFX10-NEXT:    s_or_b32 s1, s2, s1
-; GFX10-NEXT:    s_lshl_b32 s2, s9, 8
-; GFX10-NEXT:    s_or_b32 s0, s0, s3
+; GFX10-NEXT:    s_bfe_u32 s4, s0, 0x80008
+; GFX10-NEXT:    v_perm_b32 v0, s0, s2, v0
+; GFX10-NEXT:    s_lshl_b32 s5, s3, 8
+; GFX10-NEXT:    s_bfe_u32 s1, s1, 0x80008
+; GFX10-NEXT:    s_lshl_b32 s8, s2, 8
+; GFX10-NEXT:    s_bfe_u32 s3, s3, 0x100010
+; GFX10-NEXT:    s_and_b32 s9, s0, 0xff
+; GFX10-NEXT:    s_or_b32 s0, s1, s5
+; GFX10-NEXT:    s_lshl_b32 s1, s3, 8
+; GFX10-NEXT:    s_or_b32 s2, s4, s8
 ; GFX10-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
-; GFX10-NEXT:    s_or_b32 s2, s5, s2
-; GFX10-NEXT:    s_and_b32 s0, s0, 0xffff
-; GFX10-NEXT:    s_lshl_b32 s1, s1, 16
+; GFX10-NEXT:    s_or_b32 s1, s9, s1
 ; GFX10-NEXT:    s_and_b32 s2, s2, 0xffff
-; GFX10-NEXT:    s_or_b32 s0, s0, s1
-; GFX10-NEXT:    v_or_b32_e32 v1, s2, v0
+; GFX10-NEXT:    s_lshl_b32 s0, s0, 16
+; GFX10-NEXT:    s_and_b32 s1, s1, 0xffff
+; GFX10-NEXT:    s_or_b32 s0, s2, s0
+; GFX10-NEXT:    v_or_b32_e32 v1, s1, v0
 ; GFX10-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX10-NEXT:    global_store_dwordx2 v2, v[0:1], s[6:7]
 ; GFX10-NEXT:    s_endpgm
@@ -642,27 +643,28 @@ define amdgpu_kernel void @shuffle8i8(ptr addrspace(1) %in0, ptr addrspace(1) %i
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0xc0c0106
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_load_dwordx2 s[4:5], s[0:1], 0x0
-; GFX9-NEXT:    s_load_dwordx2 s[8:9], s[2:3], 0x0
+; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dwordx2 s[2:3], s[2:3], 0x0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_bfe_u32 s2, s5, 0x80008
-; GFX9-NEXT:    s_lshl_b32 s1, s9, 8
-; GFX9-NEXT:    s_bfe_u32 s0, s4, 0x80008
-; GFX9-NEXT:    s_or_b32 s1, s2, s1
-; GFX9-NEXT:    s_lshl_b32 s2, s8, 8
-; GFX9-NEXT:    s_bfe_u32 s3, s9, 0x100010
-; GFX9-NEXT:    s_or_b32 s0, s0, s2
-; GFX9-NEXT:    s_and_b32 s2, s4, 0xff
+; GFX9-NEXT:    s_bfe_u32 s1, s1, 0x80008
+; GFX9-NEXT:    s_lshl_b32 s5, s3, 8
+; GFX9-NEXT:    s_bfe_u32 s4, s0, 0x80008
+; GFX9-NEXT:    s_or_b32 s1, s1, s5
+; GFX9-NEXT:    s_lshl_b32 s5, s2, 8
+; GFX9-NEXT:    s_bfe_u32 s3, s3, 0x100010
+; GFX9-NEXT:    s_or_b32 s4, s4, s5
+; GFX9-NEXT:    s_and_b32 s5, s0, 0xff
 ; GFX9-NEXT:    s_lshl_b32 s3, s3, 8
-; GFX9-NEXT:    v_mov_b32_e32 v0, s8
-; GFX9-NEXT:    s_or_b32 s2, s2, s3
-; GFX9-NEXT:    v_perm_b32 v0, s4, v0, v1
-; GFX9-NEXT:    s_and_b32 s0, s0, 0xffff
-; GFX9-NEXT:    s_lshl_b32 s1, s1, 16
+; GFX9-NEXT:    v_mov_b32_e32 v0, s2
+; GFX9-NEXT:    s_or_b32 s3, s5, s3
+; GFX9-NEXT:    v_perm_b32 v0, s0, v0, v1
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
-; GFX9-NEXT:    s_and_b32 s2, s2, 0xffff
+; GFX9-NEXT:    s_and_b32 s0, s3, 0xffff
+; GFX9-NEXT:    v_or_b32_e32 v1, s0, v0
+; GFX9-NEXT:    s_and_b32 s0, s4, 0xffff
+; GFX9-NEXT:    s_lshl_b32 s1, s1, 16
 ; GFX9-NEXT:    s_or_b32 s0, s0, s1
-; GFX9-NEXT:    v_or_b32_e32 v1, s2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX9-NEXT:    global_store_dwordx2 v2, v[0:1], s[6:7]
 ; GFX9-NEXT:    s_endpgm
@@ -3779,7 +3781,6 @@ define hidden void @extract_v13i64(ptr addrspace(1) %in0, ptr addrspace(1) %in1,
 ; GFX10-NEXT:    global_load_dwordx4 v[8:11], v[0:1], off offset:48
 ; GFX10-NEXT:    global_load_dwordx4 v[11:14], v[0:1], off
 ; GFX10-NEXT:    global_load_dwordx4 v[14:17], v[0:1], off offset:64
-; GFX10-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_perm_b32 v0, v12, v13, 0x1000504
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
@@ -3795,7 +3796,6 @@ define hidden void @extract_v13i64(ptr addrspace(1) %in0, ptr addrspace(1) %in1,
 ; GFX9-NEXT:    global_load_dwordx4 v[11:14], v[0:1], off
 ; GFX9-NEXT:    global_load_dwordx4 v[14:17], v[0:1], off offset:64
 ; GFX9-NEXT:    s_mov_b32 s4, 0x1000504
-; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_perm_b32 v0, v12, v13, s4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)

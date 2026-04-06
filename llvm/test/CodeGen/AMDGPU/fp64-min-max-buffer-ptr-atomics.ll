@@ -43,11 +43,12 @@ define amdgpu_kernel void @raw_ptr_buffer_atomic_min_noret_f64(ptr addrspace(8) 
 ; GFX10-NEXT:    s_clause 0x2
 ; GFX10-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; GFX10-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x34
-; GFX10-NEXT:    s_load_dword s8, s[4:5], 0x3c
+; GFX10-NEXT:    s_nop 0
+; GFX10-NEXT:    s_load_dword s4, s[4:5], 0x3c
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX10-NEXT:    v_mov_b32_e32 v1, s7
-; GFX10-NEXT:    v_mov_b32_e32 v2, s8
+; GFX10-NEXT:    v_mov_b32_e32 v2, s4
 ; GFX10-NEXT:    buffer_atomic_fmin_x2 v[0:1], v2, s[0:3], 0 offen
 ; GFX10-NEXT:    s_endpgm
 ;
@@ -280,11 +281,12 @@ define amdgpu_kernel void @raw_ptr_buffer_atomic_max_noret_f64(ptr addrspace(8) 
 ; GFX10-NEXT:    s_clause 0x2
 ; GFX10-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; GFX10-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x34
-; GFX10-NEXT:    s_load_dword s8, s[4:5], 0x3c
+; GFX10-NEXT:    s_nop 0
+; GFX10-NEXT:    s_load_dword s4, s[4:5], 0x3c
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX10-NEXT:    v_mov_b32_e32 v1, s7
-; GFX10-NEXT:    v_mov_b32_e32 v2, s8
+; GFX10-NEXT:    v_mov_b32_e32 v2, s4
 ; GFX10-NEXT:    buffer_atomic_fmax_x2 v[0:1], v2, s[0:3], 0 offen
 ; GFX10-NEXT:    s_endpgm
 ;

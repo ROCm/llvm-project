@@ -264,10 +264,11 @@ define amdgpu_kernel void @v_test_imax_sge_i8(ptr addrspace(1) %out, ptr addrspa
 ; GFX1250-NEXT:    s_load_b64 s[6:7], s[4:5], 0x34 nv
 ; GFX1250-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    s_load_i8 s4, s[2:3], 0x0
-; GFX1250-NEXT:    s_load_i8 s5, s[6:7], 0x0
+; GFX1250-NEXT:    s_load_i8 s2, s[2:3], 0x0
+; GFX1250-NEXT:    s_wait_xcnt 0x0
+; GFX1250-NEXT:    s_load_i8 s3, s[6:7], 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    s_max_i32 s2, s4, s5
+; GFX1250-NEXT:    s_max_i32 s2, s2, s3
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX1250-NEXT:    global_store_b8 v0, v1, s[0:1]
@@ -714,10 +715,11 @@ define amdgpu_kernel void @v_test_umax_uge_i8(ptr addrspace(1) %out, ptr addrspa
 ; GFX1250-NEXT:    s_load_b64 s[6:7], s[4:5], 0x34 nv
 ; GFX1250-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    s_load_u8 s4, s[2:3], 0x0
-; GFX1250-NEXT:    s_load_u8 s5, s[6:7], 0x0
+; GFX1250-NEXT:    s_load_u8 s2, s[2:3], 0x0
+; GFX1250-NEXT:    s_wait_xcnt 0x0
+; GFX1250-NEXT:    s_load_u8 s3, s[6:7], 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    s_max_u32 s2, s4, s5
+; GFX1250-NEXT:    s_max_u32 s2, s2, s3
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX1250-NEXT:    global_store_b8 v0, v1, s[0:1]
@@ -784,13 +786,14 @@ define amdgpu_kernel void @v_test_umax_ugt_i32(ptr addrspace(1) %out, ptr addrsp
 ; GFX1250-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX1250-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    s_load_b32 s6, s[0:1], 0x0
-; GFX1250-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    global_load_b32 v0, v0, s[0:1] scale_offset
+; GFX1250-NEXT:    s_load_b32 s2, s[0:1], 0x0
+; GFX1250-NEXT:    s_wait_xcnt 0x0
+; GFX1250-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_loadcnt 0x0
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
-; GFX1250-NEXT:    v_max_u32_e32 v0, s6, v0
-; GFX1250-NEXT:    global_store_b32 v1, v0, s[2:3]
+; GFX1250-NEXT:    v_max_u32_e32 v0, s2, v0
+; GFX1250-NEXT:    global_store_b32 v1, v0, s[0:1]
 ; GFX1250-NEXT:    s_endpgm
 ;
 ; EG-LABEL: v_test_umax_ugt_i32:

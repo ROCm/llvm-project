@@ -673,13 +673,14 @@ define amdgpu_kernel void @s_v_madak_f32(ptr addrspace(1) noalias %out, ptr addr
 ; GFX9-LABEL: s_v_madak_f32:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; GFX9-NEXT:    s_load_dword s6, s[4:5], 0x34
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dword s4, s[4:5], 0x34
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0x41200000
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v1, v0, s[2:3]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mac_f32_e32 v2, s6, v1
+; GFX9-NEXT:    v_mac_f32_e32 v2, s4, v1
 ; GFX9-NEXT:    global_store_dword v0, v2, s[0:1]
 ; GFX9-NEXT:    s_endpgm
 ;
@@ -714,14 +715,15 @@ define amdgpu_kernel void @s_v_madak_f32(ptr addrspace(1) noalias %out, ptr addr
 ; GFX942-FMA-LABEL: s_v_madak_f32:
 ; GFX942-FMA:       ; %bb.0:
 ; GFX942-FMA-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; GFX942-FMA-NEXT:    s_load_dword s6, s[4:5], 0x34
+; GFX942-FMA-NEXT:    s_nop 0
+; GFX942-FMA-NEXT:    s_load_dword s4, s[4:5], 0x34
 ; GFX942-FMA-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX942-FMA-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
 ; GFX942-FMA-NEXT:    v_mov_b32_e32 v2, 0x41200000
 ; GFX942-FMA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-FMA-NEXT:    global_load_dword v1, v0, s[2:3]
 ; GFX942-FMA-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-FMA-NEXT:    v_fmac_f32_e32 v2, s6, v1
+; GFX942-FMA-NEXT:    v_fmac_f32_e32 v2, s4, v1
 ; GFX942-FMA-NEXT:    global_store_dword v0, v2, s[0:1]
 ; GFX942-FMA-NEXT:    s_endpgm
 ;

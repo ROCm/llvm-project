@@ -103,12 +103,13 @@ define amdgpu_kernel void @s_test_sub_v2i16(ptr addrspace(1) %out, ptr addrspace
 ; GFX9-NEXT:    s_mov_b32 s4, -1
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_load_dword s5, s[6:7], 0x0
-; GFX9-NEXT:    s_load_dword s9, s[2:3], 0x0
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dword s6, s[2:3], 0x0
 ; GFX9-NEXT:    s_mov_b32 s2, s4
 ; GFX9-NEXT:    s_mov_b32 s3, s8
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s5
-; GFX9-NEXT:    v_pk_sub_i16 v0, s9, v0
+; GFX9-NEXT:    v_pk_sub_i16 v0, s6, v0
 ; GFX9-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX9-NEXT:    s_endpgm
 ;

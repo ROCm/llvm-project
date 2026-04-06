@@ -300,20 +300,21 @@ define amdgpu_kernel void @reorder_constant_load_local_store_constant_load(ptr a
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    ds_read_b64 v[0:1], v2
-; GFX9-NEXT:    s_load_dword s6, s[4:5], 0x2c
+; GFX9-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    v_readfirstlane_b32 s0, v0
 ; GFX9-NEXT:    v_readfirstlane_b32 s1, v1
-; GFX9-NEXT:    s_load_dword s7, s[0:1], 0x4
-; GFX9-NEXT:    s_load_dword s8, s[0:1], 0xc
-; GFX9-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x24
+; GFX9-NEXT:    s_load_dword s3, s[0:1], 0x4
+; GFX9-NEXT:    s_load_dword s6, s[0:1], 0xc
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0x63
-; GFX9-NEXT:    v_mov_b32_e32 v1, s6
+; GFX9-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX9-NEXT:    ds_write_b32 v1, v0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_add_i32 s0, s7, s8
-; GFX9-NEXT:    v_mov_b32_e32 v0, s0
-; GFX9-NEXT:    global_store_dword v2, v0, s[2:3]
+; GFX9-NEXT:    s_add_i32 s2, s3, s6
+; GFX9-NEXT:    v_mov_b32_e32 v0, s2
+; GFX9-NEXT:    global_store_dword v2, v0, s[0:1]
 ; GFX9-NEXT:    s_endpgm
   %ptr0 = load ptr addrspace(4), ptr addrspace(3) @stored_constant_ptr, align 8
 

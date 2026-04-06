@@ -1530,14 +1530,15 @@ define amdgpu_kernel void @s_insertelement_v2i16_dynamic(ptr addrspace(1) %out, 
 ; GFX9-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_load_dword s6, s[4:5], 0x0
-; GFX9-NEXT:    s_load_dword s7, s[2:3], 0x0
+; GFX9-NEXT:    s_load_dword s4, s[4:5], 0x0
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dword s2, s[2:3], 0x0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    s_lshl_b32 s3, s6, 4
-; GFX9-NEXT:    s_xor_b32 s2, s7, 0x3e703e7
-; GFX9-NEXT:    s_lshl_b32 s3, 0xffff, s3
-; GFX9-NEXT:    s_and_b32 s2, s2, s3
-; GFX9-NEXT:    s_xor_b32 s2, s2, s7
+; GFX9-NEXT:    s_lshl_b32 s4, s4, 4
+; GFX9-NEXT:    s_xor_b32 s3, s2, 0x3e703e7
+; GFX9-NEXT:    s_lshl_b32 s4, 0xffff, s4
+; GFX9-NEXT:    s_and_b32 s3, s3, s4
+; GFX9-NEXT:    s_xor_b32 s2, s3, s2
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX9-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GFX9-NEXT:    s_endpgm

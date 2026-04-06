@@ -1889,6 +1889,7 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
+    addPass(&DeadMachineInstructionElimID);
 
     // TODO-WAVETRANSFORM:
     // Short-term plan: we want to preserve physical registers that have been
@@ -1959,6 +1960,7 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
 
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
+    addPass(&DeadMachineInstructionElimID);
 
     // TODO-WAVETRANSFORM:
     // Short-term plan: we want to preserve physical registers that have been

@@ -10,17 +10,18 @@ define protected amdgpu_kernel void @sccClobber(ptr addrspace(1) %a, ptr addrspa
 ; RRLIST-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x44
 ; RRLIST-NEXT:    v_mov_b32_e32 v2, 0
 ; RRLIST-NEXT:    s_waitcnt lgkmcnt(0)
-; RRLIST-NEXT:    s_load_dword s16, s[12:13], 0x0
+; RRLIST-NEXT:    s_load_dword s12, s[12:13], 0x0
+; RRLIST-NEXT:    s_nop 0
 ; RRLIST-NEXT:    s_load_dwordx2 s[2:3], s[10:11], 0x0
 ; RRLIST-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x0
 ; RRLIST-NEXT:    s_waitcnt lgkmcnt(0)
-; RRLIST-NEXT:    s_min_i32 s9, s16, 0
+; RRLIST-NEXT:    s_min_i32 s9, s12, 0
 ; RRLIST-NEXT:    s_load_dword s8, s[14:15], 0x0
 ; RRLIST-NEXT:    v_pk_mov_b32 v[0:1], s[2:3], s[2:3] op_sel:[0,1]
 ; RRLIST-NEXT:    v_cmp_lt_i64_e32 vcc, s[4:5], v[0:1]
 ; RRLIST-NEXT:    s_and_b64 s[6:7], vcc, exec
 ; RRLIST-NEXT:    s_waitcnt lgkmcnt(0)
-; RRLIST-NEXT:    s_cselect_b32 s6, s16, s8
+; RRLIST-NEXT:    s_cselect_b32 s6, s12, s8
 ; RRLIST-NEXT:    s_cmp_eq_u64 s[4:5], s[2:3]
 ; RRLIST-NEXT:    s_cselect_b32 s2, s9, s6
 ; RRLIST-NEXT:    v_mov_b32_e32 v0, s2
@@ -37,8 +38,6 @@ define protected amdgpu_kernel void @sccClobber(ptr addrspace(1) %a, ptr addrspa
 ; FAST-NEXT:    s_nop 0
 ; FAST-NEXT:    s_load_dwordx2 s[2:3], s[10:11], 0x0
 ; FAST-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x0
-; FAST-NEXT:    ; kill: killed $sgpr8 killed $sgpr9
-; FAST-NEXT:    ; kill: killed $sgpr10 killed $sgpr11
 ; FAST-NEXT:    s_nop 0
 ; FAST-NEXT:    s_load_dword s8, s[14:15], 0x0
 ; FAST-NEXT:    s_waitcnt lgkmcnt(0)

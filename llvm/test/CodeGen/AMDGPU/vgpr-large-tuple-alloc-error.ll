@@ -13,403 +13,46 @@ define i32 @test_tuple(<16 x i64> %0) {
 ; GFX900-LABEL: test_tuple:
 ; GFX900:       ; %bb.0:
 ; GFX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX900-NEXT:    buffer_store_dword v40, off, s[0:3], s32 offset:56 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v41, off, s[0:3], s32 offset:52 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v42, off, s[0:3], s32 offset:48 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v43, off, s[0:3], s32 offset:44 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v44, off, s[0:3], s32 offset:40 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v45, off, s[0:3], s32 offset:36 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v46, off, s[0:3], s32 offset:32 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v47, off, s[0:3], s32 offset:28 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v56, off, s[0:3], s32 offset:24 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v57, off, s[0:3], s32 offset:20 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v58, off, s[0:3], s32 offset:16 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v59, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
-; GFX900-NEXT:    buffer_store_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
-; GFX900-NEXT:    v_mov_b32_e32 v33, v30
-; GFX900-NEXT:    v_mov_b32_e32 v34, v29
-; GFX900-NEXT:    v_mov_b32_e32 v35, v28
-; GFX900-NEXT:    v_mov_b32_e32 v36, v27
-; GFX900-NEXT:    v_mov_b32_e32 v37, v26
-; GFX900-NEXT:    v_mov_b32_e32 v38, v25
-; GFX900-NEXT:    v_mov_b32_e32 v39, v24
-; GFX900-NEXT:    v_mov_b32_e32 v48, v23
-; GFX900-NEXT:    v_mov_b32_e32 v49, v22
-; GFX900-NEXT:    v_mov_b32_e32 v50, v21
-; GFX900-NEXT:    v_mov_b32_e32 v51, v20
-; GFX900-NEXT:    v_mov_b32_e32 v52, v19
-; GFX900-NEXT:    v_mov_b32_e32 v53, v18
-; GFX900-NEXT:    v_mov_b32_e32 v54, v17
-; GFX900-NEXT:    v_mov_b32_e32 v55, v16
-; GFX900-NEXT:    v_mov_b32_e32 v40, v15
-; GFX900-NEXT:    v_mov_b32_e32 v41, v14
-; GFX900-NEXT:    v_mov_b32_e32 v42, v13
-; GFX900-NEXT:    v_mov_b32_e32 v43, v12
-; GFX900-NEXT:    v_mov_b32_e32 v44, v11
-; GFX900-NEXT:    v_mov_b32_e32 v45, v10
-; GFX900-NEXT:    v_mov_b32_e32 v46, v9
-; GFX900-NEXT:    v_mov_b32_e32 v47, v8
-; GFX900-NEXT:    v_mov_b32_e32 v56, v7
-; GFX900-NEXT:    v_mov_b32_e32 v57, v6
-; GFX900-NEXT:    v_mov_b32_e32 v58, v5
-; GFX900-NEXT:    v_mov_b32_e32 v59, v4
-; GFX900-NEXT:    v_mov_b32_e32 v60, v3
-; GFX900-NEXT:    v_mov_b32_e32 v61, v2
-; GFX900-NEXT:    v_mov_b32_e32 v32, v1
 ; GFX900-NEXT:    buffer_load_dword v1, off, s[0:3], s32
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
-; GFX900-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:60 ; 4-byte Folded Spill
-; GFX900-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
-; GFX900-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:60 ; 4-byte Folded Reload
-; GFX900-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX900-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
+; GFX900-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
+; GFX900-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
 ; GFX900-NEXT:    v_mov_b32_e32 v0, 0
-; GFX900-NEXT:    buffer_load_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v59, off, s[0:3], s32 offset:12 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v58, off, s[0:3], s32 offset:16 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v57, off, s[0:3], s32 offset:20 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v56, off, s[0:3], s32 offset:24 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v47, off, s[0:3], s32 offset:28 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v46, off, s[0:3], s32 offset:32 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v45, off, s[0:3], s32 offset:36 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v44, off, s[0:3], s32 offset:40 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v43, off, s[0:3], s32 offset:44 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v42, off, s[0:3], s32 offset:48 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v41, off, s[0:3], s32 offset:52 ; 4-byte Folded Reload
-; GFX900-NEXT:    buffer_load_dword v40, off, s[0:3], s32 offset:56 ; 4-byte Folded Reload
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
 ; GFX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX906-LABEL: test_tuple:
 ; GFX906:       ; %bb.0:
 ; GFX906-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX906-NEXT:    buffer_store_dword v40, off, s[0:3], s32 offset:56 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v41, off, s[0:3], s32 offset:52 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v42, off, s[0:3], s32 offset:48 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v43, off, s[0:3], s32 offset:44 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v44, off, s[0:3], s32 offset:40 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v45, off, s[0:3], s32 offset:36 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v46, off, s[0:3], s32 offset:32 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v47, off, s[0:3], s32 offset:28 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v56, off, s[0:3], s32 offset:24 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v57, off, s[0:3], s32 offset:20 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v58, off, s[0:3], s32 offset:16 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v59, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
-; GFX906-NEXT:    buffer_store_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
-; GFX906-NEXT:    v_mov_b32_e32 v33, v30
-; GFX906-NEXT:    v_mov_b32_e32 v34, v29
-; GFX906-NEXT:    v_mov_b32_e32 v35, v28
-; GFX906-NEXT:    v_mov_b32_e32 v36, v27
-; GFX906-NEXT:    v_mov_b32_e32 v37, v26
-; GFX906-NEXT:    v_mov_b32_e32 v38, v25
-; GFX906-NEXT:    v_mov_b32_e32 v39, v24
-; GFX906-NEXT:    v_mov_b32_e32 v48, v23
-; GFX906-NEXT:    v_mov_b32_e32 v49, v22
-; GFX906-NEXT:    v_mov_b32_e32 v50, v21
-; GFX906-NEXT:    v_mov_b32_e32 v51, v20
-; GFX906-NEXT:    v_mov_b32_e32 v52, v19
-; GFX906-NEXT:    v_mov_b32_e32 v53, v18
-; GFX906-NEXT:    v_mov_b32_e32 v54, v17
-; GFX906-NEXT:    v_mov_b32_e32 v55, v16
-; GFX906-NEXT:    v_mov_b32_e32 v40, v15
-; GFX906-NEXT:    v_mov_b32_e32 v41, v14
-; GFX906-NEXT:    v_mov_b32_e32 v42, v13
-; GFX906-NEXT:    v_mov_b32_e32 v43, v12
-; GFX906-NEXT:    v_mov_b32_e32 v44, v11
-; GFX906-NEXT:    v_mov_b32_e32 v45, v10
-; GFX906-NEXT:    v_mov_b32_e32 v46, v9
-; GFX906-NEXT:    v_mov_b32_e32 v47, v8
-; GFX906-NEXT:    v_mov_b32_e32 v56, v7
-; GFX906-NEXT:    v_mov_b32_e32 v57, v6
-; GFX906-NEXT:    v_mov_b32_e32 v58, v5
-; GFX906-NEXT:    v_mov_b32_e32 v59, v4
-; GFX906-NEXT:    v_mov_b32_e32 v60, v3
-; GFX906-NEXT:    v_mov_b32_e32 v61, v2
-; GFX906-NEXT:    v_mov_b32_e32 v32, v1
 ; GFX906-NEXT:    buffer_load_dword v1, off, s[0:3], s32
 ; GFX906-NEXT:    s_waitcnt vmcnt(0)
-; GFX906-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:60 ; 4-byte Folded Spill
-; GFX906-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
-; GFX906-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:60 ; 4-byte Folded Reload
-; GFX906-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX906-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
+; GFX906-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
+; GFX906-NEXT:    buffer_load_dword v32, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
 ; GFX906-NEXT:    v_mov_b32_e32 v0, 0
-; GFX906-NEXT:    buffer_load_dword v61, off, s[0:3], s32 offset:4 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v60, off, s[0:3], s32 offset:8 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v59, off, s[0:3], s32 offset:12 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v58, off, s[0:3], s32 offset:16 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v57, off, s[0:3], s32 offset:20 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v56, off, s[0:3], s32 offset:24 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v47, off, s[0:3], s32 offset:28 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v46, off, s[0:3], s32 offset:32 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v45, off, s[0:3], s32 offset:36 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v44, off, s[0:3], s32 offset:40 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v43, off, s[0:3], s32 offset:44 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v42, off, s[0:3], s32 offset:48 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v41, off, s[0:3], s32 offset:52 ; 4-byte Folded Reload
-; GFX906-NEXT:    buffer_load_dword v40, off, s[0:3], s32 offset:56 ; 4-byte Folded Reload
 ; GFX906-NEXT:    s_waitcnt vmcnt(0)
 ; GFX906-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX908-LABEL: test_tuple:
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX908-NEXT:    v_accvgpr_write_b32 a0, v40 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a1, v41 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a2, v42 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a3, v43 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a4, v44 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a5, v45 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a6, v46 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a7, v47 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a8, v56 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a9, v57 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a10, v58 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a11, v59 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_write_b32 a12, v60 ; Reload Reuse
-; GFX908-NEXT:    v_mov_b32_e32 v33, v30
-; GFX908-NEXT:    v_mov_b32_e32 v34, v29
-; GFX908-NEXT:    v_mov_b32_e32 v35, v28
-; GFX908-NEXT:    v_mov_b32_e32 v36, v27
-; GFX908-NEXT:    v_mov_b32_e32 v37, v26
-; GFX908-NEXT:    v_mov_b32_e32 v38, v25
-; GFX908-NEXT:    v_mov_b32_e32 v39, v24
-; GFX908-NEXT:    v_mov_b32_e32 v48, v23
-; GFX908-NEXT:    v_mov_b32_e32 v49, v22
-; GFX908-NEXT:    v_mov_b32_e32 v50, v21
-; GFX908-NEXT:    v_mov_b32_e32 v51, v20
-; GFX908-NEXT:    v_mov_b32_e32 v52, v19
-; GFX908-NEXT:    v_mov_b32_e32 v53, v18
-; GFX908-NEXT:    v_mov_b32_e32 v54, v17
-; GFX908-NEXT:    v_mov_b32_e32 v55, v16
-; GFX908-NEXT:    v_mov_b32_e32 v40, v15
-; GFX908-NEXT:    v_mov_b32_e32 v41, v14
-; GFX908-NEXT:    v_mov_b32_e32 v42, v13
-; GFX908-NEXT:    v_mov_b32_e32 v43, v12
-; GFX908-NEXT:    v_mov_b32_e32 v44, v11
-; GFX908-NEXT:    v_mov_b32_e32 v45, v10
-; GFX908-NEXT:    v_mov_b32_e32 v46, v9
-; GFX908-NEXT:    v_mov_b32_e32 v47, v8
-; GFX908-NEXT:    v_mov_b32_e32 v56, v7
-; GFX908-NEXT:    v_mov_b32_e32 v57, v6
-; GFX908-NEXT:    v_mov_b32_e32 v58, v5
-; GFX908-NEXT:    v_mov_b32_e32 v59, v4
-; GFX908-NEXT:    v_mov_b32_e32 v60, v3
-; GFX908-NEXT:    v_accvgpr_write_b32 a13, v2 ; Reload Reuse
-; GFX908-NEXT:    v_mov_b32_e32 v32, v1
+; GFX908-NEXT:    v_accvgpr_write_b32 a0, v2 ; Reload Reuse
 ; GFX908-NEXT:    buffer_load_dword v1, off, s[0:3], s32
 ; GFX908-NEXT:    s_waitcnt vmcnt(0)
-; GFX908-NEXT:    v_accvgpr_write_b32 a14, v1 ; Reload Reuse
-; GFX908-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
-; GFX908-NEXT:    v_accvgpr_read_b32 v32, a13 ; Reload Reuse
-; GFX908-NEXT:    ; kill: def $vgpr2 killed $vgpr32 killed $exec
+; GFX908-NEXT:    v_accvgpr_write_b32 a1, v1 ; Reload Reuse
+; GFX908-NEXT:    v_accvgpr_read_b32 v32, a0 ; Reload Reuse
 ; GFX908-NEXT:    s_nop 1
-; GFX908-NEXT:    v_accvgpr_read_b32 v32, a14 ; Reload Reuse
-; GFX908-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX908-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
+; GFX908-NEXT:    v_accvgpr_read_b32 v32, a1 ; Reload Reuse
 ; GFX908-NEXT:    v_mov_b32_e32 v0, 0
-; GFX908-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v59, a11 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v58, a10 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v57, a9 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v56, a8 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v47, a7 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v46, a6 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v45, a5 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v44, a4 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v43, a3 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v42, a2 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v41, a1 ; Reload Reuse
-; GFX908-NEXT:    v_accvgpr_read_b32 v40, a0 ; Reload Reuse
 ; GFX908-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX90a-LABEL: test_tuple:
 ; GFX90a:       ; %bb.0:
 ; GFX90a-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX90a-NEXT:    v_accvgpr_write_b32 a0, v40 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a1, v41 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a2, v42 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a3, v43 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a4, v44 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a5, v45 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a6, v46 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a7, v47 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a8, v56 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a9, v57 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a10, v58 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a11, v59 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a12, v60 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_write_b32 a13, v61 ; Reload Reuse
-; GFX90a-NEXT:    v_mov_b32_e32 v33, v30
-; GFX90a-NEXT:    v_mov_b32_e32 v34, v29
-; GFX90a-NEXT:    v_mov_b32_e32 v35, v28
-; GFX90a-NEXT:    v_mov_b32_e32 v36, v27
-; GFX90a-NEXT:    v_mov_b32_e32 v37, v26
-; GFX90a-NEXT:    v_mov_b32_e32 v38, v25
-; GFX90a-NEXT:    v_mov_b32_e32 v39, v24
-; GFX90a-NEXT:    v_mov_b32_e32 v48, v23
-; GFX90a-NEXT:    v_mov_b32_e32 v49, v22
-; GFX90a-NEXT:    v_mov_b32_e32 v50, v21
-; GFX90a-NEXT:    v_mov_b32_e32 v51, v20
-; GFX90a-NEXT:    v_mov_b32_e32 v52, v19
-; GFX90a-NEXT:    v_mov_b32_e32 v53, v18
-; GFX90a-NEXT:    v_mov_b32_e32 v54, v17
-; GFX90a-NEXT:    v_mov_b32_e32 v55, v16
-; GFX90a-NEXT:    v_mov_b32_e32 v40, v15
-; GFX90a-NEXT:    v_mov_b32_e32 v41, v14
-; GFX90a-NEXT:    v_mov_b32_e32 v42, v13
-; GFX90a-NEXT:    v_mov_b32_e32 v43, v12
-; GFX90a-NEXT:    v_mov_b32_e32 v44, v11
-; GFX90a-NEXT:    v_mov_b32_e32 v45, v10
-; GFX90a-NEXT:    v_mov_b32_e32 v46, v9
-; GFX90a-NEXT:    v_mov_b32_e32 v47, v8
-; GFX90a-NEXT:    v_mov_b32_e32 v56, v7
-; GFX90a-NEXT:    v_mov_b32_e32 v57, v6
-; GFX90a-NEXT:    v_mov_b32_e32 v58, v5
-; GFX90a-NEXT:    v_mov_b32_e32 v59, v4
-; GFX90a-NEXT:    v_mov_b32_e32 v60, v3
-; GFX90a-NEXT:    v_mov_b32_e32 v61, v2
-; GFX90a-NEXT:    v_mov_b32_e32 v32, v1
 ; GFX90a-NEXT:    buffer_load_dword v1, off, s[0:3], s32
 ; GFX90a-NEXT:    s_waitcnt vmcnt(0)
-; GFX90a-NEXT:    v_accvgpr_write_b32 a14, v1 ; Reload Reuse
-; GFX90a-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1_vgpr2_vgpr3_vgpr4_vgpr5_vgpr6_vgpr7_vgpr8_vgpr9_vgpr10_vgpr11_vgpr12_vgpr13_vgpr14_vgpr15_vgpr16_vgpr17_vgpr18_vgpr19_vgpr20_vgpr21_vgpr22_vgpr23_vgpr24_vgpr25_vgpr26_vgpr27_vgpr28_vgpr29_vgpr30_vgpr31 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr1 killed $vgpr32 killed $exec
-; GFX90a-NEXT:    v_accvgpr_read_b32 v32, a14 ; Reload Reuse
-; GFX90a-NEXT:    ; kill: def $vgpr2 killed $vgpr61 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr3 killed $vgpr60 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr4 killed $vgpr59 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr5 killed $vgpr58 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr6 killed $vgpr57 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr7 killed $vgpr56 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr8 killed $vgpr47 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr9 killed $vgpr46 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr10 killed $vgpr45 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr11 killed $vgpr44 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr12 killed $vgpr43 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr13 killed $vgpr42 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr14 killed $vgpr41 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr15 killed $vgpr40 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr16 killed $vgpr55 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr17 killed $vgpr54 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr18 killed $vgpr53 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr19 killed $vgpr52 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr20 killed $vgpr51 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr21 killed $vgpr50 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr22 killed $vgpr49 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr23 killed $vgpr48 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr24 killed $vgpr39 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr25 killed $vgpr38 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr26 killed $vgpr37 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr27 killed $vgpr36 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr28 killed $vgpr35 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr29 killed $vgpr34 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr30 killed $vgpr33 killed $exec
-; GFX90a-NEXT:    ; kill: def $vgpr31 killed $vgpr32 killed $exec
+; GFX90a-NEXT:    v_accvgpr_write_b32 a0, v1 ; Reload Reuse
+; GFX90a-NEXT:    v_accvgpr_read_b32 v32, a0 ; Reload Reuse
 ; GFX90a-NEXT:    v_mov_b32_e32 v0, 0
-; GFX90a-NEXT:    v_accvgpr_read_b32 v61, a13 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v60, a12 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v59, a11 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v58, a10 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v57, a9 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v56, a8 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v47, a7 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v46, a6 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v45, a5 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v44, a4 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v43, a3 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v42, a2 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v41, a1 ; Reload Reuse
-; GFX90a-NEXT:    v_accvgpr_read_b32 v40, a0 ; Reload Reuse
 ; GFX90a-NEXT:    s_setpc_b64 s[30:31]
   %2 = shufflevector <16 x i64> %0, <16 x i64> zeroinitializer, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
   ret i32 0

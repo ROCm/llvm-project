@@ -72,8 +72,6 @@ define amdgpu_kernel void @fmuladd_f16(ptr addrspace(1) %out, ptr addrspace(1) %
 ; GFX10-FLUSH-NEXT:    s_clause 0x2
 ; GFX10-FLUSH-NEXT:    global_load_ushort v1, v0, s[10:11]
 ; GFX10-FLUSH-NEXT:    global_load_ushort v2, v0, s[12:13]
-; GFX10-FLUSH-NEXT:    ; meta instruction
-; GFX10-FLUSH-NEXT:    ; meta instruction
 ; GFX10-FLUSH-NEXT:    global_load_ushort v3, v0, s[14:15]
 ; GFX10-FLUSH-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-FLUSH-NEXT:    v_mul_f16_e32 v1, v1, v2
@@ -243,8 +241,6 @@ define amdgpu_kernel void @fmul_fadd_f16(ptr addrspace(1) %out, ptr addrspace(1)
 ; GFX10-FLUSH-NEXT:    s_clause 0x2
 ; GFX10-FLUSH-NEXT:    global_load_ushort v1, v0, s[10:11]
 ; GFX10-FLUSH-NEXT:    global_load_ushort v2, v0, s[12:13]
-; GFX10-FLUSH-NEXT:    ; meta instruction
-; GFX10-FLUSH-NEXT:    ; meta instruction
 ; GFX10-FLUSH-NEXT:    global_load_ushort v3, v0, s[14:15]
 ; GFX10-FLUSH-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-FLUSH-NEXT:    v_mul_f16_e32 v1, v1, v2
@@ -261,8 +257,6 @@ define amdgpu_kernel void @fmul_fadd_f16(ptr addrspace(1) %out, ptr addrspace(1)
 ; GFX10-DENORM-STRICT-NEXT:    s_clause 0x2
 ; GFX10-DENORM-STRICT-NEXT:    global_load_ushort v1, v0, s[10:11]
 ; GFX10-DENORM-STRICT-NEXT:    global_load_ushort v2, v0, s[12:13]
-; GFX10-DENORM-STRICT-NEXT:    ; meta instruction
-; GFX10-DENORM-STRICT-NEXT:    ; meta instruction
 ; GFX10-DENORM-STRICT-NEXT:    global_load_ushort v3, v0, s[14:15]
 ; GFX10-DENORM-STRICT-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-DENORM-STRICT-NEXT:    v_mul_f16_e32 v1, v1, v2
@@ -439,8 +433,6 @@ define amdgpu_kernel void @fmul_fadd_contract_f16(ptr addrspace(1) %out, ptr add
 ; GFX10-FLUSH-NEXT:    s_clause 0x2
 ; GFX10-FLUSH-NEXT:    global_load_ushort v1, v0, s[10:11]
 ; GFX10-FLUSH-NEXT:    global_load_ushort v2, v0, s[12:13]
-; GFX10-FLUSH-NEXT:    ; meta instruction
-; GFX10-FLUSH-NEXT:    ; meta instruction
 ; GFX10-FLUSH-NEXT:    global_load_ushort v3, v0, s[14:15]
 ; GFX10-FLUSH-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-FLUSH-NEXT:    v_mul_f16_e32 v1, v1, v2

@@ -2157,23 +2157,24 @@ define amdgpu_kernel void @v5i64_arg(ptr addrspace(1) nocapture %out, <5 x i64> 
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_load_dwordx2 s[10:11], s[8:9], 0x60
 ; GFX9-NEXT:    s_load_dwordx8 s[0:7], s[8:9], 0x40
-; GFX9-NEXT:    s_load_dwordx2 s[12:13], s[8:9], 0x0
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dwordx2 s[8:9], s[8:9], 0x0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s10
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
-; GFX9-NEXT:    global_store_dwordx2 v4, v[1:2], s[12:13] offset:32
+; GFX9-NEXT:    global_store_dwordx2 v4, v[1:2], s[8:9] offset:32
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s7
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[12:13] offset:16
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9] offset:16
 ; GFX9-NEXT:    s_nop 0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[12:13]
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9]
 ; GFX9-NEXT:    s_endpgm
 ;
 ; EG-LABEL: v5i64_arg:
@@ -2299,23 +2300,24 @@ define amdgpu_kernel void @v5f64_arg(ptr addrspace(1) nocapture %out, <5 x doubl
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_load_dwordx2 s[10:11], s[8:9], 0x60
 ; GFX9-NEXT:    s_load_dwordx8 s[0:7], s[8:9], 0x40
-; GFX9-NEXT:    s_load_dwordx2 s[12:13], s[8:9], 0x0
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dwordx2 s[8:9], s[8:9], 0x0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s10
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s11
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
-; GFX9-NEXT:    global_store_dwordx2 v4, v[1:2], s[12:13] offset:32
+; GFX9-NEXT:    global_store_dwordx2 v4, v[1:2], s[8:9] offset:32
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s7
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[12:13] offset:16
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9] offset:16
 ; GFX9-NEXT:    s_nop 0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[12:13]
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9]
 ; GFX9-NEXT:    s_endpgm
 ;
 ; EG-LABEL: v5f64_arg:

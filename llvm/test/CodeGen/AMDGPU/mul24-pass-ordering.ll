@@ -82,7 +82,6 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX9-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GFX9-NEXT:    s_mov_b64 s[10:11], 0
-; GFX9-NEXT:    ; implicit-def: $vgpr3
 ; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9-NEXT:  .LBB1_2: ; %bb23
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1

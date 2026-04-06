@@ -36,10 +36,9 @@ define <4 x half> @shuffle_v4f16_234u(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900-LABEL: shuffle_v4f16_234u:
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GX900-NEXT:    global_load_dword v6, v[0:1], off offset:4
+; GX900-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
 ; GX900-NEXT:    global_load_dwordx2 v[4:5], v[2:3], off
-; GX900-NEXT:    s_waitcnt vmcnt(1)
-; GX900-NEXT:    v_mov_b32_e32 v0, v6
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
 ; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
@@ -47,10 +46,9 @@ define <4 x half> @shuffle_v4f16_234u(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX942-LABEL: shuffle_v4f16_234u:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    s_waitcnt vmcnt(1)
-; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v6
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
@@ -58,10 +56,8 @@ define <4 x half> @shuffle_v4f16_234u(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX10-LABEL: shuffle_v4f16_234u:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v6, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX10-NEXT:    global_load_dwordx2 v[4:5], v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v6
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
@@ -177,33 +173,32 @@ define <4 x half> @shuffle_v4f16_3u6u(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GX900-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4f16_3u6u:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, s0, v5, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_3u6u:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4f16_3u6u:
@@ -236,33 +231,32 @@ define <4 x half> @shuffle_v4f16_3uu7(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GX900-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4f16_3uu7:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, s0, v5, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_3uu7:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4f16_3uu7:
@@ -471,23 +465,18 @@ define <4 x half> @shuffle_v4f16_0145(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9-LABEL: shuffle_v4f16_0145:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_0145:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_0145:
@@ -507,23 +496,18 @@ define <4 x half> @shuffle_v4f16_0167(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9-LABEL: shuffle_v4f16_0167:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_0167:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_0167:
@@ -612,23 +596,18 @@ define <4 x half> @shuffle_v4f16_2345(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9-LABEL: shuffle_v4f16_2345:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_2345:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_2345:
@@ -648,23 +627,18 @@ define <4 x half> @shuffle_v4f16_2367(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9-LABEL: shuffle_v4f16_2367:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_2367:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_2367:
@@ -685,22 +659,21 @@ define <4 x half> @shuffle_v4f16_4501(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_4501:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_4501:
@@ -723,22 +696,21 @@ define <4 x half> @shuffle_v4f16_4523(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_4523:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_4523:
@@ -818,22 +790,21 @@ define <4 x half> @shuffle_v4f16_6701(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_6701:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_6701:
@@ -856,22 +827,21 @@ define <4 x half> @shuffle_v4f16_6723(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_6723:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4f16_6723:
@@ -963,33 +933,32 @@ define <4 x half> @shuffle_v4f16_2356(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v0, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4f16_2356:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v1, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_2356:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4f16_2356:
@@ -1023,33 +992,32 @@ define <4 x half> @shuffle_v4f16_5623(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4f16_5623:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4f16_5623:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4f16_5623:
@@ -1253,33 +1221,32 @@ define <4 x i16> @shuffle_v4i16_2356(ptr addrspace(1) %arg0, ptr addrspace(1) %a
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v0, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4i16_2356:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v1, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4i16_2356:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4i16_2356:
@@ -1312,23 +1279,18 @@ define <4 x i16> @shuffle_v4i16_0167(ptr addrspace(1) %arg0, ptr addrspace(1) %a
 ; GFX9-LABEL: shuffle_v4i16_0167:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4i16_0167:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4i16_0167:
@@ -1719,23 +1681,18 @@ define <4 x half> @shuffle_v8f16_4589(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX9-LABEL: shuffle_v8f16_4589:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:8
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:8
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8f16_4589:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:8
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:8
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v8f16_4589:
@@ -1756,22 +1713,21 @@ define <4 x half> @shuffle_v8f16_10_11_2_3(ptr addrspace(1) %arg0, ptr addrspace
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8f16_10_11_2_3:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v8f16_10_11_2_3:
@@ -1794,33 +1750,32 @@ define <4 x half> @shuffle_v8f16_13_14_2_3(ptr addrspace(1) %arg0, ptr addrspace
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off offset:8
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v8f16_13_14_2_3:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off offset:8
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8f16_13_14_2_3:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off offset:8
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v8f16_13_14_2_3:
@@ -1956,14 +1911,12 @@ define <6 x half> @shuffle_v6f16_452367(ptr addrspace(1) %arg0, ptr addrspace(1)
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx3 v[4:6], v[0:1], off
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off
-; GFX942-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX942-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v2, v[2:3], off
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_mov_b32_e32 v0, v6
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v2, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v6f16_452367:
@@ -2019,19 +1972,20 @@ define amdgpu_kernel void @fma_shuffle_v2f16(ptr addrspace(1) nocapture readonly
 ; GFX942-LABEL: fma_shuffle_v2f16:
 ; GFX942:       ; %bb.0: ; %entry
 ; GFX942-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
-; GFX942-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x10
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x10
 ; GFX942-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX942-NEXT:    v_lshlrev_b32_e32 v6, 3, v0
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[0:1], v6, s[0:1]
 ; GFX942-NEXT:    global_load_dwordx2 v[2:3], v6, s[2:3]
-; GFX942-NEXT:    global_load_dwordx2 v[4:5], v6, s[6:7]
+; GFX942-NEXT:    global_load_dwordx2 v[4:5], v6, s[4:5]
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_pk_fma_f16 v4, v0, v2, v4 op_sel_hi:[0,1,1]
 ; GFX942-NEXT:    v_pk_fma_f16 v2, v1, v2, v5 op_sel_hi:[0,1,1]
 ; GFX942-NEXT:    v_pk_fma_f16 v0, v0, v3, v4 op_sel:[1,0,0]
 ; GFX942-NEXT:    v_pk_fma_f16 v1, v1, v3, v2 op_sel:[1,0,0]
-; GFX942-NEXT:    global_store_dwordx2 v6, v[0:1], s[6:7]
+; GFX942-NEXT:    global_store_dwordx2 v6, v[0:1], s[4:5]
 ; GFX942-NEXT:    s_endpgm
 ;
 ; GFX10-LABEL: fma_shuffle_v2f16:
@@ -2110,8 +2064,6 @@ define <4 x half> @shuffle_v4f16_0456(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GX900-NEXT:    global_load_dwordx2 v[4:5], v[0:1], off
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
 ; GX900-NEXT:    s_mov_b32 s4, 0x5040100
-; GX900-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GX900-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
 ; GX900-NEXT:    v_perm_b32 v0, v5, v4, s4
 ; GX900-NEXT:    v_alignbit_b32 v1, v6, v5, 16
@@ -2133,8 +2085,6 @@ define <4 x half> @shuffle_v4f16_0456(ptr addrspace(1) %arg0, ptr addrspace(1) %
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[4:5], v[0:1], off
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX10-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    v_perm_b32 v0, v5, v4, 0x5040100
 ; GFX10-NEXT:    v_alignbit_b32 v1, v6, v5, 16
@@ -3326,10 +3276,9 @@ define <4 x bfloat> @shuffle_v4bf16_234u(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900-LABEL: shuffle_v4bf16_234u:
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GX900-NEXT:    global_load_dword v6, v[0:1], off offset:4
+; GX900-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
 ; GX900-NEXT:    global_load_dwordx2 v[4:5], v[2:3], off
-; GX900-NEXT:    s_waitcnt vmcnt(1)
-; GX900-NEXT:    v_mov_b32_e32 v0, v6
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
 ; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
@@ -3337,10 +3286,9 @@ define <4 x bfloat> @shuffle_v4bf16_234u(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX942-LABEL: shuffle_v4bf16_234u:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    s_waitcnt vmcnt(1)
-; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v6
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
@@ -3348,10 +3296,8 @@ define <4 x bfloat> @shuffle_v4bf16_234u(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX10-LABEL: shuffle_v4bf16_234u:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v6, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX10-NEXT:    global_load_dwordx2 v[4:5], v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v6
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
@@ -3467,33 +3413,32 @@ define <4 x bfloat> @shuffle_v4bf16_3u6u(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GX900-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4bf16_3u6u:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, s0, v5, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_3u6u:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4bf16_3u6u:
@@ -3526,33 +3471,32 @@ define <4 x bfloat> @shuffle_v4bf16_3uu7(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GX900-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4bf16_3uu7:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, s0, v5, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_3uu7:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, s4, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4bf16_3uu7:
@@ -3761,23 +3705,18 @@ define <4 x bfloat> @shuffle_v4bf16_0145(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9-LABEL: shuffle_v4bf16_0145:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_0145:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_0145:
@@ -3797,23 +3736,18 @@ define <4 x bfloat> @shuffle_v4bf16_0167(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9-LABEL: shuffle_v4bf16_0167:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_0167:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_0167:
@@ -3902,23 +3836,18 @@ define <4 x bfloat> @shuffle_v4bf16_2345(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9-LABEL: shuffle_v4bf16_2345:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_2345:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_2345:
@@ -3938,23 +3867,18 @@ define <4 x bfloat> @shuffle_v4bf16_2367(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9-LABEL: shuffle_v4bf16_2367:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_2367:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off offset:4
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_2367:
@@ -3975,22 +3899,21 @@ define <4 x bfloat> @shuffle_v4bf16_4501(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_4501:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_4501:
@@ -4013,22 +3936,21 @@ define <4 x bfloat> @shuffle_v4bf16_4523(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_4523:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_4523:
@@ -4108,22 +4030,21 @@ define <4 x bfloat> @shuffle_v4bf16_6701(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_6701:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_6701:
@@ -4146,22 +4067,21 @@ define <4 x bfloat> @shuffle_v4bf16_6723(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_6723:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v4bf16_6723:
@@ -4253,33 +4173,32 @@ define <4 x bfloat> @shuffle_v4bf16_2356(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v0, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4bf16_2356:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v1, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_2356:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v1, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4bf16_2356:
@@ -4313,33 +4232,32 @@ define <4 x bfloat> @shuffle_v4bf16_5623(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v4bf16_5623:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v4bf16_5623:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v4bf16_5623:
@@ -4913,23 +4831,18 @@ define <4 x bfloat> @shuffle_v8bf16_4589(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX9-LABEL: shuffle_v8bf16_4589:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    global_load_dword v4, v[0:1], off offset:8
-; GFX9-NEXT:    global_load_dword v5, v[2:3], off
-; GFX9-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-NEXT:    v_mov_b32_e32 v0, v4
+; GFX9-NEXT:    global_load_dword v0, v[0:1], off offset:8
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8bf16_4589:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:8
-; GFX10-NEXT:    global_load_dword v5, v[2:3], off
-; GFX10-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-NEXT:    v_mov_b32_e32 v0, v4
+; GFX10-NEXT:    global_load_dword v0, v[0:1], off offset:8
+; GFX10-NEXT:    global_load_dword v1, v[2:3], off
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v8bf16_4589:
@@ -4950,22 +4863,21 @@ define <4 x bfloat> @shuffle_v8bf16_10_11_2_3(ptr addrspace(1) %arg0, ptr addrsp
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX9-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX9-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8bf16_10_11_2_3:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dword v4, v[2:3], off offset:4
-; GFX10-NEXT:    global_load_dword v5, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_mov_b32_e32 v0, v4
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-LABEL: shuffle_v8bf16_10_11_2_3:
@@ -4988,33 +4900,32 @@ define <4 x bfloat> @shuffle_v8bf16_13_14_2_3(ptr addrspace(1) %arg0, ptr addrsp
 ; GX900:       ; %bb.0:
 ; GX900-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off offset:8
-; GX900-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GX900-NEXT:    s_nop 0
+; GX900-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GX900-NEXT:    s_waitcnt vmcnt(1)
 ; GX900-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
-; GX900-NEXT:    v_mov_b32_e32 v1, v4
 ; GX900-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX942-LABEL: shuffle_v8bf16_13_14_2_3:
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[6:7], v[2:3], off offset:8
-; GFX942-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_alignbit_b32 v0, v7, v6, 16
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v8bf16_13_14_2_3:
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off offset:8
-; GFX10-NEXT:    global_load_dword v4, v[0:1], off offset:4
+; GFX10-NEXT:    global_load_dword v1, v[0:1], off offset:4
 ; GFX10-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-NEXT:    v_alignbit_b32 v0, v6, v5, 16
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_mov_b32_e32 v1, v4
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: shuffle_v8bf16_13_14_2_3:
@@ -5150,14 +5061,12 @@ define <6 x bfloat> @shuffle_v6bf16_452367(ptr addrspace(1) %arg0, ptr addrspace
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx3 v[4:6], v[0:1], off
-; GFX942-NEXT:    global_load_dword v4, v[2:3], off
-; GFX942-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX942-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    global_load_dword v2, v[2:3], off
 ; GFX942-NEXT:    s_waitcnt vmcnt(1)
 ; GFX942-NEXT:    v_mov_b32_e32 v0, v6
 ; GFX942-NEXT:    v_mov_b32_e32 v1, v5
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)
-; GFX942-NEXT:    v_mov_b32_e32 v2, v4
 ; GFX942-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX10-LABEL: shuffle_v6bf16_452367:
@@ -5279,13 +5188,14 @@ define amdgpu_kernel void @fma_shuffle_v2bf16(ptr addrspace(1) nocapture readonl
 ; GFX942-LABEL: fma_shuffle_v2bf16:
 ; GFX942:       ; %bb.0: ; %entry
 ; GFX942-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
-; GFX942-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x10
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x10
 ; GFX942-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX942-NEXT:    v_lshlrev_b32_e32 v6, 3, v0
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[0:1], v6, s[0:1]
 ; GFX942-NEXT:    global_load_dwordx2 v[4:5], v6, s[2:3]
-; GFX942-NEXT:    global_load_dwordx2 v[2:3], v6, s[6:7]
+; GFX942-NEXT:    global_load_dwordx2 v[2:3], v6, s[4:5]
 ; GFX942-NEXT:    s_movk_i32 s0, 0x7fff
 ; GFX942-NEXT:    s_mov_b32 s1, 0x7060302
 ; GFX942-NEXT:    s_waitcnt vmcnt(2)
@@ -5358,7 +5268,7 @@ define amdgpu_kernel void @fma_shuffle_v2bf16(ptr addrspace(1) nocapture readonl
 ; GFX942-NEXT:    s_nop 0
 ; GFX942-NEXT:    v_cndmask_b32_e32 v3, v11, v12, vcc
 ; GFX942-NEXT:    v_perm_b32 v1, v3, v1, s1
-; GFX942-NEXT:    global_store_dwordx2 v6, v[0:1], s[6:7]
+; GFX942-NEXT:    global_store_dwordx2 v6, v[0:1], s[4:5]
 ; GFX942-NEXT:    s_endpgm
 ;
 ; GFX10-LABEL: fma_shuffle_v2bf16:
@@ -5668,8 +5578,6 @@ define <4 x bfloat> @shuffle_v4bf16_0456(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GX900-NEXT:    global_load_dwordx2 v[4:5], v[0:1], off
 ; GX900-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
 ; GX900-NEXT:    s_mov_b32 s4, 0x5040100
-; GX900-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GX900-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GX900-NEXT:    s_waitcnt vmcnt(0)
 ; GX900-NEXT:    v_perm_b32 v0, v5, v4, s4
 ; GX900-NEXT:    v_alignbit_b32 v1, v6, v5, 16
@@ -5691,8 +5599,6 @@ define <4 x bfloat> @shuffle_v4bf16_0456(ptr addrspace(1) %arg0, ptr addrspace(1
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    global_load_dwordx2 v[4:5], v[0:1], off
 ; GFX10-NEXT:    global_load_dwordx2 v[5:6], v[2:3], off
-; GFX10-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
-; GFX10-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-NEXT:    v_perm_b32 v0, v5, v4, 0x5040100
 ; GFX10-NEXT:    v_alignbit_b32 v1, v6, v5, 16

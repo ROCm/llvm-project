@@ -499,9 +499,6 @@ define amdgpu_kernel void @udot8_acc16(ptr addrspace(1) %src1,
 ; GFX10-DL-NEXT:    s_clause 0x1
 ; GFX10-DL-NEXT:    global_load_dword v2, v0, s[0:1]
 ; GFX10-DL-NEXT:    global_load_dword v3, v0, s[2:3]
-; GFX10-DL-NEXT:    ; kill: killed $sgpr0 killed $sgpr1
-; GFX10-DL-NEXT:    ; kill: killed $vgpr0
-; GFX10-DL-NEXT:    ; kill: killed $sgpr2 killed $sgpr3
 ; GFX10-DL-NEXT:    global_load_ushort v0, v1, s[6:7]
 ; GFX10-DL-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-DL-NEXT:    v_and_b32_e32 v4, 15, v2
@@ -822,9 +819,6 @@ define amdgpu_kernel void @udot8_acc8(ptr addrspace(1) %src1,
 ; GFX10-DL-NEXT:    s_clause 0x1
 ; GFX10-DL-NEXT:    global_load_dword v2, v0, s[0:1]
 ; GFX10-DL-NEXT:    global_load_dword v3, v0, s[2:3]
-; GFX10-DL-NEXT:    ; kill: killed $sgpr0 killed $sgpr1
-; GFX10-DL-NEXT:    ; kill: killed $vgpr0
-; GFX10-DL-NEXT:    ; kill: killed $sgpr2 killed $sgpr3
 ; GFX10-DL-NEXT:    global_load_ubyte v0, v1, s[6:7]
 ; GFX10-DL-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-DL-NEXT:    v_and_b32_e32 v4, 15, v2
@@ -1149,9 +1143,6 @@ define amdgpu_kernel void @udot8_acc4(ptr addrspace(1) %src1,
 ; GFX10-DL-NEXT:    s_clause 0x1
 ; GFX10-DL-NEXT:    global_load_dword v2, v0, s[0:1]
 ; GFX10-DL-NEXT:    global_load_dword v3, v0, s[2:3]
-; GFX10-DL-NEXT:    ; kill: killed $sgpr0 killed $sgpr1
-; GFX10-DL-NEXT:    ; kill: killed $vgpr0
-; GFX10-DL-NEXT:    ; kill: killed $sgpr2 killed $sgpr3
 ; GFX10-DL-NEXT:    global_load_ubyte v0, v1, s[6:7]
 ; GFX10-DL-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-DL-NEXT:    v_and_b32_e32 v4, 15, v2
@@ -1461,9 +1452,6 @@ define amdgpu_kernel void @udot8_CommutationInsideMAD(ptr addrspace(1) %src1,
 ; GFX10-DL-NEXT:    s_clause 0x1
 ; GFX10-DL-NEXT:    global_load_dword v2, v0, s[0:1]
 ; GFX10-DL-NEXT:    global_load_dword v3, v0, s[2:3]
-; GFX10-DL-NEXT:    ; kill: killed $sgpr0 killed $sgpr1
-; GFX10-DL-NEXT:    ; kill: killed $vgpr0
-; GFX10-DL-NEXT:    ; kill: killed $sgpr2 killed $sgpr3
 ; GFX10-DL-NEXT:    global_load_ubyte v0, v1, s[6:7]
 ; GFX10-DL-NEXT:    s_waitcnt vmcnt(2)
 ; GFX10-DL-NEXT:    v_and_b32_e32 v4, 15, v2

@@ -357,11 +357,12 @@ define amdgpu_kernel void @s_fneg_fpext_f16_to_f32(ptr addrspace(1) %r, i32 %a) 
 ; GFX9-LABEL: s_fneg_fpext_f16_to_f32:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX9-NEXT:    s_load_dword s6, s[4:5], 0x2c
+; GFX9-NEXT:    s_nop 0
+; GFX9-NEXT:    s_load_dword s4, s[4:5], 0x2c
 ; GFX9-NEXT:    s_mov_b32 s3, 0xf000
 ; GFX9-NEXT:    s_mov_b32 s2, -1
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-NEXT:    v_cvt_f32_f16_e32 v0, s6
+; GFX9-NEXT:    v_cvt_f32_f16_e32 v0, s4
 ; GFX9-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX9-NEXT:    s_endpgm
 ;

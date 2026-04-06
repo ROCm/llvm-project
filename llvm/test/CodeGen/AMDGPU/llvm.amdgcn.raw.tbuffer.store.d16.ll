@@ -23,9 +23,10 @@ define amdgpu_kernel void @tbuffer_store_d16_x(<4 x i32> %rsrc, half %data) {
 ; PREGFX10-PACKED-LABEL: tbuffer_store_d16_x:
 ; PREGFX10-PACKED:       ; %bb.0: ; %main_body
 ; PREGFX10-PACKED-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; PREGFX10-PACKED-NEXT:    s_load_dword s6, s[4:5], 0x34
+; PREGFX10-PACKED-NEXT:    s_nop 0
+; PREGFX10-PACKED-NEXT:    s_load_dword s4, s[4:5], 0x34
 ; PREGFX10-PACKED-NEXT:    s_waitcnt lgkmcnt(0)
-; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s6
+; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s4
 ; PREGFX10-PACKED-NEXT:    tbuffer_store_format_d16_x v0, off, s[0:3], 0 format:[BUF_NUM_FORMAT_USCALED]
 ; PREGFX10-PACKED-NEXT:    s_endpgm
 ;
@@ -33,9 +34,10 @@ define amdgpu_kernel void @tbuffer_store_d16_x(<4 x i32> %rsrc, half %data) {
 ; GFX10-PACKED:       ; %bb.0: ; %main_body
 ; GFX10-PACKED-NEXT:    s_clause 0x1
 ; GFX10-PACKED-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; GFX10-PACKED-NEXT:    s_load_dword s6, s[4:5], 0x34
+; GFX10-PACKED-NEXT:    s_nop 0
+; GFX10-PACKED-NEXT:    s_load_dword s4, s[4:5], 0x34
 ; GFX10-PACKED-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s6
+; GFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX10-PACKED-NEXT:    tbuffer_store_format_d16_x v0, off, s[0:3], 0 format:[BUF_FMT_10_11_11_SSCALED]
 ; GFX10-PACKED-NEXT:    s_endpgm
 ;

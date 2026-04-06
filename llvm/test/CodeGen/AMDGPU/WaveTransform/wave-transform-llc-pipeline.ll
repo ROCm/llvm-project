@@ -105,6 +105,7 @@
 ; GCN-O0-NEXT:        AMDGPU Pre Wave Transform
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        AMDGPU Control Flow Wave Transform
+; GCN-O0-NEXT:        Remove dead machine instructions
 ; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        SI lower SGPR spill instructions
 ; GCN-O0-NEXT:        Fast Register Allocator
@@ -399,6 +400,7 @@
 ; GCN-O3-NEXT:        AMDGPU Pre Wave Transform
 ; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        AMDGPU Control Flow Wave Transform
+; GCN-O3-NEXT:        Remove dead machine instructions
 ; GCN-O3-NEXT:        Slot index numbering
 ; GCN-O3-NEXT:        Live Interval Analysis
 ; GCN-O3-NEXT:        SI optimize exec mask operations pre-RA
