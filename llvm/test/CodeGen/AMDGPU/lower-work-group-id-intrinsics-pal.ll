@@ -80,7 +80,6 @@ define amdgpu_cs void @caller() {
 ; GFX9-SDAG-NEXT:    s_load_dwordx4 s[8:11], s[8:9], 0x10
 ; GFX9-SDAG-NEXT:    s_mov_b32 s5, callee@abs32@hi
 ; GFX9-SDAG-NEXT:    s_mov_b32 s4, callee@abs32@lo
-; GFX9-SDAG-NEXT:    s_mov_b32 s32, 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9-SDAG-NEXT:    s_addc_u32 s9, s9, 0
@@ -96,7 +95,6 @@ define amdgpu_cs void @caller() {
 ; GFX9-GISEL-NEXT:    s_load_dwordx4 s[8:11], s[8:9], 0x10
 ; GFX9-GISEL-NEXT:    s_mov_b32 s4, callee@abs32@lo
 ; GFX9-GISEL-NEXT:    s_mov_b32 s5, callee@abs32@hi
-; GFX9-GISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX9-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9-GISEL-NEXT:    s_addc_u32 s9, s9, 0
@@ -113,7 +111,6 @@ define amdgpu_cs void @caller() {
 ; GFX9ARCH-SDAG-NEXT:    s_mov_b32 s5, callee@abs32@hi
 ; GFX9ARCH-SDAG-NEXT:    s_mov_b32 s4, callee@abs32@lo
 ; GFX9ARCH-SDAG-NEXT:    v_mov_b32_e32 v0, ttmp9
-; GFX9ARCH-SDAG-NEXT:    s_mov_b32 s32, 0
 ; GFX9ARCH-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9ARCH-SDAG-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9ARCH-SDAG-NEXT:    s_addc_u32 s9, s9, 0
@@ -130,7 +127,6 @@ define amdgpu_cs void @caller() {
 ; GFX9ARCH-GISEL-NEXT:    s_mov_b32 s4, callee@abs32@lo
 ; GFX9ARCH-GISEL-NEXT:    s_mov_b32 s5, callee@abs32@hi
 ; GFX9ARCH-GISEL-NEXT:    v_mov_b32_e32 v0, ttmp9
-; GFX9ARCH-GISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX9ARCH-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9ARCH-GISEL-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9ARCH-GISEL-NEXT:    s_addc_u32 s9, s9, 0
@@ -144,7 +140,6 @@ define amdgpu_cs void @caller() {
 ; GFX12-NEXT:    v_mov_b32_e32 v0, ttmp9
 ; GFX12-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; GFX12-NEXT:    s_mov_b32 s1, callee@abs32@hi
-; GFX12-NEXT:    s_mov_b32 s32, 0
 ; GFX12-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX12-NEXT:    s_endpgm

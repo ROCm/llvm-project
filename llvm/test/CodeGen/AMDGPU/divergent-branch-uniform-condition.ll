@@ -45,7 +45,6 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[0:1]
 ; ISA-NEXT:    s_mov_b64 exec, s[10:11]
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
-; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_5
 ; ISA-NEXT:  .LBB0_2: ; %loop
@@ -86,7 +85,6 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    v_mov_b32_e32 v1, 0
 ; ISA-NEXT:    s_or_b64 s[2:3], s[2:3], s[0:1]
 ; ISA-NEXT:    s_mov_b64 exec, s[4:5]
-; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_7

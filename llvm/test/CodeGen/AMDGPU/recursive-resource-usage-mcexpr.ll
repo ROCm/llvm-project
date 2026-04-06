@@ -81,7 +81,7 @@ entry:
 ; CHECK-LABEL: {{^}}usefoo
 ; CHECK: .set usefoo.num_vgpr, max(32, foo.num_vgpr)
 ; CHECK: .set usefoo.num_agpr, max(0, foo.num_agpr)
-; CHECK: .set usefoo.numbered_sgpr, max(33, foo.numbered_sgpr)
+; CHECK: .set usefoo.numbered_sgpr, max(32, foo.numbered_sgpr)
 ; CHECK: .set usefoo.private_seg_size, 0+max(foo.private_seg_size)
 ; CHECK: .set usefoo.uses_vcc, or(1, foo.uses_vcc)
 ; CHECK: .set usefoo.uses_flat_scratch, or(1, foo.uses_flat_scratch)

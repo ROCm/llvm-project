@@ -75,7 +75,6 @@ define amdgpu_kernel void @kernel_call() {
 ; CHECK-NEXT:    s_addc_u32 s19, s19, csr_vgpr_spill_fp_callee@rel32@hi+12
 ; CHECK-NEXT:    v_or3_b32 v31, v0, v1, v2
 ; CHECK-NEXT:    s_mov_b32 s14, s16
-; CHECK-NEXT:    s_mov_b32 s32, 0
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[18:19]
 ; CHECK-NEXT:    s_endpgm
 bb:
@@ -127,7 +126,6 @@ define amdgpu_kernel void @kernel_tailcall() {
 ; CHECK-NEXT:    s_addc_u32 s19, s19, csr_vgpr_spill_fp_tailcall_callee@rel32@hi+12
 ; CHECK-NEXT:    v_or3_b32 v31, v0, v1, v2
 ; CHECK-NEXT:    s_mov_b32 s14, s16
-; CHECK-NEXT:    s_mov_b32 s32, 0
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[18:19]
 ; CHECK-NEXT:    s_endpgm
 bb:

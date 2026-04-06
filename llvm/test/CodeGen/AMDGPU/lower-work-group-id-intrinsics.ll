@@ -291,7 +291,6 @@ define amdgpu_cs void @caller() {
 ; GFX9-SDAG-NEXT:    s_mov_b32 s5, callee@abs32@hi
 ; GFX9-SDAG-NEXT:    s_mov_b32 s4, callee@abs32@lo
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, ttmp9
-; GFX9-SDAG-NEXT:    s_mov_b32 s32, 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9-SDAG-NEXT:    s_addc_u32 s9, s9, 0
@@ -308,7 +307,6 @@ define amdgpu_cs void @caller() {
 ; GFX9-GISEL-NEXT:    s_mov_b32 s4, callee@abs32@lo
 ; GFX9-GISEL-NEXT:    s_mov_b32 s5, callee@abs32@hi
 ; GFX9-GISEL-NEXT:    v_mov_b32_e32 v0, ttmp9
-; GFX9-GISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX9-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-GISEL-NEXT:    s_add_u32 s8, s8, s0
 ; GFX9-GISEL-NEXT:    s_addc_u32 s9, s9, 0
@@ -322,7 +320,6 @@ define amdgpu_cs void @caller() {
 ; GFX12-SDAG-NEXT:    v_mov_b32_e32 v0, ttmp9
 ; GFX12-SDAG-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; GFX12-SDAG-NEXT:    s_mov_b32 s1, callee@abs32@hi
-; GFX12-SDAG-NEXT:    s_mov_b32 s32, 0
 ; GFX12-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-SDAG-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX12-SDAG-NEXT:    s_endpgm
@@ -332,14 +329,12 @@ define amdgpu_cs void @caller() {
 ; GFX12-GISEL-NEXT:    v_mov_b32_e32 v0, ttmp9
 ; GFX12-GISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; GFX12-GISEL-NEXT:    s_mov_b32 s1, callee@abs32@hi
-; GFX12-GISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX12-GISEL-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; GFX12-GISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX12-GISEL-NEXT:    s_endpgm
 ;
 ; GFX1250-SDAG-LABEL: caller:
 ; GFX1250-SDAG:       ; %bb.0:
-; GFX1250-SDAG-NEXT:    s_mov_b32 s32, 0
 ; GFX1250-SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-SDAG-NEXT:    s_bfe_u32 s0, ttmp6, 0x4000c
 ; GFX1250-SDAG-NEXT:    s_and_b32 s1, ttmp6, 15
@@ -357,7 +352,6 @@ define amdgpu_cs void @caller() {
 ;
 ; GFX1250-GISEL-LABEL: caller:
 ; GFX1250-GISEL:       ; %bb.0:
-; GFX1250-GISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX1250-GISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-GISEL-NEXT:    s_bfe_u32 s0, ttmp6, 0x4000c
 ; GFX1250-GISEL-NEXT:    s_and_b32 s1, ttmp6, 15

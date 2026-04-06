@@ -80,6 +80,7 @@ private:
   // appropriate source modifers and operands into the unpacked instructions.
   void addOperandAndMods(MachineInstrBuilder &NewMI, unsigned SrcMods,
                          bool IsHiBits, const MachineOperand &SrcMO);
+  bool removeDeadScalarMoves(MachineBasicBlock &MBB) const;
 
 public:
   bool run(MachineFunction &MF, MachineLoopInfo *MLI);
@@ -774,6 +775,88 @@ MachineInstrBuilder SIPreEmitPeephole::createUnpackedMI(MachineInstr &I,
   return NewMI;
 }
 
+bool SIPreEmitPeephole::removeDeadScalarMoves(MachineBasicBlock &MBB) const {
+  // Single forward pass: track pending S_MOV_B{32,64} immediate defs to
+  // physical SGPRs. If overwritten (alias-aware) before any read, erase.
+  DenseMap<MCRegister, MachineInstr *> LastUnusedDef;
+  SmallVector<MachineInstr *, 4> ToErase;
+
+  auto IsCandidate = [](const MachineInstr &MI) -> bool {
+    unsigned Opc = MI.getOpcode();
+    if (Opc != AMDGPU::S_MOV_B32 && Opc != AMDGPU::S_MOV_B64)
+      return false;
+    if (!MI.getOperand(1).isImm())
+      return false;
+    Register Reg = MI.getOperand(0).getReg();
+    if (!Reg.isPhysical())
+      return false;
+    if (Opc == AMDGPU::S_MOV_B32)
+      return AMDGPU::SGPR_32RegClass.contains(Reg);
+    return AMDGPU::SGPR_64RegClass.contains(Reg);
+  };
+
+  for (MachineInstr &MI : MBB) {
+    // Phase 1: a read of any tracked register makes the pending def live.
+    SmallVector<MCRegister, 4> ToRemove;
+    for (auto &[Reg, Def] : LastUnusedDef) {
+      if (MI.readsRegister(Reg, TRI))
+        ToRemove.push_back(Reg);
+    }
+    for (MCRegister Reg : ToRemove)
+      LastUnusedDef.erase(Reg);
+
+    // Phase 2: check explicit defs and reg-masks for overwrites.
+    // We only look at explicit def operands (not implicit defs) to avoid
+    // false positives from super-register tuple-building annotations
+    // (e.g. implicit-def $sgpr40_sgpr41_sgpr42_sgpr43 on S_MOV_B32 $sgpr42).
+    // Reg-masks (from calls) are also checked as full clobbers.
+    ToRemove.clear();
+    SmallVector<MCRegister, 4> PartialDefs;
+    for (auto &[Reg, Def] : LastUnusedDef) {
+      bool FullOverwrite = false;
+      bool PartialOverwrite = false;
+      for (const MachineOperand &MO : MI.explicit_operands()) {
+        if (!MO.isReg() || !MO.isDef() || !MO.getReg().isPhysical())
+          continue;
+        if (TRI->isSubRegisterEq(MO.getReg(), Reg)) {
+          FullOverwrite = true;
+          break;
+        }
+        if (TRI->regsOverlap(MO.getReg(), Reg)) {
+          PartialOverwrite = true;
+        }
+      }
+      if (!FullOverwrite) {
+        for (const MachineOperand &MO : MI.operands()) {
+          if (MO.isRegMask() && MO.clobbersPhysReg(Reg)) {
+            FullOverwrite = true;
+            break;
+          }
+        }
+      }
+      if (FullOverwrite)
+        ToRemove.push_back(Reg);
+      else if (PartialOverwrite)
+        PartialDefs.push_back(Reg);
+    }
+    for (MCRegister Reg : ToRemove) {
+      ToErase.push_back(LastUnusedDef[Reg]);
+      LastUnusedDef.erase(Reg);
+    }
+    for (MCRegister Reg : PartialDefs)
+      LastUnusedDef.erase(Reg);
+
+    // Phase 3: if the current instruction is a candidate, start tracking it.
+    if (IsCandidate(MI))
+      LastUnusedDef[MI.getOperand(0).getReg().asMCReg()] = &MI;
+  }
+
+  for (MachineInstr *MI : ToErase)
+    MI->eraseFromParent();
+
+  return !ToErase.empty();
+}
+
 PreservedAnalyses
 llvm::SIPreEmitPeepholePass::run(MachineFunction &MF,
                                  MachineFunctionAnalysisManager &MFAM) {
@@ -799,6 +882,8 @@ bool SIPreEmitPeephole::run(MachineFunction &MF, MachineLoopInfo *LoopInfo) {
   MF.RenumberBlocks();
 
   for (MachineBasicBlock &MBB : MF) {
+    Changed |= removeDeadScalarMoves(MBB);
+
     MachineBasicBlock::iterator TermI = MBB.getFirstTerminator();
     // Check first terminator for branches to optimize
     if (TermI != MBB.end()) {

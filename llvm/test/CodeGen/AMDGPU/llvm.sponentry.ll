@@ -80,7 +80,6 @@ define amdgpu_cs ptr addrspace(5) @sponentry_cs_dvgpr_control_flow(i32 %val, ptr
 ; DAGISEL-NEXT:    ; divergent control-flow edge
 ; DAGISEL-NEXT:    s_cbranch_execz .LBB3_2
 ; DAGISEL-NEXT:  .LBB3_1: ; %if.then
-; DAGISEL-NEXT:    s_mov_b32 s1, 0
 ; DAGISEL-NEXT:    s_getreg_b32 s1, hwreg(HW_REG_WAVE_HW_ID2, 8, 2)
 ; DAGISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
 ; DAGISEL-NEXT:    s_cmp_lg_u32 0, s1

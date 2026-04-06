@@ -9929,7 +9929,6 @@ define amdgpu_kernel void @test_limited_sgpr(ptr addrspace(1) %out, ptr addrspac
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX6-NEXT:  .LBB1_1: ; %bb0
-; GFX6-NEXT:    s_mov_b64 s[36:37], 0
 ; GFX6-NEXT:    s_mov_b64 s[36:37], exec
 ; GFX6-NEXT:    s_mov_b64 exec, 0xff
 ; GFX6-NEXT:    buffer_store_dword v4, off, s[40:43], 0

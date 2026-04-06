@@ -9672,7 +9672,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX12-NEXT:  .LBB28_1:
-; GFX12-NEXT:    s_mov_b32 s9, 0
 ; GFX12-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
@@ -9700,11 +9699,9 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX12-NEXT:    s_or_b32 s6, s6, s9
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX12-NEXT:    s_mov_b32 s7, 0
-; GFX12-NEXT:    s_mov_b32 s7, 0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX12-NEXT:  .LBB28_3:
-; GFX12-NEXT:    s_mov_b32 s7, 0
 ; GFX12-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX12-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX12-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -9816,7 +9813,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX942-NEXT:    s_or_b64 s[18:19], s[18:19], s[20:21]
 ; GFX942-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX942-NEXT:    s_mov_b64 s[16:17], 0
-; GFX942-NEXT:    s_mov_b64 s[16:17], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX942-NEXT:  .LBB28_3:
@@ -9835,7 +9831,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX942-NEXT:    v_readfirstlane_b32 s16, v2
 ; GFX942-NEXT:    s_or_b64 s[12:13], s[12:13], s[18:19]
 ; GFX942-NEXT:    s_mov_b64 exec, s[14:15]
-; GFX942-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX942-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB28_6
@@ -9898,7 +9893,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX942-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-NEXT:    s_mov_b64 s[2:3], 0
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB28_12
 ; GFX942-NEXT:  .LBB28_11:
@@ -9938,7 +9932,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX11-NEXT:  .LBB28_1:
-; GFX11-NEXT:    s_mov_b32 s9, 0
 ; GFX11-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
@@ -9964,11 +9957,9 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX11-NEXT:    s_or_b32 s6, s6, s9
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX11-NEXT:    s_mov_b32 s7, 0
-; GFX11-NEXT:    s_mov_b32 s7, 0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX11-NEXT:  .LBB28_3:
-; GFX11-NEXT:    s_mov_b32 s7, 0
 ; GFX11-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX11-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX11-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -10054,7 +10045,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX10-NEXT:  .LBB28_1:
-; GFX10-NEXT:    s_mov_b32 s9, 0
 ; GFX10-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX10-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
 ; GFX10-NEXT:    s_lshl_b32 s9, s3, 3
@@ -10077,11 +10067,9 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX10-NEXT:    s_or_b32 s6, s6, s9
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    s_mov_b32 s7, 0
-; GFX10-NEXT:    s_mov_b32 s7, 0
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX10-NEXT:  .LBB28_3:
-; GFX10-NEXT:    s_mov_b32 s7, 0
 ; GFX10-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX10-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX10-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -10184,7 +10172,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX90A-NEXT:    s_or_b64 s[18:19], s[18:19], s[20:21]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX90A-NEXT:    s_mov_b64 s[16:17], 0
-; GFX90A-NEXT:    s_mov_b64 s[16:17], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX90A-NEXT:  .LBB28_3:
@@ -10203,7 +10190,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX90A-NEXT:    v_readfirstlane_b32 s16, v2
 ; GFX90A-NEXT:    s_or_b64 s[12:13], s[12:13], s[18:19]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[14:15]
-; GFX90A-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX90A-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB28_6
@@ -10266,7 +10252,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX90A-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX90A-NEXT:    s_mov_b64 s[2:3], 0
-; GFX90A-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB28_12
 ; GFX90A-NEXT:  .LBB28_11:
@@ -10327,7 +10312,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX908-NEXT:    v_readfirstlane_b32 s12, v2
 ; GFX908-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
 ; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
-; GFX908-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX908-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB28_4
@@ -10438,7 +10422,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX8-NEXT:    v_readfirstlane_b32 s12, v2
 ; GFX8-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
 ; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
-; GFX8-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX8-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB28_4
@@ -10573,7 +10556,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:    s_or_b64 s[14:15], s[14:15], s[0:1]
 ; GFX7-NEXT:    s_mov_b64 exec, s[18:19]
 ; GFX7-NEXT:    s_mov_b64 s[0:1], 0
-; GFX7-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB28_6
 ; GFX7-NEXT:  .LBB28_4:
@@ -10645,7 +10627,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX7-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    ds_read_b32 v3, v4
-; GFX7-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
 ; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], s[0:1]
 ; GFX7-NEXT:  .LBB28_10: ; %atomicrmw.start8
@@ -10708,7 +10689,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX6-NEXT:    v_mov_b32_e32 v1, s21
 ; GFX6-NEXT:    ds_read_b32 v2, v1
 ; GFX6-NEXT:    s_bcnt1_i32_b64 s21, exec
-; GFX6-NEXT:    s_mov_b64 s[22:23], 0
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s21
 ; GFX6-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
 ; GFX6-NEXT:    s_and_b64 s[22:23], s[6:7], exec
@@ -10743,7 +10723,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX6-NEXT:    v_readfirstlane_b32 s19, v2
 ; GFX6-NEXT:    s_or_b64 s[12:13], s[12:13], s[0:1]
 ; GFX6-NEXT:    s_mov_b64 exec, s[16:17]
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB28_6
@@ -10818,7 +10797,6 @@ define amdgpu_kernel void @local_ds_fadd(ptr addrspace(1) %out, ptr addrspace(3)
 ; GFX6-NEXT:    v_mov_b32_e32 v4, s18
 ; GFX6-NEXT:    s_mov_b32 m0, -1
 ; GFX6-NEXT:    ds_read_b32 v3, v4
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
 ; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], s[0:1]
 ; GFX6-NEXT:  .LBB28_10: ; %atomicrmw.start8
@@ -10884,7 +10862,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX12-NEXT:  .LBB29_1:
-; GFX12-NEXT:    s_mov_b32 s9, 0
 ; GFX12-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
@@ -10911,11 +10888,9 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX12-NEXT:    s_or_b32 s6, s6, s9
 ; GFX12-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX12-NEXT:    s_mov_b32 s7, 0
-; GFX12-NEXT:    s_mov_b32 s7, 0
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX12-NEXT:  .LBB29_3:
-; GFX12-NEXT:    s_mov_b32 s7, 0
 ; GFX12-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX12-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX12-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -11021,7 +10996,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX942-NEXT:    s_or_b64 s[18:19], s[18:19], s[20:21]
 ; GFX942-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX942-NEXT:    s_mov_b64 s[16:17], 0
-; GFX942-NEXT:    s_mov_b64 s[16:17], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX942-NEXT:  .LBB29_3:
@@ -11041,7 +11015,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX942-NEXT:    v_readfirstlane_b32 s16, v2
 ; GFX942-NEXT:    s_or_b64 s[12:13], s[12:13], s[18:19]
 ; GFX942-NEXT:    s_mov_b64 exec, s[14:15]
-; GFX942-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX942-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB29_6
@@ -11102,7 +11075,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX942-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX942-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-NEXT:    s_mov_b64 s[2:3], 0
-; GFX942-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX942-NEXT:    ; divergent control-flow edge
 ; GFX942-NEXT:    s_cbranch_execz .LBB29_12
 ; GFX942-NEXT:  .LBB29_11:
@@ -11142,7 +11114,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX11-NEXT:  .LBB29_1:
-; GFX11-NEXT:    s_mov_b32 s9, 0
 ; GFX11-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
@@ -11167,11 +11138,9 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX11-NEXT:    s_or_b32 s6, s6, s9
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX11-NEXT:    s_mov_b32 s7, 0
-; GFX11-NEXT:    s_mov_b32 s7, 0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX11-NEXT:  .LBB29_3:
-; GFX11-NEXT:    s_mov_b32 s7, 0
 ; GFX11-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX11-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX11-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -11253,7 +11222,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX10-NEXT:  .LBB29_1:
-; GFX10-NEXT:    s_mov_b32 s9, 0
 ; GFX10-NEXT:    s_bcnt1_i32_b32 s9, exec_lo
 ; GFX10-NEXT:    v_cvt_f32_ubyte0_e32 v1, s9
 ; GFX10-NEXT:    s_lshl_b32 s9, s3, 3
@@ -11275,11 +11243,9 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX10-NEXT:    s_or_b32 s6, s6, s9
 ; GFX10-NEXT:    s_mov_b32 exec_lo, s7
 ; GFX10-NEXT:    s_mov_b32 s7, 0
-; GFX10-NEXT:    s_mov_b32 s7, 0
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX10-NEXT:  .LBB29_3:
-; GFX10-NEXT:    s_mov_b32 s7, 0
 ; GFX10-NEXT:    s_bcnt1_i32_b32 s7, exec_lo
 ; GFX10-NEXT:    s_lshl_b32 s3, s3, 4
 ; GFX10-NEXT:    v_cvt_f32_ubyte0_e32 v2, s7
@@ -11376,7 +11342,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX90A-NEXT:    s_or_b64 s[18:19], s[18:19], s[20:21]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX90A-NEXT:    s_mov_b64 s[16:17], 0
-; GFX90A-NEXT:    s_mov_b64 s[16:17], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX90A-NEXT:  .LBB29_3:
@@ -11396,7 +11361,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX90A-NEXT:    v_readfirstlane_b32 s16, v2
 ; GFX90A-NEXT:    s_or_b64 s[12:13], s[12:13], s[18:19]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[14:15]
-; GFX90A-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX90A-NEXT:    s_mov_b64 s[14:15], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB29_6
@@ -11456,7 +11420,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX90A-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX90A-NEXT:    s_or_b64 s[0:1], s[0:1], s[2:3]
 ; GFX90A-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX90A-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX90A-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB29_12
@@ -11518,7 +11481,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX908-NEXT:    v_readfirstlane_b32 s12, v2
 ; GFX908-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
 ; GFX908-NEXT:    s_mov_b64 exec, s[10:11]
-; GFX908-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX908-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB29_4
@@ -11627,7 +11589,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX8-NEXT:    v_readfirstlane_b32 s12, v2
 ; GFX8-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
 ; GFX8-NEXT:    s_mov_b64 exec, s[10:11]
-; GFX8-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX8-NEXT:    s_mov_b64 s[10:11], 0
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB29_4
@@ -11760,7 +11721,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:    s_or_b64 s[14:15], s[14:15], s[0:1]
 ; GFX7-NEXT:    s_mov_b64 exec, s[18:19]
 ; GFX7-NEXT:    s_mov_b64 s[0:1], 0
-; GFX7-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX7-NEXT:    ; divergent control-flow edge
 ; GFX7-NEXT:    s_cbranch_execz .LBB29_6
 ; GFX7-NEXT:  .LBB29_4:
@@ -11832,7 +11792,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX7-NEXT:    v_mov_b32_e32 v4, s6
 ; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    ds_read_b32 v3, v4
-; GFX7-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX7-NEXT:    s_and_b64 s[0:1], s[8:9], exec
 ; GFX7-NEXT:    s_or_b64 s[10:11], s[10:11], s[0:1]
 ; GFX7-NEXT:  .LBB29_10: ; %atomicrmw.start8
@@ -11895,7 +11854,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX6-NEXT:    v_mov_b32_e32 v1, s21
 ; GFX6-NEXT:    ds_read_b32 v2, v1
 ; GFX6-NEXT:    s_bcnt1_i32_b64 s21, exec
-; GFX6-NEXT:    s_mov_b64 s[22:23], 0
 ; GFX6-NEXT:    v_cvt_f32_ubyte0_e32 v3, s21
 ; GFX6-NEXT:    v_mul_f32_e32 v3, 0x42280000, v3
 ; GFX6-NEXT:    s_and_b64 s[22:23], s[6:7], exec
@@ -11930,7 +11888,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX6-NEXT:    v_readfirstlane_b32 s19, v2
 ; GFX6-NEXT:    s_or_b64 s[12:13], s[12:13], s[0:1]
 ; GFX6-NEXT:    s_mov_b64 exec, s[16:17]
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB29_6
@@ -12005,7 +11962,6 @@ define amdgpu_kernel void @local_ds_fadd_one_as(ptr addrspace(1) %out, ptr addrs
 ; GFX6-NEXT:    v_mov_b32_e32 v4, s18
 ; GFX6-NEXT:    s_mov_b32 m0, -1
 ; GFX6-NEXT:    ds_read_b32 v3, v4
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    s_and_b64 s[0:1], s[6:7], exec
 ; GFX6-NEXT:    s_or_b64 s[8:9], s[8:9], s[0:1]
 ; GFX6-NEXT:  .LBB29_10: ; %atomicrmw.start8

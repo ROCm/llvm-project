@@ -10792,7 +10792,6 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) {
 ; DAGISEL:       ; %bb.0:
 ; DAGISEL-NEXT:    s_mov_b32 s1, callee@abs32@hi
 ; DAGISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
-; DAGISEL-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL-NEXT:    v_dual_mov_b32 v41, v9 :: v_dual_mov_b32 v40, v8
 ; DAGISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; DAGISEL-NEXT:    flat_store_b32 v[40:41], v0
@@ -10802,7 +10801,6 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) {
 ; GISEL:       ; %bb.0:
 ; GISEL-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; GISEL-NEXT:    s_mov_b32 s1, callee@abs32@hi
-; GISEL-NEXT:    s_mov_b32 s32, 0
 ; GISEL-NEXT:    v_dual_mov_b32 v40, v8 :: v_dual_mov_b32 v41, v9
 ; GISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GISEL-NEXT:    flat_store_b32 v[40:41], v0
@@ -10812,7 +10810,6 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) {
 ; DAGISEL64:       ; %bb.0:
 ; DAGISEL64-NEXT:    s_mov_b32 s1, callee@abs32@hi
 ; DAGISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
-; DAGISEL64-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v41, v9
 ; DAGISEL64-NEXT:    v_mov_b32_e32 v40, v8
 ; DAGISEL64-NEXT:    s_swappc_b64 s[30:31], s[0:1]
@@ -10823,7 +10820,6 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) {
 ; GISEL64:       ; %bb.0:
 ; GISEL64-NEXT:    s_mov_b32 s0, callee@abs32@lo
 ; GISEL64-NEXT:    s_mov_b32 s1, callee@abs32@hi
-; GISEL64-NEXT:    s_mov_b32 s32, 0
 ; GISEL64-NEXT:    v_mov_b32_e32 v40, v8
 ; GISEL64-NEXT:    v_mov_b32_e32 v41, v9
 ; GISEL64-NEXT:    s_swappc_b64 s[30:31], s[0:1]
@@ -10832,7 +10828,6 @@ define amdgpu_cs void @call_from_entry(<8 x float> %x, ptr %p) {
 ;
 ; GFX1250-DAGISEL-LABEL: call_from_entry:
 ; GFX1250-DAGISEL:       ; %bb.0:
-; GFX1250-DAGISEL-NEXT:    s_mov_b32 s32, 0
 ; GFX1250-DAGISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-DAGISEL-NEXT:    s_mov_b64 s[0:1], callee@abs64
 ; GFX1250-DAGISEL-NEXT:    v_dual_mov_b32 v41, v9 :: v_dual_mov_b32 v40, v8

@@ -13,7 +13,7 @@ define amdgpu_kernel void @caller_internal() {
 ; GFX11-PAL-SDAG:       ; %bb.0:
 ; GFX11-PAL-SDAG-NEXT:    s_mov_b32 s0, internal_func@abs32@lo
 ; GFX11-PAL-SDAG-NEXT:    s_mov_b32 s1, internal_func@abs32@hi
-; GFX11-PAL-SDAG-NEXT:    s_mov_b32 s32, 0
+; GFX11-PAL-SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-PAL-SDAG-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-PAL-SDAG-NEXT:    s_endpgm
 ;
@@ -21,13 +21,12 @@ define amdgpu_kernel void @caller_internal() {
 ; GFX11-PAL-GISEL:       ; %bb.0:
 ; GFX11-PAL-GISEL-NEXT:    s_mov_b32 s0, internal_func@abs32@lo
 ; GFX11-PAL-GISEL-NEXT:    s_mov_b32 s1, internal_func@abs32@hi
-; GFX11-PAL-GISEL-NEXT:    s_mov_b32 s32, 0
+; GFX11-PAL-GISEL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX11-PAL-GISEL-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-PAL-GISEL-NEXT:    s_endpgm
 ;
 ; GFX1250-PAL-LABEL: caller_internal:
 ; GFX1250-PAL:       ; %bb.0:
-; GFX1250-PAL-NEXT:    s_mov_b32 s32, 0
 ; GFX1250-PAL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-PAL-NEXT:    s_mov_b64 s[0:1], internal_func@abs64
 ; GFX1250-PAL-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
@@ -39,7 +38,6 @@ define amdgpu_kernel void @caller_internal() {
 ; GFX11-HSA-NEXT:    s_getpc_b64 s[0:1]
 ; GFX11-HSA-NEXT:    s_add_u32 s0, s0, internal_func@gotpcrel32@lo+4
 ; GFX11-HSA-NEXT:    s_addc_u32 s1, s1, internal_func@gotpcrel32@hi+12
-; GFX11-HSA-NEXT:    s_mov_b32 s32, 0
 ; GFX11-HSA-NEXT:    s_load_b64 s[0:1], s[0:1], 0x0
 ; GFX11-HSA-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-HSA-NEXT:    s_swappc_b64 s[30:31], s[0:1]
@@ -47,7 +45,6 @@ define amdgpu_kernel void @caller_internal() {
 ;
 ; GFX1250-HSA-LABEL: caller_internal:
 ; GFX1250-HSA:       ; %bb.0:
-; GFX1250-HSA-NEXT:    s_mov_b32 s32, 0
 ; GFX1250-HSA-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-HSA-NEXT:    s_get_pc_i64 s[0:1]
 ; GFX1250-HSA-NEXT:    s_add_nc_u64 s[0:1], s[0:1], internal_func@gotpcrel+4

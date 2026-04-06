@@ -40,7 +40,6 @@ define amdgpu_cs void @cs_to_chain_preserve(<3 x i32> inreg %a, <3 x i32> %b) {
 ; GISEL-GFX11-NEXT:    v_dual_mov_b32 v8, v3 :: v_dual_mov_b32 v9, v1
 ; GISEL-GFX11-NEXT:    s_mov_b32 s5, chain_preserve_callee@abs32@hi
 ; GISEL-GFX11-NEXT:    s_mov_b32 s0, s3
-; GISEL-GFX11-NEXT:    s_mov_b32 s32, 0
 ; GISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
 ; GISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
@@ -54,7 +53,6 @@ define amdgpu_cs void @cs_to_chain_preserve(<3 x i32> inreg %a, <3 x i32> %b) {
 ; GISEL-GFX10-NEXT:    v_mov_b32_e32 v10, v2
 ; GISEL-GFX10-NEXT:    s_mov_b32 s4, chain_preserve_callee@abs32@lo
 ; GISEL-GFX10-NEXT:    s_mov_b32 s5, chain_preserve_callee@abs32@hi
-; GISEL-GFX10-NEXT:    s_mov_b32 s32, 0
 ; GISEL-GFX10-NEXT:    s_waitcnt lgkmcnt(0)
 ; GISEL-GFX10-NEXT:    s_bitset0_b32 s103, 21
 ; GISEL-GFX10-NEXT:    s_add_u32 s100, s100, s3
@@ -82,7 +80,6 @@ define amdgpu_cs void @cs_to_chain_preserve(<3 x i32> inreg %a, <3 x i32> %b) {
 ; DAGISEL-GFX11-NEXT:    v_dual_mov_b32 v8, v3 :: v_dual_mov_b32 v9, v1
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s5, chain_preserve_callee@abs32@hi
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 s0, s3
-; DAGISEL-GFX11-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL-GFX11-NEXT:    s_mov_b32 exec_lo, -1
 ; DAGISEL-GFX11-NEXT:    s_setpc_b64 s[4:5]
 ;
@@ -96,7 +93,6 @@ define amdgpu_cs void @cs_to_chain_preserve(<3 x i32> inreg %a, <3 x i32> %b) {
 ; DAGISEL-GFX10-NEXT:    v_mov_b32_e32 v10, v2
 ; DAGISEL-GFX10-NEXT:    s_mov_b32 s4, chain_preserve_callee@abs32@lo
 ; DAGISEL-GFX10-NEXT:    s_mov_b32 s5, chain_preserve_callee@abs32@hi
-; DAGISEL-GFX10-NEXT:    s_mov_b32 s32, 0
 ; DAGISEL-GFX10-NEXT:    s_waitcnt lgkmcnt(0)
 ; DAGISEL-GFX10-NEXT:    s_bitset0_b32 s103, 21
 ; DAGISEL-GFX10-NEXT:    s_add_u32 s100, s100, s3
