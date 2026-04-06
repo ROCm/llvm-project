@@ -187,19 +187,14 @@ define amdgpu_vs <8 x float> @load_v8i32(ptr addrspace(6) inreg %p0, ptr addrspa
 ; GFX67-NEXT:    v_mov_b32_e32 v7, s7
 ; GFX67-NEXT:    ; return to shader part epilog
 ;
-; GFX89-LABEL: load_v8i32:
-; GFX89:       ; %bb.0:
+; GFX8-LABEL: load_v8i32:
+; GFX8:       ; %bb.0:
 ; GFX8-NEXT:    s_mov_b32 s9, 0
 ; GFX8-NEXT:    s_mov_b32 s8, s1
 ; GFX8-NEXT:    s_mov_b32 s1, s9
 ; GFX8-NEXT:    s_load_dwordx8 s[0:7], s[0:1], 0x0
 ; GFX8-NEXT:    s_load_dwordx8 s[8:15], s[8:9], 0x40
-; GFX9-NEXT:    s_mov_b32 s3, 0
-; GFX9-NEXT:    s_mov_b32 s2, s1
-; GFX9-NEXT:    s_mov_b32 s1, s3
-; GFX9-NEXT:    s_load_dwordx8 s[4:11], s[0:1], 0x0
-; GFX9-NEXT:    s_load_dwordx8 s[12:19], s[2:3], 0x40
-; GFX89-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    s_add_i32 s0, s0, s8
 ; GFX8-NEXT:    s_add_i32 s1, s1, s9
 ; GFX8-NEXT:    s_add_i32 s2, s2, s10
@@ -208,6 +203,24 @@ define amdgpu_vs <8 x float> @load_v8i32(ptr addrspace(6) inreg %p0, ptr addrspa
 ; GFX8-NEXT:    s_add_i32 s5, s5, s13
 ; GFX8-NEXT:    s_add_i32 s6, s6, s14
 ; GFX8-NEXT:    s_add_i32 s7, s7, s15
+; GFX8-NEXT:    v_mov_b32_e32 v0, s0
+; GFX8-NEXT:    v_mov_b32_e32 v1, s1
+; GFX8-NEXT:    v_mov_b32_e32 v2, s2
+; GFX8-NEXT:    v_mov_b32_e32 v3, s3
+; GFX8-NEXT:    v_mov_b32_e32 v4, s4
+; GFX8-NEXT:    v_mov_b32_e32 v5, s5
+; GFX8-NEXT:    v_mov_b32_e32 v6, s6
+; GFX8-NEXT:    v_mov_b32_e32 v7, s7
+; GFX8-NEXT:    ; return to shader part epilog
+;
+; GFX9-LABEL: load_v8i32:
+; GFX9:       ; %bb.0:
+; GFX9-NEXT:    s_mov_b32 s3, 0
+; GFX9-NEXT:    s_mov_b32 s2, s1
+; GFX9-NEXT:    s_mov_b32 s1, s3
+; GFX9-NEXT:    s_load_dwordx8 s[4:11], s[0:1], 0x0
+; GFX9-NEXT:    s_load_dwordx8 s[12:19], s[2:3], 0x40
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_add_i32 s0, s4, s12
 ; GFX9-NEXT:    s_add_i32 s1, s5, s13
 ; GFX9-NEXT:    s_add_i32 s2, s6, s14
@@ -216,15 +229,15 @@ define amdgpu_vs <8 x float> @load_v8i32(ptr addrspace(6) inreg %p0, ptr addrspa
 ; GFX9-NEXT:    s_add_i32 s5, s9, s17
 ; GFX9-NEXT:    s_add_i32 s6, s10, s18
 ; GFX9-NEXT:    s_add_i32 s7, s11, s19
-; GFX89-NEXT:    v_mov_b32_e32 v0, s0
-; GFX89-NEXT:    v_mov_b32_e32 v1, s1
-; GFX89-NEXT:    v_mov_b32_e32 v2, s2
-; GFX89-NEXT:    v_mov_b32_e32 v3, s3
-; GFX89-NEXT:    v_mov_b32_e32 v4, s4
-; GFX89-NEXT:    v_mov_b32_e32 v5, s5
-; GFX89-NEXT:    v_mov_b32_e32 v6, s6
-; GFX89-NEXT:    v_mov_b32_e32 v7, s7
-; GFX89-NEXT:    ; return to shader part epilog
+; GFX9-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-NEXT:    v_mov_b32_e32 v2, s2
+; GFX9-NEXT:    v_mov_b32_e32 v3, s3
+; GFX9-NEXT:    v_mov_b32_e32 v4, s4
+; GFX9-NEXT:    v_mov_b32_e32 v5, s5
+; GFX9-NEXT:    v_mov_b32_e32 v6, s6
+; GFX9-NEXT:    v_mov_b32_e32 v7, s7
+; GFX9-NEXT:    ; return to shader part epilog
   %gep1 = getelementptr inbounds <8 x i32>, ptr addrspace(6) %p1, i32 2
   %r0 = load <8 x i32>, ptr addrspace(6) %p0
   %r1 = load <8 x i32>, ptr addrspace(6) %gep1
@@ -276,19 +289,14 @@ define amdgpu_vs <16 x float> @load_v16i32(ptr addrspace(6) inreg %p0, ptr addrs
 ; GFX67-NEXT:    v_mov_b32_e32 v15, s15
 ; GFX67-NEXT:    ; return to shader part epilog
 ;
-; GFX89-LABEL: load_v16i32:
-; GFX89:       ; %bb.0:
+; GFX8-LABEL: load_v16i32:
+; GFX8:       ; %bb.0:
 ; GFX8-NEXT:    s_mov_b32 s17, 0
 ; GFX8-NEXT:    s_mov_b32 s16, s1
 ; GFX8-NEXT:    s_mov_b32 s1, s17
 ; GFX8-NEXT:    s_load_dwordx16 s[0:15], s[0:1], 0x0
 ; GFX8-NEXT:    s_load_dwordx16 s[16:31], s[16:17], 0x80
-; GFX9-NEXT:    s_mov_b32 s3, 0
-; GFX9-NEXT:    s_mov_b32 s2, s1
-; GFX9-NEXT:    s_mov_b32 s1, s3
-; GFX9-NEXT:    s_load_dwordx16 s[4:19], s[0:1], 0x0
-; GFX9-NEXT:    s_load_dwordx16 s[36:51], s[2:3], 0x80
-; GFX89-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    s_add_i32 s0, s0, s16
 ; GFX8-NEXT:    s_add_i32 s1, s1, s17
 ; GFX8-NEXT:    s_add_i32 s2, s2, s18
@@ -305,6 +313,32 @@ define amdgpu_vs <16 x float> @load_v16i32(ptr addrspace(6) inreg %p0, ptr addrs
 ; GFX8-NEXT:    s_add_i32 s13, s13, s29
 ; GFX8-NEXT:    s_add_i32 s14, s14, s30
 ; GFX8-NEXT:    s_add_i32 s15, s15, s31
+; GFX8-NEXT:    v_mov_b32_e32 v0, s0
+; GFX8-NEXT:    v_mov_b32_e32 v1, s1
+; GFX8-NEXT:    v_mov_b32_e32 v2, s2
+; GFX8-NEXT:    v_mov_b32_e32 v3, s3
+; GFX8-NEXT:    v_mov_b32_e32 v4, s4
+; GFX8-NEXT:    v_mov_b32_e32 v5, s5
+; GFX8-NEXT:    v_mov_b32_e32 v6, s6
+; GFX8-NEXT:    v_mov_b32_e32 v7, s7
+; GFX8-NEXT:    v_mov_b32_e32 v8, s8
+; GFX8-NEXT:    v_mov_b32_e32 v9, s9
+; GFX8-NEXT:    v_mov_b32_e32 v10, s10
+; GFX8-NEXT:    v_mov_b32_e32 v11, s11
+; GFX8-NEXT:    v_mov_b32_e32 v12, s12
+; GFX8-NEXT:    v_mov_b32_e32 v13, s13
+; GFX8-NEXT:    v_mov_b32_e32 v14, s14
+; GFX8-NEXT:    v_mov_b32_e32 v15, s15
+; GFX8-NEXT:    ; return to shader part epilog
+;
+; GFX9-LABEL: load_v16i32:
+; GFX9:       ; %bb.0:
+; GFX9-NEXT:    s_mov_b32 s3, 0
+; GFX9-NEXT:    s_mov_b32 s2, s1
+; GFX9-NEXT:    s_mov_b32 s1, s3
+; GFX9-NEXT:    s_load_dwordx16 s[4:19], s[0:1], 0x0
+; GFX9-NEXT:    s_load_dwordx16 s[36:51], s[2:3], 0x80
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_add_i32 s0, s4, s36
 ; GFX9-NEXT:    s_add_i32 s1, s5, s37
 ; GFX9-NEXT:    s_add_i32 s2, s6, s38
@@ -321,23 +355,23 @@ define amdgpu_vs <16 x float> @load_v16i32(ptr addrspace(6) inreg %p0, ptr addrs
 ; GFX9-NEXT:    s_add_i32 s13, s17, s49
 ; GFX9-NEXT:    s_add_i32 s14, s18, s50
 ; GFX9-NEXT:    s_add_i32 s15, s19, s51
-; GFX89-NEXT:    v_mov_b32_e32 v0, s0
-; GFX89-NEXT:    v_mov_b32_e32 v1, s1
-; GFX89-NEXT:    v_mov_b32_e32 v2, s2
-; GFX89-NEXT:    v_mov_b32_e32 v3, s3
-; GFX89-NEXT:    v_mov_b32_e32 v4, s4
-; GFX89-NEXT:    v_mov_b32_e32 v5, s5
-; GFX89-NEXT:    v_mov_b32_e32 v6, s6
-; GFX89-NEXT:    v_mov_b32_e32 v7, s7
-; GFX89-NEXT:    v_mov_b32_e32 v8, s8
-; GFX89-NEXT:    v_mov_b32_e32 v9, s9
-; GFX89-NEXT:    v_mov_b32_e32 v10, s10
-; GFX89-NEXT:    v_mov_b32_e32 v11, s11
-; GFX89-NEXT:    v_mov_b32_e32 v12, s12
-; GFX89-NEXT:    v_mov_b32_e32 v13, s13
-; GFX89-NEXT:    v_mov_b32_e32 v14, s14
-; GFX89-NEXT:    v_mov_b32_e32 v15, s15
-; GFX89-NEXT:    ; return to shader part epilog
+; GFX9-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-NEXT:    v_mov_b32_e32 v2, s2
+; GFX9-NEXT:    v_mov_b32_e32 v3, s3
+; GFX9-NEXT:    v_mov_b32_e32 v4, s4
+; GFX9-NEXT:    v_mov_b32_e32 v5, s5
+; GFX9-NEXT:    v_mov_b32_e32 v6, s6
+; GFX9-NEXT:    v_mov_b32_e32 v7, s7
+; GFX9-NEXT:    v_mov_b32_e32 v8, s8
+; GFX9-NEXT:    v_mov_b32_e32 v9, s9
+; GFX9-NEXT:    v_mov_b32_e32 v10, s10
+; GFX9-NEXT:    v_mov_b32_e32 v11, s11
+; GFX9-NEXT:    v_mov_b32_e32 v12, s12
+; GFX9-NEXT:    v_mov_b32_e32 v13, s13
+; GFX9-NEXT:    v_mov_b32_e32 v14, s14
+; GFX9-NEXT:    v_mov_b32_e32 v15, s15
+; GFX9-NEXT:    ; return to shader part epilog
   %gep1 = getelementptr inbounds <16 x i32>, ptr addrspace(6) %p1, i32 2
   %r0 = load <16 x i32>, ptr addrspace(6) %p0
   %r1 = load <16 x i32>, ptr addrspace(6) %gep1

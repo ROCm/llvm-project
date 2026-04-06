@@ -11,7 +11,6 @@ define void @lsr_order_mul24_0(i32 %arg, i32 %arg2, i32 %arg6, i32 %arg13, i32 %
 ; GFX9:       ; %bb.0: ; %bb
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    global_load_dword v5, v[0:1], off
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_and_b32_e32 v2, 0xffffff, v2
 ; GFX9-NEXT:    v_sub_u32_e32 v4, v4, v1
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0

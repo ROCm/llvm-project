@@ -23,16 +23,14 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    s_mov_b64 s[0:1], -1
 ; ISA-NEXT:    v_interp_p1_f32_e32 v0, v1, attr0.x
 ; ISA-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v0
+; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
-; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
-; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
-; ISA-NEXT:    s_mov_b64 s[0:1], -1
 ; ISA-NEXT:    s_mov_b32 s12, 0
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    s_mov_b64 s[4:5], 0
-; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    s_mov_b64 s[6:7], 0
 ; ISA-NEXT:    s_mov_b64 s[2:3], 0
 ; ISA-NEXT:    s_branch .LBB0_2
@@ -161,7 +159,6 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:    s_mov_b64 s[0:1], -1
 ; ISA-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
-; ISA-NEXT:    s_mov_b64 s[2:3], -1
 ; ISA-NEXT:    s_mov_b32 s8, 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; ISA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v1

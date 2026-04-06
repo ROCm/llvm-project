@@ -49,9 +49,9 @@ body: |
 ...
 
 ---
-# SGPR PHI with one real value and IMPLICIT_DEF, but neither the 
+# SGPR PHI with one real value and IMPLICIT_DEF, but neither the
 # real value's Block or the other predeccsor block dominates the
-# Phi Block, so no PHI simplification occurs. 
+# Phi Block, so no PHI simplification occurs.
 name: no_simplify_non_dominating_value
 tracksRegLiveness: true
 body: |
@@ -106,7 +106,7 @@ body: |
 ...
 
 ---
-# VGPR PHI with one real value and one IMPLICIT_DEF, with the real value's 
+# VGPR PHI with one real value and one IMPLICIT_DEF, with the real value's
 # block dominating PHI block, but since its a VGPR value its not uniform,
 # so PHI simplication is not supposed to occur.
 name: no_simplify_vgpr_phi

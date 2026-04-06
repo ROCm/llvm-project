@@ -2272,6 +2272,13 @@ void ControlFlowRewriter::rewrite() {
   AccumulatorRegs = Updater.getAllAccumulators();
   Updater.cleanup();
 
+  if (RegAllOnes && MRI.use_empty(RegAllOnes)) {
+    MRI.getVRegDef(RegAllOnes)->eraseFromParent();
+  }
+  if (RegZero && MRI.use_empty(RegZero)) {
+    MRI.getVRegDef(RegZero)->eraseFromParent();
+  }
+
   LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_accs\n");
   LLVM_DEBUG(Function.dump());
   LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_accs\n");
