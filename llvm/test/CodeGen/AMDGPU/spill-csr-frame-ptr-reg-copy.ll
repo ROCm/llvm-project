@@ -3,7 +3,7 @@
 ; GCN-LABEL: {{^}}spill_csr_s5_copy:
 ; GCN: s_mov_b32 [[FP_SCRATCH_COPY:s[0-9]+]], s33
 ; GCN: s_xor_saveexec_b64
-; GCN: buffer_store_dword {{v[0-9]+}}, off, s[0:3], s33 offset:4 ; 4-byte Folded Spill
+; GCN: buffer_store_dword v2, off, s[0:3], s33 offset:4 ; 4-byte Folded Spill
 ; GCN: s_mov_b64 exec
 ; GCN: buffer_store_dword v40, off, s[0:3], s33 offset:8 ; 4-byte Folded Spill
 ; GCN: s_mov_b64 exec
@@ -15,7 +15,7 @@
 
 ; GCN: v_readlane_b32 [[FP_SCRATCH_COPY:s[0-9]+]], v40, 2
 ; GCN: s_xor_saveexec_b64
-; GCN: buffer_load_dword {{v[0-9]+}}, off, s[0:3], s33 offset:4 ; 4-byte Folded Reload
+; GCN: buffer_load_dword v2, off, s[0:3], s33 offset:4 ; 4-byte Folded Reload
 ; GCN: s_mov_b64 exec
 ; GCN: buffer_load_dword v40, off, s[0:3], s33 offset:8 ; 4-byte Folded Reload
 ; GCN: s_mov_b64 exec
