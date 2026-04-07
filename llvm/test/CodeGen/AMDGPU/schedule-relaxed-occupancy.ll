@@ -1,7 +1,7 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx906  < %s | FileCheck --check-prefix=OCC %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx906 -amdgpu-use-amdgpu-trackers=1  < %s | FileCheck --check-prefix=OCC-GCNTRACKER %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx906 -amdgpu-schedule-relaxed-occupancy=true  < %s | FileCheck --check-prefix=RELAX %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx906 -amdgpu-use-amdgpu-trackers=1 -amdgpu-schedule-relaxed-occupancy=true  < %s | FileCheck --check-prefix=RELAX-GCNTRACKER %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx906  < %s | FileCheck --check-prefix=OCC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx906 -amdgpu-use-amdgpu-trackers=1  < %s | FileCheck --check-prefix=OCC-GCNTRACKER %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx906 -amdgpu-schedule-relaxed-occupancy=true  < %s | FileCheck --check-prefix=RELAX %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx906 -amdgpu-use-amdgpu-trackers=1 -amdgpu-schedule-relaxed-occupancy=true  < %s | FileCheck --check-prefix=RELAX-GCNTRACKER %s
 
 
 ; Using -amgpu-schedule-relaxed-occupancy allows scheduler to produce better ILP by further relaxing occupancy target
@@ -9,11 +9,11 @@
 ; CHECK-LABEL: {{^}}load_fma_store:
 ; OCC:    NumVgprs: 24
 ; OCC-GCNTRACKER:    NumVgprs: 26
-; RELAX:    NumVgprs: 64
+; RELAX:    NumVgprs: 62
 ; RELAX-GCNTRACKER:    NumVgprs: 60
 ; OCC: NumVGPRsForWavesPerEU: 24
 ; OCC-GCNTRACKER: NumVGPRsForWavesPerEU: 26
-; RELAX: NumVGPRsForWavesPerEU: 64
+; RELAX: NumVGPRsForWavesPerEU: 62
 ; RELAX-GCNTRACKER: NumVGPRsForWavesPerEU: 60
 ; OCC:    Occupancy: 10
 ; OCC-GCNTRACKER:    Occupancy: 9

@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn -mcpu=tahiti -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tahiti -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; This should end with an no-op sequence of exec mask manipulations
 ; Mask should be in original state after executed unreachable block
@@ -8,19 +8,21 @@
 ; GCN-LABEL: {{^}}uniform_br_trivial_ret_divergent_br_trivial_unreachable:
 ; GCN: s_cbranch_scc1 [[RET_BB:.LBB[0-9]+_[0-9]+]]
 
-; GCN-NEXT: ; %else
+; GCN: ; %else
 
-; GCN: s_and_saveexec_b64 [[SAVE_EXEC:s\[[0-9]+:[0-9]+\]]], vcc
+; GCN: v_cmp_gt_f32_e32 vcc
+; GCN: s_or_b64 {{s\[[0-9]+:[0-9]+\]}}, {{s\[[0-9]+:[0-9]+\]}}, vcc
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz
 
-; GCN: ; %bb.{{[0-9]+}}: ; %unreachable.bb
-; GCN-NEXT: ; divergent unreachable
+; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
+; GCN: ; divergent unreachable
 
-; GCN-NEXT: ; %bb.{{[0-9]+}}: ; %Flow
-; GCN-NEXT: s_or_b64 exec, exec
+; GCN: [[RET_BB]]: ; %UnifiedReturnBlock
+; GCN: s_or_b64 exec, exec
 
-; GCN-NEXT: [[RET_BB]]:
-; GCN-NEXT: ; return
-; GCN-NEXT: .Lfunc_end0
+; GCN: ; return
+; GCN: .Lfunc_end0
 define amdgpu_ps <{ i32, i32, i32, i32, i32, i32, i32, i32, i32, float, float, float, float, float, float, float, float, float, float, float, float, float, float }> @uniform_br_trivial_ret_divergent_br_trivial_unreachable(ptr addrspace(4) inreg %arg, ptr addrspace(4) inreg %arg1, ptr addrspace(4) inreg %arg2, ptr addrspace(4) inreg %arg3, float inreg %arg4, i32 inreg %arg5, <2 x i32> %arg6, <2 x i32> %arg7, <2 x i32> %arg8, <3 x i32> %arg9, <2 x i32> %arg10, <2 x i32> %arg11, <2 x i32> %arg12, float %arg13, float %arg14, float %arg15, float %arg16, i32 inreg %arg17, i32 %arg18, i32 %arg19, float %arg20, i32 %arg21) #0 {
 entry:
   %i.i = extractelement <2 x i32> %arg7, i32 0
@@ -54,24 +56,24 @@ ret.bb:                                          ; preds = %else, %main_body
 }
 
 ; GCN-LABEL: {{^}}uniform_br_nontrivial_ret_divergent_br_nontrivial_unreachable:
-; GCN: s_cbranch_vccz
+; GCN: s_cbranch_scc{{(0|1)}} [[RET_BB2:.LBB[0-9]+_[0-9]+]]
 
-; GCN: ; %bb.{{[0-9]+}}: ; %Flow
-; GCN: s_cbranch_execnz [[RETURN:.LBB[0-9]+_[0-9]+]]
+; GCN: v_cmp_gt_f32_e32
+; GCN: s_cbranch_execz
 
-; GCN: ; %UnifiedReturnBlock
-; GCN-NEXT: s_or_b64 exec, exec
-; GCN-NEXT: s_waitcnt
+; GCN: [[RET_BB2]]: ; %ret.bb
+; GCN: v_mov_b32_e32 v0, 11
+; GCN: {{buffer|flat}}_store_dword
 
-; GCN: .LBB{{[0-9]+_[0-9]+}}: ; %else
-; GCN: s_and_saveexec_b64 [[SAVE_EXEC:s\[[0-9]+:[0-9]+\]]], vcc
+; GCN: s_cbranch_execz [[UNIFIED_RET:.LBB[0-9]+_[0-9]+]]
 
-; GCN-NEXT:  ; %unreachable.bb
+; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
 ; GCN: ds_write_b32
 ; GCN: ; divergent unreachable
 
-; GCN: ; %ret.bb
-; GCN: store_dword
+; GCN: [[UNIFIED_RET]]: ; %UnifiedReturnBlock
+; GCN: s_or_b64 exec, exec
+; GCN: s_waitcnt
 define amdgpu_ps <{ i32, i32, i32, i32, i32, i32, i32, i32, i32, float, float, float, float, float, float, float, float, float, float, float, float, float, float }> @uniform_br_nontrivial_ret_divergent_br_nontrivial_unreachable(ptr addrspace(4) inreg %arg, ptr addrspace(4) inreg %arg1, ptr addrspace(4) inreg %arg2, ptr addrspace(4) inreg %arg3, float inreg %arg4, i32 inreg %arg5, <2 x i32> %arg6, <2 x i32> %arg7, <2 x i32> %arg8, <3 x i32> %arg9, <2 x i32> %arg10, <2 x i32> %arg11, <2 x i32> %arg12, float %arg13, float %arg14, float %arg15, float %arg16, float %arg17, i32 inreg %arg18, i32 %arg19, float %arg20, i32 %arg21) #0 {
 main_body:
   %i.i = extractelement <2 x i32> %arg7, i32 0

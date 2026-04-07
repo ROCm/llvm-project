@@ -1,15 +1,16 @@
-; RUN: llc -mtriple=amdgcn -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -simplifycfg-require-and-preserve-domtree=1 < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}lower_control_flow_unreachable_terminator:
-; GCN: v_cmp_eq_u32
-; GCN: s_and_saveexec_b64
-; GCN-NEXT: s_cbranch_execz .LBB0_{{[0-9]+}}
+; GCN: v_cmp_ne_u32
+; GCN: s_xor_b64
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz .LBB0_{{[0-9]+}}
 
-; GCN-NEXT: ; %bb.{{[0-9]+}}: ; %unreachable
+; GCN: .LBB0_{{[0-9]+}}: ; %unreachable
 ; GCN: ds_write_b32
 ; GCN: ; divergent unreachable
 
-; GCN-NEXT: BB0_{{[0-9]+}}: ; %UnifiedReturnBlock
+; GCN: .LBB0_{{[0-9]+}}: ; %UnifiedReturnBlock
 ; GCN: s_endpgm
 
 define amdgpu_kernel void @lower_control_flow_unreachable_terminator() #0 {
@@ -27,16 +28,17 @@ ret:
 }
 
 ; GCN-LABEL: {{^}}lower_control_flow_unreachable_terminator_swap_block_order:
-; GCN: v_cmp_ne_u32
-; GCN: s_and_saveexec_b64
-; GCN-NEXT: s_cbranch_execz .LBB1_{{[0-9]+}}
+; GCN: v_cmp_eq_u32
+; GCN: s_xor_b64
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz .LBB1_{{[0-9]+}}
 
-; GCN-NEXT: ; %bb.{{[0-9]+}}: ; %unreachable
+; GCN: .LBB1_{{[0-9]+}}: ; %unreachable
 ; GCN: ds_write_b32
 ; GCN: ; divergent unreachable
 
-; GCN: BB1_{{[0-9]+}}:
-; GCN-NEXT: s_endpgm
+; GCN: .LBB1_{{[0-9]+}}:
+; GCN: s_endpgm
 define amdgpu_kernel void @lower_control_flow_unreachable_terminator_swap_block_order() #0 {
 bb:
   %tmp15 = tail call i32 @llvm.amdgcn.workitem.id.y()

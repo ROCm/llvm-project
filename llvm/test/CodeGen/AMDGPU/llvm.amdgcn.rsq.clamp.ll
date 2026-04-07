@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=VI -check-prefix=FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=VI -check-prefix=FUNC %s
 
 declare float @llvm.amdgcn.rsq.clamp.f32(float) #1
 declare double @llvm.amdgcn.rsq.clamp.f64(double) #1
@@ -22,14 +22,12 @@ define amdgpu_kernel void @rsq_clamp_f32(ptr addrspace(1) %out, float %src) #0 {
 ; FUNC-LABEL: {{^}}rsq_clamp_f64:
 ; SI: v_rsq_clamp_f64_e32
 
-; TODO: this constant should be folded:
-; VI-DAG: s_mov_b32 [[NEG1:s[0-9]+]], -1
-; VI-DAG: s_mov_b32 s[[LOW1:[0-9]+]], [[NEG1]]
-; VI-DAG: s_mov_b32 s[[HIGH1:[0-9]+]], 0x7fefffff
-; VI-DAG: s_mov_b32 s[[HIGH2:[0-9]+]], 0xffefffff
-; VI-DAG: v_rsq_f64_e32 [[RSQ:v\[[0-9]+:[0-9]+\]]], s[{{[0-9]+:[0-9]+}}
-; VI-DAG: v_min_f64 v[0:1], [[RSQ]], s[[[LOW1]]:[[HIGH1]]]
-; VI-DAG: v_max_f64 v[0:1], v[0:1], s[[[LOW1]]:[[HIGH2]]]
+; VI-DAG: v_rsq_f64_e32 v[0:1], s[{{[0-9]+:[0-9]+}}]
+; VI-DAG: s_mov_b32 s{{[0-9]+}}, -1
+; VI-DAG: s_mov_b32 s{{[0-9]+}}, 0x7fefffff
+; VI-DAG: v_min_f64 v[0:1], v[0:1], s[{{[0-9]+:[0-9]+}}]
+; VI-DAG: s_mov_b32 s{{[0-9]+}}, 0xffefffff
+; VI-DAG: v_max_f64 v[0:1], v[0:1], s[{{[0-9]+:[0-9]+}}]
 define amdgpu_kernel void @rsq_clamp_f64(ptr addrspace(1) %out, double %src) #0 {
   %rsq_clamp = call double @llvm.amdgcn.rsq.clamp.f64(double %src)
   store double %rsq_clamp, ptr addrspace(1) %out
