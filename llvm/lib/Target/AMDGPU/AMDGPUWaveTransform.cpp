@@ -468,12 +468,15 @@ public:
 };
 
 void ReconvergeCFGHelper::run() {
+  LLVM_DEBUG(dbgs() << "----- reconverging begins -----\n");
   HeartAdjustedPostOrder hapo;
   hapo.compute(CycleInfo, DomTree);
 
   // Step 1: Create initial set of WaveNodes mirroring the thread-level CFG.
+  LLVM_DEBUG(dbgs() << "HAPO: ");
   Nodes.reserve(hapo.size());
   for (MachineBasicBlock *Block : llvm::reverse(hapo)) {
+    LLVM_DEBUG(dbgs() << printMBBReference(*Block) << " ");
     Nodes.emplace_back(
         std::make_unique<WaveNode>(Block, CycleInfo.getCycle(Block)));
     WaveNode *WN = Nodes.back().get();
@@ -487,7 +490,7 @@ void ReconvergeCFGHelper::run() {
     }
     NodeForBlock.insert(std::make_pair(Block, WN));
   }
-
+  LLVM_DEBUG(dbgs() << '\n');
   // Link up CFG edges. Note that we ignore unreachable predecessors.
   for (const auto &NodePtr : Nodes) {
     for (MachineBasicBlock *Succ : NodePtr->Block->successors()) {
@@ -501,6 +504,8 @@ void ReconvergeCFGHelper::run() {
                                                         NodePtr.get());
     }
   }
+
+  // LLVM_DEBUG(dbgs() << "[RCFG_HELPER] CFG mirror:\n"; dumpNodes());
 
   // Step 2: Create helper nodes for cycles:
   //
@@ -520,18 +525,20 @@ void ReconvergeCFGHelper::run() {
 
     if (Node->Cycle != CurrentCycle) {
       while (CurrentCycle && !CurrentCycle->contains(Node->Cycle)) {
+        // LLVM_DEBUG(dbgs() << "[RCFG_HELPER] Prepare exit cycle: "
+        // << CurrentCycle->print(CycleInfo.getSSAContext())
+        // << '\n');
 
         prepareNodesExitCycle(CurrentCycle, Node);
         CurrentCycle = CurrentCycle->getParentCycle();
 
-      }
-
-      if (Node->Cycle != CurrentCycle) {
         assert(Node->Cycle->getParentCycle() == CurrentCycle);
-
+        // LLVM_DEBUG(dbgs() << "[RCFG_HELPER] Prepare enter cycle: "
+        // << Node->Cycle->print(CycleInfo.getSSAContext())
+        // << '\n');
         prepareNodesEnterCycle(Node);
         CurrentCycle = Node->Cycle;
-
+        // LLVM_DEBUG(dumpNodes());
       }
     }
 
@@ -539,6 +546,8 @@ void ReconvergeCFGHelper::run() {
   }
   Nodes = std::move(NextNodes);
   NextNodes.clear();
+  
+  LLVM_DEBUG(dbgs() << "RCFG pre:\n"; dumpNodes());
 
   // Step 3: Run reconverging transform.
   for (unsigned Index = 0; Index != Nodes.size(); ++Index)
@@ -550,14 +559,41 @@ void ReconvergeCFGHelper::run() {
   SmallVector<WaveNode *, 4> RerouteNodes;
   SmallVector<WaveNode *, 4> RerouteRoots;
   SmallVector<WaveNode *, 4> TmpSet;
+
+  LLVM_DEBUG({
+    dbgs() << "Nodes:";
+    for (auto &NodePtr : Nodes) {
+      dbgs() << " " << NodePtr->printableName();
+    }
+    dbgs() << "\n";
+  });
+
   for (auto &NodePtr : Nodes) {
     WaveNode *Node = NodePtr.get();
 
+    LLVM_DEBUG(dbgs() << "Reconverging: " << Node->printableName());
+
     int RerouteClass = -1;
+    LLVM_DEBUG({
+      dbgs() << " Preds:";
+      for (auto It = Node->Predecessors.begin(),
+                E = Node->Predecessors.end();
+           It != E; ++It) {
+        if (It != Node->Predecessors.begin())
+          dbgs() << ",";
+        dbgs() << (*It)->printableName();
+      }
+      dbgs() << "\n";
+    });
     for (WaveNode *Pred : Node->Predecessors) {
+      LLVM_DEBUG(dbgs() << "  Pred:" << Pred->printableName() << "\n");
       // Backward edge and predecessors without divergence don't need to
       // establish the reconverging property.
       if (Pred->OrderIndex >= Node->OrderIndex || !Pred->IsDivergent) {
+        LLVM_DEBUG(dbgs() << "    skip, uniform:"
+                          << (Pred->IsDivergent ? 0 : 1) << " backedge:"
+                          << (Pred->OrderIndex >= Node->OrderIndex ? 1 : 0)
+                          << "\n");
         PredClasses.push_back(-1);
         continue;
       }
@@ -574,11 +610,24 @@ void ReconvergeCFGHelper::run() {
         // The current node is going to be the primary successor.
         auto SelfIt = llvm::find(Pred->Successors, Node);
         std::rotate(Pred->Successors.begin(), SelfIt, SelfIt + 1);
+        LLVM_DEBUG(dbgs() << "    skip, Prim succ of " << Pred->printableName() << " : " 
+                          << Node->printableName() << "\n");
         PredClasses.push_back(-1);
         continue;
       }
 
       bool AllEdgesToNode = appendOpenSet(Pred, Node, TmpSet);
+      LLVM_DEBUG({
+        dbgs() << "    appendOpenSet(Pred=" << Pred->printableName()
+               << ", Node=" << Node->printableName() << ") = "
+               << AllEdgesToNode << " \nTmpSet={";
+        for (auto It = TmpSet.begin(), E = TmpSet.end(); It != E; ++It) {
+          if (It != TmpSet.begin())
+            dbgs() << ",";
+          dbgs() << (*It)->printableName();
+        }
+        dbgs() << "}\n";
+      });
 
       int PredClass = -1;
       for (WaveNode *reachableNode : TmpSet) {
@@ -619,11 +668,32 @@ void ReconvergeCFGHelper::run() {
     }
     assert(PredClasses.size() == Node->Predecessors.size());
 
+
+    LLVM_DEBUG({
+      dbgs() << "  RerouteCandidateClasses: ";
+      DenseMap<unsigned, SmallVector<unsigned, 4>> Sets;
+      for (unsigned I = 0, E = RerouteCandidates.size(); I != E; ++I)
+        Sets[RerouteCandidateClasses.findLeader(I)].push_back(I);
+      for (auto &[Leader, Members] : Sets) {
+        dbgs() << "{";
+        for (unsigned J = 0, JE = Members.size(); J != JE; ++J) {
+          if (J)
+            dbgs() << " ";
+          dbgs() << RerouteCandidates[Members[J]]->printableName();
+        }
+        dbgs() << "} ";
+      }
+      dbgs() << "\n\n";
+    });
+
     WaveNode *FlowNode = nullptr;
+    if(RerouteClass == -1)  LLVM_DEBUG(dbgs() << "  No rerouting needed\n");
     if (RerouteClass != -1) {
       NextNodes.push_back(
           std::make_unique<WaveNode>(Node->Cycle, ++NumFlowNodes));
       FlowNode = NextNodes.back().get();
+      LLVM_DEBUG(dbgs() << "  Rerouting... created new flow node "
+                        << FlowNode->printableName() << "\n");
       FlowNode->OrderIndex = Node->OrderIndex;
       FlowNode->IsDivergent = true;
       FlowNode->IsSecondary = true;
@@ -641,6 +711,16 @@ void ReconvergeCFGHelper::run() {
           RerouteRoots.push_back(Node->Predecessors[Idx]);
       }
 
+      LLVM_DEBUG({
+        dbgs() << "    rerouteEdgesBeyond(Reroute={";
+        for (unsigned I = 0, E = RerouteNodes.size(); I != E; ++I) {
+          if (I)
+            dbgs() << ", ";
+          dbgs() << RerouteNodes[I]->printableName();
+        }
+        dbgs() << "}, Node=" << Node->printableName()
+               << ", Flow=" << FlowNode->printableName() << ")\n";
+      });
       rerouteEdgesBeyond(RerouteNodes, Node, FlowNode);
 
       // The current node is going to be the flow node's primary successor,
@@ -688,11 +768,14 @@ void ReconvergeCFGHelper::run() {
 
     NextNodes.push_back(std::move(NodePtr));
 
+    LLVM_DEBUG(dbgs() << "RCFG " << Node->printableName() << '\n'; dumpNodes());
   }
   Nodes = std::move(NextNodes);
   NextNodes.clear();
 
   cleanupSimpleFlowNodes();
+  LLVM_DEBUG(dbgs() << "----- reconverging ends -----\n");
+
 }
 
 /// Short-circuit and remove flow nodes with a single wave successor.
@@ -762,6 +845,7 @@ void ReconvergeCFGHelper::cleanupSimpleFlowNodes() {
     NextNodes.clear();
   } while (Changed);
 
+  LLVM_DEBUG(dbgs() << "RCFG simplified:\n"; dumpNodes());
 }
 
 /// Return the given cycle's effective heart. If a cycle has no explicitly
@@ -1196,14 +1280,13 @@ void ReconvergeCFGHelper::printNodes(raw_ostream &Out) {
     if (NodePtr)
       printNode(NodePtr.get());
   }
-  Out << '\n';
+  // Out << '\n';
 }
 
 /// Dump all WaveNodes to debug out.
 LLVM_ATTRIBUTE_UNUSED
 void ReconvergeCFGHelper::dumpNodes() {
   printNodes(dbgs());
-
   verifyNodes();
 }
 
@@ -1581,6 +1664,19 @@ private:
                             unsigned ImplicitBranchOpc = 0)
         : Node(Node), CondReg(CondReg), InvertCondition(InvertCondition),
           CondIsUndef(CondIsUndef), ImplicitBranchOpc(ImplicitBranchOpc) {}
+
+    void print(raw_ostream &OS, const MachineRegisterInfo &MRI,
+               const SIInstrInfo &TII) const {
+      OS << "{Node:";
+      if (Node)
+        OS << Node->printableName();
+      else
+        OS << "nullptr";
+      OS << ", Cond:" << printReg(CondReg, MRI.getTargetRegisterInfo(), 0, &MRI)
+         << ", Inv:" << InvertCondition << ", Undef:" << CondIsUndef
+         << ", ImplicitBrOpc:"
+         << (ImplicitBranchOpc ? TII.getName(ImplicitBranchOpc) : "0") << "}";
+    }
   };
 
   struct CFGNodeInfo {
@@ -1620,6 +1716,65 @@ private:
     unsigned ImplicitBranchOpc = 0;
 
     explicit CFGNodeInfo(WaveNode *Node) : Node(Node) {}
+
+    void print(raw_ostream &os, const MachineRegisterInfo &MRI,
+               const SIInstrInfo &TII) const {
+      os << "  Node: " << Node->printableName() << "\n";
+      os << "  OrigExit: " << OrigExit << "\n";
+      os << "  OrigCondition: "
+         << printReg(OrigCondition, MRI.getTargetRegisterInfo(), 0, &MRI)
+         << "\n";
+      os << "  OrigConditionUndef: " << OrigConditionUndef << "\n";
+      os << "  ImplicitBranchOpc: "
+         << (ImplicitBranchOpc ? TII.getName(ImplicitBranchOpc) : "0") << "\n";
+      if (OrigSuccCond == nullptr)
+        os << "  OrigSuccCond: nullptr\n";
+      else
+        os << "  OrigSuccCond: " << OrigSuccCond->printableName() << "\n";
+      if (OrigSuccFinal == nullptr)
+        os << "  OrigSuccFinal: nullptr\n";
+      else
+        os << "  OrigSuccFinal: " << OrigSuccFinal->printableName() << "\n";
+      os << "  PrimarySuccessorExec: "
+         << printReg(PrimarySuccessorExec, MRI.getTargetRegisterInfo(), 0, &MRI)
+         << "\n";
+      os << "  OriginBranch(Ri): {";
+      for (const auto &E : OriginBranch) {
+        os << "(" << E.getPointer()->printableName() << ", " << E.getInt()
+           << "), ";
+      }
+      os << "}\n";
+      os << "  origins(Ti):\n";
+      for (const auto &E : origins) {
+        os << "    ";
+        E.print(os, MRI, TII);
+        os << "\n";
+      }
+      os << "  Predecessors: {";
+      for (const auto *P : Node->Predecessors)
+        os << P->printableName() << ", ";
+      os << "}\n";
+      os << "  Successors: {";
+      for (const auto *S : Node->Successors)
+        os << S->printableName() << ", ";
+      os << "}\n";
+      os << "  LaneSuccessors: {";
+      for (const auto &E : Node->LaneSuccessors) {
+        os << "(Lane: " << E.Lane->printableName()
+           << ", Wave: " << E.Wave->printableName() << "), ";
+      }
+      os << "}\n";
+      os << "  LanePredecessors: {";
+      for (const auto &E : Node->LanePredecessors) {
+        os << "(Lane: " << E.Lane->printableName()
+           << ", Wave: " << E.Wave->printableName() << "), ";
+      }
+      os << "}\n";
+      os << "  IsDivergent: " << Node->IsDivergent << "\n";
+      os << "  IsSecondary: " << Node->IsSecondary << "\n";
+      os << "  OrderIndex: " << Node->OrderIndex << "\n";
+      os << "  FlowNum: " << Node->FlowNum << "\n";
+    }
   };
 
   /// Information required to synthesize divergent terminators with a common
@@ -1658,6 +1813,17 @@ public:
   const SmallDenseSet<Register, 4> &getAccumulatorRegs() const {
     return AccumulatorRegs;
   }
+  
+  void dumpNodeInfo() const {
+    dbgs() << "CFGNodeInfo:\n";
+    for (WaveNode *Node : NodeOrder) {
+      auto It = NodeInfo.find(Node);
+      if (It != NodeInfo.end()) {
+        It->second.print(dbgs(), MRI, TII);
+        dbgs() << "\n";
+      }
+    }
+  }
 };
 
 } // anonymous namespace
@@ -1692,11 +1858,11 @@ void ControlFlowRewriter::prepareWaveCfg() {
         if (LaneSucc.Wave == primaryWave) {
           assert(!primaryLane);
           primaryLane = LaneSucc.Lane;
-#ifdef NDEBUG
+          #ifdef NDEBUG //TODO: remove this
           // early-out when assertions are disabled: we don't check for
           // uniqueness in that case
           break;
-#endif
+          #endif
         }
       }
       assert(primaryLane);
@@ -1736,7 +1902,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
         Info.OrigSuccFinal =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
       } else if (Terminator.isReturn()) {
-        assert(!Info.OrigCondition);
+        assert(!Info.OrigCondition); //ensures that the exit block has no conditional branching.
         Info.OrigExit = true;
       } else {
         assert(Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN &&
@@ -1771,11 +1937,11 @@ void ControlFlowRewriter::prepareWaveCfg() {
 
     // Record information for reconstructing lane masks.
     if (!Info.OrigSuccCond) {
-      if (Info.OrigSuccFinal) {
+      if (Info.OrigSuccFinal) {//redundant check after L1888 assert
         NodeInfo.find(Info.OrigSuccFinal)->second.origins.emplace_back(Node);
       }
     } else {
-      if (!Node->IsDivergent && Node->Successors.size() >= 2) {
+      if (!Node->IsDivergent && Node->Successors.size() >= 2) {//Conditional Uniform branch with 2 wave level succs
         assert(Node->Successors.size() == 2);
 
         NodeInfo.find(Info.OrigSuccCond)
@@ -1865,6 +2031,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
 /// establishing wave-level control flow and insert instructions for EXEC mask
 /// manipulation.
 void ControlFlowRewriter::rewrite() {
+  LLVM_DEBUG(dbgs() << "----- rewrite begins -----\n");
   GCNLaneMaskAnalysis LMA(Function);
   const AMDGPU::LaneMaskConstants &LMC = LMU.getLaneMaskConsts();
 
@@ -1941,6 +2108,10 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(Other->Block);
     }
   }
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str()
+                    << "_with_term\n";
+             Function.dump(); dbgs() << "CFG_END:" << Function.getName().str()
+                                     << "_with_term\n");
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
@@ -2143,6 +2314,11 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(OriginNode->Successors[0]->Block);
     }
 
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_"
+                      << printMBBReference(*LaneTarget->Block) << "\n";
+               Function.dump();
+               dbgs() << "CFG_END:" << Function.getName().str() << "_"
+                      << printMBBReference(*LaneTarget->Block) << "\n");
   }
 
   // Step 3: Insert rejoin masks.
@@ -2190,11 +2366,23 @@ void ControlFlowRewriter::rewrite() {
         .addReg(LMC.ExecReg)
         .addReg(Rejoin);
 
+    LLVM_DEBUG(dbgs() << "ACC:"
+                      << printReg(Rejoin, MRI.getTargetRegisterInfo(), 0, &MRI)
+                      << '\n');
+
+    LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_"
+                      << printMBBReference(*Secondary->Block) << ".rejoin\n";
+               Function.dump();
+               dbgs() << "CFG_END:" << Function.getName().str() << "_"
+                      << printMBBReference(*Secondary->Block) << ".rejoin\n");
   }
   Updater.insertAccumulatorResets();
   AccumulatorRegs = Updater.getAllAccumulators();
   Updater.cleanup();
 
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << Function.getName().str() << "_acc\n");
+  LLVM_DEBUG(Function.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << Function.getName().str() << "_acc\n");
 }
 
 /// This function fixes virtual register uses that have no dominating definition
@@ -2501,6 +2689,15 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
     return false;
   }
 
+  LLVM_DEBUG({
+    dbgs() << "AMDGPU Wave Transform: " << MF.getName() << '\n';
+    for (const MachineBasicBlock &MBB : MF) {
+      dbgs() << "  " << printMBBReference(MBB) << " ->";
+      for (const MachineBasicBlock *Succ : MBB.successors())
+        dbgs() << " " << printMBBReference(*Succ);
+      dbgs() << '\n';
+    }
+  });
   DomTree = &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
 
@@ -2557,10 +2754,14 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
 
   DomTree->applyUpdates(CFGUpdates);
   CFGUpdates.clear();
-
-
+  LLVM_DEBUG(CFRewriter.dumpNodeInfo());
   // Step 3: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();
+  LLVM_DEBUG(dbgs() << "RCFG_BEGIN:" << MF.getName() << "\n");
+  LLVM_DEBUG(ReconvergeHelper.dumpNodes());
+  LLVM_DEBUG(dbgs() << "RCFG_END:" << MF.getName() << "\n");
+  LLVM_DEBUG(CFRewriter.dumpNodeInfo());
+
   // Step 4: Fix missing dominating defs (non-SSA).
   // The wave transform inserts flow blocks and reroutes edges, which can
   // create CFG paths to a use that bypass all defs of a register, violating
@@ -2656,4 +2857,8 @@ void AMDGPUWaveTransform::cleanup(
 
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
+  LLVM_DEBUG(dbgs() << "CFG_BEGIN:" << MF.getName().str() << "_clean\n");
+  LLVM_DEBUG(MF.dump());
+  LLVM_DEBUG(dbgs() << "CFG_END:" << MF.getName().str() << "_clean\n");
+  LLVM_DEBUG(dbgs() << "----- rewrite ends -----\n");
 }
