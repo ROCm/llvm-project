@@ -423,7 +423,6 @@ void GCNLaneMaskUpdater::process() {
   // Reset accumulator.
   for (BlockInfo &Info : Blocks) {
     assert(Info.Flags || Info.Value);
-    LLVM_DEBUG(Info.dump());
     if (Info.Flags)
       AccumulatorResetBlocks[Info.Block].push_back({Accumulator, Info.Flags});
   }
