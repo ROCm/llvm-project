@@ -2010,18 +2010,22 @@ void ControlFlowRewriter::rewrite() {
         }
         case AMDGPU::S_CBRANCH_VCCNZ:
         case AMDGPU::S_CBRANCH_VCCZ: {
-          BuildMI(
-              *LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
-              TII.get(LaneOrigin.ImplicitBranchOpc == AMDGPU::S_CBRANCH_VCCNZ
-                          ? AMDGPU::S_CMP_LG_U32
-                          : AMDGPU::S_CMP_EQ_U32))
+          // S_AND_B* VCC, VCC sets SCC (SCC = VCC != 0)
+          BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
+                  TII.get(LMC.AndOpc), LMC.VccReg)
               .addReg(LMC.VccReg)
-              .addImm(0);
+              .addReg(LMC.VccReg);
+
+          // SCC gets set when VCC!=0, implyng equivalence to VCCNZ branch;
+          // so we should flip CSELECT operands for VCCZ branch equivalent.
+          bool FlipForVCCZ =
+              (LaneOrigin.ImplicitBranchOpc == AMDGPU::S_CBRANCH_VCCZ);
+
           CondReg = LMU.createLaneMaskReg();
           auto MIB =
               BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm, {},
                       TII.get(LMC.CSelectOpc), CondReg);
-          if (!LaneOrigin.InvertCondition)
+          if (LaneOrigin.InvertCondition == FlipForVCCZ)
             MIB.addReg(LMC.ExecReg).addImm(0);
           else
             MIB.addImm(0).addReg(LMC.ExecReg);
