@@ -28,8 +28,7 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    v_cndmask_b32_e64 v3, 0, -1, vcc
 ; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[0:1]
 ; ISA-NEXT:    s_mov_b64 s[0:1], -1
-; ISA-NEXT:    s_mov_b64 s[0:1], 0
-; ISA-NEXT:    s_mov_b32 s12, 0
+; ISA-NEXT:    s_mov_b32 s10, 0
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    s_mov_b64 s[4:5], 0
@@ -42,38 +41,36 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; ISA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v4
 ; ISA-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
-; ISA-NEXT:    s_or_b64 s[10:11], s[10:11], s[0:1]
-; ISA-NEXT:    s_xor_b64 s[0:1], exec, s[10:11]
-; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
-; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[0:1]
-; ISA-NEXT:    s_mov_b64 exec, s[10:11]
+; ISA-NEXT:    s_xor_b64 s[12:13], exec, s[0:1]
+; ISA-NEXT:    s_and_b64 s[12:13], s[12:13], exec
+; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
+; ISA-NEXT:    s_mov_b64 exec, s[0:1]
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    s_mov_b64 s[0:1], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_5
 ; ISA-NEXT:  .LBB0_2: ; %loop
 ; ISA-NEXT:    ; =>This Inner Loop Header: Depth=1
-; ISA-NEXT:    s_mov_b64 s[10:11], 0
-; ISA-NEXT:    s_cmp_lt_u32 s12, 32
+; ISA-NEXT:    s_cmp_lt_u32 s10, 32
 ; ISA-NEXT:    v_mov_b32_e32 v4, v1
 ; ISA-NEXT:    v_mov_b32_e32 v3, v1
+; ISA-NEXT:    s_mov_b64 s[12:13], 0
 ; ISA-NEXT:    s_cbranch_scc0 .LBB0_1
 ; ISA-NEXT:  ; %bb.3: ; %endif1
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; ISA-NEXT:    s_and_b64 s[14:15], exec, vcc
-; ISA-NEXT:    s_or_b64 s[8:9], s[8:9], s[14:15]
-; ISA-NEXT:    s_xor_b64 s[14:15], exec, s[8:9]
-; ISA-NEXT:    s_and_b64 s[14:15], s[14:15], exec
+; ISA-NEXT:    s_and_b64 s[0:1], exec, vcc
+; ISA-NEXT:    s_or_b64 s[8:9], s[8:9], s[0:1]
+; ISA-NEXT:    s_xor_b64 s[0:1], exec, s[8:9]
 ; ISA-NEXT:    v_mov_b32_e32 v4, v1
 ; ISA-NEXT:    v_mov_b32_e32 v3, v2
-; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], s[14:15]
+; ISA-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; ISA-NEXT:    s_mov_b64 exec, s[8:9]
 ; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB0_1
 ; ISA-NEXT:  .LBB0_4: ; %endif2
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
-; ISA-NEXT:    s_add_i32 s12, s12, 1
+; ISA-NEXT:    s_add_i32 s10, s10, 1
 ; ISA-NEXT:    v_mov_b32_e32 v4, v2
 ; ISA-NEXT:    v_mov_b32_e32 v3, v2
 ; ISA-NEXT:    s_branch .LBB0_1
@@ -163,8 +160,7 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
 ; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
 ; ISA-NEXT:    s_mov_b64 s[2:3], -1
-; ISA-NEXT:    s_mov_b64 s[2:3], 0
-; ISA-NEXT:    s_mov_b32 s8, 0
+; ISA-NEXT:    s_mov_b32 s6, 0
 ; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; ISA-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v1
 ; ISA-NEXT:    s_mov_b64 s[2:3], 0
@@ -172,20 +168,19 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:  .LBB1_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB1_2 Depth=1
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; ISA-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; ISA-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
-; ISA-NEXT:    s_xor_b64 s[10:11], exec, s[6:7]
+; ISA-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; ISA-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
 ; ISA-NEXT:    s_and_b64 s[10:11], s[10:11], exec
-; ISA-NEXT:    s_mov_b32 s8, 1
+; ISA-NEXT:    s_mov_b32 s6, 1
 ; ISA-NEXT:    s_or_b64 s[2:3], s[2:3], s[10:11]
-; ISA-NEXT:    s_mov_b64 exec, s[6:7]
-; ISA-NEXT:    s_mov_b64 s[6:7], 0
+; ISA-NEXT:    s_mov_b64 exec, s[8:9]
+; ISA-NEXT:    s_mov_b64 s[8:9], 0
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB1_4
 ; ISA-NEXT:  .LBB1_2: ; %loop
 ; ISA-NEXT:    ; =>This Inner Loop Header: Depth=1
-; ISA-NEXT:    s_mov_b64 s[6:7], 0
-; ISA-NEXT:    s_cmp_lg_u32 s8, 0
+; ISA-NEXT:    s_mov_b64 s[4:5], 0
+; ISA-NEXT:    s_cmp_lg_u32 s6, 0
 ; ISA-NEXT:    v_mov_b32_e32 v2, v1
 ; ISA-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; ISA-NEXT:    s_cbranch_scc0 .LBB1_1

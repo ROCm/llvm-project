@@ -13,10 +13,8 @@ define void @global_store_different_block(ptr addrspace(1) %data_ptr, ptr addrsp
 ; GFX950-NEXT:    v_and_b32_e32 v0, 1, v4
 ; GFX950-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; GFX950-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX950-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX950-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
-; GFX950-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX950-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX950-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX950-NEXT:    ; divergent control-flow edge
