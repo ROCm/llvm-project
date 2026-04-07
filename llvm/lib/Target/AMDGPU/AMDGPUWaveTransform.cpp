@@ -2255,6 +2255,186 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
 
 namespace {
 
+enum AccRegState : uint8_t { Zero, AllOnes };
+using RegStateMap = DenseMap<Register, AccRegState>;
+using BlockStateMap = DenseMap<MachineBasicBlock *, RegStateMap>;
+
+class ForwardPropSimplifier {
+  MachineFunction &MF;
+  const SIInstrInfo &TII;
+  const AMDGPU::LaneMaskConstants &LMC;
+  const SmallDenseSet<Register, 4> &AccRegs;
+  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
+  BlockStateMap OUT;
+
+  static inline AccRegState SZero = Zero;
+  static inline AccRegState SAllOnes = AllOnes;
+
+  void replaceWithMov(MachineInstr &MI, int64_t ImmVal) {
+    MI.setDesc(TII.get(LMC.MovOpc));
+    while (MI.getNumOperands() > 1)
+      MI.removeOperand(MI.getNumOperands() - 1);
+    MI.addOperand(MachineOperand::CreateImm(ImmVal));
+  }
+
+  void replaceWithCopy(MachineInstr &MI, Register SrcReg) {
+    MI.setDesc(TII.get(AMDGPU::COPY));
+    while (MI.getNumOperands() > 1)
+      MI.removeOperand(MI.getNumOperands() - 1);
+    MI.addOperand(MachineOperand::CreateReg(SrcReg, false));
+  }
+
+  RegStateMap mergeIncoming(MachineBasicBlock &MBB) {
+    RegStateMap Result;
+    if (MBB.pred_empty())
+      return Result;
+
+    for (Register Reg : AccRegs) {
+      auto FirstIt = OUT[*MBB.pred_begin()].find(Reg);
+      if (FirstIt == OUT[*MBB.pred_begin()].end())
+        continue;
+
+      AccRegState Expected = FirstIt->second;
+      if (llvm::all_of(MBB.predecessors(), [&](MachineBasicBlock *Pred) {
+            auto It = OUT[Pred].find(Reg);
+            return It != OUT[Pred].end() && It->second == Expected;
+          }))
+        Result[Reg] = Expected;
+    }
+    return Result;
+  }
+
+  AccRegState *lookupState(RegStateMap &Map, Register Reg) {
+    if (!AccRegs.count(Reg))
+      return nullptr;
+    auto It = Map.find(Reg);
+    return (It != Map.end()) ? &It->second : nullptr;
+  }
+
+  AccRegState *tryFoldBinary(MachineInstr &MI, unsigned Opc, AccRegState *S1,
+                             AccRegState *S2) {
+    if (S1 && S2) {
+      int64_t V1 = (*S1 == Zero) ? 0 : -1;
+      int64_t V2 = (*S2 == Zero) ? 0 : -1;
+      int64_t R = 0;
+      if (Opc == LMC.OrOpc)
+        R = V1 | V2;
+      if (Opc == LMC.AndOpc)
+        R = V1 & V2;
+      if (Opc == LMC.XorOpc)
+        R = V1 ^ V2;
+      replaceWithMov(MI, R);
+      return (R == 0) ? &SZero : &SAllOnes;
+    }
+
+    if (S1 || S2) {
+      AccRegState ResolvedState = S1 ? *S1 : *S2;
+      Register UnresolvedReg =
+          S1 ? MI.getOperand(2).getReg() : MI.getOperand(1).getReg();
+
+      if (Opc == LMC.OrOpc) {
+        if (ResolvedState == AllOnes) {
+          replaceWithMov(MI, -1);
+          return &SAllOnes;
+        }
+        if (ResolvedState == Zero) {
+          replaceWithCopy(MI, UnresolvedReg);
+          return nullptr;
+        }
+      }
+      if (Opc == LMC.AndOpc) {
+        if (ResolvedState == Zero) {
+          replaceWithMov(MI, 0);
+          return &SZero;
+        }
+        if (ResolvedState == AllOnes) {
+          replaceWithCopy(MI, UnresolvedReg);
+          return nullptr;
+        }
+      }
+      if (Opc == LMC.XorOpc) {
+        if (ResolvedState == Zero) {
+          replaceWithCopy(MI, UnresolvedReg);
+          return nullptr;
+        }
+      }
+    }
+
+    return nullptr;
+  }
+
+  RegStateMap forwardPropagateAccStates(MachineBasicBlock &MBB,
+                                        RegStateMap &IN) {
+    RegStateMap Cur = IN;
+
+    auto MapIt = AccInstMap.find(&MBB);
+    if (MapIt == AccInstMap.end())
+      return Cur;
+
+    for (MachineInstr *MI : MapIt->second) {
+      unsigned Opc = MI->getOpcode();
+      AccRegState *PostDefState = nullptr;
+
+      if (Opc == LMC.OrOpc || Opc == LMC.AndOpc || Opc == LMC.XorOpc) {
+        AccRegState *S1 = lookupState(Cur, MI->getOperand(1).getReg());
+        AccRegState *S2 = lookupState(Cur, MI->getOperand(2).getReg());
+        PostDefState = tryFoldBinary(*MI, Opc, S1, S2);
+
+      } else if (Opc == LMC.MovOpc && MI->getOperand(1).isImm()) {
+        int64_t Imm = MI->getOperand(1).getImm();
+        if (Imm == 0)
+          PostDefState = &SZero;
+        if (Imm == -1)
+          PostDefState = &SAllOnes;
+
+      } else if (Opc == AMDGPU::COPY) {
+        PostDefState = lookupState(Cur, MI->getOperand(1).getReg());
+      }
+
+      Register Dst = MI->getOperand(0).getReg();
+      if (AccRegs.count(Dst)) {
+        if (PostDefState)
+          Cur[Dst] = *PostDefState;
+        else
+          Cur.erase(Dst);
+      }
+    }
+    return Cur;
+  }
+
+  bool processBlock(MachineBasicBlock &MBB) {
+    RegStateMap IN = mergeIncoming(MBB);
+    RegStateMap NewOut = forwardPropagateAccStates(MBB, IN);
+
+    if (OUT[&MBB] == NewOut)
+      return false;
+    OUT[&MBB] = std::move(NewOut);
+    return true;
+  }
+
+public:
+  ForwardPropSimplifier(
+      MachineFunction &MF, const SIInstrInfo &TII,
+      const AMDGPU::LaneMaskConstants &LMC,
+      const SmallDenseSet<Register, 4> &AccRegs,
+      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap)
+      : MF(MF), TII(TII), LMC(LMC), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
+
+  void run() {
+    SmallVector<MachineBasicBlock *, 16> Worklist;
+    ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+    for (MachineBasicBlock *MBB : RPOT)
+      Worklist.push_back(MBB);
+
+    while (!Worklist.empty()) {
+      MachineBasicBlock *MBB = Worklist.pop_back_val();
+      if (processBlock(*MBB))
+        for (MachineBasicBlock *Succ : MBB->successors())
+          Worklist.push_back(Succ);
+    }
+  }
+};
+
 /// \brief Wave transform machine function pass.
 class AMDGPUWaveTransform : public MachineFunctionPass {
 public:
@@ -2385,13 +2565,12 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
 
   // Step 3: Fix up terminators and insert rejoin masks.
   CFRewriter.rewrite();
-  cleanup(MF, CFRewriter.getAccumulatorRegs());
-
   // Step 4: Fix missing dominating defs (non-SSA).
   // The wave transform inserts flow blocks and reroutes edges, which can
   // create CFG paths to a use that bypass all defs of a register, violating
   // the CFG dominance relations.
   fixMissingDominatingDefs(MF, *DomTree, *TII);
+  cleanup(MF, CFRewriter.getAccumulatorRegs());
 
   // FIXME: restore the following 1 line:
   // UI.clear();
@@ -2471,10 +2650,14 @@ void AMDGPUWaveTransform::cleanup(
 
   DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> AccInstMap;
   SmallVector<MachineInstr *, 8> DeadDefs;
-
   buildAccInstMap(MF, AccumulatorRegs, AccInstMap, DeadDefs);
 
   for (MachineInstr *MI : DeadDefs)
     MI->eraseFromParent();
 
+  const auto &LMC =
+      AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
+
+  ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
+  Simplifier.run();
 }
