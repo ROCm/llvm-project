@@ -630,7 +630,7 @@ LogicalResult PMEventOp::verify() {
   }
 
   if (eventId) {
-    if (eventId < 0 || eventId > 15) {
+    if (eventId < 0u || eventId > 15u) {
       return emitOpError() << "`id` must be between 0 and 15";
     }
   }

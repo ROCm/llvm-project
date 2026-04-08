@@ -894,25 +894,25 @@ AsinPolynomialApproximation::matchAndRewrite(math::AsinOp op,
   // Asin(x) approximation for x = [-9/16, 9/16]:
   Value s = mul(x, x);
   Value q = mul(s, s);
-  Value r = bcast(floatCst(builder, 5.5579749017470502e-2, elementType));
-  Value t = bcast(floatCst(builder, -6.2027913464120114e-2, elementType));
+  Value r = bcast(floatCst(builder, 5.5579749017470502e-2f, elementType));
+  Value t = bcast(floatCst(builder, -6.2027913464120114e-2f, elementType));
 
-  r = fma(r, q, bcast(floatCst(builder, 5.4224464349245036e-2, elementType)));
-  t = fma(t, q, bcast(floatCst(builder, -1.1326992890324464e-2, elementType)));
-  r = fma(r, q, bcast(floatCst(builder, 1.5268872539397656e-2, elementType)));
-  t = fma(t, q, bcast(floatCst(builder, 1.0493798473372081e-2, elementType)));
-  r = fma(r, q, bcast(floatCst(builder, 1.4106045900607047e-2, elementType)));
-  t = fma(t, q, bcast(floatCst(builder, 1.7339776384962050e-2, elementType)));
-  r = fma(r, q, bcast(floatCst(builder, 2.2372961589651054e-2, elementType)));
-  t = fma(t, q, bcast(floatCst(builder, 3.0381912707941005e-2, elementType)));
-  r = fma(r, q, bcast(floatCst(builder, 4.4642857881094775e-2, elementType)));
-  t = fma(t, q, bcast(floatCst(builder, 7.4999999991367292e-2, elementType)));
+  r = fma(r, q, bcast(floatCst(builder, 5.4224464349245036e-2f, elementType)));
+  t = fma(t, q, bcast(floatCst(builder, -1.1326992890324464e-2f, elementType)));
+  r = fma(r, q, bcast(floatCst(builder, 1.5268872539397656e-2f, elementType)));
+  t = fma(t, q, bcast(floatCst(builder, 1.0493798473372081e-2f, elementType)));
+  r = fma(r, q, bcast(floatCst(builder, 1.4106045900607047e-2f, elementType)));
+  t = fma(t, q, bcast(floatCst(builder, 1.7339776384962050e-2f, elementType)));
+  r = fma(r, q, bcast(floatCst(builder, 2.2372961589651054e-2f, elementType)));
+  t = fma(t, q, bcast(floatCst(builder, 3.0381912707941005e-2f, elementType)));
+  r = fma(r, q, bcast(floatCst(builder, 4.4642857881094775e-2f, elementType)));
+  t = fma(t, q, bcast(floatCst(builder, 7.4999999991367292e-2f, elementType)));
   r = fma(r, s, t);
-  r = fma(r, s, bcast(floatCst(builder, 1.6666666666670193e-1, elementType)));
+  r = fma(r, s, bcast(floatCst(builder, 1.6666666666670193e-1f, elementType)));
   t = mul(x, s);
   r = fma(r, t, x);
 
-  Value rsub = sub(bcast(floatCst(builder, 1.57079632679, elementType)), r);
+  Value rsub = sub(bcast(floatCst(builder, 1.57079632679f, elementType)), r);
   r = sel(gt, rsub, r);
   r = scopy(r, operand);
 
@@ -972,8 +972,8 @@ AcosPolynomialApproximation::matchAndRewrite(math::AcosOp op,
       arith::CmpFOp::create(builder, arith::CmpFPredicate::OGT, r, chkConst);
 
   Value trueVal =
-      fma(bcast(floatCst(builder, 9.3282184640716537e-1, elementType)),
-          bcast(floatCst(builder, 1.6839188885261840e+0, elementType)),
+      fma(bcast(floatCst(builder, 9.3282184640716537e-1f, elementType)),
+          bcast(floatCst(builder, 1.6839188885261840e+0f, elementType)),
           math::AsinOp::create(builder, r));
 
   Value falseVal = math::SqrtOp::create(builder, fma(half, r, half));
@@ -992,8 +992,8 @@ AcosPolynomialApproximation::matchAndRewrite(math::AcosOp op,
   Value betweenNegOneZero =
       arith::AndIOp::create(builder, greaterThanNegOne, lessThanZero);
 
-  trueVal = fma(bcast(floatCst(builder, 1.8656436928143307e+0, elementType)),
-                bcast(floatCst(builder, 1.6839188885261840e+0, elementType)),
+  trueVal = fma(bcast(floatCst(builder, 1.8656436928143307e+0f, elementType)),
+                bcast(floatCst(builder, 1.6839188885261840e+0f, elementType)),
                 arith::NegFOp::create(builder, r));
 
   Value finalVal =
