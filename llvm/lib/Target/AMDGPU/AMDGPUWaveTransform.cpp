@@ -83,6 +83,7 @@
 #include "llvm/ADT/IntEqClasses.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineCycleAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -93,6 +94,13 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-wave-transform"
+
+STATISTIC(
+    NumCleanupInstrsRemoved,
+    "Number of instructions removed during amdgpu-wave-transform cleanup");
+STATISTIC(
+    NumCleanupInstrsOptimized,
+    "Number of instructions optimized during amdgpu-wave-transform cleanup");
 
 static cl::opt<bool>
     AMDGPUWaveTransformPrintFinal("amdgpu-wave-transform-print-final",
@@ -2390,6 +2398,7 @@ class DeadAccDefEliminator {
 
         llvm::erase(AccInstMap[MBB], DeadMI);
         DeadMI->eraseFromParent();
+        ++NumCleanupInstrsRemoved;
         BlockChanged = true;
       }
 
@@ -2439,6 +2448,7 @@ class ForwardPropSimplifier {
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateImm(ImmVal));
+    ++NumCleanupInstrsOptimized;
   }
 
   void replaceWithCopy(MachineInstr &MI, Register SrcReg) {
@@ -2446,6 +2456,7 @@ class ForwardPropSimplifier {
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateReg(SrcReg, false));
+    ++NumCleanupInstrsOptimized;
   }
 
   RegStateMap mergeIncoming(MachineBasicBlock &MBB) {
@@ -2816,15 +2827,15 @@ void AMDGPUWaveTransform::cleanup(
   SmallVector<MachineInstr *, 8> DeadDefs;
   buildAccInstMap(MF, AccumulatorRegs, AccInstMap, DeadDefs);
 
+  NumCleanupInstrsRemoved += DeadDefs.size();
   for (MachineInstr *MI : DeadDefs)
     MI->eraseFromParent();
-
-  DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
-  Eliminator.run();
 
   const auto &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
 
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
+  DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
+  Eliminator.run();
 }
