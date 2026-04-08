@@ -1497,7 +1497,7 @@ amd_comgr_action_info_set_device_lib_linking(
  * When block sizes are set, SPIR-V translation and compilation actions
  * (AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC and
  * AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE) will automatically clone
- * kernel functions for each specified block size, if the size is withing the
+ * kernel functions for each specified block size, if the size is within the
  * limits specified by the amdgpu-flat-work-group-size attribute on the kernel.
  * The upper limit of the original kernel is assumed to represent the original
  * kernel, so if corresponding block size is in the set of block sizes, no new

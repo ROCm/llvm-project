@@ -551,14 +551,14 @@ if (NOT WIN32)
 endif()
 
 include(CTest)
-#if(BUILD_TESTING)
+if(BUILD_TESTING)
   add_custom_target(check-comgr COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS amd_comgr)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
   endif()
   add_subdirectory(test)
   add_subdirectory(test-lit)
-#endif()
+endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Add packaging directives for amd_comgr
