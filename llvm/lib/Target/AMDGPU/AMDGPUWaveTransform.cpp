@@ -2610,6 +2610,88 @@ public:
   }
 };
 
+class AccCopyPropagator {
+  const SmallDenseSet<Register, 4> &AccRegs;
+  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
+  MachineRegisterInfo &MRI;
+
+  bool isAccReg(const MachineOperand &MO) const {
+    return MO.isReg() && MO.getReg().isVirtual() && AccRegs.count(MO.getReg());
+  }
+
+  bool propagateBlock(SmallVectorImpl<MachineInstr *> &AccInsts) {
+    DenseMap<Register, Register> AvailCopies;
+    DenseMap<Register, SmallVector<Register, 2>> SrcToDsts;
+    bool Changed = false;
+
+    for (MachineInstr *MI : AccInsts) {
+      for (MachineOperand &MO : MI->uses()) {
+        if (!isAccReg(MO))
+          continue;
+        auto It = AvailCopies.find(MO.getReg());
+        if (It != AvailCopies.end()) {
+          MO.setReg(It->second);
+          Changed = true;
+        }
+      }
+
+      for (const MachineOperand &MO : MI->defs()) {
+        if (!isAccReg(MO))
+          continue;
+        Register DefReg = MO.getReg();
+        AvailCopies.erase(DefReg);
+        auto SrcIt = SrcToDsts.find(DefReg);
+        if (SrcIt != SrcToDsts.end()) {
+          for (Register Dst : SrcIt->second)
+            AvailCopies.erase(Dst);
+          SrcToDsts.erase(SrcIt);
+        }
+      }
+
+      if (MI->getOpcode() != AMDGPU::COPY)
+        continue;
+      Register Dst = MI->getOperand(0).getReg();
+      Register Src = MI->getOperand(1).getReg();
+      if (isAccReg(MI->getOperand(0)) && Src.isVirtual()) {
+        AvailCopies[Dst] = Src;
+        SrcToDsts[Src].push_back(Dst);
+      }
+    }
+    return Changed;
+  }
+
+  void eraseDeadCopies(SmallVectorImpl<MachineInstr *> &AccInsts) {
+    SmallVector<MachineInstr *, 4> ToErase;
+    for (MachineInstr *MI : AccInsts) {
+      if (MI->getOpcode() != AMDGPU::COPY)
+        continue;
+      Register Dst = MI->getOperand(0).getReg();
+      Register Src = MI->getOperand(1).getReg();
+      if (Dst == Src || (Dst.isVirtual() && MRI.use_empty(Dst)))
+        ToErase.push_back(MI);
+    }
+    for (MachineInstr *MI : ToErase) {
+      llvm::erase(AccInsts, MI);
+      MI->eraseFromParent();
+      ++NumCleanupInstrsRemoved;
+    }
+  }
+
+public:
+  AccCopyPropagator(
+      const SmallDenseSet<Register, 4> &AccRegs,
+      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap,
+      MachineRegisterInfo &MRI)
+      : AccRegs(AccRegs), AccInstMap(AccInstMap), MRI(MRI) {}
+
+  void run() {
+    for (auto &[MBB, AccInsts] : AccInstMap)
+      propagateBlock(AccInsts);
+    for (auto &[MBB, AccInsts] : AccInstMap)
+      eraseDeadCopies(AccInsts);
+  }
+};
+
 /// \brief Wave transform machine function pass.
 class AMDGPUWaveTransform : public MachineFunctionPass {
 public:
@@ -2836,6 +2918,10 @@ void AMDGPUWaveTransform::cleanup(
 
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
+
+  AccCopyPropagator CopyProp(AccumulatorRegs, AccInstMap, MF.getRegInfo());
+  CopyProp.run();
+
   DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
   Eliminator.run();
 }
