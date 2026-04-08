@@ -188,7 +188,8 @@ mlir::LogicalResult CIRToLLVMCopyOpLowering::matchAndRewrite(
     mlir::ConversionPatternRewriter &rewriter) const {
   mlir::DataLayout layout(op->getParentOfType<mlir::ModuleOp>());
   const mlir::Value length = mlir::LLVM::ConstantOp::create(
-      rewriter, op.getLoc(), rewriter.getI64Type(), op.getLength(layout));
+      rewriter, op.getLoc(), rewriter.getI64Type(),
+      op.getCopySizeInBytes(layout));
   assert(!cir::MissingFeatures::aggValueSlotVolatile());
   rewriter.replaceOpWithNewOp<mlir::LLVM::MemcpyOp>(
       op, adaptor.getDst(), adaptor.getSrc(), length, op.getIsVolatile());
@@ -2151,7 +2152,6 @@ void CIRToLLVMFuncOpLowering::lowerFuncAttributes(
     if (attr.getName() == mlir::SymbolTable::getSymbolAttrName() ||
         attr.getName() == func.getFunctionTypeAttrName() ||
         attr.getName() == getLinkageAttrNameString() ||
-        attr.getName() == func.getGlobalVisibilityAttrName() ||
         attr.getName() == func.getDsoLocalAttrName() ||
         attr.getName() == func.getInlineKindAttrName() ||
         attr.getName() == func.getSideEffectAttrName() ||
@@ -2329,8 +2329,8 @@ CIRToLLVMGlobalOpLowering::lowerGlobalAttributes(
     attributes.push_back(rewriter.getNamedAttr("section", sectionAttr));
 
   mlir::LLVM::VisibilityAttr visibility = mlir::LLVM::VisibilityAttr::get(
-      getContext(), lowerCIRVisibilityToLLVMVisibility(
-                        op.getGlobalVisibilityAttr().getValue()));
+      getContext(),
+      lowerCIRVisibilityToLLVMVisibility(op.getGlobalVisibility()));
   attributes.push_back(rewriter.getNamedAttr("visibility_", visibility));
 
   if (op->getAttr(CUDAExternallyInitializedAttr::getMnemonic()))
