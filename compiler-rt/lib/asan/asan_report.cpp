@@ -570,6 +570,7 @@ void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
 }
 
 static constexpr uptr kNonselfLeakCapacity = 1024;
+static constexpr int kMaxTrackedDevices = 16;
 
 struct NonselfLeak {
   u64 alloc_pc;        // hash key (0 = empty slot)
@@ -604,7 +605,7 @@ void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
     return;
 
   if (device_id == -1) {
-    struct { u64 bytes; u64 count; } dev_totals[16] = {};
+    struct { u64 bytes; u64 count; } dev_totals[kMaxTrackedDevices] = {};
 
     for (uptr i = 0; i < kNonselfLeakCapacity; i++) {
       NonselfLeak *e = &nonself_leak_table[i];
@@ -630,13 +631,13 @@ void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
 #endif
       Printf("%s", source_location.data());
 
-      if (e->device_id >= 0 && e->device_id < 16) {
+      if (e->device_id >= 0 && e->device_id < kMaxTrackedDevices) {
         dev_totals[e->device_id].bytes += e->total_bytes;
         dev_totals[e->device_id].count += e->count;
       }
     }
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < kMaxTrackedDevices; i++) {
       if (dev_totals[i].count > 0)
         Printf(
             "SUMMARY: AddressSanitizer: %llu byte(s) leaked in %llu "
