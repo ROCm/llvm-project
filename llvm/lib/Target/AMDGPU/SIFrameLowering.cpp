@@ -13,6 +13,7 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIMachineFunctionInfo.h"
 #include "llvm/BinaryFormat/Dwarf.h"
+#include "SISpillUtils.h"
 #include "llvm/CodeGen/LiveRegUnits.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -1782,23 +1783,8 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
 
       MBB.sortUniqueLiveIns();
 
-      if (!SpillFIs.empty() && SeenDbgInstr) {
-        // FIXME: The dead frame indices are replaced with a null register from
-        // the debug value instructions. We should instead, update it with the
-        // correct register value. But not sure the register value alone is
-        for (MachineInstr &MI : MBB) {
-          if (MI.isDebugValue()) {
-            uint32_t StackOperandIdx = MI.isDebugValueList() ? 2 : 0;
-            if (MI.getOperand(StackOperandIdx).isFI() &&
-                !MFI.isFixedObjectIndex(
-                    MI.getOperand(StackOperandIdx).getIndex()) &&
-                SpillFIs[MI.getOperand(StackOperandIdx).getIndex()]) {
-              MI.getOperand(StackOperandIdx)
-                  .ChangeToRegister(Register(), false /*isDef*/);
-            }
-          }
-        }
-      }
+      if (!SpillFIs.empty() && SeenDbgInstr)
+        clearDebugInfoForSpillFIs(MFI, MBB, SpillFIs);
     }
   }
 
