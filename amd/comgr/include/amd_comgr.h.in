@@ -237,6 +237,12 @@ extern "C" {
  */
 #define AMD_COMGR_VERSION_3_1
 
+/**
+ * The function was introduced or changed in version 3.2 of the interface
+ * and has the symbol version string of ``"@amd_comgr_NAME@_3.2"``.
+ */
+#define AMD_COMGR_VERSION_3_2
+
 /** @} */
 
 /**
@@ -1529,7 +1535,7 @@ amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_set_block_sizes(
   amd_comgr_action_info_t action_info,
   const size_t *block_sizes,
-  size_t count) AMD_COMGR_VERSION_3_1;
+  size_t count) AMD_COMGR_VERSION_3_2;
 
 /**
  * @brief Get the number of block sizes set for kernel cloning actions.
@@ -1550,7 +1556,7 @@ amd_comgr_action_info_set_block_sizes(
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_get_block_sizes_count(
   amd_comgr_action_info_t action_info,
-  size_t *count) AMD_COMGR_VERSION_3_1;
+  size_t *count) AMD_COMGR_VERSION_3_2;
 
 /**
  * @brief Get the block sizes set for kernel cloning actions.
@@ -1577,7 +1583,7 @@ amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_get_block_sizes(
   amd_comgr_action_info_t action_info,
   size_t count,
-  size_t *block_sizes) AMD_COMGR_VERSION_3_1;
+  size_t *block_sizes) AMD_COMGR_VERSION_3_2;
 
 /**
  * @brief Set the working directory of an action info object.
