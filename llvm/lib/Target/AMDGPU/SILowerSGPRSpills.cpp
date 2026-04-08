@@ -85,7 +85,7 @@ public:
   void determineRegsForWWMAllocation(MachineFunction &MF, BitVector &RegMask);
   void updateDbgValueInst(MachineInstr &MI, const BitVector &SpillFIs);
   void updateDbgValueInsts(MIVector &Insts, const BitVector &SpillFIs);
-  void updateDbgValueArg(MachineInstr &MI, uint32_t FIOpndIdx,
+  bool updateDbgValueArg(MachineInstr &MI, uint32_t FIOpndIdx,
                          const SIRegisterInfo::SpilledReg &vgpr);
 };
 
@@ -429,9 +429,10 @@ bool SILowerSGPRSpillsLegacy::runOnMachineFunction(MachineFunction &MF) {
 
 // Replace an FI argument in DBG_VALUE or DBG_VALUE_LIST
 // with corresponding VGPR lane. The argument if identified by FIOpndIdx.
-void SILowerSGPRSpills::updateDbgValueArg(MachineInstr &MI,
-                                          uint32_t FIOpndIdx,
-                                          const SIRegisterInfo::SpilledReg &vgpr) {
+// Returns true if MI was erased.
+bool SILowerSGPRSpills::updateDbgValueArg(
+    MachineInstr &MI, uint32_t FIOpndIdx,
+    const SIRegisterInfo::SpilledReg &vgpr) {
   const DIExpression *Expr = MI.getDebugExpression();
   DIExprBuilder EBuilder(*Expr);
   assert(Expr->holdsNewElements());
@@ -455,12 +456,15 @@ void SILowerSGPRSpills::updateDbgValueArg(MachineInstr &MI,
           FIOpndIdx += 2;
         MI.getOperand(FIOpndIdx).ChangeToRegister(vgpr.VGPR, false);
         MI.getDebugExpressionOp().setMetadata(EBuilder.intoExpression());
+        return false;
       }
       else {
         MI.eraseFromParent();
+        return true;
       }
     }
   }
+  return false;
 }
 
 // Replace frame index in a DBG_VALUE or DBG_VALUE_LIST instruction with VGPR lane.
@@ -495,7 +499,8 @@ void SILowerSGPRSpills::updateDbgValueInst(MachineInstr &MI,
         auto &FIOpnd = MI.getOperand(Arg->getIndex() + 2);
         if (WasOpndSpilled(FIOpnd, true)) {
           VGPRSpills = FuncInfo->getSGPRSpillToVirtualVGPRLanes(FIOpnd.getIndex());
-          updateDbgValueArg(MI, Arg->getIndex(), VGPRSpills[0]);
+          if (updateDbgValueArg(MI, Arg->getIndex(), VGPRSpills[0]))
+            return;
         }
       }
     }
