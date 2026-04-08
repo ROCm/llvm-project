@@ -2255,6 +2255,170 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
 
 namespace {
 
+using RegSet = SmallDenseSet<Register, 4>;
+
+class DeadAccDefEliminator {
+  MachineFunction &MF;
+  const SmallDenseSet<Register, 4> &AccRegs;
+  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
+
+  struct BlockUseDefInfo {
+    RegSet UpwardExposedUses;
+    RegSet Defs;
+    RegSet LocallyDeadDefs;
+    DenseMap<Register, MachineInstr *> LastDefInst;
+  };
+  DenseMap<MachineBasicBlock *, BlockUseDefInfo> BlockInfo;
+  DenseMap<MachineBasicBlock *, RegSet> LiveIn;
+
+  bool isAccReg(const MachineOperand &MO) const {
+    return MO.isReg() && MO.getReg().isVirtual() && AccRegs.count(MO.getReg());
+  }
+
+  static bool hasPhysRegDef(const MachineInstr &MI) {
+    return llvm::any_of(MI.operands(), [](const MachineOperand &MO) {
+      return MO.isReg() && MO.isDef() && MO.getReg().isPhysical();
+    });
+  }
+
+  RegSet computeLiveOut(MachineBasicBlock &MBB) const {
+    RegSet LiveOut;
+    for (MachineBasicBlock *Succ : MBB.successors()) {
+      auto It = LiveIn.find(Succ);
+      if (It != LiveIn.end())
+        for (Register Reg : It->second)
+          LiveOut.insert(Reg);
+    }
+    return LiveOut;
+  }
+
+  void computeBlockUseDefInfo(MachineBasicBlock &MBB) {
+    auto AccInstsIt = AccInstMap.find(&MBB);
+    if (AccInstsIt == AccInstMap.end())
+      return;
+
+    BlockUseDefInfo &Info = BlockInfo[&MBB];
+    Info = BlockUseDefInfo();
+    DenseMap<Register, bool> HasUseAfterLastDef;
+
+    for (MachineInstr *MI : AccInstsIt->second) {
+      for (const MachineOperand &MO : MI->uses()) {
+        if (!isAccReg(MO))
+          continue;
+        Register Reg = MO.getReg();
+        if (!Info.Defs.count(Reg))
+          Info.UpwardExposedUses.insert(Reg);
+        else
+          HasUseAfterLastDef[Reg] = true;
+      }
+
+      for (const MachineOperand &MO : MI->defs()) {
+        if (!isAccReg(MO))
+          continue;
+        Register Reg = MO.getReg();
+        Info.Defs.insert(Reg);
+        Info.LastDefInst[Reg] = MI;
+        HasUseAfterLastDef[Reg] = false;
+      }
+    }
+
+    for (auto &[Reg, UsedAfterDef] : HasUseAfterLastDef)
+      if (!UsedAfterDef)
+        Info.LocallyDeadDefs.insert(Reg);
+  }
+
+  void computeLiveness() {
+    LiveIn.clear();
+
+    ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+    SmallVector<MachineBasicBlock *, 16> PostOrder;
+    for (MachineBasicBlock *MBB : RPOT)
+      PostOrder.push_back(MBB);
+    std::reverse(PostOrder.begin(), PostOrder.end());
+
+    SmallVector<MachineBasicBlock *, 16> Worklist(PostOrder);
+    SmallPtrSet<MachineBasicBlock *, 16> InWorklist;
+    for (MachineBasicBlock *MBB : Worklist)
+      InWorklist.insert(MBB);
+
+    while (!Worklist.empty()) {
+      MachineBasicBlock *MBB = Worklist.pop_back_val();
+      InWorklist.erase(MBB);
+
+      RegSet LiveOut = computeLiveOut(*MBB);
+
+      RegSet NewLiveIn;
+      auto InfoIt = BlockInfo.find(MBB);
+      if (InfoIt != BlockInfo.end()) {
+        const BlockUseDefInfo &Info = InfoIt->second;
+        NewLiveIn = Info.UpwardExposedUses;
+        for (Register Reg : LiveOut)
+          if (!Info.Defs.count(Reg))
+            NewLiveIn.insert(Reg);
+      } else {
+        NewLiveIn = LiveOut;
+      }
+
+      if (NewLiveIn != LiveIn[MBB]) {
+        LiveIn[MBB] = std::move(NewLiveIn);
+        for (MachineBasicBlock *Pred : MBB->predecessors())
+          if (InWorklist.insert(Pred).second)
+            Worklist.push_back(Pred);
+      }
+    }
+  }
+
+  bool eliminateDeadDefs() {
+    bool Changed = false;
+
+    for (auto &[MBB, Info] : BlockInfo) {
+      RegSet LiveOut = computeLiveOut(*MBB);
+
+      RegSet DeadRegs;
+      for (Register Reg : Info.LocallyDeadDefs)
+        if (!LiveOut.count(Reg))
+          DeadRegs.insert(Reg);
+
+      if (DeadRegs.empty())
+        continue;
+
+      bool BlockChanged = false;
+      for (Register Reg : DeadRegs) {
+        MachineInstr *DeadMI = Info.LastDefInst[Reg];
+        if (hasPhysRegDef(*DeadMI))
+          continue;
+
+        llvm::erase(AccInstMap[MBB], DeadMI);
+        DeadMI->eraseFromParent();
+        BlockChanged = true;
+      }
+
+      if (BlockChanged) {
+        computeBlockUseDefInfo(*MBB);
+        Changed = true;
+      }
+    }
+    return Changed;
+  }
+
+public:
+  DeadAccDefEliminator(
+      MachineFunction &MF, const SmallDenseSet<Register, 4> &AccRegs,
+      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap)
+      : MF(MF), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
+
+  void run() {
+    for (auto &[MBB, _] : AccInstMap)
+      computeBlockUseDefInfo(*MBB);
+
+    bool Changed = true;
+    while (Changed) {
+      computeLiveness();
+      Changed = eliminateDeadDefs();
+    }
+  }
+};
+
 enum AccRegState : uint8_t { Zero, AllOnes };
 using RegStateMap = DenseMap<Register, AccRegState>;
 using BlockStateMap = DenseMap<MachineBasicBlock *, RegStateMap>;
@@ -2654,6 +2818,9 @@ void AMDGPUWaveTransform::cleanup(
 
   for (MachineInstr *MI : DeadDefs)
     MI->eraseFromParent();
+
+  DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
+  Eliminator.run();
 
   const auto &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
