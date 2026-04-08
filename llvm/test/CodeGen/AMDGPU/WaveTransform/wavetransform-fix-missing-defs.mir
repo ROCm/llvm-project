@@ -30,7 +30,6 @@ body: |
   ; CHECK-NEXT:   [[S_XOR_B32_1:%[0-9]+]]:sreg_32 = S_XOR_B32 $exec_lo, [[COPY1]], implicit-def $scc
   ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = COPY [[S_XOR_B32_1]]
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY1]]
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.2, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
@@ -38,14 +37,12 @@ body: |
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.2(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 42, implicit $exec
   ; CHECK-NEXT:   $vgpr1 = COPY [[V_MOV_B32_e32_]]
   ; CHECK-NEXT:   S_BRANCH %bb.2
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[COPY2]], implicit-def $scc
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   S_ENDPGM 0
   bb.0:
     successors: %bb.1, %bb.2
@@ -98,7 +95,6 @@ body: |
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = COPY [[S_XOR_B32_1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY1]]
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = IMPLICIT_DEF
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.4, implicit $exec
@@ -107,7 +103,6 @@ body: |
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.4(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 10, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.4
   ; CHECK-NEXT: {{  $}}
@@ -119,8 +114,6 @@ body: |
   ; CHECK-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = COPY [[S_AND_B32_]]
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY2]]
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.3, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.2
@@ -128,14 +121,12 @@ body: |
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   successors: %bb.3(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 20, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3:
   ; CHECK-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
   ; CHECK-NEXT:   $vgpr1 = COPY [[DEF]]
-  ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   S_ENDPGM 0
   bb.0:
     successors: %bb.1, %bb.2
@@ -194,7 +185,6 @@ body: |
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = COPY [[S_XOR_B32_1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY1]]
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:sreg_32 = IMPLICIT_DEF
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.4, implicit $exec
@@ -203,7 +193,6 @@ body: |
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.4(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   S_BRANCH %bb.4
   ; CHECK-NEXT: {{  $}}
@@ -215,8 +204,6 @@ body: |
   ; CHECK-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = COPY [[S_AND_B32_]]
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY2]]
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.3, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.2
@@ -224,14 +211,12 @@ body: |
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   successors: %bb.3(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[DEF:%[0-9]+]]:sreg_32 = S_MOV_B32 -1
   ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3:
   ; CHECK-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
   ; CHECK-NEXT:   $sgpr1 = COPY [[DEF]]
-  ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   S_ENDPGM 0
   bb.0:
     successors: %bb.1, %bb.2
@@ -290,7 +275,6 @@ body: |
   ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = COPY [[S_XOR_B32_1]]
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY1]]
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.4, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.1
@@ -298,7 +282,6 @@ body: |
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.4(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 10, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.4
   ; CHECK-NEXT: {{  $}}
@@ -310,8 +293,6 @@ body: |
   ; CHECK-NEXT:   [[S_AND_B32_:%[0-9]+]]:sreg_32 = S_AND_B32 [[S_XOR_B32_2]], $exec_lo, implicit-def $scc
   ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = COPY [[S_AND_B32_]]
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 [[COPY2]]
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
-  ; CHECK-NEXT:   [[COPY3:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; CHECK-NEXT:   S_CBRANCH_EXECZ %bb.3, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.2
@@ -319,14 +300,12 @@ body: |
   ; CHECK-NEXT: bb.2:
   ; CHECK-NEXT:   successors: %bb.3(0x80000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[COPY2:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   [[V_MOV_B32_e32_:%[0-9]+]]:vgpr_32 = V_MOV_B32_e32 20, implicit $exec
   ; CHECK-NEXT:   S_BRANCH %bb.3
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.3:
   ; CHECK-NEXT:   $exec_lo = S_OR_B32 $exec_lo, [[S_MOV_B32_1]], implicit-def $scc
   ; CHECK-NEXT:   $vgpr1 = COPY undef [[V_MOV_B32_e32_]]
-  ; CHECK-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; CHECK-NEXT:   S_ENDPGM 0
   bb.0:
     successors: %bb.1, %bb.2

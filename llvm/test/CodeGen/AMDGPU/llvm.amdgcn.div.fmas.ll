@@ -250,11 +250,9 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[10:11]
 ; GCN-NEXT:    s_mov_b64 s[12:13], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[10:11]
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB9_2
 ; GCN-NEXT:  .LBB9_1: ; %bb
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    s_mov_b32 s10, -1
 ; GCN-NEXT:    s_mov_b32 s11, s7
 ; GCN-NEXT:    buffer_load_dword v0, off, s[8:11], 0
@@ -266,12 +264,9 @@ define amdgpu_kernel void @test_div_fmas_f32_i1_phi_vcc(ptr addrspace(1) %out, p
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[2:3]
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB9_4
 ; GCN-NEXT:  .LBB9_3:
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
 ; GCN-NEXT:  .LBB9_4: ; %exit

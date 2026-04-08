@@ -27,12 +27,10 @@ define void @lsr_order_mul24_0(i32 %arg, i32 %arg2, i32 %arg6, i32 %arg13, i32 %
 ; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX9-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX9-NEXT:  .LBB0_2: ; %.loopexit
 ; GFX9-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 bb:
@@ -65,7 +63,6 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX9-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_3
 ; GFX9-NEXT:  .LBB1_1: ; %bb19
@@ -81,7 +78,6 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    v_add_u32_e32 v9, v17, v12
 ; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v18
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX9-NEXT:    ; implicit-def: $vgpr3
 ; GFX9-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX9-NEXT:  .LBB1_2: ; %bb23
@@ -116,12 +112,10 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-NEXT:    v_add_u32_e32 v7, v7, v8
 ; GFX9-NEXT:    s_or_b64 s[8:9], s[8:9], s[4:5]
 ; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB1_2
 ; GFX9-NEXT:  .LBB1_3: ; %.loopexit
 ; GFX9-NEXT:    s_or_b64 exec, exec, s[8:9]
-; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 bb:

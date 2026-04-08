@@ -1545,12 +1545,10 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GCN-NEXT:    s_xor_b64 s[12:13], exec, s[10:11]
 ; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
 ; GCN-NEXT:    s_mov_b64 exec, s[10:11]
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB9_1
 ; GCN-NEXT:  .LBB9_2: ; %bb18
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0)
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1582,12 +1580,10 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8-NEXT:    flat_store_dword v[16:17], v5
 ; GFX8-NEXT:    flat_store_dwordx4 v[18:19], v[5:8]
 ; GFX8-NEXT:    s_mov_b64 exec, s[6:7]
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX8-NEXT:  .LBB9_2: ; %bb18
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GFX8-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 bb:

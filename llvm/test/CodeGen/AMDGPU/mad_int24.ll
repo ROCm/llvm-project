@@ -180,7 +180,6 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB3_1
 ; GCN-NEXT:  .LBB3_2: ; %bb5
@@ -190,7 +189,6 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; GCN-NEXT:    s_mov_b32 s4, s6
 ; GCN-NEXT:    s_mov_b32 s5, s6
 ; GCN-NEXT:    buffer_store_dword v0, v[3:4], s[4:7], 0 addr64
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0)
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -213,13 +211,11 @@ define void @mad24_destroyed_knownbits_2(i32 %arg, i32 %arg1, i32 %arg2, ptr add
 ; VI-NEXT:    v_mov_b32_e32 v5, v2
 ; VI-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; VI-NEXT:    s_mov_b64 exec, s[6:7]
-; VI-NEXT:    s_mov_b64 s[6:7], 0
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execnz .LBB3_1
 ; VI-NEXT:  .LBB3_2: ; %bb5
 ; VI-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; VI-NEXT:    flat_store_dword v[3:4], v0
-; VI-NEXT:    s_mov_b64 s[4:5], 0
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    s_setpc_b64 s[30:31]
 ;
