@@ -477,7 +477,7 @@ void SILowerSGPRSpills::updateDbgValueInst(MachineInstr &MI,
     return (Opnd.isFI() && !FrInfo.isFixedObjectIndex(FrObjIdx) &&
             SpillFIs[Opnd.getIndex()]);
   };
-  
+
   if (MI.getDebugExpression()->holdsOldElements()) {
     // For old-style DIExpressions, just replace the frame index
     // argument with empty register.
@@ -489,12 +489,16 @@ void SILowerSGPRSpills::updateDbgValueInst(MachineInstr &MI,
     }
   } else if (MI.isDebugValueList()) {
     // Walk over DIOpArg nodes in the DIExpression and check
-    // if corresponding DBG_VALUE_LIST arguments have been spilled to VGPR lanes.
-    for (DIOp::Variant Elem : *MI.getDebugExpression()->getNewElementsRef()) {
+    // if corresponding DBG_VALUE_LIST arguments have been spilled to VGPR
+    // lanes.
+    ArrayRef<DIOp::Variant> NewElems =
+        *MI.getDebugExpression()->getNewElementsRef();
+    for (DIOp::Variant Elem : NewElems) {
       if (auto *Arg = std::get_if<DIOp::Arg>(&Elem)) {
         auto &FIOpnd = MI.getOperand(Arg->getIndex() + 2);
         if (WasOpndSpilled(FIOpnd, true)) {
-          VGPRSpills = FuncInfo->getSGPRSpillToVirtualVGPRLanes(FIOpnd.getIndex());
+          VGPRSpills =
+              FuncInfo->getSGPRSpillToVirtualVGPRLanes(FIOpnd.getIndex());
           updateDbgValueArg(MI, Arg->getIndex(), VGPRSpills[0]);
         }
       }
