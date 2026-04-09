@@ -1,8 +1,8 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=kaveri -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -enable-var-scope -check-prefixes=GCN,CI,MUBUF %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX9,GFX9-MUBUF,MUBUF %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -mattr=+enable-flat-scratch < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX9,GFX9-FLATSCR %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck --check-prefixes=GFX11-TRUE16 %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck --check-prefixes=GFX11-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=kaveri -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -enable-var-scope -check-prefixes=GCN,CI,MUBUF %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX9,GFX9-MUBUF,MUBUF %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -mattr=+enable-flat-scratch < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX9,GFX9-FLATSCR %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=+real-true16 < %s | FileCheck --check-prefixes=GFX11-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=-real-true16 < %s | FileCheck --check-prefixes=GFX11-FAKE16 %s
 
 ; Test that non-entry function frame indices are expanded properly to
 ; give an index relative to the scratch wave offset register
@@ -157,7 +157,9 @@ define void @void_func_byval_struct_i8_i32_ptr_value(ptr addrspace(5) byval({ i8
 
 ; GCN-LABEL: {{^}}void_func_byval_struct_i8_i32_ptr_nonentry_block:
 
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64 
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz
 
 ; CI: buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4 glc{{$}}
 ; GFX9-MUBUF:   buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4 glc{{$}}
@@ -243,7 +245,9 @@ declare void @func(ptr addrspace(5) nocapture) #0
 ; stores in the middle block.
 
 ; GCN-LABEL: {{^}}undefined_stack_store_reg:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64 
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz
 ; MUBUF: buffer_store_dword v{{[0-9]+}}, off, s[0:3], s33 offset:
 ; MUBUF: buffer_store_dword v{{[0-9]+}}, off, s[0:3], s33 offset:
 ; MUBUF: buffer_store_dword v{{[0-9]+}}, off, s[0:3], s33 offset:
@@ -271,7 +275,9 @@ bb5:
 }
 
 ; GCN-LABEL: {{^}}alloca_ptr_nonentry_block:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64 
+; GCN: s_mov_b64 exec
+; GCN: s_cbranch_execz
 ; MUBUF:   buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4
 ; FLATSCR: scratch_load_dword v{{[0-9]+}}, off, s32 offset:4
 

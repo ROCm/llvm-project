@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx900 -stop-after=prologepilog < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 -stop-after=prologepilog < %s | FileCheck -check-prefix=GCN %s
 
 ; It is a small loop test that iterates over the array member of the structure argument  passed byval to the function.
 ; The loop code will keep the prologue and epilogue blocks apart.
@@ -10,18 +10,26 @@
 define i32 @fp_save_restore_in_temp_sgpr(ptr addrspace(5) nocapture readonly byval(%struct.Data) align 4 %arg) #0 {
   ; GCN-LABEL: name: fp_save_restore_in_temp_sgpr
   ; GCN: bb.0.begin:
-  ; GCN:   liveins: $sgpr11
-  ; GCN:   $sgpr11 = frame-setup COPY $sgpr33
+  ; GCN:   liveins: $sgpr19
+  ; GCN:   $sgpr19 = frame-setup COPY $sgpr33
   ; GCN:   $sgpr33 = frame-setup COPY $sgpr32
   ; GCN: bb.1.lp_end:
-  ; GCN:   liveins: $sgpr10, $sgpr11, $vgpr1, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9
-  ; GCN: bb.2.lp_begin:
-  ; GCN:   liveins: $sgpr10, $sgpr11, $vgpr1, $sgpr4_sgpr5, $sgpr6_sgpr7
-  ; GCN: bb.3.Flow:
-  ; GCN:   liveins: $sgpr10, $sgpr11, $vgpr0, $vgpr1, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9
-  ; GCN: bb.4.end:
-  ; GCN:   liveins: $sgpr11, $vgpr0, $sgpr4_sgpr5
-  ; GCN:   $sgpr33 = frame-destroy COPY $sgpr11
+  ; GCN:   liveins: $sgpr18, $sgpr19, $vgpr0, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr10_sgpr11, $sgpr12_sgpr13, $sgpr14_sgpr15
+  ; GCN: bb.7:
+  ; GCN:   liveins: $sgpr19, $vgpr0, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9
+  ; GCN: bb.2:
+  ; GCN:   liveins: $sgpr19, $sgpr4_sgpr5
+  ; GCN: bb.3.lp_begin:
+  ; GCN:   liveins: $sgpr18, $sgpr19, $vgpr0, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $sgpr12_sgpr13, $sgpr14_sgpr15, $sgpr16_sgpr17
+  ; GCN: bb.8:
+  ; GCN:   liveins: $sgpr19, $vgpr0, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $sgpr12_sgpr13
+  ; GCN: bb.4:
+  ; GCN:   liveins: $sgpr19, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9
+  ; GCN: bb.5.end:
+  ; GCN:   liveins: $sgpr19, $vgpr0, $sgpr4_sgpr5
+  ; GCN:   $sgpr33 = frame-destroy COPY $sgpr19
+  ; GCN: bb.6:
+  ; GCN:   liveins: $sgpr19, $vgpr0, $sgpr4_sgpr5, $sgpr6_sgpr7, $sgpr8_sgpr9, $sgpr10_sgpr11, $sgpr12_sgpr13, $sgpr14_sgpr15
 begin:
   br label %lp_begin
 

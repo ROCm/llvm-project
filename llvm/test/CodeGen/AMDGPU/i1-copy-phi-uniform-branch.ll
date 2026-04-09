@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck -check-prefix=GCN %s
 
 ; GCN-LABEL: {{^}}test_dont_clobber_scc:
 
@@ -10,8 +10,8 @@
 ; GCN:      s_cmp_eq_u32    s1, 0
 ; GCN:      s_cbranch_scc1  [[PREEXIT:.LBB[0-9_]+]]
 
-; GCN: [[PREEXIT]]:
 ; GCN: [[EXIT]]:
+; GCN: [[PREEXIT]]:
 
 define amdgpu_vs float @test_dont_clobber_scc(i32 inreg %uni, i32 inreg %uni2) #0 {
 entry:

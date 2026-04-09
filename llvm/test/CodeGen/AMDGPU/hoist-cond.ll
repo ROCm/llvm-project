@@ -1,15 +1,18 @@
-; RUN: llc -mtriple=amdgcn -disable-block-placement < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -disable-block-placement < %s | FileCheck %s
 
 ; Check that invariant compare is hoisted out of the loop.
 ; At the same time condition shall not be serialized into a VGPR and deserialized later
-; using another v_cmp + v_cndmask, but used directly in s_and_saveexec_b64.
+; using another v_cmp + v_cndmask, but used for the exec mask manipulation.
 
 ; CHECK: v_cmp_{{..}}_u32_e{{32|64}} [[COND:s\[[0-9]+:[0-9]+\]|vcc]]
 ; CHECK: BB0_1:
 ; CHECK-NOT: v_cmp
 ; CHECK-NOT: v_cndmask
-; CHECK: s_and_saveexec_b64 s[{{[0-9]+:[0-9]+}}], [[COND]]
-; CHECK: ; %bb.2:
+; CHECK: s_and_b64 [[TMP:s\[[0-9]+:[0-9]+\]]], exec, [[COND]]
+; CHECK: s_xor_b64 [[TMP]], [[COND]], -1
+; CHECK: s_or_b64 [[TAKEN:s\[[0-9]+:[0-9]+\]]], [[TAKEN]], [[TMP]]
+; CHECK: s_mov_b64 exec, [[TAKEN]]
+; CHECK: BB0_2:
 
 define amdgpu_kernel void @hoist_cond(ptr addrspace(1) nocapture %arg, ptr addrspace(1) noalias nocapture readonly %arg1, i32 %arg3, i32 %arg4) {
 bb:
