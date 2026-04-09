@@ -433,6 +433,9 @@ def warn_unused_variable : Warning<"unused variable %0">,
   InGroup<UnusedVariable>, DefaultIgnore;
 def warn_unused_but_set_variable : Warning<"variable %0 set but not used">,
   InGroup<UnusedButSetVariable>, DefaultIgnore;
+def warn_unused_but_set_global : Warning<"variable %0 set but not used">,
+                                 InGroup<UnusedButSetGlobal>,
+                                 DefaultIgnore;
 def warn_unused_local_typedef : Warning<
   "unused %select{typedef|type alias}0 %1">,
   InGroup<UnusedLocalTypedef>, DefaultIgnore;
@@ -3274,6 +3277,11 @@ def warn_function_attribute_ignored_in_stmt : Warning<
   "use '%0' on statements">,
   InGroup<IgnoredAttributes>;
 
+def warn_stmt_attribute_ignored_in_function : Warning<
+  "attribute is ignored on this function as it only applies to statements; "
+  "use '%0' for functions">,
+  InGroup<IgnoredAttributes>;
+
 def err_musttail_needs_trivial_args : Error<
   "tail call requires that the return value, all parameters, and any "
   "temporaries created by the expression are trivially destructible">;
@@ -3635,6 +3643,12 @@ def err_invalid_collection_element : Error<
 def err_box_literal_collection : Error<
   "%select{string|character|boolean|numeric}0 literal must be prefixed by '@' "
   "in a collection">;
+def err_objc_literal_nonconstant_at_file_scope : Error<
+  "%select{an array|a dictionary|a numeric literal|a boxed expression|}0 "
+  "literal can only be used at file scope if %select{its contents are all "
+  "also constant literals|its contents are all also constant literals and "
+  "its keys are string literals|constant|constant}0">;
+
 def warn_objc_literal_comparison : Warning<
   "direct comparison of %select{an array literal|a dictionary literal|"
   "a numeric literal|a boxed expression|}0 has undefined behavior">,
@@ -4246,6 +4260,8 @@ def warn_at_available_unchecked_use : Warning<
 def warn_availability_invalid_os_version
     : Warning<"invalid %1 version '%0' in availability attribute">, InGroup<DiagGroup<"invalid-version-availability">>;
 def note_availability_invalid_os_version_adjusted: Note<"implicitly treating version as '%0'">;
+def err_availability_invalid_anyappleos_version
+    : Error<"invalid anyAppleOS version '%0' in availability attribute">;
 
 def warn_missing_sdksettings_for_availability_checking : Warning<
   "%0 availability is ignored without a valid 'SDKSettings.json' in the SDK">,
@@ -4485,6 +4501,8 @@ def warn_impcast_float_result_precision : Warning<
 def warn_impcast_double_promotion : Warning<
   "implicit conversion increases floating-point precision: %0 to %1">,
   InGroup<DoublePromotion>, DefaultIgnore;
+def err_impcast_incompatible_type : Error<
+  "implicit conversion from %0 to incompatible type %1">;
 def warn_impcast_integer_sign : Warning<
   "implicit conversion changes signedness: %0 to %1">,
   InGroup<SignConversion>, DefaultIgnore;
@@ -5429,6 +5447,10 @@ def err_ovl_no_viable_subscript :
     Error<"no viable overloaded operator[] for type %0">;
 def err_ovl_no_oper :
     Error<"type %0 does not provide a %select{subscript|call}1 operator">;
+def err_ovl_builtin_subscript_expects_single_arg : Error<
+  "built-in subscript operator for type %0 expects exactly one argument">;
+def err_ms_property_subscript_expects_single_arg : Error<
+  "property subscript expects exactly one argument">;
 def err_ovl_unresolvable : Error<
   "reference to %select{overloaded|multiversioned}1 function could not be "
   "resolved; did you mean to call it%select{| with no arguments}0?">;
@@ -6315,6 +6337,9 @@ def warn_unavailable_def : Warning<
 def warn_deprecated_builtin : Warning<
   "builtin %0 is deprecated; use %1 instead">,
   InGroup<DeprecatedBuiltins>;
+def warn_hip_deprecated_builtin : Warning<
+  "builtin %0 is deprecated; use %1 instead">,
+  InGroup<HipDeprecatedBuiltins>, DefaultIgnore;
 def warn_deprecated_builtin_no_suggestion : Warning<"builtin %0 is deprecated">,
   InGroup<DeprecatedBuiltins>;
 def err_unavailable : Error<"%0 is unavailable">;
@@ -7424,7 +7449,8 @@ def err_illegal_decl_mempointer_in_nonclass
 def err_reference_to_void : Error<"cannot form a reference to 'void'">;
 def err_nonfunction_block_type : Error<
   "block pointer to non-function type is invalid">;
-def err_return_block_has_expr : Error<"void block should not return a value">;
+def err_return_block_has_expr : Error<
+  "void %select{block|lambda}0 should not return a value">;
 def err_block_return_missing_expr : Error<
   "non-void block should return a value">;
 def err_func_def_incomplete_result : Error<
@@ -12380,6 +12406,8 @@ def err_omp_no_clause_for_directive : Error<
   "expected at least one %0 clause for '#pragma omp %1'">;
 def err_omp_threadprivate_in_clause : Error<
   "threadprivate variables are not allowed in '%0' clause">;
+def err_omp_device_local_in_clause : Error<
+  "device-local variable %0 is not allowed in '%1' clause">;
 def err_omp_wrong_ordered_loop_count : Error<
   "the parameter of the 'ordered' clause must be greater than or equal to the parameter of the 'collapse' clause">;
 def note_collapse_loop_count : Note<
@@ -13274,6 +13302,9 @@ def err_builtin_invalid_arg_type: Error<
   "%plural{0:|: }3"
   "%plural{[0,3]:type|:types}1 (was %4)">;
 
+def err_builtin_requires_double_type: Error<
+  "%ordinal0 argument must be a scalar, vector, or matrix of double type (was %1)">;
+
 def err_bswapg_invalid_bit_width : Error<
   "_BitInt type %0 (%1 bits) must be a multiple of 16 bits for byte swapping">;
 
@@ -13684,6 +13715,9 @@ def err_hlsl_samplecmp_requires_float
             "a floating point type">;
 def err_hlsl_gathercmp_invalid_component
     : Error<"gatherCmp%select{Red|Green|Blue|Alpha}0 operations on the Vulkan target are not supported; only GatherCmp and GatherCmpRed are allowed">;
+
+def err_hlsl_resource_member_array_access_not_constant
+    : Error<"index for struct array inside cbuffer that contains resources must be a constant integer expression">;
 
 // Layout randomization diagnostics.
 def err_non_designated_init_used : Error<

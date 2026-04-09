@@ -137,13 +137,14 @@ public:
   processEnter(llvm::SmallVectorImpl<DeclareTargetCaptureInfo> &result) const;
   bool processIf(omp::clause::If::DirectiveNameModifier directiveName,
                  mlir::omp::IfClauseOps &result) const;
-  bool processLinear(mlir::omp::LinearClauseOps &result) const;
   bool processInReduction(
       mlir::Location currentLocation, mlir::omp::InReductionClauseOps &result,
       llvm::SmallVectorImpl<const semantics::Symbol *> &outReductionSyms) const;
   bool processIsDevicePtr(
       lower::StatementContext &stmtCtx, mlir::omp::IsDevicePtrClauseOps &result,
       llvm::SmallVectorImpl<const semantics::Symbol *> &isDeviceSyms) const;
+  bool processLinear(mlir::omp::LinearClauseOps &result,
+                     bool isDeclareSimd = false) const;
   bool
   processLink(llvm::SmallVectorImpl<DeclareTargetCaptureInfo> &result) const;
 
@@ -210,8 +211,8 @@ private:
       std::map<Object, OmpMapParentAndMemberData> &parentMemberIndices,
       llvm::SmallVectorImpl<mlir::Value> &mapVars,
       llvm::SmallVectorImpl<const semantics::Symbol *> &mapSyms,
-      llvm::StringRef mapperIdNameRef = "",
-      bool isMotionModifier = false) const;
+      llvm::StringRef mapperIdNameRef = "", bool isMotionModifier = false,
+      llvm::omp::Directive directive = llvm::omp::OMPD_unknown) const;
 
   lower::AbstractConverter &converter;
   semantics::SemanticsContext &semaCtx;
