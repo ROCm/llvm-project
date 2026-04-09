@@ -293,7 +293,7 @@ void COMGR::ensureLLVMInitialized() {
     LLVMInitializeAMDGPUDisassembler();
     LLVMInitializeAMDGPUAsmParser();
     LLVMInitializeAMDGPUAsmPrinter();
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_BACKEND_AVAILABLE
     LLVMInitializeSPIRVTarget();
     LLVMInitializeSPIRVTargetInfo();
     LLVMInitializeSPIRVTargetMC();

@@ -1,4 +1,4 @@
-// REQUIRES: comgr-has-spirv
+// REQUIRES: comgr-has-spirv-translator && comgr-has-spirv-backend
 
 // COM: Validate different set of flags that could be used in comgr for SPIR-V code generation.
 // COM: In particular, test that they work with the translator or the SPIR-V backend in LLVM.

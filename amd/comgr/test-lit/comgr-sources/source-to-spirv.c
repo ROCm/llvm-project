@@ -27,7 +27,7 @@ int main(int argc, const char *argv[]) {
   }
 
   if (argc > 3) {
-    Options = (const char **)&argv[1];
+    Options = &argv[1];
     OptionsCount = (size_t)(argc - 3);
   }
 
