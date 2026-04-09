@@ -69,14 +69,13 @@ define amdgpu_kernel void @lshl3_add(ptr addrspace(1) %in, ptr addrspace(7) %in2
 ; CHECK-NEXT:    s_clause 0x1
 ; CHECK-NEXT:    s_load_b64 s[6:7], s[4:5], 0x24
 ; CHECK-NEXT:    s_load_b128 s[0:3], s[4:5], 0x44
-; CHECK-NEXT:    v_mov_b32_e32 v0, 0
+; CHECK-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
 ; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    global_load_b32 v2, v0, s[6:7] scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_load_b32 s7, s[4:5], 0x54
 ; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
-; CHECK-NEXT:    v_mov_b32_e32 v1, 0
 ; CHECK-NEXT:    s_mov_b32 s8, s3
 ; CHECK-NEXT:    s_mov_b32 s4, s6
 ; CHECK-NEXT:    s_mov_b32 s5, s2

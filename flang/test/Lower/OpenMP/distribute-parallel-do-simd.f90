@@ -1,6 +1,5 @@
 ! This test checks lowering of OpenMP DISTRIBUTE PARALLEL DO SIMD composite
 ! constructs.
-
 ! RUN: bbc -fopenmp -emit-hlfir %s -o - | FileCheck %s --check-prefixes=CHECK,DEFAULT
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir %s -o - | FileCheck %s --check-prefixes=CHECK,DEFAULT
 ! RUN: bbc -fopenmp -fopenmp-version=52 -emit-hlfir %s -o - | FileCheck %s --check-prefixes=CHECK,OPENMP52

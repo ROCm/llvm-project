@@ -2481,26 +2481,9 @@ bool CGOpenMPRuntimeGPU::hasAllocateAttributeForGlobalVar(const VarDecl *VD,
   return false;
 }
 
-// Get current OffloadArch and ignore any unknown values
-static OffloadArch getOffloadArch(CodeGenModule &CGM) {
-  if (!CGM.getTarget().hasFeature("ptx") &&
-      (CGM.getTriple().getArch() != llvm::Triple::amdgcn))
-    return OffloadArch::Unknown;
-  if (CGM.getTriple().isAMDGCN())
-    return StringToOffloadArch(CGM.getTarget().getTargetOpts().CPU);
-  // FIXME: Can we always just return StringToOffloadArch(...CPU) here?
-  llvm::StringMap<bool> Features;
-  CGM.getTarget().initFeatureMap(Features, CGM.getDiags(),
-                                 CGM.getTarget().getTargetOpts().CPU,
-                                 CGM.getTarget().getTargetOpts().Features);
-  for (const auto &Feature : CGM.getTarget().getTargetOpts().FeatureMap) {
-    if (Feature.getValue()) {
-      OffloadArch Arch = StringToOffloadArch(Feature.getKey());
-      if (Arch != OffloadArch::Unknown)
-        return Arch;
-    }
-  }
-  return OffloadArch::Unknown;
+static OffloadArch getOffloadArch(const CodeGenModule &CGM) {
+  // FIXME: This should not require parsing
+  return StringToOffloadArch(CGM.getTarget().getTargetOpts().CPU);
 }
 
 /// Check to see if target architecture supports unified addressing which is
@@ -2601,6 +2584,8 @@ void CGOpenMPRuntimeGPU::processRequiresDirective(const OMPRequiresDecl *D) {
       case OffloadArch::GFX1152:
       case OffloadArch::GFX1153:
       case OffloadArch::GFX1170:
+      case OffloadArch::GFX1171:
+      case OffloadArch::GFX1172:
       case OffloadArch::GFX12_GENERIC:
       case OffloadArch::GFX1200:
       case OffloadArch::GFX1201:

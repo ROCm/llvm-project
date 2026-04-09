@@ -25,6 +25,7 @@
 ; DEFAULT: Greedy Register Allocator
 ; DEFAULT-NEXT: Virtual Register Rewriter
 ; DEFAULT-NEXT: Stack Slot Coloring
+; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: SI lower SGPR spill instructions
 ; DEFAULT: Greedy Register Allocator
 ; DEFAULT-NEXT: SI Lower WWM Copies
@@ -38,6 +39,7 @@
 ; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: AMDGPU Control Flow Wave Transform
 ; O0-NEXT: Fast Register Allocator
+; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: SI lower SGPR spill instructions
 ; O0-NEXT: Fast Register Allocator
 ; O0-NEXT: SI Lower WWM Copies
@@ -47,7 +49,13 @@
 
 
 
-; BASIC-DEFAULT: Greedy Register Allocator
+; BASIC-DEFAULT: Debug Variable Analysis
+; BASIC-DEFAULT-NEXT: Live Stack Slot Analysis
+; BASIC-DEFAULT-NEXT: Bundle Machine CFG Edges
+; BASIC-DEFAULT-NEXT: Spill Code Placement Analysis
+; BASIC-DEFAULT-NEXT: Lazy Machine Block Frequency Analysis
+; BASIC-DEFAULT-NEXT: Machine Optimization Remark Emitter
+; BASIC-DEFAULT-NEXT: Greedy Register Allocator
 ; BASIC-DEFAULT-NEXT: GCN NSA Reassign
 ; BASIC-DEFAULT-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
@@ -57,6 +65,7 @@
 ; BASIC-DEFAULT: Basic Register Allocator
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
 ; BASIC-DEFAULT-NEXT: Stack Slot Coloring
+; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: SI lower SGPR spill instructions
 ; BASIC-DEFAULT: Greedy Register Allocator
 ; BASIC-DEFAULT-NEXT: SI Lower WWM Copies
@@ -77,6 +86,7 @@
 ; DEFAULT-BASIC: Greedy Register Allocator
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
 ; DEFAULT-BASIC-NEXT: Stack Slot Coloring
+; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: SI lower SGPR spill instructions
 ; DEFAULT-BASIC: Basic Register Allocator
 ; DEFAULT-BASIC-NEXT: SI Lower WWM Copies
@@ -87,7 +97,11 @@
 
 
 
-; BASIC-BASIC: Basic Register Allocator
+; BASIC-BASIC: Debug Variable Analysis
+; BASIC-BASIC-NEXT: Live Stack Slot Analysis
+; BASIC-BASIC-NEXT: Machine Natural Loop Construction
+; BASIC-BASIC-NEXT: Machine Block Frequency Analysis
+; BASIC-BASIC-NEXT: Basic Register Allocator
 ; BASIC-BASIC-NEXT: GCN NSA Reassign
 ; BASIC-BASIC-NEXT: AMDGPU Rewrite AGPR-Copy-MFMA
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
@@ -97,6 +111,7 @@
 ; BASIC-BASIC: Basic Register Allocator
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
 ; BASIC-BASIC-NEXT: Stack Slot Coloring
+; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: SI lower SGPR spill instructions
 ; BASIC-BASIC: Basic Register Allocator
 ; BASIC-BASIC-NEXT: SI Lower WWM Copies
