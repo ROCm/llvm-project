@@ -100,4 +100,4 @@ global: amd_comgr_action_info_set_vfs;
 global: amd_comgr_action_info_set_block_sizes;
         amd_comgr_action_info_get_block_sizes_count;
         amd_comgr_action_info_get_block_sizes;
-} @amd_comgr_NAME@_3.1;
+} @amd_comgr_NAME@3.1;
