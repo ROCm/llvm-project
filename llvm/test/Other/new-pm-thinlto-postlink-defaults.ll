@@ -93,9 +93,7 @@
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-O-NEXT: Running pass: InstCombinePass
 ; CHECK-O23SZ-NEXT: Running pass: AggressiveInstCombinePass
-; CHECK-O1-NEXT: Running pass: LibCallsShrinkWrapPass
-; CHECK-O2-NEXT: Running pass: LibCallsShrinkWrapPass
-; CHECK-O3-NEXT: Running pass: LibCallsShrinkWrapPass
+; CHECK-O-NEXT: Running pass: LibCallsShrinkWrapPass
 ; CHECK-O23SZ-NEXT: Running pass: TailCallElimPass
 ; CHECK-O-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-O-NEXT: Running pass: ReassociatePass
@@ -201,6 +199,8 @@
 ; CHECK-POSTLINK-O-NEXT: Running pass: LoopSinkPass
 ; CHECK-POSTLINK-O-NEXT: Running pass: InstSimplifyPass
 ; CHECK-POSTLINK-O-NEXT: Running pass: DivRemPairsPass
+; CHECK-POSTLINK-O-NEXT: Running pass: MergeICmpsPass
+; CHECK-POSTLINK-O-NEXT: Running pass: ExpandMemCmpPass
 ; CHECK-POSTLINK-O-NEXT: Running pass: TailCallElimPass
 ; CHECK-POSTLINK-O-NEXT: Running pass: SimplifyCFGPass
 ; CHECK-POSTLINK-O-NEXT: Running pass: AllocTokenPass

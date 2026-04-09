@@ -1716,13 +1716,13 @@ define amdgpu_kernel void @get_rounding_after_set_rounding_1() {
 ; GFX11-NEXT:    s_getreg_b32 s2, hwreg(HW_REG_MODE, 0, 4)
 ; GFX11-NEXT:    s_mov_b32 s0, 0xeb24da71
 ; GFX11-NEXT:    s_lshl_b32 s2, s2, 2
-; GFX11-NEXT:    v_mov_b32_e32 v0, 0
+; GFX11-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, 0
 ; GFX11-NEXT:    s_lshr_b64 s[0:1], s[0:1], s2
 ; GFX11-NEXT:    s_and_b32 s0, s0, 15
 ; GFX11-NEXT:    s_add_i32 s1, s0, 4
 ; GFX11-NEXT:    s_cmp_lt_u32 s0, 4
 ; GFX11-NEXT:    s_cselect_b32 s0, s0, s1
-; GFX11-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v2, s0
+; GFX11-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX11-NEXT:    global_store_b32 v[0:1], v2, off dlc
 ; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-NEXT:    s_endpgm

@@ -106,6 +106,7 @@
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        AMDGPU Control Flow Wave Transform
 ; GCN-O0-NEXT:        Fast Register Allocator
+; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        SI lower SGPR spill instructions
 ; GCN-O0-NEXT:        Fast Register Allocator
 ; GCN-O0-NEXT:        SI Lower WWM Copies
@@ -229,13 +230,6 @@
 ; GCN-O3-NEXT:        Canonicalize Freeze Instructions in Loops
 ; GCN-O3-NEXT:        Induction Variable Users
 ; GCN-O3-NEXT:        Loop Strength Reduction
-; GCN-O3-NEXT:      Basic Alias Analysis (stateless AA impl)
-; GCN-O3-NEXT:      Function Alias Analysis Results
-; GCN-O3-NEXT:      Merge contiguous icmps into a memcmp
-; GCN-O3-NEXT:      Natural Loop Information
-; GCN-O3-NEXT:      Lazy Branch Probability Analysis
-; GCN-O3-NEXT:      Lazy Block Frequency Analysis
-; GCN-O3-NEXT:      Expand memcmp() to load/stores
 ; GCN-O3-NEXT:      Remove unreachable blocks from the CFG
 ; GCN-O3-NEXT:      Natural Loop Information
 ; GCN-O3-NEXT:      Post-Dominator Tree Construction
@@ -416,6 +410,7 @@
 ; GCN-O3-NEXT:        Greedy Register Allocator
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        Stack Slot Coloring
+; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        SI lower SGPR spill instructions
 ; GCN-O3-NEXT:        Live Stack Slot Analysis
 ; GCN-O3-NEXT:        Virtual Register Map

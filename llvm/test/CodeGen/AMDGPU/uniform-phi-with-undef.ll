@@ -11,9 +11,14 @@
 define amdgpu_ps float @uniform_phi_with_undef(float inreg %c, float %v, i32 %x, i32 %y) #0 {
 ; GCN-LABEL: uniform_phi_with_undef:
 ; GCN:       ; %bb.0: ; %entry
-; GCN-NEXT:    v_cmp_ge_i32_e64 s2, v2, v1
-; GCN-NEXT:    s_xor_b32 s4, s2, exec_lo
-; GCN-NEXT:    s_mov_b32 s1, 0
+; GCN-NEXT:    v_cmp_lt_i32_e64 s1, v2, v1
+; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    s_xor_b32 s1, s1, s2
+; GCN-NEXT:    s_and_b32 s2, exec_lo, s1
+; GCN-NEXT:    s_xor_b32 s2, s1, -1
+; GCN-NEXT:    s_mov_b32 s3, 0
+; GCN-NEXT:    s_and_b32 s4, s2, exec_lo
+; GCN-NEXT:    s_and_b32 s2, exec_lo, s1
 ; GCN-NEXT:    s_mov_b32 s1, 0
 ; GCN-NEXT:    s_xor_b32 s3, exec_lo, s4
 ; GCN-NEXT:    s_mov_b32 s1, 0

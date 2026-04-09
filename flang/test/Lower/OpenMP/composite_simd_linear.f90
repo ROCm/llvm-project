@@ -1,7 +1,6 @@
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir %s -o - 2>&1 | FileCheck %s --check-prefixes=CHECK,DEFAULT
 ! RUN: %flang_fc1 -fopenmp -fopenmp-version=52 -emit-hlfir %s -o - 2>&1 | FileCheck %s --check-prefixes=CHECK,OPENMP52
 
-
 subroutine do_simd
 !CHECK: %[[I:.*]]:2 = hlfir.declare %{{.*}} {uniq_name = "_QFdo_simdEi"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
 !CHECK: %[[X:.*]]:2 = hlfir.declare %{{.*}} {uniq_name = "_QFdo_simdEx"} : (!fir.ref<i32>) -> (!fir.ref<i32>, !fir.ref<i32>)
@@ -25,7 +24,7 @@ end subroutine do_simd
 subroutine distribute_simd
 !CHECK: omp.teams {
 !CHECK: omp.distribute private(@_QFdistribute_simdEi_private_i32 {{.*}} -> %[[ARG0:.*]] : !fir.ref<i32>) {
-!DEFAULT: omp.simd linear({{.*}}) {
+!DEFAULT: omp.simd linear(val({{.*}})) private(@_QFdistribute_simdEi_private_i32 %[[ARG0]] -> {{.*}} : !fir.ref<i32>) {
 !OPENMP52: omp.simd linear(val({{.*}})) private(@_QFdistribute_simdEi_private_i32 %[[ARG0]] -> {{.*}} : !fir.ref<i32>) {
 !CHECK: } {linear_var_types = [i32], omp.composite}
 !CHECK: } {omp.composite}
