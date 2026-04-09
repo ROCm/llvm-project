@@ -314,8 +314,14 @@ __attribute__((flatten, always_inline)) void _xteam_reduction(
   }
 
   if (_IS_FAST) {
-    if (omp_thread_num == 0)
-      ompx::atomic::add(r_ptr, xwave_lds[0], ompx::atomic::seq_cst, Scope);
+    if (omp_thread_num == 0) {
+      // Force fine-grained remote memory to cover the USM case where we need to
+      // sync the result to the host.
+      [[clang::atomic(fine_grained_memory, remote_memory)]] {
+        __scoped_atomic_fetch_add(r_ptr, xwave_lds[0], ompx::atomic::seq_cst,
+                                  Scope);
+      }
+    }
   } else {
     // No sync needed here from last reduction in LDS loop
     // because we only need xwave_lds[0] correct on thread 0.
