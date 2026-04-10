@@ -2919,9 +2919,9 @@ void AMDGPUWaveTransform::cleanup(
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
 
-  AccCopyPropagator CopyProp(AccumulatorRegs, AccInstMap, MF.getRegInfo());
-  CopyProp.run();
-
   DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
   Eliminator.run();
+
+  AccCopyPropagator CopyProp(AccumulatorRegs, AccInstMap, MF.getRegInfo());
+  CopyProp.run();
 }

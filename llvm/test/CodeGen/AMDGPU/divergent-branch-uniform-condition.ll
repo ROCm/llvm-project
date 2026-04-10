@@ -53,7 +53,6 @@ define amdgpu_ps void @main(i32 %0, float %1) {
 ; ISA-NEXT:    s_cmp_lt_u32 s10, 32
 ; ISA-NEXT:    v_mov_b32_e32 v4, v1
 ; ISA-NEXT:    v_mov_b32_e32 v3, v1
-; ISA-NEXT:    s_mov_b64 s[12:13], 0
 ; ISA-NEXT:    s_cbranch_scc0 .LBB0_1
 ; ISA-NEXT:  ; %bb.3: ; %endif1
 ; ISA-NEXT:    ; in Loop: Header=BB0_2 Depth=1
@@ -174,7 +173,6 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:    s_cbranch_execz .LBB1_4
 ; ISA-NEXT:  .LBB1_2: ; %loop
 ; ISA-NEXT:    ; =>This Inner Loop Header: Depth=1
-; ISA-NEXT:    s_mov_b64 s[4:5], 0
 ; ISA-NEXT:    s_cmp_lg_u32 s6, 0
 ; ISA-NEXT:    v_mov_b32_e32 v2, v1
 ; ISA-NEXT:    s_mov_b64 s[4:5], s[0:1]
