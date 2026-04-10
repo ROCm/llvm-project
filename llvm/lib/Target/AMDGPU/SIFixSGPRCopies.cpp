@@ -69,6 +69,7 @@
 #include "AMDGPULaneMaskUtils.h"
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
+#include "SIMachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Target/TargetMachine.h"
@@ -1172,6 +1173,7 @@ void SIFixSGPRCopies::lowerVGPR2SGPRCopies(MachineFunction &MF) {
 void SIFixSGPRCopies::fixSCCCopies(MachineFunction &MF) {
   const AMDGPU::LaneMaskConstants &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
+  const SIMachineFunctionInfo *MFI = MF.getInfo<SIMachineFunctionInfo>();
   for (MachineBasicBlock &MBB : MF) {
     for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E;
          ++I) {
@@ -1195,6 +1197,13 @@ void SIFixSGPRCopies::fixSCCCopies(MachineFunction &MF) {
         continue;
       }
       if (DstReg == AMDGPU::SCC) {
+        // In late-wave mode, leave $scc = COPY %vreg_1 for
+        // AMDGPUFinalizeISelWaveTransform so it can classify the transport web
+        // before choosing the final SCC lowering.
+        if (!MFI->isWaveCFG() && SrcReg.isVirtual() &&
+            MRI->getRegClass(SrcReg) == &AMDGPU::VReg_1RegClass)
+          continue;
+
         Register Tmp = MRI->createVirtualRegister(TRI->getBoolRC());
         I = BuildMI(*MI.getParent(), std::next(MachineBasicBlock::iterator(MI)),
                     MI.getDebugLoc(), TII->get(LMC.AndOpc))

@@ -30,6 +30,7 @@ public:
 
 private:
   DenseSet<Register> ConstrainRegs;
+  DenseSet<Register> collectPreservedLaneMaskRegs() const;
   void buildLaneMaskToVGPR(MachineBasicBlock &MBB, MachineInstr &InsertBefore,
                            const DebugLoc &DL, Register DstReg,
                            Register SrcReg) {
@@ -47,6 +48,21 @@ private:
     BuildMI(MBB, InsertBefore, DL, TII->get(AMDGPU::V_CMP_NE_U32_e64), DstReg)
         .addReg(SrcReg)
         .addImm(0);
+  }
+  void buildLaneMaskToSCC(MachineBasicBlock &MBB, MachineInstr &InsertBefore,
+                          const DebugLoc &DL, Register SrcReg) {
+    Register Tmp = MRI->createVirtualRegister(ST->getBoolRC());
+    BuildMI(MBB, InsertBefore, DL, TII->get(LMC->AndOpc))
+        .addReg(Tmp, getDefRegState(true))
+        .addReg(SrcReg)
+        .addReg(LMC->ExecReg);
+  }
+  void buildVGPRToSCC(MachineBasicBlock &MBB, MachineInstr &InsertBefore,
+                      const DebugLoc &DL, Register SrcReg) {
+    Register LaneMaskReg = MRI->createVirtualRegister(
+        TII->getRegisterInfo().getWaveMaskRegClass());
+    buildVGPRToLaneMask(MBB, InsertBefore, DL, LaneMaskReg, SrcReg);
+    buildLaneMaskToSCC(MBB, InsertBefore, DL, LaneMaskReg);
   }
 
 public:
@@ -85,6 +101,57 @@ public:
 
 Vreg1WideningHelper::Vreg1WideningHelper(MachineFunction *MF)
     : PhiLoweringHelper(MF, nullptr, nullptr) {}
+
+DenseSet<Register> Vreg1WideningHelper::collectPreservedLaneMaskRegs() const {
+  DenseSet<Register> PreservedLaneMaskRegs;
+  SmallVector<Register, 8> Worklist;
+  auto AddPreservedReg = [&](Register Reg) {
+    if (!isVreg1(Reg))
+      return;
+    if (PreservedLaneMaskRegs.insert(Reg).second)
+      Worklist.push_back(Reg);
+  };
+
+  for (MachineBasicBlock &MBB : *MF) {
+    for (MachineInstr &MI : MBB) {
+      bool IsStructural =
+          MI.isPHI() || MI.getOpcode() == AMDGPU::IMPLICIT_DEF ||
+          (MI.getOpcode() == AMDGPU::COPY &&
+           MI.getOperand(0).getReg().isVirtual());
+      if (IsStructural)
+        continue;
+
+      for (const MachineOperand &MO : MI.operands()) {
+        if (!MO.isReg() || !MO.isUse())
+          continue;
+        AddPreservedReg(MO.getReg());
+      }
+    }
+  }
+
+  while (!Worklist.empty()) {
+    Register Reg = Worklist.pop_back_val();
+    MachineInstr *Def = MRI->getVRegDef(Reg);
+    if (!Def)
+      continue;
+
+    if (Def->getOpcode() == AMDGPU::COPY) {
+      AddPreservedReg(Def->getOperand(1).getReg());
+      continue;
+    }
+
+    if (Def->isPHI()) {
+      for (unsigned I = 1; I < Def->getNumOperands(); I += 2)
+        AddPreservedReg(Def->getOperand(I).getReg());
+      continue;
+    }
+
+    assert(Def->getOpcode() == AMDGPU::IMPLICIT_DEF &&
+           "unexpected vreg_1 definition");
+  }
+
+  return PreservedLaneMaskRegs;
+}
 
 // When WaveTransform happens later and CFG is not structurized,
 // We need to apply a different algorithm for lowering vreg_1
@@ -250,59 +317,18 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
 // pass.
 //
 // The only instructions that define vreg_1 virtual registers are COPY, PHI,
-// and IMPLICIT_DEF.
-// SIFixSGPRCopies may introduce scalar consumers (e.g. S_AND_B64) that directly
-// use vreg_1 values.
-// Vreg_1 regions that transitively feed such consumers through COPY/PHI chains
-// are preserved as wave-mask sgprs; all others are widened to vreg_32.
+// and IMPLICIT_DEF. In late-wave mode, COPYs that feed non-structural users
+// such as physical-register copies must stay in lane-mask form. This pass
+// first classifies those COPY/PHI/IMPLICIT_DEF webs, then either preserves
+// them as lane masks or widens them to vgpr_32 before lowering boundary copies.
 //
 //===----------------------------------------------------------------------===//
 bool Vreg1WideningHelper::widenVreg1s() {
   bool Changed = false;
   SmallSetVector<MachineInstr *, 8> DeadCopies;
   SmallVector<MachineInstr *, 8> DeferredCopyFixups;
+  DenseSet<Register> PreservedLaneMaskRegs = collectPreservedLaneMaskRegs();
   DenseSet<Register> Vreg32Set;
-
-  // Pre-pass: classify which vreg_1 registers must stay in scalar
-  // lane-mask form.  Seed the worklist with vreg_1 registers that have
-  // a non-structural consumer (anything other than COPY/PHI/IMPLICIT_DEF,
-  // e.g. S_AND_B64), then backward-propagate through defining COPY/PHI
-  // chains so the entire feeding region is preserved.
-  DenseSet<Register> PreservedLaneMaskRegs;
-  {
-    SmallVector<Register, 8> Worklist;
-
-    for (unsigned I = 0, E = MRI->getNumVirtRegs(); I < E; ++I) {
-      Register Reg = Register::index2VirtReg(I);
-      if (!isVreg1(Reg))
-        continue;
-
-      for (MachineInstr &Use : MRI->use_instructions(Reg)) {
-        if (!Use.isPHI() && Use.getOpcode() != AMDGPU::COPY &&
-            Use.getOpcode() != AMDGPU::IMPLICIT_DEF) {
-          if (PreservedLaneMaskRegs.insert(Reg).second)
-            Worklist.push_back(Reg);
-          break;
-        }
-      }
-    }
-
-    while (!Worklist.empty()) {
-      Register Reg = Worklist.pop_back_val();
-      MachineInstr *DefMI = MRI->getVRegDef(Reg);
-      if (!DefMI)
-        continue;
-      auto MarkPreserved = [&](Register Src) {
-        if (isVreg1(Src) && PreservedLaneMaskRegs.insert(Src).second)
-          Worklist.push_back(Src);
-      };
-      if (DefMI->getOpcode() == AMDGPU::COPY)
-        MarkPreserved(DefMI->getOperand(1).getReg());
-      else if (DefMI->isPHI())
-        for (unsigned I = 1, E = DefMI->getNumOperands(); I < E; I += 2)
-          MarkPreserved(DefMI->getOperand(I).getReg());
-    }
-  }
 
   // Round#1, create the replacing instruction per Vreg1 definition.
   for (MachineBasicBlock &MBB : *MF) {
@@ -314,10 +340,9 @@ bool Vreg1WideningHelper::widenVreg1s() {
       // Collect COPYs to be revisited after vreg_1 defs are reclassed.
       if (MI.getOpcode() == AMDGPU::COPY) {
         auto SrcReg = MI.getOperand(1).getReg();
-        // If SrcReg has been reclassed, it is in Vreg32Set or
-        // PreservedLaneMaskRegs.
-        if (isVreg1(SrcReg) || Vreg32Set.contains(SrcReg) ||
-            PreservedLaneMaskRegs.contains(SrcReg))
+        // Revisit copies after vreg_1 defs have been reclassed.
+        if (PreservedLaneMaskRegs.contains(SrcReg) || isVreg1(SrcReg) ||
+            Vreg32Set.contains(SrcReg))
           DeferredCopyFixups.push_back(&MI);
       }
 
@@ -327,10 +352,8 @@ bool Vreg1WideningHelper::widenVreg1s() {
 
       Changed = true;
 
-      // If this vreg_1 must stay as a scalar lane-mask, preserve it by
-      // reclassing to the wave-mask sgpr class instead of widening.
       if (PreservedLaneMaskRegs.contains(DstReg)) {
-        LLVM_DEBUG(dbgs() << "preserve lane mask for vreg1 def: " << MI);
+        LLVM_DEBUG(dbgs() << "preserve lane-mask vreg1 def: " << MI);
         markAsLaneMask(DstReg);
         continue;
       }
@@ -361,7 +384,9 @@ bool Vreg1WideningHelper::widenVreg1s() {
     } // For MI.
   } // For MBB.
 
-  // Round#2, rewrite deferred COPYs at representation boundaries.
+  // Round#2, lower deferred COPYs at representation boundaries after Round#1
+  // has decided whether each vreg_1 transport web stays as a lane mask or
+  // widens to vgpr_32.
   for (auto *MI : DeferredCopyFixups) {
     if (DeadCopies.contains(MI))
       continue;
@@ -370,8 +395,11 @@ bool Vreg1WideningHelper::widenVreg1s() {
     auto DstReg = MI->getOperand(0).getReg();
     DebugLoc DL = MI->getDebugLoc();
 
-    if (PreservedLaneMaskRegs.contains(SrcReg)) {
-      if (!isLaneMaskReg(DstReg)) {
+    if (isLaneMaskReg(SrcReg)) {
+      if (DstReg == AMDGPU::SCC) {
+        buildLaneMaskToSCC(*MI->getParent(), *MI, DL, SrcReg);
+        DeadCopies.insert(MI);
+      } else if (!isLaneMaskReg(DstReg)) {
         buildLaneMaskToVGPR(*MI->getParent(), *MI, DL, DstReg, SrcReg);
         DeadCopies.insert(MI);
       }
@@ -381,7 +409,10 @@ bool Vreg1WideningHelper::widenVreg1s() {
 
     // Should have been renamed to VGPR_32.
     assert(isVreg32(SrcReg));
-    if (isLaneMaskReg(DstReg)) {
+    if (DstReg == AMDGPU::SCC) {
+      buildVGPRToSCC(*MI->getParent(), *MI, DL, SrcReg);
+      DeadCopies.insert(MI);
+    } else if (isLaneMaskReg(DstReg)) {
       buildVGPRToLaneMask(*MI->getParent(), *MI, DL, DstReg, SrcReg);
       DeadCopies.insert(MI);
     } else

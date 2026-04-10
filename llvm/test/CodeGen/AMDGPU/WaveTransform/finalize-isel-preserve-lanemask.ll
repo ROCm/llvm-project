@@ -2,13 +2,10 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -O0 -amdgpu-late-wave-transform=1 \
 ; RUN:   -stop-after=amdgpu-finalize-isel-wave-transform -verify-machineinstrs %s -o - | FileCheck %s
 
-; Test that AMDGPUFinalizeISelWaveTransform preserves a vreg_1 copied from a
-; lane-mask SGPR as a scalar wave-mask register when the vreg_1 has direct SALU
-; consumers.
-; After SI Fix SGPR Copies, the ISel-generated `$scc = COPY %vreg_1` becomes
-; `S_AND_B64 %vreg_1, $exec`.
-; The finalize pass must keep the vreg_1 as a wave-mask SGPR (COPY sreg_64 -> sreg_64),
-; not widen it to VGPR_32.
+; Test that late-wave finalize preserves `vreg_1` webs that feed `$scc` and
+; lowers the final SCC copy after reclassing the source web to lane-mask SGPRs.
+; In late-wave mode, SI Fix SGPR Copies leaves the SCC copy in place. Finalize
+; keeps that source in lane-mask form and then sets SCC with `S_AND_B64`.
 
 %asm.output = type { <16 x i32>, <16 x i32>, <16 x i32>, <8 x i32>,
                      <2 x i32>, i32,
