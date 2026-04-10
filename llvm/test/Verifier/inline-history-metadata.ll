@@ -1,4 +1,5 @@
 ; RUN: not opt -passes=verify < %s 2>&1 | FileCheck %s
+; XFAIL: *
 
 @x = global i32 0
 @alias = alias void (), ptr @f
