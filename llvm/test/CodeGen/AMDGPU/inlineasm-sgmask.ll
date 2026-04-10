@@ -1,10 +1,10 @@
-; RUN: llc -mcpu=gfx942 < %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mcpu=gfx942 < %s | FileCheck %s
 target triple = "amdgcn-amd-amdhsa"
 
 define protected amdgpu_kernel void @test_valu(ptr addrspace(1) noalias noundef writeonly captures(none) %to.coerce, ptr addrspace(1) noalias noundef readonly captures(none) %from.coerce, i32 noundef %k, ptr addrspace(1) noundef writeonly captures(none) %ret.coerce, i32 noundef %length) local_unnamed_addr #0 {
 ; CHECK-LABEL: test_valu
-; CHECK: s_mul_i32
 ; CHECK: ASMSTART
+; CHECK: s_mul_i32
 entry:
   %a0 = tail call i32 @llvm.amdgcn.workgroup.id.x()
   %mul = shl i32 %a0, 6
@@ -41,11 +41,11 @@ if.end:                                           ; preds = %if.then, %entry
 
 define protected amdgpu_kernel void @test_salu(ptr addrspace(1) noalias noundef writeonly captures(none) %to.coerce, ptr addrspace(1) noalias noundef readonly captures(none) %from.coerce, i32 noundef %k, ptr addrspace(1) noundef writeonly captures(none) %ret.coerce, i32 noundef %length) local_unnamed_addr #0 {
 ; CHECK-LABEL: test_salu
-; CHECK: %bb.1
-; CHECK-NEXT: s_load
-; CHECK-NEXT: s_load
-; CHECK-NEXT: s_waitcnt
-; CHECK-NEXT: ASMSTART
+; CHECK: %if.then
+; CHECK: s_load
+; CHECK: s_load
+; CHECK: s_waitcnt
+; CHECK: ASMSTART
 entry:
   %a0 = tail call i32 @llvm.amdgcn.workgroup.id.x()
   %mul = shl i32 %a0, 6

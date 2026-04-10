@@ -1,7 +1,7 @@
-; RUN: llc -mtriple=amdgcn--amdpal < %s | FileCheck -check-prefixes=GCN,GCN-PAL %s
-; RUN: llc -mtriple=amdgcn-- -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
-; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-MESA %s
-; RUN: llc -mtriple=amdgcn--amdhsa -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdpal < %s | FileCheck -check-prefixes=GCN,GCN-PAL %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-- -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-mesa-mesa3d -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-MESA %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn--amdhsa -mcpu=kaveri < %s | FileCheck -check-prefixes=GCN,GCN-DEFAULT %s
 ; RUN: llc -mtriple=r600-- -mcpu=cypress < %s | FileCheck -check-prefix=R600 %s
 
 @private1 = private unnamed_addr addrspace(4) constant [4 x float] [float 0.0, float 1.0, float 2.0, float 3.0]
@@ -19,12 +19,12 @@
 ; GCN-DEFAULT: s_addc_u32 s{{[0-9]+}}, s[[PC1_HI]], .Lprivate2@rel32@hi+12
 
 ; MESA uses absolute relocations.
-; GCN-MESA: s_add_u32 s2, .Lprivate1@abs32@lo, s4
-; GCN-MESA: s_addc_u32 s3, .Lprivate1@abs32@hi, s5
+; GCN-MESA: s_add_u32 s{{[0-9]+}}, .Lprivate1@abs32@lo, s4
+; GCN-MESA: s_addc_u32 s{{[0-9]+}}, .Lprivate1@abs32@hi, s5
 
 ; PAL uses absolute relocations.
-; GCN-PAL:    s_add_u32 s2, .Lprivate1@abs32@lo, s4
-; GCN-PAL:    s_addc_u32 s3, .Lprivate1@abs32@hi, s5
+; GCN-PAL:    s_add_u32 s{{[0-9]+}}, .Lprivate1@abs32@lo, s4
+; GCN-PAL:    s_addc_u32 s{{[0-9]+}}, .Lprivate1@abs32@hi, s5
 ; GCN-PAL:    s_add_u32 s4, .Lprivate2@abs32@lo, s4
 ; GCN-PAL:    s_addc_u32 s5, .Lprivate2@abs32@hi, s5
 
@@ -44,13 +44,13 @@ define amdgpu_kernel void @private_test(i32 %index, ptr addrspace(1) %out) {
 ; GCN-DEFAULT: s_add_u32 s{{[0-9]+}}, s[[PC0_LO]], available_externally@gotpcrel32@lo+4
 ; GCN-DEFAULT: s_addc_u32 s{{[0-9]+}}, s[[PC0_HI]], available_externally@gotpcrel32@hi+12
 
-; GCN-MESA:    s_mov_b32 s1, available_externally@abs32@hi
-; GCN-MESA:    s_mov_b32 s0, available_externally@abs32@lo
+; GCN-MESA:    s_mov_b32 s{{[0-9]+}}, available_externally@abs32@hi
+; GCN-MESA:    s_mov_b32 s{{[0-9]+}}, available_externally@abs32@lo
 
 ; R600-LABEL: available_externally_test
 
-; GCN-PAL:    s_mov_b32 s1, available_externally@abs32@hi
-; GCN-PAL:    s_mov_b32 s0, available_externally@abs32@lo
+; GCN-PAL:    s_mov_b32 s{{[0-9]+}}, available_externally@abs32@hi
+; GCN-PAL:    s_mov_b32 s{{[0-9]+}}, available_externally@abs32@lo
 define amdgpu_kernel void @available_externally_test(ptr addrspace(1) %out) {
   %ptr = getelementptr [256 x i32], ptr addrspace(4) @available_externally, i32 0, i32 1
   %val = load i32, ptr addrspace(4) %ptr
