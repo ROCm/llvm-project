@@ -1318,7 +1318,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_one_as_scope
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -1346,7 +1345,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_one_as_scope
 ; GFX1132-NEXT:    v_dual_mov_b32 v0, 0x43300000 :: v_dual_mov_b32 v1, s0
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -1538,7 +1536,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_one_as_scope
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -1566,7 +1563,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_one_as_scope
 ; GFX1132-DPP-NEXT:    v_dual_mov_b32 v0, 0x43300000 :: v_dual_mov_b32 v1, s0
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -2545,7 +2541,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_agent_scope_
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -2589,7 +2584,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_agent_scope_
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -2795,7 +2789,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_agent_scope_
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -2839,7 +2832,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_agent_scope_
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -4615,7 +4607,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_default_scop
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -4659,7 +4650,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_default_scop
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -4865,7 +4855,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_default_scop
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -4909,7 +4898,6 @@ define amdgpu_kernel void @global_atomic_fadd_uni_address_uni_value_default_scop
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -7314,7 +7302,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_one_a
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -7359,7 +7346,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_one_a
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -7571,7 +7557,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_one_a
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -7616,7 +7601,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_one_a
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -8755,7 +8739,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -8800,7 +8783,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -9012,7 +8994,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -9057,7 +9038,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -11119,7 +11099,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_defau
 ; GFX1164-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-NEXT:    s_clause 0x1
 ; GFX1164-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -11164,7 +11143,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_defau
 ; GFX1132-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-NEXT:    s_clause 0x1
 ; GFX1132-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -11376,7 +11354,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_defau
 ; GFX1164-DPP-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX1164-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1164-DPP-NEXT:    s_mov_b64 s[0:1], exec
-; GFX1164-DPP-NEXT:    s_clause 0x1
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1164-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1164-DPP-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -11421,7 +11398,6 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_defau
 ; GFX1132-DPP-NEXT:    v_mbcnt_lo_u32_b32 v2, exec_lo, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s2, 0
 ; GFX1132-DPP-NEXT:    s_mov_b32 s0, exec_lo
-; GFX1132-DPP-NEXT:    s_clause 0x1
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v0, off offset:4
 ; GFX1132-DPP-NEXT:    scratch_store_b32 off, v1, off
 ; GFX1132-DPP-NEXT:    scratch_load_b64 v[0:1], off, off

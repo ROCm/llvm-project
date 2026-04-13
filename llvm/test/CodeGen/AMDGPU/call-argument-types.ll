@@ -5978,7 +5978,6 @@ define amdgpu_kernel void @test_call_external_void_func_byval_struct_i8_i32() #0
 ; GFX11-TRUE16-NEXT:    s_add_u32 s2, s2, external_void_func_byval_struct_i8_i32@rel32@lo+4
 ; GFX11-TRUE16-NEXT:    s_addc_u32 s3, s3, external_void_func_byval_struct_i8_i32@rel32@hi+12
 ; GFX11-TRUE16-NEXT:    s_mov_b64 s[6:7], s[0:1]
-; GFX11-TRUE16-NEXT:    s_clause 0x1
 ; GFX11-TRUE16-NEXT:    scratch_store_b8 off, v0, off
 ; GFX11-TRUE16-NEXT:    scratch_store_b32 off, v1, off offset:4
 ; GFX11-TRUE16-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -5995,7 +5994,6 @@ define amdgpu_kernel void @test_call_external_void_func_byval_struct_i8_i32() #0
 ; GFX11-FAKE16-NEXT:    s_add_u32 s2, s2, external_void_func_byval_struct_i8_i32@rel32@lo+4
 ; GFX11-FAKE16-NEXT:    s_addc_u32 s3, s3, external_void_func_byval_struct_i8_i32@rel32@hi+12
 ; GFX11-FAKE16-NEXT:    s_mov_b64 s[6:7], s[0:1]
-; GFX11-FAKE16-NEXT:    s_clause 0x1
 ; GFX11-FAKE16-NEXT:    scratch_store_b8 off, v0, off
 ; GFX11-FAKE16-NEXT:    scratch_store_b32 off, v1, off offset:4
 ; GFX11-FAKE16-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -6191,7 +6189,6 @@ define amdgpu_kernel void @test_call_external_void_func_sret_struct_i8_i32_byval
 ; GFX11-TRUE16-NEXT:    s_add_u32 s2, s2, external_void_func_sret_struct_i8_i32_byval_struct_i8_i32@rel32@lo+4
 ; GFX11-TRUE16-NEXT:    s_addc_u32 s3, s3, external_void_func_sret_struct_i8_i32_byval_struct_i8_i32@rel32@hi+12
 ; GFX11-TRUE16-NEXT:    s_mov_b64 s[6:7], s[0:1]
-; GFX11-TRUE16-NEXT:    s_clause 0x1
 ; GFX11-TRUE16-NEXT:    scratch_store_b8 off, v0, off
 ; GFX11-TRUE16-NEXT:    scratch_store_b32 off, v1, off offset:4
 ; GFX11-TRUE16-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -6199,7 +6196,6 @@ define amdgpu_kernel void @test_call_external_void_func_sret_struct_i8_i32_byval
 ; GFX11-TRUE16-NEXT:    scratch_store_b64 off, v[0:1], s32
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v0, 8
 ; GFX11-TRUE16-NEXT:    s_swappc_b64 s[30:31], s[2:3]
-; GFX11-TRUE16-NEXT:    s_clause 0x1
 ; GFX11-TRUE16-NEXT:    scratch_load_d16_u8 v0, off, off offset:8
 ; GFX11-TRUE16-NEXT:    scratch_load_b32 v1, off, off offset:12
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0x31016000
@@ -6222,7 +6218,6 @@ define amdgpu_kernel void @test_call_external_void_func_sret_struct_i8_i32_byval
 ; GFX11-FAKE16-NEXT:    s_add_u32 s2, s2, external_void_func_sret_struct_i8_i32_byval_struct_i8_i32@rel32@lo+4
 ; GFX11-FAKE16-NEXT:    s_addc_u32 s3, s3, external_void_func_sret_struct_i8_i32_byval_struct_i8_i32@rel32@hi+12
 ; GFX11-FAKE16-NEXT:    s_mov_b64 s[6:7], s[0:1]
-; GFX11-FAKE16-NEXT:    s_clause 0x1
 ; GFX11-FAKE16-NEXT:    scratch_store_b8 off, v0, off
 ; GFX11-FAKE16-NEXT:    scratch_store_b32 off, v1, off offset:4
 ; GFX11-FAKE16-NEXT:    scratch_load_b64 v[0:1], off, off
@@ -6230,7 +6225,6 @@ define amdgpu_kernel void @test_call_external_void_func_sret_struct_i8_i32_byval
 ; GFX11-FAKE16-NEXT:    scratch_store_b64 off, v[0:1], s32
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v0, 8
 ; GFX11-FAKE16-NEXT:    s_swappc_b64 s[30:31], s[2:3]
-; GFX11-FAKE16-NEXT:    s_clause 0x1
 ; GFX11-FAKE16-NEXT:    scratch_load_u8 v0, off, off offset:8
 ; GFX11-FAKE16-NEXT:    scratch_load_b32 v1, off, off offset:12
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0x31016000

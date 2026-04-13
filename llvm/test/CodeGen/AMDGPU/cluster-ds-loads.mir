@@ -1,0 +1,107 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx942 -run-pass machine-scheduler -debug-only=machine-scheduler %s -o /dev/null 2> %t
+# RUN: FileCheck %s < %t
+# REQUIRES: asserts
+
+# Verify that DS_READ_B128 instructions (4 DWORDs each) can form clusters
+# of up to 4 ops (16 DWORDs total). With the default limit of 8, only pairs
+# would cluster; the per-memory-type DS limit of 16 enables deeper clusters
+# for better latency hiding behind consumers like MFMA.
+
+# CHECK-LABEL: cluster_ds_read_b128:%bb.0
+# CHECK: Cluster ld/st SU([[L0:[0-9]+]]) - SU([[L1:[0-9]+]])
+# CHECK: Cluster ld/st SU([[L1]]) - SU([[L2:[0-9]+]])
+# CHECK: Cluster ld/st SU([[L2]]) - SU([[L3:[0-9]+]])
+# CHECK-NOT: Cluster ld/st
+
+# Verify that the 5th DS_READ_B128 does NOT cluster with the first 4
+# (would exceed the 16-DWORD limit for DS).
+# CHECK-LABEL: cluster_ds_read_b128_limit:%bb.0
+# CHECK: Cluster ld/st SU([[M0:[0-9]+]]) - SU([[M1:[0-9]+]])
+# CHECK: Cluster ld/st SU([[M1]]) - SU([[M2:[0-9]+]])
+# CHECK: Cluster ld/st SU([[M2]]) - SU([[M3:[0-9]+]])
+# CHECK-NOT: Cluster ld/st SU([[M3]])
+
+# Verify that the subtarget DS cluster limit (16 DWORDs) takes precedence
+# over the per-function maxMemoryClusterDWords attribute for DS operations.
+# CHECK-LABEL: cluster_ds_read_b128_attr_override:%bb.0
+# CHECK: Cluster ld/st SU([[A0:[0-9]+]]) - SU([[A1:[0-9]+]])
+# CHECK: Cluster ld/st SU([[A1]]) - SU([[A2:[0-9]+]])
+# CHECK: Cluster ld/st SU([[A2]]) - SU([[A3:[0-9]+]])
+# CHECK-NOT: Cluster ld/st
+
+---
+name: cluster_ds_read_b128
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg: '$sgpr96_sgpr97_sgpr98_sgpr99'
+body:             |
+  bb.0:
+    liveins: $vgpr0
+
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vreg_128_align2 = DS_READ_B128_gfx9 %0, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    %2:vgpr_32 = COPY %1.sub0
+    %3:vreg_128_align2 = DS_READ_B128_gfx9 %0, 16, 0, implicit $exec :: (load (s128), addrspace 3)
+    %4:vgpr_32 = COPY %3.sub0
+    %5:vreg_128_align2 = DS_READ_B128_gfx9 %0, 32, 0, implicit $exec :: (load (s128), addrspace 3)
+    %6:vgpr_32 = COPY %5.sub0
+    %7:vreg_128_align2 = DS_READ_B128_gfx9 %0, 48, 0, implicit $exec :: (load (s128), addrspace 3)
+    %8:vgpr_32 = COPY %7.sub0
+    %9:vgpr_32 = V_ADD_F32_e64 0, %2, 0, %4, 0, 0, implicit $mode, implicit $exec
+    %10:vgpr_32 = V_ADD_F32_e64 0, %6, 0, %8, 0, 0, implicit $mode, implicit $exec
+    %11:vgpr_32 = V_ADD_F32_e64 0, %9, 0, %10, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit %11
+
+---
+name: cluster_ds_read_b128_limit
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg: '$sgpr96_sgpr97_sgpr98_sgpr99'
+body:             |
+  bb.0:
+    liveins: $vgpr0
+
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vreg_128_align2 = DS_READ_B128_gfx9 %0, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    %2:vgpr_32 = COPY %1.sub0
+    %3:vreg_128_align2 = DS_READ_B128_gfx9 %0, 16, 0, implicit $exec :: (load (s128), addrspace 3)
+    %4:vgpr_32 = COPY %3.sub0
+    %5:vreg_128_align2 = DS_READ_B128_gfx9 %0, 32, 0, implicit $exec :: (load (s128), addrspace 3)
+    %6:vgpr_32 = COPY %5.sub0
+    %7:vreg_128_align2 = DS_READ_B128_gfx9 %0, 48, 0, implicit $exec :: (load (s128), addrspace 3)
+    %8:vgpr_32 = COPY %7.sub0
+    %9:vreg_128_align2 = DS_READ_B128_gfx9 %0, 64, 0, implicit $exec :: (load (s128), addrspace 3)
+    %10:vgpr_32 = COPY %9.sub0
+    %11:vgpr_32 = V_ADD_F32_e64 0, %2, 0, %4, 0, 0, implicit $mode, implicit $exec
+    %12:vgpr_32 = V_ADD_F32_e64 0, %6, 0, %8, 0, 0, implicit $mode, implicit $exec
+    %13:vgpr_32 = V_ADD_F32_e64 0, %10, 0, %11, 0, 0, implicit $mode, implicit $exec
+    %14:vgpr_32 = V_ADD_F32_e64 0, %12, 0, %13, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit %14
+
+---
+name: cluster_ds_read_b128_attr_override
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  scratchRSrcReg: '$sgpr96_sgpr97_sgpr98_sgpr99'
+  maxMemoryClusterDWords: 8
+body:             |
+  bb.0:
+    liveins: $vgpr0
+
+    %0:vgpr_32 = COPY $vgpr0
+    %1:vreg_128_align2 = DS_READ_B128_gfx9 %0, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    %2:vgpr_32 = COPY %1.sub0
+    %3:vreg_128_align2 = DS_READ_B128_gfx9 %0, 16, 0, implicit $exec :: (load (s128), addrspace 3)
+    %4:vgpr_32 = COPY %3.sub0
+    %5:vreg_128_align2 = DS_READ_B128_gfx9 %0, 32, 0, implicit $exec :: (load (s128), addrspace 3)
+    %6:vgpr_32 = COPY %5.sub0
+    %7:vreg_128_align2 = DS_READ_B128_gfx9 %0, 48, 0, implicit $exec :: (load (s128), addrspace 3)
+    %8:vgpr_32 = COPY %7.sub0
+    %9:vgpr_32 = V_ADD_F32_e64 0, %2, 0, %4, 0, 0, implicit $mode, implicit $exec
+    %10:vgpr_32 = V_ADD_F32_e64 0, %6, 0, %8, 0, 0, implicit $mode, implicit $exec
+    %11:vgpr_32 = V_ADD_F32_e64 0, %9, 0, %10, 0, 0, implicit $mode, implicit $exec
+    S_ENDPGM 0, implicit %11
+...

@@ -2112,10 +2112,19 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
       CurrentClusterBytes = Bytes + MemOpb.Width.getValue().getKnownMinValue();
     }
 
-    if (!TII->shouldClusterMemOps(MemOpa.BaseOps, MemOpa.Offset,
-                                  MemOpa.OffsetIsScalable, MemOpb.BaseOps,
-                                  MemOpb.Offset, MemOpb.OffsetIsScalable,
-                                  ClusterLength, CurrentClusterBytes))
+    // Compute the maximum latency among data-dependent consumers of the
+    // cluster anchor so targets can scale the cluster budget for pipelining.
+    unsigned MaxConsumerLatency = 0;
+    for (const SDep &Succ : MemOpa.SU->Succs)
+      if (Succ.getKind() == SDep::Data && Succ.getSUnit()->getInstr())
+        MaxConsumerLatency =
+            std::max(MaxConsumerLatency,
+                     static_cast<unsigned>(Succ.getSUnit()->Latency));
+
+    if (!TII->shouldClusterMemOps(
+            MemOpa.BaseOps, MemOpa.Offset, MemOpa.OffsetIsScalable,
+            MemOpb.BaseOps, MemOpb.Offset, MemOpb.OffsetIsScalable,
+            ClusterLength, CurrentClusterBytes, MaxConsumerLatency))
       continue;
 
     SUnit *SUa = MemOpa.SU;

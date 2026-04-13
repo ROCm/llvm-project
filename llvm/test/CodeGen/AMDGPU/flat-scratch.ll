@@ -62,7 +62,6 @@ define amdgpu_kernel void @zero_init_kernel() {
 ; GFX11-NEXT:    s_mov_b32 s3, s0
 ; GFX11-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX11-NEXT:    s_clause 0x3
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:48
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:32
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:16
@@ -78,7 +77,6 @@ define amdgpu_kernel void @zero_init_kernel() {
 ; GFX12-NEXT:    s_mov_b32 s3, s0
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-NEXT:    s_clause 0x3
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:48
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:32
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:16
@@ -181,7 +179,6 @@ define amdgpu_kernel void @zero_init_kernel() {
 ; GFX11-PAL-NEXT:    s_mov_b32 s3, s0
 ; GFX11-PAL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-PAL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX11-PAL-NEXT:    s_clause 0x3
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:48
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:32
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:16
@@ -197,7 +194,6 @@ define amdgpu_kernel void @zero_init_kernel() {
 ; GFX12-PAL-NEXT:    s_mov_b32 s3, s0
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-PAL-NEXT:    s_clause 0x3
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:48
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:32
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:16
@@ -1126,7 +1122,6 @@ define amdgpu_kernel void @zero_init_small_offset_kernel() {
 ; GFX11-NEXT:    s_mov_b32 s3, s0
 ; GFX11-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX11-NEXT:    s_clause 0x3
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:272
 ; GFX11-NEXT:    scratch_store_b128 off, v[0:3], off offset:288
@@ -1144,7 +1139,6 @@ define amdgpu_kernel void @zero_init_small_offset_kernel() {
 ; GFX12-NEXT:    s_mov_b32 s3, s0
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-NEXT:    s_clause 0x3
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:272
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:288
@@ -1257,7 +1251,6 @@ define amdgpu_kernel void @zero_init_small_offset_kernel() {
 ; GFX11-PAL-NEXT:    s_mov_b32 s3, s0
 ; GFX11-PAL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX11-PAL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX11-PAL-NEXT:    s_clause 0x3
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:272
 ; GFX11-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:288
@@ -1275,7 +1268,6 @@ define amdgpu_kernel void @zero_init_small_offset_kernel() {
 ; GFX12-PAL-NEXT:    s_mov_b32 s3, s0
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-PAL-NEXT:    s_clause 0x3
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:272
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:288
@@ -2383,7 +2375,6 @@ define amdgpu_kernel void @zero_init_large_offset_kernel() {
 ; GFX12-NEXT:    s_mov_b32 s3, s0
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-NEXT:    s_clause 0x3
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:16384
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:16400
 ; GFX12-NEXT:    scratch_store_b128 off, v[0:3], off offset:16416
@@ -2519,7 +2510,6 @@ define amdgpu_kernel void @zero_init_large_offset_kernel() {
 ; GFX12-PAL-NEXT:    s_mov_b32 s3, s0
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-PAL-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
-; GFX12-PAL-NEXT:    s_clause 0x3
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:16384
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:16400
 ; GFX12-PAL-NEXT:    scratch_store_b128 off, v[0:3], off offset:16416

@@ -3494,7 +3494,7 @@ bool RISCVInstrInfo::shouldClusterMemOps(
     ArrayRef<const MachineOperand *> BaseOps1, int64_t Offset1,
     bool OffsetIsScalable1, ArrayRef<const MachineOperand *> BaseOps2,
     int64_t Offset2, bool OffsetIsScalable2, unsigned ClusterSize,
-    unsigned NumBytes) const {
+    unsigned NumBytes, unsigned MaxConsumerLatency) const {
   // If the mem ops (to be clustered) do not have the same base ptr, then they
   // should not be clustered
   if (!BaseOps1.empty() && !BaseOps2.empty()) {

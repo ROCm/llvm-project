@@ -390,8 +390,8 @@ define amdgpu_kernel void @s_test_imin_sle_v4i32(ptr addrspace(1) %out, <4 x i32
 ; GFX9-LABEL: s_test_imin_sle_v4i32:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_load_dwordx8 s[0:7], s[8:9], 0x10
+; GFX9-NEXT:    s_load_dwordx2 s[10:11], s[8:9], 0x0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_load_dwordx2 s[8:9], s[8:9], 0x0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_min_i32 s3, s3, s7
 ; GFX9-NEXT:    s_min_i32 s2, s2, s6
@@ -401,7 +401,7 @@ define amdgpu_kernel void @s_test_imin_sle_v4i32(ptr addrspace(1) %out, <4 x i32
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX9-NEXT:    v_mov_b32_e32 v2, s2
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s3
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9]
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[10:11]
 ; GFX9-NEXT:    s_endpgm
 ;
 ; GFX10-LABEL: s_test_imin_sle_v4i32:
@@ -3835,8 +3835,8 @@ define amdgpu_kernel void @s_test_umin_ult_v8i16(ptr addrspace(1) %out, <8 x i16
 ; GFX9-LABEL: s_test_umin_ult_v8i16:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_load_dwordx8 s[0:7], s[8:9], 0x10
+; GFX9-NEXT:    s_load_dwordx2 s[10:11], s[8:9], 0x0
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
-; GFX9-NEXT:    s_load_dwordx2 s[8:9], s[8:9], 0x0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s7
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s6
@@ -3846,7 +3846,7 @@ define amdgpu_kernel void @s_test_umin_ult_v8i16(ptr addrspace(1) %out, <8 x i16
 ; GFX9-NEXT:    v_pk_min_u16 v1, s1, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX9-NEXT:    v_pk_min_u16 v0, s0, v0
-; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[8:9]
+; GFX9-NEXT:    global_store_dwordx4 v4, v[0:3], s[10:11]
 ; GFX9-NEXT:    s_endpgm
 ;
 ; GFX10-LABEL: s_test_umin_ult_v8i16:

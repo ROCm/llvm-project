@@ -568,23 +568,48 @@ bool SIInstrInfo::shouldClusterMemOps(ArrayRef<const MachineOperand *> BaseOps1,
                                       int64_t Offset1, bool OffsetIsScalable1,
                                       ArrayRef<const MachineOperand *> BaseOps2,
                                       int64_t Offset2, bool OffsetIsScalable2,
-                                      unsigned ClusterSize,
-                                      unsigned NumBytes) const {
+                                      unsigned ClusterSize, unsigned NumBytes,
+                                      unsigned MaxConsumerLatency) const {
+  if (BaseOps1.empty() || BaseOps2.empty())
+    return false;
+
   // If the mem ops (to be clustered) do not have the same base ptr, then they
   // should not be clustered
   unsigned MaxMemoryClusterDWords = DefaultMemoryClusterDWordsLimit;
-  if (!BaseOps1.empty() && !BaseOps2.empty()) {
-    const MachineInstr &FirstLdSt = *BaseOps1.front()->getParent();
-    const MachineInstr &SecondLdSt = *BaseOps2.front()->getParent();
-    if (!memOpsHaveSameBasePtr(FirstLdSt, BaseOps1, SecondLdSt, BaseOps2))
-      return false;
-
-    const SIMachineFunctionInfo *MFI =
-        FirstLdSt.getMF()->getInfo<SIMachineFunctionInfo>();
-    MaxMemoryClusterDWords = MFI->getMaxMemoryClusterDWords();
-  } else if (!BaseOps1.empty() || !BaseOps2.empty()) {
-    // If only one base op is empty, they do not have the same base ptr
+  const MachineInstr &FirstLdSt = *BaseOps1.front()->getParent();
+  const MachineInstr &SecondLdSt = *BaseOps2.front()->getParent();
+  if (!memOpsHaveSameBasePtr(FirstLdSt, BaseOps1, SecondLdSt, BaseOps2))
     return false;
+
+  // Select the cluster DWORD budget based on the memory type. Different
+  // address spaces have different latency profiles and pipelining
+  // characteristics; DS/LDS loads are low-latency and benefit from deeper
+  // clusters to allow the scheduler to pipeline them behind long-latency
+  // consumers like MFMA.
+  const MachineFunction *MF = FirstLdSt.getMF();
+  const GCNSubtarget &ST = MF->getSubtarget<GCNSubtarget>();
+  if (isDS(FirstLdSt))
+    MaxMemoryClusterDWords = ST.getMaxDSClusterDWords();
+  else if (isMUBUF(FirstLdSt) || isMTBUF(FirstLdSt) || isMIMG(FirstLdSt))
+    MaxMemoryClusterDWords = ST.getMaxVMEMClusterDWords();
+  else if (isSMRD(FirstLdSt))
+    MaxMemoryClusterDWords = ST.getMaxSMEMClusterDWords();
+  else if (isFLAT(FirstLdSt))
+    MaxMemoryClusterDWords = ST.getMaxFlatClusterDWords();
+
+  // When consumer latency information is available, scale the cluster budget
+  // to exploit pipelining. If the consumer pipeline is long (e.g. MFMA at
+  // 8-16 cycles), more loads can execute behind it, so allow deeper clusters.
+  if (MaxConsumerLatency > 0) {
+    unsigned MemLatency = SchedModel.computeInstrLatency(&FirstLdSt);
+    if (MemLatency > 0 && MaxConsumerLatency > MemLatency) {
+      unsigned LoadDWords = ((NumBytes / std::max(ClusterSize, 1U)) + 3) / 4;
+      if (LoadDWords > 0) {
+        unsigned PipelineSlots = MaxConsumerLatency / MemLatency;
+        unsigned ScaledLimit = PipelineSlots * LoadDWords * ClusterSize;
+        MaxMemoryClusterDWords = std::max(MaxMemoryClusterDWords, ScaledLimit);
+      }
+    }
   }
 
   // In order to avoid register pressure, on an average, the number of DWORDS

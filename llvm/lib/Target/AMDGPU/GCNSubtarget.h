@@ -925,6 +925,29 @@ public:
                              SDep &Dep,
                              const TargetSchedModel *SchedModel) const override;
 
+  // \returns the maximum number of DWORDs that can be clustered for DS/LDS
+  // memory operations. DS loads are low-latency and benefit from deeper
+  // clusters to pipeline behind long-latency consumers (e.g. MFMA).
+  unsigned getMaxDSClusterDWords() const { return 16; }
+
+  // \returns the maximum number of DWORDs that can be clustered for VMEM
+  // (MUBUF/MTBUF/MIMG) memory operations.
+  unsigned getMaxVMEMClusterDWords() const {
+    return DefaultMemoryClusterDWordsLimit;
+  }
+
+  // \returns the maximum number of DWORDs that can be clustered for SMEM
+  // memory operations.
+  unsigned getMaxSMEMClusterDWords() const {
+    return DefaultMemoryClusterDWordsLimit;
+  }
+
+  // \returns the maximum number of DWORDs that can be clustered for Flat
+  // memory operations.
+  unsigned getMaxFlatClusterDWords() const {
+    return DefaultMemoryClusterDWordsLimit;
+  }
+
   // \returns true if it's beneficial on this subtarget for the scheduler to
   // cluster stores as well as loads.
   bool shouldClusterStores() const { return getGeneration() >= GFX11; }

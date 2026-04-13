@@ -1428,28 +1428,28 @@ define amdgpu_kernel void @extract_neg_offset_sgpr_loaded(ptr addrspace(1) %out,
 ;
 ; GFX9-IDXMODE-LABEL: extract_neg_offset_sgpr_loaded:
 ; GFX9-IDXMODE:       ; %bb.0: ; %entry
-; GFX9-IDXMODE-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0x64
-; GFX9-IDXMODE-NEXT:    s_load_dwordx16 s[36:51], s[4:5], 0xa4
+; GFX9-IDXMODE-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0xa4
+; GFX9-IDXMODE-NEXT:    s_load_dwordx16 s[36:51], s[4:5], 0x64
 ; GFX9-IDXMODE-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-IDXMODE-NEXT:    s_load_dword s2, s[4:5], 0xe4
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v16, 0
 ; GFX9-IDXMODE-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-IDXMODE-NEXT:    s_or_b32 s8, s8, s36
-; GFX9-IDXMODE-NEXT:    s_or_b32 s3, s23, s51
-; GFX9-IDXMODE-NEXT:    s_or_b32 s4, s22, s50
-; GFX9-IDXMODE-NEXT:    s_or_b32 s5, s21, s49
-; GFX9-IDXMODE-NEXT:    s_or_b32 s6, s20, s48
-; GFX9-IDXMODE-NEXT:    s_or_b32 s7, s19, s47
-; GFX9-IDXMODE-NEXT:    s_or_b32 s18, s18, s46
-; GFX9-IDXMODE-NEXT:    s_or_b32 s17, s17, s45
-; GFX9-IDXMODE-NEXT:    s_or_b32 s16, s16, s44
-; GFX9-IDXMODE-NEXT:    s_or_b32 s15, s15, s43
-; GFX9-IDXMODE-NEXT:    s_or_b32 s14, s14, s42
-; GFX9-IDXMODE-NEXT:    s_or_b32 s13, s13, s41
-; GFX9-IDXMODE-NEXT:    s_or_b32 s12, s12, s40
-; GFX9-IDXMODE-NEXT:    s_or_b32 s11, s11, s39
-; GFX9-IDXMODE-NEXT:    s_or_b32 s10, s10, s38
-; GFX9-IDXMODE-NEXT:    s_or_b32 s9, s9, s37
+; GFX9-IDXMODE-NEXT:    s_or_b32 s8, s36, s8
+; GFX9-IDXMODE-NEXT:    s_or_b32 s3, s51, s23
+; GFX9-IDXMODE-NEXT:    s_or_b32 s4, s50, s22
+; GFX9-IDXMODE-NEXT:    s_or_b32 s5, s49, s21
+; GFX9-IDXMODE-NEXT:    s_or_b32 s6, s48, s20
+; GFX9-IDXMODE-NEXT:    s_or_b32 s7, s47, s19
+; GFX9-IDXMODE-NEXT:    s_or_b32 s18, s46, s18
+; GFX9-IDXMODE-NEXT:    s_or_b32 s17, s45, s17
+; GFX9-IDXMODE-NEXT:    s_or_b32 s16, s44, s16
+; GFX9-IDXMODE-NEXT:    s_or_b32 s15, s43, s15
+; GFX9-IDXMODE-NEXT:    s_or_b32 s14, s42, s14
+; GFX9-IDXMODE-NEXT:    s_or_b32 s13, s41, s13
+; GFX9-IDXMODE-NEXT:    s_or_b32 s12, s40, s12
+; GFX9-IDXMODE-NEXT:    s_or_b32 s11, s39, s11
+; GFX9-IDXMODE-NEXT:    s_or_b32 s10, s38, s10
+; GFX9-IDXMODE-NEXT:    s_or_b32 s9, s37, s9
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v0, s8
 ; GFX9-IDXMODE-NEXT:    s_addk_i32 s2, 0xfe00
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v1, s9
@@ -6389,22 +6389,20 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ;
 ; SI-MOVREL-LABEL: insert_vgpr_offset_multiple_in_block:
 ; SI-MOVREL:       ; %bb.0: ; %entry
-; SI-MOVREL-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
+; SI-MOVREL-NEXT:    s_load_dwordx2 s[24:25], s[4:5], 0xd
+; SI-MOVREL-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0x19
 ; SI-MOVREL-NEXT:    s_mov_b32 s3, 0xf000
-; SI-MOVREL-NEXT:    s_mov_b32 s10, 0
-; SI-MOVREL-NEXT:    s_mov_b32 s11, s3
+; SI-MOVREL-NEXT:    s_mov_b32 s26, 0
+; SI-MOVREL-NEXT:    s_mov_b32 s27, s3
 ; SI-MOVREL-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v2, 0
 ; SI-MOVREL-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-MOVREL-NEXT:    buffer_load_dword v14, v[1:2], s[8:11], 0 addr64 glc
+; SI-MOVREL-NEXT:    buffer_load_dword v14, v[1:2], s[24:27], 0 addr64 glc
 ; SI-MOVREL-NEXT:    s_waitcnt vmcnt(0)
-; SI-MOVREL-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0x19
+; SI-MOVREL-NEXT:    v_mov_b32_e32 v2, s18
 ; SI-MOVREL-NEXT:    ;;#ASMSTART
 ; SI-MOVREL-NEXT:    v_mov_b32 v1, 62
 ; SI-MOVREL-NEXT:    ;;#ASMEND
-; SI-MOVREL-NEXT:    s_mov_b32 s2, -1
-; SI-MOVREL-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-MOVREL-NEXT:    v_mov_b32_e32 v2, s18
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v3, s19
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v4, s12
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v5, s13
@@ -6417,6 +6415,7 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v10, s22
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v11, s23
 ; SI-MOVREL-NEXT:    v_mov_b32_e32 v15, s16
+; SI-MOVREL-NEXT:    s_mov_b32 s2, -1
 ; SI-MOVREL-NEXT:    v_add_i32_e32 v18, vcc, 1, v14
 ; SI-MOVREL-NEXT:    v_cmp_eq_u32_e32 vcc, 10, v14
 ; SI-MOVREL-NEXT:    v_cndmask_b32_e32 v16, v2, v1, vcc
@@ -6635,15 +6634,15 @@ define amdgpu_kernel void @insert_vgpr_offset_multiple_in_block(ptr addrspace(1)
 ; GFX9-IDXMODE-LABEL: insert_vgpr_offset_multiple_in_block:
 ; GFX9-IDXMODE:       ; %bb.0: ; %entry
 ; GFX9-IDXMODE-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x34
-; GFX9-IDXMODE-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
 ; GFX9-IDXMODE-NEXT:    s_load_dwordx16 s[8:23], s[4:5], 0x64
+; GFX9-IDXMODE-NEXT:    v_lshlrev_b32_e32 v1, 2, v0
 ; GFX9-IDXMODE-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-IDXMODE-NEXT:    global_load_dword v14, v1, s[0:1] glc
 ; GFX9-IDXMODE-NEXT:    s_waitcnt vmcnt(0)
+; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v2, s18
 ; GFX9-IDXMODE-NEXT:    ;;#ASMSTART
 ; GFX9-IDXMODE-NEXT:    v_mov_b32 v1, 62
 ; GFX9-IDXMODE-NEXT:    ;;#ASMEND
-; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v2, s18
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v3, s19
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v4, s12
 ; GFX9-IDXMODE-NEXT:    v_mov_b32_e32 v5, s13

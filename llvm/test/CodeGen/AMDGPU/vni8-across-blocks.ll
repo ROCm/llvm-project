@@ -720,9 +720,9 @@ define amdgpu_kernel void @v8i8_multiuse_multiblock(ptr addrspace(1) %src1, ptr 
 ; GFX942-LABEL: v8i8_multiuse_multiblock:
 ; GFX942:       ; %bb.0: ; %entry
 ; GFX942-NEXT:    s_load_dwordx8 s[8:15], s[4:5], 0x24
+; GFX942-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x44
 ; GFX942-NEXT:    v_and_b32_e32 v2, 0x3ff, v0
 ; GFX942-NEXT:    v_lshlrev_b32_e32 v0, 3, v2
-; GFX942-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x44
 ; GFX942-NEXT:    v_cmp_lt_u32_e64 s[2:3], 14, v2
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dwordx2 v[0:1], v0, s[8:9]

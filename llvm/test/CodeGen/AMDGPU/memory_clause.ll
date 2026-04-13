@@ -486,7 +486,6 @@ define amdgpu_kernel void @flat_scratch_load_clause(float %a, float %b, <8 x i32
 ; GCN-SCRATCH-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GCN-SCRATCH-NEXT:    ;;#ASMSTART
 ; GCN-SCRATCH-NEXT:    ;;#ASMEND
-; GCN-SCRATCH-NEXT:    s_clause 0x1
 ; GCN-SCRATCH-NEXT:    scratch_load_dword v0, off, off
 ; GCN-SCRATCH-NEXT:    scratch_load_dword v1, off, off offset:4
 ; GCN-SCRATCH-NEXT:    s_waitcnt vmcnt(0)

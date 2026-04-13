@@ -4019,19 +4019,20 @@ define amdgpu_kernel void @compute_mad(ptr addrspace(4) %i18, ptr addrspace(4) %
 ; GFX67-LABEL: compute_mad:
 ; GFX67:       ; %bb.0: ; %bb
 ; GFX67-NEXT:    s_load_dword s0, s[4:5], 0x6
-; GFX67-NEXT:    s_mov_b32 s3, 0xf000
+; GFX67-NEXT:    s_mov_b32 s7, 0xf000
+; GFX67-NEXT:    s_mov_b32 s6, 0
 ; GFX67-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX67-NEXT:    s_add_i32 s0, s0, 1
 ; GFX67-NEXT:    v_mul_lo_u32 v1, s0, v0
 ; GFX67-NEXT:    v_add_i32_e32 v2, vcc, s0, v1
 ; GFX67-NEXT:    v_mul_lo_u32 v2, v2, v0
 ; GFX67-NEXT:    v_add_i32_e32 v1, vcc, 1, v1
-; GFX67-NEXT:    s_load_dwordx4 s[12:15], s[4:5], 0x0
-; GFX67-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x4
+; GFX67-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x0
+; GFX67-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x4
 ; GFX67-NEXT:    v_mul_lo_u32 v3, v2, v1
 ; GFX67-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX67-NEXT:    s_load_dword s2, s[14:15], 0x1
-; GFX67-NEXT:    s_load_dwordx2 s[4:5], s[12:13], 0x0
+; GFX67-NEXT:    s_load_dword s2, s[2:3], 0x1
+; GFX67-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x0
 ; GFX67-NEXT:    v_add_i32_e32 v1, vcc, v3, v1
 ; GFX67-NEXT:    v_mul_lo_u32 v1, v1, v2
 ; GFX67-NEXT:    v_add_i32_e32 v2, vcc, 1, v3
@@ -4042,16 +4043,15 @@ define amdgpu_kernel void @compute_mad(ptr addrspace(4) %i18, ptr addrspace(4) %
 ; GFX67-NEXT:    v_add_i32_e32 v0, vcc, s8, v0
 ; GFX67-NEXT:    v_add_i32_e32 v2, vcc, v3, v2
 ; GFX67-NEXT:    v_mul_lo_u32 v1, v2, v1
-; GFX67-NEXT:    v_mov_b32_e32 v2, s5
-; GFX67-NEXT:    s_mov_b32 s2, 0
+; GFX67-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX67-NEXT:    v_mul_lo_u32 v3, v1, v3
 ; GFX67-NEXT:    v_add_i32_e32 v3, vcc, v3, v1
 ; GFX67-NEXT:    v_mul_lo_u32 v4, v3, v1
-; GFX67-NEXT:    v_add_i32_e32 v0, vcc, s4, v0
+; GFX67-NEXT:    v_add_i32_e32 v0, vcc, s0, v0
 ; GFX67-NEXT:    v_addc_u32_e32 v1, vcc, 0, v2, vcc
 ; GFX67-NEXT:    v_lshl_b64 v[0:1], v[0:1], 2
 ; GFX67-NEXT:    v_add_i32_e32 v2, vcc, v4, v3
-; GFX67-NEXT:    buffer_store_dword v2, v[0:1], s[0:3], 0 addr64
+; GFX67-NEXT:    buffer_store_dword v2, v[0:1], s[4:7], 0 addr64
 ; GFX67-NEXT:    s_endpgm
 ;
 ; GFX8-LABEL: compute_mad:

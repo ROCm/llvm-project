@@ -686,8 +686,8 @@ public:
                            int64_t Offset1, bool OffsetIsScalable1,
                            ArrayRef<const MachineOperand *> BaseOps2,
                            int64_t Offset2, bool OffsetIsScalable2,
-                           unsigned ClusterSize,
-                           unsigned NumBytes) const override;
+                           unsigned ClusterSize, unsigned NumBytes,
+                           unsigned MaxConsumerLatency = 0) const override;
 
   /// Return true if two MIs access different memory addresses and false
   /// otherwise

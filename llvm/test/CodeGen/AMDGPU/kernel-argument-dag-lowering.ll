@@ -527,8 +527,8 @@ define amdgpu_kernel void @byref_natural_align_constant_v16i32_arg(ptr addrspace
 ; GCN-LABEL: byref_natural_align_constant_v16i32_arg:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dwordx16 s[12:27], s[8:9], 0x40
-; GCN-NEXT:    s_load_dword s2, s[8:9], 0x80
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[8:9], 0x0
+; GCN-NEXT:    s_load_dword s2, s[8:9], 0x80
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mov_b32_e32 v0, s24

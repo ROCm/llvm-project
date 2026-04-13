@@ -967,7 +967,6 @@ define amdgpu_ps float @ps_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v6, 0x3eae29dc
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -980,11 +979,9 @@ define amdgpu_ps float @ps_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -1001,13 +998,11 @@ define amdgpu_ps float @ps_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -1971,7 +1966,6 @@ define amdgpu_vs float @vs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v6, 0x3eae29dc
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -1984,11 +1978,9 @@ define amdgpu_vs float @vs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -2005,13 +1997,11 @@ define amdgpu_vs float @vs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -2975,7 +2965,6 @@ define amdgpu_cs float @cs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v6, 0x3eae29dc
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -2988,11 +2977,9 @@ define amdgpu_cs float @cs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -3009,13 +2996,11 @@ define amdgpu_cs float @cs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -3976,7 +3961,6 @@ define amdgpu_hs float @hs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v6, 0x3eae29dc
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -3989,11 +3973,9 @@ define amdgpu_hs float @hs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -4010,13 +3992,11 @@ define amdgpu_hs float @hs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -4977,7 +4957,6 @@ define amdgpu_gs float @gs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v6, 0x3eae29dc
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -4990,11 +4969,9 @@ define amdgpu_gs float @gs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -5011,13 +4988,11 @@ define amdgpu_gs float @gs_main(i32 %idx) {
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -5989,7 +5964,6 @@ define amdgpu_hs <{i32, i32, i32, float}> @hs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v7, 0x3eae29d8
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -6002,11 +5976,9 @@ define amdgpu_hs <{i32, i32, i32, float}> @hs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -6023,13 +5995,11 @@ define amdgpu_hs <{i32, i32, i32, float}> @hs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768
@@ -7000,7 +6970,6 @@ define amdgpu_gs <{i32, i32, i32, float}> @gs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v7, 0x3eae29d8
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v8, 0x3e319356
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v9, 0x3e31934f
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[25:28], off offset:304
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[1:4], off offset:288
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v12, 0xbf20e7f5
@@ -7013,11 +6982,9 @@ define amdgpu_gs <{i32, i32, i32, float}> @gs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v2, 0xbe31934f :: v_dual_mov_b32 v31, v11
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v0, 0xb702e758
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v22, 0xbf638e39
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[6:9], off offset:240
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[11:14], off offset:224
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v14, 0x3f20e7f5 :: v_dual_mov_b32 v9, v6
-; GFX11-FLATSCR-NEXT:    s_clause 0x3
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[17:20], off offset:272
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[0:3], off offset:256
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[21:24], off offset:208
@@ -7034,13 +7001,11 @@ define amdgpu_gs <{i32, i32, i32, float}> @gs_ir_uses_scratch_offset(i32 inreg, 
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v23, v25
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v25, v26 :: v_dual_mov_b32 v18, v12
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v20, v17 :: v_dual_mov_b32 v21, v3
-; GFX11-FLATSCR-NEXT:    s_clause 0x1
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[29:32], off offset:752
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[13:16], off offset:736
 ; GFX11-FLATSCR-NEXT:    v_dual_mov_b32 v5, v8 :: v_dual_mov_b32 v14, v17
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v4, v7
 ; GFX11-FLATSCR-NEXT:    v_mov_b32_e32 v13, v19
-; GFX11-FLATSCR-NEXT:    s_clause 0x4
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[7:10], off offset:816
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[18:21], off offset:800
 ; GFX11-FLATSCR-NEXT:    scratch_store_b128 off, v[22:25], off offset:768

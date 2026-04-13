@@ -1656,12 +1656,17 @@ public:
   /// cluster if this hook returns true.
   /// \p NumBytes is the number of bytes that will be loaded from all the
   /// clustered loads if this hook returns true.
+  /// \p MaxConsumerLatency is the maximum latency among data-dependent
+  /// consumers of the first memory operation in the cluster (the cluster
+  /// "anchor"). Targets can use this to scale cluster size limits: longer
+  /// consumer pipelines (e.g. MFMA) allow more loads to be pipelined behind
+  /// the consumer, enabling deeper clusters. 0 means unknown/unavailable.
   virtual bool shouldClusterMemOps(ArrayRef<const MachineOperand *> BaseOps1,
                                    int64_t Offset1, bool OffsetIsScalable1,
                                    ArrayRef<const MachineOperand *> BaseOps2,
                                    int64_t Offset2, bool OffsetIsScalable2,
-                                   unsigned ClusterSize,
-                                   unsigned NumBytes) const {
+                                   unsigned ClusterSize, unsigned NumBytes,
+                                   unsigned MaxConsumerLatency = 0) const {
     llvm_unreachable("target did not implement shouldClusterMemOps()");
   }
 
