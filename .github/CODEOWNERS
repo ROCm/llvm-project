@@ -37,7 +37,7 @@
 /mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp @Groverkss
 
 # MemRef Dialect in MLIR.
-/mlir/lib/Dialect/MemRef/Transforms/EmulateNarrowType.cpp @MaheshRavishankar @nicolasvasilache
+/mlir/lib/Dialect/MemRef/Transforms/EmulateNarrowType.cpp @MaheshRavishankar
 
 # Vector Dialect in MLIR.
 /mlir/include/mlir/Dialect/Vector @Groverkss
