@@ -28,3 +28,28 @@ body:             |
     $scc = COPY %1
     S_ENDPGM 0
 ...
+
+# Inline asm can leave an extra vreg_1 transport COPY between the lane-mask
+# source and the lowered SCC use. Preserve the whole linear COPY chain when it
+# ends in the immediate `S_AND_* ..., $exec` SCC-lowering shape.
+---
+name:            preserve_copy_chain_used_by_immediate_s_and
+machineFunctionInfo:
+  isWaveCFG: true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    ; CHECK-LABEL: name: preserve_copy_chain_used_by_immediate_s_and
+    ; CHECK: bb.0:
+    ; CHECK-NEXT: [[DEF:%[0-9]+]]:sreg_64 = IMPLICIT_DEF
+    ; CHECK-NEXT: [[COPY0:%[0-9]+]]:sreg_64 = COPY [[DEF]]
+    ; CHECK-NEXT: [[COPY1:%[0-9]+]]:sreg_64 = COPY [[COPY0]]
+    ; CHECK-NEXT: [[AND:%[0-9]+]]:sreg_64 = S_AND_B64 [[COPY1]], $exec, implicit-def $scc
+    ; CHECK-NEXT: S_ENDPGM 0
+    ; CHECK-NOT: V_CNDMASK_B32_e64
+    %0:sreg_64 = IMPLICIT_DEF
+    %1:vreg_1 = COPY %0
+    %2:vreg_1 = COPY %1
+    $scc = COPY %2
+    S_ENDPGM 0
+...

@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn < %s | FileCheck --check-prefix=CHECK %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck  --check-prefix=CHECK %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn < %s | FileCheck --check-prefix=CHECK %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck  --check-prefix=CHECK %s
 
 ; CHECK-LABEL: {{^}}inline_asm:
 ; CHECK: s_endpgm
@@ -24,8 +24,10 @@ entry:
 ; CHECK-LABEL: {{^}}branch_on_asm_vgpr:
 ; Make sure VGPR inline assembly is treated as divergent.
 ; CHECK: v_mov_b32 v{{[0-9]+}}, 0
-; CHECK: v_cmp_eq_u32
-; CHECK: s_and_saveexec_b64
+; CHECK: v_cmp_ne_u32
+; CHECK-NEXT: s_xor_b64
+; CHECK: s_xor_b64
+; CHECK: s_mov_b64
 define amdgpu_kernel void @branch_on_asm_vgpr(ptr addrspace(1) %out) {
 	%zero = call i32 asm "v_mov_b32 $0, 0", "=v"()
 	%cmp = icmp eq i32 %zero, 0

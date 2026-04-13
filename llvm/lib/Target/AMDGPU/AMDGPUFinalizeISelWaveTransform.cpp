@@ -40,7 +40,22 @@ private:
   //   %0:vreg_1 = COPY <lane-mask>
   //   S_AND_* %0, $exec
   // so `%0` is still semantically a lane mask.
-  bool isLaneMaskToImmediateSAndUse(
+  //
+  // Copy-chain exception:
+  //   %0:vreg_1 = COPY <lane-mask>
+  //   %1:vreg_1 = COPY %0
+  //   ...
+  //   $scc = COPY %N
+  // and after `SIFixSGPRCopies`:
+  //   %0:vreg_1 = COPY <lane-mask>
+  //   %1:vreg_1 = COPY %0
+  //   ...
+  //   S_AND_* %N, $exec
+  //
+  // Preserve that whole immediate single-use COPY chain in lane-mask form. If
+  // any transport copy widens to VGPR_32, the final `S_AND_*` is left with an
+  // illegal VGPR operand.
+  bool isLaneMaskCopyChainToImmediateSAndUse(
       const MachineInstr &MI, const AMDGPU::LaneMaskConstants &LMC) const {
     if (MI.getOpcode() != AMDGPU::COPY)
       return false;
@@ -51,26 +66,35 @@ private:
 
     const MachineInstr *CurMI = &MI;
     Register CurReg = MI.getOperand(0).getReg();
+    for (;;) {
+      if (!CurReg.isVirtual() || !MRI->hasOneUse(CurReg))
+        return false;
 
-    if (!CurReg.isVirtual() || !MRI->hasOneUse(CurReg))
-      return false;
+      auto NextIt = std::next(MachineBasicBlock::const_iterator(*CurMI));
+      if (NextIt == CurMI->getParent()->end())
+        return false;
 
-    auto NextIt = std::next(MachineBasicBlock::const_iterator(*CurMI));
-    if (NextIt == CurMI->getParent()->end())
-      return false;
+      const MachineInstr &UseMI = *MRI->use_instr_begin(CurReg);
+      if (&UseMI != &*NextIt)
+        return false;
 
-    const MachineInstr &UseMI = *MRI->use_instr_begin(CurReg);
-    if (&UseMI != &*NextIt)
-      return false;
+      if (UseMI.getOpcode() == LMC.AndOpc) {
+        Register Src0 = UseMI.getOperand(1).getReg();
+        Register Src1 = UseMI.getOperand(2).getReg();
+        return (Src0 == CurReg && Src1 == LMC.ExecReg) ||
+               (Src1 == CurReg && Src0 == LMC.ExecReg);
+      }
 
-    if (UseMI.getOpcode() == LMC.AndOpc) {
-      Register Src0 = UseMI.getOperand(1).getReg();
-      Register Src1 = UseMI.getOperand(2).getReg();
-      return (Src0 == CurReg && Src1 == LMC.ExecReg) ||
-              (Src1 == CurReg && Src0 == LMC.ExecReg);
+      if (UseMI.getOpcode() != AMDGPU::COPY || UseMI.getOperand(1).getReg() != CurReg)
+        return false;
+
+      Register NextReg = UseMI.getOperand(0).getReg();
+      if (!isVreg1(NextReg))
+        return false;
+
+      CurMI = &UseMI;
+      CurReg = NextReg;
     }
-
-    return false;
   }
 
 public:
@@ -264,8 +288,8 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
 //===----------------------------------------------------------------------===//
 //
 // This pass lowers all occurrences of i1 values (with a vreg_1 register class)
-// to vreg_32 (32-bit vgpr per lane). The pass assumes machine SSA
-// form and a per-thread control flow graph.
+// to either vreg_32 (32-bit vgpr per lane) or lane mask SGPRs. The pass
+// assumes machine SSA form and a per-thread control flow graph.
 //
 // Before this pass, values that are semantically i1 and are defined and used
 // within the same basic block are already represented as lane masks in scalar
@@ -274,7 +298,10 @@ static bool simplifyMachinePHIs(MachineFunction &MF,
 // pass.
 //
 // The only instructions that use or define vreg_1 virtual registers are COPY,
-// PHI, and IMPLICIT_DEF.
+// PHI, and IMPLICIT_DEF. Most vreg_1 values are widened to vreg_32; the narrow
+// exception is a lane-mask-to-vreg_1 COPY chain whose final transport copy is
+// used by the immediate `S_AND_*` in the post-SIFixSGPRCopies SCC-lowering
+// shape.
 //
 //===----------------------------------------------------------------------===//
 bool Vreg1WideningHelper::widenVreg1s() {
@@ -308,7 +335,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
 
       assert(!MI.getOperand(0).getSubReg());
 
-      if (isLaneMaskToImmediateSAndUse(MI, *LMC)) {
+      if (isLaneMaskCopyChainToImmediateSAndUse(MI, *LMC)) {
         markAsLaneMask(DstReg);
         continue;
       }
