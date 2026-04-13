@@ -48,15 +48,14 @@ extern "C" void workshareloop_iterator(float *a, float *b, float *c) {
 // CHECK-NEXT:    call void @_ZN10MyIteratorC1Ej(ptr noundef nonnull align 1 dereferenceable(1) [[IT]], i32 noundef 7)
 // CHECK-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_ANON]], ptr [[AGG_CAPTURED]], i32 0, i32 0
 // CHECK-NEXT:    store ptr [[IT]], ptr [[TMP0]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_ANON_0]], ptr [[AGG_CAPTURED1]], i32 0, i32 0
-// CHECK-NEXT:    call void @_ZN10MyIteratorC1ERKS_(ptr noundef nonnull align 1 dereferenceable(1) [[TMP1]], ptr noundef nonnull align 1 dereferenceable(1) [[IT]])
+// CHECK-NEXT:    call void @_ZN10MyIteratorC1ERKS_(ptr noundef nonnull align 1 dereferenceable(1) [[AGG_CAPTURED1]], ptr noundef nonnull align 1 dereferenceable(1) [[IT]])
 // CHECK-NEXT:    call void @__captured_stmt(ptr [[DOTCOUNT_ADDR]], ptr [[AGG_CAPTURED]])
 // CHECK-NEXT:    [[DOTCOUNT:%.*]] = load i64, ptr [[DOTCOUNT_ADDR]], align 8
 // CHECK-NEXT:    br label [[OMP_LOOP_PREHEADER:%.*]]
 // CHECK:       omp_loop.preheader:
 // CHECK-NEXT:    store i64 0, ptr [[P_LOWERBOUND]], align 8
-// CHECK-NEXT:    [[TMP2:%.*]] = sub i64 [[DOTCOUNT]], 1
-// CHECK-NEXT:    store i64 [[TMP2]], ptr [[P_UPPERBOUND]], align 8
+// CHECK-NEXT:    [[TMP1:%.*]] = sub i64 [[DOTCOUNT]], 1
+// CHECK-NEXT:    store i64 [[TMP1]], ptr [[P_UPPERBOUND]], align 8
 // CHECK-NEXT:    store i64 1, ptr [[P_STRIDE]], align 8
 // CHECK-NEXT:    [[OMP_GLOBAL_THREAD_NUM:%.*]] = call i32 @__kmpc_global_thread_num(ptr @[[GLOB2:[0-9]+]])
 // CHECK-NEXT:    call void @__kmpc_for_static_init_8u(ptr @[[GLOB1:[0-9]+]], i32 [[OMP_GLOBAL_THREAD_NUM]], i32 34, ptr [[P_LASTITER]], ptr [[P_LOWERBOUND]], ptr [[P_UPPERBOUND]], ptr [[P_STRIDE]], i64 1, i64 0)
@@ -155,11 +154,10 @@ extern "C" void workshareloop_iterator(float *a, float *b, float *c) {
 // CHECK-NEXT:    store i64 [[LOGICAL]], ptr [[LOGICAL_ADDR]], align 8
 // CHECK-NEXT:    store ptr [[__CONTEXT]], ptr [[__CONTEXT_ADDR]], align 8
 // CHECK-NEXT:    [[TMP0:%.*]] = load ptr, ptr [[__CONTEXT_ADDR]], align 8
-// CHECK-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_ANON_0:%.*]], ptr [[TMP0]], i32 0, i32 0
-// CHECK-NEXT:    [[TMP2:%.*]] = load i64, ptr [[LOGICAL_ADDR]], align 8
-// CHECK-NEXT:    [[MUL:%.*]] = mul i64 1, [[TMP2]]
+// CHECK-NEXT:    [[TMP1:%.*]] = load i64, ptr [[LOGICAL_ADDR]], align 8
+// CHECK-NEXT:    [[MUL:%.*]] = mul i64 1, [[TMP1]]
 // CHECK-NEXT:    [[CONV:%.*]] = trunc i64 [[MUL]] to i32
-// CHECK-NEXT:    call void @_ZNK10MyIteratorplEj(ptr dead_on_unwind writable sret([[STRUCT_MYITERATOR]]) align 1 [[REF_TMP]], ptr noundef nonnull align 1 dereferenceable(1) [[TMP1]], i32 noundef [[CONV]])
+// CHECK-NEXT:    call void @_ZNK10MyIteratorplEj(ptr dead_on_unwind writable sret([[STRUCT_MYITERATOR]]) align 1 [[REF_TMP]], ptr noundef nonnull align 1 dereferenceable(1) [[TMP0]], i32 noundef [[CONV]])
 // CHECK-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[LOOPVAR_ADDR]], align 8, !nonnull [[META2]]
 // CHECK-NEXT:    [[CALL:%.*]] = call noundef nonnull align 1 dereferenceable(1) ptr @_ZN10MyIteratoraSERKS_(ptr noundef nonnull align 1 dereferenceable(1) [[TMP3]], ptr noundef nonnull align 1 dereferenceable(1) [[REF_TMP]])
 // CHECK-NEXT:    ret void
