@@ -11,70 +11,7 @@
 # See https://llvm.org/docs/DeveloperPolicy.html#maintainers as well as the
 # Maintainers.* files in the the respective subproject directories.
 
-# AMDGPU buffer pointer lowerings
-/llvm/lib/Target/AMDGPU/AMDGPULowerBufferFatPointers.cpp @krzysz00
-
-# MLIR Interfaces.
-/mlir/include/mlir/Interfaces/TilingInterface.* @MaheshRavishankar
-/mlir/lib/Interfaces/TilingInterface.* @MaheshRavishankar
-
-# AMDGPU and ROCDL dialects in MLIR.
-/mlir/include/mlir/Dialect/AMDGPU @krzysz00 @kuhar
-/mlir/lib/Dialect/AMDGPU @krzysz00 @kuhar
-/mlir/lib/Conversion/*AMDGPU* @krzysz00 @kuhar
-/mlir/lib/Conversion/*ToROCDL @krzysz00 @kuhar
-/mlir/include/mlir/Dialect/LLVMIR/ROCDL* @krzysz00 @kuhar
-
-# Arith dialect in MLIR.
-/mlir/include/mlir/Dialect/Arith @kuhar
-/mlir/lib/Dialect/Arith @kuhar
-/mlir/lib/Conversion/ArithTo* @kuhar
-
-# Linalg Dialect in MLIR.
-/mlir/lib/Dialect/Linalg/Transforms/DecomposeLinalgOps.cpp @MaheshRavishankar
-/mlir/lib/Dialect/Linalg/Transforms/DropUnitDims.cpp @MaheshRavishankar
-/mlir/lib/Dialect/Linalg/Transforms/ElementwiseOpFusion.cpp @MaheshRavishankar
-/mlir/lib/Dialect/Linalg/Transforms/Vectorization.cpp @Groverkss
-
-# MemRef Dialect in MLIR.
-/mlir/lib/Dialect/MemRef/Transforms/EmulateNarrowType.cpp @MaheshRavishankar
-
-# Vector Dialect in MLIR.
-/mlir/include/mlir/Dialect/Vector @Groverkss
-/mlir/include/mlir/Dialect/Vector/IR @kuhar
-/mlir/lib/Dialect/Vector @Groverkss
-/mlir/lib/Dialect/Vector/Transforms/VectorEmulateNarrowType.cpp @MaheshRavishankar
-
-# Presburger library in MLIR
-/mlir/**/*Presburger* @Groverkss
-
-# Transform Dialect in MLIR.
-/mlir/include/mlir/Dialect/Transform/* @ftynse
-/mlir/lib/Dialect/Transform/* @ftynse
-/mlir/**/*TransformOps* @ftynse
-
-# SPIR-V Dialect in MLIR.
-/mlir/**/SPIRV/ @antiagainst @kuhar @IgWod
-/mlir/**/SPIRVTo*/ @antiagainst @kuhar @IgWod
-/mlir/**/*ToSPIRV/ @antiagainst @kuhar @IgWod
-/mlir/tools/mlir-tblgen/SPIRVUtilsGen.cpp @antiagainst @kuhar @IgWod
-
-# MLIR Python Bindings
-/mlir/test/python/ @ftynse @stellaraccident
-/mlir/python/ @ftynse @stellaraccident
-
 # AMD-specific projects.
 /amd/comgr/ @lamb-j @chinmaydd
 /amd/device-libs/ @b-sumner @lamb-j
 /amd/hipcc/ @david-salinas @lamb-j
-
-# AMDGPU assembler and disassembler
-/llvm-project/llvm/lib/Target/AMDGPU/AsmParser/AMDGPUAsmParser.cpp @jwanggit86 
-/llvm-project/llvm/lib/Target/AMDGPU/Disassembler/AMDGPUDisassembler.cpp @jwanggit86 
- 
-# Clang Driver
-/clang/lib/Driver/ToolChains/AMDGPU.cpp @lamb-j
-/clang/lib/Driver/OffloadBundler.cpp @lamb-j @david-salinas
-
-# GlobalIsel
-/llvm/lib/Target/AMDGPU/AMDGPURegBankLegalize* @vangthao95
