@@ -2,10 +2,10 @@
 ; RUN: opt -S -passes='require<profile-summary>,function(codegenprepare)' -mtriple=amdgcn-unknown-unknown -mcpu=bonaire < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-CI -check-prefix=OPT-SICIVI %s
 ; RUN: opt -S -passes='require<profile-summary>,function(codegenprepare)' -mtriple=amdgcn-unknown-unknown -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-VI -check-prefix=OPT-SICIVI %s
 ; RUN: opt -S -passes='require<profile-summary>,function(codegenprepare)' -mtriple=amdgcn-unknown-unknown -mcpu=gfx900 < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-GFX9 %s
-; RUN: llc -mtriple=amdgcn -mcpu=tahiti -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=SI -check-prefix=SICIVI %s
-; RUN: llc -mtriple=amdgcn -mcpu=bonaire -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=CI -check-prefix=SICIVI %s
-; RUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global -amdgpu-scalarize-global-loads=false -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -check-prefix=GCN -check-prefix=VI -check-prefix=SICIVI %s
-; RUN: llc -mtriple=amdgcn -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tahiti -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=SI -check-prefix=SICIVI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=bonaire -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=CI -check-prefix=SICIVI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global -amdgpu-scalarize-global-loads=false -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds < %s | FileCheck -check-prefix=GCN -check-prefix=VI -check-prefix=SICIVI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx900 -disable-promote-alloca-to-vector -disable-promote-alloca-to-lds -amdgpu-scalarize-global-loads=false < %s | FileCheck -check-prefix=GCN -check-prefix=GFX9 %s
 
 ; OPT-LABEL: @test_sink_global_small_offset_i32(
 ; OPT-CI-NOT: getelementptr i32, ptr addrspace(1) %in
@@ -40,7 +40,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_i32_ds_offset:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, s{{[0-9]+$}}
 
 ; GFX9: v_mov_b32_e32 [[VOFFSET:v[0-9]+]], 0xf000{{$}}
@@ -70,7 +72,9 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_mubuf_offset:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4095{{$}}
 ; GFX9: v_mov_b32_e32 [[ZERO:v[0-9]+]], 0{{$}}
 ; GFX9: global_load_sbyte {{v[0-9]+}}, [[ZERO]], {{s\[[0-9]+:[0-9]+\]}} offset:4095{{$}}
@@ -99,7 +103,9 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_small_max_plus_1_mubuf_offset:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SICIVI: buffer_load_sbyte {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, s{{[0-9]+$}}
 ; GFX9: v_mov_b32_e32 [[VOFFSET:v[0-9]+]], 0x1000{{$}}
 ; GFX9: global_load_sbyte {{v[0-9]+}}, [[VOFFSET]], {{s\[[0-9]+:[0-9]+\]$}}
@@ -133,7 +139,9 @@ done:
 ; OPT: getelementptr i8,
 
 ; GCN-LABEL: {{^}}test_sink_scratch_small_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; GCN: buffer_store_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4088{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4088 glc{{$}}
 ; GCN: {{^}}.LBB4_2:
@@ -172,7 +180,9 @@ done:
 ; OPT: getelementptr i8,
 
 ; GCN-LABEL: {{^}}test_sink_scratch_small_offset_i32_reserved:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; GCN: buffer_store_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4092{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, 0 offset:4092 glc{{$}}
 ; GCN: {{^.LBB[0-9]+}}_2:
@@ -210,7 +220,9 @@ done:
 ; OPT-NOT: ptrtoint
 
 ; GCN-LABEL: {{^}}test_no_sink_scratch_large_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; GCN: buffer_store_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0 offen{{$}}
 ; GCN: buffer_load_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0 offen glc{{$}}
 ; GCN: {{^.LBB[0-9]+}}_2:
@@ -242,7 +254,9 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_global_vreg_sreg_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; CI: buffer_load_dword {{v[0-9]+}}, {{v\[[0-9]+:[0-9]+\]}}, {{s\[[0-9]+:[0-9]+\]}}, 0 addr64{{$}}
 ; VI: flat_load_dword v{{[0-9]+}}, v[{{[0-9]+:[0-9]+}}]
 ; GCN: {{^.LBB[0-9]+}}_2:
@@ -273,7 +287,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_small_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0x7{{$}}
 ; GCN: s_or_b64 exec, exec
 define amdgpu_kernel void @test_sink_constant_small_offset_i32(ptr addrspace(1) %out, ptr addrspace(4) %in) {
@@ -302,7 +318,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_8_bit_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0xff{{$}}
 ; GCN: s_or_b64 exec, exec
 define amdgpu_kernel void @test_sink_constant_max_8_bit_offset_i32(ptr addrspace(1) %out, ptr addrspace(4) %in) {
@@ -333,7 +351,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_8_bit_offset_p1_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_movk_i32 [[OFFSET:s[0-9]+]], 0x400
 
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, [[OFFSET]]{{$}}
@@ -365,7 +385,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_32_bit_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_add_u32 s{{[0-9]+}}, s{{[0-9]+}}, -4{{$}}
 ; SI: s_addc_u32 s{{[0-9]+}}, s{{[0-9]+}}, 3{{$}}
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0x0{{$}}
@@ -403,7 +425,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_32_bit_offset_p1_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; GCN: s_add_u32
 ; GCN: s_addc_u32
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, 0x0{{$}}
@@ -430,7 +454,9 @@ done:
 }
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_20_bit_byte_offset_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_mov_b32 [[OFFSET:s[0-9]+]], 0xffffc{{$}}
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, [[OFFSET]]{{$}}
 
@@ -466,7 +492,9 @@ done:
 ; OPT: br i1
 
 ; GCN-LABEL: {{^}}test_sink_constant_max_20_bit_byte_offset_p1_i32:
-; GCN: s_and_saveexec_b64
+; GCN: s_xor_b64
+; GCN: s_xor_b64
+; GCN: s_mov_b64
 ; SI: s_mov_b32 [[OFFSET:s[0-9]+]], 0x100000{{$}}
 ; SI: s_load_dword s{{[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, [[OFFSET]]{{$}}
 
