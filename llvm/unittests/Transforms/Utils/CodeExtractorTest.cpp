@@ -883,4 +883,91 @@ TEST(CodeExtractor, ArgsDebugInfo) {
   EXPECT_FALSE(verifyFunction(*Func));
 }
 
+TEST(CodeExtractor, ArgsDebugInfoAllocaLoad) {
+  LLVMContext Ctx;
+  SMDiagnostic Err;
+  std::unique_ptr<Module> M(parseAssemblyString(R"ir(
+
+  target datalayout = "e-m:e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5"
+  target triple = "amdgcn-amd-amdhsa"
+
+  define void @foo(ptr %a) !dbg !2 {
+    %1 = alloca ptr, align 8, addrspace(5), !dbg !1
+    %2 = addrspacecast ptr addrspace(5) %1 to ptr, !dbg !1
+    store ptr %a, ptr %2, align 8, !dbg !1
+    %3 = load ptr, ptr %2, align 8
+    #dbg_declare(ptr %3, !33, !DIExpression(), !1)
+    br label %entry
+
+  entry:
+    br label %extract
+
+  extract:
+    store i64 10, ptr %3, align 4, !dbg !1
+    br label %exit
+
+  exit:
+    ret void
+  }
+  !llvm.dbg.cu = !{!6}
+  !llvm.module.flags = !{!0}
+  !0 = !{i32 2, !"Debug Info Version", i32 3}
+  !1 = !DILocation(line: 11, column: 7, scope: !2)
+  !2 = distinct !DISubprogram(name: "foo", scope: !3, file: !3, type: !4, spFlags: DISPFlagDefinition, unit: !6)
+  !3 = !DIFile(filename: "test.f90", directory: "")
+  !4 = !DISubroutineType(cc: DW_CC_program, types: !5)
+  !5 = !{null}
+  !6 = distinct !DICompileUnit(language: DW_LANG_Fortran95, file: !3)
+  !7 = !DIBasicType(name: "integer", size: 32, encoding: DW_ATE_signed)
+  !33 = !DILocalVariable(name: "ptr", scope: !2, file: !3, type: !34)
+  !34 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null)
+
+  )ir",
+                                                Err, Ctx));
+
+  ASSERT_TRUE(M) << Err.getMessage();
+  Function *Func = M->getFunction("foo");
+  ASSERT_TRUE(Func);
+  BasicBlock *ExtractBB = getBlockByName(Func, "extract");
+  ASSERT_TRUE(ExtractBB);
+  SmallVector<BasicBlock *, 1> Blocks{ExtractBB};
+
+  auto TestExtracted = [&](bool AggregateArgs) {
+    CodeExtractor CE(Blocks, /* DominatorTree */ nullptr, AggregateArgs);
+    EXPECT_TRUE(CE.isEligible());
+    CodeExtractorAnalysisCache CEAC(*Func);
+    SetVector<Value *> Inputs, Outputs, SinkingCands, HoistingCands;
+    BasicBlock *CommonExit = nullptr;
+    CE.findAllocas(CEAC, SinkingCands, HoistingCands, CommonExit);
+    CE.findInputsOutputs(Inputs, Outputs, SinkingCands);
+    Function *Outlined = CE.extractCodeRegion(CEAC, Inputs, Outputs);
+    EXPECT_TRUE(Outlined);
+    BasicBlock &EB = Outlined->getEntryBlock();
+    Instruction *Term = EB.getTerminator();
+    EXPECT_TRUE(Term);
+    EXPECT_TRUE(Term->hasDbgRecords());
+    for (DbgVariableRecord &DVR : filterDbgVars(Term->getDbgRecordRange())) {
+      DILocalVariable *Var = DVR.getVariable();
+      EXPECT_TRUE(Var);
+      EXPECT_EQ(Var->getName(), "ptr");
+      const DIExpression *Expr = DVR.getExpression();
+      ASSERT_TRUE(Expr);
+      // AMDGPU fixup in fixupDebugInfoPostExtraction encodes the promoted
+      // argument with a DIArgList-style expression (non-empty elements).
+      EXPECT_GT(Expr->getNumElements(), 0u);
+      for (Value *Loc : DVR.location_ops()) {
+        if (auto *A = dyn_cast<Argument>(Loc))
+          EXPECT_EQ(A->getParent(), Outlined);
+        else if (auto *I = dyn_cast<Instruction>(Loc))
+          EXPECT_EQ(I->getParent(), &EB);
+      }
+    }
+    EXPECT_FALSE(verifyFunction(*Outlined));
+  };
+  // Test with both true and false for AggregateArgs.
+  TestExtracted(true);
+  TestExtracted(false);
+  EXPECT_FALSE(verifyFunction(*Func));
+}
+
 } // end anonymous namespace

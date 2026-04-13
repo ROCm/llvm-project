@@ -1317,10 +1317,43 @@ static void fixupDebugInfoPostExtraction(Function &OldFunc, Function &NewFunc,
         NewLoc, DR->getVariable(), Expr, DR->getDebugLoc(),
         NewFunc.getEntryBlock().getTerminator()->getIterator());
   };
-  for (auto [Input, NewVal] : zip_equal(Inputs, NewValues)) {
+  Module *M = NewFunc.getParent();
+  for (auto [In, NewVal] : zip_equal(Inputs, NewValues)) {
+    Value *Input = In;
     SmallVector<DbgVariableRecord *, 1> DPUsers;
     findDbgUsers(Input, DPUsers);
     DIExpression *Expr = DIB.createExpression();
+    if (Triple(M->getTargetTriple()).isAMDGPU()) {
+      // OpenMP target outlining runs FixupDebugInfoForOutlinedFunction, which
+      // can re-home dbg.declare / DbgVariableRecord locations from the loaded
+      // SSA value onto the addrspace(5) alloca that feeds the load. Typical
+      // shape:
+      //   %slot = alloca ptr, addrspace(5)
+      //   %addr = addrspacecast ptr addrspace(5) %slot to ptr
+      //   store ptr %captured, ptr %addr
+      //   %ptr = load ptr, ptr %addr
+      // Extraction may list the load (%ptr) as an input while debug records
+      // still reference %slot. If findDbgUsers finds nothing on the load,
+      // search the alloca behind load->getPointerOperand() and treat that as
+      // Input when updating records.
+      if (DPUsers.empty()) {
+        if (LoadInst *Load = dyn_cast<LoadInst>(Input)) {
+          if (auto *AI = dyn_cast<AllocaInst>(
+                  Load->getPointerOperand()->stripPointerCasts())) {
+            findDbgUsers(AI, DPUsers);
+            if (!DPUsers.empty())
+              Input = AI;
+          }
+        }
+      }
+      if (DPUsers.empty())
+        continue;
+      llvm::DIExprBuilder EB(Ctx);
+      EB.append<llvm::DIOp::Arg>(0u, NewVal->getType());
+      if (NewVal->getType()->isPointerTy())
+        EB.append<llvm::DIOp::Deref>(NewVal->getType());
+      Expr = EB.intoExpression();
+    }
 
     // Iterate the debud users of the Input values. If they are in the extracted
     // function then update their location with the new value. If they are in
