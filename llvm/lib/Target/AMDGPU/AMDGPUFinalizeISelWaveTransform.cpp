@@ -45,18 +45,16 @@ private:
     if (MI.getOpcode() != AMDGPU::COPY)
       return false;
 
-    Register SrcReg = MI.getOperand(1).getReg();
-    if (!isLaneMaskReg(SrcReg))
+    if (!isLaneMaskReg(MI.getOperand(1).getReg()))
       return false;
 
-    const MachineInstr *CurMI = &MI;
     Register CurReg = MI.getOperand(0).getReg();
 
     if (!CurReg.isVirtual() || !MRI->hasOneUse(CurReg))
       return false;
 
-    auto NextIt = std::next(MachineBasicBlock::const_iterator(*CurMI));
-    if (NextIt == CurMI->getParent()->end())
+    auto NextIt = std::next(MachineBasicBlock::const_iterator(MI));
+    if (NextIt == MI.getParent()->end())
       return false;
 
     const MachineInstr &UseMI = *MRI->use_instr_begin(CurReg);
