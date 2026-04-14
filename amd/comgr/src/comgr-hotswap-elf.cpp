@@ -137,7 +137,7 @@ std::string ExtractCPU(const std::string &isa_name) {
 std::string FindKernelAtOffset(const ElfInfo &elf_info,
                                uint64_t text_offset) {
   for (auto &sym : elf_info.symbols) {
-    uint8_t sym_type = sym.info & 0xf;
+    uint8_t sym_type = sym.info & kElfStTypeMask;
     if (sym_type != llvm::ELF::STT_FUNC && sym_type != llvm::ELF::STT_GNU_IFUNC)
       continue;
     if (sym.shndx != static_cast<uint16_t>(elf_info.text_section_idx))
@@ -203,19 +203,23 @@ void UpdateKernelDescriptor(uint8_t *elf_data, size_t elf_size,
   uint32_t rsrc1;
   std::memcpy(&rsrc1, kd + kKdRsrc1Offset, 4);
   if (extra_vgprs > 0) {
-    uint32_t current = rsrc1 & KD_RSRC1_VGPR_MASK;
-    uint32_t extra_granules = (static_cast<uint32_t>(extra_vgprs) + 3) / 4;
+    uint32_t current = rsrc1 & kKdRsrc1VgprMask;
+    uint32_t extra_granules =
+        (static_cast<uint32_t>(extra_vgprs) + kVgprGranuleSize - 1) /
+        kVgprGranuleSize;
     uint32_t new_val = current + extra_granules;
-    if (new_val > 63) new_val = 63;
-    rsrc1 = (rsrc1 & ~KD_RSRC1_VGPR_MASK) | new_val;
+    if (new_val > kKdRsrc1VgprMaxGranule) new_val = kKdRsrc1VgprMaxGranule;
+    rsrc1 = (rsrc1 & ~kKdRsrc1VgprMask) | new_val;
   }
   if (extra_sgprs > 0) {
-    uint32_t current = (rsrc1 >> KD_RSRC1_SGPR_SHIFT) & KD_RSRC1_SGPR_MASK;
-    uint32_t extra_granules = (static_cast<uint32_t>(extra_sgprs) + 7) / 8;
+    uint32_t current = (rsrc1 >> kKdRsrc1SgprShift) & kKdRsrc1SgprMask;
+    uint32_t extra_granules =
+        (static_cast<uint32_t>(extra_sgprs) + kSgprGranuleSize - 1) /
+        kSgprGranuleSize;
     uint32_t new_val = current + extra_granules;
-    if (new_val > 15) new_val = 15;
-    rsrc1 = (rsrc1 & ~(KD_RSRC1_SGPR_MASK << KD_RSRC1_SGPR_SHIFT)) |
-            (new_val << KD_RSRC1_SGPR_SHIFT);
+    if (new_val > kKdRsrc1SgprMaxGranule) new_val = kKdRsrc1SgprMaxGranule;
+    rsrc1 = (rsrc1 & ~(kKdRsrc1SgprMask << kKdRsrc1SgprShift)) |
+            (new_val << kKdRsrc1SgprShift);
   }
   std::memcpy(kd + kKdRsrc1Offset, &rsrc1, 4);
 }
@@ -432,6 +436,6 @@ int GetKernelVgprCount(const uint8_t *elf_data, size_t elf_size,
   if (!kd) return -1;
   uint32_t rsrc1;
   std::memcpy(&rsrc1, kd + kKdRsrc1Offset, 4);
-  uint32_t granulated = rsrc1 & KD_RSRC1_VGPR_MASK;
-  return static_cast<int>((granulated + 1) * 8);
+  uint32_t granulated = rsrc1 & kKdRsrc1VgprMask;
+  return static_cast<int>((granulated + 1) * kVgprGranularity);
 }

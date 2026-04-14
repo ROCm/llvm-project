@@ -136,7 +136,7 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
         end = decoded[i].offset + decoded[i].size;
         ++i;
       }
-      if (end - start >= 8)
+      if (end - start >= kMinNopSledSize)
         sleds.push_back({start, end, start});
     } else {
       ++i;

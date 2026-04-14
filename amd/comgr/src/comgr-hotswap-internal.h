@@ -174,13 +174,23 @@ struct RewriteRule {
 static constexpr uint64_t kMinElfSize = sizeof(llvm::ELF::Elf64_Ehdr);
 static constexpr uint64_t kKdSize = 64;
 static constexpr uint64_t kKdRsrc1Offset = 48;
-static constexpr uint32_t KD_RSRC1_VGPR_MASK = 0x3Fu;
-static constexpr uint32_t KD_RSRC1_SGPR_SHIFT = 6;
-static constexpr uint32_t KD_RSRC1_SGPR_MASK = 0xFu;
+static constexpr uint32_t kKdRsrc1VgprMask = 0x3Fu;
+static constexpr uint32_t kKdRsrc1VgprMaxGranule = 63;
+static constexpr uint32_t kKdRsrc1SgprShift = 6;
+static constexpr uint32_t kKdRsrc1SgprMask = 0xFu;
+static constexpr uint32_t kKdRsrc1SgprMaxGranule = 15;
+static constexpr uint32_t kVgprGranularity = 8;
+static constexpr uint32_t kVgprGranuleSize = 4;
+static constexpr uint32_t kSgprGranuleSize = 8;
 static constexpr int64_t kMaxSledDistance = 131072;
+static constexpr uint64_t kMinNopSledSize = 8;
+static constexpr uint32_t kMinInstSize = 4;
 
 // AMDGPU code-object-v3 ISA version note type (not in llvm::ELF enum)
 static constexpr uint32_t kNoteTypeIsaVersion = 27;
+
+// ELF symbol type extraction mask
+static constexpr uint8_t kElfStTypeMask = 0xf;
 
 // ── DWARF types ──────────────────────────────────────────────────────────────
 

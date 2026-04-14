@@ -137,9 +137,9 @@ static std::string PrintInstStr(const llvm::MCInst &inst,
                                                     pos, llvm::nulls());
 
     if (status == llvm::MCDisassembler::Fail) {
-      di.size = 4;
+      di.size = kMinInstSize;
       di.mnemonic = "<unknown>";
-      pos += 4;
+      pos += kMinInstSize;
     } else {
       di.size = static_cast<uint32_t>(inst_size);
       if (llvm_state.printer)
@@ -274,12 +274,14 @@ Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
 
 // ── VGPR introspection ───────────────────────────────────────────────────────
 
+static constexpr llvm::StringLiteral kVgprPrefix("VGPR");
+
 int GetVgprNum(unsigned reg, const llvm::MCRegisterInfo &MRI) {
   const char *name = MRI.getName(reg);
   if (!name) return -1;
   llvm::StringRef rname(name);
-  if (!rname.starts_with("VGPR")) return -1;
-  llvm::StringRef numpart = rname.drop_front(4);
+  if (!rname.starts_with(kVgprPrefix)) return -1;
+  llvm::StringRef numpart = rname.drop_front(kVgprPrefix.size());
   size_t underscore = numpart.find('_');
   if (underscore != llvm::StringRef::npos)
     numpart = numpart.take_front(underscore);
@@ -295,11 +297,11 @@ std::pair<int, int> GetVgprRange(unsigned reg,
   const char *name = MRI.getName(reg);
   if (!name) return {-1, 0};
   llvm::StringRef rname(name);
-  if (!rname.starts_with("VGPR")) return {-1, 0};
+  if (!rname.starts_with(kVgprPrefix)) return {-1, 0};
   int count = 1;
   for (char c : rname)
     if (c == '_') count++;
-  llvm::StringRef numpart = rname.drop_front(4);
+  llvm::StringRef numpart = rname.drop_front(kVgprPrefix.size());
   size_t numend = numpart.find_first_not_of("0123456789");
   if (numend != llvm::StringRef::npos)
     numpart = numpart.take_front(numend);
