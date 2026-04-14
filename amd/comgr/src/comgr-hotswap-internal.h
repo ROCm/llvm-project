@@ -31,11 +31,13 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -151,7 +153,7 @@ struct ElfInfo {
 struct Trampoline {
   uint64_t original_offset;
   uint32_t original_size;
-  std::vector<uint8_t> bytes;
+  llvm::SmallVector<uint8_t, 16> bytes;
 };
 
 // ── NOP sled ─────────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ struct NopSled {
 
 struct RewriteRule {
   std::string replace_mnemonic;
-  std::vector<uint8_t> replace_bytes;
+  llvm::SmallVector<uint8_t, 16> replace_bytes;
 };
 
 // ── ELF / KD named constants ─────────────────────────────────────────────────
@@ -255,7 +257,7 @@ struct BasicBlock {
 
 struct CFG {
   std::vector<BasicBlock> blocks;
-  std::unordered_map<uint64_t, int> offset_to_block;
+  llvm::DenseMap<uint64_t, int> offset_to_block;
 };
 
 struct LivenessInfo {
@@ -331,7 +333,7 @@ struct PatchContext {
   size_t elf_size;
   const ElfInfo &elf_info;
   const LivenessInfo &liveness;
-  std::unordered_map<std::string, KernelPatchStats> &kernel_stats;
+  llvm::StringMap<KernelPatchStats> &kernel_stats;
   std::vector<ScratchPatchInfo> &out_scratch_patches;
 };
 
@@ -388,8 +390,8 @@ LLVMState InitLLVMCached(const std::string &isa_name);
 [[nodiscard]] bool DecodeTextSection(const uint8_t *text, uint64_t text_size,
                                      const LLVMState &llvm_state,
                                      std::vector<InternalDecodedInst> &decoded);
-std::vector<uint8_t> AssembleSingleInst(const std::string &asm_str,
-                                        const LLVMState &llvm_state);
+llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
+                                                  const LLVMState &llvm_state);
 [[nodiscard]] bool ApplyMnemonicSwap(const RewriteRule &rule,
                                      InternalDecodedInst &inst, uint8_t *text,
                                      const LLVMState &llvm_state);

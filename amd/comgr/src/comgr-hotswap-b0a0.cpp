@@ -240,7 +240,7 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
     }
   }
 
-  std::unordered_map<std::string, KernelPatchStats> kernel_stats;
+  llvm::StringMap<KernelPatchStats> kernel_stats;
 
   PatchContext ctx{config,       decoded,     text,
                    text_size,    llvm_state,
@@ -268,17 +268,18 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
   patched += ApplyWmmaHazardPatch(ctx);
 
   for (const auto &kv : kernel_stats) {
-    const std::string &kname = kv.first;
+    llvm::StringRef kname = kv.first();
     const auto &stats = kv.second;
     if (kname.empty())
       continue;
+    std::string kname_str = kname.str();
     int vgprs_before =
-        GetKernelVgprCount(elf_data, elf_size, elf_info, kname);
+        GetKernelVgprCount(elf_data, elf_size, elf_info, kname_str);
     if (stats.extra_vgprs > 0)
-      UpdateKernelDescriptor(elf_data, elf_size, elf_info, kname,
+      UpdateKernelDescriptor(elf_data, elf_size, elf_info, kname_str,
                              stats.extra_vgprs, 0);
     int vgprs_after =
-        GetKernelVgprCount(elf_data, elf_size, elf_info, kname);
+        GetKernelVgprCount(elf_data, elf_size, elf_info, kname_str);
     HotswapLog(HotswapLogLevel::Info)
         << "hotswap: liveness: kernel " << kname
         << ": vgprs_before=" << vgprs_before

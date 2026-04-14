@@ -155,8 +155,8 @@ static std::string PrintInstStr(const llvm::MCInst &inst,
 
 // ── AssembleSingleInst ───────────────────────────────────────────────────────
 
-std::vector<uint8_t> AssembleSingleInst(const std::string &asm_str,
-                                        const LLVMState &llvm_state) {
+llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
+                                                  const LLVMState &llvm_state) {
   llvm_state.Ctx->reset();
 
   std::string full_asm = ".text\n" + asm_str;
@@ -209,9 +209,9 @@ std::vector<uint8_t> AssembleSingleInst(const std::string &asm_str,
   if (!ParseElfInfo(elf_bytes, elf_sz, asm_elf)) return {};
   if (asm_elf.text_size == 0) return {};
 
-  return std::vector<uint8_t>(elf_bytes + asm_elf.text_offset,
-                              elf_bytes + asm_elf.text_offset +
-                                  asm_elf.text_size);
+  return llvm::SmallVector<uint8_t, 16>(elf_bytes + asm_elf.text_offset,
+                                       elf_bytes + asm_elf.text_offset +
+                                           asm_elf.text_size);
 }
 
 // ── ApplyMnemonicSwap ────────────────────────────────────────────────────────

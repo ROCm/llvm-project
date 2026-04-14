@@ -9,6 +9,8 @@
 #include "comgr-hotswap-internal.h"
 
 #include "MCTargetDesc/AMDGPUTargetStreamer.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/MathExtras.h"
 
 // ── s_branch / s_nop encoding ────────────────────────────────────────────────
 
@@ -38,10 +40,8 @@ std::string ExtractCPU(const std::string &isa_name) {
   if (pos != std::string::npos) {
     std::string cpu;
     for (size_t i = pos; i < isa_name.size(); ++i) {
-      char c = isa_name[i];
-      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-          (c >= 'A' && c <= 'Z'))
-        cpu += c;
+      if (llvm::isAlnum(isa_name[i]))
+        cpu += isa_name[i];
       else
         break;
     }
@@ -344,7 +344,6 @@ MallocBuffer GrowElfWithTrampolines(const uint8_t *elf, size_t elf_size,
 // ── PatchElfIsa ──────────────────────────────────────────────────────────────
 
 static constexpr uint32_t kEFlagsMachMask = 0xFFu;
-static constexpr size_t kNoteHeaderSize = 12;
 
 static void PatchIsaInNote(uint8_t *desc, uint32_t descsz,
                            const std::string &target_cpu) {
@@ -407,23 +406,21 @@ bool PatchElfIsa(uint8_t *elf, size_t elf_size,
     if (sh_offset + sh_size > elf_size) continue;
 
     uint64_t pos = sh_offset;
-    while (pos + kNoteHeaderSize <= sh_offset + sh_size) {
+    while (pos + sizeof(Nhdr) <= sh_offset + sh_size) {
       uint32_t namesz, descsz, type;
       std::memcpy(&namesz, elf + pos + offsetof(Nhdr, n_namesz), 4);
       std::memcpy(&descsz, elf + pos + offsetof(Nhdr, n_descsz), 4);
       std::memcpy(&type, elf + pos + offsetof(Nhdr, n_type), 4);
-      uint32_t namesz_aligned =
-          (namesz + kNoteAlign - 1) & ~(kNoteAlign - 1);
-      uint32_t descsz_aligned =
-          (descsz + kNoteAlign - 1) & ~(kNoteAlign - 1);
-      uint64_t note_total = kNoteHeaderSize + namesz_aligned + descsz_aligned;
+      uint32_t namesz_aligned = llvm::alignTo(namesz, kNoteAlign);
+      uint32_t descsz_aligned = llvm::alignTo(descsz, kNoteAlign);
+      uint64_t note_total = sizeof(Nhdr) + namesz_aligned + descsz_aligned;
       if (pos + note_total > sh_offset + sh_size) break;
 
       if (type == kNoteTypeIsaVersion && namesz > 0) {
         const char *owner =
-            reinterpret_cast<const char *>(elf + pos + kNoteHeaderSize);
+            reinterpret_cast<const char *>(elf + pos + sizeof(Nhdr));
         if (std::strncmp(owner, kAmdgpuNoteOwner, kAmdgpuNoteOwnerLen) == 0)
-          PatchIsaInNote(elf + pos + kNoteHeaderSize + namesz_aligned,
+          PatchIsaInNote(elf + pos + sizeof(Nhdr) + namesz_aligned,
                          descsz, target_cpu);
       }
       pos += note_total;
