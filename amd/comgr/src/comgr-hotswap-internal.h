@@ -192,6 +192,18 @@ static constexpr uint32_t kNoteTypeIsaVersion = 27;
 // ELF symbol type extraction mask
 static constexpr uint8_t kElfStTypeMask = 0xf;
 
+// s_branch encoding limits (16-bit signed dword offset field)
+static constexpr int64_t kBranchOffsetMin = -32768;
+static constexpr int64_t kBranchOffsetMax = 32767;
+static constexpr uint32_t kBranchOffsetMask = 0xFFFF;
+
+// AMDGPU ELF note owner
+static constexpr const char *kAmdgpuNoteOwner = "AMDGPU";
+static constexpr size_t kAmdgpuNoteOwnerLen = 6;
+
+// ELF note alignment
+static constexpr uint32_t kNoteAlign = 4;
+
 // ── DWARF types ──────────────────────────────────────────────────────────────
 
 struct DebugLineRow {

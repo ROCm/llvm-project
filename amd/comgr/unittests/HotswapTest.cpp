@@ -17,54 +17,54 @@ static constexpr uint32_t kTestNopOpcode = 0xBF800000u;
 // ── EncodeSBranch ────────────────────────────────────────────────────────────
 
 TEST(EncodeSBranch, ForwardBranchGFX9) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   ASSERT_TRUE(EncodeSBranch(0, 8, out, kTestBranchGFX9));
   uint32_t encoded;
-  std::memcpy(&encoded, out, 4);
+  std::memcpy(&encoded, out, sizeof(encoded));
   EXPECT_EQ(encoded, 0xBF820001u);
 }
 
 TEST(EncodeSBranch, BackwardBranchGFX9) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   ASSERT_TRUE(EncodeSBranch(16, 0, out, kTestBranchGFX9));
   uint32_t encoded;
-  std::memcpy(&encoded, out, 4);
+  std::memcpy(&encoded, out, sizeof(encoded));
   EXPECT_EQ(encoded, 0xBF82FFFBu);
 }
 
 TEST(EncodeSBranch, ForwardBranchGFX12) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   ASSERT_TRUE(EncodeSBranch(0, 8, out, kTestBranchGFX12));
   uint32_t encoded;
-  std::memcpy(&encoded, out, 4);
+  std::memcpy(&encoded, out, sizeof(encoded));
   EXPECT_EQ(encoded, 0xBFA00001u);
 }
 
 TEST(EncodeSBranch, UnalignedDeltaFails) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   EXPECT_FALSE(EncodeSBranch(0, 7, out, kTestBranchGFX9));
 }
 
 TEST(EncodeSBranch, OutOfRangeFails) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   EXPECT_FALSE(EncodeSBranch(0, 500000, out, kTestBranchGFX9));
 }
 
 TEST(EncodeSBranch, ZeroOffsetBranch) {
-  uint8_t out[4] = {};
-  ASSERT_TRUE(EncodeSBranch(0, 4, out, kTestBranchGFX9));
+  uint8_t out[kMinInstSize] = {};
+  ASSERT_TRUE(EncodeSBranch(0, kMinInstSize, out, kTestBranchGFX9));
   uint32_t encoded;
-  std::memcpy(&encoded, out, 4);
+  std::memcpy(&encoded, out, sizeof(encoded));
   EXPECT_EQ(encoded, kTestBranchGFX9);
 }
 
 // ── EncodeSNop ───────────────────────────────────────────────────────────────
 
 TEST(EncodeSNop, ProducesCorrectEncoding) {
-  uint8_t out[4] = {};
+  uint8_t out[kMinInstSize] = {};
   EncodeSNop(out, kTestNopOpcode);
   uint32_t encoded;
-  std::memcpy(&encoded, out, 4);
+  std::memcpy(&encoded, out, sizeof(encoded));
   EXPECT_EQ(encoded, kTestNopOpcode);
 }
 

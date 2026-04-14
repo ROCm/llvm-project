@@ -154,24 +154,25 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
   std::memcpy(ctx.text + sled.write_pos, replacement.data(),
               replacement.size());
 
-  uint8_t br_back[4];
+  uint8_t br_back[kMinInstSize];
   if (!EncodeSBranch(sled.write_pos + replacement.size(),
                      inst_offset + inst_size, br_back, cfg.s_branch_opcode))
     return false;
-  std::memcpy(ctx.text + sled.write_pos + replacement.size(), br_back, 4);
+  std::memcpy(ctx.text + sled.write_pos + replacement.size(), br_back,
+              kMinInstSize);
 
-  uint8_t br_fwd[4];
+  uint8_t br_fwd[kMinInstSize];
   if (!EncodeSBranch(inst_offset, sled.write_pos, br_fwd,
                      cfg.s_branch_opcode))
     return false;
-  std::memcpy(ctx.text + inst_offset, br_fwd, 4);
+  std::memcpy(ctx.text + inst_offset, br_fwd, kMinInstSize);
 
-  for (uint32_t i = 4; i < inst_size; i += 4) {
-    uint8_t nop[4];
+  for (uint32_t i = kMinInstSize; i < inst_size; i += kMinInstSize) {
+    uint8_t nop[kMinInstSize];
     EncodeSNop(nop, cfg.s_nop_opcode);
-    std::memcpy(ctx.text + inst_offset + i, nop, 4);
+    std::memcpy(ctx.text + inst_offset + i, nop, kMinInstSize);
   }
-  sled.write_pos += replacement.size() + 4;
+  sled.write_pos += replacement.size() + kMinInstSize;
   return true;
 }
 
@@ -187,11 +188,11 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
   t.original_size = inst_size;
   t.bytes.insert(t.bytes.end(), replacement.begin(), replacement.end());
 
-  uint8_t br_back[4];
+  uint8_t br_back[kMinInstSize];
   if (!EncodeSBranch(tramp_offset + t.bytes.size(), inst_offset + inst_size,
                      br_back, ctx.config.s_branch_opcode))
     return false;
-  t.bytes.insert(t.bytes.end(), br_back, br_back + 4);
+  t.bytes.insert(t.bytes.end(), br_back, br_back + kMinInstSize);
 
   ctx.out_trampolines.push_back(std::move(t));
   return true;
@@ -200,10 +201,10 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
 [[nodiscard]] static bool EmitReplacementCode(
     PatchContext &ctx, uint64_t inst_offset, uint32_t inst_size,
     const std::vector<uint8_t> &replacement, const char *desc = nullptr) {
-  uint64_t needed = replacement.size() + 4;
+  uint64_t needed = replacement.size() + kMinInstSize;
   NopSled *sled = FindNearestSled(ctx.nop_sleds, inst_offset, needed);
 
-  if (sled && replacement.size() + 4 <= sled->end - sled->write_pos)
+  if (sled && replacement.size() + kMinInstSize <= sled->end - sled->write_pos)
     return EmitToNopSled(ctx, *sled, inst_offset, inst_size, replacement);
 
   return EmitToTrampoline(ctx, inst_offset, inst_size, replacement);
@@ -299,22 +300,23 @@ static void FixupTrampolineBranches(
     uint64_t tp = tramp_text_offset;
     tramp_text_offset += t.bytes.size();
 
-    uint8_t br_back[4];
-    if (!EncodeSBranch(tp + t.bytes.size() - 4,
+    uint8_t br_back[kMinInstSize];
+    if (!EncodeSBranch(tp + t.bytes.size() - kMinInstSize,
                        t.original_offset + t.original_size, br_back,
                        config.s_branch_opcode))
       continue;
-    std::memcpy(t.bytes.data() + t.bytes.size() - 4, br_back, 4);
+    std::memcpy(t.bytes.data() + t.bytes.size() - kMinInstSize, br_back,
+                kMinInstSize);
 
-    uint8_t br_fwd[4];
+    uint8_t br_fwd[kMinInstSize];
     if (!EncodeSBranch(t.original_offset, tp, br_fwd,
                        config.s_branch_opcode))
       continue;
-    std::memcpy(text + t.original_offset, br_fwd, 4);
-    for (uint32_t i = 4; i < t.original_size; i += 4) {
-      uint8_t nop[4];
+    std::memcpy(text + t.original_offset, br_fwd, kMinInstSize);
+    for (uint32_t i = kMinInstSize; i < t.original_size; i += kMinInstSize) {
+      uint8_t nop[kMinInstSize];
       EncodeSNop(nop, config.s_nop_opcode);
-      std::memcpy(text + t.original_offset + i, nop, 4);
+      std::memcpy(text + t.original_offset + i, nop, kMinInstSize);
     }
   }
 }

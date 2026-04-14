@@ -249,11 +249,13 @@ Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
   result.original_offset = original_offset;
   result.original_size = original_size;
 
-  std::string asm_source = ".text\n";
+  static constexpr llvm::StringLiteral kTextDirective(".text\n");
+  std::string asm_source(kTextDirective);
   for (auto &line : asm_lines)
     asm_source += line + "\n";
 
-  auto bytes = AssembleSingleInst(asm_source.substr(6), llvm_state);
+  auto bytes = AssembleSingleInst(
+      asm_source.substr(kTextDirective.size()), llvm_state);
   if (bytes.empty()) return result;
 
   result.bytes = std::move(bytes);
@@ -261,14 +263,15 @@ Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
   uint64_t branch_back_from = trampoline_text_offset + result.bytes.size();
   uint64_t branch_back_to = original_offset + original_size;
 
-  uint8_t branch_bytes[4];
+  uint8_t branch_bytes[kMinInstSize];
   if (!EncodeSBranch(branch_back_from, branch_back_to, branch_bytes,
                      config.s_branch_opcode)) {
     result.bytes.clear();
     return result;
   }
 
-  result.bytes.insert(result.bytes.end(), branch_bytes, branch_bytes + 4);
+  result.bytes.insert(result.bytes.end(), branch_bytes,
+                      branch_bytes + kMinInstSize);
   return result;
 }
 
@@ -348,8 +351,9 @@ bool CheckVgprOverlap(const llvm::MCInst &wmma_inst,
   }
   if (wmma_input_ranges.empty()) return false;
 
+  static constexpr unsigned kDestOperandIdx = 0;
   if (valu_inst.getNumOperands() == 0) return false;
-  const auto &dest_op = valu_inst.getOperand(0);
+  const auto &dest_op = valu_inst.getOperand(kDestOperandIdx);
   if (!dest_op.isReg()) return false;
   auto valu_dest = GetVgprRange(dest_op.getReg(), MRI);
   if (valu_dest.first < 0) return false;

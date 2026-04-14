@@ -16,18 +16,19 @@
                                  uint8_t out_bytes[4],
                                  uint32_t s_branch_opcode) {
   int64_t byte_delta = static_cast<int64_t>(to_offset) -
-                       static_cast<int64_t>(from_offset) - 4;
-  if (byte_delta % 4 != 0) return false;
-  int64_t dword_offset = byte_delta / 4;
-  if (dword_offset < -32768 || dword_offset > 32767) return false;
-  uint32_t encoded =
-      s_branch_opcode | (static_cast<uint16_t>(dword_offset) & 0xFFFF);
-  std::memcpy(out_bytes, &encoded, 4);
+                       static_cast<int64_t>(from_offset) - kMinInstSize;
+  if (byte_delta % kMinInstSize != 0) return false;
+  int64_t dword_offset = byte_delta / kMinInstSize;
+  if (dword_offset < kBranchOffsetMin || dword_offset > kBranchOffsetMax)
+    return false;
+  uint32_t encoded = s_branch_opcode |
+                     (static_cast<uint16_t>(dword_offset) & kBranchOffsetMask);
+  std::memcpy(out_bytes, &encoded, kMinInstSize);
   return true;
 }
 
 void EncodeSNop(uint8_t out_bytes[4], uint32_t s_nop_opcode) {
-  std::memcpy(out_bytes, &s_nop_opcode, 4);
+  std::memcpy(out_bytes, &s_nop_opcode, kMinInstSize);
 }
 
 // ── ExtractCPU ───────────────────────────────────────────────────────────────
@@ -163,12 +164,12 @@ std::string FindKernelAtOffset(const ElfInfo &elf_info,
   uint32_t remaining =
       inst_size - static_cast<uint32_t>(rule.replace_bytes.size());
   uint64_t pad_offset = inst_offset + rule.replace_bytes.size();
-  while (remaining >= 4) {
-    uint8_t nop[4];
+  while (remaining >= kMinInstSize) {
+    uint8_t nop[kMinInstSize];
     EncodeSNop(nop, s_nop_opcode);
-    std::memcpy(text + pad_offset, nop, 4);
-    pad_offset += 4;
-    remaining -= 4;
+    std::memcpy(text + pad_offset, nop, kMinInstSize);
+    pad_offset += kMinInstSize;
+    remaining -= kMinInstSize;
   }
   return true;
 }
@@ -367,7 +368,10 @@ static void PatchIsaInNote(uint8_t *desc, uint32_t descsz,
 bool PatchElfIsa(uint8_t *elf, size_t elf_size,
                  const std::string &target_cpu) {
   if (elf_size < kMinElfSize) return false;
-  if (elf[0] != 0x7f || elf[1] != 'E' || elf[2] != 'L' || elf[3] != 'F')
+  if (elf[llvm::ELF::EI_MAG0] != llvm::ELF::ElfMagic[0] ||
+      elf[llvm::ELF::EI_MAG1] != llvm::ELF::ElfMagic[1] ||
+      elf[llvm::ELF::EI_MAG2] != llvm::ELF::ElfMagic[2] ||
+      elf[llvm::ELF::EI_MAG3] != llvm::ELF::ElfMagic[3])
     return false;
   if (elf[llvm::ELF::EI_CLASS] != llvm::ELF::ELFCLASS64) return false;
 
@@ -408,15 +412,17 @@ bool PatchElfIsa(uint8_t *elf, size_t elf_size,
       std::memcpy(&namesz, elf + pos + offsetof(Nhdr, n_namesz), 4);
       std::memcpy(&descsz, elf + pos + offsetof(Nhdr, n_descsz), 4);
       std::memcpy(&type, elf + pos + offsetof(Nhdr, n_type), 4);
-      uint32_t namesz_aligned = (namesz + 3) & ~3u;
-      uint32_t descsz_aligned = (descsz + 3) & ~3u;
+      uint32_t namesz_aligned =
+          (namesz + kNoteAlign - 1) & ~(kNoteAlign - 1);
+      uint32_t descsz_aligned =
+          (descsz + kNoteAlign - 1) & ~(kNoteAlign - 1);
       uint64_t note_total = kNoteHeaderSize + namesz_aligned + descsz_aligned;
       if (pos + note_total > sh_offset + sh_size) break;
 
       if (type == kNoteTypeIsaVersion && namesz > 0) {
         const char *owner =
             reinterpret_cast<const char *>(elf + pos + kNoteHeaderSize);
-        if (std::strncmp(owner, "AMDGPU", 6) == 0)
+        if (std::strncmp(owner, kAmdgpuNoteOwner, kAmdgpuNoteOwnerLen) == 0)
           PatchIsaInNote(elf + pos + kNoteHeaderSize + namesz_aligned,
                          descsz, target_cpu);
       }
