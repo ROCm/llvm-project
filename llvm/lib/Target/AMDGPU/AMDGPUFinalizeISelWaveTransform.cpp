@@ -30,9 +30,51 @@ public:
 
 private:
   DenseSet<Register> ConstrainRegs;
+  // This function matches the narrow SCC-lowering pattern that must stay in
+  // lane-mask form instead of widening to VGPR_32.
+  //
+  // Example:
+  //   %0:vreg_1 = COPY <lane-mask>
+  //   $scc = COPY %0
+  // `SIFixSGPRCopies` immediately lowers that to:
+  //   %0:vreg_1 = COPY <lane-mask>
+  //   S_AND_* %0, $exec
+  // so `%0` is still semantically a lane mask.
+  bool isLaneMaskToImmediateSAndUse(
+      const MachineInstr &MI, const AMDGPU::LaneMaskConstants &LMC) const {
+    if (MI.getOpcode() != AMDGPU::COPY)
+      return false;
+
+    if (!isLaneMaskReg(MI.getOperand(1).getReg()))
+      return false;
+
+    Register CurReg = MI.getOperand(0).getReg();
+
+    if (!CurReg.isVirtual() || !MRI->hasOneUse(CurReg))
+      return false;
+
+    auto NextIt = std::next(MachineBasicBlock::const_iterator(MI));
+    if (NextIt == MI.getParent()->end())
+      return false;
+
+    const MachineInstr &UseMI = *MRI->use_instr_begin(CurReg);
+    if (&UseMI != &*NextIt)
+      return false;
+
+    if (UseMI.getOpcode() == LMC.AndOpc) {
+      Register Src0 = UseMI.getOperand(1).getReg();
+      Register Src1 = UseMI.getOperand(2).getReg();
+      return (Src0 == CurReg && Src1 == LMC.ExecReg) ||
+              (Src1 == CurReg && Src0 == LMC.ExecReg);
+    }
+
+    return false;
+  }
 
 public:
-  void markAsLaneMask(Register DstReg) const override {}
+  void markAsLaneMask(Register DstReg) const override {
+    MRI->setRegClass(DstReg, ST->getBoolRC());
+  }
   void getCandidatesForLowering(
       SmallVectorImpl<MachineInstr *> &Vreg1Phis) const override {}
   void collectIncomingValuesFromPhi(
@@ -263,6 +305,11 @@ bool Vreg1WideningHelper::widenVreg1s() {
       DebugLoc DL = MI.getDebugLoc();
 
       assert(!MI.getOperand(0).getSubReg());
+
+      if (isLaneMaskToImmediateSAndUse(MI, *LMC)) {
+        markAsLaneMask(DstReg);
+        continue;
+      }
 
       Register DefReg32b = MRI->createVirtualRegister(&AMDGPU::VGPR_32RegClass);
       Vreg32Set.insert(DefReg32b);
