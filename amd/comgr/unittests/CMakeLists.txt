@@ -9,7 +9,6 @@ set(LLVM_LINK_COMPONENTS
   AllTargetsDisassemblers
   AllTargetsInfos
   AllTargetsMCAs
-  AMDGPUUtils
   )
 
 add_unittest(check-comgr HotswapTests
@@ -18,6 +17,4 @@ add_unittest(check-comgr HotswapTests
 
 target_include_directories(HotswapTests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
-  ${LLVM_MAIN_SRC_DIR}/lib/Target/AMDGPU
-  ${LLVM_BINARY_DIR}/lib/Target/AMDGPU
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)

@@ -18,22 +18,21 @@
 
 #include "comgr-hotswap-internal.h"
 
-#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/StringExtras.h"
 
 // ── GFX1250 B0-to-A0 constants ──────────────────────────────────────────────
 
 static constexpr uint32_t kSBranchGFX12 = 0xBFA00000u;
 static constexpr uint32_t kSNopOpcode = 0xBF800000u;
+static constexpr unsigned kGfx1250MaxVGPRs = 256;
 
-static RewriteConfig MakeGfx1250B0A0Config(const LLVMState &state) {
-  unsigned max_vgprs =
-      llvm::AMDGPU::IsaInfo::getTotalNumVGPRs(state.STI.get());
+static RewriteConfig MakeGfx1250B0A0Config() {
   return {"amdgcn-amd-amdhsa--gfx1250",
           "amdgcn-amd-amdhsa--gfx1250",
           "gfx1250",
           kSBranchGFX12,
           kSNopOpcode,
-          max_vgprs};
+          kGfx1250MaxVGPRs};
 }
 
 // ── Weak-symbol patch stubs ──────────────────────────────────────────────────
@@ -391,7 +390,7 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
   LLVMState llvm_state = InitLLVMCached(isa);
   if (!llvm_state.valid) return AMD_COMGR_STATUS_ERROR;
 
-  RewriteConfig config = MakeGfx1250B0A0Config(llvm_state);
+  RewriteConfig config = MakeGfx1250B0A0Config();
 
   std::vector<uint8_t> buf(elf, elf + elf_size);
   uint8_t *text = buf.data() + elf_info.text_offset;

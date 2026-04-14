@@ -168,9 +168,7 @@ endif()
 
 target_include_directories(amd_comgr
   PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${LLVM_MAIN_SRC_DIR}/lib/Target/AMDGPU
-  ${LLVM_BINARY_DIR}/lib/Target/AMDGPU)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 message("")
 message("------------LLVM_DIR: ${LLVM_DIR}")
@@ -576,8 +574,6 @@ if(BUILD_TESTING)
       POSITION_INDEPENDENT_CODE ON)
     target_include_directories(comgr_hotswap_obj PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/src
-      ${LLVM_MAIN_SRC_DIR}/lib/Target/AMDGPU
-      ${LLVM_BINARY_DIR}/lib/Target/AMDGPU
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>)
     if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
       target_include_directories(comgr_hotswap_obj PRIVATE

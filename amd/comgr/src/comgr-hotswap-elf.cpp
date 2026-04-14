@@ -8,9 +8,9 @@
 
 #include "comgr-hotswap-internal.h"
 
-#include "MCTargetDesc/AMDGPUTargetStreamer.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/TargetParser/TargetParser.h"
 
 // ── s_branch / s_nop encoding ────────────────────────────────────────────────
 
@@ -378,8 +378,14 @@ bool PatchElfIsa(uint8_t *elf, size_t elf_size,
     return false;
   if (elf[llvm::ELF::EI_CLASS] != llvm::ELF::ELFCLASS64) return false;
 
-  unsigned target_mach =
-      llvm::AMDGPUTargetStreamer::getElfMach(llvm::StringRef(target_cpu));
+  auto ak = llvm::AMDGPU::parseArchAMDGCN(target_cpu);
+  if (ak == llvm::AMDGPU::GPUKind::GK_NONE) return false;
+  unsigned target_mach = llvm::ELF::EF_AMDGPU_MACH_NONE;
+#define X(VAL, ENUM, NAME)                                                     \
+  if (llvm::StringRef(NAME) == target_cpu)                                     \
+    target_mach = llvm::ELF::ENUM;
+  AMDGPU_MACH_LIST(X)
+#undef X
   if (target_mach == llvm::ELF::EF_AMDGPU_MACH_NONE) return false;
 
   using Ehdr = llvm::ELF::Elf64_Ehdr;
