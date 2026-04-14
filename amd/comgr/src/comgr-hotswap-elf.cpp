@@ -202,7 +202,7 @@ void UpdateKernelDescriptor(uint8_t *elf_data, size_t elf_size,
   if (!kd) return;
 
   uint32_t rsrc1;
-  std::memcpy(&rsrc1, kd + kKdRsrc1Offset, 4);
+  std::memcpy(&rsrc1, kd + kKdRsrc1Offset, sizeof(rsrc1));
   if (extra_vgprs > 0) {
     uint32_t current = rsrc1 & kKdRsrc1VgprMask;
     uint32_t extra_granules =
@@ -222,7 +222,7 @@ void UpdateKernelDescriptor(uint8_t *elf_data, size_t elf_size,
     rsrc1 = (rsrc1 & ~(kKdRsrc1SgprMask << kKdRsrc1SgprShift)) |
             (new_val << kKdRsrc1SgprShift);
   }
-  std::memcpy(kd + kKdRsrc1Offset, &rsrc1, 4);
+  std::memcpy(kd + kKdRsrc1Offset, &rsrc1, sizeof(rsrc1));
 }
 
 // ── NOP sled management ──────────────────────────────────────────────────────
@@ -253,28 +253,31 @@ static void AdjustSectionHeaders(uint8_t *elf, uint64_t text_offset,
   uint64_t text_end = text_offset + text_size;
   uint64_t e_shoff;
   uint16_t e_shentsize, e_shnum;
-  std::memcpy(&e_shoff, elf + offsetof(Ehdr, e_shoff), 8);
-  std::memcpy(&e_shentsize, elf + offsetof(Ehdr, e_shentsize), 2);
+  std::memcpy(&e_shoff, elf + offsetof(Ehdr, e_shoff), sizeof(e_shoff));
+  std::memcpy(&e_shentsize, elf + offsetof(Ehdr, e_shentsize),
+              sizeof(e_shentsize));
 
   if (e_shoff >= text_end) {
     uint64_t new_shoff = e_shoff + tramp_total;
-    std::memcpy(elf + offsetof(Ehdr, e_shoff), &new_shoff, 8);
+    std::memcpy(elf + offsetof(Ehdr, e_shoff), &new_shoff, sizeof(new_shoff));
     e_shoff = new_shoff;
   }
 
-  std::memcpy(&e_shnum, elf + offsetof(Ehdr, e_shnum), 2);
+  std::memcpy(&e_shnum, elf + offsetof(Ehdr, e_shnum), sizeof(e_shnum));
 
   for (uint16_t i = 0; i < e_shnum; ++i) {
     uint8_t *sh = elf + e_shoff + i * e_shentsize;
     uint64_t sh_offset;
-    std::memcpy(&sh_offset, sh + offsetof(Shdr, sh_offset), 8);
+    std::memcpy(&sh_offset, sh + offsetof(Shdr, sh_offset), sizeof(sh_offset));
 
     if (sh_offset == text_offset) {
       uint64_t new_text_size = text_size + tramp_total;
-      std::memcpy(sh + offsetof(Shdr, sh_size), &new_text_size, 8);
+      std::memcpy(sh + offsetof(Shdr, sh_size), &new_text_size,
+                  sizeof(new_text_size));
     } else if (sh_offset > text_offset) {
       uint64_t new_offset = sh_offset + tramp_total;
-      std::memcpy(sh + offsetof(Shdr, sh_offset), &new_offset, 8);
+      std::memcpy(sh + offsetof(Shdr, sh_offset), &new_offset,
+                  sizeof(new_offset));
     }
   }
 }
@@ -287,25 +290,26 @@ static void AdjustProgramHeaders(uint8_t *elf, uint64_t text_offset,
   uint64_t text_end = text_offset + text_size;
   uint64_t e_phoff;
   uint16_t e_phentsize, e_phnum;
-  std::memcpy(&e_phoff, elf + offsetof(Ehdr, e_phoff), 8);
-  std::memcpy(&e_phentsize, elf + offsetof(Ehdr, e_phentsize), 2);
-  std::memcpy(&e_phnum, elf + offsetof(Ehdr, e_phnum), 2);
+  std::memcpy(&e_phoff, elf + offsetof(Ehdr, e_phoff), sizeof(e_phoff));
+  std::memcpy(&e_phentsize, elf + offsetof(Ehdr, e_phentsize),
+              sizeof(e_phentsize));
+  std::memcpy(&e_phnum, elf + offsetof(Ehdr, e_phnum), sizeof(e_phnum));
 
   for (uint16_t i = 0; i < e_phnum; ++i) {
     uint8_t *ph = elf + e_phoff + i * e_phentsize;
     uint64_t p_offset, p_filesz, p_memsz;
-    std::memcpy(&p_offset, ph + offsetof(Phdr, p_offset), 8);
-    std::memcpy(&p_filesz, ph + offsetof(Phdr, p_filesz), 8);
-    std::memcpy(&p_memsz, ph + offsetof(Phdr, p_memsz), 8);
+    std::memcpy(&p_offset, ph + offsetof(Phdr, p_offset), sizeof(p_offset));
+    std::memcpy(&p_filesz, ph + offsetof(Phdr, p_filesz), sizeof(p_filesz));
+    std::memcpy(&p_memsz, ph + offsetof(Phdr, p_memsz), sizeof(p_memsz));
 
     if (p_offset <= text_offset && p_offset + p_filesz >= text_end) {
       p_filesz += tramp_total;
       p_memsz += tramp_total;
-      std::memcpy(ph + offsetof(Phdr, p_filesz), &p_filesz, 8);
-      std::memcpy(ph + offsetof(Phdr, p_memsz), &p_memsz, 8);
+      std::memcpy(ph + offsetof(Phdr, p_filesz), &p_filesz, sizeof(p_filesz));
+      std::memcpy(ph + offsetof(Phdr, p_memsz), &p_memsz, sizeof(p_memsz));
     } else if (p_offset > text_offset) {
       p_offset += tramp_total;
-      std::memcpy(ph + offsetof(Phdr, p_offset), &p_offset, 8);
+      std::memcpy(ph + offsetof(Phdr, p_offset), &p_offset, sizeof(p_offset));
     }
   }
 }
@@ -383,34 +387,37 @@ bool PatchElfIsa(uint8_t *elf, size_t elf_size,
   using Nhdr = llvm::ELF::Elf64_Nhdr;
 
   uint32_t e_flags;
-  std::memcpy(&e_flags, elf + offsetof(Ehdr, e_flags), 4);
+  std::memcpy(&e_flags, elf + offsetof(Ehdr, e_flags), sizeof(e_flags));
   e_flags = (e_flags & ~kEFlagsMachMask) | (target_mach & kEFlagsMachMask);
-  std::memcpy(elf + offsetof(Ehdr, e_flags), &e_flags, 4);
+  std::memcpy(elf + offsetof(Ehdr, e_flags), &e_flags, sizeof(e_flags));
 
   uint64_t e_shoff;
   uint16_t e_shentsize, e_shnum;
-  std::memcpy(&e_shoff, elf + offsetof(Ehdr, e_shoff), 8);
-  std::memcpy(&e_shentsize, elf + offsetof(Ehdr, e_shentsize), 2);
-  std::memcpy(&e_shnum, elf + offsetof(Ehdr, e_shnum), 2);
+  std::memcpy(&e_shoff, elf + offsetof(Ehdr, e_shoff), sizeof(e_shoff));
+  std::memcpy(&e_shentsize, elf + offsetof(Ehdr, e_shentsize),
+              sizeof(e_shentsize));
+  std::memcpy(&e_shnum, elf + offsetof(Ehdr, e_shnum), sizeof(e_shnum));
   if (e_shoff == 0 || e_shnum == 0) return true;
 
   for (uint16_t i = 0; i < e_shnum; ++i) {
     const uint8_t *sh = elf + e_shoff + i * e_shentsize;
     uint32_t sh_type;
-    std::memcpy(&sh_type, sh + offsetof(Shdr, sh_type), 4);
+    std::memcpy(&sh_type, sh + offsetof(Shdr, sh_type), sizeof(sh_type));
     if (sh_type != llvm::ELF::SHT_NOTE) continue;
 
     uint64_t sh_offset, sh_size;
-    std::memcpy(&sh_offset, sh + offsetof(Shdr, sh_offset), 8);
-    std::memcpy(&sh_size, sh + offsetof(Shdr, sh_size), 8);
+    std::memcpy(&sh_offset, sh + offsetof(Shdr, sh_offset), sizeof(sh_offset));
+    std::memcpy(&sh_size, sh + offsetof(Shdr, sh_size), sizeof(sh_size));
     if (sh_offset + sh_size > elf_size) continue;
 
     uint64_t pos = sh_offset;
     while (pos + sizeof(Nhdr) <= sh_offset + sh_size) {
       uint32_t namesz, descsz, type;
-      std::memcpy(&namesz, elf + pos + offsetof(Nhdr, n_namesz), 4);
-      std::memcpy(&descsz, elf + pos + offsetof(Nhdr, n_descsz), 4);
-      std::memcpy(&type, elf + pos + offsetof(Nhdr, n_type), 4);
+      std::memcpy(&namesz, elf + pos + offsetof(Nhdr, n_namesz),
+                  sizeof(namesz));
+      std::memcpy(&descsz, elf + pos + offsetof(Nhdr, n_descsz),
+                  sizeof(descsz));
+      std::memcpy(&type, elf + pos + offsetof(Nhdr, n_type), sizeof(type));
       uint32_t namesz_aligned = llvm::alignTo(namesz, kNoteAlign);
       uint32_t descsz_aligned = llvm::alignTo(descsz, kNoteAlign);
       uint64_t note_total = sizeof(Nhdr) + namesz_aligned + descsz_aligned;
@@ -438,7 +445,7 @@ int GetKernelVgprCount(const uint8_t *elf_data, size_t elf_size,
       const_cast<uint8_t *>(elf_data), elf_size, elf_info, kernel_name);
   if (!kd) return -1;
   uint32_t rsrc1;
-  std::memcpy(&rsrc1, kd + kKdRsrc1Offset, 4);
+  std::memcpy(&rsrc1, kd + kKdRsrc1Offset, sizeof(rsrc1));
   uint32_t granulated = rsrc1 & kKdRsrc1VgprMask;
   return static_cast<int>((granulated + 1) * kVgprGranularity);
 }
