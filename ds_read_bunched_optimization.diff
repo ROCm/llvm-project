@@ -1,0 +1,235 @@
+diff --git a/llvm/lib/Target/AMDGPU/AMDGPUDSStall.cpp b/llvm/lib/Target/AMDGPU/AMDGPUDSStall.cpp
+new file mode 100644
+index 000000000000..97e3da44606d
+--- /dev/null
++++ b/llvm/lib/Target/AMDGPU/AMDGPUDSStall.cpp
+@@ -0,0 +1,162 @@
++//===--- AMDGPUDSStall.cpp - AMDGPU DS Read Interleaving  ----------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++//
++/// \file This file contains a DAG scheduling mutation that inserts weak order
++///       edges to pull VALU/SALU compute work before consecutive DS read
++///       instructions, breaking up back-to-back LDS reads so compute and
++///       memory can overlap.
++//
++//===----------------------------------------------------------------------===//
++
++#include "AMDGPUDSStall.h"
++#include "SIInstrInfo.h"
++#include "llvm/CodeGen/ScheduleDAGInstrs.h"
++#include "llvm/CodeGen/TargetSchedule.h"
++
++using namespace llvm;
++
++#define DEBUG_TYPE "amdgpu-ds-stall"
++
++namespace {
++
++class DSStall : public ScheduleDAGMutation {
++public:
++  void apply(ScheduleDAGInstrs *DAG) override;
++};
++
++static bool isDS(const SUnit &SU) {
++  const MachineInstr *MI = SU.getInstr();
++  return MI && SIInstrInfo::isDS(*MI);
++}
++
++static bool isDSRead(const SUnit &SU) {
++  const MachineInstr *MI = SU.getInstr();
++  return isDS(SU) && MI->mayLoad() && !MI->mayStore();
++}
++
++static bool isComputeFiller(const SUnit &SU) {
++  const MachineInstr *MI = SU.getInstr();
++  if (!MI)
++    return false;
++  return SIInstrInfo::isVALU(*MI) || SIInstrInfo::isSALU(*MI);
++}
++
++void DSStall::apply(ScheduleDAGInstrs *DAG) {
++  const TargetSchedModel *SchedModel = DAG->getSchedModel();
++
++  if (!SchedModel->hasInstrSchedModel())
++    return;
++
++  const unsigned NumSUnits = DAG->SUnits.size();
++  if (NumSUnits < 2)
++    return;
++
++  // Global pool of fillers already claimed across all bunches.
++  SmallPtrSet<SUnit *, 8> ClaimedFillers;
++
++  unsigned I = 0;
++  while (I < NumSUnits) {
++    // Find the start of a DS_READ bunch.
++    if (!isDSRead(DAG->SUnits[I])) {
++      ++I;
++      continue;
++    }
++
++    // Identify the bunch: consecutive DS_READs by strict NodeNum adjacency.
++    unsigned BunchStart = I;
++    unsigned BunchEnd = I;
++    while (BunchEnd + 1 < NumSUnits &&
++           isDSRead(DAG->SUnits[BunchEnd + 1]))
++      ++BunchEnd;
++
++    unsigned BunchSize = BunchEnd - BunchStart + 1;
++    I = BunchEnd + 1;
++
++    if (BunchSize < 2)
++      continue;
++
++    LLVM_DEBUG(dbgs() << "DSStall: bunch of " << BunchSize << " DS reads ["
++                      << DAG->SUnits[BunchStart].NodeNum << ".."
++                      << DAG->SUnits[BunchEnd].NodeNum << "]\n");
++
++    // StartNodeNum: first SUnit after the bunch to begin scanning for fillers.
++    unsigned StartNodeNum = BunchEnd + 1;
++
++    // For each consecutive pair (DSA, DSB) in the bunch, find a filler
++    // and route DSA -> Filler -> DSB to interleave compute between reads.
++    for (unsigned J = BunchStart + 1; J <= BunchEnd; ++J) {
++      SUnit *DSA = &DAG->SUnits[J - 1];
++      SUnit *DSB = &DAG->SUnits[J];
++      unsigned DSLatency =
++          SchedModel->computeInstrLatency(DSA->getInstr());
++
++      SUnit *Best = nullptr;
++      unsigned BestLatency = 0;
++      unsigned InstrCount = 0;
++
++      for (unsigned N = StartNodeNum;
++           N < NumSUnits && InstrCount < DSLatency; ++N) {
++        SUnit &Cand = DAG->SUnits[N];
++
++        // Stop at any DS operation (read or write).
++        if (isDS(Cand))
++          break;
++
++        if (ClaimedFillers.count(&Cand))
++          continue;
++
++        if (!isComputeFiller(Cand))
++          continue;
++
++        // Each instruction takes 1 issue cycle; count instructions
++        // rather than summing output latencies to match issue rate.
++        ++InstrCount;
++        unsigned Latency = SchedModel->computeInstrLatency(Cand.getInstr());
++
++        // Skip candidates that would create a cycle on either edge.
++        // DSA -> Cand: cycle if Cand -> ... -> DSA exists.
++        // Cand -> DSB: cycle if DSB -> ... -> Cand exists.
++        if (DAG->IsReachable(DSA, &Cand) || DAG->IsReachable(&Cand, DSB))
++          continue;
++
++        if (Latency > BestLatency) {
++          Best = &Cand;
++          BestLatency = Latency;
++        }
++      }
++
++      if (!Best)
++        continue;
++
++      // Route: DSA -> Filler -> DSB (two weak edges).
++      if (!DAG->IsReachable(Best, DSA)) {
++        SDep DepAF(DSA, SDep::Weak);
++        DAG->addEdge(Best, DepAF);
++      }
++      if (!DAG->IsReachable(DSB, Best)) {
++        SDep DepFB(Best, SDep::Weak);
++        DAG->addEdge(DSB, DepFB);
++      }
++      ClaimedFillers.insert(Best);
++
++      LLVM_DEBUG(dbgs() << "  SU(" << DSA->NodeNum << ") -> SU("
++                        << Best->NodeNum << ") -> SU(" << DSB->NodeNum
++                        << ") fillerLatency=" << BestLatency << "\n");
++    }
++  }
++}
++
++} // end anonymous namespace
++
++namespace llvm {
++
++std::unique_ptr<ScheduleDAGMutation> createAMDGPUDSStallDAGMutation() {
++  return std::make_unique<DSStall>();
++}
++
++} // end namespace llvm
+diff --git a/llvm/lib/Target/AMDGPU/AMDGPUDSStall.h b/llvm/lib/Target/AMDGPU/AMDGPUDSStall.h
+new file mode 100644
+index 000000000000..a38f46b949aa
+--- /dev/null
++++ b/llvm/lib/Target/AMDGPU/AMDGPUDSStall.h
+@@ -0,0 +1,21 @@
++//===- AMDGPUDSStall.h - AMDGPU DS Read Interleaving  ----------*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPUDSSTALL_H
++#define LLVM_LIB_TARGET_AMDGPU_AMDGPUDSSTALL_H
++
++#include "llvm/CodeGen/ScheduleDAGMutation.h"
++#include <memory>
++
++namespace llvm {
++
++std::unique_ptr<ScheduleDAGMutation> createAMDGPUDSStallDAGMutation();
++
++} // namespace llvm
++
++#endif // LLVM_LIB_TARGET_AMDGPU_AMDGPUDSSTALL_H
+diff --git a/llvm/lib/Target/AMDGPU/AMDGPUTargetMachine.cpp b/llvm/lib/Target/AMDGPU/AMDGPUTargetMachine.cpp
+index e4cc522194f2..d6779c459f83 100644
+--- a/llvm/lib/Target/AMDGPU/AMDGPUTargetMachine.cpp
++++ b/llvm/lib/Target/AMDGPU/AMDGPUTargetMachine.cpp
+@@ -18,6 +18,7 @@
+ #include "AMDGPU.h"
+ #include "AMDGPUAliasAnalysis.h"
+ #include "AMDGPUCtorDtorLowering.h"
++#include "AMDGPUDSStall.h"
+ #include "AMDGPUExportClustering.h"
+ #include "AMDGPUIGroupLP.h"
+ #include "AMDGPUISelDAGToDAG.h"
+@@ -544,6 +545,7 @@ createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
+   DAG->addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::Initial));
+   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
+   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
++  DAG->addMutation(createAMDGPUDSStallDAGMutation());
+   return DAG;
+ }
+ 
+@@ -1021,6 +1023,7 @@ public:
+     DAG->addMutation(ST.createFillMFMAShadowMutation(DAG->TII));
+     DAG->addMutation(
+         createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PostRA));
++    DAG->addMutation(createAMDGPUDSStallDAGMutation());
+     if (isPassEnabled(EnableVOPD, CodeGenOptLevel::Less))
+       DAG->addMutation(createVOPDPairingMutation());
+     return DAG;
+diff --git a/llvm/lib/Target/AMDGPU/CMakeLists.txt b/llvm/lib/Target/AMDGPU/CMakeLists.txt
+index fed29c3e14aa..a97237c91297 100644
+--- a/llvm/lib/Target/AMDGPU/CMakeLists.txt
++++ b/llvm/lib/Target/AMDGPU/CMakeLists.txt
+@@ -54,6 +54,7 @@ add_llvm_target(AMDGPUCodeGen
+   AMDGPUCodeGenPrepare.cpp
+   AMDGPUCombinerHelper.cpp
+   AMDGPUCtorDtorLowering.cpp
++  AMDGPUDSStall.cpp
+   AMDGPUExportClustering.cpp
+   AMDGPUFrameLowering.cpp
+   AMDGPUGlobalISelDivergenceLowering.cpp
