@@ -293,9 +293,10 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
 
 // ── RetargetCodeObjectB0A0 — helpers ─────────────────────────────────────────
 
-static void FixupTrampolineBranches(
+[[nodiscard]] static bool FixupTrampolineBranches(
     std::vector<Trampoline> &trampolines, uint8_t *text,
     uint64_t text_size, const RewriteConfig &config) {
+  bool all_ok = true;
   uint64_t tramp_text_offset = text_size;
   for (auto &t : trampolines) {
     uint64_t tp = tramp_text_offset;
@@ -304,15 +305,25 @@ static void FixupTrampolineBranches(
     uint8_t br_back[kMinInstSize];
     if (!EncodeSBranch(tp + t.bytes.size() - kMinInstSize,
                        t.original_offset + t.original_size, br_back,
-                       config.s_branch_opcode))
+                       config.s_branch_opcode)) {
+      HotswapLog(HotswapLogLevel::Error)
+          << "hotswap: WARNING: trampoline branch-back encoding failed at 0x"
+          << llvm::utohexstr(t.original_offset) << "\n";
+      all_ok = false;
       continue;
+    }
     std::memcpy(t.bytes.data() + t.bytes.size() - kMinInstSize, br_back,
                 kMinInstSize);
 
     uint8_t br_fwd[kMinInstSize];
     if (!EncodeSBranch(t.original_offset, tp, br_fwd,
-                       config.s_branch_opcode))
+                       config.s_branch_opcode)) {
+      HotswapLog(HotswapLogLevel::Error)
+          << "hotswap: WARNING: trampoline branch-fwd encoding failed at 0x"
+          << llvm::utohexstr(t.original_offset) << "\n";
+      all_ok = false;
       continue;
+    }
     std::memcpy(text + t.original_offset, br_fwd, kMinInstSize);
     for (uint32_t i = kMinInstSize; i < t.original_size; i += kMinInstSize) {
       uint8_t nop[kMinInstSize];
@@ -320,6 +331,7 @@ static void FixupTrampolineBranches(
       std::memcpy(text + t.original_offset + i, nop, kMinInstSize);
     }
   }
+  return all_ok;
 }
 
 static void PatchDebugSections(MallocBuffer &elf_buf,
@@ -399,7 +411,9 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
       << "hotswap: applied " << count << " patches\n";
 
   if (!deferred.empty()) {
-    FixupTrampolineBranches(deferred, text, elf_info.text_size, config);
+    if (!FixupTrampolineBranches(deferred, text, elf_info.text_size, config))
+      HotswapLog(HotswapLogLevel::Error)
+          << "hotswap: WARNING: some trampolines could not be fixed up\n";
 
     MallocBuffer new_buf =
         GrowElfWithTrampolines(buf.data(), elf_size, elf_info, deferred);
