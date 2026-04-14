@@ -100,6 +100,10 @@ foreach(gpu gfx600 gfx700 gfx803)
   add_isa_test(native_rsqrt ${gpu})
   add_isa_test(native_log ${gpu})
   add_isa_test(native_exp ${gpu})
+  # Verify __ocml_log_f32 compiles through the polynomial extended-
+  # precision path (MATH_PRIVATE(lnep)) rather than the hardware
+  # v_log_f32 primitive that native_log uses.
+  add_isa_test(log ${gpu})
 endforeach()
 
 foreach(gpu gfx803 gfx900 gfx90a gfx1030 gfx1100 gfx1200)
