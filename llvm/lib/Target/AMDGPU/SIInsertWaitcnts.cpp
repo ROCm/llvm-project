@@ -34,6 +34,7 @@
 #include "llvm/ADT/Sequence.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachinePassManager.h"
 #include "llvm/CodeGen/MachinePostDominators.h"
@@ -511,6 +512,7 @@ class SIInsertWaitcnts {
   DenseMap<const Value *, MachineBasicBlock *> SLoadAddresses;
   DenseMap<MachineBasicBlock *, PreheaderFlushFlags> PreheadersToFlush;
   MachineLoopInfo &MLI;
+  MachineDominatorTree &MDT;
   MachinePostDominatorTree &PDT;
   AliasAnalysis *AA = nullptr;
   MachineFunction &MF;
@@ -546,9 +548,11 @@ public:
   AMDGPU::InstCounterType MaxCounter;
   bool IsExpertMode = false;
 
-  SIInsertWaitcnts(MachineLoopInfo &MLI, MachinePostDominatorTree &PDT,
+  SIInsertWaitcnts(MachineLoopInfo &MLI, MachineDominatorTree &MDT,
+                   MachinePostDominatorTree &PDT,
                    AliasAnalysis *AA, MachineFunction &MF)
-      : MLI(MLI), PDT(PDT), AA(AA), MF(MF), ST(MF.getSubtarget<GCNSubtarget>()),
+      : MLI(MLI), MDT(MDT), PDT(PDT), AA(AA), MF(MF),
+        ST(MF.getSubtarget<GCNSubtarget>()),
         TII(*ST.getInstrInfo()), TRI(TII.getRegisterInfo()),
         MRI(MF.getRegInfo()) {
     (void)ForceExpCounter;
@@ -565,6 +569,9 @@ public:
   bool isVMEMOrFlatVMEM(const MachineInstr &MI) const;
   bool isDSRead(const MachineInstr &MI) const;
   bool mayStoreIncrementingDSCNT(const MachineInstr &MI) const;
+  bool isGuardingBranchLoopInvariant(
+      MachineBasicBlock *UseMBB, MachineLoop *ML,
+      const DenseSet<MCRegUnit> &AllDefsInLoop) const;
   bool run();
 
   void setForceEmitWaitcnt() {
@@ -1057,6 +1064,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addRequired<MachineLoopInfoWrapperPass>();
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
     AU.addRequired<MachinePostDominatorTreeWrapperPass>();
     AU.addUsedIfAvailable<AAResultsWrapperPass>();
     AU.addPreserved<AAResultsWrapperPass>();
@@ -1726,6 +1734,7 @@ bool WaitcntBrackets::counterOutOfOrder(AMDGPU::InstCounterType T) const {
 INITIALIZE_PASS_BEGIN(SIInsertWaitcntsLegacy, DEBUG_TYPE, "SI Insert Waitcnts",
                       false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(MachinePostDominatorTreeWrapperPass)
 INITIALIZE_PASS_END(SIInsertWaitcntsLegacy, DEBUG_TYPE, "SI Insert Waitcnts",
                     false, false)
@@ -3474,6 +3483,76 @@ bool SIInsertWaitcnts::mayStoreIncrementingDSCNT(const MachineInstr &MI) const {
   return MI.mayStore() && SIInstrInfo::isDS(MI);
 }
 
+// Branch invariance heuristic for multi-block loops.
+//
+// When an outside-loaded register is used in a block that does NOT dominate all
+// loop back edges, the use is conditional (executed only on some iterations).
+// Flushing in the preheader has an upfront iter-0 cost, amortized across
+// iterations where the use is reached.  If the branch condition is
+// loop-invariant the same path is taken every iteration, so either:
+//   (a) the use is always reached — but then the block dominates all paths
+//       that matter, and the check above already handles it, OR
+//   (b) the use is never reached — flushing is pure cost with no benefit.
+// In either case there is no amortization opportunity, so we skip the flush.
+//
+// If the branch condition varies across iterations, different iterations may
+// take different paths.  When the use IS reached, the preheader flush helps;
+// when it is NOT reached, the flush was a harmless no-op (already waited).
+// On average the benefit outweighs the one-time iter-0 cost, so we flush.
+//
+// Implementation: find the conditional branch in the immediate dominator of
+// UseMBB, identify the comparison that sets the condition register (SCC/VCC),
+// and check whether its input operands are all defined outside the loop.
+bool SIInsertWaitcnts::isGuardingBranchLoopInvariant(
+    MachineBasicBlock *UseMBB, MachineLoop *ML,
+    const DenseSet<MCRegUnit> &AllDefsInLoop) const {
+  MachineDomTreeNode *Node = MDT.getNode(UseMBB);
+  if (!Node || !Node->getIDom())
+    return false;
+  MachineBasicBlock *IDom = Node->getIDom()->getBlock();
+  if (!IDom || !ML->contains(IDom))
+    return false;
+
+  MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
+  SmallVector<MachineOperand, 4> Cond;
+  if (TII.analyzeBranch(*IDom, TBB, FBB, Cond, /*AllowModify=*/false) ||
+      Cond.size() < 2 || !Cond[1].isReg())
+    return false;
+
+  // EXEC-based branches guard divergent control flow; conservatively treat
+  // them as varying (the EXEC mask is almost always modified in-loop).
+  MCRegister CondReg = Cond[1].getReg().asMCReg();
+  if (CondReg == AMDGPU::EXEC || CondReg == AMDGPU::EXEC_LO)
+    return false;
+
+  // Walk backward from the branch to find the instruction that defines
+  // CondReg (the comparison / test that produces the branch condition).
+  MachineInstr *CondDef = nullptr;
+  for (auto I = std::prev(IDom->getFirstTerminator()), E = IDom->begin();;
+       --I) {
+    if (I->modifiesRegister(CondReg, &TRI)) {
+      CondDef = &*I;
+      break;
+    }
+    if (I == E)
+      break;
+  }
+  if (!CondDef)
+    return false;
+
+  // The condition is loop-invariant iff every register input of the defining
+  // instruction is NOT defined anywhere inside the loop.
+  for (const MachineOperand &Op : CondDef->all_uses()) {
+    if (!Op.isReg() || !Op.getReg().isValid())
+      continue;
+    for (MCRegUnit RU : TRI.regunits(Op.getReg().asMCReg())) {
+      if (AllDefsInLoop.contains(RU))
+        return false;
+    }
+  }
+  return true;
+}
+
 // Return flags indicating which counters should be flushed in the preheader of
 // the given loop. We currently decide to flush in the following situations:
 // For VMEM (FlushVmCnt):
@@ -3525,10 +3604,20 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
   bool TrackDSFlushPoint = ST.hasExtendedWaitCounts() && IsSingleBlock;
   unsigned LastDSFlushPosition = 0;
 
-  // Preheader hoist simulation: for single-block loops, simulate counter
-  // queues on iter 1+ to check if loop-invariant registers benefit from
-  // flushing. Tracks both LOAD_CNT and DS_CNT independently.
-  bool TrackHoist = IsSingleBlock;
+  // Preheader hoist simulation: simulate counter queues on iter 1+ to check
+  // if loop-invariant registers benefit from flushing.  Tracks both LOAD_CNT
+  // and DS_CNT independently.
+  //
+  // For multi-block loops, event counts aggregate across all blocks in the
+  // linear walk order.  This overcounts C (the outstanding-events metric)
+  // relative to any single execution path, but overcounting only causes
+  // extra flushes (a harmless one-time iter-0 cost), never missed flushes.
+  //
+  // Nested-loop guard: if the preheader is inside another loop, skip the
+  // analysis to avoid intermediate flushes from inner to outer loop body.
+  // The outer loop's own preheader analysis handles outer-level invariants.
+  MachineBasicBlock *Preheader = ML->getLoopPreheader();
+  bool TrackHoist = Preheader && !MLI.getLoopFor(Preheader);
   bool HasInLoopVMEMDefUse = false;
   bool HasInLoopDSDefUse = false;
   unsigned LoadCntEvents = 0;
@@ -3538,8 +3627,15 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
     unsigned InstrPos;
     unsigned LoadCntEventsAt;
     unsigned DSCntEventsAt;
+    MachineBasicBlock *UseMBB;
   };
   DenseMap<MCRegUnit, OutsideRegUseInfo> OutsideLoadUseInfo;
+
+  // For multi-block loops: collect all register defs inside the loop so the
+  // branch invariance heuristic can quickly test whether a comparison operand
+  // is loop-invariant.
+  bool TrackBranchInvariance = TrackHoist && !IsSingleBlock;
+  DenseSet<MCRegUnit> AllDefsInLoop;
 
   for (MachineBasicBlock *MBB : ML->blocks()) {
     for (MachineInstr &MI : *MBB) {
@@ -3645,8 +3741,8 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
           }
           if (TrackHoist && (HasPendingLoadCnt || HasPendingDSCnt))
             OutsideLoadUseInfo.try_emplace(
-                RU,
-                OutsideRegUseInfo{HoistInstrPos, LoadCntEvents, DSCntEvents});
+                RU, OutsideRegUseInfo{HoistInstrPos, LoadCntEvents,
+                                      DSCntEvents, MBB});
         }
       }
 
@@ -3689,6 +3785,16 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
         }
       }
 
+      // Collect all register defs for the branch invariance heuristic.
+      if (TrackBranchInvariance) {
+        for (const MachineOperand &Op : MI.all_defs()) {
+          if (!Op.isReg() || !Op.getReg().isValid())
+            continue;
+          for (MCRegUnit RU : TRI.regunits(Op.getReg().asMCReg()))
+            AllDefsInLoop.insert(RU);
+        }
+      }
+
       // Update hoist tracking counters after processing the instruction.
       if (IsLoadCntEvent)
         ++LoadCntEvents;
@@ -3705,8 +3811,8 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
        (HasVMemLoad && ST.hasVmemWriteVgprInOrder())))
     Flags.FlushVmCnt = 0;
 
-  // Preheader hoist for single-block loops: simulate the counter queue state
-  // on iter 1+ to check if loop-invariant registers benefit from flushing.
+  // Preheader hoist: simulate the counter queue state on iter 1+ to check
+  // if loop-invariant registers benefit from flushing.
   //
   // For each invariant (outside-loaded, not redefined in-loop) on counter T:
   //   N = preheader UB(T) - register score(T)  (the waitcnt target)
@@ -3717,11 +3823,46 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
   // (drain point), the counter resets to EventsAt(drain). For points before
   // the first drain, C = TotalEvents + EventsAt(point).
   //
+  // For multi-block loops, TotalEvents is the sum of events across all blocks
+  // (an overcount for any single path, but overcounting C leads to more
+  // flushes, never fewer — a safe conservative direction).
+  //
   // Bail when in-loop-defined loads are consumed in-loop (def-before-use),
   // since those create drain points we can't easily model.
   // TODO: Model drain points from in-loop loads used in-loop to handle
   // mixed reload + in-loop-compute patterns.
   if (TrackHoist && !OutsideLoadUseInfo.empty()) {
+    // Branch invariance filter (multi-block only): remove uses in conditional
+    // blocks whose guarding branch has a loop-invariant condition.
+    // See isGuardingBranchLoopInvariant() for the full rationale.
+    if (TrackBranchInvariance) {
+      MachineBasicBlock *Header = ML->getHeader();
+      SmallVector<MachineBasicBlock *, 4> Latches;
+      for (MachineBasicBlock *Pred : Header->predecessors())
+        if (ML->contains(Pred))
+          Latches.push_back(Pred);
+
+      SmallVector<MCRegUnit, 4> ToRemove;
+      for (const auto &[RU, Info] : OutsideLoadUseInfo) {
+        if (Info.UseMBB == Header)
+          continue;
+
+        bool DomAllLatches = true;
+        for (MachineBasicBlock *Latch : Latches) {
+          if (!MDT.dominates(Info.UseMBB, Latch)) {
+            DomAllLatches = false;
+            break;
+          }
+        }
+        if (DomAllLatches)
+          continue;
+
+        if (isGuardingBranchLoopInvariant(Info.UseMBB, ML, AllDefsInLoop))
+          ToRemove.push_back(RU);
+      }
+      for (MCRegUnit RU : ToRemove)
+        OutsideLoadUseInfo.erase(RU);
+    }
     // Helper: run the C > N profitability check for one counter.
     // Returns the flush value (UB - HighestProfitableScore) or nullopt.
     auto checkCounter = [&](AMDGPU::InstCounterType T, unsigned TotalEvents,
@@ -3805,25 +3946,27 @@ SIInsertWaitcnts::getPreheaderFlushFlags(MachineLoop *ML,
 
 bool SIInsertWaitcntsLegacy::runOnMachineFunction(MachineFunction &MF) {
   auto &MLI = getAnalysis<MachineLoopInfoWrapperPass>().getLI();
+  auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   auto &PDT =
       getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   AliasAnalysis *AA = nullptr;
   if (auto *AAR = getAnalysisIfAvailable<AAResultsWrapperPass>())
     AA = &AAR->getAAResults();
 
-  return SIInsertWaitcnts(MLI, PDT, AA, MF).run();
+  return SIInsertWaitcnts(MLI, MDT, PDT, AA, MF).run();
 }
 
 PreservedAnalyses
 SIInsertWaitcntsPass::run(MachineFunction &MF,
                           MachineFunctionAnalysisManager &MFAM) {
   auto &MLI = MFAM.getResult<MachineLoopAnalysis>(MF);
+  auto &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   auto &PDT = MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   auto *AA = MFAM.getResult<FunctionAnalysisManagerMachineFunctionProxy>(MF)
                  .getManager()
                  .getCachedResult<AAManager>(MF.getFunction());
 
-  if (!SIInsertWaitcnts(MLI, PDT, AA, MF).run())
+  if (!SIInsertWaitcnts(MLI, MDT, PDT, AA, MF).run())
     return PreservedAnalyses::all();
 
   return getMachineFunctionPassPreservedAnalyses()

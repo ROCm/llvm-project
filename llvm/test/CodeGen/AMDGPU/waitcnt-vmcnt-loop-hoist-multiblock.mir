@@ -1,0 +1,226 @@
+# RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -verify-machineinstrs -run-pass si-insert-waitcnts -o - %s | FileCheck %s
+
+---
+
+# Multi-block variant of "variant2": invariant v1 (score 2, newest) is used
+# first in the header, reloaded v0 (score 1) is used second.  The loop body
+# is split across two blocks (bb.1 = header, bb.2 = latch).  Hoist simulation
+# sees 1 LOAD_CNT event (reload), so C = 1 > N = 0 => flush in preheader.
+
+# CHECK-LABEL: name: multiblock_header_use_do_flush
+# CHECK-LABEL: bb.0:
+# CHECK:         S_WAIT_LOADCNT_DSCNT 0
+# CHECK:         $vgpr0 = GLOBAL_LOAD_DWORD
+# CHECK:         $vgpr1 = GLOBAL_LOAD_DWORD
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK:         S_BRANCH %bb.1
+# CHECK-LABEL: bb.1:
+# CHECK-NOT:     S_WAIT_LOADCNT
+# CHECK:         $vgpr3 = V_ADD_U32_e32 $vgpr1
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK-NEXT:    $vgpr2 = V_ADD_U32_e32 $vgpr0
+
+name:            multiblock_header_use_do_flush
+body:             |
+  bb.0:
+    successors: %bb.1
+
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    $vgpr1 = GLOBAL_LOAD_DWORD $vgpr12_vgpr13, 0, 0, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2
+
+    $vgpr3 = V_ADD_U32_e32 $vgpr1, $vgpr5, implicit $exec
+    $vgpr2 = V_ADD_U32_e32 $vgpr0, $vgpr5, implicit $exec
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.1, %bb.3
+
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    S_CMP_LG_U32 $sgpr3, $sgpr4, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    S_ENDPGM 0
+
+...
+---
+
+# Diamond CFG: invariant v1 used only in bb.2 (a conditional block), with
+# a varying branch condition (sgpr3 modified in-loop by S_ADD_U32).
+# bb.2 does NOT dominate the latch (bb.4).  The branch invariance heuristic
+# finds sgpr3 in AllDefsInLoop => condition varies => keep the use => flush.
+
+# CHECK-LABEL: name: multiblock_branch_varying_do_flush
+# CHECK-LABEL: bb.0:
+# CHECK:         S_WAIT_LOADCNT_DSCNT 0
+# CHECK:         $vgpr0 = GLOBAL_LOAD_DWORD
+# CHECK:         $vgpr1 = GLOBAL_LOAD_DWORD
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK:         S_BRANCH %bb.1
+# CHECK-LABEL: bb.1:
+
+name:            multiblock_branch_varying_do_flush
+body:             |
+  bb.0:
+    successors: %bb.1
+
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    $vgpr1 = GLOBAL_LOAD_DWORD $vgpr12_vgpr13, 0, 0, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+
+    S_CMP_LG_U32 $sgpr3, $sgpr4, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.4
+
+    $vgpr3 = V_ADD_U32_e32 $vgpr1, $vgpr5, implicit $exec
+    S_BRANCH %bb.4
+
+  bb.3:
+    successors: %bb.4
+
+    $vgpr6 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.4
+
+  bb.4:
+    successors: %bb.1, %bb.5
+
+    $vgpr2 = V_ADD_U32_e32 $vgpr0, $vgpr5, implicit $exec
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    $sgpr3 = S_ADD_U32 $sgpr3, 1, implicit-def $scc
+    S_CMP_LG_U32 $sgpr3, $sgpr4, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.5
+
+  bb.5:
+    S_ENDPGM 0
+
+...
+---
+
+# Same diamond CFG, but the branch condition in the header uses sgpr10/sgpr11
+# which are NOT defined inside the loop => loop-invariant condition.
+# The branch invariance heuristic removes v1's use from OutsideLoadUseInfo,
+# so no preheader flush is emitted.  The wait for v1 stays in-loop (bb.2).
+
+# CHECK-LABEL: name: multiblock_branch_invariant_no_flush
+# CHECK-LABEL: bb.0:
+# CHECK:         S_WAIT_LOADCNT_DSCNT 0
+# CHECK:         $vgpr0 = GLOBAL_LOAD_DWORD
+# CHECK:         $vgpr1 = GLOBAL_LOAD_DWORD
+# CHECK-NOT:     S_WAIT_LOADCNT
+# CHECK:         S_BRANCH %bb.1
+# CHECK-LABEL: bb.2:
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK-NEXT:    $vgpr3 = V_ADD_U32_e32 $vgpr1
+
+name:            multiblock_branch_invariant_no_flush
+body:             |
+  bb.0:
+    successors: %bb.1
+
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    $vgpr1 = GLOBAL_LOAD_DWORD $vgpr12_vgpr13, 0, 0, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2, %bb.3
+
+    S_CMP_LG_U32 $sgpr10, $sgpr11, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.2:
+    successors: %bb.4
+
+    $vgpr3 = V_ADD_U32_e32 $vgpr1, $vgpr5, implicit $exec
+    S_BRANCH %bb.4
+
+  bb.3:
+    successors: %bb.4
+
+    $vgpr6 = V_MOV_B32_e32 0, implicit $exec
+    S_BRANCH %bb.4
+
+  bb.4:
+    successors: %bb.1, %bb.5
+
+    $vgpr2 = V_ADD_U32_e32 $vgpr0, $vgpr5, implicit $exec
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    S_CMP_LG_U32 $sgpr3, $sgpr4, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.5
+
+  bb.5:
+    S_ENDPGM 0
+
+...
+---
+
+# Nested loop: inner loop (bb.2) has preheader bb.1 inside the outer loop.
+# The nested-loop guard (MLI.getLoopFor(preheader) != null) prevents flush
+# analysis for the inner loop.  The outer loop's preheader (bb.0) analysis
+# sees v1 used in bb.1 (outer header, dominates all outer back edges) and
+# computes C > N => flush in bb.0.
+# Key check: flush in bb.0, NO flush in bb.1 (inner preheader).
+
+# CHECK-LABEL: name: nested_outer_flush_inner_no_flush
+# CHECK-LABEL: bb.0:
+# CHECK:         S_WAIT_LOADCNT_DSCNT 0
+# CHECK:         $vgpr0 = GLOBAL_LOAD_DWORD
+# CHECK:         $vgpr1 = GLOBAL_LOAD_DWORD
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK:         S_BRANCH %bb.1
+# CHECK-LABEL: bb.1:
+# CHECK-NOT:     S_WAIT_LOADCNT 0
+# CHECK:         $vgpr3 = V_ADD_U32_e32 $vgpr1
+# CHECK:         S_BRANCH %bb.2
+# CHECK-LABEL: bb.2:
+# CHECK:         S_WAIT_LOADCNT 0
+# CHECK-NEXT:    $vgpr2 = V_ADD_U32_e32 $vgpr0
+
+name:            nested_outer_flush_inner_no_flush
+body:             |
+  bb.0:
+    successors: %bb.1
+
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    $vgpr1 = GLOBAL_LOAD_DWORD $vgpr12_vgpr13, 0, 0, implicit $exec
+    S_BRANCH %bb.1
+
+  bb.1:
+    successors: %bb.2
+
+    $vgpr3 = V_ADD_U32_e32 $vgpr1, $vgpr5, implicit $exec
+    S_BRANCH %bb.2
+
+  bb.2:
+    successors: %bb.2, %bb.3
+
+    $vgpr2 = V_ADD_U32_e32 $vgpr0, $vgpr5, implicit $exec
+    $vgpr0 = GLOBAL_LOAD_DWORD $vgpr10_vgpr11, 0, 0, implicit $exec
+    S_CMP_LG_U32 $sgpr3, $sgpr4, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.2, implicit $scc
+    S_BRANCH %bb.3
+
+  bb.3:
+    successors: %bb.1, %bb.4
+
+    S_CMP_LG_U32 $sgpr5, $sgpr6, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.4
+
+  bb.4:
+    S_ENDPGM 0
+
+...
