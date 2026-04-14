@@ -7,9 +7,10 @@
 //===----------------------------------------------------------------------===//
 //
 /// \file This file contains a DAG scheduling mutation that adds weak order
-///       edges between DS read instructions to discourage the scheduler from
-///       placing them back-to-back. This allows VALU/MFMA work to be
-///       interleaved with DS reads, hiding LDS latency.
+///       edges between consecutive DS read instructions, routing them through
+///       high-latency compute fillers (VALU/SALU). This discourages the
+///       scheduler from placing DS reads back-to-back, hiding LDS latency
+///       and reducing register pressure from live-range overlap.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,10 +18,15 @@
 #include "SIInstrInfo.h"
 #include "llvm/CodeGen/ScheduleDAGInstrs.h"
 #include "llvm/CodeGen/TargetSchedule.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-ds-stall"
+
+static cl::opt<bool> DisableDSStall("amdgpu-disable-ds-stall",
+  cl::desc("Disable DS read interleaving mutation"),
+  cl::init(false), cl::Hidden);
 
 namespace {
 
@@ -45,6 +51,9 @@ static bool isComputeFiller(const SUnit &SU) {
 }
 
 void DSStall::apply(ScheduleDAGInstrs *DAG) {
+  if (DisableDSStall)
+    return;
+
   const TargetSchedModel *SchedModel = DAG->getSchedModel();
 
   if (!SchedModel->hasInstrSchedModel())
@@ -68,12 +77,10 @@ void DSStall::apply(ScheduleDAGInstrs *DAG) {
     if (DAG->IsReachable(DSB, DSA))
       continue;
 
-    // Find the best VALU/SALU/MFMA filler between DSA and DSB:
-    // highest latency, ties broken by earliest program order.
-    // canAddEdge checks ensure both legs are cycle-safe after earlier
-    // mutations (IGroupLP, MacroFusion, etc.) may have added edges.
     SUnit *Best = nullptr;
     unsigned BestLat = 0;
+
+    // Phase 1: Search between DSA and DSB for a compute filler.
     for (unsigned N = DSA->NodeNum + 1; N < DSB->NodeNum; ++N) {
       SUnit &Cand = DAG->SUnits[N];
       if (!isComputeFiller(Cand))
@@ -87,18 +94,35 @@ void DSStall::apply(ScheduleDAGInstrs *DAG) {
       }
     }
 
-    // No compute work available to interleave; let the scheduler decide.
-    if (!Best)
+    // Phase 2: Widen to the entire scheduling region.
+    if (!Best) {
+      for (SUnit &Cand : DAG->SUnits) {
+        if (Cand.NodeNum > DSA->NodeNum && Cand.NodeNum < DSB->NodeNum)
+          continue; // already visited in Phase 1
+        if (!isComputeFiller(Cand))
+          continue;
+        if (!DAG->canAddEdge(&Cand, DSA) || !DAG->canAddEdge(DSB, &Cand))
+          continue;
+        unsigned Lat = SchedModel->computeInstrLatency(Cand.getInstr());
+        if (Lat > BestLat) {
+          Best = &Cand;
+          BestLat = Lat;
+        }
+      }
+    }
+
+    if (Best) {
+      bool AddedAF = DAG->addEdge(Best, SDep(DSA, SDep::Weak));
+      bool AddedFB = DAG->addEdge(DSB, SDep(Best, SDep::Weak));
+      LLVM_DEBUG(dbgs() << "  Routed: SU(" << DSA->NodeNum << ") -> SU("
+                        << Best->NodeNum << ") -> SU(" << DSB->NodeNum
+                        << ") lat=" << BestLat
+                        << " edges=" << AddedAF << "," << AddedFB << "\n");
       continue;
+    }
 
-    // Route: DSA -> Best -> DSB (weak edges).
-    bool AddedAF = DAG->addEdge(Best, SDep(DSA, SDep::Weak));
-    bool AddedFB = DAG->addEdge(DSB, SDep(Best, SDep::Weak));
-
-    LLVM_DEBUG(dbgs() << "  Routed: SU(" << DSA->NodeNum << ") -> SU("
-                      << Best->NodeNum << ") -> SU(" << DSB->NodeNum
-                      << ") fillerLat=" << BestLat
-                      << " edges=" << AddedAF << "," << AddedFB << "\n");
+    LLVM_DEBUG(dbgs() << "  Skip: no routable filler for SU("
+                      << DSA->NodeNum << ") -> SU(" << DSB->NodeNum << ")\n");
   }
 }
 
