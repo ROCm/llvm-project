@@ -237,23 +237,34 @@ mlir::FlatSymbolRefAttr getOrGenImplicitDefaultDeclareMapper(
           firOpBuilder, loc, recType, mapperIdName, mangler);
     }
 
-    auto ref =
-        getFieldRef(declareOp.getBase(), memberName, memberType, recordType);
-    llvm::SmallVector<mlir::Value> bounds;
-    genBoundsOps(ref, bounds);
-    mlir::Value mapOp = Fortran::utils::openmp::createMapInfoOp(firOpBuilder,
-        loc, ref, /*varPtrPtr=*/mlir::Value{}, /*name=*/"", bounds,
-        /*members=*/{},
-        /*membersIndex=*/mlir::ArrayAttr{}, mapFlag, captureKind, ref.getType(),
-        /*partialMap=*/false, mapperId);
-    memberMapOps.emplace_back(mapOp);
-    memberPlacementIndices.emplace_back(
-        llvm::SmallVector<int64_t>{(int64_t)entry.index()});
+    // Only emit explicit member maps for pointer members (for deep copy) or
+    // record maps. As non-pointer/non-allocatable members are covered by the
+    // parent map and currently we need to emit a record map for internal records
+    // as they can have their own declare mappers.
+    if (fir::isPointerType(fir::unwrapRefType(memberType)) ||
+        mlir::isa<fir::RecordType>(fir::getFortranElementType(memberType))) {
+      auto ref =
+          getFieldRef(declareOp.getBase(), memberName, memberType, recordType);
+      llvm::SmallVector<mlir::Value> bounds;
+      genBoundsOps(ref, bounds);
+      mlir::Value mapOp = Fortran::utils::openmp::createMapInfoOp(firOpBuilder,
+          loc, ref, /*varPtrPtr=*/mlir::Value{}, /*name=*/"", bounds,
+          /*members=*/{},
+          /*membersIndex=*/mlir::ArrayAttr{}, mapFlag, captureKind,
+          ref.getType(),
+          /*partialMap=*/false, mapperId);
+      memberMapOps.emplace_back(mapOp);
+      memberPlacementIndices.emplace_back(
+          llvm::SmallVector<int64_t>{(int64_t)entry.index()});
+    }
   }
 
   llvm::SmallVector<mlir::Value> bounds;
   genBoundsOps(declareOp.getOriginalBase(), bounds);
-  mlir::omp::ClauseMapFlags parentMapFlag = mlir::omp::ClauseMapFlags::implicit;
+  // Use to|from|implicit for the parent map so that the base struct data
+  // (including non-pointer/non-allocatable members) gets transferred.
+  mlir::omp::ClauseMapFlags parentMapFlag = mlir::omp::ClauseMapFlags::to |
+      mlir::omp::ClauseMapFlags::from | mlir::omp::ClauseMapFlags::implicit;
   mlir::omp::MapInfoOp mapOp = Fortran::utils::openmp::createMapInfoOp(
       firOpBuilder, loc, declareOp.getOriginalBase(),
       /*varPtrPtr=*/mlir::Value(), /*name=*/"", bounds, memberMapOps,

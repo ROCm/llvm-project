@@ -44,7 +44,7 @@ subroutine mapType_is_device_ptr
 end subroutine mapType_is_device_ptr
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant  [5 x i64] [i64 0, i64 24, i64 0, i64 0, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727557, i64 515, i64 32768, i64 288]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 544, i64 281474976727557, i64 515, i64 32768, i64 288]
 subroutine mapType_ptr
   integer, pointer :: a
   !$omp target
@@ -84,7 +84,7 @@ subroutine map_ompx_hold
 end subroutine
 
 !CHECK: @.offload_sizes{{.*}} = private unnamed_addr constant [5 x i64] [i64 0, i64 24, i64 0, i64 0, i64 0]
-!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 32, i64 281474976727557, i64 515, i64 32768, i64 288]
+!CHECK: @.offload_maptypes{{.*}} = private unnamed_addr constant [5 x i64] [i64 544, i64 281474976727557, i64 515, i64 32768, i64 288]
 subroutine mapType_allocatable
   integer, allocatable :: a
   allocate(a)

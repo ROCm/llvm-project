@@ -1291,6 +1291,12 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   if (args.hasArg(clang::options::OPT_fopenmp_force_usm)) {
     res.getLangOpts().OpenMPForceUSM = 1;
   }
+
+  // -f[no-]openmp-implicit-pointer-comp-map (default: on)
+  res.getLoweringOpts().setOpenMPImplicitPointerComponentMap(
+      args.hasFlag(clang::options::OPT_fopenmp_implicit_pointer_comp_map,
+                   clang::options::OPT_fno_openmp_implicit_pointer_comp_map,
+                   /*default=*/true));
   if (args.hasArg(clang::options::OPT_fopenmp_is_target_device)) {
     res.getLangOpts().OpenMPIsTargetDevice = 1;
 

@@ -4265,6 +4265,12 @@ def fopenmp_force_usm : Flag<["-"], "fopenmp-force-usm">, Group<f_Group>,
   Flags<[NoArgumentUnused]>, Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>,
   HelpText<"Force behavior as if the user specified pragma omp requires unified_shared_memory.">,
   MarshallingInfoFlag<LangOpts<"OpenMPForceUSM">>;
+def fopenmp_implicit_pointer_comp_map : Flag<["-"], "fopenmp-implicit-pointer-comp-map">, Group<f_Group>,
+  Flags<[NoArgumentUnused]>, Visibility<[FlangOption, FC1Option]>,
+  HelpText<"Enable implicit mapping of pointer components in derived types (experimental, default on)">;
+def fno_openmp_implicit_pointer_comp_map : Flag<["-"], "fno-openmp-implicit-pointer-comp-map">, Group<f_Group>,
+  Flags<[NoArgumentUnused]>, Visibility<[FlangOption, FC1Option]>,
+  HelpText<"Disable implicit mapping of pointer components in derived types">;
 def fopenmp_target_jit : Flag<["-"], "fopenmp-target-jit">, Group<f_Group>,
   Flags<[NoArgumentUnused]>, Visibility<[ClangOption, CLOption]>,
   HelpText<"Emit code that can be JIT compiled for OpenMP offloading. Implies -foffload-lto=full">;

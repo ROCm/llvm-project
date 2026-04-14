@@ -92,5 +92,11 @@ ENUM_LOWERINGOPT(PreserveUseDebugInfo, unsigned, 1, 0)
 /// Portable, Extremum, ExtremeNum). Default: Legacy.
 ENUM_LOWERINGOPT(FPMaxminBehavior, Fortran::common::FPMaxminBehavior, 2, 0)
 
+/// If true (default), enable implicit mapping of pointer components in
+/// derived types when they are implicitly captured or explicitly mapped.
+/// This is an experimental feature that generates default declare 
+/// mappers for derived types containing pointer members.
+ENUM_LOWERINGOPT(OpenMPImplicitPointerComponentMap, unsigned, 1, 1)
+
 #undef LOWERINGOPT
 #undef ENUM_LOWERINGOPT

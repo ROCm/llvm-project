@@ -1790,23 +1790,13 @@ void ClauseProcessor::processMapObjects(
             (directive != llvm::omp::Directive::OMPD_target_enter_data &&
              directive != llvm::omp::Directive::OMPD_target_exit_data &&
              directive != llvm::omp::Directive::OMPD_target_update)) {
-          bool isAllocOrPointer =
-              semantics::IsAllocatableOrObjectPointer(object.sym());
-          bool isPointer = semantics::IsPointer(*object.sym());
-          bool isImplicitMap =
-              (mapTypeBits & mlir::omp::ClauseMapFlags::implicit) ==
-              mlir::omp::ClauseMapFlags::implicit;
           bool needsDefaultMapper =
-              isAllocOrPointer ||
               requiresImplicitDefaultDeclareMapper(*objectTypeSpec);
-          // For implicit captures, avoid synthesizing default mappers for
-          // pointer entities (which can over-map pointer payloads) and for
-          // plain non-allocatable/non-pointer entities. Keep implicit mapper
-          // support for allocatables.
-          if (isImplicitMap && (isPointer || !isAllocOrPointer))
-            needsDefaultMapper = false;
-          mapperId = addImplicitMapper(object, mapperIdName,
-                                       /*allowGenerate=*/needsDefaultMapper);
+          mapperId = addImplicitMapper(
+              object, mapperIdName,
+              /*allowGenerate=*/needsDefaultMapper &&
+                  converter.getLoweringOptions()
+                      .getOpenMPImplicitPointerComponentMap());
         }
       }
 

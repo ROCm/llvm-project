@@ -5757,15 +5757,15 @@ static void mapParentWithMembers(
     // should be visible to the mapper for correct behaviour.
     mapFlags parentFlags = mapData.Types[mapDataIndex];
     mapFlags preserve = mapFlags::OMP_MAP_TO | mapFlags::OMP_MAP_FROM |
-                        mapFlags::OMP_MAP_ALWAYS | mapFlags::OMP_MAP_CLOSE |
-                        mapFlags::OMP_MAP_PRESENT |
+                        mapFlags::OMP_MAP_CLOSE | mapFlags::OMP_MAP_PRESENT |
                         mapFlags::OMP_MAP_OMPX_HOLD |
                         mapFlags::OMP_MAP_IMPLICIT;
     baseFlag |= (parentFlags & preserve);
   } else {
     mapFlags parentFlags = mapData.Types[mapDataIndex];
-    mapFlags preserve =
-        mapFlags::OMP_MAP_PRESENT | mapFlags::OMP_MAP_RETURN_PARAM;
+    mapFlags preserve = mapFlags::OMP_MAP_PRESENT |
+                        mapFlags::OMP_MAP_RETURN_PARAM |
+                        mapFlags::OMP_MAP_IMPLICIT;
     baseFlag |= (parentFlags & preserve);
   }
 

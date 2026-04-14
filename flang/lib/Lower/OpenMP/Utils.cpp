@@ -86,7 +86,7 @@ bool requiresImplicitDefaultDeclareMapper(
 
     semantics::DirectComponentIterator directComponents{spec};
     for (const semantics::Symbol &component : directComponents) {
-      if (component.attrs().test(semantics::Attr::ALLOCATABLE))
+      if (component.attrs().test(semantics::Attr::POINTER))
         return true;
 
       if (const semantics::DeclTypeSpec *declType = component.GetType())

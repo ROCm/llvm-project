@@ -2745,6 +2745,24 @@ static void collectSymbolsWithDynamicSubstring(
   symbolsWithDynamicSubstring = visitor.symbolsWithDynamicSubstring;
 }
 
+static bool recordHasPointerMembers(fir::RecordType recordType) {
+  if (!recordType)
+    return false;
+
+  for (auto [fieldName, fieldType] : recordType.getTypeList()) {
+    if (fir::isPointerType(fieldType))
+      return true;
+
+    if (auto recType = mlir::dyn_cast<fir::RecordType>(
+            fir::getFortranElementType(fieldType))) {
+      if (recordHasPointerMembers(recType))
+        return true;
+    }
+  }
+
+  return false;
+};
+
 static mlir::omp::TargetOp
 genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
             lower::StatementContext &stmtCtx,
@@ -2894,28 +2912,28 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
                 converter.mangleName(mapperIdName, *typeSpec->GetScope());
 
           if (!mapperIdName.empty()) {
-            bool isPointer = semantics::IsPointer(sym);
-            bool isAllocatable = semantics::IsAllocatable(sym);
             bool hasDefaultMapper =
                 converter.getModuleOp().lookupSymbol(mapperIdName);
-            // Avoid attaching implicit default mappers to pointer captures.
-            // For large pointer-based derived aggregates this can over-map
-            // nested payloads and conflict with explicit enter/exit maps.
-            if (!isPointer && (hasDefaultMapper || isAllocatable)) {
-              if (!hasDefaultMapper) {
-                if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
-                        converter.genType(*typeSpec)))
-                  mapperId = getOrGenImplicitDefaultDeclareMapper(
-                      converter.getFirOpBuilder(), loc, recordType,
-                      mapperIdName,
-                      [&](std::string &mapperIdName,
-                          llvm::StringRef memberName) {
-                        defaultMangler(converter, mapperIdName, memberName);
-                      });
-              } else {
-                mapperId = mlir::FlatSymbolRefAttr::get(
-                    &converter.getMLIRContext(), mapperIdName);
-              }
+            if (!hasDefaultMapper) {
+              // Experimental: Generate implicit default declare mappers for
+              // derived types with pointer members. This is controlled by
+              // the -f[no-]openmp-implicit-pointer-comp-map flag.
+              if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
+                        converter.genType(*typeSpec))) {
+                  if (recordHasPointerMembers(recordType) && converter.getLoweringOptions()
+                      .getOpenMPImplicitPointerComponentMap()) {
+                    mapperId = getOrGenImplicitDefaultDeclareMapper(
+                        converter.getFirOpBuilder(), loc, recordType,
+                        mapperIdName,
+                        [&](std::string &mapperIdName,
+                            llvm::StringRef memberName) {
+                          defaultMangler(converter, mapperIdName, memberName);
+                        });
+                  }
+                }
+            } else {
+              mapperId = mlir::FlatSymbolRefAttr::get(
+                  &converter.getMLIRContext(), mapperIdName);
             }
           }
         }

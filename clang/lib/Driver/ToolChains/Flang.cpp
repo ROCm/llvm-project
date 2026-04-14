@@ -1164,6 +1164,8 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
       if (Args.hasArg(options::OPT_fopenmp_force_usm))
         CmdArgs.push_back("-fopenmp-force-usm");
+      Args.AddLastArg(CmdArgs, options::OPT_fopenmp_implicit_pointer_comp_map,
+                      options::OPT_fno_openmp_implicit_pointer_comp_map);
       Args.AddLastArg(CmdArgs, options::OPT_fopenmp_simd,
                       options::OPT_fno_openmp_simd);
 
@@ -1305,4 +1307,3 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 Flang::Flang(const ToolChain &TC) : Tool("flang", "flang frontend", TC) {}
 
 Flang::~Flang() {}
-
