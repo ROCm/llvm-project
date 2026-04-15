@@ -2002,14 +2002,6 @@ void ControlFlowRewriter::rewrite() {
           });
       assert(LaneSucc != Node->LaneSuccessors.end());
 
-      // The _other_ successor may be a flow block instead of an original
-      // successor.
-      WaveNode *Other;
-      if (Node->Successors[0] == LaneSucc->Wave)
-        Other = Node->Successors[1];
-      else
-        Other = Node->Successors[0];
-
       // Re-emit the implicit conditional branch for the lane successor.
       // INLINEASM_BR is skipped: it was preserved during terminator
       // removal and already retargeted.
@@ -2020,6 +2012,14 @@ void ControlFlowRewriter::rewrite() {
                                      .addMBB(LaneSucc->Wave->Block);
         TII.fixImplicitOperands(*CondBrMI);
       }
+
+      // The _other_ successor may be a flow block instead of an original
+      // successor.
+      WaveNode *Other;
+      if (Node->Successors[0] == LaneSucc->Wave)
+        Other = Node->Successors[1];
+      else
+        Other = Node->Successors[0];
 
       BuildMI(*Node->Block, MBBINodeEnd, {}, TII.get(AMDGPU::S_BRANCH))
           .addMBB(Other->Block);
