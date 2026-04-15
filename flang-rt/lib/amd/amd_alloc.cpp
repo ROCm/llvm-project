@@ -16,7 +16,7 @@
 #include "flang/Runtime/AMD/amd_alloc.h"
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/descriptor.h"
-#include "flang-rt/runtime/lock.h"
+#include "flang/Runtime/AMD/amd_util.h"
 #include "flang/Support/Fortran.h"
 #include <algorithm>
 #include <cstdio>
@@ -24,7 +24,6 @@
 #include <cstring>
 #include <limits>
 #include <string_view>
-#include <unordered_map>
 
 namespace Fortran::runtime::amd {
 
@@ -43,25 +42,7 @@ extern "C" void omp_target_free(void *, int);
 // OpenMPFree can pass the correct device ID to omp_target_free,
 // even if omp_set_default_device() was called between ALLOCATE
 // and DEALLOCATE.
-static Lock allocDeviceMapLock;
-static std::unordered_map<void *, int> allocDeviceMap;
-
-static void trackAllocation(void *pointer, int device) {
-  CriticalSection guard(allocDeviceMapLock);
-  allocDeviceMap[pointer] = device;
-}
-
-static int retrieveAndRemoveDevice(void *pointer) {
-  CriticalSection guard(allocDeviceMapLock);
-  auto it = allocDeviceMap.find(pointer);
-  if (it != allocDeviceMap.end()) {
-    int device = it->second;
-    allocDeviceMap.erase(it);
-    return device;
-  }
-  // Fallback if the pointer is not tracked.
-  return omp_get_default_device();
-}
+static PointerDeviceMap allocDeviceMap;
 
 static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 #if ALLOC_DEBUG
@@ -73,7 +54,7 @@ static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
   int device{omp_get_default_device()};
   void *pointer{omp_target_alloc(AllocationSize, device)};
   if (pointer) {
-    trackAllocation(pointer, device);
+    allocDeviceMap.insert(pointer, device);
   }
 #if ALLOC_DEBUG
   if (debugEnabled) {
@@ -87,7 +68,7 @@ static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 }
 
 static void OpenMPFree(void *pointer) {
-  int device{retrieveAndRemoveDevice(pointer)};
+  int device{allocDeviceMap.removeAndGet(pointer)};
 #if ALLOC_DEBUG
   if (debugEnabled) {
     std::fprintf(stderr, "[AMD_ALLOC] %s(%p) device %d (%s:%d)\n",

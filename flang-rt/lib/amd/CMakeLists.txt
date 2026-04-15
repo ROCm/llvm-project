@@ -14,6 +14,7 @@
 
 add_flangrt_library(flang_rt.amd STATIC SHARED
   amd_alloc.cpp
+  amd_util.cpp
   INSTALL_WITH_TOOLCHAIN
 )
 
