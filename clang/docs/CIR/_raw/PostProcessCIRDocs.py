@@ -42,6 +42,7 @@ depth: 2
 if len(cir_docs_toctree) > 0:
     with open(INDEX_PATH, encoding="utf-8") as fp:
         index_content = fp.read()
+    cir_docs_entries = "\n    ".join(cir_docs_toctree)
     index_content += f"""
 
 CIR Dialect Reference
@@ -51,7 +52,7 @@ CIR Dialect Reference
     :numbered:
     :maxdepth: 1
 
-    {"\n    ".join(cir_docs_toctree)}
+    {cir_docs_entries}
 """
     with open(INDEX_OUTPUT_PATH, "w", encoding="utf-8") as fp:
         fp.write(index_content)
