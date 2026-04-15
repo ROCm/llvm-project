@@ -1,0 +1,62 @@
+//===-- lib/amd/amd_util.cpp ------------------------------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "flang/Runtime/AMD/amd_util.h"
+#include "flang-rt/runtime/lock.h"
+#include <cstdlib>
+#include <cstring>
+
+namespace Fortran::runtime::amd {
+
+static constexpr std::size_t initialCapacity{256};
+
+static Lock pointerDeviceMapLock;
+
+void PointerDeviceMap::grow() {
+  std::size_t newCapacity = capacity_ ? capacity_ * 2 : initialCapacity;
+  Entry *newEntries =
+      static_cast<Entry *>(std::realloc(entries_, newCapacity * sizeof(Entry)));
+  if (!newEntries) {
+    return; // allocation failed; caller will cope
+  }
+  entries_ = newEntries;
+  capacity_ = newCapacity;
+}
+
+void PointerDeviceMap::insert(void *pointer, int device) {
+  CriticalSection guard(pointerDeviceMapLock);
+  if (count_ == capacity_) {
+    grow();
+    if (count_ == capacity_) {
+      return; // grow failed
+    }
+  }
+  entries_[count_++] = {pointer, device};
+}
+
+int PointerDeviceMap::removeAndGet(void *pointer) {
+  CriticalSection guard(pointerDeviceMapLock);
+  for (std::size_t i = 0; i < count_; ++i) {
+    if (entries_[i].pointer == pointer) {
+      int device = entries_[i].device;
+      // Swap with last entry and shrink.
+      entries_[i] = entries_[--count_];
+      return device;
+    }
+  }
+  return -1;
+}
+
+void PointerDeviceMap::dump() const {
+  CriticalSection guard(pointerDeviceMapLock);
+  for (std::size_t i = 0; i < count_; ++i) {
+    std::fprintf(stderr, "%p -> %d\n", entries_[i].pointer, entries_[i].device);
+  }
+}
+
+} // namespace Fortran::runtime::amd
