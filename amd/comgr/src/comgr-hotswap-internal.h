@@ -335,6 +335,15 @@ struct PatchContext {
   const LivenessInfo &liveness;
   llvm::StringMap<KernelPatchStats> &kernel_stats;
   std::vector<ScratchPatchInfo> &out_scratch_patches;
+
+  // Set by a patch that matched a required rewrite rule but could not emit
+  // its replacement (e.g., operand extraction/validation failure, assembler
+  // failure).  Distinguished from "rule did not match": a no-match is a
+  // normal zero-patch outcome, but a match-without-emit means the code
+  // object still contains an instruction the policy is supposed to have
+  // eliminated, so the retarget must surface an error to the caller rather
+  // than return SUCCESS with an incompatible binary.
+  bool patch_failure = false;
 };
 
 // ── Function declarations ────────────────────────────────────────────────────

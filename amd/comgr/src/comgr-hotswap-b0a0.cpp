@@ -211,15 +211,13 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
 
 // ── ApplyGfx1250B0toA0Rules ──────────────────────────────────────────────────
 
-static uint32_t
-ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
-                        uint8_t *text, uint64_t text_size,
-                        const LLVMState &llvm_state,
-                        std::vector<Trampoline> &out_trampolines,
-                        uint8_t *elf_data, size_t elf_size,
-                        const ElfInfo &elf_info,
-                        std::vector<ScratchPatchInfo> &out_scratch_patches,
-                        const RewriteConfig &config) {
+static uint32_t ApplyGfx1250B0toA0Rules(
+    std::vector<InternalDecodedInst> &decoded, uint8_t *text,
+    uint64_t text_size, const LLVMState &llvm_state,
+    std::vector<Trampoline> &out_trampolines, uint8_t *elf_data,
+    size_t elf_size, const ElfInfo &elf_info,
+    std::vector<ScratchPatchInfo> &out_scratch_patches,
+    const RewriteConfig &config, bool &out_patch_failure) {
   uint32_t patched = 0;
   std::vector<NopSled> nop_sleds = BuildNopSledMap(decoded);
 
@@ -265,6 +263,8 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
   }
 
   patched += ApplyWmmaHazardPatch(ctx);
+
+  out_patch_failure = ctx.patch_failure;
 
   for (const auto &kv : kernel_stats) {
     llvm::StringRef kname = kv.first();
@@ -401,13 +401,24 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
 
   std::vector<Trampoline> deferred;
   std::vector<ScratchPatchInfo> scratch_patches;
-  uint32_t count =
-      ApplyGfx1250B0toA0Rules(decoded, text, elf_info.text_size, llvm_state,
-                              deferred, buf.data(), buf.size(), elf_info,
-                              scratch_patches, config);
+  bool patch_failure = false;
+  uint32_t count = ApplyGfx1250B0toA0Rules(
+      decoded, text, elf_info.text_size, llvm_state, deferred, buf.data(),
+      buf.size(), elf_info, scratch_patches, config, patch_failure);
 
   HotswapLog(HotswapLogLevel::Info)
       << "hotswap: applied " << count << " patches\n";
+
+  // If any patch matched a required rewrite rule but failed to emit, the
+  // output binary still contains an instruction the policy is supposed to
+  // have eliminated.  Surface this as an error rather than returning SUCCESS
+  // with a silently incompatible code object.
+  if (patch_failure) {
+    HotswapLog(HotswapLogLevel::Error)
+        << "hotswap: one or more required patches could not be applied; "
+           "refusing to return an incompatible code object\n";
+    return AMD_COMGR_STATUS_ERROR;
+  }
 
   if (!deferred.empty()) {
     if (!FixupTrampolineBranches(deferred, text, elf_info.text_size, config))

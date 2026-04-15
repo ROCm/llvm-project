@@ -70,7 +70,8 @@ set(HOTSWAP_SOURCES
   src/comgr-hotswap.cpp
   src/comgr-hotswap-b0a0.cpp
   src/comgr-hotswap-elf.cpp
-  src/comgr-hotswap-llvm.cpp)
+  src/comgr-hotswap-llvm.cpp
+  src/comgr-hotswap-patch-wmma-split.cpp)
 
 set(SOURCES
   src/comgr-cache.cpp

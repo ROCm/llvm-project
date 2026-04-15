@@ -22,12 +22,26 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc < 4)
-    fail("usage: hotswap-rewrite <elf_file> <source_isa> <target_isa> [--zero-size]");
+    fail("usage: hotswap-rewrite <elf_file> <source_isa> <target_isa> "
+         "[--zero-size] [-o <out_file>]");
 
   const char *ElfFile = argv[1];
   const char *SourceISA = argv[2];
   const char *TargetISA = argv[3];
-  int ZeroSize = (argc > 4 && strcmp(argv[4], "--zero-size") == 0);
+  int ZeroSize = 0;
+  const char *OutFile = NULL;
+
+  for (int i = 4; i < argc; ++i) {
+    if (strcmp(argv[i], "--zero-size") == 0) {
+      ZeroSize = 1;
+    } else if (strcmp(argv[i], "-o") == 0) {
+      if (i + 1 >= argc)
+        fail("-o requires a path argument");
+      OutFile = argv[++i];
+    } else {
+      fail("unknown argument: %s", argv[i]);
+    }
+  }
 
   char *ElfBuf;
   size_t ElfSize = (size_t)setBuf(ElfFile, &ElfBuf);
@@ -52,21 +66,31 @@ int main(int argc, char *argv[]) {
   if (Status != AMD_COMGR_STATUS_SUCCESS)
     fail("unexpected error status %d", (int)Status);
 
-  size_t OutSize = 0;
-  amd_comgr_(get_data(OutputData, &OutSize, NULL));
+  if (OutFile) {
+    // When the caller supplies -o, they want the rewritten ELF on disk and
+    // will typically run llvm-objdump / FileCheck on it.  Allow the output
+    // to differ in size or content from the input (trampolines grow .text).
+    dumpData(OutputData, OutFile);
+  } else {
+    // Legacy identity-path mode: the rewriter is expected to return the
+    // input unchanged (e.g. stubbed ISAs).  Enforce that explicitly.
+    size_t OutSize = 0;
+    amd_comgr_(get_data(OutputData, &OutSize, NULL));
 
-  if (OutSize != ElfSize)
-    fail("output size %zu != input size %zu", OutSize, ElfSize);
+    if (OutSize != ElfSize)
+      fail("output size %zu != input size %zu", OutSize, ElfSize);
 
-  char *OutBuf = (char *)malloc(OutSize);
-  if (!OutBuf)
-    fail("malloc failed");
-  amd_comgr_(get_data(OutputData, &OutSize, OutBuf));
+    char *OutBuf = (char *)malloc(OutSize);
+    if (!OutBuf)
+      fail("malloc failed");
+    amd_comgr_(get_data(OutputData, &OutSize, OutBuf));
 
-  if (memcmp(OutBuf, ElfBuf, ElfSize) != 0)
-    fail("output content differs from input");
+    if (memcmp(OutBuf, ElfBuf, ElfSize) != 0)
+      fail("output content differs from input");
 
-  free(OutBuf);
+    free(OutBuf);
+  }
+
   amd_comgr_(release_data(OutputData));
   amd_comgr_(release_data(InputData));
   free(ElfBuf);
