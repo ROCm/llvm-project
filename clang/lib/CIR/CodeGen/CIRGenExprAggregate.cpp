@@ -273,6 +273,19 @@ public:
              "Implicit cast types must be compatible");
       Visit(e->getSubExpr());
       break;
+    case CK_ToUnion: {
+      if (dest.isIgnored()) {
+        cgf.emitAnyExpr(e->getSubExpr(), AggValueSlot::ignored(),
+                        /*ignoreResult=*/true);
+        break;
+      }
+      QualType ty = e->getSubExpr()->getType();
+      Address castPtr = dest.getAddress().withElementType(cgf.getBuilder(),
+                                                          cgf.convertType(ty));
+      emitInitializationToLValue(e->getSubExpr(),
+                                 cgf.makeAddrLValue(castPtr, ty));
+      break;
+    }
     default:
       cgf.cgm.errorNYI(e->getSourceRange(),
                        std::string("AggExprEmitter: VisitCastExpr: ") +
@@ -484,11 +497,26 @@ public:
                                     e->getArrayFiller());
   }
 
-  void VisitArrayInitLoopExpr(const ArrayInitLoopExpr *e,
-                              llvm::Value *outerBegin = nullptr) {
-    cgf.cgm.errorNYI(e->getSourceRange(),
-                     "AggExprEmitter: VisitArrayInitLoopExpr");
+  void VisitArrayInitLoopExpr(const ArrayInitLoopExpr *e) {
+    CIRGenFunction::OpaqueValueMapping binding(cgf, e->getCommonExpr());
+    uint64_t numElements = e->getArraySize().getZExtValue();
+
+    if (!numElements)
+      return;
+
+    const mlir::Location loc = cgf.getLoc(e->getSourceRange());
+
+    if (!e->getType()->isConstantArrayType())
+      cgf.cgm.errorNYI(e->getSourceRange(),
+                       "VisitArrayInitLoopExpr: Non-constant array");
+
+    Address dest = ensureSlot(loc, e->getType()).getAddress();
+    cir::ArrayType arrayTy = cast<cir::ArrayType>(dest.getElementType());
+
+    emitArrayInit(dest, arrayTy, e->getType(),
+                  const_cast<ArrayInitLoopExpr *>(e), {}, e->getSubExpr());
   }
+
   void VisitImplicitValueInitExpr(ImplicitValueInitExpr *e) {
     cgf.cgm.errorNYI(e->getSourceRange(),
                      "AggExprEmitter: VisitImplicitValueInitExpr");
@@ -501,8 +529,11 @@ public:
     Visit(dae->getExpr());
   }
   void VisitCXXInheritedCtorInitExpr(const CXXInheritedCtorInitExpr *e) {
-    cgf.cgm.errorNYI(e->getSourceRange(),
-                     "AggExprEmitter: VisitCXXInheritedCtorInitExpr");
+    AggValueSlot slot =
+        ensureSlot(cgf.getLoc(e->getSourceRange()), e->getType());
+    cgf.emitInheritedCXXConstructorCall(e->getConstructor(),
+                                        e->constructsVBase(), slot.getAddress(),
+                                        e->inheritedFromVBase(), e);
   }
 
   /// Emit the initializer for a std::initializer_list initialized with a
@@ -671,6 +702,8 @@ void AggExprEmitter::emitArrayInit(Address destPtr, cir::ArrayType arrayTy,
 
   const uint64_t numInitElements = args.size();
 
+  bool setArrayInitLoopExprScope = isa<ArrayInitLoopExpr>(e);
+
   const QualType elementType =
       cgf.getContext().getAsArrayType(arrayQTy)->getElementType();
 
@@ -768,6 +801,15 @@ void AggExprEmitter::emitArrayInit(Address destPtr, cir::ArrayType arrayTy,
           LValue elementLV = cgf.makeAddrLValue(
               Address(currentElement, cirElementType, elementAlign),
               elementType);
+
+          mlir::Value idx;
+          if (setArrayInitLoopExprScope)
+            idx = cir::PtrDiffOp::create(b, loc, cgf.ptrDiffTy, currentElement,
+                                         begin);
+
+          CIRGenFunction::ArrayInitLoopExprScope loopExprScope(
+              cgf, setArrayInitLoopExprScope, idx);
+
           if (arrayFiller)
             emitInitializationToLValue(arrayFiller, elementLV);
           else
@@ -920,12 +962,11 @@ void AggExprEmitter::emitNullInitializationToLValue(mlir::Location loc,
 void AggExprEmitter::VisitLambdaExpr(LambdaExpr *e) {
   CIRGenFunction::SourceLocRAIIObject loc{cgf, cgf.getLoc(e->getSourceRange())};
   AggValueSlot slot = ensureSlot(cgf.getLoc(e->getSourceRange()), e->getType());
-  [[maybe_unused]] LValue slotLV =
-      cgf.makeAddrLValue(slot.getAddress(), e->getType());
+  LValue slotLV = cgf.makeAddrLValue(slot.getAddress(), e->getType());
 
   // We'll need to enter cleanup scopes in case any of the element
   // initializers throws an exception or contains branch out of the expressions.
-  assert(!cir::MissingFeatures::opScopeCleanupRegion());
+  CIRGenFunction::CleanupDeactivationScope deactivationScope(cgf);
 
   for (auto [curField, capture, captureInit] : llvm::zip(
            e->getLambdaClass()->fields(), e->captures(), e->capture_inits())) {
@@ -952,9 +993,13 @@ void AggExprEmitter::VisitLambdaExpr(LambdaExpr *e) {
     emitInitializationToLValue(captureInit, lv);
 
     // Push a destructor if necessary.
-    if ([[maybe_unused]] QualType::DestructionKind DtorKind =
-            curField->getType().isDestructedType())
-      cgf.cgm.errorNYI(e->getSourceRange(), "lambda with destructed field");
+    if (QualType::DestructionKind dtorKind =
+            curField->getType().isDestructedType()) {
+      assert(lv.isSimple());
+      cgf.pushDestroyAndDeferDeactivation(NormalAndEHCleanup, lv.getAddress(),
+                                          curField->getType(),
+                                          cgf.getDestroyer(dtorKind), false);
+    }
   }
 }
 
