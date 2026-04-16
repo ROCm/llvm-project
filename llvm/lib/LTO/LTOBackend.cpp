@@ -22,8 +22,10 @@
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/CGData/CodeGenData.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/LLVMRemarkStreamer.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/LTO/LTO.h"
@@ -74,6 +76,10 @@ static cl::opt<bool> ThinLTOAssumeMerged(
     "thinlto-assume-merged", cl::init(false),
     cl::desc("Assume the input has already undergone ThinLTO function "
              "importing and the other pre-optimization pipeline changes."));
+
+static cl::opt<bool> DisableNPMForBackend(
+      "disable-npm-for-backend", cl::init(false),
+      cl::desc("Disable NPM for backend"));
 
 static cl::list<std::string>
     SaveModulesList("filter-save-modules", cl::value_desc("module names"),
@@ -502,7 +508,49 @@ static void codegen(const CodegenConfig &Conf, TargetMachine *TM,
   // Stream->commit() is called. The commit function of CacheStream deletes
   // the raw stream, which is too early as streamers (e.g. MCAsmStreamer)
   // keep the pointer and may use it until their destruction. See #138194.
-  {
+  if (TM && TM->ShouldUseNPMForBackend() &&
+      !DisableNPMForBackend) {
+    MachineModuleInfo MMI(TM);
+    PassInstrumentationCallbacks PIC;
+    MachineFunctionAnalysisManager MFAM;
+    LoopAnalysisManager LAM;
+    FunctionAnalysisManager FAM;
+    CGSCCAnalysisManager CGAM;
+    ModuleAnalysisManager MAM;
+    PassBuilder PB(TM, PipelineTuningOptions(), std::nullopt, &PIC);
+
+    TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);  
+    FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
+    MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+    MAM.registerPass([&] {
+      return RuntimeLibraryAnalysis(
+          Mod.getTargetTriple(), TM->Options.ExceptionModel,
+          TM->Options.FloatABIType, TM->Options.EABIVersion,
+          TM->Options.MCOptions.ABIName, TM->Options.VecLib);
+    });
+
+    if (!isEmptyModule(Mod))
+      MAM.registerPass([&] { return ImmutableModuleSummaryIndexAnalysis(&CombinedIndex);  });
+    
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.registerMachineFunctionAnalyses(MFAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
+
+    ModulePassManager MPM;
+    FunctionPassManager FPM;
+
+    if (TM->buildCodeGenPipeline(MPM, MAM,*Stream->OS, DwoOut ? &DwoOut->os() : nullptr,
+        Conf.CGFileType, CGPassBuilderOption(), MMI.getContext(), &PIC))
+      report_fatal_error("Failed to setup codegen");
+    
+    MPM.run(Mod, MAM);
+    
+    if (DwoOut)
+      DwoOut->keep();
+  } else {
     legacy::PassManager CodeGenPasses;
     TargetLibraryInfoImpl TLII(Mod.getTargetTriple(), TM->Options.VecLib);
     CodeGenPasses.add(new TargetLibraryInfoWrapperPass(TLII));
