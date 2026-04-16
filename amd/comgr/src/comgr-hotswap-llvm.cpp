@@ -38,7 +38,8 @@ LLVMState InitLLVMImpl(const std::string &isa_name,
 
   LLVMState state;
   state.cpu = ExtractCPU(isa_name);
-  if (state.cpu.empty()) return state;
+  if (state.cpu.empty())
+    return state;
 
   if (cached_target) {
     state.target = cached_target;
@@ -47,22 +48,27 @@ LLVMState InitLLVMImpl(const std::string &isa_name,
     llvm::Triple triple(kAMDGPUTriple);
     state.target = llvm::TargetRegistry::lookupTarget("amdgcn", triple, error);
   }
-  if (!state.target) return state;
+  if (!state.target)
+    return state;
 
   state.MRI.reset(state.target->createMCRegInfo(kAMDGPUTriple));
-  if (!state.MRI) return state;
+  if (!state.MRI)
+    return state;
 
   llvm::MCTargetOptions mc_opts;
   state.MAI.reset(
       state.target->createMCAsmInfo(*state.MRI, kAMDGPUTriple, mc_opts));
-  if (!state.MAI) return state;
+  if (!state.MAI)
+    return state;
 
   state.MCII.reset(state.target->createMCInstrInfo());
-  if (!state.MCII) return state;
+  if (!state.MCII)
+    return state;
 
   state.STI.reset(
       state.target->createMCSubtargetInfo(kAMDGPUTriple, state.cpu, ""));
-  if (!state.STI || !state.STI->isCPUStringValid(state.cpu)) return state;
+  if (!state.STI || !state.STI->isCPUStringValid(state.cpu))
+    return state;
 
   state.Ctx = std::make_unique<llvm::MCContext>(
       kAMDGPUTriple, state.MAI.get(), state.MRI.get(), state.STI.get());
@@ -72,7 +78,8 @@ LLVMState InitLLVMImpl(const std::string &isa_name,
 
   state.disasm.reset(
       state.target->createMCDisassembler(*state.STI, *state.Ctx));
-  if (!state.disasm) return state;
+  if (!state.disasm)
+    return state;
 
   unsigned asm_variant = state.MAI->getAssemblerDialect();
   state.printer.reset(state.target->createMCInstPrinter(
@@ -106,7 +113,8 @@ LLVMState InitLLVMCached(const std::string &isa_name) {
 
 static std::string ExtractMnemonic(const std::string &printed) {
   size_t s = printed.find_first_not_of(" \t");
-  if (s == std::string::npos) return "";
+  if (s == std::string::npos)
+    return "";
   size_t e = printed.find_first_of(" \t", s);
   return printed.substr(s, e - s);
 }
@@ -122,9 +130,10 @@ static std::string PrintInstStr(const llvm::MCInst &inst,
 
 // ── Instruction decode ───────────────────────────────────────────────────────
 
-[[nodiscard]] bool DecodeTextSection(const uint8_t *text, uint64_t text_size,
-                                     const LLVMState &llvm_state,
-                                     std::vector<InternalDecodedInst> &decoded) {
+[[nodiscard]] bool
+DecodeTextSection(const uint8_t *text, uint64_t text_size,
+                  const LLVMState &llvm_state,
+                  std::vector<InternalDecodedInst> &decoded) {
   uint64_t pos = 0;
   while (pos < text_size) {
     InternalDecodedInst di;
@@ -176,7 +185,8 @@ llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
   llvm::MCAsmBackend *mab = llvm_state.target->createMCAsmBackend(
       *llvm_state.STI, *llvm_state.MRI, mc_opts);
 
-  if (!ce || !mab) return {};
+  if (!ce || !mab)
+    return {};
 
   auto streamer = std::unique_ptr<llvm::MCStreamer>(
       llvm_state.target->createMCObjectStreamer(
@@ -185,33 +195,38 @@ llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
           mab->createObjectWriter(*bos),
           std::unique_ptr<llvm::MCCodeEmitter>(ce), *llvm_state.STI));
 
-  if (!streamer) return {};
+  if (!streamer)
+    return {};
 
-  auto parser = std::unique_ptr<llvm::MCAsmParser>(
-      llvm::createMCAsmParser(src_mgr, *llvm_state.Ctx, *streamer,
-                              *llvm_state.MAI));
+  auto parser = std::unique_ptr<llvm::MCAsmParser>(llvm::createMCAsmParser(
+      src_mgr, *llvm_state.Ctx, *streamer, *llvm_state.MAI));
   auto tap = std::unique_ptr<llvm::MCTargetAsmParser>(
       llvm_state.target->createMCAsmParser(*llvm_state.STI, *parser,
                                            *llvm_state.MCII, mc_opts));
-  if (!tap) return {};
+  if (!tap)
+    return {};
   parser->setTargetParser(*tap);
 
-  if (parser->Run(true)) return {};
+  if (parser->Run(true))
+    return {};
 
   bos.reset();
   data_stream->flush();
 
   const uint8_t *elf_bytes = reinterpret_cast<const uint8_t *>(data.data());
   size_t elf_sz = data.size();
-  if (elf_sz < kMinElfSize) return {};
+  if (elf_sz < kMinElfSize)
+    return {};
 
   ElfInfo asm_elf;
-  if (!ParseElfInfo(elf_bytes, elf_sz, asm_elf)) return {};
-  if (asm_elf.text_size == 0) return {};
+  if (!ParseElfInfo(elf_bytes, elf_sz, asm_elf))
+    return {};
+  if (asm_elf.text_size == 0)
+    return {};
 
   return llvm::SmallVector<uint8_t, 16>(elf_bytes + asm_elf.text_offset,
-                                       elf_bytes + asm_elf.text_offset +
-                                           asm_elf.text_size);
+                                        elf_bytes + asm_elf.text_offset +
+                                            asm_elf.text_size);
 }
 
 // ── ApplyMnemonicSwap ────────────────────────────────────────────────────────
@@ -219,11 +234,13 @@ llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
 [[nodiscard]] bool ApplyMnemonicSwap(const RewriteRule &rule,
                                      InternalDecodedInst &inst, uint8_t *text,
                                      const LLVMState &llvm_state) {
-  if (!llvm_state.printer) return false;
+  if (!llvm_state.printer)
+    return false;
 
   std::string printed = PrintInstStr(inst.inst, llvm_state);
   size_t start = printed.find_first_not_of(" \t");
-  if (start == std::string::npos) return false;
+  if (start == std::string::npos)
+    return false;
   size_t end = printed.find_first_of(" \t", start);
 
   std::string new_asm = (end != std::string::npos)
@@ -231,7 +248,8 @@ llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
                             : rule.replace_mnemonic;
 
   auto bytes = AssembleSingleInst(new_asm, llvm_state);
-  if (bytes.empty() || bytes.size() != inst.size) return false;
+  if (bytes.empty() || bytes.size() != inst.size)
+    return false;
 
   std::memcpy(text + inst.offset, bytes.data(), inst.size);
   return true;
@@ -240,8 +258,7 @@ llvm::SmallVector<uint8_t, 16> AssembleSingleInst(const std::string &asm_str,
 // ── BuildTrampoline ──────────────────────────────────────────────────────────
 
 Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
-                           uint64_t original_offset,
-                           uint32_t original_size,
+                           uint64_t original_offset, uint32_t original_size,
                            uint64_t trampoline_text_offset,
                            const RewriteConfig &config,
                            const LLVMState &llvm_state) {
@@ -254,9 +271,10 @@ Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
   for (auto &line : asm_lines)
     asm_source += line + "\n";
 
-  auto bytes = AssembleSingleInst(
-      asm_source.substr(kTextDirective.size()), llvm_state);
-  if (bytes.empty()) return result;
+  auto bytes =
+      AssembleSingleInst(asm_source.substr(kTextDirective.size()), llvm_state);
+  if (bytes.empty())
+    return result;
 
   result.bytes = std::move(bytes);
 
@@ -281,9 +299,11 @@ static constexpr llvm::StringLiteral kVgprPrefix("VGPR");
 
 int GetVgprNum(unsigned reg, const llvm::MCRegisterInfo &MRI) {
   const char *name = MRI.getName(reg);
-  if (!name) return -1;
+  if (!name)
+    return -1;
   llvm::StringRef rname(name);
-  if (!rname.starts_with(kVgprPrefix)) return -1;
+  if (!rname.starts_with(kVgprPrefix))
+    return -1;
   llvm::StringRef numpart = rname.drop_front(kVgprPrefix.size());
   size_t underscore = numpart.find('_');
   if (underscore != llvm::StringRef::npos)
@@ -291,19 +311,23 @@ int GetVgprNum(unsigned reg, const llvm::MCRegisterInfo &MRI) {
   int val = -1;
   auto [ptr, ec] =
       std::from_chars(numpart.data(), numpart.data() + numpart.size(), val);
-  if (ec != std::errc()) return -1;
+  if (ec != std::errc())
+    return -1;
   return val;
 }
 
 std::pair<int, int> GetVgprRange(unsigned reg,
                                  const llvm::MCRegisterInfo &MRI) {
   const char *name = MRI.getName(reg);
-  if (!name) return {-1, 0};
+  if (!name)
+    return {-1, 0};
   llvm::StringRef rname(name);
-  if (!rname.starts_with(kVgprPrefix)) return {-1, 0};
+  if (!rname.starts_with(kVgprPrefix))
+    return {-1, 0};
   int count = 1;
   for (char c : rname)
-    if (c == '_') count++;
+    if (c == '_')
+      count++;
   llvm::StringRef numpart = rname.drop_front(kVgprPrefix.size());
   size_t numend = numpart.find_first_not_of("0123456789");
   if (numend != llvm::StringRef::npos)
@@ -316,12 +340,14 @@ std::pair<int, int> GetVgprRange(unsigned reg,
   return {base, count};
 }
 
-std::pair<int, int>
-GetOperandVgprRange(const llvm::MCInst &inst, unsigned op_idx,
-                    const llvm::MCRegisterInfo &MRI) {
-  if (op_idx >= inst.getNumOperands()) return {-1, 0};
+std::pair<int, int> GetOperandVgprRange(const llvm::MCInst &inst,
+                                        unsigned op_idx,
+                                        const llvm::MCRegisterInfo &MRI) {
+  if (op_idx >= inst.getNumOperands())
+    return {-1, 0};
   const auto &op = inst.getOperand(op_idx);
-  if (!op.isReg()) return {-1, 0};
+  if (!op.isReg())
+    return {-1, 0};
   return GetVgprRange(op.getReg(), MRI);
 }
 
@@ -333,34 +359,60 @@ std::string PrintInst(const InternalDecodedInst &di,
 }
 
 bool RangesOverlap(int base1, int count1, int base2, int count2) {
-  if (base1 < 0 || base2 < 0) return false;
+  if (base1 < 0 || base2 < 0)
+    return false;
   return base1 < base2 + count2 && base2 < base1 + count1;
 }
 
 // ── WMMA co-execution hazard overlap check ──────────────────────────────────
 
+static std::vector<std::pair<int, int>>
+CollectExplicitVgprRanges(const llvm::MCInst &inst, unsigned begin_idx,
+                          unsigned end_idx, const llvm::MCRegisterInfo &MRI) {
+  std::vector<std::pair<int, int>> ranges;
+  end_idx = std::min(end_idx, inst.getNumOperands());
+  for (unsigned i = begin_idx; i < end_idx; ++i) {
+    const auto &op = inst.getOperand(i);
+    if (!op.isReg())
+      continue;
+    auto range = GetVgprRange(op.getReg(), MRI);
+    if (range.first >= 0)
+      ranges.push_back(range);
+  }
+  return ranges;
+}
+
 bool CheckVgprOverlap(const llvm::MCInst &wmma_inst,
                       const llvm::MCInst &valu_inst,
+                      const llvm::MCInstrInfo &MCII,
                       const llvm::MCRegisterInfo &MRI) {
-  std::vector<std::pair<int, int>> wmma_input_ranges;
-  for (unsigned i = 0; i < wmma_inst.getNumOperands(); ++i) {
-    const auto &op = wmma_inst.getOperand(i);
-    if (!op.isReg()) continue;
-    auto range = GetVgprRange(op.getReg(), MRI);
-    if (range.first >= 0) wmma_input_ranges.push_back(range);
-  }
-  if (wmma_input_ranges.empty()) return false;
+  const llvm::MCInstrDesc &wmma_desc = MCII.get(wmma_inst.getOpcode());
+  const llvm::MCInstrDesc &valu_desc = MCII.get(valu_inst.getOpcode());
 
-  static constexpr unsigned kDestOperandIdx = 0;
-  if (valu_inst.getNumOperands() == 0) return false;
-  const auto &dest_op = valu_inst.getOperand(kDestOperandIdx);
-  if (!dest_op.isReg()) return false;
-  auto valu_dest = GetVgprRange(dest_op.getReg(), MRI);
-  if (valu_dest.first < 0) return false;
+  std::vector<std::pair<int, int>> wmma_defs =
+      CollectExplicitVgprRanges(wmma_inst, 0, wmma_desc.getNumDefs(), MRI);
+  std::vector<std::pair<int, int>> wmma_regs =
+      CollectExplicitVgprRanges(wmma_inst, 0, wmma_inst.getNumOperands(), MRI);
+  std::vector<std::pair<int, int>> valu_defs =
+      CollectExplicitVgprRanges(valu_inst, 0, valu_desc.getNumDefs(), MRI);
+  std::vector<std::pair<int, int>> valu_uses = CollectExplicitVgprRanges(
+      valu_inst, valu_desc.getNumDefs(), valu_inst.getNumOperands(), MRI);
 
-  for (const auto &wr : wmma_input_ranges) {
-    if (RangesOverlap(wr.first, wr.second, valu_dest.first, valu_dest.second))
-      return true;
+  for (const auto &wmma_def : wmma_defs) {
+    for (const auto &valu_use : valu_uses) {
+      if (RangesOverlap(wmma_def.first, wmma_def.second, valu_use.first,
+                        valu_use.second))
+        return true;
+    }
   }
+
+  for (const auto &wmma_reg : wmma_regs) {
+    for (const auto &valu_def : valu_defs) {
+      if (RangesOverlap(wmma_reg.first, wmma_reg.second, valu_def.first,
+                        valu_def.second))
+        return true;
+    }
+  }
+
   return false;
 }

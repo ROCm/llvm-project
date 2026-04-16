@@ -10,12 +10,13 @@
 /// comgr-hotswap-*.cpp compilation units. Not part of the public COMGR API.
 ///
 /// Module structure:
-///   comgr-hotswap-elf.cpp       — ELF parsing, binary helpers, trampoline growth
-///   comgr-hotswap-dwarf.cpp     — DWARF debug section patching
-///   comgr-hotswap-llvm.cpp      — LLVM MC infrastructure (disasm/asm/encode)
-///   comgr-hotswap-liveness.cpp  — CFG, backward liveness, scratch allocator
-///   comgr-hotswap-b0a0.cpp      — ISA rewrite policy (e.g., GFX1250 B0-to-A0)
-///   comgr-hotswap.cpp           — Public C API entry points
+///   comgr-hotswap-elf.cpp         — ELF parsing and trampoline growth
+///   comgr-hotswap-dwarf.cpp       — DWARF patching
+///   comgr-hotswap-llvm.cpp        — LLVM MC decode/encode support
+///   comgr-hotswap-liveness.cpp    — CFG, liveness, scratch allocator
+///   comgr-hotswap-patch-*.cpp     — Independent patch implementations
+///   comgr-hotswap-b0a0.cpp        — GFX1250 B0-to-A0 rewrite policy
+///   comgr-hotswap.cpp             — Public C API entry points
 ///
 //===----------------------------------------------------------------------===//
 
@@ -79,7 +80,10 @@ struct MallocBuffer {
 
   explicit operator bool() const { return data != nullptr; }
   uint8_t *get() const { return data.get(); }
-  uint8_t *release() { size = 0; return data.release(); }
+  uint8_t *release() {
+    size = 0;
+    return data.release();
+  }
 };
 
 // ── Logging ──────────────────────────────────────────────────────────────────
@@ -313,14 +317,6 @@ struct WmmaNopReq {
   int a0_nops;
 };
 
-struct WmmaHazard {
-  size_t wmma_idx;
-  size_t valu_idx;
-  int existing_nops;
-  int needed_nops;
-  int deficit;
-};
-
 struct KernelPatchStats {
   int extra_vgprs = 0;
   int scratch_reused = 0;
@@ -360,8 +356,8 @@ std::string FindKernelAtOffset(const ElfInfo &elf_info, uint64_t text_offset);
                                     uint32_t s_nop_opcode);
 void UpdateKernelDescriptor(uint8_t *elf_data, size_t elf_size,
                             const ElfInfo &elf_info,
-                            const std::string &kernel_name,
-                            int32_t extra_vgprs, int32_t extra_sgprs);
+                            const std::string &kernel_name, int32_t extra_vgprs,
+                            int32_t extra_sgprs);
 NopSled *FindNearestSled(std::vector<NopSled> &sleds, uint64_t offset,
                          uint64_t needed);
 MallocBuffer GrowElfWithTrampolines(const uint8_t *elf, size_t elf_size,
@@ -369,15 +365,18 @@ MallocBuffer GrowElfWithTrampolines(const uint8_t *elf, size_t elf_size,
                                     const std::vector<Trampoline> &trampolines);
 bool PatchElfIsa(uint8_t *elf, size_t elf_size, const std::string &target_cpu);
 int GetKernelVgprCount(const uint8_t *elf_data, size_t elf_size,
-                       const ElfInfo &elf_info,
-                       const std::string &kernel_name);
+                       const ElfInfo &elf_info, const std::string &kernel_name);
+[[nodiscard]] bool EmitReplacementCode(PatchContext &ctx, uint64_t inst_offset,
+                                       uint32_t inst_size,
+                                       const std::vector<uint8_t> &replacement);
 
 // dwarf
 uint8_t *FindSectionHeader(uint8_t *elf, size_t elf_size, const char *name,
                            int *out_idx = nullptr);
-[[nodiscard]] bool AddTrampolineSymbols(
-    MallocBuffer &elf_buf, const std::vector<Trampoline> &trampolines,
-    uint64_t text_size_before, int text_section_idx);
+[[nodiscard]] bool
+AddTrampolineSymbols(MallocBuffer &elf_buf,
+                     const std::vector<Trampoline> &trampolines,
+                     uint64_t text_size_before, int text_section_idx);
 [[nodiscard]] bool PatchDebugLine(MallocBuffer &elf_buf,
                                   const std::vector<Trampoline> &trampolines,
                                   uint64_t text_size_before,
@@ -409,17 +408,16 @@ Trampoline BuildTrampoline(const std::vector<std::string> &asm_lines,
 std::string PrintInst(const InternalDecodedInst &di,
                       const LLVMState &llvm_state);
 int GetVgprNum(unsigned reg, const llvm::MCRegisterInfo &MRI);
-std::pair<int, int> GetVgprRange(unsigned reg,
-                                 const llvm::MCRegisterInfo &MRI);
+std::pair<int, int> GetVgprRange(unsigned reg, const llvm::MCRegisterInfo &MRI);
 std::pair<int, int> GetOperandVgprRange(const llvm::MCInst &inst,
                                         unsigned op_idx,
                                         const llvm::MCRegisterInfo &MRI);
 bool RangesOverlap(int base1, int count1, int base2, int count2);
 bool CheckVgprOverlap(const llvm::MCInst &wmma_inst,
                       const llvm::MCInst &valu_inst,
+                      const llvm::MCInstrInfo &MCII,
                       const llvm::MCRegisterInfo &MRI);
 WmmaNopReq ClassifyWmmaNops(const std::string &mnemonic);
-bool IsValuInst(const std::string &mnemonic);
 
 // liveness
 RegDefUse GetInstRegDefUse(const llvm::MCInst &inst,
@@ -434,19 +432,18 @@ LivenessInfo ComputeLiveness(const std::vector<InternalDecodedInst> &decoded,
                              unsigned max_vgprs);
 [[nodiscard]] bool VerifyPatchCorrectness(
     const uint8_t *text, uint64_t text_size, const LLVMState &llvm_state,
-    const std::vector<ScratchPatchInfo> &scratch_patches,
-    unsigned max_vgprs);
+    const std::vector<ScratchPatchInfo> &scratch_patches, unsigned max_vgprs);
 
 // policy — dispatcher
-amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
-                                          size_t elf_size, void **out_data,
-                                          size_t *out_size);
+amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data, size_t elf_size,
+                                          void **out_data, size_t *out_size);
 
 // policy — patch entry points (weak stubs in b0a0.cpp)
 //
-// Each group is defined as a weak symbol in comgr-hotswap-b0a0.cpp returning 0.
+// Per-instruction groups keep weak no-op stubs in comgr-hotswap-b0a0.cpp.
 // Patch .cpp files provide strong definitions that override the stubs at link
-// time, allowing patches to land as independent PRs.
+// time, allowing patches to land as independent PRs. Whole-kernel passes may
+// instead use weak declarations with guarded call sites.
 
 /// Per-instruction patches that rewrite in place without changing code size:
 ///  - cluster_load -> global_load mnemonic swap

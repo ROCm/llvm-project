@@ -68,9 +68,8 @@ BuildCFG(const std::vector<InternalDecodedInst> &decoded,
 }
 
 __attribute__((weak)) LivenessInfo
-ComputeLiveness(const std::vector<InternalDecodedInst> &decoded,
-                const CFG &, const llvm::MCInstrInfo &,
-                const llvm::MCRegisterInfo &,
+ComputeLiveness(const std::vector<InternalDecodedInst> &decoded, const CFG &,
+                const llvm::MCInstrInfo &, const llvm::MCRegisterInfo &,
                 unsigned max_vgprs) {
   LivenessInfo info;
   llvm::BitVector all_live(max_vgprs);
@@ -81,9 +80,9 @@ ComputeLiveness(const std::vector<InternalDecodedInst> &decoded,
   return info;
 }
 
-__attribute__((weak)) RegDefUse
-GetInstRegDefUse(const llvm::MCInst &, const llvm::MCInstrInfo &,
-                 const llvm::MCRegisterInfo &) {
+__attribute__((weak)) RegDefUse GetInstRegDefUse(const llvm::MCInst &,
+                                                 const llvm::MCInstrInfo &,
+                                                 const llvm::MCRegisterInfo &) {
   return {};
 }
 
@@ -91,8 +90,7 @@ __attribute__((weak)) int64_t GetBranchImm(const llvm::MCInst &) { return 0; }
 
 __attribute__((weak)) bool
 VerifyPatchCorrectness(const uint8_t *, uint64_t, const LLVMState &,
-                       const std::vector<ScratchPatchInfo> &,
-                       unsigned) {
+                       const std::vector<ScratchPatchInfo> &, unsigned) {
   return true;
 }
 
@@ -102,20 +100,20 @@ __attribute__((weak)) uint8_t *FindSectionHeader(uint8_t *, size_t,
                                                  const char *, int *) {
   return nullptr;
 }
-__attribute__((weak)) bool
-AddTrampolineSymbols(MallocBuffer &, const std::vector<Trampoline> &,
-                     uint64_t, int) {
+__attribute__((weak)) bool AddTrampolineSymbols(MallocBuffer &,
+                                                const std::vector<Trampoline> &,
+                                                uint64_t, int) {
   return true;
 }
-__attribute__((weak)) bool
-PatchDebugLine(MallocBuffer &, const std::vector<Trampoline> &, uint64_t,
-               uint64_t) {
+__attribute__((weak)) bool PatchDebugLine(MallocBuffer &,
+                                          const std::vector<Trampoline> &,
+                                          uint64_t, uint64_t) {
   return true;
 }
 __attribute__((weak)) void PatchDebugRanges(uint8_t *, size_t, uint64_t,
                                             uint64_t, uint64_t) {}
-__attribute__((weak)) void PatchDebugInfo(uint8_t *, size_t, uint64_t,
-                                          uint64_t, uint64_t) {}
+__attribute__((weak)) void PatchDebugInfo(uint8_t *, size_t, uint64_t, uint64_t,
+                                          uint64_t) {}
 __attribute__((weak)) void PatchDebugFrame(uint8_t *, size_t, uint64_t,
                                            uint64_t, uint64_t) {}
 
@@ -144,9 +142,9 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
 
 // ── Sled-or-trampoline code emission ─────────────────────────────────────────
 
-[[nodiscard]] static bool EmitToNopSled(
-    PatchContext &ctx, NopSled &sled, uint64_t inst_offset, uint32_t inst_size,
-    const std::vector<uint8_t> &replacement) {
+[[nodiscard]] static bool
+EmitToNopSled(PatchContext &ctx, NopSled &sled, uint64_t inst_offset,
+              uint32_t inst_size, const std::vector<uint8_t> &replacement) {
   const auto &cfg = ctx.config;
   std::memcpy(ctx.text + sled.write_pos, replacement.data(),
               replacement.size());
@@ -159,8 +157,7 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
               kMinInstSize);
 
   uint8_t br_fwd[kMinInstSize];
-  if (!EncodeSBranch(inst_offset, sled.write_pos, br_fwd,
-                     cfg.s_branch_opcode))
+  if (!EncodeSBranch(inst_offset, sled.write_pos, br_fwd, cfg.s_branch_opcode))
     return false;
   std::memcpy(ctx.text + inst_offset, br_fwd, kMinInstSize);
 
@@ -173,9 +170,9 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
   return true;
 }
 
-[[nodiscard]] static bool EmitToTrampoline(
-    PatchContext &ctx, uint64_t inst_offset, uint32_t inst_size,
-    const std::vector<uint8_t> &replacement) {
+[[nodiscard]] static bool
+EmitToTrampoline(PatchContext &ctx, uint64_t inst_offset, uint32_t inst_size,
+                 const std::vector<uint8_t> &replacement) {
   uint64_t tramp_offset = ctx.text_size;
   for (auto &t : ctx.out_trampolines)
     tramp_offset += t.bytes.size();
@@ -195,9 +192,9 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
   return true;
 }
 
-[[nodiscard]] static bool EmitReplacementCode(
-    PatchContext &ctx, uint64_t inst_offset, uint32_t inst_size,
-    const std::vector<uint8_t> &replacement, const char *desc = nullptr) {
+[[nodiscard]] bool
+EmitReplacementCode(PatchContext &ctx, uint64_t inst_offset, uint32_t inst_size,
+                    const std::vector<uint8_t> &replacement) {
   uint64_t needed = replacement.size() + kMinInstSize;
   NopSled *sled = FindNearestSled(ctx.nop_sleds, inst_offset, needed);
 
@@ -207,193 +204,21 @@ BuildNopSledMap(const std::vector<InternalDecodedInst> &decoded) {
   return EmitToTrampoline(ctx, inst_offset, inst_size, replacement);
 }
 
-// ── WMMA hazard helpers ─────────────────────────────────────────────────────
-
-WmmaNopReq ClassifyWmmaNops(const std::string &mnemonic) {
-  llvm::StringRef mnemonic_ref(mnemonic);
-  bool is_wmma = mnemonic_ref.starts_with("v_wmma");
-  bool is_swmmac = mnemonic_ref.starts_with("v_swmmac");
-  if (!is_wmma && !is_swmmac)
-    return {4, 4};
-
-  if (mnemonic_ref.contains("_iu8") || mnemonic_ref.contains("_iu4"))
-    return {8, 4};
-
-  if (mnemonic_ref.contains("f8f6f4"))
-    return {1, 4};
-
-  bool has_f8 = mnemonic_ref.contains("_fp8") ||
-                mnemonic_ref.contains("_f8") ||
-                mnemonic_ref.contains("_bf8");
-  if (has_f8) {
-    if (mnemonic_ref.contains("16x16x128"))
-      return {3, 4};
-    return {1, 4};
-  }
-
-  if (mnemonic_ref.contains("_f16") || mnemonic_ref.contains("_bf16"))
-    return {4, 4};
-
-  return {4, 4};
-}
-
-bool IsValuInst(const std::string &mnemonic) {
-  llvm::StringRef mnemonic_ref(mnemonic);
-  if (!mnemonic_ref.starts_with("v_"))
-    return false;
-  if (mnemonic_ref == "v_nop")
-    return false;
-  if (mnemonic_ref.starts_with("v_wmma"))
-    return false;
-  if (mnemonic_ref.starts_with("v_swmmac"))
-    return false;
-  return true;
-}
-
-static bool IsTerminatingSalu(const std::string &mnemonic) {
-  llvm::StringRef mnemonic_ref(mnemonic);
-  return mnemonic_ref.starts_with("s_branch") ||
-         mnemonic_ref.starts_with("s_cbranch") ||
-         mnemonic_ref == "s_endpgm" ||
-         mnemonic_ref == "s_setpc" ||
-         mnemonic_ref == "s_swappc" ||
-         mnemonic_ref == "s_call";
-}
-
-static std::vector<WmmaHazard>
-ValidateWmmaCoexecHazards(const PatchContext &ctx) {
-  std::vector<WmmaHazard> hazards;
-  int wmma_scanned = 0;
-
-  for (size_t wmma_idx = 0; wmma_idx < ctx.decoded.size(); ++wmma_idx) {
-    const auto &wmma = ctx.decoded[wmma_idx];
-    llvm::StringRef mnemonic_ref(wmma.mnemonic);
-    if (!mnemonic_ref.starts_with("v_wmma") &&
-        !mnemonic_ref.starts_with("v_swmmac"))
-      continue;
-
-    ++wmma_scanned;
-    WmmaNopReq requirement = ClassifyWmmaNops(wmma.mnemonic);
-    if (requirement.a0_nops <= requirement.b0_nops)
-      continue;
-
-    int safe_slots = 0;
-    for (size_t valu_idx = wmma_idx + 1; valu_idx < ctx.decoded.size();
-         ++valu_idx) {
-      const auto &candidate = ctx.decoded[valu_idx];
-
-      if (candidate.mnemonic == "v_nop") {
-        ++safe_slots;
-        if (safe_slots >= requirement.a0_nops)
-          break;
-        continue;
-      }
-
-      if (llvm::StringRef(candidate.mnemonic).starts_with("s_")) {
-        if (IsTerminatingSalu(candidate.mnemonic))
-          break;
-        continue;
-      }
-
-      if (IsValuInst(candidate.mnemonic)) {
-        if (!CheckVgprOverlap(wmma.inst, candidate.inst, *ctx.llvm_state.MRI)) {
-          ++safe_slots;
-          if (safe_slots >= requirement.a0_nops)
-            break;
-          continue;
-        }
-
-        if (safe_slots < requirement.a0_nops) {
-          hazards.push_back({wmma_idx, valu_idx, safe_slots,
-                             requirement.a0_nops,
-                             requirement.a0_nops - safe_slots});
-          HotswapLog(HotswapLogLevel::Debug)
-              << "hotswap: WMMA co-exec hazard @0x"
-              << llvm::utohexstr(wmma.offset)
-              << ": " << wmma.mnemonic
-              << " needs " << requirement.a0_nops
-              << " V_NOPs for A0, only " << safe_slots
-              << " found before " << candidate.mnemonic
-              << " @0x" << llvm::utohexstr(candidate.offset) << "\n";
-        }
-        break;
-      }
-
-      break;
-    }
-  }
-
-  HotswapLog(HotswapLogLevel::Info)
-      << "hotswap: WMMA co-exec validation: "
-      << hazards.size() << " hazards ("
-      << wmma_scanned << " WMMA instructions scanned)\n";
-  return hazards;
-}
-
-__attribute__((weak)) uint32_t ApplyWmmaHazardPatch(PatchContext &ctx) {
-  std::vector<WmmaHazard> hazards = ValidateWmmaCoexecHazards(ctx);
-  if (hazards.empty())
-    return 0;
-
-  auto vnop_bytes = AssembleSingleInst("v_nop", ctx.llvm_state);
-  if (vnop_bytes.size() != kMinInstSize) {
-    HotswapLog(HotswapLogLevel::Error)
-        << "hotswap: WMMA hazard: v_nop assembly failed\n";
-    return 0;
-  }
-
-  uint32_t patched = 0;
-  for (const auto &hazard : hazards) {
-    const auto &valu = ctx.decoded[hazard.valu_idx];
-    std::vector<uint8_t> replacement;
-    replacement.reserve(static_cast<size_t>(hazard.deficit) * kMinInstSize +
-                        valu.size);
-
-    for (int nop_count = 0; nop_count < hazard.deficit; ++nop_count)
-      replacement.insert(replacement.end(), vnop_bytes.begin(),
-                         vnop_bytes.end());
-
-    replacement.insert(replacement.end(), ctx.text + valu.offset,
-                       ctx.text + valu.offset + valu.size);
-
-    if (!EmitReplacementCode(ctx, valu.offset, valu.size, replacement,
-                             "wmma-hazard")) {
-      HotswapLog(HotswapLogLevel::Error)
-          << "hotswap: WMMA hazard @0x"
-          << llvm::utohexstr(valu.offset)
-          << ": failed to emit " << hazard.deficit
-          << " v_nop(s)\n";
-      continue;
-    }
-
-    HotswapLog(HotswapLogLevel::Info)
-        << "hotswap: WMMA hazard fix @0x"
-        << llvm::utohexstr(valu.offset)
-        << ": inserted " << hazard.deficit
-        << " v_nop(s)\n";
-    ++patched;
-  }
-
-  return patched;
-}
-
 // ── ApplyGfx1250B0toA0Rules ──────────────────────────────────────────────────
 
-static uint32_t
-ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
-                        uint8_t *text, uint64_t text_size,
-                        const LLVMState &llvm_state,
-                        std::vector<Trampoline> &out_trampolines,
-                        uint8_t *elf_data, size_t elf_size,
-                        const ElfInfo &elf_info,
-                        std::vector<ScratchPatchInfo> &out_scratch_patches,
-                        const RewriteConfig &config) {
+static uint32_t ApplyGfx1250B0toA0Rules(
+    std::vector<InternalDecodedInst> &decoded, uint8_t *text,
+    uint64_t text_size, const LLVMState &llvm_state,
+    std::vector<Trampoline> &out_trampolines, uint8_t *elf_data,
+    size_t elf_size, const ElfInfo &elf_info,
+    std::vector<ScratchPatchInfo> &out_scratch_patches,
+    const RewriteConfig &config) {
   uint32_t patched = 0;
   std::vector<NopSled> nop_sleds = BuildNopSledMap(decoded);
 
   CFG cfg = BuildCFG(decoded, *llvm_state.MCII);
-  LivenessInfo liveness = ComputeLiveness(
-      decoded, cfg, *llvm_state.MCII, *llvm_state.MRI, config.max_vgprs);
+  LivenessInfo liveness = ComputeLiveness(decoded, cfg, *llvm_state.MCII,
+                                          *llvm_state.MRI, config.max_vgprs);
 
   if (!liveness.converged) {
     HotswapLog(HotswapLogLevel::Error)
@@ -409,12 +234,19 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
 
   llvm::StringMap<KernelPatchStats> kernel_stats;
 
-  PatchContext ctx{config,       decoded,     text,
-                   text_size,    llvm_state,
-                   out_trampolines, nop_sleds,
-                   elf_data,     elf_size,
-                   elf_info,     liveness,
-                   kernel_stats, out_scratch_patches};
+  PatchContext ctx{config,
+                   decoded,
+                   text,
+                   text_size,
+                   llvm_state,
+                   out_trampolines,
+                   nop_sleds,
+                   elf_data,
+                   elf_size,
+                   elf_info,
+                   liveness,
+                   kernel_stats,
+                   out_scratch_patches};
 
   for (size_t idx = 0; idx < decoded.size(); ++idx) {
     auto &di = decoded[idx];
@@ -423,16 +255,29 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
 
     uint32_t p = 0;
     p += ApplyInPlacePatches(ctx, idx);
-    if (p) { patched += p; continue; }
+    if (p) {
+      patched += p;
+      continue;
+    }
     p += ApplyTrampolinePatches(ctx, idx);
-    if (p) { patched += p; continue; }
+    if (p) {
+      patched += p;
+      continue;
+    }
     p += ApplyWmmaSplitPatches(ctx, idx);
-    if (p) { patched += p; continue; }
+    if (p) {
+      patched += p;
+      continue;
+    }
     p += ApplyScratchPatches(ctx, idx);
-    if (p) { patched += p; continue; }
+    if (p) {
+      patched += p;
+      continue;
+    }
   }
 
-  patched += ApplyWmmaHazardPatch(ctx);
+  if (ApplyWmmaHazardPatch)
+    patched += ApplyWmmaHazardPatch(ctx);
 
   for (const auto &kv : kernel_stats) {
     llvm::StringRef kname = kv.first();
@@ -449,8 +294,7 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
         GetKernelVgprCount(elf_data, elf_size, elf_info, kname_str);
     HotswapLog(HotswapLogLevel::Info)
         << "hotswap: liveness: kernel " << kname
-        << ": vgprs_before=" << vgprs_before
-        << ", vgprs_after=" << vgprs_after
+        << ": vgprs_before=" << vgprs_before << ", vgprs_after=" << vgprs_after
         << ", scratch_reused=" << stats.scratch_reused
         << ", scratch_above_kd=" << stats.scratch_above_kd << "\n";
   }
@@ -460,9 +304,9 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
 
 // ── RetargetCodeObjectB0A0 — helpers ─────────────────────────────────────────
 
-[[nodiscard]] static bool FixupTrampolineBranches(
-    std::vector<Trampoline> &trampolines, uint8_t *text,
-    uint64_t text_size, const RewriteConfig &config) {
+[[nodiscard]] static bool
+FixupTrampolineBranches(std::vector<Trampoline> &trampolines, uint8_t *text,
+                        uint64_t text_size, const RewriteConfig &config) {
   bool all_ok = true;
   uint64_t tramp_text_offset = text_size;
   for (auto &t : trampolines) {
@@ -483,8 +327,7 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
                 kMinInstSize);
 
     uint8_t br_fwd[kMinInstSize];
-    if (!EncodeSBranch(t.original_offset, tp, br_fwd,
-                       config.s_branch_opcode)) {
+    if (!EncodeSBranch(t.original_offset, tp, br_fwd, config.s_branch_opcode)) {
       HotswapLog(HotswapLogLevel::Error)
           << "hotswap: WARNING: trampoline branch-fwd encoding failed at 0x"
           << llvm::utohexstr(t.original_offset) << "\n";
@@ -503,8 +346,7 @@ ApplyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &decoded,
 
 static void PatchDebugSections(MallocBuffer &elf_buf,
                                const std::vector<Trampoline> &trampolines,
-                               const ElfInfo &elf_info,
-                               size_t tramp_total) {
+                               const ElfInfo &elf_info, size_t tramp_total) {
   if (!AddTrampolineSymbols(elf_buf, trampolines, elf_info.text_size,
                             elf_info.text_section_idx))
     HotswapLog(HotswapLogLevel::Error)
@@ -523,8 +365,7 @@ static void PatchDebugSections(MallocBuffer &elf_buf,
 
 static void RunScratchVerification(
     const void *out_data, size_t out_size, const LLVMState &llvm_state,
-    const std::vector<ScratchPatchInfo> &scratch_patches,
-    unsigned max_vgprs) {
+    const std::vector<ScratchPatchInfo> &scratch_patches, unsigned max_vgprs) {
   ElfInfo verify_elf_info;
   const uint8_t *verify_elf = static_cast<const uint8_t *>(out_data);
   if (!ParseElfInfo(verify_elf, out_size, verify_elf_info) ||
@@ -540,14 +381,14 @@ static void RunScratchVerification(
 
 // ── RetargetCodeObjectB0A0 ───────────────────────────────────────────────────
 
-amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
-                                          size_t elf_size, void **out_data,
-                                          size_t *out_size) {
+amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data, size_t elf_size,
+                                          void **out_data, size_t *out_size) {
   ElfInfo elf_info;
   const uint8_t *elf = static_cast<const uint8_t *>(elf_data);
   if (!ParseElfInfo(elf, elf_size, elf_info) || elf_info.text_size == 0) {
     MallocBuffer copy(elf_size);
-    if (!copy) return AMD_COMGR_STATUS_ERROR;
+    if (!copy)
+      return AMD_COMGR_STATUS_ERROR;
     std::memcpy(copy.get(), elf_data, elf_size);
     *out_size = elf_size;
     *out_data = copy.release();
@@ -556,7 +397,8 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
 
   const std::string isa = "amdgcn-amd-amdhsa--gfx1250";
   LLVMState llvm_state = InitLLVMCached(isa);
-  if (!llvm_state.valid) return AMD_COMGR_STATUS_ERROR;
+  if (!llvm_state.valid)
+    return AMD_COMGR_STATUS_ERROR;
 
   RewriteConfig config = MakeGfx1250B0A0Config();
 
@@ -569,10 +411,9 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
 
   std::vector<Trampoline> deferred;
   std::vector<ScratchPatchInfo> scratch_patches;
-  uint32_t count =
-      ApplyGfx1250B0toA0Rules(decoded, text, elf_info.text_size, llvm_state,
-                              deferred, buf.data(), buf.size(), elf_info,
-                              scratch_patches, config);
+  uint32_t count = ApplyGfx1250B0toA0Rules(
+      decoded, text, elf_info.text_size, llvm_state, deferred, buf.data(),
+      buf.size(), elf_info, scratch_patches, config);
 
   HotswapLog(HotswapLogLevel::Info)
       << "hotswap: applied " << count << " patches\n";
@@ -584,10 +425,12 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
 
     MallocBuffer new_buf =
         GrowElfWithTrampolines(buf.data(), elf_size, elf_info, deferred);
-    if (!new_buf) return AMD_COMGR_STATUS_ERROR;
+    if (!new_buf)
+      return AMD_COMGR_STATUS_ERROR;
 
     size_t tramp_total = 0;
-    for (auto &t : deferred) tramp_total += t.bytes.size();
+    for (auto &t : deferred)
+      tramp_total += t.bytes.size();
 
     PatchDebugSections(new_buf, deferred, elf_info, tramp_total);
 
@@ -595,7 +438,8 @@ amd_comgr_status_t RetargetCodeObjectB0A0(const void *elf_data,
     *out_data = new_buf.release();
   } else {
     MallocBuffer out(elf_size);
-    if (!out) return AMD_COMGR_STATUS_ERROR;
+    if (!out)
+      return AMD_COMGR_STATUS_ERROR;
     std::memcpy(out.get(), buf.data(), elf_size);
     *out_data = out.release();
     *out_size = elf_size;

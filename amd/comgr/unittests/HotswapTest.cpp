@@ -42,15 +42,7 @@ TEST(ClassifyWmmaNops, DistinguishesSteppingRequirements) {
   EXPECT_EQ(fallback.a0_nops, 4);
 }
 
-TEST(IsValuInst, ExcludesNonValuCases) {
-  EXPECT_TRUE(IsValuInst("v_fma_f32"));
-  EXPECT_FALSE(IsValuInst("v_nop"));
-  EXPECT_FALSE(IsValuInst("v_wmma_f32_16x16x64_fp8_fp8"));
-  EXPECT_FALSE(IsValuInst("v_swmmac_f32_16x16x128_fp8_fp8"));
-  EXPECT_FALSE(IsValuInst("s_add_u32"));
-}
-
-TEST(CheckVgprOverlap, UsesValuDestinationForWarHazards) {
+TEST(CheckVgprOverlap, DetectsReadAndWriteHazards) {
   LLVMState llvm_state = InitLLVMCached("amdgcn-amd-amdhsa--gfx1250");
   ASSERT_TRUE(llvm_state.valid);
 
@@ -59,12 +51,16 @@ TEST(CheckVgprOverlap, UsesValuDestinationForWarHazards) {
       llvm_state);
   ASSERT_FALSE(wmma_bytes.empty());
 
-  auto hazard_bytes = AssembleSingleInst("v_fma_f32 v0, v0, v1, v2",
-                                         llvm_state);
-  ASSERT_FALSE(hazard_bytes.empty());
+  auto write_hazard_bytes =
+      AssembleSingleInst("v_fma_f32 v0, v0, v1, v2", llvm_state);
+  ASSERT_FALSE(write_hazard_bytes.empty());
 
-  auto safe_bytes = AssembleSingleInst("v_fma_f32 v40, v0, v1, v2",
-                                       llvm_state);
+  auto read_hazard_bytes =
+      AssembleSingleInst("v_fma_f32 v40, v0, v1, v2", llvm_state);
+  ASSERT_FALSE(read_hazard_bytes.empty());
+
+  auto safe_bytes =
+      AssembleSingleInst("v_fma_f32 v40, v32, v33, v34", llvm_state);
   ASSERT_FALSE(safe_bytes.empty());
 
   std::vector<InternalDecodedInst> wmma_decoded;
@@ -72,20 +68,31 @@ TEST(CheckVgprOverlap, UsesValuDestinationForWarHazards) {
                                 llvm_state, wmma_decoded));
   ASSERT_EQ(wmma_decoded.size(), 1u);
 
-  std::vector<InternalDecodedInst> hazard_decoded;
-  ASSERT_TRUE(DecodeTextSection(hazard_bytes.data(), hazard_bytes.size(),
-                                llvm_state, hazard_decoded));
-  ASSERT_EQ(hazard_decoded.size(), 1u);
+  std::vector<InternalDecodedInst> write_hazard_decoded;
+  ASSERT_TRUE(DecodeTextSection(write_hazard_bytes.data(),
+                                write_hazard_bytes.size(), llvm_state,
+                                write_hazard_decoded));
+  ASSERT_EQ(write_hazard_decoded.size(), 1u);
+
+  std::vector<InternalDecodedInst> read_hazard_decoded;
+  ASSERT_TRUE(DecodeTextSection(read_hazard_bytes.data(),
+                                read_hazard_bytes.size(), llvm_state,
+                                read_hazard_decoded));
+  ASSERT_EQ(read_hazard_decoded.size(), 1u);
 
   std::vector<InternalDecodedInst> safe_decoded;
   ASSERT_TRUE(DecodeTextSection(safe_bytes.data(), safe_bytes.size(),
                                 llvm_state, safe_decoded));
   ASSERT_EQ(safe_decoded.size(), 1u);
 
-  EXPECT_TRUE(CheckVgprOverlap(wmma_decoded[0].inst, hazard_decoded[0].inst,
+  EXPECT_TRUE(CheckVgprOverlap(wmma_decoded[0].inst,
+                               write_hazard_decoded[0].inst, *llvm_state.MCII,
+                               *llvm_state.MRI));
+  EXPECT_TRUE(CheckVgprOverlap(wmma_decoded[0].inst,
+                               read_hazard_decoded[0].inst, *llvm_state.MCII,
                                *llvm_state.MRI));
   EXPECT_FALSE(CheckVgprOverlap(wmma_decoded[0].inst, safe_decoded[0].inst,
-                                *llvm_state.MRI));
+                                *llvm_state.MCII, *llvm_state.MRI));
 }
 
 TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
@@ -97,8 +104,7 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
       llvm_state);
   ASSERT_FALSE(wmma_bytes.empty());
 
-  auto valu_bytes = AssembleSingleInst("v_fma_f32 v0, v0, v1, v2",
-                                       llvm_state);
+  auto valu_bytes = AssembleSingleInst("v_fma_f32 v0, v0, v1, v2", llvm_state);
   ASSERT_FALSE(valu_bytes.empty());
 
   auto vnop_bytes = AssembleSingleInst("v_nop", llvm_state);
@@ -133,10 +139,9 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
   LivenessInfo liveness;
   llvm::StringMap<KernelPatchStats> kernel_stats;
   std::vector<ScratchPatchInfo> scratch_patches;
-  PatchContext ctx{config,         decoded,        text.data(),
-                   text.size(),    llvm_state,     trampolines,
-                   nop_sleds,      text.data(),    text.size(),
-                   elf_info,       liveness,       kernel_stats,
+  PatchContext ctx{config,         decoded,     text.data(), text.size(),
+                   llvm_state,     trampolines, nop_sleds,   text.data(),
+                   text.size(),    elf_info,    liveness,    kernel_stats,
                    scratch_patches};
 
   const auto &valu_inst = decoded[1];
@@ -145,15 +150,14 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
 
   EXPECT_EQ(patched, 1u);
   EXPECT_TRUE(trampolines.empty());
-  EXPECT_EQ(nop_sleds[0].write_pos,
-            original_write_pos + 4 * kMinInstSize + valu_inst.size +
-                kMinInstSize);
+  EXPECT_EQ(nop_sleds[0].write_pos, original_write_pos + 4 * kMinInstSize +
+                                        valu_inst.size + kMinInstSize);
 
   for (int nop_index = 0; nop_index < 4; ++nop_index) {
-    EXPECT_EQ(std::memcmp(text.data() + original_write_pos +
-                              nop_index * kMinInstSize,
-                          vnop_bytes.data(), kMinInstSize),
-              0);
+    EXPECT_EQ(
+        std::memcmp(text.data() + original_write_pos + nop_index * kMinInstSize,
+                    vnop_bytes.data(), kMinInstSize),
+        0);
   }
 
   EXPECT_EQ(std::memcmp(text.data() + original_write_pos + 4 * kMinInstSize,
