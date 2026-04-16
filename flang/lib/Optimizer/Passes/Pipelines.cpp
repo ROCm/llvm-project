@@ -357,7 +357,7 @@ void createOpenMPFIRPassPipeline(mlir::PassManager &pm,
   // to access the data on the offload target device.
   pm.addPass(flangomp::createMapsForPrivatizedSymbolsPass());
   pm.addPass(flangomp::createAutomapToTargetDataPass());
-  pm.addPass(flangomp::createMapInfoFinalizationPass());
+  pm.addPass(flangomp::createMapInfoFinalizationPass(opts.deferDescMap));
   pm.addPass(mlir::omp::createMarkDeclareTargetPass());
 
   // Delete unreachable target operations before FunctionFilteringPass
@@ -425,8 +425,8 @@ void createDefaultFIRCodeGenPassPipeline(mlir::PassManager &pm,
       {framePointerKind, config.InstrumentFunctionEntry,
        config.InstrumentFunctionExit, config.NoInfsFPMath, config.NoNaNsFPMath,
        config.ApproxFuncFPMath, config.NoSignedZerosFPMath, config.UnsafeFPMath,
-       config.Reciprocals, config.PreferVectorWidth, /*tuneCPU=*/"",
-       setNoCapture, setNoAlias}));
+       config.Reciprocals, config.PreferVectorWidth, config.UseSampleProfile,
+       /*tuneCPU=*/"", setNoCapture, setNoAlias}));
 
   if (config.EnableOpenMP) {
     pm.addNestedPass<mlir::func::FuncOp>(
