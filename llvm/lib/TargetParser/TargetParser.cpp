@@ -370,6 +370,7 @@ static void fillAMDGCNFeatureMap(StringRef GPU, const Triple &T,
     Features["swmmac-gfx1200-insts"] = true;
     Features["atomic-fmin-fmax-global-f32"] = true;
     break;
+  case GK_GFX115E:
   case GK_GFX1153:
   case GK_GFX1152:
   case GK_GFX1151:

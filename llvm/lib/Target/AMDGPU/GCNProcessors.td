@@ -304,6 +304,11 @@ def : ProcessorModel<"gfx1153", GFX11SpeedModel,
   FeatureISAVersion11_5_3.Features
 >;
 
+// Internal only
+def : ProcessorModel<"gfx115E", GFX11SpeedModel,
+  FeatureISAVersion11_5_0.Features
+>;
+
 def : ProcessorModel<"gfx1170", GFX11SpeedModel,
   FeatureISAVersion11_7_Common.Features
 >;
@@ -316,7 +321,8 @@ def : ProcessorModel<"gfx1172", GFX11SpeedModel,
   FeatureISAVersion11_7_Common.Features
 >;
 
-// [gfx1100, gfx1101, gfx1102, gfx1103, gfx1150, gfx1151, gfx1152, gfx1153]
+// [gfx1100, gfx1101, gfx1102, gfx1103, gfx1150, gfx1151, gfx1152, gfx1153,
+//  gfx115E]
 def : ProcessorModel<"gfx11-generic", GFX11SpeedModel,
   FeatureISAVersion11_Generic.Features
 >;

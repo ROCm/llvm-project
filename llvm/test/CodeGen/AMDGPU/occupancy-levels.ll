@@ -18,6 +18,8 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1152 -mattr=+wavefrontsize64 < %s | FileCheck --check-prefixes=GCN,GFX1030,GFX1030W64 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1153 < %s | FileCheck --check-prefixes=GCN,GFX1030,GFX1030W32 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1153 -mattr=+wavefrontsize64 < %s | FileCheck --check-prefixes=GCN,GFX1030,GFX1030W64 %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx115E < %s | FileCheck --check-prefixes=GCN,GFX1030,GFX1030W32 %s
+; RUN: llc -mtriple=amdgcn -mcpu=gfx115E -mattr=+wavefrontsize64 < %s | FileCheck --check-prefixes=GCN,GFX1030,GFX1030W64 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1200 < %s | FileCheck --check-prefixes=GCN,GFX1100,GFX1100W32 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -mattr=+wavefrontsize64 < %s | FileCheck --check-prefixes=GCN,GFX1100,GFX1100W64 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1250 < %s | FileCheck --check-prefixes=GCN,GFX1250 %s
