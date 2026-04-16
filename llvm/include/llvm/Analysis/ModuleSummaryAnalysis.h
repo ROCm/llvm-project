@@ -50,7 +50,6 @@ class ModuleSummaryIndexAnalysis
 
 public:
   using Result = ModuleSummaryIndex;
-
   LLVM_ABI Result run(Module &M, ModuleAnalysisManager &AM);
 };
 
@@ -90,6 +89,36 @@ public:
       const ModuleSummaryIndex *Index = nullptr);
   const ModuleSummaryIndex *getIndex() const { return Index; }
   void getAnalysisUsage(AnalysisUsage &AU) const override;
+};
+
+/// NPM analysis to provide an externally-built ModuleSummaryIndex (e.g. the
+/// combined index from LTO). Analogous to the legacy
+/// ImmutableModuleSummaryIndexWrapperPass.
+class ImmutableModuleSummaryIndexAnalysis
+    : public AnalysisInfoMixin<ImmutableModuleSummaryIndexAnalysis> {
+  friend AnalysisInfoMixin<ImmutableModuleSummaryIndexAnalysis>;
+  LLVM_ABI static AnalysisKey Key;
+  const ModuleSummaryIndex *Index = nullptr;
+
+public:
+  class Result {
+    const ModuleSummaryIndex *Index;
+    Result(const ModuleSummaryIndex *Index) : Index(Index) {}
+    friend class ImmutableModuleSummaryIndexAnalysis;
+
+  public:
+    const ModuleSummaryIndex *getIndex() const { return Index; }
+    bool invalidate(Module &, const PreservedAnalyses &,
+                    ModuleAnalysisManager::Invalidator &) {
+      return false;
+    }
+  };
+
+  ImmutableModuleSummaryIndexAnalysis() = default;
+  ImmutableModuleSummaryIndexAnalysis(const ModuleSummaryIndex *Index)
+      : Index(Index) {}
+
+  Result run(Module &M, ModuleAnalysisManager &AM) { return Result(Index); }
 };
 
 //===--------------------------------------------------------------------===//
