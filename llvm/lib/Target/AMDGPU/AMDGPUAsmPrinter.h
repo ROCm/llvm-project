@@ -174,6 +174,8 @@ class AMDGPUAsmPrinterBeginPass : public PassInfoMixin<AMDGPUAsmPrinterBeginPass
   public:
     PreservedAnalyses run(MachineFunction &MF,
                           MachineFunctionAnalysisManager &MFAM);
+    // AsmPrinter needs to run regardless of optimization level.
+    static bool isRequired() { return true; }
   };
   
   class AMDGPUAsmPrinterEndPass : public PassInfoMixin<AMDGPUAsmPrinterEndPass> {

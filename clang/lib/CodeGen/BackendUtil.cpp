@@ -1313,6 +1313,8 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
   PassBuilder PB(TM.get(), PipelineTuningOptions(), std::nullopt, &PIC);
+
+  TargetLibraryInfoImpl TLII(TheModule->getTargetTriple());
   
   PB.registerModuleAnalyses(MAM);
   PB.registerCGSCCAnalyses(CGAM);
@@ -1321,11 +1323,15 @@ void EmitAssemblyHelper::RunCodegenPipelineWithNewPM(BackendAction Action,
   PB.registerMachineFunctionAnalyses(MFAM);
   PB.crossRegisterProxies(LAM, FAM, CGAM, MAM, &MFAM);
   SI.registerCallbacks(PIC, &MAM);
-    
-  TargetLibraryInfoImpl TLII(TheModule->getTargetTriple());
 
   FAM.registerPass([&] { return TargetLibraryAnalysis(TLII); });
   MAM.registerPass([&] { return MachineModuleAnalysis(MMI); });
+  MAM.registerPass([&] {
+    const llvm::TargetOptions &Options = TM->Options;
+    return RuntimeLibraryAnalysis(
+      TargetTriple, Options.ExceptionModel, Options.FloatABIType,
+      Options.EABIVersion, Options.MCOptions.ABIName, Options.VecLib);
+  });
 
   ModulePassManager MPM;
   FunctionPassManager FPM;
