@@ -10,6 +10,7 @@ set(LLVM_LINK_COMPONENTS
   Object
   Support
   TargetParser
+  AllTargetsAsmParsers
   AllTargetsDescs
   AllTargetsDisassemblers
   AllTargetsInfos

@@ -418,6 +418,8 @@ bool RangesOverlap(int base1, int count1, int base2, int count2);
 bool CheckVgprOverlap(const llvm::MCInst &wmma_inst,
                       const llvm::MCInst &valu_inst,
                       const llvm::MCRegisterInfo &MRI);
+WmmaNopReq ClassifyWmmaNops(const std::string &mnemonic);
+bool IsValuInst(const std::string &mnemonic);
 
 // liveness
 RegDefUse GetInstRegDefUse(const llvm::MCInst &inst,
