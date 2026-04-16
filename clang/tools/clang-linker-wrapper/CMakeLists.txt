@@ -34,6 +34,8 @@ add_clang_tool(clang-linker-wrapper
   ${tablegen_deps}
   )
 
+add_clang_symlink(amdgcn-link clang-linker-wrapper)
+
 set(CLANG_LINKER_WRAPPER_LIB_DEPS
   clangBasic
   )
