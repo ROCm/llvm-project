@@ -1,5 +1,6 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
 name: Test Artifacts
-
 
 on:
   workflow_dispatch:
@@ -7,6 +8,9 @@ on:
       artifact_group:
         type: string
       artifact_run_id:
+        type: string
+        default: ""
+      amdgpu_targets:
         type: string
         default: ""
       amdgpu_families:
@@ -20,6 +24,9 @@ on:
         type: string
       test_labels:
         type: string
+      run_functional_tests:
+        type: boolean
+        default: false          
       test_retry_count:
         type: number
         default: 2                  #It will perform one additional try if failed
@@ -31,6 +38,9 @@ on:
       artifact_run_id:
         type: string
         default: ""
+      amdgpu_targets:
+        type: string
+        default: ""          
       amdgpu_families:
         type: string
       test_runs_on:
@@ -46,6 +56,9 @@ on:
         type: number
         default: 2
         required: false
+      run_functional_tests:
+        type: boolean
+        default: false          
           
   push:
     branches:
@@ -56,18 +69,19 @@ permissions:
 
 jobs:
   configure_test_matrix:
-    name: "Configure test matrix"
+    name: "Configure test matrix (${{ inputs.amdgpu_families }})"
     # if there is a test machine available
     if: ${{ inputs.test_runs_on != '' }}
     runs-on: ${{ inputs.test_runs_on }}
     outputs:
+      sanity_component: ${{ steps.configure.outputs.sanity_component }}
       components: ${{ steps.configure.outputs.components }}
       platform: ${{ steps.configure.outputs.platform }}
       shard_arr: ${{ steps.configure.outputs.shard_arr }}
     steps:
       - name: "Fetch 'build_tools' from repository"
         if: ${{ runner.os == 'Windows' }}
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
@@ -82,13 +96,13 @@ jobs:
         run: . '${{ github.workspace }}\prejob\build_tools\github_actions\cleanup_processes.ps1'
 
       - name: "Checking out repository"
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
 
       - name: Setting up Python
-        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: 3.12
 
@@ -144,6 +158,7 @@ jobs:
       artifact_run_id: ${{ inputs.artifact_run_id }}
       artifact_group: ${{ inputs.artifact_group }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
       test_retry_count: ${{ inputs.test_retry_count }}
       # If the test requires a multi GPU, use the multi GPU test runner
       # Otherwise, use the standard test runner
