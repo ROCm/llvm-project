@@ -18,6 +18,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_unittest(check-comgr HotswapTests
+  HotswapElfTest.cpp
   HotswapTest.cpp
   ${HOTSWAP_TEST_SOURCES})
 
