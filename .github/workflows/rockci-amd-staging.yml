@@ -15,9 +15,6 @@
 name: CI amd-staging
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       linux_amdgpu_families:
@@ -46,12 +43,6 @@ on:
         type: string
         description: "If provided, the tests will run on this artifact ID"
         default: ""
-  pull_request:
-    branches: [amd-staging]
-    types:
-      - labeled
-      - opened
-      - synchronize
 
 permissions:
   contents: read
