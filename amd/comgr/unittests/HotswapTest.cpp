@@ -13,6 +13,24 @@
 
 static constexpr uint32_t kTestBranchGFX12 = 0xBFA00000u;
 static constexpr uint32_t kTestNopOpcode = 0xBF800000u;
+static constexpr int kTestMaxVGPRs = 256;
+
+static RewriteConfig MakeTestConfig() {
+  return {"amdgcn-amd-amdhsa--gfx1250",
+          "amdgcn-amd-amdhsa--gfx1250",
+          "gfx1250",
+          kTestBranchGFX12,
+          kTestNopOpcode,
+          kTestMaxVGPRs};
+}
+
+static void AppendSNopBytes(std::vector<uint8_t> &text, int nop_count) {
+  for (int nop_index = 0; nop_index < nop_count; ++nop_index) {
+    uint8_t snop[kMinInstSize];
+    EncodeSNop(snop, kTestNopOpcode);
+    text.insert(text.end(), snop, snop + kMinInstSize);
+  }
+}
 
 // ── WMMA hazard helpers ─────────────────────────────────────────────────────
 
@@ -116,11 +134,7 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
 
   uint64_t sled_start = text.size();
   static constexpr int kSledNops = 16;
-  for (int nop_index = 0; nop_index < kSledNops; ++nop_index) {
-    uint8_t snop[kMinInstSize];
-    EncodeSNop(snop, kTestNopOpcode);
-    text.insert(text.end(), snop, snop + kMinInstSize);
-  }
+  AppendSNopBytes(text, kSledNops);
 
   std::vector<InternalDecodedInst> decoded;
   ASSERT_TRUE(DecodeTextSection(text.data(), text.size(), llvm_state, decoded));
@@ -129,12 +143,7 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
   std::vector<Trampoline> trampolines;
   std::vector<NopSled> nop_sleds{
       {sled_start, sled_start + kSledNops * kMinInstSize, sled_start}};
-  RewriteConfig config{"amdgcn-amd-amdhsa--gfx1250",
-                       "amdgcn-amd-amdhsa--gfx1250",
-                       "gfx1250",
-                       kTestBranchGFX12,
-                       kTestNopOpcode,
-                       256};
+  RewriteConfig config = MakeTestConfig();
   ElfInfo elf_info;
   LivenessInfo liveness;
   llvm::StringMap<KernelPatchStats> kernel_stats;
@@ -165,5 +174,187 @@ TEST(ApplyWmmaHazardPatch, InsertsVNopsViaNearbySled) {
             0);
   EXPECT_NE(std::memcmp(text.data() + valu_inst.offset, valu_bytes.data(),
                         std::min<size_t>(valu_bytes.size(), kMinInstSize)),
+            0);
+}
+
+TEST(ApplyWmmaHazardPatch, CountsExistingSafeSlotsBeforeHazard) {
+  LLVMState llvm_state = InitLLVMCached("amdgcn-amd-amdhsa--gfx1250");
+  ASSERT_TRUE(llvm_state.valid);
+
+  auto wmma_bytes = AssembleSingleInst(
+      "v_wmma_f32_16x16x64_fp8_fp8 v[0:7], v[8:15], v[16:23], v[0:7]",
+      llvm_state);
+  ASSERT_FALSE(wmma_bytes.empty());
+
+  auto salu_bytes = AssembleSingleInst("s_mov_b32 s0, s1", llvm_state);
+  ASSERT_FALSE(salu_bytes.empty());
+
+  auto safe_valu_bytes =
+      AssembleSingleInst("v_fma_f32 v40, v32, v33, v34", llvm_state);
+  ASSERT_FALSE(safe_valu_bytes.empty());
+
+  auto hazard_valu_bytes =
+      AssembleSingleInst("v_fma_f32 v0, v0, v1, v2", llvm_state);
+  ASSERT_FALSE(hazard_valu_bytes.empty());
+
+  auto vnop_bytes = AssembleSingleInst("v_nop", llvm_state);
+  ASSERT_EQ(vnop_bytes.size(), static_cast<size_t>(kMinInstSize));
+
+  std::vector<uint8_t> text;
+  text.insert(text.end(), wmma_bytes.begin(), wmma_bytes.end());
+  text.insert(text.end(), salu_bytes.begin(), salu_bytes.end());
+  text.insert(text.end(), safe_valu_bytes.begin(), safe_valu_bytes.end());
+  text.insert(text.end(), vnop_bytes.begin(), vnop_bytes.end());
+  text.insert(text.end(), hazard_valu_bytes.begin(), hazard_valu_bytes.end());
+
+  uint64_t sled_start = text.size();
+  static constexpr int kSledNops = 16;
+  AppendSNopBytes(text, kSledNops);
+
+  std::vector<InternalDecodedInst> decoded;
+  ASSERT_TRUE(DecodeTextSection(text.data(), text.size(), llvm_state, decoded));
+  ASSERT_GE(decoded.size(), 5u);
+
+  std::vector<Trampoline> trampolines;
+  std::vector<NopSled> nop_sleds{
+      {sled_start, sled_start + kSledNops * kMinInstSize, sled_start}};
+  RewriteConfig config = MakeTestConfig();
+  ElfInfo elf_info;
+  LivenessInfo liveness;
+  llvm::StringMap<KernelPatchStats> kernel_stats;
+  std::vector<ScratchPatchInfo> scratch_patches;
+  PatchContext ctx{config,         decoded,     text.data(), text.size(),
+                   llvm_state,     trampolines, nop_sleds,   text.data(),
+                   text.size(),    elf_info,    liveness,    kernel_stats,
+                   scratch_patches};
+
+  const auto &hazard_inst = decoded[4];
+  uint64_t original_write_pos = nop_sleds[0].write_pos;
+  uint32_t patched = ApplyWmmaHazardPatch(ctx);
+
+  EXPECT_EQ(patched, 1u);
+  EXPECT_TRUE(trampolines.empty());
+  EXPECT_EQ(nop_sleds[0].write_pos, original_write_pos + 2 * kMinInstSize +
+                                        hazard_inst.size + kMinInstSize);
+
+  for (int nop_index = 0; nop_index < 2; ++nop_index) {
+    EXPECT_EQ(
+        std::memcmp(text.data() + original_write_pos + nop_index * kMinInstSize,
+                    vnop_bytes.data(), kMinInstSize),
+        0);
+  }
+
+  EXPECT_EQ(std::memcmp(text.data() + original_write_pos + 2 * kMinInstSize,
+                        hazard_valu_bytes.data(), hazard_valu_bytes.size()),
+            0);
+}
+
+TEST(ApplyWmmaHazardPatch, StopsScanningAtTerminatingSalu) {
+  LLVMState llvm_state = InitLLVMCached("amdgcn-amd-amdhsa--gfx1250");
+  ASSERT_TRUE(llvm_state.valid);
+
+  auto wmma_bytes = AssembleSingleInst(
+      "v_wmma_f32_16x16x64_fp8_fp8 v[0:7], v[8:15], v[16:23], v[0:7]",
+      llvm_state);
+  ASSERT_FALSE(wmma_bytes.empty());
+
+  auto endpgm_bytes = AssembleSingleInst("s_endpgm", llvm_state);
+  ASSERT_FALSE(endpgm_bytes.empty());
+
+  auto hazard_valu_bytes =
+      AssembleSingleInst("v_fma_f32 v0, v0, v1, v2", llvm_state);
+  ASSERT_FALSE(hazard_valu_bytes.empty());
+
+  std::vector<uint8_t> text;
+  text.insert(text.end(), wmma_bytes.begin(), wmma_bytes.end());
+  text.insert(text.end(), endpgm_bytes.begin(), endpgm_bytes.end());
+  text.insert(text.end(), hazard_valu_bytes.begin(), hazard_valu_bytes.end());
+
+  uint64_t sled_start = text.size();
+  static constexpr int kSledNops = 16;
+  AppendSNopBytes(text, kSledNops);
+
+  std::vector<InternalDecodedInst> decoded;
+  ASSERT_TRUE(DecodeTextSection(text.data(), text.size(), llvm_state, decoded));
+  ASSERT_GE(decoded.size(), 3u);
+
+  std::vector<Trampoline> trampolines;
+  std::vector<NopSled> nop_sleds{
+      {sled_start, sled_start + kSledNops * kMinInstSize, sled_start}};
+  RewriteConfig config = MakeTestConfig();
+  ElfInfo elf_info;
+  LivenessInfo liveness;
+  llvm::StringMap<KernelPatchStats> kernel_stats;
+  std::vector<ScratchPatchInfo> scratch_patches;
+  PatchContext ctx{config,         decoded,     text.data(), text.size(),
+                   llvm_state,     trampolines, nop_sleds,   text.data(),
+                   text.size(),    elf_info,    liveness,    kernel_stats,
+                   scratch_patches};
+
+  uint64_t original_write_pos = nop_sleds[0].write_pos;
+  uint32_t patched = ApplyWmmaHazardPatch(ctx);
+
+  EXPECT_EQ(patched, 0u);
+  EXPECT_TRUE(trampolines.empty());
+  EXPECT_EQ(nop_sleds[0].write_pos, original_write_pos);
+}
+
+TEST(ApplyWmmaHazardPatch, FallsBackToTrampolineWhenNoSledExists) {
+  LLVMState llvm_state = InitLLVMCached("amdgcn-amd-amdhsa--gfx1250");
+  ASSERT_TRUE(llvm_state.valid);
+
+  auto wmma_bytes = AssembleSingleInst(
+      "v_wmma_f32_16x16x64_fp8_fp8 v[0:7], v[8:15], v[16:23], v[0:7]",
+      llvm_state);
+  ASSERT_FALSE(wmma_bytes.empty());
+
+  auto hazard_valu_bytes =
+      AssembleSingleInst("v_fma_f32 v0, v0, v1, v2", llvm_state);
+  ASSERT_FALSE(hazard_valu_bytes.empty());
+
+  auto vnop_bytes = AssembleSingleInst("v_nop", llvm_state);
+  ASSERT_EQ(vnop_bytes.size(), static_cast<size_t>(kMinInstSize));
+
+  std::vector<uint8_t> text;
+  text.insert(text.end(), wmma_bytes.begin(), wmma_bytes.end());
+  text.insert(text.end(), hazard_valu_bytes.begin(), hazard_valu_bytes.end());
+
+  std::vector<InternalDecodedInst> decoded;
+  ASSERT_TRUE(DecodeTextSection(text.data(), text.size(), llvm_state, decoded));
+  ASSERT_GE(decoded.size(), 2u);
+
+  std::vector<Trampoline> trampolines;
+  std::vector<NopSled> nop_sleds;
+  RewriteConfig config = MakeTestConfig();
+  ElfInfo elf_info;
+  LivenessInfo liveness;
+  llvm::StringMap<KernelPatchStats> kernel_stats;
+  std::vector<ScratchPatchInfo> scratch_patches;
+  PatchContext ctx{config,         decoded,     text.data(), text.size(),
+                   llvm_state,     trampolines, nop_sleds,   text.data(),
+                   text.size(),    elf_info,    liveness,    kernel_stats,
+                   scratch_patches};
+
+  const auto &hazard_inst = decoded[1];
+  uint32_t patched = ApplyWmmaHazardPatch(ctx);
+
+  ASSERT_EQ(patched, 1u);
+  ASSERT_EQ(trampolines.size(), 1u);
+
+  const auto &trampoline = trampolines[0];
+  EXPECT_EQ(trampoline.original_offset, hazard_inst.offset);
+  EXPECT_EQ(trampoline.original_size, hazard_inst.size);
+  EXPECT_EQ(
+      trampoline.bytes.size(),
+      static_cast<size_t>(4 * kMinInstSize + hazard_inst.size + kMinInstSize));
+
+  for (int nop_index = 0; nop_index < 4; ++nop_index) {
+    EXPECT_EQ(std::memcmp(trampoline.bytes.data() + nop_index * kMinInstSize,
+                          vnop_bytes.data(), kMinInstSize),
+              0);
+  }
+
+  EXPECT_EQ(std::memcmp(trampoline.bytes.data() + 4 * kMinInstSize,
+                        hazard_valu_bytes.data(), hazard_valu_bytes.size()),
             0);
 }
