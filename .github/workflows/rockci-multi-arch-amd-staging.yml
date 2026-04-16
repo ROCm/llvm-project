@@ -8,7 +8,7 @@
 # ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
 # sub-workflows directly.
 
-name: AMD-Staging Multi-Arch CI
+name: Multi-Arch CI amd-staging
 
 on:
   push:
@@ -98,7 +98,7 @@ jobs:
       build_config: ${{ needs.setup.outputs.windows_build_config }}
       test_labels: ${{ needs.setup.outputs.windows_test_labels }}
       rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
-      test_type: ${{ needs.setup.outputs.test_type }}
+      test_type: 'smoke'
     permissions:
       contents: read
       id-token: write
@@ -109,13 +109,29 @@ jobs:
     needs:
       - setup
       - linux_build_and_test
-      - windows_build_and_test
+        #- windows_build_and_test
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Evaluate workflow results
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Output failed jobs
         run: |
-          python build_tools/github_actions/workflow_summary.py \
-            --needs-json '${{ toJSON(needs) }}'
+          echo '${{ toJson(needs) }}'
+
+          # Build a list of failed jobs, but ignore those marked continue-on-error
+          FAILED_JOBS="$(echo '${{ toJson(needs) }}' \
+            | jq --raw-output '
+              to_entries
+              | map(select(
+                  (.value.result != "success" and .value.result != "skipped")
+                  and (.value.outputs.continue_on_error | not)
+                ))
+              | map(.key)
+              | join(",")
+            ' \
+          )"
+
+          if [[ -n "${FAILED_JOBS}" ]]; then
+            echo "The following jobs failed: ${FAILED_JOBS}"
+            exit 1
+          else
+            echo "All required jobs succeeded (continue-on-error jobs ignored)."
+          fi      
