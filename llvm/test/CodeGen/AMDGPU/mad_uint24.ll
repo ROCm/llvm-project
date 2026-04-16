@@ -1549,6 +1549,7 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GCN-NEXT:    s_cbranch_execnz .LBB9_1
 ; GCN-NEXT:  .LBB9_2: ; %bb18
 ; GCN-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0)
 ; GCN-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -1584,6 +1585,7 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8-NEXT:    s_cbranch_execnz .LBB9_1
 ; GFX8-NEXT:  .LBB9_2: ; %bb18
 ; GFX8-NEXT:    s_or_b64 exec, exec, s[4:5]
+; GFX8-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 bb:

@@ -2263,174 +2263,8 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
 
 namespace {
 
-using RegSet = SmallDenseSet<Register, 4>;
-
-class DeadAccDefEliminator {
-  MachineFunction &MF;
-  const SmallDenseSet<Register, 4> &AccRegs;
-  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
-
-  struct BlockUseDefInfo {
-    RegSet UpwardExposedUses;
-    RegSet Defs;
-    RegSet LocallyDeadDefs;
-    DenseMap<Register, MachineInstr *> LastDefInst;
-  };
-  DenseMap<MachineBasicBlock *, BlockUseDefInfo> BlockInfo;
-  DenseMap<MachineBasicBlock *, RegSet> LiveIn;
-
-  bool isAccReg(const MachineOperand &MO) const {
-    return MO.isReg() && MO.getReg().isVirtual() && AccRegs.count(MO.getReg());
-  }
-
-  static bool hasPhysRegDef(const MachineInstr &MI) {
-    return llvm::any_of(MI.operands(), [](const MachineOperand &MO) {
-      return MO.isReg() && MO.isDef() && MO.getReg().isPhysical();
-    });
-  }
-
-  RegSet computeLiveOut(MachineBasicBlock &MBB) const {
-    RegSet LiveOut;
-    for (MachineBasicBlock *Succ : MBB.successors()) {
-      auto It = LiveIn.find(Succ);
-      if (It != LiveIn.end())
-        for (Register Reg : It->second)
-          LiveOut.insert(Reg);
-    }
-    return LiveOut;
-  }
-
-  void computeBlockUseDefInfo(MachineBasicBlock &MBB) {
-    auto AccInstsIt = AccInstMap.find(&MBB);
-    if (AccInstsIt == AccInstMap.end())
-      return;
-
-    BlockUseDefInfo &Info = BlockInfo[&MBB];
-    Info = BlockUseDefInfo();
-    DenseMap<Register, bool> HasUseAfterLastDef;
-
-    for (MachineInstr *MI : AccInstsIt->second) {
-      for (const MachineOperand &MO : MI->uses()) {
-        if (!isAccReg(MO))
-          continue;
-        Register Reg = MO.getReg();
-        if (!Info.Defs.count(Reg))
-          Info.UpwardExposedUses.insert(Reg);
-        else
-          HasUseAfterLastDef[Reg] = true;
-      }
-
-      for (const MachineOperand &MO : MI->defs()) {
-        if (!isAccReg(MO))
-          continue;
-        Register Reg = MO.getReg();
-        Info.Defs.insert(Reg);
-        Info.LastDefInst[Reg] = MI;
-        HasUseAfterLastDef[Reg] = false;
-      }
-    }
-
-    for (auto &[Reg, UsedAfterDef] : HasUseAfterLastDef)
-      if (!UsedAfterDef)
-        Info.LocallyDeadDefs.insert(Reg);
-  }
-
-  void computeLiveness() {
-    LiveIn.clear();
-
-    ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-    SmallVector<MachineBasicBlock *, 16> PostOrder;
-    for (MachineBasicBlock *MBB : RPOT)
-      PostOrder.push_back(MBB);
-    std::reverse(PostOrder.begin(), PostOrder.end());
-
-    SmallVector<MachineBasicBlock *, 16> Worklist(PostOrder);
-    SmallPtrSet<MachineBasicBlock *, 16> InWorklist;
-    for (MachineBasicBlock *MBB : Worklist)
-      InWorklist.insert(MBB);
-
-    while (!Worklist.empty()) {
-      MachineBasicBlock *MBB = Worklist.pop_back_val();
-      InWorklist.erase(MBB);
-
-      RegSet LiveOut = computeLiveOut(*MBB);
-
-      RegSet NewLiveIn;
-      auto InfoIt = BlockInfo.find(MBB);
-      if (InfoIt != BlockInfo.end()) {
-        const BlockUseDefInfo &Info = InfoIt->second;
-        NewLiveIn = Info.UpwardExposedUses;
-        for (Register Reg : LiveOut)
-          if (!Info.Defs.count(Reg))
-            NewLiveIn.insert(Reg);
-      } else {
-        NewLiveIn = LiveOut;
-      }
-
-      if (NewLiveIn != LiveIn[MBB]) {
-        LiveIn[MBB] = std::move(NewLiveIn);
-        for (MachineBasicBlock *Pred : MBB->predecessors())
-          if (InWorklist.insert(Pred).second)
-            Worklist.push_back(Pred);
-      }
-    }
-  }
-
-  bool eliminateDeadDefs() {
-    bool Changed = false;
-
-    for (auto &[MBB, Info] : BlockInfo) {
-      RegSet LiveOut = computeLiveOut(*MBB);
-
-      RegSet DeadRegs;
-      for (Register Reg : Info.LocallyDeadDefs)
-        if (!LiveOut.count(Reg))
-          DeadRegs.insert(Reg);
-
-      if (DeadRegs.empty())
-        continue;
-
-      bool BlockChanged = false;
-      for (Register Reg : DeadRegs) {
-        MachineInstr *DeadMI = Info.LastDefInst[Reg];
-        if (hasPhysRegDef(*DeadMI))
-          continue;
-
-        llvm::erase(AccInstMap[MBB], DeadMI);
-        DeadMI->eraseFromParent();
-        ++NumCleanupInstrsRemoved;
-        BlockChanged = true;
-      }
-
-      if (BlockChanged) {
-        computeBlockUseDefInfo(*MBB);
-        Changed = true;
-      }
-    }
-    return Changed;
-  }
-
-public:
-  DeadAccDefEliminator(
-      MachineFunction &MF, const SmallDenseSet<Register, 4> &AccRegs,
-      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap)
-      : MF(MF), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
-
-  void run() {
-    for (auto &[MBB, _] : AccInstMap)
-      computeBlockUseDefInfo(*MBB);
-
-    bool Changed = true;
-    while (Changed) {
-      computeLiveness();
-      Changed = eliminateDeadDefs();
-    }
-  }
-};
-
-enum AccRegState : uint8_t { Zero, AllOnes };
-using RegStateMap = DenseMap<Register, AccRegState>;
-using BlockStateMap = DenseMap<MachineBasicBlock *, RegStateMap>;
+using RegValueMap = DenseMap<Register, Register>;
+using BlockValueMap = DenseMap<MachineBasicBlock *, RegValueMap>;
 
 class ForwardPropSimplifier {
   MachineFunction &MF;
@@ -2438,16 +2272,15 @@ class ForwardPropSimplifier {
   const AMDGPU::LaneMaskConstants &LMC;
   const SmallDenseSet<Register, 4> &AccRegs;
   DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
-  BlockStateMap OUT;
-
-  static inline AccRegState SZero = Zero;
-  static inline AccRegState SAllOnes = AllOnes;
+  BlockValueMap OUT;
+  bool Changed = false;
 
   void replaceWithMov(MachineInstr &MI, int64_t ImmVal) {
     MI.setDesc(TII.get(LMC.MovOpc));
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateImm(ImmVal));
+    Changed = true;
     ++NumCleanupInstrsOptimized;
   }
 
@@ -2456,11 +2289,12 @@ class ForwardPropSimplifier {
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateReg(SrcReg, false));
+    Changed = true;
     ++NumCleanupInstrsOptimized;
   }
 
-  RegStateMap mergeIncoming(MachineBasicBlock &MBB) {
-    RegStateMap Result;
+  RegValueMap mergeIncoming(MachineBasicBlock &MBB) {
+    RegValueMap Result;
     if (MBB.pred_empty())
       return Result;
 
@@ -2469,7 +2303,7 @@ class ForwardPropSimplifier {
       if (FirstIt == OUT[*MBB.pred_begin()].end())
         continue;
 
-      AccRegState Expected = FirstIt->second;
+      Register Expected = FirstIt->second;
       if (llvm::all_of(MBB.predecessors(), [&](MachineBasicBlock *Pred) {
             auto It = OUT[Pred].find(Reg);
             return It != OUT[Pred].end() && It->second == Expected;
@@ -2479,68 +2313,15 @@ class ForwardPropSimplifier {
     return Result;
   }
 
-  AccRegState *lookupState(RegStateMap &Map, Register Reg) {
+  Register *lookupValue(RegValueMap &Map, Register Reg) {
     if (!AccRegs.count(Reg))
       return nullptr;
     auto It = Map.find(Reg);
     return (It != Map.end()) ? &It->second : nullptr;
   }
 
-  AccRegState *tryFoldBinary(MachineInstr &MI, unsigned Opc, AccRegState *S1,
-                             AccRegState *S2) {
-    if (S1 && S2) {
-      int64_t V1 = (*S1 == Zero) ? 0 : -1;
-      int64_t V2 = (*S2 == Zero) ? 0 : -1;
-      int64_t R = 0;
-      if (Opc == LMC.OrOpc)
-        R = V1 | V2;
-      if (Opc == LMC.AndOpc)
-        R = V1 & V2;
-      if (Opc == LMC.XorOpc)
-        R = V1 ^ V2;
-      replaceWithMov(MI, R);
-      return (R == 0) ? &SZero : &SAllOnes;
-    }
-
-    if (S1 || S2) {
-      AccRegState ResolvedState = S1 ? *S1 : *S2;
-      Register UnresolvedReg =
-          S1 ? MI.getOperand(2).getReg() : MI.getOperand(1).getReg();
-
-      if (Opc == LMC.OrOpc) {
-        if (ResolvedState == AllOnes) {
-          replaceWithMov(MI, -1);
-          return &SAllOnes;
-        }
-        if (ResolvedState == Zero) {
-          replaceWithCopy(MI, UnresolvedReg);
-          return nullptr;
-        }
-      }
-      if (Opc == LMC.AndOpc) {
-        if (ResolvedState == Zero) {
-          replaceWithMov(MI, 0);
-          return &SZero;
-        }
-        if (ResolvedState == AllOnes) {
-          replaceWithCopy(MI, UnresolvedReg);
-          return nullptr;
-        }
-      }
-      if (Opc == LMC.XorOpc) {
-        if (ResolvedState == Zero) {
-          replaceWithCopy(MI, UnresolvedReg);
-          return nullptr;
-        }
-      }
-    }
-
-    return nullptr;
-  }
-
-  RegStateMap forwardPropagateAccStates(MachineBasicBlock &MBB,
-                                        RegStateMap &IN) {
-    RegStateMap Cur = IN;
+  RegValueMap forwardPropAccValues(MachineBasicBlock &MBB, RegValueMap &IN) {
+    RegValueMap Cur = IN;
 
     auto MapIt = AccInstMap.find(&MBB);
     if (MapIt == AccInstMap.end())
@@ -2548,38 +2329,87 @@ class ForwardPropSimplifier {
 
     for (MachineInstr *MI : MapIt->second) {
       unsigned Opc = MI->getOpcode();
-      AccRegState *PostDefState = nullptr;
 
-      if (Opc == LMC.OrOpc || Opc == LMC.AndOpc || Opc == LMC.XorOpc) {
-        AccRegState *S1 = lookupState(Cur, MI->getOperand(1).getReg());
-        AccRegState *S2 = lookupState(Cur, MI->getOperand(2).getReg());
-        PostDefState = tryFoldBinary(*MI, Opc, S1, S2);
-
-      } else if (Opc == LMC.MovOpc && MI->getOperand(1).isImm()) {
-        int64_t Imm = MI->getOperand(1).getImm();
-        if (Imm == 0)
-          PostDefState = &SZero;
-        if (Imm == -1)
-          PostDefState = &SAllOnes;
-
-      } else if (Opc == AMDGPU::COPY) {
-        PostDefState = lookupState(Cur, MI->getOperand(1).getReg());
+      // Replace uses of acc regs with their tracked non-zero value.
+      for (MachineOperand &MO : MI->uses()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual() ||
+            !AccRegs.count(MO.getReg()))
+          continue;
+        auto It = Cur.find(MO.getReg());
+        if (It != Cur.end() && It->second != Register(0)) {
+          MO.setReg(It->second);
+          Changed = true;
+          ++NumCleanupInstrsOptimized;
+        }
       }
 
       Register Dst = MI->getOperand(0).getReg();
-      if (AccRegs.count(Dst)) {
-        if (PostDefState)
-          Cur[Dst] = *PostDefState;
+      if (!AccRegs.count(Dst))
+        continue;
+
+      // --- MovOpc ---
+      // #1: ACC = MOV 0
+      if (Opc == LMC.MovOpc) {
+        if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
+          Cur[Dst] = Register(0);
+
+        // --- COPY ---
+        // #3: ACC = COPY %val, #4: ACC = COPY EXEC, #5: ACC = COPY ACC
+      } else if (Opc == AMDGPU::COPY) {
+        Register Src = MI->getOperand(1).getReg();
+        Register *SrcVal = lookupValue(Cur, Src);
+        if (SrcVal && *SrcVal == Register(0)) {
+          replaceWithMov(*MI, 0);
+          Cur[Dst] = Register(0);
+        } else if (AccRegs.count(Src))
+          Cur[Dst] = SrcVal ? *SrcVal : Src;
+        else if (Src.isVirtual())
+          Cur[Dst] = Src;
         else
           Cur.erase(Dst);
+
+        // --- AndOpc ---
+        // #6: ACC = %val AND EXEC
+      } else if (Opc == LMC.AndOpc) {
+        Cur.erase(Dst);
+
+        // --- OrOpc ---
+        // #7: ACC = ACC OR %masked, #8: ACC = ACC OR EXEC
+      } else if (Opc == LMC.OrOpc) {
+        Register Src1 = MI->getOperand(1).getReg();
+        Register Src2 = MI->getOperand(2).getReg();
+        Register *S1 = lookupValue(Cur, Src1);
+        Register *S2 = lookupValue(Cur, Src2);
+
+        if (S1 && *S1 == Register(0)) {
+          replaceWithCopy(*MI, Src2);
+          if (Src2.isVirtual())
+            Cur[Dst] = Src2;
+          else
+            Cur.erase(Dst);
+        } else if (S2 && *S2 == Register(0)) {
+          replaceWithCopy(*MI, Src1);
+          if (Src1.isVirtual())
+            Cur[Dst] = Src1;
+          else
+            Cur.erase(Dst);
+        } else {
+          Cur.erase(Dst);
+        }
+
+        // --- XorOpc ---
+        // #10: %rejoin = EXEC XOR ACC — Dst is never ACC, use-replacement only.
+
+      } else {
+        llvm_unreachable("Unexpected opcode defining ACC reg");
       }
     }
     return Cur;
   }
 
   bool processBlock(MachineBasicBlock &MBB) {
-    RegStateMap IN = mergeIncoming(MBB);
-    RegStateMap NewOut = forwardPropagateAccStates(MBB, IN);
+    RegValueMap IN = mergeIncoming(MBB);
+    RegValueMap NewOut = forwardPropAccValues(MBB, IN);
 
     if (OUT[&MBB] == NewOut)
       return false;
@@ -2596,99 +2426,22 @@ public:
       : MF(MF), TII(TII), LMC(LMC), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
 
   void run() {
-    SmallVector<MachineBasicBlock *, 16> Worklist;
-    ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-    for (MachineBasicBlock *MBB : RPOT)
-      Worklist.push_back(MBB);
+    do {
+      Changed = false;
+      OUT.clear();
 
-    while (!Worklist.empty()) {
-      MachineBasicBlock *MBB = Worklist.pop_back_val();
-      if (processBlock(*MBB))
-        for (MachineBasicBlock *Succ : MBB->successors())
-          Worklist.push_back(Succ);
-    }
-  }
-};
+      SmallVector<MachineBasicBlock *, 16> Worklist;
+      ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+      for (MachineBasicBlock *MBB : RPOT)
+        Worklist.push_back(MBB);
 
-class AccCopyPropagator {
-  const SmallDenseSet<Register, 4> &AccRegs;
-  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
-  MachineRegisterInfo &MRI;
-
-  bool isAccReg(const MachineOperand &MO) const {
-    return MO.isReg() && MO.getReg().isVirtual() && AccRegs.count(MO.getReg());
-  }
-
-  bool propagateBlock(SmallVectorImpl<MachineInstr *> &AccInsts) {
-    DenseMap<Register, Register> AvailCopies;
-    DenseMap<Register, SmallVector<Register, 2>> SrcToDsts;
-    bool Changed = false;
-
-    for (MachineInstr *MI : AccInsts) {
-      for (MachineOperand &MO : MI->uses()) {
-        if (!isAccReg(MO))
-          continue;
-        auto It = AvailCopies.find(MO.getReg());
-        if (It != AvailCopies.end()) {
-          MO.setReg(It->second);
-          Changed = true;
-        }
+      while (!Worklist.empty()) {
+        MachineBasicBlock *MBB = Worklist.pop_back_val();
+        if (processBlock(*MBB))
+          for (MachineBasicBlock *Succ : MBB->successors())
+            Worklist.push_back(Succ);
       }
-
-      for (const MachineOperand &MO : MI->defs()) {
-        if (!isAccReg(MO))
-          continue;
-        Register DefReg = MO.getReg();
-        AvailCopies.erase(DefReg);
-        auto SrcIt = SrcToDsts.find(DefReg);
-        if (SrcIt != SrcToDsts.end()) {
-          for (Register Dst : SrcIt->second)
-            AvailCopies.erase(Dst);
-          SrcToDsts.erase(SrcIt);
-        }
-      }
-
-      if (MI->getOpcode() != AMDGPU::COPY)
-        continue;
-      Register Dst = MI->getOperand(0).getReg();
-      Register Src = MI->getOperand(1).getReg();
-      if (isAccReg(MI->getOperand(0)) && Src.isVirtual()) {
-        AvailCopies[Dst] = Src;
-        SrcToDsts[Src].push_back(Dst);
-      }
-    }
-    return Changed;
-  }
-
-  void eraseDeadCopies(SmallVectorImpl<MachineInstr *> &AccInsts) {
-    SmallVector<MachineInstr *, 4> ToErase;
-    for (MachineInstr *MI : AccInsts) {
-      if (MI->getOpcode() != AMDGPU::COPY)
-        continue;
-      Register Dst = MI->getOperand(0).getReg();
-      Register Src = MI->getOperand(1).getReg();
-      if (Dst == Src || (Dst.isVirtual() && MRI.use_empty(Dst)))
-        ToErase.push_back(MI);
-    }
-    for (MachineInstr *MI : ToErase) {
-      llvm::erase(AccInsts, MI);
-      MI->eraseFromParent();
-      ++NumCleanupInstrsRemoved;
-    }
-  }
-
-public:
-  AccCopyPropagator(
-      const SmallDenseSet<Register, 4> &AccRegs,
-      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap,
-      MachineRegisterInfo &MRI)
-      : AccRegs(AccRegs), AccInstMap(AccInstMap), MRI(MRI) {}
-
-  void run() {
-    for (auto &[MBB, AccInsts] : AccInstMap)
-      propagateBlock(AccInsts);
-    for (auto &[MBB, AccInsts] : AccInstMap)
-      eraseDeadCopies(AccInsts);
+    } while (Changed);
   }
 };
 
@@ -2846,11 +2599,103 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   return true; // assume that we changed something
 }
 
+namespace {
+
+/// Per-block Use (upward-exposed) and Def sets for accumulator registers.
+struct AccBBUseDef {
+  SmallDenseSet<Register, 4> Use; // upward-exposed uses
+  SmallDenseMap<Register, MachineInstr *, 4> Def;
+};
+
+/// Per-block LiveIn and LiveOut sets for accumulator registers.
+struct AccBBLiveness {
+  SmallDenseSet<Register, 4> LiveIn;
+  SmallDenseSet<Register, 4> LiveOut;
+};
+
+} // anonymous namespace
+
+/// Return true if \p MI defines any physical register.
+static bool hasPhysRegDef(const MachineInstr &MI) {
+  return llvm::any_of(MI.operands(), [](const MachineOperand &Op) {
+    return Op.isReg() && Op.isDef() && Op.getReg().isPhysical();
+  });
+}
+
+static DenseMap<MachineBasicBlock *, AccBBUseDef>
+computeAccUseDef(MachineFunction &MF,
+                 const SmallDenseSet<Register, 4> &AccumulatorRegs) {
+  DenseMap<MachineBasicBlock *, AccBBUseDef> Result;
+  for (MachineBasicBlock &MBB : MF) {
+    AccBBUseDef UD;
+    for (MachineInstr &MI : MBB) {
+      for (const MachineOperand &MO : MI.uses()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual() ||
+            !AccumulatorRegs.count(MO.getReg()))
+          continue;
+        Register R = MO.getReg();
+        if (!UD.Def.count(R))
+          UD.Use.insert(R);
+      }
+      for (const MachineOperand &MO : MI.defs()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual() ||
+            !AccumulatorRegs.count(MO.getReg()))
+          continue;
+        UD.Def[MO.getReg()] = &MI;
+      }
+    }
+    if (!UD.Use.empty() || !UD.Def.empty())
+      Result[&MBB] = std::move(UD);
+  }
+  return Result;
+}
+
+/// Compute per-block LiveIn/LiveOut for accumulator registers using
+/// iterative fixed-point dataflow analysis.
+///   LiveOut(B) = ∪ LiveIn(S) for all successors S of B
+///   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B))
+static DenseMap<MachineBasicBlock *, AccBBLiveness>
+computeAccLiveness(MachineFunction &MF,
+                   const DenseMap<MachineBasicBlock *, AccBBUseDef> &UseDef) {
+  DenseMap<MachineBasicBlock *, AccBBLiveness> Liveness;
+
+  // Pre-populate all blocks so operator[] never rehashes during iteration.
+  for (MachineBasicBlock &MBB : MF)
+    (void)Liveness[&MBB];
+
+  for (const auto &[MBB, UD] : UseDef)
+    Liveness[MBB].LiveIn = UD.Use;
+
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+    for (MachineBasicBlock &MBB : MF) {
+      AccBBLiveness &L = Liveness[&MBB];
+
+      for (MachineBasicBlock *Succ : MBB.successors()) {
+        for (Register R : Liveness[Succ].LiveIn) {
+          if (L.LiveOut.insert(R).second)
+            Changed = true;
+        }
+      }
+
+      auto UDIt = UseDef.find(&MBB);
+      for (Register R : L.LiveOut) {
+        if (UDIt != UseDef.end() && UDIt->second.Def.count(R))
+          continue;
+        if (L.LiveIn.insert(R).second)
+          Changed = true;
+      }
+    }
+  }
+
+  return Liveness;
+}
+
 /// Build a per-MBB program-order list of accumulator instructions and
 /// identify dead defs (overwritten before any use).
 static void buildAccInstMap(
-    MachineFunction &MF,
-    const SmallDenseSet<Register, 4> &AccumulatorRegs,
+    MachineFunction &MF, const SmallDenseSet<Register, 4> &AccumulatorRegs,
     DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap,
     SmallVectorImpl<MachineInstr *> &DeadDefs) {
   for (MachineBasicBlock &MBB : MF) {
@@ -2878,11 +2723,7 @@ static void buildAccInstMap(
         auto It = LastUnusedDef.find(Reg);
         if (It != LastUnusedDef.end()) {
           MachineInstr *PrevDef = It->second;
-          bool HasPhysRegDef =
-              llvm::any_of(PrevDef->operands(), [](const MachineOperand &Op) {
-                return Op.isReg() && Op.isDef() && Op.getReg().isPhysical();
-              });
-          if (!HasPhysRegDef) {
+          if (!hasPhysRegDef(*PrevDef)) {
             llvm::erase(OrderedAccInsts, PrevDef);
             DeadDefs.push_back(PrevDef);
           }
@@ -2913,15 +2754,33 @@ void AMDGPUWaveTransform::cleanup(
   for (MachineInstr *MI : DeadDefs)
     MI->eraseFromParent();
 
+  // forward propagate accumulator values
   const auto &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
 
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
 
-  DeadAccDefEliminator Eliminator(MF, AccumulatorRegs, AccInstMap);
-  Eliminator.run();
+  // compute Use Def sets for each block
+  DenseMap<MachineBasicBlock *, AccBBUseDef> AccUseDef =
+      computeAccUseDef(MF, AccumulatorRegs);
 
-  AccCopyPropagator CopyProp(AccumulatorRegs, AccInstMap, MF.getRegInfo());
-  CopyProp.run();
+  DenseMap<MachineBasicBlock *, AccBBLiveness> AccLiveness =
+      computeAccLiveness(MF, AccUseDef);
+
+  // Remove dead defs: registers in Def(B) but not in LiveOut(B).
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  for (const auto &[MBB, UD] : AccUseDef) {
+    auto LIt = AccLiveness.find(MBB);
+    for (const auto &[R, DefMI] : UD.Def) {
+      if (LIt != AccLiveness.end() && LIt->second.LiveOut.count(R))
+        continue;
+      if (!MRI.use_nodbg_empty(R))
+        continue;
+      if (!hasPhysRegDef(*DefMI)) {
+        ++NumCleanupInstrsRemoved;
+        DefMI->eraseFromParent();
+      }
+    }
+  }
 }
