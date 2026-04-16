@@ -218,7 +218,10 @@ jobs:
           git config --global core.symlinks true
           git config --global core.longpaths true
           git config fetch.parallel 10          
+
+      - name: Runner health status
         run: |
+          ccache --zero-stats
           python build_tools/health_status.py
 
       - name: Remove ununsed existing patchces									 
