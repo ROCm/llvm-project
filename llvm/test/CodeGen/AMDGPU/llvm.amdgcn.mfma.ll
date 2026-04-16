@@ -1781,9 +1781,9 @@ define amdgpu_kernel void @test_mfma_f32_16x16x4f16(ptr addrspace(1) %arg, ptr a
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v16, s20
 ; GFX942-NEXT:    v_mov_b32_e32 v17, s21
-; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-NEXT:    v_mov_b32_e32 v18, s22
 ; GFX942-NEXT:    v_mov_b32_e32 v19, s23
+; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-NEXT:    v_mov_b64_e32 v[2:3], s[2:3]
 ; GFX942-NEXT:    v_mov_b64_e32 v[4:5], s[4:5]
 ; GFX942-NEXT:    v_mov_b64_e32 v[6:7], s[6:7]
@@ -1810,9 +1810,9 @@ define amdgpu_kernel void @test_mfma_f32_16x16x4f16(ptr addrspace(1) %arg, ptr a
 ; GFX942-VGPR-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v16, s20
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v17, s21
-; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v18, s22
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v19, s23
+; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[2:3], s[2:3]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[4:5], s[4:5]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[6:7], s[6:7]
@@ -1932,9 +1932,9 @@ define amdgpu_kernel void @test_mfma_f32_4x4x4f16(ptr addrspace(1) %arg, ptr add
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX942-NEXT:    v_mov_b32_e32 v7, s5
-; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-NEXT:    v_mov_b32_e32 v8, s6
 ; GFX942-NEXT:    v_mov_b32_e32 v9, s7
+; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-NEXT:    v_mov_b64_e32 v[2:3], s[10:11]
 ; GFX942-NEXT:    s_nop 1
 ; GFX942-NEXT:    v_mfma_f32_4x4x4_16b_f16 v[0:3], v[6:7], v[8:9], v[0:3] cbsz:1 abid:2 blgp:3
@@ -1952,9 +1952,9 @@ define amdgpu_kernel void @test_mfma_f32_4x4x4f16(ptr addrspace(1) %arg, ptr add
 ; GFX942-VGPR-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v7, s5
-; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v8, s6
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v9, s7
+; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[2:3], s[10:11]
 ; GFX942-VGPR-NEXT:    s_nop 1
 ; GFX942-VGPR-NEXT:    v_mfma_f32_4x4x4_16b_f16 v[0:3], v[6:7], v[8:9], v[0:3] cbsz:1 abid:2 blgp:3
@@ -2151,9 +2151,9 @@ define amdgpu_kernel void @test_mfma_f32_32x32x8f16(ptr addrspace(1) %arg, ptr a
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v16, s20
 ; GFX942-NEXT:    v_mov_b32_e32 v17, s21
-; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-NEXT:    v_mov_b32_e32 v18, s22
 ; GFX942-NEXT:    v_mov_b32_e32 v19, s23
+; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-NEXT:    v_mov_b64_e32 v[2:3], s[2:3]
 ; GFX942-NEXT:    v_mov_b64_e32 v[4:5], s[4:5]
 ; GFX942-NEXT:    v_mov_b64_e32 v[6:7], s[6:7]
@@ -2180,9 +2180,9 @@ define amdgpu_kernel void @test_mfma_f32_32x32x8f16(ptr addrspace(1) %arg, ptr a
 ; GFX942-VGPR-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v16, s20
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v17, s21
-; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v18, s22
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v19, s23
+; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[0:1]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[2:3], s[2:3]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[4:5], s[4:5]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[6:7], s[6:7]
@@ -2302,9 +2302,9 @@ define amdgpu_kernel void @test_mfma_f32_16x16x16f16(ptr addrspace(1) %arg, ptr 
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX942-NEXT:    v_mov_b32_e32 v7, s5
-; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-NEXT:    v_mov_b32_e32 v8, s6
 ; GFX942-NEXT:    v_mov_b32_e32 v9, s7
+; GFX942-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-NEXT:    v_mov_b64_e32 v[2:3], s[10:11]
 ; GFX942-NEXT:    s_nop 1
 ; GFX942-NEXT:    v_mfma_f32_16x16x16_f16 v[0:3], v[6:7], v[8:9], v[0:3] cbsz:1 abid:2 blgp:3
@@ -2322,9 +2322,9 @@ define amdgpu_kernel void @test_mfma_f32_16x16x16f16(ptr addrspace(1) %arg, ptr 
 ; GFX942-VGPR-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v7, s5
-; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v8, s6
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v9, s7
+; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[0:1], s[8:9]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[2:3], s[10:11]
 ; GFX942-VGPR-NEXT:    s_nop 1
 ; GFX942-VGPR-NEXT:    v_mfma_f32_16x16x16_f16 v[0:3], v[6:7], v[8:9], v[0:3] cbsz:1 abid:2 blgp:3
@@ -3228,11 +3228,11 @@ define amdgpu_kernel void @test_mfma_i32_4x4x4i8_splat_imm_src2_1(ptr addrspace(
 ; NOLIT-SRCC-LABEL: test_mfma_i32_4x4x4i8_splat_imm_src2_1:
 ; NOLIT-SRCC:       ; %bb.0: ; %bb
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1
+; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, 1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, 1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, 1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, 1
-; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v4, 0
 ; NOLIT-SRCC-NEXT:    s_nop 0
@@ -4213,11 +4213,11 @@ define amdgpu_kernel void @test_mfma_f32_4x4x1f32_imm_splat(ptr addrspace(1) %ar
 ; NOLIT-SRCC-LABEL: test_mfma_f32_4x4x1f32_imm_splat:
 ; NOLIT-SRCC:       ; %bb.0: ; %bb
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
+; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, 1.0
-; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v4, 0
 ; NOLIT-SRCC-NEXT:    s_nop 0
@@ -4816,11 +4816,11 @@ define amdgpu_kernel void @test_mfma_f32_4x4x1f32_imm(ptr addrspace(1) %arg) #0 
 ; NOLIT-SRCC-LABEL: test_mfma_f32_4x4x1f32_imm:
 ; NOLIT-SRCC:       ; %bb.0: ; %bb
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
+; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, 2.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, 1.0
-; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v4, 0
 ; NOLIT-SRCC-NEXT:    s_nop 0
@@ -4838,11 +4838,11 @@ define amdgpu_kernel void @test_mfma_f32_4x4x1f32_imm(ptr addrspace(1) %arg) #0 
 ; LIT-SRCC-LABEL: test_mfma_f32_4x4x1f32_imm:
 ; LIT-SRCC:       ; %bb.0: ; %bb
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
+; LIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, 1.0
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, 2.0
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, 1.0
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, 1.0
-; LIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v4, 0
 ; LIT-SRCC-NEXT:    s_nop 0
@@ -5408,8 +5408,8 @@ define amdgpu_kernel void @test_mfma_f32_32x32x1f32_imm(ptr addrspace(1) %arg) #
 ; GFX942-NEXT:    v_mov_b32_e32 v29, v1
 ; GFX942-NEXT:    v_mov_b32_e32 v30, v1
 ; GFX942-NEXT:    v_mov_b32_e32 v31, v1
-; GFX942-NEXT:    v_mov_b64_e32 v[32:33], v[30:31]
 ; GFX942-NEXT:    v_mov_b32_e32 v34, 2.0
+; GFX942-NEXT:    v_mov_b64_e32 v[32:33], v[30:31]
 ; GFX942-NEXT:    v_mov_b64_e32 v[30:31], v[28:29]
 ; GFX942-NEXT:    v_mov_b64_e32 v[28:29], v[26:27]
 ; GFX942-NEXT:    v_mov_b64_e32 v[26:27], v[24:25]
@@ -5475,8 +5475,8 @@ define amdgpu_kernel void @test_mfma_f32_32x32x1f32_imm(ptr addrspace(1) %arg) #
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v29, v1
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v30, v1
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v31, v1
-; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[32:33], v[30:31]
 ; GFX942-VGPR-NEXT:    v_mov_b32_e32 v34, 2.0
+; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[32:33], v[30:31]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[30:31], v[28:29]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[28:29], v[26:27]
 ; GFX942-VGPR-NEXT:    v_mov_b64_e32 v[26:27], v[24:25]
@@ -5519,11 +5519,11 @@ define amdgpu_kernel void @test_mfma_f32_4x4x1f32_lit_splat(ptr addrspace(1) %ar
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 0x42f60000
 ; NOLIT-SRCC-NEXT:    v_lshlrev_b32_e32 v4, 4, v0
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
+; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, v1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, v1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, v1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, v1
-; NOLIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; NOLIT-SRCC-NEXT:    s_nop 1
 ; NOLIT-SRCC-NEXT:    v_mfma_f32_4x4x1f32 a[0:3], v0, v1, a[0:3]
@@ -5542,11 +5542,11 @@ define amdgpu_kernel void @test_mfma_f32_4x4x1f32_lit_splat(ptr addrspace(1) %ar
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v1, 0x42f60000
 ; LIT-SRCC-NEXT:    v_lshlrev_b32_e32 v4, 4, v0
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
+; LIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, v1
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, v1
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, v1
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, v1
-; LIT-SRCC-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; LIT-SRCC-NEXT:    s_nop 1
 ; LIT-SRCC-NEXT:    v_mfma_f32_4x4x1f32 a[0:3], v0, v1, a[0:3]
@@ -5742,40 +5742,47 @@ define amdgpu_kernel void @test_mfma_f32_32x32x1f32_vecarg(ptr addrspace(1) %arg
 ; NOLIT-SRCC-NEXT:    global_load_dwordx4 v[8:11], v32, s[0:1] offset:32
 ; NOLIT-SRCC-NEXT:    global_load_dwordx4 v[4:7], v32, s[0:1] offset:16
 ; NOLIT-SRCC-NEXT:    global_load_dwordx4 v[0:3], v32, s[0:1]
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(7)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a28, v28
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(6)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a24, v24
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(5)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a20, v20
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(4)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a16, v16
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(3)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a12, v12
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(2)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a8, v8
+; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(1)
+; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a4, v4
 ; NOLIT-SRCC-NEXT:    s_waitcnt vmcnt(0)
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, v0
+; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, v1
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, v2
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, v3
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a4, v4
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a5, v5
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a6, v6
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a7, v7
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a8, v8
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a9, v9
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a10, v10
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a11, v11
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a12, v12
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a13, v13
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a14, v14
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a15, v15
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a16, v16
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a17, v17
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a18, v18
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a19, v19
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a20, v20
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a21, v21
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a22, v22
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a23, v23
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a24, v24
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a25, v25
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a26, v26
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a27, v27
-; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a28, v28
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a29, v29
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a30, v30
 ; NOLIT-SRCC-NEXT:    v_accvgpr_write_b32 a31, v31
-; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
 ; NOLIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; NOLIT-SRCC-NEXT:    s_nop 1
 ; NOLIT-SRCC-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v0, v1, a[0:31] cbsz:1 abid:2 blgp:3
@@ -5837,40 +5844,47 @@ define amdgpu_kernel void @test_mfma_f32_32x32x1f32_vecarg(ptr addrspace(1) %arg
 ; LIT-SRCC-NEXT:    global_load_dwordx4 v[8:11], v32, s[0:1] offset:32
 ; LIT-SRCC-NEXT:    global_load_dwordx4 v[4:7], v32, s[0:1] offset:16
 ; LIT-SRCC-NEXT:    global_load_dwordx4 v[0:3], v32, s[0:1]
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(7)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a28, v28
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(6)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a24, v24
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(5)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a20, v20
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(4)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a16, v16
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(3)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a12, v12
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(2)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a8, v8
+; LIT-SRCC-NEXT:    s_waitcnt vmcnt(1)
+; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a4, v4
 ; LIT-SRCC-NEXT:    s_waitcnt vmcnt(0)
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a0, v0
+; LIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a1, v1
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a2, v2
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a3, v3
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a4, v4
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a5, v5
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a6, v6
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a7, v7
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a8, v8
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a9, v9
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a10, v10
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a11, v11
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a12, v12
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a13, v13
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a14, v14
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a15, v15
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a16, v16
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a17, v17
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a18, v18
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a19, v19
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a20, v20
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a21, v21
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a22, v22
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a23, v23
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a24, v24
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a25, v25
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a26, v26
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a27, v27
-; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a28, v28
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a29, v29
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a30, v30
 ; LIT-SRCC-NEXT:    v_accvgpr_write_b32 a31, v31
-; LIT-SRCC-NEXT:    v_mov_b32_e32 v0, 1.0
 ; LIT-SRCC-NEXT:    v_mov_b32_e32 v1, 2.0
 ; LIT-SRCC-NEXT:    s_nop 1
 ; LIT-SRCC-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v0, v1, a[0:31] cbsz:1 abid:2 blgp:3

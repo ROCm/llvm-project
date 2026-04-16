@@ -1150,11 +1150,7 @@ void SIInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         MIB.addReg(DestReg, RegState::Define | RegState::Implicit);
     } else {
       MachineInstrBuilder Builder =
-          BuildMI(MBB, MI, DL, get(Opcode), DestSubReg).addReg(SrcSubReg);
-      if (IsFirstSubreg)
-        Builder.addReg(DestReg, RegState::Define | RegState::Implicit);
-
-      Builder.addReg(SrcReg, getKillRegState(UseKill) | RegState::Implicit);
+	BuildMI(MBB, MI, DL, get(Opcode), DestSubReg).addReg(SrcSubReg, getKillRegState(UseKill));
     }
   }
 }

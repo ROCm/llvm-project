@@ -5829,8 +5829,8 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX9-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX9-NEXT:  ; %bb.1:
 ; GFX9-NEXT:    s_bcnt1_i32_b64 s2, s[2:3]
-; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-NEXT:    v_cvt_f64_u32_e32 v[0:1], s2
+; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX9-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
@@ -5862,10 +5862,10 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1064-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; GFX1064-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX1064-NEXT:  ; %bb.1:
-; GFX1064-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1064-NEXT:    s_bcnt1_i32_b64 s2, s[2:3]
-; GFX1064-NEXT:    v_mov_b32_e32 v6, 0
+; GFX1064-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1064-NEXT:    v_cvt_f64_u32_e32 v[0:1], s2
+; GFX1064-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX1064-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1064-NEXT:    s_load_dwordx2 s[2:3], s[0:1], 0x0
 ; GFX1064-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
@@ -5896,10 +5896,10 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1032-NEXT:    s_and_saveexec_b32 s0, vcc_lo
 ; GFX1032-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX1032-NEXT:  ; %bb.1:
-; GFX1032-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1032-NEXT:    s_bcnt1_i32_b32 s3, s3
-; GFX1032-NEXT:    v_mov_b32_e32 v6, 0
+; GFX1032-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1032-NEXT:    v_cvt_f64_u32_e32 v[0:1], s3
+; GFX1032-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX1032-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1032-NEXT:    s_load_dwordx2 s[4:5], s[0:1], 0x0
 ; GFX1032-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
@@ -6043,8 +6043,8 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX9-DPP-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX9-DPP-NEXT:  ; %bb.1:
 ; GFX9-DPP-NEXT:    s_bcnt1_i32_b64 s2, s[2:3]
-; GFX9-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-DPP-NEXT:    v_cvt_f64_u32_e32 v[0:1], s2
+; GFX9-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX9-DPP-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-DPP-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX9-DPP-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
@@ -6076,10 +6076,10 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1064-DPP-NEXT:    s_and_saveexec_b64 s[0:1], vcc
 ; GFX1064-DPP-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX1064-DPP-NEXT:  ; %bb.1:
-; GFX1064-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1064-DPP-NEXT:    s_bcnt1_i32_b64 s2, s[2:3]
-; GFX1064-DPP-NEXT:    v_mov_b32_e32 v6, 0
+; GFX1064-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1064-DPP-NEXT:    v_cvt_f64_u32_e32 v[0:1], s2
+; GFX1064-DPP-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX1064-DPP-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1064-DPP-NEXT:    s_load_dwordx2 s[2:3], s[0:1], 0x0
 ; GFX1064-DPP-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
@@ -6110,10 +6110,10 @@ define amdgpu_kernel void @global_atomic_fadd_double_uni_address_uni_value_agent
 ; GFX1032-DPP-NEXT:    s_and_saveexec_b32 s0, vcc_lo
 ; GFX1032-DPP-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX1032-DPP-NEXT:  ; %bb.1:
-; GFX1032-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1032-DPP-NEXT:    s_bcnt1_i32_b32 s3, s3
-; GFX1032-DPP-NEXT:    v_mov_b32_e32 v6, 0
+; GFX1032-DPP-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1032-DPP-NEXT:    v_cvt_f64_u32_e32 v[0:1], s3
+; GFX1032-DPP-NEXT:    v_mov_b32_e32 v6, 0
 ; GFX1032-DPP-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1032-DPP-NEXT:    s_load_dwordx2 s[4:5], s[0:1], 0x0
 ; GFX1032-DPP-NEXT:    v_mul_f64 v[4:5], v[0:1], 4.0
