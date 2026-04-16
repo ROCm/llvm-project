@@ -59,7 +59,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           aws-region: us-east-2
-          role-to-assume: arn:aws:iam::692859939525:role/therock-ci
+          role-to-assume: arn:aws:iam::692859939525:role/therock-ci-external
 
       - name: Copy prebuilt stage artifacts
         env:
@@ -131,29 +131,6 @@ jobs:
       amdgpu_families: ${{ fromJSON(inputs.build_config).dist_amdgpu_families }}
       multiarch_index: true
       package_version: ${{ inputs.rocm_package_version }}
-    permissions:
-      contents: read
-      id-token: write
-
-  # NOTE: Per-family PyTorch builds — each family gets its own wheel built
-  # against that family's ROCm package index slice.
-  # TODO(future): Consider adding a combined multi-arch pytorch build job
-  # that builds once against the full multi-arch index (amdgpu_families=all).
-  build_pytorch_wheels_per_family:
-    needs: [build_python_packages]
-    name: Build PyTorch | ${{ matrix.family_info.amdgpu_family }}
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).build_pytorch == true }}
-    strategy:
-      fail-fast: false
-      matrix:
-        family_info: ${{ fromJSON(inputs.build_config).per_family_info }}
-    uses: ./.github/workflows/build_windows_pytorch_wheels_ci.yml
-    with:
-      artifact_group: ${{ matrix.family_info.amdgpu_family }}
-      python_version: "3.12"
-      pytorch_git_ref: "release/2.10"
-      rocm_package_find_links_url: "${{ needs.build_python_packages.outputs.package_find_links_url }}/${{ matrix.family_info.amdgpu_family }}/index.html"
-      rocm_version: ${{ inputs.rocm_package_version }}
     permissions:
       contents: read
       id-token: write
