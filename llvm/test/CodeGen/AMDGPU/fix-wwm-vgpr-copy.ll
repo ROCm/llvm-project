@@ -23,12 +23,9 @@ define amdgpu_hs void @wwm(i32 inreg %arg, ptr addrspace(8) inreg %buffer) {
 ; GCN-NEXT:  .LBB0_2: ; %bb602
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, s0, v0
 ; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[0:1]
-; GCN-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GCN-NEXT:    s_and_b64 s[0:1], s[0:1], exec
-; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[0:1]
-; GCN-NEXT:    s_mov_b64 exec, s[2:3]
-; GCN-NEXT:    s_mov_b64 s[0:1], 0
+; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GCN-NEXT:    s_and_b64 s[2:3], s[2:3], exec
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %bb49
@@ -38,14 +35,9 @@ define amdgpu_hs void @wwm(i32 inreg %arg, ptr addrspace(8) inreg %buffer) {
 ; GCN-NEXT:  .LBB0_4: ; %UnifiedReturnBlock
 ; GCN-NEXT:    s_endpgm
 entry:
-  br label %work
 
 bb42:
   br label %bb602
-
-bb602:
-  %tmp603 = phi i32 [ 0, %bb42 ], [ 1, %work ]
-  %tmp607 = icmp eq i32 %tmp603, %tmp1196
   br i1 %tmp607, label %bb49, label %bb54
 
 bb49:
@@ -86,12 +78,9 @@ define amdgpu_hs void @strict_wwm(i32 inreg %arg, ptr addrspace(8) inreg %buffer
 ; GCN-NEXT:  .LBB1_2: ; %bb602
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, s0, v0
 ; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GCN-NEXT:    s_or_b64 s[2:3], s[2:3], s[0:1]
-; GCN-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GCN-NEXT:    s_and_b64 s[0:1], s[0:1], exec
-; GCN-NEXT:    s_or_b64 s[8:9], s[8:9], s[0:1]
-; GCN-NEXT:    s_mov_b64 exec, s[2:3]
-; GCN-NEXT:    s_mov_b64 s[0:1], 0
+; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GCN-NEXT:    s_and_b64 s[2:3], s[2:3], exec
+; GCN-NEXT:    s_mov_b64 exec, s[0:1]
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %bb49

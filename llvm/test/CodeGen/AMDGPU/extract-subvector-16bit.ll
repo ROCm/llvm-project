@@ -1256,24 +1256,18 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; SI-NEXT:    buffer_load_ubyte v4, off, s[0:3], s32
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_and_b32_e32 v4, 1, v4
-; SI-NEXT:    v_cmp_eq_u32_e64 s[40:41], 0, v4
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
 ; SI-NEXT:    s_mov_b32 s38, 0
-; SI-NEXT:    s_xor_b64 s[36:37], s[40:41], exec
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_xor_b64 s[42:43], exec, s[36:37]
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_mov_b64 s[34:35], 0
+; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
+; SI-NEXT:    s_xor_b64 s[34:35], exec, s[36:37]
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
-; SI-NEXT:    s_mov_b64 s[36:37], 0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB7_2
 ; SI-NEXT:  .LBB7_1: ; %T
-; SI-NEXT:    s_mov_b64 s[36:37], 0
-; SI-NEXT:    s_mov_b32 s44, 0xf000
+; SI-NEXT:    s_mov_b32 s40, 0xf000
 ; SI-NEXT:    s_mov_b32 s39, s38
 ; SI-NEXT:    s_mov_b64 s[36:37], s[38:39]
-; SI-NEXT:    s_mov_b32 s39, s44
+; SI-NEXT:    s_mov_b32 s39, s40
 ; SI-NEXT:    buffer_load_ushort v8, v[0:1], s[36:39], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v4, v[0:1], s[36:39], 0 addr64 offset:2 glc
@@ -1315,17 +1309,13 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; SI-NEXT:    v_or_b32_e32 v2, v2, v10
 ; SI-NEXT:    v_or_b32_e32 v1, v8, v11
 ; SI-NEXT:  .LBB7_2:
-; SI-NEXT:    s_or_b64 exec, exec, s[42:43]
-; SI-NEXT:    s_xor_b64 s[36:37], exec, s[40:41]
-; SI-NEXT:    s_and_b64 s[36:37], s[36:37], exec
-; SI-NEXT:    s_or_b64 s[34:35], s[34:35], s[36:37]
-; SI-NEXT:    s_mov_b64 exec, s[40:41]
-; SI-NEXT:    s_mov_b64 s[36:37], 0
-; SI-NEXT:    s_mov_b64 s[36:37], 0
+; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
+; SI-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; SI-NEXT:    s_and_b64 s[34:35], s[34:35], exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB7_4
 ; SI-NEXT:  .LBB7_3: ; %F
-; SI-NEXT:    s_mov_b64 s[36:37], 0
 ; SI-NEXT:    s_mov_b32 s40, 0xf000
 ; SI-NEXT:    s_mov_b32 s39, s38
 ; SI-NEXT:    s_mov_b64 s[36:37], s[38:39]
@@ -1405,24 +1395,18 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; SI-NEXT:    v_or_b32_e32 v1, v2, v5
 ; SI-NEXT:    v_or_b32_e32 v2, v12, v4
 ; SI-NEXT:    v_or_b32_e32 v3, v3, v7
-; SI-NEXT:    s_mov_b64 s[34:35], 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: vec_16xi16_extract_8xi16_0:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    buffer_load_ubyte v4, off, s[0:3], s32
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX9-NEXT:    v_cmp_eq_u32_e64 s[36:37], 0, v4
-; GFX9-NEXT:    s_xor_b64 s[40:41], s[36:37], exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[40:41]
-; GFX9-NEXT:    s_mov_b64 exec, s[40:41]
-; GFX9-NEXT:    s_mov_b64 s[40:41], 0
+; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, s[36:37]
+; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB7_2
 ; GFX9-NEXT:  .LBB7_1: ; %T
@@ -1430,16 +1414,12 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    s_mov_b64 s[40:41], 0
 ; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX9-NEXT:  .LBB7_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, s[38:39]
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_and_b64 s[38:39], s[38:39], exec
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
-; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; GFX9-NEXT:    s_and_b64 s[34:35], s[34:35], exec
+; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB7_4
 ; GFX9-NEXT:  .LBB7_3: ; %F
@@ -1447,7 +1427,6 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
 ; GFX9-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GFX9-NEXT:  .LBB7_4: ; %exit
 ; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
@@ -1476,25 +1455,19 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX9-NEXT:    v_perm_b32 v1, v5, v8, s34
 ; GFX9-NEXT:    v_perm_b32 v2, v6, v2, s34
 ; GFX9-NEXT:    v_perm_b32 v3, v7, v3, s34
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: vec_16xi16_extract_8xi16_0:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    scratch_load_u8 v4, off, s32
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e64 s1, 0, v4
-; GFX11-TRUE16-NEXT:    s_xor_b32 s3, s1, exec_lo
-; GFX11-TRUE16-NEXT:    s_xor_b32 s2, exec_lo, s3
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s3
-; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v4
+; GFX11-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_2
 ; GFX11-TRUE16-NEXT:  .LBB7_1: ; %T
@@ -1502,17 +1475,12 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[0:3], v[0:1], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0
 ; GFX11-TRUE16-NEXT:  .LBB7_2:
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-TRUE16-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB7_4
 ; GFX11-TRUE16-NEXT:  .LBB7_3: ; %F
@@ -1520,7 +1488,6 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[0:3], v[2:3], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
 ; GFX11-TRUE16-NEXT:  .LBB7_4: ; %exit
 ; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v3.l
@@ -1540,25 +1507,19 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.l, v4.l, 0x3d00, s0
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v2.h, v4.l, 0x3d00, s34
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v3.h, 0x3d00, v4.l, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: vec_16xi16_extract_8xi16_0:
 ; GFX11-FAKE16:       ; %bb.0:
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-FAKE16-NEXT:    scratch_load_u8 v4, off, s32
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e64 s1, 0, v4
-; GFX11-FAKE16-NEXT:    s_xor_b32 s3, s1, exec_lo
-; GFX11-FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s3
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s3
-; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v4
+; GFX11-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_2
 ; GFX11-FAKE16-NEXT:  .LBB7_1: ; %T
@@ -1566,17 +1527,12 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[0:3], v[0:1], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0
 ; GFX11-FAKE16-NEXT:  .LBB7_2:
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-FAKE16-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB7_4
 ; GFX11-FAKE16-NEXT:  .LBB7_3: ; %F
@@ -1584,7 +1540,6 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[0:3], v[2:3], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
 ; GFX11-FAKE16-NEXT:  .LBB7_4: ; %exit
 ; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v3
@@ -1596,7 +1551,6 @@ define amdgpu_gfx <8 x i16> @vec_16xi16_extract_8xi16_0(i1 inreg %cond, ptr addr
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v6, 16, v1
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v3, 0x3900, v5, vcc_lo
 ; GFX11-FAKE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v2
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v2, 0x3900, v5, vcc_lo
 ; GFX11-FAKE16-NEXT:    v_cmp_gt_u16_e32 vcc_lo, 0x3801, v7
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v7, 0x3900, v5, vcc_lo
@@ -1643,24 +1597,18 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; SI-NEXT:    buffer_load_ubyte v4, off, s[0:3], s32
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_and_b32_e32 v4, 1, v4
-; SI-NEXT:    v_cmp_eq_u32_e64 s[40:41], 0, v4
+; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
 ; SI-NEXT:    s_mov_b32 s38, 0
-; SI-NEXT:    s_xor_b64 s[36:37], s[40:41], exec
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_xor_b64 s[42:43], exec, s[36:37]
-; SI-NEXT:    s_mov_b64 s[34:35], 0
-; SI-NEXT:    s_mov_b64 s[34:35], 0
+; SI-NEXT:    s_xor_b64 s[36:37], vcc, exec
+; SI-NEXT:    s_xor_b64 s[34:35], exec, s[36:37]
 ; SI-NEXT:    s_mov_b64 exec, s[36:37]
-; SI-NEXT:    s_mov_b64 s[36:37], 0
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB8_2
 ; SI-NEXT:  .LBB8_1: ; %T
-; SI-NEXT:    s_mov_b64 s[36:37], 0
-; SI-NEXT:    s_mov_b32 s44, 0xf000
+; SI-NEXT:    s_mov_b32 s40, 0xf000
 ; SI-NEXT:    s_mov_b32 s39, s38
 ; SI-NEXT:    s_mov_b64 s[36:37], s[38:39]
-; SI-NEXT:    s_mov_b32 s39, s44
+; SI-NEXT:    s_mov_b32 s39, s40
 ; SI-NEXT:    buffer_load_ushort v3, v[0:1], s[36:39], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_load_ushort v4, v[0:1], s[36:39], 0 addr64 offset:2 glc
@@ -1702,17 +1650,13 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; SI-NEXT:    v_or_b32_e32 v2, v2, v10
 ; SI-NEXT:    v_or_b32_e32 v3, v3, v11
 ; SI-NEXT:  .LBB8_2:
-; SI-NEXT:    s_or_b64 exec, exec, s[42:43]
-; SI-NEXT:    s_xor_b64 s[36:37], exec, s[40:41]
-; SI-NEXT:    s_and_b64 s[36:37], s[36:37], exec
-; SI-NEXT:    s_or_b64 s[34:35], s[34:35], s[36:37]
-; SI-NEXT:    s_mov_b64 exec, s[40:41]
-; SI-NEXT:    s_mov_b64 s[36:37], 0
-; SI-NEXT:    s_mov_b64 s[36:37], 0
+; SI-NEXT:    s_or_b64 exec, exec, s[34:35]
+; SI-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; SI-NEXT:    s_and_b64 s[34:35], s[34:35], exec
+; SI-NEXT:    s_mov_b64 exec, vcc
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB8_4
 ; SI-NEXT:  .LBB8_3: ; %F
-; SI-NEXT:    s_mov_b64 s[36:37], 0
 ; SI-NEXT:    s_mov_b32 s40, 0xf000
 ; SI-NEXT:    s_mov_b32 s39, s38
 ; SI-NEXT:    s_mov_b64 s[36:37], s[38:39]
@@ -1791,24 +1735,18 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; SI-NEXT:    v_or_b32_e32 v1, v1, v2
 ; SI-NEXT:    v_or_b32_e32 v2, v13, v4
 ; SI-NEXT:    v_or_b32_e32 v3, v12, v6
-; SI-NEXT:    s_mov_b64 s[34:35], 0
 ; SI-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: vec_16xf16_extract_8xf16_0:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    buffer_load_ubyte v4, off, s[0:3], s32
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    v_and_b32_e32 v4, 1, v4
-; GFX9-NEXT:    v_cmp_eq_u32_e64 s[36:37], 0, v4
-; GFX9-NEXT:    s_xor_b64 s[40:41], s[36:37], exec
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[40:41]
-; GFX9-NEXT:    s_mov_b64 exec, s[40:41]
-; GFX9-NEXT:    s_mov_b64 s[40:41], 0
+; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v4
+; GFX9-NEXT:    s_xor_b64 s[36:37], vcc, exec
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, s[36:37]
+; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX9-NEXT:  .LBB8_1: ; %T
@@ -1816,16 +1754,12 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[0:1], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    s_mov_b64 s[40:41], 0
 ; GFX9-NEXT:    ; kill: killed $vgpr0 killed $vgpr1
 ; GFX9-NEXT:  .LBB8_2:
-; GFX9-NEXT:    s_or_b64 exec, exec, s[38:39]
-; GFX9-NEXT:    s_xor_b64 s[38:39], exec, s[36:37]
-; GFX9-NEXT:    s_and_b64 s[38:39], s[38:39], exec
-; GFX9-NEXT:    s_or_b64 s[34:35], s[34:35], s[38:39]
-; GFX9-NEXT:    s_mov_b64 exec, s[36:37]
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
+; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
+; GFX9-NEXT:    s_xor_b64 s[34:35], exec, vcc
+; GFX9-NEXT:    s_and_b64 s[34:35], s[34:35], exec
+; GFX9-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB8_4
 ; GFX9-NEXT:  .LBB8_3: ; %F
@@ -1833,7 +1767,6 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-NEXT:    global_load_dwordx4 v[4:7], v[2:3], off glc
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    s_mov_b64 s[36:37], 0
 ; GFX9-NEXT:    ; kill: killed $vgpr2 killed $vgpr3
 ; GFX9-NEXT:  .LBB8_4: ; %exit
 ; GFX9-NEXT:    s_or_b64 exec, exec, s[34:35]
@@ -1860,25 +1793,19 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX9-NEXT:    v_pack_b32_f16 v1, v9, v5
 ; GFX9-NEXT:    v_pack_b32_f16 v2, v8, v6
 ; GFX9-NEXT:    v_pack_b32_f16 v3, v3, v7
-; GFX9-NEXT:    s_mov_b64 s[34:35], 0
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-TRUE16-LABEL: vec_16xf16_extract_8xf16_0:
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    scratch_load_u8 v4, off, s32
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e64 s1, 0, v4
-; GFX11-TRUE16-NEXT:    s_xor_b32 s3, s1, exec_lo
-; GFX11-TRUE16-NEXT:    s_xor_b32 s2, exec_lo, s3
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s3
-; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v4
+; GFX11-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX11-TRUE16-NEXT:  .LBB8_1: ; %T
@@ -1886,17 +1813,12 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[0:3], v[0:1], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    s_mov_b32 s3, 0
 ; GFX11-TRUE16-NEXT:  .LBB8_2:
-; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-TRUE16-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-TRUE16-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
+; GFX11-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-TRUE16-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-TRUE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-TRUE16-NEXT:    ; divergent control-flow edge
 ; GFX11-TRUE16-NEXT:    s_cbranch_execz .LBB8_4
 ; GFX11-TRUE16-NEXT:  .LBB8_3: ; %F
@@ -1904,7 +1826,6 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    global_load_b128 v[0:3], v[2:3], off glc dlc
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-TRUE16-NEXT:    s_mov_b32 s1, 0
 ; GFX11-TRUE16-NEXT:  .LBB8_4: ; %exit
 ; GFX11-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-TRUE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v3.l
@@ -1924,25 +1845,19 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v0.l, v4.l, 0x3d00, s0
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v2.h, v4.l, 0x3d00, s34
 ; GFX11-TRUE16-NEXT:    v_cndmask_b16 v3.h, 0x3d00, v4.l, s1
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: vec_16xf16_extract_8xf16_0:
 ; GFX11-FAKE16:       ; %bb.0:
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-FAKE16-NEXT:    scratch_load_u8 v4, off, s32
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    v_and_b32_e32 v4, 1, v4
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e64 s1, 0, v4
-; GFX11-FAKE16-NEXT:    s_xor_b32 s3, s1, exec_lo
-; GFX11-FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s3
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s3
-; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0
+; GFX11-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v4
+; GFX11-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_2
 ; GFX11-FAKE16-NEXT:  .LBB8_1: ; %T
@@ -1950,17 +1865,12 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[0:3], v[0:1], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s3, 0
 ; GFX11-FAKE16-NEXT:  .LBB8_2:
-; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_xor_b32 s2, exec_lo, s1
-; GFX11-FAKE16-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX11-FAKE16-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-FAKE16-NEXT:    s_or_b32 s0, s0, s2
-; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
+; GFX11-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX11-FAKE16-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-FAKE16-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX11-FAKE16-NEXT:    ; divergent control-flow edge
 ; GFX11-FAKE16-NEXT:    s_cbranch_execz .LBB8_4
 ; GFX11-FAKE16-NEXT:  .LBB8_3: ; %F
@@ -1968,7 +1878,6 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-FAKE16-NEXT:    global_load_b128 v[0:3], v[2:3], off glc dlc
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s1, 0
 ; GFX11-FAKE16-NEXT:  .LBB8_4: ; %exit
 ; GFX11-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX11-FAKE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v3
@@ -1980,7 +1889,6 @@ define amdgpu_gfx <8 x half> @vec_16xf16_extract_8xf16_0(i1 inreg %cond, ptr add
 ; GFX11-FAKE16-NEXT:    v_lshrrev_b32_e32 v6, 16, v1
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v3, 0x3900, v5, vcc_lo
 ; GFX11-FAKE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v2
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v2, 0x3900, v5, vcc_lo
 ; GFX11-FAKE16-NEXT:    v_cmp_ge_f16_e32 vcc_lo, 0.5, v7
 ; GFX11-FAKE16-NEXT:    v_cndmask_b32_e32 v7, 0x3900, v5, vcc_lo
