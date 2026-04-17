@@ -503,11 +503,16 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    scratch_load_b128 v[39:42], off, s33 offset:228 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[43:46], off, s33 offset:244 th:TH_LOAD_LU
 ; CHECK-NEXT:    scratch_load_b128 v[47:50], off, s33 offset:260 th:TH_LOAD_LU
+; CHECK-NEXT:    s_wait_loadcnt 0x1
+; CHECK-NEXT:    v_dual_mov_b32 v44, v0 :: v_dual_mov_b32 v45, v1
+; CHECK-NEXT:    v_mov_b32_e32 v46, v2
 ; CHECK-NEXT:    s_clause 0x3
 ; CHECK-NEXT:    scratch_store_b128 off, v[15:18], s32 offset:112
 ; CHECK-NEXT:    scratch_store_b128 off, v[11:14], s32 offset:96
 ; CHECK-NEXT:    scratch_store_b128 off, v[7:10], s32 offset:80
 ; CHECK-NEXT:    scratch_store_b128 off, v[3:6], s32 offset:64
+; CHECK-NEXT:    v_dual_mov_b32 v0, v72 :: v_dual_mov_b32 v1, v73
+; CHECK-NEXT:    v_dual_mov_b32 v2, v74 :: v_dual_mov_b32 v3, v75
 ; CHECK-NEXT:    v_dual_mov_b32 v4, v88 :: v_dual_mov_b32 v5, v89
 ; CHECK-NEXT:    v_dual_mov_b32 v6, v90 :: v_dual_mov_b32 v7, v91
 ; CHECK-NEXT:    v_dual_mov_b32 v8, v76 :: v_dual_mov_b32 v9, v77
@@ -515,23 +520,14 @@ define <8 x half> @baz() nounwind {
 ; CHECK-NEXT:    v_dual_mov_b32 v12, v60 :: v_dual_mov_b32 v13, v61
 ; CHECK-NEXT:    v_dual_mov_b32 v14, v62 :: v_dual_mov_b32 v15, v63
 ; CHECK-NEXT:    v_dual_mov_b32 v16, v108 :: v_dual_mov_b32 v17, v109
-; CHECK-NEXT:    v_mov_b32_e32 v18, v110
-; CHECK-NEXT:    s_wait_loadcnt 0x1
-; CHECK-NEXT:    v_dual_mov_b32 v44, v0 :: v_dual_mov_b32 v45, v1
-; CHECK-NEXT:    v_mov_b32_e32 v46, v2
-; CHECK-NEXT:    v_dual_mov_b32 v0, v72 :: v_dual_mov_b32 v1, v73
-; CHECK-NEXT:    v_dual_mov_b32 v2, v74 :: v_dual_mov_b32 v3, v75
-; CHECK-NEXT:    v_mov_b32_e32 v43, v34
-; CHECK-NEXT:    v_dual_mov_b32 v42, v33 :: v_dual_mov_b32 v41, v32
-; CHECK-NEXT:    v_dual_mov_b32 v40, v31 :: v_dual_mov_b32 v39, v30
-; CHECK-NEXT:    v_dual_mov_b32 v38, v29 :: v_dual_mov_b32 v37, v28
-; CHECK-NEXT:    v_dual_mov_b32 v36, v27 :: v_dual_mov_b32 v35, v26
-; CHECK-NEXT:    v_mov_b32_e32 v34, v25
-; CHECK-NEXT:    v_mov_b32_e32 v33, v24
-; CHECK-NEXT:    v_mov_b32_e32 v32, v23
-; CHECK-NEXT:    v_mov_b32_e32 v31, v22
-; CHECK-NEXT:    v_mov_b32_e32 v30, v21
-; CHECK-NEXT:    v_mov_b32_e32 v29, v20
+; CHECK-NEXT:    v_dual_mov_b32 v18, v110 :: v_dual_mov_b32 v35, v26
+; CHECK-NEXT:    v_dual_mov_b32 v39, v30 :: v_dual_mov_b32 v38, v29
+; CHECK-NEXT:    v_dual_mov_b32 v43, v34 :: v_dual_mov_b32 v42, v33
+; CHECK-NEXT:    v_dual_mov_b32 v41, v32 :: v_dual_mov_b32 v40, v31
+; CHECK-NEXT:    v_dual_mov_b32 v37, v28 :: v_dual_mov_b32 v36, v27
+; CHECK-NEXT:    v_dual_mov_b32 v34, v25 :: v_dual_mov_b32 v33, v24
+; CHECK-NEXT:    v_dual_mov_b32 v32, v23 :: v_dual_mov_b32 v31, v22
+; CHECK-NEXT:    v_dual_mov_b32 v30, v21 :: v_dual_mov_b32 v29, v20
 ; CHECK-NEXT:    v_mov_b32_e32 v28, v19
 ; CHECK-NEXT:    s_clause 0x3
 ; CHECK-NEXT:    scratch_store_b128 off, v[43:46], s32 offset:48
