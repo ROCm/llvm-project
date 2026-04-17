@@ -1,5 +1,5 @@
-! RUN: %flang -ffast-amd-memory-allocator -S -emit-llvm -fopenmp -fopenmp-targets=amdgcn-amd-amdhsa --offload-arch=gfx90a -o - %s | FileCheck %s --check-prefix=CHECK-OMP
-! RUN: %flang -ffast-amd-memory-allocator -S -emit-llvm -target amdgcn-- -o - %s | FileCheck %s --check-prefix=CHECK
+! RUN: %flang -fopenmp-default-allocate=gpu -S -emit-llvm -fopenmp -fopenmp-targets=amdgcn-amd-amdhsa --offload-arch=gfx90a -o - %s | FileCheck %s --check-prefix=CHECK-OMP
+! RUN: %flang -fopenmp-default-allocate=gpu -S -emit-llvm -target amdgcn-- -o - %s | FileCheck %s --check-prefix=CHECK
 !REQUIRES: AFAR
 subroutine func_t_device()
   !$omp declare target enter(func_t_device) device_type(nohost)
