@@ -531,7 +531,7 @@ define void @multi_stage_recurse2(i32 %val) #2 {
 ; GCN: .set .Lusage_multi_stage_recurse.has_indirect_call, or(0, .Lmulti_stage_recurse1.has_indirect_call)
 ; GCN: TotalNumSgprs: 40
 ; GCN: NumVgprs: 48
-; GCN: ScratchSize: 16
+; GCN: ScratchSize: 32
 define amdgpu_kernel void @usage_multi_stage_recurse(i32 %n) #0 {
   call void @multi_stage_recurse1(i32 %n)
   ret void
@@ -586,7 +586,7 @@ define void @multi_stage_recurse_noattr2(i32 %val) #0 {
 ; GCN: .set .Lusage_multi_stage_recurse_noattrs.has_indirect_call, or(0, .Lmulti_stage_recurse_noattr1.has_indirect_call)
 ; GCN: TotalNumSgprs: 63
 ; GCN: NumVgprs: 41
-; GCN: ScratchSize: 16
+; GCN: ScratchSize: 32
 define amdgpu_kernel void @usage_multi_stage_recurse_noattrs(i32 %n) #0 {
   call void @multi_stage_recurse_noattr1(i32 %n)
   ret void

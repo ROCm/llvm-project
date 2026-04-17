@@ -34,8 +34,10 @@ define void @_Z12lane_pc_testj() #0 !dbg !9 {
 ; GCN-NEXT:    s_cmp_lg_u32 s8, s6
 ; GCN-NEXT:    s_cselect_b32 s5, s7, s5
 ; GCN-NEXT:    s_cselect_b32 s4, s8, s4
+; GCN-NEXT:  ; %bb.1: ; %lab
+; GCN-NEXT:    .loc 0 0 1 is_stmt 0 ; t.cpp:0:1
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
-; GCN-NEXT:    .loc 0 13 1 ; t.cpp:13:1
+; GCN-NEXT:    .loc 0 13 1 is_stmt 1 ; t.cpp:13:1
 ; GCN-NEXT:    v_mov_b32_e32 v0, s4
 ; GCN-NEXT:    v_mov_b32_e32 v1, s5
 ; GCN-NEXT:    flat_store_dword v[0:1], v2
