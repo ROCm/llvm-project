@@ -1,6 +1,7 @@
-; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc=greedy -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
-; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc=basic -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
-; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc=fast -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
+; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc-npm=greedy -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
+; TODO: Tests should be moved to NPM when basic regalloc is ported
+; RUN: not llc -enable-new-pm=0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc=basic -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
+; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -vgpr-regalloc-npm=fast -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error %s
 
 declare <32 x i32> @llvm.amdgcn.mfma.i32.32x32x4i8(i32, i32, <32 x i32>, i32 immarg, i32 immarg, i32 immarg)
 
