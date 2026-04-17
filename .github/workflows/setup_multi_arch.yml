@@ -59,7 +59,6 @@ jobs:
       windows_build_config: >
             [{"test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm", "family": "gfx1151", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "windows-release", "artifact_group": "gfx1151"}]
       test_type: 'quick'        
-      test_type: ${{ steps.configure.outputs.test_type }}
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
       rocm_package_version: ${{ steps.rocm_package_version.outputs.rocm_package_version }}
