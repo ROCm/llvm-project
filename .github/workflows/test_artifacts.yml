@@ -111,6 +111,7 @@ jobs:
         env:
           ARTIFACT_GROUP: ${{ inputs.artifact_group }}
           AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+          AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
           TEST_TYPE: ${{ inputs.test_type }}
           TEST_LABELS: ${{ inputs.test_labels }}
         run: |
@@ -128,6 +129,7 @@ jobs:
     with:
       artifact_group: ${{ inputs.artifact_group }}
       artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: ${{ needs.configure_test_matrix.outputs.platform }}
@@ -141,6 +143,7 @@ jobs:
       artifact_group: ${{ inputs.artifact_group }}
       artifact_run_id: ${{ inputs.artifact_run_id }}
       amdgpu_families: ${{ inputs.amdgpu_families }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: ${{ needs.configure_test_matrix.outputs.platform }}
 
