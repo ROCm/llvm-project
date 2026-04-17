@@ -1,4 +1,4 @@
-; RUN: opt -S -mtriple=amdgcn-unknown-amdhsa -mcpu=kaveri -passes=amdgpu-promote-alloca < %s | FileCheck %s
+; RUN: opt -S -mtriple=amdgcn-unknown-amdhsa -mcpu=kaveri -passes="amdgpu-promote-alloca" < %s | FileCheck %s
 ; Nothing should be done if the addrspacecast is captured.
 
 declare void @consume_ptr2int(i32) #0
