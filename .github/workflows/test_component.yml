@@ -10,6 +10,9 @@ on:
         type: string
       amdgpu_families:
         type: string
+      amdgpu_targets:
+        type: string
+        default: ""          
       test_runs_on:
         type: string
       platform:
