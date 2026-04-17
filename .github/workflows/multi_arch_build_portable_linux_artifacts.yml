@@ -77,7 +77,97 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
 
+      - name: Update Submodule Pointer to the PR
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          git config --global --add safe.directory $PWD
+          # Fetch the latest commit SHA from the PR branch
+          PR_SHA=${{ github.event.pull_request.head.sha }}
+          # Update the submodule pointer using cacheinfo
+          git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          git commit -m "Update submodule reference for compiler/amd-llvm"
+          # Verify the pointer update
+          git submodule status
+          git submodule
+
+      - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: multiple-pr-build-params
+          path: .
+
+      - name: Check for parameterised PR trigger
+        id: check_parameterised_trigger
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if [ -f "./${{ github.run_id }}_PR_params.env" ]; then
+            echo "parameterised_trigger=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "parameterised_trigger=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Source the multiple PR's of params
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
+        run: |
+          set -a
+          source ./${{ github.run_id }}_PR_params.env
+          set +a
+          echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+          echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
+          echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+
+      - name: Update submodule pointers from provided parameter PR values
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
+        run: |
+          git config --global --add safe.directory "$PWD"
+          # Function to get SHA with git-ls
+          get_pr_sha() {
+             local pr_url="$1"
+             local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
+             local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
+             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+          }
+
+          # LLVM PR
+          LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
+          echo "LLVM head SHA: $LLVM_SHA"
+          git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+
+          # SPIRV PR
+          if [[ -n "$SPIRV_PR_URL" ]]; then
+              SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
+              echo "SPIRV head SHA: $SPIRV_SHA"
+              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          else
+              SPIRV_SHA="$(git ls-remote https://github.com/ROCm/SPIRV-LLVM-Translator.git refs/heads/amd-staging | awk '{print $1}')"
+              echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
+              git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+          fi
+
+          # HIPIFY PR
+          if [[ -n "$HIPIFY_PR_URL" ]]; then
+              HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
+              echo "HIPIFY head SHA: $HIPIFY_SHA"
+              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          else
+              HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
+              echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
+              git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+          fi
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          git commit -m "Update submodule references from PR URLs"
+          git submodule status
+          git submodule
+            
       - name: Install python deps
         run: pip install -r requirements.txt
 
@@ -97,6 +187,10 @@ jobs:
         run: |
           ./build_tools/health_status.py
 
+      - name: Remove ununsed existing patchces									 
+        run: |
+          rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
+
       # Note: no AWS credentials should be needed here since our CI buckets
       # all currently have public read access.
       - name: Fetch inbound artifacts
@@ -112,6 +206,17 @@ jobs:
         timeout-minutes: 30
         run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
+      - name: TheRock and llvm SHA
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        run: |
+             git config --global --add safe.directory $PWD
+             git log --oneline -1
+             ls -l compiler/amd-llvm
+             cd compiler/amd-llvm/llvm
+             ls -l
+             git log --oneline -3
+             cd -
+          
       - name: Get stage configuration
         id: stage_config
         run: |
@@ -126,7 +231,14 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
-      - name: Configure
+      - name: Configure PR Projects
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
+        env:
+          cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+          amdgpu_families: ${{ inputs.amdgpu_families }}
+          package_version: ${{ inputs.package_version }}
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPILER=ON  -DTHEROCK_ENABLE_CORE_RUNTIME=ON -DTHEROCK_ENABLE_HIP_RUNTIME=ON -DTHEROCK_ENABLE_RCCL=ON -DTHEROCK_ENABLE_PRIM=ON -DTHEROCK_ENABLE_BLAS=ON -DTHEROCK_ENABLE_RAND=ON -DTHEROCK_ENABLE_SOLVER=ON -DTHEROCK_ENABLE_SPARSE=ON -DTHEROCK_ENABLE_SYSDEPS=OFF  -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_OCL_RUNTIME=ON  -DTHEROCK_ENABLE_MATH_LIBS=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          BUILD_DIR: build           
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
@@ -134,6 +246,22 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }}
+
+      - name: Configure All Projects
+        if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
+        env:
+          cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+          amdgpu_families: ${{ inputs.amdgpu_families }}
+          package_version: ${{ inputs.package_version }}
+          extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          BUILD_DIR: build
+        run: |
+          cmake -B "${BUILD_DIR}" -S . -GNinja \
+            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ steps.stage_config.outputs.cmake_args }}            
 
       - name: Build stage
         run: |
