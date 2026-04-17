@@ -1,10 +1,19 @@
 ; RUN: llc -O0 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 < %s | FileCheck %s
 
-; CallGraphAnalysis, which CodeGenSCC order depends on, does not look
+; LazyCallGraph, which CodeGenSCC order depends on, does not look
 ; through aliases. If GlobalOpt is never run, we do not see direct
 ; calls,
 
 @alias1 = hidden alias void (), ptr @aliasee_vgpr32_sgpr76
+
+; CHECK:      .set .Laliasee_vgpr32_sgpr76.num_vgpr, 27
+; CHECK-NEXT: .set .Laliasee_vgpr32_sgpr76.num_agpr, 0
+; CHECK-NEXT: .set .Laliasee_vgpr32_sgpr76.numbered_sgpr, 32
+define internal void @aliasee_vgpr32_sgpr76() #1 {
+bb:
+  call void asm sideeffect "; clobber v26 ", "~{v26}"()
+  ret void
+}
 
 ; The parent kernel has a higher VGPR usage than the possible callees.
 
@@ -19,15 +28,6 @@ define amdgpu_kernel void @kernel1() #0 {
 bb:
   call void asm sideeffect "; clobber v40 ", "~{v40}"()
   call void @alias1() #2
-  ret void
-}
-
-; CHECK:      .set .Laliasee_vgpr32_sgpr76.num_vgpr, 27
-; CHECK-NEXT: .set .Laliasee_vgpr32_sgpr76.num_agpr, 0
-; CHECK-NEXT: .set .Laliasee_vgpr32_sgpr76.numbered_sgpr, 32
-define internal void @aliasee_vgpr32_sgpr76() #1 {
-bb:
-  call void asm sideeffect "; clobber v26 ", "~{v26}"()
   ret void
 }
 
