@@ -2245,10 +2245,10 @@ defm diagnostics_show_note_include_stack : BoolFOption<"diagnostics-show-note-in
 defm diagnostics_show_inlining_chain
     : BoolFOption<"diagnostics-show-inlining-chain",
                   CodeGenOpts<"ShowInliningChain">, DefaultFalse,
-                  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+                  PosFlag<SetTrue, [], [ClangOption, CLOption, CC1Option],
                           "Show inlining chain notes for "
                           "[[gnu::warning/error]] diagnostics">,
-                  NegFlag<SetFalse, [], [ClangOption, CC1Option]>>;
+                  NegFlag<SetFalse, [], [ClangOption, CLOption, CC1Option]>>;
 def fdiagnostics_format_EQ : Joined<["-"], "fdiagnostics-format=">, Group<f_clang_Group>;
 def fdiagnostics_show_category_EQ : Joined<["-"], "fdiagnostics-show-category=">, Group<f_clang_Group>;
 def fdiagnostics_show_template_tree : Flag<["-"], "fdiagnostics-show-template-tree">,
@@ -2348,6 +2348,14 @@ def winx64_eh_unwindv2
       NormalizedValues<["Disabled", "BestEffort", "Required"]>,
       NormalizedValuesScope<"llvm::WinX64EHUnwindV2Mode">,
       MarshallingInfoEnum<CodeGenOpts<"WinX64EHUnwindV2">, "Disabled">;
+def win_cfg_mechanism
+    : Joined<["-"], "fwin-cfg-mechanism=">, Group<f_Group>,
+    Visibility<[ClangOption, CC1Option]>,
+      HelpText<"Sets the mechanism to use for Control Flow Guard on Windows">,
+      Values<"automatic,dispatch,check">,
+      NormalizedValues<["Automatic", "Dispatch", "Check"]>,
+      NormalizedValuesScope<"llvm::ControlFlowGuardMechanism">,
+      MarshallingInfoEnum<CodeGenOpts<"WinControlFlowGuardMechanism">, "Automatic">;
 def fexcess_precision_EQ : Joined<["-"], "fexcess-precision=">, Group<f_Group>,
   Visibility<[ClangOption, CLOption]>,
   HelpText<"Allows control over excess precision on targets where native "
@@ -6815,8 +6823,10 @@ def y : Joined<["-"], "y">;
 
 defm integrated_as : BoolFOption<"integrated-as",
   CodeGenOpts<"DisableIntegratedAS">, DefaultFalse,
-  NegFlag<SetTrue, [], [ClangOption, CC1Option, FlangOption], "Disable">,
-  PosFlag<SetFalse, [], [ClangOption, CC1Option, FlangOption], "Enable">,
+  NegFlag<SetTrue, [], [ClangOption, CC1Option, FlangOption, FC1Option],
+          "Disable">,
+  PosFlag<SetFalse, [], [ClangOption, CC1Option, FlangOption, FC1Option],
+          "Enable">,
   BothFlags<[], [ClangOption], " the integrated assembler">>;
 
 def fintegrated_cc1 : Flag<["-"], "fintegrated-cc1">,
@@ -6839,7 +6849,7 @@ def fno_integrated_objemitter : Flag<["-"], "fno-integrated-objemitter">,
 
 def : Flag<["-"], "integrated-as">, Alias<fintegrated_as>;
 def : Flag<["-"], "no-integrated-as">, Alias<fno_integrated_as>,
-      Visibility<[ClangOption, CC1Option, FlangOption]>;
+      Visibility<[ClangOption, CC1Option, FlangOption, FC1Option]>;
 
 def working_directory : Separate<["-"], "working-directory">,
   Visibility<[ClangOption, CC1Option]>,
@@ -9821,6 +9831,10 @@ def _SLASH_d2epilogunwindrequirev2 : CLFlag<"d2epilogunwindrequirev2">,
   HelpText<"Require generation of unwind v2 (epilog) information for x64 Windows">;
 def _SLASH_d2guardnochecks : CLFlag<"d2guardnochecks">,
   HelpText<"When used with /guard:cf, emits Windows Control Flow Guard tables only (no checks)">;
+def _SLASH_d2guardcfgdispatch : CLFlag<"d2guardcfgdispatch">,
+  HelpText<"Use the dispatch mechanism to call the Control Flow Guard checker">;
+def _SLASH_d2guardcfgdispatch_ : CLFlag<"d2guardcfgdispatch-">,
+  HelpText<"Use the check mechanism to call the Control Flow Guard checker">;
 def _SLASH_EH : CLJoined<"EH">, HelpText<"Set exception handling model">;
 def _SLASH_EP : CLFlag<"EP">,
   HelpText<"Disable linemarker output and preprocess to stdout">;
@@ -10293,6 +10307,8 @@ def dxc_hlsl_version : Option<["/", "-"], "HV", KIND_JOINED_OR_SEPARATE>,
                      Values<"2016, 2017, 2018, 2021, 202x, 202y">;
 def dxc_validator_path_EQ : Joined<["--"], "dxv-path=">, Group<dxc_Group>,
   HelpText<"DXIL validator installation path">;
+def spirv_validator_path_EQ : Joined<["--"], "spirv-val-path=">, Group<dxc_Group>,
+  HelpText<"SPIRV validator installation path">;
 def dxc_disable_validation : DXCFlag<"Vd">,
   HelpText<"Disable validation">;
 def dxc_gis : DXCFlag<"Gis">,

@@ -2317,6 +2317,45 @@ uint64_t Process::ReadUnsignedIntegerFromMemory(lldb::addr_t vm_addr,
   return fail_value;
 }
 
+llvm::SmallVector<std::optional<uint64_t>>
+Process::ReadUnsignedIntegersFromMemory(llvm::ArrayRef<addr_t> addresses,
+                                        unsigned integer_byte_size) {
+  if (addresses.empty())
+    return {};
+  // Like ReadUnsignedIntegerFromMemory, this only supports a handful
+  // of widths.
+  if (!llvm::is_contained({1u, 2u, 4u, 8u}, integer_byte_size))
+    return llvm::SmallVector<std::optional<uint64_t>>(addresses.size(),
+                                                      std::nullopt);
+
+  llvm::SmallVector<Range<addr_t, size_t>> ranges{
+      llvm::map_range(addresses, [=](addr_t ptr) {
+        return Range<addr_t, size_t>(ptr, integer_byte_size);
+      })};
+
+  std::vector<uint8_t> buffer(integer_byte_size * addresses.size(), 0);
+  llvm::SmallVector<llvm::MutableArrayRef<uint8_t>> memory =
+      ReadMemoryRanges(ranges, buffer);
+
+  llvm::SmallVector<std::optional<uint64_t>> result;
+  result.reserve(addresses.size());
+  const uint32_t addr_size = GetAddressByteSize();
+  const ByteOrder byte_order = GetByteOrder();
+
+  for (llvm::MutableArrayRef<uint8_t> range : memory) {
+    if (range.size() != integer_byte_size) {
+      result.push_back(std::nullopt);
+      continue;
+    }
+
+    DataExtractor data(range.data(), integer_byte_size, byte_order, addr_size);
+    offset_t offset = 0;
+    result.push_back(data.GetMaxU64(&offset, integer_byte_size));
+    assert(offset == integer_byte_size);
+  }
+  return result;
+}
+
 int64_t Process::ReadSignedIntegerFromMemory(lldb::addr_t vm_addr,
                                              size_t integer_byte_size,
                                              int64_t fail_value,
@@ -2334,6 +2373,12 @@ addr_t Process::ReadPointerFromMemory(lldb::addr_t vm_addr, Status &error) {
                                   error))
     return scalar.ULongLong(LLDB_INVALID_ADDRESS);
   return LLDB_INVALID_ADDRESS;
+}
+
+llvm::SmallVector<std::optional<addr_t>>
+Process::ReadPointersFromMemory(llvm::ArrayRef<addr_t> ptr_locs) {
+  const size_t ptr_size = GetAddressByteSize();
+  return ReadUnsignedIntegersFromMemory(ptr_locs, ptr_size);
 }
 
 bool Process::WritePointerToMemory(lldb::addr_t vm_addr, lldb::addr_t ptr_value,
@@ -3880,7 +3925,8 @@ bool Process::ShouldBroadcastEvent(Event *event_ptr) {
 bool Process::PrivateStateThread::StartupThread() {
   llvm::Expected<HostThread> private_state_thread =
       ThreadLauncher::LaunchThread(
-          m_thread_name, [this] { return m_process.RunPrivateStateThread(); },
+          m_thread_name,
+          [this] { return m_process.RunPrivateStateThread(m_is_override); },
           8 * 1024 * 1024);
   if (!private_state_thread) {
     LLDB_LOG_ERROR(GetLog(LLDBLog::Host), private_state_thread.takeError(),
@@ -3938,7 +3984,8 @@ bool Process::StartPrivateStateThread(
     // place already, so do that first:
     *backup_ptr = m_current_private_state_thread_sp;
     m_current_private_state_thread_sp.reset(new PrivateStateThread(
-        *this, GetPublicState(), GetPrivateState(), thread_name));
+        *this, GetPublicState(), GetPrivateState(), thread_name,
+        /*is_override=*/true));
   } else
     m_current_private_state_thread_sp->SetThreadName(thread_name);
 
@@ -4153,7 +4200,15 @@ Status Process::HaltPrivate() {
   return error;
 }
 
-thread_result_t Process::RunPrivateStateThread() {
+thread_local bool PrivateStateThreadGuard::g_is_private_state_thread = false;
+
+thread_result_t Process::RunPrivateStateThread(bool is_override) {
+  // Override PSTs exist solely to service RunThreadPlan expression evaluation.
+  // They must see parent frames, not provider-augmented frames.
+  std::optional<PrivateStateThreadGuard> pst_guard;
+  if (is_override)
+    pst_guard.emplace();
+
   bool control_only = true;
 
   Log *log = GetLog(LLDBLog::Process);
@@ -5341,6 +5396,13 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
     // still succeed.
     bool miss_first_event = true;
 #endif
+
+    // If we spawned an override PST, mark the current (original) PST so
+    // GetStackFrameList returns parent frames during event processing.
+    std::optional<PrivateStateThreadGuard> private_state_thread_guard;
+    if (backup_private_state_thread)
+      private_state_thread_guard.emplace();
+
     while (true) {
       // We usually want to resume the process if we get to the top of the
       // loop. The only exception is if we get two running events with no
@@ -5683,6 +5745,8 @@ Process::RunThreadPlan(ExecutionContext &exe_ctx,
       }
     } // END WAIT LOOP
 
+    private_state_thread_guard.reset();
+
     // If we had to start up a temporary private state thread to run this
     // thread plan, shut it down now.
     if (backup_private_state_thread &&
@@ -6024,6 +6088,7 @@ void Process::Flush() {
   m_extended_thread_stop_id = 0;
   m_queue_list.Clear();
   m_queue_list_stop_id = 0;
+  GetTarget().GetDebugger().FlushStatusLine();
 }
 
 lldb::addr_t Process::GetCodeAddressMask() {
