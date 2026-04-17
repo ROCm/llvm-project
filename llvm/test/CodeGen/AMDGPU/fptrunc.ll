@@ -792,6 +792,28 @@ define amdgpu_kernel void @fptrunc_f64_to_f16_afn(ptr addrspace(1) %out, double 
 ; GFX11-UNSAFE-GISEL-FAKE16-NEXT:    v_cvt_f16_f32_e32 v0, v0
 ; GFX11-UNSAFE-GISEL-FAKE16-NEXT:    buffer_store_b16 v0, off, s[0:3], 0
 ; GFX11-UNSAFE-GISEL-FAKE16-NEXT:    s_endpgm
+; GFX11-UNSAFE-SDAG-TRUE16-LABEL: fptrunc_f64_to_f16_afn:
+; GFX11-UNSAFE-SDAG-TRUE16:       ; %bb.0:
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    v_cvt_f32_f64_e32 v0, s[2:3]
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    v_cvt_f16_f32_e32 v0.l, v0
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    buffer_store_b16 v0, off, s[0:3], 0
+; GFX11-UNSAFE-SDAG-TRUE16-NEXT:    s_endpgm
+; GFX11-UNSAFE-SDAG-FAKE16-LABEL: fptrunc_f64_to_f16_afn:
+; GFX11-UNSAFE-SDAG-FAKE16:       ; %bb.0:
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    v_cvt_f32_f64_e32 v0, s[2:3]
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_mov_b32 s3, 0x31016000
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_mov_b32 s2, -1
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    v_cvt_f16_f32_e32 v0, v0
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    buffer_store_b16 v0, off, s[0:3], 0
+; GFX11-UNSAFE-SDAG-FAKE16-NEXT:    s_endpgm
   %result = fptrunc afn double %in to half
   %result_i16 = bitcast half %result to i16
   store i16 %result_i16, ptr addrspace(1) %out

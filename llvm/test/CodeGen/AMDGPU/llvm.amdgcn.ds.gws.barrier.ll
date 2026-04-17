@@ -265,6 +265,48 @@ define amdgpu_kernel void @gws_barrier_vgpr_offset_add(i32 %val) #0 {
 ; GFX11:    ds_gws_barrier v0 offset:3 gds
 ; GFX11:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11:    s_endpgm
+; GFX10-SDAG-LABEL: gws_barrier_vgpr_offset_add:
+; GFX10-SDAG:  ; %bb.0:
+; GFX10-SDAG:    v_readfirstlane_b32 s1, v0
+; GFX10-SDAG:    s_lshl_b32 m0, s1, 16
+; GFX10-SDAG:    s_waitcnt lgkmcnt(0)
+; GFX10-SDAG:    v_mov_b32_e32 v0, s0
+; GFX10-SDAG:    ds_gws_barrier v0 offset:3 gds
+; GFX10-SDAG:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX10-SDAG:    s_endpgm
+; GFX10-GISEL-LABEL: gws_barrier_vgpr_offset_add:
+; GFX10-GISEL:  ; %bb.0:
+; GFX10-GISEL:    v_add_nc_u32_e32 v0, 3, v0
+; GFX10-GISEL:    v_readfirstlane_b32 s1, v0
+; GFX10-GISEL:    s_lshl_b32 m0, s1, 16
+; GFX10-GISEL:    s_waitcnt lgkmcnt(0)
+; GFX10-GISEL:    v_mov_b32_e32 v0, s0
+; GFX10-GISEL:    ds_gws_barrier v0 gds
+; GFX10-GISEL:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX10-GISEL:    s_endpgm
+; GFX11-SDAG-LABEL: gws_barrier_vgpr_offset_add:
+; GFX11-SDAG:  ; %bb.0:
+; GFX11-SDAG:    v_and_b32_e32 v0, 0x3ff, v0
+; GFX11-SDAG:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-SDAG:    v_readfirstlane_b32 s1, v0
+; GFX11-SDAG:    s_lshl_b32 m0, s1, 16
+; GFX11-SDAG:    s_waitcnt lgkmcnt(0)
+; GFX11-SDAG:    v_mov_b32_e32 v0, s0
+; GFX11-SDAG:    ds_gws_barrier v0 offset:3 gds
+; GFX11-SDAG:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-SDAG:    s_endpgm
+; GFX11-GISEL-LABEL: gws_barrier_vgpr_offset_add:
+; GFX11-GISEL:  ; %bb.0:
+; GFX11-GISEL:    v_and_b32_e32 v0, 0x3ff, v0
+; GFX11-GISEL:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
+; GFX11-GISEL:    v_add_nc_u32_e32 v0, 3, v0
+; GFX11-GISEL:    v_readfirstlane_b32 s1, v0
+; GFX11-GISEL:    s_lshl_b32 m0, s1, 16
+; GFX11-GISEL:    s_waitcnt lgkmcnt(0)
+; GFX11-GISEL:    v_mov_b32_e32 v0, s0
+; GFX11-GISEL:    ds_gws_barrier v0 gds
+; GFX11-GISEL:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-GISEL:    s_endpgm
   %vgpr.offset.base = call i32 @llvm.amdgcn.workitem.id.x()
   %vgpr.offset = add i32 %vgpr.offset.base, 3
   call void @llvm.amdgcn.ds.gws.barrier(i32 %val, i32 %vgpr.offset)

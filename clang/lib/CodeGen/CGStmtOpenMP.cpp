@@ -197,6 +197,8 @@ class OMPLoopScope : public CodeGenFunction::RunCleanupsScope {
       PreInits = Unroll->getPreInits();
     } else if (const auto *Reverse = dyn_cast<OMPReverseDirective>(&S)) {
       PreInits = Reverse->getPreInits();
+    } else if (const auto *Split = dyn_cast<OMPSplitDirective>(&S)) {
+      PreInits = Split->getPreInits();
     } else if (const auto *Interchange =
                    dyn_cast<OMPInterchangeDirective>(&S)) {
       PreInits = Interchange->getPreInits();
@@ -2474,7 +2476,7 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
     const Stmt *ParallelRegionBodyStmt = CS->getCapturedStmt();
 
     auto BodyGenCB = [&, this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<InsertPointTy> DeallocIPs) {
+                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       OMPBuilderCBHelpers::EmitOMPOutlinedRegionBody(
           *this, ParallelRegionBodyStmt, AllocIP, CodeGenIP, "parallel");
       return llvm::Error::success();
@@ -2486,7 +2488,7 @@ void CodeGenFunction::EmitOMPParallelDirective(const OMPParallelDirective &S) {
         AllocaInsertPt->getParent(), AllocaInsertPt->getIterator());
     llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
         cantFail(OMPBuilder.createParallel(
-            Builder, AllocaIP, /*DeallocIPs=*/{}, BodyGenCB, PrivCB, FiniCB,
+            Builder, AllocaIP, /*DeallocBlocks=*/{}, BodyGenCB, PrivCB, FiniCB,
             IfCond, NumThreads, ProcBind, S.hasCancel()));
     Builder.restoreIP(AfterIP);
     return;
@@ -3681,6 +3683,12 @@ void CodeGenFunction::EmitOMPStripeDirective(const OMPStripeDirective &S) {
 void CodeGenFunction::EmitOMPReverseDirective(const OMPReverseDirective &S) {
   // Emit the de-sugared statement.
   OMPTransformDirectiveScopeRAII ReverseScope(*this, &S);
+  EmitStmt(S.getTransformedStmt());
+}
+
+void CodeGenFunction::EmitOMPSplitDirective(const OMPSplitDirective &S) {
+  // Emit the de-sugared statement (the split loops).
+  OMPTransformDirectiveScopeRAII SplitScope(*this, &S);
   EmitStmt(S.getTransformedStmt());
 }
 
@@ -5172,9 +5180,9 @@ void CodeGenFunction::EmitOMPSectionsDirective(const OMPSectionsDirective &S) {
     llvm::SmallVector<BodyGenCallbackTy, 4> SectionCBVector;
     if (CS) {
       for (const Stmt *SubStmt : CS->children()) {
-        auto SectionCB = [this, SubStmt](InsertPointTy AllocIP,
-                                         InsertPointTy CodeGenIP,
-                                         ArrayRef<InsertPointTy> DeallocIPs) {
+        auto SectionCB = [this, SubStmt](
+                             InsertPointTy AllocIP, InsertPointTy CodeGenIP,
+                             ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
           OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(*this, SubStmt, AllocIP,
                                                         CodeGenIP, "section");
           return llvm::Error::success();
@@ -5184,7 +5192,7 @@ void CodeGenFunction::EmitOMPSectionsDirective(const OMPSectionsDirective &S) {
     } else {
       auto SectionCB =
           [this, CapturedStmt](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<InsertPointTy> DeallocIPs) {
+                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
             OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
                 *this, CapturedStmt, AllocIP, CodeGenIP, "section");
             return llvm::Error::success();
@@ -5244,7 +5252,7 @@ void CodeGenFunction::EmitOMPSectionDirective(const OMPSectionDirective &S) {
 
     auto BodyGenCB = [SectionRegionBodyStmt,
                       this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<InsertPointTy> DeallocIPs) {
+                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
           *this, SectionRegionBodyStmt, AllocIP, CodeGenIP, "section");
       return llvm::Error::success();
@@ -5330,7 +5338,7 @@ void CodeGenFunction::EmitOMPMasterDirective(const OMPMasterDirective &S) {
 
     auto BodyGenCB = [MasterRegionBodyStmt,
                       this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<InsertPointTy> DeallocIPs) {
+                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
           *this, MasterRegionBodyStmt, AllocIP, CodeGenIP, "master");
       return llvm::Error::success();
@@ -5381,7 +5389,7 @@ void CodeGenFunction::EmitOMPMaskedDirective(const OMPMaskedDirective &S) {
 
     auto BodyGenCB = [MaskedRegionBodyStmt,
                       this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<InsertPointTy> DeallocIPs) {
+                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
           *this, MaskedRegionBodyStmt, AllocIP, CodeGenIP, "masked");
       return llvm::Error::success();
@@ -5425,7 +5433,7 @@ void CodeGenFunction::EmitOMPCriticalDirective(const OMPCriticalDirective &S) {
 
     auto BodyGenCB = [CriticalRegionBodyStmt,
                       this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                            ArrayRef<InsertPointTy> DeallocIPs) {
+                            ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       OMPBuilderCBHelpers::EmitOMPInlinedRegionBody(
           *this, CriticalRegionBodyStmt, AllocIP, CodeGenIP, "critical");
       return llvm::Error::success();
@@ -6395,7 +6403,7 @@ void CodeGenFunction::EmitOMPTaskgroupDirective(
                            AllocaInsertPt->getIterator());
 
     auto BodyGenCB = [&, this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                               ArrayRef<InsertPointTy> DeallocIPs) {
+                               ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
       Builder.restoreIP(CodeGenIP);
       EmitStmt(S.getInnermostCapturedStmt()->getCapturedStmt());
       return llvm::Error::success();
@@ -6405,7 +6413,7 @@ void CodeGenFunction::EmitOMPTaskgroupDirective(
       CapturedStmtInfo = &CapStmtInfo;
     llvm::OpenMPIRBuilder::InsertPointTy AfterIP =
         cantFail(OMPBuilder.createTaskgroup(Builder, AllocaIP,
-                                            /*DeallocIPs=*/{}, BodyGenCB));
+                                            /*DeallocBlocks=*/{}, BodyGenCB));
     Builder.restoreIP(AfterIP);
     return;
   }
@@ -7122,9 +7130,9 @@ void CodeGenFunction::EmitOMPOrderedDirective(const OMPOrderedDirective &S) {
         return llvm::Error::success();
       };
 
-      auto BodyGenCB = [&S, C, this](InsertPointTy AllocIP,
-                                     InsertPointTy CodeGenIP,
-                                     ArrayRef<InsertPointTy> DeallocIPs) {
+      auto BodyGenCB = [&S, C,
+                        this](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
+                              ArrayRef<llvm::BasicBlock *> DeallocBlocks) {
         Builder.restoreIP(CodeGenIP);
 
         const CapturedStmt *CS = S.getInnermostCapturedStmt();

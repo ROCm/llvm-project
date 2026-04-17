@@ -92,6 +92,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUMCResourceInfo.cpp
   AMDGPUMarkLastScratchLoad.cpp
   AMDGPUMIRFormatter.cpp
+  AMDGPUNextUseAnalysis.cpp
   AMDGPUPartitionVGPRsForRA.cpp
   AMDGPUPerfHintAnalysis.cpp
   AMDGPUPostLegalizerCombiner.cpp
@@ -120,6 +121,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUTargetMachine.cpp
   AMDGPUTargetObjectFile.cpp
   AMDGPUTargetTransformInfo.cpp
+  AMDGPUWaitcntUtils.cpp
   AMDGPUWaitSGPRHazards.cpp
   AMDGPUUnifyDivergentExitNodes.cpp
   R600MachineCFGStructurizer.cpp
