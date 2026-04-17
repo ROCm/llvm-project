@@ -355,28 +355,28 @@ continue:
 ; arguments before we lower any calls to them.
 
 define hidden i32 @ret_i32_noinline() #0 {
-; GCN-LABEL: ret_i32_noinline:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_mov_b32_e32 v0, 4
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; CALLEE-LABEL: ret_i32_noinline:
+; CALLEE:       ; %bb.0:
+; CALLEE-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; CALLEE-NEXT:    v_mov_b32_e32 v0, 4
+; CALLEE-NEXT:    s_setpc_b64 s[30:31]
   ret i32 4
 }
 
 define hidden i32 @ret_i32_alwaysinline() #1 {
-; GCN-LABEL: ret_i32_alwaysinline:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    v_mov_b32_e32 v0, 4
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; CALLEE-LABEL: ret_i32_alwaysinline:
+; CALLEE:       ; %bb.0:
+; CALLEE-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; CALLEE-NEXT:    v_mov_b32_e32 v0, 4
+; CALLEE-NEXT:    s_setpc_b64 s[30:31]
   ret i32 4
 }
 
 define hidden i32 @ident_i32(i32 %i) #0 {
-; GCN-LABEL: ident_i32:
-; GCN:       ; %bb.0:
-; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GCN-NEXT:    s_setpc_b64 s[30:31]
+; CALLEE-LABEL: ident_i32:
+; CALLEE:       ; %bb.0:
+; CALLEE-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; CALLEE-NEXT:    s_setpc_b64 s[30:31]
   ret i32 %i
 }
 

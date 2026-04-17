@@ -648,7 +648,7 @@ define amdgpu_kernel void @introduced_copy_to_sgpr(i64 %arg, i32 %arg1, i32 %arg
 ; GFX908-NEXT:    s_mov_b64 s[22:23], s[18:19]
 ; GFX908-NEXT:    s_andn2_b64 vcc, exec, s[22:23]
 ; GFX908-NEXT:    s_cbranch_vccz .LBB3_4
-; GFX908-NEXT:  ; %bb.8: ; in Loop: Header=BB3_2 Depth=1
+; GFX908-NEXT:  ; %bb.8: ; in Loop: Header=BB3_5 Depth=2
 ; GFX908-NEXT:    s_mov_b64 s[22:23], -1
 ; GFX908-NEXT:    ; implicit-def: $vgpr2_vgpr3
 ; GFX908-NEXT:    ; implicit-def: $sgpr20_sgpr21
@@ -803,7 +803,7 @@ define amdgpu_kernel void @introduced_copy_to_sgpr(i64 %arg, i32 %arg1, i32 %arg
 ; GFX90A-NEXT:    s_mov_b64 s[22:23], s[18:19]
 ; GFX90A-NEXT:    s_andn2_b64 vcc, exec, s[22:23]
 ; GFX90A-NEXT:    s_cbranch_vccz .LBB3_4
-; GFX90A-NEXT:  ; %bb.8: ; in Loop: Header=BB3_2 Depth=1
+; GFX90A-NEXT:  ; %bb.8: ; in Loop: Header=BB3_5 Depth=2
 ; GFX90A-NEXT:    s_mov_b64 s[22:23], -1
 ; GFX90A-NEXT:    ; implicit-def: $vgpr4_vgpr5
 ; GFX90A-NEXT:    ; implicit-def: $sgpr20_sgpr21
