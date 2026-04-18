@@ -279,14 +279,14 @@ void FactsGenerator::VisitCXXNullPtrLiteralExpr(
   getOriginsList(*N);
 }
 
-void FactsGenerator::VisitCastExpr(const CastExpr *CE) {
-  OriginList *Dest = getOriginsList(*CE);
+void FactsGenerator::VisitImplicitCastExpr(const ImplicitCastExpr *ICE) {
+  OriginList *Dest = getOriginsList(*ICE);
   if (!Dest)
     return;
-  const Expr *SubExpr = CE->getSubExpr();
+  const Expr *SubExpr = ICE->getSubExpr();
   OriginList *Src = getOriginsList(*SubExpr);
 
-  switch (CE->getCastKind()) {
+  switch (ICE->getCastKind()) {
   case CK_LValueToRValue:
     // TODO: Decide what to do for x-values here.
     if (!SubExpr->isLValue())
@@ -297,11 +297,11 @@ void FactsGenerator::VisitCastExpr(const CastExpr *CE) {
     // `int *p, *q; p = q;`) should propagate the inner origin (what the pointer
     // points to), not the outer origin (the pointer's storage location). Strip
     // the outer lvalue origin.
-    flow(getOriginsList(*CE), getRValueOrigins(SubExpr, Src),
+    flow(getOriginsList(*ICE), getRValueOrigins(SubExpr, Src),
          /*Kill=*/true);
     return;
   case CK_NullToPointer:
-    getOriginsList(*CE);
+    getOriginsList(*ICE);
     // TODO: Flow into them a null origin.
     return;
   case CK_NoOp:
@@ -542,7 +542,8 @@ void FactsGenerator::VisitCXXFunctionalCastExpr(
   // expression.
   if (handleTestPoint(FCE))
     return;
-  VisitCastExpr(FCE);
+  if (isGslPointerType(FCE->getType()))
+    killAndFlowOrigin(*FCE, *FCE->getSubExpr());
 }
 
 void FactsGenerator::VisitInitListExpr(const InitListExpr *ILE) {
