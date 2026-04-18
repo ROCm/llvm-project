@@ -726,7 +726,6 @@ void AggExprEmitter::emitArrayInit(Address destPtr, cir::ArrayType arrayTy,
   // members if an initializer throws. For that, we'll need an EH cleanup.
   QualType::DestructionKind dtorKind = elementType.isDestructedType();
   Address endOfInit = Address::invalid();
-  assert(!cir::MissingFeatures::cleanupDeactivationScope());
 
   if (dtorKind && cgf.getLangOpts().Exceptions) {
     endOfInit = cgf.createTempAlloca(cirElementPtrType, cgf.getPointerAlign(),

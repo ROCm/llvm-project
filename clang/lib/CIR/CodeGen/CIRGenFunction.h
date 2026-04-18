@@ -1145,7 +1145,6 @@ public:
   class RunCleanupsScope {
     EHScopeStack::stable_iterator cleanupStackDepth, oldCleanupStackDepth;
     size_t lifetimeExtendedCleanupStackSize;
-    CleanupDeactivationScope deactivateCleanups;
 
   protected:
     bool performCleanup;
@@ -1161,7 +1160,7 @@ public:
   public:
     /// Enter a new cleanup scope.
     explicit RunCleanupsScope(CIRGenFunction &cgf)
-        : deactivateCleanups(cgf), performCleanup(true), cgf(cgf) {
+        : performCleanup(true), cgf(cgf) {
       cleanupStackDepth = cgf.ehStack.stable_begin();
       lifetimeExtendedCleanupStackSize =
           cgf.lifetimeExtendedCleanupStack.size();
@@ -1182,7 +1181,6 @@ public:
     void forceCleanup(ArrayRef<mlir::Value *> valuesToReload = {}) {
       assert(performCleanup && "Already forced cleanup");
       cgf.didCallStackSave = oldDidCallStackSave;
-      deactivateCleanups.forceDeactivate();
       cgf.popCleanupBlocks(cleanupStackDepth, lifetimeExtendedCleanupStackSize,
                            valuesToReload);
       performCleanup = false;
