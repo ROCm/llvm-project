@@ -288,7 +288,8 @@ void FactsGenerator::VisitCastExpr(const CastExpr *CE) {
 
   switch (CE->getCastKind()) {
   case CK_LValueToRValue:
-    if (!SubExpr->isGLValue())
+    // TODO: Decide what to do for x-values here.
+    if (!SubExpr->isLValue())
       return;
 
     assert(Src && "LValue being cast to RValue has no origin list");
