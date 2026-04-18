@@ -196,7 +196,6 @@ using string = basic_string<char>;
 template<typename T>
 struct unique_ptr {
   unique_ptr();
-  explicit unique_ptr(T*);
   unique_ptr(unique_ptr<T>&&);
   unique_ptr& operator=(unique_ptr<T>&&);
   ~unique_ptr();
@@ -205,11 +204,6 @@ struct unique_ptr {
   T *operator->();
   T *get() const;
 };
-
-template<typename T, typename... Args>
-unique_ptr<T> make_unique(Args&&... args) {
-  return unique_ptr<T>(new T(args...));
-}
 
 template<typename T>
 struct optional {
