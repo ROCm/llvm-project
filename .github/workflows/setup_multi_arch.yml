@@ -15,7 +15,7 @@ on:
           for release builds. Controls artifact bucket selection, IAM role,
           and package versioning.
         type: string
-        default: ""
+        default: "dev" #this is temp addition as setup_ccache.py on amd-staging doesnt have recent update
       prerelease_version:
         description: Prerelease version number such as '2'. This gets appended to the computed version after 'rc', like '7.10.0rc2'
         type: string
