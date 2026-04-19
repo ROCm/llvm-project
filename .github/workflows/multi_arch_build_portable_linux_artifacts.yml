@@ -179,7 +179,8 @@ jobs:
       - name: Setup ccache
         run: |
           ./build_tools/setup_ccache.py \
-            --release-type "${{ inputs.release_type }}" \
+            --config-preset "github-oss-presubmit" \
+                                                  #--release-type "${{ inputs.release_type }}" \ temp as setup_ccache.py does have the change incorporated
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache"
 

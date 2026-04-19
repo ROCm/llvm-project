@@ -3,7 +3,7 @@ name: Compiler CI PSDB trigger on amd-staging branch
 # Controls when the workflow will run
 on:
   pull_request:
-    branches: [amd-staging]
+    branches: [amd-staginggggg]
     types: [opened, reopened, ready_for_review]
   workflow_dispatch:
 

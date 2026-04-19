@@ -236,7 +236,8 @@ jobs:
       - name: Setup ccache
         run: |
           python ./build_tools/setup_ccache.py \
-            --release-type "${{ inputs.release_type }}" \
+            --config-preset "github-oss-presubmit" \
+          #--release-type "${{ inputs.release_type }}" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache" \
             --log-dir "${BUILD_DIR}/logs/ccache"
