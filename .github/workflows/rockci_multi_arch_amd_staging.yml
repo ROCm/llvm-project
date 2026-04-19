@@ -64,6 +64,7 @@ jobs:
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"
+      release_type: "dev"  #this is temp addition until the rock amd-staging gets the updated setup_ccache.py file
 
   linux_build_and_test:
     name: Linux::${{ fromJSON(needs.setup.outputs.linux_build_config || '{}').build_variant_label || 'skip' }}

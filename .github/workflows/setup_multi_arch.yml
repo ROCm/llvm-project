@@ -54,10 +54,38 @@ jobs:
     outputs:
       enable_build_jobs: true
       # Temporary fix on gfx94x due to non availability of MI325 machines
-      linux_build_config: >
-        {"per_family_info": [{"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}, {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}, {"amdgpu_family": "gfx950-dcgpu", "amdgpu_targets": "", "test-runs-on": "linux-mi355-1gpu-ossci-rocm", "benchmark-runs-on": "linux-mi355-1gpu-ossci-rocm"}], "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx950-dcgpu", "artifact_group": "multi-arch-release", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "expect_failure": false, "build_pytorch": true, "prebuilt_stages": "", "baseline_run_id": ""}
-      windows_build_config: >
-        {"per_family_info": [{"amdgpu_family": "gfx1151", "amdgpu_targets": "", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm"}], "dist_amdgpu_families": "gfx1151", "artifact_group": "multi-arch-release", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "expect_failure": false, "build_pytorch": true, "prebuilt_stages": "", "baseline_run_id": ""}
+      linux_build_config: >-
+        {
+          "per_family_info": [
+            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
+            {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
+            {"amdgpu_family": "gfx950-dcgpu", "amdgpu_targets": "", "test-runs-on": "linux-mi355-1gpu-ossci-rocm", "benchmark-runs-on": "linux-mi355-1gpu-ossci-rocm"}
+          ],
+          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx950-dcgpu",
+          "artifact_group": "multi-arch-release",
+          "build_variant_label": "release",
+          "build_variant_suffix": "",
+          "build_variant_cmake_preset": "",
+          "expect_failure": false,
+          "build_pytorch": true,
+          "prebuilt_stages": "",
+          "baseline_run_id": ""
+        }
+      windows_build_config: >-
+        {
+          "per_family_info": [
+            {"amdgpu_family": "gfx1151", "amdgpu_targets": "", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm"}
+          ],
+          "dist_amdgpu_families": "gfx1151",
+          "artifact_group": "multi-arch-release",
+          "build_variant_label": "release",
+          "build_variant_suffix": "",
+          "build_variant_cmake_preset": "windows-release",
+          "expect_failure": false,
+          "build_pytorch": true,
+          "prebuilt_stages": "",
+          "baseline_run_id": ""
+        }      
       test_type: 'quick'        
       linux_test_labels: ${{ steps.configure.outputs.linux_test_labels }}
       windows_test_labels: ${{ steps.configure.outputs.windows_test_labels }}
