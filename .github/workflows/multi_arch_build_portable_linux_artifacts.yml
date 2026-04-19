@@ -92,7 +92,7 @@ jobs:
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule reference for compiler/amd-llvm"
-
+          git submodule update --init --recursive compiler/amd-llvm
           # Verify the pointer update
           git submodule status
           git submodule
@@ -166,6 +166,7 @@ jobs:
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
+          git submodule update --init --recursive compiler/amd-llvm
           git submodule status
           git submodule
             
@@ -193,17 +194,6 @@ jobs:
           rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
 
 
-      - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
-        run: |
-             git config --global --add safe.directory $PWD
-             git log --oneline -1
-             ls -l compiler/amd-llvm
-             cd compiler/amd-llvm/llvm
-             ls -l
-             git log --oneline -3
-             cd -
-          
       # Note: no AWS credentials should be needed here since our CI buckets
       # all currently have public read access.
       - name: Fetch inbound artifacts
@@ -219,6 +209,17 @@ jobs:
         timeout-minutes: 30
         run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
+      - name: TheRock and llvm SHA
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        run: |
+             git config --global --add safe.directory $PWD
+             git log --oneline -1
+             ls -l compiler/amd-llvm
+             cd compiler/amd-llvm/llvm
+             ls -l
+             git log --oneline -3
+             cd -
+          
       - name: Get stage configuration
         id: stage_config
         run: |
