@@ -3,6 +3,8 @@
 
 module m
 
+real, allocatable, pinned :: pinned_real(:,:,:)
+
 interface doit
 subroutine __device_sub(a)
     real(4), device, intent(in) :: a(:,:,:)
@@ -13,6 +15,14 @@ subroutine __host_sub(a)
     !dir$ ignore_tkr(c) a
 end
 end interface
+
+contains
+
+  subroutine vectoraddarray(a, b, n)
+    implicit none
+    integer :: n
+    real, dimension(1:n) :: a, b
+  end subroutine 
 end module
 
 program testex1
@@ -25,6 +35,7 @@ type :: t
   real(4), dimension(10,10,10) :: a
 end type
 type(t) :: b
+real, dimension(:), allocatable :: a2, b2
 
 
 !$acc enter data copyin(a)
@@ -58,6 +69,10 @@ block; use m
   end do
   !$acc end host_data
   end block
+ 
+  !$acc host_data use_device(a2, b2) if(allocated(a2))
+  call vectoraddarray(a2, b2, 10)
+  !$acc end host_data
 
 end
 
@@ -65,3 +80,16 @@ end
 ! CHECK: fir.call @_QP__host_sub
 ! CHECK: fir.call @_QP__device_sub
 ! CHECK: fir.call @_QP__device_sub
+
+subroutine test_use_details()
+  use m
+  call doit(pinned_real)
+  !$acc host_data use_device(pinned_real)
+  call doit(pinned_real)
+  !$acc end host_data
+  call doit(pinned_real)
+end subroutine
+
+! CHECK: fir.address_of(@_QP__host_sub)
+! CHECK: fir.address_of(@_QP__device_sub)
+! CHECK: fir.address_of(@_QP__host_sub)

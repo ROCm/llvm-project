@@ -2132,6 +2132,7 @@ public:
 
   DISourceLanguageName getSourceLanguage() const { return SourceLanguage; }
   bool isOptimized() const { return IsOptimized; }
+  bool isDebugInfoForProfiling() const { return DebugInfoForProfiling; }
   unsigned getRuntimeVersion() const { return RuntimeVersion; }
   DebugEmissionKind getEmissionKind() const {
     return (DebugEmissionKind)EmissionKind;
@@ -4224,6 +4225,10 @@ public:
   LLVM_ABI static void appendOffset(SmallVectorImpl<uint64_t> &Ops,
                                     int64_t Offset);
 
+  LLVM_ABI static bool
+  extractLeadingOffset(ArrayRef<uint64_t> Ops, int64_t &OffsetInBytes,
+                       SmallVectorImpl<uint64_t> &RemainingOps);
+
   /// If this is a constant offset, extract it. If there is no expression,
   /// return true with an offset of zero.
   LLVM_ABI bool extractIfOffset(int64_t &Offset) const;
@@ -4588,6 +4593,8 @@ public:
     return any_of(Elements,
                   [](auto &&E) { return std::holds_alternative<T>(E); });
   }
+
+  LLVMContext &getContext() const { return C; }
 
   /// Update the expression to reflect the removal of one level of indirection
   /// from the value acting as the referrer.

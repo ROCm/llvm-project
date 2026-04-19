@@ -1512,6 +1512,8 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
     unsigned BuiltinWMMAOp;
     // Need return type when D and C are of different types.
     bool NeedReturnType = false;
+    // Need to remove unused neg modifiers.
+    bool RemoveABNeg = false;
 
     switch (BuiltinID) {
     case AMDGPU::BI__builtin_amdgcn_wmma_f32_16x16x16_f16_w32:
@@ -1652,29 +1654,35 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
       break;
     // GFX1250 WMMA builtins
     case AMDGPU::BI__builtin_amdgcn_wmma_f32_16x16x4_f32:
-      ArgsForMatchingMatrixTypes = {5, 1};
+      ArgsForMatchingMatrixTypes = {3, 0};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_f32_16x16x4_f32;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_f32_16x16x32_bf16:
-      ArgsForMatchingMatrixTypes = {5, 1};
+      ArgsForMatchingMatrixTypes = {3, 0};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_f32_16x16x32_bf16;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_f32_16x16x32_f16:
-      ArgsForMatchingMatrixTypes = {5, 1};
+      ArgsForMatchingMatrixTypes = {3, 0};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_f32_16x16x32_f16;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_f16_16x16x32_f16:
-      ArgsForMatchingMatrixTypes = {5, 1};
+      ArgsForMatchingMatrixTypes = {3, 0};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_f16_16x16x32_f16;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_bf16_16x16x32_bf16:
-      ArgsForMatchingMatrixTypes = {5, 1};
+      ArgsForMatchingMatrixTypes = {3, 0};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_bf16_16x16x32_bf16;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_bf16f32_16x16x32_bf16:
       NeedReturnType = true;
-      ArgsForMatchingMatrixTypes = {1, 5};
+      ArgsForMatchingMatrixTypes = {0, 3};
       BuiltinWMMAOp = Intrinsic::amdgcn_wmma_bf16f32_16x16x32_bf16;
+      RemoveABNeg = true;
       break;
     case AMDGPU::BI__builtin_amdgcn_wmma_f32_16x16x64_fp8_fp8:
       ArgsForMatchingMatrixTypes = {3, 0};
@@ -1827,8 +1835,12 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
     }
 
     SmallVector<Value *, 6> Args;
-    for (int i = 0, e = E->getNumArgs(); i != e; ++i)
+    for (int i = 0, e = E->getNumArgs(); i != e; ++i) {
+      // Remove unused neg modifiers.
+      if (RemoveABNeg && (i == 0 || i == 2))
+        continue;
       Args.push_back(EmitScalarExpr(E->getArg(i)));
+    }
     if (AppendFalseForOpselArg)
       Args.push_back(Builder.getFalse());
 
@@ -2077,6 +2089,10 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
   case AMDGPU::BI__builtin_amdgcn_raw_buffer_store_b128:
     return emitBuiltinWithOneOverloadedType<5>(
         *this, E, Intrinsic::amdgcn_raw_ptr_buffer_store);
+  case AMDGPU::BI__builtin_amdgcn_raw_buffer_store_format_v4f32:
+  case AMDGPU::BI__builtin_amdgcn_raw_buffer_store_format_v4f16:
+    return emitBuiltinWithOneOverloadedType<5>(
+        *this, E, Intrinsic::amdgcn_raw_ptr_buffer_store_format);
   case AMDGPU::BI__builtin_amdgcn_raw_buffer_load_b8:
   case AMDGPU::BI__builtin_amdgcn_raw_buffer_load_b16:
   case AMDGPU::BI__builtin_amdgcn_raw_buffer_load_b32:
@@ -2109,6 +2125,31 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
     return Builder.CreateCall(
         F, {EmitScalarExpr(E->getArg(0)), EmitScalarExpr(E->getArg(1)),
             EmitScalarExpr(E->getArg(2)), EmitScalarExpr(E->getArg(3))});
+  }
+  case AMDGPU::BI__builtin_amdgcn_raw_buffer_load_format_v4f32:
+  case AMDGPU::BI__builtin_amdgcn_raw_buffer_load_format_v4f16: {
+    llvm::Type *RetTy = ConvertType(E->getType());
+    Function *F =
+        CGM.getIntrinsic(Intrinsic::amdgcn_raw_ptr_buffer_load_format, {RetTy});
+
+    return Builder.CreateCall(
+        F, {EmitScalarExpr(E->getArg(0)), EmitScalarExpr(E->getArg(1)),
+            EmitScalarExpr(E->getArg(2)), EmitScalarExpr(E->getArg(3))});
+  }
+  case AMDGPU::BI__builtin_amdgcn_struct_buffer_store_format_v4f32:
+  case AMDGPU::BI__builtin_amdgcn_struct_buffer_store_format_v4f16:
+    return emitBuiltinWithOneOverloadedType<6>(
+        *this, E, Intrinsic::amdgcn_struct_ptr_buffer_store_format);
+  case AMDGPU::BI__builtin_amdgcn_struct_buffer_load_format_v4f32:
+  case AMDGPU::BI__builtin_amdgcn_struct_buffer_load_format_v4f16: {
+    llvm::Type *RetTy = ConvertType(E->getType());
+    Function *F = CGM.getIntrinsic(
+        Intrinsic::amdgcn_struct_ptr_buffer_load_format, {RetTy});
+
+    return Builder.CreateCall(
+        F, {EmitScalarExpr(E->getArg(0)), EmitScalarExpr(E->getArg(1)),
+            EmitScalarExpr(E->getArg(2)), EmitScalarExpr(E->getArg(3)),
+            EmitScalarExpr(E->getArg(4))});
   }
   case AMDGPU::BI__builtin_amdgcn_raw_ptr_buffer_atomic_add_i32:
     return emitBuiltinWithOneOverloadedType<5>(

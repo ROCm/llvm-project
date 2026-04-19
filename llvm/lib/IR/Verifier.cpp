@@ -549,10 +549,12 @@ private:
   void visitAccessGroupMetadata(const MDNode *MD);
   void visitCapturesMetadata(Instruction &I, const MDNode *Captures);
   void visitAllocTokenMetadata(Instruction &I, MDNode *MD);
+  void visitInlineHistoryMetadata(Instruction &I, MDNode *MD);
 
   template <class Ty> bool isValidMetadataArray(const MDTuple &N);
 #define HANDLE_SPECIALIZED_MDNODE_LEAF(CLASS) void visit##CLASS(const CLASS &N);
 #include "llvm/IR/Metadata.def"
+  void visitDIType(const DIType &N);
   void visitDIScope(const DIScope &N);
   void visitDIVariable(const DIVariable &N);
   void visitDILexicalBlockBase(const DILexicalBlockBase &N);
@@ -1229,7 +1231,16 @@ void Verifier::visitDIScope(const DIScope &N) {
     CheckDI(isa<DIFile>(F), "invalid file", &N, F);
 }
 
+void Verifier::visitDIType(const DIType &N) {
+  CheckDI(isScope(N.getRawScope()), "invalid scope", &N, N.getRawScope());
+  visitDIScope(N);
+  CheckDI(N.getRawFile() || N.getLine() == 0, "line specified with no file", &N,
+          N.getLine());
+}
+
 void Verifier::visitDISubrangeType(const DISubrangeType &N) {
+  visitDIType(N);
+
   CheckDI(N.getTag() == dwarf::DW_TAG_subrange_type, "invalid tag", &N);
   auto *BaseType = N.getRawBaseType();
   CheckDI(!BaseType || isType(BaseType), "BaseType must be a type");
@@ -1316,6 +1327,8 @@ void Verifier::visitDIEnumerator(const DIEnumerator &N) {
 }
 
 void Verifier::visitDIBasicType(const DIBasicType &N) {
+  visitDIType(N);
+
   CheckDI(N.getTag() == dwarf::DW_TAG_base_type ||
               N.getTag() == dwarf::DW_TAG_unspecified_type ||
               N.getTag() == dwarf::DW_TAG_string_type,
@@ -1346,14 +1359,16 @@ void Verifier::visitDIFixedPointType(const DIFixedPointType &N) {
 }
 
 void Verifier::visitDIStringType(const DIStringType &N) {
+  visitDIType(N);
+
   CheckDI(N.getTag() == dwarf::DW_TAG_string_type, "invalid tag", &N);
   CheckDI(!(N.isBigEndian() && N.isLittleEndian()), "has conflicting flags",
           &N);
 }
 
 void Verifier::visitDIDerivedType(const DIDerivedType &N) {
-  // Common scope checks.
-  visitDIScope(N);
+  // Common type checks.
+  visitDIType(N);
 
   CheckDI(N.getTag() == dwarf::DW_TAG_typedef ||
               N.getTag() == dwarf::DW_TAG_pointer_type ||
@@ -1419,7 +1434,6 @@ void Verifier::visitDIDerivedType(const DIDerivedType &N) {
     }
   }
 
-  CheckDI(isScope(N.getRawScope()), "invalid scope", &N, N.getRawScope());
   CheckDI(isType(N.getRawBaseType()), "invalid base type", &N,
           N.getRawBaseType());
 
@@ -1463,8 +1477,8 @@ void Verifier::visitTemplateParams(const MDNode &N, const Metadata &RawParams) {
 }
 
 void Verifier::visitDICompositeType(const DICompositeType &N) {
-  // Common scope checks.
-  visitDIScope(N);
+  // Common type checks.
+  visitDIType(N);
 
   CheckDI(N.getTag() == dwarf::DW_TAG_array_type ||
               N.getTag() == dwarf::DW_TAG_structure_type ||
@@ -1476,7 +1490,6 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
               N.getTag() == dwarf::DW_TAG_namelist,
           "invalid tag", &N);
 
-  CheckDI(isScope(N.getRawScope()), "invalid scope", &N, N.getRawScope());
   CheckDI(isType(N.getRawBaseType()), "invalid base type", &N,
           N.getRawBaseType());
 
@@ -1538,6 +1551,7 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
 }
 
 void Verifier::visitDISubroutineType(const DISubroutineType &N) {
+  visitDIType(N);
   CheckDI(N.getTag() == dwarf::DW_TAG_subroutine_type, "invalid tag", &N);
   if (auto *Types = N.getRawTypeArray()) {
     CheckDI(isa<MDTuple>(Types), "invalid composite elements", &N, Types);
@@ -1617,7 +1631,11 @@ void Verifier::visitDICompileUnit(const DICompileUnit &N) {
   if (auto *Array = N.getRawImportedEntities()) {
     CheckDI(isa<MDTuple>(Array), "invalid imported entity list", &N, Array);
     for (Metadata *Op : N.getImportedEntities()->operands()) {
-      CheckDI(Op && isa<DIImportedEntity>(Op), "invalid imported entity ref",
+      auto *IE = dyn_cast_or_null<DIImportedEntity>(Op);
+      CheckDI(IE, "invalid imported entity ref", &N, Op);
+      CheckDI(!isa_and_nonnull<DILocalScope>(IE->getScope()),
+              "function-local imports are not allowed in a DICompileUnit's "
+              "imported entities list",
               &N, Op);
     }
   }
@@ -3119,9 +3137,6 @@ void Verifier::visitFunction(const Function &F) {
 
   Check(!Attrs.hasAttrSomewhere(Attribute::ElementType),
         "Attribute 'elementtype' can only be applied to a callsite.", &F);
-
-  Check(!Attrs.hasFnAttr("aarch64_zt0_undef"),
-        "Attribute 'aarch64_zt0_undef' can only be applied to a callsite.");
 
   if (Attrs.hasFnAttr(Attribute::Naked))
     for (const Argument &Arg : F.args())
@@ -4986,6 +5001,13 @@ void Verifier::visitCatchPadInst(CatchPadInst &CPI) {
   Check(&*BB->getFirstNonPHIIt() == &CPI,
         "CatchPadInst not the first non-PHI instruction in the block.", &CPI);
 
+  Check(llvm::all_of(CPI.arg_operands(),
+                     [](Use &U) {
+                       auto *V = U.get();
+                       return isa<Constant>(V) || isa<AllocaInst>(V);
+                     }),
+        "Argument operand must be alloca or constant.", &CPI);
+
   visitEHPadPredecessors(CPI);
   visitFuncletPadInst(CPI);
 }
@@ -5609,6 +5631,20 @@ void Verifier::visitAllocTokenMetadata(Instruction &I, MDNode *MD) {
         "expected integer constant", MD);
 }
 
+void Verifier::visitInlineHistoryMetadata(Instruction &I, MDNode *MD) {
+  Check(isa<CallBase>(I), "!inline_history should only exist on calls", &I);
+  for (Metadata *Op : MD->operands()) {
+    // Can be null when a function is erased.
+    if (!Op)
+      continue;
+    Check(isa<ValueAsMetadata>(Op) &&
+              isa<Function>(cast<ValueAsMetadata>(Op)
+                                ->getValue()
+                                ->stripPointerCastsAndAliases()),
+          "!inline_history operands must be functions or null", MD);
+  }
+}
+
 /// verifyInstruction - Verify that an instruction is well formed.
 ///
 void Verifier::visitInstruction(Instruction &I) {
@@ -5840,6 +5876,9 @@ void Verifier::visitInstruction(Instruction &I) {
 
   if (MDNode *MD = I.getMetadata(LLVMContext::MD_alloc_token))
     visitAllocTokenMetadata(I, MD);
+
+  if (MDNode *MD = I.getMetadata(LLVMContext::MD_inline_history))
+    visitInlineHistoryMetadata(I, MD);
 
   if (MDNode *N = I.getDebugLoc().getAsMDNode()) {
     CheckDI(isa<DILocation>(N), "invalid !dbg metadata attachment", &I, N);
@@ -6526,7 +6565,6 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           "masked_store: vector mask must be same length as value", Call);
     break;
   }
-
   case Intrinsic::experimental_guard: {
     Check(isa<CallInst>(Call), "experimental_guard cannot be invoked", Call);
     Check(Call.countOperandBundlesOfType(LLVMContext::OB_deopt) == 1,
@@ -6571,6 +6609,10 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           Call);
     break;
   }
+  case Intrinsic::masked_udiv:
+  case Intrinsic::masked_sdiv:
+  case Intrinsic::masked_urem:
+  case Intrinsic::masked_srem:
   case Intrinsic::vector_reduce_and:
   case Intrinsic::vector_reduce_or:
   case Intrinsic::vector_reduce_xor:
@@ -6913,25 +6955,6 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
           Call);
     break;
   }
-  case Intrinsic::aarch64_stshh_atomic_store: {
-    uint64_t Order = cast<ConstantInt>(Call.getArgOperand(2))->getZExtValue();
-    Check(Order == static_cast<uint64_t>(AtomicOrderingCABI::relaxed) ||
-              Order == static_cast<uint64_t>(AtomicOrderingCABI::release) ||
-              Order == static_cast<uint64_t>(AtomicOrderingCABI::seq_cst),
-          "order argument to llvm.aarch64.stshh.atomic.store must be 0, 3 or 5",
-          Call);
-
-    Check(cast<ConstantInt>(Call.getArgOperand(3))->getZExtValue() < 2,
-          "policy argument to llvm.aarch64.stshh.atomic.store must be 0 or 1",
-          Call);
-
-    uint64_t Size = cast<ConstantInt>(Call.getArgOperand(4))->getZExtValue();
-    Check(Size == 8 || Size == 16 || Size == 32 || Size == 64,
-          "size argument to llvm.aarch64.stshh.atomic.store must be 8, 16, "
-          "32 or 64",
-          Call);
-    break;
-  }
   case Intrinsic::callbr_landingpad: {
     const auto *CBR = dyn_cast<CallBrInst>(Call.getOperand(0));
     Check(CBR, "intrinstic requires callbr operand", &Call);
@@ -6990,6 +7013,11 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     }
     break;
   }
+  case Intrinsic::structured_alloca:
+    Check(Call.hasRetAttr(Attribute::ElementType),
+          "@llvm.structured.alloca calls require elementtype attribute.",
+          &Call);
+    break;
   case Intrinsic::amdgcn_cs_chain: {
     auto CallerCC = Call.getCaller()->getCallingConv();
     switch (CallerCC) {
@@ -7285,7 +7313,9 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   case Intrinsic::lifetime_start:
   case Intrinsic::lifetime_end: {
     Value *Ptr = Call.getArgOperand(0);
-    Check(isa<AllocaInst>(Ptr) || isa<PoisonValue>(Ptr),
+    IntrinsicInst *II = dyn_cast<IntrinsicInst>(Ptr);
+    Check(isa<AllocaInst>(Ptr) || isa<PoisonValue>(Ptr) ||
+              (II && II->getIntrinsicID() == Intrinsic::structured_alloca),
           "llvm.lifetime.start/end can only be used on alloca or poison",
           &Call);
     break;

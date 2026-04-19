@@ -23,11 +23,20 @@ endmacro()
 # Creates target ${name} which depends on a clang command to compile ${input} to
 # ${output}, with any additional arguments from ${ARGN}, and add it to the
 # TEST_INPUT_BITCODES target list.
+set(TEST_INPUT_WCHAR_FLAG)
+if(WIN32)
+  # Match -fshort-wchar used by device libs on Windows (see
+  # amd/device-libs/cmake/OCL.cmake). Without this, linking fails with
+  # conflicting wchar_size module flags.
+  set(TEST_INPUT_WCHAR_FLAG -fshort-wchar)
+endif()
+
 macro(add_test_input_bitcode name input output)
   add_custom_command(
     OUTPUT "${output}"
     COMMAND "$<TARGET_FILE:clang>" -c -emit-llvm -target amdgcn-amd-amdhsa
     -mcpu=gfx900 -nogpulib -nogpuinc
+    ${TEST_INPUT_WCHAR_FLAG}
     ${ARGN} "${CMAKE_CURRENT_SOURCE_DIR}/${input}"
     -o "${output}"
     VERBATIM
@@ -210,7 +219,7 @@ add_comgr_test(metadata_tp_test c)
 add_comgr_test(metadata_yaml_test c)
 add_comgr_test(metadata_msgpack_test c)
 add_comgr_test(metadata_multiple_msgpacks_test c)
-#add_comgr_test(metadata_merge_test c)
+add_comgr_test(metadata_merge_test c)
 add_comgr_test(symbols_test c)
 add_comgr_test(symbols_iterate_test c)
 add_comgr_test(compile_test c)
@@ -237,5 +246,6 @@ add_comgr_test(compile_source_to_executable c)
 add_comgr_test(name_expression_map_test c)
 add_comgr_test(compile_hip_test c)
 add_comgr_test(compile_hip_to_relocatable c)
+add_comgr_test(compile_hip_with_libcxx_test c)
 add_comgr_test(mangled_names_hip_test c)
 #add_comgr_test(unbundle_hip_test c)

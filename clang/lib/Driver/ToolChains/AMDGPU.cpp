@@ -14,6 +14,7 @@
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/SanitizerArgs.h"
 #include "clang/Options/Options.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/Error.h"
@@ -147,8 +148,7 @@ void RocmInstallationDetector::scanLibDevicePath(llvm::StringRef Path) {
 
       llvm::Twine GfxName = Twine("gfx") + IsaVersionNumber;
       SmallString<8> Tmp;
-      LibDeviceMap.insert(
-        std::make_pair(GfxName.toStringRef(Tmp), FilePath.str()));
+      LibDeviceMap.insert({GfxName.toStringRef(Tmp), FilePath.str()});
     }
   }
 }
@@ -313,7 +313,8 @@ RocmInstallationDetector::getInstallationPathCandidates() {
 
 RocmInstallationDetector::RocmInstallationDetector(
     const Driver &D, const llvm::Triple &HostTriple,
-    const llvm::opt::ArgList &Args, bool DetectHIPRuntime)
+    const llvm::opt::ArgList &Args, bool DetectHIPRuntime,
+    bool DetectOpenMPRuntime)
     : D(D) {
   Verbose = Args.hasArg(options::OPT_v);
   RocmPathArg = Args.getLastArgValue(options::OPT_rocm_path_EQ);
@@ -339,7 +340,7 @@ RocmInstallationDetector::RocmInstallationDetector(
     unsigned Minor = ~0U;
     SmallVector<StringRef, 3> Parts;
     HIPVersionArg.split(Parts, '.');
-    if (Parts.size())
+    if (!Parts.empty())
       Parts[0].getAsInteger(0, Major);
     if (Parts.size() > 1)
       Parts[1].getAsInteger(0, Minor);
@@ -367,13 +368,32 @@ RocmInstallationDetector::RocmInstallationDetector(
 
   if (DetectHIPRuntime)
     detectHIPRuntime();
+  if (DetectOpenMPRuntime)
+    detectOpenMPRuntime();
+}
+
+void RocmInstallationDetector::detectOpenMPRuntime() {
+  assert(OpenMPASanRTLPath.empty());
+  // Set OpenMP ASan library directory path for pre-instrumented device
+  // libraries (e.g., libompdevice.a). This path is used when linking with
+  // -fsanitize=address for OpenMP offloading.
+  OpenMPASanRTLPath = llvm::sys::path::parent_path(D.Dir);
+  llvm::sys::path::append(OpenMPASanRTLPath, "lib", "asan");
+  if (D.getVFS().exists(OpenMPASanRTLPath))
+    return;
+  // Fallback: Search ASan libs in the ROCm tree (e.g. /opt/rocm/llvm/lib/asan).
+  const auto &Candidates = getInstallationPathCandidates();
+  if (Candidates.empty())
+    return;
+  OpenMPASanRTLPath = Candidates.front().Path;
+  llvm::sys::path::append(OpenMPASanRTLPath, "lib", "llvm", "lib", "asan");
 }
 
 void RocmInstallationDetector::detectDeviceLibrary() {
   assert(LibDevicePath.empty());
 
   if (!RocmDeviceLibPathArg.empty())
-    LibDevicePath = RocmDeviceLibPathArg[RocmDeviceLibPathArg.size() - 1];
+    LibDevicePath = RocmDeviceLibPathArg.back();
   else if (std::optional<std::string> LibPathEnv =
                llvm::sys::Process::GetEnv("HIP_DEVICE_LIB_PATH"))
     LibDevicePath = std::move(*LibPathEnv);
@@ -641,6 +661,8 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         Args.MakeArgString("-plugin-opt=-mattr=" + llvm::join(Features, ",")));
   }
 
+  getToolChain().addProfileRTLibs(Args, CmdArgs);
+
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
   if (Args.hasArg(options::OPT_startfiles)) {
@@ -740,15 +762,31 @@ AMDGPUToolChain::AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
     : Generic_ELF(D, Triple, Args),
       OptionsDefault(
           {{options::OPT_O, "3"}, {options::OPT_cl_std_EQ, "CL1.2"}}) {
+  loadMultilibsFromYAML(Args, D);
+
   // Check code object version options. Emit warnings for legacy options
   // and errors for the last invalid code object version options.
   // It is done here to avoid repeated warning or error messages for
   // each tool invocation.
   checkAMDGPUCodeObjectVersion(D, Args);
+  // When ASan is enabled, setup ASan library path configuration early so that
+  // the linker finds ASan-instrumented libraries.
+  checkAndAddAMDGPUSanLibPaths(Args);
 }
 
 Tool *AMDGPUToolChain::buildLinker() const {
   return new tools::amdgpu::Linker(*this);
+}
+
+// Common function to check and add ASan library paths.
+void AMDGPUToolChain::checkAndAddAMDGPUSanLibPaths(const ArgList &Args) {
+  // For OpenMP: when ASan is enabled, prepend the OpenMP ASan library path so
+  // the linker finds ASan-instrumented libraries.
+  if (getSanitizerArgs(Args).needsAsanRt()) {
+    StringRef OmpASanPath = RocmInstallation->getOpenMPASanRTLPath();
+    if (!OmpASanPath.empty() && getVFS().exists(OmpASanPath))
+      getFilePaths().insert(getFilePaths().begin(), OmpASanPath.str());
+  }
 }
 
 DerivedArgList *
@@ -777,11 +815,10 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
           << llvm::toString(GPUsOrErr.takeError()) << "-mcpu";
     } else {
       auto &GPUs = *GPUsOrErr;
-      if (GPUs.size() > 1) {
+      if (llvm::SmallSet<std::string, 1>(GPUs.begin(), GPUs.end()).size() > 1)
         getDriver().Diag(diag::warn_drv_multi_gpu_arch)
             << llvm::Triple::getArchTypeName(getArch())
             << llvm::join(GPUs, ", ") << "-mcpu";
-      }
       DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_mcpu_EQ),
                         Args.MakeArgString(GPUs.front()));
     }
@@ -884,8 +921,10 @@ void AMDGPUToolChain::addClangTargetOptions(
     Action::OffloadKind DeviceOffloadingKind) const {
   // Default to "hidden" visibility, as object level linking will not be
   // supported for the foreseeable future.
+  // TODO: remove the SPIR-V bypass once it can encode (hidden) visibility.
   if (!DriverArgs.hasArg(options::OPT_fvisibility_EQ,
-                         options::OPT_fvisibility_ms_compat)) {
+                         options::OPT_fvisibility_ms_compat) &&
+      !getEffectiveTriple().isSPIRV()) {
     CC1Args.push_back("-fvisibility=hidden");
     CC1Args.push_back("-fapply-global-visibility-to-externs");
   }
@@ -919,6 +958,18 @@ void AMDGPUToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   if (DriverArgs.hasArg(options::OPT_nostdinc) ||
       DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
+
+  // Add multilib variant include paths in priority order.
+  for (const Multilib &M : getOrderedMultilibs()) {
+    if (M.isDefault())
+      continue;
+    if (std::optional<std::string> StdlibIncDir = getStdlibIncludePath()) {
+      SmallString<128> Dir(*StdlibIncDir);
+      llvm::sys::path::append(Dir, M.includeSuffix());
+      if (getDriver().getVFS().exists(Dir))
+        addSystemInclude(DriverArgs, CC1Args, Dir);
+    }
+  }
 
   if (std::optional<std::string> Path = getStdlibIncludePath())
     addSystemInclude(DriverArgs, CC1Args, *Path);
@@ -1075,16 +1126,17 @@ RocmInstallationDetector::getCommonBitcodeLibs(
       BCLibs.emplace_back(BCLib);
     }
   };
-  auto AddSanBCLibs = [&]() {
-    if (Pref.GPUSan)
-      AddBCLib(getAsanRTLPath(), false);
-  };
 
-  AddSanBCLibs();
+  // For OpenMP, openmp-devicertl(libompdevice.a) already contains ASan GPU
+  // runtime and Ockl functions (via POST_BUILD). Don't add it again at driver
+  // level to avoid duplicates as most of the symbols have USED attribute and
+  // duplicates entries in llvm.compiler.used & llvm.used makes their
+  // duplicate definitions persist even with internalization enabled
+  if (Pref.GPUSan && !Pref.IsOpenMP)
+    // Add Gpu Sanitizer RTL bitcode lib required for AMDGPU Sanitizer
+    AddBCLib(getAsanRTLPath(),false);
   AddBCLib(getOCMLPath());
   if (!Pref.IsOpenMP)
-    AddBCLib(getOCKLPath());
-  else if (Pref.GPUSan && Pref.IsOpenMP)
     AddBCLib(getOCKLPath());
   AddBCLib(getUnsafeMathPath(Pref.UnsafeMathOpt || Pref.FastRelaxedMath));
   AddBCLib(getFiniteOnlyPath(Pref.FiniteOnly || Pref.FastRelaxedMath));

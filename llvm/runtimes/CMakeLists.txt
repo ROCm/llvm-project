@@ -462,6 +462,15 @@ function(runtime_register_target name)
     if(TARGET builtins-${name})
       add_dependencies(check-builtins check-builtins-${name})
     endif()
+
+    foreach(runtime_name ${runtime_names})
+      if(TARGET check-${runtime_name}-${name})
+        if(NOT TARGET check-${runtime_name})
+          add_custom_target(check-${runtime_name})
+        endif()
+        add_dependencies(check-${runtime_name} check-${runtime_name}-${name})
+      endif()
+    endforeach()
   endif()
   foreach(runtime_name ${runtime_names})
     if(NOT TARGET ${runtime_name})
@@ -560,9 +569,19 @@ if(build_runtimes)
     list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
   endif()
 
-  # TODO: We need to consider passing it as '-DRUNTIMES_x86_64_LLVM_ENABLE_RUNTIMES'.
+  set(libclc_enabled FALSE)
   if("libclc" IN_LIST LLVM_ENABLE_RUNTIMES)
-    foreach(dep clang llvm-as llvm-dis llvm-link opt llvm-ar llvm-ranlib)
+    set(libclc_enabled TRUE)
+  else()
+    foreach(target ${LLVM_RUNTIME_TARGETS})
+      if("libclc" IN_LIST RUNTIMES_${target}_LLVM_ENABLE_RUNTIMES)
+        set(libclc_enabled TRUE)
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(libclc_enabled)
+    foreach(dep clang llvm-link opt llvm-ar llvm-ranlib llvm-spirv)
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -584,6 +603,13 @@ if(build_runtimes)
     # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
     # No need to provide a separate path for ROCt.
     if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
+
+      set(rocr_extra_cmake_args "")
+      if(THEROCK_AMDGPU_TARGETS)
+        # Pass the list of AMDGPU targets to ROCr runtime
+        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
+      endif()
+
       if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
         message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
       endif()
@@ -596,6 +622,7 @@ if(build_runtimes)
         CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
                    -DIMAGE_SUPPORT=OFF
                    -DLLVM_RUNTIME_OPENMP=ON
+                   ${rocr_extra_cmake_args}
                    ${extra_cmake_args})
       set(HSA_DEP rocr-runtime)
     endif()
@@ -649,6 +676,12 @@ if(build_runtimes)
     endforeach()
   endif()
   if(LLVM_LIBC_GPU_BUILD)
+    set(_gpu_loader "${LLVM_TOOLS_BINARY_DIR}/llvm-gpu-loader${CMAKE_EXECUTABLE_SUFFIX}")
+    foreach(name ${LLVM_RUNTIME_TARGETS})
+      if(name MATCHES "^(amdgcn|nvptx)")
+        set(RUNTIMES_${name}_CMAKE_CROSSCOMPILING_EMULATOR "${_gpu_loader}" CACHE STRING "")
+      endif()
+    endforeach()
     list(APPEND extra_cmake_args "-DLLVM_LIBC_GPU_BUILD=ON")
     if(TARGET llvm-offload-binary)
       list(APPEND extra_deps llvm-offload-binary)
@@ -773,4 +806,10 @@ if(build_runtimes)
 
     set_property(GLOBAL APPEND PROPERTY LLVM_ALL_ADDITIONAL_TEST_TARGETS runtimes ${extra_deps})
   endif()
+endif()
+
+if(LIBOMP_ENABLE_ARM64X)
+  # TODO: This only needs to depend on openmp-arm64ec-pc-windows-msvc, but the 
+  # openmp targets set up for cross build runtimes don't currently work correctly.
+  add_dependencies(runtimes-configure runtimes-arm64ec-pc-windows-msvc-build)
 endif()

@@ -18,6 +18,7 @@
 #include "comgr-device-libs.h"
 #include "comgr-diagnostic-handler.h"
 #include "comgr-env.h"
+#include "comgr-libcxx-headers.h"
 #include "comgr-resource-directory.h"
 #include "comgr-spirv-command.h"
 #include "comgr-unbundle-command.h"
@@ -486,7 +487,7 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
         T, Ctx, std::unique_ptr<MCAsmBackend>(MAB),
         MAB->createObjectWriter(*Out), std::unique_ptr<MCCodeEmitter>(CE),
         *STI));
-    Str.get()->initSections(Opts.NoExecStack, *STI);
+    Str.get()->initSections(*STI);
   }
 
   bool Failed = false;
@@ -1048,6 +1049,20 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
     Argv.push_back("-nogpulib");
   }
 
+  // Auto-inject embedded libc++ headers as a fallback include path.
+  // Using -idirafter places them AFTER all other include paths, so:
+  //   - System libstdc++ or libc++ headers take priority when available
+  //   - User-provided -I paths take priority
+  //   - Embedded headers only kick in when no other C++ headers are found
+  // This ensures backward compatibility while providing headers on systems
+  // without C++ development headers (e.g., driver-only installs).
+  if (HasEmbeddedHeaders && getLanguage() == AMD_COMGR_LANGUAGE_HIP) {
+    SmallString<256> LibcxxPath(env::getLLVMPath());
+    sys::path::append(LibcxxPath, "include", "c++", "v1");
+    Argv.push_back("-idirafter");
+    Argv.push_back(Saver.save(StringRef(LibcxxPath)).data());
+  }
+
   // TODO: Enable this for OpenCL as well (SWDEV-377546)
   if (getLanguage() == AMD_COMGR_LANGUAGE_HIP && env::shouldSaveLLVMTemps()) {
     Argv.push_back("-save-temps=obj");
@@ -1062,6 +1077,16 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
   // By default clang driver will ask CC1 to leak memory.
   Argv.push_back("-Xclang");
   Argv.push_back("-no-disable-free");
+
+  // Append options from AMD_COMGR_DRIVER_OPTIONS_APPEND environment variable.
+  // Options are space-separated and appended after all other options.
+  StringRef EnvOptions = env::getDriverOptionsAppend();
+  if (!EnvOptions.empty()) {
+    SmallVector<StringRef, 8> Options;
+    EnvOptions.split(Options, ' ', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+    for (StringRef Opt : Options)
+      Argv.push_back(Saver.save(Opt).data());
+  }
 
   Argv.push_back(InputFilePath);
 
@@ -2382,6 +2407,50 @@ AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,
   } else {
     if (env::shouldEmitVerboseLogs()) {
       LogS << "\t File System: Real\n";
+    }
+  }
+
+  // Add embedded libc++ headers to VFS for HIP compilations.
+  if (getLanguage() == AMD_COMGR_LANGUAGE_HIP && hasEmbeddedLibcxxHeaders()) {
+    if (!InMemoryFS) {
+      InMemoryFS = new vfs::InMemoryFileSystem;
+      OverlayFS->pushOverlay(InMemoryFS);
+    }
+
+    SmallString<256> ClangBinaryPath(env::getLLVMPath());
+    sys::path::append(ClangBinaryPath, "bin", "clang");
+    std::string ResourceDir = GetResourcesPath(ClangBinaryPath);
+
+    // libc++ headers → <install>/include/c++/v1/<relative-path>
+    SmallString<256> LibcxxBase(env::getLLVMPath());
+    sys::path::append(LibcxxBase, "include", "c++", "v1");
+
+    for (const auto &Entry : getLibcxxHeaderFiles()) {
+      SmallString<128> Path(LibcxxBase);
+      path::append(Path, Entry.RelativePath);
+      InMemoryFS->addFile(Path, 0,
+                          MemoryBuffer::getMemBuffer(Entry.FileContent, Path,
+                                                     false));
+    }
+
+    // Clang builtin headers → <resource-dir>/include/<relative-path>
+    SmallString<256> ClangBuiltinBase(ResourceDir);
+    sys::path::append(ClangBuiltinBase, "include");
+
+    for (const auto &Entry : getClangBuiltinHeaderFiles()) {
+      SmallString<128> Path(ClangBuiltinBase);
+      path::append(Path, Entry.RelativePath);
+      InMemoryFS->addFile(Path, 0,
+                          MemoryBuffer::getMemBuffer(Entry.FileContent, Path,
+                                                     false));
+    }
+
+    HasEmbeddedHeaders = true;
+    if (env::shouldEmitVerboseLogs()) {
+      LogS << "\t Embedded " << getLibcxxHeaderFiles().size()
+           << " libc++ headers at: " << LibcxxBase << "\n";
+      LogS << "\t Embedded " << getClangBuiltinHeaderFiles().size()
+           << " clang builtins at: " << ClangBuiltinBase << "\n";
     }
   }
 }

@@ -35,6 +35,7 @@
 #include "llvm/Debuginfod/BuildIDFetcher.h"
 #include "llvm/Debuginfod/Debuginfod.h"
 #include "llvm/Demangle/Demangle.h"
+#include "llvm/HTTP/HTTPClient.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDisassembler/MCRelocationInfo.h"
@@ -66,7 +67,6 @@
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/HTTP/HTTPClient.h"
 #include "llvm/Support/LLVMDriver.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
@@ -341,7 +341,6 @@ static bool PrettyPGOAnalysisMap;
 static bool DynamicSymbolTable;
 std::string objdump::TripleName;
 bool objdump::UnwindInfo;
-static bool Wide;
 std::string objdump::Prefix;
 uint32_t objdump::PrefixStrip;
 
@@ -526,7 +525,7 @@ static const Target *getTarget(const ObjectFile *Obj) {
   const Target *TheTarget =
       TargetRegistry::lookupTarget(ArchName, TheTriple, Error);
   if (!TheTarget)
-    reportError(Obj->getFileName(), "can't find target: " + Error);
+    reportError(Obj->getFileName(), "cannot find target: " + Error);
 
   // Update the triple name and return the found target.
   TripleName = TheTriple.getTriple();
@@ -3662,6 +3661,7 @@ static void parseOtoolOptions(const llvm::opt::InputArgList &InputArgs) {
   ArchName = InputArgs.getLastArgValue(OTOOL_arch).str();
   if (!ArchName.empty())
     ArchFlags.push_back(ArchName);
+  ArchiveHeaders = InputArgs.hasArg(OTOOL_a);
   LinkOptHints = InputArgs.hasArg(OTOOL_C);
   if (InputArgs.hasArg(OTOOL_d))
     FilterSections.push_back("__DATA,__data");
@@ -3765,7 +3765,6 @@ static void parseObjdumpOptions(const llvm::opt::InputArgList &InputArgs) {
   DynamicSymbolTable = InputArgs.hasArg(OBJDUMP_dynamic_syms);
   TripleName = InputArgs.getLastArgValue(OBJDUMP_triple_EQ).str();
   UnwindInfo = InputArgs.hasArg(OBJDUMP_unwind_info);
-  Wide = InputArgs.hasArg(OBJDUMP_wide);
   Prefix = InputArgs.getLastArgValue(OBJDUMP_prefix).str();
   parseIntArg(InputArgs, OBJDUMP_prefix_strip, PrefixStrip);
   if (const opt::Arg *A = InputArgs.getLastArg(OBJDUMP_debug_vars_EQ)) {

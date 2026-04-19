@@ -147,11 +147,11 @@ class OpenMP_AllocatorClauseSkip<
                     extraClassDeclaration> {
 
   let arguments = (ins
-    Optional<I64>:$allocator
+    Optional<AnyInteger>:$allocator
   );
 
   let optAssemblyFormat = [{
-    `allocator` `(` $allocator `)`
+    `allocator` `(` $allocator `:` type($allocator) `)`
   }];
 
   let description = [{
@@ -317,20 +317,26 @@ class OpenMP_DependClauseSkip<
     bit description = false, bit extraClassDeclaration = false
   > : OpenMP_Clause<traits, arguments, assemblyFormat, description,
                     extraClassDeclaration> {
-  let arguments = (ins
-    OptionalAttr<TaskDependArrayAttr>:$depend_kinds,
-    Variadic<OpenMP_PointerLikeType>:$depend_vars
-  );
+  let arguments = (ins OptionalAttr<TaskDependArrayAttr>:$depend_kinds,
+      Variadic<OpenMP_PointerLikeType>:$depend_vars,
+      OptionalAttr<TaskDependArrayAttr>:$depend_iterated_kinds,
+      Variadic<OpenMP_IteratedType>:$depend_iterated);
 
   let optAssemblyFormat = [{
     `depend` `(`
-      custom<DependVarList>($depend_vars, type($depend_vars), $depend_kinds) `)`
+      custom<DependVarList>($depend_vars, type($depend_vars), $depend_kinds,
+                            $depend_iterated, type($depend_iterated),
+                            $depend_iterated_kinds) `)`
   }];
 
   let description = [{
     The `depend_kinds` and `depend_vars` arguments are variadic lists of values
     that specify the dependencies of this particular task in relation to other
     tasks.
+
+    The `depend_iterated_kinds` and `depend_iterated` arguments are variadic
+    lists of iterator-produced handles (from `omp.iterator`) that specify
+    dependencies expanded at runtime via an iterator modifier.
   }];
 }
 
@@ -826,12 +832,14 @@ class OpenMP_LinearClauseSkip<
                     extraClassDeclaration> {
   let arguments = (ins Variadic<AnyType>:$linear_vars,
       Variadic<AnyInteger>:$linear_step_vars,
-      OptionalAttr<ArrayAttr>:$linear_var_types);
+      OptionalAttr<ArrayAttr>:$linear_var_types,
+      OptionalAttr<ArrayAttr>:$linear_modifiers);
 
   let optAssemblyFormat = [{
     `linear` `(`
       custom<LinearClause>($linear_vars, type($linear_vars),
-                           $linear_step_vars, type($linear_step_vars)) `)`
+                           $linear_step_vars, type($linear_step_vars),
+                           $linear_modifiers) `)`
   }];
 
   let description = [{
@@ -839,6 +847,10 @@ class OpenMP_LinearClauseSkip<
     associated linear operand. Note that the `linear_vars` and
     `linear_step_vars` variadic lists should contain the same number of
     elements.
+
+    The `linear_modifiers` attribute optionally specifies a per-variable
+    linear-modifier: `val`, `ref`, or `uval`. When omitted, the default
+    modifier is determined by the language semantics.
   }];
 }
 
@@ -909,6 +921,43 @@ class OpenMP_MapClauseSkip<
 }
 
 def OpenMP_MapClause : OpenMP_MapClauseSkip<>;
+
+//===----------------------------------------------------------------------===//
+// Not in the spec: Clause-like structure to memory allocation information.
+//===----------------------------------------------------------------------===//
+
+class OpenMP_MemAllocationSizeClauseSkip<
+    bit traits = false, bit arguments = false, bit assemblyFormat = false,
+    bit description = false, bit extraClassDeclaration = false
+  > : OpenMP_Clause<traits, arguments, assemblyFormat, description,
+                    extraClassDeclaration> {
+
+  let arguments = (ins
+    TypeAttr:$mem_elem_type,
+    AnySignlessInteger:$mem_array_size,
+    ConfinedAttr<OptionalAttr<I64Attr>, [IntPositive]>:$mem_alignment
+  );
+
+  let reqAssemblyFormat = [{
+    $mem_array_size `x` $mem_elem_type `:` `(` type($mem_array_size) `)`
+  }];
+
+  let optAssemblyFormat = [{
+    `align` `(` $mem_alignment `)`
+  }];
+
+  let description = [{
+    The `mem_elem_type` is the type of the object the memory allocation refers
+    to. It is used to calculate the size of the allocation.
+
+    The `mem_array_size` is the number of objects.
+
+    The optional `mem_alignment` is used to specify the alignment for each
+    element. If not set, the `DataLayout` defaults will be used instead.
+  }];
+}
+
+def OpenMP_MemAllocationSizeClause : OpenMP_MemAllocationSizeClauseSkip<>;
 
 //===----------------------------------------------------------------------===//
 // V5.2: [15.8.1] `memory-order` clause set

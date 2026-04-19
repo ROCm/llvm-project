@@ -650,8 +650,6 @@ differences:
   boolean vectors.
 * Casting a scalar bool value to a boolean vector type means broadcasting the
   scalar value onto all lanes (same as general ext_vector_type).
-* It is not possible to access or swizzle elements of a boolean vector
-  (different than general ext_vector_type).
 
 The size and alignment are both the number of bits rounded up to the next power
 of two, but the alignment is at most the maximum vector alignment of the
@@ -2707,8 +2705,9 @@ programming patterns, makes programs more concise, and improves the safety of
 container creation.  There are several feature macros associated with object
 literals and subscripting: ``__has_feature(objc_array_literals)`` tests the
 availability of array literals; ``__has_feature(objc_dictionary_literals)``
-tests the availability of dictionary literals;
-``__has_feature(objc_subscripting)`` tests the availability of object
+tests the availability of dictionary literals; ``objc_constant_literals``
+tests the availability of having number, array, and dictionary literals
+emitted at compile time; ``__has_feature(objc_subscripting)`` tests the availability of object
 subscripting.
 
 Objective-C Autosynthesis of Properties
@@ -3994,6 +3993,63 @@ be used within constant expressions.
 
   unsigned _BitInt(20) value = 0xABCDE;
   unsigned _BitInt(20) rotated = __builtin_stdc_rotate_left(value, 5);
+
+``__builtin_stdc_*`` bit utilities
+----------------------------------
+
+**Syntax**:
+
+.. code-block:: c
+
+  unsigned int __builtin_stdc_leading_zeros(T value);
+  unsigned int __builtin_stdc_leading_ones(T value);
+  unsigned int __builtin_stdc_trailing_zeros(T value);
+  unsigned int __builtin_stdc_trailing_ones(T value);
+  unsigned int __builtin_stdc_first_leading_zero(T value);
+  unsigned int __builtin_stdc_first_leading_one(T value);
+  unsigned int __builtin_stdc_first_trailing_zero(T value);
+  unsigned int __builtin_stdc_first_trailing_one(T value);
+  unsigned int __builtin_stdc_count_zeros(T value);
+  unsigned int __builtin_stdc_count_ones(T value);
+  bool         __builtin_stdc_has_single_bit(T value);
+  unsigned int __builtin_stdc_bit_width(T value);
+  T            __builtin_stdc_bit_floor(T value);
+  T            __builtin_stdc_bit_ceil(T value);
+
+where ``T`` is any unsigned integer type except ``bool`` and enumeration types,
+including ``_BitInt`` types.
+
+**Description**:
+
+These builtins implement the C23 ``<stdbit.h>`` operations. Following the C23
+standard, ``unsigned int`` is used as the ``generic_return_type`` for count and
+position queries (``leading_zeros``, ``leading_ones``, ``trailing_zeros``,
+``trailing_ones``, ``first_leading_zero``, ``first_leading_one``,
+``first_trailing_zero``, ``first_trailing_one``, ``count_zeros``,
+``count_ones``, ``bit_width``); ``has_single_bit`` returns ``bool``; and
+``bit_floor``/``bit_ceil`` return the same type as the operand. Zero and
+all-ones cases follow the C23 definitions. All are usable in constant
+expressions.
+
+``bool`` and enumeration types are rejected as arguments because C23 does not
+permit them for these functions.
+
+As a Clang extension, ``_BitInt`` types of arbitrary widths are supported. C23
+only requires support for bit-precise integers whose width matches a standard
+or extended integer type.
+
+**Examples**:
+
+.. code-block:: c
+
+  unsigned _BitInt(9) x = 0x11;
+  unsigned int lz  = __builtin_stdc_leading_zeros(x);
+  unsigned int tz  = __builtin_stdc_trailing_zeros(x);
+  unsigned int fto = __builtin_stdc_first_trailing_one(x);
+  unsigned int cz  = __builtin_stdc_count_zeros(x);
+  bool has_one    = __builtin_stdc_has_single_bit(x);
+  unsigned _BitInt(9) ceilv  = __builtin_stdc_bit_ceil((unsigned _BitInt(9))5);
+  unsigned _BitInt(9) floorv = __builtin_stdc_bit_floor((unsigned _BitInt(9))5);
 
 ``__builtin_unreachable``
 -------------------------
@@ -6139,6 +6195,23 @@ statements S1 and S2 above.
 If Loop Distribution is turned on globally with
 ``-mllvm -enable-loop-distribution``, specifying ``distribute(disable)`` can
 be used the disable it on a per-loop basis.
+
+Disable Loop Invariant Code Motion
+----------------------------------
+
+Loop Invariant Code Motion (LICM) moves loop invariant code outside of the loop.
+If ``licm(disable))`` is specified, compiler will skip LICM on the specific loop.
+
+.. code-block:: c++
+
+  #pragma clang loop licm(disable)
+  while (i < Length) {
+    List[i] = A[x] * i * 2;
+    i++;
+  }
+
+The load for A[x] is loop invariant, it will not be hoisted out of the loop
+when LICM is disabled.
 
 Additional Information
 ----------------------

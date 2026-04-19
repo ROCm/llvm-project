@@ -109,6 +109,9 @@ intrinsicToAttrMask(Intrinsic::ID ID, bool &NonKernelOnly, bool &NeedsImplicit,
     // offsets.
     return CodeObjectVersion >= AMDGPU::AMDHSA_COV5 ? IMPLICIT_ARG_PTR
                                                     : QUEUE_PTR;
+  case Intrinsic::amdgcn_wwm:
+  case Intrinsic::amdgcn_strict_wwm:
+    return WHOLE_WAVE_MODE;
   case Intrinsic::trap:
   case Intrinsic::debugtrap:
   case Intrinsic::ubsantrap:
@@ -1598,8 +1601,8 @@ static bool runImpl(SetVector<Function *> &Functions, bool IsModulePass,
           return true;
         // Otherwise specialize uniform values.
         const auto &TTI = TM.getTargetTransformInfo(*CB.getCaller());
-        return TTI.getInstructionUniformity(CB.getCalledOperand()) ==
-               InstructionUniformity::AlwaysUniform;
+        return TTI.getValueUniformity(CB.getCalledOperand()) ==
+               ValueUniformity::AlwaysUniform;
       };
   AC.IPOAmendableCB = [](const Function &F) {
     return F.getCallingConv() == CallingConv::AMDGPU_KERNEL;
@@ -1667,7 +1670,7 @@ PreservedAnalyses llvm::AMDGPUAttributorPass::run(Module &M,
 
   SetVector<Function *> Functions;
   for (Function &F : M) {
-    if (!F.isIntrinsic())
+    if (!F.isDeclaration())
       Functions.insert(&F);
   }
 

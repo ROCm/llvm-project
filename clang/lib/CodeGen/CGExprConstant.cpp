@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ABIInfoImpl.h"
 #include "CGCXXABI.h"
 #include "CGObjCRuntime.h"
 #include "CGRecordLayout.h"
@@ -21,6 +20,7 @@
 #include "clang/AST/APValue.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/NSAPI.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/Builtins.h"
@@ -759,7 +759,7 @@ bool ConstStructBuilder::Build(const InitListExpr *ILE, bool AllowOverwrite) {
 
     // Zero-sized fields are not emitted, but their initializers may still
     // prevent emission of this struct as a constant.
-    if (isEmptyFieldForLayout(CGM.getContext(), Field)) {
+    if (Field->isZeroSize(CGM.getContext())) {
       if (Init && Init->HasSideEffects(CGM.getContext()))
         return false;
       continue;
@@ -894,8 +894,7 @@ bool ConstStructBuilder::Build(const APValue &Val, const RecordDecl *RD,
       continue;
 
     // Don't emit anonymous bitfields or zero-sized fields.
-    if (Field->isUnnamedBitField() ||
-        isEmptyFieldForLayout(CGM.getContext(), *Field))
+    if (Field->isUnnamedBitField() || Field->isZeroSize(CGM.getContext()))
       continue;
 
     // Emit the value of the initializer.
@@ -2031,24 +2030,29 @@ llvm::Constant *ConstantEmitter::emitForMemory(CodeGenModule &CGM,
   }
 
   if (destType->isBitIntType()) {
-    ConstantAggregateBuilder Builder(CGM);
-    llvm::Type *LoadStoreTy = CGM.getTypes().convertTypeForLoadStore(destType);
-    // ptrtoint/inttoptr should not involve _BitInt in constant expressions, so
-    // casting to ConstantInt is safe here.
-    auto *CI = cast<llvm::ConstantInt>(C);
-    llvm::Constant *Res = llvm::ConstantFoldCastOperand(
-        destType->isSignedIntegerOrEnumerationType() ? llvm::Instruction::SExt
-                                                     : llvm::Instruction::ZExt,
-        CI, LoadStoreTy, CGM.getDataLayout());
-    if (CGM.getTypes().typeRequiresSplitIntoByteArray(destType, C->getType())) {
-      // Long _BitInt has array of bytes as in-memory type.
-      // So, split constant into individual bytes.
-      llvm::Type *DesiredTy = CGM.getTypes().ConvertTypeForMem(destType);
-      llvm::APInt Value = cast<llvm::ConstantInt>(Res)->getValue();
-      Builder.addBits(Value, /*OffsetInBits=*/0, /*AllowOverwrite=*/false);
-      return Builder.build(DesiredTy, /*AllowOversized*/ false);
+    llvm::Type *MemTy = CGM.getTypes().ConvertTypeForMem(destType);
+    if (C->getType() != MemTy) {
+      ConstantAggregateBuilder Builder(CGM);
+      llvm::Type *LoadStoreTy =
+          CGM.getTypes().convertTypeForLoadStore(destType);
+      // ptrtoint/inttoptr should not involve _BitInt in constant expressions,
+      // so casting to ConstantInt is safe here.
+      auto *CI = cast<llvm::ConstantInt>(C);
+      llvm::Constant *Res = llvm::ConstantFoldCastOperand(
+          destType->isSignedIntegerOrEnumerationType()
+              ? llvm::Instruction::SExt
+              : llvm::Instruction::ZExt,
+          CI, LoadStoreTy, CGM.getDataLayout());
+      if (CGM.getTypes().typeRequiresSplitIntoByteArray(destType,
+                                                        C->getType())) {
+        // Long _BitInt has array of bytes as in-memory type.
+        // So, split constant into individual bytes.
+        llvm::APInt Value = cast<llvm::ConstantInt>(Res)->getValue();
+        Builder.addBits(Value, /*OffsetInBits=*/0, /*AllowOverwrite=*/false);
+        return Builder.build(MemTy, /*AllowOversized*/ false);
+      }
+      return Res;
     }
-    return Res;
   }
 
   return C;
@@ -2132,6 +2136,9 @@ private:
   ConstantLValue VisitObjCBoxedExpr(const ObjCBoxedExpr *E);
   ConstantLValue VisitObjCEncodeExpr(const ObjCEncodeExpr *E);
   ConstantLValue VisitObjCStringLiteral(const ObjCStringLiteral *E);
+  llvm::Constant *VisitObjCCollectionElement(const Expr *E);
+  ConstantLValue VisitObjCArrayLiteral(const ObjCArrayLiteral *E);
+  ConstantLValue VisitObjCDictionaryLiteral(const ObjCDictionaryLiteral *E);
   ConstantLValue VisitPredefinedExpr(const PredefinedExpr *E);
   ConstantLValue VisitAddrLabelExpr(const AddrLabelExpr *E);
   ConstantLValue VisitCallExpr(const CallExpr *E);
@@ -2352,10 +2359,91 @@ ConstantLValueEmitter::VisitObjCStringLiteral(const ObjCStringLiteral *E) {
 
 ConstantLValue
 ConstantLValueEmitter::VisitObjCBoxedExpr(const ObjCBoxedExpr *E) {
-  assert(E->isExpressibleAsConstantInitializer() &&
-         "this boxed expression can't be emitted as a compile-time constant");
-  const auto *SL = cast<StringLiteral>(E->getSubExpr()->IgnoreParenCasts());
-  return emitConstantObjCStringLiteral(SL, E->getType(), CGM);
+  ASTContext &Context = CGM.getContext();
+  CGObjCRuntime &Runtime = CGM.getObjCRuntime();
+  const Expr *SubExpr = E->getSubExpr();
+  const QualType &Ty = SubExpr->IgnoreParens()->getType();
+
+  assert(SubExpr->isEvaluatable(Context) &&
+         "Non const NSNumber is being emitted as a constant");
+
+  if (const auto *SL = dyn_cast<StringLiteral>(SubExpr->IgnoreParenCasts()))
+    return emitConstantObjCStringLiteral(SL, E->getType(), CGM);
+
+  // Note `@YES` `@NO` need to be handled explicitly
+  // to meet existing plist encoding / decoding expectations
+  const bool IsBoolType =
+      (Ty->isBooleanType() || NSAPI(Context).isObjCBOOLType(Ty));
+  bool BoolValue = false;
+  if (IsBoolType && SubExpr->EvaluateAsBooleanCondition(BoolValue, Context)) {
+    ConstantAddress C = Runtime.GenerateConstantNumber(BoolValue, Ty);
+    return C.withElementType(CGM.getTypes().ConvertTypeForMem(E->getType()));
+  }
+
+  Expr::EvalResult IntResult{};
+  if (SubExpr->EvaluateAsInt(IntResult, Context)) {
+    ConstantAddress C =
+        Runtime.GenerateConstantNumber(IntResult.Val.getInt(), Ty);
+    return C.withElementType(CGM.getTypes().ConvertTypeForMem(E->getType()));
+  }
+
+  llvm::APFloat FloatValue(0.0);
+  if (SubExpr->EvaluateAsFloat(FloatValue, Context)) {
+    ConstantAddress C = Runtime.GenerateConstantNumber(FloatValue, Ty);
+    return C.withElementType(CGM.getTypes().ConvertTypeForMem(E->getType()));
+  }
+
+  llvm_unreachable("SubExpr is expected to be evaluated as a numeric type");
+}
+
+llvm::Constant *
+ConstantLValueEmitter::VisitObjCCollectionElement(const Expr *E) {
+  auto CE = cast<CastExpr>(E);
+  const Expr *Elm = CE->getSubExpr();
+  QualType DestTy = CE->getType();
+
+  assert(CE->getCastKind() == CK_BitCast &&
+         "Expected a CK_BitCast type for valid items in constant objc "
+         "collection literals");
+
+  llvm::Type *DstTy = CGM.getTypes().ConvertType(DestTy);
+  ConstantLValue LV = Visit(Elm);
+  llvm::Constant *ConstVal = cast<llvm::Constant>(LV.Value);
+  llvm::Constant *Val = llvm::ConstantExpr::getBitCast(ConstVal, DstTy);
+  return Val;
+}
+
+ConstantLValue
+ConstantLValueEmitter::VisitObjCArrayLiteral(const ObjCArrayLiteral *E) {
+  SmallVector<llvm::Constant *, 16> ObjectExpressions;
+  uint64_t NumElements = E->getNumElements();
+  ObjectExpressions.reserve(NumElements);
+
+  for (uint64_t i = 0; i < NumElements; i++) {
+    llvm::Constant *Val = VisitObjCCollectionElement(E->getElement(i));
+    ObjectExpressions.push_back(Val);
+  }
+  ConstantAddress C =
+      CGM.getObjCRuntime().GenerateConstantArray(ObjectExpressions);
+  return C.withElementType(CGM.getTypes().ConvertTypeForMem(E->getType()));
+}
+
+ConstantLValue ConstantLValueEmitter::VisitObjCDictionaryLiteral(
+    const ObjCDictionaryLiteral *E) {
+  SmallVector<std::pair<llvm::Constant *, llvm::Constant *>, 16> KeysAndObjects;
+  uint64_t NumElements = E->getNumElements();
+  KeysAndObjects.reserve(NumElements);
+
+  for (uint64_t i = 0; i < NumElements; i++) {
+    llvm::Constant *Key =
+        VisitObjCCollectionElement(E->getKeyValueElement(i).Key);
+    llvm::Constant *Val =
+        VisitObjCCollectionElement(E->getKeyValueElement(i).Value);
+    KeysAndObjects.push_back({Key, Val});
+  }
+  ConstantAddress C =
+      CGM.getObjCRuntime().GenerateConstantDictionary(E, KeysAndObjects);
+  return C.withElementType(CGM.getTypes().ConvertTypeForMem(E->getType()));
 }
 
 ConstantLValue
@@ -2711,10 +2799,8 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
 
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()) ||
-          CGM.getContext()
-              .getASTRecordLayout(base)
-              .getNonVirtualSize()
+      if (base->isEmpty() ||
+          CGM.getContext().getASTRecordLayout(base).getNonVirtualSize()
               .isZero())
         continue;
 
@@ -2728,8 +2814,7 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
   for (const auto *Field : record->fields()) {
     // Fill in non-bitfields. (Bitfields always use a zero pattern, which we
     // will fill in later.)
-    if (!Field->isBitField() &&
-        !isEmptyFieldForLayout(CGM.getContext(), Field)) {
+    if (!Field->isBitField() && !Field->isZeroSize(CGM.getContext())) {
       unsigned fieldIndex = layout.getLLVMFieldNo(Field);
       elements[fieldIndex] = CGM.EmitNullConstant(Field->getType());
     }
@@ -2749,7 +2834,7 @@ static llvm::Constant *EmitNullConstant(CodeGenModule &CGM,
     for (const auto &I : CXXR->vbases()) {
       const auto *base = I.getType()->castAsCXXRecordDecl();
       // Ignore empty bases.
-      if (isEmptyRecordForLayout(CGM.getContext(), I.getType()))
+      if (base->isEmpty())
         continue;
 
       unsigned fieldIndex = layout.getVirtualBaseIndex(base);

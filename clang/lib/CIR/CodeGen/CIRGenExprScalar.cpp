@@ -415,9 +415,9 @@ public:
   mlir::Value VisitInitListExpr(InitListExpr *e);
 
   mlir::Value VisitArrayInitIndexExpr(ArrayInitIndexExpr *e) {
-    cgf.cgm.errorNYI(e->getSourceRange(),
-                     "ScalarExprEmitter: array init index");
-    return {};
+    assert(cgf.getArrayInitIndex() &&
+           "ArrayInitIndexExpr not inside an ArrayInitLoopExpr?");
+    return cgf.getArrayInitIndex();
   }
 
   mlir::Value VisitImplicitValueInitExpr(const ImplicitValueInitExpr *e) {
@@ -694,7 +694,8 @@ public:
         return {};
       }
 
-      if (mlir::isa<cir::SingleType, cir::DoubleType>(value.getType())) {
+      if (mlir::isa<cir::SingleType, cir::DoubleType, cir::LongDoubleType>(
+              value.getType())) {
         // Create the inc/dec operation.
         // NOTE(CIR): clang calls CreateAdd but folds this to a unary op
         value = emitIncOrDec(e, value);
@@ -1325,10 +1326,6 @@ public:
           mlir::Value res = cgf.evaluateExprAsBool(e->getRHS());
           lexScope.forceCleanup({&res});
           cir::YieldOp::create(b, loc, res);
-          if (res.getParentBlock() != builder.getInsertionBlock())
-            cgf.cgm.errorNYI(
-                e->getSourceRange(),
-                "ScalarExprEmitter: VisitBinLAnd ternary with cleanup");
         },
         /*falseBuilder*/
         [&](mlir::OpBuilder &b, mlir::Location loc) {
@@ -1382,10 +1379,6 @@ public:
           mlir::Value res = cgf.evaluateExprAsBool(e->getRHS());
           lexScope.forceCleanup({&res});
           cir::YieldOp::create(b, loc, res);
-          if (res.getParentBlock() != builder.getInsertionBlock())
-            cgf.cgm.errorNYI(
-                e->getSourceRange(),
-                "ScalarExprEmitter: VisitBinLOr ternary with cleanup");
         });
 
     return maybePromoteBoolResult(resOp.getResult(), resTy);
@@ -1603,11 +1596,11 @@ mlir::Value ScalarExprEmitter::emitCompoundAssign(
 }
 
 mlir::Value ScalarExprEmitter::VisitExprWithCleanups(ExprWithCleanups *e) {
-  CIRGenFunction::RunCleanupsScope cleanups(cgf);
+  CIRGenFunction::FullExprCleanupScope scope(cgf, e->getSubExpr());
   mlir::Value v = Visit(e->getSubExpr());
   // Defend against dominance problems caused by jumps out of expression
   // evaluation through the shared cleanup block.
-  cleanups.forceCleanup({&v});
+  scope.exit({&v});
   return v;
 }
 
@@ -1993,7 +1986,7 @@ mlir::Value ScalarExprEmitter::emitSub(const BinOpInfo &ops) {
 mlir::Value ScalarExprEmitter::emitShl(const BinOpInfo &ops) {
   // TODO: This misses out on the sanitizer check below.
   if (ops.isFixedPointOp()) {
-    assert(cir::MissingFeatures::fixedPointType());
+    assert(!cir::MissingFeatures::fixedPointType());
     cgf.cgm.errorNYI("fixed point");
     return {};
   }
@@ -2025,7 +2018,7 @@ mlir::Value ScalarExprEmitter::emitShl(const BinOpInfo &ops) {
 mlir::Value ScalarExprEmitter::emitShr(const BinOpInfo &ops) {
   // TODO: This misses out on the sanitizer check below.
   if (ops.isFixedPointOp()) {
-    assert(cir::MissingFeatures::fixedPointType());
+    assert(!cir::MissingFeatures::fixedPointType());
     cgf.cgm.errorNYI("fixed point");
     return {};
   }
@@ -2151,18 +2144,9 @@ mlir::Value ScalarExprEmitter::VisitCastExpr(CastExpr *ce) {
   case CK_NonAtomicToAtomic:
   case CK_UserDefinedConversion:
     return Visit(const_cast<Expr *>(subExpr));
-  case CK_NoOp: {
-    auto v = Visit(const_cast<Expr *>(subExpr));
-    if (v) {
-      // CK_NoOp can model a pointer qualification conversion, which can remove
-      // an array bound and change the IR type.
-      // FIXME: Once pointee types are removed from IR, remove this.
-      mlir::Type t = cgf.convertType(destTy);
-      if (t != v.getType())
-        cgf.getCIRGenModule().errorNYI("pointer qualification conversion");
-    }
-    return v;
-  }
+  case CK_NoOp:
+    return ce->changesVolatileQualification() ? emitLoadOfLValue(ce)
+                                              : Visit(subExpr);
   case CK_IntegralToPointer: {
     mlir::Type destCIRTy = cgf.convertType(destTy);
     mlir::Value src = Visit(const_cast<Expr *>(subExpr));
@@ -2232,13 +2216,9 @@ mlir::Value ScalarExprEmitter::VisitCastExpr(CastExpr *ce) {
     assert(!cir::MissingFeatures::cxxABI());
 
     const MemberPointerType *mpt = ce->getType()->getAs<MemberPointerType>();
-    if (mpt->isMemberFunctionPointerType()) {
-      auto ty = mlir::cast<cir::MethodType>(cgf.convertType(destTy));
-      return builder.getNullMethodPtr(ty, cgf.getLoc(subExpr->getExprLoc()));
-    }
-
-    auto ty = mlir::cast<cir::DataMemberType>(cgf.convertType(destTy));
-    return builder.getNullDataMemberPtr(ty, cgf.getLoc(subExpr->getExprLoc()));
+    mlir::Location loc = cgf.getLoc(subExpr->getExprLoc());
+    return cgf.getBuilder().getConstant(
+        loc, cgf.cgm.emitNullMemberAttr(destTy, mpt));
   }
 
   case CK_ReinterpretMemberPointer: {
