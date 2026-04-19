@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - main
+      - amd/dev/kirthana14m/multi-arch-ci-amd-staging
       - multi_arch/**
       - release/therock-*
   workflow_dispatch:
@@ -42,12 +43,12 @@ on:
         type: string
         default: ""
         description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
-  pull_request:
-    branches: [amd-staging]
-    types:
-      - labeled
-      - opened
-      - synchronize
+  #pull_request:
+  #  branches: [amd-staging]
+  #  types:
+  #    - labeled
+  #    - opened
+  #    - synchronize
 permissions:
   contents: read
 
