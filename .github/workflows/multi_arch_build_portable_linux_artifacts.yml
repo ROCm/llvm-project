@@ -92,6 +92,7 @@ jobs:
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule reference for compiler/amd-llvm"
+
           # Verify the pointer update
           git submodule status
           git submodule
@@ -202,10 +203,6 @@ jobs:
             --output-dir="${BUILD_DIR}" \
             --bootstrap
 
-      - name: Fetch sources
-        timeout-minutes: 30
-        run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
-
       - name: TheRock and llvm SHA
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
         run: |
@@ -216,7 +213,11 @@ jobs:
              ls -l
              git log --oneline -3
              cd -
-          
+            
+      - name: Fetch sources
+        timeout-minutes: 30
+        run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
+
       - name: Get stage configuration
         id: stage_config
         run: |
