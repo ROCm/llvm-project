@@ -52,7 +52,7 @@ jobs:
     env:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'      
     outputs:
-      enable_build_jobs: ${{ 'true' }}
+      enable_build_jobs: 'true'
       # Temporary fix on gfx94x due to non availability of MI325 machines
       linux_build_config: >
         [ {"test-runs-on": "", "family": "gfx110X-all", "bypass_tests_for_releases": true, "sanity_check_only_for_family": true, "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "artifact_group": "gfx110X-all"}, {"test-runs-on": "", "family": "gfx94X-dcgpu", "bypass_tests_for_releases": true, "sanity_check_only_for_family": true, "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "artifact_group": "gfx94X-dcgpu"}, {"test-runs-on": "linux-mi355-1gpu-ossci-rocm", "benchmark-runs-on": "linux-mi355-1gpu-ossci-rocm", "family": "gfx950-dcgpu", "build_variant_label": "release", "build_variant_suffix": "", "build_variant_cmake_preset": "", "artifact_group": "gfx950-dcgpu"}]        
