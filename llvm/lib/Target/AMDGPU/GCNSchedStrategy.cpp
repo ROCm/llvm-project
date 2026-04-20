@@ -218,7 +218,8 @@ static void getRegisterPressures(
   GCNRegPressure NewPressure;
   if (AtTop) {
     GCNDownwardRPTracker TempDownwardTracker(DownwardTracker);
-    NewPressure = TempDownwardTracker.bumpDownwardPressure(MI, SRI);
+    TempDownwardTracker.advance(MI, /*UseInternalIterator=*/false);
+    NewPressure = TempDownwardTracker.getPressure();
   } else {
     GCNUpwardRPTracker TempUpwardTracker(UpwardTracker);
     TempUpwardTracker.recede(*MI);
