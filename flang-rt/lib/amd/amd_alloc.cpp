@@ -16,6 +16,7 @@
 #include "flang/Runtime/AMD/amd_alloc.h"
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/descriptor.h"
+#include "flang-rt/runtime/terminator.h"
 #include "flang/Runtime/AMD/amd_util.h"
 #include "flang/Support/Fortran.h"
 #include <algorithm>
@@ -69,6 +70,10 @@ static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 
 static void OpenMPFree(void *pointer) {
   int device{allocDeviceMap.removeAndGet(pointer)};
+  if (device == -1) {
+    Terminator{__FILE__, __LINE__}.Crash(
+        "OpenMPFree: pointer %p was not allocated by OpenMPAlloc", pointer);
+  }
 #if ALLOC_DEBUG
   if (debugEnabled) {
     std::fprintf(stderr, "[AMD_ALLOC] %s(%p) device %d (%s:%d)\n",
