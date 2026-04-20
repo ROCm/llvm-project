@@ -8,9 +8,6 @@
 
 #warning "amd_alloc.cpp was part of the build"
 
-#define ALLOC_INITIAL_SIZE (128 * 1024 * 1024)
-#define ALLOC_BLOCK_SIZE (512)
-
 #define ALLOC_DEBUG 1
 
 #include "flang/Runtime/AMD/amd_alloc.h"
