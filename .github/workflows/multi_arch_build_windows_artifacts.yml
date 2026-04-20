@@ -76,6 +76,7 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
+          submodules: recursive            
 
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
