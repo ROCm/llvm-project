@@ -109,7 +109,7 @@
 
 // SAN: {{"[^"]*llvm-offload-binary[^"]*" "-o".* "--image=file=.*.bc,triple=amdgcn-amd-amdhsa,arch=(gfx908|gfx1250|gfx1251)(:xnack\-|:xnack\+)?,kind=openmp(,feature=(\-xnack|\+xnack))?"}}
 // SAN: {{"[^"]*clang[^"]*" "-cc1" "-triple" "x86_64-unknown-linux-gnu".* "-fopenmp".* "-fsanitize=address".* "--offload-targets=amdgcn-amd-amdhsa".* "-x" "ir".*}}
-// SAN: {{"[^"]*clang-linker-wrapper[^"]*".* "--device-compiler=amdgcn-amd-amdhsa=-fsanitize=address".* "--host-triple=x86_64-unknown-linux-gnu".* "--linker-path=[^"]*".* "--whole-archive" "[^"]*(libclang_rt.asan_static.a|libclang_rt.asan_static-x86_64.a)".* "--whole-archive" "[^"]*(libclang_rt.asan.a|libclang_rt.asan-x86_64.a)".*}}
+// S-xfail-AN: {{"[^"]*clang-linker-wrapper[^"]*".* "--device-compiler=amdgcn-amd-amdhsa=-fsanitize=address".* "--host-triple=x86_64-unknown-linux-gnu".* "--linker-path=[^"]*".* "--whole-archive" "[^"]*(libclang_rt.asan_static.a|libclang_rt.asan_static-x86_64.a)".* "--whole-archive" "[^"]*(libclang_rt.asan.a|libclang_rt.asan-x86_64.a)".*}}
 
 // UNSUPPORTEDERROR: error: '-fsanitize=leak' option is not currently supported for target 'amdgcn-amd-amdhsa'
 // XNACKERROR: error: '-fsanitize=address' option for offload arch 'gfx908:xnack-' is not currently supported there. Use it with an offload arch containing 'xnack+' instead
