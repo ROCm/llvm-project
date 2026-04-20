@@ -101,6 +101,11 @@ struct WmmaRegOperands {
   std::pair<int, int> src0{-1, 0};
   std::pair<int, int> src1{-1, 0};
   std::pair<int, int> src2{-1, 0};
+  // For VOP3P WMMAs, $src2 (the accumulator input) accepts inline constants
+  // as well as VGPRs. clang folds a statically-zero accumulator into an
+  // immediate, which is the common shape for `C = wmma(A, B, 0)`-style code.
+  bool src2_is_imm = false;
+  int64_t src2_imm = 0;
   bool valid = false;
 };
 
@@ -109,6 +114,7 @@ static WmmaRegOperands ExtractWmmaRegOperands(const llvm::MCInst &inst,
   WmmaRegOperands r;
   std::pair<int, int> *targets[] = {&r.dst, &r.src0, &r.src1, &r.src2};
   unsigned found = 0;
+  unsigned last_reg_idx = 0;
   for (unsigned i = 0, e = inst.getNumOperands(); i < e && found < 4; ++i) {
     const auto &op = inst.getOperand(i);
     if (!op.isReg())
@@ -117,9 +123,28 @@ static WmmaRegOperands ExtractWmmaRegOperands(const llvm::MCInst &inst,
     if (rng.first < 0)
       return r;
     *targets[found++] = rng;
+    last_reg_idx = i;
   }
-  if (found == 4)
+  if (found == 4) {
     r.valid = true;
+    return r;
+  }
+  // We found vdst, src0, src1 but not a register $src2. For VOP3P WMMA the
+  // disassembler-built MCInst lays out [vdst, src0, src1, src2, ...trailing
+  // modifier imms (matrix_a/b_reuse, neg_lo/hi, clamp, etc.)]. When clang
+  // folds a zero-initialized accumulator, $src2 is the inline immediate at
+  // index (last_reg_idx + 1) instead of a VGPR — accept it.
+  if (found == 3) {
+    unsigned src2_idx = last_reg_idx + 1;
+    if (src2_idx < inst.getNumOperands()) {
+      const auto &op = inst.getOperand(src2_idx);
+      if (op.isImm()) {
+        r.src2_is_imm = true;
+        r.src2_imm = op.getImm();
+        r.valid = true;
+      }
+    }
+  }
   return r;
 }
 
@@ -149,17 +174,25 @@ static bool ValidateSplitOperands(SplitKind kind, const WmmaRegOperands &r,
         << reason << "\n";
   };
 
-  // Shared across both families: all four operands must be present as
-  // positive-width VGPR ranges, and C (src2) must share the destination's
-  // shape because the accumulator aliases the destination after emission.
-  if (r.dst.second <= 0 || r.src0.second <= 0 || r.src1.second <= 0 ||
-      r.src2.second <= 0) {
+  // Shared across both families: dst, src0, src1 must be present as
+  // positive-width VGPR ranges. src2 (the accumulator input) must be a
+  // positive-width VGPR range that shares dst's shape OR an inline
+  // immediate (the accumulator-folded-to-constant case); the constant
+  // will be passed through to the first split instruction's src2 slot
+  // and dst is used as the carry for the second.
+  if (r.dst.second <= 0 || r.src0.second <= 0 || r.src1.second <= 0) {
     logError("non-positive VGPR range width");
     return false;
   }
-  if (r.dst.second != r.src2.second) {
-    logError("dst and src2 VGPR widths differ");
-    return false;
+  if (!r.src2_is_imm) {
+    if (r.src2.second <= 0) {
+      logError("non-positive VGPR range width");
+      return false;
+    }
+    if (r.dst.second != r.src2.second) {
+      logError("dst and src2 VGPR widths differ");
+      return false;
+    }
   }
 
   switch (kind) {
@@ -194,7 +227,8 @@ BuildSplit128to64Asm(llvm::StringRef replacement, const WmmaRegOperands &r) {
   // Split K in half; dst and C are unchanged.  For the second half, C = dst
   // so the accumulator threads through from the first half.  Preconditions
   // are enforced by ValidateSplitOperands at the call site.
-  assert(r.dst.second > 0 && r.src2.second == r.dst.second);
+  assert(r.dst.second > 0 &&
+         (r.src2_is_imm || r.src2.second == r.dst.second));
   assert(r.src0.second > 0 && r.src0.second % 2 == 0);
   assert(r.src1.second > 0 && r.src1.second % 2 == 0);
 
@@ -202,7 +236,9 @@ BuildSplit128to64Asm(llvm::StringRef replacement, const WmmaRegOperands &r) {
   int b_half = r.src1.second / 2;
 
   const std::string dst = FormatVgprRange(r.dst.first, r.dst.second);
-  const std::string c = FormatVgprRange(r.src2.first, r.src2.second);
+  const std::string c = r.src2_is_imm
+                            ? llvm::itostr(r.src2_imm)
+                            : FormatVgprRange(r.src2.first, r.src2.second);
 
   std::vector<std::string> out;
   out.reserve(2);
@@ -228,7 +264,7 @@ static std::vector<std::string> BuildSplit32x16Asm(llvm::StringRef replacement,
   // matches the original f4 instruction.  Preconditions are enforced by
   // ValidateSplitOperands at the call site.
   assert(r.dst.second > 0 && r.dst.second % 2 == 0);
-  assert(r.src2.second == r.dst.second);
+  assert(r.src2_is_imm || r.src2.second == r.dst.second);
   assert(r.src0.second > 0 && r.src0.second % 2 == 0);
   assert(r.src1.second > 0);
 
@@ -236,6 +272,15 @@ static std::vector<std::string> BuildSplit32x16Asm(llvm::StringRef replacement,
   int a_half = r.src0.second / 2;
 
   const std::string b = FormatVgprRange(r.src1.first, r.src1.second);
+  // When src2 is an inline immediate (compiler-folded zero accumulator),
+  // both halves use the same immediate. When it's a VGPR range, each half
+  // takes its own slice (lower / upper half of M).
+  const std::string c_lo =
+      r.src2_is_imm ? llvm::itostr(r.src2_imm)
+                    : FormatVgprRange(r.src2.first, dst_half);
+  const std::string c_hi =
+      r.src2_is_imm ? llvm::itostr(r.src2_imm)
+                    : FormatVgprRange(r.src2.first + dst_half, dst_half);
   constexpr llvm::StringLiteral kFmtSuffix =
       "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
 
@@ -244,15 +289,13 @@ static std::vector<std::string> BuildSplit32x16Asm(llvm::StringRef replacement,
   out.push_back(llvm::formatv("{0} {1}, {2}, {3}, {4} {5}", replacement,
                               FormatVgprRange(r.dst.first, dst_half),
                               FormatVgprRange(r.src0.first, a_half), b,
-                              FormatVgprRange(r.src2.first, dst_half),
-                              kFmtSuffix)
+                              c_lo, kFmtSuffix)
                     .str());
   out.push_back(
       llvm::formatv("{0} {1}, {2}, {3}, {4} {5}", replacement,
                     FormatVgprRange(r.dst.first + dst_half, dst_half),
                     FormatVgprRange(r.src0.first + a_half, a_half), b,
-                    FormatVgprRange(r.src2.first + dst_half, dst_half),
-                    kFmtSuffix)
+                    c_hi, kFmtSuffix)
           .str());
   return out;
 }
