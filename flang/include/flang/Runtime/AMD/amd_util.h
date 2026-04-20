@@ -22,7 +22,7 @@ public:
   void insert(void *pointer, int device);
 
   // Look up and remove the entry for |pointer|.  Returns the associated
-  // device ID, or |fallback| if the pointer was not found.
+  // device ID, or -1 if the pointer was not found.
   int removeAndGet(void *pointer);
 
   // Dump the pointer-device table
