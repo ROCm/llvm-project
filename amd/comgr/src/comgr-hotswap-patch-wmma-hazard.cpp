@@ -45,21 +45,24 @@ static bool IsWmmaLike(const llvm::MCInst &inst,
                     AmdgpuTSFlags::IsWMMA | AmdgpuTSFlags::IsSWMMAC);
 }
 
+static bool IsVNop(const llvm::MCInst &inst, const llvm::MCInstrInfo &MCII) {
+  return MCII.getName(inst.getOpcode()) == "V_NOP_e32";
+}
+
 static bool IsCoexecutableVALUInst(const InternalDecodedInst &inst,
                                    const llvm::MCInstrInfo &MCII) {
-  if (inst.mnemonic == "v_nop")
+  if (IsVNop(inst.inst, MCII))
     return false;
   if (!HasTSFlags(inst.inst, MCII, AmdgpuTSFlags::VALU))
     return false;
   return !IsWmmaLike(inst.inst, MCII);
 }
 
-static bool IsTerminatingSalu(const std::string &mnemonic) {
-  llvm::StringRef mnemonic_ref(mnemonic);
-  return mnemonic_ref.starts_with("s_branch") ||
-         mnemonic_ref.starts_with("s_cbranch") || mnemonic_ref == "s_endpgm" ||
-         mnemonic_ref == "s_setpc" || mnemonic_ref == "s_swappc" ||
-         mnemonic_ref == "s_call";
+static bool IsTerminatingSalu(const llvm::MCInst &inst,
+                              const llvm::MCInstrInfo &MCII) {
+  const llvm::MCInstrDesc &desc = MCII.get(inst.getOpcode());
+  return desc.isTerminator() || desc.isBranch() || desc.isCall() ||
+         desc.isReturn();
 }
 
 static std::vector<WmmaHazard>
@@ -84,15 +87,15 @@ ValidateWmmaCoexecHazards(const PatchContext &ctx) {
          ++valu_idx) {
       const auto &candidate = ctx.decoded[valu_idx];
 
-      if (candidate.mnemonic == "v_nop") {
+      if (IsVNop(candidate.inst, MCII)) {
         ++safe_slots;
         if (safe_slots >= requirement.a0_nops)
           break;
         continue;
       }
 
-      if (llvm::StringRef(candidate.mnemonic).starts_with("s_")) {
-        if (IsTerminatingSalu(candidate.mnemonic))
+      if (!HasTSFlags(candidate.inst, MCII, AmdgpuTSFlags::VALU)) {
+        if (IsTerminatingSalu(candidate.inst, MCII))
           break;
         continue;
       }
@@ -129,28 +132,27 @@ ValidateWmmaCoexecHazards(const PatchContext &ctx) {
 
 } // namespace
 
-WmmaNopReq ClassifyWmmaNops(const std::string &mnemonic) {
-  llvm::StringRef mnemonic_ref(mnemonic);
-  bool is_wmma = mnemonic_ref.starts_with("v_wmma");
-  bool is_swmmac = mnemonic_ref.starts_with("v_swmmac");
+WmmaNopReq ClassifyWmmaNops(llvm::StringRef mnemonic) {
+  bool is_wmma = mnemonic.starts_with("v_wmma");
+  bool is_swmmac = mnemonic.starts_with("v_swmmac");
   if (!is_wmma && !is_swmmac)
     return {4, 4};
 
-  if (mnemonic_ref.contains("_iu8") || mnemonic_ref.contains("_iu4"))
+  if (mnemonic.contains("_iu8") || mnemonic.contains("_iu4"))
     return {8, 4};
 
-  if (mnemonic_ref.contains("f8f6f4"))
+  if (mnemonic.contains("f8f6f4"))
     return {1, 4};
 
-  bool has_f8 = mnemonic_ref.contains("_fp8") || mnemonic_ref.contains("_f8") ||
-                mnemonic_ref.contains("_bf8");
+  bool has_f8 = mnemonic.contains("_fp8") || mnemonic.contains("_f8") ||
+                mnemonic.contains("_bf8");
   if (has_f8) {
-    if (mnemonic_ref.contains("16x16x128"))
+    if (mnemonic.contains("16x16x128"))
       return {3, 4};
     return {1, 4};
   }
 
-  if (mnemonic_ref.contains("_f16") || mnemonic_ref.contains("_bf16"))
+  if (mnemonic.contains("_f16") || mnemonic.contains("_bf16"))
     return {4, 4};
 
   return {4, 4};

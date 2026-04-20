@@ -320,9 +320,29 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
                    OutTrampolines,   Sleds,   Elf,  Liveness, KernelStats,
                    OutScratchPatches};
 
+<<<<<<< HEAD
   for (size_t Idx = 0, E = Decoded.size(); Idx < E; ++Idx) {
     const InternalDecodedInst &DI = Decoded[Idx];
     if (DI.Mnemonic == "<unknown>")
+=======
+  PatchContext ctx{config,
+                   decoded,
+                   text,
+                   text_size,
+                   llvm_state,
+                   out_trampolines,
+                   nop_sleds,
+                   elf_data,
+                   elf_size,
+                   elf_info,
+                   liveness,
+                   kernel_stats,
+                   out_scratch_patches};
+
+  for (size_t idx = 0; idx < decoded.size(); ++idx) {
+    auto &di = decoded[idx];
+    if (di.mnemonic == kUnknownMnemonic)
+>>>>>>> e51aab01c18c (comgr: apply LLVM coding standards to hotswap files)
       continue;
 
     uint32_t P = 0;
@@ -355,6 +375,7 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     const KernelPatchStats &Stats = KV.second;
     if (KName.empty())
       continue;
+<<<<<<< HEAD
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     if (Stats.ExtraVgprs > 0)
@@ -368,6 +389,18 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
           << ", vgprs_after=" << VgprsAfter.value_or(0)
           << ", scratch_reused=" << Stats.ScratchReused
           << ", scratch_above_kd=" << Stats.ScratchAboveKd << "\n";
+=======
+    int vgprs_before = GetKernelVgprCount(elf_data, elf_size, elf_info, kname);
+    if (stats.extra_vgprs > 0)
+      UpdateKernelDescriptor(elf_data, elf_size, elf_info, kname,
+                             stats.extra_vgprs, 0);
+    int vgprs_after = GetKernelVgprCount(elf_data, elf_size, elf_info, kname);
+    HotswapLog(HotswapLogLevel::Info)
+        << "hotswap: liveness: kernel " << kname
+        << ": vgprs_before=" << vgprs_before << ", vgprs_after=" << vgprs_after
+        << ", scratch_reused=" << stats.scratch_reused
+        << ", scratch_above_kd=" << stats.scratch_above_kd << "\n";
+>>>>>>> e51aab01c18c (comgr: apply LLVM coding standards to hotswap files)
   }
   return Patched;
 }
