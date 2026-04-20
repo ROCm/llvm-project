@@ -104,7 +104,11 @@ jobs:
     needs: [copy_prebuilt_stages, build_multi_arch_stages]
     name: Test ${{ matrix.family_info.amdgpu_family }}
     # If we are expecting a build failure, do not run tests to save machine capacity.
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false }}
+    if: >-
+      ${{ !cancelled() && fromJSON(inputs.build_config).expect_failure == false &&
+      (needs.copy_prebuilt_stages.result == 'success' ||
+      needs.copy_prebuilt_stages.result == 'skipped') &&
+      needs.build_multi_arch_stages.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
