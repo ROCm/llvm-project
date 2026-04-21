@@ -88,6 +88,7 @@ jobs:
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule reference for compiler/amd-llvm"
+          git submodule update --init --recursive compiler/amd-llvm
           # Verify the pointer update
           git submodule status
           git submodule

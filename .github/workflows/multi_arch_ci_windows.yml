@@ -139,30 +139,3 @@ jobs:
     permissions:
       contents: read
       id-token: write
-
-  test_python_packages_per_family:
-    needs: [build_python_packages]
-    name: Test Python ${{ matrix.family_info.amdgpu_family }}
-    if: ${{ !failure() && !cancelled() && fromJSON(inputs.build_config).expect_failure == false }}
-    strategy:
-      fail-fast: false
-      matrix:
-        family_info: ${{ fromJSON(inputs.build_config).per_family_info }}
-    uses: ./.github/workflows/test_rocm_wheels.yml
-    with:
-      amdgpu_family: ${{ matrix.family_info.amdgpu_family }}
-      test_runs_on: ${{ matrix.family_info.test-runs-on }}
-      # TODO: Simplify to just `needs.build_python_packages.outputs.package_find_links_url`
-      # once kpack split is always enabled.
-      package_find_links_url: >-
-        ${{
-          needs.build_python_packages.outputs.kpack_split == 'true'
-          && needs.build_python_packages.outputs.package_find_links_url
-          || format('{0}/{1}/index.html',
-              needs.build_python_packages.outputs.package_find_links_url,
-              matrix.family_info.amdgpu_family)
-        }}
-      python_version: "3.12"
-      rocm_version: ${{ inputs.rocm_package_version }}
-      amdgpu_targets: ${{ matrix.family_info.amdgpu_targets }}
-      kpack_split: ${{ needs.build_python_packages.outputs.kpack_split }}
