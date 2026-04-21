@@ -57,11 +57,11 @@ jobs:
       linux_build_config: >-
         {
           "per_family_info": [
-            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
+            {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-ossci-rocm", "bypass_tests_for_releases": true},
             {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true},
-            {"amdgpu_family": "gfx950-dcgpu", "amdgpu_targets": "", "test-runs-on": "linux-mi355-1gpu-ossci-rocm", "benchmark-runs-on": "linux-mi355-1gpu-ossci-rocm"}
+            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
           ],
-          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx950-dcgpu",
+          "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx90a",
           "artifact_group": "multi-arch-release",
           "build_variant_label": "release",
           "build_variant_suffix": "",
