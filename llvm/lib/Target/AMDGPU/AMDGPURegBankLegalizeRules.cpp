@@ -690,6 +690,16 @@ RegBankLegalizeRules::RegBankLegalizeRules(const GCNSubtarget &_ST,
       .Any({{UniBRC}, {{}, {}, VerifyAllSgpr}})
       .Any({{DivBRC}, {{}, {}, ApplyAllVgpr}});
 
+  addRulesForGOpcs({G_BUILD_VECTOR})
+      .Any({{UniBRC, S16}, {{}, {}, VerifyAllSgpr}})
+      .Any({{UniBRC, BRC}, {{}, {}, VerifyAllSgpr}})
+      .Any({{DivBRC, S16}, {{}, {}, ApplyAllVgpr}})
+      .Any({{DivBRC, BRC}, {{}, {}, ApplyAllVgpr}});
+
+  addRulesForGOpcs({G_MERGE_VALUES, G_CONCAT_VECTORS})
+      .Any({{UniBRC, BRC}, {{}, {}, VerifyAllSgpr}})
+      .Any({{DivBRC, BRC}, {{}, {}, ApplyAllVgpr}});
+
   addRulesForGOpcs({G_PHI})
       .Any({{UniS1}, {{}, {}, AextToS32InIncomingBlockGPHI}})
       .Any({{UniS16}, {{}, {}, VerifyAllSgprGPHI}})
@@ -1457,7 +1467,8 @@ RegBankLegalizeRules::RegBankLegalizeRules(const GCNSubtarget &_ST,
       .Uni(V2S16, {{UniInVgprV2S16}, {VgprV2S16, VgprV2S16}})
       .Div(V2S16, {{VgprV2S16}, {VgprV2S16, VgprV2S16}});
 
-  addRulesForGOpcs({G_FMINNUM_IEEE, G_FMAXNUM_IEEE, G_FMINNUM, G_FMAXNUM},
+  addRulesForGOpcs({G_FMINNUM_IEEE, G_FMAXNUM_IEEE, G_FMINNUM, G_FMAXNUM,
+                    G_FMINIMUMNUM, G_FMAXIMUMNUM},
                    Standard)
       .Div(S16, {{Vgpr16}, {Vgpr16, Vgpr16}})
       .Div(S32, {{Vgpr32}, {Vgpr32, Vgpr32}})
