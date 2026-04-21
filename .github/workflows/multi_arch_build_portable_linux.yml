@@ -235,12 +235,12 @@ jobs:
   fusilli-libs:
     needs: [compiler-runtime, math-libs, iree-compiler]
     if: >-
-    ${{
-      !cancelled() &&
-      !failure() &&
-      !contains(inputs.prebuilt_stages, 'fusilli-libs') &&
-      inputs.build_variant_label != 'asan'
-    }}
+      ${{
+        !cancelled() &&
+        !failure() &&
+        !contains(inputs.prebuilt_stages, 'fusilli-libs') &&
+        inputs.build_variant_label != 'asan'
+      }}      
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
