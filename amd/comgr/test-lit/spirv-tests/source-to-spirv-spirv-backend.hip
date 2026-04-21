@@ -28,7 +28,7 @@
 
 // COM: Verify LLVM IR contains expected functions and target triple
 // CHECK: target triple = "amdgcn-amd-amdhsa"
-// SPIRVBE: define internal void @_Z11clean_valuePf
+// SPIRVBE: define void @_Z11clean_valuePf
 // CHECK: define amdgpu_kernel void @_Z9add_valuePfS_S_
 
 __attribute__((device))
