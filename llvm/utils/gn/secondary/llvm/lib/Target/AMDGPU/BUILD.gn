@@ -132,6 +132,7 @@ static_library("LLVMAMDGPUCodeGen") {
   sources = [
     "AMDGPUAliasAnalysis.cpp",
     "AMDGPUAlwaysInlinePass.cpp",
+    "AMDGPUAnnotateUniformValues.cpp",
     "AMDGPUArgumentUsageInfo.cpp",
     "AMDGPUAsanInstrumentation.cpp",
     "AMDGPUAsmPrinter.cpp",

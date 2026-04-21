@@ -37,11 +37,11 @@
 ; GCN-O0-NEXT: cgscc(function(lower-switch
 ; GCN-O0-NEXT: lower-invoke
 ; GCN-O0-NEXT: unreachableblockelim
-; GCN-O0-NEXT: amdgpu-late-codegenprepare
 ; GCN-O0-NEXT: amdgpu-unify-divergent-exit-nodes
 ; GCN-O0-NEXT: fix-irreducible
 ; GCN-O0-NEXT: unify-loop-exits
 ; GCN-O0-NEXT: StructurizeCFGPass
+; GCN-O0-NEXT: amdgpu-annotate-uniform
 ; GCN-O0-NEXT: si-annotate-control-flow
 ; GCN-O0-NEXT: amdgpu-rewrite-undef-for-phi
 ; GCN-O0-NEXT: lcssa
@@ -151,6 +151,7 @@
 ; GCN-O2-NEXT: fix-irreducible
 ; GCN-O2-NEXT: unify-loop-exits
 ; GCN-O2-NEXT: StructurizeCFGPass
+; GCN-O2-NEXT: amdgpu-annotate-uniform
 ; GCN-O2-NEXT: si-annotate-control-flow
 ; GCN-O2-NEXT: amdgpu-rewrite-undef-for-phi
 ; GCN-O2-NEXT: lcssa))
@@ -319,6 +320,7 @@
 ; GCN-O3-NEXT: fix-irreducible
 ; GCN-O3-NEXT: unify-loop-exits
 ; GCN-O3-NEXT: StructurizeCFGPass
+; GCN-O3-NEXT: amdgpu-annotate-uniform
 ; GCN-O3-NEXT: si-annotate-control-flow
 ; GCN-O3-NEXT: amdgpu-rewrite-undef-for-phi
 ; GCN-O3-NEXT: lcssa))

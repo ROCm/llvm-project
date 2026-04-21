@@ -694,6 +694,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUAlwaysInlinePass(*PR);
   initializeAMDGPULowerExecSyncLegacyPass(*PR);
   initializeAMDGPUSwLowerLDSLegacyPass(*PR);
+  initializeAMDGPUAnnotateUniformValuesLegacyPass(*PR);
   initializeAMDGPUAtomicOptimizerPass(*PR);
   initializeAMDGPULowerKernelArgumentsPass(*PR);
   initializeAMDGPUPromoteKernelArgumentsPass(*PR);
@@ -1629,11 +1630,11 @@ bool AMDGPUPassConfig::addGCPasses() {
 bool GCNPassConfig::addPreISel() {
   AMDGPUPassConfig::addPreISel();
 
-  bool IsOptNone = TM->getOptLevel() == CodeGenOptLevel::None;
-  if (!IsOptNone)
+  if (TM->getOptLevel() > CodeGenOptLevel::None)
     addPass(createSinkingPass());
 
-  addPass(createAMDGPULateCodeGenPrepareLegacyPass(IsOptNone));
+  if (TM->getOptLevel() > CodeGenOptLevel::None)
+    addPass(createAMDGPULateCodeGenPrepareLegacyPass());
 
   // Merge divergent exit nodes. StructurizeCFG won't recognize the multi-exit
   // regions formed by them.
@@ -1649,6 +1650,8 @@ bool GCNPassConfig::addPreISel() {
   addPass(createUnifyLoopExitsPass());
   if (!LateWaveTransform)
     addPass(createStructurizeCFGPass(false)); // true -> SkipUniformRegions
+
+  addPass(createAMDGPUAnnotateUniformValuesLegacy());
 
   if (!LateWaveTransform) {
     addPass(createSIAnnotateControlFlowLegacyPass());
@@ -2502,12 +2505,12 @@ void AMDGPUCodeGenPassBuilder::addCodeGenPrepare(
 }
 
 void AMDGPUCodeGenPassBuilder::addPreISel(PassManagerWrapper &PMW) const {
-  bool IsOptNone = TM.getOptLevel() == CodeGenOptLevel::None;
-  if (!IsOptNone) {
+
+  if (TM.getOptLevel() > CodeGenOptLevel::None) {
     addFunctionPass(FlattenCFGPass(), PMW);
     addFunctionPass(SinkingPass(), PMW);
+    addFunctionPass(AMDGPULateCodeGenPreparePass(TM), PMW);
   }
-  addFunctionPass(AMDGPULateCodeGenPreparePass(TM, IsOptNone), PMW);
 
   // Merge divergent exit nodes. StructurizeCFG won't recognize the multi-exit
   // regions formed by them.
@@ -2517,7 +2520,9 @@ void AMDGPUCodeGenPassBuilder::addPreISel(PassManagerWrapper &PMW) const {
   addFunctionPass(UnifyLoopExitsPass(), PMW);
   addFunctionPass(StructurizeCFGPass(/*SkipUniformRegions=*/false), PMW);
 
-  addFunctionPass(SIAnnotateControlFlowPass(TM), PMW);
+  addFunctionPass(AMDGPUAnnotateUniformValuesPass(), PMW);
+
+  addFunctionPass(SIAnnotateControlFlowPass(TM), PMW );
 
   // TODO: Move this right after structurizeCFG to avoid extra divergence
   // analysis. This depends on stopping SIAnnotateControlFlow from making

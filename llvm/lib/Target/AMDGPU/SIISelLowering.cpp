@@ -20401,8 +20401,7 @@ bool SITargetLowering::isReassocProfitable(MachineRegisterInfo &MRI,
 
 MachineMemOperand::Flags
 SITargetLowering::getTargetMMOFlags(const Instruction &I) const {
-  // Propagate metadata set during AMDGPULateCodegenPrepare to the MMO of a
-  // load.
+  // Propagate metadata set by AMDGPUAnnotateUniformValues to the MMO of a load.
   MachineMemOperand::Flags Flags = MachineMemOperand::MONone;
   if (I.getMetadata("amdgpu.noclobber"))
     Flags |= MONoClobber;

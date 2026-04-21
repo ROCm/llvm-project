@@ -61,7 +61,7 @@ FunctionPass *createSIPostRABundlerPass();
 FunctionPass *createAMDGPUImageIntrinsicOptimizerPass(const TargetMachine *);
 ModulePass *createAMDGPURemoveIncompatibleFunctionsPass(const TargetMachine *);
 FunctionPass *createAMDGPUCodeGenPreparePass();
-FunctionPass *createAMDGPULateCodeGenPrepareLegacyPass(bool IsOptNone);
+FunctionPass *createAMDGPULateCodeGenPrepareLegacyPass();
 FunctionPass *createAMDGPUReserveWWMRegsPass();
 FunctionPass *createAMDGPUPartitionVGPRsForRAPass();
 FunctionPass *createAMDGPURewriteOutArgumentsPass();
@@ -347,12 +347,9 @@ class AMDGPULateCodeGenPreparePass
     : public PassInfoMixin<AMDGPULateCodeGenPreparePass> {
 private:
   const GCNTargetMachine &TM;
-  bool isOptNone;
 
 public:
-  AMDGPULateCodeGenPreparePass(const GCNTargetMachine &TM,
-                               bool isOptNone = false)
-      : TM(TM), isOptNone(isOptNone){};
+  AMDGPULateCodeGenPreparePass(const GCNTargetMachine &TM) : TM(TM) {};
   PreservedAnalyses run(Function &, FunctionAnalysisManager &);
 };
 
@@ -474,6 +471,8 @@ public:
                         MachineFunctionAnalysisManager &MFAM);
 };
 
+FunctionPass *createAMDGPUAnnotateUniformValuesLegacy();
+
 ModulePass *createAMDGPUPrintfRuntimeBinding();
 void initializeAMDGPUPrintfRuntimeBindingPass(PassRegistry&);
 extern char &AMDGPUPrintfRuntimeBindingID;
@@ -500,6 +499,9 @@ extern char &SIOptimizeExecMaskingPreRAID;
 
 void initializeSIOptimizeVGPRLiveRangeLegacyPass(PassRegistry &);
 extern char &SIOptimizeVGPRLiveRangeLegacyID;
+
+void initializeAMDGPUAnnotateUniformValuesLegacyPass(PassRegistry &);
+extern char &AMDGPUAnnotateUniformValuesLegacyPassID;
 
 void initializeAMDGPUCodeGenPreparePass(PassRegistry&);
 extern char &AMDGPUCodeGenPrepareID;

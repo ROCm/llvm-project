@@ -43,6 +43,7 @@ add_public_tablegen_target(AMDGPUCommonTableGen)
 add_llvm_target(AMDGPUCodeGen
   AMDGPUAliasAnalysis.cpp
   AMDGPUAlwaysInlinePass.cpp
+  AMDGPUAnnotateUniformValues.cpp
   AMDGPUArgumentUsageInfo.cpp
   AMDGPUAsanInstrumentation.cpp
   AMDGPUAsmPrinter.cpp
