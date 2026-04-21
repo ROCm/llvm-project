@@ -171,7 +171,9 @@ jobs:
           git submodule
             
       - name: Install python deps
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install --force-reinstall boto3>=1.42.79,<1.42.85   # For DVC pull issue
 
       - name: Adjust git config
         run: |
