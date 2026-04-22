@@ -80,6 +80,7 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIInstrInfo.h"
 #include "SIMachineFunctionInfo.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/IntEqClasses.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -90,6 +91,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
+#include <variant>
 
 using namespace llvm;
 
@@ -133,6 +135,12 @@ static bool isArtificialTerminator(MachineInstr &MI) {
 
 struct WaveNode;
 
+using WaveNodeVec = SmallVector<WaveNode *, 4>;
+using WaveNodeSet = DenseSet<WaveNode *>;
+using AccRegSet = SmallDenseSet<Register, 4>;
+using AccInstsMap =
+    DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>>;
+
 /// Map a lane-level successor or predecessor to a wave-level successor or
 /// predecessor.
 struct LaneEdge {
@@ -147,8 +155,8 @@ struct LaneEdge {
 struct WaveNode {
   MachineBasicBlock *Block = nullptr;
   MachineCycle *Cycle = nullptr;
-  SmallVector<WaveNode *, 4> Predecessors;
-  SmallVector<WaveNode *, 4> Successors;
+  WaveNodeVec Predecessors;
+  WaveNodeVec Successors;
   SmallVector<LaneEdge, 4> LanePredecessors;
   SmallVector<LaneEdge, 4> LaneSuccessors;
 
@@ -211,7 +219,7 @@ private:
   /// the number of temporary allocations.
   struct {
     SmallVector<WaveNode *, 8> Worklist;
-    DenseSet<WaveNode *> Found;
+    WaveNodeSet Found;
   } OpenSetScan;
 
 public:
@@ -552,12 +560,12 @@ void ReconvergeCFGHelper::run() {
   for (unsigned Index = 0; Index != Nodes.size(); ++Index)
     Nodes[Index]->OrderIndex = Index;
 
-  SmallVector<WaveNode *, 4> RerouteCandidates;
+  WaveNodeVec RerouteCandidates;
   IntEqClasses RerouteCandidateClasses;
   SmallVector<int, 4> PredClasses;
-  SmallVector<WaveNode *, 4> RerouteNodes;
-  SmallVector<WaveNode *, 4> RerouteRoots;
-  SmallVector<WaveNode *, 4> TmpSet;
+  WaveNodeVec RerouteNodes;
+  WaveNodeVec RerouteRoots;
+  WaveNodeVec TmpSet;
   for (auto &NodePtr : Nodes) {
     WaveNode *Node = NodePtr.get();
 
@@ -830,7 +838,7 @@ ReconvergeCFGHelper::getEffectiveHeart(const MachineCycle *Cycle) {
 //       structures in mind.
 void ReconvergeCFGHelper::prepareNodesEnterCycle(WaveNode *headerNode) {
   MachineCycle *Cycle = headerNode->Cycle;
-  SmallVector<WaveNode *, 4> Entering;
+  WaveNodeVec Entering;
 
   assert(Cycle);
   for (unsigned Index = headerNode->OrderIndex;
@@ -908,8 +916,8 @@ void ReconvergeCFGHelper::prepareNodesEnterCycle(WaveNode *headerNode) {
 ///
 void ReconvergeCFGHelper::prepareNodesExitCycle(MachineCycle *Cycle,
                                                 WaveNode *nextNode) {
-  SmallVector<WaveNode *, 4> FromNodes;
-  SmallVector<WaveNode *, 4> ToNodes;
+  WaveNodeVec FromNodes;
+  WaveNodeVec ToNodes;
 
   assert(Cycle);
   MachineBasicBlock *Heart = getEffectiveHeart(Cycle);
@@ -1217,7 +1225,7 @@ void ReconvergeCFGHelper::dumpNodes() {
 
 /// Verify some basic invariants on WaveNodes.
 void ReconvergeCFGHelper::verifyNodes() {
-  DenseSet<WaveNode *> SeenNodes;
+  WaveNodeSet SeenNodes;
 
   auto verifyNode = [&](WaveNode *Node) {
     LLVM_ATTRIBUTE_UNUSED
@@ -1232,8 +1240,8 @@ void ReconvergeCFGHelper::verifyNodes() {
       verifyNode(NodePtr.get());
   }
 
-  DenseSet<WaveNode *> LanePreds;
-  DenseSet<WaveNode *> LaneSuccs;
+  WaveNodeSet LanePreds;
+  WaveNodeSet LaneSuccs;
 
   // FIXME: these only contain assertions so are "unused variables" in release
   // build
@@ -1360,7 +1368,7 @@ void SSAReconstructor::run() {
   }
 
 #ifndef NDEBUG
-  DenseSet<WaveNode *> PhiSeenNodes;
+  WaveNodeSet PhiSeenNodes;
 #endif
   SmallVector<PhiIncoming, 4> PhiWorklist;
   for (MachineInstr *OriginalPhi : OriginalPhis) {
@@ -1640,7 +1648,7 @@ private:
     /// Flow nodes that are targeted by one or more of the terminators in
     /// \ref BranchNodes, but are themselves only intermediate steps to the
     /// targets in question.
-    DenseSet<WaveNode *> FlowNodes;
+    WaveNodeSet FlowNodes;
   };
 
   MachineFunction &Function;
@@ -1651,7 +1659,7 @@ private:
 
   DenseMap<WaveNode *, CFGNodeInfo> NodeInfo;
   std::vector<WaveNode *> NodeOrder;
-  SmallDenseSet<Register, 4> AccumulatorRegs;
+  AccRegSet AccumulatorRegs;
 
 public:
   ControlFlowRewriter(MachineFunction &function,
@@ -1663,9 +1671,7 @@ public:
   void prepareWaveCfg();
   void rewrite();
 
-  const SmallDenseSet<Register, 4> &getAccumulatorRegs() const {
-    return AccumulatorRegs;
-  }
+  const AccRegSet &getAccumulatorRegs() const { return AccumulatorRegs; }
 };
 
 } // anonymous namespace
@@ -2263,24 +2269,52 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
 
 namespace {
 
-using RegValueMap = DenseMap<Register, Register>;
+using RegIntVariant = std::variant<int64_t, Register>;
+using RegValueMap = DenseMap<Register, RegIntVariant>;
 using BlockValueMap = DenseMap<MachineBasicBlock *, RegValueMap>;
 
+static inline RegIntVariant zeroVal() { return RegIntVariant{int64_t{0}}; }
+static inline bool isZero(const RegIntVariant &V) {
+  return std::holds_alternative<int64_t>(V);
+}
+static inline const Register *asReg(const RegIntVariant &V) {
+  return std::get_if<Register>(&V);
+}
+
+// Dataflow-based forward propagation simplifier for accumulator-register
+// instructions. Tracks per-block mappings of Reg -> (known 0 | virutal sgpr)
+// and uses them to fold COPY/OR/XOR patterns and rewrite acc uses.
+// Example:
+// BB0:
+//    succ: BB1
+//    %acc1 = MOV 0
+//    %acc2 = COPY %sgpr1
+//    %acc3 = %sgpr2 AND $exec
+//
+//  BlockValueMap OUT[BB0] = { %acc1 -> 0, %acc2 -> %sgpr1 }
+//
+// BB1: Merged incoming values from all preds : { %acc1 -> 0, %acc2 -> %sgpr1 }
+//    pred: BB0
+//    %acc1 = %acc1 OR %sgpr3 ->  %acc1 = COPY %sgpr3
+//    %acc3 = COPY %acc2  ->  %acc3 = COPY %sgpr1
+//    %acc3 = %acc3 OR $exec -> %acc3 = %sgpr1 OR $exec
+//
+//  BlockValueMap OUT[BB1] = { %acc1 -> %sgpr3, %acc2 -> %sgpr1 }
+//
 class ForwardPropSimplifier {
   MachineFunction &MF;
   const SIInstrInfo &TII;
   const AMDGPU::LaneMaskConstants &LMC;
-  const SmallDenseSet<Register, 4> &AccRegs;
-  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap;
-  BlockValueMap OUT;
-  bool Changed = false;
+  const AccRegSet &AccRegs;
+  AccInstsMap &AccInstMap;
+  BlockValueMap
+      OUT; // resolved Accumulator register values at end of each block.
 
   void replaceWithMov(MachineInstr &MI, int64_t ImmVal) {
     MI.setDesc(TII.get(LMC.MovOpc));
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateImm(ImmVal));
-    Changed = true;
     ++NumCleanupInstrsOptimized;
   }
 
@@ -2289,21 +2323,19 @@ class ForwardPropSimplifier {
     while (MI.getNumOperands() > 1)
       MI.removeOperand(MI.getNumOperands() - 1);
     MI.addOperand(MachineOperand::CreateReg(SrcReg, false));
-    Changed = true;
     ++NumCleanupInstrsOptimized;
   }
 
+  // merge incoming OUT values from MBB's predecessors:
+  // IN[MBB] = Intersection of all OUT[MBB.preds]
   RegValueMap mergeIncoming(MachineBasicBlock &MBB) {
     RegValueMap Result;
     if (MBB.pred_empty())
       return Result;
 
-    for (Register Reg : AccRegs) {
-      auto FirstIt = OUT[*MBB.pred_begin()].find(Reg);
-      if (FirstIt == OUT[*MBB.pred_begin()].end())
-        continue;
-
-      Register Expected = FirstIt->second;
+    for (const auto &PredOUT : OUT[*MBB.pred_begin()]) {
+      Register Reg = PredOUT.first;
+      const RegIntVariant &Expected = PredOUT.second;
       if (llvm::all_of(MBB.predecessors(), [&](MachineBasicBlock *Pred) {
             auto It = OUT[Pred].find(Reg);
             return It != OUT[Pred].end() && It->second == Expected;
@@ -2313,135 +2345,172 @@ class ForwardPropSimplifier {
     return Result;
   }
 
-  Register *lookupValue(RegValueMap &Map, Register Reg) {
-    if (!AccRegs.count(Reg))
-      return nullptr;
+  const RegIntVariant *lookupValue(const RegValueMap &Map, Register Reg) {
     auto It = Map.find(Reg);
     return (It != Map.end()) ? &It->second : nullptr;
   }
 
-  RegValueMap forwardPropAccValues(MachineBasicBlock &MBB, RegValueMap &IN) {
-    RegValueMap Cur = IN;
+  // Rewrite acc-register uses in MI to their tracked equivalent registers.
+  void rewriteAccUses(MachineInstr &MI, const RegValueMap &Cur) {
+    for (MachineOperand &MO : MI.uses()) {
+      if (!MO.isReg() || !MO.getReg().isVirtual() ||
+          !AccRegs.count(MO.getReg()))
+        continue;
+      auto It = Cur.find(MO.getReg());
+      if (It == Cur.end())
+        continue;
+      if (const Register *R = asReg(It->second)) {
+        MO.setReg(*R);
+        ++NumCleanupInstrsOptimized;
+      }
+    }
+  }
 
+  //  Cur[Dst] = Cur[Src], if Cur[Src] exists
+  //           = Src, if Cur[Src] does not exists and Src is virtual
+  // if none of the above hold true, it means Cur[Dst] cannot be resolved to a
+  // known 0 or a virtual sgpr register and must be removed from the map
+  void updateRegValueMapEntry(RegValueMap &Cur, Register Dst, Register Src) {
+    if (const RegIntVariant *V = lookupValue(Cur, Src))
+      Cur[Dst] = *V;
+    else if (Src.isVirtual())
+      Cur[Dst] = RegIntVariant{Src};
+    else
+      Cur.erase(Dst);
+  }
+
+  // If exactly one of {A, B} is a known zero, return the other; else {}.
+  Register otherIfOneIsZero(const RegValueMap &Cur, Register A, Register B) {
+    const RegIntVariant *VA = lookupValue(Cur, A);
+    const RegIntVariant *VB = lookupValue(Cur, B);
+    if (VA && isZero(*VA))
+      return B;
+    if (VB && isZero(*VB))
+      return A;
+    return {};
+  }
+
+  // forward walk on MBB's accumulator instructions, simplifying the
+  // instructions using the tracked values in Cur, simultaneously updating Cur
+  // with the new known 0 or virtual sgpr registers
+  void forwardPropAccValues(MachineBasicBlock &MBB, RegValueMap &Cur) {
     auto MapIt = AccInstMap.find(&MBB);
     if (MapIt == AccInstMap.end())
-      return Cur;
+      return;
 
     for (MachineInstr *MI : MapIt->second) {
-      unsigned Opc = MI->getOpcode();
+      rewriteAccUses(*MI, Cur);
 
-      // Replace uses of acc regs with their tracked non-zero value.
-      for (MachineOperand &MO : MI->uses()) {
-        if (!MO.isReg() || !MO.getReg().isVirtual() ||
-            !AccRegs.count(MO.getReg()))
-          continue;
-        auto It = Cur.find(MO.getReg());
-        if (It != Cur.end() && It->second != Register(0)) {
-          MO.setReg(It->second);
-          Changed = true;
-          ++NumCleanupInstrsOptimized;
-        }
-      }
+      const unsigned Opc = MI->getOpcode();
+      const Register Dst = MI->getOperand(0).getReg();
 
-      Register Dst = MI->getOperand(0).getReg();
-      if (!AccRegs.count(Dst))
-        continue;
-
-      // --- MovOpc ---
-      // #1: ACC = MOV 0
-      if (Opc == LMC.MovOpc) {
-        if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
-          Cur[Dst] = Register(0);
-
-        // --- COPY ---
-        // #3: ACC = COPY %val, #4: ACC = COPY EXEC, #5: ACC = COPY ACC
-      } else if (Opc == AMDGPU::COPY) {
-        Register Src = MI->getOperand(1).getReg();
-        Register *SrcVal = lookupValue(Cur, Src);
-        if (SrcVal && *SrcVal == Register(0)) {
-          replaceWithMov(*MI, 0);
-          Cur[Dst] = Register(0);
-        } else if (AccRegs.count(Src))
-          Cur[Dst] = SrcVal ? *SrcVal : Src;
-        else if (Src.isVirtual())
-          Cur[Dst] = Src;
+      // ACC = MOV 0
+      if (AccRegs.count(Dst) && Opc == LMC.MovOpc) {
+        const MachineOperand &Imm = MI->getOperand(1);
+        if (Imm.isImm() && Imm.getImm() == 0)
+          Cur[Dst] = zeroVal();
         else
           Cur.erase(Dst);
+        continue;
+      }
 
-        // --- AndOpc ---
-        // #6: ACC = %val AND EXEC
-      } else if (Opc == LMC.AndOpc) {
-        Cur.erase(Dst);
-
-        // --- OrOpc ---
-        // #7: ACC = ACC OR %masked, #8: ACC = ACC OR EXEC
-      } else if (Opc == LMC.OrOpc) {
-        Register Src1 = MI->getOperand(1).getReg();
-        Register Src2 = MI->getOperand(2).getReg();
-        Register *S1 = lookupValue(Cur, Src1);
-        Register *S2 = lookupValue(Cur, Src2);
-
-        if (S1 && *S1 == Register(0)) {
-          replaceWithCopy(*MI, Src2);
-          if (Src2.isVirtual())
-            Cur[Dst] = Src2;
-          else
-            Cur.erase(Dst);
-        } else if (S2 && *S2 == Register(0)) {
-          replaceWithCopy(*MI, Src1);
-          if (Src1.isVirtual())
-            Cur[Dst] = Src1;
-          else
-            Cur.erase(Dst);
+      // ACC = COPY %vreg | ACC = COPY EXEC | ACC = COPY ACC
+      if (Opc == AMDGPU::COPY) {
+        Register Src = MI->getOperand(1).getReg();
+        if (const RegIntVariant *SrcVal = lookupValue(Cur, Src)) {
+          if (isZero(*SrcVal))
+            replaceWithMov(*MI, 0);
+          else if (const Register *R = asReg(*SrcVal))
+            replaceWithCopy(*MI, *R);
+          Cur[Dst] = *SrcVal;
+        } else if (Src.isVirtual()) {
+          Cur[Dst] = RegIntVariant{Src};
         } else {
           Cur.erase(Dst);
         }
+        continue;
+      }
 
-        // --- XorOpc ---
-        // #10: %rejoin = EXEC XOR ACC — Dst is never ACC, use-replacement only.
+      // ACC = %val AND EXEC
+      if (Opc == LMC.AndOpc) {
+        Cur.erase(Dst);
+        continue;
+      }
 
-      } else {
-        llvm_unreachable("Unexpected opcode defining ACC reg");
+      // ACC = ACC OR %masked | ACC = ACC OR EXEC
+      if (Opc == LMC.OrOpc) {
+        Register Src1 = MI->getOperand(1).getReg();
+        Register Src2 = MI->getOperand(2).getReg();
+        Register Other = otherIfOneIsZero(Cur, Src1, Src2);
+        if (!Other) {
+          Cur.erase(Dst);
+          continue;
+        }
+        replaceWithCopy(*MI, Other);
+        updateRegValueMapEntry(Cur, Dst, Other);
+        continue;
+      }
+
+      // ACC = %a XOR %b
+      if (Opc == LMC.XorOpc) {
+        Register Src1 = MI->getOperand(1).getReg();
+        Register Src2 = MI->getOperand(2).getReg();
+        if (Register Other = otherIfOneIsZero(Cur, Src1, Src2))
+          replaceWithCopy(*MI, Other);
       }
     }
-    return Cur;
   }
 
+  // merge incoming OUT values from MBB's predecessors and forward propagate
+  // merged values to obtain updated OUT for MBB
   bool processBlock(MachineBasicBlock &MBB) {
-    RegValueMap IN = mergeIncoming(MBB);
-    RegValueMap NewOut = forwardPropAccValues(MBB, IN);
+    RegValueMap RegValues = mergeIncoming(MBB);
+    forwardPropAccValues(MBB, RegValues);
+    auto It = OUT.find(&MBB);
 
-    if (OUT[&MBB] == NewOut)
-      return false;
-    OUT[&MBB] = std::move(NewOut);
-    return true;
+    // OUT changes if forward propageted values are different from the current
+    // OUT for MBB or OUT value for MBB does not exist
+    bool OutChanged = (It == OUT.end() || It->second != RegValues);
+    if (OutChanged)
+      OUT[&MBB] = std::move(RegValues);
+    return OutChanged;
   }
 
 public:
-  ForwardPropSimplifier(
-      MachineFunction &MF, const SIInstrInfo &TII,
-      const AMDGPU::LaneMaskConstants &LMC,
-      const SmallDenseSet<Register, 4> &AccRegs,
-      DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap)
+  ForwardPropSimplifier(MachineFunction &MF, const SIInstrInfo &TII,
+                        const AMDGPU::LaneMaskConstants &LMC,
+                        const AccRegSet &AccRegs, AccInstsMap &AccInstMap)
       : MF(MF), TII(TII), LMC(LMC), AccRegs(AccRegs), AccInstMap(AccInstMap) {}
 
   void run() {
-    do {
-      Changed = false;
-      OUT.clear();
+    ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
+    SmallVector<MachineBasicBlock *, 32> RPOBlocks(
+        RPOT.begin(), RPOT.end());                    // maps RPO index to MBB
+    DenseMap<MachineBasicBlock *, unsigned> RPOIndex; // maps MBB to RPO index
+    RPOIndex.reserve(RPOBlocks.size());
+    for (unsigned I = 0, E = RPOBlocks.size(); I != E; ++I)
+      RPOIndex[RPOBlocks[I]] = I;
 
-      SmallVector<MachineBasicBlock *, 16> Worklist;
-      ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
-      for (MachineBasicBlock *MBB : RPOT)
-        Worklist.push_back(MBB);
+    // Ping-pong bitvector worklists indexed by RPO number.
+    unsigned N = RPOBlocks.size();
+    BitVector Active(N, true); // bitvector of active MBBs
+    BitVector Next(N);         // bitvector of next MBBs
 
-      while (!Worklist.empty()) {
-        MachineBasicBlock *MBB = Worklist.pop_back_val();
-        if (processBlock(*MBB))
-          for (MachineBasicBlock *Succ : MBB->successors())
-            Worklist.push_back(Succ);
+    // iterate until fix point : no OUT changes in any block
+    while (Active.any()) {
+      for (unsigned I : Active.set_bits()) {
+        MachineBasicBlock *MBB = RPOBlocks[I];
+        if (!processBlock(*MBB)) // MBB is processed to fixed point, skip
+          continue;
+        for (MachineBasicBlock *Succ : MBB->successors()) {
+          auto It = RPOIndex.find(Succ);
+          if (It != RPOIndex.end())
+            Next.set(It->second);
+        }
       }
-    } while (Changed);
+      Active.reset();
+      std::swap(Active, Next);
+    }
   }
 };
 
@@ -2482,8 +2551,7 @@ public:
   }
 
 private:
-  void cleanup(MachineFunction &MF,
-               const SmallDenseSet<Register, 4> &AccumulatorRegs);
+  void cleanup(MachineFunction &MF, const AccRegSet &AccumulatorRegs);
 
   MachineDominatorTree *DomTree = nullptr;
   // MachineConvergenceInfo ConvergenceInfo;
@@ -2601,30 +2669,28 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
 
 namespace {
 
-/// Per-block Use (upward-exposed) and Def sets for accumulator registers.
+// Per-block use-def recorded for accumulator registers.
 struct AccBBUseDef {
-  SmallDenseSet<Register, 4> Use; // upward-exposed uses
-  SmallDenseMap<Register, MachineInstr *, 4> Def;
+  AccRegSet UpwardExposedUse; // uses without a preceeding def in the same BB
+  AccRegSet Def;
+  SmallDenseMap<Register, MachineInstr *, 4>
+      UnusedDef; // def not follwed by any use in same BB
 };
 
-/// Per-block LiveIn and LiveOut sets for accumulator registers.
+// Per-block LiveIn and LiveOut sets for accumulator registers.
 struct AccBBLiveness {
-  SmallDenseSet<Register, 4> LiveIn;
-  SmallDenseSet<Register, 4> LiveOut;
+  AccRegSet LiveIn;
+  AccRegSet LiveOut;
 };
 
 } // anonymous namespace
 
-/// Return true if \p MI defines any physical register.
-static bool hasPhysRegDef(const MachineInstr &MI) {
-  return llvm::any_of(MI.operands(), [](const MachineOperand &Op) {
-    return Op.isReg() && Op.isDef() && Op.getReg().isPhysical();
-  });
-}
-
+// Computes the following for all BBs:
+// Upward exposed uses - Use of accumulator register without a preceeding def in
+// the same BB Def - Def of accumulator register UnusedDef - Def of the
+// accumulator register with no use after it in the same BB
 static DenseMap<MachineBasicBlock *, AccBBUseDef>
-computeAccUseDef(MachineFunction &MF,
-                 const SmallDenseSet<Register, 4> &AccumulatorRegs) {
+computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs) {
   DenseMap<MachineBasicBlock *, AccBBUseDef> Result;
   for (MachineBasicBlock &MBB : MF) {
     AccBBUseDef UD;
@@ -2635,36 +2701,38 @@ computeAccUseDef(MachineFunction &MF,
           continue;
         Register R = MO.getReg();
         if (!UD.Def.count(R))
-          UD.Use.insert(R);
+          UD.UpwardExposedUse.insert(R);
+        UD.UnusedDef.erase(R);
       }
       for (const MachineOperand &MO : MI.defs()) {
         if (!MO.isReg() || !MO.getReg().isVirtual() ||
             !AccumulatorRegs.count(MO.getReg()))
           continue;
-        UD.Def[MO.getReg()] = &MI;
+        Register R = MO.getReg();
+        UD.Def.insert(R);
+        UD.UnusedDef[R] = &MI;
       }
     }
-    if (!UD.Use.empty() || !UD.Def.empty())
+    if (!UD.UpwardExposedUse.empty() || !UD.Def.empty())
       Result[&MBB] = std::move(UD);
   }
   return Result;
 }
 
-/// Compute per-block LiveIn/LiveOut for accumulator registers using
-/// iterative fixed-point dataflow analysis.
-///   LiveOut(B) = ∪ LiveIn(S) for all successors S of B
-///   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B))
+// Compute per-block LiveIn/LiveOut for accumulator registers using
+// iterative fixed-point dataflow analysis.
+//   LiveOut(B) = ∪ LiveIn(S) for all successors S of B
+//   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B))
 static DenseMap<MachineBasicBlock *, AccBBLiveness>
 computeAccLiveness(MachineFunction &MF,
                    const DenseMap<MachineBasicBlock *, AccBBUseDef> &UseDef) {
   DenseMap<MachineBasicBlock *, AccBBLiveness> Liveness;
 
-  // Pre-populate all blocks so operator[] never rehashes during iteration.
   for (MachineBasicBlock &MBB : MF)
     (void)Liveness[&MBB];
 
   for (const auto &[MBB, UD] : UseDef)
-    Liveness[MBB].LiveIn = UD.Use;
+    Liveness[MBB].LiveIn = UD.UpwardExposedUse;
 
   bool Changed = true;
   while (Changed) {
@@ -2692,44 +2760,27 @@ computeAccLiveness(MachineFunction &MF,
   return Liveness;
 }
 
-/// Build a per-MBB program-order list of accumulator instructions and
-/// identify dead defs (overwritten before any use).
-static void buildAccInstMap(
-    MachineFunction &MF, const SmallDenseSet<Register, 4> &AccumulatorRegs,
-    DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> &AccInstMap,
-    SmallVectorImpl<MachineInstr *> &DeadDefs) {
+// Build a per-MBB program-order list of all machine instrs that use or define
+// any register from the AccumulatorRegs set
+static void buildAccInstMap(MachineFunction &MF,
+                            const AccRegSet &AccumulatorRegs,
+                            AccInstsMap &AccInstMap) {
   for (MachineBasicBlock &MBB : MF) {
-    DenseMap<Register, MachineInstr *> LastUnusedDef;
     SmallVector<MachineInstr *, 8> OrderedAccInsts;
 
     for (MachineInstr &MI : MBB) {
       bool IsAccInst = false;
 
-      // Check uses first: a use makes the pending def live.
       for (const MachineOperand &MO : MI.uses()) {
         if (MO.isReg() && MO.getReg().isVirtual() &&
-            AccumulatorRegs.count(MO.getReg())) {
-          LastUnusedDef.erase(MO.getReg());
+            AccumulatorRegs.count(MO.getReg()))
           IsAccInst = true;
-        }
       }
 
       for (const MachineOperand &MO : MI.defs()) {
-        if (!MO.isReg() || !MO.getReg().isVirtual() ||
-            !AccumulatorRegs.count(MO.getReg()))
-          continue;
-
-        Register Reg = MO.getReg();
-        auto It = LastUnusedDef.find(Reg);
-        if (It != LastUnusedDef.end()) {
-          MachineInstr *PrevDef = It->second;
-          if (!hasPhysRegDef(*PrevDef)) {
-            llvm::erase(OrderedAccInsts, PrevDef);
-            DeadDefs.push_back(PrevDef);
-          }
-        }
-        LastUnusedDef[Reg] = &MI;
-        IsAccInst = true;
+        if (MO.isReg() && MO.getReg().isVirtual() &&
+            AccumulatorRegs.count(MO.getReg()))
+          IsAccInst = true;
       }
 
       if (IsAccInst)
@@ -2741,25 +2792,50 @@ static void buildAccInstMap(
   }
 }
 
-void AMDGPUWaveTransform::cleanup(
-    MachineFunction &MF, const SmallDenseSet<Register, 4> &AccumulatorRegs) {
+// remove dead defs and simplify the accumulator instrs added during rewrite
+void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
+                                  const AccRegSet &AccumulatorRegs) {
   if (AccumulatorRegs.empty())
     return;
 
-  DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>> AccInstMap;
-  SmallVector<MachineInstr *, 8> DeadDefs;
-  buildAccInstMap(MF, AccumulatorRegs, AccInstMap, DeadDefs);
+  AccInstsMap AccInstMap;
+  buildAccInstMap(MF, AccumulatorRegs, AccInstMap);
 
-  NumCleanupInstrsRemoved += DeadDefs.size();
-  for (MachineInstr *MI : DeadDefs)
-    MI->eraseFromParent();
-
-  // forward propagate accumulator values
   const auto &LMC =
       AMDGPU::LaneMaskConstants::get(MF.getSubtarget<GCNSubtarget>());
 
+  // forward propagate accumulator values
   ForwardPropSimplifier Simplifier(MF, *TII, LMC, AccumulatorRegs, AccInstMap);
   Simplifier.run();
+
+  // Remove locally dead defs: def followed by re-def with no intervening use in
+  // the same BB
+  for (auto &[MBB, AccInsts] : AccInstMap) {
+    DenseMap<Register, MachineInstr *> LastUnusedDef;
+    SmallVector<MachineInstr *, 4> LocalDeadDefs;
+
+    for (MachineInstr *MI : AccInsts) {
+      for (const MachineOperand &MO : MI->uses()) {
+        if (MO.isReg() && MO.getReg().isVirtual() &&
+            AccumulatorRegs.count(MO.getReg()))
+          LastUnusedDef.erase(MO.getReg());
+      }
+      for (const MachineOperand &MO : MI->defs()) {
+        if (!MO.isReg() || !MO.getReg().isVirtual() ||
+            !AccumulatorRegs.count(MO.getReg()))
+          continue;
+        Register Reg = MO.getReg();
+        auto It = LastUnusedDef.find(Reg);
+        if (It != LastUnusedDef.end())
+          LocalDeadDefs.push_back(It->second);
+        LastUnusedDef[Reg] = MI;
+      }
+    }
+
+    NumCleanupInstrsRemoved += LocalDeadDefs.size();
+    for (MachineInstr *MI : LocalDeadDefs)
+      MI->eraseFromParent();
+  }
 
   // compute Use Def sets for each block
   DenseMap<MachineBasicBlock *, AccBBUseDef> AccUseDef =
@@ -2768,19 +2844,17 @@ void AMDGPUWaveTransform::cleanup(
   DenseMap<MachineBasicBlock *, AccBBLiveness> AccLiveness =
       computeAccLiveness(MF, AccUseDef);
 
-  // Remove dead defs: registers in Def(B) but not in LiveOut(B).
-  MachineRegisterInfo &MRI = MF.getRegInfo();
+  // Remove globally dead defs: UnusedDef(B) - LiveOut(B).
+  // These are defs defined in a BB and not used anywhere in the forward data
+  // flow
   for (const auto &[MBB, UD] : AccUseDef) {
     auto LIt = AccLiveness.find(MBB);
-    for (const auto &[R, DefMI] : UD.Def) {
+    for (const auto &[R, DefMI] : UD.UnusedDef) {
       if (LIt != AccLiveness.end() && LIt->second.LiveOut.count(R))
         continue;
-      if (!MRI.use_nodbg_empty(R))
-        continue;
-      if (!hasPhysRegDef(*DefMI)) {
-        ++NumCleanupInstrsRemoved;
-        DefMI->eraseFromParent();
-      }
+
+      DefMI->eraseFromParent();
+      ++NumCleanupInstrsRemoved;
     }
   }
 }
