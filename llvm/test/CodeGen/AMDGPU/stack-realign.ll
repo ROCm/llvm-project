@@ -384,28 +384,19 @@ define i32 @needs_align1024_stack_args_used_inside_loop(ptr addrspace(5) nocaptu
 ; GCN-NEXT:    s_and_b64 s[12:13], s[12:13], exec
 ; GCN-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
 ; GCN-NEXT:    s_mov_b64 exec, s[10:11]
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
 ; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_cbranch_execz .LBB10_6
 ; GCN-NEXT:  .LBB10_5:
-; GCN-NEXT:    s_mov_b64 s[10:11], 0
-; GCN-NEXT:  .LBB10_6:
 ; GCN-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
 ; GCN-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
 ; GCN-NEXT:    s_mov_b64 exec, s[8:9]
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
 ; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_cbranch_execz .LBB10_8
-; GCN-NEXT:  .LBB10_7:
+; GCN-NEXT:    s_cbranch_execz .LBB10_7
+; GCN-NEXT:  .LBB10_6:
 ; GCN-NEXT:    v_mov_b32_e32 v0, 1
-; GCN-NEXT:    s_mov_b64 s[6:7], 0
-; GCN-NEXT:  .LBB10_8: ; %exit
+; GCN-NEXT:  .LBB10_7: ; %exit
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_mov_b32 s32, s34
 ; GCN-NEXT:    s_mov_b32 s34, s20
 ; GCN-NEXT:    s_mov_b32 s33, s17
