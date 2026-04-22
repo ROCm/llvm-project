@@ -6,11 +6,12 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Strong-symbol override for ApplyInPlacePatches.  Handles instruction
+/// Strong-symbol override for applyInPlacePatches.  Handles instruction
 /// rewrites that fit in the same code size as the original:
 ///
-///   - cluster_load -> global_load   (mnemonic swap, same encoding width)
-///   - s_clause     -> s_nop         (4-byte byte-level overwrite)
+///   - cluster_load -> global_load   (opcode swap via MCInst + MCCodeEmitter)
+///   - s_clause     -> s_nop         (byte-level overwrite via
+///   applyByteReplace)
 ///
 /// No trampolines, ELF growth, or extra VGPRs are required.
 ///
@@ -20,51 +21,102 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCFixup.h"
 
-/// Map a B0-only cluster_load mnemonic to its A0-compatible global_load
-/// equivalent.  Returns an empty StringRef if \p mnemonic is not a
+using namespace llvm;
+
+namespace COMGR {
+namespace hotswap {
+namespace {
+
+/// Map a B0-only cluster_load mnemonic to the assembly string of its
+/// A0-compatible global_load equivalent (with a dummy operand to resolve
+/// the opcode). Returns an empty StringRef if \p Mnemonic is not a
 /// cluster_load variant.
-static llvm::StringRef GetClusterLoadReplacement(llvm::StringRef mnemonic) {
-  return llvm::StringSwitch<llvm::StringRef>(mnemonic)
-      .Case("cluster_load_b32", "global_load_b32")
-      .Case("cluster_load_b64", "global_load_b64")
-      .Case("cluster_load_b128", "global_load_b128")
-      .Case("cluster_load_async_to_lds_b8", "global_load_async_to_lds_b8")
-      .Case("cluster_load_async_to_lds_b32", "global_load_async_to_lds_b32")
-      .Case("cluster_load_async_to_lds_b64", "global_load_async_to_lds_b64")
-      .Case("cluster_load_async_to_lds_b128", "global_load_async_to_lds_b128")
+StringRef getClusterLoadReplacementAsm(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("cluster_load_b32", "global_load_b32 v0, v[0:1], off")
+      .Case("cluster_load_b64", "global_load_b64 v[0:1], v[2:3], off")
+      .Case("cluster_load_b128", "global_load_b128 v[0:3], v[4:5], off")
+      .Case("cluster_load_async_to_lds_b8",
+            "global_load_async_to_lds_b8 v[0:1], off")
+      .Case("cluster_load_async_to_lds_b32",
+            "global_load_async_to_lds_b32 v[0:1], off")
+      .Case("cluster_load_async_to_lds_b64",
+            "global_load_async_to_lds_b64 v[0:1], off")
+      .Case("cluster_load_async_to_lds_b128",
+            "global_load_async_to_lds_b128 v[0:1], off")
       .Default("");
 }
 
-uint32_t ApplyInPlacePatches(PatchContext &ctx, size_t idx) {
-  auto &di = ctx.decoded[idx];
-  llvm::StringRef mnemonic(di.mnemonic);
+/// Resolve the MC opcode index for an assembly mnemonic by parsing a dummy
+/// instruction through the asm parser. Returns the opcode, or
+/// MCII->getNumOpcodes() as a sentinel on failure.
+unsigned resolveOpcode(StringRef AsmSnippet, const LLVMState &LS) {
+  SmallVector<uint8_t> Bytes = assembleSingleInst(AsmSnippet, LS);
+  if (Bytes.empty())
+    return LS.MCII->getNumOpcodes();
+  // Decode the assembled bytes to get the MCInst with the resolved opcode.
+  std::vector<InternalDecodedInst> Decoded;
+  if (!decodeTextSection(Bytes.data(), Bytes.size(), LS, Decoded) ||
+      Decoded.empty())
+    return LS.MCII->getNumOpcodes();
+  return Decoded[0].Inst.getOpcode();
+}
 
-  llvm::StringRef replacement = GetClusterLoadReplacement(mnemonic);
-  if (!replacement.empty()) {
-    RewriteRule rule;
-    rule.replace_mnemonic = replacement.str();
-    if (ApplyMnemonicSwap(rule, di, ctx.text, ctx.llvm_state)) {
-      HotswapLog(HotswapLogLevel::Debug)
-          << "hotswap: inplace: " << mnemonic << " -> " << replacement
-          << " at 0x" << llvm::utohexstr(di.offset) << "\n";
+/// Encode an MCInst to raw bytes via MCCodeEmitter.
+SmallVector<uint8_t> encodeMCInst(const MCInst &Inst, const LLVMState &LS) {
+  SmallVector<char, 16> Code;
+  SmallVector<MCFixup, 4> Fixups;
+  LS.MCE->encodeInstruction(Inst, Code, Fixups, *LS.STI);
+  return SmallVector<uint8_t>(Code.begin(), Code.end());
+}
+
+/// Perform an opcode swap: clone the decoded MCInst, set the replacement
+/// opcode, re-encode via MCCodeEmitter, and overwrite in place.
+/// Returns true on success.
+bool swapOpcode(InternalDecodedInst &DI, uint8_t *Text, const LLVMState &LS,
+                unsigned NewOpcode) {
+  MCInst NewInst = DI.Inst;
+  NewInst.setOpcode(NewOpcode);
+  SmallVector<uint8_t> Bytes = encodeMCInst(NewInst, LS);
+  if (Bytes.empty() || Bytes.size() != DI.Size)
+    return false;
+  std::memcpy(Text + DI.Offset, Bytes.data(), DI.Size);
+  return true;
+}
+
+} // anonymous namespace
+
+uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
+  InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  StringRef Mnemonic(DI.Mnemonic);
+
+  StringRef ReplacementAsm = getClusterLoadReplacementAsm(Mnemonic);
+  if (!ReplacementAsm.empty()) {
+    unsigned NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
+    if (NewOpcode < Ctx.LS.MCII->getNumOpcodes() &&
+        swapOpcode(DI, Ctx.Text, Ctx.LS, NewOpcode)) {
+      log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << NewOpcode
+            << " at 0x" << utohexstr(DI.Offset) << "\n";
       return 1;
     }
   }
 
-  if (mnemonic == "s_clause") {
-    RewriteRule rule;
-    uint8_t nop[kMinInstSize];
-    EncodeSNop(nop, ctx.config.s_nop_opcode);
-    rule.replace_bytes.assign(nop, nop + kMinInstSize);
-    if (ApplyByteReplace(rule, di.offset, di.size, ctx.text, ctx.text_size,
-                         ctx.config.s_nop_opcode)) {
-      HotswapLog(HotswapLogLevel::Debug)
-          << "hotswap: inplace: s_clause -> s_nop at 0x"
-          << llvm::utohexstr(di.offset) << "\n";
+  if (Mnemonic == "s_clause") {
+    RewriteRule Rule;
+    Rule.ReplaceBytes.assign(Ctx.LS.SNopBytes.begin(), Ctx.LS.SNopBytes.end());
+    if (applyByteReplace(Rule, DI.Offset, DI.Size, Ctx.Text, Ctx.TextSize,
+                         Ctx.LS)) {
+      log() << "hotswap: inplace: s_clause -> s_nop at 0x"
+            << utohexstr(DI.Offset) << "\n";
       return 1;
     }
   }
 
   return 0;
 }
+
+} // namespace hotswap
+} // namespace COMGR
