@@ -112,6 +112,8 @@ static cl::opt<int> MaxPotentialValuesIterations(
 
 STATISTIC(NumAAs, "Number of abstract attributes created");
 STATISTIC(NumIndirectCallsPromoted, "Number of indirect calls promoted");
+STATISTIC(NumAAPointerInfoAccessesCapped,
+          "Number of AAPointerInfo instances capped to pessimistic");
 
 static cl::opt<bool> DumpFnTiming(
     "attributor-dump-fn-timing", cl::Hidden,
@@ -1047,8 +1049,10 @@ ChangeStatus AA::PointerInfo::State::addAccess(
     std::optional<Value *> Content, AAPointerInfo::AccessKind Kind, Type *Ty,
     Instruction *RemoteI) {
   if (MaxAccessesPerAAPointerInfo > 0 &&
-      AccessList.size() >= MaxAccessesPerAAPointerInfo)
+      AccessList.size() >= MaxAccessesPerAAPointerInfo) {
+    ++NumAAPointerInfoAccessesCapped;
     return indicatePessimisticFixpoint();
+  }
 
   RemoteI = RemoteI ? RemoteI : &I;
 

@@ -84,6 +84,11 @@ STATISTIC(NumAttributesValidFixpoint,
           "Number of abstract attributes in a valid fixpoint state");
 STATISTIC(NumAttributesManifested,
           "Number of abstract attributes manifested in IR");
+STATISTIC(NumKernelScopeIndirectCalls,
+          "Number of truly indirect calls encountered during kernel scope "
+          "computation");
+STATISTIC(NumKernelScopeFnsDiscovered,
+          "Number of functions discovered by kernel scope BFS");
 
 // TODO: Determine a good default value.
 //
@@ -2661,6 +2666,9 @@ ChangeStatus Attributor::run() {
   if (PrintCallGraph)
     ACallGraph.populateAll();
 
+  if (InfoCache.targetIsGPU())
+    InfoCache.computeKernelScopeMap();
+
   Phase = AttributorPhase::UPDATE;
   runTillFixpoint();
 
@@ -3413,6 +3421,121 @@ ChangeStatus Attributor::rewriteFunctionSignatures(
   }
 
   return Changed;
+}
+
+void InformationCache::computeKernelScopeMap() {
+  if (KernelScopeMapComputed)
+    return;
+  KernelScopeMapComputed = true;
+
+  SmallVector<const Function *, 64> Kernels;
+  for (const Function &Fn : M)
+    if (!Fn.isDeclaration() && isKernel(Fn))
+      Kernels.push_back(&Fn);
+
+  for (const Function *K : Kernels) {
+    SmallVector<const Function *, 32> Worklist;
+    SmallPtrSet<const Function *, 32> Visited;
+    Worklist.push_back(K);
+
+    while (!Worklist.empty()) {
+      const Function *Cur = Worklist.pop_back_val();
+      if (!Visited.insert(Cur).second)
+        continue;
+      KernelScopeMap[Cur].insert(K);
+
+      for (const BasicBlock &BB : *Cur) {
+        for (const Instruction &I : BB) {
+          const auto *CB = dyn_cast<CallBase>(&I);
+          if (!CB)
+            continue;
+
+          // Case 1: Direct callee — the common case for normal call/invoke
+          // instructions where the target function is statically known.
+          if (const Function *Callee = CB->getCalledFunction()) {
+            if (!Callee->isDeclaration() && !Callee->isIntrinsic())
+              Worklist.push_back(Callee);
+          }
+
+          // Case 2: Callback metadata — handles runtime functions annotated
+          // with !callback metadata (e.g. those in OMP_RTL_CB_INFO) where
+          // a specific argument is known to be a callback function pointer.
+          SmallVector<const Use *, 4> CBUses;
+          AbstractCallSite::getCallbackUses(*CB, CBUses);
+          for (const Use *U : CBUses) {
+            if (const auto *CBFn =
+                    dyn_cast<Function>(U->get()->stripPointerCasts()))
+              if (!CBFn->isDeclaration())
+                Worklist.push_back(CBFn);
+          }
+
+          // Case 3: Function pointer constants in arguments — catches
+          // patterns like __kmpc_parallel_60(ptr @body_fn, ...) where the
+          // callee passes a known function pointer but lacks !callback
+          // metadata. We scan all arguments for constant Function* values.
+          bool AnyFnArg = false;
+          for (const Use &Arg : CB->args()) {
+            if (const auto *ArgFn =
+                    dyn_cast<Function>(Arg.get()->stripPointerCasts())) {
+              if (!ArgFn->isDeclaration())
+                Worklist.push_back(ArgFn);
+              AnyFnArg = true;
+            }
+          }
+
+          // Truly indirect call: no static callee, no callback metadata,
+          // and no function pointer constants in arguments. Functions
+          // reachable only through these calls won't appear in the map
+          // and will be treated conservatively (unknown kernel scope).
+          if (!CB->getCalledFunction() && CBUses.empty() && !AnyFnArg)
+            ++NumKernelScopeIndirectCalls;
+        }
+      }
+    }
+  }
+
+  NumKernelScopeFnsDiscovered += KernelScopeMap.size();
+
+  LLVM_DEBUG({
+    dbgs() << "[KernelScope] Computed kernel scope map:\n";
+
+    SmallVector<
+        std::pair<StringRef, const SmallPtrSet<const Function *, 4> *>>
+        Sorted;
+    for (auto &Entry : KernelScopeMap)
+      Sorted.push_back({Entry.first->getName(), &Entry.second});
+    llvm::sort(Sorted,
+               [](const auto &A, const auto &B) { return A.first < B.first; });
+
+    for (auto &[Name, KSet] : Sorted) {
+      dbgs() << "[KernelScope]   " << Name << " -> {";
+      SmallVector<StringRef> KNames;
+      for (const Function *KF : *KSet)
+        KNames.push_back(KF->getName());
+      llvm::sort(KNames);
+      bool First = true;
+      for (StringRef KN : KNames) {
+        if (!First)
+          dbgs() << ", ";
+        dbgs() << KN;
+        First = false;
+      }
+      dbgs() << "} (" << KSet->size() << " kernel(s))\n";
+    }
+
+    dbgs() << "[KernelScope] Summary: " << Kernels.size() << " kernels, "
+           << KernelScopeMap.size() << " functions in map, "
+           << NumKernelScopeIndirectCalls << " indirect calls encountered\n";
+  });
+}
+
+const SmallPtrSet<const Function *, 4> *
+InformationCache::getEnclosingKernels(const Function &F) {
+  computeKernelScopeMap();
+  auto It = KernelScopeMap.find(&F);
+  if (It == KernelScopeMap.end())
+    return nullptr;
+  return &It->second;
 }
 
 void InformationCache::initializeInformationCache(const Function &CF,

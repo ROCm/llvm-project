@@ -1211,8 +1211,8 @@ struct InformationCache {
   InformationCache(const Module &M, AnalysisGetter &AG,
                    BumpPtrAllocator &Allocator, SetVector<Function *> *CGSCC,
                    bool UseExplorer = true)
-      : CGSCC(CGSCC), DL(M.getDataLayout()), Allocator(Allocator), AG(AG),
-        TargetTriple(M.getTargetTriple()) {
+      : M(M), CGSCC(CGSCC), DL(M.getDataLayout()), Allocator(Allocator),
+        AG(AG), TargetTriple(M.getTargetTriple()) {
     if (UseExplorer)
       Explorer = new (Allocator) MustBeExecutedContextExplorer(
           /* ExploreInterBlock */
@@ -1265,6 +1265,9 @@ struct InformationCache {
     }
   }
 
+  /// The module this cache is associated with.
+  const Module &M;
+
   /// The CG-SCC the pass is run on, or nullptr if it is a module pass.
   const SetVector<Function *> *const CGSCC = nullptr;
 
@@ -1300,6 +1303,18 @@ struct InformationCache {
     FunctionInfo &FI = getFunctionInfo(F);
     return FI.IsKernel;
   }
+
+  /// Eagerly compute the kernel scope map (BFS from each kernel through
+  /// the static call graph). Called once before the fixpoint iteration
+  /// for GPU targets.
+  void computeKernelScopeMap();
+
+  /// Get the set of kernels that can transitively reach \p F through the
+  /// static call graph. Returns nullptr if \p F was not discovered by any
+  /// kernel's BFS (unknown scope — caller should be conservative).
+  /// Triggers computeKernelScopeMap() on first call if not already done.
+  const SmallPtrSet<const Function *, 4> *
+  getEnclosingKernels(const Function &F);
 
   /// Return true if \p Arg is involved in a must-tail call, thus the argument
   /// of the caller or callee.
@@ -1429,6 +1444,11 @@ private:
 
   /// The triple describing the target machine.
   Triple TargetTriple;
+
+  /// Map from function to the set of kernel functions that can reach it
+  /// transitively through the static call graph. Computed lazily.
+  DenseMap<const Function *, SmallPtrSet<const Function *, 4>> KernelScopeMap;
+  bool KernelScopeMapComputed = false;
 
   /// Give the Attributor access to the members so
   /// Attributor::identifyDefaultAbstractAttributes(...) can initialize them.
