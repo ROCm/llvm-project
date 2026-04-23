@@ -87,3 +87,8 @@ kernel with `%clang`, pipe through the LIT tool, verify with
 
 `make check-comgr` runs all three suites; the per-suite targets
 (`make test`, `make test-lit`, `make test-unit`) run them individually.
+
+**Verify under AddressSanitizer before submitting.** Comgr builds with
+`-DADDRESS_SANITIZER=On` (see `CMakeLists.txt`). Re-run `make
+check-comgr` against the ASAN build to catch use-after-free, leaks,
+and other memory bugs that won't surface in a normal release build.
