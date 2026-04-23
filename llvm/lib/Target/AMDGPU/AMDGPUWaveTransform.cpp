@@ -141,6 +141,13 @@ using AccRegSet = SmallDenseSet<Register, 4>;
 using AccInstsMap =
     DenseMap<MachineBasicBlock *, SmallVector<MachineInstr *, 8>>;
 
+// Returns true if MO is a virtual register belonging
+// to the accumulator register set.
+static inline bool isAccRegOperand(const MachineOperand &MO,
+                                   const AccRegSet &AccRegs) {
+  return MO.isReg() && MO.getReg().isVirtual() && AccRegs.count(MO.getReg());
+}
+
 /// Map a lane-level successor or predecessor to a wave-level successor or
 /// predecessor.
 struct LaneEdge {
@@ -2210,7 +2217,7 @@ void ControlFlowRewriter::rewrite() {
 
   }
   Updater.insertAccumulatorResets();
-  AccumulatorRegs = Updater.getAllAccumulators();
+  AccumulatorRegs = Updater.takeAllAccumulators();
   Updater.cleanup();
 
 }
@@ -2353,8 +2360,7 @@ class ForwardPropSimplifier {
   // Rewrite acc-register uses in MI to their tracked equivalent registers.
   void rewriteAccUses(MachineInstr &MI, const RegValueMap &Cur) {
     for (MachineOperand &MO : MI.uses()) {
-      if (!MO.isReg() || !MO.getReg().isVirtual() ||
-          !AccRegs.count(MO.getReg()))
+      if (!isAccRegOperand(MO, AccRegs))
         continue;
       auto It = Cur.find(MO.getReg());
       if (It == Cur.end())
@@ -2689,15 +2695,14 @@ struct AccBBLiveness {
 // Upward exposed uses - Use of accumulator register without a preceeding def in
 // the same BB Def - Def of accumulator register UnusedDef - Def of the
 // accumulator register with no use after it in the same BB
-static DenseMap<MachineBasicBlock *, AccBBUseDef>
-computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs) {
-  DenseMap<MachineBasicBlock *, AccBBUseDef> Result;
+static void
+computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs,
+                 DenseMap<MachineBasicBlock *, AccBBUseDef> &Result) {
   for (MachineBasicBlock &MBB : MF) {
-    AccBBUseDef UD;
+    AccBBUseDef &UD = Result[&MBB];
     for (MachineInstr &MI : MBB) {
       for (const MachineOperand &MO : MI.uses()) {
-        if (!MO.isReg() || !MO.getReg().isVirtual() ||
-            !AccumulatorRegs.count(MO.getReg()))
+        if (!isAccRegOperand(MO, AccumulatorRegs))
           continue;
         Register R = MO.getReg();
         if (!UD.Def.count(R))
@@ -2705,32 +2710,24 @@ computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs) {
         UD.UnusedDef.erase(R);
       }
       for (const MachineOperand &MO : MI.defs()) {
-        if (!MO.isReg() || !MO.getReg().isVirtual() ||
-            !AccumulatorRegs.count(MO.getReg()))
+        if (!isAccRegOperand(MO, AccumulatorRegs))
           continue;
         Register R = MO.getReg();
         UD.Def.insert(R);
         UD.UnusedDef[R] = &MI;
       }
     }
-    if (!UD.UpwardExposedUse.empty() || !UD.Def.empty())
-      Result[&MBB] = std::move(UD);
   }
-  return Result;
 }
 
 // Compute per-block LiveIn/LiveOut for accumulator registers using
 // iterative fixed-point dataflow analysis.
 //   LiveOut(B) = ∪ LiveIn(S) for all successors S of B
 //   LiveIn(B)  = Use(B) ∪ (LiveOut(B) - Def(B))
-static DenseMap<MachineBasicBlock *, AccBBLiveness>
+static void
 computeAccLiveness(MachineFunction &MF,
-                   const DenseMap<MachineBasicBlock *, AccBBUseDef> &UseDef) {
-  DenseMap<MachineBasicBlock *, AccBBLiveness> Liveness;
-
-  for (MachineBasicBlock &MBB : MF)
-    (void)Liveness[&MBB];
-
+                   const DenseMap<MachineBasicBlock *, AccBBUseDef> &UseDef,
+                   DenseMap<MachineBasicBlock *, AccBBLiveness> &Liveness) {
   for (const auto &[MBB, UD] : UseDef)
     Liveness[MBB].LiveIn = UD.UpwardExposedUse;
 
@@ -2739,6 +2736,7 @@ computeAccLiveness(MachineFunction &MF,
     Changed = false;
     for (MachineBasicBlock &MBB : MF) {
       AccBBLiveness &L = Liveness[&MBB];
+      const AccBBUseDef &UD = UseDef.find(&MBB)->second;
 
       for (MachineBasicBlock *Succ : MBB.successors()) {
         for (Register R : Liveness[Succ].LiveIn) {
@@ -2747,17 +2745,14 @@ computeAccLiveness(MachineFunction &MF,
         }
       }
 
-      auto UDIt = UseDef.find(&MBB);
       for (Register R : L.LiveOut) {
-        if (UDIt != UseDef.end() && UDIt->second.Def.count(R))
+        if (UD.Def.count(R))
           continue;
         if (L.LiveIn.insert(R).second)
           Changed = true;
       }
     }
   }
-
-  return Liveness;
 }
 
 // Build a per-MBB program-order list of all machine instrs that use or define
@@ -2772,14 +2767,12 @@ static void buildAccInstMap(MachineFunction &MF,
       bool IsAccInst = false;
 
       for (const MachineOperand &MO : MI.uses()) {
-        if (MO.isReg() && MO.getReg().isVirtual() &&
-            AccumulatorRegs.count(MO.getReg()))
+        if (isAccRegOperand(MO, AccumulatorRegs))
           IsAccInst = true;
       }
 
       for (const MachineOperand &MO : MI.defs()) {
-        if (MO.isReg() && MO.getReg().isVirtual() &&
-            AccumulatorRegs.count(MO.getReg()))
+        if (isAccRegOperand(MO, AccumulatorRegs))
           IsAccInst = true;
       }
 
@@ -2816,13 +2809,11 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
 
     for (MachineInstr *MI : AccInsts) {
       for (const MachineOperand &MO : MI->uses()) {
-        if (MO.isReg() && MO.getReg().isVirtual() &&
-            AccumulatorRegs.count(MO.getReg()))
+        if (isAccRegOperand(MO, AccumulatorRegs))
           LastUnusedDef.erase(MO.getReg());
       }
       for (const MachineOperand &MO : MI->defs()) {
-        if (!MO.isReg() || !MO.getReg().isVirtual() ||
-            !AccumulatorRegs.count(MO.getReg()))
+        if (!isAccRegOperand(MO, AccumulatorRegs))
           continue;
         Register Reg = MO.getReg();
         auto It = LastUnusedDef.find(Reg);
@@ -2838,19 +2829,19 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
   }
 
   // compute Use Def sets for each block
-  DenseMap<MachineBasicBlock *, AccBBUseDef> AccUseDef =
-      computeAccUseDef(MF, AccumulatorRegs);
+  DenseMap<MachineBasicBlock *, AccBBUseDef> AccUseDef;
+  computeAccUseDef(MF, AccumulatorRegs, AccUseDef);
 
-  DenseMap<MachineBasicBlock *, AccBBLiveness> AccLiveness =
-      computeAccLiveness(MF, AccUseDef);
+  DenseMap<MachineBasicBlock *, AccBBLiveness> AccLiveness;
+  computeAccLiveness(MF, AccUseDef, AccLiveness);
 
   // Remove globally dead defs: UnusedDef(B) - LiveOut(B).
   // These are defs defined in a BB and not used anywhere in the forward data
   // flow
   for (const auto &[MBB, UD] : AccUseDef) {
-    auto LIt = AccLiveness.find(MBB);
+    const AccBBLiveness &L = AccLiveness.find(MBB)->second;
     for (const auto &[R, DefMI] : UD.UnusedDef) {
-      if (LIt != AccLiveness.end() && LIt->second.LiveOut.count(R))
+      if (L.LiveOut.count(R))
         continue;
 
       DefMI->eraseFromParent();

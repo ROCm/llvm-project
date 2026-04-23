@@ -137,6 +137,10 @@ public:
     return AllAccumulators;
   }
 
+  SmallDenseSet<Register, 4> takeAllAccumulators() {
+    return std::move(AllAccumulators);
+  }
+
   GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
   void setLaneMaskAnalysis(GCNLaneMaskAnalysis *Analysis) { LMA = Analysis; }
