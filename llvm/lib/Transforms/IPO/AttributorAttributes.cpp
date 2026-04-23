@@ -1342,9 +1342,6 @@ struct AAPointerInfoImpl
         A, this, IRPosition::function(Scope), DepClassTy::OPTIONAL,
         IsKnownNoRecurse);
 
-    // TODO: Use reaching kernels from AAKernelInfo (or move it to
-    // AAExecutionDomain) such that we allow scopes other than kernels as long
-    // as the reaching kernels are disjoint.
     bool InstInKernel;
     if (getAssociatedFunction() == &Scope) {
       if (!IsAssociatedFunctionKernel.has_value())
@@ -1353,6 +1350,13 @@ struct AAPointerInfoImpl
     } else {
       InstInKernel = A.getInfoCache().isKernel(Scope);
     }
+
+    // For GPU targets, get the set of kernels that can reach the querying
+    // function. This allows non-kernel functions to skip accesses from
+    // disjoint kernel scopes on kernel-lifetime objects.
+    const SmallPtrSet<const Function *, 4> *EnclosingKernels =
+        InfoCache.targetIsGPU() ? InfoCache.getEnclosingKernels(Scope)
+                                : nullptr;
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
         FindInterferingWrites && IsKnownNoRecurse;
@@ -1430,9 +1434,12 @@ struct AAPointerInfoImpl
       Function *AccScope = Acc.getRemoteInst()->getFunction();
       bool AccInSameScope = AccScope == &Scope;
 
-      // If the object has kernel lifetime we can ignore accesses only reachable
-      // by other kernels. For now we only skip accesses *in* other kernels.
-      if (InstInKernel && ObjHasKernelLifetime && !AccInSameScope) {
+      // If the object has kernel lifetime, accesses from disjoint kernel scopes
+      // cannot interfere. Skip an access that is *in* a different kernel when
+      // the querying function is itself a kernel or when the querying
+      // function's enclosing kernels (from the static call graph) don't
+      // include the access's kernel.
+      if (ObjHasKernelLifetime && !AccInSameScope) {
         bool AccScopeIsKernel;
         if (AccScope == LastCheckedFn) {
           AccScopeIsKernel = LastCheckedResult;
@@ -1441,9 +1448,13 @@ struct AAPointerInfoImpl
           LastCheckedFn = AccScope;
           LastCheckedResult = AccScopeIsKernel;
         }
-        
-        if (AccScopeIsKernel)
-          return true;
+
+        if (AccScopeIsKernel) {
+          if (InstInKernel)
+            return true;
+          if (EnclosingKernels && !EnclosingKernels->count(AccScope))
+            return true;
+        }
       }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
