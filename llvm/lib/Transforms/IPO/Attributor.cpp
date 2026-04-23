@@ -3496,6 +3496,18 @@ void InformationCache::computeKernelScopeMap() {
 
   NumKernelScopeFnsDiscovered += KernelScopeMap.size();
 
+  // Build the BitVector representation for fast disjointness checks.
+  NumKernels = Kernels.size();
+  for (unsigned I = 0, E = Kernels.size(); I < E; ++I)
+    KernelIndexMap[Kernels[I]] = I;
+
+  for (auto &[Fn, KSet] : KernelScopeMap) {
+    BitVector &BV = KernelScopeBVMap[Fn];
+    BV.resize(NumKernels);
+    for (const Function *K : KSet)
+      BV.set(KernelIndexMap[K]);
+  }
+
   LLVM_DEBUG({
     dbgs() << "[KernelScope] Computed kernel scope map:\n";
 
@@ -3536,6 +3548,26 @@ InformationCache::getEnclosingKernels(const Function &F) {
   if (It == KernelScopeMap.end())
     return nullptr;
   return &It->second;
+}
+
+const BitVector *
+InformationCache::getEnclosingKernelsBV(const Function &F) {
+  computeKernelScopeMap();
+  auto It = KernelScopeBVMap.find(&F);
+  if (It == KernelScopeBVMap.end())
+    return nullptr;
+  return &It->second;
+}
+
+const BitVector *InformationCache::getKernelBV(const Function &F) {
+  computeKernelScopeMap();
+  auto It = KernelIndexMap.find(&F);
+  if (It == KernelIndexMap.end())
+    return nullptr;
+  auto BVIt = KernelScopeBVMap.find(&F);
+  if (BVIt == KernelScopeBVMap.end())
+    return nullptr;
+  return &BVIt->second;
 }
 
 void InformationCache::initializeInformationCache(const Function &CF,

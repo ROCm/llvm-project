@@ -97,6 +97,7 @@
 #ifndef LLVM_TRANSFORMS_IPO_ATTRIBUTOR_H
 #define LLVM_TRANSFORMS_IPO_ATTRIBUTOR_H
 
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/IntervalMap.h"
@@ -1316,6 +1317,15 @@ struct InformationCache {
   const SmallPtrSet<const Function *, 4> *
   getEnclosingKernels(const Function &F);
 
+  /// Get a BitVector representing the enclosing kernel set for \p F.
+  /// Bit i is set iff kernel i (per KernelIndexMap) can reach \p F.
+  /// Returns nullptr if \p F has unknown scope.
+  const BitVector *getEnclosingKernelsBV(const Function &F);
+
+  /// Get the BitVector for a kernel function itself (single bit set).
+  /// Returns nullptr if \p F is not a known kernel.
+  const BitVector *getKernelBV(const Function &F);
+
   /// Return true if \p Arg is involved in a must-tail call, thus the argument
   /// of the caller or callee.
   bool isInvolvedInMustTailCall(const Argument &Arg) {
@@ -1448,6 +1458,18 @@ private:
   /// Map from function to the set of kernel functions that can reach it
   /// transitively through the static call graph. Computed lazily.
   DenseMap<const Function *, SmallPtrSet<const Function *, 4>> KernelScopeMap;
+
+  /// BitVector representation of the kernel scope map. Bit i corresponds to
+  /// the kernel at KernelIndexMap[kernel] = i. Used for fast disjointness
+  /// checks in forallInterferingAccesses.
+  DenseMap<const Function *, BitVector> KernelScopeBVMap;
+
+  /// Maps each kernel function to a dense index for the BitVector encoding.
+  DenseMap<const Function *, unsigned> KernelIndexMap;
+
+  /// Number of kernels discovered. Determines BitVector width.
+  unsigned NumKernels = 0;
+
   bool KernelScopeMapComputed = false;
 
   /// Give the Attributor access to the members so

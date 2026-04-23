@@ -1351,11 +1351,11 @@ struct AAPointerInfoImpl
       InstInKernel = A.getInfoCache().isKernel(Scope);
     }
 
-    // For GPU targets, get the set of kernels that can reach the querying
-    // function. This allows non-kernel functions to skip accesses from
-    // disjoint kernel scopes on kernel-lifetime objects.
-    const SmallPtrSet<const Function *, 4> *EnclosingKernels =
-        InfoCache.targetIsGPU() ? InfoCache.getEnclosingKernels(Scope)
+    // For GPU targets, get the BitVector of kernels that can reach the
+    // querying function. Used for fast disjointness checks to skip accesses
+    // from unrelated kernel scopes on kernel-lifetime objects.
+    const BitVector *ScopeKernelsBV =
+        InfoCache.targetIsGPU() ? InfoCache.getEnclosingKernelsBV(Scope)
                                 : nullptr;
     bool ObjHasKernelLifetime = false;
     const bool UseDominanceReasoning =
@@ -1426,35 +1426,28 @@ struct AAPointerInfoImpl
     // therefore blockers in the reachability traversal.
     AA::InstExclusionSetTy ExclusionSet;
 
-    // Cache for isKernel check to avoid repeated map lookups for the same function.
-    const Function *LastCheckedFn = nullptr;
-    bool LastCheckedResult = false;
+    // Cache the AccScope's kernel bitvector to avoid repeated map lookups.
+    const Function *LastAccScopeFn = nullptr;
+    const BitVector *LastAccScopeBV = nullptr;
 
     auto AccessCB = [&](const Access &Acc, bool Exact) {
       Function *AccScope = Acc.getRemoteInst()->getFunction();
       bool AccInSameScope = AccScope == &Scope;
 
-      // If the object has kernel lifetime, accesses from disjoint kernel scopes
-      // cannot interfere. Skip an access that is *in* a different kernel when
-      // the querying function is itself a kernel or when the querying
-      // function's enclosing kernels (from the static call graph) don't
-      // include the access's kernel.
-      if (ObjHasKernelLifetime && !AccInSameScope) {
-        bool AccScopeIsKernel;
-        if (AccScope == LastCheckedFn) {
-          AccScopeIsKernel = LastCheckedResult;
+      // If the object has kernel lifetime, accesses from disjoint kernel
+      // scopes cannot interfere. Use BitVector anyCommon() for an O(N/64)
+      // disjointness check where N is the number of kernels.
+      if (ScopeKernelsBV && ObjHasKernelLifetime && !AccInSameScope) {
+        const BitVector *AccBV;
+        if (AccScope == LastAccScopeFn) {
+          AccBV = LastAccScopeBV;
         } else {
-          AccScopeIsKernel = isKernelCached(A, *AccScope);
-          LastCheckedFn = AccScope;
-          LastCheckedResult = AccScopeIsKernel;
+          AccBV = InfoCache.getEnclosingKernelsBV(*AccScope);
+          LastAccScopeFn = AccScope;
+          LastAccScopeBV = AccBV;
         }
-
-        if (AccScopeIsKernel) {
-          if (InstInKernel)
-            return true;
-          if (EnclosingKernels && !EnclosingKernels->count(AccScope))
-            return true;
-        }
+        if (AccBV && !ScopeKernelsBV->anyCommon(*AccBV))
+          return true;
       }
 
       if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
