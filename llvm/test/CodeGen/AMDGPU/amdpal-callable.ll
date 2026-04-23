@@ -183,7 +183,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      no_stack_extern_call:
 ; GCN-NEXT:        .backend_stack_size: 0x10{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; GFX8-NEXT:        .sgpr_count:     0x2b{{$}}
+; GFX8-NEXT:        .sgpr_count:     0x29{{$}}
 ; GFX9-LT_WT-NEXT:        .sgpr_count:     0x2f{{$}}
 ; GFX9-ST_WT-NEXT:        .sgpr_count:     0x2c{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x10{{$}}
@@ -191,7 +191,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      no_stack_extern_call_many_args:
 ; GCN-NEXT:        .backend_stack_size: 0x90{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; GFX8-NEXT:        .sgpr_count:     0x2b{{$}}
+; GFX8-NEXT:        .sgpr_count:     0x29{{$}}
 ; GFX9-LT_WT-NEXT:        .sgpr_count:     0x2f{{$}}
 ; GFX9-ST_WT-NEXT:        .sgpr_count:     0x2c{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x90{{$}}
@@ -199,7 +199,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      no_stack_indirect_call:
 ; GCN-NEXT:        .backend_stack_size: 0x10{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; GFX8-NEXT:        .sgpr_count:     0x2b{{$}}
+; GFX8-NEXT:        .sgpr_count:     0x29{{$}}
 ; GFX9-LT_WT-NEXT:        .sgpr_count:     0x2f{{$}}
 ; GFX9-ST_WT-NEXT:        .sgpr_count:     0x2c{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x10{{$}}
@@ -231,7 +231,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      simple_stack_extern_call:
 ; GCN-NEXT:        .backend_stack_size: 0x20{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; GFX8-NEXT:        .sgpr_count:     0x2b{{$}}
+; GFX8-NEXT:        .sgpr_count:     0x29{{$}}
 ; GFX9-LT_WT-NEXT:        .sgpr_count:     0x2f{{$}}
 ; GFX9-ST_WT-NEXT:        .sgpr_count:     0x2c{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x20{{$}}
@@ -239,7 +239,7 @@ attributes #0 = { nounwind }
 ; GCN-NEXT:      simple_stack_indirect_call:
 ; GCN-NEXT:        .backend_stack_size: 0x20{{$}}
 ; GCN-NEXT:        .lds_size:       0{{$}}
-; GFX8-NEXT:        .sgpr_count:     0x2b{{$}}
+; GFX8-NEXT:        .sgpr_count:     0x29{{$}}
 ; GFX9-LT_WT-NEXT:        .sgpr_count:     0x2f{{$}}
 ; GFX9-ST_WT-NEXT:        .sgpr_count:     0x2c{{$}}
 ; GCN-NEXT:        .stack_frame_size_in_bytes: 0x20{{$}}
