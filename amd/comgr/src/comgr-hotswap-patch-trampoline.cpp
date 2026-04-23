@@ -24,20 +24,22 @@
 #include <utility>
 #include <vector>
 
+using namespace llvm;
+
 namespace COMGR {
 namespace hotswap {
 
 static std::string printInst(const InternalDecodedInst &DI,
                              const LLVMState &LS) {
   std::string S;
-  llvm::raw_string_ostream OS(S);
+  raw_string_ostream OS(S);
   LS.MCIP->printInst(&DI.Inst, 0, "", *LS.STI, OS);
   return S;
 }
 
 // -- DS stride64 swap table ---------------------------------------------------
 
-static const std::pair<llvm::StringRef, llvm::StringRef>
+static const std::pair<StringRef, StringRef>
     kDs2AddrStride64Swaps[] = {
         {"ds_load_2addr_stride64_b32", "ds_load_b32"},
         {"ds_load_2addr_stride64_b64", "ds_load_b64"},
@@ -47,12 +49,12 @@ static const std::pair<llvm::StringRef, llvm::StringRef>
         {"ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64"},
 };
 
-static bool isDs2AddrStride64(llvm::StringRef Mnem) {
+static bool isDs2AddrStride64(StringRef Mnem) {
   return Mnem.contains("_2addr_stride64_");
 }
 
-static std::pair<llvm::StringRef, llvm::StringRef>
-lookupDs2AddrSwap(llvm::StringRef Mnem) {
+static std::pair<StringRef, StringRef>
+lookupDs2AddrSwap(StringRef Mnem) {
   for (const auto &P : kDs2AddrStride64Swaps) {
     if (Mnem == P.first)
       return P;
@@ -301,16 +303,16 @@ bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx, unsigned SgprMCReg) {
   if (SgprMCReg == 0)
     return true;
 
-  const llvm::MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  const llvm::MCInstrInfo &MCII = *Ctx.LS.MCII;
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  const MCInstrInfo &MCII = *Ctx.LS.MCII;
 
   for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
     const auto &DI = Ctx.Decoded[I];
     if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
       continue;
 
-    const llvm::MCInst &Inst = DI.Inst;
-    const llvm::MCInstrDesc &Desc = MCII.get(Inst.getOpcode());
+    const MCInst &Inst = DI.Inst;
+    const MCInstrDesc &Desc = MCII.get(Inst.getOpcode());
 
     if (DI.Mnemonic == "s_endpgm")
       return false;
@@ -393,7 +395,7 @@ static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
 // Assemble a single instruction and return its bytes. If assembly fails,
 // log an error and return an empty vector.
 
-static llvm::SmallVector<uint8_t, 16>
+static SmallVector<uint8_t, 16>
 assembleOrFail(const std::string &AsmStr, const LLVMState &LS,
                const char *Context) {
   auto Bytes = assembleSingleInst(AsmStr, LS);
@@ -449,7 +451,7 @@ static uint32_t patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
   auto &DI = Ctx.Decoded[Idx];
 
   if (Idx > 0) {
-    llvm::StringRef Prev = Ctx.Decoded[Idx - 1].Mnemonic;
+    StringRef Prev = Ctx.Decoded[Idx - 1].Mnemonic;
     if (Prev == "s_pack_hh_b32_b16" || Prev == "v_writelane_b32")
       return 0;
   }
@@ -529,7 +531,7 @@ static uint32_t patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 //   tensor_load_to_lds     → prepend s_pack_hh (+ save/restore if SGPR live)
 
 uint32_t applyTrampolinePatches(PatchContext &Ctx, size_t Idx) {
-  llvm::StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
+  StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
   if (isDs2AddrStride64(Mnem))
     return patchDs2AddrStride64(Ctx, Idx);
