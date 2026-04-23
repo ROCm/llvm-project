@@ -181,10 +181,6 @@ jobs:
         run: |
           python ./build_tools/memory_monitor.py --phase "Test ${{ fromJSON(inputs.component).job_name }}" -- \
           bash -c '${{ fromJSON(inputs.component).test_script }}'
-          echo "=== Searching entire workspace ==="
-          find $GITHUB_WORKSPACE -name "rocroller-tests*" -type f 2>/dev/null
-          echo "=== Build directory structure ==="
-          find build/ -type f -name "*.test" -o -name "*rocroller*" 2>/dev/null
 
 
       - name: Print test reproduction command
