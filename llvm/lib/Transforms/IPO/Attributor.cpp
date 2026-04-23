@@ -81,6 +81,13 @@ STATISTIC(NumAttributesValidFixpoint,
 STATISTIC(NumAttributesManifested,
           "Number of abstract attributes manifested in IR");
 
+// Fine-grained getFunctionInfo call tracking
+STATISTIC(NumIsKernelLine686, "isKernel calls at isPotentiallyReachable:686 (ToFn)");
+STATISTIC(NumIsKernelLine687, "isKernel calls at isPotentiallyReachable:687 (FromFn)");
+STATISTIC(NumGetOpcodeInstMap, "getOpcodeInstMapForFunction calls (lines 2069,2912,3609)");
+STATISTIC(NumGetRWInsts, "getReadOrWriteInstsForFunction calls (line 2106)");
+STATISTIC(NumDirectGetFunctionInfo, "Direct getFunctionInfo calls (lines 3249,3351)");
+
 // TODO: Determine a good default value.
 //
 // In the LLVM-TS and SPEC2006, 32 seems to not induce compile time overheads
@@ -120,6 +127,15 @@ static cl::opt<bool>
                          cl::desc("Allow the Attributor to create shallow "
                                   "wrappers for non-exact definitions."),
                          cl::init(false));
+
+static cl::opt<bool, true>
+    PrintGetFunctionInfoStatsX("attributor-print-getfunctioninfo-stats", cl::Hidden,
+                               cl::desc("Print InformationCache::getFunctionInfo() "
+                                        "call statistics for performance analysis."),
+                               cl::location(AttributorPrintGetFunctionInfoStats),
+                               cl::init(false));
+
+bool llvm::AttributorPrintGetFunctionInfoStats;
 
 static cl::opt<bool>
     AllowDeepWrapper("attributor-allow-deep-wrappers", cl::Hidden,
@@ -683,11 +699,17 @@ isPotentiallyReachable(Attributor &A, const Instruction &FromI,
   // kernel, values like allocas and shared memory are not accessible. We
   // implicitly check for this situation to avoid costly lookups.
   if (GoBackwardsCB && &ToFn != FromI.getFunction() &&
-      !GoBackwardsCB(*FromI.getFunction()) && A.getInfoCache().isKernel(ToFn) &&
-      A.getInfoCache().isKernel(*FromI.getFunction())) {
-    LLVM_DEBUG(dbgs() << "[AA] assume kernel cannot be reached from within the "
-                         "module; success\n";);
-    return false;
+      !GoBackwardsCB(*FromI.getFunction())) {
+    ++NumIsKernelLine686;
+    bool ToIsKernel = A.getInfoCache().isKernel(ToFn);
+    if (ToIsKernel) {
+      ++NumIsKernelLine687;
+      if (A.getInfoCache().isKernel(*FromI.getFunction())) {
+        LLVM_DEBUG(dbgs() << "[AA] assume kernel cannot be reached from within the "
+                             "module; success\n";);
+        return false;
+      }
+    }
   }
 
   // If we can go arbitrarily backwards we will eventually reach an entry point
@@ -2066,6 +2088,7 @@ bool Attributor::checkForAllInstructions(function_ref<bool(Instruction &)> Pred,
           ? (getAAFor<AAIsDead>(*QueryingAA, QueryIRP, DepClassTy::NONE))
           : nullptr;
 
+  ++NumGetOpcodeInstMap;
   auto &OpcodeInstMap = InfoCache.getOpcodeInstMapForFunction(*Fn);
   if (!checkForAllInstructionsImpl(this, OpcodeInstMap, Pred, QueryingAA,
                                    LivenessAA, Opcodes, UsedAssumedInformation,
@@ -2102,6 +2125,7 @@ bool Attributor::checkForAllReadWriteInstructions(
   const auto *LivenessAA =
       getAAFor<AAIsDead>(QueryingAA, QueryIRP, DepClassTy::NONE);
 
+  ++NumGetRWInsts;
   for (Instruction *I :
        InfoCache.getReadOrWriteInstsForFunction(*AssociatedFunction)) {
     // Skip dead instructions.
@@ -2909,6 +2933,7 @@ bool Attributor::isValidFunctionSignatureRewrite(
 
   // Forbid must-tail calls for now.
   // TODO:
+  ++NumGetOpcodeInstMap;
   auto &OpcodeInstMap = InfoCache.getOpcodeInstMapForFunction(*Fn);
   if (!checkForAllInstructionsImpl(nullptr, OpcodeInstMap, InstPred, nullptr,
                                    nullptr, {Instruction::Call},
@@ -3245,8 +3270,10 @@ void InformationCache::initializeInformationCache(const Function &CF,
       } else if (cast<CallInst>(I).isMustTailCall()) {
         FI.ContainsMustTailCall = true;
         if (auto *Callee = dyn_cast_if_present<Function>(
-                cast<CallInst>(I).getCalledOperand()))
+                cast<CallInst>(I).getCalledOperand())) {
+          ++NumDirectGetFunctionInfo;
           getFunctionInfo(*Callee).CalledViaMustTail = true;
+        }
       }
       [[fallthrough]];
     case Instruction::CallBr:
@@ -3349,6 +3376,7 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
   // In non-module runs we need to look at the call sites of a function to
   // determine if it is part of a must-tail call edge. This will influence what
   // attributes we can derive.
+  ++NumDirectGetFunctionInfo;
   InformationCache::FunctionInfo &FI = InfoCache.getFunctionInfo(F);
   if (!isModulePass() && !FI.CalledViaMustTail) {
     for (const Use &U : F.uses())
@@ -3607,6 +3635,7 @@ void Attributor::identifyDefaultAbstractAttributes(Function &F) {
     return true;
   };
 
+  ++NumGetOpcodeInstMap;
   auto &OpcodeInstMap = InfoCache.getOpcodeInstMapForFunction(F);
   [[maybe_unused]] bool Success;
   bool UsedAssumedInformation = false;

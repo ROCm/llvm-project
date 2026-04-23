@@ -1657,8 +1657,8 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; AMDGPU-NEXT:  [[ENTRY:.*:]]
 ; AMDGPU-NEXT:    [[CAPTURED_VARS_ADDRS:%.*]] = alloca ptr, align 8, addrspace(5)
 ; AMDGPU-NEXT:    [[CAPTURED_VARS_ADDRS_CAST:%.*]] = addrspacecast ptr addrspace(5) [[CAPTURED_VARS_ADDRS]] to ptr
-; AMDGPU-NEXT:    br label %[[REGION_CHECK_TID:.*]]
-; AMDGPU:       [[REGION_CHECK_TID]]:
+; AMDGPU-NEXT:    br label %[[FOR_COND:.*]]
+; AMDGPU:       [[FOR_COND]]:
 ; AMDGPU-NEXT:    [[TMP0:%.*]] = call fastcc i32 @__kmpc_get_hardware_thread_id_in_block()
 ; AMDGPU-NEXT:    [[TMP1:%.*]] = icmp eq i32 [[TMP0]], 0
 ; AMDGPU-NEXT:    br i1 [[TMP1]], label %[[REGION_GUARDED:.*]], label %[[REGION_BARRIER:.*]]
@@ -1671,8 +1671,8 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; AMDGPU-NEXT:    call void @__kmpc_barrier_simple_spmd(ptr @[[GLOB2]], i32 [[TMP0]])
 ; AMDGPU-NEXT:    br label %[[REGION_EXIT:.*]]
 ; AMDGPU:       [[REGION_EXIT]]:
-; AMDGPU-NEXT:    br label %[[FOR_COND:.*]]
-; AMDGPU:       [[FOR_COND]]:
+; AMDGPU-NEXT:    br label %[[FOR_COND1:.*]]
+; AMDGPU:       [[FOR_COND1]]:
 ; AMDGPU-NEXT:    [[I_0:%.*]] = phi i32 [ 0, %[[REGION_EXIT]] ], [ [[INC:%.*]], %[[FOR_BODY:.*]] ]
 ; AMDGPU-NEXT:    [[CMP:%.*]] = icmp slt i32 [[I_0]], 100
 ; AMDGPU-NEXT:    br i1 [[CMP]], label %[[FOR_BODY]], label %[[FOR_COND_CLEANUP:.*]]
@@ -1685,15 +1685,15 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; AMDGPU-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[TMP2]], align 4, !tbaa [[INT_TBAA12]]
 ; AMDGPU-NEXT:    call void @__kmpc_parallel_60(ptr @[[GLOB1]], i32 [[TMP3]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__7, ptr @__omp_outlined__7_wrapper, ptr [[CAPTURED_VARS_ADDRS_CAST]], i64 1, i32 0)
 ; AMDGPU-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
-; AMDGPU-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP23:![0-9]+]]
+; AMDGPU-NEXT:    br label %[[FOR_COND1]], !llvm.loop [[LOOP23:![0-9]+]]
 ;
 ; NVPTX-LABEL: define internal void @__omp_outlined__6(
 ; NVPTX-SAME: ptr noalias [[DOTGLOBAL_TID_:%.*]], ptr noalias [[DOTBOUND_TID_:%.*]]) #[[ATTR1]] {
 ; NVPTX-NEXT:  [[ENTRY:.*:]]
 ; NVPTX-NEXT:    [[CAPTURED_VARS_ADDRS:%.*]] = alloca ptr, align 8, addrspace(5)
 ; NVPTX-NEXT:    [[CAPTURED_VARS_ADDRS_CAST:%.*]] = addrspacecast ptr addrspace(5) [[CAPTURED_VARS_ADDRS]] to ptr
-; NVPTX-NEXT:    br label %[[REGION_CHECK_TID:.*]]
-; NVPTX:       [[REGION_CHECK_TID]]:
+; NVPTX-NEXT:    br label %[[FOR_COND:.*]]
+; NVPTX:       [[FOR_COND]]:
 ; NVPTX-NEXT:    [[TMP0:%.*]] = call fastcc i32 @__kmpc_get_hardware_thread_id_in_block()
 ; NVPTX-NEXT:    [[TMP1:%.*]] = icmp eq i32 [[TMP0]], 0
 ; NVPTX-NEXT:    br i1 [[TMP1]], label %[[REGION_GUARDED:.*]], label %[[REGION_BARRIER:.*]]
@@ -1706,8 +1706,8 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-NEXT:    call void @__kmpc_barrier_simple_spmd(ptr @[[GLOB2]], i32 [[TMP0]])
 ; NVPTX-NEXT:    br label %[[REGION_EXIT:.*]]
 ; NVPTX:       [[REGION_EXIT]]:
-; NVPTX-NEXT:    br label %[[FOR_COND:.*]]
-; NVPTX:       [[FOR_COND]]:
+; NVPTX-NEXT:    br label %[[FOR_COND1:.*]]
+; NVPTX:       [[FOR_COND1]]:
 ; NVPTX-NEXT:    [[I_0:%.*]] = phi i32 [ 0, %[[REGION_EXIT]] ], [ [[INC:%.*]], %[[FOR_BODY:.*]] ]
 ; NVPTX-NEXT:    [[CMP:%.*]] = icmp slt i32 [[I_0]], 100
 ; NVPTX-NEXT:    br i1 [[CMP]], label %[[FOR_BODY]], label %[[FOR_COND_CLEANUP:.*]]
@@ -1720,7 +1720,7 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-NEXT:    [[TMP3:%.*]] = load i32, ptr addrspace(5) [[TMP2]], align 4, !tbaa [[INT_TBAA12]]
 ; NVPTX-NEXT:    call void @__kmpc_parallel_60(ptr @[[GLOB1]], i32 [[TMP3]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__7, ptr @__omp_outlined__7_wrapper, ptr [[CAPTURED_VARS_ADDRS_CAST]], i64 1, i32 0)
 ; NVPTX-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
-; NVPTX-NEXT:    br label %[[FOR_COND]], !llvm.loop [[LOOP23:![0-9]+]]
+; NVPTX-NEXT:    br label %[[FOR_COND1]], !llvm.loop [[LOOP23:![0-9]+]]
 ;
 ; AMDGPU-DISABLED1-LABEL: define internal void @__omp_outlined__6(
 ; AMDGPU-DISABLED1-SAME: ptr noalias [[DOTGLOBAL_TID_:%.*]], ptr noalias [[DOTBOUND_TID_:%.*]]) #[[ATTR1]] {
