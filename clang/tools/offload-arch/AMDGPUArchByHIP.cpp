@@ -87,8 +87,18 @@ static std::vector<std::string> getSearchPaths() {
 
   // Get the directory of the current executable
   if (auto MainExe = sys::fs::getMainExecutable(nullptr, nullptr);
-      !MainExe.empty())
-    Paths.push_back(sys::path::parent_path(MainExe).str());
+      !MainExe.empty()) {
+    StringRef ExeDir = sys::path::parent_path(MainExe);
+    Paths.push_back(ExeDir.str());
+    // Search parent dirs for ROCm bin/
+    StringRef Parent = sys::path::parent_path(ExeDir);
+    for (int I = 0; I < 3 && !Parent.empty(); ++I) {
+      SmallString<256> Candidate(Parent);
+      sys::path::append(Candidate, "bin");
+      Paths.push_back(std::string(Candidate));
+      Parent = sys::path::parent_path(Parent);
+    }
+  }
 
   // Get the system directory
   wchar_t SystemDirectory[MAX_PATH];
@@ -181,7 +191,8 @@ static std::pair<std::string, bool> findNewestHIPDLL() {
   if (DLLNames.empty())
     return {"amdhip64.dll", true};
 
-  llvm::sort(DLLNames, compareVersions);
+  // Stable sort preserves search-path order on version ties
+  llvm::stable_sort(DLLNames, compareVersions);
   return {DLLNames[0], false};
 #else
   // On Linux, fallback to default shared object
@@ -200,6 +211,21 @@ int printGPUsByHIP() {
   }
 
   std::string ErrMsg;
+#ifdef _WIN32
+  // Load with altered search path so transitive deps resolve from DLL's dir
+  if (!IsFallback) {
+    int WLen = MultiByteToWideChar(CP_UTF8, 0, DynamicHIPPath.c_str(),
+                                   -1, nullptr, 0);
+    if (WLen > 0) {
+      std::vector<wchar_t> WPath(WLen);
+      if (MultiByteToWideChar(CP_UTF8, 0, DynamicHIPPath.c_str(), -1,
+                              WPath.data(), WLen) > 0) {
+        (void)LoadLibraryExW(WPath.data(), nullptr,
+                             LOAD_WITH_ALTERED_SEARCH_PATH);
+      }
+    }
+  }
+#endif
   auto DynlibHandle = std::make_unique<llvm::sys::DynamicLibrary>(
       llvm::sys::DynamicLibrary::getPermanentLibrary(DynamicHIPPath.c_str(),
                                                      &ErrMsg));
