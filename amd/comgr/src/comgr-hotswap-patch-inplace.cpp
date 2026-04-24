@@ -19,6 +19,13 @@
 
 #include "comgr-hotswap-internal.h"
 
+// MSVC does not support weak symbols; LLVM_ATTRIBUTE_WEAK expands to nothing,
+// so the stub in comgr-hotswap-b0a0.cpp becomes a regular definition and
+// this file would produce a duplicate-symbol link error (LNK2005). Guard
+// the strong override until a proper registration mechanism replaces the
+// weak-symbol pattern on Windows (tracked in #2294 / #2285).
+#if !defined(_MSC_VER)
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -40,28 +47,27 @@ StringRef getClusterLoadReplacementAsm(StringRef Mnemonic) {
       .Case("cluster_load_b64", "global_load_b64 v[0:1], v[2:3], off")
       .Case("cluster_load_b128", "global_load_b128 v[0:3], v[4:5], off")
       .Case("cluster_load_async_to_lds_b8",
-            "global_load_async_to_lds_b8 v[0:1], off")
+            "global_load_async_to_lds_b8 v0, v[0:1], off")
       .Case("cluster_load_async_to_lds_b32",
-            "global_load_async_to_lds_b32 v[0:1], off")
+            "global_load_async_to_lds_b32 v0, v[0:1], off")
       .Case("cluster_load_async_to_lds_b64",
-            "global_load_async_to_lds_b64 v[0:1], off")
+            "global_load_async_to_lds_b64 v0, v[0:1], off")
       .Case("cluster_load_async_to_lds_b128",
-            "global_load_async_to_lds_b128 v[0:1], off")
+            "global_load_async_to_lds_b128 v0, v[0:1], off")
       .Default("");
 }
 
 /// Resolve the MC opcode index for an assembly mnemonic by parsing a dummy
-/// instruction through the asm parser. Returns the opcode, or
-/// MCII->getNumOpcodes() as a sentinel on failure.
-unsigned resolveOpcode(StringRef AsmSnippet, const LLVMState &LS) {
+/// instruction through the asm parser.
+std::optional<unsigned> resolveOpcode(StringRef AsmSnippet,
+                                      const LLVMState &LS) {
   SmallVector<uint8_t> Bytes = assembleSingleInst(AsmSnippet, LS);
   if (Bytes.empty())
-    return LS.MCII->getNumOpcodes();
-  // Decode the assembled bytes to get the MCInst with the resolved opcode.
+    return std::nullopt;
   std::vector<InternalDecodedInst> Decoded;
   if (!decodeTextSection(Bytes.data(), Bytes.size(), LS, Decoded) ||
       Decoded.empty())
-    return LS.MCII->getNumOpcodes();
+    return std::nullopt;
   return Decoded[0].Inst.getOpcode();
 }
 
@@ -95,10 +101,9 @@ uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
 
   StringRef ReplacementAsm = getClusterLoadReplacementAsm(Mnemonic);
   if (!ReplacementAsm.empty()) {
-    unsigned NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
-    if (NewOpcode < Ctx.LS.MCII->getNumOpcodes() &&
-        swapOpcode(DI, Ctx.Text, Ctx.LS, NewOpcode)) {
-      log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << NewOpcode
+    std::optional<unsigned> NewOpcode = resolveOpcode(ReplacementAsm, Ctx.LS);
+    if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
+      log() << "hotswap: inplace: " << Mnemonic << " -> opcode " << *NewOpcode
             << " at 0x" << utohexstr(DI.Offset) << "\n";
       return 1;
     }
@@ -120,3 +125,5 @@ uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
 
 } // namespace hotswap
 } // namespace COMGR
+
+#endif // !defined(_MSC_VER)
