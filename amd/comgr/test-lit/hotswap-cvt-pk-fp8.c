@@ -1,8 +1,9 @@
-// COM: Test v_cvt_pk_fp8_f32 CLAMP=1 (E5M3) base conversion patch.
+// COM: Test v_cvt_pk_fp8_f32 CLAMP=1 (E5M3) full conversion patch.
 // COM:
 // COM: Creates a minimal gfx1250 code object containing v_cvt_pk_fp8_f32
 // COM: with clamp (E5M3 mode), runs the hotswap rewrite, and verifies the
-// COM: replacement sequence via disassembly.
+// COM: replacement sequence covers: NaN detection, base F32→F16→UE5M3
+// COM: conversion, RTE rounding, overflow clamping, and NaN override.
 
 // COM: -----------------------------------------------------------------------
 // COM: Build a minimal gfx1250 code object with the target instruction.
@@ -40,19 +41,19 @@
 // RUN: printf '.rodata\n.p2align 6\n' >> %t.s
 // RUN: printf '.amdhsa_kernel test_cvt_pk_fp8_low\n' >> %t.s
 // RUN: printf '  .amdhsa_group_segment_fixed_size 0\n  .amdhsa_private_segment_fixed_size 0\n' >> %t.s
-// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 3\n  .amdhsa_next_free_sgpr 1\n' >> %t.s
+// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 3\n  .amdhsa_next_free_sgpr 2\n' >> %t.s
 // RUN: printf '  .amdhsa_float_round_mode_32 0\n  .amdhsa_float_round_mode_16_64 0\n' >> %t.s
 // RUN: printf '  .amdhsa_float_denorm_mode_32 3\n  .amdhsa_float_denorm_mode_16_64 3\n' >> %t.s
 // RUN: printf '.end_amdhsa_kernel\n' >> %t.s
 // RUN: printf '.amdhsa_kernel test_cvt_pk_fp8_high\n' >> %t.s
 // RUN: printf '  .amdhsa_group_segment_fixed_size 0\n  .amdhsa_private_segment_fixed_size 0\n' >> %t.s
-// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 8\n  .amdhsa_next_free_sgpr 1\n' >> %t.s
+// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 8\n  .amdhsa_next_free_sgpr 2\n' >> %t.s
 // RUN: printf '  .amdhsa_float_round_mode_32 0\n  .amdhsa_float_round_mode_16_64 0\n' >> %t.s
 // RUN: printf '  .amdhsa_float_denorm_mode_32 3\n  .amdhsa_float_denorm_mode_16_64 3\n' >> %t.s
 // RUN: printf '.end_amdhsa_kernel\n' >> %t.s
 // RUN: printf '.amdhsa_kernel test_cvt_pk_fp8_noclamp\n' >> %t.s
 // RUN: printf '  .amdhsa_group_segment_fixed_size 0\n  .amdhsa_private_segment_fixed_size 0\n' >> %t.s
-// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 13\n  .amdhsa_next_free_sgpr 1\n' >> %t.s
+// RUN: printf '  .amdhsa_kernarg_size 0\n  .amdhsa_next_free_vgpr 13\n  .amdhsa_next_free_sgpr 2\n' >> %t.s
 // RUN: printf '  .amdhsa_float_round_mode_32 0\n  .amdhsa_float_round_mode_16_64 0\n' >> %t.s
 // RUN: printf '  .amdhsa_float_denorm_mode_32 3\n  .amdhsa_float_denorm_mode_16_64 3\n' >> %t.s
 // RUN: printf '.end_amdhsa_kernel\n' >> %t.s
@@ -84,35 +85,110 @@
 // STATUS: RESULT: SUCCESS
 
 // COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=1 (E5M3) instructions were patched — the original
-// COM: site should contain s_branch, and the trampoline should contain the
-// COM: base conversion sequence.
+// COM: Verify: CLAMP=1 low-half patch — original site has s_branch, and
+// COM: the trampoline contains the full per-source conversion sequence:
+// COM:   NaN detect → clamp → F16 → RTE round → overflow clamp → NaN override
+// COM: repeated for both src0 and src1, then pack + merge.
+// COM:
+// COM: Per-source sequence (15 instructions):
+// COM:   v_and_b32        (strip sign for NaN test)
+// COM:   v_cmp_lt_u32     (NaN compare: literal < tmp ⇔ tmp > literal)
+// COM:   s_mov_b32        (save NaN flag)
+// COM:   v_max_num_f32    (clamp negative)
+// COM:   v_cvt_f16_f32    (F32→F16)
+// COM:   v_and_b32        (extract guard bits)
+// COM:   v_lshrrev_b32    (shift to get byte)
+// COM:   v_lshlrev_b32    (guard * 2)
+// COM:   v_bfi_b32        (guard*2 + lsb)
+// COM:   v_cmp_lt_u32     (round-up compare)
+// COM:   v_add_co_ci_u32  (apply rounding via carry-in)
+// COM:   v_min_u32        (overflow clamp to 0xFE)
+// COM:   s_mov_b32        (restore NaN flag)
+// COM:   v_mov_b32        (load NaN byte 0xFF)
+// COM:   v_cndmask_b32    (NaN override)
 // COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d --no-leading-addr --no-show-raw-insn %t.patched.co \
 // RUN:   | %FileCheck --check-prefix=LOW %s
 
 // LOW-LABEL: <test_cvt_pk_fp8_low>:
 // LOW:       s_branch
-// LOW:       v_max_num_f32{{.*}}, 0, v1
+// COM: --- src0 conversion ---
+// LOW:       v_and_b32{{.*}}0x7fffffff, v1
+// LOW-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_max_num_f32{{.*}}, 0, v1
 // LOW-NEXT:  v_cvt_f16_f32
+// LOW-NEXT:  v_and_b32
 // LOW-NEXT:  v_lshrrev_b32
+// LOW-NEXT:  v_lshlrev_b32
+// LOW-NEXT:  v_bfi_b32
+// LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
+// LOW-NEXT:  v_add_co_ci_u32
+// LOW-NEXT:  v_min_u32
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_mov_b32
+// LOW-NEXT:  v_cndmask_b32
+// COM: --- src1 conversion ---
+// LOW-NEXT:  v_and_b32{{.*}}0x7fffffff, v2
+// LOW-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
+// LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v2
 // LOW-NEXT:  v_cvt_f16_f32
+// LOW-NEXT:  v_and_b32
 // LOW-NEXT:  v_lshrrev_b32
+// LOW-NEXT:  v_lshlrev_b32
+// LOW-NEXT:  v_bfi_b32
+// LOW-NEXT:  v_cmp_lt_u32{{.*}}0x80
+// LOW-NEXT:  v_add_co_ci_u32
+// LOW-NEXT:  v_min_u32
+// LOW-NEXT:  s_mov_b32
+// LOW-NEXT:  v_mov_b32
+// LOW-NEXT:  v_cndmask_b32
+// COM: --- pack + merge (low half) ---
 // LOW-NEXT:  v_lshl_or_b32
 // LOW-NEXT:  v_bfi_b32 v0,
 
+// COM: -----------------------------------------------------------------------
+// COM: Verify: CLAMP=1 high-half patch.
+// COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d --no-leading-addr --no-show-raw-insn %t.patched.co \
 // RUN:   | %FileCheck --check-prefix=HIGH %s
 
 // HIGH-LABEL: <test_cvt_pk_fp8_high>:
 // HIGH:       s_branch
-// HIGH:       v_max_num_f32{{.*}}, 0, v6
+// COM: --- src0 conversion ---
+// HIGH:       v_and_b32{{.*}}0x7fffffff, v6
+// HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v6
 // HIGH-NEXT:  v_cvt_f16_f32
+// HIGH-NEXT:  v_and_b32
 // HIGH-NEXT:  v_lshrrev_b32
+// HIGH-NEXT:  v_lshlrev_b32
+// HIGH-NEXT:  v_bfi_b32
+// HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80
+// HIGH-NEXT:  v_add_co_ci_u32
+// HIGH-NEXT:  v_min_u32
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_mov_b32
+// HIGH-NEXT:  v_cndmask_b32
+// COM: --- src1 conversion ---
+// HIGH-NEXT:  v_and_b32{{.*}}0x7fffffff, v7
+// HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
+// HIGH-NEXT:  s_mov_b32
 // HIGH-NEXT:  v_max_num_f32{{.*}}, 0, v7
 // HIGH-NEXT:  v_cvt_f16_f32
+// HIGH-NEXT:  v_and_b32
 // HIGH-NEXT:  v_lshrrev_b32
+// HIGH-NEXT:  v_lshlrev_b32
+// HIGH-NEXT:  v_bfi_b32
+// HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x80
+// HIGH-NEXT:  v_add_co_ci_u32
+// HIGH-NEXT:  v_min_u32
+// HIGH-NEXT:  s_mov_b32
+// HIGH-NEXT:  v_mov_b32
+// HIGH-NEXT:  v_cndmask_b32
+// COM: --- pack + merge (high half: shift + bfi) ---
 // HIGH-NEXT:  v_lshl_or_b32
 // HIGH-NEXT:  v_lshlrev_b32
 // HIGH-NEXT:  v_bfi_b32 v5,

@@ -38,10 +38,6 @@ namespace hotswap {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Emit a deferred trampoline: queues \p Replacement bytes (plus a
-/// MinInstSize placeholder for the branch-back) into \p Ctx.OutTrampolines.
-/// The branch encoding is resolved later by fixupTrampolineBranches in
-/// comgr-hotswap-b0a0.cpp.
 static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
                             uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
   Trampoline T;
@@ -53,9 +49,28 @@ static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
   return true;
 }
 
-/// Format a VGPR number as an assembly operand string ("v0", "v1", ...).
 static std::string vgprName(unsigned N) {
   return ("v" + Twine(N)).str();
+}
+
+/// Strip neg/abs modifier wrappers from a printed operand, returning the
+/// bare register or literal name.  Handles `-v1`, `neg(v1)`, `|v1|`,
+/// `abs(v1)`, and combinations like `-|v1|` or `neg(abs(v1))`.
+static std::string stripModifiers(StringRef Op) {
+  Op = Op.trim();
+  if (Op.starts_with("-"))
+    Op = Op.drop_front(1);
+  if (Op.starts_with("neg(") && Op.ends_with(")"))
+    Op = Op.drop_front(4).drop_back(1);
+  if (Op.starts_with("|") && Op.ends_with("|"))
+    Op = Op.drop_front(1).drop_back(1);
+  if (Op.starts_with("abs(") && Op.ends_with(")"))
+    Op = Op.drop_front(4).drop_back(1);
+  if (Op.starts_with("-"))
+    Op = Op.drop_front(1);
+  if (Op.starts_with("|") && Op.ends_with("|"))
+    Op = Op.drop_front(1).drop_back(1);
+  return Op.str();
 }
 
 /// Parse the printed operands of a 3-operand instruction.  Expects MCInst-
@@ -70,7 +85,6 @@ static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
   LS.MCIP->printInst(&Inst, 0, "", *LS.STI, OS);
 
   StringRef S = StringRef(Buf).ltrim();
-  // Skip mnemonic.
   auto [Mnem, Rest] = S.split(' ');
   Rest = Rest.ltrim();
 
@@ -81,29 +95,75 @@ static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
 
   Dst = Parts[0].trim().str();
   Src0 = Parts[1].trim().str();
-  // Third operand may have trailing modifiers ("v2 clamp"); take first word.
   Src1 = Parts[2].trim().split(' ').first.str();
   return !Dst.empty() && !Src0.empty() && !Src1.empty();
+}
+
+// ---------------------------------------------------------------------------
+// Per-source F32 → UE5M3 conversion with full fixups
+// ---------------------------------------------------------------------------
+
+/// Emit assembly for converting one F32 source to a UE5M3 byte in \p Out.
+///
+/// Handles NaN (→ 0xFF), overflow/Inf (→ 0xFE), RTE rounding of the 7
+/// discarded F16 mantissa bits, and source modifiers (neg/abs forwarded
+/// from the original instruction via \p Src).
+///
+/// Register contract:
+///   \p Out   — output VGPR, receives UE5M3 byte in bits [7:0]
+///   \p Tmp   — scratch VGPR, clobbered
+///   \p NanSgpr — SGPR name (e.g. "s0") for saving/restoring the NaN flag
+///   \p Src   — full operand with modifiers (used in v_max_f32)
+///   \p BareSrc — bare register name (used in v_and_b32 for NaN detect)
+///   VCC is clobbered.
+///
+/// RTE rounding shortcut: rather than extracting round_bit, sticky, and lsb
+/// into separate registers (which would require a 3rd VGPR per source), we
+/// use the identity: round_up = (guard_bits * 2 + lsb) > 128, where
+/// guard_bits = F16[6:0].  This collapses the entire RTE decision into a
+/// single integer comparison.  See design doc §4.3 for derivation.
+static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
+                            StringRef BareSrc, StringRef Out, StringRef Tmp,
+                            StringRef NanSgpr) {
+  // NaN detection: (|src| > 0x7F800000) ⇒ NaN.
+  // v_and_b32 strips the sign, so neg/abs modifiers don't affect this test.
+  // VOPC form: literal in src0, VGPR in src1 (implicit VCC write).
+  OS << "v_and_b32 " << Tmp << ", 0x7FFFFFFF, " << BareSrc << "\n";
+  OS << "v_cmp_lt_u32 0x7F800000, " << Tmp << "\n";
+  OS << "s_mov_b32 " << NanSgpr << ", vcc_lo\n";
+
+  // Clamp to non-negative → F16.  Source modifiers are applied by v_max_f32.
+  OS << "v_max_f32 " << Out << ", 0, " << Src << "\n";
+  OS << "v_cvt_f16_f32 " << Out << ", " << Out << "\n";
+
+  // RTE rounding: extract guard_bits = F16[6:0], shift to get preliminary
+  // byte, then compute round_up = (guard_bits*2 + lsb) > 128.
+  OS << "v_and_b32 " << Tmp << ", 0x7F, " << Out << "\n";
+  OS << "v_lshrrev_b32 " << Out << ", 7, " << Out << "\n";
+  OS << "v_lshlrev_b32 " << Tmp << ", 1, " << Tmp << "\n";
+  // v_bfi_b32: dst = (mask & insert) | (~mask & background)
+  // With mask=0xFFFFFFFE: copies Tmp[31:1] and Out[0] → guard*2 + lsb
+  OS << "v_bfi_b32 " << Tmp << ", 0xFFFFFFFE, " << Tmp << ", " << Out << "\n";
+  // v_add_co_ci_u32 adds VCC as carry-in, collapsing the conditional
+  // increment into one instruction: Out += (guard*2 + lsb > 128) ? 1 : 0.
+  OS << "v_cmp_lt_u32 0x80, " << Tmp << "\n";
+  OS << "v_add_co_ci_u32 " << Out << ", 0, " << Out << "\n";
+
+  // Overflow / Inf clamp: max representable UE5M3 = 0xFE (no infinity).
+  // Must precede NaN override so 0xFF is not clamped.
+  OS << "v_min_u32 " << Out << ", 0xFE, " << Out << "\n";
+
+  // NaN override: if original F32 was NaN, force 0xFF.
+  // Load the NaN byte into Tmp (avoids literal in v_cndmask src1).
+  OS << "s_mov_b32 vcc_lo, " << NanSgpr << "\n";
+  OS << "v_mov_b32 " << Tmp << ", 0xFF\n";
+  OS << "v_cndmask_b32 " << Out << ", " << Out << ", " << Tmp << "\n";
 }
 
 // ---------------------------------------------------------------------------
 // v_cvt_pk_fp8_f32 patch  (Case 1, instruction 1)
 // ---------------------------------------------------------------------------
 
-/// Patch a single v_cvt_pk_fp8_f32 with CLAMP=1 (E5M3 mode).
-///
-/// Base conversion: F32 -> clamp-to-positive -> F16 -> shift >> 7 -> UE5M3.
-/// UE5M3 shares F16's 5-bit exponent (bias 15), so v_cvt_f16_f32 handles
-/// exponent re-biasing and denormal flush; the shift extracts the top 8 bits
-/// of the unsigned F16 representation (sign bit excluded, since UE5M3 is
-/// unsigned and negatives are clamped to zero).
-///
-/// Edge cases NOT covered by this base path (documented in
-/// docs/scratch-patches/1_f32_to_e5m3/v_cvt_pk_fp8_f32.md §4):
-///   - NaN:    base path maps NaN→0 instead of 0xFF
-///   - Overflow/Inf: base path produces 0xF8 instead of 0xFE
-///   - RTE rounding: base path truncates F16 mantissa bits [6:0]
-///   - Source modifiers: not propagated from original instruction
 static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   if (DI.Size != 8) {
@@ -119,7 +179,6 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 
   bool WriteHigh = (Raw[1] >> 6) & 1;
 
-  // Extract operand names from the disassembled instruction.
   std::string VdstStr, Src0Str, Src1Str;
   if (!parseThreeOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str, Src1Str)) {
     log() << "hotswap: error: cvt_pk_fp8_f32: failed to parse operands at "
@@ -127,9 +186,10 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  // Allocate two scratch VGPRs for the conversion temporaries.
-  // findKernelAtOffset compares against symbol st_value, which is a virtual
-  // address in linked ELFs; DI.Offset is section-relative.
+  std::string Src0Bare = stripModifiers(Src0Str);
+  std::string Src1Bare = stripModifiers(Src1Str);
+
+  // findKernelAtOffset takes a virtual address.
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
   std::optional<unsigned> KdVgprs =
@@ -139,45 +199,39 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
                          Ctx.Config.MaxVgprs);
 
+  // 3 scratch VGPRs: T0 (src0 byte), T1 (src1 byte), T2 (shared scratch
+  // for NaN detection and RTE rounding intermediates within each source).
   std::optional<unsigned> T0 = Alloc.alloc();
   std::optional<unsigned> T1 = Alloc.alloc();
-  if (!T0 || !T1) {
-    log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 2 scratch "
+  std::optional<unsigned> T2 = Alloc.alloc();
+  if (!T0 || !T1 || !T2) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 3 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
 
   std::string T0Name = vgprName(*T0);
   std::string T1Name = vgprName(*T1);
+  std::string T2Name = vgprName(*T2);
 
-  // Build the replacement assembly.
-  //
-  // For each source: clamp negative → F16 → shift to get UE5M3 byte.
-  // Then pack and merge into the correct half of vdst.
   std::string Asm;
   raw_string_ostream AsmOS(Asm);
 
-  // --- src0 → byte0 in T0 ---
-  AsmOS << "v_max_f32 " << T0Name << ", 0, " << Src0Str << "\n";
-  AsmOS << "v_cvt_f16_f32 " << T0Name << ", " << T0Name << "\n";
-  AsmOS << "v_lshrrev_b32 " << T0Name << ", 7, " << T0Name << "\n";
+  // --- src0 → byte in T0 (scratch: T2) ---
+  emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, "s0");
 
-  // --- src1 → byte1 in T1 ---
-  AsmOS << "v_max_f32 " << T1Name << ", 0, " << Src1Str << "\n";
-  AsmOS << "v_cvt_f16_f32 " << T1Name << ", " << T1Name << "\n";
-  AsmOS << "v_lshrrev_b32 " << T1Name << ", 7, " << T1Name << "\n";
+  // --- src1 → byte in T1 (scratch: T2) ---
+  emitF32ToUE5M3(AsmOS, Src1Str, Src1Bare, T1Name, T2Name, "s1");
 
-  // --- pack: T0[15:0] = { byte1, byte0 } ---
+  // Pack: T0[15:0] = { byte1, byte0 }
   AsmOS << "v_lshl_or_b32 " << T0Name << ", " << T1Name << ", 8, " << T0Name
         << "\n";
 
-  // --- merge into the correct 16-bit half of vdst ---
+  // Merge into the correct 16-bit half of vdst.
   if (!WriteHigh) {
-    // op_sel[3]==0: write low half, preserve high half.
     AsmOS << "v_bfi_b32 " << VdstStr << ", 0xFFFF, " << T0Name << ", "
           << VdstStr << "\n";
   } else {
-    // op_sel[3]==1: shift packed result to [31:16], write high half.
     AsmOS << "v_lshlrev_b32 " << T0Name << ", 16, " << T0Name << "\n";
     AsmOS << "v_bfi_b32 " << VdstStr << ", 0xFFFF0000, " << T0Name << ", "
           << VdstStr << "\n";
@@ -193,15 +247,13 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
-  // Update kernel stats.
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
   unsigned Extra = Alloc.extraVgprsNeeded();
   if (Extra > Stats.ExtraVgprs)
     Stats.ExtraVgprs = Extra;
-  Stats.ScratchReused += 2 - Alloc.extraVgprsNeeded();
-  Stats.ScratchAboveKd += Alloc.extraVgprsNeeded();
+  Stats.ScratchReused += 3 - Extra;
+  Stats.ScratchAboveKd += Extra;
 
-  // Record scratch usage for post-patch verification.
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
   Info.ScratchRegs = Alloc.LiveAtPoint;
@@ -209,7 +261,7 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 
   log() << "hotswap: cvt_pk_fp8_f32: patched CLAMP=1 (E5M3) at offset 0x"
         << utohexstr(DI.Offset) << " (" << ReplacementBytes.size()
-        << " bytes, scratch v" << *T0 << "/v" << *T1
+        << " bytes, scratch v" << *T0 << "/v" << *T1 << "/v" << *T2
         << ", half=" << (WriteHigh ? "high" : "low") << ")\n";
 
   return 1;
@@ -219,10 +271,6 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 // applyScratchPatches — strong override
 // ---------------------------------------------------------------------------
 
-/// Dispatch scratch-patch pass over the decoded instruction stream.
-/// Called once per instruction from the per-instruction loop in
-/// applyGfx1250B0toA0Rules (comgr-hotswap-b0a0.cpp). Returns the number
-/// of patches applied at \p Idx (0 or 1).
 uint32_t applyScratchPatches(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
