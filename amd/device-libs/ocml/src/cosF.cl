@@ -11,9 +11,6 @@
 float
 MATH_MANGLE(cos)(float x)
 {
-    if (!FINITE_ONLY_OPT())
-        x = BUILTIN_ISINF_F32(x) ? QNAN_F32 : x;
-
     float ax = BUILTIN_ABS_F32(x);
 
     struct redret r = MATH_PRIVATE(trigred)(ax);
@@ -28,5 +25,10 @@ MATH_MANGLE(cos)(float x)
     float c =  (r.i & 1) != 0 ? sc.s : sc.c;
     c = AS_FLOAT(AS_INT(c) ^ (r.i > 1 ? SIGNBIT_SP32 : 0));
 
+    if (!FINITE_ONLY_OPT()) {
+        c = BUILTIN_ISFINITE_F32(ax) ? c : QNAN_F32;
+    }
+
     return c;
 }
+
