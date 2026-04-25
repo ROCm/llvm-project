@@ -24,8 +24,10 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-set(ADDITIONAL_SHARED_LIBRARIES_TO_LINK
-  libstdc++fs.so)
+set(ADDITIONAL_SHARED_LIBRARIES_TO_LINK)
+if(UNIX AND NOT APPLE)
+  list(APPEND ADDITIONAL_SHARED_LIBRARIES_TO_LINK stdc++fs)
+endif()
 
 set(HIPCC_BIN
   hipcc)
@@ -42,14 +44,12 @@ set(HIPCONFIG_SOURCES
 )
 
 add_executable(${HIPCC_BIN} ${HIPCC_SOURCES})
-if(NOT WIN32)
-  # C++17 does not require std lib linking.
+if(ADDITIONAL_SHARED_LIBRARIES_TO_LINK)
   target_link_libraries(${HIPCC_BIN} ${ADDITIONAL_SHARED_LIBRARIES_TO_LINK})
 endif()
 
 add_executable(${HIPCONFIG_BIN} ${HIPCONFIG_SOURCES})
-if(NOT WIN32)
-  # C++17 does not require std lib linking.
+if(ADDITIONAL_SHARED_LIBRARIES_TO_LINK)
   target_link_libraries(${HIPCONFIG_BIN} ${ADDITIONAL_SHARED_LIBRARIES_TO_LINK})
 endif()
 

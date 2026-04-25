@@ -76,6 +76,7 @@ class HipBinAmd : public HipBinBase {
   const string& getHsaPath() const;
   const string& getRocclrHomePath() const;
   const bool isWindows() const;
+  const bool isApple() const;
 };
 
 HipBinAmd::HipBinAmd() {
@@ -157,6 +158,14 @@ void HipBinAmd::initializeHipLdFlags() {
   if (!fs::exists(hipCC)) {
     hipLdFlags = "--driver-mode=g++";
   }
+  if (isApple()) {
+    SystemCmdOut sdkOut =
+        hipBinUtilPtr_->exec("/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null");
+    string sdkPath = regex_replace(sdkOut.out, regex("\\s+$"), "");
+    if (!sdkPath.empty()) {
+      hipLdFlags += " -isysroot " + sdkPath;
+    }
+  }
   hipLdFlags_ = hipLdFlags;
 }
 
@@ -190,6 +199,20 @@ void HipBinAmd::initializeHipCXXFlags() {
   if (var.hipClangHccCompactModeEnv_.compare("1") == 0) {
     hipCXXFlags +=
     " -Xclang -fallow-half-arguments-and-returns -D__HIP_HCC_COMPAT_MODE__=1";
+  }
+
+  if (isApple()) {
+    SystemCmdOut sdkOut =
+        hipBinUtilPtr_->exec("/usr/bin/xcrun --sdk macosx --show-sdk-path 2>/dev/null");
+    string sdkPath = regex_replace(sdkOut.out, regex("\\s+$"), "");
+    if (!sdkPath.empty()) {
+      hipCXXFlags += " -isysroot " + sdkPath;
+      fs::path libcxxInclude = sdkPath;
+      libcxxInclude /= "usr/include/c++/v1";
+      if (fs::exists(libcxxInclude)) {
+        hipCXXFlags += " -isystem " + libcxxInclude.string();
+      }
+    }
   }
 
   hipCXXFlags_ = hipCXXFlags;
@@ -301,6 +324,14 @@ string HipBinAmd::getDeviceLibPath() const {
   }
 
   if (deviceLibPath.empty()) {
+    fs::path llvmAmdgcnBitcode = roccmPath;
+    llvmAmdgcnBitcode /= "lib/llvm/amdgcn/bitcode";
+    if (fs::exists(llvmAmdgcnBitcode)) {
+      deviceLibPath = llvmAmdgcnBitcode.string();
+    }
+  }
+
+  if (deviceLibPath.empty()) {
     fs::path amdgcnBitcode = roccmPath;
     amdgcnBitcode /= "amdgcn/bitcode";
     if (fs::exists(amdgcnBitcode)) {
@@ -354,7 +385,12 @@ string HipBinAmd::getHipLibPath() const {
     hipLibPath = env.hipLibPathEnv_;
   }
   else if (!env.hipPathEnv_.empty()) {
-    fs::path p = env.hipLibPathEnv_;
+    fs::path p = env.hipPathEnv_;
+    p /= "lib";
+    hipLibPath = p.string();
+  }
+  else {
+    fs::path p = getHipPath();
     p /= "lib";
     hipLibPath = p.string();
   }
@@ -438,6 +474,14 @@ void HipBinAmd::printFull() {
 const bool HipBinAmd::isWindows() const {
     const OsType& osInfo = getOSInfo();
     return (osInfo == windows);
+}
+
+const bool HipBinAmd::isApple() const {
+#if defined(__APPLE__)
+    return true;
+#else
+    return false;
+#endif
 }
 
 void HipBinAmd::executeHipCCCmd(vector<string> argv) {
@@ -821,6 +865,10 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
     HIPCXXFLAGS += " --cuda-host-only";
   }
 
+  if (hasHIP && !deviceLibPath.empty()) {
+    HIPCXXFLAGS += " --rocm-device-lib-path=" + deviceLibPath;
+  }
+
   // hipcc currrently requires separate compilation of source files,
   // ie it is not possible to pass
   // CPP files combined with .O files
@@ -857,10 +905,16 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       HIPLDFLAGS += " -L" + hip_path;
     }
     HIPLDFLAGS += " --hip-link";
+    if (isApple()) {
+      HIPLDFLAGS += " -lamdhip64";
+      if (!hip_path.empty()) {
+        HIPLDFLAGS += " -Wl,-rpath," + hip_path;
+      }
+    }
     if (rdc) {
       HIPLDFLAGS += HIPLDARCHFLAGS;
     }
-    if (!windows) {
+    if (!isWindows() && !isApple()) {
       HIPLDFLAGS += "  --rtlib=compiler-rt -unwindlib=libgcc";
     }
   }

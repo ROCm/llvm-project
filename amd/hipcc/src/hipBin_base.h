@@ -271,7 +271,7 @@ HipBinBase::HipBinBase() {
 void HipBinBase::readOSInfo() {
 #if defined _WIN32 || defined  _WIN64
   osInfo_ = windows;
-#elif  defined __unix || defined __linux__
+#elif  defined __APPLE__ || defined __unix || defined __linux__
   osInfo_ = lnx;
 #endif
 }

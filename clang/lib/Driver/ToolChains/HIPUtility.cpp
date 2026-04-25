@@ -411,6 +411,8 @@ void HIP::constructGenerateObjFileFromHIPFatBinary(
     // Define the first gpubin handle symbol
     if (HostTriple.isWindowsMSVCEnvironment())
       ObjStream << "  .section .hip_gpubin_handle,\"dw\"\n";
+    else if (HostTriple.isOSBinFormatMachO())
+      ObjStream << "  .section __HIP,__hip_gpubin\n";
     else {
       ObjStream << "  .protected " << PrimaryGpuBinHandleSymbol << "\n";
       ObjStream << "  .type " << PrimaryGpuBinHandleSymbol << ",@object\n";
@@ -432,6 +434,8 @@ void HIP::constructGenerateObjFileFromHIPFatBinary(
     // Define the first fatbin symbol
     if (HostTriple.isWindowsMSVCEnvironment())
       ObjStream << "  .section .hip_fatbin,\"dw\"\n";
+    else if (HostTriple.isOSBinFormatMachO())
+      ObjStream << "  .section __HIP,__hip_fatbin\n";
     else {
       ObjStream << "  .protected " << PrimaryHipFatbinSymbol << "\n";
       ObjStream << "  .type " << PrimaryHipFatbinSymbol << ",@object\n";

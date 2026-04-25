@@ -817,10 +817,16 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
   llvm::Constant *FatBinStr;
   unsigned FatMagic;
   if (IsHIP) {
-    FatbinConstantName = ".hip_fatbin";
-    FatbinSectionName = ".hipFatBinSegment";
+    FatbinConstantName =
+        CGM.getTriple().isOSBinFormatMachO() ? "__HIP,__hip_fatbin"
+                                             : ".hip_fatbin";
+    FatbinSectionName =
+        CGM.getTriple().isOSBinFormatMachO() ? "__HIP,__hip_fatbinw"
+                                             : ".hipFatBinSegment";
 
-    ModuleIDSectionName = "__hip_module_id";
+    ModuleIDSectionName = CGM.getTriple().isOSBinFormatMachO()
+                              ? "__HIP,__hip_module_id"
+                              : "__hip_module_id";
     ModuleIDPrefix = "__hip_";
 
     if (CudaGpuBinary) {
@@ -831,9 +837,9 @@ llvm::Function *CGNVCUDARuntime::makeModuleCtorFunction() {
                                     FatbinConstantName, HIPCodeObjectAlign);
     } else {
       // If fatbin is not available, create an external symbol
-      // __hip_fatbin in section .hip_fatbin. The external symbol is supposed
-      // to contain the fat binary but will be populated somewhere else,
-      // e.g. by lld through link script.
+      // __hip_fatbin in the HIP fatbin section. The external symbol is
+      // supposed to contain the fat binary but will be populated somewhere
+      // else, e.g. by lld through link script.
       FatBinStr = new llvm::GlobalVariable(
           CGM.getModule(), CGM.Int8Ty,
           /*isConstant=*/true, llvm::GlobalValue::ExternalLinkage, nullptr,

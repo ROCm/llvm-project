@@ -285,7 +285,8 @@ GlobalVariable *createFatbinDesc(Module &M, ArrayRef<char> Image, bool IsHIP,
 
   // Create the global string containing the fatbinary.
   StringRef FatbinConstantSection =
-      IsHIP ? ".hip_fatbin"
+      IsHIP ? (Triple.isOSBinFormatMachO() ? "__HIP,__hip_fatbin"
+                                           : ".hip_fatbin")
             : (Triple.isMacOSX() ? "__NV_CUDA,__nv_fatbin" : ".nv_fatbin");
   auto *Data = ConstantDataArray::get(C, Image);
   auto *Fatbin = new GlobalVariable(M, Data->getType(), /*isConstant*/ true,
@@ -294,7 +295,9 @@ GlobalVariable *createFatbinDesc(Module &M, ArrayRef<char> Image, bool IsHIP,
   Fatbin->setSection(FatbinConstantSection);
 
   // Create the fatbinary wrapper
-  StringRef FatbinWrapperSection = IsHIP               ? ".hipFatBinSegment"
+  StringRef FatbinWrapperSection = IsHIP ? (Triple.isOSBinFormatMachO()
+                                                ? "__HIP,__hip_fatbinw"
+                                                : ".hipFatBinSegment")
                                    : Triple.isMacOSX() ? "__NV_CUDA,__fatbin"
                                                        : ".nvFatBinSegment";
   Constant *FatbinWrapper[] = {
@@ -555,17 +558,20 @@ void createRegisterFatbinFunction(Module &M, GlobalVariable *FatbinDesc,
                                   StringRef Suffix,
                                   bool EmitSurfacesAndTextures) {
   LLVMContext &C = M.getContext();
+  const llvm::Triple &Triple = M.getTargetTriple();
+  StringRef CtorDtorSection =
+      Triple.isOSBinFormatMachO() ? "__TEXT,__text" : ".text.startup";
   auto *CtorFuncTy = FunctionType::get(Type::getVoidTy(C), /*isVarArg*/ false);
   auto *CtorFunc = Function::Create(
       CtorFuncTy, GlobalValue::InternalLinkage,
       (IsHIP ? ".hip.fatbin_reg" : ".cuda.fatbin_reg") + Suffix, &M);
-  CtorFunc->setSection(".text.startup");
+  CtorFunc->setSection(CtorDtorSection);
 
   auto *DtorFuncTy = FunctionType::get(Type::getVoidTy(C), /*isVarArg*/ false);
   auto *DtorFunc = Function::Create(
       DtorFuncTy, GlobalValue::InternalLinkage,
       (IsHIP ? ".hip.fatbin_unreg" : ".cuda.fatbin_unreg") + Suffix, &M);
-  DtorFunc->setSection(".text.startup");
+  DtorFunc->setSection(CtorDtorSection);
 
   auto *PtrTy = PointerType::getUnqual(C);
 

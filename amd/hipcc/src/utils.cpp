@@ -17,6 +17,11 @@ typedef std::string::size_type TSIZE;
 #define ENDLINE "/\\"
 #endif
 #else
+#if defined(__APPLE__)
+#include <limits.h>
+#include <mach-o/dyld.h>
+#include <cstdlib>
+#endif
 #include <unistd.h>
 #endif
 
@@ -32,6 +37,27 @@ std::string hipcc::utils::getSelfPath() {
   TSIZE pos = TSTR(buffer).find_last_of(ENDLINE);
   TSTR wide = TSTR(buffer).substr(0, pos);
   path = std::string(wide.begin(), wide.end());
+#elif defined(__APPLE__)
+  char buff[MAX_PATH_CHAR];
+  uint32_t size = sizeof(buff);
+  std::string exePathString;
+  if (_NSGetExecutablePath(buff, &size) == 0) {
+    exePathString = buff;
+  } else {
+    std::vector<char> dynamicBuff(size);
+    if (_NSGetExecutablePath(dynamicBuff.data(), &size) == 0) {
+      exePathString = dynamicBuff.data();
+    }
+  }
+  if (!exePathString.empty()) {
+    char resolved[PATH_MAX];
+    const char *resolvedPath = realpath(exePathString.c_str(), resolved);
+    fs::path exePath(resolvedPath != nullptr ? resolvedPath : exePathString);
+    path = exePath.parent_path().string();
+  } else {
+    std::cerr << "_NSGetExecutablePath: Error reading the exe path" << std::endl;
+    exit(-1);
+  }
 #else
   char buff[MAX_PATH_CHAR];
   ssize_t len = ::readlink("/proc/self/exe", buff, sizeof(buff) - 1);
