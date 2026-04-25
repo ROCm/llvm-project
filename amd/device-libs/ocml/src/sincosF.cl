@@ -11,9 +11,6 @@
 float
 MATH_MANGLE(sincos)(float x, __private float *cp)
 {
-    if (!FINITE_ONLY_OPT())
-        x = BUILTIN_ISINF_F32(x) ? QNAN_F32 : x;
-
     float ax = BUILTIN_ABS_F32(x);
 
     struct redret r = MATH_PRIVATE(trigred)(ax);
@@ -31,6 +28,12 @@ MATH_MANGLE(sincos)(float x, __private float *cp)
     sc.s = -sc.s;
     float c = odd ? sc.s : sc.c;
     c = AS_FLOAT(AS_INT(c) ^ flip);
+
+    if (!FINITE_ONLY_OPT()) {
+        bool finite = BUILTIN_ISFINITE_F32(ax);
+        c = finite ? c : QNAN_F32;
+        s = finite ? s : QNAN_F32;
+    }
 
     *cp = c;
     return s;
