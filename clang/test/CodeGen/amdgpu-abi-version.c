@@ -12,7 +12,7 @@
 // LLVM-NEXT:    [[TMP1:%.*]] = icmp sge i32 [[TMP0]], 500
 // LLVM-NEXT:    [[TMP2:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // LLVM-NEXT:    [[TMP3:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP2]], i32 12
-// LLVM-NEXT:    [[TMP4:%.*]] = call align 4 dereferenceable(64) ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+// LLVM-NEXT:    [[TMP4:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // LLVM-NEXT:    [[TMP5:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP4]], i32 4
 // LLVM-NEXT:    [[TMP6:%.*]] = select i1 [[TMP1]], ptr addrspace(4) [[TMP3]], ptr addrspace(4) [[TMP5]]
 // LLVM-NEXT:    [[TMP7:%.*]] = load i16, ptr addrspace(4) [[TMP6]], align 2, !range [[RNG1:![0-9]+]], !invariant.load [[META2:![0-9]+]], !noundef [[META2]]

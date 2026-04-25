@@ -82,12 +82,12 @@ __gpu_kernel void foo() {
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_x(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
-// AMDGPU-NEXT:    [[TMP0:%.*]] = call align 4 dereferenceable(64) ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+// AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 12
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG3:![0-9]+]], !invariant.load [[META4:![0-9]+]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2:![0-9]+]], !invariant.load [[META3:![0-9]+]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i32 12
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG5:![0-9]+]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG4:![0-9]+]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP5]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[CONV]]
 // AMDGPU-NEXT:    ret i32 [[DIV]]
@@ -96,12 +96,12 @@ __gpu_kernel void foo() {
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_y(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
-// AMDGPU-NEXT:    [[TMP0:%.*]] = call align 4 dereferenceable(64) ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+// AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 16
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG3]], !invariant.load [[META4]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2]], !invariant.load [[META3]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i32 14
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG5]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP5]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[CONV]]
 // AMDGPU-NEXT:    ret i32 [[DIV]]
@@ -110,12 +110,12 @@ __gpu_kernel void foo() {
 // AMDGPU-LABEL: define internal i32 @__gpu_num_blocks_z(
 // AMDGPU-SAME: ) #[[ATTR0]] {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
-// AMDGPU-NEXT:    [[TMP0:%.*]] = call align 4 dereferenceable(64) ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
+// AMDGPU-NEXT:    [[TMP0:%.*]] = call ptr addrspace(4) @llvm.amdgcn.dispatch.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 20
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG3]], !invariant.load [[META4]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i32, ptr addrspace(4) [[TMP1]], align 4, !range [[RNG2]], !invariant.load [[META3]]
 // AMDGPU-NEXT:    [[TMP3:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP4:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP3]], i32 16
-// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG5]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP5:%.*]] = load i16, ptr addrspace(4) [[TMP4]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP5]] to i32
 // AMDGPU-NEXT:    [[DIV:%.*]] = udiv i32 [[TMP2]], [[CONV]]
 // AMDGPU-NEXT:    ret i32 [[DIV]]
@@ -213,7 +213,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 12
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG5]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP2]] to i32
 // AMDGPU-NEXT:    ret i32 [[CONV]]
 //
@@ -223,7 +223,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 14
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG5]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP2]] to i32
 // AMDGPU-NEXT:    ret i32 [[CONV]]
 //
@@ -233,7 +233,7 @@ __gpu_kernel void foo() {
 // AMDGPU-NEXT:  [[ENTRY:.*:]]
 // AMDGPU-NEXT:    [[TMP0:%.*]] = call align 8 dereferenceable(256) ptr addrspace(4) @llvm.amdgcn.implicitarg.ptr()
 // AMDGPU-NEXT:    [[TMP1:%.*]] = getelementptr i8, ptr addrspace(4) [[TMP0]], i32 16
-// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG5]], !invariant.load [[META4]], !noundef [[META4]]
+// AMDGPU-NEXT:    [[TMP2:%.*]] = load i16, ptr addrspace(4) [[TMP1]], align 2, !range [[RNG4]], !invariant.load [[META3]], !noundef [[META3]]
 // AMDGPU-NEXT:    [[CONV:%.*]] = zext i16 [[TMP2]] to i32
 // AMDGPU-NEXT:    ret i32 [[CONV]]
 //
@@ -1378,7 +1378,7 @@ __gpu_kernel void foo() {
 // SPIRV-NEXT:    ret void
 //
 //.
-// AMDGPU: [[RNG3]] = !{i32 1, i32 0}
-// AMDGPU: [[META4]] = !{}
-// AMDGPU: [[RNG5]] = !{i16 1, i16 1025}
+// AMDGPU: [[RNG2]] = !{i32 1, i32 0}
+// AMDGPU: [[META3]] = !{}
+// AMDGPU: [[RNG4]] = !{i16 1, i16 1025}
 //.
