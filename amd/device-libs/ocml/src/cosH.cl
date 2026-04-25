@@ -13,9 +13,6 @@ UGEN(cos)
 half
 MATH_MANGLE(cos)(half x)
 {
-    if (!FINITE_ONLY_OPT())
-        x = BUILTIN_ISINF_F16(x) ? QNAN_F16 : x;
-
     half ax = BUILTIN_ABS_F16(x);
     struct redret r = MATH_PRIVATE(trigred)(ax);
     struct scret sc = MATH_PRIVATE(sincosred)(r.hi);
@@ -25,6 +22,10 @@ MATH_MANGLE(cos)(half x)
 
     short flip = r.i > 1 ? (short)SIGNBIT_HP16 : 0;
     c = AS_HALF((short)(AS_SHORT(c) ^ flip));
+
+    if (!FINITE_ONLY_OPT()) {
+        c = BUILTIN_ISFINITE_F16(ax) ? c : QNAN_F16;
+    }
 
     return c;
 }
