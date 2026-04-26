@@ -79,8 +79,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: "ROCm/TheRock"
-          #ref: 'compiler/amd-staging'
-          ref: 8b650e8c6cd3fd04330a349fd0ecbc2b37703023
+          ref: 'compiler/amd-staging'
 
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
@@ -174,22 +173,11 @@ jobs:
       - name: Install python deps
         run: |
           pip install -r requirements.txt
-          #pip install --upgrade \
-          #    "boto3>=1.42.79,<1.42.85" \
-          #    "botocore>=1.42.79,<1.42.85" \
-          #     "aiobotocore>=3.4.0"
 
       - name: Adjust git config
         run: |
           git config --global --add safe.directory $PWD
           git config fetch.parallel 10
-
-      #- name: Setup ccache
-         #run: |
-          #./build_tools/setup_ccache.py \
-          #  --config-preset "github-oss-presubmit" \
-          #  --dir "$(dirname $CCACHE_CONFIGPATH)" \
-          #  --local-path "$CACHE_DIR/ccache"
 
       - name: Setup ccache
         run: |
