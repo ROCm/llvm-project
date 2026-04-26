@@ -76,7 +76,7 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           #ref: 'compiler/amd-staging'
-          ref: 2a2f3cbbdb0d590b5bc913a03c293b07fad2e6cc
+          ref: d90fba3a766181bb29cb610b76324745ea0afc89
 
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
