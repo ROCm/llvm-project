@@ -520,15 +520,5 @@ bool checkVgprOverlap(const MCInst &WmmaInst, const MCInst &ValuInst,
   return false;
 }
 
-unsigned lookupSgprMCReg(int SgprNum, const MCRegisterInfo &MRI) {
-  std::string TargetName = "SGPR" + std::to_string(SgprNum);
-  for (unsigned R = 1, E = MRI.getNumRegs(); R < E; ++R) {
-    const char *Name = MRI.getName(R);
-    if (Name && StringRef(Name) == TargetName)
-      return R;
-  }
-  return 0;
-}
-
 } // namespace hotswap
 } // namespace COMGR
