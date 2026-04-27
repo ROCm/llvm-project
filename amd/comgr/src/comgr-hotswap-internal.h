@@ -352,8 +352,6 @@ Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
 bool checkVgprOverlap(const llvm::MCInst &WmmaInst,
                       const llvm::MCInst &ValuInst,
                       const llvm::MCRegisterInfo &MRI);
-WmmaNopReq ClassifyWmmaNops(const std::string &mnemonic);
-bool IsValuInst(const std::string &mnemonic);
 
 // -- VGPR liveness types ------------------------------------------------------
 

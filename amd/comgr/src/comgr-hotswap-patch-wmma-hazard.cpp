@@ -4,118 +4,151 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// Whole-kernel patch for the GFX1250 A0 WMMA/SWMMAC co-execution hazard.
-//
+///
+/// \file
+/// Whole-kernel patch for the GFX1250 A0 WMMA/SWMMAC co-execution hazard.
+/// Detects WMMA/SWMMAC instructions that lack sufficient v_nop separation
+/// before the first overlapping co-executable VALU, and inserts the required
+/// v_nop padding.
+///
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
 
+#if !defined(_MSC_VER)
+
 #include "llvm/ADT/StringExtras.h"
 
+using namespace llvm;
+
+namespace COMGR {
+namespace hotswap {
 namespace {
 
 struct WmmaHazard {
-  size_t valu_idx;
-  int deficit;
+  size_t ValuIdx;
+  int Deficit;
+};
+
+struct WmmaNopReq {
+  int A0Nops;
+  int B0Nops;
 };
 
 namespace AmdgpuTSFlags {
-// Mirrors the AMDGPU MC instruction flags in llvm/lib/Target/AMDGPU/SIDefines.h
-// so the hotswap pass can classify decoded MC instructions without depending on
-// backend-private MachineInstr helpers.
 static constexpr uint64_t VALU = UINT64_C(1) << 1;
 static constexpr uint64_t IsWMMA = UINT64_C(1) << 59;
 static constexpr uint64_t IsSWMMAC = UINT64_C(1) << 63;
 } // namespace AmdgpuTSFlags
 
-static uint64_t GetTSFlags(const llvm::MCInst &inst,
-                           const llvm::MCInstrInfo &MCII) {
-  return MCII.get(inst.getOpcode()).TSFlags;
+static uint64_t getTSFlags(const MCInst &Inst, const MCInstrInfo &MCII) {
+  return MCII.get(Inst.getOpcode()).TSFlags;
 }
 
-static bool HasTSFlags(const llvm::MCInst &inst, const llvm::MCInstrInfo &MCII,
-                       uint64_t mask) {
-  return (GetTSFlags(inst, MCII) & mask) != 0;
+static bool hasTSFlags(const MCInst &Inst, const MCInstrInfo &MCII,
+                       uint64_t Mask) {
+  return (getTSFlags(Inst, MCII) & Mask) != 0;
 }
 
-static bool IsWmmaLike(const llvm::MCInst &inst,
-                       const llvm::MCInstrInfo &MCII) {
-  return HasTSFlags(inst, MCII,
+static bool isWmmaLike(const MCInst &Inst, const MCInstrInfo &MCII) {
+  return hasTSFlags(Inst, MCII,
                     AmdgpuTSFlags::IsWMMA | AmdgpuTSFlags::IsSWMMAC);
 }
 
-static bool IsVNop(const llvm::MCInst &inst, const llvm::MCInstrInfo &MCII) {
-  return MCII.getName(inst.getOpcode()) == "V_NOP_e32";
+static bool isVNop(const MCInst &Inst, const MCInstrInfo &MCII) {
+  return MCII.getName(Inst.getOpcode()) == "V_NOP_e32";
 }
 
-static bool IsCoexecutableVALUInst(const InternalDecodedInst &inst,
-                                   const llvm::MCInstrInfo &MCII) {
-  if (IsVNop(inst.inst, MCII))
+static bool isCoexecutableVALU(const InternalDecodedInst &DI,
+                               const MCInstrInfo &MCII) {
+  if (isVNop(DI.Inst, MCII))
     return false;
-  if (!HasTSFlags(inst.inst, MCII, AmdgpuTSFlags::VALU))
+  if (!hasTSFlags(DI.Inst, MCII, AmdgpuTSFlags::VALU))
     return false;
-  return !IsWmmaLike(inst.inst, MCII);
+  return !isWmmaLike(DI.Inst, MCII);
 }
 
-static bool IsTerminatingSalu(const llvm::MCInst &inst,
-                              const llvm::MCInstrInfo &MCII) {
-  const llvm::MCInstrDesc &desc = MCII.get(inst.getOpcode());
-  return desc.isTerminator() || desc.isBranch() || desc.isCall() ||
-         desc.isReturn();
+static bool isTerminatingSalu(const MCInst &Inst, const MCInstrInfo &MCII) {
+  const MCInstrDesc &Desc = MCII.get(Inst.getOpcode());
+  return Desc.isTerminator() || Desc.isBranch() || Desc.isCall() ||
+         Desc.isReturn();
+}
+
+static WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
+  bool IsWmma = Mnemonic.starts_with("v_wmma");
+  bool IsSwmmac = Mnemonic.starts_with("v_swmmac");
+  if (!IsWmma && !IsSwmmac)
+    return {4, 4};
+
+  if (Mnemonic.contains("_iu8") || Mnemonic.contains("_iu4"))
+    return {8, 4};
+
+  if (Mnemonic.contains("f8f6f4"))
+    return {1, 4};
+
+  bool HasF8 = Mnemonic.contains("_fp8") || Mnemonic.contains("_f8") ||
+               Mnemonic.contains("_bf8");
+  if (HasF8) {
+    if (Mnemonic.contains("16x16x128"))
+      return {3, 4};
+    return {1, 4};
+  }
+
+  if (Mnemonic.contains("_f16") || Mnemonic.contains("_bf16"))
+    return {4, 4};
+
+  return {4, 4};
 }
 
 static std::vector<WmmaHazard>
-ValidateWmmaCoexecHazards(const PatchContext &ctx) {
-  const llvm::MCInstrInfo &MCII = *ctx.llvm_state.MCII;
-  const llvm::MCRegisterInfo &MRI = *ctx.llvm_state.MRI;
-  std::vector<WmmaHazard> hazards;
-  int wmma_scanned = 0;
+validateWmmaCoexecHazards(const PatchContext &Ctx) {
+  const MCInstrInfo &MCII = *Ctx.LS.MCII;
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  std::vector<WmmaHazard> Hazards;
+  int WmmaScanned = 0;
 
-  for (size_t wmma_idx = 0; wmma_idx < ctx.decoded.size(); ++wmma_idx) {
-    const auto &wmma = ctx.decoded[wmma_idx];
-    if (!IsWmmaLike(wmma.inst, MCII))
+  for (size_t WmmaIdx = 0, E = Ctx.Decoded.size(); WmmaIdx < E; ++WmmaIdx) {
+    const InternalDecodedInst &WmmaDI = Ctx.Decoded[WmmaIdx];
+    if (!isWmmaLike(WmmaDI.Inst, MCII))
       continue;
 
-    ++wmma_scanned;
-    WmmaNopReq requirement = ClassifyWmmaNops(wmma.mnemonic);
-    if (requirement.a0_nops <= requirement.b0_nops)
+    ++WmmaScanned;
+    WmmaNopReq Req = classifyWmmaNops(WmmaDI.Mnemonic);
+    if (Req.A0Nops <= Req.B0Nops)
       continue;
 
-    int safe_slots = 0;
-    for (size_t valu_idx = wmma_idx + 1; valu_idx < ctx.decoded.size();
-         ++valu_idx) {
-      const auto &candidate = ctx.decoded[valu_idx];
+    int SafeSlots = 0;
+    for (size_t ValuIdx = WmmaIdx + 1; ValuIdx < E; ++ValuIdx) {
+      const InternalDecodedInst &Candidate = Ctx.Decoded[ValuIdx];
 
-      if (IsVNop(candidate.inst, MCII)) {
-        ++safe_slots;
-        if (safe_slots >= requirement.a0_nops)
+      if (isVNop(Candidate.Inst, MCII)) {
+        ++SafeSlots;
+        if (SafeSlots >= Req.A0Nops)
           break;
         continue;
       }
 
-      if (!HasTSFlags(candidate.inst, MCII, AmdgpuTSFlags::VALU)) {
-        if (IsTerminatingSalu(candidate.inst, MCII))
+      if (!hasTSFlags(Candidate.Inst, MCII, AmdgpuTSFlags::VALU)) {
+        if (isTerminatingSalu(Candidate.Inst, MCII))
           break;
         continue;
       }
 
-      if (IsCoexecutableVALUInst(candidate, MCII)) {
-        if (!CheckVgprOverlap(wmma.inst, candidate.inst, MCII, MRI)) {
-          ++safe_slots;
-          if (safe_slots >= requirement.a0_nops)
+      if (isCoexecutableVALU(Candidate, MCII)) {
+        if (!checkVgprOverlap(WmmaDI.Inst, Candidate.Inst, MRI)) {
+          ++SafeSlots;
+          if (SafeSlots >= Req.A0Nops)
             break;
           continue;
         }
 
-        if (safe_slots < requirement.a0_nops) {
-          hazards.push_back({valu_idx, requirement.a0_nops - safe_slots});
-          HotswapLog(HotswapLogLevel::Debug)
-              << "hotswap: WMMA co-exec hazard @0x"
-              << llvm::utohexstr(wmma.offset) << ": " << wmma.mnemonic
-              << " needs " << requirement.a0_nops << " V_NOPs for A0, only "
-              << safe_slots << " found before " << candidate.mnemonic << " @0x"
-              << llvm::utohexstr(candidate.offset) << "\n";
+        if (SafeSlots < Req.A0Nops) {
+          Hazards.push_back({ValuIdx, Req.A0Nops - SafeSlots});
+          log() << "hotswap: WMMA co-exec hazard at 0x"
+                << utohexstr(WmmaDI.Offset) << ": " << WmmaDI.Mnemonic
+                << " needs " << Req.A0Nops << " v_nops, only " << SafeSlots
+                << " found before " << Candidate.Mnemonic << " at 0x"
+                << utohexstr(Candidate.Offset) << "\n";
         }
         break;
       }
@@ -124,78 +157,54 @@ ValidateWmmaCoexecHazards(const PatchContext &ctx) {
     }
   }
 
-  HotswapLog(HotswapLogLevel::Info)
-      << "hotswap: WMMA co-exec validation: " << hazards.size() << " hazards ("
-      << wmma_scanned << " WMMA instructions scanned)\n";
-  return hazards;
+  log() << "hotswap: WMMA co-exec validation: " << Hazards.size()
+        << " hazards (" << WmmaScanned << " WMMA instructions scanned)\n";
+  return Hazards;
 }
 
-} // namespace
+} // anonymous namespace
 
-WmmaNopReq ClassifyWmmaNops(llvm::StringRef mnemonic) {
-  bool is_wmma = mnemonic.starts_with("v_wmma");
-  bool is_swmmac = mnemonic.starts_with("v_swmmac");
-  if (!is_wmma && !is_swmmac)
-    return {4, 4};
-
-  if (mnemonic.contains("_iu8") || mnemonic.contains("_iu4"))
-    return {8, 4};
-
-  if (mnemonic.contains("f8f6f4"))
-    return {1, 4};
-
-  bool has_f8 = mnemonic.contains("_fp8") || mnemonic.contains("_f8") ||
-                mnemonic.contains("_bf8");
-  if (has_f8) {
-    if (mnemonic.contains("16x16x128"))
-      return {3, 4};
-    return {1, 4};
-  }
-
-  if (mnemonic.contains("_f16") || mnemonic.contains("_bf16"))
-    return {4, 4};
-
-  return {4, 4};
-}
-
-uint32_t ApplyWmmaHazardPatch(PatchContext &ctx) {
-  std::vector<WmmaHazard> hazards = ValidateWmmaCoexecHazards(ctx);
-  if (hazards.empty())
+uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
+  std::vector<WmmaHazard> Hazards = validateWmmaCoexecHazards(Ctx);
+  if (Hazards.empty())
     return 0;
 
-  auto vnop_bytes = AssembleSingleInst("v_nop", ctx.llvm_state);
-  if (vnop_bytes.size() != kMinInstSize) {
-    HotswapLog(HotswapLogLevel::Error)
-        << "hotswap: WMMA hazard: v_nop assembly failed\n";
+  SmallVector<uint8_t> VnopBytes = assembleSingleInst("v_nop", Ctx.LS);
+  if (VnopBytes.size() != 4) {
+    log() << "hotswap: error: WMMA hazard: v_nop assembly failed\n";
     return 0;
   }
 
-  uint32_t patched = 0;
-  for (const auto &hazard : hazards) {
-    const auto &valu = ctx.decoded[hazard.valu_idx];
-    std::vector<uint8_t> replacement;
-    replacement.reserve(static_cast<size_t>(hazard.deficit) * kMinInstSize +
-                        valu.size);
+  uint32_t Patched = 0;
+  for (const WmmaHazard &H : Hazards) {
+    const InternalDecodedInst &ValuDI = Ctx.Decoded[H.ValuIdx];
 
-    for (int nop_count = 0; nop_count < hazard.deficit; ++nop_count)
-      replacement.insert(replacement.end(), vnop_bytes.begin(),
-                         vnop_bytes.end());
+    uint64_t TrampolineTextOffset = Ctx.TextSize;
+    for (const Trampoline &T : Ctx.OutTrampolines)
+      TrampolineTextOffset += T.Bytes.size();
 
-    replacement.insert(replacement.end(), ctx.text + valu.offset,
-                       ctx.text + valu.offset + valu.size);
+    SmallVector<std::string> AsmLines;
+    for (int I = 0; I < H.Deficit; ++I)
+      AsmLines.push_back("v_nop");
 
-    if (!EmitReplacementCode(ctx, valu.offset, valu.size, replacement)) {
-      HotswapLog(HotswapLogLevel::Error)
-          << "hotswap: WMMA hazard @0x" << llvm::utohexstr(valu.offset)
-          << ": failed to emit " << hazard.deficit << " v_nop(s)\n";
-      continue;
-    }
+    std::string PrintedInst;
+    raw_string_ostream OS(PrintedInst);
+    Ctx.LS.MCIP->printInst(&ValuDI.Inst, 0, "", *Ctx.LS.STI, OS);
+    AsmLines.push_back(StringRef(PrintedInst).trim().str());
 
-    HotswapLog(HotswapLogLevel::Info)
-        << "hotswap: WMMA hazard fix @0x" << llvm::utohexstr(valu.offset)
-        << ": inserted " << hazard.deficit << " v_nop(s)\n";
-    ++patched;
+    Trampoline T = buildTrampoline(AsmLines, ValuDI.Offset, ValuDI.Size,
+                                   TrampolineTextOffset, Ctx.LS);
+    Ctx.OutTrampolines.push_back(std::move(T));
+
+    log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)
+          << ": inserted " << H.Deficit << " v_nop(s)\n";
+    ++Patched;
   }
 
-  return patched;
+  return Patched;
 }
+
+} // namespace hotswap
+} // namespace COMGR
+
+#endif // !defined(_MSC_VER)
