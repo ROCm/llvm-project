@@ -377,7 +377,8 @@ static void adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
 // -- ElfView::growWithTrampolines ---------------------------------------------
 
 std::unique_ptr<WritableMemoryBuffer>
-ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
+ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
+                             ArrayRef<uint8_t> SNopBytes) const {
   const size_t InputSize = size();
   const uint8_t *Input = data();
 
@@ -398,7 +399,21 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
 
   uint64_t TextEnd = textOffset() + textSize();
 
-  const size_t NewSize = InputSize + TrampTotal;
+  // Pad TrampTotal to the maximum alignment of post-.text SHF_ALLOC sections
+  // so that shifting their virtual addresses preserves sh_addralign invariants.
+  uint64_t MaxPostTextAlign = 1;
+  for (const ELFT::Shdr &Shdr : Sections) {
+    if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
+      continue;
+    if (Shdr.sh_offset <= textOffset())
+      continue;
+    if (Shdr.sh_addralign > MaxPostTextAlign)
+      MaxPostTextAlign = Shdr.sh_addralign;
+  }
+  size_t PaddedTrampTotal = llvm::alignTo(TrampTotal, MaxPostTextAlign);
+  size_t PadBytes = PaddedTrampTotal - TrampTotal;
+
+  const size_t NewSize = InputSize + PaddedTrampTotal;
   std::unique_ptr<WritableMemoryBuffer> Buf =
       WritableMemoryBuffer::getNewUninitMemBuffer(NewSize);
   if (!Buf) {
@@ -415,15 +430,25 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
     std::memcpy(Out + Pos, T.Bytes.data(), T.Bytes.size());
     Pos += T.Bytes.size();
   }
+  if (PadBytes > 0 && SNopBytes.size() == MinInstSize) {
+    for (size_t I = 0; I < PadBytes; I += MinInstSize)
+      std::memcpy(Out + Pos + I, SNopBytes.data(), MinInstSize);
+    Pos += PadBytes;
+  } else if (PadBytes > 0) {
+    std::memset(Out + Pos, 0, PadBytes);
+    Pos += PadBytes;
+  }
   if (TextEnd < InputSize)
     std::memcpy(Out + Pos, Input + TextEnd, InputSize - TextEnd);
 
-  adjustSectionHeaders(Out, NewSize, textOffset(), textSize(), TrampTotal);
-  adjustProgramHeaders(Out, NewSize, textOffset(), textSize(), TrampTotal);
+  adjustSectionHeaders(Out, NewSize, textOffset(), textSize(),
+                       PaddedTrampTotal);
+  adjustProgramHeaders(Out, NewSize, textOffset(), textSize(),
+                       PaddedTrampTotal);
   log() << "hotswap: growWithTrampolines: grew ELF from " << InputSize << " to "
         << NewSize << " bytes (" << Trampolines.size() << " trampoline"
         << (Trampolines.size() == 1 ? "" : "s") << ", " << TrampTotal
-        << " bytes appended).\n";
+        << " trampoline bytes + " << PadBytes << " alignment padding).\n";
   return Buf;
 }
 
