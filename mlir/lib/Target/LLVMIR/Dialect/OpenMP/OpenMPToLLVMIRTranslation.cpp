@@ -5743,6 +5743,20 @@ static bool checkIfPointerMap(omp::MapInfoOp mapOp) {
   return false;
 }
 
+static bool isUseDevicePtrItem(omp::MapInfoOp mapInfoOp) {
+  assert(mapInfoOp->hasOneUse() &&
+         "Expected only one use of omp.map_info item");
+  if (auto dataOp =
+          dyn_cast<omp::TargetDataOp>(mapInfoOp->use_begin()->getOwner())) {
+    SmallVector<Value> useDevicePtrVars = dataOp.getUseDevicePtrVars();
+    for (auto it : useDevicePtrVars)
+      if (it == mapInfoOp) {
+        llvm::errs() << "Test1\n\n\n";
+        return true;
+      }
+  }
+  return false;
+}
 static void
 processIndividualMap(llvm::IRBuilderBase &builder,
                      llvm::OpenMPIRBuilder &ompBuilder, MapInfoData &mapData,
@@ -5769,9 +5783,8 @@ processIndividualMap(llvm::IRBuilderBase &builder,
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
 
   if (mapInfoOp.getMapCaptureType() == omp::VariableCaptureKind::ByCopy &&
-      !isPtrTy)
+      !isPtrTy && !isUseDevicePtrItem(mapInfoOp))
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL;
-
   // if we have a pointer and it's part of a MEMBER_OF mapping we do not apply
   // MEMBER_OF, as the runtime currently has a work-around that utilises
   // MEMBER_OF to prevent reference updating in certain scenarios instead of
