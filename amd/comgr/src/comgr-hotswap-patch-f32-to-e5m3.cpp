@@ -17,10 +17,12 @@
 ///
 /// Covered instructions (implementation order):
 ///   1. v_cvt_pk_fp8_f32  — F32 pack to FP8 (this file, done)
-///   2. v_cvt_sr_fp8_f32  — F32 stochastic-round to FP8 (future)
+///   2. v_cvt_sr_fp8_f32  — F32 stochastic-round to FP8 (done)
 ///   3. v_cvt_f32_fp8     — FP8 unpack to F32 (future)
 ///
-/// Design document: docs/scratch-patches/1_f32_to_e5m3/v_cvt_pk_fp8_f32.md
+/// Design documents:
+///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_pk_fp8_f32.md
+///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_sr_fp8_f32.md
 ///
 //===----------------------------------------------------------------------===//
 
@@ -149,8 +151,11 @@ static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
   OS << "v_cmp_lt_u32 0x80, " << Tmp << "\n";
   OS << "v_add_co_ci_u32 " << Out << ", 0, " << Out << "\n";
 
-  // Overflow / Inf clamp: max representable UE5M3 = 0xFE (no infinity).
-  // Must precede NaN override so 0xFF is not clamped.
+  // Safety clamp: cap at UE5M3 max 0xFE so NaN override ordering works.
+  // NOTE: this is effectively a no-op for overflow/Inf — F16 +Inf yields
+  // 0xF8 after >>7 which is below 0xFE.  The full UE5M3 exponent-31
+  // octave (0xF8–0xFE) is unreachable via F16 intermediate; see design doc
+  // §4.3 "Overflow / Inf handling" for accepted limitation details.
   OS << "v_min_u32 " << Out << ", 0xFE, " << Out << "\n";
 
   // NaN override: if original F32 was NaN, force 0xFF.
@@ -268,6 +273,149 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 }
 
 // ---------------------------------------------------------------------------
+// v_cvt_sr_fp8_f32 patch  (Case 1, instruction 2)
+// ---------------------------------------------------------------------------
+
+/// Patch a CLAMP=1 `v_cvt_sr_fp8_f32` (stochastic-round F32 → UE5M3).
+///
+/// The SR path injects stochastic noise into the F32 mantissa before the
+/// F16 intermediate conversion, replicating the ISA pseudocode (§17.6.94).
+/// Unlike the PK path, no explicit RTE rounding block is needed — the noise
+/// makes simple truncation statistically equivalent to unbiased rounding.
+/// See design doc v_cvt_sr_fp8_f32.md §3 for the full rationale.
+///
+/// Scratch: 2 VGPRs (Out + Tmp), 1 SGPR (s0 for NaN flag).
+static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
+  const InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  if (DI.Size != 8) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: unexpected inst size "
+          << DI.Size << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  const uint8_t *Raw = Ctx.Text + DI.Offset;
+  bool Clamp = (Raw[1] >> 7) & 1;
+  if (!Clamp)
+    return 0;
+
+  // OPSEL[3:2] selects which byte of vdst to write (0–3).
+  unsigned ByteSel = (Raw[1] >> 5) & 0x3;
+
+  std::string VdstStr, Src0Str, Src1Str;
+  if (!parseThreeOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str, Src1Str)) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: failed to parse operands at "
+          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  // Only src0 supports neg/abs modifiers; src1 is U32 with no modifiers.
+  std::string Src0Bare = stripModifiers(Src0Str);
+
+  std::string KernelName =
+      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
+  std::optional<unsigned> KdVgprs =
+      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
+  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
+
+  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+                         Ctx.Config.MaxVgprs);
+
+  // 2 scratch VGPRs: Out (conversion result + noise intermediate), Tmp (NaN
+  // flag save + noise computation).
+  std::optional<unsigned> Out = Alloc.alloc();
+  std::optional<unsigned> Tmp = Alloc.alloc();
+  if (!Out || !Tmp) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 2 scratch "
+          << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string OutName = vgprName(*Out);
+  std::string TmpName = vgprName(*Tmp);
+
+  std::string Asm;
+  raw_string_ostream AsmOS(Asm);
+
+  // --- NaN detection (before max destroys NaN) ---
+  // v_and_b32 strips the sign, making this modifier-agnostic.
+  AsmOS << "v_and_b32 " << TmpName << ", 0x7FFFFFFF, " << Src0Bare << "\n";
+  AsmOS << "v_cmp_lt_u32 0x7F800000, " << TmpName << "\n";
+  AsmOS << "s_mov_b32 s0, vcc_lo\n";
+
+  // --- Clamp negative (UE5M3 is unsigned) ---
+  // Source modifiers on src0 are applied natively by v_max_f32 VOP3.
+  AsmOS << "v_max_f32 " << OutName << ", 0, " << Src0Str << "\n";
+
+  // --- Stochastic noise injection ---
+  // Replicate ISA pseudocode: add S1[31:12] to F32 mantissa, truncate back
+  // to 23 bits, then reconstruct the perturbed F32 via v_bfi_b32.
+  AsmOS << "v_and_b32 " << TmpName << ", 0x007FFFFF, " << OutName << "\n";
+  AsmOS << "v_lshrrev_b32 " << OutName << ", 12, " << Src1Str << "\n";
+  AsmOS << "v_add_u32 " << TmpName << ", " << TmpName << ", " << OutName
+        << "\n";
+  AsmOS << "v_and_b32 " << TmpName << ", 0x007FFFFF, " << TmpName << "\n";
+  AsmOS << "v_max_f32 " << OutName << ", 0, " << Src0Str << "\n";
+  AsmOS << "v_bfi_b32 " << OutName << ", 0x007FFFFF, " << TmpName << ", "
+        << OutName << "\n";
+
+  // --- F32 → F16 → UE5M3 (truncation, not RTE — SR noise handles rounding) ---
+  AsmOS << "v_cvt_f16_f32 " << OutName << ", " << OutName << "\n";
+  AsmOS << "v_lshrrev_b32 " << OutName << ", 7, " << OutName << "\n";
+
+  // --- Overflow clamp (safety) ---
+  AsmOS << "v_min_u32 " << OutName << ", 0xFE, " << OutName << "\n";
+
+  // --- NaN override ---
+  AsmOS << "s_mov_b32 vcc_lo, s0\n";
+  AsmOS << "v_mov_b32 " << TmpName << ", 0xFF\n";
+  AsmOS << "v_cndmask_b32 " << OutName << ", " << OutName << ", " << TmpName
+        << "\n";
+
+  // --- Byte merge (byte_sel known at patch time) ---
+  if (ByteSel == 0) {
+    AsmOS << "v_bfi_b32 " << VdstStr << ", 0xFF, " << OutName << ", "
+          << VdstStr << "\n";
+  } else {
+    unsigned Shift = ByteSel * 8;
+    static const char *const Masks[] = {nullptr, "0xFF00", "0xFF0000",
+                                        "0xFF000000"};
+    AsmOS << "v_lshlrev_b32 " << OutName << ", " << Shift << ", " << OutName
+          << "\n";
+    AsmOS << "v_bfi_b32 " << VdstStr << ", " << Masks[ByteSel] << ", "
+          << OutName << ", " << VdstStr << "\n";
+  }
+
+  SmallVector<uint8_t> ReplacementBytes = assembleSingleInst(Asm, Ctx.LS);
+  if (ReplacementBytes.empty()) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: assembly failed for "
+          << "replacement at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+    return 0;
+
+  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
+  unsigned Extra = Alloc.extraVgprsNeeded();
+  if (Extra > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = Extra;
+  Stats.ScratchReused += 2 - Extra;
+  Stats.ScratchAboveKd += Extra;
+
+  ScratchPatchInfo Info;
+  Info.Offset = DI.Offset;
+  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Ctx.OutScratchPatches.push_back(std::move(Info));
+
+  log() << "hotswap: cvt_sr_fp8_f32: patched CLAMP=1 (E5M3) at offset 0x"
+        << utohexstr(DI.Offset) << " (" << ReplacementBytes.size()
+        << " bytes, scratch v" << *Out << "/v" << *Tmp
+        << ", byte_sel=" << ByteSel << ")\n";
+
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
 // applyScratchPatches — strong override
 // ---------------------------------------------------------------------------
 
@@ -276,6 +424,9 @@ uint32_t applyScratchPatches(PatchContext &Ctx, size_t Idx) {
 
   if (Mnem == "v_cvt_pk_fp8_f32")
     return patchCvtPkFp8F32(Ctx, Idx);
+
+  if (Mnem == "v_cvt_sr_fp8_f32")
+    return patchCvtSrFp8F32(Ctx, Idx);
 
   return 0;
 }
