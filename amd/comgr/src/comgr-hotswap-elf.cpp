@@ -314,6 +314,14 @@ static void adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
       uint64_t NewOffset = ShOffset + TrampTotal;
       std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOffset,
                   sizeof(NewOffset));
+      uint64_t ShFlags;
+      std::memcpy(&ShFlags, Sh + offsetof(Shdr, sh_flags), sizeof(ShFlags));
+      if (ShFlags & ELF::SHF_ALLOC) {
+        uint64_t ShAddr;
+        std::memcpy(&ShAddr, Sh + offsetof(Shdr, sh_addr), sizeof(ShAddr));
+        ShAddr += TrampTotal;
+        std::memcpy(Sh + offsetof(Shdr, sh_addr), &ShAddr, sizeof(ShAddr));
+      }
     }
   }
 }
@@ -354,6 +362,14 @@ static void adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
     } else if (POffset > TextOffset) {
       POffset += TrampTotal;
       std::memcpy(Ph + offsetof(Phdr, p_offset), &POffset, sizeof(POffset));
+      uint64_t PVaddr;
+      std::memcpy(&PVaddr, Ph + offsetof(Phdr, p_vaddr), sizeof(PVaddr));
+      PVaddr += TrampTotal;
+      std::memcpy(Ph + offsetof(Phdr, p_vaddr), &PVaddr, sizeof(PVaddr));
+      uint64_t PPaddr;
+      std::memcpy(&PPaddr, Ph + offsetof(Phdr, p_paddr), sizeof(PPaddr));
+      PPaddr += TrampTotal;
+      std::memcpy(Ph + offsetof(Phdr, p_paddr), &PPaddr, sizeof(PPaddr));
     }
   }
 }
@@ -380,25 +396,7 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
     return nullptr;
   }
 
-  // Enforce the invariant: no SHF_ALLOC section may start past `.text`. We
-  // only shift file offsets, not virtual addresses, so any loaded section
-  // appearing after `.text` would end up with stale sh_addr / p_vaddr.
   uint64_t TextEnd = textOffset() + textSize();
-  for (const ELFT::Shdr &Shdr : Sections) {
-    if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
-      continue;
-    if (Shdr.sh_offset < TextEnd)
-      continue;
-    Expected<StringRef> NameOrErr = File.getSectionName(Shdr);
-    StringRef Name = NameOrErr ? *NameOrErr : StringRef("<unknown>");
-    if (!NameOrErr)
-      consumeError(NameOrErr.takeError());
-    log() << "hotswap: error: growWithTrampolines refuses to run: "
-          << "SHF_ALLOC section '" << Name << "' starts at file offset "
-          << Shdr.sh_offset << " which is past .text end " << TextEnd
-          << "; virtual address shifting is not implemented.\n";
-    return nullptr;
-  }
 
   const size_t NewSize = InputSize + TrampTotal;
   std::unique_ptr<WritableMemoryBuffer> Buf =
