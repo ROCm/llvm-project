@@ -16,8 +16,8 @@ int main(int argc, char *argv[]) {
 
   amd_comgr_get_version(Major, Minor);
 
-  if (*Major != 3 || *Minor != 2)
-    fail("incorrect version: expected 3.2, saw %zu, %zu", *Major, *Minor);
+  if (*Major != 3 || *Minor != 3)
+    fail("incorrect version: expected 3.3, saw %zu, %zu", *Major, *Minor);
 
   free(Major);
   free(Minor);
