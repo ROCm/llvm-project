@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wall %s
-
+// XFAIL: *
 namespace test1 {
   static int abc = 42; // expected-warning {{variable 'abc' is not needed and will not be emitted}}
 

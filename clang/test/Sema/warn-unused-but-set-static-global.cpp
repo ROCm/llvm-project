@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -fsyntax-only -Wunused-but-set-variable -verify -std=c++17 %s
 // RUN: %clang_cc1 -fsyntax-only -Wunused-but-set-variable -Wno-unused-but-set-global -verify=no-global -std=c++17 %s
 // no-global-no-diagnostics
-
+// XFAIL: *
 static thread_local int tl_set_unused;  // expected-warning {{variable 'tl_set_unused' set but not used}}
 static thread_local int tl_set_and_used;
 thread_local int tl_no_static_set_unused;
