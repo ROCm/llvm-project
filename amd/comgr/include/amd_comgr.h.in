@@ -391,24 +391,49 @@ typedef enum amd_comgr_data_kind_s {
   AMD_COMGR_DATA_KIND_AR = 0x11,
   /**
    * The data is a bitcode bundle.
+   *
+   * Deprecated: use AMD_COMGR_DATA_KIND_BUNDLE. The unbundle action now
+   * detects each entry's payload kind from its bytes, so a typed bundle
+   * kind is no longer required.
    */
-  AMD_COMGR_DATA_KIND_BC_BUNDLE = 0x12,
+  AMD_COMGR_DATA_KIND_BC_BUNDLE
+      AMD_COMGR_DEPRECATED("Use AMD_COMGR_DATA_KIND_BUNDLE.") = 0x12,
   /**
    * The data is an archive bundle.
+   *
+   * Deprecated: use AMD_COMGR_DATA_KIND_BUNDLE. The unbundle action now
+   * inspects the input bytes and routes archive-of-bundle inputs through
+   * the archive bundler path automatically.
    */
-  AMD_COMGR_DATA_KIND_AR_BUNDLE = 0x13,
+  AMD_COMGR_DATA_KIND_AR_BUNDLE
+      AMD_COMGR_DEPRECATED("Use AMD_COMGR_DATA_KIND_BUNDLE.") = 0x13,
   /**
    * The data is an object file bundle.
+   *
+   * Deprecated: use AMD_COMGR_DATA_KIND_BUNDLE. The unbundle action now
+   * detects each entry's payload kind from its bytes, so a typed bundle
+   * kind is no longer required.
    */
-  AMD_COMGR_DATA_KIND_OBJ_BUNDLE = 0x14,
+  AMD_COMGR_DATA_KIND_OBJ_BUNDLE
+      AMD_COMGR_DEPRECATED("Use AMD_COMGR_DATA_KIND_BUNDLE.") = 0x14,
   /**
    * The data is SPIR-V IR
    */
   AMD_COMGR_DATA_KIND_SPIRV = 0x15,
   /**
+   * The data is an offload bundle (clang-offload-bundler output) or an
+   * archive of offload bundles. The bundle may be heterogeneous,
+   * carrying entries of different payload kinds (for example ELF
+   * objects for one offload arch and SPIR-V for another). When
+   * unbundled, the input bytes are inspected to route archive inputs
+   * through the archive bundler path, and each output data object's
+   * kind is determined by inspecting the extracted bytes.
+   */
+  AMD_COMGR_DATA_KIND_BUNDLE = 0x16,
+  /**
    * Marker for last valid data kind.
    */
-  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_SPIRV
+  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_BUNDLE
 } amd_comgr_data_kind_t;
 
 /**

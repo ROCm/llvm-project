@@ -36,6 +36,7 @@
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/LLVMContext.h"
@@ -1512,6 +1513,29 @@ amd_comgr_status_t AMDGPUCompiler::compileToRelocatable() {
   return processFiles(AMD_COMGR_DATA_KIND_RELOCATABLE, ".o");
 }
 
+// Detect the payload kind of a single extracted bundle entry by inspecting
+// the leading bytes. Used by the AMD_COMGR_DATA_KIND_BUNDLE unbundle path
+// (and the deprecated typed bundle kinds), which may carry heterogeneous
+// payloads (e.g. ELF for one offload arch and SPIR-V for another).
+static amd_comgr_data_kind_t detectPayloadKind(StringRef Bytes) {
+  switch (llvm::identify_magic(Bytes)) {
+  case llvm::file_magic::bitcode:
+    return AMD_COMGR_DATA_KIND_BC;
+  case llvm::file_magic::elf:
+  case llvm::file_magic::elf_relocatable:
+  case llvm::file_magic::elf_executable:
+  case llvm::file_magic::elf_shared_object:
+  case llvm::file_magic::elf_core:
+    return AMD_COMGR_DATA_KIND_EXECUTABLE;
+  case llvm::file_magic::spirv_object:
+    return AMD_COMGR_DATA_KIND_SPIRV;
+  case llvm::file_magic::archive:
+    return AMD_COMGR_DATA_KIND_AR;
+  default:
+    return AMD_COMGR_DATA_KIND_BYTES;
+  }
+}
+
 amd_comgr_status_t AMDGPUCompiler::unbundle() {
   if (auto Status = createTmpDirs()) {
     return Status;
@@ -1521,29 +1545,49 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
   auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
 
-    const char *FileExtension;
-    amd_comgr_data_kind_t UnbundledDataKind;
-    switch (Input->DataKind) {
-    case AMD_COMGR_DATA_KIND_BC_BUNDLE:
-      FileExtension = "bc";
-      UnbundledDataKind = AMD_COMGR_DATA_KIND_BC;
-      break;
-    case AMD_COMGR_DATA_KIND_AR_BUNDLE:
-      FileExtension = "a";
-      UnbundledDataKind = AMD_COMGR_DATA_KIND_AR;
-      break;
-    case AMD_COMGR_DATA_KIND_OBJ_BUNDLE:
-      FileExtension = "o";
-      UnbundledDataKind = AMD_COMGR_DATA_KIND_EXECUTABLE;
-      break;
-    default:
+    // The deprecated typed bundle kinds (BC_BUNDLE, OBJ_BUNDLE,
+    // AR_BUNDLE) are accepted as aliases for BUNDLE; routing is driven
+    // entirely by inspecting the input bytes.
+    if (Input->DataKind != AMD_COMGR_DATA_KIND_BUNDLE &&
+        Input->DataKind != AMD_COMGR_DATA_KIND_BC_BUNDLE &&
+        Input->DataKind != AMD_COMGR_DATA_KIND_OBJ_BUNDLE &&
+        Input->DataKind != AMD_COMGR_DATA_KIND_AR_BUNDLE) {
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
     }
+
+    UnbundleOp Op;
+    // BundlerFilesType is the clang-offload-bundler -type= hint and
+    // must be one of its recognized values (bc/o/s/a/ast/gch). It does
+    // not affect the extracted bytes.
+    const char *BundlerFilesType;
+    amd_comgr_data_kind_t UnbundledDataKind;
+    bool DetectPerEntryKind;
+    if (llvm::identify_magic(StringRef(Input->Data, Input->Size)) ==
+        llvm::file_magic::archive) {
+      // Archive of bundles -> UnbundleArchive. Each output is a
+      // per-target archive; the data kind is fixed.
+      Op = UnbundleOp::Archive;
+      BundlerFilesType = "a";
+      UnbundledDataKind = AMD_COMGR_DATA_KIND_AR;
+      DetectPerEntryKind = false;
+    } else {
+      // Plain offload bundle (compressed or not). The bundler treats
+      // payloads opaquely; each entry's data kind is determined after
+      // extraction by inspecting the bytes.
+      Op = UnbundleOp::Files;
+      BundlerFilesType = "o";
+      UnbundledDataKind = AMD_COMGR_DATA_KIND_BYTES;
+      DetectPerEntryKind = true;
+    }
+    // Internally name input/output temp files with a generic ".bundle"
+    // suffix; the resolved data kind comes from detection (or is fixed
+    // for archives), independent of the bundler's -type= hint.
+    static constexpr const char *TempExt = "bundle";
 
     // Configure Offload Bundler
     OffloadBundlerConfig BundlerConfig;
     BundlerConfig.AllowMissingBundles = true;
-    BundlerConfig.FilesType = FileExtension;
+    BundlerConfig.FilesType = BundlerFilesType;
     BundlerConfig.HipOpenmpCompatible = 1;
     BundlerConfig.AllowNoHost = 1;
 
@@ -1552,7 +1596,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       const size_t BufSize = sizeof(char) * 30;
       char *Buf = (char *)malloc(BufSize);
       snprintf(Buf, BufSize, "comgr-bundle-%d.%s", std::rand() % 10000,
-               FileExtension);
+               TempExt);
       Input->Name = Buf;
     }
 
@@ -1575,14 +1619,14 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
     if (env::shouldEmitVerboseLogs()) {
       LogS << "   Extracting Bundle:\n"
            << "   Input Filename: " << BundlerConfig.InputFileNames[0] << "\n"
-           << "   Unbundled Files Extension: ." << FileExtension << "\n";
+           << "   Bundler Files Type: ." << BundlerFilesType << "\n";
     }
 
     for (StringRef Entry : ActionInfo->BundleEntryIDs) {
       // Add an output file for each target
       SmallString<128> OutputFilePath = OutputDir;
       sys::path::append(OutputFilePath,
-                        OutputPrefix + "-" + Entry + "." + FileExtension);
+                        OutputPrefix + "-" + Entry + "." + TempExt);
 
       BundlerConfig.TargetNames.emplace_back(Entry);
       BundlerConfig.OutputFileNames.emplace_back(OutputFilePath);
@@ -1594,7 +1638,7 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       }
     }
 
-    UnbundleCommand Unbundle(Input->DataKind, BundlerConfig);
+    UnbundleCommand Unbundle(Op, BundlerConfig);
     if (Cache) {
       if (auto Status = Cache->execute(Unbundle, LogS)) {
         return Status;
@@ -1619,6 +1663,16 @@ amd_comgr_status_t AMDGPUCompiler::unbundle() {
       DataObject *Result = DataObject::convert(ResultT);
       if (auto Status = inputFromFile(Result, OutputFilePath))
         return Status;
+
+      if (DetectPerEntryKind) {
+        Result->DataKind =
+            detectPayloadKind(StringRef(Result->Data, Result->Size));
+        if (env::shouldEmitVerboseLogs()) {
+          LogS << "\tDetected payload kind for " << OutputFilePath
+               << ": 0x" << llvm::Twine::utohexstr(Result->DataKind).str()
+               << "\n";
+        }
+      }
 
       StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);

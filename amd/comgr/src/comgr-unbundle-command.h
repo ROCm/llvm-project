@@ -16,9 +16,12 @@ class OffloadBundlerConfig;
 } // namespace clang
 
 namespace COMGR {
+// Selects which OffloadBundler operation the unbundle action drives.
+enum class UnbundleOp { Files, Archive };
+
 class UnbundleCommand final : public CachedCommandAdaptor {
 private:
-  amd_comgr_data_kind_t Kind;
+  UnbundleOp Op;
   const clang::OffloadBundlerConfig &Config;
 
   // To avoid copies, store the output of execute, such that readExecuteOutput
@@ -26,9 +29,8 @@ private:
   llvm::SmallString<64> OutputBuffer;
 
 public:
-  UnbundleCommand(amd_comgr_data_kind_t Kind,
-                  const clang::OffloadBundlerConfig &Config)
-      : Kind(Kind), Config(Config) {}
+  UnbundleCommand(UnbundleOp Op, const clang::OffloadBundlerConfig &Config)
+      : Op(Op), Config(Config) {}
 
   bool canCache() const override;
   llvm::Error writeExecuteOutput(llvm::StringRef CachedBuffer) override;

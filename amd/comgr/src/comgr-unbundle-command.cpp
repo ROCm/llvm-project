@@ -25,7 +25,7 @@ using SizeFieldType = uint32_t;
 
 bool UnbundleCommand::canCache() const {
   // The header format for AR files is not the same as object files
-  if (Kind == AMD_COMGR_DATA_KIND_AR_BUNDLE)
+  if (Op == UnbundleOp::Archive)
     return false;
 
   StringRef InputFilename = Config.InputFileNames.front();
@@ -94,26 +94,21 @@ amd_comgr_status_t UnbundleCommand::execute(raw_ostream &LogS) {
 
   OffloadBundler Bundler(Config);
 
-  switch (Kind) {
-  case AMD_COMGR_DATA_KIND_BC_BUNDLE:
-  case AMD_COMGR_DATA_KIND_OBJ_BUNDLE: {
+  switch (Op) {
+  case UnbundleOp::Files: {
     if (Error Err = Bundler.UnbundleFiles()) {
       logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Error: ");
       return AMD_COMGR_STATUS_ERROR;
     }
     break;
   }
-  case AMD_COMGR_DATA_KIND_AR_BUNDLE: {
+  case UnbundleOp::Archive: {
     if (Error Err = Bundler.UnbundleArchive()) {
       logAllUnhandledErrors(std::move(Err), LogS, "Unbundle Archives Error: ");
       return AMD_COMGR_STATUS_ERROR;
     }
     break;
   }
-  default:
-    assert(false && "invalid bundle type");
-    LogS << "Unbundle Error: invalid bundle type\n";
-    return AMD_COMGR_STATUS_ERROR;
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
