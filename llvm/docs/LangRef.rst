@@ -787,8 +787,8 @@ be performed as loads and stores of the correct type since stores of other
 types may not propagate the external data.
 Therefore it is not legal to convert an existing load/store (or a
 ``llvm.memcpy`` / ``llvm.memmove`` intrinsic) of pointer types with external
-state to a load/store of an integer type with the same bitwidth, as that may drop
-the external state.
+state to a load/store of an integer or byte type with the same bitwidth, as that
+may drop the external state.
 
 
 .. _globalvars:
@@ -3854,15 +3854,8 @@ volatile operation may not be changed. Different address spaces may
 have different trapping behavior when dereferencing an invalid
 pointer.
 
-The compiler may assume execution will continue after a volatile operation,
-so operations which modify memory or may have undefined behavior can be
-hoisted past a volatile operation.
-
-As an exception to the preceding rule, the compiler may not assume execution
-will continue after a volatile store operation. This restriction is necessary
-to support the somewhat common pattern in C of intentionally storing to an
-invalid pointer to crash the program. In the future, it might make sense to
-allow frontends to control this behavior.
+Volatile operations are permitted to trap. The compiler may not assume
+that execution will continue after a volatile operation.
 
 IR-level volatile loads and stores cannot safely be optimized into ``llvm.memcpy``
 or ``llvm.memmove`` intrinsics even when those intrinsics are flagged volatile.
@@ -3983,12 +3976,13 @@ For a simpler introduction to the ordering constraints, see the
     address. All modification orders must be compatible with the
     happens-before order. There is no guarantee that the modification
     orders can be combined to a global total order for the whole program
-    (and this often will not be possible). The read in an atomic
-    read-modify-write operation (:ref:`cmpxchg <i_cmpxchg>` and
-    :ref:`atomicrmw <i_atomicrmw>`) reads the value in the modification
-    order immediately before the value it writes. If one atomic read
-    happens before another atomic read of the same address, the later
-    read must see the same value or a later value in the address's
+    (and this often will not be possible). If the read in an atomic
+    read-modify-write operation M (:ref:`cmpxchg <i_cmpxchg>` and
+    :ref:`atomicrmw <i_atomicrmw>`) reads from a ``monotonic`` (or
+    stronger) write W, W must be immediately before M in the address's
+    modification order. If one atomic read happens before another atomic
+    read of the same address and both are at least ``monotonic``, the
+    later read must not see an earlier value in the address's
     modification order. This disallows reordering of ``monotonic`` (or
     stronger) operations on the same address. If an address is written
     ``monotonic``-ally by one thread, and other threads ``monotonic``-ally
@@ -4014,10 +4008,11 @@ For a simpler introduction to the ordering constraints, see the
     In addition to the guarantees of ``acq_rel`` (``acquire`` for an
     operation that only reads, ``release`` for an operation that only
     writes), there is a global total order on all
-    sequentially-consistent operations on all addresses. Each
-    sequentially-consistent read sees the last preceding write to the
-    same address in this global order. This corresponds to the C/C++
-    ``memory_order_seq_cst`` and Java ``volatile``.
+    sequentially-consistent operations on all addresses. If an address
+    is only accessed through sequentially-consistent operations, each
+    sequentially-consistent read of that address sees the last preceding
+    write to the same address in this global order. This corresponds to
+    the C/C++ ``memory_order_seq_cst`` and Java ``volatile``.
 
     Note: this global total order is *not* guaranteed to be fully
     consistent with the *happens-before* partial order if
@@ -4472,6 +4467,53 @@ Examples:
 | ``i1942652``   | a really big integer of over 1 million bits.   |
 +----------------+------------------------------------------------+
 
+.. _t_byte:
+
+Byte Type
+"""""""""
+
+:Overview:
+
+The byte type represents raw memory data in SSA registers. It should be used
+when it cannot be determined whether a value holds a pointer or another type at
+run time, or if the value contains uninitialized or poison data. Frontends are
+expected to use a byte type when:
+
+#. Lowering memory operations like `memcpy` and `memmove` to load/store pairs
+   without knowing the underlying type being copied.
+
+#. Working with union types that can hold a pointer alongside a non-pointer
+   type.
+
+#. Working with possibly uninitialized data.
+
+Otherwise, when known, the specific type should be used. Each bit can be:
+
+* An integer bit (0 or 1)
+* Part of a pointer value
+* ``poison``
+
+Any bit width from 1 bit to 2\ :sup:`23`\ (about 8 million) can be specified.
+
+:Syntax:
+
+::
+
+      bN
+
+The number of bits the byte occupies is specified by the ``N`` value.
+
+Examples:
+*********
+
++----------------+------------------------------------------------+
+| ``b1``         | a single-bit byte value.                       |
++----------------+------------------------------------------------+
+| ``b32``        | a 32-bit byte value.                           |
++----------------+------------------------------------------------+
+| ``b128``       | a 128-bit byte value.                          |
++----------------+------------------------------------------------+
+
 .. _t_floating:
 
 Floating-Point Types
@@ -4905,6 +4947,10 @@ Simple Constants
     Note that hexadecimal integers are sign extended from the number
     of active bits, i.e., the bit width minus the number of leading
     zeros. So '``s0x0001``' of type '``i16``' will be -1, not 1.
+**Byte constants**
+    Byte constants are used to initialize global variables of the :ref:`byte
+    <t_byte>` type. These are strictly equivalent to integer constants:
+    ``store b8 42, ptr %p`` is equivalent to ``store i8 42, ptr %p``.
 **Floating-point constants**
     Floating-point constants use standard decimal notation (e.g.
     123.421), exponential notation (e.g., 1.23421e+2), or a more precise
@@ -5455,6 +5501,14 @@ instructions to emit), a list of operand constraints (stored as a string), a
 flag that indicates whether or not the inline asm expression has side effects,
 and a flag indicating whether the function containing the asm needs to align its
 stack conservatively.
+
+The compiler may not assume that the actual code executed at runtime matches the
+contents of the template string. Correctness-critical analyses must base their
+results only on the list of operand constraints and the flags -- not the
+contents of the template string. This ensures correct behavior if the assembly
+code emitted by this expression is altered later, e.g. via self-modifying code,
+as long as the code keeps upholding the requirements of the operand constraints
+and the flags.
 
 The template string supports argument substitution of the operands using "``$``"
 followed by a number, to indicate substitution of the given register/memory
@@ -11827,6 +11881,8 @@ If the value being loaded is of aggregate type, the bytes that correspond to
 padding may be accessed but are ignored, because it is impossible to observe
 padding from the loaded aggregate value.
 If ``<pointer>`` is not a well-defined value, the behavior is undefined.
+The behavior of loading a value of a type that differs from the type used to
+store it is described in the :ref:`bitcast <i_bitcast>` section.
 
 Examples:
 """""""""
@@ -13089,10 +13145,10 @@ The '``bitcast``' instruction takes a value to cast, which must be a
 non-aggregate first class value, and a type to cast it to, which must
 also be a non-aggregate :ref:`first class <t_firstclass>` type. The
 bit sizes of ``value`` and the destination type, ``ty2``, must be
-identical. If the source type is a pointer, the destination type must
-also be a pointer of the same size. This instruction supports bitwise
-conversion of vectors to integers and to vectors of other types (as
-long as they have the same size).
+identical. If the source type is a pointer, the destination type must also be a
+pointer or a byte (vector of bytes) of the same size. This instruction supports
+bitwise conversion of vectors to integers and to vectors of other types (as long
+as they have the same size).
 
 Semantics:
 """"""""""
@@ -13102,14 +13158,43 @@ is always a *no-op cast* because no bits change with this
 conversion. The conversion is done as if the ``value`` had been stored
 to memory and read back as type ``ty2``. Pointer (or vector of
 pointers) types may only be converted to other pointer (or vector of
-pointers) types with the same address space through this instruction.
-To convert pointers to other types, use the :ref:`inttoptr <i_inttoptr>`
-or :ref:`ptrtoint <i_ptrtoint>` instructions first.
+pointers) types with the same address space or byte (or vector of bytes) types
+through this instruction. To convert pointers to other types, use the
+:ref:`inttoptr <i_inttoptr>` or :ref:`ptrtoint <i_ptrtoint>` instructions first.
 
 There is a caveat for bitcasts involving vector types in relation to
 endianness. For example ``bitcast <2 x i8> <value> to i16`` puts element zero
 of the vector in the least significant bits of the i16 for little-endian while
 element zero ends up in the most significant bits for big-endian.
+
+If ``value`` is of the :ref:`byte type <t_byte>`:
+
+* If ``ty2`` is a scalar type:
+
+    * If ``ty2`` is a byte type, the original bits are unchanged.
+
+    * If ``ty2`` is a pointer type:
+
+        * If at least one bit of ``value`` is ``poison``, the result is
+          ``poison``.
+
+        * If all bits of ``value`` are from the same pointer and are correctly
+          ordered (there were no pointer bit swaps), the result is that pointer.
+
+        * Otherwise, the result is a pointer with the address given by the
+          integer value of the input, and without provenance.
+
+    * If ``ty2`` is an integer or floating-point type:
+
+        * If at least one bit of ``value`` is ``poison``, the result is
+          ``poison``.
+
+        * Otherwise, the result is the value encoded by the input bits with
+          their provenance stripped without being exposed.
+
+* If ``ty2`` is a vector type, the input bits get sliced into chunks
+  corresponding to lanes of the output. Each lane is then converted using the
+  rules for scalar types above.
 
 Example:
 """"""""
@@ -13120,6 +13205,17 @@ Example:
       %Y = bitcast i32* %x to i16*      ; yields i16*:%x
       %Z = bitcast <2 x i32> %V to i64; ; yields i64: %V (depends on endianness)
       %Z = bitcast <2 x i32*> %V to <2 x i64*> ; yields <2 x i64*>
+
+      ; considering %bi to hold an integer and %bp to hold a pointer,
+      %a = bitcast b64 %bi to i64       ; returns an integer, no-op cast
+      %b = bitcast b64 %bp to i64       ; reinterprets the pointer as an integer, returning its address without exposing provenance
+      %c = bitcast b64 %bp to ptr       ; returns a pointer, no-op cast
+      %d = bitcast b64 %bi to ptr       ; reinterprets the integer as a pointer, returning a pointer with no provenance
+
+      %e = bitcast <2 x b32> %v to i64  ; reinterprets the raw bytes as an integer
+      %f = bitcast <2 x b32> %v to ptr  ; reinterprets the raw bytes as a pointer
+
+      %g = bitcast <2 x b32> %v to <4 x i16> ; reinterprets the raw bytes as integers
 
 .. _i_addrspacecast:
 
@@ -13552,6 +13648,7 @@ instructions may yield different values.
 While ``undef`` and ``poison`` pointers can be frozen, the result is a
 non-dereferenceable pointer. See the
 :ref:`Pointer Aliasing Rules <pointeraliasing>` section for more information.
+Values of the :ref:`byte type <t_byte>` are frozen on a per-bit basis.
 If an aggregate value or vector is frozen, the operand is frozen element-wise.
 The padding of an aggregate isn't considered, since it isn't visible
 without storing it into memory and loading it with a different type.
@@ -13579,6 +13676,9 @@ Example:
       %v.fr = freeze <2 x i32> %v                ; element-wise freeze
       %d = extractelement <2 x i32> %v.fr, i32 0 ; not undef
       %add.f = add i32 %d, %d                    ; even number
+
+      %l = load b32, ptr %p                      ; may be uninitialized
+      %f = freeze b32 %l                         ; freezes on a per-bit basis
 
       ; branching on frozen value
       %poison = add nsw i1 %k, undef   ; poison
@@ -25057,18 +25157,18 @@ This is an overloaded intrinsic.
 
 ::
 
-      declare <4 x i1> @llvm.loop.dependence.war.mask.v4i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <8 x i1> @llvm.loop.dependence.war.mask.v8i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <16 x i1> @llvm.loop.dependence.war.mask.v16i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <vscale x 16 x i1> @llvm.loop.dependence.war.mask.nxv16i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
+      declare <4 x i1> @llvm.loop.dependence.war.mask.v4i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
+      declare <8 x i1> @llvm.loop.dependence.war.mask.v8i1.i32(i32 %addrA, i32 %addrB, i32 immarg %elementSize)
+      declare <16 x i1> @llvm.loop.dependence.war.mask.v16i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
+      declare <vscale x 16 x i1> @llvm.loop.dependence.war.mask.nxv16i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
 
 
 Overview:
 """""""""
 
-Given a vector load from %ptrA followed by a vector store to %ptrB, this
-instruction generates a mask where an active lane indicates that the
-write-after-read sequence can be performed safely for that lane, without the
+Given a vector load from address %addrA followed by a vector store to address
+%addrB, this instruction generates a mask where an active lane indicates that
+the write-after-read sequence can be performed safely for that lane, without the
 danger of a write-after-read hazard occurring.
 
 A write-after-read hazard occurs when a write-after-read sequence for a given
@@ -25078,22 +25178,22 @@ the aliasing of pointers.
 Arguments:
 """"""""""
 
-The first two arguments are pointers and the last argument is an immediate.
+The first two arguments are integers and the last argument is an immediate.
 The result is a vector with the i1 element type.
 
 Semantics:
 """"""""""
 
 ``%elementSize`` is the size of the accessed elements in bytes.
-The intrinsic returns ``poison`` if the distance between ``%prtA`` and ``%ptrB``
-is smaller than ``VF * %elementsize`` and either ``%ptrA + VF * %elementSize``
-or ``%ptrB + VF * %elementSize`` wrap.
+The intrinsic returns ``poison`` if the distance between ``%addrA`` and ``%addrB``
+is smaller than ``VF * %elementsize`` and either ``%addrA + VF * %elementSize``
+or ``%addrB + VF * %elementSize`` wrap.
 
-The element of the result mask is active when loading from %ptrA then storing to
-%ptrB is safe and doesn't result in a write-after-read hazard, meaning that:
+The element of the result mask is active when loading from %addrA then storing to
+%addrB is safe and doesn't result in a write-after-read hazard, meaning that:
 
-* (ptrB - ptrA) <= 0 (guarantees that all lanes are loaded before any stores), or
-* elementSize * lane < (ptrB - ptrA) (guarantees that this lane is loaded
+* (addrB - addrA) <= 0 (guarantees that all lanes are loaded before any stores), or
+* elementSize * lane < (addrB - addrA) (guarantees that this lane is loaded
   before the store to the same address)
 
 Examples:
@@ -25101,14 +25201,16 @@ Examples:
 
 .. code-block:: llvm
 
-      %loop.dependence.mask = call <4 x i1> @llvm.loop.dependence.war.mask.v4i1(ptr %ptrA, ptr %ptrB, i64 4)
-      %vecA = call <4 x i32> @llvm.masked.load.v4i32.p0v4i32(ptr align 4 %ptrA, <4 x i1> %loop.dependence.mask, <4 x i32> poison)
+      %addrA = ptrtoaddr ptr %ptrA to i64
+      %addrB = ptrtoaddr ptr %ptrB to i64
+      %loop.dependence.mask = call <4 x i1> @llvm.loop.dependence.war.mask.v4i1.i64(i64 %addrA, i64 %addrB, i64 4)
+      %vecA = call <4 x i32> @llvm.masked.load.v4i32.p0(ptr align 4 %ptrA, <4 x i1> %loop.dependence.mask, <4 x i32> poison)
       [...]
-      call @llvm.masked.store.v4i32.p0v4i32(<4 x i32> %vecA, ptr align 4 %ptrB, <4 x i1> %loop.dependence.mask)
+      call @llvm.masked.store.v4i32.p0(<4 x i32> %vecA, ptr align 4 %ptrB, <4 x i1> %loop.dependence.mask)
 
       ; For the above example, consider the following cases:
       ;
-      ; 1. ptrA >= ptrB
+      ; 1. addrA >= addrB
       ;
       ;   load =      <0,1,2,3>     ; uint32_t load = array[i+2];
       ;  store =  <0,1,2,3>         ; array[i] = store;
@@ -25116,7 +25218,7 @@ Examples:
       ; This results in an all-true mask, as the load always occurs before the
       ; store, so it does not depend on any values to be stored.
       ;
-      ; 2. ptrB - ptrA = 2 * elementSize:
+      ; 2. addrB - addrA = 2 * elementSize:
       ;
       ;   load =  <0,1,2,3>         ; uint32_t load = array[i];
       ;  store =      <0,1,2,3>     ; array[i+2] = store;
@@ -25125,7 +25227,7 @@ Examples:
       ; we can only read two lanes before we would read values that have yet to
       ; be written.
       ;
-      ; 3. ptrB - ptrA = 4 * elementSize
+      ; 3. addrB - addrA = 4 * elementSize
       ;
       ;   load =  <0,1,2,3>         ; uint32_t load = array[i];
       ;  store =          <0,1,2,3> ; array[i+4] = store;
@@ -25144,17 +25246,17 @@ This is an overloaded intrinsic.
 
 ::
 
-      declare <4 x i1> @llvm.loop.dependence.raw.mask.v4i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <8 x i1> @llvm.loop.dependence.raw.mask.v8i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <16 x i1> @llvm.loop.dependence.raw.mask.v16i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
-      declare <vscale x 16 x i1> @llvm.loop.dependence.raw.mask.nxv16i1(ptr %ptrA, ptr %ptrB, i64 immarg %elementSize)
+      declare <4 x i1> @llvm.loop.dependence.raw.mask.v4i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
+      declare <8 x i1> @llvm.loop.dependence.raw.mask.v8i1.i32(i32 %addrA, i32 %addrB, i32 immarg %elementSize)
+      declare <16 x i1> @llvm.loop.dependence.raw.mask.v16i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
+      declare <vscale x 16 x i1> @llvm.loop.dependence.raw.mask.nxv16i1.i64(i64 %addrA, i64 %addrB, i64 immarg %elementSize)
 
 
 Overview:
 """""""""
 
-Given a vector store to %ptrA followed by a vector load from %ptrB, this
-instruction generates a mask where an active lane indicates that the
+Given a vector store to address %addrA followed by a vector load from address
+%addrB, this instruction generates a mask where an active lane indicates that the
 read-after-write sequence can be performed safely for that lane, without a
 read-after-write hazard or a store-to-load forwarding hazard being introduced.
 
@@ -25170,23 +25272,23 @@ complete.
 Arguments:
 """"""""""
 
-The first two arguments are pointers and the last argument is an immediate.
+The first two arguments are integers and the last argument is an immediate.
 The result is a vector with the i1 element type.
 
 Semantics:
 """"""""""
 
 ``%elementSize`` is the size of the accessed elements in bytes.
-The intrinsic returns ``poison`` if the distance between ``%prtA`` and ``%ptrB``
-is smaller than ``VF * %elementsize`` and either ``%ptrA + VF * %elementSize``
-or ``%ptrB + VF * %elementSize`` wrap.
+The intrinsic returns ``poison`` if the distance between ``%addrA`` and ``%addrB``
+is smaller than ``VF * %elementsize`` and either ``%addrA + VF * %elementSize``
+or ``%addrB + VF * %elementSize`` wrap.
 
-The element of the result mask is active when storing to %ptrA then loading from
-%ptrB is safe and doesn't result in aliasing, meaning that:
+The element of the result mask is active when storing to %addrA then loading from
+%addrB is safe and doesn't result in aliasing, meaning that:
 
-* elementSize * lane < abs(ptrB - ptrA) (guarantees that the store of this lane
+* elementSize * lane < abs(addrB - addrA) (guarantees that the store of this lane
   occurs before loading from this address), or
-* ptrA == ptrB (doesn't introduce any new hazards that weren't in the scalar
+* addrA == addrB (doesn't introduce any new hazards that weren't in the scalar
   code)
 
 Examples:
@@ -25194,21 +25296,23 @@ Examples:
 
 .. code-block:: llvm
 
-      %loop.dependence.mask = call <4 x i1> @llvm.loop.dependence.raw.mask.v4i1(ptr %ptrA, ptr %ptrB, i64 4)
-      call @llvm.masked.store.v4i32.p0v4i32(<4 x i32> %vecA, ptr align 4 %ptrA, <4 x i1> %loop.dependence.mask)
+      %addrA = ptrtoaddr ptr %ptrA to i64
+      %addrB = ptrtoaddr ptr %ptrB to i64
+      %loop.dependence.mask = call <4 x i1> @llvm.loop.dependence.raw.mask.v4i1.i64(i64 %addrA, i64 %addrB, i64 4)
+      call @llvm.masked.store.v4i32.p0(<4 x i32> %vecA, ptr align 4 %ptrA, <4 x i1> %loop.dependence.mask)
       [...]
-      %vecB = call <4 x i32> @llvm.masked.load.v4i32.p0v4i32(ptr align 4 %ptrB, <4 x i1> %loop.dependence.mask, <4 x i32> poison)
+      %vecB = call <4 x i32> @llvm.masked.load.v4i32.p0(ptr align 4 %ptrB, <4 x i1> %loop.dependence.mask, <4 x i32> poison)
 
       ; For the above example, consider the following cases:
       ;
-      ; 1. ptrA == ptrB
+      ; 1. addrA == addrB
       ;
       ;  store = <0,1,2,3>       ; array[i] = store;
       ;   load = <0,1,2,3>       ; uint32_t load = array[i];
       ;
       ; This results in a all-true mask. There is no conflict.
       ;
-      ; 2. ptrB - ptrA = 2 * elementSize
+      ; 2. addrB - addrA = 2 * elementSize
       ;
       ;  store =  <0,1,2,3>      ; array[i] = store;
       ;   load =      <0,1,2,3>  ; uint32_t load = array[i+2];
@@ -25216,7 +25320,7 @@ Examples:
       ; This results in a mask with the first two lanes active. In this case,
       ; only two lanes can be written without overwriting values yet to be read.
       ;
-      ; 3. ptrB - ptrA = -2 * elementSize
+      ; 3. addrB - addrA = -2 * elementSize
       ;
       ;  store =      <0,1,2,3>  ; array[i+2] = store;
       ;   load =  <0,1,2,3>      ; uint32_t load = array[i];
@@ -27989,8 +28093,9 @@ object's lifetime.
 Arguments:
 """"""""""
 
-The argument is either a pointer to an ``alloca`` instruction or an
-``llvm.structured.alloca`` intrinsic, or a ``poison`` value.
+The argument is either a ``poison`` value or an SSA variable whose defining
+instruction is ``alloca`` or a call of the ``llvm.structured.alloca``
+intrinsics. Otherwise, the IR is considered ill-formed.
 
 Semantics:
 """"""""""
@@ -28000,10 +28105,12 @@ If ``ptr`` is a ``poison`` value, the intrinsic has no effect.
 Otherwise, the stack-allocated object that ``ptr`` points to is initially
 marked as dead. After '``llvm.lifetime.start``', the stack object is marked as
 alive and has an uninitialized value.
-The stack object is marked as dead when either
-:ref:`llvm.lifetime.end <int_lifeend>` to the alloca/structured.alloca is
-executed or the function returns.
+Calling ``llvm.lifetime.start`` when the stack object is already alive just
+resets its contents to be uninitialized.
 
+The stack object is marked as dead again when either
+:ref:`llvm.lifetime.end <int_lifeend>` to the alloca/structured.alloca is executed or the
+function returns.
 After :ref:`llvm.lifetime.end <int_lifeend>` is called,
 '``llvm.lifetime.start``' on the stack object can be called again.
 The second '``llvm.lifetime.start``' call marks the object as alive, but it
@@ -28030,8 +28137,9 @@ The '``llvm.lifetime.end``' intrinsic specifies the end of a
 Arguments:
 """"""""""
 
-The argument is either a pointer to an ``alloca`` instruction or an
-``llvm.structured.alloca`` intrinsic, or a ``poison`` value.
+The argument is either a ``poison`` value or an SSA variable whose defining
+instruction is ``alloca`` or a call of the ``llvm.structured.alloca``
+intrinsics. Otherwise, the IR is considered ill-formed.
 
 Semantics:
 """"""""""
