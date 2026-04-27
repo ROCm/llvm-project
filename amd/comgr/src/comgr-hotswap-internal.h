@@ -483,10 +483,6 @@ struct PatchContext {
 
 // -- Trampoline patch helpers (defined in comgr-hotswap-patch-trampoline.cpp) --
 
-std::vector<std::string> expandDs2AddrAsm(const std::string &PrintedAsm,
-                                          const std::string &FromMnemonic,
-                                          const std::string &ToMnemonic);
-unsigned lookupSgprMCReg(int SgprNum, const llvm::MCRegisterInfo &MRI);
 bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx, unsigned SgprMCReg);
 
 // -- Patch entry points (weak stubs in comgr-hotswap-b0a0.cpp) ----------------
