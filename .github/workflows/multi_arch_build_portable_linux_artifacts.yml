@@ -84,19 +84,19 @@ jobs:
       #Temporary block to merge the PR-4897
       - name: Apply PR 4897 if not yet merged
         run: |
-          THEROCK_URL="https://github.com/ROCm/TheRock.git"
-          if git fetch "$THEROCK_URL" refs/pull/4897/head:pr-4897 2>/dev/null; then
-            if git merge-base --is-ancestor pr-4897 HEAD 2>/dev/null; then
-              echo "PR #4897 is already merged — skipping"
-            else
-              echo "PR #4897 is open and not yet merged — cherry-picking"
-              git config --global user.email "z1-cciauto@amd.com"
-              git config --global user.name "Z1 cciauto"
-              git merge --no-edit --no-commit pr-4897
-            fi
-          else
-            echo "PR #4897 ref not available — skipping"
+          if ! git fetch origin pull/4897/head:refs/remotes/origin/pr-4897-head; then
+             echo "Could not fetch refs/pull/4897/head — skipping."
+             exit 0
           fi
+          PR_HEAD="origin/pr-4897-head"
+          if git merge-base --is-ancestor "${PR_HEAD}" HEAD; then
+            echo "PR #4897 tip is already contained in HEAD — nothing to merge."
+            exit 0
+          fi
+          echo "Merging PR #4897 into current checkout."
+          git config user.email "z1-cciauto@amd.com"
+          git config user.name "Z1 cciauto"
+          git merge --no-edit "${PR_HEAD}"
             
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
