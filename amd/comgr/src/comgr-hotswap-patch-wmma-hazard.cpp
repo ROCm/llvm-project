@@ -17,6 +17,7 @@
 
 #if !defined(_MSC_VER)
 
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringExtras.h"
 
 using namespace llvm;
@@ -30,11 +31,11 @@ struct WmmaHazard {
   int Deficit;
 };
 
-struct WmmaNopReq {
-  int A0Nops;
-  int B0Nops;
-};
-
+// Mirrors SIInstrFlags from llvm/lib/Target/AMDGPU/SIDefines.h.
+// SIDefines.h is a backend-private header (not installed), so we
+// duplicate the bit positions here. These must stay in sync with
+// the AMDGPU backend; verify against SIDefines.h if TSFlags layout
+// changes upstream.
 namespace AmdgpuTSFlags {
 static constexpr uint64_t VALU = UINT64_C(1) << 1;
 static constexpr uint64_t IsWMMA = UINT64_C(1) << 59;
@@ -74,7 +75,12 @@ static bool isTerminatingSalu(const MCInst &Inst, const MCInstrInfo &MCII) {
          Desc.isReturn();
 }
 
-static WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
+} // anonymous namespace
+
+// Checks are ordered most-restrictive-first. If a mnemonic matches
+// multiple substrings (e.g. contains both "_iu8" and "_f16"), the
+// first match wins. Do not reorder without verifying A0 nop counts.
+WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   bool IsWmma = Mnemonic.starts_with("v_wmma");
   bool IsSwmmac = Mnemonic.starts_with("v_swmmac");
   if (!IsWmma && !IsSwmmac)
@@ -100,11 +106,14 @@ static WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   return {4, 4};
 }
 
+namespace {
+
 static std::vector<WmmaHazard>
 validateWmmaCoexecHazards(const PatchContext &Ctx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   std::vector<WmmaHazard> Hazards;
+  DenseSet<size_t> PatchedValuIndices;
   int WmmaScanned = 0;
 
   for (size_t WmmaIdx = 0, E = Ctx.Decoded.size(); WmmaIdx < E; ++WmmaIdx) {
@@ -142,7 +151,8 @@ validateWmmaCoexecHazards(const PatchContext &Ctx) {
           continue;
         }
 
-        if (SafeSlots < Req.A0Nops) {
+        if (SafeSlots < Req.A0Nops &&
+            PatchedValuIndices.insert(ValuIdx).second) {
           Hazards.push_back({ValuIdx, Req.A0Nops - SafeSlots});
           log() << "hotswap: WMMA co-exec hazard at 0x"
                 << utohexstr(WmmaDI.Offset) << ": " << WmmaDI.Mnemonic
@@ -169,8 +179,7 @@ uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
   if (Hazards.empty())
     return 0;
 
-  SmallVector<uint8_t> VnopBytes = assembleSingleInst("v_nop", Ctx.LS);
-  if (VnopBytes.size() != 4) {
+  if (assembleSingleInst("v_nop", Ctx.LS).size() != 4) {
     log() << "hotswap: error: WMMA hazard: v_nop assembly failed\n";
     return 0;
   }
@@ -187,6 +196,9 @@ uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
     for (int I = 0; I < H.Deficit; ++I)
       AsmLines.push_back("v_nop");
 
+    // buildTrampoline takes assembly text, so we must print the MCInst.
+    // This is a string round-trip but unavoidable without refactoring
+    // the trampoline builder to accept MCInst directly.
     std::string PrintedInst;
     raw_string_ostream OS(PrintedInst);
     Ctx.LS.MCIP->printInst(&ValuDI.Inst, 0, "", *Ctx.LS.STI, OS);
@@ -194,6 +206,11 @@ uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
 
     Trampoline T = buildTrampoline(AsmLines, ValuDI.Offset, ValuDI.Size,
                                    TrampolineTextOffset, Ctx.LS);
+    if (T.Bytes.empty()) {
+      log() << "hotswap: error: WMMA hazard: buildTrampoline failed at 0x"
+            << utohexstr(ValuDI.Offset) << "\n";
+      continue;
+    }
     Ctx.OutTrampolines.push_back(std::move(T));
 
     log() << "hotswap: WMMA hazard fix at 0x" << utohexstr(ValuDI.Offset)

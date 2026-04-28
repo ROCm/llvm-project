@@ -353,6 +353,15 @@ bool checkVgprOverlap(const llvm::MCInst &WmmaInst,
                       const llvm::MCInst &ValuInst,
                       const llvm::MCRegisterInfo &MRI);
 
+/// WMMA/SWMMAC A0 vs B0 v_nop spacing requirement.
+struct WmmaNopReq {
+  int A0Nops;
+  int B0Nops;
+};
+
+/// Classify the A0/B0 v_nop requirement for a WMMA/SWMMAC mnemonic.
+WmmaNopReq classifyWmmaNops(llvm::StringRef Mnemonic);
+
 // -- VGPR liveness types ------------------------------------------------------
 
 /// Per-instruction def/use bitvectors over the VGPR index space. Populated by

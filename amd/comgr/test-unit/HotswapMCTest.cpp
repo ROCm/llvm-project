@@ -297,3 +297,65 @@ TEST(BuildTrampoline, EmptyOnBadAsm) {
                                  /*TrampolineTextOffset=*/0x1000, S);
   EXPECT_TRUE(T.Bytes.empty());
 }
+
+// -- classifyWmmaNops ---------------------------------------------------------
+
+TEST(ClassifyWmmaNops, NonWmmaReturnsDefault) {
+  WmmaNopReq Req = classifyWmmaNops("v_add_f32");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, IntegerWmmaReturns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_i32_16x16x32_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Iu4Returns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_i32_16x16x64_iu4");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, F8f6f4Returns1) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x128_f8f6f4");
+  EXPECT_EQ(Req.A0Nops, 1);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Fp8_16x16x128Returns3) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x128_fp8_fp8");
+  EXPECT_EQ(Req.A0Nops, 3);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Fp8SmallReturns1) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x32_fp8_fp8");
+  EXPECT_EQ(Req.A0Nops, 1);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, F16Returns4) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x16_f16");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Bf16Returns4) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x16_bf16");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, SwmmacIu8Returns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_swmmac_i32_16x16x64_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, OrderingMostRestrictiveWins) {
+  // A mnemonic containing both _iu8 and _f16 should return 8 (iu8 first)
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f16_something_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+}
