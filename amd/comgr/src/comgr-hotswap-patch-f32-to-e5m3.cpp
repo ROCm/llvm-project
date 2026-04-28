@@ -56,9 +56,20 @@ static std::string vgprName(unsigned N) {
   return ("v" + Twine(N)).str();
 }
 
+/// Strip True16 sub-register suffixes (`.l`, `.h`) from a register name.
+/// Newer LLVM MCInstPrinter builds emit these for instructions like
+/// v_cvt_pk_fp8_f32 that write to a 16-bit half, but the 32-bit ALU
+/// instructions in our replacement sequences don't accept them.
+static std::string stripTrue16Suffix(StringRef S) {
+  if (S.ends_with(".l") || S.ends_with(".h"))
+    return S.drop_back(2).str();
+  return S.str();
+}
+
 /// Strip neg/abs modifier wrappers from a printed operand, returning the
 /// bare register or literal name.  Handles `-v1`, `neg(v1)`, `|v1|`,
 /// `abs(v1)`, and combinations like `-|v1|` or `neg(abs(v1))`.
+/// Also strips True16 `.l`/`.h` suffixes from the resulting bare name.
 static std::string stripModifiers(StringRef Op) {
   Op = Op.trim();
   if (Op.starts_with("-"))
@@ -73,7 +84,7 @@ static std::string stripModifiers(StringRef Op) {
     Op = Op.drop_front(1);
   if (Op.starts_with("|") && Op.ends_with("|"))
     Op = Op.drop_front(1).drop_back(1);
-  return Op.str();
+  return stripTrue16Suffix(Op);
 }
 
 /// Parse the printed operands of a 2-operand instruction.  Expects MCInst-
@@ -96,7 +107,7 @@ static bool parseTwoOperands(const MCInst &Inst, const LLVMState &LS,
   if (Parts.size() < 2)
     return false;
 
-  Dst = Parts[0].trim().str();
+  Dst = stripTrue16Suffix(Parts[0].trim());
   Src0 = Parts[1].trim().split(' ').first.str();
   return !Dst.empty() && !Src0.empty();
 }
@@ -121,7 +132,7 @@ static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
   if (Parts.size() < 3)
     return false;
 
-  Dst = Parts[0].trim().str();
+  Dst = stripTrue16Suffix(Parts[0].trim());
   Src0 = Parts[1].trim().str();
   Src1 = Parts[2].trim().split(' ').first.str();
   return !Dst.empty() && !Src0.empty() && !Src1.empty();
