@@ -299,7 +299,7 @@ static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
 
 // -- assembleOrFail -----------------------------------------------------------
 
-static SmallVector<uint8_t, 16>
+static SmallVector<uint8_t>
 assembleOrFail(const std::string &AsmStr, const LLVMState &LS,
                const char *Context) {
   auto Bytes = assembleSingleInst(AsmStr, LS);
