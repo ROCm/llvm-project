@@ -217,7 +217,7 @@ define fastcc i32 @foo() {
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr93
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr94
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr95
-  ; CHECK-NEXT:   S_WAITCNT 0
+  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0_Expcnt_0_Lgkmcnt_0
   ; CHECK-NEXT:   $sgpr16 = S_MOV_B32 $sgpr33
   ; CHECK-NEXT:   $sgpr33 = S_MOV_B32 $sgpr32
   ; CHECK-NEXT:   $sgpr17 = S_OR_SAVEEXEC_B32 -1, implicit-def $exec, implicit-def dead $scc, implicit $exec
@@ -260,7 +260,7 @@ define fastcc i32 @foo() {
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr5
   ; CHECK-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa_register $sgpr32
   ; CHECK-NEXT:   $sgpr33 = S_MOV_B32 killed $sgpr4
-  ; CHECK-NEXT:   S_WAITCNT 16240
+  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0
   ; CHECK-NEXT:   S_SETPC_B64_return undef $sgpr30_sgpr31, implicit undef $vgpr0
   fence acquire
   call fastcc void @bar()
