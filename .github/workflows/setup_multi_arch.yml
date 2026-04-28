@@ -96,10 +96,30 @@ jobs:
         with:
           # We need the parent commit to do a diff
           repository: "ROCm/TheRock"
-            #ref: 'compiler/amd-staging'
-          ref: 55f1cc369e5df0b672e99720c893dd389ca83501          
+          ref: 'compiler/amd-staging'
           fetch-depth: 2
 
+      #Temporary block to merge the PR-4897
+      - name: Detect if ROCm/TheRock PR 4897 is open
+        id: pr4897
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: 'ROCm',
+              repo: 'TheRock',
+              pull_number: 4897,
+            });
+            core.setOutput('open', pr.state === 'open' ? 'true' : 'false');
+
+      - name: Merge PR 4897 on top of checkout (only if open)
+        if: steps.pr4897.outputs.open == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin pull/4897/head
+          git merge --no-edit FETCH_HEAD
+            
       - name: SHA of TheRock
         run: |
              git rev-parse HEAD
