@@ -78,26 +78,12 @@ jobs:
           ref: 'compiler/amd-staging'
       
       #Temporary block to merge the PR-4897
-      - name: Detect if ROCm/TheRock PR 4897 is open
-        id: pr4897
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: 'ROCm',
-              repo: 'TheRock',
-              pull_number: 4897,
-            });
-            core.setOutput('open', pr.state === 'open' ? 'true' : 'false');
-
-      - name: Merge PR 4897 on top of checkout (only if open)
-        if: steps.pr4897.outputs.open == 'true'
-        shell: bash
+      - name: Apply PR 4897 if not yet merged
         run: |
-          set -euo pipefail
-          git fetch origin pull/4897/head
-          git merge --no-edit FETCH_HEAD
-            
+          git fetch origin refs/pull/4897/head:pr-4897 2>/dev/null && \
+          ! git merge-base --is-ancestor pr-4897 HEAD 2>/dev/null && \
+          git cherry-pick --no-commit pr-4897 || \
+          echo "PR 4897 already merged or not available — skipping"
 
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
