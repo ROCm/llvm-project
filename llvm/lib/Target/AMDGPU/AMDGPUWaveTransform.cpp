@@ -2276,14 +2276,23 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
 
 namespace {
 
-using RegIntVariant = std::variant<int64_t, Register>;
+// Abstract value tracked per register: either a known-zero constant
+// (monostate) or an alias to another virtual register.
+using RegIntVariant = std::variant<std::monostate, Register>;
+// maps Register to variant
 using RegValueMap = DenseMap<Register, RegIntVariant>;
+// maps MBB to variant state resolved at end off MBB
 using BlockValueMap = DenseMap<MachineBasicBlock *, RegValueMap>;
 
-static inline RegIntVariant zeroVal() { return RegIntVariant{int64_t{0}}; }
-static inline bool isZero(const RegIntVariant &V) {
-  return std::holds_alternative<int64_t>(V);
+// return known zero variant
+static inline RegIntVariant zeroVal() {
+  return RegIntVariant{std::monostate{}};
 }
+// True iff V holds known zero variant
+static inline bool isZero(const RegIntVariant &V) {
+  return std::holds_alternative<std::monostate>(V);
+}
+// returns mapped register if V holds a register alias, else null
 static inline const Register *asReg(const RegIntVariant &V) {
   return std::get_if<Register>(&V);
 }
@@ -2335,10 +2344,9 @@ class ForwardPropSimplifier {
 
   // merge incoming OUT values from MBB's predecessors:
   // IN[MBB] = Intersection of all OUT[MBB.preds]
-  RegValueMap mergeIncoming(MachineBasicBlock &MBB) {
-    RegValueMap Result;
+  void mergeIncoming(MachineBasicBlock &MBB, RegValueMap &Result) {
     if (MBB.pred_empty())
-      return Result;
+      return;
 
     for (const auto &PredOUT : OUT[*MBB.pred_begin()]) {
       Register Reg = PredOUT.first;
@@ -2349,7 +2357,6 @@ class ForwardPropSimplifier {
           }))
         Result[Reg] = Expected;
     }
-    return Result;
   }
 
   const RegIntVariant *lookupValue(const RegValueMap &Map, Register Reg) {
@@ -2359,7 +2366,7 @@ class ForwardPropSimplifier {
 
   // Rewrite acc-register uses in MI to their tracked equivalent registers.
   void rewriteAccUses(MachineInstr &MI, const RegValueMap &Cur) {
-    for (MachineOperand &MO : MI.uses()) {
+    for (MachineOperand &MO : MI.explicit_uses()) {
       if (!isAccRegOperand(MO, AccRegs))
         continue;
       auto It = Cur.find(MO.getReg());
@@ -2416,7 +2423,7 @@ class ForwardPropSimplifier {
         if (Imm.isImm() && Imm.getImm() == 0)
           Cur[Dst] = zeroVal();
         else
-          Cur.erase(Dst);
+          llvm_unreachable("Accumulator MOV must be MOV 0");
         continue;
       }
 
@@ -2428,6 +2435,8 @@ class ForwardPropSimplifier {
             replaceWithMov(*MI, 0);
           else if (const Register *R = asReg(*SrcVal))
             replaceWithCopy(*MI, *R);
+          else
+            llvm_unreachable("Invalid register value");
           Cur[Dst] = *SrcVal;
         } else if (Src.isVirtual()) {
           Cur[Dst] = RegIntVariant{Src};
@@ -2463,6 +2472,7 @@ class ForwardPropSimplifier {
         Register Src2 = MI->getOperand(2).getReg();
         if (Register Other = otherIfOneIsZero(Cur, Src1, Src2))
           replaceWithCopy(*MI, Other);
+        continue;
       }
     }
   }
@@ -2470,7 +2480,8 @@ class ForwardPropSimplifier {
   // merge incoming OUT values from MBB's predecessors and forward propagate
   // merged values to obtain updated OUT for MBB
   bool processBlock(MachineBasicBlock &MBB) {
-    RegValueMap RegValues = mergeIncoming(MBB);
+    RegValueMap RegValues;
+    mergeIncoming(MBB, RegValues);
     forwardPropAccValues(MBB, RegValues);
     auto It = OUT.find(&MBB);
 
@@ -2493,12 +2504,13 @@ public:
     SmallVector<MachineBasicBlock *, 32> RPOBlocks(
         RPOT.begin(), RPOT.end());                    // maps RPO index to MBB
     DenseMap<MachineBasicBlock *, unsigned> RPOIndex; // maps MBB to RPO index
-    RPOIndex.reserve(RPOBlocks.size());
-    for (unsigned I = 0, E = RPOBlocks.size(); I != E; ++I)
+    unsigned N = RPOBlocks.size();
+    RPOIndex.reserve(N);
+    for (unsigned I = 0, E = N; I != E; ++I)
       RPOIndex[RPOBlocks[I]] = I;
 
     // Ping-pong bitvector worklists indexed by RPO number.
-    unsigned N = RPOBlocks.size();
+
     BitVector Active(N, true); // bitvector of active MBBs
     BitVector Next(N);         // bitvector of next MBBs
 
@@ -2510,8 +2522,8 @@ public:
           continue;
         for (MachineBasicBlock *Succ : MBB->successors()) {
           auto It = RPOIndex.find(Succ);
-          if (It != RPOIndex.end())
-            Next.set(It->second);
+          assert(It != RPOIndex.end() && "Invalid RPO index");
+          Next.set(It->second);
         }
       }
       Active.reset();
@@ -2698,10 +2710,11 @@ struct AccBBLiveness {
 static void
 computeAccUseDef(MachineFunction &MF, const AccRegSet &AccumulatorRegs,
                  DenseMap<MachineBasicBlock *, AccBBUseDef> &Result) {
+
   for (MachineBasicBlock &MBB : MF) {
     AccBBUseDef &UD = Result[&MBB];
     for (MachineInstr &MI : MBB) {
-      for (const MachineOperand &MO : MI.uses()) {
+      for (const MachineOperand &MO : MI.explicit_uses()) {
         if (!isAccRegOperand(MO, AccumulatorRegs))
           continue;
         Register R = MO.getReg();
@@ -2764,20 +2777,12 @@ static void buildAccInstMap(MachineFunction &MF,
     SmallVector<MachineInstr *, 8> OrderedAccInsts;
 
     for (MachineInstr &MI : MBB) {
-      bool IsAccInst = false;
-
-      for (const MachineOperand &MO : MI.uses()) {
-        if (isAccRegOperand(MO, AccumulatorRegs))
-          IsAccInst = true;
+      for (const MachineOperand &MO : MI.explicit_operands()) {
+        if (isAccRegOperand(MO, AccumulatorRegs)) {
+          OrderedAccInsts.push_back(&MI);
+          break;
+        }
       }
-
-      for (const MachineOperand &MO : MI.defs()) {
-        if (isAccRegOperand(MO, AccumulatorRegs))
-          IsAccInst = true;
-      }
-
-      if (IsAccInst)
-        OrderedAccInsts.push_back(&MI);
     }
 
     if (!OrderedAccInsts.empty())
@@ -2808,7 +2813,7 @@ void AMDGPUWaveTransform::cleanup(MachineFunction &MF,
     SmallVector<MachineInstr *, 4> LocalDeadDefs;
 
     for (MachineInstr *MI : AccInsts) {
-      for (const MachineOperand &MO : MI->uses()) {
+      for (const MachineOperand &MO : MI->explicit_uses()) {
         if (isAccRegOperand(MO, AccumulatorRegs))
           LastUnusedDef.erase(MO.getReg());
       }
