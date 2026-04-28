@@ -102,6 +102,7 @@ jobs:
       #Temporary block to merge the PR-4897
       - name: Apply PR 4897 if not yet merged
         run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           if ! git fetch origin pull/4897/head:refs/remotes/origin/pr-4897-head; then
              echo "Could not fetch refs/pull/4897/head — skipping."
              exit 0
