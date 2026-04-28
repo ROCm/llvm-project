@@ -2217,7 +2217,7 @@ void ControlFlowRewriter::rewrite() {
 
   }
   Updater.insertAccumulatorResets();
-  AccumulatorRegs = Updater.takeAllAccumulators();
+  AccumulatorRegs = std::move(Updater.getAllAccumulators());
   Updater.cleanup();
 
 }

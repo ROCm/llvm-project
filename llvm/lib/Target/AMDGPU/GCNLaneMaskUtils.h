@@ -133,13 +133,7 @@ private:
 public:
   Register Accumulator;
 
-  const SmallDenseSet<Register, 4> &getAllAccumulators() const {
-    return AllAccumulators;
-  }
-
-  SmallDenseSet<Register, 4> takeAllAccumulators() {
-    return std::move(AllAccumulators);
-  }
+  SmallDenseSet<Register, 4> &getAllAccumulators() { return AllAccumulators; }
 
   GCNLaneMaskUpdater(MachineFunction &MF) : LMU(MF) {}
 
