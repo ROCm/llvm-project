@@ -771,28 +771,32 @@ body:             |
 ...
 ---
 
-# Same as above case, but use flat memory instructions instead
+# Same as above case, but use flat memory instructions instead.
+# FLAT loads set scores on both LOAD_CNT and DS_CNT. The preheader hoist
+# simulation detects that the DS_CNT (lgkmcnt) wait would stall on back-edge
+# traffic from the FLAT store, and flushes it in the preheader.
+# On GFX9 this combines with the existing vmcnt(0) flush into a single wait.
 
 # GFX9-LABEL: waitcnt_vm_loop_flat_mem
 # GFX9-LABEL: bb.0:
-# GFX9: S_WAITCNT 39
+# GFX9: S_WAITCNT 112
 # GFX9-LABEL: bb.1:
-# GFX9-NOT: S_WAITCNT 39
+# GFX9-NOT: S_WAITCNT
 # GFX9-LABEL: bb.2:
 
 # GFX10-LABEL: waitcnt_vm_loop_flat_mem
 # GFX10-LABEL: bb.0:
-# GFX10-NOT: S_WAITCNT 11
+# GFX10: S_WAITCNT 49279
 # GFX10-LABEL: bb.1:
-# GFX10: S_WAITCNT 11
+# GFX10: S_WAITCNT 16240
 # GFX10-LABEL: bb.2:
 
 # GFX12-LABEL: waitcnt_vm_loop_flat_mem
 # GFX12-LABEL: bb.0:
 # GFX12: FLAT_LOAD_DWORD
-# GFX12-NOT: S_WAIT_LOADCNT_DSCNT 0
+# GFX12: S_WAIT_DSCNT 0
 # GFX12-LABEL: bb.1:
-# GFX12: S_WAIT_LOADCNT_DSCNT 0
+# GFX12: S_WAIT_LOADCNT 0
 # GFX12-LABEL: bb.2:
 name:            waitcnt_vm_loop_flat_mem
 body:             |

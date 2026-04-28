@@ -2,22 +2,17 @@
 # RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -run-pass=si-insert-waitcnts -o - %s | FileCheck %s
 # RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -run-pass=si-insert-waitcnts -o - %s | FileCheck %s
 
-# Test for the fix that removed the incorrect S_BARRIER check for DS stores.
-# Previously, the code would reset SeenDSStoreInCurrMBB when encountering an
-# S_BARRIER, incorrectly assuming that stores postdominated by a barrier would
-# be waited at the barrier. This was wrong because:
-# 1. S_BARRIER without AutoWaitcntBeforeBarrier does not automatically wait for DS stores to complete
-# 2. S_BARRIER with BackOffBarrier feature does not later flush memory ops by adding ZERO waitcnt
-#
-# This test ensures that when a loop has a DS store followed by S_BARRIER,
-# the preheader flush optimization is NOT applied (no S_WAIT_DSCNT in preheader).
-# The wait should happen inside the loop instead.
+# Test for DS store followed by S_BARRIER in loop.
+# Previously, DS stores would prevent preheader flush entirely. With the
+# queue simulation, the DS_CNT flush is correctly hoisted to the preheader
+# because the back-edge DS store traffic would stall the invariant's wait.
+# S_BARRIER with BackOffBarrier does not affect this decision.
 
 ---
 # Test: DS store followed by S_BARRIER in loop.
 # DS load in preheader, value used in loop.
-# The preheader should NOT have S_WAIT_DSCNT because SeenDSStoreInLoop = true.
-# Instead, the wait should be inside the loop.
+# The preheader hoist simulation detects that the DS store's back-edge traffic
+# stalls the invariant, so S_WAIT_DSCNT is flushed in the preheader.
 name: ds_store_barrier_no_preheader_flush
 tracksRegLiveness: true
 machineFunctionInfo:
@@ -29,15 +24,15 @@ body: |
   ; CHECK-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1, $vgpr2
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   $vgpr10_vgpr11_vgpr12_vgpr13 = DS_READ_B128 $vgpr0, 0, 0, implicit $m0, implicit $exec
-  ; Verify NO S_WAIT_DSCNT in preheader - the wait must be inside the loop
-  ; CHECK-NOT:    S_WAIT_DSCNT
+  ; DS_CNT flush hoisted to preheader by queue simulation
+  ; CHECK-NEXT:   S_WAIT_DSCNT 0
   ; CHECK-NEXT:   S_BRANCH %bb.1
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.1:
   ; CHECK-NEXT:   successors: %bb.1(0x40000000), %bb.2(0x40000000)
   ; CHECK-NEXT:   liveins: $sgpr0, $vgpr0, $vgpr1, $vgpr2, $vgpr10
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   S_WAIT_DSCNT 0
+  ; No S_WAIT_DSCNT here - already resolved in preheader
   ; CHECK-NEXT:   $vgpr30 = V_ADD_F32_e32 $vgpr10, $vgpr1, implicit $mode, implicit $exec
   ; CHECK-NEXT:   DS_WRITE_B32 $vgpr2, $vgpr30, 0, 0, implicit $m0, implicit $exec
   ; With BackOffBarrier, no S_WAIT_DSCNT needed before S_BARRIER
