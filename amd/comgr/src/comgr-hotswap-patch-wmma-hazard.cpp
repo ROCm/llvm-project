@@ -42,34 +42,31 @@ static constexpr uint64_t IsWMMA = UINT64_C(1) << 59;
 static constexpr uint64_t IsSWMMAC = UINT64_C(1) << 63;
 } // namespace AmdgpuTSFlags
 
-static uint64_t getTSFlags(const MCInst &Inst, const MCInstrInfo &MCII) {
+uint64_t getTSFlags(const MCInst &Inst, const MCInstrInfo &MCII) {
   return MCII.get(Inst.getOpcode()).TSFlags;
 }
 
-static bool hasTSFlags(const MCInst &Inst, const MCInstrInfo &MCII,
-                       uint64_t Mask) {
+bool hasTSFlags(const MCInst &Inst, const MCInstrInfo &MCII, uint64_t Mask) {
   return (getTSFlags(Inst, MCII) & Mask) != 0;
 }
 
-static bool isWmmaLike(const MCInst &Inst, const MCInstrInfo &MCII) {
+bool isWmmaLike(const MCInst &Inst, const MCInstrInfo &MCII) {
   return hasTSFlags(Inst, MCII,
                     AmdgpuTSFlags::IsWMMA | AmdgpuTSFlags::IsSWMMAC);
 }
 
-static bool isVNop(const MCInst &Inst, const MCInstrInfo &MCII) {
-  return MCII.getName(Inst.getOpcode()) == "V_NOP_e32";
-}
+bool isVNop(const InternalDecodedInst &DI) { return DI.Mnemonic == "v_nop"; }
 
-static bool isCoexecutableVALU(const InternalDecodedInst &DI,
-                               const MCInstrInfo &MCII) {
-  if (isVNop(DI.Inst, MCII))
+bool isCoexecutableVALU(const InternalDecodedInst &DI,
+                        const MCInstrInfo &MCII) {
+  if (isVNop(DI))
     return false;
   if (!hasTSFlags(DI.Inst, MCII, AmdgpuTSFlags::VALU))
     return false;
   return !isWmmaLike(DI.Inst, MCII);
 }
 
-static bool isTerminatingSalu(const MCInst &Inst, const MCInstrInfo &MCII) {
+bool isTerminatingSalu(const MCInst &Inst, const MCInstrInfo &MCII) {
   const MCInstrDesc &Desc = MCII.get(Inst.getOpcode());
   return Desc.isTerminator() || Desc.isBranch() || Desc.isCall() ||
          Desc.isReturn();
@@ -81,6 +78,9 @@ static bool isTerminatingSalu(const MCInst &Inst, const MCInstrInfo &MCII) {
 // multiple substrings (e.g. contains both "_iu8" and "_f16"), the
 // first match wins. Do not reorder without verifying A0 nop counts.
 WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
+  // Redundant in production (caller filters via isWmmaLike), but kept
+  // as a defensive guard since classifyWmmaNops is a public function
+  // also exercised directly by unit tests with non-WMMA mnemonics.
   bool IsWmma = Mnemonic.starts_with("v_wmma");
   bool IsSwmmac = Mnemonic.starts_with("v_swmmac");
   if (!IsWmma && !IsSwmmac)
@@ -92,9 +92,8 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
   if (Mnemonic.contains("f8f6f4"))
     return {1, 4};
 
-  bool HasF8 = Mnemonic.contains("_fp8") || Mnemonic.contains("_f8") ||
-               Mnemonic.contains("_bf8");
-  if (HasF8) {
+  if (Mnemonic.contains("_fp8") || Mnemonic.contains("_f8") ||
+      Mnemonic.contains("_bf8")) {
     if (Mnemonic.contains("16x16x128"))
       return {3, 4};
     return {1, 4};
@@ -108,8 +107,7 @@ WmmaNopReq classifyWmmaNops(StringRef Mnemonic) {
 
 namespace {
 
-static std::vector<WmmaHazard>
-validateWmmaCoexecHazards(const PatchContext &Ctx) {
+std::vector<WmmaHazard> findWmmaCoexecHazards(const PatchContext &Ctx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
   std::vector<WmmaHazard> Hazards;
@@ -130,7 +128,7 @@ validateWmmaCoexecHazards(const PatchContext &Ctx) {
     for (size_t ValuIdx = WmmaIdx + 1; ValuIdx < E; ++ValuIdx) {
       const InternalDecodedInst &Candidate = Ctx.Decoded[ValuIdx];
 
-      if (isVNop(Candidate.Inst, MCII)) {
+      if (isVNop(Candidate)) {
         ++SafeSlots;
         if (SafeSlots >= Req.A0Nops)
           break;
@@ -175,14 +173,9 @@ validateWmmaCoexecHazards(const PatchContext &Ctx) {
 } // anonymous namespace
 
 uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
-  std::vector<WmmaHazard> Hazards = validateWmmaCoexecHazards(Ctx);
+  std::vector<WmmaHazard> Hazards = findWmmaCoexecHazards(Ctx);
   if (Hazards.empty())
     return 0;
-
-  if (assembleSingleInst("v_nop", Ctx.LS).size() != 4) {
-    log() << "hotswap: error: WMMA hazard: v_nop assembly failed\n";
-    return 0;
-  }
 
   uint32_t Patched = 0;
   for (const WmmaHazard &H : Hazards) {
@@ -192,19 +185,12 @@ uint32_t applyWmmaHazardPatch(PatchContext &Ctx) {
     for (const Trampoline &T : Ctx.OutTrampolines)
       TrampolineTextOffset += T.Bytes.size();
 
-    SmallVector<std::string> AsmLines;
+    SmallVector<MCInst> Insts;
     for (int I = 0; I < H.Deficit; ++I)
-      AsmLines.push_back("v_nop");
+      Insts.push_back(Ctx.LS.VNopInst);
+    Insts.push_back(ValuDI.Inst);
 
-    // buildTrampoline takes assembly text, so we must print the MCInst.
-    // This is a string round-trip but unavoidable without refactoring
-    // the trampoline builder to accept MCInst directly.
-    std::string PrintedInst;
-    raw_string_ostream OS(PrintedInst);
-    Ctx.LS.MCIP->printInst(&ValuDI.Inst, 0, "", *Ctx.LS.STI, OS);
-    AsmLines.push_back(StringRef(PrintedInst).trim().str());
-
-    Trampoline T = buildTrampoline(AsmLines, ValuDI.Offset, ValuDI.Size,
+    Trampoline T = buildTrampoline(Insts, ValuDI.Offset, ValuDI.Size,
                                    TrampolineTextOffset, Ctx.LS);
     if (T.Bytes.empty()) {
       log() << "hotswap: error: WMMA hazard: buildTrampoline failed at 0x"
