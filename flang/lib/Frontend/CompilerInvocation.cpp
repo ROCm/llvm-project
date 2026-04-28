@@ -901,7 +901,7 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
     llvm::StringRef val = arg->getValue();
     if (val == "gpu") {
       opts.features.Enable(
-          Fortran::common::LanguageFeature::AmdMemoryAllocator);
+          Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
     } else if (val != "host") {
       diags.Report(clang::diag::err_drv_invalid_value)
           << arg->getAsString(args) << val;

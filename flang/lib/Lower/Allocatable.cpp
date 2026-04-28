@@ -197,18 +197,17 @@ bool isRegionNestedInOmpTarget(mlir::Region &region) {
   return false;
 }
 
-/// Generate a runtime call to set allocator idx of descriptor for target amd.
-static void genAMDRuntimeDescriptorSetAllocIdx(fir::FirOpBuilder &builder,
-                                               mlir::Location loc,
-                                               const fir::MutableBoxValue &box,
-                                               int allocatorId) {
+static void genOpenMPRuntimeDescriptorSetAllocIdx(fir::FirOpBuilder &builder,
+                                                  mlir::Location loc,
+                                                  const fir::MutableBoxValue &box,
+                                                  int allocatorId) {
   if (isRegionNestedInOmpTarget(builder.getRegion()))
     return;
   auto *context = builder.getContext();
   mlir::Type descriptorTy = box.getAddr().getType();
   mlir::IntegerType posTy = builder.getI32Type();
   mlir::func::FuncOp callee = builder.createFunction(
-      loc, RTNAME_STRING(AMDAllocatableSetAllocIdx),
+      loc, RTNAME_STRING(OpenMPAllocatableSetAllocIdx),
       mlir::FunctionType::get(context, {descriptorTy, posTy}, {}));
   llvm::SmallVector<mlir::Value> args{box.getAddr()};
   args.push_back(
@@ -524,8 +523,8 @@ private:
                             !box.isPointer();
     unsigned allocatorIdx = Fortran::lower::getAllocatorIdx(alloc.getSymbol());
     const auto &langFeatures = converter.getFoldingContext().languageFeatures();
-    bool isAMDMemoryAllocatorEnabled = langFeatures.IsEnabled(
-        Fortran::common::LanguageFeature::AmdMemoryAllocator);
+    bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
+        Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
 
     if (inlineAllocation &&
         ((isCudaAllocate && isCudaDeviceContext) || !isCudaAllocate)) {
@@ -558,8 +557,8 @@ private:
     genAllocateObjectBounds(alloc, box);
     mlir::Value stat;
     if (!isCudaAllocate) {
-      if (isAMDMemoryAllocatorEnabled)
-        genAMDRuntimeDescriptorSetAllocIdx(builder, loc, box, 1);
+      if (isOpenMPAllocatorEnabled)
+        genOpenMPRuntimeDescriptorSetAllocIdx(builder, loc, box, 1);
       stat = genRuntimeAllocate(builder, loc, box, errorManager);
       setPinnedToFalse();
     } else {
@@ -681,8 +680,8 @@ private:
     unsigned allocatorIdx = Fortran::lower::getAllocatorIdx(alloc.getSymbol());
     fir::ExtendedValue exv = isSource ? sourceExv : moldExv;
     const auto &langFeatures = converter.getFoldingContext().languageFeatures();
-    bool isAMDMemoryAllocatorEnabled = langFeatures.IsEnabled(
-        Fortran::common::LanguageFeature::AmdMemoryAllocator);
+    bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
+        Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
 
     bool sourceIsDevice = false;
     if (const Fortran::semantics::Symbol *sym{GetLastSymbol(sourceExpr)})
@@ -711,8 +710,8 @@ private:
       stat =
           genCudaAllocate(builder, loc, box, errorManager, alloc.getSymbol());
     } else {
-      if (isAMDMemoryAllocatorEnabled)
-        genAMDRuntimeDescriptorSetAllocIdx(builder, loc, box, 1);
+      if (isOpenMPAllocatorEnabled)
+        genOpenMPRuntimeDescriptorSetAllocIdx(builder, loc, box, 1);
       if (isSource)
         stat = genRuntimeAllocateSource(builder, loc, box, exv, errorManager);
       else

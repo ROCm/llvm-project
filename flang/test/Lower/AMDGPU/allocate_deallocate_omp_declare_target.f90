@@ -5,8 +5,8 @@ subroutine func_t_device()
   !$omp declare target enter(func_t_device) device_type(nohost)
     integer, ALLOCATABLE :: poly
 
-! CHECK-OMP-NOT: call void @_FortranAAMDAllocatableSetAllocIdx({{.*}}, i32 1)
-! CHECK: call void @_FortranAAMDAllocatableSetAllocIdx({{.*}}, i32 1)
+! CHECK-OMP-NOT: call void @_FortranAOpenMPAllocatableSetAllocIdx({{.*}}, i32 1)
+! CHECK: call void @_FortranAOpenMPAllocatableSetAllocIdx({{.*}}, i32 1)
 ! CHECK-OMP: call i32 @_FortranAAllocatableAllocate
 ! CHECK: call i32 @_FortranAAllocatableAllocate   
     ALLOCATE(poly)

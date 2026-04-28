@@ -10,8 +10,8 @@ program main
      !$omp target teams distribute parallel do private(poly)
      do j=1,n
 
-! CHECK-OMP-NOT: call void @_FortranAAMDAllocatableSetAllocIdx({{.*}}, i32 1)
-! CHECK: call void @_FortranAAMDAllocatableSetAllocIdx({{.*}}, i32 1)
+! CHECK-OMP-NOT: call void @_FortranAOpenMPAllocatableSetAllocIdx({{.*}}, i32 1)
+! CHECK: call void @_FortranAOpenMPAllocatableSetAllocIdx({{.*}}, i32 1)
 ! CHECK-OMP: call i32 @_FortranAAllocatableAllocate
 ! CHECK: call i32 @_FortranAAllocatableAllocate
        ALLOCATE(poly(1:3))
