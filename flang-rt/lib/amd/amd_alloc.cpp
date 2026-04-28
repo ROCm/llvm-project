@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#warning "amd_alloc.cpp was part of the build"
-
 #define ALLOC_DEBUG 1
 
 #include "flang/Runtime/AMD/amd_alloc.h"

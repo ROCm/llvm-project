@@ -6,13 +6,10 @@
 #
 #===------------------------------------------------------------------------===#
 
-if (FLANG_RT_INCLUDE_AMD)
-  message(STATUS "Adding AMD-specific Fortran runtime implementation")
-  add_subdirectory(amd)
-endif()
 if (FLANG_RT_ENABLE_STATIC OR FLANG_RT_ENABLE_SHARED)
   add_subdirectory(quadmath)
   add_subdirectory(runtime)
+  add_subdirectory(amd)
   if (FLANG_RT_INCLUDE_CUF)
     add_subdirectory(cuda)
   endif()
