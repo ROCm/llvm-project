@@ -1601,14 +1601,6 @@ static TryCastResult TryStaticCast(Sema &Self, ExprResult &SrcExpr,
     return TC_Success;
   }
 
-  if (SrcType == Self.Context.AMDGPUFeaturePredicateTy &&
-      DestType == Self.Context.getLogicalOperationType()) {
-    SrcExpr = Self.AMDGPU().ExpandAMDGPUPredicateBI(
-        dyn_cast<CallExpr>(SrcExpr.get()));
-    Kind = CK_NoOp;
-    return TC_Success;
-  }
-
   // We tried everything. Everything! Nothing works! :-(
   return TC_NotApplicable;
 }
