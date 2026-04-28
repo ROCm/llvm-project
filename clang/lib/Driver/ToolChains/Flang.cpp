@@ -1090,13 +1090,13 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   addFortranDialectOptions(Args, CmdArgs);
 
-  if (const Arg *A = Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
+  if (const Arg *A =
+          Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
     StringRef Val(A->getValue());
     if (Val != "gpu" && Val != "host") {
       D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
     } else {
-      CmdArgs.push_back(
-          Args.MakeArgString("-fopenmp-default-allocate=" + Val));
+      CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
       if (Val == "gpu") {
         CmdArgs.push_back("-mmlir");
         CmdArgs.push_back("-use-alloc-runtime");
