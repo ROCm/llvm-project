@@ -33,6 +33,8 @@
 
 #define OFFLOAD_DEVICE_DEFAULT -1
 
+#define HOST_DEVICE                -10
+
 /// return flags of __tgt_target_XXX public APIs
 enum __tgt_target_return_t : int {
   /// successful offload executed on a target device
@@ -77,13 +79,15 @@ enum tgt_map_type {
   // the structured region
   // This is an OpenMP extension for the sake of OpenACC support.
   OMP_TGT_MAPTYPE_OMPX_HOLD = 0x2000,
+  // mapping is for a descriptor (a.k.a. dope vector)
+  OMP_TGT_MAPTYPE_DESCRIPTOR = 0x4000,
   // Attach pointer and pointee, after processing all other maps.
   // Applicable to map-entering directives. Does not change ref-count.
-  OMP_TGT_MAPTYPE_ATTACH = 0x4000,
+  OMP_TGT_MAPTYPE_ATTACH = 0x8000,
   // When a lookup fails, fall back to using null as the translated pointer,
   // instead of preserving the original pointer's value. Currently only
   // useful in conjunction with RETURN_PARAM.
-  OMP_TGT_MAPTYPE_FB_NULLIFY = 0x8000,
+  OMP_TGT_MAPTYPE_FB_NULLIFY = 0x10000,
   // descriptor for non-contiguous target-update
   OMP_TGT_MAPTYPE_NON_CONTIG = 0x100000000000,
   // member of struct, member given by [16 MSBs] - 1
@@ -274,12 +278,25 @@ struct __tgt_target_non_contig {
 extern "C" {
 #endif
 
+int ompx_get_team_procs(int device_num);
+
+/// The OpenMP access group type. The criterion for grouping tasks using a
+/// specific grouping property.
+enum omp_access_t {
+  /// Groups the tasks based on the contention group to which they belong.
+  omp_access_cgroup = 0,
+  /// Groups the tasks based on the parallel region to which they bind.
+  omp_access_pteam = 1,
+};
+
 void ompx_dump_mapping_tables(void);
 int omp_get_num_devices(void);
 int omp_get_device_num(void);
 int omp_get_device_from_uid(const char *DeviceUid);
 const char *omp_get_uid_from_device(int DeviceNum);
 int omp_get_initial_device(void);
+size_t omp_get_gprivate_limit(int DeviceNum,
+                              omp_access_t AccessGroup = omp_access_cgroup);
 void *omp_target_alloc(size_t Size, int DeviceNum);
 void omp_target_free(void *DevicePtr, int DeviceNum);
 int omp_target_is_present(const void *Ptr, int DeviceNum);
@@ -300,6 +317,8 @@ int omp_target_disassociate_ptr(const void *HostPtr, int DeviceNum);
 
 /// Explicit target memory allocators
 /// Using the llvm_ prefix until they become part of the OpenMP standard.
+void *llvm_omp_target_lock_mem(void *ptr, size_t size, int device_num);
+void llvm_omp_target_unlock_mem(void *ptr, int device_num);
 void *llvm_omp_target_alloc_device(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_host(size_t Size, int DeviceNum);
 void *llvm_omp_target_alloc_shared(size_t Size, int DeviceNum);
@@ -415,11 +434,13 @@ void __tgt_target_nowait_query(void **AsyncHandle);
 
 /// Executes a target kernel by replaying recorded kernel arguments and
 /// device memory.
-int __tgt_target_kernel_replay(ident_t *Loc, int64_t DeviceId, void *HostPtr,
-                               void *DeviceMemory, int64_t DeviceMemorySize,
-                               void **TgtArgs, ptrdiff_t *TgtOffsets,
-                               int32_t NumArgs, int32_t NumTeams,
-                               int32_t ThreadLimit, uint64_t LoopTripCount);
+int __tgt_target_kernel_replay(
+    ident_t *Loc, int64_t DeviceId, void *HostPtr, void *DeviceMemory,
+    void *ReuseDeviceAlloc, int64_t DeviceMemorySize,
+    const llvm::offloading::EntryTy *Globals, int32_t NumGlobals,
+    void **TgtArgs, ptrdiff_t *TgtOffsets, int32_t NumArgs, int32_t NumTeams,
+    int32_t ThreadLimit, uint32_t SharedMemorySize, uint64_t LoopTripCount,
+    KernelReplayOutcomeTy *ReplayOutcome);
 
 void __tgt_set_info_flag(uint32_t);
 
@@ -427,7 +448,12 @@ int __tgt_print_device_info(int64_t DeviceId);
 
 int __tgt_activate_record_replay(int64_t DeviceId, uint64_t MemorySize,
                                  void *VAddr, bool IsRecord, bool SaveOutput,
-                                 uint64_t &ReqPtrArgOffset);
+                                 bool EmitReport, const char *OutputDirPath);
+
+// Registers a callback for the RPC server. Expects this function type.
+// unsigned callback(rpc::Server::Port *Port, unsigned NumLanes). See the RPC
+// code for details.
+void __tgt_register_rpc_callback(unsigned (*Callback)(void *, unsigned));
 
 #ifdef __cplusplus
 }

@@ -58,19 +58,19 @@
 // implicitly turns on LLVMs SanitizerCoverage, which the driver then forwards
 // to the device cc1. SanitizerCoverage is not supported on amdgcn.)
 
-// RUN: %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ \
+// RUN: not %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ \
 // RUN:   -fsanitize=address,fuzzer --rocm-path=%S/Inputs/rocm %s 2>&1 \
 // RUN:   | FileCheck -check-prefixes=INVALIDCOMBINATION,INVALIDCOMBINATION1 %s
-// RUN: %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ \
+// RUN: not %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ \
 // RUN:   -fsanitize=fuzzer,address --rocm-path=%S/Inputs/rocm %s 2>&1 \
 // RUN:   | FileCheck -check-prefixes=INVALIDCOMBINATION,INVALIDCOMBINATION2 %s
 
 // Do the same for multiple -fsanitize arguments and multi-arch scenarios.
 
-// RUN:   %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ --offload-arch=gfx908:xnack- \
+// RUN: not %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+ --offload-arch=gfx908:xnack- \
 // RUN:   -fsanitize=address,fuzzer -fsanitize=leak --rocm-path=%S/Inputs/rocm %s 2>&1 \
 // RUN:   | FileCheck -check-prefixes=MULT1,XNACK2 %s
-// RUN:   %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+,gfx908:xnack- \
+// RUN: not  %clang -### --target=x86_64-unknown-linux-gnu --offload-arch=gfx900:xnack+,gfx908:xnack- \
 // RUN:   -fsanitize=fuzzer,address -fsanitize=leak --rocm-path=%S/Inputs/rocm %s 2>&1 \
 // RUN:   | FileCheck -check-prefixes=MULT2,XNACK2 %s
 
@@ -102,13 +102,11 @@
 // CHECK-NOT: {{"[^"]*lld(\.exe){0,1}".* ".*hip.bc"}}
 // CHECK: {{"[^"]*clang[^"]*".* "-triple" "x86_64-unknown-linux-gnu".* "-fsanitize=address"}}
 
-// NORDC: {{"[^"]*clang[^"]*".* "-emit-obj".* "-fcuda-is-device".* .* "-mlink-bitcode-file" ".*asanrtl.bc".* "-fsanitize=address".*}} "-o" "[[OUT:[^"]*.o]]"
-// NORDC-NOT: {{"[^"]*lld(\.exe){0,1}".*}} "[[OUT]]" {{".*asanrtl.bc" ".*hip.bc"}}
+// NORDC: {{"[^"]*clang[^"]*".* "-emit-llvm-bc".* "-fcuda-is-device".* .* "-mlink-bitcode-file" ".*asanrtl.bc".* "-fsanitize=address".*}} "-o" "[[OUT:[^"]*.bc]]"
 // NORDC: {{"[^"]*clang[^"]*".* "-triple" "x86_64-unknown-linux-gnu".* "-fsanitize=address"}}
 
-// RDC: {{"[^"]*clang[^"]*".* "-triple" "x86_64-unknown-linux-gnu".* "-fsanitize=address"}}
 // RDC: {{"[^"]*clang[^"]*".* "-emit-llvm-bc".* "-fcuda-is-device".* "-mlink-bitcode-file" ".*asanrtl.bc".* "-fsanitize=address".*}} "-o" "[[OUT:[^"]*.bc]]"
-// RDC-NOT: {{"[^"]*lld(\.exe){0,1}".*}} "[[OUT]]" {{".*asanrtl.bc" ".*hip.bc"}}
+// RDC: {{"[^"]*clang[^"]*".* "-triple" "x86_64-unknown-linux-gnu".* "-fsanitize=address"}}
 
 // FAIL: error: cannot find ROCm device library for ABI version 5; provide its path via '--rocm-path' or '--rocm-device-lib-path', or pass '-nogpulib' to build without ROCm device library
 

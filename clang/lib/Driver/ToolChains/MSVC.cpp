@@ -267,6 +267,9 @@ void visualstudio::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       break;
     case Driver::OMPRT_GOMP:
       break;
+    case Driver::OMPRT_BOLT:
+      llvm::report_fatal_error("MSVC toolchain does not support OMPRT_BOLT");
+      break;
     case Driver::OMPRT_Unknown:
       // Already diagnosed.
       break;
@@ -518,7 +521,9 @@ void MSVCToolChain::addSYCLIncludeArgs(const ArgList &DriverArgs,
 
 void MSVCToolChain::addOffloadRTLibs(unsigned ActiveKinds, const ArgList &Args,
                                      ArgStringList &CmdArgs) const {
-  if (Args.hasArg(options::OPT_no_hip_rt) || Args.hasArg(options::OPT_r))
+  if (!Args.hasFlag(options::OPT_offloadlib, options::OPT_no_offloadlib,
+                    true) ||
+      Args.hasArg(options::OPT_no_hip_rt) || Args.hasArg(options::OPT_r))
     return;
 
   if (ActiveKinds & Action::OFK_HIP) {

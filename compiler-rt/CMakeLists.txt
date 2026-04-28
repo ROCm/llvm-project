@@ -32,6 +32,14 @@ list(INSERT CMAKE_MODULE_PATH 0
   "${LLVM_COMMON_CMAKE_UTILS}/Modules"
   )
 
+# Expose the shared `runtimes-libc-*` targets to compiler-rt subcomponents
+# (same as libcxx / libcxxabi / libunwind).
+if(LLVM_RUNTIMES_BUILD)
+  list(APPEND CMAKE_MODULE_PATH
+       "${CMAKE_CURRENT_SOURCE_DIR}/../runtimes/cmake/Modules")
+  include(HandleLibC)
+endif()
+
 if(CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_CFG_RESOLVED_INTDIR "${CMAKE_CFG_INTDIR}/")
 else()
@@ -355,6 +363,13 @@ if("${ANDROID_API_LEVEL}" GREATER_EQUAL 29)
   list(APPEND SANITIZER_COMMON_CFLAGS -fno-emulated-tls)
   string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " -fno-emulated-tls")
 endif()
+# Hexagon Linux uses native TLS (TPREL via the UGP register); the sanitizer
+# runtimes must be built without emulated TLS so that __thread variables are
+# placed in .tdata/.tbss instead of emutls control structures.
+if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "hexagon")
+  list(APPEND SANITIZER_COMMON_CFLAGS -fno-emulated-tls)
+  string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " -fno-emulated-tls")
+endif()
 if(NOT WIN32)
   append_list_if(COMPILER_RT_HAS_FPIC_FLAG -fPIC SANITIZER_COMMON_CFLAGS)
 endif()
@@ -513,6 +528,26 @@ elseif(COMPILER_RT_HAS_G_FLAG)
   list(APPEND SANITIZER_COMMON_CFLAGS -g)
 endif()
 
+if(SANITIZER_AMDGPU)
+  list(APPEND SANITIZER_COMMON_CFLAGS -DSANITIZER_AMDGPU=1)
+  message(STATUS "Looking 'hsa' and 'amd_comgr' header")
+  find_path(HSA_INCLUDE NAMES hsa.h HINTS ${SANITIZER_HSA_INCLUDE_PATH} /opt/rocm/include PATH_SUFFIXES hsa)
+  if(NOT HSA_INCLUDE)
+    message(FATAL_ERROR "Required header 'hsa.h' not found in path ${HSA_INCLUDE}. Aborting SANITIZER_AMDGPU build")
+  endif()
+  message(STATUS "Found 'hsa.h' in ${HSA_INCLUDE}")
+  include_directories(${HSA_INCLUDE})
+  find_path(COMgr_INCLUDE NAMES amd_comgr.h.in HINTS ${SANITIZER_COMGR_INCLUDE_PATH} PATH_SUFFIXES amd_comgr)
+  if(NOT COMgr_INCLUDE)
+    find_path(COMgr_INCLUDE NAMES amd_comgr.h HINTS /opt/rocm/include PATH_SUFFIXES amd_comgr)
+    if(NOT COMgr_INCLUDE)
+      message(FATAL_ERROR "Required header 'amd_comgr.h/amd_comgr.h.in' not found in path ${COMgr_INCLUDE}. Aborting SANITIZER_AMDGPU build")
+    endif()
+  endif()
+  message(STATUS "Found 'amd_comgr.h.in/amd_comgr.h' in ${COMgr_INCLUDE}")
+  include_directories(${COMgr_INCLUDE})
+endif()
+
 if(LLVM_ENABLE_MODULES)
   # Sanitizers cannot be built with -fmodules. The interceptors intentionally
   # don't include system headers, which is incompatible with modules.
@@ -562,6 +597,10 @@ if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "sparc")
   list(APPEND SANITIZER_COMMON_LINK_LIBS -Wl,--as-needed atomic -Wl,--no-as-needed)
 endif()
 
+if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "mips")
+  list(APPEND SANITIZER_COMMON_LINK_LIBS atomic)
+endif()
+
 if (COMPILER_RT_USE_BUILTINS_LIBRARY)
   string(REPLACE "-Wl,-z,defs" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 else()
@@ -603,8 +642,8 @@ append_list_if(COMPILER_RT_HAS_NOSTDINCXX_FLAG -nostdinc++ SANITIZER_COMMON_CFLA
 append_list_if(COMPILER_RT_HAS_NOSTDLIBXX_FLAG -nostdlib++ SANITIZER_COMMON_LINK_FLAGS)
 
 # Remove -stdlib= which is unused when passing -nostdinc++...
-string(REGEX MATCHALL "-stdlib=[a-zA-Z+]*" stdlib_flag "${CMAKE_CXX_FLAGS}")
-string(REGEX REPLACE "-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+string(REGEX MATCHALL "-?-stdlib=[a-zA-Z+]*" stdlib_flag "${CMAKE_CXX_FLAGS}")
+string(REGEX REPLACE "-?-stdlib=[a-zA-Z+]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
 # ...we need it to build some runtimes and tests so readd it where appropriate.
 list(APPEND COMPILER_RT_COMMON_CFLAGS ${stdlib_flag})

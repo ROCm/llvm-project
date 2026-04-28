@@ -11,10 +11,12 @@
 
 #include "flang/Optimizer/Dialect/CUF/CUFDialect.h"
 #include "flang/Optimizer/Dialect/FIROps.h"
+#include "flang/Optimizer/Transforms/Utils.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
+
 #include <memory>
 
 namespace mlir {
@@ -27,6 +29,14 @@ class ModuleOp;
 } // namespace mlir
 
 namespace fir {
+
+/// Controls hoisting of invariant ops from nested regions (e.g. scf.if
+/// within loops) in the flang-licm pass.
+enum class LICMNestedHoistingMode {
+  None,       ///< Do not hoist from nested regions.
+  Cheap,      ///< Only hoist cheap ops like fir.convert.
+  Aggressive, ///< Hoist all safe invariant ops.
+};
 
 //===----------------------------------------------------------------------===//
 // Passes defined in Passes.td

@@ -1,12 +1,11 @@
 // clang-format off
 // RUN: %libomptarget-compile-generic
-// RUN: env LIBOMPTARGET_INFO=16 \
+// RUN: env LIBOMPTARGET_INFO=16 LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT=32 \
 // RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic --check-prefix=DEFAULT
 // RUN: env LIBOMPTARGET_INFO=16 LIBOMPTARGET_MIN_THREADS_FOR_LOW_TRIP_COUNT=8 \
 // RUN:   %libomptarget-run-generic 2>&1 | %fcheck-generic --check-prefix=EIGHT
 
 // REQUIRES: gpu
-// XFAIL: intelgpu
 
 #define N 128
 

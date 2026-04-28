@@ -52,6 +52,7 @@ class DwarfCompileUnit;
 class DwarfExpression;
 class DwarfTypeUnit;
 class DwarfUnit;
+class GlobalVariable;
 class LexicalScope;
 class MachineFunction;
 class MCSection;
@@ -145,14 +146,24 @@ class Multi {
   /// DW_OP_LLVM_tag_offset value from DebugLocs.
   std::optional<uint8_t> DebugLocListTagOffset;
 
+  /// In DIOp-DIExpressions, if this variable has pointer type and all entries
+  /// in the loclist produce the same divergent address space, this is set to be
+  /// the that address space.
+  std::optional<unsigned> CommonAddrSpace;
+
 public:
   explicit Multi(unsigned DebugLocListIndex,
-                 std::optional<uint8_t> DebugLocListTagOffset)
+                 std::optional<uint8_t> DebugLocListTagOffset,
+                 std::optional<unsigned> CommonAddrSpace = std::nullopt)
       : DebugLocListIndex(DebugLocListIndex),
-        DebugLocListTagOffset(DebugLocListTagOffset) {}
+        DebugLocListTagOffset(DebugLocListTagOffset),
+        CommonAddrSpace(CommonAddrSpace) {}
   unsigned getDebugLocListIndex() const { return DebugLocListIndex; }
   std::optional<uint8_t> getDebugLocListTagOffset() const {
     return DebugLocListTagOffset;
+  }
+  std::optional<unsigned> getCommonDivergentAddrSpace() const {
+    return CommonAddrSpace;
   }
 };
 /// Single location defined by (potentially multiple) MMI entries.
@@ -277,6 +288,9 @@ public:
 
   const DIType *getType() const;
 
+  bool isDivergentAddrSpaceCompatible() const;
+  std::optional<unsigned> getCommonDivergentAddrSpace() const;
+
   static bool classof(const DbgEntity *N) {
     return N->getDbgEntityID() == DbgVariableKind;
   }
@@ -394,9 +408,6 @@ class DwarfDebug : public DebugHandlerBase {
   /// table for the same directory as DW_AT_comp_dir.
   StringRef CompilationDir;
 
-  /// Holder for the file specific debug information.
-  DwarfFile InfoHolder;
-
   /// Holders for the various debug information flags that we might need to
   /// have exposed. See accessor functions below for description.
 
@@ -476,6 +487,9 @@ private:
   AccelTableKind TheAccelTableKind;
   bool HasAppleExtensionAttributes;
   bool HasSplitDwarf;
+  // Enables extensions defined at
+  // https://llvm.org/docs/AMDGPUDwarfProposalForHeterogeneousDebugging.html
+  bool HasHeterogeneousExtensionAttributes;
 
   /// Whether to generate the DWARF v5 string offsets table.
   /// It consists of a series of contributions, each preceded by a header.
@@ -531,10 +545,6 @@ private:
   DebuggerKind DebuggerTuning = DebuggerKind::Default;
 
   MCDwarfDwoLineTable *getDwoLineTable(const DwarfCompileUnit &);
-
-  const SmallVectorImpl<std::unique_ptr<DwarfCompileUnit>> &getUnits() {
-    return InfoHolder.getUnits();
-  }
 
   using InlinedEntity = DbgValueHistoryMap::InlinedEntity;
 
@@ -673,6 +683,7 @@ private:
   /// emit it here if we don't have a skeleton CU for split dwarf.
   void addGnuPubAttributes(DwarfCompileUnit &U, DIE &D) const;
 
+  DwarfCompileUnit *getDwarfCompileUnit(const DICompileUnit *DIUnit);
   /// Create new DwarfCompileUnit for the given metadata node with tag
   /// DW_TAG_compile_unit.
   DwarfCompileUnit &getOrCreateDwarfCompileUnit(const DICompileUnit *DIUnit);
@@ -711,6 +722,8 @@ private:
   void computeKeyInstructions(const MachineFunction *MF);
 
 protected:
+  /// Holder for the file specific debug information.
+  DwarfFile InfoHolder;
   /// Gather pre-function debug information.
   void beginFunctionImpl(const MachineFunction *MF) override;
 
@@ -722,7 +735,55 @@ protected:
 
   void skippedNonDebugFunction() override;
 
+  /// Target-specific debug info initialization at function start.
+  virtual void initializeTargetDebugInfo(const MachineFunction &MF) {}
+
+  /// Setters for target-specific DWARF configuration overrides.
+  /// Called from target DwarfDebug subclass constructors.
+  void setUseInlineStrings(bool V) { UseInlineStrings = V; }
+  void setUseRangesSection(bool V) { UseRangesSection = V; }
+  void setUseSectionsAsReferences(bool V) { UseSectionsAsReferences = V; }
+
+  /// Whether to attach ranges/low_pc to the compile unit DIE in endModule.
+  virtual bool shouldAttachCompileUnitRanges() const { return true; }
+
+  /// Target-specific source line recording.
+  virtual void recordTargetSourceLine(const DebugLoc &DL, unsigned Flags);
+
+  const SmallVectorImpl<std::unique_ptr<DwarfCompileUnit>> &getUnits() {
+    return InfoHolder.getUnits();
+  }
+
 public:
+  //===--------------------------------------------------------------------===//
+  // Target hooks for debug info customization.
+  //
+
+  /// Whether the target requires resetting the base address in range/loc lists.
+  virtual bool shouldResetBaseAddress(const MCSection &Section) const {
+    return false;
+  }
+
+  /// Describes the storage kind of a debug variable for target hooks.
+  enum class VariableLocationKind { Global, Register, FrameIndex };
+
+  /// Extract target-specific address space information from a DIExpression.
+  /// Targets may strip address-space-encoding ops from the expression and
+  /// return the address space via \p TargetAddrSpace.
+  virtual const DIExpression *
+  adjustExpressionForTarget(const DIExpression *Expr,
+                            std::optional<unsigned> &TargetAddrSpace) const {
+    return Expr;
+  }
+
+  /// Add target-specific attributes to a variable DIE (e.g.
+  /// DW_AT_address_class).
+  virtual void
+  addTargetVariableAttributes(DwarfCompileUnit &CU, DIE &Die,
+                              std::optional<unsigned> TargetAddrSpace,
+                              VariableLocationKind VarLocKind,
+                              const GlobalVariable *GV = nullptr) const {}
+
   //===--------------------------------------------------------------------===//
   // Main entry points.
   //
@@ -764,6 +825,9 @@ public:
   void setSymbolSize(const MCSymbol *Sym, uint64_t Size) override {
     SymSize[Sym] = Size;
   }
+
+  /// Whether to emit .debug_pubnames / .debug_pubtypes. Default true;
+  virtual bool shouldEmitDwarfPubSections() const { return true; }
 
   /// Returns whether we should emit all DW_AT_[MIPS_]linkage_name.
   /// If not, we still might emit certain cases.
@@ -817,6 +881,13 @@ public:
 
   bool useAppleExtensionAttributes() const {
     return HasAppleExtensionAttributes;
+  }
+
+  /// Returns whether extensions defined at
+  /// https://llvm.org/docs/AMDGPUDwarfProposalForHeterogeneousDebugging.html
+  /// are enabled.
+  bool useHeterogeneousExtensionAttributes() const {
+    return HasHeterogeneousExtensionAttributes;
   }
 
   /// Returns whether or not to change the current debug info for the

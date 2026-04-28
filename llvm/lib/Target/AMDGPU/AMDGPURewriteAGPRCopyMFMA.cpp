@@ -30,15 +30,20 @@
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "llvm/CodeGen/LiveStacks.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Support/DebugCounter.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "amdgpu-rewrite-agpr-copy-mfma"
+
+DEBUG_COUNTER(RewriteAGPRCopyMFMACounter, DEBUG_TYPE,
+              "Controls which MFMA chains are rewritten to AGPR form");
 
 namespace {
 
@@ -59,6 +64,7 @@ class AMDGPURewriteAGPRCopyMFMAImpl {
   LiveIntervals &LIS;
   LiveStacks &LSS;
   const RegisterClassInfo &RegClassInfo;
+  MachineDominatorTree &MDT;
 
   bool attemptReassignmentsToAGPR(SmallSetVector<Register, 4> &InterferingRegs,
                                   MCPhysReg PrefPhysReg) const;
@@ -67,10 +73,11 @@ public:
   AMDGPURewriteAGPRCopyMFMAImpl(MachineFunction &MF, VirtRegMap &VRM,
                                 LiveRegMatrix &LRM, LiveIntervals &LIS,
                                 LiveStacks &LSS,
-                                const RegisterClassInfo &RegClassInfo)
+                                const RegisterClassInfo &RegClassInfo,
+                                MachineDominatorTree &MDT)
       : MF(MF), ST(MF.getSubtarget<GCNSubtarget>()), TII(*ST.getInstrInfo()),
         TRI(*ST.getRegisterInfo()), MRI(MF.getRegInfo()), VRM(VRM), LRM(LRM),
-        LIS(LIS), LSS(LSS), RegClassInfo(RegClassInfo) {}
+        LIS(LIS), LSS(LSS), RegClassInfo(RegClassInfo), MDT(MDT) {}
 
   bool isRewriteCandidate(const MachineInstr &MI) const {
     return TII.isMAI(MI) && AMDGPU::getMFMASrcCVDstAGPROp(MI.getOpcode()) != -1;
@@ -205,7 +212,8 @@ bool AMDGPURewriteAGPRCopyMFMAImpl::recomputeRegClassExceptRewritable(
       if (!NewRC || NewRC == OldRC) {
         LLVM_DEBUG(dbgs() << "User of " << printReg(Reg, &TRI)
                           << " cannot be reassigned to "
-                          << TRI.getRegClassName(NewRC) << ": " << *MI);
+                          << (NewRC ? TRI.getRegClassName(NewRC) : "NULL")
+                          << ": " << *MI);
         return false;
       }
     }
@@ -267,7 +275,8 @@ bool AMDGPURewriteAGPRCopyMFMAImpl::tryReassigningMFMAChain(
     LRM.unassign(LI);
   }
 
-  if (!attemptReassignmentsToAGPR(RewriteRegs, PhysRegHint)) {
+  if (!DebugCounter::shouldExecute(RewriteAGPRCopyMFMACounter) ||
+      !attemptReassignmentsToAGPR(RewriteRegs, PhysRegHint)) {
     // Roll back the register assignments to the original state.
     for (auto [LI, OldAssign] : TentativeReassignments) {
       if (VRM.hasPhys(LI->reg()))
@@ -523,6 +532,82 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
     if (SpillReferences == SpillSlotReferences.end())
       continue;
 
+    // For each spill reload, every path from entry to the reload must pass
+    // through at least one spill store to the same stack slot.
+    SmallVector<MachineInstr *, 4> Stores, Loads;
+    Stores.reserve(SpillReferences->second.size());
+    Loads.reserve(SpillReferences->second.size());
+    for (MachineInstr *MI : SpillReferences->second) {
+      if (MI->mayStore())
+        Stores.push_back(MI);
+      else if (MI->mayLoad())
+        Loads.push_back(MI);
+    }
+
+    SmallPtrSet<MachineBasicBlock *, 4> StoreBlocks;
+    for (MachineInstr *S : Stores)
+      if (MDT.isReachableFromEntry(S->getParent()))
+        StoreBlocks.insert(S->getParent());
+
+    if (StoreBlocks.empty()) {
+      LLVM_DEBUG(dbgs() << "Skipping " << printReg(Slot, &TRI)
+                        << ": no reachable stores\n");
+      continue;
+    }
+
+    // Compute blocks reachable from entry without passing through a store
+    // block.
+    SmallPtrSet<MachineBasicBlock *, 16> StoreFreeReachable;
+    SmallVector<MachineBasicBlock *, 16> Worklist;
+
+    MachineBasicBlock &EntryMBB = MF.front();
+    Worklist.push_back(&EntryMBB);
+    StoreFreeReachable.insert(&EntryMBB);
+
+    while (!Worklist.empty()) {
+      MachineBasicBlock *MBB = Worklist.pop_back_val();
+      if (StoreBlocks.contains(MBB))
+        continue;
+
+      for (MachineBasicBlock *Succ : MBB->successors()) {
+        if (StoreFreeReachable.insert(Succ).second)
+          Worklist.push_back(Succ);
+      }
+    }
+
+    auto IsLoadJointlyDominatedByStores = [&](MachineInstr *LoadMI) -> bool {
+      MachineBasicBlock *LoadMBB = LoadMI->getParent();
+      if (!MDT.isReachableFromEntry(LoadMBB))
+        return true;
+
+      // Check if every path passed through a store block.
+      if (!StoreFreeReachable.contains(LoadMBB))
+        return true;
+
+      // Otherwise, there exists a path to this block that has not seen any
+      // store yet. We must ensure that within this block there is a store to
+      // this slot before the load.
+      for (MachineInstr &MI : *LoadMBB) {
+        if (&MI == LoadMI)
+          break;
+        if (MI.mayStore()) {
+          for (MachineOperand &MO : MI.operands()) {
+            if (MO.isFI() && MO.getIndex() == Slot)
+              return true;
+          }
+        }
+      }
+
+      return false;
+    };
+
+    if (!llvm::all_of(Loads, IsLoadJointlyDominatedByStores)) {
+      LLVM_DEBUG(
+          dbgs() << "Skipping " << printReg(Slot, &TRI)
+                 << ": some reachable load not jointly dominated by stores\n");
+      continue;
+    }
+
     const TargetRegisterClass *RC = LSS.getIntervalRegClass(Slot);
 
     LLVM_DEBUG(dbgs() << "Trying to eliminate " << printReg(Slot, &TRI)
@@ -548,7 +633,26 @@ void AMDGPURewriteAGPRCopyMFMAImpl::eliminateSpillsOfReassignedVGPRs() const {
       // replacement vreg uses.
       LiveInterval &NewLI = LIS.createAndComputeVirtRegInterval(NewVReg);
       VRM.grow();
+
+      // A spill slot can be stored to multiple times, so the replacement
+      // vreg may have multiple disconnected live range components. Split
+      // them into separate vregs to maintain the single-component invariant.
+      SmallVector<LiveInterval *, 4> SplitLIs;
+      LIS.splitSeparateComponents(NewLI, SplitLIs);
+
+      LLVM_DEBUG({
+        if (!SplitLIs.empty()) {
+          dbgs() << "Split unspilled interval into " << (SplitLIs.size() + 1)
+                 << " components\n";
+        }
+      });
+
       LRM.assign(NewLI, PhysReg);
+      for (LiveInterval *SplitLI : SplitLIs) {
+        VRM.grow();
+        LRM.assign(*SplitLI, PhysReg);
+      }
+
       MFI.RemoveStackObject(Slot);
       break;
     }
@@ -595,10 +699,7 @@ public:
   static char ID;
   RegisterClassInfo RegClassInfo;
 
-  AMDGPURewriteAGPRCopyMFMALegacy() : MachineFunctionPass(ID) {
-    initializeAMDGPURewriteAGPRCopyMFMALegacyPass(
-        *PassRegistry::getPassRegistry());
-  }
+  AMDGPURewriteAGPRCopyMFMALegacy() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
@@ -611,11 +712,13 @@ public:
     AU.addRequired<VirtRegMapWrapperLegacy>();
     AU.addRequired<LiveRegMatrixWrapperLegacy>();
     AU.addRequired<LiveStacksWrapperLegacy>();
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
 
     AU.addPreserved<LiveIntervalsWrapperPass>();
     AU.addPreserved<VirtRegMapWrapperLegacy>();
     AU.addPreserved<LiveRegMatrixWrapperLegacy>();
     AU.addPreserved<LiveStacksWrapperLegacy>();
+    AU.addPreserved<MachineDominatorTreeWrapperPass>();
 
     AU.setPreservesAll();
     MachineFunctionPass::getAnalysisUsage(AU);
@@ -630,6 +733,7 @@ INITIALIZE_PASS_DEPENDENCY(LiveIntervalsWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(VirtRegMapWrapperLegacy)
 INITIALIZE_PASS_DEPENDENCY(LiveRegMatrixWrapperLegacy)
 INITIALIZE_PASS_DEPENDENCY(LiveStacksWrapperLegacy)
+INITIALIZE_PASS_DEPENDENCY(MachineDominatorTreeWrapperPass)
 INITIALIZE_PASS_END(AMDGPURewriteAGPRCopyMFMALegacy, DEBUG_TYPE,
                     "AMDGPU Rewrite AGPR-Copy-MFMA", false, false)
 
@@ -649,7 +753,8 @@ bool AMDGPURewriteAGPRCopyMFMALegacy::runOnMachineFunction(
   auto &LRM = getAnalysis<LiveRegMatrixWrapperLegacy>().getLRM();
   auto &LIS = getAnalysis<LiveIntervalsWrapperPass>().getLIS();
   auto &LSS = getAnalysis<LiveStacksWrapperLegacy>().getLS();
-  AMDGPURewriteAGPRCopyMFMAImpl Impl(MF, VRM, LRM, LIS, LSS, RegClassInfo);
+  auto &MDT = getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
+  AMDGPURewriteAGPRCopyMFMAImpl Impl(MF, VRM, LRM, LIS, LSS, RegClassInfo, MDT);
   return Impl.run(MF);
 }
 
@@ -660,10 +765,11 @@ AMDGPURewriteAGPRCopyMFMAPass::run(MachineFunction &MF,
   LiveRegMatrix &LRM = MFAM.getResult<LiveRegMatrixAnalysis>(MF);
   LiveIntervals &LIS = MFAM.getResult<LiveIntervalsAnalysis>(MF);
   LiveStacks &LSS = MFAM.getResult<LiveStacksAnalysis>(MF);
+  MachineDominatorTree &MDT = MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   RegisterClassInfo RegClassInfo;
   RegClassInfo.runOnMachineFunction(MF);
 
-  AMDGPURewriteAGPRCopyMFMAImpl Impl(MF, VRM, LRM, LIS, LSS, RegClassInfo);
+  AMDGPURewriteAGPRCopyMFMAImpl Impl(MF, VRM, LRM, LIS, LSS, RegClassInfo, MDT);
   if (!Impl.run(MF))
     return PreservedAnalyses::all();
   auto PA = getMachineFunctionPassPreservedAnalyses();

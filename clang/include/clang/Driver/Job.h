@@ -144,6 +144,9 @@ class Command {
   /// See Command::setEnvironment
   std::vector<const char *> Environment;
 
+  /// Dependent actions
+  llvm::SmallVector<const Action *, 4> DependentActions;
+
   /// Optional redirection for stdin, stdout, stderr.
   std::vector<std::optional<std::string>> RedirectFiles;
 
@@ -223,6 +226,9 @@ public:
 
   const llvm::opt::ArgStringList &getArguments() const { return Arguments; }
 
+  const llvm::SmallVector<const Action *, 4> &getDependentActions() const {
+    return DependentActions;
+  }
   const std::vector<InputInfo> &getInputInfos() const { return InputInfoList; }
 
   const std::vector<std::string> &getOutputFilenames() const {
@@ -278,6 +284,9 @@ public:
   void clear();
 
   const list_type &getJobs() const { return Jobs; }
+
+  // Returns and transfers ownership of all jobs, leaving this list empty.
+  list_type takeJobs() { return std::exchange(Jobs, {}); };
 
   bool empty() const { return Jobs.empty(); }
   size_type size() const { return Jobs.size(); }

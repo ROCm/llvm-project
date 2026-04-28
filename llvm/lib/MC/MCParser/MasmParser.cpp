@@ -212,7 +212,7 @@ struct FieldInfo {
 StructFieldInfo::StructFieldInfo(std::vector<StructInitializer> V,
                                  StructInfo S) {
   Initializers = std::move(V);
-  Structure = S;
+  Structure = std::move(S);
 }
 
 StructInfo::StructInfo(StringRef StructName, bool Union,
@@ -462,7 +462,7 @@ public:
 
   void addDirectiveHandler(StringRef Directive,
                            ExtensionDirectiveHandler Handler) override {
-    ExtensionDirectiveMap[Directive] = Handler;
+    ExtensionDirectiveMap[Directive] = std::move(Handler);
     DirectiveKindMap.try_emplace(Directive, DK_HANDLER_DIRECTIVE);
   }
 
@@ -694,7 +694,6 @@ private:
     DK_ELSEIFIDNI,
     DK_ELSE,
     DK_ENDIF,
-
     DK_MACRO,
     DK_EXITM,
     DK_ENDM,
@@ -1203,7 +1202,7 @@ const AsmToken MasmParser::peekTok(bool ShouldSkipSpace) {
 bool MasmParser::Run(bool NoInitialTextSection, bool NoFinalize) {
   // Create the initial section, if requested.
   if (!NoInitialTextSection)
-    Out.initSections(false, getTargetParser().getSTI());
+    Out.initSections(getTargetParser().getSTI());
 
   // Prime the lexer.
   Lex();
@@ -1273,7 +1272,7 @@ bool MasmParser::Run(bool NoInitialTextSection, bool NoFinalize) {
 bool MasmParser::checkForValidSection() {
   if (!ParsingMSInlineAsm && !(getStreamer().getCurrentFragment() &&
                                getStreamer().getCurrentSectionOnly())) {
-    Out.initSections(false, getTargetParser().getSTI());
+    Out.initSections(getTargetParser().getSTI());
     return Error(getTok().getLoc(),
                  "expected section directive before assembly directive");
   }
@@ -4098,7 +4097,7 @@ bool MasmParser::parseDirectiveEnds(StringRef Name, SMLoc NameLoc) {
   // and the size of its largest field.
   Structure.Size = llvm::alignTo(
       Structure.Size, std::min(Structure.Alignment, Structure.AlignmentSize));
-  Structs[Name.lower()] = Structure;
+  Structs[Name.lower()] = std::move(Structure);
 
   if (parseEOL())
     return addErrorSuffix(" in ENDS directive");
@@ -5271,6 +5270,10 @@ void MasmParser::initializeDirectiveKindMap() {
   // DirectiveKindMap[".cfi_def_cfa_register"] = DK_CFI_DEF_CFA_REGISTER;
   // DirectiveKindMap[".cfi_offset"] = DK_CFI_OFFSET;
   // DirectiveKindMap[".cfi_rel_offset"] = DK_CFI_REL_OFFSET;
+  // DirectiveKindMap[".cfi_llvm_register_pair"] = DK_CFI_LLVM_REGISTER_PAIR;
+  // DirectiveKindMap[".cfi_llvm_vector_registers"] =
+  //   DK_CFI_LLVM_VECTOR_REGISTERS;
+  // DirectiveKindMap[".cfi_llvm_vector_offset"] = DK_CFI_LLVM_VECTOR_OFFSET;
   // DirectiveKindMap[".cfi_personality"] = DK_CFI_PERSONALITY;
   // DirectiveKindMap[".cfi_lsda"] = DK_CFI_LSDA;
   // DirectiveKindMap[".cfi_remember_state"] = DK_CFI_REMEMBER_STATE;

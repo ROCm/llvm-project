@@ -22,7 +22,7 @@ endif()
 configure_file(${LIBOMP_INC_DIR}/omp.h.var ${LIBOMP_HEADERS_INTDIR}/omp.h @ONLY)
 configure_file(${LIBOMP_INC_DIR}/ompx.h.var ${LIBOMP_HEADERS_INTDIR}/ompx.h @ONLY)
 configure_file(kmp_config.h.cmake kmp_config.h @ONLY)
-if(${LIBOMP_OMPT_SUPPORT})
+if(LIBOMP_OMPT_SUPPORT)
   configure_file(${LIBOMP_INC_DIR}/omp-tools.h.var ${LIBOMP_HEADERS_INTDIR}/omp-tools.h @ONLY)
 endif()
 
@@ -86,6 +86,7 @@ else()
     kmp_csupport.cpp
     kmp_debug.cpp
     kmp_itt.cpp
+    kmp_invoke_microtask.cpp
     kmp_environment.cpp
     kmp_error.cpp
     kmp_global.cpp
@@ -109,9 +110,9 @@ else()
     # Windows specific files
     libomp_append(LIBOMP_CXXFILES z_Windows_NT_util.cpp)
     libomp_append(LIBOMP_CXXFILES z_Windows_NT-586_util.cpp)
-    if(${LIBOMP_ARCH} STREQUAL "i386" OR ${LIBOMP_ARCH} STREQUAL "x86_64")
+    if(LIBOMP_ARCH STREQUAL "i386" OR LIBOMP_ARCH STREQUAL "x86_64")
       libomp_append(LIBOMP_ASMFILES z_Windows_NT-586_asm.asm) # Windows assembly file
-    elseif((${LIBOMP_ARCH} STREQUAL "aarch64" OR ${LIBOMP_ARCH} STREQUAL "arm") AND (NOT MSVC OR CMAKE_C_COMPILER_ID STREQUAL "Clang"))
+    elseif((LIBOMP_ARCH STREQUAL "aarch64" OR LIBOMP_ARCH STREQUAL "arm") AND (NOT MSVC OR CMAKE_C_COMPILER_ID STREQUAL "Clang"))
       # z_Linux_asm.S works for AArch64 and ARM Windows too.
       libomp_append(LIBOMP_GNUASMFILES z_Linux_asm.S)
     else()
@@ -150,8 +151,14 @@ libomp_append(LIBOMP_SOURCE_FILES libomp.rc WIN32)
 libomp_get_cxxflags(LIBOMP_CONFIGURED_CXXFLAGS)
 libomp_get_asmflags(LIBOMP_CONFIGURED_ASMFLAGS)
 # Set the compiler flags for each type of source
+set(LIBOMP_CONFIGURED_CXXFLAGS "${LIBOMP_CONFIGURED_CXXFLAGS} ${OPENMP_SOURCE_DEBUG_MAP}")
 set_source_files_properties(${LIBOMP_CXXFILES} PROPERTIES COMPILE_FLAGS "${LIBOMP_CONFIGURED_CXXFLAGS}")
 set_source_files_properties(${LIBOMP_ASMFILES} ${LIBOMP_GNUASMFILES} PROPERTIES COMPILE_FLAGS "${LIBOMP_CONFIGURED_ASMFLAGS}")
+
+# Disable libstdc++/libc++ assertions, even in an LLVM_ENABLE_ASSERTIONS build,
+# to avoid an unwanted dependency on libstdc++/libc++.so.
+add_definitions(-U_GLIBCXX_ASSERTIONS)
+add_definitions(-U_LIBCPP_ENABLE_ASSERTIONS)
 
 # Disable libstdc++ assertions, even in an LLVM_ENABLE_ASSERTIONS build, to
 # avoid an unwanted dependency on libstdc++.so.
@@ -174,7 +181,7 @@ libomp_get_libflags(LIBOMP_CONFIGURED_LIBFLAGS)
 
 # Build libomp library. Add LLVMSupport dependency if building in-tree with
 # libomptarget profiling enabled.
-if(OPENMP_STANDALONE_BUILD OR (NOT OPENMP_ENABLE_LIBOMP_PROFILING))
+if(NOT OPENMP_ENABLE_LIBOMP_PROFILING)
   add_library(omp ${LIBOMP_LIBRARY_KIND} $<TARGET_OBJECTS:obj.omp>)
   set_property(TARGET omp PROPERTY FOLDER "OpenMP/Libraries")
   # Linking command will include libraries in LIBOMP_CONFIGURED_LIBFLAGS
@@ -188,12 +195,18 @@ else()
   # libomp must be a C++ library such that it can link libLLVMSupport
   set(LIBOMP_LINKER_LANGUAGE CXX)
 endif()
-if(${LIBOMP_USE_HWLOC})
+if(LIBOMP_USE_HWLOC)
+  # Since we are using an OBJECT library, the PRIVATE and INTERFACE options are split
+  # (instead of using PUBLIC): obj.omp for compiling itself, omp for propagating
+  # the options to other libraries that depend on it, e.g. libompd.
+  target_include_directories(obj.omp
+    PRIVATE
+    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
+    "$<INSTALL_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
   target_include_directories(omp
-                             PUBLIC
-			     "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
-			     "$<INSTALL_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
-  )
+    INTERFACE
+    "$<BUILD_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>"
+    "$<INSTALL_INTERFACE:${LIBOMP_HWLOC_INCLUDE_DIR}>")
 endif()
 
 if(OPENMP_MSVC_NAME_SCHEME)
@@ -374,7 +387,7 @@ if(WIN32)
 endif()
 
 # Move files to exports/ directory if requested
-if(${LIBOMP_COPY_EXPORTS})
+if(LIBOMP_COPY_EXPORTS)
   include(LibompExports)
 endif()
 
@@ -382,7 +395,7 @@ endif()
 include(LibompMicroTests)
 add_custom_target(libomp-micro-tests)
 set_target_properties(libomp-micro-tests PROPERTIES FOLDER "OpenMP/Tests")
-if(NOT ${MIC} AND NOT CMAKE_CROSSCOMPILING)
+if(NOT MIC AND NOT CMAKE_CROSSCOMPILING)
   add_dependencies(libomp-micro-tests libomp-test-touch)
 endif()
 if(NOT WIN32 AND NOT APPLE)
@@ -395,10 +408,8 @@ add_dependencies(libomp-micro-tests libomp-test-deps)
 
 # `omp` needs to be exported if in-tree build.
 set(export_to_llvmexports)
-if (NOT OPENMP_STANDALONE_BUILD)
-  get_target_export_arg(omp LLVM export_to_llvmexports)
-  set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS omp)
-endif()
+get_target_export_arg(omp LLVM export_to_llvmexports)
+set_property(GLOBAL APPEND PROPERTY LLVM_EXPORTS omp)
 
 # Install rules
 # We want to install libomp in ${DESTDIR}/${CMAKE_INSTALL_FULL_LIBDIR}
@@ -416,10 +427,28 @@ if(WIN32)
       \"${alias}${CMAKE_STATIC_LIBRARY_SUFFIX}\" WORKING_DIRECTORY \"${outdir}\")")
   endforeach()
 else()
+  if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+    install(FILES ${LIBOMP_LIBRARY_DIR}/libomp.a DESTINATION "${OPENMP_INSTALL_LIBDIR}" COMPONENT runtime)
+  else()
+    install(TARGETS omp ${export_to_llvmexports} EXPORT openmpTargets ${LIBOMP_INSTALL_KIND}
+            DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+    install(EXPORT openmpTargets FILE openmpTargets.cmake NAMESPACE OpenMP::
+            DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
+  endif()
 
-  install(TARGETS omp ${export_to_llvmexports} ${LIBOMP_INSTALL_KIND} DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+  # Create cmake configuration files
+  include(CMakePackageConfigHelpers)
 
-  if(${LIBOMP_INSTALL_ALIASES})
+  configure_package_config_file(
+   ../openmp-config.cmake.in
+   openmp-config.cmake
+   INSTALL_DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp
+   PATH_VARS LIBOMP_HEADERS_INSTALL_PATH OPENMP_INSTALL_LIBDIR)
+
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openmp-config.cmake
+          DESTINATION ${OPENMP_INSTALL_CFGDIR}/openmp)
+
+  if(LIBOMP_INSTALL_ALIASES)
     # Create aliases (symlinks) of the library for backwards compatibility
     extend_path(outdir "${CMAKE_INSTALL_PREFIX}" "${OPENMP_INSTALL_LIBDIR}")
     if(AIX)
@@ -432,7 +461,7 @@ else()
     foreach(alias IN LISTS LIBOMP_ALIASES)
       install(CODE "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E create_symlink \"${LIBOMP_LIB_NAME}${LIBRARY_SUFFIX}\"
         \"${alias}${LIBRARY_SUFFIX}\" WORKING_DIRECTORY
-        \"\$ENV{DESTDIR}${outdir}\")")
+        \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${RUN_PACKAGE}${OPENMP_INSTALL_LIBDIR}\")")
     endforeach()
     if(LIBOMP_ENABLE_SHARED AND NOT AIX)
       install(CODE "execute_process(COMMAND \"\${CMAKE_COMMAND}\" -E create_symlink \"${LIBOMP_LIB_FILE}\"
@@ -447,7 +476,7 @@ install(
   ${LIBOMP_HEADERS_INTDIR}/ompx.h
   DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH}
 )
-if(${LIBOMP_OMPT_SUPPORT})
+if(LIBOMP_OMPT_SUPPORT)
   install(FILES ${LIBOMP_HEADERS_INTDIR}/omp-tools.h DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH})
   # install under legacy name ompt.h
   install(FILES ${LIBOMP_HEADERS_INTDIR}/omp-tools.h DESTINATION ${LIBOMP_HEADERS_INSTALL_PATH} RENAME ompt.h)

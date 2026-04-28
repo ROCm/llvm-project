@@ -165,16 +165,24 @@ static bool parseDebugArgs(Fortran::frontend::CodeGenOptions &opts,
             args.getLastArg(clang::options::OPT_split_dwarf_output))
       opts.SplitDwarfOutput = a->getValue();
   }
+
+  if (const llvm::opt::Arg *arg =
+          args.getLastArg(clang::options::OPT_dwarf_debug_flags))
+    opts.DwarfDebugFlags = arg->getValue();
+
+  opts.DebugInfoForProfiling =
+      args.hasArg(clang::options::OPT_fdebug_info_for_profiling);
+
   return true;
 }
 
-static void parseDoConcurrentMapping(Fortran::frontend::CodeGenOptions &opts,
+static bool parseDoConcurrentMapping(Fortran::frontend::CodeGenOptions &opts,
                                      llvm::opt::ArgList &args,
                                      clang::DiagnosticsEngine &diags) {
   llvm::opt::Arg *arg =
       args.getLastArg(clang::options::OPT_fdo_concurrent_to_openmp_EQ);
   if (!arg)
-    return;
+    return true;
 
   using DoConcurrentMappingKind =
       Fortran::frontend::CodeGenOptions::DoConcurrentMappingKind;
@@ -189,9 +197,11 @@ static void parseDoConcurrentMapping(Fortran::frontend::CodeGenOptions &opts,
   if (!val.has_value()) {
     diags.Report(clang::diag::err_drv_invalid_value)
         << arg->getAsString(args) << arg->getValue();
+    return false;
   }
 
   opts.setDoConcurrentMapping(val.value());
+  return true;
 }
 
 static bool parseVectorLibArg(Fortran::frontend::CodeGenOptions &opts,
@@ -284,6 +294,10 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
                    clang::options::OPT_fno_stack_arrays, false))
     opts.StackArrays = 1;
 
+  if (args.hasFlag(clang::options::OPT_fsafe_trampoline,
+                   clang::options::OPT_fno_safe_trampoline, false))
+    opts.EnableSafeTrampoline = 1;
+
   if (args.getLastArg(clang::options::OPT_floop_interchange))
     opts.InterchangeLoops = 1;
 
@@ -339,6 +353,11 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
 
   if (args.hasArg(clang::options::OPT_finstrument_functions))
     opts.InstrumentFunctions = 1;
+
+  // -fno-integrated-as: emit GNU Assembler compatible assembly.
+  if (!args.hasFlag(clang::options::OPT_fintegrated_as,
+                    clang::options::OPT_fno_integrated_as, true))
+    opts.DisableIntegratedAS = 1;
 
   if (const llvm::opt::Arg *a =
           args.getLastArg(clang::options::OPT_mcode_object_version_EQ)) {
@@ -457,6 +476,9 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
     opts.ProfileInstrumentUsePath = A->getValue();
   }
 
+  opts.SampleProfileFile =
+      args.getLastArgValue(clang::options::OPT_fprofile_sample_use_EQ);
+
   // -mcmodel option.
   if (const llvm::opt::Arg *a =
           args.getLastArg(clang::options::OPT_mcmodel_EQ)) {
@@ -486,7 +508,16 @@ static void parseCodeGenArgs(Fortran::frontend::CodeGenOptions &opts,
     opts.Underscoring = 0;
   }
 
+  if (args.hasFlag(clang::options::OPT_foffload_global_filtering,
+                   clang::options::OPT_fno_offload_global_filtering, false)) {
+    opts.OffloadGlobalFiltering = 1;
+  }
+
   parseDoConcurrentMapping(opts, args, diags);
+
+  opts.DeferDescriptorMapping =
+      args.hasFlag(clang::options::OPT_fdefer_desc_map,
+                   clang::options::OPT_fno_defer_desc_map, true);
 
   if (const llvm::opt::Arg *arg =
           args.getLastArg(clang::options::OPT_complex_range_EQ)) {
@@ -866,6 +897,11 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
                                     clang::options::OPT_fno_save_main_program,
                                     false));
 
+  // -ffast-amd-memory-allocator
+  if (args.hasArg(clang::options::OPT_ffast_amd_memory_allocator)) {
+    opts.features.Enable(Fortran::common::LanguageFeature::AmdMemoryAllocator);
+  }
+
   if (args.hasArg(clang::options::OPT_falternative_parameter_statement)) {
     opts.features.Enable(Fortran::common::LanguageFeature::OldStyleParameter);
   }
@@ -1197,7 +1233,8 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   unsigned numErrorsBefore = diags.getNumErrors();
   llvm::Triple t(res.getTargetOpts().triple);
 
-  constexpr unsigned newestFullySupported = 31;
+  constexpr unsigned newestFullySupported = 52;
+  // By default OpenMP is set to 5.2 version
   constexpr unsigned latestFinalized = 60;
   // By default OpenMP is set to the most recent fully supported version
   res.getLangOpts().OpenMPVersion = newestFullySupported;
@@ -1237,10 +1274,12 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
       if (llvm::is_contained(ompVersions, version)) {
         res.getLangOpts().OpenMPVersion = version;
 
+#if ENABLED_FOR_STAGING
         if (version > latestFinalized)
           reportFutureVersion(value);
         else if (version > newestFullySupported)
           diags.Report(clang::diag::warn_openmp_incomplete) << version;
+#endif
       } else if (llvm::is_contained(oldVersions, version)) {
         const unsigned diagID =
             diags.getCustomDiagID(clang::DiagnosticsEngine::Warning,
@@ -1344,6 +1383,10 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
         res.getLangOpts().OMPTargetTriples.push_back(tt);
     }
   }
+
+  if (args.hasArg(clang::options::OPT_famd_allow_threadprivate_equivalence))
+    res.getLangOpts().AllowThreadprivateEquivalence = true;
+
   return diags.getNumErrors() == numErrorsBefore;
 }
 
@@ -1641,8 +1684,10 @@ bool CompilerInvocation::createFromArgs(
 
   // -frealloc-lhs is the default.
   if (!args.hasFlag(clang::options::OPT_frealloc_lhs,
-                    clang::options::OPT_fno_realloc_lhs, true))
+                    clang::options::OPT_fno_realloc_lhs, true)) {
     invoc.loweringOpts.setReallocateLHS(false);
+    invoc.getLangOpts().NoReallocateLHS = true;
+  }
 
   invoc.loweringOpts.setRepackArrays(args.hasFlag(
       clang::options::OPT_frepack_arrays, clang::options::OPT_fno_repack_arrays,
@@ -1656,10 +1701,17 @@ bool CompilerInvocation::createFromArgs(
     invoc.loweringOpts.setRepackArraysWhole(arg->getValue() ==
                                             llvm::StringRef{"whole"});
 
+  if (auto *arg = args.getLastArg(clang::options::OPT_ffp_maxmin_behavior_EQ)) {
+    auto value = Fortran::common::parseFPMaxminBehavior(arg->getValue());
+    invoc.getCodeGenOpts().setFPMaxminBehavior(value);
+    invoc.loweringOpts.setFPMaxminBehavior(value);
+  }
+
   success &= parseFrontendArgs(invoc.getFrontendOpts(), args, diags);
   parseTargetArgs(invoc.getTargetOpts(), args);
   parsePreprocessorArgs(invoc.getPreprocessorOpts(), args);
   parseCodeGenArgs(invoc.getCodeGenOpts(), args, diags);
+  success &= parseDoConcurrentMapping(invoc.getCodeGenOpts(), args, diags);
   success &= parseDebugArgs(invoc.getCodeGenOpts(), args, diags);
 
   // Enable USE statement preservation for debug info if debug level is above
@@ -1765,6 +1817,7 @@ void CompilerInvocation::setDefaultPredefinitions() {
   auto &fortranOptions = getFortranOpts();
   const auto &frontendOptions = getFrontendOpts();
   // Populate the macro list with version numbers and other predefinitions.
+  fortranOptions.predefinitions.emplace_back("__amdflang__", "1");
   fortranOptions.predefinitions.emplace_back("__flang__", "1");
   fortranOptions.predefinitions.emplace_back("__flang_major__",
                                              FLANG_VERSION_MAJOR_STRING);
@@ -1894,7 +1947,7 @@ CompilerInvocation::getSemanticsCtx(
 
   auto semanticsContext = std::make_unique<semantics::SemanticsContext>(
       getDefaultKinds(), fortranOptions.features, getLangOpts(),
-      allCookedSources);
+      allCookedSources, getCodeGenOpts().getFPMaxminBehavior());
 
   semanticsContext->set_moduleDirectory(getModuleDir())
       .set_searchDirectories(fortranOptions.searchDirectories)

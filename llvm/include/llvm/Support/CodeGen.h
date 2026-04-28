@@ -95,6 +95,12 @@ namespace llvm {
       return std::nullopt;
     return static_cast<CodeGenOptLevel>(OL);
   }
+#if 0
+  /// Get the integer \c ID of \p Level.
+  inline IDType getID(CodeGenOptLevel::Level Level) {
+    return static_cast<IDType>(Level);
+  }
+#endif
   /// Parse \p C as a single digit integer and get matching \c CodeGenLevel.
   ///
   /// Returns std::nullopt if the input is not a valid optimization level.
@@ -181,6 +187,13 @@ namespace llvm {
     TableOnly = 1,
     // Enable Control Flow Guard checks and emit the tables.
     Enabled = 2,
+  };
+
+  enum class ControlFlowGuardMechanism {
+    // Choose the mechanism automatically based on the target.
+    Automatic = 0,
+    Check = 1,
+    Dispatch = 2,
   };
 
   } // namespace llvm

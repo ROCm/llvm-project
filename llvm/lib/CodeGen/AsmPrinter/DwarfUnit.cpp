@@ -37,9 +37,16 @@ using namespace llvm;
 
 #define DEBUG_TYPE "dwarfdebug"
 
+bool llvm::DisableDwarfLocations;
+static cl::opt<bool, true> DisableDwarfLocationsOpt(
+    "disable-dwarf-locations",
+    cl::desc("Disable emitting DWARF location DIE attributes"),
+    cl::ReallyHidden, cl::location(DisableDwarfLocations),
+    cl::init(false));
+
 DIEDwarfExpression::DIEDwarfExpression(const AsmPrinter &AP,
                                        DwarfCompileUnit &CU, DIELoc &DIE)
-    : DwarfExpression(AP.getDwarfVersion(), CU), AP(AP), OutDIE(DIE) {}
+    : DwarfExpression(AP, CU), OutDIE(DIE) {}
 
 void DIEDwarfExpression::emitOp(uint8_t Op, const char* Comment) {
   CU.addUInt(getActiveDIE(), dwarf::DW_FORM_data1, Op);
@@ -59,6 +66,10 @@ void DIEDwarfExpression::emitData1(uint8_t Value) {
 
 void DIEDwarfExpression::emitBaseTypeRef(uint64_t Idx) {
   CU.addBaseTypeRef(getActiveDIE(), Idx);
+}
+
+void DIEDwarfExpression::emitOpAddress(const GlobalVariable *GV) {
+  CU.addOpAddress(getActiveDIE(), AP.getSymbol(GV));
 }
 
 void DIEDwarfExpression::enableTemporaryBuffer() {
@@ -185,6 +196,13 @@ bool DwarfUnit::isShareableAcrossCUs(const DINode *D) const {
   // level already) but may be implementable for some value in projects
   // building multiple independent libraries with LTO and then linking those
   // together.
+
+  // Prevent generation of cross-CU references for DWARF v2 due to conflicts
+  // resulting from the FAQ recommendation: "If you are producing DWARF V2,
+  // please use the DWARF V3 definition of DW_FORM_ref_addr."
+  // (https://dwarfstd.org/faq.html)
+  if (DD->getDwarfVersion() == 2)
+    return false;
   if (isDwoUnit() && !DD->shareAcrossDWOCUs())
     return false;
   return (isa<DIType>(D) ||
@@ -210,6 +228,11 @@ void DwarfUnit::insertDIE(DIE *D) {
   MDNodeToDieMap.insert(std::make_pair(nullptr, D));
 }
 
+void DwarfUnit::addMemorySpaceAttribute(DIE &D, dwarf::MemorySpace MS) {
+  if (MS != dwarf::DW_MSPACE_LLVM_none)
+    addUInt(D, dwarf::DW_AT_LLVM_memory_space, dwarf::DW_FORM_data4, MS);
+}
+
 void DwarfUnit::addFlag(DIE &Die, dwarf::Attribute Attribute) {
   if (DD->getDwarfVersion() >= 4)
     addAttribute(Die, Attribute, dwarf::DW_FORM_flag_present, DIEInteger(1));
@@ -231,9 +254,7 @@ void DwarfUnit::addUInt(DIEValueList &Block, dwarf::Form Form,
   addUInt(Block, (dwarf::Attribute)0, Form, Integer);
 }
 
-void DwarfUnit::addIntAsBlock(DIE &Die, dwarf::Attribute Attribute, const APInt &Val) {
-  DIEBlock *Block = new (DIEValueAllocator) DIEBlock;
-
+void DwarfUnit::addIntToBlock(DIEBlock &Block, const APInt &Val) {
   // Get the raw data form of the large APInt.
   const uint64_t *Ptr64 = Val.getRawData();
 
@@ -247,10 +268,16 @@ void DwarfUnit::addIntAsBlock(DIE &Die, dwarf::Attribute Attribute, const APInt 
       c = Ptr64[i / 8] >> (8 * (i & 7));
     else
       c = Ptr64[(NumBytes - 1 - i) / 8] >> (8 * ((NumBytes - 1 - i) & 7));
-    addUInt(*Block, dwarf::DW_FORM_data1, c);
+    addUInt(Block, dwarf::DW_FORM_data1, c);
   }
+}
 
-  addBlock(Die, Attribute, Block);
+void DwarfUnit::addIntAsBlock(DIE &Die, dwarf::Attribute Attribute,
+                              const APInt &Val) {
+  DIEBlock *Block = new (DIEValueAllocator) DIEBlock;
+  addIntToBlock(*Block, Val);
+  Block->computeSize(Asm->getDwarfFormParams());
+  addBlock(Die, Attribute, Block->BestForm(), Block);
 }
 
 void DwarfUnit::addInt(DIE &Die, dwarf::Attribute Attribute,
@@ -426,6 +453,8 @@ DIE &DwarfUnit::createAndAddDIE(dwarf::Tag Tag, DIE &Parent, const DINode *N) {
 void DwarfUnit::addBlock(DIE &Die, dwarf::Attribute Attribute, DIELoc *Loc) {
   Loc->computeSize(Asm->getDwarfFormParams());
   DIELocs.push_back(Loc); // Memoize so we can call the destructor later on.
+  if (DisableDwarfLocations)
+    return;
   addAttribute(Die, Attribute, Loc->BestForm(DD->getDwarfVersion()), Loc);
 }
 
@@ -896,9 +925,8 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
   // If DWARF address space value is other than None, add it.  The IR
   // verifier checks that DWARF address space only exists for pointer
   // or reference types.
-  if (DTy->getDWARFAddressSpace())
-    addUInt(Buffer, dwarf::DW_AT_address_class, dwarf::DW_FORM_data4,
-            *DTy->getDWARFAddressSpace());
+  if (auto AS = DTy->getDWARFAddressSpace())
+    addUInt(Buffer, dwarf::DW_AT_LLVM_address_space, dwarf::DW_FORM_data4, *AS);
 
   // Add template alias template parameters.
   if (Tag == dwarf::DW_TAG_template_alias)
@@ -916,6 +944,8 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
     if (PtrAuthData->authenticatesNullValues())
       addFlag(Buffer, dwarf::DW_AT_LLVM_ptrauth_authenticates_null_values);
   }
+
+  addMemorySpaceAttribute(Buffer, DTy->getDWARFMemorySpace());
 }
 
 std::optional<unsigned>
@@ -1140,8 +1170,7 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
           constructTypeDIE(VariantPart, Composite);
         }
       } else if (Tag == dwarf::DW_TAG_namelist) {
-        auto *Var = dyn_cast<DINode>(Element);
-        auto *VarDIE = getDIE(Var);
+        auto *VarDIE = getDIE(Element);
         if (VarDIE) {
           DIE &ItemDie = createAndAddDIE(dwarf::DW_TAG_namelist_item, Buffer);
           addDIEEntry(ItemDie, dwarf::DW_AT_namelist_item, *VarDIE);
@@ -2036,8 +2065,20 @@ DIE *DwarfUnit::getOrCreateStaticMemberDIE(const DIDerivedType *DT) {
 
   if (const ConstantInt *CI = dyn_cast_or_null<ConstantInt>(DT->getConstant()))
     addConstantValue(StaticMemberDIE, CI, Ty);
-  if (const ConstantFP *CFP = dyn_cast_or_null<ConstantFP>(DT->getConstant()))
+  else if (const ConstantFP *CFP =
+               dyn_cast_or_null<ConstantFP>(DT->getConstant()))
     addConstantFPValue(StaticMemberDIE, CFP);
+  else if (auto *CDS =
+               dyn_cast_or_null<ConstantDataSequential>(DT->getConstant())) {
+    assert(CDS->getElementType()->isIntegerTy() &&
+           "Non-integer arrays not supported.");
+    DIEBlock *Block = new (DIEValueAllocator) DIEBlock;
+    for (unsigned I = 0; I != CDS->getNumElements(); ++I)
+      addIntToBlock(*Block, CDS->getElementAsAPInt(I));
+    Block->computeSize(Asm->getDwarfFormParams());
+    addBlock(StaticMemberDIE, dwarf::DW_AT_const_value, Block->BestForm(),
+             Block);
+  }
 
   if (uint32_t AlignInBytes = DT->getAlignInBytes())
     addUInt(StaticMemberDIE, dwarf::DW_AT_alignment, dwarf::DW_FORM_udata,

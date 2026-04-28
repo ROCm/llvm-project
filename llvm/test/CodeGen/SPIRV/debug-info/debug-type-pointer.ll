@@ -1,52 +1,18 @@
-; RUN: llc --verify-machineinstrs --spv-emit-nonsemantic-debug-info --spirv-ext=+SPV_KHR_non_semantic_info --print-after=spirv-nonsemantic-debug-info -O0 -mtriple=spirv64-unknown-unknown %s -o - 2>&1 | FileCheck %s --check-prefix=CHECK-MIR
-; RUN: llc --verify-machineinstrs --print-after=spirv-nonsemantic-debug-info -O0 -mtriple=spirv64-amd-amdhsa %s -o - 2>&1 | FileCheck %s --check-prefix=CHECK-MIR
-; RUN: llc --verify-machineinstrs --spv-emit-nonsemantic-debug-info --spirv-ext=+SPV_KHR_non_semantic_info -O0 -mtriple=spirv64-unknown-unknown %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
+; RUN: llc --verify-machineinstrs --spirv-ext=+SPV_KHR_non_semantic_info -O0 -mtriple=spirv64-unknown-unknown %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
 ; RUN: llc --verify-machineinstrs -O0 -mtriple=spirv64-amd-amdhsa %s -o - | FileCheck %s --check-prefix=CHECK-SPIRV
 ; RUN: llc --verify-machineinstrs -O0 -mtriple=spirv64-unknown-unknown --spirv-ext=+SPV_KHR_non_semantic_info %s -o - | FileCheck %s --check-prefix=CHECK-OPTION
 ; TODO(#109287): When type is void * the spirv-val raises an error when DebugInfoNone is set as <id> Base Type argument of DebugTypePointer.
-; DISABLED: %if spirv-tools %{ llc --verify-machineinstrs --spv-emit-nonsemantic-debug-info --spirv-ext=+SPV_KHR_non_semantic_info -O0 -mtriple=spirv64-unknown-unknown %s -o - -filetype=obj | spirv-val %}
+; DISABLED: %if spirv-tools %{ llc --verify-machineinstrs --spirv-ext=+SPV_KHR_non_semantic_info -O0 -mtriple=spirv64-unknown-unknown %s -o - -filetype=obj | spirv-val %}
 
-; CHECK-MIR-DAG:   [[i32type:%[0-9]+\:type]] = OpTypeInt 32, 0
-; CHECK-MIR-DAG:   [[void_type:%[0-9]+\:type\(s64\)]] = OpTypeVoid
-; CHECK-MIR-DAG:   [[i32_8:%[0-9]+\:iid]] = OpConstantI [[i32type]], 8{{$}}
-; CHECK-MIR-DAG:   [[i32_0:%[0-9]+\:iid(\(s32\))?]] = OpConstantNull [[i32type]]
-; CHECK-MIR-DAG:   [[i32_5:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 5{{$}}
-; CHECK-MIR-DAG:   [[enc_float:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 3{{$}}
-; CHECK-MIR-DAG:   [[enc_boolean:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 2{{$}}
-; CHECK-MIR-DAG:   [[bool:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_8]], [[enc_boolean]], [[i32_0]]
-; CHECK-MIR-DAG:   [[i32_16:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 16{{$}}
-; CHECK-MIR-DAG:   [[enc_signed:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 4{{$}}
-; CHECK-MIR-DAG:   [[short:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_16]], [[enc_signed]], [[i32_0]]
-; CHECK-MIR-DAG:   [[char:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_8]], [[i32_5]], [[i32_0]]
-; CHECK-MIR-DAG:   [[i32_64:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 64{{$}}
-; CHECK-MIR-DAG:   [[long:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_64]], [[enc_signed]], [[i32_0]]
-; CHECK-MIR-DAG:   [[i32_32:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 32{{$}}
-; CHECK-MIR-DAG:   [[enc_unsigned:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 6{{$}}
-; CHECK-MIR-DAG:   [[unsigned_int:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_32]], [[enc_unsigned]], [[i32_0]]
-; CHECK-MIR-DAG:   [[unsigned_short:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_16]], [[enc_unsigned]], [[i32_0]]
-; CHECK-MIR-DAG:   [[enc_unsigned_char:%[0-9]+\:iid\(s32\)]] = OpConstantI [[i32type]], 7{{$}}
-; CHECK-MIR-DAG:   [[unsigned_char:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_8]], [[enc_unsigned_char]], [[i32_0]]
-; CHECK-MIR-DAG:   [[unsigned_long:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_64]], [[enc_unsigned]], [[i32_0]]
-; CHECK-MIR-DAG:   [[float:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_32]], [[enc_float]], [[i32_0]]
-; CHECK-MIR-DAG:   [[double:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_64]], [[enc_float]], [[i32_0]]
-; CHECK-MIR-DAG:   [[int:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 2, {{%[0-9]+\:[a-z0-9\(\)]+}}, [[i32_32]], [[enc_signed]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[bool]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[short]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[char]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[long]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[unsigned_int]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[unsigned_short]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[unsigned_char]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[unsigned_long]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[float]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[double]], [[i32_8]], [[i32_0]]
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[int]], [[i32_5]], [[i32_0]]
-; CHECK-MIR-DAG:   [[debug_info_none:%[0-9]+\:id\(s32\)]] = OpExtInst [[void_type]], 3, 0
-; CHECK-MIR-DAG:   OpExtInst [[void_type]], 3, 3, [[debug_info_none]], [[i32_5]], [[i32_0]]
-
+; Anchor on OpTypeVoid rather than OpTypeInt 32 0. The module may already contain
+; OpConstant i32 N instructions (e.g. for array dimensions) before the NSDI section,
+; which have the same pattern as the NSDI-emitted constants. Anchoring after
+; OpTypeVoid (emitted immediately before the NSDI constants) ensures the DAG group
+; binds [[i32_8]] etc. to the NSDI constants rather than earlier module constants.
 ; CHECK-SPIRV:	[[i32type:%[0-9]+]] = OpTypeInt 32 0
+; CHECK-SPIRV:	[[void_type:%[0-9]+]] = OpTypeVoid
 ; CHECK-SPIRV-DAG:	[[i32_8:%[0-9]+]] = OpConstant [[i32type]] 8{{$}}
-; CHECK-SPIRV-DAG:	[[i32_0:%[0-9]+]] = OpConstantNull [[i32type]]{{$}}
+; CHECK-SPIRV-DAG:	[[i32_0:%[0-9]+]] = OpConstant [[i32type]] 0{{$}}
 ; CHECK-SPIRV-DAG:	[[i32_5:%[0-9]+]] = OpConstant [[i32type]] 5{{$}}
 ; CHECK-SPIRV-DAG:	[[enc_float:%[0-9]+]] = OpConstant [[i32type]] 3{{$}}
 ; CHECK-SPIRV-DAG:	[[enc_boolean:%[0-9]+]] = OpConstant [[i32type]] 2{{$}}
@@ -81,7 +47,7 @@
 ; CHECK-SPIRV-DAG:	[[debug_info_none:%[0-9]+]] = OpExtInst {{%[0-9]+ %[0-9]+}} DebugInfoNone
 ; CHECK-SPIRV-DAG:	OpExtInst {{%[0-9]+ %[0-9]+}} DebugTypePointer [[debug_info_none]] [[i32_5]] [[i32_0]]
 
-; CHECK-OPTION-NOT: DebugTypePointer
+; CHECK-OPTION: DebugTypePointer
 
 @gi0 = dso_local addrspace(1) global ptr addrspace(4) null, align 4, !dbg !0
 @gv0 = dso_local addrspace(1) global ptr addrspace(4) null, align 4, !dbg !5
@@ -188,8 +154,8 @@ define spir_func i32 @test1() !dbg !72 {
 !4 = !{!0, !5}
 !5 = !DIGlobalVariableExpression(var: !6, expr: !DIExpression(DW_OP_constu, 1, DW_OP_swap, DW_OP_xderef))
 !6 = distinct !DIGlobalVariable(name: "gv0", scope: !2, file: !3, line: 3, type: !7, isLocal: false, isDefinition: true)
-!7 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 32, dwarfAddressSpace: 1)
-!8 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !9, size: 32, dwarfAddressSpace: 1)
+!7 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 32, addressSpace: 1)
+!8 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !9, size: 32, addressSpace: 1)
 !9 = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
 !10 = !{i32 7, !"Dwarf Version", i32 5}
 !11 = !{i32 2, !"Debug Info Version", i32 3}
@@ -203,43 +169,43 @@ define spir_func i32 @test1() !dbg !72 {
 !19 = !{!9}
 !20 = !{}
 !21 = !DILocalVariable(name: "bp0", scope: !17, file: !3, line: 6, type: !22)
-!22 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !23, size: 32, dwarfAddressSpace: 4)
+!22 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !23, size: 32, addressSpace: 4)
 !23 = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
 !24 = !DILocation(line: 6, column: 9, scope: !17)
 !25 = !DILocalVariable(name: "sp0", scope: !17, file: !3, line: 7, type: !26)
-!26 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !27, size: 32, dwarfAddressSpace: 4)
+!26 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !27, size: 32, addressSpace: 4)
 !27 = !DIBasicType(name: "short", size: 16, encoding: DW_ATE_signed)
 !28 = !DILocation(line: 7, column: 10, scope: !17)
 !29 = !DILocalVariable(name: "cp0", scope: !17, file: !3, line: 8, type: !30)
-!30 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !31, size: 32, dwarfAddressSpace: 4)
+!30 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !31, size: 32, addressSpace: 4)
 !31 = !DIBasicType(name: "char", size: 8, encoding: DW_ATE_signed_char)
 !32 = !DILocation(line: 8, column: 9, scope: !17)
 !33 = !DILocalVariable(name: "lp0", scope: !17, file: !3, line: 9, type: !34)
-!34 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !35, size: 32, dwarfAddressSpace: 4)
+!34 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !35, size: 32, addressSpace: 4)
 !35 = !DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)
 !36 = !DILocation(line: 9, column: 9, scope: !17)
 !37 = !DILocalVariable(name: "uip0", scope: !17, file: !3, line: 10, type: !38)
-!38 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !39, size: 32, dwarfAddressSpace: 4)
+!38 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !39, size: 32, addressSpace: 4)
 !39 = !DIBasicType(name: "unsigned int", size: 32, encoding: DW_ATE_unsigned)
 !40 = !DILocation(line: 10, column: 17, scope: !17)
 !41 = !DILocalVariable(name: "usp0", scope: !17, file: !3, line: 11, type: !42)
-!42 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !43, size: 32, dwarfAddressSpace: 4)
+!42 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !43, size: 32, addressSpace: 4)
 !43 = !DIBasicType(name: "unsigned short", size: 16, encoding: DW_ATE_unsigned)
 !44 = !DILocation(line: 11, column: 19, scope: !17)
 !45 = !DILocalVariable(name: "ucp0", scope: !17, file: !3, line: 12, type: !46)
-!46 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !47, size: 32, dwarfAddressSpace: 4)
+!46 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !47, size: 32, addressSpace: 4)
 !47 = !DIBasicType(name: "unsigned char", size: 8, encoding: DW_ATE_unsigned_char)
 !48 = !DILocation(line: 12, column: 18, scope: !17)
 !49 = !DILocalVariable(name: "ulp0", scope: !17, file: !3, line: 13, type: !50)
-!50 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !51, size: 32, dwarfAddressSpace: 4)
+!50 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !51, size: 32, addressSpace: 4)
 !51 = !DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)
 !52 = !DILocation(line: 13, column: 18, scope: !17)
 !53 = !DILocalVariable(name: "fp0", scope: !17, file: !3, line: 14, type: !54)
-!54 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !55, size: 32, dwarfAddressSpace: 4)
+!54 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !55, size: 32, addressSpace: 4)
 !55 = !DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)
 !56 = !DILocation(line: 14, column: 10, scope: !17)
 !57 = !DILocalVariable(name: "dp0", scope: !17, file: !3, line: 15, type: !58)
-!58 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !59, size: 32, dwarfAddressSpace: 4)
+!58 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !59, size: 32, addressSpace: 4)
 !59 = !DIBasicType(name: "double", size: 64, encoding: DW_ATE_float)
 !60 = !DILocation(line: 15, column: 11, scope: !17)
 !61 = !DILocalVariable(name: "ip0", scope: !17, file: !3, line: 16, type: !8)
@@ -282,4 +248,4 @@ define spir_func i32 @test1() !dbg !72 {
 !98 = !DILocalVariable(name: "arr1", scope: !72, file: !3, line: 35, type: !67)
 !99 = !DILocation(line: 35, column: 7, scope: !72)
 !100 = !DILocation(line: 36, column: 3, scope: !72)
-!101 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !67, size: 32, dwarfAddressSpace: 4)
+!101 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !67, size: 32, addressSpace: 4)

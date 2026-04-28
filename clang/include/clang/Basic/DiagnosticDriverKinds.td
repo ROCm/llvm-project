@@ -71,6 +71,9 @@ def err_drv_no_rocm_device_lib : Error<
   "%select{|, which requires ROCm %3 or higher}2}0; provide its path via "
   "'--rocm-path' or '--rocm-device-lib-path', or pass '-nogpulib' to build "
   "without ROCm device library">;
+def err_drv_no_asan_rt_lib : Error<
+  "AMDGPU address sanitizer runtime library (asanrtl) not found. "
+  "Please install ROCm device library which supports address sanitizer">;
 def err_drv_no_hip_runtime : Error<
   "cannot find HIP runtime; provide its path via '--rocm-path', or pass "
   "'-nogpuinc' to build without HIP runtime">;
@@ -167,9 +170,9 @@ def warn_drv_unsupported_option_for_runtime : Warning<
 def warn_drv_unsupported_openmp_library : Warning<
   "the library '%0=%1' is not supported, OpenMP will not be enabled">,
   InGroup<OptionIgnored>;
-def warn_openmp_incomplete : Warning<
-  "OpenMP support for version %0 in flang is still incomplete">,
-  InGroup<ExperimentalOption>;
+
+def warn_openacc_experimental : Warning<
+"OpenACC is NOT supported for AMDGPU">;
 
 def err_drv_invalid_thread_model_for_target : Error<
   "invalid thread model '%0' in '%1' for this target">;
@@ -177,6 +180,10 @@ def err_drv_invalid_linker_name : Error<
   "invalid linker name in argument '%0'">;
 def err_drv_invalid_rtlib_name : Error<
   "invalid runtime library name in argument '%0'">;
+def err_drv_invalid_allocatable_mode : Error<
+  "invalid semantic mode for assignments to allocatables in argument '%0'">;
+def err_drv_unsupported_fixed_line_length : Error<
+  "unsupported fixed-format line length in argument '%0'">;
 def err_drv_unsupported_rtlib_for_platform : Error<
   "unsupported runtime library '%0' for platform '%1'">;
 def err_drv_invalid_unwindlib_name : Error<
@@ -187,6 +194,8 @@ def err_drv_incompatible_unwindlib : Error<
   "--rtlib=libgcc requires --unwindlib=libgcc">;
 def err_drv_incompatible_options : Error<
   "the combination of '%0' and '%1' is incompatible">;
+def err_drv_invalid_cstdlib_name : Error<
+  "invalid C library name in argument '%0'">;
 def err_drv_invalid_stdlib_name : Error<
   "invalid library name in argument '%0'">;
 def err_drv_invalid_output_with_multiple_archs : Error<
@@ -212,6 +221,12 @@ def err_drv_invalid_diagnotics_misexpect_tolerance : Error<
   "invalid argument in '%0', only integers are supported">;
 def err_drv_missing_argument : Error<
   "argument to '%0' is missing (expected %1 value%s1)">;
+def err_drv_missing_Xopenmptarget_or_march: Error<
+  "option -fopenmp-targets= requires additional options -Xopenmp-target= and -march=">,
+  DefaultFatal;
+def warn_drv_missing_flang_exec : Warning<
+  "%0 not found, 'openmp-extras' package from ROCm may be missing">,
+  InGroup<InvalidCommandLineArgument>;
 def err_drv_invalid_Xarch_argument_with_args : Error<
   "invalid Xarch argument: '%0', options requiring arguments are unsupported">;
 def err_drv_Xopenmp_target_missing_triple : Error<
@@ -392,7 +407,7 @@ def err_drv_omp_host_target_not_supported : Error<
   "target '%0' is not a supported OpenMP host target">;
 def err_drv_expecting_fopenmp_with_fopenmp_targets : Error<
   "'-fopenmp-targets' must be used in conjunction with a '-fopenmp' option "
-  "compatible with offloading; e.g., '-fopenmp=libomp' or '-fopenmp=libiomp5'">;
+  "compatible with offloading; e.g., '-fopenmp=libomp' or '-fopenmp=libiomp5' or '-fopenmp=libbolt'">;
 def err_drv_failed_to_deduce_target_from_arch : Error<
   "failed to deduce triple for target architecture '%0'; specify the triple "
   "using '-fopenmp-targets' and '-Xopenmp-target' instead">;
@@ -446,6 +461,9 @@ def warn_ignored_clang_option : Warning<"the flag '%0' has been deprecated and w
 def warn_drv_unsupported_opt_for_target : Warning<
   "optimization flag '%0' is not supported for target '%1'">,
   InGroup<IgnoredOptimizationArgument>;
+def warn_drv_riscv_be_experimental : Warning<
+  "big-endian RISC-V target support is experimental">,
+  InGroup<RISCVBEExperimental>;
 def warn_drv_unsupported_debug_info_opt_for_target : Warning<
   "debug information option '%0' is not supported for target '%1'">,
   InGroup<UnsupportedTargetOpt>;
@@ -487,8 +505,8 @@ def warn_drv_clang_unsupported : Warning<
 def warn_drv_deprecated_arg : Warning<
   "argument '%0' is deprecated%select{|, use '%2' instead}1">, InGroup<Deprecated>;
 def warn_drv_deprecated_arg_ofast : Warning<
-  "argument '-Ofast' is deprecated; use '-O3 -ffast-math' for the same behavior,"
-  " or '-O3' to enable only conforming optimizations">,
+  "argument '-Ofast' is deprecated; use '-O3' to enable only conforming optimizations, "
+  "or consult the documentation for the same behavior">,
   InGroup<DeprecatedOFast>;
 def warn_drv_deprecated_arg_ofast_for_flang : Warning<
   "argument '-Ofast' is deprecated; use '-O3 -ffast-math -fstack-arrays -fno-protect-parens' for the same behavior,"
@@ -608,6 +626,32 @@ def err_drv_reduced_module_output_overrided : Warning<
   "please consider use '-fmodule-output=' to specify the output file for reduced BMI explicitly">,
   InGroup<DiagGroup<"reduced-bmi-output-overrided">>;
 
+def remark_performing_driver_managed_module_build : Remark<
+  "performing driver managed module build">, InGroup<ModulesDriver>;
+def remark_modules_manifest_not_found : Remark<
+  "standard modules manifest file not found; import of standard library "
+  "modules not supported">,
+  InGroup<ModulesDriver>;
+def remark_using_modules_manifest : Remark<
+  "using standard modules manifest file '%0'">,
+  InGroup<ModulesDriver>;
+def err_modules_manifest_failed_parse : Error<
+  "failure while parsing standard modules manifest: '%0'">;
+def err_default_modules_cache_not_available : Error<
+  "unable to determine the default -fmodules-cache-path. Please specify it "
+  "explicitly using -fmodules-cache-path or the CLANG_MODULE_CACHE_PATH "
+  "environment variable">;
+def err_dependency_scan_failed : Error<
+  "failed to perform dependency scan">;
+def err_modules_driver_named_module_redefinition : Error<
+  "duplicate definitions of C++20 named module '%0' in '%1' and '%2'">;
+def remark_printing_module_graph : Remark<
+  "printing module dependency graph">,
+  InGroup<ModulesDriver>;
+def err_module_defined_outside_of_module_source : Error<
+  "module '%0' is defined in file '%1', but module declarations are only "
+  "allowed in C++ module inputs; use the '.cppm' extension or '-x c++module'">;
+
 def warn_drv_delayed_template_parsing_after_cxx20 : Warning<
   "-fdelayed-template-parsing is deprecated after C++20">,
   InGroup<DiagGroup<"delayed-template-parsing-in-cxx20">>;
@@ -722,6 +766,14 @@ def warn_drv_global_isel_incomplete_opt : Warning<
   "-fglobal-isel support is incomplete for this architecture at the current optimization level">,
   InGroup<GlobalISel>;
 
+def warn_drv_amd_opt_removed : Warning<
+  "[AMD] proprietary optimization compiler has been removed">,
+  InGroup<UnusedCommandLineArgument>;
+
+def warn_drv_amd_opt_not_found : Warning<
+  "[AMD] proprietary optimization compiler installation was not found">,
+  InGroup<UnusedCommandLineArgument>;
+
 def warn_drv_moutline_unsupported_opt : Warning<
   "'%0' does not support '-moutline'; flag ignored">,
   InGroup<OptionIgnored>;
@@ -832,6 +884,8 @@ def err_drv_dxc_invalid_matrix_layout : Error<
   "cannot specify /Zpr and /Zpc together">;
 def err_drv_dxc_missing_target_profile : Error<
   "target profile option (-T) is missing">;
+def err_drv_dxc_Fre_requires_Fo_metal
+    : Error<"-Fre option requires -Fo option when targeting Metal">;
 def err_drv_hlsl_unsupported_target : Error<
   "HLSL code generation is unsupported for target '%0'">;
 def err_drv_hlsl_bad_shader_required_in_target : Error<
@@ -843,6 +897,9 @@ def err_drv_hlsl_bad_shader_unsupported : Error<
 def warn_drv_dxc_missing_dxv : Warning<
   "dxv not found; resulting DXIL will not be validated or signed for use in "
   "release environment">, InGroup<DXILValidation>;
+def warn_drv_dxc_missing_spirv_val : Warning<
+  "spirv-val not found; resulting SPIR-V will not be validated">,
+  InGroup<SPIRVValidation>;
 
 def err_drv_invalid_range_dxil_validator_version : Error<
   "invalid validator version : %0; validator version must be less than or "
@@ -916,4 +973,7 @@ def warn_drv_gcc_install_dir_libstdcxx : Warning<
     "future releases of the clang compiler will prefer GCC installations "
     "containing libstdc++ include directories; '%0' would be chosen over '%1'">,
     InGroup<DiagGroup<"gcc-install-dir-libstdcxx">>;
+
+def err_drv_reflection_requires_cxx26 : Error<
+  "option '%0' is only supported when compiling in C++26 mode">;
 }

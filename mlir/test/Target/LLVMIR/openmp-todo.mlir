@@ -1,6 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir -split-input-file -verify-diagnostics %s
 
-
 llvm.func @atomic_hint(%v : !llvm.ptr, %x : !llvm.ptr, %expr : i32) {
   // expected-warning@below {{hint clause discarded}}
   omp.atomic.capture hint(uncontended) {
@@ -46,17 +45,6 @@ llvm.func @distribute_order(%lb : i32, %ub : i32, %step : i32) {
     omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
       omp.yield
     }
-  }
-  llvm.return
-}
-
-// -----
-
-llvm.func @ordered_region_par_level_simd() {
-  // expected-error@below {{not yet implemented: Unhandled clause parallelization-level in omp.ordered.region operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.ordered.region}}
-  omp.ordered.region par_level_simd {
-    omp.terminator
   }
   llvm.return
 }
@@ -312,26 +300,15 @@ llvm.func @taskgroup_task_reduction(%x : !llvm.ptr) {
 // -----
 
 llvm.func @taskloop_allocate(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
-  // expected-error@below {{not yet implemented: Unhandled clause allocate in omp.taskloop operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop}}
-  omp.taskloop allocate(%x : !llvm.ptr -> %x : !llvm.ptr) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
+  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop.context}}
+  // expected-error@below {{not yet implemented: Unhandled clause allocate in omp.taskloop.context operation}}
+  omp.taskloop.context allocate(%x : !llvm.ptr -> %x : !llvm.ptr) {
+    omp.taskloop.wrapper {
+      omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
+        omp.yield
+      }
     }
-  }
-  llvm.return
-}
-
-// -----
-
-llvm.func @taskloop_collapse(%lb : i32, %ub : i32, %step : i32, %lb1 : i32, %ub1 : i32, %step1 : i32) {
-  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop}}
-  omp.taskloop {
-    // expected-error@below {{not yet implemented: Unhandled clause collapse in omp.loop_nest operation}}
-    // expected-error@below {{LLVM Translation failed for operation: omp.loop_nest}}
-    omp.loop_nest (%iv, %iv1) : i32 = (%lb, %lb1) to (%ub, %ub1) inclusive step (%step, %step1) collapse(2) {
-      omp.yield
-    }
+    omp.terminator
   }
   llvm.return
 }
@@ -348,12 +325,15 @@ llvm.func @taskloop_collapse(%lb : i32, %ub : i32, %step : i32, %lb1 : i32, %ub1
   }
 
 llvm.func @taskloop_inreduction(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
-  // expected-error@below {{not yet implemented: Unhandled clause in_reduction in omp.taskloop operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop}}
-  omp.taskloop in_reduction(@add_reduction_i32 %x -> %arg0 : !llvm.ptr) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
+  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop.context}}
+  // expected-error@below {{not yet implemented: Unhandled clause in_reduction in omp.taskloop.context operation}}
+  omp.taskloop.context in_reduction(@add_reduction_i32 %x -> %arg0 : !llvm.ptr) {
+    omp.taskloop.wrapper {
+      omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
+        omp.yield
+      }
     }
+    omp.terminator
   }
   llvm.return
 }
@@ -370,12 +350,15 @@ llvm.func @taskloop_inreduction(%lb : i32, %ub : i32, %step : i32, %x : !llvm.pt
   }
 
 llvm.func @taskloop_reduction(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
-  // expected-error@below {{not yet implemented: Unhandled clause reduction in omp.taskloop operation}}
-  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop}}
-  omp.taskloop reduction(@add_reduction_i32 %x -> %arg0 : !llvm.ptr) {
-    omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
-      omp.yield
+  // expected-error@below {{LLVM Translation failed for operation: omp.taskloop.context}}
+  // expected-error@below {{not yet implemented: Unhandled clause reduction in omp.taskloop.context operation}}
+  omp.taskloop.context reduction(@add_reduction_i32 %x -> %arg0 : !llvm.ptr) {
+    omp.taskloop.wrapper {
+      omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
+        omp.yield
+      }
     }
+    omp.terminator
   }
   llvm.return
 }
@@ -477,6 +460,7 @@ llvm.func @wsloop_allocate(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
 }
 
 // -----
+
 llvm.func @wsloop_order(%lb : i32, %ub : i32, %step : i32) {
   // expected-error@below {{not yet implemented: Unhandled clause order in omp.wsloop operation}}
   // expected-error@below {{LLVM Translation failed for operation: omp.wsloop}}

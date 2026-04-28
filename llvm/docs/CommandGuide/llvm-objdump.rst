@@ -223,7 +223,8 @@ OPTIONS
 
 .. option:: --offloading
 
-  Display the content of the LLVM offloading sections and HIP offload bundles.
+  Display the content of the LLVM offloading section.
+  Extract Clang offload binaries into code objects.
 
 .. option:: --prefix=<prefix>
 
@@ -271,7 +272,7 @@ OPTIONS
 
   When printing symbols, only print symbols with a value up to ``address``.
 
-.. option:: --symbolize-operands
+.. option:: --symbolize-operands, --no-symbolize-operands
 
   When disassembling, symbolize a branch target operand to print a label instead of a real address.
 
@@ -284,7 +285,8 @@ OPTIONS
   any analysis with a special representation (i.e. BlockFrequency,
   BranchProbability, etc) are printed as raw hex values.
 
-  Only supported for AArch64, BPF, PowerPC, RISC-V, and X86.
+  Only supported for AArch64, BPF, PowerPC, RISC-V, and X86. Enabled by default
+  for BPF; use ``--no-symbolize-operands`` to disable.
 
   Example:
     A non-symbolized branch instruction with a local target and pc-relative memory access like

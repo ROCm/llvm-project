@@ -33,9 +33,9 @@ class AAResults;
 class AllocaInst;
 class AssumptionCache;
 class BasicBlock;
-class BranchInst;
 class CallBase;
 class CallInst;
+class CondBrInst;
 class DIBuilder;
 class DomTreeUpdater;
 class Function;
@@ -202,7 +202,7 @@ LLVM_ABI bool FlattenCFG(BasicBlock *BB, AAResults *AA = nullptr);
 /// If this basic block is ONLY a setcc and a branch, and if a predecessor
 /// branches to us and one of our successors, fold the setcc into the
 /// predecessor and use logical operations to pick the right destination.
-LLVM_ABI bool foldBranchToCommonDest(BranchInst *BI,
+LLVM_ABI bool foldBranchToCommonDest(CondBrInst *BI,
                                      llvm::DomTreeUpdater *DTU = nullptr,
                                      MemorySSAUpdater *MSSAU = nullptr,
                                      const TargetTransformInfo *TTI = nullptr,
@@ -368,7 +368,7 @@ salvageDebugInfoImpl(Instruction &I, uint64_t CurrentLocOps,
 /// introducing a use-before-def, it is either salvaged (\ref salvageDebugInfo)
 /// or deleted. Returns true if any debug users were updated.
 LLVM_ABI bool replaceAllDbgUsesWith(Instruction &From, Value &To,
-                                    Instruction &DomPoint, DominatorTree &DT);
+                                    Instruction &DomPoint, const DominatorTree &DT);
 
 /// If a terminator in an unreachable basic block has an operand of type
 /// Instruction, transform it into poison. Return true if any operands

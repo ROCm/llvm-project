@@ -96,8 +96,6 @@ private:
   // Symbols in private, firstprivate, and/or lastprivate clauses.
   llvm::SetVector<const semantics::Symbol *> explicitlyPrivatizedSymbols;
   llvm::SetVector<const semantics::Symbol *> defaultSymbols;
-  llvm::SetVector<const semantics::Symbol *> implicitSymbols;
-  llvm::SetVector<const semantics::Symbol *> preDeterminedSymbols;
   llvm::SetVector<const semantics::Symbol *> allPrivatizedSymbols;
 
   lower::AbstractConverter &converter;
@@ -111,10 +109,17 @@ private:
   lower::SymMap &symTable;
   bool isTargetPrivatization;
   OMPConstructSymbolVisitor visitor;
+  bool privatizationDone = false;
 
   bool needBarrier();
-  void collectSymbols(semantics::Symbol::Flag flag,
-                      llvm::SetVector<const semantics::Symbol *> &symbols);
+  void collectPrivatizedSymbols(
+      std::optional<semantics::Symbol::Flag> flag,
+      const llvm::SetVector<const semantics::Symbol *> &allSymbols,
+      const llvm::SetVector<const semantics::Symbol *> &symbolsInNestedRegions,
+      llvm::SetVector<const semantics::Symbol *> *symbols = nullptr);
+  void
+  collectSymbols(semantics::Symbol::Flag flag,
+                 llvm::SetVector<const semantics::Symbol *> *symbols = nullptr);
   void collectSymbolsInNestedRegions(
       lower::pft::Evaluation &eval, semantics::Symbol::Flag flag,
       llvm::SetVector<const semantics::Symbol *> &symbolsInNestedRegions);
@@ -126,6 +131,7 @@ private:
   void collectDefaultSymbols();
   void collectImplicitSymbols();
   void collectPreDeterminedSymbols();
+  void collectIndirectReferences();
   void privatize(mlir::omp::PrivateClauseOps *clauseOps,
                  std::optional<llvm::omp::Directive> dir = std::nullopt);
   void copyLastPrivatize(mlir::Operation *op);
@@ -157,20 +163,34 @@ public:
                        bool useDelayedPrivatization, lower::SymMap &symTable,
                        bool isTargetPrivatization = false);
 
-  // Privatisation is split into two steps.
-  // Step1 performs cloning of all privatisation clauses and copying for
-  // firstprivates. Step1 is performed at the place where process/processStep1
+  // Privatisation is split into 3 steps:
+  //
+  // * Step1: collects all symbols that should be privatized.
+  //
+  // * Step2: performs cloning of all privatisation clauses and copying for
+  // firstprivates. Step2 is performed at the place where process/processStep2
   // is called. This is usually inside the Operation corresponding to the OpenMP
-  // construct, for looping constructs this is just before the Operation. The
-  // split into two steps was performed basically to be able to call
-  // privatisation for looping constructs before the operation is created since
-  // the bounds of the MLIR OpenMP operation can be privatised.
-  // Step2 performs the copying for lastprivates and requires knowledge of the
-  // MLIR operation to insert the last private update. Step2 adds
+  // construct, for looping constructs this is just before the Operation.
+  //
+  // * Step3: performs the copying for lastprivates and requires knowledge of
+  // the MLIR operation to insert the last private update. Step3 adds
   // dealocation code as well.
-  void processStep1(mlir::omp::PrivateClauseOps *clauseOps = nullptr,
+  //
+  // The split was performed for the following reasons:
+  //
+  // 1. Step1 was split so that the `target` op knows which symbols should not
+  // be mapped into the target region due to being `private`. The implicit
+  // mapping happens before the op body is generated so we need to to collect
+  // the private symbols first and then later in the body actually privatize
+  // them.
+  //
+  // 2. Step2 was split in order to call privatisation for looping constructs
+  // before the operation is created since the bounds of the MLIR OpenMP
+  // operation can be privatised.
+  void processStep1();
+  void processStep2(mlir::omp::PrivateClauseOps *clauseOps = nullptr,
                     std::optional<llvm::omp::Directive> dir = std::nullopt);
-  void processStep2(mlir::Operation *op, bool isLoop);
+  void processStep3(mlir::Operation *op, bool isLoop);
 
   void pushLoopIV(mlir::Value iv) { loopIVs.push_back(iv); }
 

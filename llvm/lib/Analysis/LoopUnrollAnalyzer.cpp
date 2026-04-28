@@ -39,11 +39,6 @@ bool UnrolledInstAnalyzer::simplifyInstWithSCEV(Instruction *I) {
     return true;
   }
 
-  // If we have a loop invariant computation, we only need to compute it once.
-  // Given that, all but the first occurance are free.
-  if (!IterationNumber->isZero() && SE.isLoopInvariant(S, L))
-    return true;
-
   auto *AR = dyn_cast<SCEVAddRecExpr>(S);
   if (!AR || AR->getLoop() != L)
     return false;
@@ -66,7 +61,7 @@ bool UnrolledInstAnalyzer::simplifyInstWithSCEV(Instruction *I) {
   SimplifiedAddress Address;
   Address.Base = Base->getValue();
   Address.Offset = *Offset;
-  SimplifiedAddresses[I] = Address;
+  SimplifiedAddresses[I] = std::move(Address);
   return false;
 }
 

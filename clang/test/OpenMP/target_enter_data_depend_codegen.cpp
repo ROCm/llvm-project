@@ -38,7 +38,7 @@ double gc[100];
 // CK1: [[MTYPE03:@.+]] = {{.+}}constant [1 x i64] zeroinitializer
 
 // CK1: [[SIZE04:@.+]] = {{.+}}constant [2 x i64] [i64 24, i64 {{4|8}}]
-// CK1: [[MTYPE04:@.+]] = {{.+}}constant [2 x i64] [i64 1, i64 [[#0x4000]]]
+// CK1: [[MTYPE04:@.+]] = {{.+}}constant [2 x i64] [i64 1, i64 [[#0x8000]]]
 
 // CK1-LABEL: _Z3fooi
 void foo(int arg) {
@@ -242,15 +242,15 @@ void foo(int arg) {
   // &gb.b[0], &gb.b[0], 3 * sizeof(gb.b[0]), TO
   // &gb.b,    &gb.b[0], sizeof(void*),       ATTACH
 
-  // CK1: [[B:%.+]] = load ptr, ptr getelementptr inbounds nuw (%struct.ST, ptr @gb, i32 0, i32 1)
-  // CK1: [[B1:%.+]] = load ptr, ptr getelementptr inbounds nuw (%struct.ST, ptr @gb, i32 0, i32 1)
+  // CK1: [[B:%.+]] = load ptr, ptr getelementptr inbounds nuw (i8, ptr @gb, i{{64|32}} {{8|4}})
+  // CK1: [[B1:%.+]] = load ptr, ptr getelementptr inbounds nuw (i8, ptr @gb, i{{64|32}} {{8|4}})
   // CK1: [[BGEP0:%.+]] = getelementptr inbounds nuw double, ptr [[B1]], i[[sz]] 0
   // CK1: [[BP0:%.+]] = getelementptr inbounds [2 x ptr], ptr [[BP:%.+]], i32 0, i32 0
   // CK1: store ptr [[B]], ptr [[BP0]],
   // CK1: [[P0:%.+]] = getelementptr inbounds [2 x ptr], ptr [[P:%.+]], i32 0, i32 0
   // CK1: store ptr [[BGEP0]], ptr [[P0]],
   // CK1: [[BP1:%.+]] = getelementptr inbounds [2 x ptr], ptr [[BP]], i32 0, i32 1
-  // CK1: store ptr getelementptr inbounds nuw (%struct.ST, ptr @gb, i32 0, i32 1), ptr [[BP1]],
+  // CK1: store ptr getelementptr inbounds nuw (i8, ptr @gb, i{{64|32}} {{8|4}}), ptr [[BP1]],
   // CK1: [[P1:%.+]] = getelementptr inbounds [2 x ptr], ptr [[P]], i32 0, i32 1
   // CK1: store ptr [[BGEP0]], ptr [[P1]],
   // CK1: [[GEPBP0:%.+]] = getelementptr inbounds [2 x ptr], ptr [[BP]], i32 0, i32 0

@@ -21,10 +21,19 @@ module _Builtin_intrinsics [system] [extern_c] {
       export *
     }
 
+    explicit module bf16 {
+      header "arm_bf16.h"
+      export *
+    }
+
+    explicit module fp16 {
+      header "arm_fp16.h"
+      export *
+    }
+
     explicit module neon {
       requires neon
       header "arm_neon.h"
-      header "arm_fp16.h"
       export *
     }
 
@@ -351,7 +360,6 @@ module _Builtin_unwind [system] {
 module opencl_c [system] {
   requires opencl
   header "opencl-c.h"
-  header "opencl-c-base.h"
 }
 
 module ptrauth [system] {

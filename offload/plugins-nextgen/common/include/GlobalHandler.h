@@ -37,16 +37,7 @@ using namespace llvm::object;
 /// Common abstraction for globals that live on the host and device.
 /// It simply encapsulates the symbol name, symbol size, and symbol address
 /// (which might be host or device depending on the context).
-/// Both size and address may be absent (signified by 0/nullptr), and can be
-/// populated with getGlobalMetadataFromDevice/Image.
-class GlobalTy {
-  // NOTE: Maybe we can have a pointer to the offload entry name instead of
-  // holding a private copy of the name as a std::string.
-  std::string Name;
-  uint32_t Size;
-  void *Ptr;
-
-public:
+struct GlobalTy {
   GlobalTy(const std::string &Name, uint32_t Size = 0, void *Ptr = nullptr)
       : Name(Name), Size(Size), Ptr(Ptr) {}
 
@@ -56,11 +47,24 @@ public:
 
   void setSize(int32_t S) { Size = S; }
   void setPtr(void *P) { Ptr = P; }
+
+private:
+  // NOTE: Maybe we can have a pointer to the offload entry name instead of
+  // holding a private copy of the name as a std::string.
+  std::string Name;
+  uint32_t Size;
+  void *Ptr;
 };
 
 using IntPtrT = void *;
 struct __llvm_profile_data {
 #define INSTR_PROF_DATA(Type, LLVMType, Name, Initializer)                     \
+  std::remove_const<Type>::type Name;
+#include "llvm/ProfileData/InstrProfData.inc"
+};
+
+struct __llvm_profile_gpu_sections {
+#define INSTR_PROF_GPU_SECT(Type, LLVMType, Name, Initializer)                 \
   std::remove_const<Type>::type Name;
 #include "llvm/ProfileData/InstrProfData.inc"
 };
@@ -72,11 +76,14 @@ extern int __attribute__((weak)) __llvm_write_custom_profile(
     const char *CountersEnd, const char *NamesBegin, const char *NamesEnd,
     const uint64_t *VersionOverride);
 }
-/// PGO profiling data extracted from a GPU device
+/// PGO profiling data extracted from a GPU device via __llvm_profile_sections.
 struct GPUProfGlobals {
-  SmallVector<int64_t> Counts;
-  SmallVector<__llvm_profile_data> Data;
-  SmallVector<uint8_t> NamesData;
+  SmallVector<char> NamesSection;
+  SmallVector<char> CountersSection;
+  SmallVector<char> DataSection;
+  /// Distance from __llvm_prf_data to __llvm_prf_cnts on the device. Used to
+  /// adjust CounterPtr label differences when remapping to the host buffer.
+  intptr_t DeviceCountersDelta = 0;
   Triple TargetTriple;
   uint64_t Version = INSTR_PROF_RAW_VERSION;
 
@@ -86,10 +93,7 @@ struct GPUProfGlobals {
 };
 
 /// Subclass of GlobalTy that holds the memory for a global of \p Ty.
-template <typename Ty> class StaticGlobalTy : public GlobalTy {
-  Ty Data;
-
-public:
+template <typename Ty> struct StaticGlobalTy : public GlobalTy {
   template <typename... Args>
   StaticGlobalTy(const std::string &Name, Args &&...args)
       : GlobalTy(Name, sizeof(Ty), &Data),
@@ -108,6 +112,9 @@ public:
   Ty &getValue() { return Data; }
   const Ty &getValue() const { return Data; }
   void setValue(const Ty &V) { Data = V; }
+
+private:
+  Ty Data;
 };
 
 /// Helper class to do the heavy lifting when it comes to moving globals between

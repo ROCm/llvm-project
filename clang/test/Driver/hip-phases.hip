@@ -67,9 +67,13 @@
 // RUN: %clang -x hip --target=x86_64-unknown-linux-gnu -ccc-print-phases \
 // RUN: --no-offload-new-driver --cuda-gpu-arch=gfx803 %s -S 2>&1 \
 // RUN: | FileCheck -check-prefixes=ASM %s
+// RUN: %clang -x hip --target=x86_64-unknown-linux-gnu -ccc-print-phases \
+// RUN: --offload-new-driver --cuda-gpu-arch=gfx803 %s -S 2>&1 \
+// RUN: | FileCheck -check-prefixes=ASM %s
 // ASM-DAG: [[P0:[0-9]+]]: input, "{{.*}}hip-phases.hip", [[T:hip]], (device-[[T]], [[ARCH:gfx803]])
 // ASM-DAG: [[P1:[0-9]+]]: preprocessor, {[[P0]]}, [[T]]-cpp-output, (device-[[T]], [[ARCH]])
 // ASM-DAG: [[P2:[0-9]+]]: compiler, {[[P1]]}, ir, (device-[[T]], [[ARCH]])
+// ASM-DAG: [[P3:[0-9]+]]: backend, {[[P2]]}, assembler, (device-[[T]], [[ARCH]])
 
 // ASM-DAG: [[P5:[0-9]+]]: input, "{{.*}}hip-phases.hip", [[T]], (host-[[T]])
 // ASM-DAG: [[P6:[0-9]+]]: preprocessor, {[[P5]]}, [[T]]-cpp-output, (host-[[T]])
@@ -649,9 +653,9 @@
 //
 // Test the bindings using the new driver in LTO-mode.
 //
-// RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-phases \
-// RUN:        --offload-arch=gfx90a --offload-arch=gfx908 -foffload-lto -fgpu-rdc -c %s 2>&1 \
-// RUN: | FileCheck -check-prefix=LTO %s
+// R-UN: %clang -### --target=x86_64-linux-gnu --offload-new-driver -ccc-print-phases \
+// R-UN:        --offload-arch=gfx90a --offload-arch=gfx908 -foffload-lto -fgpu-rdc -c %s 2>&1 \
+// R-UN: | FileCheck -check-prefix=LTO %s
 //      LTO: 0: input, "[[INPUT:.+]]", hip, (host-hip)
 // LTO-NEXT: 1: preprocessor, {0}, hip-cpp-output, (host-hip)
 // LTO-NEXT: 2: compiler, {1}, ir, (host-hip)

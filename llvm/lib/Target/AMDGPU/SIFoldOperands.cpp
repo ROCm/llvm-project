@@ -1158,8 +1158,7 @@ bool SIFoldOperandsImpl::tryToFoldACImm(
   if (UseOpIdx >= Desc.getNumOperands())
     return false;
 
-  // Filter out unhandled pseudos.
-  if (!AMDGPU::isSISrcOperand(Desc, UseOpIdx))
+  if (!AMDGPU::isSISrcInlinableOperand(Desc, UseOpIdx))
     return false;
 
   if (OpToFold.isImm() && OpToFold.isOperandLegal(*TII, *UseMI, UseOpIdx)) {
@@ -1445,6 +1444,7 @@ void SIFoldOperandsImpl::foldOperand(
           return;
 
         UseMI->setDesc(TII->get(AMDGPU::S_MOV_B32));
+        UseMI->clearFlag(MachineInstr::NoConvergent);
 
         if (OpToFold.isImm()) {
           UseMI->getOperand(1).ChangeToImmediate(
@@ -1462,9 +1462,9 @@ void SIFoldOperandsImpl::foldOperand(
       }
 
       if (OpToFold.isReg() && TRI->isSGPRReg(*MRI, OpToFold.getReg())) {
-        if (execMayBeModifiedBeforeUse(*MRI,
-                                       UseMI->getOperand(UseOpIdx).getReg(),
-                                       *OpToFold.DefMI, *UseMI))
+        if (execMayBeModifiedBeforeUse(
+                *MRI, UseMI->getOperand(UseOpIdx).getReg(),
+                *OpToFold.DefMI, *UseMI))
           return;
 
         // %vgpr = COPY %sgpr0
@@ -1476,6 +1476,7 @@ void SIFoldOperandsImpl::foldOperand(
         UseMI->getOperand(1).setSubReg(OpToFold.getSubReg());
         UseMI->getOperand(1).setIsKill(false);
         UseMI->removeOperand(2); // Remove exec read (or src1 for readlane)
+        UseMI->clearFlag(MachineInstr::NoConvergent);
         return;
       }
     }
@@ -1638,7 +1639,7 @@ bool SIFoldOperandsImpl::tryConstantFoldOp(MachineInstr *MI) const {
       TII->mutateAndCleanupImplicit(*MI, TII->get(AMDGPU::COPY));
     } else if (Src1Val == -1) {
       // y = or x, -1 => y = v_mov_b32 -1
-      MI->removeOperand(Src1Idx);
+      MI->removeOperand(Src0Idx);
       TII->mutateAndCleanupImplicit(
           *MI, TII->get(getMovOpc(Opc == AMDGPU::S_OR_B32)));
     } else
@@ -2773,7 +2774,6 @@ bool SIFoldOperandsImpl::run(MachineFunction &MF) {
   //
   // FIXME: Also need to check strictfp
   bool IsIEEEMode = MFI->getMode().IEEE;
-  bool HasNSZ = MFI->hasNoSignedZerosFPMath();
 
   bool Changed = false;
   for (MachineBasicBlock *MBB : depth_first(&MF)) {
@@ -2812,8 +2812,7 @@ bool SIFoldOperandsImpl::run(MachineFunction &MF) {
 
       // TODO: Omod might be OK if there is NSZ only on the source
       // instruction, and not the omod multiply.
-      if (IsIEEEMode || (!HasNSZ && !MI.getFlag(MachineInstr::FmNsz)) ||
-          !tryFoldOMod(MI))
+      if (IsIEEEMode || !MI.getFlag(MachineInstr::FmNsz) || !tryFoldOMod(MI))
         Changed |= tryFoldClamp(MI);
     }
 

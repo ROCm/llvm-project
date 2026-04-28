@@ -45,7 +45,8 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
 #if defined(RT_DEVICE_COMPILATION)
   std::printf("\nfatal Fortran runtime error");
   if (sourceFileName_) {
-    std::printf("(%s", sourceFileName_);
+    // commenting out temporarily to avoid ICE seen with amd-staging
+    // std::printf("(%s", sourceFileName_);
     if (sourceLine_) {
       std::printf(":%d", sourceLine_);
     }
@@ -70,8 +71,11 @@ RT_API_ATTRS void Terminator::CrashHeader() const {
   std::printf("\n");
 #else
   fputc('\n', stderr);
+  // TODO: This should flush the buffers through the RPC interface.
+#if !RT_GPU_TARGET
   // FIXME: re-enable the flush along with the IO enabling.
   io::FlushOutputOnCrash(*this);
+#endif
 #endif
   NotifyOtherImagesOfErrorTermination(EXIT_FAILURE);
 #if defined(RT_DEVICE_COMPILATION)

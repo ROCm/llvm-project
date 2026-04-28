@@ -21,7 +21,7 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(LIBOMPD_LD_STD_FLAGS FALSE CACHE BOOL
   "Use -stdlibc++ instead of -libc++ library for C++ ")
 
-if(${LIBOMPD_LD_STD_FLAGS})
+if(LIBOMPD_LD_STD_FLAGS)
 #  Find and replace/add libstdc++ to compile flags     
    STRING( FIND "${CMAKE_CXX_FLAGS}" "-stdlib=libc++" OUT )
    if("${OUT}" STREQUAL "-1" )   
@@ -44,6 +44,17 @@ include_directories (
         ${LIBOMP_INCLUDE_DIR}
         ${LIBOMP_SRC_DIR}
 )
+
+if(${LIBOMP_USE_HWLOC})
+  set(CMAKE_REQUIRED_INCLUDES ${LIBOMP_HWLOC_INSTALL_DIR}/include)
+  check_include_file(hwloc.h LIBOMP_HAVE_HWLOC_H)
+  set(CMAKE_REQUIRED_INCLUDES)
+  if(NOT LIBOMP_HAVE_HWLOC_H)
+    libomp_error_say("Hwloc requested but not available")
+  else()
+    include_directories(${LIBOMP_HWLOC_INSTALL_DIR}/include)
+  endif()
+endif()
 
 INSTALL( TARGETS ompd
         LIBRARY DESTINATION ${OPENMP_INSTALL_LIBDIR}

@@ -277,9 +277,16 @@ struct AsanThreadLocalMallocStorage {
 
 void *asan_memalign(uptr alignment, uptr size, BufferedStackTrace *stack);
 void asan_free(void *ptr, BufferedStackTrace *stack);
+void asan_free_sized(void* ptr, uptr size, BufferedStackTrace* stack);
+void asan_free_aligned_sized(void* ptr, uptr alignment, uptr size,
+                             BufferedStackTrace* stack);
 
 void *asan_malloc(uptr size, BufferedStackTrace *stack);
 void *asan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack);
+#if SANITIZER_AIX
+void* asan_vec_malloc(uptr size, BufferedStackTrace* stack);
+void* asan_vec_calloc(uptr nmemb, uptr size, BufferedStackTrace* stack);
+#endif
 void *asan_realloc(void *p, uptr size, BufferedStackTrace *stack);
 void *asan_reallocarray(void *p, uptr nmemb, uptr size,
                         BufferedStackTrace *stack);
@@ -316,4 +323,43 @@ void PrintInternalAllocatorStats();
 void AsanSoftRssLimitExceededCallback(bool exceeded);
 
 }  // namespace __asan
+
+#if SANITIZER_AMDGPU
+#include <hsa.h>
+#include <hsa_ext_amd.h>
+
+namespace __asan {
+hsa_status_t asan_hsa_amd_memory_pool_allocate(
+  hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void **ptr,
+  BufferedStackTrace *stack);
+hsa_status_t asan_hsa_amd_memory_pool_free(
+  void *ptr,
+  BufferedStackTrace *stack);
+hsa_status_t asan_hsa_amd_agents_allow_access(
+  uint32_t num_agents, const hsa_agent_t *agents, const uint32_t *flags,
+  const void *ptr,
+  BufferedStackTrace *stack);
+hsa_status_t asan_hsa_amd_ipc_memory_create(
+  void* ptr, size_t len, hsa_amd_ipc_memory_t* handle);
+hsa_status_t asan_hsa_amd_ipc_memory_attach(
+  const hsa_amd_ipc_memory_t* handle, size_t len, uint32_t num_agents,
+  const hsa_agent_t* mapping_agents, void** mapped_ptr);
+hsa_status_t asan_hsa_amd_ipc_memory_detach(
+  void* mapped_ptr);
+hsa_status_t asan_hsa_amd_vmem_address_reserve_align(void** ptr, size_t size,
+                                                     uint64_t address,
+                                                     uint64_t alignment,
+                                                     uint64_t flags,
+                                                     BufferedStackTrace* stack);
+hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
+                                            BufferedStackTrace* stack);
+hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
+                                       hsa_amd_pointer_info_t* info,
+                                       void* (*alloc)(size_t),
+                                       uint32_t* num_agents_accessible,
+                                       hsa_agent_t** accessible);
+hsa_status_t asan_hsa_init();
+} // namespace __asan
+#endif
+
 #endif  // ASAN_ALLOCATOR_H

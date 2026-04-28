@@ -40,10 +40,12 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LLVMRemarkStreamer.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassTimingInfo.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/LTO/LTOBackend.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Object/Archive.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
@@ -248,6 +250,8 @@ void BackendConsumer::HandleTranslationUnit(ASTContext &C) {
   LLVMContext &Ctx = getModule()->getContext();
   std::unique_ptr<DiagnosticHandler> OldDiagnosticHandler =
     Ctx.getDiagnosticHandler();
+  llvm::scope_exit RestoreDiagnosticHandler(
+      [&]() { Ctx.setDiagnosticHandler(std::move(OldDiagnosticHandler)); });
   Ctx.setDiagnosticHandler(std::make_unique<ClangDiagnosticHandler>(
       CodeGenOpts, this));
 
@@ -310,8 +314,6 @@ void BackendConsumer::HandleTranslationUnit(ASTContext &C) {
   emitBackendOutput(CI, CI.getCodeGenOpts(),
                     C.getTargetInfo().getDataLayoutString(), getModule(),
                     Action, FS, std::move(AsmOutStream), this);
-
-  Ctx.setDiagnosticHandler(std::move(OldDiagnosticHandler));
 
   if (OptRecordFile)
     OptRecordFile->keep();
@@ -732,6 +734,47 @@ void BackendConsumer::DontCallDiagHandler(const DiagnosticInfoDontCall &D) {
                               ? diag::err_fe_backend_error_attr
                               : diag::warn_fe_backend_warning_attr)
       << llvm::demangle(D.getFunctionName()) << D.getNote();
+
+  if (!CodeGenOpts.ShowInliningChain)
+    return;
+
+  auto EmitNote = [&](SourceLocation Loc, StringRef FuncName, bool IsFirst) {
+    if (!Loc.isValid())
+      Loc = LocCookie;
+    unsigned DiagID =
+        IsFirst ? diag::note_fe_backend_in : diag::note_fe_backend_inlined;
+    Diags.Report(Loc, DiagID) << llvm::demangle(FuncName.str());
+  };
+
+  // Try debug info first for accurate source locations.
+  if (!D.getDebugInlineChain().empty()) {
+    SourceManager &SM = Context->getSourceManager();
+    FileManager &FM = SM.getFileManager();
+    for (const auto &[I, Info] : llvm::enumerate(D.getDebugInlineChain())) {
+      SourceLocation Loc;
+      if (Info.Line > 0)
+        if (auto FE = FM.getOptionalFileRef(Info.Filename))
+          Loc = SM.translateFileLineCol(*FE, Info.Line,
+                                        Info.Column ? Info.Column : 1);
+      EmitNote(Loc, Info.FuncName, I == 0);
+    }
+    return;
+  }
+
+  // Fall back to heuristic (srcloc metadata) when debug info is unavailable.
+  auto InliningDecisions = D.getInliningDecisions();
+  if (InliningDecisions.empty())
+    return;
+
+  for (const auto &[I, Entry] : llvm::enumerate(InliningDecisions)) {
+    SourceLocation Loc =
+        I == 0 ? LocCookie : SourceLocation::getFromRawEncoding(Entry.second);
+    EmitNote(Loc, Entry.first, I == 0);
+  }
+
+  // Suggest enabling debug info (at least -gline-directives-only) for more
+  // accurate locations.
+  Diags.Report(LocCookie, diag::note_fe_backend_inlining_debug_info);
 }
 
 void BackendConsumer::MisExpectDiagHandler(
@@ -961,10 +1004,81 @@ CodeGenAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   if (BA != Backend_EmitNothing && !OS)
     return nullptr;
 
-  // Load bitcode modules to link with, if we need to.
   if (loadLinkModules(CI))
     return nullptr;
+  // Load bitcode modules to link with, if we need to.
+  if (LinkModules.empty())
+    for (const CodeGenOptions::BitcodeFileToLink &F :
+         CI.getCodeGenOpts().LinkBitcodeFiles) {
+      auto BCBuf = CI.getFileManager().getBufferForFile(F.Filename);
+      if (!BCBuf) {
+        CI.getDiagnostics().Report(diag::err_cannot_open_file)
+            << F.Filename << BCBuf.getError().message();
+        LinkModules.clear();
+        return nullptr;
+      }
 
+      if (StringRef(F.Filename).ends_with(".a")) {
+        // Handle Archive file
+        Error Err = Error::success();
+        llvm::object::Archive Archive(BCBuf.get()->getMemBufferRef(), Err);
+        llvm::object::Archive *ArchivePtr = &Archive;
+
+        if (Err) {
+          auto EC = errorToErrorCode(std::move(Err));
+          CI.getDiagnostics().Report(diag::err_cannot_open_file)
+              << F.Filename << EC.message();
+          LinkModules.clear();
+          return nullptr;
+        }
+
+        for (auto &C : ArchivePtr->children(Err)) {
+          Expected<MemoryBufferRef> MemBufRef = C.getMemoryBufferRef();
+          if (MemBufRef.takeError()) {
+            CI.getDiagnostics().Report(diag::err_cannot_open_file)
+                << F.Filename;
+            LinkModules.clear();
+            return nullptr;
+          }
+
+          auto ChildBuf = llvm::MemoryBuffer::getMemBufferCopy(
+              MemBufRef.get().getBuffer(),
+              MemBufRef.get().getBufferIdentifier());
+          Expected<std::unique_ptr<llvm::Module>> ModuleOrErr =
+              getOwningLazyBitcodeModule(std::move(ChildBuf), *VMContext);
+          if (!ModuleOrErr) {
+            handleAllErrors(ModuleOrErr.takeError(), [&](ErrorInfoBase &EIB) {
+              CI.getDiagnostics().Report(diag::err_cannot_open_file)
+                  << F.Filename << EIB.message();
+            });
+            LinkModules.clear();
+            return nullptr;
+          }
+          LinkModules.push_back({std::move(ModuleOrErr.get()), F.PropagateAttrs,
+                                 F.Internalize, F.LinkFlags});
+        } // end for each child
+
+        if (std::move(Err)) {
+          CI.getDiagnostics().Report(diag::err_cannot_open_file) << F.Filename;
+          LinkModules.clear();
+          return nullptr;
+        }
+      } else {
+        // Single .bc file
+        Expected<std::unique_ptr<llvm::Module>> ModuleOrErr =
+            getOwningLazyBitcodeModule(std::move(*BCBuf), *VMContext);
+        if (!ModuleOrErr) {
+          handleAllErrors(ModuleOrErr.takeError(), [&](ErrorInfoBase &EIB) {
+            CI.getDiagnostics().Report(diag::err_cannot_open_file)
+                << F.Filename << EIB.message();
+          });
+          LinkModules.clear();
+          return nullptr;
+        }
+        LinkModules.push_back({std::move(ModuleOrErr.get()), F.PropagateAttrs,
+                               F.Internalize, F.LinkFlags});
+      }
+    }
   CoverageSourceInfo *CoverageInfo = nullptr;
   // Add the preprocessor callback only when the coverage mapping is generated.
   if (CI.getCodeGenOpts().CoverageMapping)

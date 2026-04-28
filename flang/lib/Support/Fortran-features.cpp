@@ -70,6 +70,13 @@ LanguageFeatureControl::LanguageFeatureControl() {
         std::move(cliOption);
   });
 
+  // Fix CLI spellings where the auto-generated hyphenation is wrong.
+  // TODO: -Wopen-mp-* should be fixed in a central place.  See
+  // see Discourse at
+  // https://discourse.llvm.org/t/openmp-misspelling-of-wopen-mp/90196.
+  ReplaceCliCanonicalSpelling(LanguageFeature::OpenMPThreadprivateEquivalence,
+      "openmp-threadprivate-equivalence");
+
   // These features must be explicitly enabled by command line options.
   disable_.set(LanguageFeature::OldDebugLines);
   disable_.set(LanguageFeature::OpenACC);
@@ -77,6 +84,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   disable_.set(LanguageFeature::CUDA); // !@cuf
   disable_.set(LanguageFeature::CudaManaged);
   disable_.set(LanguageFeature::CudaUnified);
+  disable_.set(LanguageFeature::AmdMemoryAllocator);
   disable_.set(LanguageFeature::ImplicitNoneTypeNever);
   disable_.set(LanguageFeature::ImplicitNoneTypeAlways);
   disable_.set(LanguageFeature::ImplicitNoneExternal);
@@ -104,6 +112,7 @@ LanguageFeatureControl::LanguageFeatureControl() {
   warnLanguage_.set(LanguageFeature::ListDirectedSize);
   warnLanguage_.set(LanguageFeature::IgnoreIrrelevantAttributes);
   warnLanguage_.set(LanguageFeature::TransferBOZ);
+  warnLanguage_.set(LanguageFeature::AllocatedForAssociated);
   warnUsage_.set(UsageWarning::ShortArrayActual);
   warnUsage_.set(UsageWarning::FoldingException);
   warnUsage_.set(UsageWarning::FoldingAvoidsRuntimeCrash);
@@ -152,6 +161,10 @@ LanguageFeatureControl::LanguageFeatureControl() {
   warnLanguage_.set(LanguageFeature::SavedLocalInSpecExpr);
   warnLanguage_.set(LanguageFeature::NullActualForAllocatable);
   warnUsage_.set(UsageWarning::BadValueInDeadCode);
+  warnUsage_.set(UsageWarning::MisplacedIgnoreTKR);
+  warnUsage_.set(UsageWarning::ImpureFinalInPure);
+  warnUsage_.set(UsageWarning::IgnoredNoReallocateLHS);
+  warnLanguage_.set(LanguageFeature::OpenMPThreadprivateEquivalence);
 }
 
 std::optional<LanguageControlFlag> LanguageFeatureControl::FindWarning(

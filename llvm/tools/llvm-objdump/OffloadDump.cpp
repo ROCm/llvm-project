@@ -16,6 +16,7 @@
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/OffloadBinary.h"
 #include "llvm/Object/OffloadBundle.h"
+#include "llvm/Support/Alignment.h"
 
 using namespace llvm;
 using namespace llvm::object;
@@ -36,6 +37,8 @@ static StringRef getImageName(const OffloadBinary &OB) {
     return "fatbinary";
   case IMG_PTX:
     return "ptx";
+  case IMG_SPIRV:
+    return "spir-v";
   default:
     return "<none>";
   }

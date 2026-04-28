@@ -10,6 +10,7 @@
 #define FORTRAN_OPTIMIZER_OPENMP_PASSES
 
 include "mlir/Pass/PassBase.td"
+include "mlir/IR/EnumAttr.td"
 
 def MapInfoFinalizationPass
     : Pass<"omp-map-info-finalization", "mlir::ModuleOp"> {
@@ -20,6 +21,12 @@ def MapInfoFinalizationPass
     explicit individual mapping by the OpenMP runtime.
   }];
   let dependentDialects = ["mlir::omp::OpenMPDialect"];
+
+  let options = [Option<"deferDescMapping", "opt-defer-desc-mapping",
+                      "bool", /*default=*/"true",
+                      "Activates or deactivates deferred descriptor mapping, "
+                      "which delays mapping of top-level descriptors to target "
+                      "regions and target data regions">];
 }
 
 def MapsForPrivatizedSymbolsPass
@@ -35,9 +42,15 @@ def MapsForPrivatizedSymbolsPass
   let dependentDialects = ["mlir::omp::OpenMPDialect"];
 }
 
-def MarkDeclareTargetPass
-    : Pass<"omp-mark-declare-target", "mlir::ModuleOp"> {
-  let summary = "Marks all functions called by an OpenMP declare target function as declare target";
+def DeleteUnreachableTargetsPass
+    : Pass<"omp-delete-unreachable-targets", "mlir::ModuleOp"> {
+  let summary = "Deletes OpenMP target operations in unreachable code";
+  let description = [{
+    Identifies and removes OpenMP target operations that reside in unreachable
+    code (e.g., inside if(.false.) blocks). This ensures consistency between
+    host and device compilation by preventing unreachable targets from being
+    processed on the device side.
+  }];
   let dependentDialects = ["mlir::omp::OpenMPDialect"];
 }
 
@@ -48,6 +61,15 @@ def FunctionFilteringPass : Pass<"omp-function-filtering"> {
     "mlir::func::FuncDialect",
     "fir::FIROpsDialect",
     "mlir::omp::OpenMPDialect"
+  ];
+}
+
+def GlobalFilteringPass : Pass<"omp-global-filtering"> {
+  let summary = "Filters out globals intended for the host when compiling "
+                "for the target device.";
+  let dependentDialects = [
+    "mlir::func::FuncDialect",
+    "fir::FIROpsDialect"
   ];
 }
 

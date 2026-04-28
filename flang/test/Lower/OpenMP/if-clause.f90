@@ -1224,6 +1224,22 @@ program main
   !$omp end target teams
 
   ! ----------------------------------------------------------------------------
+  ! TARGET UPDATE
+  ! ----------------------------------------------------------------------------
+
+  ! CHECK:      omp.target_update
+  ! CHECK-NOT:  if({{.*}})
+  !$omp target update to(i)
+
+  ! CHECK:      omp.target_update
+  ! CHECK-SAME: if({{.*}})
+  !$omp target update to(i) if(.true.)
+
+  ! CHECK:      omp.target_update
+  ! CHECK-SAME: if({{.*}})
+  !$omp target update to(i) if(target update: .true.)
+
+  ! ----------------------------------------------------------------------------
   ! TASK
   ! ----------------------------------------------------------------------------
   ! CHECK:      omp.task
@@ -1584,22 +1600,25 @@ program main
   ! TASKLOOP
   ! ----------------------------------------------------------------------------
 
-  ! CHECK:      omp.taskloop
+  ! CHECK:      omp.taskloop.context
   ! CHECK-NOT: if({{.*}})
+  ! CHECK:      omp.taskloop.wrapper
   !$omp taskloop
   do i = 1, 10
   end do
   !$omp end taskloop
 
-  ! CHECK:      omp.taskloop
+  ! CHECK:      omp.taskloop.context
   ! CHECK-SAME: if({{.*}})
+  ! CHECK:      omp.taskloop.wrapper
   !$omp taskloop if(.true.)
   do i = 1, 10
   end do
   !$omp end taskloop
 
-  ! CHECK:      omp.taskloop
+  ! CHECK:      omp.taskloop.context
   ! CHECK-SAME: if({{.*}})
+  ! CHECK:      omp.taskloop.wrapper
   !$omp taskloop if(taskloop: .true.)
   do i = 1, 10
   end do

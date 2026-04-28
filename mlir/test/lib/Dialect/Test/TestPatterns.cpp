@@ -154,7 +154,8 @@ public:
 
   LogicalResult matchAndRewrite(TestCommutative2Op op,
                                 PatternRewriter &rewriter) const override {
-    auto operand = op->getOperand(0).getDefiningOp<TestCommutative2Op>();
+    auto operand =
+        dyn_cast_or_null<TestCommutative2Op>(op->getOperand(0).getDefiningOp());
     if (!operand)
       return failure();
     Attribute constInput;
@@ -265,7 +266,8 @@ struct FoldLessThanOpF32ToI1 : public OpRewritePattern<test::LessThanOp> {
 
     Attribute operandAttrs[2] = {lhsAttr, rhsAttr};
     TypedAttr res = cast_or_null<TypedAttr>(
-        constFoldBinaryOp<FloatAttr, FloatAttr::ValueType, void, IntegerAttr>(
+        constFoldBinaryOp<FloatAttr, FloatAttr, FloatAttr::ValueType,
+                          FloatAttr::ValueType, void, IntegerAttr>(
             operandAttrs, op.getType(), [](APFloat lhs, APFloat rhs) -> APInt {
               return APInt(1, lhs < rhs);
             }));
@@ -744,10 +746,13 @@ static void invokeCreateWithInferredReturnType(Operation *op) {
     for (int j = 0; j < e; ++j) {
       std::array<Value, 2> values = {{fop.getArgument(i), fop.getArgument(j)}};
       SmallVector<Type, 2> inferredReturnTypes;
+      // Only pass properties if the op's properties type matches OpTy's.
+      PropertyRef properties = op->getPropertiesStorage();
+      if (properties.getTypeID() != TypeID::get<typename OpTy::Properties>())
+        properties = PropertyRef();
       if (succeeded(OpTy::inferReturnTypes(
               context, std::nullopt, values, op->getDiscardableAttrDictionary(),
-              op->getPropertiesStorage(), op->getRegions(),
-              inferredReturnTypes))) {
+              properties, op->getRegions(), inferredReturnTypes))) {
         OperationState state(location, OpTy::getOperationName());
         // TODO: Expand to regions.
         OpTy::build(b, state, values, op->getAttrs());

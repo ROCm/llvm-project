@@ -119,9 +119,34 @@ llvm::DIBasicType *DebugTranslation::translateImpl(DIBasicTypeAttr attr) {
       /*AlignInBits=*/0, attr.getEncoding(), llvm::DINode::FlagZero);
 }
 
+llvm::TempDICompileUnit
+DebugTranslation::translateTemporaryImpl(DICompileUnitAttr attr) {
+  return llvm::DICompileUnit::getTemporary(
+      llvmCtx,
+      static_cast<llvm::DISourceLanguageName>(attr.getSourceLanguage()),
+      /*File=*/nullptr, "", attr.getIsOptimized(),
+      /*Flags=*/"", /*RuntimeVersion=*/0,
+      /*splitDebugFileName=*/"",
+      static_cast<llvm::DICompileUnit::DebugEmissionKind>(
+          attr.getEmissionKind()),
+      /*EnumTypes=*/nullptr, /*RetainedTypes=*/nullptr,
+      /*GlobalVariables=*/nullptr, /*ImportedEntities=*/nullptr,
+      /*Macros=*/nullptr,
+      /*DWOId=*/0, /*SplitDebugInlining=*/true,
+      attr.getIsDebugInfoForProfiling(),
+      static_cast<llvm::DICompileUnit::DebugNameTableKind>(
+          attr.getNameTableKind()),
+      /*RangesBaseAddress=*/false, /*SysRoot=*/"", /*SDK=*/"");
+}
+
 llvm::DICompileUnit *DebugTranslation::translateImpl(DICompileUnitAttr attr) {
+  if (attr.getId())
+    if (auto iter = distinctAttrToNode.find(attr.getId());
+        iter != distinctAttrToNode.end())
+      return cast<llvm::DICompileUnit>(iter->second);
+
   llvm::DIBuilder builder(llvmModule);
-  return builder.createCompileUnit(
+  llvm::DICompileUnit *cu = builder.createCompileUnit(
       attr.getSourceLanguage(), translate(attr.getFile()),
       attr.getProducer() ? attr.getProducer().getValue() : "",
       attr.getIsOptimized(),
@@ -130,9 +155,20 @@ llvm::DICompileUnit *DebugTranslation::translateImpl(DICompileUnitAttr attr) {
                                    : "",
       static_cast<llvm::DICompileUnit::DebugEmissionKind>(
           attr.getEmissionKind()),
-      0, true, false,
+      0, true, attr.getIsDebugInfoForProfiling(),
       static_cast<llvm::DICompileUnit::DebugNameTableKind>(
           attr.getNameTableKind()));
+
+  llvm::SmallVector<llvm::Metadata *> importNodes;
+  for (DINodeAttr importNode : attr.getImportedEntities())
+    importNodes.push_back(translate(importNode));
+  if (!importNodes.empty())
+    cu->replaceImportedEntities(llvm::MDTuple::get(llvmCtx, importNodes));
+
+  if (attr.getId())
+    distinctAttrToNode.try_emplace(attr.getId(), cu);
+
+  return cu;
 }
 
 /// Returns a new `DINodeT` that is either distinct or not, depending on
@@ -200,10 +236,11 @@ DebugTranslation::translateImpl(DICompositeTypeAttr attr) {
 llvm::DIDerivedType *DebugTranslation::translateImpl(DIDerivedTypeAttr attr) {
   return llvm::DIDerivedType::get(
       llvmCtx, attr.getTag(), getMDStringOrNull(attr.getName()),
-      /*File=*/nullptr, /*Line=*/0,
-      /*Scope=*/nullptr, translate(attr.getBaseType()), attr.getSizeInBits(),
+      translate(attr.getFile()), attr.getLine(), translate(attr.getScope()),
+      translate(attr.getBaseType()), attr.getSizeInBits(),
       attr.getAlignInBits(), attr.getOffsetInBits(),
-      attr.getDwarfAddressSpace(), /*PtrAuthData=*/std::nullopt,
+      attr.getDwarfAddressSpace(), llvm::dwarf::DW_MSPACE_LLVM_none,
+      /*PtrAuthData=*/std::nullopt,
       /*Flags=*/static_cast<llvm::DINode::DIFlags>(attr.getFlags()),
       translate(attr.getExtraData()));
 }
@@ -257,6 +294,7 @@ DebugTranslation::translateImpl(DILocalVariableAttr attr) {
       llvmCtx, translate(attr.getScope()), getMDStringOrNull(attr.getName()),
       translate(attr.getFile()), attr.getLine(), translate(attr.getType()),
       attr.getArg(), static_cast<llvm::DINode::DIFlags>(attr.getFlags()),
+      llvm::dwarf::DW_MSPACE_LLVM_none,
       attr.getAlignInBits(),
       /*Annotations=*/nullptr);
 }
@@ -267,7 +305,8 @@ DebugTranslation::translateImpl(DIGlobalVariableAttr attr) {
       llvmCtx, translate(attr.getScope()), getMDStringOrNull(attr.getName()),
       getMDStringOrNull(attr.getLinkageName()), translate(attr.getFile()),
       attr.getLine(), translate(attr.getType()), attr.getIsLocalToUnit(),
-      attr.getIsDefined(), nullptr, nullptr, attr.getAlignInBits(), nullptr);
+      attr.getIsDefined(), nullptr, nullptr, llvm::dwarf::DW_MSPACE_LLVM_none,
+      attr.getAlignInBits(), nullptr);
 }
 
 llvm::DINode *
@@ -299,6 +338,13 @@ DebugTranslation::translateRecursive(DIRecursiveTypeAttrInterface attr) {
             setRecursivePlaceholder(temporary.get());
             // Must call `translateImpl` directly instead of `translate` to
             // avoid handling the recursive interface again.
+            auto *concrete = translateImpl(attr);
+            temporary->replaceAllUsesWith(concrete);
+            return concrete;
+          })
+          .Case([&](DICompileUnitAttr attr) {
+            auto temporary = translateTemporaryImpl(attr);
+            setRecursivePlaceholder(temporary.get());
             auto *concrete = translateImpl(attr);
             temporary->replaceAllUsesWith(concrete);
             return concrete;

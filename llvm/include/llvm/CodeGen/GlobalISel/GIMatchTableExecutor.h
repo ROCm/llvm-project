@@ -18,6 +18,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Bitset.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -107,6 +108,15 @@ enum {
   /// - Default(4) - failure jump target
   /// - JumpTable(4)... - (UpperBound - LowerBound) (at least 2) jump targets
   GIM_SwitchType,
+
+  /// Switch over the shape of an LLT on the specified instruction operand
+  /// - InsnID(ULEB128) - Instruction ID
+  /// - OpIdx(ULEB128) - Operand index
+  /// - LowerBound(2) - numerically minimum Type ID supported
+  /// - UpperBound(2) - numerically maximum + 1 Type ID supported
+  /// - Default(4) - failure jump target
+  /// - JumpTable(4)... - (UpperBound - LowerBound) (at least 2) jump targets
+  GIM_SwitchTypeShape,
 
   /// Record the specified instruction.
   /// The IgnoreCopies variant ignores COPY instructions.
@@ -245,6 +255,12 @@ enum {
   /// - OpIdx(ULEB128) - Operand index
   /// - SizeInBits(ULEB128) - The size of the pointer value in bits.
   GIM_CheckPointerToAny,
+
+  /// Check the machine type of the specified operand
+  /// - InsnID(ULEB128) - Instruction ID
+  /// - OpIdx(ULEB128) - Operand index
+  /// - MachineOperandType(ULEB128) - Expected type
+  GIM_CheckMachineOperandType,
 
   /// Check the register bank for the specified operand
   /// - InsnID(ULEB128) - Instruction ID
@@ -664,14 +680,14 @@ public:
           CustomRenderers(CustomRenderers) {
 
       for (size_t I = 0; I < NumTypeObjects; ++I)
-        TypeIDMap[TypeObjects[I]] = I;
+        TypeIDMap[TypeObjects[I].getUniqueRAWLLTData()] = I;
     }
     const LLT *TypeObjects;
     const PredicateBitset *FeatureBitsets;
     const ComplexMatcherMemFn *ComplexPredicates;
     const CustomRendererFn *CustomRenderers;
 
-    SmallDenseMap<LLT, unsigned, 64> TypeIDMap;
+    SmallDenseMap<uint64_t, unsigned, 64> TypeIDMap;
   };
 
 protected:

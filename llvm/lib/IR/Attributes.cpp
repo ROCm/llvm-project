@@ -513,10 +513,18 @@ CaptureInfo Attribute::getCaptureInfo() const {
   return CaptureInfo::createFromIntValue(pImpl->getValueAsInt());
 }
 
+DenormalFPEnv Attribute::getDenormalFPEnv() const {
+  return DenormalFPEnv::createFromIntValue(pImpl->getValueAsInt());
+}
+
 FPClassTest Attribute::getNoFPClass() const {
   assert(hasAttribute(Attribute::NoFPClass) &&
          "Can only call getNoFPClass() on nofpclass attribute");
   return static_cast<FPClassTest>(pImpl->getValueAsInt());
+}
+
+bool Attribute::isSanitizedPaddedGlobal() const {
+  return hasAttribute(Attribute::SanitizedPaddedGlobal);
 }
 
 const ConstantRange &Attribute::getRange() const {
@@ -653,14 +661,28 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
       OS << getModRefStr(OtherMR);
     }
 
+    bool TargetPrintedForAll = false;
     for (auto Loc : MemoryEffects::locations()) {
       ModRefInfo MR = ME.getModRef(Loc);
       if (MR == OtherMR)
         continue;
 
-      if (!First)
+      if (!First && !TargetPrintedForAll)
         OS << ", ";
       First = false;
+
+      // isTargetMemLocSameForAll is fine for target location < 3
+      // If more targets are added it should do something like:
+      // memory(target_mem:read, target_mem3:none, target_mem5:write).
+      if (ME.isTargetMemLoc(Loc) && ME.isTargetMemLocSameForAll()) {
+        if (!TargetPrintedForAll) {
+          OS << "target_mem: ";
+          OS << getModRefStr(MR);
+          TargetPrintedForAll = true;
+        }
+        // Only works when target memories are last to be listed in Location.
+        continue;
+      }
 
       switch (Loc) {
       case IRMemLocation::ArgMem:
@@ -693,11 +715,25 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return Result;
   }
 
+  if (hasAttribute(Attribute::DenormalFPEnv)) {
+    std::string Result = "denormal_fpenv(";
+    raw_string_ostream OS(Result);
+
+    struct DenormalFPEnv FPEnv = getDenormalFPEnv();
+    FPEnv.print(OS, /*OmitIfSame=*/true);
+
+    OS << ')';
+    return Result;
+  }
+
   if (hasAttribute(Attribute::NoFPClass)) {
     std::string Result = "nofpclass";
     raw_string_ostream(Result) << getNoFPClass();
     return Result;
   }
+
+  if (hasAttribute(Attribute::SanitizedPaddedGlobal))
+    return "sanitized_padded_global";
 
   if (hasAttribute(Attribute::Range)) {
     std::string Result;
@@ -2285,6 +2321,10 @@ AttrBuilder &AttrBuilder::addCapturesAttr(CaptureInfo CI) {
   return addRawIntAttr(Attribute::Captures, CI.toIntValue());
 }
 
+AttrBuilder &AttrBuilder::addDenormalFPEnvAttr(DenormalFPEnv FPEnv) {
+  return addRawIntAttr(Attribute::DenormalFPEnv, FPEnv.toIntValue());
+}
+
 AttrBuilder &AttrBuilder::addNoFPClassAttr(FPClassTest Mask) {
   if (Mask == fcNone)
     return *this;
@@ -2455,6 +2495,10 @@ AttributeMask AttributeFuncs::typeIncompatible(Type *Ty, AttributeSet AS,
     // Attributes that only apply to integers.
     if (ASK & ASK_SAFE_TO_DROP)
       Incompatible.addAttribute(Attribute::AllocAlign);
+  }
+
+  if (!Ty->isIntegerTy() && !Ty->isByteTy()) {
+    // Attributes that only apply to integers and bytes.
     if (ASK & ASK_UNSAFE_TO_DROP)
       Incompatible.addAttribute(Attribute::SExt).addAttribute(Attribute::ZExt);
   }
@@ -2543,16 +2587,16 @@ static bool denormModeCompatible(DenormalMode CallerMode,
 }
 
 static bool checkDenormMode(const Function &Caller, const Function &Callee) {
-  DenormalMode CallerMode = Caller.getDenormalModeRaw();
-  DenormalMode CalleeMode = Callee.getDenormalModeRaw();
+  DenormalFPEnv CallerEnv = Caller.getDenormalFPEnv();
+  DenormalFPEnv CalleeEnv = Callee.getDenormalFPEnv();
 
-  if (denormModeCompatible(CallerMode, CalleeMode)) {
-    DenormalMode CallerModeF32 = Caller.getDenormalModeF32Raw();
-    DenormalMode CalleeModeF32 = Callee.getDenormalModeF32Raw();
+  if (denormModeCompatible(CallerEnv.DefaultMode, CalleeEnv.DefaultMode)) {
+    DenormalMode CallerModeF32 = CallerEnv.F32Mode;
+    DenormalMode CalleeModeF32 = CalleeEnv.F32Mode;
     if (CallerModeF32 == DenormalMode::getInvalid())
-      CallerModeF32 = CallerMode;
+      CallerModeF32 = CallerEnv.DefaultMode;
     if (CalleeModeF32 == DenormalMode::getInvalid())
-      CalleeModeF32 = CalleeMode;
+      CalleeModeF32 = CalleeEnv.DefaultMode;
     return denormModeCompatible(CallerModeF32, CalleeModeF32);
   }
 

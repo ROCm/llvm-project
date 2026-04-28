@@ -16,6 +16,7 @@
 #include "asan_descriptions.h"
 #include "asan_scariness_score.h"
 #include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_symbolizer_amdgpu.h"
 
 namespace __asan {
 
@@ -94,6 +95,25 @@ struct ErrorNewDeleteTypeMismatch : ErrorBase {
     GetHeapAddressInformation(addr, 1, &addr_description);
   }
   void Print();
+};
+
+struct ErrorFreeSizeMismatch : ErrorBase {
+  const BufferedStackTrace* free_stack;
+  HeapAddressDescription addr_description;
+  uptr delete_size;
+  uptr delete_alignment;
+
+  ErrorFreeSizeMismatch() = default;  // (*)
+  ErrorFreeSizeMismatch(u32 tid, BufferedStackTrace* stack, uptr addr,
+                        uptr delete_size, uptr delete_alignment)
+      : ErrorBase(tid, 10, "free-size-mismatch"),
+        free_stack(stack),
+        delete_size(delete_size),
+        delete_alignment(delete_alignment) {
+    GetHeapAddressInformation(addr, 1, &addr_description);
+  }
+  void Print();
+  bool isFreeAlignedSized() const { return delete_alignment != 0; }
 };
 
 struct ErrorFreeNotMalloced : ErrorBase {
@@ -279,16 +299,16 @@ struct ErrorStringFunctionMemoryRangesOverlap : ErrorBase {
   const char *function;
 
   ErrorStringFunctionMemoryRangesOverlap() = default;  // (*)
-  ErrorStringFunctionMemoryRangesOverlap(u32 tid, BufferedStackTrace *stack_,
-                                         uptr addr1, uptr length1_, uptr addr2,
-                                         uptr length2_, const char *function_)
+  ErrorStringFunctionMemoryRangesOverlap(u32 tid, BufferedStackTrace* stack,
+                                         uptr addr1, uptr length1, uptr addr2,
+                                         uptr length2, const char* function)
       : ErrorBase(tid),
-        stack(stack_),
-        length1(length1_),
-        length2(length2_),
+        stack(stack),
+        length1(length1),
+        length2(length2),
         addr1_description(addr1, length1, /*shouldLockThreadRegistry=*/false),
         addr2_description(addr2, length2, /*shouldLockThreadRegistry=*/false),
-        function(function_) {
+        function(function) {
     char bug_type[100];
     internal_snprintf(bug_type, sizeof(bug_type), "%s-param-overlap", function);
     scariness.Clear();
@@ -301,14 +321,16 @@ struct ErrorStringFunctionSizeOverflow : ErrorBase {
   const BufferedStackTrace *stack;
   AddressDescription addr_description;
   uptr size;
+  bool is_write;
 
   ErrorStringFunctionSizeOverflow() = default;  // (*)
-  ErrorStringFunctionSizeOverflow(u32 tid, BufferedStackTrace *stack_,
-                                  uptr addr, uptr size_)
+  ErrorStringFunctionSizeOverflow(u32 tid, BufferedStackTrace* stack, uptr addr,
+                                  uptr size, bool is_write)
       : ErrorBase(tid, 10, "negative-size-param"),
-        stack(stack_),
+        stack(stack),
         addr_description(addr, /*shouldLockThreadRegistry=*/false),
-        size(size_) {}
+        size(size),
+        is_write(is_write) {}
   void Print();
 };
 
@@ -403,18 +425,91 @@ struct ErrorInvalidPointerPair : ErrorBase {
   void Print();
 };
 
-struct ErrorGeneric : ErrorBase {
+struct ErrorGenericBase : ErrorBase {
   AddressDescription addr_description;
-  uptr pc, bp, sp;
   uptr access_size;
-  const char *bug_descr;
   bool is_write;
   u8 shadow_val;
+  const char *bug_descr;
+  ErrorGenericBase() = default;  // (*)
+  ErrorGenericBase(u32 tid, uptr addr_, bool is_write_, uptr access_size_);
+};
 
+struct ErrorGeneric : ErrorGenericBase {
+  uptr pc, bp, sp;
   ErrorGeneric() = default;  // (*)
   ErrorGeneric(u32 tid, uptr pc_, uptr bp_, uptr sp_, uptr addr, bool is_write_,
                uptr access_size_);
   void Print();
+};
+
+// codeobject location for non-self error types.
+struct CodeObjectLocation {
+  int fd;
+  s64 vma_adjust;
+  u64 offset, size;
+  CodeObjectLocation() = default;
+  CodeObjectLocation(int fd_, s64 vma_adjust_, u64 offset_, u64 size_)
+      : fd(fd_), vma_adjust(vma_adjust_), offset(offset_), size(size_) {}
+};
+
+// NonSelf Generic Error can be used to report
+// an error triggered by cpu thread that compiler-rt is not aware of
+struct ErrorNonSelfGeneric : ErrorGenericBase {
+  CodeObjectLocation cb_loc;
+  // At present, we assume one thread triggered the error
+  static constexpr u32 threads_count = 1;
+  static constexpr u32 addr_count = 1;
+  static constexpr u32 maxcs_depth = 1;
+
+  uptr addresses[addr_count];
+  u64 thread_id[threads_count];
+  uptr callstack[maxcs_depth];
+
+  ErrorNonSelfGeneric() = default;
+  ErrorNonSelfGeneric(uptr *callstack_, u32 n_callstack, uptr *addrs,
+                      u32 n_addrs, u64 *threadids, u32 n_threads, bool is_write,
+                      u32 access_size, int fd_, s64 vm_adj, u64 off_, u64 sz_);
+  void Print();
+};
+
+// AMDGPU Device Generic Error
+// Represents an invaid memory access made by a single amdgpu wave-front
+// Todo: abstract amdgpu related info into a base classes in case of
+// multiple error types for AMDGPU
+struct ErrorNonSelfAMDGPU : ErrorGenericBase {
+  CodeObjectLocation cb_loc;
+  // amdgpu wave-front can have atmost 64 active threads
+  static constexpr u32 wavesize = 64;
+  uptr device_address[wavesize];
+  // currently we don't support callstack of depth > 1
+  static constexpr u32 maxcs_depth = 1;
+  uptr callstack[maxcs_depth];
+
+  struct workgroup_id {
+    u64 idx, idy, idz;
+    workgroup_id() = default;
+    workgroup_id(u64 idx_, u64 idy_, u64 idz_)
+        : idx(idx_), idy(idy_), idz(idz_) {}
+  } wg;
+  u64 workitem_ids[wavesize];
+  u32 nactive_threads;
+  int device_id;
+
+  ErrorNonSelfAMDGPU() = default;
+  ErrorNonSelfAMDGPU(uptr *dev_callstack, u32 n_callstack, uptr *dev_address,
+                     u32 n_addrs, u64 *wi_ids, u32 n_wi, bool is_write_,
+                     u32 access_size_, int fd_, s64 vm_adj, u64 file_start_,
+                     u64 file_size_);
+  void Print();
+
+  // error type identifying key
+  static constexpr const char *key = "amdgpu";
+
+ private:
+  void PrintStack();
+  void PrintThreadsAndAddresses();
+  void PrintMallocStack();
 };
 
 // clang-format off
@@ -422,6 +517,7 @@ struct ErrorGeneric : ErrorBase {
   macro(DeadlySignal)                                      \
   macro(DoubleFree)                                        \
   macro(NewDeleteTypeMismatch)                             \
+  macro(FreeSizeMismatch)                                  \
   macro(FreeNotMalloced)                                   \
   macro(AllocTypeMismatch)                                 \
   macro(MallocUsableSizeNotOwned)                          \
@@ -442,7 +538,9 @@ struct ErrorGeneric : ErrorBase {
   macro(BadParamsToCopyContiguousContainerAnnotations)     \
   macro(ODRViolation)                                      \
   macro(InvalidPointerPair)                                \
-  macro(Generic)
+  macro(Generic)                                           \
+  macro(NonSelfGeneric)                                    \
+  macro(NonSelfAMDGPU)
 // clang-format on
 
 #define ASAN_DEFINE_ERROR_KIND(name) kErrorKind##name,

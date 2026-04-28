@@ -87,6 +87,28 @@ int OnExit() {
   return 0;
 }
 
+#  if SANITIZER_POSIX
+static inline bool RangeOverlaps(uptr beg, uptr end_excl, uptr seg_beg,
+                                 uptr seg_end_incl) {
+  if (!seg_beg && !seg_end_incl)
+    return false;
+  uptr seg_end_excl = seg_end_incl + 1;
+  return beg < seg_end_excl && end_excl > seg_beg;
+}
+
+static inline bool IntersectsShadow(uptr beg, uptr end_excl) {
+  // Check shadow regions
+  if (RangeOverlaps(beg, end_excl, kLowShadowBeg, kLowShadowEnd))
+    return true;
+  if (kMidShadowBeg &&
+      RangeOverlaps(beg, end_excl, kMidShadowBeg, kMidShadowEnd))
+    return true;
+  if (RangeOverlaps(beg, end_excl, kHighShadowBeg, kHighShadowEnd))
+    return true;
+  return false;
+}
+#  endif  // SANITIZER_POSIX
+
 }  // namespace __asan
 
 // ---------------------- Wrappers ---------------- {{{1
@@ -142,6 +164,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void*)
       if (flags()->strict_init_order)               \
         StopInitOrderChecking();                    \
       CheckNoDeepBind(filename, flag);              \
+      PatchHsaRuntimeDlopenFlag(filename, flag);    \
       REAL(dlopen)(filename, flag);                 \
     })
 #  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
@@ -159,6 +182,25 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void*)
 template <class Mmap>
 static void* mmap_interceptor(Mmap real_mmap, void* addr, SIZE_T length,
                               int prot, int flags, int fd, OFF64_T offset) {
+#  if SANITIZER_POSIX
+  if (length == 0)
+    return real_mmap(addr, length, prot, flags, fd, offset);
+  const uptr start = reinterpret_cast<uptr>(addr);
+  uptr end_excl;
+  if (UNLIKELY(__builtin_add_overflow(start, static_cast<uptr>(length),
+                                      &end_excl))) {
+    errno = errno_EINVAL;
+    return (void*)-1;
+  }
+  if (flags & map_fixed) {
+    // TODO: shadow gap may need to be checked
+    if (__asan::IntersectsShadow(start, end_excl)) {
+      errno = errno_EINVAL;
+      return (void*)-1;
+    }
+  }
+#  endif  // SANITIZER_POSIX
+
   void* res = real_mmap(addr, length, prot, flags, fd, offset);
   if (length && res != (void*)-1) {
     const uptr beg = reinterpret_cast<uptr>(res);
@@ -173,14 +215,32 @@ static void* mmap_interceptor(Mmap real_mmap, void* addr, SIZE_T length,
 
 template <class Munmap>
 static int munmap_interceptor(Munmap real_munmap, void* addr, SIZE_T length) {
+  const uptr start = reinterpret_cast<uptr>(addr);
+
+#  if SANITIZER_POSIX
+  if (length == 0)
+    return real_munmap(addr, length);
+
+  uptr end_excl;
+  if (UNLIKELY(__builtin_add_overflow(start, static_cast<uptr>(length),
+                                      &end_excl))) {
+    errno = errno_EINVAL;
+    return -1;
+  }
+  // TODO: shadow gap may need to be checked
+  if (__asan::IntersectsShadow(start, end_excl)) {
+    errno = errno_EINVAL;
+    return -1;
+  }
+#  endif  // SANITIZER_POSIX
+
   // We should not tag if munmap fail, but it's to late to tag after
   // real_munmap, as the pages could be mmaped by another thread.
-  const uptr beg = reinterpret_cast<uptr>(addr);
-  if (length && IsAligned(beg, GetPageSize())) {
+  if (length && IsAligned(start, GetPageSize())) {
     SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
     // Protect from unmapping the shadow.
-    if (AddrIsInMem(beg) && AddrIsInMem(beg + rounded_length - 1))
-      PoisonShadow(beg, rounded_length, 0);
+    if (AddrIsInMem(start) && AddrIsInMem(start + rounded_length - 1))
+      PoisonShadow(start, rounded_length, 0);
   }
   return real_munmap(addr, length);
 }
@@ -189,13 +249,14 @@ static int munmap_interceptor(Munmap real_munmap, void* addr, SIZE_T length) {
                                        fd, offset)                           \
     do {                                                                     \
       (void)(ctx);                                                           \
-      return mmap_interceptor(REAL(mmap), addr, sz, prot, flags, fd, off);   \
+      return mmap_interceptor(REAL(mmap), addr, length, prot, flags, fd,     \
+                              offset);                                       \
     } while (false)
 
-#  define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, length) \
-    do {                                                    \
-      (void)(ctx);                                          \
-      return munmap_interceptor(REAL(munmap), addr, sz);    \
+#  define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, length)  \
+    do {                                                     \
+      (void)(ctx);                                           \
+      return munmap_interceptor(REAL(munmap), addr, length); \
     } while (false)
 
 #  if CAN_SANITIZE_LEAKS
@@ -835,6 +896,164 @@ DEFINE_REAL(int, vfork, )
 DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork, )
 #  endif
 
+#if SANITIZER_AMDGPU
+void ENSURE_HSA_INITED();
+
+INTERCEPTOR(hsa_status_t, hsa_amd_memory_pool_allocate,
+  hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags, void **ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_MALLOC;
+  return asan_hsa_amd_memory_pool_allocate(memory_pool, size, flags, ptr,
+    &stack);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_memory_pool_free, void *ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_FREE;
+  return asan_hsa_amd_memory_pool_free(ptr, &stack);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_agents_allow_access, uint32_t num_agents,
+  const hsa_agent_t *agents, const uint32_t *flags, const void *ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_FREE;
+  return asan_hsa_amd_agents_allow_access(num_agents, agents, flags, ptr,
+    &stack);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_memory_copy, void *dst, const void *src,
+  size_t size) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  if (flags()->replace_intrin) {
+    if (dst != src) {
+      CHECK_RANGES_OVERLAP("hsa_memory_copy", dst, size, src, size);
+    }
+    ASAN_READ_RANGE(nullptr, src, size);
+    ASAN_WRITE_RANGE(nullptr, dst, size);
+  }
+  return REAL(hsa_memory_copy)(dst, src, size);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_memory_async_copy, void* dst,
+  hsa_agent_t dst_agent, const void* src, hsa_agent_t src_agent, size_t size,
+  uint32_t num_dep_signals, const hsa_signal_t* dep_signals,
+  hsa_signal_t completion_signal) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  if (flags()->replace_intrin) {
+    if (dst != src) {
+      CHECK_RANGES_OVERLAP("hsa_amd_memory_async_copy", dst, size, src, size);
+    }
+    ASAN_READ_RANGE(nullptr, src, size);
+    ASAN_WRITE_RANGE(nullptr, dst, size);
+  }
+  return REAL(hsa_amd_memory_async_copy)(dst, dst_agent, src, src_agent, size,
+    num_dep_signals, dep_signals, completion_signal);
+}
+
+#if HSA_AMD_INTERFACE_VERSION_MINOR>=1
+INTERCEPTOR(hsa_status_t, hsa_amd_memory_async_copy_on_engine, void* dst,
+  hsa_agent_t dst_agent, const void* src, hsa_agent_t src_agent, size_t size,
+  uint32_t num_dep_signals, const hsa_signal_t* dep_signals,
+  hsa_signal_t completion_signal, hsa_amd_sdma_engine_id_t engine_id,
+ bool force_copy_on_sdma) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  if (flags()->replace_intrin) {
+    if (dst != src) {
+      CHECK_RANGES_OVERLAP("hsa_amd_memory_async_copy_on_engine", dst, size,
+                           src, size);
+    }
+    ASAN_READ_RANGE(nullptr, src, size);
+    ASAN_WRITE_RANGE(nullptr, dst, size);
+  }
+  return REAL(hsa_amd_memory_async_copy_on_engine)(
+    dst, dst_agent, src, src_agent, size, num_dep_signals, dep_signals,
+    completion_signal, engine_id, force_copy_on_sdma);
+}
+#endif
+
+INTERCEPTOR(hsa_status_t, hsa_amd_ipc_memory_create, void* ptr, size_t len,
+  hsa_amd_ipc_memory_t* handle) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  return asan_hsa_amd_ipc_memory_create(ptr, len, handle);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_ipc_memory_attach,
+  const hsa_amd_ipc_memory_t* handle, size_t len, uint32_t num_agents,
+  const hsa_agent_t* mapping_agents, void** mapped_ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  return asan_hsa_amd_ipc_memory_attach(handle, len, num_agents, mapping_agents,
+    mapped_ptr);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_ipc_memory_detach, void* mapped_ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  return asan_hsa_amd_ipc_memory_detach(mapped_ptr);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_vmem_address_reserve_align, void** ptr,
+            size_t size, uint64_t address, uint64_t alignment, uint64_t flags) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_MALLOC;
+  return asan_hsa_amd_vmem_address_reserve_align(ptr, size, address, alignment,
+                                                 flags, &stack);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_FREE;
+  return asan_hsa_amd_vmem_address_free(ptr, size, &stack);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
+            hsa_amd_pointer_info_t* info, void* (*alloc)(size_t),
+            uint32_t* num_agents_accessible, hsa_agent_t** accessible) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  return asan_hsa_amd_pointer_info(ptr, info, alloc, num_agents_accessible,
+                                   accessible);
+}
+
+INTERCEPTOR(hsa_status_t, hsa_init) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  return asan_hsa_init();
+}
+
+void InitializeAmdgpuInterceptors() {
+  ASAN_INTERCEPT_FUNC(hsa_init);
+  ASAN_INTERCEPT_FUNC(hsa_memory_copy);
+  ASAN_INTERCEPT_FUNC(hsa_amd_memory_pool_allocate);
+  ASAN_INTERCEPT_FUNC(hsa_amd_memory_pool_free);
+  ASAN_INTERCEPT_FUNC(hsa_amd_agents_allow_access);
+  ASAN_INTERCEPT_FUNC(hsa_amd_memory_async_copy);
+#if HSA_AMD_INTERFACE_VERSION_MINOR>=1
+  ASAN_INTERCEPT_FUNC(hsa_amd_memory_async_copy_on_engine);
+#endif
+  ASAN_INTERCEPT_FUNC(hsa_amd_ipc_memory_create);
+  ASAN_INTERCEPT_FUNC(hsa_amd_ipc_memory_attach);
+  ASAN_INTERCEPT_FUNC(hsa_amd_ipc_memory_detach);
+  ASAN_INTERCEPT_FUNC(hsa_amd_vmem_address_reserve_align);
+  ASAN_INTERCEPT_FUNC(hsa_amd_vmem_address_free);
+  ASAN_INTERCEPT_FUNC(hsa_amd_pointer_info);
+}
+
+void ENSURE_HSA_INITED() {
+  if (!REAL(hsa_init))
+    InitializeAmdgpuInterceptors();
+}
+#endif
+
 // ---------------------- InitializeAsanInterceptors ---------------- {{{1
 namespace __asan {
 void InitializeAsanInterceptors() {
@@ -950,6 +1169,12 @@ void InitializeAsanInterceptors() {
 #  if ASAN_INTERCEPT_VFORK
   ASAN_INTERCEPT_FUNC(vfork);
 #  endif
+
+#if SANITIZER_AMDGPU
+  InitializeAmdgpuInterceptors();
+#endif
+
+  InitializePlatformInterceptors();
 
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
 }

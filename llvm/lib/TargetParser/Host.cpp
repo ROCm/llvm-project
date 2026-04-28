@@ -1340,6 +1340,12 @@ static const char *getAMDProcessorTypeAndSubtype(unsigned Family,
       *Subtype = X86::AMDFAM1AH_ZNVER5;
       break; //  "znver5"
     }
+    if ((Model >= 0x50 && Model <= 0x5f) || (Model >= 0x80 && Model <= 0xcf) ||
+        (Model >= 0xd8 && Model <= 0xe7)) {
+      CPU = "znver6";
+      *Subtype = X86::AMDFAM1AH_ZNVER6;
+      break; //  "znver6"
+    }
     break;
 
   default:
@@ -1460,11 +1466,8 @@ static void getAvailableFeatures(unsigned ECX, unsigned EDX, unsigned MaxLeaf,
   if (HasLeaf7 && ((EDX >> 8) & 1) && HasAVX512Save)
     setFeature(X86::FEATURE_AVX512VP2INTERSECT);
 
-  // EAX from subleaf 0 is the maximum subleaf supported. Some CPUs don't
-  // return all 0s for invalid subleaves so check the limit.
   bool HasLeaf7Subleaf1 =
-      HasLeaf7 && EAX >= 1 &&
-      !getX86CpuIDAndInfoEx(0x7, 0x1, &EAX, &EBX, &ECX, &EDX);
+      MaxLeaf >= 7 && !getX86CpuIDAndInfoEx(0x7, 0x1, &EAX, &EBX, &ECX, &EDX);
   if (HasLeaf7Subleaf1 && ((EAX >> 5) & 1) && HasAVX512Save)
     setFeature(X86::FEATURE_AVX512BF16);
 
@@ -2142,11 +2145,8 @@ StringMap<bool> sys::getHostCPUFeatures() {
   Features["avx512fp16"] = HasLeaf7 && ((EDX >> 23) & 1) && HasAVX512Save;
   Features["amx-tile"]   = HasLeaf7 && ((EDX >> 24) & 1) && HasAMXSave;
   Features["amx-int8"]   = HasLeaf7 && ((EDX >> 25) & 1) && HasAMXSave;
-  // EAX from subleaf 0 is the maximum subleaf supported. Some CPUs don't
-  // return all 0s for invalid subleaves so check the limit.
   bool HasLeaf7Subleaf1 =
-      HasLeaf7 && EAX >= 1 &&
-      !getX86CpuIDAndInfoEx(0x7, 0x1, &EAX, &EBX, &ECX, &EDX);
+      MaxLevel >= 7 && !getX86CpuIDAndInfoEx(0x7, 0x1, &EAX, &EBX, &ECX, &EDX);
   Features["sha512"]     = HasLeaf7Subleaf1 && ((EAX >> 0) & 1);
   Features["sm3"]        = HasLeaf7Subleaf1 && ((EAX >> 1) & 1);
   Features["sm4"]        = HasLeaf7Subleaf1 && ((EAX >> 2) & 1);
@@ -2167,13 +2167,18 @@ StringMap<bool> sys::getHostCPUFeatures() {
   bool HasAVX10 = HasLeaf7Subleaf1 && ((EDX >> 19) & 1);
   bool HasAPXF = HasLeaf7Subleaf1 && ((EDX >> 21) & 1) && HasAPXSave;
   Features["egpr"] = HasAPXF;
+#ifndef _WIN32
+  // TODO: We may need to check OS or MSVC version once unwinder opcodes
+  // support PUSH2/POP2/PPX.
   Features["push2pop2"] = HasAPXF;
   Features["ppx"] = HasAPXF;
+#endif
   Features["ndd"] = HasAPXF;
   Features["ccmp"] = HasAPXF;
   Features["nf"] = HasAPXF;
   Features["cf"] = HasAPXF;
   Features["zu"] = HasAPXF;
+  Features["jmpabs"] = HasAPXF;
 
   bool HasLeafD = MaxLevel >= 0xd &&
                   !getX86CpuIDAndInfoEx(0xd, 0x1, &EAX, &EBX, &ECX, &EDX);

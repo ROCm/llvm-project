@@ -42,6 +42,8 @@
 #include <cstdarg>
 #include <mutex>
 #include <string>
+#include <cstdint>
+#include <cstdlib>
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Format.h"
@@ -61,8 +63,15 @@ enum OpenMPInfoType : uint32_t {
   OMP_INFOTYPE_PLUGIN_KERNEL = 0x0010,
   // Print whenever data is transferred to the device
   OMP_INFOTYPE_DATA_TRANSFER = 0x0020,
+  // AMD-only flag values (at least for now)
+  // Show kernel launches
+  OMP_INFOTYPE_AMD_KERNEL_TRACE = 0x1000,
+  // Enable also API-level tracing
+  OMP_INFOTYPE_AMD_API_TRACE = 0x200,
   // Print whenever data does not have a viable device counterpart.
   OMP_INFOTYPE_EMPTY_MAPPING = 0x0040,
+  // Print diagnostic information for users.
+  OMP_INFOTYPE_USER_DIAGNOSTIC = 0x0080,
   // Enable every flag.
   OMP_INFOTYPE_ALL = 0xffffffff,
 };
@@ -73,6 +82,25 @@ inline std::atomic<uint32_t> &getInfoLevelInternal() {
   std::call_once(Flag, []() {
     if (char *EnvStr = getenv("LIBOMPTARGET_INFO"))
       InfoLevel.store(std::stoi(EnvStr));
+  });
+
+  static std::once_flag KTFlag{};
+  std::call_once(KTFlag, []() {
+    if (char *EnvStr = getenv("LIBOMPTARGET_KERNEL_TRACE")) {
+      auto V = std::stoi(EnvStr);
+      // Match the LIBOMPTARGET_KERNEL_TRACE values and set InfoLevel to the
+      // enum values to keep backward-compatibility for
+      // LIBOMPTARGET_KERNEL_TRACE
+      if (V == 1)
+        InfoLevel.store(OMP_INFOTYPE_AMD_KERNEL_TRACE);
+      if (V == 2)
+        InfoLevel.store(OMP_INFOTYPE_AMD_API_TRACE |
+                        /*OMP_INFOTYPE_API_TRACE=*/0xff000000);
+      if (V == 3)
+        InfoLevel.store(OMP_INFOTYPE_AMD_KERNEL_TRACE |
+			OMP_INFOTYPE_AMD_API_TRACE |
+                        /*OMP_INFOTYPE_API_TRACE=*/0xff000000);
+    }
   });
 
   return InfoLevel;
@@ -271,7 +299,12 @@ struct DebugFilter {
 struct DebugSettings {
   bool Enabled = false;
   uint32_t DefaultLevel = 1;
-  llvm::SmallVector<DebugFilter> Filters;
+  // Types/Components in this list are not printed when debug is enabled
+  // unless they are explicitly requested by the user in IncludeFilters.
+  llvm::SmallVector<StringRef> ExcludeFilters;
+  // Types/Components in this list are printed when debug is enabled if
+  // the debug level is equal or higher than the specified level.
+  llvm::SmallVector<DebugFilter> IncludeFilters;
 };
 
 [[maybe_unused]] static DebugFilter parseDebugFilter(StringRef Filter) {
@@ -309,13 +342,12 @@ struct DebugSettings {
 
     Settings.Enabled = true;
 
-    if (EnvRef.starts_with_insensitive("all")) {
-      auto Spec = parseDebugFilter(EnvRef);
-      if (Spec.Type.equals_insensitive("all")) {
-        Settings.DefaultLevel = Spec.Level;
-        return;
-      }
-    }
+    // Messages with Type/Components added to the exclude list are not
+    // not printed when debug is enabled unless they are explicitly
+    // requested by the user.
+    // Eventually, this should be configured from the upper layers but
+    // for now we can hardcode some excluded types here like:
+    // Settings.ExcludeFilters.push_back(Type);
 
     if (!EnvRef.getAsInteger(10, Settings.DefaultLevel))
       return;
@@ -325,7 +357,18 @@ struct DebugSettings {
     for (auto &FilterSpec : llvm::split(EnvRef, ',')) {
       if (FilterSpec.empty())
         continue;
-      Settings.Filters.push_back(parseDebugFilter(FilterSpec));
+      DebugFilter Filter = parseDebugFilter(FilterSpec);
+
+      // Remove from ExcludeFilters if present
+      Settings.ExcludeFilters.erase(
+          std::remove_if(Settings.ExcludeFilters.begin(),
+                         Settings.ExcludeFilters.end(),
+                         [&](StringRef OutType) {
+                           return OutType.equals_insensitive(Filter.Type);
+                         }),
+          Settings.ExcludeFilters.end());
+
+      Settings.IncludeFilters.push_back(Filter);
     }
   });
 
@@ -340,7 +383,12 @@ shouldPrintDebug(const char *Component, const char *Type, uint32_t &Level) {
   if (!Settings.Enabled)
     return false;
 
-  if (Settings.Filters.empty()) {
+  for (const auto &Filter : Settings.ExcludeFilters) {
+    if (Filter.equals_insensitive(Type) || Filter.equals_insensitive(Component))
+      return false;
+  }
+
+  if (Settings.IncludeFilters.empty()) {
     if (Level <= Settings.DefaultLevel) {
       Level = Settings.DefaultLevel;
       return true;
@@ -348,10 +396,10 @@ shouldPrintDebug(const char *Component, const char *Type, uint32_t &Level) {
     return false;
   }
 
-  for (const auto &DT : Settings.Filters) {
+  for (const auto &DT : Settings.IncludeFilters) {
     if (DT.Level < Level)
       continue;
-    if (DT.Type.equals_insensitive(Type) ||
+    if (DT.Type.equals_insensitive("all") || DT.Type.equals_insensitive(Type) ||
         DT.Type.equals_insensitive(Component)) {
       Level = DT.Level;
       return true;
@@ -598,7 +646,7 @@ static inline odbg_ostream reportErrorStream() {
     if (::llvm::offload::debug::shouldPrintDebug(GETNAME(TARGET_NAME),
                                                  (ODT_Error), RealLevel))
       return odbg_ostream{
-          ::llvm::offload::debug::computePrefix(DEBUG_PREFIX, ODT_Error),
+          ::llvm::offload::debug::computePrefix("DEBUG_PREFIX_FIXME:", ODT_Error),
           ::llvm::offload::debug::dbgs(), RealLevel};
     else
       return odbg_ostream{"", ::llvm::nulls(), 1};
@@ -650,7 +698,9 @@ template <uint32_t InfoId> static constexpr const char *InfoIdToODT() {
   };
 
   constexpr const char *result = getId();
+#if FIXME
   static_assert(result != nullptr, "Unknown InfoId being used");
+#endif
   return result;
 }
 

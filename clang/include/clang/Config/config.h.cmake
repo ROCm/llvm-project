@@ -29,6 +29,9 @@
 /* Default OpenMP runtime used by -fopenmp. */
 #define CLANG_DEFAULT_OPENMP_RUNTIME "${CLANG_DEFAULT_OPENMP_RUNTIME}"
 
+/* Default architecture for OpenMP offloading to Nvidia GPUs. */
+#define CLANG_OPENMP_NVPTX_DEFAULT_ARCH "${CLANG_OPENMP_NVPTX_DEFAULT_ARCH}"
+
 /* Default architecture for SystemZ. */
 #define CLANG_SYSTEMZ_DEFAULT_ARCH "${CLANG_SYSTEMZ_DEFAULT_ARCH}"
 
@@ -84,5 +87,11 @@
 
 /* Whether CIR is built into Clang */
 #cmakedefine01 CLANG_ENABLE_CIR
+
+/* Whether to use xcselect to find the macOS SDK */
+#cmakedefine CLANG_USE_XCSELECT
+
+/* Policy to use for xcselect */
+#cmakedefine CLANG_XCSELECT_HOST_SDK_POLICY ${CLANG_XCSELECT_HOST_SDK_POLICY}
 
 #endif

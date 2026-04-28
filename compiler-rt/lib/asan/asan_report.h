@@ -53,6 +53,8 @@ void ReportDeadlySignal(const SignalContext &sig);
 void ReportNewDeleteTypeMismatch(uptr addr, uptr delete_size,
                                  uptr delete_alignment,
                                  BufferedStackTrace *free_stack);
+void ReportFreeSizeMismatch(uptr addr, uptr delete_size, uptr delete_alignment,
+                            BufferedStackTrace* free_stack);
 void ReportDoubleFree(uptr addr, BufferedStackTrace *free_stack);
 void ReportFreeNotMalloced(uptr addr, BufferedStackTrace *free_stack);
 void ReportAllocTypeMismatch(uptr addr, BufferedStackTrace *free_stack,
@@ -79,8 +81,8 @@ void ReportStringFunctionMemoryRangesOverlap(const char *function,
                                              const char *offset1, uptr length1,
                                              const char *offset2, uptr length2,
                                              BufferedStackTrace *stack);
-void ReportStringFunctionSizeOverflow(uptr offset, uptr size,
-                                      BufferedStackTrace *stack);
+void ReportStringFunctionSizeOverflow(uptr offset, uptr size, bool is_write,
+                                      BufferedStackTrace* stack);
 void ReportBadParamsToAnnotateContiguousContainer(uptr beg, uptr end,
                                                   uptr old_mid, uptr new_mid,
                                                   BufferedStackTrace *stack);
@@ -102,6 +104,21 @@ void ReportMacMzReallocUnknown(uptr addr, uptr zone_ptr,
 void ReportMacCfReallocUnknown(uptr addr, uptr zone_ptr,
                                const char *zone_name,
                                BufferedStackTrace *stack);
+
+// Interface to report errors and warnings by nonself threads
+// executing in the environment. Needed cpu threads can also submit a report.
+void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
+                        uptr *nonself_addrs, u32 n_nonself_addrs,
+                        u64 *nonself_tids, u32 n_nonself_tids, bool is_write,
+                        u32 access_size, bool is_abort,
+                        const char *nonself_name, s64 nonself_vma_adjust,
+                        int nonself_fd, u64 nonself_file_extent_size,
+                        u64 nonself_file_extent_start);
+
+// Report a device memory leak or print summary when device_id == -1.
+void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
+                       const char *device_name, s64 vma_adjust, int fd,
+                       u64 file_extent_size, u64 file_extent_start);
 
 }  // namespace __asan
 #endif  // ASAN_REPORT_H

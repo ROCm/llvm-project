@@ -236,7 +236,7 @@ private:
   void copyToDestRegs(CombineInfo &CI, CombineInfo &Paired,
                       MachineBasicBlock::iterator InsertBefore,
                       const DebugLoc &DL, AMDGPU::OpName OpName,
-                      Register DestReg) const;
+                      Register DestReg, MachineInstr *NewMI) const;
   Register copyFromSrcRegs(CombineInfo &CI, CombineInfo &Paired,
                            MachineBasicBlock::iterator InsertBefore,
                            const DebugLoc &DL, AMDGPU::OpName OpName) const;
@@ -1320,8 +1320,13 @@ SILoadStoreOptimizer::checkAndPrepareMerge(CombineInfo &CI,
   // correct for the new instruction.  This should return true, because
   // this function should only be called on CombineInfo objects that
   // have already been confirmed to be mergeable.
-  if (CI.InstClass == DS_READ || CI.InstClass == DS_WRITE)
+  if (CI.InstClass == DS_READ || CI.InstClass == DS_WRITE) {
+    if (STM->hasUnalignedDS2Bug() &&
+        (CI.I->memoperands_empty() ||
+         (*CI.I->memoperands_begin())->getAlign().value() < CI.Width * 4))
+      return nullptr;
     offsetsCanBeCombined(CI, *STM, Paired, true);
+  }
 
   if (CI.InstClass == DS_WRITE) {
     // Both data operands must be AGPR or VGPR, so the data registers needs to
@@ -1372,8 +1377,9 @@ SILoadStoreOptimizer::checkAndPrepareMerge(CombineInfo &CI,
 void SILoadStoreOptimizer::copyToDestRegs(
     CombineInfo &CI, CombineInfo &Paired,
     MachineBasicBlock::iterator InsertBefore, const DebugLoc &DL,
-    AMDGPU::OpName OpName, Register DestReg) const {
+    AMDGPU::OpName OpName, Register DestReg, MachineInstr *NewMI) const {
   MachineBasicBlock *MBB = CI.I->getParent();
+  MachineFunction *MF = MBB->getParent();
 
   auto [SubRegIdx0, SubRegIdx1] = getSubRegIdxs(CI, Paired);
 
@@ -1394,6 +1400,17 @@ void SILoadStoreOptimizer::copyToDestRegs(
   BuildMI(*MBB, InsertBefore, DL, CopyDesc)
       .add(*Dest1)
       .addReg(DestReg, RegState::Kill, SubRegIdx1);
+
+  if (unsigned DINum = CI.I->peekDebugInstrNum()) {
+    unsigned NewDINum = NewMI->getDebugInstrNum();
+    MF->makeDebugValueSubstitution(std::make_pair(DINum, 0),
+                                   std::make_pair(NewDINum, 0), SubRegIdx0);
+  }
+  if (unsigned DINum = Paired.I->peekDebugInstrNum()) {
+    unsigned NewDINum = NewMI->getDebugInstrNum();
+    MF->makeDebugValueSubstitution(std::make_pair(DINum, 0),
+                                   std::make_pair(NewDINum, 0), SubRegIdx1);
+  }
 }
 
 // Return a register for the source of the merged store after copying the
@@ -1488,7 +1505,8 @@ SILoadStoreOptimizer::mergeRead2Pair(CombineInfo &CI, CombineInfo &Paired,
           .addImm(0)                                 // gds
           .cloneMergedMemRefs({&*CI.I, &*Paired.I});
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdst, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdst, DestReg,
+                 Read2);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -1614,7 +1632,7 @@ SILoadStoreOptimizer::mergeImagePair(CombineInfo &CI, CombineInfo &Paired,
 
   MachineInstr *New = MIB.addMemOperand(combineKnownAdjacentMMOs(CI, Paired));
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg, New);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -1648,7 +1666,7 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeSMemLoadImmPair(
   New.addImm(MergedOffset);
   New.addImm(CI.CPol).addMemOperand(combineKnownAdjacentMMOs(CI, Paired));
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::sdst, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::sdst, DestReg, New);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -1691,7 +1709,7 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeBufferLoadPair(
         .addImm(0)            // swz
         .addMemOperand(combineKnownAdjacentMMOs(CI, Paired));
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg, New);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -1744,7 +1762,7 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeTBufferLoadPair(
           .addImm(0)            // swz
           .addMemOperand(combineKnownAdjacentMMOs(CI, Paired));
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdata, DestReg, New);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -1823,7 +1841,7 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeFlatLoadPair(
        .addImm(CI.CPol)
        .addMemOperand(combineKnownAdjacentMMOs(CI, Paired));
 
-  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdst, DestReg);
+  copyToDestRegs(CI, Paired, InsertBefore, DL, AMDGPU::OpName::vdst, DestReg, New);
 
   CI.I->eraseFromParent();
   Paired.I->eraseFromParent();
@@ -2369,24 +2387,30 @@ void SILoadStoreOptimizer::processBaseWithConstOffset(const MachineOperand &Base
   Addr.Offset = (*Offset0P & 0x00000000ffffffff) | (Offset1 << 32);
 }
 
-// Maintain the correct LDS address for async loads.
-// It becomes incorrect when promoteConstantOffsetToImm
-// adds an offset only meant for the src operand.
+// Maintain the correct LDS address for async loads and stores.
+// It becomes incorrect when promoteConstantOffsetToImm adds an offset only
+// meant for the global address operand. For async loads the LDS address is in
+// vdst. For async stores, the LDS address is in vdata.
 void SILoadStoreOptimizer::updateAsyncLDSAddress(MachineInstr &MI,
                                                  int32_t OffsetDiff) const {
   if (!TII->usesASYNC_CNT(MI) || OffsetDiff == 0)
     return;
 
-  Register OldVDst = TII->getNamedOperand(MI, AMDGPU::OpName::vdst)->getReg();
-  Register NewVDst = MRI->createVirtualRegister(MRI->getRegClass(OldVDst));
+  MachineOperand *LDSAddr = TII->getNamedOperand(MI, AMDGPU::OpName::vdst);
+  if (!LDSAddr)
+    LDSAddr = TII->getNamedOperand(MI, AMDGPU::OpName::vdata);
+  assert(LDSAddr);
+
+  Register OldReg = LDSAddr->getReg();
+  Register NewReg = MRI->createVirtualRegister(MRI->getRegClass(OldReg));
   MachineBasicBlock &MBB = *MI.getParent();
   const DebugLoc &DL = MI.getDebugLoc();
-  BuildMI(MBB, MI, DL, TII->get(AMDGPU::V_ADD_U32_e64), NewVDst)
-      .addReg(OldVDst)
+  BuildMI(MBB, MI, DL, TII->get(AMDGPU::V_ADD_U32_e64), NewReg)
+      .addReg(OldReg)
       .addImm(-OffsetDiff)
       .addImm(0);
 
-  MI.getOperand(0).setReg(NewVDst);
+  LDSAddr->setReg(NewReg);
 }
 
 bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
@@ -2403,6 +2427,16 @@ bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
 
   unsigned AS = SIInstrInfo::isFLATGlobal(MI) ? AMDGPUAS::GLOBAL_ADDRESS
                                               : AMDGPUAS::FLAT_ADDRESS;
+
+  uint64_t FlatVariant = AS == AMDGPUAS::GLOBAL_ADDRESS
+                             ? SIInstrFlags::FlatGlobal
+                             : SIInstrFlags::FLAT;
+  bool AllowNegativeOffset =
+      TII->allowNegativeFlatOffset(FlatVariant) && !TII->usesASYNC_CNT(MI);
+  // The async global instructions use i24 offset for global address but u16
+  // offset for LDS address. In this case, we just only promote when the offset
+  // is u16.
+  bool IsOffsetU16 = TII->usesASYNC_CNT(MI);
 
   if (AnchorList.count(&MI))
     return false;
@@ -2463,6 +2497,7 @@ bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
   MemAddress AnchorAddr;
   uint32_t MaxDist = std::numeric_limits<uint32_t>::min();
   SmallVector<std::pair<MachineInstr *, int64_t>, 4> InstsWCommonBase;
+  bool MIIsAnchor = false;
 
   MachineBasicBlock *MBB = MI.getParent();
   MachineBasicBlock::iterator E = MBB->end();
@@ -2496,17 +2531,39 @@ bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
 
     InstsWCommonBase.emplace_back(&MINext, MAddrNext.Offset);
 
-    int64_t Dist = MAddr.Offset - MAddrNext.Offset;
-    TargetLoweringBase::AddrMode AM;
-    AM.HasBaseReg = true;
-    AM.BaseOffs = Dist;
-    if (TLI->isLegalFlatAddressingMode(AM, AS) &&
-        (uint32_t)std::abs(Dist) > MaxDist) {
-      MaxDist = std::abs(Dist);
+    if (AllowNegativeOffset) {
+      int64_t Dist = MAddr.Offset - MAddrNext.Offset;
+      TargetLoweringBase::AddrMode AM;
+      AM.HasBaseReg = true;
+      AM.BaseOffs = Dist;
+      if (TLI->isLegalFlatAddressingMode(AM, AS) &&
+          (uint32_t)std::abs(Dist) > MaxDist) {
+        MaxDist = std::abs(Dist);
 
-      AnchorAddr = MAddrNext;
-      AnchorInst = &MINext;
+        AnchorAddr = MAddrNext;
+        AnchorInst = &MINext;
+      }
     }
+  }
+
+  // When negative offsets are not allowed, pick the candidate with the smallest
+  // offset as anchor so all promoted offsets are non-negative. If MI itself has
+  // the smallest offset, MI becomes the reference point (MIIsAnchor).
+  if (!AllowNegativeOffset && !InstsWCommonBase.empty()) {
+    for (auto &[Inst, Offset] : InstsWCommonBase) {
+      int64_t Dist = MAddr.Offset - Offset;
+      TargetLoweringBase::AddrMode AM;
+      AM.HasBaseReg = true;
+      AM.BaseOffs = Dist;
+      if (Dist >= 0 && TLI->isLegalFlatAddressingMode(AM, AS) &&
+          (!IsOffsetU16 || isUInt<16>(Dist)) &&
+          (!AnchorInst || Offset < AnchorAddr.Offset)) {
+        AnchorAddr = Visited[Inst];
+        AnchorInst = Inst;
+      }
+    }
+    if (!AnchorInst)
+      MIIsAnchor = true;
   }
 
   if (AnchorInst) {
@@ -2528,7 +2585,9 @@ bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
       AM.HasBaseReg = true;
       AM.BaseOffs = OtherOffset - AnchorAddr.Offset;
 
-      if (TLI->isLegalFlatAddressingMode(AM, AS)) {
+      if (TLI->isLegalFlatAddressingMode(AM, AS) &&
+          (AllowNegativeOffset || AM.BaseOffs >= 0) &&
+          (!IsOffsetU16 || isUInt<16>(AM.BaseOffs))) {
         LLVM_DEBUG(dbgs() << "  Promote Offset(" << OtherOffset; dbgs() << ")";
                    OtherMI->dump());
         int32_t OtherOffsetDiff = OtherOffset - AnchorAddr.Offset;
@@ -2539,6 +2598,36 @@ bool SILoadStoreOptimizer::promoteConstantOffsetToImm(
     }
     AnchorList.insert(AnchorInst);
     return true;
+  }
+
+  if (MIIsAnchor) {
+    LLVM_DEBUG(dbgs() << "  MI is anchor (smallest offset); promoting "
+                         "candidates relative to MI's base.\n");
+
+    Register Base = TII->getNamedOperand(MI, AMDGPU::OpName::vaddr)->getReg();
+    bool AnyPromoted = false;
+
+    for (auto [OtherMI, OtherOffset] : InstsWCommonBase) {
+      int64_t Dist = OtherOffset - MAddr.Offset;
+      TargetLoweringBase::AddrMode AM;
+      AM.HasBaseReg = true;
+      AM.BaseOffs = Dist;
+      if (Dist >= 0 && TLI->isLegalFlatAddressingMode(AM, AS) &&
+          (!IsOffsetU16 || isUInt<16>(Dist))) {
+        LLVM_DEBUG(dbgs() << "  Promote Offset(" << OtherOffset << ")";
+                   OtherMI->dump());
+        updateBaseAndOffset(*OtherMI, Base, Dist);
+        updateAsyncLDSAddress(*OtherMI, Dist);
+        LLVM_DEBUG(dbgs() << "     After promotion: "; OtherMI->dump());
+        AnyPromoted = true;
+      }
+    }
+
+    if (AnyPromoted) {
+      TII->getNamedOperand(MI, AMDGPU::OpName::vaddr)->setIsKill(false);
+      AnchorList.insert(&MI);
+      return true;
+    }
   }
 
   return false;

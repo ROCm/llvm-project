@@ -5,15 +5,18 @@
 
 set(COMMON_CMAKE_ARGS "-DHAVE_LLVM_LIT=ON;-DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}")
 foreach(proj ${LLVM_ENABLE_RUNTIMES})
-  set(proj_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
-  if(IS_DIRECTORY ${proj_dir} AND EXISTS ${proj_dir}/CMakeLists.txt)
-    list(APPEND runtimes ${proj_dir})
-  else()
-    message(FATAL_ERROR "LLVM_ENABLE_RUNTIMES requests ${proj} but directory not found: ${proj_dir}")
-  endif()
   string(TOUPPER "${proj}" canon_name)
   STRING(REGEX REPLACE "-" "_" canon_name ${canon_name})
-  set(LLVM_EXTERNAL_${canon_name}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
+  if(NOT LLVM_EXTERNAL_${canon_name}_SOURCE_DIR)
+    set(LLVM_EXTERNAL_${canon_name}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../${proj}")
+  endif()
+  set(proj_dir "${LLVM_EXTERNAL_${canon_name}_SOURCE_DIR}")
+  if(NOT IS_DIRECTORY ${proj_dir} OR NOT EXISTS ${proj_dir}/CMakeLists.txt)
+    message(FATAL_ERROR "LLVM_ENABLE_RUNTIMES requests ${proj} but directory not found: ${proj_dir}")
+  endif()
+  list(APPEND runtimes ${proj_dir})
+  list(APPEND RUNTIMES_CMAKE_ARGS
+    "-DLLVM_EXTERNAL_${canon_name}_SOURCE_DIR=${LLVM_EXTERNAL_${canon_name}_SOURCE_DIR}")
 endforeach()
 
 function(get_compiler_rt_path path)
@@ -459,6 +462,15 @@ function(runtime_register_target name)
     if(TARGET builtins-${name})
       add_dependencies(check-builtins check-builtins-${name})
     endif()
+
+    foreach(runtime_name ${runtime_names})
+      if(TARGET check-${runtime_name}-${name})
+        if(NOT TARGET check-${runtime_name})
+          add_custom_target(check-${runtime_name})
+        endif()
+        add_dependencies(check-${runtime_name} check-${runtime_name}-${name})
+      endif()
+    endforeach()
   endif()
   foreach(runtime_name ${runtime_names})
     if(NOT TARGET ${runtime_name})
@@ -521,6 +533,7 @@ if(build_runtimes)
                 llvm-symbolizer
                 llvm-xray
                 llvm-offload-binary
+                llvm-gpu-loader
                 not
                 obj2yaml
                 opt
@@ -539,18 +552,36 @@ if(build_runtimes)
   endif()
 
   # Forward user-provived system configuration to runtimes for requirement introspection.
-  # CMAKE_PREFIX_PATH is the search path for CMake packages.
+  # CMAKE_PREFIX_PATH is the search path for CMake packages. In order to pass through
+  # the command line interface, the CMake semicolon separator needs to be replaced
+  # with $<SEMICOLON>
   if(CMAKE_PREFIX_PATH)
-    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
+    string(JOIN "$<SEMICOLON>" escaped_cmake_prefix_path ${CMAKE_PREFIX_PATH})
+    # Some projects require access to the LLVM lib/cmake directory
+    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR OR DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+      string(PREPEND escaped_cmake_prefix_path "${CMAKE_BINARY_DIR}/lib/cmake$<SEMICOLON>")
+    endif()
+    list(APPEND extra_cmake_args "-DCMAKE_PREFIX_PATH=${escaped_cmake_prefix_path}")
   endif()
+
   # CMAKE_PROGRAM_PATH is the search path for executables such as python.
   if(CMAKE_PROGRAM_PATH)
     list(APPEND extra_cmake_args "-DCMAKE_PROGRAM_PATH=${CMAKE_PROGRAM_PATH}")
   endif()
 
-  # TODO: We need to consider passing it as '-DRUNTIMES_x86_64_LLVM_ENABLE_RUNTIMES'.
+  set(libclc_enabled FALSE)
   if("libclc" IN_LIST LLVM_ENABLE_RUNTIMES)
-    foreach(dep clang llvm-as llvm-link opt)
+    set(libclc_enabled TRUE)
+  else()
+    foreach(target ${LLVM_RUNTIME_TARGETS})
+      if("libclc" IN_LIST RUNTIMES_${target}_LLVM_ENABLE_RUNTIMES)
+        set(libclc_enabled TRUE)
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(libclc_enabled)
+    foreach(dep clang llvm-link opt llvm-ar llvm-ranlib llvm-spirv)
       if(TARGET ${dep})
         list(APPEND extra_deps ${dep})
       endif()
@@ -569,6 +600,61 @@ if(build_runtimes)
     list(APPEND extra_args ENABLE_FORTRAN)
   endif()
   if("openmp" IN_LIST LLVM_ENABLE_RUNTIMES OR "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
+    # With ROCm 6.3 the ROCr runtime and the thunk layer share a single repository.
+    # No need to provide a separate path for ROCt.
+    if (OFFLOAD_EXTERNAL_PROJECT_UNIFIED_ROCR)
+
+      set(rocr_extra_cmake_args "")
+      if(THEROCK_AMDGPU_TARGETS)
+        # Pass the list of AMDGPU targets to ROCr runtime
+        list(APPEND rocr_extra_cmake_args "-DTHEROCK_AMDGPU_TARGETS=${THEROCK_AMDGPU_TARGETS}")
+      endif()
+
+      if(NOT DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH)
+        message(SEND_ERROR "External ROCr requires setting LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH")
+      endif()
+
+      message(STATUS "Add external unified ROCr: ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}")
+      ExternalProject_Add(rocr-runtime
+        SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_HSA_PATH}
+        DEPENDS clang llvm-link lld opt llvm-objcopy
+        INSTALL_COMMAND ""
+        CMAKE_ARGS -DBUILD_SHARED_LIBS=ON
+                   -DIMAGE_SUPPORT=OFF
+                   -DLLVM_RUNTIME_OPENMP=ON
+                   ${rocr_extra_cmake_args}
+                   ${extra_cmake_args})
+      set(HSA_DEP rocr-runtime)
+    endif()
+
+    # omptarget device RTL depends on device libs, leading to circular dependency in build scripts.
+    # Providing path to the sources enables to build them as part of compiler build, which
+    # removes the ciruclar dependency on the script-side.
+    if (DEFINED LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH)
+      message(STATUS "Add external AMD device-libs: ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}")
+      if (NOT ${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH} STREQUAL "")
+        ExternalProject_Add(rocm-device-libs
+          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
+          DEPENDS clang llvm-link lld opt llvm-objcopy
+          CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${ROCM_DEVICE_LIBS_INSTALL_PREFIX_PATH}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn
+                     -DCMAKE_INSTALL_LIBDIR=lib
+                     ${extra_cmake_args})
+      else()
+        ExternalProject_Add(rocm-device-libs
+          SOURCE_DIR ${LIBOMPTARGET_EXTERNAL_PROJECT_ROCM_DEVICE_LIBS_PATH}
+          DEPENDS clang llvm-link lld opt llvm-objcopy
+          INSTALL_COMMAND ""
+          CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_BINARY_DIR}/lib/cmake
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_NEW=${ROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC}
+                     -DROCM_DEVICE_LIBS_BITCODE_INSTALL_LOC_OLD=amdgcn)
+      endif()
+    endif()
+
+    if("AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
+      set(AMDGPU_ARCH_DEP amdgpu-arch)
+    endif()
     if (${LLVM_TOOL_FLANG_BUILD})
       message(STATUS "Configuring build of omp_lib.mod and omp_lib_kinds.mod via flang")
       set(LIBOMP_FORTRAN_MODULES_COMPILER "${CMAKE_BINARY_DIR}/bin/flang")
@@ -580,13 +666,22 @@ if(build_runtimes)
       # that all .mod files are also properly build.
       list(APPEND extra_deps "flang" "module_files")
     endif()
-    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper)
-      if(TARGET ${dep})
+    if (${LIBOMPTARGET_BUILD_DEVICE_FORTRT})
+      set(FORTRT_DEP FortranRuntime)
+    endif()
+    foreach(dep opt llvm-link llvm-extract clang llvm-offload-binary clang-nvlink-wrapper rocm-device-libs offload-arch ${HSA_DEP} ${AMDGPU_ARCH_DEP} ${FORTRT_DEP})
+      if(TARGET ${dep} AND OPENMP_ENABLE_LIBOMPTARGET)
         list(APPEND extra_deps ${dep})
       endif()
     endforeach()
   endif()
   if(LLVM_LIBC_GPU_BUILD)
+    set(_gpu_loader "${LLVM_TOOLS_BINARY_DIR}/llvm-gpu-loader${CMAKE_EXECUTABLE_SUFFIX}")
+    foreach(name ${LLVM_RUNTIME_TARGETS})
+      if(name MATCHES "^(amdgcn|nvptx)")
+        set(RUNTIMES_${name}_CMAKE_CROSSCOMPILING_EMULATOR "${_gpu_loader}" CACHE STRING "")
+      endif()
+    endforeach()
     list(APPEND extra_cmake_args "-DLLVM_LIBC_GPU_BUILD=ON")
     if(TARGET llvm-offload-binary)
       list(APPEND extra_deps llvm-offload-binary)
@@ -700,13 +795,6 @@ if(build_runtimes)
     # We need to add the runtimes as a dependency because compiler-rt can be
     # built as part of runtimes and we need the profile runtime for PGO
     add_dependencies(clang-bootstrap-deps runtimes)
-    # The bootstrap build will attempt to configure the offload runtime
-    # before the openmp project which will error out due to failing to
-    # find libomp.so. We must add omp as a dependency before runtimes
-    # are configured.
-    if("openmp" IN_LIST LLVM_ENABLE_PROJECTS AND "offload" IN_LIST LLVM_ENABLE_RUNTIMES)
-      add_dependencies(clang-bootstrap-deps omp)
-    endif()
   endif()
 
   if(LLVM_INCLUDE_TESTS)
@@ -718,4 +806,10 @@ if(build_runtimes)
 
     set_property(GLOBAL APPEND PROPERTY LLVM_ALL_ADDITIONAL_TEST_TARGETS runtimes ${extra_deps})
   endif()
+endif()
+
+if(LIBOMP_ENABLE_ARM64X)
+  # TODO: This only needs to depend on openmp-arm64ec-pc-windows-msvc, but the 
+  # openmp targets set up for cross build runtimes don't currently work correctly.
+  add_dependencies(runtimes-configure runtimes-arm64ec-pc-windows-msvc-build)
 endif()

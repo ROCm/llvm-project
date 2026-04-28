@@ -159,12 +159,11 @@
 // RUN:   --rocm-path=%S/Inputs/rocm %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck %s --check-prefixes=ABI6
 
-// Test default code object version with old device library without abi_version_400.bc
-// RUN: %clang -### --target=x86_64-linux-gnu --offload-arch=gfx900 \
-// RUN:   -mcode-object-version=4 \
-// RUN:   --hip-device-lib-path=%S/Inputs/rocm/amdgcn/bitcode-no-abi-ver \
+// Test default code object version with old device library without abi_version_500.bc
+// RUN: not %clang -### --target=x86_64-linux-gnu --offload-arch=gfx900 \
+// RUN:   --hip-device-lib-path=%S/Inputs/rocm/amdgcn/bitcode-no-abi-ver   \
 // RUN:   --rocm-path=%S/Inputs/rocm %S/Inputs/hip_multiple_inputs/b.hip \
-// RUN: 2>&1 | FileCheck %s --check-prefixes=NOABI4
+// RUN: 2>&1 | FileCheck %s --check-prefixes=NOABI6
 
 // Test -mcode-object-version=4
 // RUN: %clang -### --target=x86_64-linux-gnu --offload-arch=gfx900 \
@@ -215,26 +214,21 @@
 
 // ALL-SAME: "-mlink-builtin-bitcode" "[[DEVICELIB_DIR]]oclc_unsafe_math_off.bc"
 // ALL-SAME: "-mlink-builtin-bitcode" "[[DEVICELIB_DIR]]oclc_finite_only_off.bc"
-// ALL-SAME: "-mlink-builtin-bitcode" "[[DEVICELIB_DIR]]oclc_correctly_rounded_sqrt_on.bc"
 // ALL-SAME: "-mlink-builtin-bitcode" "[[DEVICELIB_DIR]]oclc_wavefrontsize64_on.bc"
 // ALL-SAME: "-mlink-builtin-bitcode" "[[DEVICELIB_DIR]]oclc_isa_version_{{[0-9]+}}.bc"
 // INST-SAME: "-mlink-builtin-bitcode" "{{.*}}instrument.bc"
 
 // FAST: "-mlink-builtin-bitcode" "{{.*}}oclc_unsafe_math_on.bc"
 // FAST-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_finite_only_on.bc"
-// FAST-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_correctly_rounded_sqrt_on.bc"
 
 // FINITE: "-mlink-builtin-bitcode" "{{.*}}oclc_unsafe_math_off.bc"
 // FINITE-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_finite_only_on.bc"
-// FINITE-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_correctly_rounded_sqrt_on.bc"
 
 // UNSAFE: "-mlink-builtin-bitcode" "{{.*}}oclc_unsafe_math_on.bc"
 // UNSAFE-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_finite_only_off.bc"
-// UNSAFE-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_correctly_rounded_sqrt_on.bc"
 
 // DIVSQRT: "-mlink-builtin-bitcode" "{{.*}}oclc_unsafe_math_off.bc"
 // DIVSQRT-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_finite_only_off.bc"
-// DIVSQRT-SAME: "-mlink-builtin-bitcode" "{{.*}}oclc_correctly_rounded_sqrt_off.bc"
 
 // ABI4-NOT: error:
 // ABI4: "-mlink-builtin-bitcode" "{{.*}}oclc_abi_version_400.bc"

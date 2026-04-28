@@ -1,3 +1,4 @@
+
 # See docs/CMake.html for instructions about how to build LLVM with CMake.
 cmake_minimum_required(VERSION 3.20.0)
 
@@ -15,6 +16,30 @@ mark_as_advanced(LLVM_NO_INSTALL_NAME_DIR_FOR_BUILD_TREE)
 if(NOT LLVM_NO_INSTALL_NAME_DIR_FOR_BUILD_TREE)
   set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 endif()
+
+# Darwin used to keep libLLVM's install name unversioned even when
+# LLVM_VERSION_SUFFIX was set. That makes distinct LLVM builds look
+# interchangeable to Mach-O consumers. Keep an opt-out for downstream users
+# that still depend on the legacy install name.
+option(LLVM_VERSIONED_DYLIB_NAME_ON_DARWIN "If set, use versioned dylib names and install names on Darwin like other Unix platforms" ON)
+mark_as_advanced(LLVM_VERSIONED_DYLIB_NAME_ON_DARWIN)
+# At the time of writing (2026-04-01),
+# https://github.com/llvm/llvm-project/pull/189004#issuecomment-4171272082
+# claims that Xcode uses libclang for indexing and can load additional
+# toolchains, so keeping libclang.dylib unversioned avoids breaking that
+# compatibility by default. If this ever changes, audit Darwin libclang users
+# first and verify that Xcode and downstream toolchains accept a versioned
+# libclang install name before changing this default.
+option(LLVM_UNVERSIONED_LIBCLANG_ON_DARWIN "If set, keep libclang's Darwin dylib identity unversioned when Darwin versioned dylib names are enabled" ON)
+mark_as_advanced(LLVM_UNVERSIONED_LIBCLANG_ON_DARWIN)
+# At the time of writing (2026-04-01),
+# https://github.com/llvm/llvm-project/pull/189004#issuecomment-4165730721
+# claims that the macOS linker requires libLTO.dylib to keep that stable name
+# for LTO builds. If this ever changes, audit Darwin LTO users first and
+# verify that ld64 and downstream toolchains accept a versioned libLTO install
+# name before changing this default.
+option(LLVM_UNVERSIONED_LIBLTO_ON_DARWIN "If set, keep libLTO's Darwin dylib identity unversioned when Darwin versioned dylib names are enabled" ON)
+mark_as_advanced(LLVM_UNVERSIONED_LIBLTO_ON_DARWIN)
 
 include(${LLVM_COMMON_CMAKE_UTILS}/Modules/LLVMVersion.cmake)
 
@@ -104,19 +129,13 @@ endif()
 # This allows an easy way of setting up a build directory for llvm and another
 # one for llvm+clang+... using the same sources.
 # These projects will be included when "all" is included in LLVM_ENABLE_PROJECTS.
-set(LLVM_ALL_PROJECTS "bolt;clang;clang-tools-extra;compiler-rt;cross-project-tests;libclc;lld;lldb;mlir;openmp;polly")
-if ("${CMAKE_SYSTEM_NAME}" MATCHES "AIX")
-  # Disallow 'openmp' as a LLVM PROJECT on AIX as the supported way is to use
-  # LLVM_ENABLE_RUNTIMES.
-  list(REMOVE_ITEM LLVM_ALL_PROJECTS openmp)
-endif()
+set(LLVM_ALL_PROJECTS "bolt;clang;clang-tools-extra;cross-project-tests;lld;lldb;mlir;polly")
 
-# The "libc" project, which is not part of "all" projects, could be included in
-# LLVM_ENABLE_PROJECTS.  It is preferred to include "libc" in
-# LLVM_ENABLE_RUNTIMES instead of LLVM_ENABLE_PROJECTS.
+# The libc and compiler-rt projects are not part of LLVM_ALL_PROJECTS, because
+# it is preferred to use LLVM_ENABLE_RUNTIMES for them instead.
 #
 # The flang project is not yet part of "all" projects (see C++ requirements).
-set(LLVM_EXTRA_PROJECTS "flang" "libc")
+set(LLVM_EXTRA_PROJECTS "flang" "libc" "compiler-rt")
 # List of all known projects in the mono repo
 set(LLVM_KNOWN_PROJECTS "${LLVM_ALL_PROJECTS};${LLVM_EXTRA_PROJECTS}")
 set(LLVM_ENABLE_PROJECTS "" CACHE STRING
@@ -124,6 +143,15 @@ set(LLVM_ENABLE_PROJECTS "" CACHE STRING
 # Make sure expansion happens first to not handle "all" in rest of the checks.
 if( LLVM_ENABLE_PROJECTS STREQUAL "all" )
   set( LLVM_ENABLE_PROJECTS ${LLVM_ALL_PROJECTS})
+endif()
+
+if ("openmp" IN_LIST LLVM_ENABLE_PROJECTS)
+  message(FATAL_ERROR "
+Support for the LLVM_ENABLE_PROJECTS=openmp build mode has been removed. Please switch to the bootstrapping build
+    cmake -S <llvm-project>/llvm -B build -DLLVM_ENABLE_PROJECTS=clang -DLLVM_ENABLE_RUNTIMES=openmp
+or to the runtimes default build
+    cmake -S <llvm-project>/runtimes -B build -DLLVM_ENABLE_RUNTIMES=openmp
+")
 endif()
 
 foreach(proj ${LLVM_ENABLE_PROJECTS})
@@ -136,7 +164,7 @@ endforeach()
 #
 # As we migrate runtimes to using the bootstrapping build, the set of default runtimes
 # should grow as we remove those runtimes from LLVM_ENABLE_PROJECTS above.
-set(LLVM_DEFAULT_RUNTIMES "libcxx;libcxxabi;libunwind")
+set(LLVM_DEFAULT_RUNTIMES "libcxx;libcxxabi;libunwind;libclc;compiler-rt;openmp")
 set(LLVM_SUPPORTED_RUNTIMES "libc;libunwind;libcxxabi;libcxx;compiler-rt;openmp;llvm-libgcc;offload;flang-rt;libclc;libsycl;orc-rt")
 set(LLVM_ENABLE_RUNTIMES "" CACHE STRING
   "Semicolon-separated list of runtimes to build, or \"all\" (${LLVM_DEFAULT_RUNTIMES}). Supported runtimes are ${LLVM_SUPPORTED_RUNTIMES}.")
@@ -195,13 +223,6 @@ if ("offload" IN_LIST LLVM_ENABLE_PROJECTS)
     "https://openmp.llvm.org/ for building the runtimes.")
 endif()
 
-if ("openmp" IN_LIST LLVM_ENABLE_PROJECTS)
-  message(WARNING "Using LLVM_ENABLE_PROJECTS=openmp is deprecated now, and will "
-    "become a fatal error in a future release.  Please use "
-    "-DLLVM_ENABLE_RUNTIMES=openmp or see the instructions at "
-    "https://openmp.llvm.org/ for building the runtimes.")
-endif()
-
 if ("flang-rt" IN_LIST LLVM_ENABLE_RUNTIMES)
   if (NOT "flang" IN_LIST LLVM_ENABLE_PROJECTS)
     message(FATAL_ERROR "Flang is not enabled, but is required for the Flang-RT runtime")
@@ -227,15 +248,32 @@ if(LIBC_GPU_BUILD)
   list(APPEND RUNTIMES_amdgcn-amd-amdhsa_LLVM_ENABLE_RUNTIMES "libc")
 endif()
 
+# Set up Arm64X build of the OpenMP runtime
+option(LIBOMP_ENABLE_ARM64X "Build the OpenMP library as Arm64X for compatibility with both Arm64 and Arm64EC" OFF)
+if(LIBOMP_ENABLE_ARM64X)
+  if(NOT CMAKE_HOST_WIN32 AND NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "ARM64")
+    message(FATAL_ERROR "Arm64X builds are only supported on Windows hosts.")
+  endif()
+  if(NOT LLVM_RUNTIME_TARGETS)
+    set(LLVM_RUNTIME_TARGETS "default")
+  endif()
+
+  if(NOT "arm64ec-pc-windows-msvc" IN_LIST LLVM_RUNTIME_TARGETS)
+    list(APPEND LLVM_RUNTIME_TARGETS "arm64ec-pc-windows-msvc")
+  endif()
+  set(RUNTIMES_arm64ec-pc-windows-msvc_LIBOMP_ENABLE_ARM64X ON)
+endif()
+
 foreach(_name ${LLVM_RUNTIME_TARGETS})
   if("libc" IN_LIST RUNTIMES_${_name}_LLVM_ENABLE_RUNTIMES)
-    if("${_name}" STREQUAL "amdgcn-amd-amdhsa" OR "${_name}" STREQUAL "nvptx64-nvidia-cuda")
+    if("${_name}" STREQUAL "amdgcn-amd-amdhsa" OR "${_name}" STREQUAL "nvptx64-nvidia-cuda" OR "${_name}" STREQUAL "spirv64-intel-unknown")
       set(LLVM_LIBC_GPU_BUILD ON)
     endif()
   endif()
 endforeach()
 if("${LIBC_TARGET_TRIPLE}" STREQUAL "amdgcn-amd-amdhsa" OR
-   "${LIBC_TARGET_TRIPLE}" STREQUAL "nvptx64-nvidia-cuda")
+   "${LIBC_TARGET_TRIPLE}" STREQUAL "nvptx64-nvidia-cuda" OR
+   "${LIBC_TARGET_TRIPLE}" STREQUAL "spirv64-intel-unknown")
   set(LLVM_LIBC_GPU_BUILD ON)
 endif()
 
@@ -313,6 +351,22 @@ if(LLVM_CCACHE_BUILD)
         set(CCACHE_PROGRAM "CCACHE_DIR=${LLVM_CCACHE_DIR} ${CCACHE_PROGRAM}")
       endif()
       set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ${CCACHE_PROGRAM})
+
+      if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # ccache with PCH can lead to false-positives when only a macro
+        # definition changes with non-Clang compilers, because macro definitions
+        # are not compared in preprocessed mode.
+        # See: https://github.com/ccache/ccache/issues/1668
+        if(NOT DEFINED CMAKE_DISABLE_PRECOMPILE_HEADERS)
+          message(NOTICE "Using ccache with precompiled headers with non-Clang "
+            "compilers is not supported. CMAKE_DISABLE_PRECOMPILE_HEADERS will be set to ON. "
+            "Pass -DCMAKE_DISABLE_PRECOMPILE_HEADERS=OFF to override this.")
+          set(CMAKE_DISABLE_PRECOMPILE_HEADERS "ON")
+        elseif(NOT CMAKE_DISABLE_PRECOMPILE_HEADERS)
+          message(WARNING "Using ccache with precompiled headers with non-Clang "
+            "compilers is not supported.")
+        endif()
+      endif()
     else()
       # Until a way to reliably configure ccache on Windows is found,
       # disable precompiled headers for Windows + ccache builds
@@ -368,7 +422,7 @@ list(INSERT CMAKE_MODULE_PATH 0
 
 # Generate a CompilationDatabase (compile_commands.json file) for our build,
 # for use by clang_complete, YouCompleteMe, etc.
-set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LLVM_INSTALL_BINUTILS_SYMLINKS
   "Install symlinks from the binutils tool names to the corresponding LLVM tools." OFF)
@@ -593,6 +647,8 @@ set(LLVM_TARGET_ARCH "host"
 
 set(LLVM_ENABLE_LIBXML2 "ON" CACHE STRING "Use libxml2 if available. Can be ON, OFF, or FORCE_ON")
 
+set(LLVM_USE_STATIC_LIBXML2 "OFF" CACHE BOOL "Use static version of libxml2. Can be ON, or OFF")
+
 option(LLVM_ENABLE_LIBEDIT "Use libedit if available." ON)
 
 option(LLVM_ENABLE_LIBPFM "Use libpfm for performance counters if available." ON)
@@ -600,6 +656,11 @@ option(LLVM_ENABLE_LIBPFM "Use libpfm for performance counters if available." ON
 option(LLVM_ENABLE_THREADS "Use threads if available." ON)
 
 set(LLVM_ENABLE_ICU "OFF" CACHE STRING "Use ICU for text encoding conversion support if available. Can be ON, OFF, or FORCE_ON")
+
+# After Windows 10 1903, icu.lib is available.
+if(WIN32 AND CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "10.0.18362")
+  cmake_dependent_option(LLVM_ENABLE_WINDOWS_ICU "Use Windows vendored ICU if possible" OFF LLVM_ENABLE_ICU OFF)
+endif()
 
 set(LLVM_ENABLE_ICONV "OFF" CACHE STRING "Use iconv for text encoding conversion support if available. Can be ON, OFF, or FORCE_ON")
 
@@ -687,7 +748,7 @@ else()
   option(LLVM_ENABLE_ASSERTIONS "Enable assertions" ON)
 endif()
 
-option(LLVM_ENABLE_IO_SANDBOX "Enable IO sandboxing in supported tools" OFF)
+option(LLVM_ENABLE_IO_SANDBOX "Enable IO sandboxing in supported tools" ${LLVM_ENABLE_ASSERTIONS})
 option(LLVM_ENABLE_EXPENSIVE_CHECKS "Enable expensive checks" OFF)
 
 set(LLVM_ABI_BREAKING_CHECKS "WITH_ASSERTS" CACHE STRING
@@ -990,6 +1051,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "BSD|Linux|OS390|AIX")
 else()
   set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR_default OFF)
 endif()
+set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR_default OFF)
 set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR ${LLVM_ENABLE_PER_TARGET_RUNTIME_DIR_default} CACHE BOOL
   "Enable per-target runtimes directory")
 
@@ -1154,9 +1216,9 @@ configure_file(
   )
 
 # They are not referenced. See set_output_directory().
-set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${LLVM_TOOLS_BINARY_DIR} )
-set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LLVM_LIBRARY_DIR} )
-set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${LLVM_LIBRARY_DIR} )
+set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/bin )
+set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX} )
+set( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX} )
 
 # For up-to-date instructions for installing the TFLite dependency, refer to
 # the bot setup script: https://github.com/google/ml-compiler-opt/blob/main/buildbot/buildbot_init.sh
@@ -1520,6 +1582,18 @@ endif()
 
 if (LLVM_INCLUDE_UTILS AND LLVM_INCLUDE_TOOLS)
   add_subdirectory(utils/llvm-locstats)
+endif()
+
+# Following variables are required for ROCM backwards compatibility,
+# and should be removed in ROCM 7.0 release.
+set(ROCM_LLVM_BACKWARD_COMPAT_LINK "" CACHE STRING "Old rocm-llvm install path")
+set(ROCM_LLVM_BACKWARD_COMPAT_LINK_TARGET "" CACHE STRING "New rocm-llvm install path")
+if (NOT ROCM_LLVM_BACKWARD_COMPAT_LINK STREQUAL "" AND
+    NOT ROCM_LLVM_BACKWARD_COMPAT_LINK_TARGET STREQUAL "")
+  install(CODE "execute_process(\
+                COMMAND ${CMAKE_COMMAND} -E create_symlink \
+                ${ROCM_LLVM_BACKWARD_COMPAT_LINK_TARGET} \
+                ${ROCM_LLVM_BACKWARD_COMPAT_LINK})")
 endif()
 
 if (XCODE)

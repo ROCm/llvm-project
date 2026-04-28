@@ -1,12 +1,12 @@
 ; REQUIRES: x86-registered-target
-; RUN: opt -thinlto-bc -thinlto-split-lto-unit -o %t %s
-; RUN: llvm-modextract -b -n 0 -o %t0 %t
-; RUN: llvm-modextract -b -n 1 -o %t1 %t
+; RUN: opt  -thinlto-bc -thinlto-split-lto-unit -o %t %s
+; RUN: llvm-modextract  -b -n 0 -o %t0 %t
+; RUN: llvm-modextract  -b -n 1 -o %t1 %t
 ; RUN: not llvm-modextract -b -n 2 -o - %t 2>&1 | FileCheck --check-prefix=ERROR %s
-; RUN: llvm-dis -o - %t0 | FileCheck --check-prefix=M0 %s
-; RUN: llvm-dis -o - %t1 | FileCheck --check-prefix=M1 %s
-; RUN: llvm-bcanalyzer -dump %t0 | FileCheck --check-prefix=BCA0 %s
-; RUN: llvm-bcanalyzer -dump %t1 | FileCheck --check-prefix=BCA1 %s
+; RUN: llvm-dis  -o - %t0 | FileCheck --check-prefix=M0 %s
+; RUN: llvm-dis  -o - %t1 | FileCheck --check-prefix=M1 %s
+; RUN: llvm-bcanalyzer  -dump %t0 | FileCheck --check-prefix=BCA0 %s
+; RUN: llvm-bcanalyzer  -dump %t1 | FileCheck --check-prefix=BCA1 %s
 
 target triple = "x86_64-unknown-linux-gnu"
 
@@ -33,3 +33,8 @@ define internal void @f2() {
 
 ; M1: !0 = !{i32 0, !"typeid"}
 !0 = !{i32 0, !"typeid"}
+
+; test that the GUID of f.<hash> is the same in the summaries of the 2 split
+; modules
+; M0: = gv: (name: "f.13757e0fb71915e385efa4dc9d1e08fd", {{.*}} ; guid = 11302379072751562722
+; M1: = gv: (name: "f.13757e0fb71915e385efa4dc9d1e08fd") ; guid = 11302379072751562722

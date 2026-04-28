@@ -62,6 +62,7 @@ add_clang_library(clangCodeGen
   CGAtomic.cpp
   CGBlocks.cpp
   CGBuiltin.cpp
+  CGEmitEmissaryExec.cpp
   CGCUDANV.cpp
   CGCUDARuntime.cpp
   CGCXX.cpp
@@ -116,6 +117,7 @@ add_clang_library(clangCodeGen
   ModuleBuilder.cpp
   ObjectFilePCHContainerWriter.cpp
   PatternInit.cpp
+  QualTypeMapper.cpp
   SanitizerMetadata.cpp
   SwiftCallingConv.cpp
   TargetBuiltins/ARM.cpp

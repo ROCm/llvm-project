@@ -138,9 +138,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
   IRBuilder<> Builder(T);
 
   // Branch - See if we are conditional jumping on constant
-  if (auto *BI = dyn_cast<BranchInst>(T)) {
-    if (BI->isUnconditional()) return false;  // Can't optimize uncond branch
-
+  if (auto *BI = dyn_cast<CondBrInst>(T)) {
     BasicBlock *Dest1 = BI->getSuccessor(0);
     BasicBlock *Dest2 = BI->getSuccessor(1);
 
@@ -154,7 +152,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       Dest1->removePredecessor(BI->getParent());
 
       // Replace the conditional branch with an unconditional one.
-      BranchInst *NewBI = Builder.CreateBr(Dest1);
+      UncondBrInst *NewBI = Builder.CreateBr(Dest1);
 
       // Transfer the metadata to the new branch instruction.
       NewBI->copyMetadata(*BI, {LLVMContext::MD_loop, LLVMContext::MD_dbg,
@@ -178,7 +176,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       OldDest->removePredecessor(BB);
 
       // Replace the conditional branch with an unconditional one.
-      BranchInst *NewBI = Builder.CreateBr(Destination);
+      UncondBrInst *NewBI = Builder.CreateBr(Destination);
 
       // Transfer the metadata to the new branch instruction.
       NewBI->copyMetadata(*BI, {LLVMContext::MD_loop, LLVMContext::MD_dbg,
@@ -223,17 +221,21 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
         // left, unless the metadata doesn't match the switch.
         if (NCases > 1 && MD) {
           // Collect branch weights into a vector.
-          SmallVector<uint32_t, 8> Weights;
-          extractBranchWeights(MD, Weights);
+          SmallVector<uint64_t, 8> Weights;
+          extractFromBranchWeightMD64(MD, Weights);
 
           // Merge weight of this case to the default weight.
           unsigned Idx = It->getCaseIndex();
-          // TODO: Add overflow check.
+
+          // Check for and prevent uint64_t overflow by reducing branch weights.
+          if (Weights[0] > UINT64_MAX - Weights[Idx + 1])
+            fitWeights(Weights);
+
           Weights[0] += Weights[Idx + 1];
           // Remove weight for this case.
           std::swap(Weights[Idx + 1], Weights.back());
           Weights.pop_back();
-          setBranchWeights(*SI, Weights, hasBranchWeightOrigin(MD));
+          setFittedBranchWeights(*SI, Weights, hasBranchWeightOrigin(MD));
         }
         // Remove this entry.
         BasicBlock *ParentBB = SI->getParent();
@@ -313,9 +315,8 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
           FirstCase.getCaseValue(), "cond");
 
       // Insert the new branch.
-      BranchInst *NewBr = Builder.CreateCondBr(Cond,
-                                               FirstCase.getCaseSuccessor(),
-                                               SI->getDefaultDest());
+      CondBrInst *NewBr = Builder.CreateCondBr(
+          Cond, FirstCase.getCaseSuccessor(), SI->getDefaultDest());
       SmallVector<uint32_t> Weights;
       if (extractBranchWeights(*SI, Weights) && Weights.size() == 2) {
         uint32_t DefWeight = Weights[0];
@@ -457,6 +458,7 @@ bool llvm::wouldInstructionBeTriviallyDead(const Instruction *I,
     case Intrinsic::wasm_trunc_unsigned:
     case Intrinsic::ptrauth_auth:
     case Intrinsic::ptrauth_resign:
+    case Intrinsic::ptrauth_resign_load_relative:
       return true;
     default:
       return false;
@@ -1156,7 +1158,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
          "TryToSimplifyUncondBranchFromEmptyBlock called on entry block!");
 
   // We can't simplify infinite loops.
-  BasicBlock *Succ = cast<BranchInst>(BB->getTerminator())->getSuccessor(0);
+  BasicBlock *Succ = cast<UncondBrInst>(BB->getTerminator())->getSuccessor(0);
   if (BB == Succ)
     return false;
 
@@ -1275,10 +1277,10 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   // |       v
   // |    for.body <---- (md2)
   // |_______|  |______|
-  if (Instruction *TI = BB->getTerminator())
+  if (Instruction *TI = BB->getTerminatorOrNull())
     if (TI->hasNonDebugLocLoopMetadata())
       for (BasicBlock *Pred : predecessors(BB))
-        if (Instruction *PredTI = Pred->getTerminator())
+        if (Instruction *PredTI = Pred->getTerminatorOrNull())
           if (PredTI->hasNonDebugLocLoopMetadata())
             return false;
 
@@ -1346,7 +1348,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
   // If the unconditional branch we replaced contains non-debug llvm.loop
   // metadata, we add the metadata to the branch instructions in the
   // predecessors.
-  if (Instruction *TI = BB->getTerminator())
+  if (Instruction *TI = BB->getTerminatorOrNull())
     if (TI->hasNonDebugLocLoopMetadata()) {
       MDNode *LoopMD = TI->getMetadata(LLVMContext::MD_loop);
       for (BasicBlock *Pred : predecessors(BB))
@@ -1361,7 +1363,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
       Succ->takeName(BB);
 
     // Clear the successor list of BB to match updates applying to DTU later.
-    if (BB->getTerminator())
+    if (BB->hasTerminator())
       BB->back().eraseFromParent();
 
     new UnreachableInst(BB->getContext(), BB);
@@ -1666,6 +1668,41 @@ static void insertDbgValueOrDbgVariableRecord(DIBuilder &Builder, Value *DV,
   Instr->getParent()->insertDbgRecordBefore(DVRec, Instr);
 }
 
+// \p In is an expression that takes a pointer argument. Attempt to create an
+// equivalent expression that takes a value by replacing the type field to the
+// DIOpArg and adding a DIOpAddrOf after it.
+static DIExpression *tryRemoveNewDIExpressionIndirection(DIExpression *In,
+                                                         Type *ArgType) {
+  if (!In->holdsNewElements())
+    return In;
+
+  auto Elements = In->getNewElementsRef();
+  DIExprBuilder ExprBuilder(In->getContext());
+  unsigned NumReplacedArgs = 0;
+  for (auto Iter = Elements->begin(), End = Elements->end(); Iter != End;
+       ++Iter) {
+    auto *Arg = std::get_if<DIOp::Arg>(&*Iter);
+    if (!Arg) {
+      ExprBuilder.append(*Iter);
+      continue;
+    }
+
+    ++NumReplacedArgs;
+    ExprBuilder.append<DIOp::Arg>(Arg->getIndex(), ArgType);
+    auto *PointerTy = dyn_cast<PointerType>(Arg->getResultType());
+    if (!PointerTy)
+      return nullptr;
+
+    auto Next = std::next(Iter);
+    if (Next == Elements->end() || !std::holds_alternative<DIOp::Deref>(*Next))
+      ExprBuilder.append<DIOp::AddrOf>(PointerTy->getAddressSpace());
+    else
+      Iter = Next;
+  }
+
+  return NumReplacedArgs == 1 ? ExprBuilder.intoExpression() : nullptr;
+}
+
 static DIExpression *dropInitialDeref(const DIExpression *DIExpr) {
   int NumEltDropped = DIExpr->getElements()[0] == dwarf::DW_OP_LLVM_arg ? 3 : 1;
   return DIExpression::get(DIExpr->getContext(),
@@ -1682,6 +1719,10 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR,
 
   DebugLoc NewLoc = getDebugValueLoc(DVR);
 
+  DIExpr = tryRemoveNewDIExpressionIndirection(DIExpr, DV->getType());
+  if (!DIExpr)
+    return;
+
   // If the alloca describes the variable itself, i.e. the expression in the
   // dbg.declare doesn't start with a dereference, we can perform the
   // conversion if the value covers the entire fragment of DII.
@@ -1697,6 +1738,11 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR,
   bool CanConvert =
       DIExpr->isDeref() || (!DIExpr->startsWithDeref() &&
                             valueCoversEntireFragment(DV->getType(), DVR));
+
+  // There are no such limitations on new DIExpressions.
+  if (DIExpr->holdsNewElements())
+    CanConvert = true;
+
   if (CanConvert) {
     insertDbgValueOrDbgVariableRecord(Builder, DV, DIVar, DIExpr, NewLoc,
                                       SI->getIterator());
@@ -1738,7 +1784,8 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR, LoadInst *LI,
   auto *DIExpr = DVR->getExpression();
   assert(DIVar && "Missing variable");
 
-  if (!valueCoversEntireFragment(LI->getType(), DVR)) {
+  if (!DIExpr->holdsNewElements() &&
+      !valueCoversEntireFragment(LI->getType(), DVR)) {
     // FIXME: If only referring to a part of the variable described by the
     // dbg.declare, then we want to insert a DbgVariableRecord for the
     // corresponding fragment.
@@ -1746,6 +1793,10 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR, LoadInst *LI,
                       << *DVR << '\n');
     return;
   }
+
+  DIExpr = tryRemoveNewDIExpressionIndirection(DIExpr, LI->getType());
+  if (!DIExpr)
+    return;
 
   DebugLoc NewLoc = getDebugValueLoc(DVR);
 
@@ -1777,10 +1828,15 @@ void llvm::ConvertDebugDeclareToDebugValue(DbgVariableRecord *DVR, PHINode *APN,
   auto *DIExpr = DVR->getExpression();
   assert(DIVar && "Missing variable");
 
+  DIExpr = tryRemoveNewDIExpressionIndirection(DIExpr, APN->getType());
+  if (!DIExpr)
+    return;
+
   if (PhiHasDebugValue(DIVar, DIExpr, APN))
     return;
 
-  if (!valueCoversEntireFragment(APN->getType(), DVR)) {
+  if (!DIExpr->holdsNewElements() &&
+      !valueCoversEntireFragment(APN->getType(), DVR)) {
     // FIXME: If only referring to a part of the variable described by the
     // dbg.declare, then we want to insert a DbgVariableRecord for the
     // corresponding fragment.
@@ -1863,15 +1919,29 @@ bool llvm::LowerDbgDeclare(Function &F) {
           // the variable by dereferencing the alloca.
           if (!CI->isLifetimeStartOrEnd()) {
             DebugLoc NewLoc = getDebugValueLoc(DDI);
-            auto *DerefExpr =
-                DIExpression::append(DDI->getExpression(), dwarf::DW_OP_deref);
-            insertDbgValueOrDbgVariableRecord(DIB, AI, DDI->getVariable(),
-                                              DerefExpr, NewLoc,
-                                              CI->getIterator());
+            if (DDI->getExpression()->holdsNewElements()) {
+              // In DIOp-based DIExpressions it's okay for a dbg.value to
+              // produce a memory location descriptor, so there isn't any need
+              // to change the expression.
+              insertDbgValueOrDbgVariableRecord(DIB, AI, DDI->getVariable(),
+                                                DDI->getExpression(), NewLoc,
+                                                CI->getIterator());
+            } else {
+              auto *DerefExpr = DIExpression::append(DDI->getExpression(),
+                                                     dwarf::DW_OP_deref);
+              insertDbgValueOrDbgVariableRecord(DIB, AI, DDI->getVariable(),
+                                                DerefExpr, NewLoc,
+                                                CI->getIterator());
+            }
           }
         } else if (BitCastInst *BI = dyn_cast<BitCastInst>(U)) {
           if (BI->getType()->isPointerTy())
             WorkList.push_back(BI);
+        } else if (auto *ASC = dyn_cast<AddrSpaceCastInst>(U)) {
+          // Only look through addrspacecasts if the declare uses new
+          // expressions (to avoid a difference with upstream).
+          if (DDI->getExpression()->holdsNewElements())
+            WorkList.push_back(ASC);
         }
       }
     }
@@ -2047,6 +2117,164 @@ template <typename T> static void salvageDbgAssignAddress(T *Assign) {
   }
 }
 
+/// This is a port of getSalvageOpsForBinOp() to DIOp-based DIExpressions.
+static Value *
+getNewSalvageOpsForBinOp(BinaryOperator *BI, uint64_t CurrentLocOps,
+                         SmallVectorImpl<DIOp::Variant> &Ops,
+                         SmallVectorImpl<Value *> &AdditionalValues) {
+  // Handle binary operations with constant integer operands as a special case.
+  auto *ConstInt = dyn_cast<ConstantInt>(BI->getOperand(1));
+
+  if (ConstInt) {
+    // Values wider than 64 bits cannot be represented within a DIExpression.
+    if (ConstInt->getBitWidth() > 64)
+      return nullptr;
+    Ops.emplace_back(DIOp::Constant(ConstInt));
+  } else {
+    Ops.emplace_back(DIOp::Arg(CurrentLocOps, BI->getOperand(1)->getType()));
+    AdditionalValues.push_back(BI->getOperand(1));
+  }
+
+  switch (BI->getOpcode()) {
+  default:
+    // FIXME: Some binary operators aren't representable in DIOp-based
+    // DIExpressions.
+    return nullptr;
+  case Instruction::Add:
+    Ops.emplace_back(DIOp::Add());
+    break;
+  case Instruction::Sub:
+    Ops.emplace_back(DIOp::Sub());
+    break;
+  case Instruction::Mul:
+    Ops.emplace_back(DIOp::Mul());
+    break;
+  case Instruction::SDiv:
+    Ops.emplace_back(DIOp::Div());
+    break;
+  case Instruction::Shl:
+    Ops.emplace_back(DIOp::Shl());
+    break;
+  case Instruction::LShr:
+    Ops.emplace_back(DIOp::LShr());
+    break;
+  case Instruction::AShr:
+    Ops.emplace_back(DIOp::AShr());
+    break;
+  case Instruction::And:
+    Ops.emplace_back(DIOp::And());
+    break;
+  case Instruction::Or:
+    Ops.emplace_back(DIOp::Or());
+    break;
+  case Instruction::Xor:
+    Ops.emplace_back(DIOp::Xor());
+    break;
+  case Instruction::SRem:
+    Ops.emplace_back(DIOp::Mod());
+    break;
+  }
+
+  return BI->getOperand(0);
+}
+
+static bool getNewDIConversionOps(const DataLayout &DL, Type *SourceTy,
+                                  Type *DestTy,
+                                  std::optional<DIBasicType::Signedness> Sign,
+                                  SmallVectorImpl<DIOp::Variant> &Ops);
+
+/// This is a port of getSalvageOpsForGEP() to DIOp-based DIExpressions.
+static Value *
+getNewSalvageOpsForGEP(GetElementPtrInst *GEP, const DataLayout &DL,
+                       uint64_t CurrentLocOps,
+                       SmallVectorImpl<DIOp::Variant> &Ops,
+                       SmallVectorImpl<Value *> &AdditionalValues) {
+  LLVMContext &Ctx = GEP->getContext();
+  Type *PointerTy = GEP->getPointerOperand()->getType();
+  auto *IntPtrTy = IntegerType::get(Ctx, DL.getPointerTypeSizeInBits(PointerTy));
+  unsigned BitWidth = DL.getIndexSizeInBits(GEP->getPointerAddressSpace());
+
+  // Rewrite a GEP into a DIExpression.
+  SmallMapVector<Value *, APInt, 4> VariableOffsets;
+  APInt ConstantOffset(BitWidth, 0);
+  if (!GEP->collectOffset(DL, BitWidth, VariableOffsets, ConstantOffset))
+    return nullptr;
+
+  Ops.emplace_back(DIOp::Reinterpret(IntPtrTy));
+
+  for (const auto &Offset : VariableOffsets) {
+    AdditionalValues.push_back(Offset.first);
+    assert(Offset.second.isStrictlyPositive() &&
+           "Expected strictly positive multiplier for offset.");
+    Ops.push_back(DIOp::Arg(CurrentLocOps++, Offset.first->getType()));
+    // Add a conversion operation if the gep offset operand has a different
+    // integer width than the pointer size.
+    if (!getNewDIConversionOps(DL, Offset.first->getType(), IntPtrTy,
+                               DIBasicType::Signedness::Signed, Ops))
+      return nullptr;
+    ConstantInt *ConstOffset =
+        ConstantInt::get(IntPtrTy, Offset.second.getZExtValue());
+    Ops.push_back(DIOp::Constant(ConstOffset));
+    Ops.push_back(DIOp::Mul());
+    Ops.push_back(DIOp::Add());
+  }
+
+  Ops.emplace_back(DIOp::Constant(
+      ConstantInt::get(IntPtrTy, ConstantOffset.getZExtValue())));
+  Ops.emplace_back(DIOp::Add());
+  Ops.emplace_back(DIOp::Reinterpret(PointerTy));
+  return GEP->getOperand(0);
+}
+
+/// This is a port of salvageDebugInfoImpl() to DIOp-based DIExpressions.
+///
+/// \param I is an instruction that's about to be deleted, used as a location op
+/// to a debug intrinsic. \p Ops will be populated with DIOps that have the same
+/// semantics as I.
+/// \param CurrentLocOps is the number of location ops the debug intrinsic
+/// currently uses.
+/// \param AdditionalValues is populated with any additional location ops we
+/// need to add to the intrinsic to salvage this instruction.
+/// \returns a Value to replace I with in the debug intrinsic's location ops.
+static Value *salvageNewDebugInfo(Instruction &I, uint64_t CurrentLocOps,
+                                  SmallVectorImpl<Value *> &AdditionalValues,
+                                  SmallVectorImpl<DIOp::Variant> &Ops) {
+  auto &M = *I.getModule();
+  auto &DL = M.getDataLayout();
+
+  if (I.getType()->isVectorTy())
+    return nullptr;
+
+  if (auto *CI = dyn_cast<CastInst>(&I)) {
+    Value *FromValue = CI->getOperand(0);
+    Type *Type = CI->getType();
+
+    if (CI->isNoopCast(DL))
+      Ops.emplace_back(DIOp::Reinterpret(Type));
+    // FIXME(diexpression-poison): relax restriction to integer type to match IR
+    // instruction
+    else if (isa<SExtInst>(&I) && Type->isIntegerTy())
+      Ops.emplace_back(DIOp::SExt(Type));
+    // FIXME(diexpression-poison): relax restriction to integer type to match IR
+    // instruction
+    else if (isa<ZExtInst>(&I) && Type->isIntegerTy())
+      Ops.emplace_back(DIOp::ZExt(Type));
+    else if (isa<TruncInst>(&I))
+      Ops.emplace_back(DIOp::Convert(Type));
+    else
+      return nullptr;
+
+    return FromValue;
+  }
+
+  if (auto *BI = dyn_cast<BinaryOperator>(&I))
+    return getNewSalvageOpsForBinOp(BI, CurrentLocOps, Ops, AdditionalValues);
+  if (auto *GEP = dyn_cast<GetElementPtrInst>(&I))
+    return getNewSalvageOpsForGEP(GEP, DL, CurrentLocOps, Ops, AdditionalValues);
+
+  return nullptr;
+}
+
 void llvm::salvageDebugInfoForDbgValues(Instruction &I,
                                         ArrayRef<DbgVariableRecord *> DPUsers) {
   // These are arbitrary chosen limits on the maximum number of values and the
@@ -2083,6 +2311,25 @@ void llvm::salvageDebugInfoForDbgValues(Instruction &I,
     Value *Op0 = nullptr;
     DIExpression *SalvagedExpr = DVR->getExpression();
     auto LocItr = find(DVRLocation, &I);
+
+    if (SalvagedExpr->holdsNewElements()) {
+      while (SalvagedExpr && LocItr != DVRLocation.end()) {
+        SmallVector<DIOp::Variant, 16> Ops;
+        unsigned LocNo = std::distance(DVRLocation.begin(), LocItr);
+        uint64_t CurrentLocOps = SalvagedExpr->getNewNumLocationOperands();
+        Op0 = salvageNewDebugInfo(I, CurrentLocOps, AdditionalValues, Ops);
+        if (!Op0)
+          break;
+        SalvagedExpr = DIExpression::appendNewOpsToArg(SalvagedExpr, Ops, LocNo,
+                                                       Op0->getType());
+        LocItr = std::find(++LocItr, DVRLocation.end(), &I);
+      }
+      // salvageDebugInfoImpl should fail on examining the first element of
+      // DbgUsers, or none of them.
+      if (!Op0)
+        break;
+    }
+
     while (SalvagedExpr && LocItr != DVRLocation.end()) {
       SmallVector<uint64_t, 16> Ops;
       unsigned LocNo = std::distance(DVRLocation.begin(), LocItr);
@@ -2339,7 +2586,8 @@ using DbgValReplacement = std::optional<DIExpression *>;
 /// possibly moving/undefing users to prevent use-before-def. Returns true if
 /// changes are made.
 static bool rewriteDebugUsers(
-    Instruction &From, Value &To, Instruction &DomPoint, DominatorTree &DT,
+    Instruction &From, Value &To, Instruction &DomPoint,
+    const DominatorTree &DT,
     function_ref<DbgValReplacement(DbgVariableRecord &DVR)> RewriteDVRExpr) {
   // Find debug users of From.
   SmallVector<DbgVariableRecord *, 1> DPUsers;
@@ -2424,8 +2672,101 @@ static bool isBitCastSemanticsPreserving(const DataLayout &DL, Type *FromTy,
   return false;
 }
 
+/// Generate new DIOps for a conversion from \param SourceTy to \param DestTy.
+/// Returns true if the conversion was successful.
+static bool getNewDIConversionOps(const DataLayout &DL, Type *SourceTy,
+                                  Type *DestTy,
+                                  std::optional<DIBasicType::Signedness> Sign,
+                                  SmallVectorImpl<DIOp::Variant> &Ops) {
+  if (SourceTy == DestTy)
+    return true; // No conversion necessary.
+
+  TypeSize SourceBits = DL.getTypeSizeInBits(SourceTy);
+  TypeSize DestBits = DL.getTypeSizeInBits(DestTy);
+
+  if (SourceBits == DestBits && !DL.isNonIntegralPointerType(SourceTy) &&
+      !DL.isNonIntegralPointerType(DestTy) &&
+      ((SourceTy->isPointerTy() && DestTy->isIntegerTy()) ||
+       (SourceTy->isIntegerTy() && DestTy->isPointerTy()))) {
+    Ops.emplace_back(DIOp::Reinterpret(DestTy));
+    return true;
+  }
+
+  if (SourceTy->isPointerTy() && DestTy->isPointerTy()) {
+    Ops.emplace_back(DIOp::Convert(DestTy));
+    return true;
+  }
+
+  if (!SourceTy->isIntegerTy() || !DestTy->isIntegerTy())
+    return false;
+
+  if (SourceBits < DestBits) {
+    if (!Sign)
+      return false;
+
+    if (*Sign == DIBasicType::Signedness::Signed)
+      Ops.emplace_back(DIOp::SExt(DestTy));
+    else
+      Ops.emplace_back(DIOp::ZExt(DestTy));
+    return true;
+  }
+
+  Ops.emplace_back(DIOp::Convert(DestTy));
+  return true;
+}
+
+/// Convert the type of all DIOpArgs that refer to \param LocOp to \param NewTy.
+/// This is done by replacing the DIOpArg type and adding an appropriate
+/// conversion operator back to the original type. e.g, the following
+/// expression:
+///
+///   DIExpression(DIOpArg(ptr), DIOpDeref(i32))
+///
+/// Becomes:
+///
+///   DIExpression(DIOpArg(i64), DIOpReinterpret(ptr), DIOpDeref(i32))
+///
+/// If NewTy is i64. After this function returns, DII must be updated with a new
+/// value of the correct type.
+template <class IntrinsicOrRecord>
+static std::optional<DIExpression *>
+updateNewDIExpressionArgType(IntrinsicOrRecord &DII, Value *LocOp,
+                             Type *NewTy) {
+  DIExpression *Expr = DII.getExpression();
+  assert(Expr->holdsNewElements() && "expected a new DIExpression!");
+
+  // If the types are the same, then the expression is already correct.
+  if (LocOp->getType() == NewTy)
+    return Expr;
+
+  const DataLayout &DL = DII.getModule()->getDataLayout();
+  auto LocOps = DII.location_ops();
+  for (auto Iter = LocOps.begin(); Iter != LocOps.end(); ++Iter) {
+    Value *V = *Iter;
+    if (V != LocOp)
+      continue;
+
+    // Use the signedness of the variable to determine whether we should use
+    // ZExt/SExt for integer promotions. This isn't necessarily correct, but
+    // it's probably the best we can do given replaceAllDbgUsesWith()'s API.
+    SmallVector<DIOp::Variant, 1> ConversionOps;
+    if (!getNewDIConversionOps(DL, NewTy, LocOp->getType(),
+                               DII.getVariable()->getSignedness(),
+                               ConversionOps))
+      return std::nullopt;
+
+    unsigned LocNo = std::distance(LocOps.begin(), Iter);
+    Expr = DIExpression::appendNewOpsToArg(Expr, ConversionOps, LocNo, NewTy);
+    if (!Expr)
+      return std::nullopt;
+  }
+
+  return Expr;
+}
+
 bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
-                                 Instruction &DomPoint, DominatorTree &DT) {
+                                 Instruction &DomPoint,
+                                 const DominatorTree &DT) {
   // Exit early if From has no debug users.
   if (!From.isUsedByMetadata())
     return false;
@@ -2436,6 +2777,8 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
   Type *ToTy = To.getType();
 
   auto IdentityDVR = [&](DbgVariableRecord &DVR) -> DbgValReplacement {
+    if (DVR.getExpression()->holdsNewElements())
+      return updateNewDIExpressionArgType(DVR, &From, ToTy);
     return DVR.getExpression();
   };
 
@@ -2460,6 +2803,9 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
     // The width of the result has shrunk. Use sign/zero extension to describe
     // the source variable's high bits.
     auto SignOrZeroExtDVR = [&](DbgVariableRecord &DVR) -> DbgValReplacement {
+      if (DVR.getExpression()->holdsNewElements())
+        return updateNewDIExpressionArgType(DVR, &From, ToTy);
+
       DILocalVariable *Var = DVR.getVariable();
 
       // Without knowing signedness, sign/zero extension isn't possible.
@@ -2472,6 +2818,17 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
                                      Signed);
     };
     return rewriteDebugUsers(From, To, DomPoint, DT, SignOrZeroExtDVR);
+  }
+
+  if (FromTy->isPointerTy() && ToTy->isPointerTy()) {
+    // Non-bitcast address space conversions are only supported on
+    // DIOp-DIExpressions.
+    auto IdentityNewDVR = [&](DbgVariableRecord &DVR) -> DbgValReplacement {
+      if (DVR.getExpression()->holdsNewElements())
+        return updateNewDIExpressionArgType(DVR, &From, ToTy);
+      return std::nullopt;
+    };
+    return rewriteDebugUsers(From, To, DomPoint, DT, IdentityNewDVR);
   }
 
   // TODO: Floating-point conversions, vectors.
@@ -2597,7 +2954,7 @@ CallInst *llvm::changeToCall(InvokeInst *II, DomTreeUpdater *DTU) {
 
   // Follow the call by a branch to the normal destination.
   BasicBlock *NormalDestBB = II->getNormalDest();
-  auto *BI = BranchInst::Create(NormalDestBB, II->getIterator());
+  auto *BI = UncondBrInst::Create(NormalDestBB, II->getIterator());
   // Although it takes place after the call itself, the new branch is still
   // performing part of the control-flow functionality of the invoke, so we use
   // II's DebugLoc.
@@ -2656,13 +3013,12 @@ BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
   return Split;
 }
 
-static bool markAliveBlocks(Function &F,
-                            SmallPtrSetImpl<BasicBlock *> &Reachable,
+static bool markAliveBlocks(Function &F, SmallVectorImpl<bool> &Reachable,
                             DomTreeUpdater *DTU = nullptr) {
   SmallVector<BasicBlock*, 128> Worklist;
   BasicBlock *BB = &F.front();
   Worklist.push_back(BB);
-  Reachable.insert(BB);
+  Reachable[BB->getNumber()] = true;
   bool Changed = false;
   do {
     BB = Worklist.pop_back_val();
@@ -2768,6 +3124,7 @@ static bool markAliveBlocks(Function &F,
           BasicBlock *UnreachableNormalDest = BasicBlock::Create(
               Ctx, OrigNormalDest->getName() + ".unreachable",
               II->getFunction(), OrigNormalDest);
+          Reachable.resize(II->getFunction()->getMaxBlockNumber());
           auto *UI = new UnreachableInst(Ctx, UnreachableNormalDest);
           UI->setDebugLoc(DebugLoc::getTemporary());
           II->setNormalDest(UnreachableNormalDest);
@@ -2782,7 +3139,7 @@ static bool markAliveBlocks(Function &F,
             // jump to the normal destination branch.
             BasicBlock *NormalDestBB = II->getNormalDest();
             BasicBlock *UnwindDestBB = II->getUnwindDest();
-            BranchInst::Create(NormalDestBB, II->getIterator());
+            UncondBrInst::Create(NormalDestBB, II->getIterator());
             UnwindDestBB->removePredecessor(II->getParent());
             II->eraseFromParent();
             if (DTU)
@@ -2848,9 +3205,12 @@ static bool markAliveBlocks(Function &F,
     }
 
     Changed |= ConstantFoldTerminator(BB, true, nullptr, DTU);
-    for (BasicBlock *Successor : successors(BB))
-      if (Reachable.insert(Successor).second)
+    for (BasicBlock *Successor : successors(BB)) {
+      if (!Reachable[Successor->getNumber()]) {
         Worklist.push_back(Successor);
+        Reachable[Successor->getNumber()] = true;
+      }
+    }
   } while (!Worklist.empty());
   return Changed;
 }
@@ -2895,20 +3255,14 @@ Instruction *llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
 /// otherwise.
 bool llvm::removeUnreachableBlocks(Function &F, DomTreeUpdater *DTU,
                                    MemorySSAUpdater *MSSAU) {
-  SmallPtrSet<BasicBlock *, 16> Reachable;
+  SmallVector<bool, 16> Reachable(F.getMaxBlockNumber());
   bool Changed = markAliveBlocks(F, Reachable, DTU);
-
-  // If there are unreachable blocks in the CFG...
-  if (Reachable.size() == F.size())
-    return Changed;
-
-  assert(Reachable.size() < F.size());
 
   // Are there any blocks left to actually delete?
   SmallSetVector<BasicBlock *, 8> BlocksToRemove;
   for (BasicBlock &BB : F) {
     // Skip reachable basic blocks
-    if (Reachable.count(&BB))
+    if (Reachable[BB.getNumber()])
       continue;
     // Skip already-deleted blocks
     if (DTU && DTU->isBBPendingDeletion(&BB))
@@ -3908,12 +4262,6 @@ bool llvm::canReplaceOperandWithVariable(const Instruction *I, unsigned OpIdx) {
   // instructions.
   if (Op->isSwiftError())
     return false;
-
-  // Protected pointer field loads/stores should be paired with the intrinsic
-  // to avoid unnecessary address escapes.
-  if (auto *II = dyn_cast<IntrinsicInst>(Op))
-    if (II->getIntrinsicID() == Intrinsic::protected_field_ptr)
-      return false;
 
   // Cannot replace alloca argument with phi/select.
   if (I->isLifetimeStartOrEnd())

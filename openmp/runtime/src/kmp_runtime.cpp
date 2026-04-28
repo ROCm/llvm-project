@@ -8294,6 +8294,7 @@ void __kmp_cleanup(void) {
 #else
   __kmp_cleanup_user_locks();
 #endif
+
 #if OMPD_SUPPORT
   if (ompd_env_block) {
     __kmp_free(ompd_env_block);
@@ -8924,7 +8925,7 @@ __kmp_determine_reduction_method(
 
 #if KMP_ARCH_X86_64 || KMP_ARCH_PPC64 || KMP_ARCH_AARCH64 ||                   \
     KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64 ||             \
-    KMP_ARCH_VE || KMP_ARCH_S390X || KMP_ARCH_WASM
+    KMP_ARCH_VE || KMP_ARCH_S390X || KMP_ARCH_WASM || KMP_ARCH_ARM64EC
 
 #if KMP_OS_LINUX || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||     \
     KMP_OS_OPENBSD || KMP_OS_WINDOWS || KMP_OS_DARWIN || KMP_OS_HAIKU ||       \
@@ -9221,14 +9222,9 @@ void __kmp_add_threads_to_team(kmp_team_t *team, int new_nthreads) {
 // Globals and functions for hidden helper task
 kmp_info_t **__kmp_hidden_helper_threads;
 kmp_info_t *__kmp_hidden_helper_main_thread;
-std::atomic<kmp_int32> __kmp_unexecuted_hidden_helper_tasks;
-#if KMP_OS_LINUX
-kmp_int32 __kmp_hidden_helper_threads_num = 8;
-kmp_int32 __kmp_enable_hidden_helper = TRUE;
-#else
 kmp_int32 __kmp_hidden_helper_threads_num = 0;
+std::atomic<kmp_int32> __kmp_unexecuted_hidden_helper_tasks;
 kmp_int32 __kmp_enable_hidden_helper = FALSE;
-#endif
 
 namespace {
 std::atomic<kmp_int32> __kmp_hit_hidden_helper_threads_num;

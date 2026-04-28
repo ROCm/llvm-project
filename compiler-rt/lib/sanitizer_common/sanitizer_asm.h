@@ -61,6 +61,8 @@
 # define ASM_TAIL_CALL jg
 #elif defined(__riscv)
 # define ASM_TAIL_CALL tail
+#elif defined(__hexagon__)
+#  define ASM_TAIL_CALL jump
 #endif
 
 // Currently, almost all of the shared libraries rely on the value of
@@ -148,9 +150,13 @@
 #define NO_EXEC_STACK_DIRECTIVE
 #endif
 
-#if (defined(__x86_64__) || defined(__i386__)) && defined(__has_include) && __has_include(<cet.h>)
+#if defined(__x86_64__) || defined(__i386__)
+#if defined(__has_include)
+#if __has_include(<cet.h>)
 #include <cet.h>
+#endif
 #endif
 #ifndef _CET_ENDBR
 #define _CET_ENDBR
+#endif
 #endif

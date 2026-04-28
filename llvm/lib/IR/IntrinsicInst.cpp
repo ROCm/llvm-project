@@ -39,6 +39,7 @@ bool IntrinsicInst::mayLowerToFunctionCall(Intrinsic::ID IID) {
   case Intrinsic::objc_autoreleasePoolPop:
   case Intrinsic::objc_autoreleasePoolPush:
   case Intrinsic::objc_autoreleaseReturnValue:
+  case Intrinsic::objc_claimAutoreleasedReturnValue:
   case Intrinsic::objc_copyWeak:
   case Intrinsic::objc_destroyWeak:
   case Intrinsic::objc_initWeak:
@@ -180,10 +181,11 @@ void DbgVariableIntrinsic::replaceVariableLocationOp(unsigned OpIdx,
 
 void DbgVariableIntrinsic::addVariableLocationOps(ArrayRef<Value *> NewValues,
                                                   DIExpression *NewExpr) {
-  assert(NewExpr->hasAllLocationOps(getNumVariableLocationOps() +
+  assert(NewExpr->holdsNewElements() ||
+         NewExpr->hasAllLocationOps(getNumVariableLocationOps() +
                                     NewValues.size()) &&
-         "NewExpr for debug variable intrinsic does not reference every "
-         "location operand.");
+             "NewExpr for debug variable intrinsic does not reference every "
+             "location operand.");
   assert(!is_contained(NewValues, nullptr) && "New values must be non-null");
   setArgOperand(2, MetadataAsValue::get(getContext(), NewExpr));
   SmallVector<ValueAsMetadata *, 4> MDs;

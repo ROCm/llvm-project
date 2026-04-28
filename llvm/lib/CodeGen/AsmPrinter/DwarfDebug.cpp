@@ -199,6 +199,10 @@ void DebugLocDwarfExpression::emitBaseTypeRef(uint64_t Idx) {
   getActiveStreamer().emitULEB128(Idx, Twine(Idx), ULEB128PadSize);
 }
 
+void DebugLocDwarfExpression::emitOpAddress(const GlobalVariable *GV) {
+  llvm_unreachable("cannot have loc_list for global");
+}
+
 bool DebugLocDwarfExpression::isFrameRegister(const TargetRegisterInfo &TRI,
                                               llvm::Register MachineReg) {
   // This information is not available while emitting .debug_loc entries.
@@ -229,6 +233,63 @@ void DebugLocDwarfExpression::commitTemporaryBuffer() {
   }
   TmpBuf->Bytes.clear();
   TmpBuf->Comments.clear();
+}
+
+namespace {
+/// Utility class for finding the common divergent address space of all the
+/// DIExpressions that describe the location of a variable, if such an address
+/// space exists.
+class CommonDivergentAddrSpaceFinder {
+  std::optional<unsigned> CommonAS;
+  bool HasCommonAddrSpace = true;
+
+public:
+  void addSubExpr(const DIExpression *Expr) {
+    if (!Expr || !HasCommonAddrSpace)
+      return;
+    std::optional<unsigned> ExprAS = Expr->getNewDivergentAddrSpace();
+    if (!ExprAS)
+      HasCommonAddrSpace = false;
+    else if (!CommonAS)
+      CommonAS = *ExprAS;
+    else if (*CommonAS != *ExprAS)
+      HasCommonAddrSpace = false;
+  }
+
+  std::optional<unsigned> get() const {
+    return HasCommonAddrSpace ? CommonAS : std::nullopt;
+  }
+};
+} // namespace
+
+std::optional<unsigned> DbgVariable::getCommonDivergentAddrSpace() const {
+  const Loc::Variant *Loc = &asVariant();
+
+  if (auto *LM = std::get_if<Loc::Multi>(Loc))
+    return LM->getCommonDivergentAddrSpace();
+
+  CommonDivergentAddrSpaceFinder Finder;
+  if (auto *LS = std::get_if<Loc::Single>(Loc)) {
+    Finder.addSubExpr(LS->getExpr());
+  } else if (auto *MMI = std::get_if<Loc::MMI>(Loc)) {
+    for (auto &FIE : MMI->getFrameIndexExprs())
+      Finder.addSubExpr(FIE.Expr);
+  } else if (auto *EV = std::get_if<Loc::EntryValue>(Loc)) {
+    for (auto &Val : EV->EntryValues)
+      Finder.addSubExpr(&Val.Expr);
+  }
+
+  return Finder.get();
+}
+
+bool DbgVariable::isDivergentAddrSpaceCompatible() const {
+  if (auto *DT = dyn_cast<DIDerivedType>(getType()))
+    return DT->getTag() == dwarf::DW_TAG_pointer_type ||
+           DT->getTag() == dwarf::DW_TAG_reference_type ||
+           DT->getTag() == dwarf::DW_TAG_rvalue_reference_type;
+  // FIXME: We could support divergent address spaces on pointer/reference
+  // fields of struct types.
+  return false;
 }
 
 const DIType *DbgVariable::getType() const {
@@ -286,7 +347,7 @@ bool llvm::operator<(const EntryValueInfo &LHS, const EntryValueInfo &RHS) {
 Loc::Single::Single(DbgValueLoc ValueLoc)
     : ValueLoc(std::make_unique<DbgValueLoc>(ValueLoc)),
       Expr(ValueLoc.getExpression()) {
-  if (!Expr->getNumElements())
+  if (Expr->holdsOldElements() && !Expr->getNumElements())
     Expr = nullptr;
 }
 
@@ -302,7 +363,8 @@ void Loc::MMI::addFrameIndexExpr(const DIExpression *Expr, int FI) {
   assert((FrameIndexExprs.size() == 1 ||
           llvm::all_of(FrameIndexExprs,
                        [](const FrameIndexExpr &FIE) {
-                         return FIE.Expr && FIE.Expr->isFragment();
+                         return FIE.Expr && (FIE.Expr->isFragment() ||
+                                             FIE.Expr->isPoisoned());
                        })) &&
          "conflicting locations for variable");
 }
@@ -333,9 +395,9 @@ static AccelTableKind computeAccelTableKind(unsigned DwarfVersion,
 
 DwarfDebug::DwarfDebug(AsmPrinter *A)
     : DebugHandlerBase(A), DebugLocs(A->OutStreamer->isVerboseAsm()),
-      InfoHolder(A, "info_string", DIEValueAllocator),
       SkeletonHolder(A, "skel_string", DIEValueAllocator),
-      IsDarwin(A->TM.getTargetTriple().isOSDarwin()) {
+      IsDarwin(A->TM.getTargetTriple().isOSDarwin()),
+      InfoHolder(A, "info_string", DIEValueAllocator) {
   const Triple &TT = Asm->TM.getTargetTriple();
 
   // Make sure we know our "debugger tuning".  The target option takes
@@ -352,7 +414,7 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
     DebuggerTuning = DebuggerKind::GDB;
 
   if (DwarfInlinedStrings == Default)
-    UseInlineStrings = TT.isNVPTX() || tuneForDBX();
+    UseInlineStrings = tuneForDBX();
   else
     UseInlineStrings = DwarfInlinedStrings == Enable;
 
@@ -360,6 +422,8 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
   UseARangesSection = GenerateARangeSection || tuneForSCE();
 
   HasAppleExtensionAttributes = tuneForLLDB();
+  HasHeterogeneousExtensionAttributes =
+      Asm->MAI->supportsHeterogeneousDebuggingExtensions();
 
   // Handle split DWARF.
   HasSplitDwarf = !Asm->TM.Options.MCOptions.SplitDwarfFile.empty();
@@ -373,9 +437,8 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
   unsigned DwarfVersionNumber = Asm->TM.Options.MCOptions.DwarfVersion;
   unsigned DwarfVersion = DwarfVersionNumber ? DwarfVersionNumber
                                     : MMI->getModule()->getDwarfVersion();
-  // Use dwarf 4 by default if nothing is requested. For NVPTX, use dwarf 2.
-  DwarfVersion =
-      TT.isNVPTX() ? 2 : (DwarfVersion ? DwarfVersion : dwarf::DWARF_VERSION);
+  if (!DwarfVersion)
+    DwarfVersion = dwarf::DWARF_VERSION;
 
   bool Dwarf64 = DwarfVersion >= 3 && // DWARF64 was introduced in DWARFv3.
                  TT.isArch64Bit();    // DWARF64 requires 64-bit relocations.
@@ -393,12 +456,9 @@ DwarfDebug::DwarfDebug(AsmPrinter *A)
   if (!Dwarf64 && TT.isArch64Bit() && TT.isOSBinFormatXCOFF())
     report_fatal_error("XCOFF requires DWARF64 for 64-bit mode!");
 
-  UseRangesSection = !NoDwarfRangesSection && !TT.isNVPTX();
+  UseRangesSection = !NoDwarfRangesSection;
 
-  // Use sections as references. Force for NVPTX.
-  if (DwarfSectionsAsReferences == Default)
-    UseSectionsAsReferences = TT.isNVPTX();
-  else
+  if (DwarfSectionsAsReferences != Default)
     UseSectionsAsReferences = DwarfSectionsAsReferences == Enable;
 
   // Don't generate type units for unsupported object file formats.
@@ -955,6 +1015,30 @@ void DwarfDebug::constructCallSiteEntryDIEs(const DISubprogram &SP,
     return true;
   };
 
+  // Create call_target connections for indirect calls.
+  auto addCallSiteTargetForIndirectCalls = [&](const MachineInstr *MI,
+                                               DIE &CallSiteDIE) {
+    const MachineFunction *MF = MI->getMF();
+    const auto &CalleesMap = MF->getCallSitesInfo();
+    auto CSInfo = CalleesMap.find(MI);
+    // Get the information for the call instruction.
+    if (CSInfo == CalleesMap.end() || !CSInfo->second.CallTarget)
+      return;
+
+    MDNode *CallTarget = CSInfo->second.CallTarget;
+    // Add DW_AT_LLVM_virtual_call_origin with the 'call_target' metadata.
+    assert(!CallSiteDIE.findAttribute(dwarf::DW_AT_LLVM_virtual_call_origin) &&
+           "DW_AT_LLVM_virtual_call_origin already exists");
+    const DISubprogram *CalleeSP = dyn_cast<DISubprogram>(CallTarget);
+    DIE *CalleeDIE = CU.getOrCreateSubprogramDIE(CalleeSP, nullptr);
+    assert(CalleeDIE && "Could not create DIE for call site entry origin");
+    CU.addDIEEntry(CallSiteDIE,
+                   CU.getDwarf5OrGNUAttr(dwarf::DW_AT_LLVM_virtual_call_origin),
+                   *CalleeDIE);
+    // Add DW_AT_linkage_name to the method declaration if needed.
+    CU.addLinkageNamesToDeclarations(*this, *CalleeSP, *CalleeDIE);
+  };
+
   // Emit call site entries for each call or tail call in the function.
   for (const MachineBasicBlock &MBB : MF) {
     for (const MachineInstr &MI : MBB.instrs()) {
@@ -1052,6 +1136,9 @@ void DwarfDebug::constructCallSiteEntryDIEs(const DISubprogram &SP,
           ScopeDIE, CalleeSP, CalleeDecl, IsTail, PCAddr, CallAddr, CallTarget,
           Offset, AllocSiteTy);
 
+      if (CallTarget.getReg())
+        addCallSiteTargetForIndirectCalls(TopLevelCallMI, CallSiteDIE);
+
       // Optionally emit call-site-param debug info.
       if (emitDebugEntryValues()) {
         ParamSet Params;
@@ -1143,20 +1230,27 @@ void DwarfDebug::finishUnitAttributes(const DICompileUnit *DIUnit,
     }
   }
 }
+
+DwarfCompileUnit *DwarfDebug::getDwarfCompileUnit(const DICompileUnit *DIUnit) {
+  if (auto *CU = CUMap.lookup(DIUnit))
+    return CU;
+
+  if (useSplitDwarf() && !shareAcrossDWOCUs() &&
+      (!DIUnit->getSplitDebugInlining() ||
+       DIUnit->getEmissionKind() == DICompileUnit::FullDebug) &&
+      !CUMap.empty())
+    return CUMap.begin()->second;
+
+  return nullptr;
+}
+
 // Create new DwarfCompileUnit for the given metadata node with tag
 // DW_TAG_compile_unit.
 DwarfCompileUnit &
 DwarfDebug::getOrCreateDwarfCompileUnit(const DICompileUnit *DIUnit) {
-  if (auto *CU = CUMap.lookup(DIUnit))
+  if (auto *CU = getDwarfCompileUnit(DIUnit))
     return *CU;
 
-  if (useSplitDwarf() &&
-      !shareAcrossDWOCUs() &&
-      (!DIUnit->getSplitDebugInlining() ||
-       DIUnit->getEmissionKind() == DICompileUnit::FullDebug) &&
-      !CUMap.empty()) {
-    return *CUMap.begin()->second;
-  }
   CompilationDir = DIUnit->getDirectory();
 
   auto OwnedUnit = std::make_unique<DwarfCompileUnit>(
@@ -1229,14 +1323,6 @@ void DwarfDebug::beginModule(Module *M) {
 
   assert(NumDebugCUs > 0 && "Asm unexpectedly initialized");
   SingleCU = NumDebugCUs == 1;
-  DenseMap<DIGlobalVariable *, SmallVector<DwarfCompileUnit::GlobalExpr, 1>>
-      GVMap;
-  for (const GlobalVariable &Global : M->globals()) {
-    SmallVector<DIGlobalVariableExpression *, 1> GVs;
-    Global.getDebugInfo(GVs);
-    for (auto *GVE : GVs)
-      GVMap[GVE->getVariable()].push_back({&Global, GVE->getExpression()});
-  }
 
   // Create the symbol that designates the start of the unit's contribution
   // to the string offsets table. In a split DWARF scenario, only the skeleton
@@ -1271,30 +1357,13 @@ void DwarfDebug::beginModule(Module *M) {
 
     DwarfCompileUnit &CU = getOrCreateDwarfCompileUnit(CUNode);
 
-    // Global Variables.
-    for (auto *GVE : CUNode->getGlobalVariables()) {
-      // Don't bother adding DIGlobalVariableExpressions listed in the CU if we
-      // already know about the variable and it isn't adding a constant
-      // expression.
-      auto &GVMapEntry = GVMap[GVE->getVariable()];
-      auto *Expr = GVE->getExpression();
-      if (!GVMapEntry.size() || (Expr && Expr->isConstant()))
-        GVMapEntry.push_back({nullptr, Expr});
-    }
-
-    DenseSet<DIGlobalVariable *> Processed;
-    for (auto *GVE : CUNode->getGlobalVariables()) {
-      DIGlobalVariable *GV = GVE->getVariable();
-      if (Processed.insert(GV).second)
-        CU.getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
-    }
-
-    for (auto *Ty : CUNode->getEnumTypes())
+    for (auto *Ty : CUNode->getEnumTypes()) {
+      assert(!isa_and_nonnull<DILocalScope>(Ty->getScope()) &&
+             "Unexpected function-local entity in 'enums' CU field.");
       CU.getOrCreateTypeDIE(cast<DIType>(Ty));
+    }
 
     for (auto *Ty : CUNode->getRetainedTypes()) {
-      // The retained types array by design contains pointers to
-      // MDNodes rather than DIRefs. Unique them here.
       if (DIType *RT = dyn_cast<DIType>(Ty))
         // There is no point in force-emitting a forward declaration.
         CU.getOrCreateTypeDIE(RT);
@@ -1397,11 +1466,7 @@ void DwarfDebug::finalizeModuleInfo() {
     DwarfCompileUnit &U = SkCU ? *SkCU : TheCU;
 
     if (unsigned NumRanges = TheCU.getRanges().size()) {
-      // PTX does not support subtracting labels from the code section in the
-      // debug_loc section.  To work around this, the NVPTX backend needs the
-      // compile unit to have no low_pc in order to have a zero base_address
-      // when handling debug_loc in cuda-gdb.
-      if (!(Asm->TM.getTargetTriple().isNVPTX() && tuneForGDB())) {
+      if (shouldAttachCompileUnitRanges()) {
         if (NumRanges > 1 && useRangesSection())
           // A DW_AT_low_pc attribute may also be specified in combination with
           // DW_AT_ranges to specify the default base address for use in
@@ -1459,7 +1524,7 @@ void DwarfDebug::finalizeModuleInfo() {
                             TLOF.getDwarfMacinfoSection()->getBeginSymbol());
       }
     }
-    }
+  }
 
   // Emit all frontend-produced Skeleton CUs, i.e., Clang modules.
   for (auto *CUNode : MMI->getModule()->debug_compile_units())
@@ -1485,9 +1550,41 @@ void DwarfDebug::endModule() {
   assert(CurFn == nullptr);
   assert(CurMI == nullptr);
 
-  for (const auto &P : CUMap) {
-    const auto *CUNode = cast<DICompileUnit>(P.first);
-    DwarfCompileUnit *CU = &*P.second;
+  const Module *M = MMI->getModule();
+
+  // Collect global variables info.
+  DenseMap<DIGlobalVariable *, SmallVector<DwarfCompileUnit::GlobalExpr, 1>>
+      GVMap;
+  for (const GlobalVariable &Global : M->globals()) {
+    SmallVector<DIGlobalVariableExpression *, 1> GVs;
+    Global.getDebugInfo(GVs);
+    for (auto *GVE : GVs)
+      GVMap[GVE->getVariable()].push_back({&Global, GVE->getExpression()});
+  }
+
+  for (DICompileUnit *CUNode : M->debug_compile_units()) {
+    DwarfCompileUnit *CU = getDwarfCompileUnit(CUNode);
+
+    // If the CU hasn't been emitted yet, it must be empty. Skip it.
+    if (!CU)
+      continue;
+
+    // Emit Global Variables.
+    for (auto *GVE : CUNode->getGlobalVariables()) {
+      // Don't bother adding DIGlobalVariableExpressions listed in the CU if we
+      // already know about the variable and it isn't adding a constant
+      // expression.
+      auto &GVMapEntry = GVMap[GVE->getVariable()];
+      auto *Expr = GVE->getExpression();
+      if (!GVMapEntry.size() || (Expr && Expr->isConstant()))
+        GVMapEntry.push_back({nullptr, Expr});
+    }
+    DenseSet<DIGlobalVariable *> Processed;
+    for (auto *GVE : CUNode->getGlobalVariables()) {
+      DIGlobalVariable *GV = GVE->getVariable();
+      if (Processed.insert(GV).second)
+        CU->getOrCreateGlobalVariableDIE(GV, sortGlobalExprs(GVMap[GV]));
+    }
 
     // Emit imported entities.
     for (auto *IE : CUNode->getImportedEntities()) {
@@ -1495,9 +1592,13 @@ void DwarfDebug::endModule() {
              "Unexpected function-local entity in 'imports' CU field.");
       CU->getOrCreateImportedEntityDIE(IE);
     }
+
+    // Emit function-local entities.
     for (const auto *D : CU->getDeferredLocalDecls()) {
       if (auto *IE = dyn_cast<DIImportedEntity>(D))
         CU->getOrCreateImportedEntityDIE(IE);
+      else if (auto *Ty = dyn_cast<DIType>(D))
+        CU->getOrCreateTypeDIE(Ty);
       else
         llvm_unreachable("Unexpected local retained node!");
     }
@@ -2005,6 +2106,18 @@ void DwarfDebug::collectEntityInfo(DwarfCompileUnit &TheCU,
       continue;
     }
 
+    // If all entries in the location list produce a consistent divergent
+    // address space we need to inform the expression emitter that it is
+    // permitted to produce divergent address spaces.
+    if (RegVar->isDivergentAddrSpaceCompatible()) {
+      CommonDivergentAddrSpaceFinder Finder;
+      for (const DebugLocEntry &DLE : Entries)
+        for (const DbgValueLoc &DVL : DLE.getValues())
+          Finder.addSubExpr(DVL.getExpression());
+      if (std::optional<unsigned> AS = Finder.get())
+        List.setCommonDivergentAddrSpace(*AS);
+    }
+
     // If the variable has a DIBasicType, extract it.  Basic types cannot have
     // unique identifiers, so don't bother resolving the type with the
     // identifier map.
@@ -2248,11 +2361,23 @@ void DwarfDebug::beginInstruction(const MachineInstr *MI) {
       Flags |= DWARF2_FLAG_IS_STMT;
   }
 
-  RecordSourceLine(DL, Flags);
+  // Call target-specific source line recording.
+  recordTargetSourceLine(DL, Flags);
 
   // If we're not at line 0, remember this location.
   if (DL.getLine())
     PrevInstLoc = DL;
+}
+
+/// Default implementation of target-specific source line recording.
+void DwarfDebug::recordTargetSourceLine(const DebugLoc &DL, unsigned Flags) {
+  SmallString<128> LocationString;
+  if (Asm->OutStreamer->isVerboseAsm()) {
+    raw_svector_ostream OS(LocationString);
+    DL.print(OS);
+  }
+  recordSourceLine(DL.getLine(), DL.getCol(), DL.getScope(), Flags,
+                   LocationString);
 }
 
 // Returns the position where we should place prologue_end, potentially nullptr,
@@ -2749,6 +2874,9 @@ void DwarfDebug::beginFunctionImpl(const MachineFunction *MF) {
   Asm->OutStreamer->getContext().setDwarfCompileUnitID(
       getDwarfCompileUnitIDForLineTable(CU));
 
+  // Call target-specific debug info initialization.
+  initializeTargetDebugInfo(*MF);
+
   // Record beginning of function.
   PrologEndLoc = emitInitialLocDirective(
       *MF, Asm->OutStreamer->getContext().getDwarfCompileUnitID());
@@ -3145,7 +3273,6 @@ void DwarfDebug::emitDebugLocEntry(ByteStreamer &Streamer,
   for (const auto &Op : Expr) {
     assert(Op.getCode() != dwarf::DW_OP_const_type &&
            "3 operand ops not yet supported");
-    assert(!Op.getSubCode() && "SubOps not yet supported");
     Streamer.emitInt8(Op.getCode(), Comment != End ? *(Comment++) : "");
     Offset++;
     for (unsigned I = 0; I < Op.getDescription().Op.size(); ++I) {
@@ -3170,8 +3297,17 @@ void DwarfDebug::emitDebugLocValue(const AsmPrinter &AP, const DIBasicType *BT,
                                    const DbgValueLoc &Value,
                                    DwarfExpression &DwarfExpr) {
   auto *DIExpr = Value.getExpression();
-  DIExpressionCursor ExprCursor(DIExpr);
   DwarfExpr.addFragmentOffset(DIExpr);
+
+  if (DIExpr) {
+    if (auto NewElementsRef = DIExpr->getNewElementsRef()) {
+      DwarfExpr.addExpression(*NewElementsRef, Value.getLocEntries(),
+                              AP.MF->getSubtarget().getRegisterInfo());
+      return;
+    }
+  }
+
+  DIExpressionCursor ExprCursor(DIExpr);
 
   // If the DIExpr is an Entry Value, we want to follow the same code path
   // regardless of whether the DBG_VALUE is variadic or not.
@@ -3272,7 +3408,9 @@ void DebugLocEntry::finalize(const AsmPrinter &AP,
   assert(Begin != End && "unexpected location list entry with empty range");
   DebugLocStream::EntryBuilder Entry(List, Begin, End);
   BufferByteStreamer Streamer = Entry.getStreamer();
-  DebugLocDwarfExpression DwarfExpr(AP.getDwarfVersion(), Streamer, TheCU);
+  DebugLocDwarfExpression DwarfExpr(AP, Streamer, TheCU);
+  if (List.hasCommonDivergentAddrSpace())
+    DwarfExpr.permitDivergentAddrSpace();
   const DbgValueLoc &Value = Values[0];
   if (Value.isFragment()) {
     // Emit all fragments that belong to the same variable and range.
@@ -3375,15 +3513,8 @@ emitRangeList(DwarfDebug &DD, AsmPrinter *Asm, MCSymbol *Sym, const Ranges &R,
   bool BaseIsSet = false;
   for (const auto &P : SectionRanges) {
     auto *Base = CUBase;
-    if ((Asm->TM.getTargetTriple().isNVPTX() && DD.tuneForGDB()) ||
+    if (DD.shouldResetBaseAddress(*P.first) ||
         (DD.useSplitDwarf() && UseDwarf5 && P.first->isLinkerRelaxable())) {
-      // PTX does not support subtracting labels from the code section in the
-      // debug_loc section.  To work around this, the NVPTX backend needs the
-      // compile unit to have no low_pc in order to have a zero base_address
-      // when handling debug_loc in cuda-gdb.  Additionally, cuda-gdb doesn't
-      // seem to handle setting a per-variable base to zero.  To make cuda-gdb
-      // happy, just emit labels with no base while having no compile unit
-      // low_pc.
       BaseIsSet = false;
       Base = nullptr;
     } else if (!Base && ShouldUseBaseAddress) {
@@ -3502,6 +3633,9 @@ void DwarfDebug::emitDebugLocImpl(MCSection *Sec) {
 
 // Emit locations into the .debug_loc/.debug_loclists section.
 void DwarfDebug::emitDebugLoc() {
+  if (DisableDwarfLocations)
+    return;
+
   emitDebugLocImpl(
       getDwarfVersion() >= 5
           ? Asm->getObjFileLowering().getDwarfLoclistsSection()
@@ -3510,6 +3644,9 @@ void DwarfDebug::emitDebugLoc() {
 
 // Emit locations into the .debug_loc.dwo/.debug_loclists.dwo section.
 void DwarfDebug::emitDebugLocDWO() {
+  if (DisableDwarfLocations)
+    return;
+
   if (getDwarfVersion() >= 5) {
     emitDebugLocImpl(
         Asm->getObjFileLowering().getDwarfLoclistsDWOSection());

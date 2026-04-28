@@ -133,6 +133,7 @@ elseif(NOT APPLE)
   llvm_check_compiler_linker_flag(C -Wl,-x LIBOMP_HAVE_X_FLAG)
   llvm_check_compiler_linker_flag(C -Wl,--as-needed LIBOMP_HAVE_AS_NEEDED_FLAG)
   llvm_check_compiler_linker_flag(C "-Wl,--version-script=${LIBOMP_SRC_DIR}/exports_test_so.txt" LIBOMP_HAVE_VERSION_SCRIPT_FLAG)
+  llvm_check_compiler_linker_flag(C "-Wl,--undefined-version" LIBOMP_HAVE_UNDEFINED_VERSION_FLAG)  # FIXME issue #58858
   llvm_check_compiler_linker_flag(C -static-libgcc LIBOMP_HAVE_STATIC_LIBGCC_FLAG)
   llvm_check_compiler_linker_flag(C -Wl,-z,noexecstack LIBOMP_HAVE_Z_NOEXECSTACK_FLAG)
 endif()
@@ -246,14 +247,14 @@ else()
 endif()
 
 # Check if adaptive locks are available
-if((${IA32} OR ${INTEL64}) AND NOT MSVC)
+if((IA32 OR INTEL64) AND NOT MSVC)
   set(LIBOMP_HAVE_ADAPTIVE_LOCKS TRUE)
 else()
   set(LIBOMP_HAVE_ADAPTIVE_LOCKS FALSE)
 endif()
 
 # Check if stats-gathering is available
-if(${LIBOMP_STATS})
+if(LIBOMP_STATS)
   check_c_source_compiles(
      "__thread int x;
      int main(int argc, char** argv)
@@ -264,7 +265,7 @@ if(${LIBOMP_STATS})
      { unsigned long long t = __builtin_readcyclecounter(); return 0; }"
      LIBOMP_HAVE___BUILTIN_READCYCLECOUNTER)
   if(NOT LIBOMP_HAVE___BUILTIN_READCYCLECOUNTER)
-    if(${IA32} OR ${INTEL64} OR ${MIC})
+    if(IA32 OR INTEL64 OR MIC)
       check_include_file(x86intrin.h LIBOMP_HAVE_X86INTRIN_H)
       libomp_append(CMAKE_REQUIRED_DEFINITIONS -DLIBOMP_HAVE_X86INTRIN_H LIBOMP_HAVE_X86INTRIN_H)
       check_c_source_compiles(
@@ -327,7 +328,7 @@ endif()
 set(LIBOMP_HAVE_OMPT_SUPPORT ${LIBOMP_HAVE_OMPT_SUPPORT} PARENT_SCOPE)
 
 # Check if HWLOC support is available
-if(${LIBOMP_USE_HWLOC})
+if(LIBOMP_USE_HWLOC)
   find_path(LIBOMP_HWLOC_INCLUDE_DIR NAMES hwloc.h HINTS ${LIBOMP_HWLOC_INSTALL_DIR} PATH_SUFFIXES include)
   set(CMAKE_REQUIRED_INCLUDES ${LIBOMP_HWLOC_INCLUDE_DIR})
   check_include_file(hwloc.h LIBOMP_HAVE_HWLOC_H)
@@ -336,8 +337,15 @@ if(${LIBOMP_USE_HWLOC})
     NAMES hwloc libhwloc
     HINTS ${LIBOMP_HWLOC_INSTALL_DIR}/lib)
   if(LIBOMP_HWLOC_LIBRARY)
+    # In case libhwloc is static, check_library_exists does not work on static libs
+    get_filename_component(LIBOMP_HWLOC_LIBRARY_EXT ${LIBOMP_HWLOC_LIBRARY} EXT)
+    string(COMPARE EQUAL ${LIBOMP_HWLOC_LIBRARY_EXT} ".a" LIBOMP_HWLOC_LIBRARY_IS_STATIC)
+    if(LIBOMP_HWLOC_LIBRARY_IS_STATIC)
+      set(LIBOMP_HAVE_LIBHWLOC TRUE)
+    else()
     check_library_exists(${LIBOMP_HWLOC_LIBRARY} hwloc_topology_init
       ${LIBOMP_HWLOC_INSTALL_DIR}/lib LIBOMP_HAVE_LIBHWLOC)
+    endif()
     get_filename_component(LIBOMP_HWLOC_LIBRARY_DIR ${LIBOMP_HWLOC_LIBRARY} PATH)
   endif()
   if(LIBOMP_HAVE_HWLOC_H AND LIBOMP_HAVE_LIBHWLOC AND LIBOMP_HWLOC_LIBRARY)
@@ -349,7 +357,7 @@ if(${LIBOMP_USE_HWLOC})
 endif()
 
 # Check if ThreadSanitizer support is available
-if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux" AND ${INTEL64})
+if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux" AND INTEL64)
   set(LIBOMP_HAVE_TSAN_SUPPORT TRUE)
 else()
   set(LIBOMP_HAVE_TSAN_SUPPORT FALSE)

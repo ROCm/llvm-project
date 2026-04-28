@@ -84,7 +84,9 @@ enum class ThinOrFullLTOPhase {
   /// Full LTO prelink phase.
   FullLTOPreLink,
   /// Full LTO postlink (backend compile) phase.
-  FullLTOPostLink
+  FullLTOPostLink,
+  /// Custom LTO postlink (e.g. --lto-newpm-passes=...)
+  CustomLTOPostLink
 };
 
 #ifndef NDEBUG
@@ -334,17 +336,6 @@ protected:
   /// optimization bisect is over the limit.
   bool skipFunction(const Function &F) const;
 };
-
-/// If the user specifies the -time-passes argument on an LLVM tool command line
-/// then the value of this boolean will be true, otherwise false.
-/// This is the storage for the -time-passes option.
-LLVM_ABI extern bool TimePassesIsEnabled;
-/// If TimePassesPerRun is true, there would be one line of report for
-/// each pass invocation.
-/// If TimePassesPerRun is false, there would be only one line of
-/// report for each pass (even there are more than one pass objects).
-/// (For new pass manager only)
-LLVM_ABI extern bool TimePassesPerRun;
 
 } // end namespace llvm
 

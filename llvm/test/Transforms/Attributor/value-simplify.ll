@@ -626,7 +626,7 @@ define internal ptr @test_byval2(ptr byval(%struct.X) %a) {
 ; CHECK-NEXT:    [[A_PRIV:%.*]] = alloca [[STRUCT_X:%.*]], align 8
 ; CHECK-NEXT:    store ptr [[TMP0]], ptr [[A_PRIV]], align 8
 ; CHECK-NEXT:    call void @sync()
-; CHECK-NEXT:    [[L:%.*]] = load ptr, ptr [[A_PRIV]], align 8
+; CHECK-NEXT:    [[L:%.*]] = load ptr, ptr [[A_PRIV]], align 8, !invariant.load [[META0:![0-9]+]]
 ; CHECK-NEXT:    ret ptr [[L]]
 ;
   call void @sync()
@@ -975,11 +975,11 @@ define i1 @icmp() {
 define void @test_callee_is_undef(ptr %fn) {
 ; TUNIT-LABEL: define {{[^@]+}}@test_callee_is_undef
 ; TUNIT-SAME: (ptr nofree captures(none) [[FN:%.*]]) {
-; TUNIT-NEXT:    call void @unknown_calle_arg_is_undef(ptr nofree noundef captures(none) [[FN]])
-; TUNIT-NEXT:    ret void
+; TUNIT-NEXT:    unreachable
 ;
 ; CGSCC-LABEL: define {{[^@]+}}@test_callee_is_undef
-; CGSCC-SAME: (ptr nofree noundef nonnull captures(none) [[FN:%.*]]) {
+; CGSCC-SAME: (ptr nofree captures(none) [[FN:%.*]]) {
+; CGSCC-NEXT:    call void @callee_is_undef()
 ; CGSCC-NEXT:    call void @unknown_calle_arg_is_undef(ptr nofree noundef nonnull captures(none) [[FN]])
 ; CGSCC-NEXT:    ret void
 ;
@@ -989,9 +989,9 @@ define void @test_callee_is_undef(ptr %fn) {
 }
 define internal void @callee_is_undef(ptr %fn) {
 ;
-; CGSCC: Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
+; CGSCC: Function Attrs: memory(readwrite, argmem: none)
 ; CGSCC-LABEL: define {{[^@]+}}@callee_is_undef
-; CGSCC-SAME: () #[[ATTR1]] {
+; CGSCC-SAME: () #[[ATTR2]] {
 ; CGSCC-NEXT:    unreachable
 ;
   call void %fn()
@@ -999,10 +999,10 @@ define internal void @callee_is_undef(ptr %fn) {
 }
 define internal void @unknown_calle_arg_is_undef(ptr %fn, i32 %arg) {
 ;
-; CHECK-LABEL: define {{[^@]+}}@unknown_calle_arg_is_undef
-; CHECK-SAME: (ptr nofree noundef nonnull captures(none) [[FN:%.*]]) {
-; CHECK-NEXT:    call void [[FN]](i32 undef)
-; CHECK-NEXT:    ret void
+; CGSCC-LABEL: define {{[^@]+}}@unknown_calle_arg_is_undef
+; CGSCC-SAME: (ptr nofree noundef nonnull captures(none) [[FN:%.*]]) {
+; CGSCC-NEXT:    call void [[FN]](i32 undef)
+; CGSCC-NEXT:    ret void
 ;
   call void %fn(i32 %arg)
   ret void
@@ -1359,7 +1359,7 @@ define internal i32 @ret_speculatable_expr(ptr %mem, i32 %a2) {
 ; CGSCC-SAME: (i32 [[TMP0:%.*]]) #[[ATTR1]] {
 ; CGSCC-NEXT:    [[MEM_PRIV:%.*]] = alloca i32, align 4
 ; CGSCC-NEXT:    store i32 [[TMP0]], ptr [[MEM_PRIV]], align 4
-; CGSCC-NEXT:    [[L:%.*]] = load i32, ptr [[MEM_PRIV]], align 4
+; CGSCC-NEXT:    [[L:%.*]] = load i32, ptr [[MEM_PRIV]], align 4, !invariant.load [[META0]]
 ; CGSCC-NEXT:    [[MUL:%.*]] = mul i32 [[L]], 13
 ; CGSCC-NEXT:    [[ADD:%.*]] = add i32 [[MUL]], 7
 ; CGSCC-NEXT:    ret i32 [[ADD]]
@@ -1684,7 +1684,7 @@ define i32 @readExtInitZeroInit() {
 ; TUNIT: attributes #[[ATTR10]] = { nofree willreturn }
 ; TUNIT: attributes #[[ATTR11]] = { nofree nosync nounwind willreturn memory(write) }
 ; TUNIT: attributes #[[ATTR12]] = { nofree willreturn memory(readwrite) }
-; TUNIT: attributes #[[ATTR13]] = { nofree nosync nounwind willreturn }
+; TUNIT: attributes #[[ATTR13]] = { nofree norecurse nosync nounwind willreturn }
 ; TUNIT: attributes #[[ATTR14]] = { nosync }
 ; TUNIT: attributes #[[ATTR15]] = { nosync nounwind memory(read) }
 ; TUNIT: attributes #[[ATTR16]] = { nounwind memory(write) }
@@ -1708,4 +1708,8 @@ define i32 @readExtInitZeroInit() {
 ; CGSCC: attributes #[[ATTR16]] = { nofree willreturn memory(readwrite) }
 ; CGSCC: attributes #[[ATTR17]] = { nosync }
 ; CGSCC: attributes #[[ATTR18]] = { nounwind }
+;.
+; TUNIT: [[META0]] = !{}
+;.
+; CGSCC: [[META0]] = !{}
 ;.

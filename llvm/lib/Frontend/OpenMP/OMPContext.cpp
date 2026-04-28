@@ -61,11 +61,7 @@ OMPContext::OMPContext(bool IsDeviceCompilation, Triple TargetTriple,
     // Add the appropriate device architecture trait based on the triple.
 #define OMP_TRAIT_PROPERTY(Enum, TraitSetEnum, TraitSelectorEnum, Str)         \
   if (TraitSelector::TraitSelectorEnum == TraitSelector::target_device_arch) { \
-    if (TargetOffloadTriple.getArch() ==                                       \
-        TargetOffloadTriple.getArchTypeForLLVMName(Str))                       \
-      ActiveTraits.set(unsigned(TraitProperty::Enum));                         \
-    if (StringRef(Str) == "x86_64" &&                                          \
-        TargetOffloadTriple.getArch() == Triple::x86_64)                       \
+    if (TargetOffloadTriple.getArch() == Triple::parseArch(Str))               \
       ActiveTraits.set(unsigned(TraitProperty::Enum));                         \
   }
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
@@ -111,10 +107,7 @@ OMPContext::OMPContext(bool IsDeviceCompilation, Triple TargetTriple,
 #define OMP_TRAIT_PROPERTY(Enum, TraitSetEnum, TraitSelectorEnum, Str)         \
   if (TraitSelector::TraitSelectorEnum == TraitSelector::device_arch ||        \
       TraitSelector::TraitSelectorEnum == TraitSelector::target_device_arch) { \
-    if (TargetTriple.getArch() == TargetTriple.getArchTypeForLLVMName(Str))    \
-      ActiveTraits.set(unsigned(TraitProperty::Enum));                         \
-    if (StringRef(Str) == "x86_64" &&                                          \
-        TargetTriple.getArch() == Triple::x86_64)                              \
+    if (TargetTriple.getArch() == Triple::parseArch(Str))                      \
       ActiveTraits.set(unsigned(TraitProperty::Enum));                         \
   }
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
@@ -123,9 +116,8 @@ OMPContext::OMPContext(bool IsDeviceCompilation, Triple TargetTriple,
     //       The discussion on the list did not seem to have come to an agreed
     //       upon solution.
 
-    // LLVM is the "OpenMP vendor" but we could also interpret vendor as the
-    // target vendor.
-    ActiveTraits.set(unsigned(TraitProperty::implementation_vendor_llvm));
+  // AMD should be the "OpenMP Compiler vendor" for Rocmcc Unified compiler.
+  ActiveTraits.set(unsigned(TraitProperty::implementation_vendor_amd));
 
     // The user condition true is accepted but not false.
     ActiveTraits.set(unsigned(TraitProperty::user_condition_true));

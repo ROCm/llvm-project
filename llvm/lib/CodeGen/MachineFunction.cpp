@@ -20,6 +20,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
@@ -45,6 +46,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/Function.h"
@@ -63,6 +65,7 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/DOTGraphTraits.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
@@ -161,6 +164,21 @@ static inline Align getFnStackAlignment(const TargetSubtargetInfo &STI,
   return STI.getFrameLowering()->getStackAlign();
 }
 
+static FramePointerKind getFramePointerPolicy(const Function &F) {
+  Attribute FPAttr = F.getFnAttribute("frame-pointer");
+  if (!FPAttr.isValid())
+    return FramePointerKind::None;
+
+  StringRef FP = FPAttr.getValueAsString();
+  return StringSwitch<FramePointerKind>(FP)
+      .Case("all", FramePointerKind::All)
+      .Case("non-leaf", FramePointerKind::NonLeaf)
+      .Case("non-leaf-no-reserve", FramePointerKind::NonLeafNoReserve)
+      .Case("reserved", FramePointerKind::Reserved)
+      .Case("none", FramePointerKind::None)
+      .Default(FramePointerKind::None);
+}
+
 MachineFunction::MachineFunction(Function &F, const TargetMachine &Target,
                                  const TargetSubtargetInfo &STI, MCContext &Ctx,
                                  unsigned FunctionNum)
@@ -202,6 +220,7 @@ void MachineFunction::init() {
   FrameInfo = new (Allocator) MachineFrameInfo(
       getFnStackAlignment(STI, F), /*StackRealignable=*/CanRealignSP,
       /*ForcedRealign=*/ForceRealignSP && CanRealignSP);
+  FrameInfo->setFramePointerPolicy(getFramePointerPolicy(F));
 
   setUnsafeStackSize(F, *FrameInfo);
 
@@ -210,11 +229,6 @@ void MachineFunction::init() {
 
   ConstantPool = new (Allocator) MachineConstantPool(getDataLayout());
   Alignment = STI.getTargetLowering()->getMinFunctionAlignment();
-
-  // FIXME: Shouldn't use pref alignment if explicit alignment is set on F.
-  if (!F.hasOptSize())
-    Alignment = std::max(Alignment,
-                         STI.getTargetLowering()->getPrefFunctionAlignment());
 
   // -fsanitize=function and -fsanitize=kcfi instrument indirect function calls
   // to load a type hash before the function label. Ensure functions are aligned
@@ -239,9 +253,14 @@ void MachineFunction::init() {
     WasmEHInfo = new (Allocator) WasmEHFuncInfo();
   }
 
-  assert(Target.isCompatibleDataLayout(getDataLayout()) &&
-         "Can't create a MachineFunction using a Module with a "
-         "Target-incompatible DataLayout attached\n");
+  if (!Target.isCompatibleDataLayout(getDataLayout())) {
+    report_fatal_error(
+        formatv("Can't create a MachineFunction using a Module with a "
+                "Target-incompatible DataLayout attached\n  Target "
+                "DataLayout: {0}\n  Module DataLayout: {1}\n",
+                Target.createDataLayout().getStringRepresentation(),
+                getDataLayout().getStringRepresentation()));
+  }
 
   PSVManager = std::make_unique<PseudoSourceValueManager>(getTarget());
 }
@@ -330,10 +349,33 @@ bool MachineFunction::shouldSplitStack() const {
   return getFunction().hasFnAttribute("split-stack");
 }
 
+Align MachineFunction::getPreferredAlignment() const {
+  Align PrefAlignment;
+
+  if (MaybeAlign A = F.getPreferredAlignment())
+    PrefAlignment = *A;
+  else if (!F.hasOptSize())
+    PrefAlignment = STI.getTargetLowering()->getPrefFunctionAlignment();
+  else
+    PrefAlignment = Align(1);
+
+  return std::max(PrefAlignment, getAlignment());
+}
+
 [[nodiscard]] unsigned
 MachineFunction::addFrameInst(const MCCFIInstruction &Inst) {
   FrameInstructions.push_back(Inst);
   return FrameInstructions.size() - 1;
+}
+
+void MachineFunction::replaceFrameInstRegister(Register FromReg,
+                                               Register ToReg) {
+  const MCRegisterInfo *MCRI = Ctx.getRegisterInfo();
+  unsigned DwarfFromReg = MCRI->getDwarfRegNum(FromReg, false);
+  unsigned DwarfToReg = MCRI->getDwarfRegNum(ToReg, false);
+
+  for (MCCFIInstruction &Inst : FrameInstructions)
+    Inst.replaceRegister(DwarfFromReg, DwarfToReg);
 }
 
 /// This discards all of the MachineBasicBlock numbers and recomputes them.
@@ -375,7 +417,6 @@ void MachineFunction::RenumberBlocks(MachineBasicBlock *MBB) {
   // numbering, shrink MBBNumbering now.
   assert(BlockNo <= MBBNumbering.size() && "Mismatch!");
   MBBNumbering.resize(BlockNo);
-  MBBNumberingEpoch++;
 }
 
 int64_t MachineFunction::estimateFunctionSizeInBytes() {
@@ -700,6 +741,9 @@ bool MachineFunction::needsFrameMoves() const {
 }
 
 MachineFunction::CallSiteInfo::CallSiteInfo(const CallBase &CB) {
+  if (MDNode *Node = CB.getMetadata(llvm::LLVMContext::MD_call_target))
+    CallTarget = Node;
+
   // Numeric callee_type ids are only for indirect calls.
   if (!CB.isIndirectCall())
     return;
@@ -809,7 +853,7 @@ MCSymbol *MachineFunction::getJTISymbol(unsigned JTI, MCContext &Ctx,
   assert(JTI < JumpTableInfo->getJumpTables().size() && "Invalid JTI!");
 
   StringRef Prefix = isLinkerPrivate ? DL.getLinkerPrivateGlobalPrefix()
-                                     : DL.getPrivateGlobalPrefix();
+                                     : DL.getInternalSymbolPrefix();
   SmallString<60> Name;
   raw_svector_ostream(Name)
     << Prefix << "JTI" << getFunctionNumber() << '_' << JTI;
@@ -819,7 +863,7 @@ MCSymbol *MachineFunction::getJTISymbol(unsigned JTI, MCContext &Ctx,
 /// Return a function-local symbol to represent the PIC base.
 MCSymbol *MachineFunction::getPICBaseSymbol() const {
   const DataLayout &DL = getDataLayout();
-  return Ctx.getOrCreateSymbol(Twine(DL.getPrivateGlobalPrefix()) +
+  return Ctx.getOrCreateSymbol(Twine(DL.getInternalSymbolPrefix()) +
                                Twine(getFunctionNumber()) + "$pb");
 }
 
@@ -1063,8 +1107,8 @@ void MachineFunction::substituteDebugValuesForInst(const MachineInstr &Old,
 }
 
 auto MachineFunction::salvageCopySSA(
-    MachineInstr &MI, DenseMap<Register, DebugInstrOperandPair> &DbgPHICache)
-    -> DebugInstrOperandPair {
+    MachineInstr &MI, DenseMap<Register, SalvageCopySSAResult> &DbgPHICache)
+    -> SalvageCopySSAResult {
   const TargetInstrInfo &TII = *getSubtarget().getInstrInfo();
 
   // Check whether this copy-like instruction has already been salvaged into
@@ -1088,7 +1132,7 @@ auto MachineFunction::salvageCopySSA(
 }
 
 auto MachineFunction::salvageCopySSAImpl(MachineInstr &MI)
-    -> DebugInstrOperandPair {
+    -> SalvageCopySSAResult {
   MachineRegisterInfo &MRI = getRegInfo();
   const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
   const TargetInstrInfo &TII = *getSubtarget().getInstrInfo();
@@ -1119,8 +1163,8 @@ auto MachineFunction::salvageCopySSAImpl(MachineInstr &MI)
       SubReg = Cpy.getOperand(1).getSubReg();
     } else if (Cpy.isSubregToReg()) {
       OldReg = Cpy.getOperand(0).getReg();
-      NewReg = Cpy.getOperand(2).getReg();
-      SubReg = Cpy.getOperand(3).getImm();
+      NewReg = Cpy.getOperand(1).getReg();
+      SubReg = Cpy.getOperand(2).getImm();
     } else {
       auto CopyDetails = *TII.isCopyInstr(Cpy);
       const MachineOperand &Src = *CopyDetails.Source;
@@ -1186,7 +1230,8 @@ auto MachineFunction::salvageCopySSAImpl(MachineInstr &MI)
     for (auto &MO : Inst->all_defs()) {
       if (MO.getReg() != State.first)
         continue;
-      return ApplySubregisters({Inst->getDebugInstrNum(), MO.getOperandNo()});
+      return {ApplySubregisters({Inst->getDebugInstrNum(), MO.getOperandNo()}),
+              Inst};
     }
 
     llvm_unreachable("Vreg def with no corresponding operand?");
@@ -1206,8 +1251,9 @@ auto MachineFunction::salvageCopySSAImpl(MachineInstr &MI)
       if (!TRI.regsOverlap(RegToSeek, MO.getReg()))
         continue;
 
-      return ApplySubregisters(
-          {ToExamine.getDebugInstrNum(), MO.getOperandNo()});
+      return {
+          ApplySubregisters({ToExamine.getDebugInstrNum(), MO.getOperandNo()}),
+          &ToExamine};
     }
   }
 
@@ -1228,7 +1274,131 @@ auto MachineFunction::salvageCopySSAImpl(MachineInstr &MI)
   Builder.addReg(State.first);
   unsigned NewNum = getNewDebugInstrNum();
   Builder.addImm(NewNum);
-  return ApplySubregisters({NewNum, 0u});
+  return {ApplySubregisters({NewNum, 0u}), nullptr};
+}
+
+/// The Op operand to the DBG_INSTR_REF instruction DbgInstr is a virtual
+/// register defined by the REG_SEQUENCE instruction RegSeq. In order to
+/// finalize DbgInstr to use instruction references, find the defining
+/// instruction for each register in the sequence and compose them with a
+/// DIOpComposite.
+static bool finalizeInstrRefRegSequenceNew(
+    MachineInstr &DbgInstr, MachineOperand &Op, MachineInstr &RegSeq,
+    DenseMap<Register, MachineFunction::SalvageCopySSAResult> &DbgPHICache) {
+
+  const DIExpression *Expr = DbgInstr.getDebugExpression();
+  if (Expr->holdsOldElements())
+    return false;
+
+  auto &MF = *DbgInstr.getParent()->getParent();
+  auto &Ctx = Expr->getContext();
+  auto &TRI = *MF.getSubtarget().getRegisterInfo();
+  auto &TII = *MF.getSubtarget().getInstrInfo();
+  auto &DL = MF.getDataLayout();
+
+  struct Part {
+    MachineFunction::DebugInstrOperandPair DbgInstrNum;
+    unsigned Size;
+    unsigned Offset;
+  };
+  SmallVector<Part> Parts;
+
+  // Walk through the reg sequence, collecting debug-instr-numbers and
+  // subregister piece sizes and offsets into Parts.
+  for (unsigned I = 1; I < RegSeq.getNumOperands(); I += 2) {
+    Register RegOp = RegSeq.getOperand(I).getReg();
+    if (!RegOp.isVirtual())
+      return false;
+
+    unsigned SubReg = RegSeq.getOperand(I + 1).getImm();
+    unsigned SubSize = TRI.getSubRegIdxSize(SubReg);
+    unsigned SubOffset = TRI.getSubRegIdxOffset(SubReg);
+    MachineInstr &DefMI = *MF.getRegInfo().def_instr_begin(RegOp);
+
+    if (DefMI.isCopyLike() || TII.isCopyInstr(DefMI)) {
+      auto P = MF.salvageCopySSA(DefMI, DbgPHICache);
+      Parts.push_back({P.first, SubSize, SubOffset});
+      continue;
+    }
+
+    // Otherwise, identify the operand number that the VReg refers to.
+    unsigned OperandIdx = 0;
+    for (const auto &DefMO : DefMI.operands()) {
+      if (DefMO.isReg() && DefMO.isDef() && DefMO.getReg() == RegOp)
+        break;
+      ++OperandIdx;
+    }
+    assert(OperandIdx < DefMI.getNumOperands());
+
+    // Morph this instr ref to point at the given instruction and operand.
+    unsigned ID = DefMI.getDebugInstrNum();
+    MachineFunction::DebugInstrOperandPair P{ID, OperandIdx};
+    Parts.push_back({P, SubSize, SubOffset});
+  }
+
+  // Line up the Parts and make sure there aren't any gaps, DIOpComposite can't
+  // handle that easily.
+  std::sort(Parts.begin(), Parts.end(),
+            [](auto &LHS, auto &RHS) { return LHS.Offset < RHS.Offset; });
+  for (unsigned I = 1, E = Parts.size(); I < E; ++I)
+    if (Parts[I - 1].Offset + Parts[I - 1].Size != Parts[I].Offset)
+      return false;
+  if (Parts.empty() || Parts[0].Offset)
+    return false;
+
+  unsigned ArgNoToReplace = 0;
+  unsigned NumArgs = DbgInstr.getNumDebugOperands();
+  assert(NumArgs == Expr->getNewNumLocationOperands());
+  for (; ArgNoToReplace != NumArgs; ++ArgNoToReplace)
+    if (&DbgInstr.getDebugOperand(ArgNoToReplace) == &Op)
+      break;
+  if (ArgNoToReplace == NumArgs)
+    return false;
+
+  auto Elems = Expr->getNewElementsRef();
+  auto NewSize = TypeSize::getFixed(Parts.back().Offset + Parts.back().Size);
+  for (DIOp::Variant Elem : *Elems) {
+    // Only replace the argument with a composite if it has the same size as the
+    // parts.
+    if (auto *Arg = std::get_if<DIOp::Arg>(&Elem))
+      if (Arg->getIndex() == ArgNoToReplace &&
+          DL.getTypeSizeInBits(Arg->getResultType()) != NewSize)
+        return false;
+  }
+
+  Op.ChangeToDbgInstrRef(Parts[0].DbgInstrNum.first,
+                         Parts[0].DbgInstrNum.second);
+  if (Parts.size() == 1)
+    return true;
+
+  // Split up the DIOpArg using a DIOpComposite.
+  DIExprBuilder B{Ctx};
+  for (DIOp::Variant Elem : *Elems) {
+    auto *Arg = std::get_if<DIOp::Arg>(&Elem);
+    if (!Arg || Arg->getIndex() != ArgNoToReplace) {
+      B.append(Elem);
+      continue;
+    }
+    bool FirstPart = true;
+    for (const Part &P : Parts) {
+      // Since these arguments have to line up with the order of the operands on
+      // the DBG_INSTR_REF, recycle Arg's index first, it lines up with the Op
+      // that was ChangeToDbgInstrRef'd above.
+      unsigned ArgNo = FirstPart ? Arg->getIndex() : NumArgs++;
+      FirstPart = false;
+      B.append<DIOp::Arg>(ArgNo, IntegerType::get(Ctx, P.Size));
+    }
+    B.append<DIOp::Composite>(Parts.size(), Arg->getResultType());
+  }
+
+  auto *NewExpr = B.intoExpression();
+  for (const Part &P : drop_begin(Parts, 1))
+    DbgInstr.addOperand(MachineOperand::CreateDbgInstrRef(
+        P.DbgInstrNum.first, P.DbgInstrNum.second));
+  DbgInstr.getDebugExpressionOp().setMetadata(NewExpr);
+  assert(NewExpr->getNewNumLocationOperands() ==
+         DbgInstr.getNumDebugOperands());
+  return true;
 }
 
 void MachineFunction::finalizeDebugInstrRefs() {
@@ -1240,7 +1410,7 @@ void MachineFunction::finalizeDebugInstrRefs() {
     MI.setDebugValueUndef();
   };
 
-  DenseMap<Register, DebugInstrOperandPair> ArgDbgPHIs;
+  DenseMap<Register, SalvageCopySSAResult> ArgDbgPHIs;
   for (auto &MBB : *this) {
     for (auto &MI : MBB) {
       if (!MI.isDebugRef())
@@ -1248,7 +1418,8 @@ void MachineFunction::finalizeDebugInstrRefs() {
 
       bool IsValidRef = true;
 
-      for (MachineOperand &MO : MI.debug_operands()) {
+      for (unsigned I = 0; I < MI.getNumDebugOperands(); ++I) {
+        MachineOperand &MO = MI.getDebugOperand(I);
         if (!MO.isReg())
           continue;
 
@@ -1270,7 +1441,12 @@ void MachineFunction::finalizeDebugInstrRefs() {
         // for why this is important.
         if (DefMI.isCopyLike() || TII->isCopyInstr(DefMI)) {
           auto Result = salvageCopySSA(DefMI, ArgDbgPHIs);
-          MO.ChangeToDbgInstrRef(Result.first, Result.second);
+          if (!Result.second || !Result.second->isRegSequence() ||
+              !finalizeInstrRefRegSequenceNew(MI, MO, *Result.second,
+                                              ArgDbgPHIs))
+            MO.ChangeToDbgInstrRef(Result.first.first, Result.first.second);
+        } else if (DefMI.isRegSequence() &&
+                   finalizeInstrRefRegSequenceNew(MI, MO, DefMI, ArgDbgPHIs)) {
         } else {
           // Otherwise, identify the operand number that the VReg refers to.
           unsigned OperandIdx = 0;

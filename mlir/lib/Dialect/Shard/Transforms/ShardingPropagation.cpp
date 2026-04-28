@@ -153,7 +153,7 @@ getOrderedPossibleShardingAttrs(ArrayRef<Sharding> mustShardings,
 //     `annotate_for_users`.
 // 3. All other cases. Resharding is required for operands/results with
 //   annotation targeting explicitly this operation.
-ReshardingRquirementKind getReshardingRquirementKind(
+static ReshardingRquirementKind getReshardingRquirementKind(
     Operation *op, const std::vector<Sharding> &operandAndResultShardings) {
   ReshardingRquirementKind res = ReshardingRquirementKind::NO_RESHARDING;
 
@@ -167,7 +167,7 @@ ReshardingRquirementKind getReshardingRquirementKind(
 
   for (auto [operand, sharding] :
        llvm::zip_equal(op->getOperands(), operandShardings)) {
-    ShardOp shardOp = operand.getDefiningOp<ShardOp>();
+    ShardOp shardOp = llvm::dyn_cast_or_null<ShardOp>(operand.getDefiningOp());
     if (!shardOp) {
       continue;
     }
@@ -364,21 +364,30 @@ struct ShardingPropagation
     FunctionOpInterface funcOp = getOperation();
     MLIRContext *ctx = funcOp.getContext();
     Region &region = funcOp.getFunctionBody();
-    OpBuilder builder(ctx);
+
+    if (region.empty())
+      return;
+
+    Block &block = region.front();
+    // Nothing to propagate if there is no sharding annotation in the block.
+    if (block.getOps<shard::ShardOp>().empty())
+      return;
+
     if (!region.hasOneBlock()) {
       funcOp.emitOpError() << "only one block is supported!";
       return signalPassFailure();
     }
-    Block &block = region.front();
 
     LLVM_DEBUG(
         DBGS() << "print all the ops' iterator types and indexing maps in the "
                   "block.\n";
-        for (Operation &op : block.getOperations()) {
+        for (Operation &op
+             : block.getOperations()) {
           if (auto shardingOp = llvm::dyn_cast<ShardingInterface>(&op))
             shardingOp.printLoopTypesAndIndexingMaps(llvm::dbgs());
         });
 
+    OpBuilder builder(ctx);
     auto traverse = [&](auto &&range, OpBuilder &builder,
                         const char *order) -> bool {
       for (Operation &op : range) {

@@ -3,6 +3,7 @@
 
 set(SANITIZER_SOURCES_NOTERMINATION
   sanitizer_allocator.cpp
+  sanitizer_allocator_amdgpu.cpp
   sanitizer_common.cpp
   sanitizer_deadlock_detector1.cpp
   sanitizer_deadlock_detector2.cpp
@@ -87,6 +88,7 @@ set(SANITIZER_SYMBOLIZER_SOURCES
   sanitizer_stacktrace_printer.cpp
   sanitizer_stacktrace_sparc.cpp
   sanitizer_symbolizer.cpp
+  sanitizer_symbolizer_amdgpu.cpp
   sanitizer_symbolizer_libbacktrace.cpp
   sanitizer_symbolizer_libcdep.cpp
   sanitizer_symbolizer_mac.cpp
@@ -97,6 +99,7 @@ set(SANITIZER_SYMBOLIZER_SOURCES
   sanitizer_symbolizer_report_fuchsia.cpp
   sanitizer_symbolizer_win.cpp
   sanitizer_thread_history.cpp
+  sanitizer_unwind_aix.cpp
   sanitizer_unwind_linux_libcdep.cpp
   sanitizer_unwind_fuchsia.cpp
   sanitizer_unwind_win.cpp
@@ -192,6 +195,7 @@ set(SANITIZER_IMPL_HEADERS
   sanitizer_stoptheworld.h
   sanitizer_suppressions.h
   sanitizer_symbolizer.h
+  sanitizer_symbolizer_amdgpu.h
   sanitizer_symbolizer_markup_constants.h
   sanitizer_symbolizer_internal.h
   sanitizer_symbolizer_libbacktrace.h
