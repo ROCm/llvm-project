@@ -9,7 +9,7 @@
 if (FLANG_RT_ENABLE_STATIC OR FLANG_RT_ENABLE_SHARED)
   add_subdirectory(quadmath)
   add_subdirectory(runtime)
-  add_subdirectory(amd)
+  add_subdirectory(openmp)
   if (FLANG_RT_INCLUDE_CUF)
     add_subdirectory(cuda)
   endif()

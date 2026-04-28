@@ -1,4 +1,4 @@
-//===-- lib/amd/amd_alloc.cpp -----------------------------------*- C++ -*-===//
+//===-- lib/openmp/omp_alloc.cpp ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,11 +8,11 @@
 
 #define ALLOC_DEBUG 1
 
-#include "flang/Runtime/AMD/amd_alloc.h"
+#include "flang/Runtime/OpenMP/omp_alloc.h"
 #include "flang-rt/runtime/allocator-registry.h"
 #include "flang-rt/runtime/descriptor.h"
 #include "flang-rt/runtime/terminator.h"
-#include "flang/Runtime/AMD/amd_util.h"
+#include "flang/Runtime/OpenMP/omp_util.h"
 #include "flang/Support/Fortran.h"
 #include <algorithm>
 #include <cstdio>
@@ -21,7 +21,7 @@
 #include <limits>
 #include <string_view>
 
-namespace Fortran::runtime::amd {
+namespace Fortran::runtime::omp {
 
 static bool debugEnabled;
 
@@ -43,7 +43,7 @@ static PointerDeviceMap allocDeviceMap;
 static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 #if ALLOC_DEBUG
   if (debugEnabled) {
-    std::fprintf(stderr, "[AMD_ALLOC] %s(%zu) (%s:%d)\n", __PRETTY_FUNCTION__,
+    std::fprintf(stderr, "[OMP_ALLOC] %s(%zu) (%s:%d)\n", __PRETTY_FUNCTION__,
         AllocationSize, __FILE__, __LINE__);
   }
 #endif
@@ -55,7 +55,7 @@ static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 #if ALLOC_DEBUG
   if (debugEnabled) {
     std::fprintf(stderr,
-        "[AMD_ALLOC] pointer of size %zu allocated at %p"
+        "[OMP_ALLOC] pointer of size %zu allocated at %p"
         " on device %d.\n",
         AllocationSize, pointer, device);
   }
@@ -71,7 +71,7 @@ static void OpenMPFree(void *pointer) {
   }
 #if ALLOC_DEBUG
   if (debugEnabled) {
-    std::fprintf(stderr, "[AMD_ALLOC] %s(%p) device %d (%s:%d)\n",
+    std::fprintf(stderr, "[OMP_ALLOC] %s(%p) device %d (%s:%d)\n",
         __PRETTY_FUNCTION__, pointer, device, __FILE__, __LINE__);
   }
 #endif
@@ -82,7 +82,7 @@ static void registerOpenMPAllocator() {
 #if ALLOC_DEBUG
   if (debugEnabled) {
     std::fprintf(
-        stderr, "[AMD_ALLOC] registering OpenMP device memory allocator\n");
+        stderr, "[OMP_ALLOC] registering OpenMP device memory allocator\n");
   }
 #endif // ALLOC_DEBUG
   allocatorRegistry.Register(1, {&OpenMPAlloc, &OpenMPFree});
@@ -127,21 +127,21 @@ static std::pair<std::string_view, std::string_view> splitAtColon(
 }
 
 extern "C" {
-void RTDEF(AMDRegisterAllocator)() {
+void RTDEF(OpenMPRegisterAllocator)() {
 #if ALLOC_DEBUG
   debugEnabled = false;
-  if (getIntFromEnvironment("AMD_ALLOC_DEBUG", 0) != 0) {
+  if (getIntFromEnvironment("OMP_ALLOC_DEBUG", 0) != 0) {
     debugEnabled = true;
   }
   if (debugEnabled) {
-    std::fprintf(stderr, "[AMD_ALLOC] %s (%s:%d)\n", __PRETTY_FUNCTION__,
+    std::fprintf(stderr, "[OMP_ALLOC] %s (%s:%d)\n", __PRETTY_FUNCTION__,
         __FILE__, __LINE__);
   }
 #endif
 
   // Determine what allocator to register via very simplistic parsing of syntax
   // ALLOCATOR:MEMORY_KIND.  Proper values are: OPENMP
-  const char *allocator_env = getStringFromEnvironment("AMD_ALLOC", "openmp");
+  const char *allocator_env = getStringFromEnvironment("OMP_ALLOC", "openmp");
   char allocator[256];
   std::strncpy(allocator, allocator_env, sizeof(allocator) - 1);
   allocator[sizeof(allocator) - 1] = '\0';
@@ -149,22 +149,22 @@ void RTDEF(AMDRegisterAllocator)() {
     *p = ::toupper(*p);
 #if ALLOC_DEBUG
   if (debugEnabled) {
-    std::fprintf(stderr, "[AMD_ALLOC] requesting allocator: %s\n", allocator);
+    std::fprintf(stderr, "[OMP_ALLOC] requesting allocator: %s\n", allocator);
   }
 #endif // ALLOC_DEBUG
   std::pair<std::string_view, std::string_view> allocSpec{
       splitAtColon(allocator)};
   if (allocSpec.first != "OPENMP") {
     std::fprintf(stderr,
-        "[AMD_ALLOC] warning: wrong allocator ('%.*s') specified for AMD "
-        "allocator, using 'OPENMP' instead.\n",
+        "[OMP_ALLOC] warning: wrong allocator ('%.*s') specified, "
+        "using 'OPENMP' instead.\n",
         static_cast<int>(allocSpec.first.size()), allocSpec.first.data());
     allocSpec.first = "OPENMP";
   }
   if (allocSpec.first == "OPENMP") {
     if (!allocSpec.second.empty()) {
       std::fprintf(stderr,
-          "[AMD_ALLOC] warning: OpenMP allocator does not "
+          "[OMP_ALLOC] warning: OpenMP allocator does not "
           "accept allocator option type '%.*s'.\n",
           static_cast<int>(allocSpec.second.size()), allocSpec.second.data());
     }
@@ -172,12 +172,12 @@ void RTDEF(AMDRegisterAllocator)() {
   }
 }
 
-void RTDEF(AMDAllocatableSetAllocIdx)(Descriptor &descriptor, int pos) {
+void RTDEF(OpenMPAllocatableSetAllocIdx)(Descriptor &descriptor, int pos) {
   if (descriptor.IsAllocatable() && !descriptor.IsAllocated()) {
 #if ALLOC_DEBUG
     if (debugEnabled) {
       std::fprintf(
-          stderr, "[AMD_ALLOC] AMDAllocatableSetAllocIdx = %d \n", pos);
+          stderr, "[OMP_ALLOC] OpenMPAllocatableSetAllocIdx = %d \n", pos);
     }
 #endif
     descriptor.SetAllocIdx(pos);
@@ -185,4 +185,4 @@ void RTDEF(AMDAllocatableSetAllocIdx)(Descriptor &descriptor, int pos) {
 }
 } // extern "C"
 
-} // namespace Fortran::runtime::amd
+} // namespace Fortran::runtime::omp

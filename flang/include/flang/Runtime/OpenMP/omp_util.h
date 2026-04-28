@@ -1,4 +1,4 @@
-//===-- include/flang/Runtime/AMD/amd_util.h --------------------*- C++ -*-===//
+//===-- include/flang/Runtime/OpenMP/omp_util.h -----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef FORTRAN_RUNTIME_AMD_UTIL_H_
-#define FORTRAN_RUNTIME_AMD_UTIL_H_
+#ifndef FORTRAN_RUNTIME_OMP_UTIL_H_
+#define FORTRAN_RUNTIME_OMP_UTIL_H_
 
 #include <cstddef>
 
-namespace Fortran::runtime::amd {
+namespace Fortran::runtime::omp {
 
 // A simple thread-safe map from pointer to integer value (e.g. device ID).
 // Implemented as a dynamically-grown array with linear search to avoid
@@ -41,6 +41,6 @@ private:
   std::size_t capacity_{0};
 };
 
-} // namespace Fortran::runtime::amd
+} // namespace Fortran::runtime::omp
 
-#endif // FORTRAN_RUNTIME_AMD_UTIL_H_
+#endif // FORTRAN_RUNTIME_OMP_UTIL_H_

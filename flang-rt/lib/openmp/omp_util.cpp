@@ -1,4 +1,4 @@
-//===-- lib/amd/amd_util.cpp ------------------------------------*- C++ -*-===//
+//===-- lib/openmp/omp_util.cpp ----------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "flang/Runtime/AMD/amd_util.h"
+#include "flang/Runtime/OpenMP/omp_util.h"
 #include "flang-rt/runtime/lock.h"
 #include "flang-rt/runtime/terminator.h"
 #include <cstdlib>
 #include <cstring>
 
-namespace Fortran::runtime::amd {
+namespace Fortran::runtime::omp {
 
 static constexpr std::size_t initialCapacity{256};
 
@@ -58,4 +58,4 @@ void PointerDeviceMap::dump() const {
   }
 }
 
-} // namespace Fortran::runtime::amd
+} // namespace Fortran::runtime::omp
