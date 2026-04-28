@@ -10,7 +10,6 @@
 #define FORTRAN_RUNTIME_AMD_UTIL_H_
 
 #include <cstddef>
-#include <cstdlib>
 
 namespace Fortran::runtime::amd {
 
@@ -19,8 +18,6 @@ namespace Fortran::runtime::amd {
 // pulling in C++ runtime dependencies via std::unordered_map.
 class PointerDeviceMap {
 public:
-  ~PointerDeviceMap() { std::free(entries_); }
-
   // Record that |pointer| is associated with |device|.
   void insert(void *pointer, int device);
 

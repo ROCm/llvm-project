@@ -8,6 +8,7 @@
 
 #include "flang/Runtime/AMD/amd_util.h"
 #include "flang-rt/runtime/lock.h"
+#include "flang-rt/runtime/terminator.h"
 #include <cstdlib>
 #include <cstring>
 
@@ -22,7 +23,8 @@ void PointerDeviceMap::grow() {
   Entry *newEntries =
       static_cast<Entry *>(std::realloc(entries_, newCapacity * sizeof(Entry)));
   if (!newEntries) {
-    return; // allocation failed; caller will cope
+    Terminator{__FILE__, __LINE__}.Crash(
+        "PointerDeviceMap: realloc failed (capacity %zu)", newCapacity);
   }
   entries_ = newEntries;
   capacity_ = newCapacity;
@@ -32,9 +34,6 @@ void PointerDeviceMap::insert(void *pointer, int device) {
   CriticalSection guard(pointerDeviceMapLock);
   if (count_ == capacity_) {
     grow();
-    if (count_ == capacity_) {
-      return; // grow failed
-    }
   }
   entries_[count_++] = {pointer, device};
 }
