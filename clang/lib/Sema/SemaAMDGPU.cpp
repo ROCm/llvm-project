@@ -16,6 +16,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/Basic/DiagnosticFrontend.h"
 #include "clang/Basic/DiagnosticSema.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
@@ -1006,6 +1007,9 @@ bool DiagnoseUnguardedBuiltins::TraverseGuardedStmt(Stmt *S, CallExpr *P) {
 }
 
 bool DiagnoseUnguardedBuiltins::VisitAsmStmt(AsmStmt *ASM) {
+  // TODO: drop once ROCm HIP headers add is_invocable guards.
+  if (SemaRef.getSourceManager().isInSystemHeader(ASM->getAsmLoc()))
+    return true;
   // TODO: should we check if the ASM is valid for the target? Can we?
   if (!CurrentGFXIP.empty())
     return true;
@@ -1018,6 +1022,10 @@ bool DiagnoseUnguardedBuiltins::VisitAsmStmt(AsmStmt *ASM) {
 }
 
 bool DiagnoseUnguardedBuiltins::VisitCallExpr(CallExpr *CE) {
+  // TODO: drop once ROCm HIP headers add is_invocable guards.
+  if (SemaRef.getSourceManager().isInSystemHeader(CE->getExprLoc()))
+    return true;
+
   unsigned ID = CE->getBuiltinCallee();
   Builtin::Context &BInfo = SemaRef.getASTContext().BuiltinInfo;
 
