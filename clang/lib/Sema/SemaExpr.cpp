@@ -13946,9 +13946,9 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
       return QualType();
 
     if (LHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
-      LHS = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(LHS.get()));
+      LHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(LHS.get());
     if (RHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
-      RHS = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(RHS.get()));
+      RHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(RHS.get());
 
     if (!LHS.get()->getType()->isScalarType() ||
         !RHS.get()->getType()->isScalarType())
@@ -16365,7 +16365,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
         break;
       } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
         resultType = Context.getLogicalOperationType();
-        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
+        Input = AMDGPU().ExpandAMDGPUPredicateBuiltIn(InputExpr);
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -21235,7 +21235,7 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
 
   if (!E->isTypeDependent()) {
     if (E->getType() == Context.AMDGPUFeaturePredicateTy)
-      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
+      return AMDGPU().ExpandAMDGPUPredicateBuiltIn(E);
 
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4
