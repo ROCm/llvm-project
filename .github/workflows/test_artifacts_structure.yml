@@ -69,10 +69,19 @@ jobs:
       #Temporary block to merge the PR-4897
       - name: Apply PR 4897 if not yet merged
         run: |
-          git fetch origin refs/pull/4897/head:pr-4897 2>/dev/null && \
-          ! git merge-base --is-ancestor pr-4897 HEAD 2>/dev/null && \
-          git cherry-pick --no-commit pr-4897 || \
-          echo "PR 4897 already merged or not available — skipping"
+          THEROCK_URL="https://github.com/ROCm/TheRock.git"
+          if git fetch "$THEROCK_URL" refs/pull/4897/head:pr-4897 2>/dev/null; then
+            if git merge-base --is-ancestor pr-4897 HEAD 2>/dev/null; then
+              echo "PR #4897 is already merged — skipping"
+            else
+              echo "PR #4897 is open and not yet merged — cherry-picking"
+              git config --global user.email "z1-cciauto@amd.com"
+              git config --global user.name "Z1 cciauto"
+              git cherry-pick --no-commit pr-4897
+            fi
+          else
+            echo "PR #4897 ref not available — skipping"
+          fi
 
       - name: Setting up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
