@@ -4,10 +4,12 @@
 ! RUN: %flang -### -S -fopenmp-default-allocate=gpu %s -o - 2>&1 | FileCheck %s --check-prefix=GPU
 ! RUN: %flang -### -S -fopenmp-default-allocate=host %s -o - 2>&1 | FileCheck %s --check-prefix=HOST
 
+! GPU: warning: -fopenmp-default-allocate= is an experimental feature
 ! GPU: "-fc1"
 ! GPU-SAME: "-fopenmp-default-allocate=gpu"
 ! GPU-SAME: "-mmlir" "-use-alloc-runtime"
 
+! HOST: warning: -fopenmp-default-allocate= is an experimental feature
 ! HOST: "-fc1"
 ! HOST-SAME: "-fopenmp-default-allocate=host"
 ! HOST-NOT: "-mmlir"

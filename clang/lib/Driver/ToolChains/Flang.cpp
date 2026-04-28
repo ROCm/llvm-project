@@ -1096,6 +1096,7 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
     if (Val != "gpu" && Val != "host") {
       D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
     } else {
+      D.Diag(diag::warn_openmp_default_allocate_experimental);
       CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
       if (Val == "gpu") {
         CmdArgs.push_back("-mmlir");
