@@ -399,18 +399,23 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
 
   uint64_t TextEnd = textOffset() + textSize();
 
-  // Pad TrampTotal to the maximum alignment of post-.text SHF_ALLOC sections
-  // so that shifting their virtual addresses preserves sh_addralign invariants.
+  // Pad TrampTotal to the maximum alignment of all post-.text sections so
+  // that shifting file offsets preserves sh_addralign invariants. The
+  // sh_addr update in adjustSectionHeaders is still gated on SHF_ALLOC.
   uint64_t MaxPostTextAlign = 1;
   for (const ELFT::Shdr &Shdr : Sections) {
-    if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
-      continue;
     if (Shdr.sh_offset <= textOffset())
       continue;
     if (Shdr.sh_addralign > MaxPostTextAlign)
       MaxPostTextAlign = Shdr.sh_addralign;
   }
   size_t PaddedTrampTotal = llvm::alignTo(TrampTotal, MaxPostTextAlign);
+  if (PaddedTrampTotal > SIZE_MAX - InputSize) {
+    log() << "hotswap: error: growWithTrampolines: padded trampoline bytes ("
+          << PaddedTrampTotal << ") + ELF size (" << InputSize
+          << ") overflow size_t.\n";
+    return nullptr;
+  }
   size_t PadBytes = PaddedTrampTotal - TrampTotal;
 
   const size_t NewSize = InputSize + PaddedTrampTotal;
