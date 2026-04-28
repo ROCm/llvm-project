@@ -88,7 +88,7 @@ jobs:
               echo "PR #4897 is open and not yet merged — cherry-picking"
               git config --global user.email "z1-cciauto@amd.com"
               git config --global user.name "Z1 cciauto"
-              git cherry-pick --no-commit pr-4897
+              git merge --no-edit --no-commit pr-4897
             fi
           else
             echo "PR #4897 ref not available — skipping"
