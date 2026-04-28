@@ -18,11 +18,12 @@
 /// Covered instructions (implementation order):
 ///   1. v_cvt_pk_fp8_f32  — F32 pack to FP8 (this file, done)
 ///   2. v_cvt_sr_fp8_f32  — F32 stochastic-round to FP8 (done)
-///   3. v_cvt_f32_fp8     — FP8 unpack to F32 (future)
+///   3. v_cvt_f32_fp8     — FP8 unpack to F32 (done)
 ///
 /// Design documents:
 ///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_pk_fp8_f32.md
 ///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_sr_fp8_f32.md
+///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_f32_fp8.md
 ///
 //===----------------------------------------------------------------------===//
 
@@ -73,6 +74,31 @@ static std::string stripModifiers(StringRef Op) {
   if (Op.starts_with("|") && Op.ends_with("|"))
     Op = Op.drop_front(1).drop_back(1);
   return Op.str();
+}
+
+/// Parse the printed operands of a 2-operand instruction.  Expects MCInst-
+/// Printer output shaped like "  mnemonic dst, src0 [modifiers...]".
+/// Returns true on success and fills \p Dst, \p Src0 with the trimmed
+/// operand strings.  Trailing modifiers (byte_sel, clamp, etc.) are stripped
+/// from Src0.
+static bool parseTwoOperands(const MCInst &Inst, const LLVMState &LS,
+                             std::string &Dst, std::string &Src0) {
+  std::string Buf;
+  raw_string_ostream OS(Buf);
+  LS.MCIP->printInst(&Inst, 0, "", *LS.STI, OS);
+
+  StringRef S = StringRef(Buf).ltrim();
+  auto [Mnem, Rest] = S.split(' ');
+  Rest = Rest.ltrim();
+
+  SmallVector<StringRef, 4> Parts;
+  Rest.split(Parts, ',');
+  if (Parts.size() < 2)
+    return false;
+
+  Dst = Parts[0].trim().str();
+  Src0 = Parts[1].trim().split(' ').first.str();
+  return !Dst.empty() && !Src0.empty();
 }
 
 /// Parse the printed operands of a 3-operand instruction.  Expects MCInst-
@@ -416,6 +442,146 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 }
 
 // ---------------------------------------------------------------------------
+// v_cvt_f32_fp8 patch  (Case 1, instruction 3)
+// ---------------------------------------------------------------------------
+
+/// Patch a CLAMP=1 `v_cvt_f32_fp8` (UE5M3 → F32 unpack).
+///
+/// The unpack path extracts a UE5M3 byte from the source VGPR (position
+/// selected by OPSEL[1:0]), converts it to F32 via a left-shift-7 → F16 →
+/// F32 pipeline, and applies fixups for the exponent-31 octave (bytes
+/// 0xF8–0xFE) and UE5M3 NaN (byte 0xFF).  See design doc v_cvt_f32_fp8.md
+/// §3–§5 for the full rationale.
+///
+/// Only VOP3 (_e64) encoding can carry CLAMP=1; VOP1 has no CLAMP bit and
+/// is skipped.  No source modifiers exist on this instruction (OPF_NOABS,
+/// OPF_NONEG) so no modifier forwarding is needed.
+///
+/// Scratch: 2 VGPRs (Out + Tmp), 2 SGPRs (s0 for NaN flag, s1 for exp-31).
+static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
+  const InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  // VOP1 (4 bytes) has no CLAMP bit; only VOP3 (8 bytes) needs patching.
+  if (DI.Size != 8)
+    return 0;
+
+  const uint8_t *Raw = Ctx.Text + DI.Offset;
+  bool Clamp = (Raw[1] >> 7) & 1;
+  if (!Clamp)
+    return 0;
+
+  // OPSEL[1:0] at dword 0 bits [12:11] (byte 1 bits [4:3]).
+  // Reversed mapping: byte_sel = OPSEL[0]*2 + OPSEL[1].
+  unsigned Opsel1 = (Raw[1] >> 4) & 1;
+  unsigned Opsel0 = (Raw[1] >> 3) & 1;
+  unsigned ByteSel = Opsel0 * 2 + Opsel1;
+
+  std::string VdstStr, Src0Str;
+  if (!parseTwoOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str)) {
+    log() << "hotswap: error: cvt_f32_fp8: failed to parse operands at "
+          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string KernelName =
+      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
+  std::optional<unsigned> KdVgprs =
+      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
+  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
+
+  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+                         Ctx.Config.MaxVgprs);
+
+  // 2 scratch VGPRs: Out (byte extraction → F16 path → result),
+  // Tmp (exp-31 direct construction + NaN constant).
+  std::optional<unsigned> Out = Alloc.alloc();
+  std::optional<unsigned> Tmp = Alloc.alloc();
+  if (!Out || !Tmp) {
+    log() << "hotswap: error: cvt_f32_fp8: unable to allocate 2 scratch "
+          << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string OutName = vgprName(*Out);
+  std::string TmpName = vgprName(*Tmp);
+
+  std::string Asm;
+  raw_string_ostream AsmOS(Asm);
+
+  // --- Byte extraction (byte_sel known at patch time) ---
+  switch (ByteSel) {
+  case 0:
+    AsmOS << "v_and_b32 " << OutName << ", 0xFF, " << Src0Str << "\n";
+    break;
+  case 1:
+    AsmOS << "v_bfe_u32 " << OutName << ", " << Src0Str << ", 8, 8\n";
+    break;
+  case 2:
+    AsmOS << "v_bfe_u32 " << OutName << ", " << Src0Str << ", 16, 8\n";
+    break;
+  case 3:
+    AsmOS << "v_lshrrev_b32 " << OutName << ", 24, " << Src0Str << "\n";
+    break;
+  }
+
+  // --- NaN detection (byte == 0xFF) ---
+  AsmOS << "v_cmp_eq_u32 0xFF, " << OutName << "\n";
+  AsmOS << "s_mov_b32 s0, vcc_lo\n";
+
+  // --- Exp-31 detection (byte >= 0xF8) ---
+  AsmOS << "v_cmp_lt_u32 0xF7, " << OutName << "\n";
+  AsmOS << "s_mov_b32 s1, vcc_lo\n";
+
+  // --- Exp-31 direct F32 construction ---
+  AsmOS << "v_and_b32 " << TmpName << ", 0x07, " << OutName << "\n";
+  AsmOS << "v_lshlrev_b32 " << TmpName << ", 20, " << TmpName << "\n";
+  AsmOS << "v_or_b32 " << TmpName << ", 0x47800000, " << TmpName << "\n";
+
+  // --- F16 base path (handles bytes 0x00–0xF7 correctly) ---
+  AsmOS << "v_lshlrev_b32 " << OutName << ", 7, " << OutName << "\n";
+  AsmOS << "v_cvt_f32_f16 " << OutName << ", " << OutName << "\n";
+
+  // --- Select exp-31 fixup ---
+  AsmOS << "s_mov_b32 vcc_lo, s1\n";
+  AsmOS << "v_cndmask_b32 " << OutName << ", " << OutName << ", " << TmpName
+        << "\n";
+
+  // --- NaN override (byte 0xFF → hardware qNaN 0x7FA3D000) ---
+  AsmOS << "s_mov_b32 vcc_lo, s0\n";
+  AsmOS << "v_mov_b32 " << TmpName << ", 0x7FA3D000\n";
+  AsmOS << "v_cndmask_b32 " << VdstStr << ", " << OutName << ", " << TmpName
+        << "\n";
+
+  SmallVector<uint8_t> ReplacementBytes = assembleSingleInst(Asm, Ctx.LS);
+  if (ReplacementBytes.empty()) {
+    log() << "hotswap: error: cvt_f32_fp8: assembly failed for "
+          << "replacement at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+    return 0;
+
+  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
+  unsigned Extra = Alloc.extraVgprsNeeded();
+  if (Extra > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = Extra;
+  Stats.ScratchReused += 2 - Extra;
+  Stats.ScratchAboveKd += Extra;
+
+  ScratchPatchInfo Info;
+  Info.Offset = DI.Offset;
+  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Ctx.OutScratchPatches.push_back(std::move(Info));
+
+  log() << "hotswap: cvt_f32_fp8: patched CLAMP=1 (E5M3) at offset 0x"
+        << utohexstr(DI.Offset) << " (" << ReplacementBytes.size()
+        << " bytes, scratch v" << *Out << "/v" << *Tmp
+        << ", byte_sel=" << ByteSel << ")\n";
+
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
 // applyScratchPatches — strong override
 // ---------------------------------------------------------------------------
 
@@ -427,6 +593,13 @@ uint32_t applyScratchPatches(PatchContext &Ctx, size_t Idx) {
 
   if (Mnem == "v_cvt_sr_fp8_f32")
     return patchCvtSrFp8F32(Ctx, Idx);
+
+  // VOP1 mnemonic is "v_cvt_f32_fp8"; VOP3 may append "_e64" or other
+  // suffixes depending on the LLVM build.  Use starts_with to match all
+  // encoding variants; the Size and CLAMP checks inside patchCvtF32Fp8
+  // filter out non-VOP3 and non-CLAMP forms.
+  if (Mnem.starts_with("v_cvt_f32_fp8"))
+    return patchCvtF32Fp8(Ctx, Idx);
 
   return 0;
 }
