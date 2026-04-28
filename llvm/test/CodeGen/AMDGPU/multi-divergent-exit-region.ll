@@ -69,8 +69,7 @@
 ; GCN: s_cbranch_execz
 
 ; GCN: ; %LeafBlock
-; GCN: v_cmp_eq_u32_e32 vcc, 1,
-; GCN: s_or_b64
+; GCN: v_cmp_eq_u32_e{{32|64}} {{vcc|s\[[0-9]+:[0-9]+\]}}, 1,
 ; GCN: s_xor_b64
 
 ; Second reconverge
@@ -371,7 +370,7 @@ exit1:                                     ; preds = %LeafBlock, %LeafBlock1
 ; GCN: v_cmp_{{eq|ne}}_u32_e32 vcc, {{3|7}}, v0
 
 ; GCN: ; %LeafBlock1
-; GCN: v_cmp_{{eq|ne}}_u32_e32 vcc, {{3|7}}, v0
+; GCN: v_cmp_{{eq|ne}}_u32_e{{32|64}} {{vcc|s\[[0-9]+:[0-9]+\]}}, {{3|7}}, v0
 
 ; GCN: s_xor_b64
 ; GCN: s_mov_b64 exec
