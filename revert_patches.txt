@@ -5,15 +5,18 @@ rocwmma and CK needs changes
 breaks build of hipblaslt
 [AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
 ---
-breaks smoke*
-[Reland][IR] Add initial support for the byte type (#186888)
----
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
 ---
 needs SPIRV/COMGR
 18e695890306 [SPIRV][AMDGPU][clang][CodeGen][opt] Add late-resolved 
 ---
-breaks build of runtime
-Revert "[compiler-rt] Enable minimal ubsan for GPU targets (#188289)
+breaks build of llvm
+[clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
+---
+breaks reduction_teams aomp_mappings_newrt
+[Offload] Make kernel dynamic memory handling more generic (#194403)
+---
+breaks smoke, smoke-fort-limbo
+[Clang] Emit LLVM flatten attribute instead of per-callsite alwaysinline (#188615)
 ---

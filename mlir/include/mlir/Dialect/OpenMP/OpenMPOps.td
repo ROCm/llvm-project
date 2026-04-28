@@ -357,6 +357,36 @@ def SingleOp : OpenMP_Op<"single", traits = [
   let hasVerifier = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Scope Construct (OpenMP 5.1)
+//===----------------------------------------------------------------------===//
+
+def ScopeOp
+    : OpenMP_Op<"scope", traits = [AttrSizedOperandSegments],
+                clauses = [OpenMP_AllocateClause, OpenMP_NowaitClause,
+                           OpenMP_PrivateClause, OpenMP_ReductionClause],
+                singleRegion = true> {
+  let summary = "scope directive";
+  let description = [{
+    The scope construct defines a structured block that is executed by all
+    threads in the current team, providing a lexical scope for
+    privatization. An implicit barrier occurs at the end of the region
+    unless the `nowait` clause is present.
+
+    Introduced in OpenMP 5.1.
+  }]#clausesDescription;
+
+  let builders = [OpBuilder<(ins CArg<"const ScopeOperands &">:$clauses)>];
+
+  let assemblyFormat = clausesAssemblyFormat#[{
+    custom<PrivateReductionRegion>($region, $private_vars, type($private_vars),
+        $private_syms, $private_needs_barrier, $reduction_mod, $reduction_vars,
+        type($reduction_vars), $reduction_byref, $reduction_syms) attr-dict
+  }];
+
+  let hasVerifier = 1;
+}
+
 //===---------------------------------------------------------------------===//
 // OpenMP Canonical Loop Info Creation
 //===---------------------------------------------------------------------===//
@@ -1017,7 +1047,9 @@ def TaskloopContextOp : OpenMP_Op<"taskloop.context", traits = [
     ```
 
     The wrapped `omp.loop_nest` lower bounds, upper bounds and steps must be
-    defined outside of the `omp.taskloop.context` region.
+    either defined outside of the `omp.taskloop.context` region or produced by
+    pure, regionless operations inside the region that do not depend on block
+    arguments.
 
     For definitions of "undeferred task", "included task", "final task" and
     "mergeable task", please check OpenMP Specification.
@@ -2222,6 +2254,26 @@ def AllocateDirOp : OpenMP_Op<"allocate_dir", [AttrSizedOperandSegments], clause
 }
 
 //===----------------------------------------------------------------------===//
+// AllocateFreeOp
+//===----------------------------------------------------------------------===//
+
+def AllocateFreeOp : OpenMP_Op<"allocate_free", [AttrSizedOperandSegments],
+    clauses = [OpenMP_AllocatorClause]> {
+  let summary = "free-op paired with allocate directive";
+  let description = [{
+    At the end of the scope each list item allocated using allocate directive
+    should be deallocated(using this free operation).
+  }] # clausesDescription;
+
+  let arguments = !con((ins Variadic<AnyType>:$varList),
+                       clausesArgs);
+
+  let assemblyFormat = " `(` $varList `:` type($varList) `)` oilist(" #
+                       clausesOptAssemblyFormat #
+                       ") attr-dict ";
+}
+
+//===----------------------------------------------------------------------===//
 // TargetAllocMemOp
 //===----------------------------------------------------------------------===//
 
@@ -2307,14 +2359,10 @@ def TargetFreeMemOp : OpenMP_Op<"target_freemem",
 
 def AllocSharedMemOp : OpenMP_Op<"alloc_shared_mem", traits = [
     MemoryEffects<[MemAlloc<DefaultResource>]>
+  ], clauses = [
+    OpenMP_MemAllocationSizeClause
   ]> {
   let summary = "allocate storage on shared memory for objects of a given type";
-
-  let arguments = (ins
-    TypeAttr:$elem_type,
-    AnySignlessInteger:$array_size,
-    ConfinedAttr<OptionalAttr<I64Attr>, [IntPositive]>:$alignment
-  );
 
   let description = [{
     Allocates memory shared across threads of a team for an object of the given
@@ -2324,27 +2372,18 @@ def AllocSharedMemOp : OpenMP_Op<"alloc_shared_mem", traits = [
 
     ```mlir
       // Allocate an i32 vector with %size elements and aligned to 8 bytes.
-      %ptr_shared = omp.alloc_shared_mem %size x i32 {alignment = 8} : (i64) -> (!llvm.ptr)
+      %ptr_shared = omp.alloc_shared_mem %size x i32 : (i64) align(8) -> !llvm.ptr
       // ...
-      omp.free_shared_mem %ptr_shared : !llvm.ptr
+      omp.free_shared_mem [%size x i32 : (i64) align(8)] %ptr_shared : !llvm.ptr
     ```
-
-    The `elem_type` is the type of the object for which memory is being
-    allocated.
-
-    The `array_size` is the number of objects to allocate memory for.
-
-    The optional `alignment` is used to specify the alignment for each element.
-    If not set, the `DataLayout` defaults will be used instead.
-  }];
+  }] # clausesDescription;
 
   let results = (outs OpenMP_PointerLikeType);
-  let assemblyFormat = [{
-    $array_size `x` $elem_type attr-dict `:` `(` type($array_size) `)` `->` type(results)
-  }];
+  let assemblyFormat = clausesReqAssemblyFormat # " oilist(" #
+    clausesOptAssemblyFormat # ") `->` type(results) attr-dict";
 
   let extraClassDeclaration = [{
-    mlir::Type getAllocatedType() { return getElemTypeAttr().getValue(); }
+    mlir::Type getAllocatedType() { return getMemElemTypeAttr().getValue(); }
   }];
   let hasVerifier = 1;
 }
@@ -2353,31 +2392,34 @@ def AllocSharedMemOp : OpenMP_Op<"alloc_shared_mem", traits = [
 // FreeSharedMemOp
 //===----------------------------------------------------------------------===//
 
-def FreeSharedMemOp : OpenMP_Op<"free_shared_mem", [MemoryEffects<[MemFree]>]> {
+def FreeSharedMemOp : OpenMP_Op<"free_shared_mem", traits = [
+    MemoryEffects<[MemFree]>
+  ], clauses = [
+    OpenMP_MemAllocationSizeClause
+  ]> {
   let summary = "free shared memory";
 
   let description = [{
     Deallocates shared memory that was previously allocated by an
     `omp.alloc_shared_mem` operation. After this operation, the deallocated
     memory is in an undefined state and should not be accessed.
-    It is crucial to ensure that all accesses to the memory region are completed
-    before `omp.alloc_shared_mem` is called to avoid undefined behavior.
 
     ```mlir
       // Example of allocating and freeing shared memory.
-      %ptr_shared = omp.alloc_shared_mem %size x i32 : (i64) -> (!llvm.ptr)
+      %ptr_shared = omp.alloc_shared_mem %size x i32 : (i64) -> !llvm.ptr
       // ...
-      omp.free_shared_mem %ptr_shared : !llvm.ptr
+      omp.free_shared_mem [%size x i32 : (i64)] %ptr_shared : !llvm.ptr
     ```
 
     The `heapref` operand represents the pointer to shared memory to be
     deallocated, previously returned by `omp.alloc_shared_mem`.
-  }];
+  }] # clausesDescription;
 
-  let arguments = (ins
+  let arguments = !con(clausesArgs, (ins
     Arg<OpenMP_PointerLikeType, "", [MemFree]>:$heapref
-  );
-  let assemblyFormat = "$heapref attr-dict `:` type($heapref)";
+  ));
+  let assemblyFormat = "` ` `[`" # clausesReqAssemblyFormat # " oilist(" #
+    clausesOptAssemblyFormat # ") `]` $heapref `:` type($heapref) attr-dict";
   let hasVerifier = 1;
 }
 

@@ -23,6 +23,7 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FoldInterfaces.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -2950,6 +2951,34 @@ LogicalResult SectionsOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
+// ScopeOp
+//===----------------------------------------------------------------------===//
+
+void ScopeOp::build(OpBuilder &builder, OperationState &state,
+                    const ScopeOperands &clauses) {
+  MLIRContext *ctx = builder.getContext();
+  ScopeOp::build(builder, state, clauses.allocateVars, clauses.allocatorVars,
+                 clauses.nowait, clauses.privateVars,
+                 makeArrayAttr(ctx, clauses.privateSyms),
+                 clauses.privateNeedsBarrier, clauses.reductionMod,
+                 clauses.reductionVars,
+                 makeDenseBoolArrayAttr(ctx, clauses.reductionByref),
+                 makeArrayAttr(ctx, clauses.reductionSyms));
+}
+
+LogicalResult ScopeOp::verify() {
+  if (getAllocateVars().size() != getAllocatorVars().size())
+    return emitError(
+        "expected equal sizes for allocate and allocator variables");
+
+  if (failed(verifyPrivateVarList(*this)))
+    return failure();
+
+  return verifyReductionVarList(*this, getReductionSyms(), getReductionVars(),
+                                getReductionByref());
+}
+
+//===----------------------------------------------------------------------===//
 // SingleOp
 //===----------------------------------------------------------------------===//
 
@@ -3488,19 +3517,31 @@ LogicalResult TaskloopContextOp::verifyRegions() {
   if (!loopNestOp)
     return failure();
 
-  auto isDefinedInTaskloopContext = [&](Value value) {
-    // A region is considered an ancestor of itself
-    return region.isAncestor(value.getParentRegion());
+  std::function<bool(Value)> isValidBoundValue = [&](Value value) -> bool {
+    Region *valueRegion = value.getParentRegion();
+    // A loop bound value defined outside of the taskloop context region is
+    // valid. A region is considered an ancestor of itself.
+    if (!region.isAncestor(valueRegion))
+      return true;
+
+    Operation *defOp = value.getDefiningOp();
+    if (!defOp || defOp->getNumRegions() != 0 || !isPure(defOp))
+      return false;
+
+    return llvm::all_of(defOp->getOperands(), isValidBoundValue);
   };
-  auto hasTaskloopLocalBound = [&](OperandRange range) {
-    return llvm::any_of(range, isDefinedInTaskloopContext);
+  auto hasUnsupportedTaskloopLocalBound = [&](OperandRange range) -> bool {
+    return llvm::any_of(range,
+                        [&](Value value) { return !isValidBoundValue(value); });
   };
 
-  if (hasTaskloopLocalBound(loopNestOp.getLoopLowerBounds()) ||
-      hasTaskloopLocalBound(loopNestOp.getLoopUpperBounds()) ||
-      hasTaskloopLocalBound(loopNestOp.getLoopSteps())) {
-    return emitOpError() << "expects loop bounds and steps to be defined "
-                            "outside of the taskloop.context region";
+  if (hasUnsupportedTaskloopLocalBound(loopNestOp.getLoopLowerBounds()) ||
+      hasUnsupportedTaskloopLocalBound(loopNestOp.getLoopUpperBounds()) ||
+      hasUnsupportedTaskloopLocalBound(loopNestOp.getLoopSteps())) {
+    return emitOpError()
+           << "expects loop bounds and steps to be defined outside of the "
+              "taskloop.context region or by pure, regionless operations "
+              "that do not depend on block arguments";
   }
 
   return success();
@@ -4712,7 +4753,7 @@ LogicalResult AllocateDirOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult AllocSharedMemOp::verify() {
-  return verifyAlignment(*getOperation(), getAlignment());
+  return verifyAlignment(*getOperation(), getMemAlignment());
 }
 
 //===----------------------------------------------------------------------===//
@@ -4720,10 +4761,7 @@ LogicalResult AllocSharedMemOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult FreeSharedMemOp::verify() {
-  return getHeapref().getDefiningOp<AllocSharedMemOp>()
-             ? success()
-             : emitOpError() << "'heapref' operand must be defined by an "
-                                "'omp.alloc_shared_memory' op";
+  return verifyAlignment(*getOperation(), getMemAlignment());
 }
 
 //===----------------------------------------------------------------------===//

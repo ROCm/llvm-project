@@ -34,11 +34,16 @@
 #include "MemoryManager.h"
 #include "OffloadError.h"
 #include "RPC.h"
+#include "RecordReplay.h"
 #include "omptarget.h"
 
 #include "GenericProfiler.h"
 
+#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StableHashing.h"
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
 #include "llvm/Support/Allocator.h"
@@ -63,7 +68,6 @@ namespace plugin {
 struct GenericPluginTy;
 struct GenericKernelTy;
 struct GenericDeviceTy;
-struct RecordReplayTy;
 struct KernelRunRecordTy;
 template <typename ResourceRef> class GenericDeviceResourceManagerTy;
 
@@ -316,6 +320,45 @@ struct DynBlockMemConfTy {
   void *FallbackPtr = nullptr;
 };
 
+/// Tracker of virtual memory address reservations.
+template <typename HandleTy> class VMemTrackerTy {
+  struct EntryTy {
+    uint64_t Size;
+    HandleTy Handle;
+  };
+
+  /// Map of virtual memory address reservations.
+  DenseMap<void *, EntryTy> VMemMap;
+
+  /// Mutex for safe access to the map.
+  std::mutex Mutex;
+
+public:
+  /// Register a new virtual address reservation.
+  Error registerReservation(void *VAddr, uint64_t Size, HandleTy Handle) {
+    std::lock_guard<std::mutex> Lock(Mutex);
+    auto It = VMemMap.find(VAddr);
+    if (It != VMemMap.end())
+      return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
+                           "virtual address already reserved");
+    VMemMap[VAddr] = {Size, Handle};
+    return Plugin::success();
+  }
+
+  /// Unregister a virtual address reservation and return its information.
+  Expected<std::pair<uint64_t, HandleTy>> unregisterReservation(void *VAddr) {
+    std::lock_guard<std::mutex> Lock(Mutex);
+    auto It = VMemMap.find(VAddr);
+    if (It == VMemMap.end())
+      return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
+                           "virtual address not reserved");
+    uint64_t Size = It->second.Size;
+    HandleTy Handle = It->second.Handle;
+    VMemMap.erase(It);
+    return std::make_pair(Size, Handle);
+  }
+};
+
 /// Class wrapping a __tgt_device_image and its offload entry table on a
 /// specific device. This class is responsible for storing and managing
 /// the offload entries for an image on a device.
@@ -375,7 +418,9 @@ struct GenericKernelTy {
   /// one used to initialize the kernel.
   Error launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
                ptrdiff_t *ArgOffsets, KernelArgsTy &KernelArgs,
-               AsyncInfoWrapperTy &AsyncInfoWrapper) const;
+               KernelExtraArgsTy *KernelExtraArgs,
+               AsyncInfoWrapperTy &AsyncInfoWrapper,
+               RecordReplayTy::HandleTy *RRHandle = nullptr) const;
   virtual Error launchImpl(GenericDeviceTy &GenericDevice,
                            uint32_t NumThreads[3], uint32_t NumBlocks[3],
                            uint32_t DynBlockMemSize, KernelArgsTy &KernelArgs,
@@ -854,6 +899,27 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
   GenericDeviceTy(GenericPluginTy &Plugin, int32_t DeviceId, int32_t NumDevices,
                   const llvm::omp::GV &GridValues);
 
+  /// Suggest a virtual address for device memory mapping.
+  virtual void *getSuggestedVirtualAddress() { return nullptr; }
+
+  /// Allocate \p Size bytes on the device and hints the backend to map it to
+  /// virtual address \p VAddr. The function returns the allocated virtual
+  /// address. The memory must be deallocated through
+  /// GenericDeviceTy::deallocateWithVirtualAddress().
+  virtual Expected<void *> allocateWithVirtualAddress(uint64_t Size,
+                                                      void *VAddr = nullptr) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "allocate with virtual address not supported");
+  }
+
+  /// Deallocate device memory \p VAddr, which was allocated through
+  /// GenericDeviceTy::allocateWithVirtualAddress(), and unmap the virtual
+  /// address range.
+  virtual Error deallocateWithVirtualAddress(void *VAddr, uint64_t Size) {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "allocate with virtual address not supported");
+  }
+
   /// Get the device identifier within the corresponding plugin. Notice that
   /// this id is not unique between different plugins; they may overlap.
   int32_t getDeviceId() const { return DeviceId; }
@@ -1030,7 +1096,9 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
 
   /// Run the kernel associated with \p EntryPtr
   Error launchKernel(void *EntryPtr, void **ArgPtrs, ptrdiff_t *ArgOffsets,
-                     KernelArgsTy &KernelArgs, __tgt_async_info *AsyncInfo);
+                     KernelArgsTy &KernelArgs,
+                     KernelExtraArgsTy *KernelExtraArgs,
+                     __tgt_async_info *AsyncInfo);
 
   /// Initialize a __tgt_async_info structure.
   Error initAsyncInfo(__tgt_async_info **AsyncInfoPtr);
@@ -1342,6 +1410,29 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
     return ATI;
   }
 
+  Error initRecordReplay(int64_t Size, void *VAddr, bool IsRecord,
+                         bool IsNative, bool SaveOutput, bool EmitReport,
+                         const char *OutputDirPath) {
+    if (RecordReplay)
+      return Plugin::error(error::ErrorCode::INVALID_ARGUMENT,
+                           "RR already initialized");
+    // Other formats could be supported in the future.
+    if (!IsNative)
+      return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                           "non-native RR not available");
+
+    RecordReplayTy::StatusTy Status = IsRecord
+                                          ? RecordReplayTy::StatusTy::Recording
+                                          : RecordReplayTy::StatusTy::Replaying;
+
+    RecordReplay =
+        new NativeRecordReplayTy(Status, OutputDirPath ? OutputDirPath : "",
+                                 SaveOutput, EmitReport, *this);
+    return RecordReplay->init(Size, VAddr);
+  }
+
+  RecordReplayTy *getRecordReplay() { return RecordReplay; }
+
   /// Map to record kernel have been launchedl, for error reporting purposes.
   ProtectedObj<KernelTraceInfoRecordTy> KernelLaunchTraces;
 
@@ -1429,6 +1520,8 @@ private:
   /// Indicate whether failures when locking mapped buffers should be ignored.
   bool IgnoreLockMappedFailures;
 
+  /// Record and replay manager.
+  RecordReplayTy *RecordReplay = nullptr;
 
 protected:
   /// Environment variables defined by the LLVM OpenMP implementation
@@ -1615,7 +1708,7 @@ struct GenericPluginTy {
   /// Construct a plugin instance.
   GenericPluginTy(Triple::ArchType TA)
       : GlobalHandler(nullptr), JIT(TA), RPCServer(nullptr),
-        RecordReplay(nullptr), Profiler(getProfilerToAttach()) {}
+        Profiler(getProfilerToAttach()) {}
 
   virtual ~GenericPluginTy() {}
 
@@ -1710,11 +1803,6 @@ struct GenericPluginTy {
   virtual Error deinitRPCDoorbell() { return Plugin::success(); }
 
   /// Get a reference to the record and replay interface for the plugin.
-  RecordReplayTy &getRecordReplay() {
-    assert(RecordReplay && "RR interface not initialized");
-    return *RecordReplay;
-  }
-
   /// Initialize a device within the plugin.
   Error initDevice(int32_t DeviceId);
 
@@ -1843,8 +1931,9 @@ public:
 
   /// Initializes the record and replay mechanism inside the plugin.
   int32_t initialize_record_replay(int32_t DeviceId, int64_t MemorySize,
-                                   void *VAddr, bool isRecord, bool SaveOutput,
-                                   uint64_t &ReqPtrArgOffset);
+                                   void *VAddr, bool IsRecord, bool IsNative,
+                                   bool SaveOutput, bool EmitReport,
+                                   const char *OutputDirPath);
 
   /// Loads the associated binary into the plugin and returns a handle to it.
   int32_t load_binary(int32_t DeviceId, __tgt_device_image *TgtImage,
@@ -1906,6 +1995,7 @@ public:
   /// Begin executing a kernel on the given device.
   int32_t launch_kernel(int32_t DeviceId, void *TgtEntryPtr, void **TgtArgs,
                         ptrdiff_t *TgtOffsets, KernelArgsTy *KernelArgs,
+                        KernelExtraArgsTy *KernelExtraArgs,
                         __tgt_async_info *AsyncInfoPtr);
 
   /// Synchronize an asyncrhonous queue with the plugin runtime.
@@ -2055,9 +2145,6 @@ private:
 
   /// The interface between the plugin and the GPU for host services.
   RPCServerTy *RPCServer;
-
-  /// The interface between the plugin and the GPU for host services.
-  RecordReplayTy *RecordReplay;
 
   /// The Profiler instance
   std::unique_ptr<GenericProfilerTy> Profiler;

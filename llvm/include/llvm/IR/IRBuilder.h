@@ -244,7 +244,14 @@ public:
   }
 
   /// Set location information used by debugging information.
-  void SetCurrentDebugLocation(DebugLoc L) {
+  void SetCurrentDebugLocation(const DebugLoc &L) {
+    // For !dbg metadata attachments, we use DebugLoc instead of the raw MDNode
+    // to include optional introspection data for use in Debugify.
+    StoredDL = L;
+  }
+
+  /// Set location information used by debugging information.
+  void SetCurrentDebugLocation(DebugLoc &&L) {
     // For !dbg metadata attachments, we use DebugLoc instead of the raw MDNode
     // to include optional introspection data for use in Debugify.
     StoredDL = std::move(L);
@@ -542,6 +549,24 @@ public:
   // Type creation methods
   //===--------------------------------------------------------------------===//
 
+  /// Fetch the type representing an 8-bit byte.
+  ByteType *getByte8Ty() { return Type::getByte8Ty(Context); }
+
+  /// Fetch the type representing a 16-bit byte.
+  ByteType *getByte16Ty() { return Type::getByte16Ty(Context); }
+
+  /// Fetch the type representing a 32-bit byte.
+  ByteType *getByte32Ty() { return Type::getByte32Ty(Context); }
+
+  /// Fetch the type representing a 64-bit byte.
+  ByteType *getByte64Ty() { return Type::getByte64Ty(Context); }
+
+  /// Fetch the type representing a 128-bit byte.
+  ByteType *getByte128Ty() { return Type::getByte128Ty(Context); }
+
+  /// Fetch the type representing an N-bit byte.
+  ByteType *getByteNTy(unsigned N) { return Type::getByteNTy(Context, N); }
+
   /// Fetch the type representing a single bit
   IntegerType *getInt1Ty() {
     return Type::getInt1Ty(Context);
@@ -603,6 +628,12 @@ public:
   /// Fetch the type representing a pointer.
   PointerType *getPtrTy(unsigned AddrSpace = 0) {
     return PointerType::get(Context, AddrSpace);
+  }
+
+  /// Fetch the type of a byte with size at least as big as that of a
+  /// pointer in the given address space.
+  ByteType *getBytePtrTy(const DataLayout &DL, unsigned AddrSpace = 0) {
+    return DL.getBytePtrType(Context, AddrSpace);
   }
 
   /// Fetch the type of an integer with size at least as big as that of a
@@ -987,10 +1018,11 @@ public:
                                         Value *RHS, FMFSource FMFSource = {},
                                         const Twine &Name = "");
 
-  /// Create a call to intrinsic \p ID with \p Args, mangled using \p Types. If
-  /// \p FMFSource is provided, copy fast-math-flags from that instruction to
-  /// the intrinsic.
-  LLVM_ABI CallInst *CreateIntrinsic(Intrinsic::ID ID, ArrayRef<Type *> Types,
+  /// Create a call to intrinsic \p ID with \p Args, mangled using
+  /// \p OverloadTypes. If \p FMFSource is provided, copy fast-math-flags from
+  /// that instruction to the intrinsic.
+  LLVM_ABI CallInst *CreateIntrinsic(Intrinsic::ID ID,
+                                     ArrayRef<Type *> OverloadTypes,
                                      ArrayRef<Value *> Args,
                                      FMFSource FMFSource = {},
                                      const Twine &Name = "");
@@ -1009,6 +1041,12 @@ public:
   CallInst *CreateIntrinsic(Intrinsic::ID ID, ArrayRef<Value *> Args,
                             FMFSource FMFSource = {}, const Twine &Name = "") {
     return CreateIntrinsic(ID, /*Types=*/{}, Args, FMFSource, Name);
+  }
+
+  /// Create call to the fabs intrinsic.
+  CallInst *CreateFAbs(Value *V, FMFSource FMFSource = {},
+                       const Twine &Name = "") {
+    return CreateUnaryIntrinsic(Intrinsic::fabs, V, FMFSource, Name);
   }
 
   /// Create call to the minnum intrinsic.
@@ -1724,6 +1762,18 @@ public:
     return Insert(BinOp, Name);
   }
 
+  Value *CreateNoWrapBinOp(Instruction::BinaryOps Opc, Value *LHS, Value *RHS,
+                           bool IsNUW, bool IsNSW, const Twine &Name = "") {
+    if (Value *V = Folder.FoldNoWrapBinOp(Opc, LHS, RHS, IsNUW, IsNSW))
+      return V;
+    Instruction *BinOp = BinaryOperator::Create(Opc, LHS, RHS);
+    if (IsNUW)
+      BinOp->setHasNoUnsignedWrap(IsNUW);
+    if (IsNSW)
+      BinOp->setHasNoSignedWrap(IsNSW);
+    return Insert(BinOp, Name);
+  }
+
   Value *CreateLogicalAnd(Value *Cond1, Value *Cond2, const Twine &Name = "",
                           Instruction *MDFrom = nullptr) {
     assert(Cond2->getType()->isIntOrIntVectorTy(1));
@@ -1846,6 +1896,16 @@ public:
     Align AllocaAlign = DL.getPrefTypeAlign(Ty);
     unsigned AddrSpace = DL.getAllocaAddrSpace();
     return Insert(new AllocaInst(Ty, AddrSpace, ArraySize, AllocaAlign), Name);
+  }
+
+  CallInst *CreateStructuredAlloca(Type *BaseType, const Twine &Name = "") {
+    const DataLayout &DL = BB->getDataLayout();
+    PointerType *PtrTy = DL.getAllocaPtrType(Context);
+    CallInst *Output =
+        CreateIntrinsic(Intrinsic::structured_alloca, {PtrTy}, {}, {}, Name);
+    Output->addRetAttr(
+        Attribute::get(getContext(), Attribute::ElementType, BaseType));
+    return Output;
   }
 
   /// Provided to resolve 'CreateLoad(Ty, Ptr, "...")' correctly, instead of

@@ -1865,6 +1865,9 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
       return DAG.getConstant(*CI, DL, VT);
     }
 
+    if (const ConstantByte *CB = dyn_cast<ConstantByte>(C))
+      return DAG.getConstant(CB->getValue(), getCurSDLoc(), VT);
+
     if (const GlobalValue *GV = dyn_cast<GlobalValue>(C))
       return DAG.getGlobalAddress(GV, getCurSDLoc(), VT);
 
@@ -5119,7 +5122,7 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
 
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
       MachinePointerInfo(PtrOperand), MMOFlags,
-      VT.getStoreSize(), Alignment, AAInfo, Ranges);
+      LocationSize::upperBound(VT.getStoreSize()), Alignment, AAInfo, Ranges);
 
   const auto &TLI = DAG.getTargetLoweringInfo();
 
@@ -8476,6 +8479,30 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                          EVT::getEVT(I.getType()), getValue(I.getOperand(0)),
                          getValue(I.getOperand(1)), getValue(I.getOperand(2)),
                          DAG.getConstant(0, sdl, MVT::i64)));
+    return;
+  case Intrinsic::masked_udiv:
+    setValue(&I,
+             DAG.getNode(ISD::MASKED_UDIV, sdl, EVT::getEVT(I.getType()),
+                         getValue(I.getOperand(0)), getValue(I.getOperand(1)),
+                         getValue(I.getOperand(2))));
+    return;
+  case Intrinsic::masked_sdiv:
+    setValue(&I,
+             DAG.getNode(ISD::MASKED_SDIV, sdl, EVT::getEVT(I.getType()),
+                         getValue(I.getOperand(0)), getValue(I.getOperand(1)),
+                         getValue(I.getOperand(2))));
+    return;
+  case Intrinsic::masked_urem:
+    setValue(&I,
+             DAG.getNode(ISD::MASKED_UREM, sdl, EVT::getEVT(I.getType()),
+                         getValue(I.getOperand(0)), getValue(I.getOperand(1)),
+                         getValue(I.getOperand(2))));
+    return;
+  case Intrinsic::masked_srem:
+    setValue(&I,
+             DAG.getNode(ISD::MASKED_SREM, sdl, EVT::getEVT(I.getType()),
+                         getValue(I.getOperand(0)), getValue(I.getOperand(1)),
+                         getValue(I.getOperand(2))));
     return;
   }
 }
