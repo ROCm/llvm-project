@@ -84,7 +84,10 @@ endif()
 
 set(LLVM_ENABLE_LIBXML2 @LLVM_ENABLE_LIBXML2@)
 if(LLVM_ENABLE_LIBXML2)
-  find_package(LibXml2)
+  find_package(LibXml2 CONFIG QUIET)
+  if(NOT LibXml2_FOUND)
+    find_package(LibXml2 REQUIRED)
+  endif()
 endif()
 
 set(LLVM_ENABLE_CURL @LLVM_ENABLE_CURL@)
