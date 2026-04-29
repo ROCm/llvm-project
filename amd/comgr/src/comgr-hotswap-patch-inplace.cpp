@@ -132,13 +132,23 @@ uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
   // original barrier-ID operand. The dummy "-1" is only used to resolve
   // the target opcode via the asm parser.
   //
-  // The _M0 form (s_barrier_signal_isfirst m0) is a separate mnemonic
-  // that does not match this check. The AMDGPU backend never emits
-  // _M0 for compute kernels (no .cpp reference to
-  // S_BARRIER_SIGNAL_ISFIRST_M0 exists outside tablegen/SIInstrInfo.h
-  // predicates), so we intentionally skip it. If a binary ever contains
-  // the _M0 form, the swap will not fire and the log below will report
-  // the miss.
+  // Correctness caveat: the isfirst variant defines SCC; the non-isfirst
+  // variant does not. If downstream code reads SCC expecting the result
+  // of isfirst (e.g. an s_cbranch_scc1 selecting the elected wave), the
+  // swap leaves that read consuming stale SCC. On A0 the isfirst result
+  // is already unreliable due to the underlying race, so the swap removes
+  // a known-broken code path rather than introducing a new one. But it
+  // is not a semantic equivalence. Liveness/CFG-aware detection of SCC
+  // consumers is undecidable in general; the proper fix lives in
+  // A0-targeted Clang codegen and is out of scope for hotswap. This
+  // patch is a runtime mitigation for B0 binaries running on A0.
+  //
+  // The _M0 form has a different tablegen mnemonic string
+  // ("s_barrier_signal_isfirst m0", with the "m0" baked into the
+  // mnemonic itself, not as an operand -- see S_BARRIER_SIGNAL_ISFIRST_M0
+  // in SOPInstructions.td), so it does not match this equality check
+  // and falls through to the dispatcher's "no match" return below.
+  // The AMDGPU backend never emits the _M0 form for compute kernels.
   if (Mnemonic == "s_barrier_signal_isfirst") {
     std::optional<unsigned> NewOpcode =
         resolveOpcode("s_barrier_signal -1", Ctx.LS);
@@ -147,12 +157,6 @@ uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
             << *NewOpcode << " at 0x" << utohexstr(DI.Offset) << "\n";
       return 1;
     }
-  }
-
-  if (Mnemonic == "s_barrier_signal_isfirst m0") {
-    log() << "hotswap: warning: s_barrier_signal_isfirst m0 at 0x"
-          << utohexstr(DI.Offset)
-          << " not patched (compiler-emitted _M0 form unexpected)\n";
   }
 
   return 0;
