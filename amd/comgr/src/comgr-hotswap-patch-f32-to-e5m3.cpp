@@ -27,6 +27,10 @@
 ///
 //===----------------------------------------------------------------------===//
 
+// MSVC does not support weak symbols; guard the strong override to avoid
+// LNK2005 duplicate definition errors (tracked in #2294 / #2285).
+#if !defined(_MSC_VER)
+
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
@@ -52,9 +56,7 @@ static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
   return true;
 }
 
-static std::string vgprName(unsigned N) {
-  return ("v" + Twine(N)).str();
-}
+static std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
 
 /// Strip True16 sub-register suffixes (`.l`, `.h`) from a register name.
 /// Newer LLVM MCInstPrinter builds emit these for instructions like
@@ -162,8 +164,8 @@ static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
 /// guard_bits = F16[6:0].  This collapses the entire RTE decision into a
 /// single integer comparison.  See design doc §4.3 for derivation.
 static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
-                            StringRef BareSrc, StringRef Out, StringRef Tmp,
-                            StringRef NanSgpr) {
+                           StringRef BareSrc, StringRef Out, StringRef Tmp,
+                           StringRef NanSgpr) {
   // NaN detection: (|src| > 0x7F800000) ⇒ NaN.
   // v_and_b32 strips the sign, so neg/abs modifiers don't affect this test.
   // VOPC form: literal in src0, VGPR in src1 (implicit VCC write).
@@ -209,8 +211,8 @@ static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
 static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   if (DI.Size != 8) {
-    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size "
-          << DI.Size << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
 
@@ -325,8 +327,8 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   if (DI.Size != 8) {
-    log() << "hotswap: error: cvt_sr_fp8_f32: unexpected inst size "
-          << DI.Size << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    log() << "hotswap: error: cvt_sr_fp8_f32: unexpected inst size " << DI.Size
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
 
@@ -410,8 +412,8 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 
   // --- Byte merge (byte_sel known at patch time) ---
   if (ByteSel == 0) {
-    AsmOS << "v_bfi_b32 " << VdstStr << ", 0xFF, " << OutName << ", "
-          << VdstStr << "\n";
+    AsmOS << "v_bfi_b32 " << VdstStr << ", 0xFF, " << OutName << ", " << VdstStr
+          << "\n";
   } else {
     unsigned Shift = ByteSel * 8;
     static const char *const Masks[] = {nullptr, "0xFF00", "0xFF0000",
@@ -617,3 +619,5 @@ uint32_t applyScratchPatches(PatchContext &Ctx, size_t Idx) {
 
 } // namespace hotswap
 } // namespace COMGR
+
+#endif // !defined(_MSC_VER)
