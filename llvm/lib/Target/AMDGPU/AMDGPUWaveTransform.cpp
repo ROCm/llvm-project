@@ -2400,7 +2400,7 @@ class ForwardPropSimplifier {
       return B;
     if (VB && isZero(*VB))
       return A;
-    return {};
+    return AMDGPU::NoRegister;
   }
 
   // forward walk on MBB's accumulator instructions, simplifying the
