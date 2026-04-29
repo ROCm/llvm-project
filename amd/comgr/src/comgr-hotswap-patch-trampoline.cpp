@@ -15,8 +15,15 @@
 
 #include "comgr-hotswap-internal.h"
 
-#include "llvm/ADT/StringMap.h"
+// MSVC does not support weak symbols; LLVM_ATTRIBUTE_WEAK expands to nothing,
+// so the stub in comgr-hotswap-b0a0.cpp becomes a regular definition and
+// this file would produce a duplicate-symbol link error (LNK2005). Guard
+// the strong override until a proper registration mechanism replaces the
+// weak-symbol pattern on Windows (tracked in #2294 / #2285).
+#if !defined(_MSC_VER)
+
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -50,8 +57,8 @@ static std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
   return Name.str();
 }
 
-static SmallVector<MCRegister, 2>
-getDirectSubRegs(MCRegister Reg, const MCRegisterInfo &MRI) {
+static SmallVector<MCRegister, 2> getDirectSubRegs(MCRegister Reg,
+                                                   const MCRegisterInfo &MRI) {
   SmallVector<MCRegister, 2> Result;
   for (MCPhysReg Sub : MRI.subregs(Reg)) {
     StringRef Name = MRI.getName(Sub);
@@ -64,16 +71,15 @@ getDirectSubRegs(MCRegister Reg, const MCRegisterInfo &MRI) {
 
 // -- DS stride64 swap table (StringMap) ---------------------------------------
 
-static const StringMap<StringRef> &getDs2AddrSwapMap() {
-  static const StringMap<StringRef> Map({
-      {"ds_load_2addr_stride64_b32", "ds_load_b32"},
-      {"ds_load_2addr_stride64_b64", "ds_load_b64"},
-      {"ds_store_2addr_stride64_b32", "ds_store_b32"},
-      {"ds_store_2addr_stride64_b64", "ds_store_b64"},
-      {"ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32"},
-      {"ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64"},
-  });
-  return Map;
+static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_2addr_stride64_b32", "ds_load_b32")
+      .Case("ds_load_2addr_stride64_b64", "ds_load_b64")
+      .Case("ds_store_2addr_stride64_b32", "ds_store_b32")
+      .Case("ds_store_2addr_stride64_b64", "ds_store_b64")
+      .Case("ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32")
+      .Case("ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64")
+      .Default("");
 }
 
 // -- expandDs2Addr (MC-layer) -------------------------------------------------
@@ -90,9 +96,10 @@ static const StringMap<StringRef> &getDs2AddrSwapMap() {
 // register operands come first and the two 8-bit offset immediates always
 // follow. We scan the operand list for them.
 
-static std::vector<std::string>
-expandDs2Addr(const MCInst &Inst, StringRef FromMnem, StringRef ToMnem,
-              const LLVMState &LS) {
+static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
+                                              StringRef FromMnem,
+                                              StringRef ToMnem,
+                                              const LLVMState &LS) {
   const MCRegisterInfo &MRI = *LS.MRI;
 
   // Collect register operands and locate the two offset immediates.
@@ -139,7 +146,8 @@ expandDs2Addr(const MCInst &Inst, StringRef FromMnem, StringRef ToMnem,
   }
 
   if (IsXchg && Regs.size() >= 4) {
-    // Xchg: Inst = ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0, data1
+    // Xchg: Inst = ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0,
+    // data1
     auto Subs = getDirectSubRegs(Regs[0], MRI);
     if (Subs.size() < 2)
       return {};
@@ -271,7 +279,7 @@ bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx, unsigned SgprMCReg) {
   return true;
 }
 
-// -- allocScratchVgpr -----------------------------------------------------------
+// -- allocScratchVgpr ---------------------------------------------------------
 
 static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   auto &DI = Ctx.Decoded[Idx];
@@ -289,8 +297,7 @@ static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
 
   if (Alloc.extraVgprsNeeded() > 0 && !KernelName.empty()) {
     auto &Stats = Ctx.KernelStats[KernelName];
-    Stats.ExtraVgprs =
-        std::max(Stats.ExtraVgprs, Alloc.extraVgprsNeeded());
+    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.extraVgprsNeeded());
     Stats.ScratchAboveKd += Alloc.extraVgprsNeeded();
   }
 
@@ -299,9 +306,9 @@ static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
 
 // -- assembleOrFail -----------------------------------------------------------
 
-static SmallVector<uint8_t>
-assembleOrFail(const std::string &AsmStr, const LLVMState &LS,
-               const char *Context) {
+static SmallVector<uint8_t> assembleOrFail(const std::string &AsmStr,
+                                           const LLVMState &LS,
+                                           const char *Context) {
   auto Bytes = assembleSingleInst(AsmStr, LS);
   if (Bytes.empty())
     log() << "hotswap: " << Context << ": assembly failed: " << AsmStr << "\n";
@@ -316,12 +323,9 @@ assembleOrFail(const std::string &AsmStr, const LLVMState &LS,
 
 static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   auto &DI = Ctx.Decoded[Idx];
-  const auto &Map = getDs2AddrSwapMap();
-  auto It = Map.find(DI.Mnemonic);
-  if (It == Map.end())
+  StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
+  if (ToMnem.empty())
     return false;
-
-  StringRef ToMnem = It->second;
   auto Expanded = expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (Expanded.empty()) {
     log() << "hotswap: error: ds_2addr_stride64 expansion failed for: "
@@ -379,9 +383,9 @@ static bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 
   std::string BaseSreg = toAsmRegName(MRI, BaseMCReg);
 
-  auto PackBytes = assembleOrFail(
-      "s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg, Ctx.LS,
-      "tensor_load_to_lds pack");
+  auto PackBytes =
+      assembleOrFail("s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg,
+                     Ctx.LS, "tensor_load_to_lds pack");
   if (PackBytes.empty())
     return false;
 
@@ -404,12 +408,11 @@ static bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
     Ctx.OutScratchPatches.push_back(std::move(SPI));
 
     std::string V = "v" + std::to_string(ScratchVgpr);
-    auto Save = assembleOrFail(
-        "v_writelane_b32 " + V + ", " + BaseSreg + ", 0", Ctx.LS,
-        "tensor_load_to_lds save");
-    auto Restore = assembleOrFail(
-        "v_readlane_b32 " + BaseSreg + ", " + V + ", 0", Ctx.LS,
-        "tensor_load_to_lds restore");
+    auto Save = assembleOrFail("v_writelane_b32 " + V + ", " + BaseSreg + ", 0",
+                               Ctx.LS, "tensor_load_to_lds save");
+    auto Restore =
+        assembleOrFail("v_readlane_b32 " + BaseSreg + ", " + V + ", 0", Ctx.LS,
+                       "tensor_load_to_lds restore");
     if (Save.empty() || Restore.empty())
       return false;
 
@@ -451,7 +454,7 @@ static bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 uint32_t applyTrampolinePatches(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
-  if (getDs2AddrSwapMap().count(Mnem))
+  if (!getDs2AddrReplacement(Mnem).empty())
     return patchDs2AddrStride64(Ctx, Idx) ? 1 : 0;
 
   if (Mnem == "tensor_load_to_lds")
@@ -462,3 +465,5 @@ uint32_t applyTrampolinePatches(PatchContext &Ctx, size_t Idx) {
 
 } // namespace hotswap
 } // namespace COMGR
+
+#endif // !defined(_MSC_VER)
