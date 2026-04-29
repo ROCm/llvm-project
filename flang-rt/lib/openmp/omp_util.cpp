@@ -23,6 +23,8 @@ static constexpr std::size_t initialCapacity{256};
 
 static Lock pointerDeviceMapLock;
 
+/// Double the capacity of the entries array (or set it to initialCapacity if
+/// empty).  Crashes on allocation failure.  Must be called under the lock.
 void PointerDeviceMap::grow() {
   std::size_t newCapacity = capacity_ ? capacity_ * 2 : initialCapacity;
   Entry *newEntries =
@@ -35,6 +37,7 @@ void PointerDeviceMap::grow() {
   capacity_ = newCapacity;
 }
 
+/// Record that \p pointer was allocated on \p device.  Thread-safe.
 void PointerDeviceMap::insert(void *pointer, int device) {
   CriticalSection guard(pointerDeviceMapLock);
   if (count_ == capacity_) {
@@ -43,6 +46,8 @@ void PointerDeviceMap::insert(void *pointer, int device) {
   entries_[count_++] = {pointer, device};
 }
 
+/// Remove \p pointer from the map and return its device ID, or -1 if not
+/// found.  Uses swap-with-last for O(1) removal.  Thread-safe.
 int PointerDeviceMap::removeAndGet(void *pointer) {
   CriticalSection guard(pointerDeviceMapLock);
   for (std::size_t i = 0; i < count_; ++i) {
@@ -56,6 +61,8 @@ int PointerDeviceMap::removeAndGet(void *pointer) {
   return -1;
 }
 
+/// Print all (pointer, device) entries to stderr.  Thread-safe.
+/// Can be used for debugging purposes.
 void PointerDeviceMap::dump() const {
   CriticalSection guard(pointerDeviceMapLock);
   for (std::size_t i = 0; i < count_; ++i) {
