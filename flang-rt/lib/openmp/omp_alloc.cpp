@@ -40,6 +40,7 @@ extern "C" void omp_target_free(void *, int);
 // and DEALLOCATE.
 static PointerDeviceMap allocDeviceMap;
 
+/// Allocate \p AllocationSize bytes on the current default OpenMP device.
 static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
 #if ALLOC_DEBUG
   if (debugEnabled) {
@@ -63,6 +64,7 @@ static void *OpenMPAlloc(std::size_t AllocationSize, std::int64_t *) {
   return pointer;
 }
 
+/// Free a pointer previously allocated by OpenMPAlloc on the correct device.
 static void OpenMPFree(void *pointer) {
   int device{allocDeviceMap.removeAndGet(pointer)};
   if (device == -1) {
@@ -78,6 +80,7 @@ static void OpenMPFree(void *pointer) {
   omp_target_free(pointer, device);
 }
 
+/// Register the OpenMP alloc/free pair in the runtime's allocator registry.
 static void registerOpenMPAllocator() {
 #if ALLOC_DEBUG
   if (debugEnabled) {
@@ -88,6 +91,7 @@ static void registerOpenMPAllocator() {
   allocatorRegistry.Register(1, {&OpenMPAlloc, &OpenMPFree});
 }
 
+/// Return the value of environment variable \p envirable, or \p defaultValue.
 static const char *getStringFromEnvironment(
     const char *envirable, const char *defaultValue = "") {
   if (auto value{std::getenv(envirable)}) {
@@ -96,6 +100,7 @@ static const char *getStringFromEnvironment(
   return defaultValue;
 }
 
+/// Return the integer value of environment variable \p envirable, or \p defaultValue.
 static int getIntFromEnvironment(
     const char *envirable, const int defaultValue = 0) {
   int result = defaultValue;
@@ -113,6 +118,8 @@ static int getIntFromEnvironment(
   return result;
 }
 
+/// Split \p str at the first ':' into (before, after). If no colon, the
+/// second element is empty.
 static std::pair<std::string_view, std::string_view> splitAtColon(
     std::string_view str) {
   const char *data = str.data();

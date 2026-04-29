@@ -13,19 +13,26 @@
 
 namespace Fortran::runtime::omp {
 
-// A simple thread-safe map from pointer to integer value (e.g. device ID).
-// Implemented as a dynamically-grown array with linear search to avoid
-// pulling in C++ runtime dependencies via std::unordered_map.
+/// A thread-safe map from allocation pointer to device ID.
+///
+/// Used to remember which OpenMP device each pointer was allocated on,
+/// so that deallocation can target the correct device even if
+/// omp_set_default_device() was called in between.
+///
+/// Implemented as a dynamically-grown flat array with linear search and
+/// a global lock, to avoid pulling in C++ runtime dependencies (e.g.
+/// std::unordered_map).  This is adequate for the expected allocation
+/// counts in typical Fortran programs.
 class PointerDeviceMap {
 public:
-  // Record that |pointer| is associated with |device|.
+  /// Record that \p pointer was allocated on \p device.
   void insert(void *pointer, int device);
 
-  // Look up and remove the entry for |pointer|.  Returns the associated
-  // device ID, or -1 if the pointer was not found.
+  /// Remove the entry for \p pointer and return the device ID it was
+  /// allocated on.  Returns -1 if \p pointer is not in the map.
   int removeAndGet(void *pointer);
 
-  // Dump the pointer-device table
+  /// Print all entries to stderr (for debugging).
   void dump() const;
 
 private:

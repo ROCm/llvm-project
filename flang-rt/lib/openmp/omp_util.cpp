@@ -5,6 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// Implementation of PointerDeviceMap -- a thread-safe pointer-to-device-ID
+// map used by the OpenMP allocator runtime to track allocation origins.
+//
+//===----------------------------------------------------------------------===//
 
 #include "flang/Runtime/OpenMP/omp_util.h"
 #include "flang-rt/runtime/lock.h"
