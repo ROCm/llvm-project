@@ -9,9 +9,13 @@
 /// Strong-symbol override for applyInPlacePatches.  Handles instruction
 /// rewrites that fit in the same code size as the original:
 ///
-///   - cluster_load -> global_load   (opcode swap via MCInst + MCCodeEmitter)
-///   - s_clause     -> s_nop         (byte-level overwrite via
-///   applyByteReplace)
+///   - cluster_load             -> global_load    (opcode swap via MCInst +
+///                                                 MCCodeEmitter)
+///   - s_clause                 -> s_nop          (byte-level overwrite via
+///                                                 applyByteReplace)
+///   - s_barrier_signal_isfirst -> s_barrier_signal
+///                                                (opcode swap; same operand
+///                                                 layout, drops SCC write)
 ///
 /// No trampolines, ELF growth, or extra VGPRs are required.
 ///
@@ -118,6 +122,37 @@ uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx) {
             << utohexstr(DI.Offset) << "\n";
       return 1;
     }
+  }
+
+  // s_barrier_signal_isfirst -> s_barrier_signal: on A0, the isfirst
+  // variant may return stale SCC when cluster barriers are in flight.
+  // Both S_BARRIER_SIGNAL_IMM and S_BARRIER_SIGNAL_ISFIRST_IMM share
+  // a single SplitBarrier:$src0 immediate operand (see SOPInstructions.td),
+  // so cloning the decoded MCInst and flipping the opcode preserves the
+  // original barrier-ID operand. The dummy "-1" is only used to resolve
+  // the target opcode via the asm parser.
+  //
+  // The _M0 form (s_barrier_signal_isfirst m0) is a separate mnemonic
+  // that does not match this check. The AMDGPU backend never emits
+  // _M0 for compute kernels (no .cpp reference to
+  // S_BARRIER_SIGNAL_ISFIRST_M0 exists outside tablegen/SIInstrInfo.h
+  // predicates), so we intentionally skip it. If a binary ever contains
+  // the _M0 form, the swap will not fire and the log below will report
+  // the miss.
+  if (Mnemonic == "s_barrier_signal_isfirst") {
+    std::optional<unsigned> NewOpcode =
+        resolveOpcode("s_barrier_signal -1", Ctx.LS);
+    if (NewOpcode && swapOpcode(DI, Ctx.Text, Ctx.LS, *NewOpcode)) {
+      log() << "hotswap: inplace: s_barrier_signal_isfirst -> opcode "
+            << *NewOpcode << " at 0x" << utohexstr(DI.Offset) << "\n";
+      return 1;
+    }
+  }
+
+  if (Mnemonic == "s_barrier_signal_isfirst m0") {
+    log() << "hotswap: warning: s_barrier_signal_isfirst m0 at 0x"
+          << utohexstr(DI.Offset)
+          << " not patched (compiler-emitted _M0 form unexpected)\n";
   }
 
   return 0;
