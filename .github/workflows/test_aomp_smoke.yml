@@ -18,9 +18,6 @@ on:
         type: string
       platform:
         type: string
-      release_type:
-        type: string
-        default: ""          
   workflow_call:
     inputs:
       artifact_group:
@@ -38,9 +35,6 @@ on:
         type: string
       platform:
         type: string
-      release_type:
-        type: string
-        default: ""          
   push:
     branches:
       - ADHOCBUILD
