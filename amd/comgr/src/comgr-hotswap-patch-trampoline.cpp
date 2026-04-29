@@ -205,6 +205,8 @@ static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
 
     uint64_t Off = Ctx.Decoded[I].Offset;
     std::memcpy(Ctx.Text + Off, Bytes.data(), Bytes.size());
+
+    Ctx.Decoded[I].Inst = NewInst;
     return;
   }
 }

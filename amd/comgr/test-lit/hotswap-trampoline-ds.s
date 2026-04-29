@@ -57,9 +57,59 @@ test_ds_kernel:
 .Ltest_ds_kernel_end:
 .size test_ds_kernel, .Ltest_ds_kernel_end-test_ds_kernel
 
+// COM: --- Multi-DS test: two DS2 sites before one s_wait_dscnt ---------
+// COM: The wait count should be bumped from 0x0 to 0x2 (once per DS2 site).
+// RUN: hotswap-rewrite %t.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --dump %t.multi.elf --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=MULTI-API %s
+// MULTI-API: IDEMPOTENT: YES
+
+// RUN: %llvm-objdump -d %t.multi.elf \
+// RUN:   | %FileCheck --check-prefix=MULTI %s
+// MULTI: s_wait_dscnt 0x2
+
+.globl test_multi_ds_kernel
+.p2align 8
+.type test_multi_ds_kernel,@function
+test_multi_ds_kernel:
+  ds_load_2addr_stride64_b32 v[0:1], v4 offset0:0 offset1:1
+  ds_load_2addr_stride64_b32 v[2:3], v4 offset0:2 offset1:3
+  s_wait_dscnt 0x0
+  s_endpgm
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+  s_nop 0
+.Ltest_multi_ds_kernel_end:
+.size test_multi_ds_kernel, .Ltest_multi_ds_kernel_end-test_multi_ds_kernel
+
 .rodata
 .p2align 8
 .amdhsa_kernel test_ds_kernel
   .amdhsa_next_free_vgpr 3
+  .amdhsa_next_free_sgpr 1
+.end_amdhsa_kernel
+
+.amdhsa_kernel test_multi_ds_kernel
+  .amdhsa_next_free_vgpr 5
   .amdhsa_next_free_sgpr 1
 .end_amdhsa_kernel
