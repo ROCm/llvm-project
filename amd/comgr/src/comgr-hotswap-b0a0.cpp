@@ -262,9 +262,9 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 /// \p InstOffset + \p InstSize). Prefers an in-place NOP-sled rewrite when a
 /// reachable sled with sufficient headroom exists; otherwise falls back to a
 /// deferred trampoline.
-[[nodiscard]] bool
-emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
-                    ArrayRef<uint8_t> Replacement) {
+[[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
+                                       uint32_t InstSize,
+                                       ArrayRef<uint8_t> Replacement) {
   // findNearestSled already enforces that the returned sled has at least
   // `Needed` bytes of headroom, so a non-null result is sufficient to take
   // the in-place path.
