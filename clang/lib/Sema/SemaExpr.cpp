@@ -2814,12 +2814,12 @@ recoverFromMSUnqualifiedLookup(Sema &S, ASTContext &Context,
       TemplateArgs);
 }
 
-ExprResult
-Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
-                        SourceLocation TemplateKWLoc, UnqualifiedId &Id,
-                        bool HasTrailingLParen, bool IsAddressOfOperand,
-                        CorrectionCandidateCallback *CCC,
-                        bool IsInlineAsmIdentifier, Token *KeywordReplacement) {
+ExprResult Sema::ActOnIdExpression(Scope *S, CXXScopeSpec &SS,
+                                   SourceLocation TemplateKWLoc,
+                                   UnqualifiedId &Id, bool HasTrailingLParen,
+                                   bool IsAddressOfOperand,
+                                   CorrectionCandidateCallback *CCC,
+                                   bool IsInlineAsmIdentifier) {
   assert(!(IsAddressOfOperand && HasTrailingLParen) &&
          "cannot be direct & operand and have a trailing lparen");
   if (SS.isInvalid())
@@ -6914,6 +6914,15 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 
     FunctionDecl *FDecl = dyn_cast<FunctionDecl>(NDecl);
     if (FDecl && FDecl->getBuiltinID()) {
+      const llvm::Triple &Triple = Context.getTargetInfo().getTriple();
+      if (Triple.isSPIRV() && Triple.getVendor() == llvm::Triple::AMD) {
+        if (Context.BuiltinInfo.isTSBuiltin(FDecl->getBuiltinID()) &&
+            !Context.BuiltinInfo.isAuxBuiltinID(FDecl->getBuiltinID())) {
+          AMDGPU().AddPotentiallyUnguardedBuiltinUser(cast<FunctionDecl>(
+              getFunctionLevelDeclContext(/*AllowLambda=*/true)));
+        }
+      }
+
       // Rewrite the function decl for this builtin by replacing parameters
       // with no explicit address space with the address space of the arguments
       // in ArgExprs.
@@ -13936,6 +13945,11 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
     if (RHS.isInvalid())
       return QualType();
 
+    if (LHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      LHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(LHS.get());
+    if (RHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      RHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(RHS.get());
+
     if (!LHS.get()->getType()->isScalarType() ||
         !RHS.get()->getType()->isScalarType())
       return InvalidOperands(Loc, LHS, RHS);
@@ -16351,7 +16365,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
         break;
       } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
         resultType = Context.getLogicalOperationType();
-        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
+        Input = AMDGPU().ExpandAMDGPUPredicateBuiltIn(InputExpr);
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -17594,8 +17608,9 @@ bool Sema::DiagnoseAssignmentResult(AssignConvertType ConvTy,
     }
     break;
   case AssignConvertType::IncompatiblePointerDiscardsQualifiers: {
-    // Perform array-to-pointer decay if necessary.
-    if (SrcType->isArrayType()) SrcType = Context.getArrayDecayedType(SrcType);
+    // Perform decay if necessary.
+    if (SrcType->canDecayToPointerType())
+      SrcType = Context.getDecayedType(SrcType);
 
     isInvalid = true;
 
@@ -17708,6 +17723,11 @@ bool Sema::DiagnoseAssignmentResult(AssignConvertType ConvTy,
   case AssignConvertType::CompatibleOBTDiscards:
     return false;
   case AssignConvertType::IncompatibleOBTKinds: {
+    assert(!SrcType->isFunctionType() &&
+           "Unexpected function type found in IncompatibleOBTKinds assignment");
+    if (SrcType->canDecayToPointerType())
+      SrcType = Context.getDecayedType(SrcType);
+
     auto getOBTKindName = [](QualType Ty) -> StringRef {
       if (Ty->isPointerType())
         Ty = Ty->getPointeeType();
@@ -21215,7 +21235,7 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
 
   if (!E->isTypeDependent()) {
     if (E->getType() == Context.AMDGPUFeaturePredicateTy)
-      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
+      return AMDGPU().ExpandAMDGPUPredicateBuiltIn(E);
 
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4

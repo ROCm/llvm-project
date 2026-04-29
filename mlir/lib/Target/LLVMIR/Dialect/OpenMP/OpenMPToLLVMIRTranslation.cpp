@@ -448,6 +448,10 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkPrivate(op, result);
         checkReduction(op, result);
       })
+      .Case([&](omp::ScopeOp op) {
+        checkAllocate(op, result);
+        checkReduction(op, result);
+      })
       .Case([&](omp::SingleOp op) {
         checkAllocate(op, result);
         checkPrivate(op, result);
@@ -576,6 +580,9 @@ static llvm::OpenMPIRBuilder::InsertPointTy findAllocInsertPoints(
   // this case.
   if (deallocBlocks) {
     for (llvm::BasicBlock &block : *builder.GetInsertBlock()->getParent()) {
+      // TODO: This currently results in no blocks being added to the list when
+      // all exit blocks of the enclosing function have not been lowered before
+      // this is reached.
       llvm::Instruction *terminator = block.getTerminatorOrNull();
       if (isa_and_present<llvm::ReturnInst>(terminator))
         deallocBlocks->emplace_back(&block);
@@ -1083,7 +1090,7 @@ makeAtomicReductionGen(omp::DeclareReductionOp decl,
 static OwningDataPtrPtrReductionGen
 makeRefDataPtrGen(omp::DeclareReductionOp decl, llvm::IRBuilderBase &builder,
                   LLVM::ModuleTranslation &moduleTranslation, bool isByRef) {
-  if (!isByRef)
+  if (!isByRef || decl.getDataPtrPtrRegion().empty())
     return OwningDataPtrPtrReductionGen();
 
   OwningDataPtrPtrReductionGen refDataPtrGen =
@@ -2051,6 +2058,92 @@ convertOmpSections(Operation &opInst, llvm::IRBuilderBase &builder,
   return createReductionsAndCleanup(
       sectionsOp, builder, moduleTranslation, allocaIP, reductionDecls,
       privateReductionVariables, isByRef, sectionsOp.getNowait());
+}
+
+/// Converts an OpenMP scope construct into LLVM IR.
+static LogicalResult
+convertOmpScope(omp::ScopeOp &scopeOp, llvm::IRBuilderBase &builder,
+                LLVM::ModuleTranslation &moduleTranslation) {
+  using InsertPointTy = llvm::OpenMPIRBuilder::InsertPointTy;
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+
+  if (failed(checkImplementationStatus(*scopeOp)))
+    return failure();
+
+  llvm::ArrayRef<bool> isByRef = getIsByRef(scopeOp.getReductionByref());
+  assert(isByRef.size() == scopeOp.getNumReductionVars());
+
+  PrivateVarsInfo privateVarsInfo(scopeOp);
+
+  SmallVector<omp::DeclareReductionOp> reductionDecls;
+  collectReductionDecls(scopeOp, reductionDecls);
+  InsertPointTy allocaIP = findAllocInsertPoints(builder, moduleTranslation);
+
+  SmallVector<llvm::Value *> privateReductionVariables(
+      scopeOp.getNumReductionVars());
+  DenseMap<Value, llvm::Value *> reductionVariableMap;
+
+  MutableArrayRef<BlockArgument> reductionArgs =
+      cast<omp::BlockArgOpenMPOpInterface>(*scopeOp).getReductionBlockArgs();
+
+  // Allocate private vars before the scope body
+  llvm::Expected<llvm::BasicBlock *> afterAllocas = allocatePrivateVars(
+      scopeOp, builder, moduleTranslation, privateVarsInfo, allocaIP);
+  if (failed(handleError(afterAllocas, *scopeOp)))
+    return failure();
+
+  if (failed(allocAndInitializeReductionVars(
+          scopeOp, reductionArgs, builder, moduleTranslation, allocaIP,
+          reductionDecls, privateReductionVariables, reductionVariableMap,
+          isByRef)))
+    return failure();
+
+  auto bodyCB =
+      [&](InsertPointTy allocaIP, InsertPointTy codeGenIP,
+          llvm::ArrayRef<llvm::BasicBlock *> deallocBlocks) -> llvm::Error {
+    builder.restoreIP(codeGenIP);
+
+    if (handleError(
+            initPrivateVars(builder, moduleTranslation, privateVarsInfo),
+            *scopeOp)
+            .failed())
+      return llvm::make_error<PreviouslyReportedError>();
+
+    if (failed(copyFirstPrivateVars(
+            scopeOp, builder, moduleTranslation, privateVarsInfo.mlirVars,
+            privateVarsInfo.llvmVars, privateVarsInfo.privatizers,
+            scopeOp.getPrivateNeedsBarrier())))
+      return llvm::make_error<PreviouslyReportedError>();
+
+    return convertOmpOpRegions(scopeOp.getRegion(), "omp.scope.region", builder,
+                               moduleTranslation)
+        .takeError();
+  };
+
+  auto finiCB = [&](InsertPointTy codeGenIP) -> llvm::Error {
+    InsertPointTy oldIP = builder.saveIP();
+    builder.restoreIP(codeGenIP);
+    if (failed(cleanupPrivateVars(scopeOp, builder, moduleTranslation,
+                                  scopeOp.getLoc(), privateVarsInfo)))
+      return llvm::make_error<PreviouslyReportedError>();
+    builder.restoreIP(oldIP);
+    return llvm::Error::success();
+  };
+
+  llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
+  llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
+      ompBuilder->createScope(ompLoc, bodyCB, finiCB, scopeOp.getNowait());
+
+  if (failed(handleError(afterIP, *scopeOp)))
+    return failure();
+
+  builder.restoreIP(*afterIP);
+
+  // Process the reductions if required.
+  return createReductionsAndCleanup(
+      scopeOp, builder, moduleTranslation, allocaIP, reductionDecls,
+      privateReductionVariables, isByRef, scopeOp.getNowait(),
+      /*isTeamsReduction=*/false);
 }
 
 /// Converts an OpenMP single construct into LLVM IR using OpenMPIRBuilder.
@@ -6988,12 +7081,12 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
     llvm::Value *input, llvm::Value *&retVal, llvm::IRBuilderBase &builder,
     llvm::OpenMPIRBuilder &ompBuilder,
     LLVM::ModuleTranslation &moduleTranslation,
-    llvm::IRBuilderBase::InsertPoint allocIP,
+    llvm::IRBuilderBase::InsertPoint allocaIP,
     llvm::IRBuilderBase::InsertPoint codeGenIP,
     llvm::ArrayRef<llvm::IRBuilderBase::InsertPoint> deallocIPs) {
   assert(ompBuilder.Config.isTargetDevice() &&
          "function only supported for target device codegen");
-  builder.restoreIP(allocIP);
+  builder.restoreIP(allocaIP);
 
   omp::VariableCaptureKind capture = omp::VariableCaptureKind::ByRef;
   LLVM::TypeToLLVMIRTranslator typeToLLVMIRTranslator(
@@ -7049,7 +7142,7 @@ static llvm::IRBuilderBase::InsertPoint createDeviceArgumentAccessor(
       ompBuilder.createOMPFreeShared(builder, v, arg.getType());
     }
   } else {
-    // Use the current point, which was previously set to allocIP.
+    // Use the current point, which was previously set to allocaIP.
     v = builder.CreateAlloca(arg.getType(), allocaAS);
 
     if (allocaAS != defaultAS && arg.getType()->isPointerTy())
@@ -7684,7 +7777,7 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   };
 
   auto argAccessorCB = [&](llvm::Argument &arg, llvm::Value *input,
-                           llvm::Value *&retVal, InsertPointTy allocIP,
+                           llvm::Value *&retVal, InsertPointTy allocaIP,
                            InsertPointTy codeGenIP,
                            llvm::ArrayRef<InsertPointTy> deallocIPs)
       -> llvm::OpenMPIRBuilder::InsertPointOrErrorTy {
@@ -7702,7 +7795,7 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
 
     return createDeviceArgumentAccessor(targetOp, mapData, arg, input, retVal,
                                         builder, *ompBuilder, moduleTranslation,
-                                        allocIP, codeGenIP, deallocIPs);
+                                        allocaIP, codeGenIP, deallocIPs);
   };
 
   llvm::OpenMPIRBuilder::TargetKernelRuntimeAttrs runtimeAttrs;
@@ -8528,6 +8621,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           .Case([&](omp::SectionsOp) {
             return convertOmpSections(*op, builder, moduleTranslation);
           })
+          .Case([&](omp::ScopeOp op) {
+            return convertOmpScope(op, builder, moduleTranslation);
+          })
           .Case([&](omp::SingleOp op) {
             return convertOmpSingle(op, builder, moduleTranslation);
           })
@@ -8616,18 +8712,18 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           .Case([&](omp::TargetFreeMemOp) {
             return convertTargetFreeMemOp(*op, builder, moduleTranslation);
           })
-          .Case([&](omp::AllocSharedMemOp op) {
-            return convertAllocSharedMemOp(op, builder, moduleTranslation);
-          })
-          .Case([&](omp::FreeSharedMemOp op) {
-            return convertFreeSharedMemOp(op, builder, moduleTranslation);
-          })
           .Case([&](omp::AllocateDirOp) {
             return convertAllocateDirOp(*op, builder, moduleTranslation, *this);
           })
           .Case([&](omp::AllocateFreeOp) {
             return convertAllocateFreeOp(*op, builder, moduleTranslation,
                                          *this);
+          })
+          .Case([&](omp::AllocSharedMemOp op) {
+            return convertAllocSharedMemOp(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::FreeSharedMemOp op) {
+            return convertFreeSharedMemOp(op, builder, moduleTranslation);
           })
           .Default([&](Operation *inst) {
             return inst->emitError()
