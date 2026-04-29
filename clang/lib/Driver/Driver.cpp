@@ -101,6 +101,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/StringSaver.h"
@@ -1839,6 +1840,8 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
   if (UseModulesDriver) {
     Diags.Report(diag::remark_performing_driver_managed_module_build);
 
+    modules::diagnoseModulesDriverArgs(C->getArgs(), Diags);
+
     // Read the Standard library module manifest and, if available, add all
     // discovered modules to this Compilation. Jobs for modules specified in
     // the manifest that are not required by any command-line input are pruned
@@ -2398,12 +2401,42 @@ void Driver::PrintHelp(bool ShowHidden) const {
                       VisibilityMask);
 }
 
+/// Read and display additional version info from a local file if present.
+static void PrintLocalVersionInfo(StringRef ExecutablePath, raw_ostream &OS) {
+  SmallString<128> VersionInfoPath;
+
+  // Check if environment variable specifies a custom path
+  if (const char *EnvPath = ::getenv("LLVM_VERSION_INFO_FILE")) {
+    VersionInfoPath = EnvPath;
+  } else {
+    // Try same directory as executable
+    VersionInfoPath = llvm::sys::path::parent_path(ExecutablePath);
+    llvm::sys::path::append(VersionInfoPath, ".llvm-version-info");
+  }
+
+  // Read the version info file
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileOrErr =
+      llvm::MemoryBuffer::getFile(VersionInfoPath);
+
+  if (!FileOrErr)
+    return;
+
+  StringRef Contents = FileOrErr.get()->getBuffer();
+  if (Contents.empty())
+    return;
+
+  // Print the additional version info
+  OS << Contents.trim() << " ";
+}
+
 void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   if (IsFlangMode()) {
+    PrintLocalVersionInfo(ClangExecutable, OS);
     OS << getClangToolFullVersion("flang") << '\n';
   } else {
     // FIXME: The following handlers should use a callback mechanism, we don't
     // know what the client would like to do.
+    PrintLocalVersionInfo(ClangExecutable, OS);
     OS << getClangFullVersion() << '\n';
   }
   const ToolChain &TC = C.getDefaultToolChain();
