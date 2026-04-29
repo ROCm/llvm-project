@@ -4822,7 +4822,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
           "re-run with HSA_XNACK=1. If your device does not support XNACK, "
           "remove USM pragma and use map clauses instead. "
           "Set OMPX_EAGER_ZERO_COPY_MAPS=1 for optimal zero-copy "
-          "performance on non-XNACK APUs.");
+          "performance on non-XNACK shared-memory devices.");
       if (OMPX_StrictSanityChecks)
         llvm_unreachable("User-requested hard stop on sanity check errors.");
     }
