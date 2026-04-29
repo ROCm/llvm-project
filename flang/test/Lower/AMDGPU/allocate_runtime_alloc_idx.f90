@@ -1,4 +1,4 @@
-! RUN: %flang -fopenmp-default-allocate=gpu -S -emit-llvm --offload-targets=amdgcn-amd-amdhsa -o - %s | FileCheck %s
+! RUN: %flang -fopenmp-default-allocate=target -S -emit-llvm --offload-targets=amdgcn-amd-amdhsa -o - %s | FileCheck %s
 
 subroutine allocate_deallocate()
   real, allocatable :: x

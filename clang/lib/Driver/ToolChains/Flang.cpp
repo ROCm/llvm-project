@@ -1093,12 +1093,12 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   if (const Arg *A =
           Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
     StringRef Val(A->getValue());
-    if (Val != "gpu" && Val != "host") {
+    if (Val != "target" && Val != "host") {
       D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
     } else {
       D.Diag(diag::warn_openmp_default_allocate_experimental);
       CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
-      if (Val == "gpu") {
+      if (Val == "target") {
         CmdArgs.push_back("-mmlir");
         CmdArgs.push_back("-use-alloc-runtime");
       }

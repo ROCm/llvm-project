@@ -1,13 +1,13 @@
 ! Check that the driver passes -fopenmp-default-allocate= through to fc1
-! and only adds -mmlir -use-alloc-runtime for gpu mode.
+! and only adds -mmlir -use-alloc-runtime for target mode.
 
-! RUN: %flang -### -S -fopenmp-default-allocate=gpu %s -o - 2>&1 | FileCheck %s --check-prefix=GPU
+! RUN: %flang -### -S -fopenmp-default-allocate=target %s -o - 2>&1 | FileCheck %s --check-prefix=TARGET
 ! RUN: %flang -### -S -fopenmp-default-allocate=host %s -o - 2>&1 | FileCheck %s --check-prefix=HOST
 
-! GPU: warning: -fopenmp-default-allocate= is an experimental feature
-! GPU: "-fc1"
-! GPU-SAME: "-fopenmp-default-allocate=gpu"
-! GPU-SAME: "-mmlir" "-use-alloc-runtime"
+! TARGET: warning: -fopenmp-default-allocate= is an experimental feature
+! TARGET: "-fc1"
+! TARGET-SAME: "-fopenmp-default-allocate=target"
+! TARGET-SAME: "-mmlir" "-use-alloc-runtime"
 
 ! HOST: warning: -fopenmp-default-allocate= is an experimental feature
 ! HOST: "-fc1"

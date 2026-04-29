@@ -895,11 +895,11 @@ static bool parseFrontendArgs(FrontendOptions &opts, llvm::opt::ArgList &args,
                                     clang::options::OPT_fno_save_main_program,
                                     false));
 
-  // -fopenmp-default-allocate={gpu,host}
+  // -fopenmp-default-allocate={target,host}
   if (const auto *arg =
           args.getLastArg(clang::options::OPT_fopenmp_default_allocate_EQ)) {
     llvm::StringRef val = arg->getValue();
-    if (val == "gpu") {
+    if (val == "target") {
       opts.features.Enable(
           Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
     } else if (val != "host") {

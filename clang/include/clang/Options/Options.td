@@ -4032,8 +4032,8 @@ defm disable_block_signature_string : BoolFOption<"disable-block-signature-strin
 
 def fopenmp_default_allocate_EQ : Joined<["-"], "fopenmp-default-allocate=">,
   Group<f_Group>, Visibility<[FlangOption, FC1Option]>,
-  HelpText<"Set default allocator for OpenMP offloading (=gpu or =host)">,
-  Values<"gpu,host">;
+  HelpText<"Set default allocator for OpenMP offloading (=target or =host)">,
+  Values<"target,host">;
 def fomit_frame_pointer : Flag<["-"], "fomit-frame-pointer">, Group<f_Group>,
   Visibility<[ClangOption, FlangOption]>,
   HelpText<"Omit the frame pointer from functions that don't need it. "
