@@ -7,7 +7,9 @@ endif()
 include(${LLVM_COMMON_CMAKE_UTILS}/Modules/CMakePolicy.cmake
   NO_POLICY_SCOPE)
 
-cmake_policy(SET CMP0146 OLD)
+if(POLICY CMP0146)
+  cmake_policy(SET CMP0146 OLD)
+endif()
 
 # If we are not building as a part of LLVM, build Clang as an
 # standalone project, using LLVM as an external library:
@@ -184,8 +186,6 @@ if(CLANG_ENABLE_LIBXML2)
       set(CLANG_HAVE_LIBXML 1)
       get_target_property(_libxml2_location LibXml2::LibXml2 LOCATION)
       message(STATUS "Found LibXml2: ${_libxml2_location}")
-    else()
-      set(CLANG_ENABLE_LIBXML2 OFF CACHE BOOL "" FORCE)
     endif()
   endif()
 endif()

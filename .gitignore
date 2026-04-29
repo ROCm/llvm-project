@@ -89,7 +89,5 @@ pythonenv*
 # automodapi puts generated documentation files here.
 /lldb/docs/python_api/
 
-.depends/
-.depend/
-depends/
-depend/
+.depend*/
+depend*/
