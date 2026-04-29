@@ -10,7 +10,7 @@
 ; CHECK-NOT: v_cndmask
 ; CHECK: s_and_b64 [[TMP:s\[[0-9]+:[0-9]+\]]], exec, [[COND]]
 ; CHECK: s_xor_b64 [[TMP]], [[COND]], -1
-; CHECK: s_or_b64 [[TAKEN:s\[[0-9]+:[0-9]+\]]], [[TAKEN]], [[TMP]]
+; CHECK: s_and_b64 [[TAKEN:s\[[0-9]+:[0-9]+\]]], [[TMP]], exec
 ; CHECK: s_mov_b64 exec, [[TAKEN]]
 ; CHECK: BB0_2:
 

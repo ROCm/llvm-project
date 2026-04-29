@@ -12,17 +12,13 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6:       ; %bb.0: ; %bb
 ; GFX6-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX6-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX6-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX6-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX6-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX6-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX6-NEXT:    ; divergent control-flow edge
 ; GFX6-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX6-NEXT:  .LBB0_1: ; %bb3
-; GFX6-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX6-NEXT:    s_load_dword s2, s[4:5], 0xb
 ; GFX6-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x9
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
@@ -39,7 +35,6 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX6-NEXT:    s_load_dword s0, s[4:5], 0xe
 ; GFX6-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX6-NEXT:    s_bitcmp0_b32 s0, 0
-; GFX6-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX6-NEXT:    s_cbranch_scc1 .LBB0_4
 ; GFX6-NEXT:  ; %bb.3: ; %bb15
 ; GFX6-NEXT:    s_mov_b32 m0, -1
@@ -50,17 +45,13 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX8:       ; %bb.0: ; %bb
 ; GFX8-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GFX8-NEXT:    s_xor_b64 s[2:3], vcc, exec
-; GFX8-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX8-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX8-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX8-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
-; GFX8-NEXT:    s_mov_b64 s[6:7], 0
 ; GFX8-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX8-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX8-NEXT:    ; divergent control-flow edge
 ; GFX8-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX8-NEXT:  .LBB0_1: ; %bb3
-; GFX8-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX8-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; GFX8-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
@@ -77,7 +68,6 @@ define amdgpu_kernel void @reg_coalescer_breaks_dead(ptr addrspace(1) nocapture 
 ; GFX8-NEXT:    s_load_dword s0, s[4:5], 0x38
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    s_bitcmp0_b32 s0, 0
-; GFX8-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX8-NEXT:    s_cbranch_scc1 .LBB0_4
 ; GFX8-NEXT:  ; %bb.3: ; %bb15
 ; GFX8-NEXT:    s_mov_b32 m0, -1

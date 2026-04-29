@@ -415,6 +415,7 @@ void GCNLaneMaskUpdater::process() {
 
   if (!Accumulator) {
     Accumulator = LMU.createLaneMaskReg();
+    AllAccumulators.insert(Accumulator);
     BuildMI(Entry, Entry.getFirstTerminator(), {},
             TII->get(LMU.getLaneMaskConsts().MovOpc), Accumulator)
         .addImm(0);

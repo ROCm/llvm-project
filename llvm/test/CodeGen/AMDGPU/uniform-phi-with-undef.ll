@@ -16,51 +16,40 @@ define amdgpu_ps float @uniform_phi_with_undef(float inreg %c, float %v, i32 %x,
 ; GCN-NEXT:    s_xor_b32 s1, s1, s2
 ; GCN-NEXT:    s_and_b32 s2, exec_lo, s1
 ; GCN-NEXT:    s_xor_b32 s2, s1, -1
-; GCN-NEXT:    s_mov_b32 s3, 0
-; GCN-NEXT:    s_and_b32 s4, s2, exec_lo
-; GCN-NEXT:    s_and_b32 s2, exec_lo, s1
-; GCN-NEXT:    s_mov_b32 s1, 0
-; GCN-NEXT:    s_xor_b32 s3, exec_lo, s4
-; GCN-NEXT:    s_mov_b32 s1, 0
-; GCN-NEXT:    s_mov_b32 s1, 0
-; GCN-NEXT:    s_mov_b32 exec_lo, s4
-; GCN-NEXT:    s_mov_b32 s4, 0
+; GCN-NEXT:    s_and_b32 s3, s2, exec_lo
+; GCN-NEXT:    s_and_b32 s1, exec_lo, s1
+; GCN-NEXT:    s_xor_b32 s2, exec_lo, s3
+; GCN-NEXT:    s_mov_b32 exec_lo, s3
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_1
 ; GCN-NEXT:    s_branch .LBB0_3
 ; GCN-NEXT:  .LBB0_1:
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s3
-; GCN-NEXT:    s_xor_b32 s3, exec_lo, s2
-; GCN-NEXT:    s_and_b32 s3, s3, exec_lo
-; GCN-NEXT:    s_or_b32 s1, s1, s3
-; GCN-NEXT:    s_mov_b32 exec_lo, s2
-; GCN-NEXT:    s_mov_b32 s2, 0
-; GCN-NEXT:    s_mov_b32 s2, 0
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GCN-NEXT:    s_xor_b32 s2, exec_lo, s1
+; GCN-NEXT:    s_and_b32 s2, s2, exec_lo
+; GCN-NEXT:    s_mov_b32 exec_lo, s1
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_2:
-; GCN-NEXT:    s_mov_b32 s2, 0
 ; GCN-NEXT:    s_branch .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %if
-; GCN-NEXT:    s_mov_b32 s4, 0
-; GCN-NEXT:    s_mov_b32 s4, 0x40400000
-; GCN-NEXT:    v_div_scale_f32 v1, s5, s4, s4, v0
+; GCN-NEXT:    s_mov_b32 s3, 0x40400000
+; GCN-NEXT:    v_div_scale_f32 v1, s4, s3, s3, v0
 ; GCN-NEXT:    v_rcp_f32_e64 v2, v1
-; GCN-NEXT:    s_mov_b32 s5, 1.0
-; GCN-NEXT:    v_fma_f32 v3, -v1, v2, s5
+; GCN-NEXT:    s_mov_b32 s4, 1.0
+; GCN-NEXT:    v_fma_f32 v3, -v1, v2, s4
 ; GCN-NEXT:    v_fmac_f32_e64 v2, v3, v2
-; GCN-NEXT:    v_div_scale_f32 v3, vcc_lo, v0, s4, v0
+; GCN-NEXT:    v_div_scale_f32 v3, vcc_lo, v0, s3, v0
 ; GCN-NEXT:    v_mul_f32_e64 v4, v3, v2
 ; GCN-NEXT:    v_fma_f32 v5, -v1, v4, v3
 ; GCN-NEXT:    v_fmac_f32_e64 v4, v5, v2
 ; GCN-NEXT:    v_fma_f32 v1, -v1, v4, v3
 ; GCN-NEXT:    v_div_fmas_f32 v1, v1, v2, v4
-; GCN-NEXT:    v_div_fixup_f32 v0, v1, s4, v0
+; GCN-NEXT:    v_div_fixup_f32 v0, v1, s3, v0
 ; GCN-NEXT:    s_branch .LBB0_1
 ; GCN-NEXT:  .LBB0_4: ; %end
-; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GCN-NEXT:    s_or_b32 exec_lo, exec_lo, s2
 ; GCN-NEXT:    v_add_f32_e64 v0, v0, s0
-; GCN-NEXT:    s_mov_b32 s0, 0
 ; GCN-NEXT:    ; return to shader part epilog
 entry:
   %cc = icmp slt i32 %y, %x

@@ -15,17 +15,13 @@ define amdgpu_kernel void @global_atomic_fadd_noret_f32_wrong_subtarget(ptr addr
 ; GCN-NEXT:    v_mbcnt_hi_u32_b32 v0, exec_hi, v0
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GCN-NEXT:    s_mov_b64 s[2:3], 0
 ; GCN-NEXT:    s_mov_b64 exec, s[0:1]
-; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execnz .LBB0_2
 ; GCN-NEXT:  .LBB0_1:
 ; GCN-NEXT:    s_endpgm
 ; GCN-NEXT:  .LBB0_2:
-; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GCN-NEXT:    s_bcnt1_i32_b64 s2, exec
 ; GCN-NEXT:    v_cvt_f32_ubyte0_e32 v1, s2
