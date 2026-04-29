@@ -18,7 +18,8 @@
 ///
 /// Covered instructions:
 ///   1. v_wmma_scale16_f32_16x16x128_f8f6f4 — decompose to regular Scale
-///   2. v_wmma_scale16_f32_32x16x128_f4     — B0-only, detection + logging
+///   2. v_wmma_scale16_f32_32x16x128_f4     — split 32x16 into 2× 16x16,
+///      then decompose each half to regular Scale
 ///
 /// Design document: docs/scratch-patches/3_wmma_scale16_decomp/README.md
 ///
@@ -315,18 +316,245 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
 }
 
 // ---------------------------------------------------------------------------
-// v_wmma_scale16_f32_32x16x128_f4 — B0-only, no A0 counterpart
+// Base WMMA uop register field extraction (bytes 8-15 of 16-byte VOP3PX)
 // ---------------------------------------------------------------------------
+//
+// The base WMMA uop follows standard VOP3P field layout:
+//   VDST:  byte[8] bits [7:0] (8-bit, raw VGPR number without +256)
+//   SRC0:  byte[12] bits [7:0] + byte[13] bit[0] << 8 (9-bit)
+//   SRC1:  byte[13] bits [7:1] >> 1 + byte[14] bits [1:0] << 7 (9-bit)
+
+static unsigned extractVdst(const uint8_t *Raw) { return Raw[8]; }
+
+static unsigned extractSrc0(const uint8_t *Raw) {
+  return Raw[12] | ((Raw[13] & 0x01u) << 8);
+}
+
+static unsigned extractSrc1(const uint8_t *Raw) {
+  return ((Raw[13] >> 1) & 0x7Fu) | ((Raw[14] & 0x03u) << 7);
+}
+
+// ---------------------------------------------------------------------------
+// VOP3PX3 modifier field extraction
+// ---------------------------------------------------------------------------
+//
+// SCALE_OPSEL_HI[0] (matrix_b_scale, thread-half for B): bit 59 = byte[7] bit 3
+// matrix_a_scale_fmt[1:0]: bits [62:61] = byte[7] bits [6:5]
+// matrix_b_scale_fmt[1:0]: bits [9:8] = byte[1] bits [1:0]
+
+static bool extractBScaleRow1(const uint8_t *Raw) { return (Raw[7] >> 3) & 1; }
+
+static unsigned extractAScaleFmt(const uint8_t *Raw) {
+  return (Raw[7] >> 5) & 0x3;
+}
+
+static unsigned extractBScaleFmt(const uint8_t *Raw) { return Raw[1] & 0x3; }
+
+// Format a scale operand for assembly output. Returns the operand string
+// (e.g. "v42" for VGPRs, "s0" for SGPRs). Returns "" on unsupported encoding.
+static std::string formatScaleOp(unsigned Enc,
+                                 std::optional<unsigned> ReducedVgpr) {
+  if (ReducedVgpr)
+    return vgprName(*ReducedVgpr);
+  if (Enc >= VgprEncBase)
+    return vgprName(Enc - VgprEncBase);
+  if (Enc <= 105)
+    return ("s" + Twine(Enc)).str();
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// v_wmma_scale16_f32_32x16x128_f4 → 2× v_wmma_scale_f32_16x16x128_f8f6f4
+// ---------------------------------------------------------------------------
+//
+// The 32x16 FP4 instruction is B0-only. Decompose it into two 16x16 halves
+// that split along the M dimension (rows), then each half undergoes the same
+// block-16→block-32 scale reduction as the 16x16 case.
+//
+// Register mapping (linear VGPR packing):
+//   Half 0: D=v[d:d+7], A=v[a:a+7], B=v[b:b+7], C=v[d:d+7]
+//   Half 1: D=v[d+8:d+15], A=v[a+8:a+15], B=v[b:b+7], C=v[d+8:d+15]
+//
+// Scale operands are shared: both halves use the same reduced B32 scale.
+// SCALE_OPSEL[0] (matrix_a_scale) selects the thread-half for A scales:
+//   Half 0 → ROW0 (threads 0-15), Half 1 → ROW1 (threads 16-31).
 
 static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
-  log() << "hotswap: error: wmma_scale16: "
-        << "v_wmma_scale16_f32_32x16x128_f4 at offset 0x"
-        << utohexstr(DI.Offset)
-        << " is B0-only with no A0 counterpart; cannot patch\n";
+  if (DI.Size != VOP3PXSize) {
+    log() << "hotswap: error: wmma_scale16: unexpected 32x16 inst size "
+          << DI.Size << " at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
 
-  return 0;
+  if (Idx > 0 && StringRef(Ctx.Decoded[Idx - 1].Mnemonic) == "s_branch")
+    return 0;
+
+  const uint8_t *Raw = Ctx.Text + DI.Offset;
+
+  unsigned DBase = extractVdst(Raw);
+  unsigned Src0Enc = extractSrc0(Raw);
+  unsigned Src1Enc = extractSrc1(Raw);
+
+  if (!isVgprEncoding(Src0Enc) || !isVgprEncoding(Src1Enc)) {
+    log() << "hotswap: error: wmma_scale16: 32x16 non-VGPR matrix src at "
+          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  unsigned ABase = Src0Enc - VgprEncBase;
+  unsigned BBase = Src1Enc - VgprEncBase;
+
+  unsigned ScaleSrc0Enc = extractScaleSrc0(Raw);
+  unsigned ScaleSrc1Enc = extractScaleSrc1(Raw);
+
+  bool NeedReductionA = isVgprEncoding(ScaleSrc0Enc);
+  bool NeedReductionB = isVgprEncoding(ScaleSrc1Enc);
+
+  unsigned Src0Lo = 0, Src0Hi = 0, Src1Lo = 0, Src1Hi = 0;
+  if (NeedReductionA) {
+    Src0Lo = ScaleSrc0Enc - VgprEncBase;
+    Src0Hi = Src0Lo + 1;
+  }
+  if (NeedReductionB) {
+    Src1Lo = ScaleSrc1Enc - VgprEncBase;
+    Src1Hi = Src1Lo + 1;
+  }
+
+  bool OrigBScaleRow1 = extractBScaleRow1(Raw);
+  unsigned AScaleFmt = extractAScaleFmt(Raw);
+  unsigned BScaleFmt = extractBScaleFmt(Raw);
+
+  std::string KernelName =
+      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
+  std::optional<unsigned> KdVgprs =
+      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
+  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
+
+  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+                         Ctx.Config.MaxVgprs);
+
+  std::optional<unsigned> ScratchA, ScratchB, T1, T2;
+  unsigned ScratchCount = 0;
+
+  if (NeedReductionA) {
+    ScratchA = Alloc.alloc();
+    ++ScratchCount;
+  }
+  if (NeedReductionB) {
+    ScratchB = Alloc.alloc();
+    ++ScratchCount;
+  }
+  if (NeedReductionA || NeedReductionB) {
+    T1 = Alloc.alloc();
+    T2 = Alloc.alloc();
+    ScratchCount += 2;
+  }
+
+  if ((NeedReductionA && !ScratchA) || (NeedReductionB && !ScratchB) ||
+      ((NeedReductionA || NeedReductionB) && (!T1 || !T2))) {
+    log() << "hotswap: error: wmma_scale16: unable to allocate " << ScratchCount
+          << " scratch VGPRs for 32x16 at offset 0x" << utohexstr(DI.Offset)
+          << "\n";
+    return 0;
+  }
+
+  // --- Scale reduction preamble (shared by both halves) ---
+  std::string Asm;
+  raw_string_ostream AsmOS(Asm);
+
+  if (NeedReductionA)
+    emitScaleReduction(AsmOS, vgprName(Src0Lo), vgprName(Src0Hi),
+                       vgprName(*ScratchA), vgprName(*T1), vgprName(*T2));
+  if (NeedReductionB)
+    emitScaleReduction(AsmOS, vgprName(Src1Lo), vgprName(Src1Hi),
+                       vgprName(*ScratchB), vgprName(*T1), vgprName(*T2));
+
+  SmallVector<uint8_t> PreambleBytes;
+  if (NeedReductionA || NeedReductionB) {
+    PreambleBytes = assembleSingleInst(Asm, Ctx.LS);
+    if (PreambleBytes.empty()) {
+      log() << "hotswap: error: wmma_scale16: 32x16 preamble assembly failed "
+            << "at offset 0x" << utohexstr(DI.Offset) << "\n";
+      return 0;
+    }
+  }
+
+  // --- Assemble two 16x16 WMMA halves ---
+  std::string ScaleAStr = formatScaleOp(ScaleSrc0Enc, ScratchA);
+  std::string ScaleBStr = formatScaleOp(ScaleSrc1Enc, ScratchB);
+
+  if (ScaleAStr.empty() || ScaleBStr.empty()) {
+    log() << "hotswap: error: wmma_scale16: 32x16 unsupported scale encoding "
+          << "at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  SmallVector<uint8_t> Replacement;
+  Replacement.insert(Replacement.end(), PreambleBytes.begin(),
+                     PreambleBytes.end());
+
+  for (unsigned Half = 0; Half < 2; ++Half) {
+    unsigned HalfD = DBase + Half * 8;
+    unsigned HalfA = ABase + Half * 8;
+
+    std::string WmmaAsm;
+    raw_string_ostream WOS(WmmaAsm);
+
+    WOS << "v_wmma_scale_f32_16x16x128_f8f6f4" << " v[" << HalfD << ":"
+        << (HalfD + 7) << "]," << " v[" << HalfA << ":" << (HalfA + 7) << "],"
+        << " v[" << BBase << ":" << (BBase + 7) << "]," << " v[" << HalfD << ":"
+        << (HalfD + 7) << "]," << " " << ScaleAStr << ", " << ScaleBStr
+        << " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
+
+    if (Half == 1)
+      WOS << " matrix_a_scale:MATRIX_SCALE_ROW1";
+    if (OrigBScaleRow1)
+      WOS << " matrix_b_scale:MATRIX_SCALE_ROW1";
+    if (AScaleFmt == 1)
+      WOS << " matrix_a_scale_fmt:MATRIX_SCALE_FMT_E5M3";
+    else if (AScaleFmt == 2)
+      WOS << " matrix_a_scale_fmt:MATRIX_SCALE_FMT_E4M3";
+    if (BScaleFmt == 1)
+      WOS << " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E5M3";
+    else if (BScaleFmt == 2)
+      WOS << " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E4M3";
+
+    WOS << "\n";
+
+    SmallVector<uint8_t> HalfBytes = assembleSingleInst(WmmaAsm, Ctx.LS);
+    if (HalfBytes.size() != VOP3PXSize) {
+      log() << "hotswap: error: wmma_scale16: 32x16 half " << Half
+            << " assembly produced " << HalfBytes.size() << " bytes (expected "
+            << VOP3PXSize << ") at offset 0x" << utohexstr(DI.Offset) << "\n";
+      return 0;
+    }
+
+    Replacement.insert(Replacement.end(), HalfBytes.begin(), HalfBytes.end());
+  }
+
+  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
+    return 0;
+
+  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
+  unsigned Extra = Alloc.extraVgprsNeeded();
+  if (Extra > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = Extra;
+  Stats.ScratchReused += ScratchCount - Extra;
+  Stats.ScratchAboveKd += Extra;
+
+  ScratchPatchInfo Info;
+  Info.Offset = DI.Offset;
+  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Ctx.OutScratchPatches.push_back(std::move(Info));
+
+  log() << "hotswap: wmma_scale16: patched 32x16→2x16x16 Scale16→Scale at "
+        << "offset 0x" << utohexstr(DI.Offset) << " (" << Replacement.size()
+        << " bytes, reductionA=" << NeedReductionA
+        << ", reductionB=" << NeedReductionB << ")\n";
+
+  return 1;
 }
 
 // ---------------------------------------------------------------------------

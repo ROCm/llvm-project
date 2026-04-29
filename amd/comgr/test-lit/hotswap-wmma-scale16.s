@@ -71,6 +71,34 @@
 // SCALE16-NEXT:  v_wmma_scale_f32_16x16x128_f8f6f4
 
 // COM: -----------------------------------------------------------------------
+// COM: Verify: Scale16 32x16 instruction is decomposed into two 16x16 WMMAs.
+// COM:
+// COM: The 32x16 FP4 instruction is B0-only (no A0 counterpart). It is split
+// COM: along M into two 16x16 halves, each with scale reduction preamble and
+// COM: rewritten v_wmma_scale_f32_16x16x128_f8f6f4 (VOP3PX2).
+// COM: -----------------------------------------------------------------------
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SPLIT32 %s
+
+// SPLIT32-LABEL: <test_wmma_scale16_32x16>:
+// SPLIT32:       s_branch
+// COM: --- scale A reduction (shared by both halves) ---
+// SPLIT32:       v_and_b32{{.*}}0xff, v40
+// SPLIT32:       v_max_u32
+// SPLIT32:       v_lshl_or_b32
+// SPLIT32:       v_lshl_or_b32
+// SPLIT32:       v_lshl_or_b32
+// COM: --- scale B reduction ---
+// SPLIT32:       v_and_b32{{.*}}0xff, v42
+// SPLIT32:       v_max_u32
+// SPLIT32:       v_lshl_or_b32
+// SPLIT32:       v_lshl_or_b32
+// SPLIT32:       v_lshl_or_b32
+// COM: --- rewritten WMMA half 0 (rows 0-15) ---
+// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4
+// COM: --- rewritten WMMA half 1 (rows 16-31) ---
+// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4
+
+// COM: -----------------------------------------------------------------------
 // COM: Verify: regular Scale instruction is NOT patched.
 // COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOPATCH %s
@@ -102,7 +130,17 @@ test_wmma_scale16_16x16:
 .Ltest_wmma_scale16_16x16_end:
 .size test_wmma_scale16_16x16, .Ltest_wmma_scale16_16x16_end-test_wmma_scale16_16x16
 
-// --- Kernel 2: regular Scale (should NOT be patched) ---
+// --- Kernel 2: Scale16 32x16 FP4 (should be split into two 16x16) ---
+.globl test_wmma_scale16_32x16
+.p2align 8
+.type test_wmma_scale16_32x16,@function
+test_wmma_scale16_32x16:
+  v_wmma_scale16_f32_32x16x128_f4 v[0:15], v[16:31], v[32:39], v[0:15], v[40:41], v[42:43]
+  s_endpgm
+.Ltest_wmma_scale16_32x16_end:
+.size test_wmma_scale16_32x16, .Ltest_wmma_scale16_32x16_end-test_wmma_scale16_32x16
+
+// --- Kernel 3: regular Scale (should NOT be patched) ---
 .globl test_wmma_scale_16x16
 .p2align 8
 .type test_wmma_scale_16x16,@function
@@ -116,6 +154,10 @@ test_wmma_scale_16x16:
 .p2align 8
 .amdhsa_kernel test_wmma_scale16_16x16
   .amdhsa_next_free_vgpr 52
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_wmma_scale16_32x16
+  .amdhsa_next_free_vgpr 44
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
 .amdhsa_kernel test_wmma_scale_16x16
