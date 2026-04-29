@@ -66,7 +66,6 @@ target_link_libraries(HotswapElfTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapElfTests PRIVATE
-  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
@@ -107,7 +106,6 @@ target_link_libraries(HotswapMCTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapMCTests PRIVATE
-  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
