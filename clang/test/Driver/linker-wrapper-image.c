@@ -59,8 +59,14 @@
 //      CUDA-COFF: @__start_llvm_offload_entries = weak_odr hidden constant [0 x %struct.__tgt_offload_entry] zeroinitializer, section "llvm_offload_entries$OA"
 // CUDA-COFF-NEXT: @__stop_llvm_offload_entries = weak_odr hidden constant [0 x %struct.__tgt_offload_entry] zeroinitializer, section "llvm_offload_entries$OZ"
 
-//      CUDA: @.fatbin_image = internal constant [0 x i8] zeroinitializer, section ".nv_fatbin"
-// CUDA-NEXT: @.fatbin_wrapper = internal constant %fatbin_wrapper { i32 1180844977, i32 1, ptr @.fatbin_image, ptr null }, section ".nvFatBinSegment", align 8
+//      CUDA: @.fatbin_image = internal constant
+// CUDA-SAME: section ".nv_fatbin"
+// CUDA-NEXT: @.fatbin_wrapper = internal constant %fatbin_wrapper
+// CUDA-SAME: { i32 1180844977, i32 1, ptr @.fatbin_image, ptr null }
+// CUDA-SAME: section ".nvFatBinSegment"
+// CUDA-SAME: no_sanitize_address
+// CUDA-SAME: no_sanitize_hwaddress
+// CUDA-SAME: align 8
 // CUDA-NEXT: @.cuda.binary_handle = internal global ptr null
 
 // CUDA: @llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 101, ptr @.cuda.fatbin_reg, ptr null }]
@@ -170,8 +176,14 @@
 //      HIP-COFF: @__start_llvm_offload_entries = weak_odr hidden constant [0 x %struct.__tgt_offload_entry] zeroinitializer, section "llvm_offload_entries$OA"
 // HIP-COFF-NEXT: @__stop_llvm_offload_entries = weak_odr hidden constant [0 x %struct.__tgt_offload_entry] zeroinitializer, section "llvm_offload_entries$OZ"
 
-//      HIP: @.fatbin_image = internal constant [0 x i8] zeroinitializer, section ".hip_fatbin"
-// HIP-NEXT: @.fatbin_wrapper = internal constant %fatbin_wrapper { i32 1212764230, i32 1, ptr @.fatbin_image, ptr null }, section ".hipFatBinSegment", align 8
+//      HIP: @.fatbin_image = internal constant
+// HIP-SAME: section ".hip_fatbin"
+// HIP-NEXT: @.fatbin_wrapper = internal constant %fatbin_wrapper
+// HIP-SAME: { i32 1212764230, i32 1, ptr @.fatbin_image, ptr null }
+// HIP-SAME: section ".hipFatBinSegment"
+// HIP-SAME: no_sanitize_address
+// HIP-SAME: no_sanitize_hwaddress
+// HIP-SAME: align 8
 // HIP-NEXT: @.hip.binary_handle = internal global ptr null
 
 // HIP: @llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 101, ptr @.hip.fatbin_reg, ptr null }]
