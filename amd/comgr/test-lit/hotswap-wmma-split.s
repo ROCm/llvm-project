@@ -12,7 +12,7 @@
 
 // RUN: hotswap-rewrite %t.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out.elf --allow-grow \
+// RUN:   --output %t.out.elf \
 // RUN:   | %FileCheck --check-prefix=API %s
 // API: RESULT: SUCCESS
 
@@ -190,7 +190,7 @@ test_no_split_required:
 //
 // RUN: hotswap-rewrite %t.out.elf \
 // RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --output %t.out2.elf --allow-grow \
+// RUN:   --output %t.out2.elf \
 // RUN:   | %FileCheck --check-prefix=API2 %s
 // API2: RESULT: SUCCESS
 // RUN: cmp %t.out.elf %t.out2.elf
