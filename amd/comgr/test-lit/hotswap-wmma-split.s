@@ -18,6 +18,20 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
+// COM: Verify .text actually grew on the wire. Disassembly above shows the
+// COM: replacement mnemonics, but a buggy rewriter could leave the .text
+// COM: section header sh_size unchanged -- the disassembler walks raw bytes
+// COM: regardless, but downstream tools that respect section headers (the
+// COM: HSA loader's relocation pass, ELF strippers, debuggers) would then
+// COM: miss the appended trampolines. Assert .text in the output is strictly
+// COM: larger than .text in the input. Field 7 of llvm-readelf -S is the
+// COM: hex Size column; the trailing space after `\.text` skips
+// COM: `.text.<funcname>` would-be matches (none exist here, but cheap
+// COM: insurance).
+// RUN: SIZE_IN=$(%llvm-readelf -S %t.elf | awk '/\.text /{print $7; exit}') && \
+// RUN:   SIZE_OUT=$(%llvm-readelf -S %t.out.elf | awk '/\.text /{print $7; exit}') && \
+// RUN:   test $((16#$SIZE_OUT)) -gt $((16#$SIZE_IN))
+
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 
 // -- Test 1: 16x16x128_fp8_fp8 -> two 16x16x64_fp8_fp8 -----------------------

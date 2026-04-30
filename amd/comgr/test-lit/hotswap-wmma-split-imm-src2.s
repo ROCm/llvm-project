@@ -19,6 +19,11 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
+// COM: Verify .text grew on the wire (see hotswap-wmma-split.s for rationale).
+// RUN: SIZE_IN=$(%llvm-readelf -S %t.elf | awk '/\.text /{print $7; exit}') && \
+// RUN:   SIZE_OUT=$(%llvm-readelf -S %t.out.elf | awk '/\.text /{print $7; exit}') && \
+// RUN:   test $((16#$SIZE_OUT)) -gt $((16#$SIZE_IN))
+
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 
 // -- Test 1: 16x16x128_fp8_fp8 with $src2 = inline imm 0 ---------------------
