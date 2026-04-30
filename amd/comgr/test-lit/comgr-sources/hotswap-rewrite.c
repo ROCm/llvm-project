@@ -23,29 +23,41 @@ int main(int argc, char *argv[]) {
 
   if (argc < 4)
     fail("usage: hotswap-rewrite <elf_file> <source_isa> <target_isa> "
-         "[--zero-size | --output <path>]");
+         "[--zero-size | --output <path> [--allow-grow]]");
 
   const char *ElfFile = argv[1];
   const char *SourceISA = argv[2];
   const char *TargetISA = argv[3];
 
-  // Optional trailing flags. They are mutually exclusive; --zero-size is
-  // used by the negative tests that exercise INVALID_ARGUMENT paths;
-  // --output <path> is used by the e2e test to save the rewrite output
-  // for inspection by llvm-readelf / llvm-objdump.
+  // Optional trailing flags. --zero-size is used by the negative tests that
+  // exercise INVALID_ARGUMENT paths; --output <path> is used by tests that
+  // save the rewrite output for inspection by llvm-readelf / llvm-objdump.
+  // --allow-grow is an opt-in modifier for --output that lets the output
+  // ELF be larger than the input -- used by trampoline-based rewrites
+  // (e.g. WMMA splitter) which append to .text. By default the size check
+  // remains active so in-place tests catch accidental .text growth.
   int ZeroSize = 0;
+  int AllowGrow = 0;
   const char *OutputPath = NULL;
-  if (argc > 4) {
-    if (strcmp(argv[4], "--zero-size") == 0) {
+  int Pos = 4;
+  while (Pos < argc) {
+    if (strcmp(argv[Pos], "--zero-size") == 0) {
       ZeroSize = 1;
-    } else if (strcmp(argv[4], "--output") == 0) {
-      if (argc < 6)
+      Pos += 1;
+    } else if (strcmp(argv[Pos], "--output") == 0) {
+      if (Pos + 1 >= argc)
         fail("--output requires a path argument");
-      OutputPath = argv[5];
+      OutputPath = argv[Pos + 1];
+      Pos += 2;
+    } else if (strcmp(argv[Pos], "--allow-grow") == 0) {
+      AllowGrow = 1;
+      Pos += 1;
     } else {
-      fail("unknown flag '%s'", argv[4]);
+      fail("unknown flag '%s'", argv[Pos]);
     }
   }
+  if (AllowGrow && !OutputPath)
+    fail("--allow-grow requires --output");
 
   char *ElfBuf;
   size_t ElfSize = (size_t)setBuf(ElfFile, &ElfBuf);
@@ -73,8 +85,10 @@ int main(int argc, char *argv[]) {
   if (OutputPath) {
     size_t OutSize = 0;
     amd_comgr_(get_data(OutputData, &OutSize, NULL));
-    if (OutSize != ElfSize)
-      fail("output size %zu != input size %zu", OutSize, ElfSize);
+    if (!AllowGrow && OutSize != ElfSize)
+      fail("output size %zu != input size %zu (pass --allow-grow if the "
+           "rewrite is expected to append trampolines)",
+           OutSize, ElfSize);
     dumpData(OutputData, OutputPath);
   } else {
     size_t OutSize = 0;
