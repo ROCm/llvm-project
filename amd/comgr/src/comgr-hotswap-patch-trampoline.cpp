@@ -37,6 +37,21 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
+// -- DS stride64 swap table (StringSwitch) ----------------------------------
+//
+// Maps each 2-address DS mnemonic to its single-address replacement.
+
+static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_2addr_stride64_b32", "ds_load_b32")
+      .Case("ds_load_2addr_stride64_b64", "ds_load_b64")
+      .Case("ds_store_2addr_stride64_b32", "ds_store_b32")
+      .Case("ds_store_2addr_stride64_b64", "ds_store_b64")
+      .Case("ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32")
+      .Case("ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64")
+      .Default("");
+}
+
 // -- MC-layer register helpers ----------------------------------------------
 //
 // MCRegisterInfo::getName() returns internal LLVM names (e.g. "VGPR0",
@@ -98,19 +113,6 @@ static std::string fmtRegOperand(const MCRegisterInfo &MRI, MCRegister Reg) {
 // Format an optional byte offset as " offset:N" (empty string when zero).
 static std::string fmtOffset(uint32_t Offset) {
   return Offset ? " offset:" + std::to_string(Offset) : "";
-}
-
-// -- DS stride64 swap table (StringSwitch) ----------------------------------
-
-static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
-  return StringSwitch<StringRef>(Mnemonic)
-      .Case("ds_load_2addr_stride64_b32", "ds_load_b32")
-      .Case("ds_load_2addr_stride64_b64", "ds_load_b64")
-      .Case("ds_store_2addr_stride64_b32", "ds_store_b32")
-      .Case("ds_store_2addr_stride64_b64", "ds_store_b64")
-      .Case("ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32")
-      .Case("ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64")
-      .Default("");
 }
 
 // -- DS expansion helpers ---------------------------------------------------
