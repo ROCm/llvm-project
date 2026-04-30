@@ -716,14 +716,14 @@ private:
 
   /// Emit call to llvm.dbg.declare for a variable definition.
   /// Returns a pointer to the DILocalVariable associated with the
-  /// llvm.dbg.def, or nullptr otherwise.
+  /// llvm.dbg.declare, or nullptr otherwise.
   llvm::DILocalVariable *EmitDeclareForHeterogeneousDwarf(
       const VarDecl *decl, llvm::Value *AI, std::optional<unsigned> ArgNo,
       CGBuilderTy &Builder, const bool UsePointerValue = false);
 
   /// Emit call to llvm.dbg.declare for a structured binding definition.
   /// Returns a pointer to the DILocalVariable associated with the
-  /// llvm.dbg.def, or nullptr otherwise.
+  /// llvm.dbg.declare, or nullptr otherwise.
   llvm::DILocalVariable *EmitDeclareForHeterogeneousDwarf(
       const BindingDecl *decl, llvm::Value *AI, std::optional<unsigned> ArgNo,
       CGBuilderTy &Builder, const bool UsePointerValue = false);
