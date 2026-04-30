@@ -509,10 +509,6 @@ struct PatchContext {
                                        uint32_t InstSize,
                                        llvm::ArrayRef<uint8_t> Replacement);
 
-// -- Trampoline patch helpers (comgr-hotswap-patch-trampoline.cpp) -----------
-
-bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx, unsigned SgprMCReg);
-
 // -- Patch entry points (weak stubs in comgr-hotswap-b0a0.cpp) ----------------
 
 uint32_t applyInPlacePatches(PatchContext &Ctx, size_t Idx);

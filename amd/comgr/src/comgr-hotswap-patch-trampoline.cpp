@@ -8,8 +8,8 @@
 /// \file
 /// Strong-symbol override for applyTrampolinePatches. Handles B0 errata
 /// whose fix is larger than the original instruction:
-///   - ds_*_2addr_stride64_*  : one 8B DS instruction -> two single-address DS
-///   - tensor_load_to_lds     : prepend s_pack_hh_b32_b16 to clear multicast
+///   - ds_*_2addr_stride64_*  : one 8B DS instruction -> two single-address
+///     DS instructions
 ///
 //===----------------------------------------------------------------------===//
 
@@ -37,7 +37,7 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
-// -- MC-layer register helpers ------------------------------------------------
+// -- MC-layer register helpers ----------------------------------------------
 //
 // MCRegisterInfo::getName() returns internal LLVM names (e.g. "VGPR0",
 // "SGPR4"). These stable TableGen identifiers are converted to assembly
@@ -69,7 +69,7 @@ static SmallVector<MCRegister, 2> getDirectSubRegs(MCRegister Reg,
   return Result;
 }
 
-// -- DS stride64 swap table (StringMap) ---------------------------------------
+// -- DS stride64 swap table (StringMap) -------------------------------------
 
 static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
   return StringSwitch<StringRef>(Mnemonic)
@@ -82,7 +82,7 @@ static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
       .Default("");
 }
 
-// -- expandDs2Addr (MC-layer) -------------------------------------------------
+// -- expandDs2Addr (MC-layer) -----------------------------------------------
 //
 // Reads operands directly from the decoded MCInst to build two single-address
 // DS assembly strings. DS_READ2ST64/DS_WRITE2ST64 operand layout (TableGen
@@ -178,7 +178,7 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
   return {};
 }
 
-// -- bumpNextWaitDscnt --------------------------------------------------------
+// -- bumpNextWaitDscnt ------------------------------------------------------
 //
 // After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
 // in the stream must be incremented by 1 to account for the extra outstanding
@@ -211,102 +211,7 @@ static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
   }
 }
 
-// -- getDescriptorBaseSgpr ----------------------------------------------------
-//
-// Extract the base SGPR MCRegister from the second operand of a
-// tensor_load_to_lds instruction. The second operand is an 8-SGPR group
-// descriptor (SReg_256); we need its first sub-register for the
-// s_pack_hh_b32_b16 fix.
-
-static MCRegister getDescriptorBaseSgpr(const MCInst &Inst,
-                                        const MCRegisterInfo &MRI) {
-  if (Inst.getNumOperands() < 2 || !Inst.getOperand(1).isReg())
-    return MCRegister();
-  MCRegister Tuple = MCRegister(Inst.getOperand(1).getReg());
-  auto Subs = getDirectSubRegs(Tuple, MRI);
-  return Subs.empty() ? MCRegister() : Subs[0];
-}
-
-// -- isSgprLiveAfter ----------------------------------------------------------
-//
-// Conservative forward-scan heuristic. Returns true if the given SGPR
-// (identified by its MCRegister) is used before being redefined in the
-// instruction stream following Idx. Conservatively returns true on
-// control-flow-affecting instructions or end of stream.
-
-bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx, unsigned SgprMCReg) {
-  if (SgprMCReg == 0)
-    return true;
-
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  const MCInstrInfo &MCII = *Ctx.LS.MCII;
-
-  for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
-    const auto &DI = Ctx.Decoded[I];
-    if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
-      continue;
-
-    const MCInst &Inst = DI.Inst;
-    const MCInstrDesc &Desc = MCII.get(Inst.getOpcode());
-
-    if (DI.Mnemonic == "s_endpgm")
-      return false;
-
-    if (Desc.mayAffectControlFlow(Inst, MRI))
-      return true;
-
-    unsigned NumDefs = Desc.getNumDefs();
-    bool FoundUse = false;
-    bool FoundDef = false;
-
-    for (unsigned OpI = 0; OpI < Inst.getNumOperands(); ++OpI) {
-      const auto &Op = Inst.getOperand(OpI);
-      if (!Op.isReg() || Op.getReg() == 0)
-        continue;
-      if (!MRI.regsOverlap(Op.getReg(), SgprMCReg))
-        continue;
-
-      if (OpI < NumDefs)
-        FoundDef = true;
-      else
-        FoundUse = true;
-    }
-
-    if (FoundUse)
-      return true;
-    if (FoundDef && !FoundUse)
-      return false;
-  }
-
-  return true;
-}
-
-// -- allocScratchVgpr ---------------------------------------------------------
-
-static int allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
-  auto &DI = Ctx.Decoded[Idx];
-  std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
-  unsigned KdVgprs = 0;
-  if (auto Opt =
-          Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize))
-    KdVgprs = *Opt;
-
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
-                         Ctx.Config.MaxVgprs);
-  auto ScratchOpt = Alloc.alloc();
-  if (!ScratchOpt)
-    return -1;
-
-  if (Alloc.extraVgprsNeeded() > 0 && !KernelName.empty()) {
-    auto &Stats = Ctx.KernelStats[KernelName];
-    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.extraVgprsNeeded());
-    Stats.ScratchAboveKd += Alloc.extraVgprsNeeded();
-  }
-
-  return static_cast<int>(*ScratchOpt);
-}
-
-// -- assembleOrFail -----------------------------------------------------------
+// -- assembleOrFail ---------------------------------------------------------
 
 static SmallVector<uint8_t> assembleOrFail(const std::string &AsmStr,
                                            const LLVMState &LS,
@@ -317,7 +222,7 @@ static SmallVector<uint8_t> assembleOrFail(const std::string &AsmStr,
   return Bytes;
 }
 
-// -- patchDs2AddrStride64 -----------------------------------------------------
+// -- patchDs2AddrStride64 ---------------------------------------------------
 //
 // Expand one ds_*_2addr_stride64_* instruction into two single-address DS
 // instructions. The split doubles the outstanding DS operation count, so
@@ -351,116 +256,18 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   return true;
 }
 
-// -- patchTensorLoadToLds -----------------------------------------------------
+// -- applyTrampolinePatches -------------------------------------------------
 //
-// Prepend s_pack_hh_b32_b16 to clear multicast routing bits in the group
-// descriptor's base SGPR. If the SGPR is live after the tensor_load, bracket
-// the sequence with v_writelane/v_readlane to save and restore its value
-// through a scratch VGPR lane.
-
-static bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
-  auto &DI = Ctx.Decoded[Idx];
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-
-  MCRegister BaseMCReg = getDescriptorBaseSgpr(DI.Inst, MRI);
-  if (!BaseMCReg.isValid()) {
-    log() << "hotswap: error: tensor_load_to_lds: could not extract descriptor "
-             "base register\n";
-    return false;
-  }
-
-  // Idempotency guard: verify the previous instruction is part of an earlier
-  // patch for the *same* descriptor SGPR, not just any s_pack_hh / v_writelane.
-  if (Idx > 0) {
-    const auto &Prev = Ctx.Decoded[Idx - 1];
-    if (Prev.Mnemonic == "s_pack_hh_b32_b16" ||
-        Prev.Mnemonic == "v_writelane_b32") {
-      for (unsigned OpI = 0; OpI < Prev.Inst.getNumOperands(); ++OpI) {
-        const MCOperand &Op = Prev.Inst.getOperand(OpI);
-        if (Op.isReg() && MRI.regsOverlap(Op.getReg(), BaseMCReg))
-          return false;
-      }
-    }
-  }
-
-  std::string BaseSreg = toAsmRegName(MRI, BaseMCReg);
-
-  auto PackBytes =
-      assembleOrFail("s_pack_hh_b32_b16 " + BaseSreg + ", 0, " + BaseSreg,
-                     Ctx.LS, "tensor_load_to_lds pack");
-  if (PackBytes.empty())
-    return false;
-
-  bool SgprLive = isSgprLiveAfter(Ctx, Idx, BaseMCReg.id());
-
-  const uint8_t *OrigInst = Ctx.Text + DI.Offset;
-
-  if (SgprLive) {
-    int ScratchVgpr = allocScratchVgpr(Ctx, Idx);
-    if (ScratchVgpr < 0) {
-      log() << "hotswap: error: tensor_load_to_lds: no scratch VGPR "
-               "available\n";
-      return false;
-    }
-
-    ScratchPatchInfo SPI;
-    SPI.Offset = DI.Offset;
-    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-    SPI.ScratchRegs.set(ScratchVgpr);
-    Ctx.OutScratchPatches.push_back(std::move(SPI));
-
-    std::string V = "v" + std::to_string(ScratchVgpr);
-    auto Save = assembleOrFail("v_writelane_b32 " + V + ", " + BaseSreg + ", 0",
-                               Ctx.LS, "tensor_load_to_lds save");
-    auto Restore =
-        assembleOrFail("v_readlane_b32 " + BaseSreg + ", " + V + ", 0", Ctx.LS,
-                       "tensor_load_to_lds restore");
-    if (Save.empty() || Restore.empty())
-      return false;
-
-    std::vector<uint8_t> Replacement;
-    Replacement.insert(Replacement.end(), Save.begin(), Save.end());
-    Replacement.insert(Replacement.end(), PackBytes.begin(), PackBytes.end());
-    Replacement.insert(Replacement.end(), OrigInst, OrigInst + DI.Size);
-    Replacement.insert(Replacement.end(), Restore.begin(), Restore.end());
-
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
-      return false;
-
-    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
-          << " live, save/restore via " << V << "\n";
-  } else {
-    std::vector<uint8_t> Replacement;
-    Replacement.insert(Replacement.end(), PackBytes.begin(), PackBytes.end());
-    Replacement.insert(Replacement.end(), OrigInst, OrigInst + DI.Size);
-
-    if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
-      return false;
-
-    log() << "hotswap: tensor_load_to_lds: " << BaseSreg
-          << " dead, no save/restore needed\n";
-  }
-
-  DI.Mnemonic = "<replaced>";
-  return true;
-}
-
-// -- applyTrampolinePatches ---------------------------------------------------
-//
-// Strong-symbol override. Handles two B0 errata that produce replacement code
+// Strong-symbol override. Handles B0 errata that produce replacement code
 // larger than the original instruction slot:
 //
 //   ds_*_2addr_stride64_*  -> split into two single-address DS ops
-//   tensor_load_to_lds     -> prepend s_pack_hh (+ save/restore if SGPR live)
 
 uint32_t applyTrampolinePatches(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
   if (!getDs2AddrReplacement(Mnem).empty())
     return patchDs2AddrStride64(Ctx, Idx) ? 1 : 0;
-
-  if (Mnem == "tensor_load_to_lds")
-    return patchTensorLoadToLds(Ctx, Idx) ? 1 : 0;
 
   return 0;
 }
