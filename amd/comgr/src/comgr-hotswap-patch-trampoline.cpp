@@ -40,10 +40,9 @@ namespace hotswap {
 // -- MC-layer register helpers ----------------------------------------------
 //
 // MCRegisterInfo::getName() returns internal LLVM names (e.g. "VGPR0",
-// "SGPR4"). These stable TableGen identifiers are converted to assembly
-// syntax ("v0", "s4") for instruction building. MCSubRegIterator returns
-// ALL sub-registers including nested lo16/hi16 fragments; we filter to
-// keep only the direct 32-bit components.
+// "SGPR4"). We convert these to assembly syntax ("v0", "s4") for instruction
+// building. Sub-register iteration returns ALL fragments (including lo16/hi16);
+// getDirectSubRegs filters to only scalar 32-bit components.
 
 static std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
   const char *N = MRI.getName(Reg);
@@ -57,9 +56,9 @@ static std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
   return Name.str();
 }
 
-static SmallVector<MCRegister, 2> getDirectSubRegs(MCRegister Reg,
+static SmallVector<MCRegister, 4> getDirectSubRegs(MCRegister Reg,
                                                    const MCRegisterInfo &MRI) {
-  SmallVector<MCRegister, 2> Result;
+  SmallVector<MCRegister, 4> Result;
   for (MCPhysReg Sub : MRI.subregs(Reg)) {
     StringRef Name = MRI.getName(Sub);
     if ((Name.starts_with("VGPR") || Name.starts_with("SGPR")) &&
@@ -69,7 +68,21 @@ static SmallVector<MCRegister, 2> getDirectSubRegs(MCRegister Reg,
   return Result;
 }
 
-static std::string toAsmRegRange(const MCRegisterInfo &MRI, MCRegister Reg) {
+// Format a VGPR pair as a range expression: (VGPR0, VGPR1) -> "v[0:1]".
+static std::string fmtRegPair(const MCRegisterInfo &MRI, MCRegister Lo,
+                              MCRegister Hi) {
+  std::string LoName = toAsmRegName(MRI, Lo);
+  std::string HiName = toAsmRegName(MRI, Hi);
+  char Prefix = LoName[0];
+  StringRef LoIdx = StringRef(LoName).drop_front(1);
+  StringRef HiIdx = StringRef(HiName).drop_front(1);
+  return std::string(1, Prefix) + "[" + LoIdx.str() + ":" + HiIdx.str() + "]";
+}
+
+// Format a register operand for assembly. Single registers (VGPR0) produce
+// "v0"; register tuples (VGPR0_VGPR1) produce "v[0:1]" by decomposing into
+// their scalar sub-registers.
+static std::string fmtRegOperand(const MCRegisterInfo &MRI, MCRegister Reg) {
   const char *N = MRI.getName(Reg);
   if (!N)
     return {};
@@ -79,11 +92,12 @@ static std::string toAsmRegRange(const MCRegisterInfo &MRI, MCRegister Reg) {
   auto Subs = getDirectSubRegs(Reg, MRI);
   if (Subs.size() < 2)
     return toAsmRegName(MRI, Reg);
-  std::string Lo = toAsmRegName(MRI, Subs.front());
-  std::string Hi = toAsmRegName(MRI, Subs.back());
-  if (Lo.empty() || Hi.empty())
-    return {};
-  return Lo.substr(0, 1) + "[" + Lo.substr(1) + ":" + Hi.substr(1) + "]";
+  return fmtRegPair(MRI, Subs.front(), Subs.back());
+}
+
+// Format an optional byte offset as " offset:N" (empty string when zero).
+static std::string fmtOffset(uint32_t Offset) {
+  return Offset ? " offset:" + std::to_string(Offset) : "";
 }
 
 // -- DS stride64 swap table (StringSwitch) ----------------------------------
@@ -99,19 +113,90 @@ static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
       .Default("");
 }
 
-// -- expandDs2Addr (MC-layer) -----------------------------------------------
+// -- DS expansion helpers ---------------------------------------------------
 //
-// Reads operands directly from the decoded MCInst to build two single-address
-// DS assembly strings. DS_READ2ST64/DS_WRITE2ST64 operand layout (TableGen
-// DS_1A_Off8_RET / DS_1A1D_Off8_NORET / DS_1A2D_Off8_NORET):
-//   Op 0: $vdst (64b pair, load/xchg) or $addr (store)
-//   Op 1: $addr (load/xchg) or $data0 (store) or $vdst (xchg)
-//   Op 2: $offset0 (8b imm) or $data0/$data1
-//   Op 3: $offset1 (8b imm) or ...
+// Each helper expands one DS 2-address instruction into two single-address
+// assembly strings. The three operation types have different operand layouts:
+//   Load:  ds_load_2addr_stride64  vdst_pair, addr, off0, off1
+//   Store: ds_store_2addr_stride64 addr, data0, data1, off0, off1
+//   Xchg:  ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0, data1, ...
 //
-// The operand order varies across load/store/xchg, but the key insight is that
-// register operands come first and the two 8-bit offset immediates always
-// follow. We scan the operand list for them.
+// For b32 operations, destinations are split into individual VGPRs.
+// For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
+
+// Split a compound destination register into two formatted destination strings.
+// b32: VReg_64 -> ("v0", "v1"); b64: VReg_128 -> ("v[0:1]", "v[2:3]")
+static std::pair<std::string, std::string>
+splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
+  auto Subs = getDirectSubRegs(CompoundReg, MRI);
+  if (IsB64) {
+    if (Subs.size() < 4)
+      return {};
+    return {fmtRegPair(MRI, Subs[0], Subs[1]),
+            fmtRegPair(MRI, Subs[2], Subs[3])};
+  }
+  if (Subs.size() < 2)
+    return {};
+  return {toAsmRegName(MRI, Subs[0]), toAsmRegName(MRI, Subs[1])};
+}
+
+static std::vector<std::string>
+expandDs2AddrLoad(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
+                  bool IsB64, uint32_t Off0, uint32_t Off1,
+                  const MCRegisterInfo &MRI) {
+  if (Regs.size() < 2)
+    return {};
+  auto [D0, D1] = splitDstPair(Regs[0], IsB64, MRI);
+  if (D0.empty())
+    return {};
+  std::string Addr = toAsmRegName(MRI, Regs[1]);
+  return {
+      ToMnem.str() + " " + D0 + ", " + Addr + fmtOffset(Off0),
+      ToMnem.str() + " " + D1 + ", " + Addr + fmtOffset(Off1),
+  };
+}
+
+static std::vector<std::string>
+expandDs2AddrStore(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
+                   bool IsB64, uint32_t Off0, uint32_t Off1,
+                   const MCRegisterInfo &MRI) {
+  if (Regs.size() < 3)
+    return {};
+  std::string Addr = toAsmRegName(MRI, Regs[0]);
+  std::string Data0 =
+      IsB64 ? fmtRegOperand(MRI, Regs[1]) : toAsmRegName(MRI, Regs[1]);
+  std::string Data1 =
+      IsB64 ? fmtRegOperand(MRI, Regs[2]) : toAsmRegName(MRI, Regs[2]);
+  return {
+      ToMnem.str() + " " + Addr + ", " + Data0 + fmtOffset(Off0),
+      ToMnem.str() + " " + Addr + ", " + Data1 + fmtOffset(Off1),
+  };
+}
+
+static std::vector<std::string>
+expandDs2AddrXchg(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
+                  bool IsB64, uint32_t Off0, uint32_t Off1,
+                  const MCRegisterInfo &MRI) {
+  if (Regs.size() < 4)
+    return {};
+  auto [D0, D1] = splitDstPair(Regs[0], IsB64, MRI);
+  if (D0.empty())
+    return {};
+  std::string Addr = toAsmRegName(MRI, Regs[1]);
+  std::string Data0 =
+      IsB64 ? fmtRegOperand(MRI, Regs[2]) : toAsmRegName(MRI, Regs[2]);
+  std::string Data1 =
+      IsB64 ? fmtRegOperand(MRI, Regs[3]) : toAsmRegName(MRI, Regs[3]);
+  return {
+      ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 + fmtOffset(Off0),
+      ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 + fmtOffset(Off1),
+  };
+}
+
+// -- expandDs2Addr ----------------------------------------------------------
+//
+// Top-level expansion: extracts operands from the decoded MCInst, computes
+// scaled offsets, then dispatches to the appropriate layout-specific helper.
 
 static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
                                               StringRef FromMnem,
@@ -119,7 +204,6 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
                                               const LLVMState &LS) {
   const MCRegisterInfo &MRI = *LS.MRI;
 
-  // Collect register operands and locate the two offset immediates.
   SmallVector<MCRegister, 4> Regs;
   int64_t Off0 = 0, Off1 = 0;
   unsigned ImmsSeen = 0;
@@ -140,105 +224,13 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
   uint32_t Scale = 64 * ElemBytes;
   uint32_t ScaledOff0 = static_cast<uint32_t>(Off0) * Scale;
   uint32_t ScaledOff1 = static_cast<uint32_t>(Off1) * Scale;
-
-  auto FmtOff = [](uint32_t V) -> std::string {
-    return V ? " offset:" + std::to_string(V) : "";
-  };
-
-  bool IsLoad = FromMnem.starts_with("ds_load");
-  bool IsXchg = FromMnem.starts_with("ds_storexchg");
   bool IsB64 = (ElemBytes == 8);
 
-  auto FmtPair = [&](MCRegister Lo, MCRegister Hi) -> std::string {
-    std::string LoStr = toAsmRegName(MRI, Lo);
-    std::string HiStr = toAsmRegName(MRI, Hi);
-    return LoStr.substr(0, 1) + "[" + LoStr.substr(1) + ":" + HiStr.substr(1) +
-           "]";
-  };
-
-  if (IsLoad && Regs.size() >= 2) {
-    // Load: Inst = ds_load_2addr_stride64 vdst_pair, addr
-    auto Subs = getDirectSubRegs(Regs[0], MRI);
-    std::string Addr = toAsmRegName(MRI, Regs[1]);
-
-    if (IsB64) {
-      if (Subs.size() < 4)
-        return {};
-      std::string D0 = FmtPair(Subs[0], Subs[1]);
-      std::string D1 = FmtPair(Subs[2], Subs[3]);
-      return {
-          ToMnem.str() + " " + D0 + ", " + Addr + FmtOff(ScaledOff0),
-          ToMnem.str() + " " + D1 + ", " + Addr + FmtOff(ScaledOff1),
-      };
-    }
-
-    if (Subs.size() < 2)
-      return {};
-    std::string D0 = toAsmRegName(MRI, Subs[0]);
-    std::string D1 = toAsmRegName(MRI, Subs[1]);
-    return {
-        ToMnem.str() + " " + D0 + ", " + Addr + FmtOff(ScaledOff0),
-        ToMnem.str() + " " + D1 + ", " + Addr + FmtOff(ScaledOff1),
-    };
-  }
-
-  if (IsXchg && Regs.size() >= 4) {
-    // Xchg: Inst = ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0,
-    // data1
-    auto Subs = getDirectSubRegs(Regs[0], MRI);
-    std::string Addr = toAsmRegName(MRI, Regs[1]);
-
-    if (IsB64) {
-      if (Subs.size() < 4)
-        return {};
-      std::string D0 = FmtPair(Subs[0], Subs[1]);
-      std::string D1 = FmtPair(Subs[2], Subs[3]);
-      std::string Data0 = toAsmRegRange(MRI, Regs[2]);
-      std::string Data1 = toAsmRegRange(MRI, Regs[3]);
-      return {
-          ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 +
-              FmtOff(ScaledOff0),
-          ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 +
-              FmtOff(ScaledOff1),
-      };
-    }
-
-    if (Subs.size() < 2)
-      return {};
-    std::string D0 = toAsmRegName(MRI, Subs[0]);
-    std::string D1 = toAsmRegName(MRI, Subs[1]);
-    std::string Data0 = toAsmRegName(MRI, Regs[2]);
-    std::string Data1 = toAsmRegName(MRI, Regs[3]);
-    return {
-        ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 +
-            FmtOff(ScaledOff0),
-        ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 +
-            FmtOff(ScaledOff1),
-    };
-  }
-
-  // Store: Inst = ds_store_2addr_stride64 addr, data0, data1
-  if (Regs.size() >= 3) {
-    std::string Addr = toAsmRegName(MRI, Regs[0]);
-
-    if (IsB64) {
-      std::string Data0 = toAsmRegRange(MRI, Regs[1]);
-      std::string Data1 = toAsmRegRange(MRI, Regs[2]);
-      return {
-          ToMnem.str() + " " + Addr + ", " + Data0 + FmtOff(ScaledOff0),
-          ToMnem.str() + " " + Addr + ", " + Data1 + FmtOff(ScaledOff1),
-      };
-    }
-
-    std::string Data0 = toAsmRegName(MRI, Regs[1]);
-    std::string Data1 = toAsmRegName(MRI, Regs[2]);
-    return {
-        ToMnem.str() + " " + Addr + ", " + Data0 + FmtOff(ScaledOff0),
-        ToMnem.str() + " " + Addr + ", " + Data1 + FmtOff(ScaledOff1),
-    };
-  }
-
-  return {};
+  if (FromMnem.starts_with("ds_load"))
+    return expandDs2AddrLoad(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
+  if (FromMnem.starts_with("ds_storexchg"))
+    return expandDs2AddrXchg(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
+  return expandDs2AddrStore(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
 }
 
 // -- bumpNextWaitDscnt ------------------------------------------------------
