@@ -243,6 +243,12 @@ extern "C" {
  */
 #define AMD_COMGR_VERSION_3_2
 
+/**
+ * The function was introduced or changed in version 3.3 of the interface
+ * and has the symbol version string of ``"@amd_comgr_NAME@_3.3"``.
+ */
+#define AMD_COMGR_VERSION_3_3
+
 /** @} */
 
 /**
