@@ -24,7 +24,7 @@ using namespace llvm;
 
 namespace {
 
-class Vreg1WideningHelper : public PhiLoweringHelper {
+class Vreg1WideningHelper : public AMDGPU::PhiLoweringHelper {
 public:
   Vreg1WideningHelper(MachineFunction *MF);
 
@@ -79,14 +79,14 @@ public:
       SmallVectorImpl<MachineInstr *> &Vreg1Phis) const override {}
   void collectIncomingValuesFromPhi(
       const MachineInstr *MI,
-      SmallVectorImpl<Incoming> &Incomings) const override {}
+      SmallVectorImpl<AMDGPU::Incoming> &Incomings) const override {}
   void replaceDstReg(Register NewReg, Register OldReg,
                      MachineBasicBlock *MBB) override {}
   void buildMergeLaneMasks(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator I, const DebugLoc &DL,
                            Register DstReg, Register PrevReg,
                            Register CurReg) override {}
-  void constrainAsLaneMask(Incoming &In) override {}
+  void constrainAsLaneMask(AMDGPU::Incoming &In) override {}
 
   bool widenVreg1s();
 

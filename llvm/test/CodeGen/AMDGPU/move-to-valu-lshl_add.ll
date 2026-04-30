@@ -12,17 +12,11 @@ define amdgpu_kernel void @lshl1_add(ptr addrspace(1) %in, ptr addrspace(7) %in2
 ; CHECK-NEXT:    global_load_b32 v1, v0, s[6:7] scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_load_b32 s7, s[4:5], 0x54
-; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s8, s3
-; CHECK-NEXT:    s_mov_b32 s4, s6
+; CHECK-NEXT:    s_mov_b32 s4, s1
 ; CHECK-NEXT:    s_mov_b32 s5, s2
-; CHECK-NEXT:    s_mov_b32 s2, s1
-; CHECK-NEXT:    s_mov_b32 s3, s6
-; CHECK-NEXT:    s_mov_b32 s9, s6
-; CHECK-NEXT:    s_or_b64 s[4:5], s[2:3], s[4:5]
-; CHECK-NEXT:    s_wait_kmcnt 0x0
-; CHECK-NEXT:    s_or_b64 s[6:7], s[8:9], s[6:7]
+; CHECK-NEXT:    s_mov_b32 s6, s3
 ; CHECK-NEXT:    v_lshl_add_u32 v1, v1, 1, s0
+; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    buffer_store_b16 v0, v1, s[4:7], null offen
 ; CHECK-NEXT:    s_endpgm
   %vaddr = load volatile i32, ptr addrspace(1) %in, align 4
@@ -43,17 +37,11 @@ define amdgpu_kernel void @lshl2_add(ptr addrspace(1) %in, ptr addrspace(7) %in2
 ; CHECK-NEXT:    global_load_b32 v1, v0, s[6:7] scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_load_b32 s7, s[4:5], 0x54
-; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s8, s3
-; CHECK-NEXT:    s_mov_b32 s4, s6
+; CHECK-NEXT:    s_mov_b32 s4, s1
 ; CHECK-NEXT:    s_mov_b32 s5, s2
-; CHECK-NEXT:    s_mov_b32 s2, s1
-; CHECK-NEXT:    s_mov_b32 s3, s6
-; CHECK-NEXT:    s_mov_b32 s9, s6
-; CHECK-NEXT:    s_or_b64 s[4:5], s[2:3], s[4:5]
-; CHECK-NEXT:    s_wait_kmcnt 0x0
-; CHECK-NEXT:    s_or_b64 s[6:7], s[8:9], s[6:7]
+; CHECK-NEXT:    s_mov_b32 s6, s3
 ; CHECK-NEXT:    v_lshl_add_u32 v1, v1, 2, s0
+; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    buffer_store_b32 v0, v1, s[4:7], null offen
 ; CHECK-NEXT:    s_endpgm
   %vaddr = load volatile i32, ptr addrspace(1) %in, align 4
@@ -74,18 +62,12 @@ define amdgpu_kernel void @lshl3_add(ptr addrspace(1) %in, ptr addrspace(7) %in2
 ; CHECK-NEXT:    global_load_b32 v2, v0, s[6:7] scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_load_b32 s7, s[4:5], 0x54
-; CHECK-NEXT:    s_mov_b32 s6, 0
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
-; CHECK-NEXT:    s_mov_b32 s8, s3
-; CHECK-NEXT:    s_mov_b32 s4, s6
+; CHECK-NEXT:    s_mov_b32 s4, s1
 ; CHECK-NEXT:    s_mov_b32 s5, s2
-; CHECK-NEXT:    s_mov_b32 s2, s1
-; CHECK-NEXT:    s_mov_b32 s3, s6
-; CHECK-NEXT:    s_mov_b32 s9, s6
-; CHECK-NEXT:    s_or_b64 s[4:5], s[2:3], s[4:5]
-; CHECK-NEXT:    s_wait_kmcnt 0x0
-; CHECK-NEXT:    s_or_b64 s[6:7], s[8:9], s[6:7]
+; CHECK-NEXT:    s_mov_b32 s6, s3
 ; CHECK-NEXT:    v_lshl_add_u32 v2, v2, 3, s0
+; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    buffer_store_b64 v[0:1], v2, s[4:7], null offen
 ; CHECK-NEXT:    s_endpgm
   %vaddr = load volatile i32, ptr addrspace(1) %in, align 4
@@ -108,18 +90,12 @@ define amdgpu_kernel void @lshl4_add(ptr addrspace(1) %in, ptr addrspace(7) %in2
 ; CHECK-NEXT:    global_load_b32 v3, v0, s[6:7] scope:SCOPE_SYS
 ; CHECK-NEXT:    s_wait_loadcnt 0x0
 ; CHECK-NEXT:    s_load_b32 s7, s[4:5], 0x54
-; CHECK-NEXT:    s_mov_b32 s6, 0
-; CHECK-NEXT:    s_mov_b32 s4, 0
-; CHECK-NEXT:    s_mov_b32 s9, s6
-; CHECK-NEXT:    s_mov_b32 s11, s6
+; CHECK-NEXT:    s_mov_b32 s4, s1
 ; CHECK-NEXT:    s_mov_b32 s5, s2
-; CHECK-NEXT:    s_mov_b32 s10, s1
-; CHECK-NEXT:    s_mov_b32 s8, s3
-; CHECK-NEXT:    s_or_b64 s[4:5], s[10:11], s[4:5]
-; CHECK-NEXT:    s_wait_kmcnt 0x0
-; CHECK-NEXT:    s_or_b64 s[6:7], s[8:9], s[6:7]
+; CHECK-NEXT:    s_mov_b32 s6, s3
 ; CHECK-NEXT:    v_lshl_add_u32 v4, v3, 4, s0
 ; CHECK-NEXT:    v_mov_b32_e32 v3, v0
+; CHECK-NEXT:    s_wait_kmcnt 0x0
 ; CHECK-NEXT:    buffer_store_b128 v[0:3], v4, s[4:7], null offen
 ; CHECK-NEXT:    s_endpgm
   %vaddr = load volatile i32, ptr addrspace(1) %in, align 4

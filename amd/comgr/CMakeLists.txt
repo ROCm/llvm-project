@@ -77,6 +77,10 @@ set(SOURCES
   src/comgr-disassembly.cpp
   src/comgr-env.cpp
   src/comgr-hotswap.cpp
+  src/comgr-hotswap-b0a0.cpp
+  src/comgr-hotswap-elf.cpp
+  src/comgr-hotswap-llvm.cpp
+  src/comgr-hotswap-patch-inplace.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
@@ -558,6 +562,7 @@ if(BUILD_TESTING)
   endif()
   add_subdirectory(test)
   add_subdirectory(test-lit)
+  add_subdirectory(test-unit)
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

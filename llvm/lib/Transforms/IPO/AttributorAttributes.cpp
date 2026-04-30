@@ -88,6 +88,11 @@ static cl::opt<bool> ManifestInternal(
 
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
                                        cl::Hidden);
+static cl::opt<unsigned> MaxAccessesPerAAPointerInfo(
+    "attributor-max-pi-accesses", cl::Hidden,
+    cl::desc("Maximum number of accesses in a single AAPointerInfo instance "
+             "before going pessimistic (0 = unlimited)"),
+    cl::init(512));
 
 template <>
 unsigned llvm::PotentialConstantIntValuesState::MaxPotentialValues = 0;
@@ -938,6 +943,10 @@ ChangeStatus AA::PointerInfo::State::addAccess(
     Attributor &A, const AAPointerInfo::RangeList &Ranges, Instruction &I,
     std::optional<Value *> Content, AAPointerInfo::AccessKind Kind, Type *Ty,
     Instruction *RemoteI) {
+  if (MaxAccessesPerAAPointerInfo > 0 &&
+      AccessList.size() >= MaxAccessesPerAAPointerInfo)
+    return indicatePessimisticFixpoint();
+
   RemoteI = RemoteI ? RemoteI : &I;
 
   // Check if we have an access for this instruction, if not, simply add it.
@@ -1092,7 +1101,14 @@ struct AAPointerInfoImpl
     HasBeenWrittenTo = false;
 
     SmallPtrSet<const Access *, 8> DominatingWrites;
-    SmallVector<std::pair<const Access *, bool>, 8> InterferingAccesses;
+
+    // All Accesses are not equal. AccessCB partitions them into two groups.
+    // IntraFnAccesses: When RemoteI is in the same function as I (Scope).
+    // See CanSkipAccessBatch below (Batch Reachability Optimization)
+    // InterFnAccesses: When RemoteI is in a different function as I. Processed
+    // by CanSkipAccess.
+    SmallVector<std::pair<const Access *, bool>, 8> IntraFnAccesses;
+    SmallVector<std::pair<const Access *, bool>, 8> InterFnAccesses;
 
     Function &Scope = *I.getFunction();
     bool IsKnownNoSync;
@@ -1183,14 +1199,10 @@ struct AAPointerInfoImpl
     auto HasKernelLifetime = [&](Value *V, Module &M) {
       if (!AA::isGPU(M))
         return false;
-      switch (AA::GPUAddressSpace(V->getType()->getPointerAddressSpace())) {
-      case AA::GPUAddressSpace::Shared:
-      case AA::GPUAddressSpace::Constant:
-      case AA::GPUAddressSpace::Local:
-        return true;
-      default:
-        return false;
-      };
+      unsigned VAS = V->getType()->getPointerAddressSpace();
+      return AA::isGPUSharedAddressSpace(M, VAS) ||
+             AA::isGPUConstantAddressSpace(M, VAS) ||
+             AA::isGPULocalAddressSpace(M, VAS);
     };
 
     // The IsLiveInCalleeCB will be used by the AA::isPotentiallyReachable query
@@ -1252,9 +1264,21 @@ struct AAPointerInfoImpl
 
       // Track if all interesting accesses are in the same `nosync` function as
       // the given instruction.
-      AllInSameNoSyncFn &= Acc.getRemoteInst()->getFunction() == &Scope;
+      AllInSameNoSyncFn &= AccInSameScope;
 
-      InterferingAccesses.push_back({&Acc, Exact});
+      // Only truly local accesses (LocalI == RemoteI) use the batch BFS path.
+      // Imported accesses (from translateAndAddStateFromCallee) have
+      // LocalI != RemoteI: LocalI is the call site, RemoteI is the actual
+      // instruction in the callee. For recursive calls, RemoteI is in the
+      // same function but at a different invocation context. The batch BFS
+      // would incorrectly check block-level reachability between I and
+      // RemoteI, missing the call-site indirection. These must go through
+      // CanSkipAccess with isPotentiallyReachable, which correctly handles
+      // cross-invocation reachability via the call graph.
+      if (AccInSameScope && Acc.getLocalInst() == Acc.getRemoteInst())
+        IntraFnAccesses.push_back({&Acc, Exact});
+      else
+        InterFnAccesses.push_back({&Acc, Exact});
       return true;
     };
     if (!State::forallInterferingAccesses(I, AccessCB, Range))
@@ -1277,8 +1301,9 @@ struct AAPointerInfoImpl
     auto CanSkipAccess = [&](const Access &Acc, bool Exact) {
       if (SkipCB && SkipCB(Acc))
         return true;
-      if (!CanIgnoreThreading(Acc))
+      if (!CanIgnoreThreading(Acc)) {
         return false;
+      }
 
       // Check read (RAW) dependences and write (WAR) dependences as necessary.
       // If we successfully excluded all effects we are interested in, the
@@ -1343,13 +1368,297 @@ struct AAPointerInfoImpl
       return LeastDominatingWriteInst != Acc.getRemoteInst();
     };
 
-    // Run the user callback on all accesses we cannot skip and return if
-    // that succeeded for all or not.
-    for (auto &It : InterferingAccesses) {
-      if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
-          !CanSkipAccess(*It.first, It.second)) {
-        if (!UserCB(*It.first, It.second))
+    {
+      // Batch reachability optimization for CanSkipAccess.
+      //
+      // Without this optimization, each interfering access would trigger two
+      // independent AA::isPotentiallyReachable calls. Each call traverses the
+      // CFG from scratch. With N interfering accesses, this is 2 * N
+      // independent BFS traversals over the same function's CFG — redundant
+      // work.
+      //
+      // This optimization pre-computes two block-level reachability sets:
+      //   ReachableFromI: all basic blocks reachable forward from I's block
+      //   ReachableToI:   all basic blocks that can reach I's block (backward)
+      //
+      // These are computed lazily (on first use) via a single BFS each,
+      // respecting the ExclusionSet (must-write barriers) and liveness
+      // (dead edges from AAIsDead). Then for each intra-function access,
+      // a cheap set lookup replaces the full isPotentiallyReachable call:
+      //   - ReadChecked:  if Acc's block is NOT in ReachableFromI, I can't
+      //                   reach Acc, so Acc's read can't observe I's write.
+      //   - WriteChecked: if Acc's block is NOT in ReachableToI, Acc can't
+      //                   reach I, so Acc's write can't affect I's read.
+      //
+      // If the block-level check is inconclusive, we fall back to
+      // isPotentiallyReachable.
+      //
+      //
+
+      DenseSet<const BasicBlock *> ReachableFromI;
+      bool ReachableFromIComputed = false;
+
+      DenseSet<const BasicBlock *> ReachableToI;
+      bool ReachableToIComputed = false;
+
+      // Map each basic block to the ExclusionSet instructions it contains.
+      // Built once and shared across the BFS helpers and same-block checks
+      // in CanSkipAccessBatch, replacing per-use iteration over ExclusionSet.
+      DenseMap<const BasicBlock *, SmallVector<const Instruction *, 2>>
+          ExcludedBlockInsts;
+      for (const Instruction *ExclI : ExclusionSet)
+        ExcludedBlockInsts[ExclI->getParent()].push_back(ExclI);
+
+      // Lazily compute forward reachability from I's block.
+      // BFS over successor edges within Scope, skipping dead edges (AAIsDead)
+      // and not traversing past ExclusionSet blocks (must-write barriers).
+      // I's block is always traversed (its successors are always explored).
+      // Other blocks containing ExclusionSet instructions are added to the
+      // reachable set but their successors are NOT explored.
+      //
+      // Note: we do NOT block I's block even if it contains an ExclusionSet
+      // instruction after I. This matches isPotentiallyReachable /
+      // isReachableImpl semantics, which check SuccBB == ToBB before
+      // ExclusionBlocks and thus always consider direct successors as
+      // reachable.
+      auto EnsureReachableFromI = [&]() {
+        if (ReachableFromIComputed)
+          return;
+
+        const BasicBlock *FromBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(FromBB);
+        ReachableFromI.insert(FromBB);
+
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          // Don't traverse past ExclusionSet blocks (must-write barriers),
+          // but always traverse I's own block.
+          if (BB != FromBB && ExcludedBlockInsts.count(BB))
+            continue;
+
+          for (const BasicBlock *SuccBB : successors(BB)) {
+            if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB))
+              continue;
+
+            if (ReachableFromI.insert(SuccBB).second)
+              Worklist.push_back(SuccBB);
+          }
+        }
+        ReachableFromIComputed = true;
+      };
+
+      // Lazily compute backward reachability to I's block.
+      // BFS over predecessor edges within Scope, skipping dead edges and
+      // not traversing past ExclusionSet blocks. This is the mirror of
+      // EnsureReachableFromI: it answers "can Acc reach I?" rather than
+      // "can I reach Acc?".
+      //
+      // Lazily compute backward reachability to I's block.
+      // BFS over predecessor edges within Scope, skipping dead edges and
+      // not traversing past ExclusionSet blocks. This is the mirror of
+      // EnsureReachableFromI: it answers "can Acc reach I?" rather than
+      // "can I reach Acc?".
+      //
+      // As with EnsureReachableFromI, I's block is always traversed
+      // (its predecessors are always explored) to match isPotentiallyReachable
+      // semantics.
+      auto EnsureReachableToI = [&]() {
+        if (ReachableToIComputed)
+          return;
+
+        const BasicBlock *ToBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(ToBB);
+        ReachableToI.insert(ToBB);
+
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          for (const BasicBlock *PredBB : predecessors(BB)) {
+            if (LivenessAA && LivenessAA->isEdgeDead(PredBB, BB))
+              continue;
+
+            if (!ReachableToI.insert(PredBB).second)
+              continue;
+
+            // Don't traverse past ExclusionSet blocks, but always
+            // traverse I's own block (ToBB).
+            bool Blocked = (PredBB != ToBB && ExcludedBlockInsts.count(PredBB));
+
+            if (!Blocked)
+              Worklist.push_back(PredBB);
+          }
+        }
+        ReachableToIComputed = true;
+      };
+
+      // Batch variant of CanSkipAccess for intra-function accesses.
+      //
+      // The batch BFS can safely be used as a negative filter (skip iPR when
+      // BFS says "not reachable") only when iPR agrees for all paths the BFS
+      // can't model. This requires:
+      //   (a) norecurse: instructionCanReach can't find paths back to Scope
+      //   (b) GoBackwardsCB returns false for Scope: iPR won't step back to
+      //   callers
+      // Both hold for allocas in norecurse functions where
+      // GoBackwardsCB(*Scope) = IsLiveInCalleeCB(*Scope) = (AIFn != Scope) =
+      // false.
+      //
+      // When BFSSafe is true (alloca in norecurse fn), the BFS is used as a
+      // negative filter: if Acc's block is NOT in the reachable set,
+      // isPotentiallyReachable would also return false, so we can directly
+      // set Checked = true without calling isPotentiallyReachable.
+      //
+      // When BFSSafe is false, the BFS cannot be a negative filter because
+      // isPotentiallyreachable considers inter-procedural and cross-invocation
+      // paths that the BFS can't model. In that case, we skip the BFS entirely
+      // and only use the same-block optimization (which doesn't depend on the
+      // BFS).
+      bool BFSSafe = false;
+      if (isa<AllocaInst>(&getAssociatedValue()) && IsLiveInCalleeCB)
+        BFSSafe = true;
+
+      auto CanSkipAccessBatch = [&](const Access &Acc, bool Exact) {
+        if (SkipCB && SkipCB(Acc))
+          return true;
+        if (!CanIgnoreThreading(Acc)) {
           return false;
+        }
+
+        bool ReadChecked = !FindInterferingReads;
+        bool WriteChecked = !FindInterferingWrites;
+
+        // Forward reachability: can I reach Acc?
+        if (!ReadChecked) {
+          if (BFSSafe) {
+            EnsureReachableFromI();
+            bool BlockReachable =
+                ReachableFromI.count(Acc.getRemoteInst()->getParent());
+
+            if (!BlockReachable) {
+              // BFS-safe negative filter: the BFS is a complete model of
+              // reachability for allocas in norecurse functions.
+              ReadChecked = true;
+            } else if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                       I.comesBefore(Acc.getRemoteInst())) {
+              // Same-block optimization.
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (I.comesBefore(ExclI) &&
+                      ExclI->comesBefore(Acc.getRemoteInst())) {
+                    ReadChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            // Not BFS-safe: only apply same-block optimization.
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                I.comesBefore(Acc.getRemoteInst())) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (I.comesBefore(ExclI) &&
+                      ExclI->comesBefore(Acc.getRemoteInst())) {
+                    ReadChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (!ReadChecked) {
+            if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB)) {
+              ReadChecked = true;
+            }
+          }
+        }
+
+        // Backward reachability: can Acc reach I?
+        if (!WriteChecked) {
+          if (BFSSafe) {
+            EnsureReachableToI();
+            bool BlockReachable =
+                ReachableToI.count(Acc.getRemoteInst()->getParent());
+
+            if (!BlockReachable) {
+              WriteChecked = true;
+            } else if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                       Acc.getRemoteInst()->comesBefore(&I)) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (Acc.getRemoteInst()->comesBefore(ExclI) &&
+                      ExclI->comesBefore(&I)) {
+                    WriteChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                Acc.getRemoteInst()->comesBefore(&I)) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (Acc.getRemoteInst()->comesBefore(ExclI) &&
+                      ExclI->comesBefore(&I)) {
+                    WriteChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (!WriteChecked) {
+            if (!AA::isPotentiallyReachable(A, *Acc.getRemoteInst(), I,
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB)) {
+              WriteChecked = true;
+            }
+          }
+        }
+        if (ReadChecked && WriteChecked)
+          return true;
+
+        if (!DT || !UseDominanceReasoning)
+          return false;
+        if (!DominatingWrites.count(&Acc))
+          return false;
+        return LeastDominatingWriteInst != Acc.getRemoteInst();
+      };
+
+      // Process intra-function accesses.
+      for (auto &It : IntraFnAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccessBatch(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
+      }
+
+      // Process cross-function accesses.
+      for (auto &It : InterFnAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccess(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
       }
     }
     return true;
@@ -2955,8 +3264,8 @@ struct AAUndefinedBehaviorImpl : public AAUndefinedBehavior {
     const size_t NoUBPrevSize = AssumedNoUBInsts.size();
 
     auto InspectMemAccessInstForUB = [&](Instruction &I) {
-      // Lang ref now states volatile store is not UB, let's skip them.
-      if (I.isVolatile() && I.mayWriteToMemory())
+      // Volatile accesses on null are not necessarily UB.
+      if (I.isVolatile())
         return true;
 
       // Skip instructions that are already saved.
@@ -3347,6 +3656,17 @@ struct AAWillReturnImpl : public AAWillReturn {
     bool UsedAssumedInformation = false;
     if (!A.checkForAllCallLikeInstructions(CheckForWillReturn, *this,
                                            UsedAssumedInformation))
+      return indicatePessimisticFixpoint();
+
+    auto CheckForVolatile = [&](Instruction &I) {
+      // Volatile operations are not willreturn.
+      return !I.isVolatile();
+    };
+    if (!A.checkForAllInstructions(CheckForVolatile, *this,
+                                   {Instruction::Load, Instruction::Store,
+                                    Instruction::AtomicCmpXchg,
+                                    Instruction::AtomicRMW},
+                                   UsedAssumedInformation))
       return indicatePessimisticFixpoint();
 
     return ChangeStatus::UNCHANGED;
@@ -4184,6 +4504,9 @@ struct AAIsDeadValueImpl : public AAIsDead {
   /// Determine if \p I is assumed to be side-effect free.
   bool isAssumedSideEffectFree(Attributor &A, Instruction *I) {
     if (!I || wouldInstructionBeTriviallyDead(I))
+      return true;
+
+    if (!I->isTerminator() && !I->mayHaveSideEffects())
       return true;
 
     auto *CB = dyn_cast<CallBase>(I);
@@ -8743,11 +9066,12 @@ void AAMemoryLocationImpl::categorizePtrValue(
 
     // Filter accesses to constant (GPU) memory if we have an AS at the access
     // site or the object is known to actually have the associated AS.
-    if ((AccessAS == (unsigned)AA::GPUAddressSpace::Constant ||
-         (ObjectAS == (unsigned)AA::GPUAddressSpace::Constant &&
-          isIdentifiedObject(&Obj))) &&
-        AA::isGPU(*I.getModule()))
-      return true;
+    if (AA::isGPU(A.getModule())) {
+      if (AA::isGPUConstantAddressSpace(A.getModule(), AccessAS) ||
+          (AA::isGPUConstantAddressSpace(A.getModule(), ObjectAS) &&
+           isIdentifiedObject(&Obj)))
+        return true;
+    }
 
     if (isa<UndefValue>(&Obj))
       return true;
