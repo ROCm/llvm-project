@@ -1239,11 +1239,11 @@ defm gpu_rdc : BoolFOption<"gpu-rdc",
 
 defm offload_implicit_host_device_templates :
   BoolFOption<"offload-implicit-host-device-templates",
-  LangOpts<"OffloadImplicitHostDeviceTemplates">, DefaultFalse,
+  LangOpts<"OffloadImplicitHostDeviceTemplates">, Default<"LangOpts->HIP">,
   PosFlag<SetTrue, [], [ClangOption, CC1Option],
           "Template functions or specializations without host, device and "
           "global attributes have implicit host device attributes (CUDA/HIP only)">,
-  NegFlag<SetFalse>>;
+  NegFlag<SetFalse, [], [ClangOption, CC1Option]>>;
 
 def fgpu_default_stream_EQ : Joined<["-"], "fgpu-default-stream=">,
   HelpText<"Specify default stream. The default value is 'legacy'. (CUDA/HIP only)">,
