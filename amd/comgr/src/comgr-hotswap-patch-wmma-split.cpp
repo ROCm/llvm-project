@@ -114,8 +114,31 @@ SplitMatch lookupSplitRule(StringRef Mnemonic) {
 
 constexpr unsigned VgprRegIdxMask = 0x3ff;
 
+// Cache the smallest-enclosing MCRegisterClass per MCRegister. Without it,
+// every operand lookup walks all ~100 AMDGPU register classes; with it, a
+// kernel that repeatedly uses the same VGPR ranges (the common shape for
+// tile-multiply loops) hits the cache after the first WMMA. The cache is
+// thread_local because MCRegisterClass pointers are owned by the
+// MCRegisterInfo passed in, which lives for the duration of one rewrite
+// call -- using a static cache across calls would leave dangling pointers
+// when the next rewrite constructs a fresh MCRegisterInfo. Invalidation is
+// keyed on the MRI pointer: a different MRI from the previous call clears
+// the cache before any lookup. Single-threaded access by construction
+// (thread_local), so no mutex is needed.
 const MCRegisterClass *
 findSmallestEnclosingClass(MCRegister Reg, const MCRegisterInfo &MRI) {
+  thread_local const MCRegisterInfo *CachedMRI = nullptr;
+  thread_local DenseMap<unsigned, const MCRegisterClass *> Cache;
+
+  if (CachedMRI != &MRI) {
+    Cache.clear();
+    CachedMRI = &MRI;
+  }
+
+  auto It = Cache.find(Reg.id());
+  if (It != Cache.end())
+    return It->second;
+
   const MCRegisterClass *Smallest = nullptr;
   for (unsigned I = 0, E = MRI.getNumRegClasses(); I < E; ++I) {
     const MCRegisterClass &RC = MRI.getRegClass(I);
@@ -123,6 +146,7 @@ findSmallestEnclosingClass(MCRegister Reg, const MCRegisterInfo &MRI) {
         (!Smallest || RC.getSizeInBits() < Smallest->getSizeInBits()))
       Smallest = &RC;
   }
+  Cache[Reg.id()] = Smallest;
   return Smallest;
 }
 
