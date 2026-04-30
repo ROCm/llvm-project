@@ -115,16 +115,52 @@ static std::string fmtOffset(uint32_t Offset) {
   return Offset ? " offset:" + std::to_string(Offset) : "";
 }
 
-// -- DS expansion helpers ---------------------------------------------------
+// -- DS expansion -----------------------------------------------------------
 //
-// Each helper expands one DS 2-address instruction into two single-address
-// assembly strings. The three operation types have different operand layouts:
+// Expands one DS 2-address instruction into two single-address assembly
+// strings. The three operation types have different operand layouts:
 //   Load:  ds_load_2addr_stride64  vdst_pair, addr, off0, off1
 //   Store: ds_store_2addr_stride64 addr, data0, data1, off0, off1
 //   Xchg:  ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0, data1, ...
 //
 // For b32 operations, destinations are split into individual VGPRs.
 // For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
+
+struct DsOperands {
+  SmallVector<MCRegister, 4> Regs;
+  uint32_t Off0;
+  uint32_t Off1;
+  bool IsB64;
+  const MCRegisterInfo *MRI;
+};
+
+static DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
+                                    const LLVMState &LS) {
+  DsOperands Ops;
+  Ops.MRI = LS.MRI.get();
+
+  int64_t RawOff0 = 0, RawOff1 = 0;
+  unsigned ImmsSeen = 0;
+  for (unsigned I = 0, E = Inst.getNumOperands(); I < E; ++I) {
+    const MCOperand &Op = Inst.getOperand(I);
+    if (Op.isReg() && Op.getReg() != 0)
+      Ops.Regs.push_back(MCRegister(Op.getReg()));
+    else if (Op.isImm()) {
+      if (ImmsSeen == 0)
+        RawOff0 = Op.getImm();
+      else if (ImmsSeen == 1)
+        RawOff1 = Op.getImm();
+      ++ImmsSeen;
+    }
+  }
+
+  uint32_t ElemBytes = FromMnem.contains("_b64") ? 8 : 4;
+  uint32_t Scale = 64 * ElemBytes;
+  Ops.Off0 = static_cast<uint32_t>(RawOff0) * Scale;
+  Ops.Off1 = static_cast<uint32_t>(RawOff1) * Scale;
+  Ops.IsB64 = (ElemBytes == 8);
+  return Ops;
+}
 
 // Split a compound destination register into two formatted destination strings.
 // b32: VReg_64 -> ("v0", "v1"); b64: VReg_128 -> ("v[0:1]", "v[2:3]")
@@ -142,56 +178,54 @@ splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
   return {toAsmRegName(MRI, Subs[0]), toAsmRegName(MRI, Subs[1])};
 }
 
-static std::vector<std::string>
-expandDs2AddrLoad(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
-                  bool IsB64, uint32_t Off0, uint32_t Off1,
-                  const MCRegisterInfo &MRI) {
-  if (Regs.size() < 2)
+static std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
+                                                  StringRef ToMnem) {
+  if (Ops.Regs.size() < 2)
     return {};
-  auto [D0, D1] = splitDstPair(Regs[0], IsB64, MRI);
+  auto [D0, D1] = splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
   if (D0.empty())
     return {};
-  std::string Addr = toAsmRegName(MRI, Regs[1]);
+  std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
   return {
-      ToMnem.str() + " " + D0 + ", " + Addr + fmtOffset(Off0),
-      ToMnem.str() + " " + D1 + ", " + Addr + fmtOffset(Off1),
+      ToMnem.str() + " " + D0 + ", " + Addr + fmtOffset(Ops.Off0),
+      ToMnem.str() + " " + D1 + ", " + Addr + fmtOffset(Ops.Off1),
   };
 }
 
-static std::vector<std::string>
-expandDs2AddrStore(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
-                   bool IsB64, uint32_t Off0, uint32_t Off1,
-                   const MCRegisterInfo &MRI) {
-  if (Regs.size() < 3)
+static std::vector<std::string> expandDs2AddrStore(const DsOperands &Ops,
+                                                   StringRef ToMnem) {
+  if (Ops.Regs.size() < 3)
     return {};
-  std::string Addr = toAsmRegName(MRI, Regs[0]);
-  std::string Data0 =
-      IsB64 ? fmtRegOperand(MRI, Regs[1]) : toAsmRegName(MRI, Regs[1]);
-  std::string Data1 =
-      IsB64 ? fmtRegOperand(MRI, Regs[2]) : toAsmRegName(MRI, Regs[2]);
+  const MCRegisterInfo &MRI = *Ops.MRI;
+  std::string Addr = toAsmRegName(MRI, Ops.Regs[0]);
+  std::string Data0 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[1])
+                                : toAsmRegName(MRI, Ops.Regs[1]);
+  std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[2])
+                                : toAsmRegName(MRI, Ops.Regs[2]);
   return {
-      ToMnem.str() + " " + Addr + ", " + Data0 + fmtOffset(Off0),
-      ToMnem.str() + " " + Addr + ", " + Data1 + fmtOffset(Off1),
+      ToMnem.str() + " " + Addr + ", " + Data0 + fmtOffset(Ops.Off0),
+      ToMnem.str() + " " + Addr + ", " + Data1 + fmtOffset(Ops.Off1),
   };
 }
 
-static std::vector<std::string>
-expandDs2AddrXchg(const SmallVector<MCRegister, 4> &Regs, StringRef ToMnem,
-                  bool IsB64, uint32_t Off0, uint32_t Off1,
-                  const MCRegisterInfo &MRI) {
-  if (Regs.size() < 4)
+static std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
+                                                  StringRef ToMnem) {
+  if (Ops.Regs.size() < 4)
     return {};
-  auto [D0, D1] = splitDstPair(Regs[0], IsB64, MRI);
+  const MCRegisterInfo &MRI = *Ops.MRI;
+  auto [D0, D1] = splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
   if (D0.empty())
     return {};
-  std::string Addr = toAsmRegName(MRI, Regs[1]);
-  std::string Data0 =
-      IsB64 ? fmtRegOperand(MRI, Regs[2]) : toAsmRegName(MRI, Regs[2]);
-  std::string Data1 =
-      IsB64 ? fmtRegOperand(MRI, Regs[3]) : toAsmRegName(MRI, Regs[3]);
+  std::string Addr = toAsmRegName(MRI, Ops.Regs[1]);
+  std::string Data0 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[2])
+                                : toAsmRegName(MRI, Ops.Regs[2]);
+  std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[3])
+                                : toAsmRegName(MRI, Ops.Regs[3]);
   return {
-      ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 + fmtOffset(Off0),
-      ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 + fmtOffset(Off1),
+      ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 +
+          fmtOffset(Ops.Off0),
+      ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 +
+          fmtOffset(Ops.Off1),
   };
 }
 
@@ -204,35 +238,17 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
                                               StringRef FromMnem,
                                               StringRef ToMnem,
                                               const LLVMState &LS) {
-  const MCRegisterInfo &MRI = *LS.MRI;
-
-  SmallVector<MCRegister, 4> Regs;
-  int64_t Off0 = 0, Off1 = 0;
-  unsigned ImmsSeen = 0;
-  for (unsigned I = 0, E = Inst.getNumOperands(); I < E; ++I) {
-    const MCOperand &Op = Inst.getOperand(I);
-    if (Op.isReg() && Op.getReg() != 0)
-      Regs.push_back(MCRegister(Op.getReg()));
-    else if (Op.isImm()) {
-      if (ImmsSeen == 0)
-        Off0 = Op.getImm();
-      else if (ImmsSeen == 1)
-        Off1 = Op.getImm();
-      ++ImmsSeen;
-    }
-  }
-
-  uint32_t ElemBytes = FromMnem.contains("_b64") ? 8 : 4;
-  uint32_t Scale = 64 * ElemBytes;
-  uint32_t ScaledOff0 = static_cast<uint32_t>(Off0) * Scale;
-  uint32_t ScaledOff1 = static_cast<uint32_t>(Off1) * Scale;
-  bool IsB64 = (ElemBytes == 8);
+  DsOperands Ops = extractDsOperands(Inst, FromMnem, LS);
 
   if (FromMnem.starts_with("ds_load"))
-    return expandDs2AddrLoad(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
+    return expandDs2AddrLoad(Ops, ToMnem);
   if (FromMnem.starts_with("ds_storexchg"))
-    return expandDs2AddrXchg(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
-  return expandDs2AddrStore(Regs, ToMnem, IsB64, ScaledOff0, ScaledOff1, MRI);
+    return expandDs2AddrXchg(Ops, ToMnem);
+  if (FromMnem.starts_with("ds_store"))
+    return expandDs2AddrStore(Ops, ToMnem);
+
+  log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
+  return {};
 }
 
 // -- bumpNextWaitDscnt ------------------------------------------------------
