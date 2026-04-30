@@ -50,9 +50,9 @@ static std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
   if (!N)
     return {};
   StringRef Name(N);
-  if (Name.starts_with("VGPR"))
+  if (Name.starts_with("VGPR") && !Name.contains('_'))
     return ("v" + Name.drop_front(4)).str();
-  if (Name.starts_with("SGPR"))
+  if (Name.starts_with("SGPR") && !Name.contains('_'))
     return ("s" + Name.drop_front(4)).str();
   return Name.str();
 }
@@ -63,13 +63,30 @@ static SmallVector<MCRegister, 2> getDirectSubRegs(MCRegister Reg,
   for (MCPhysReg Sub : MRI.subregs(Reg)) {
     StringRef Name = MRI.getName(Sub);
     if ((Name.starts_with("VGPR") || Name.starts_with("SGPR")) &&
-        !Name.contains("LO") && !Name.contains("HI"))
+        !Name.contains("LO") && !Name.contains("HI") && !Name.contains('_'))
       Result.push_back(MCRegister(Sub));
   }
   return Result;
 }
 
-// -- DS stride64 swap table (StringMap) -------------------------------------
+static std::string toAsmRegRange(const MCRegisterInfo &MRI, MCRegister Reg) {
+  const char *N = MRI.getName(Reg);
+  if (!N)
+    return {};
+  StringRef Name(N);
+  if (!Name.contains('_'))
+    return toAsmRegName(MRI, Reg);
+  auto Subs = getDirectSubRegs(Reg, MRI);
+  if (Subs.size() < 2)
+    return toAsmRegName(MRI, Reg);
+  std::string Lo = toAsmRegName(MRI, Subs.front());
+  std::string Hi = toAsmRegName(MRI, Subs.back());
+  if (Lo.empty() || Hi.empty())
+    return {};
+  return Lo.substr(0, 1) + "[" + Lo.substr(1) + ":" + Hi.substr(1) + "]";
+}
+
+// -- DS stride64 swap table (StringSwitch) ----------------------------------
 
 static StringRef getDs2AddrReplacement(StringRef Mnemonic) {
   return StringSwitch<StringRef>(Mnemonic)
@@ -130,15 +147,35 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
 
   bool IsLoad = FromMnem.starts_with("ds_load");
   bool IsXchg = FromMnem.starts_with("ds_storexchg");
+  bool IsB64 = (ElemBytes == 8);
+
+  auto FmtPair = [&](MCRegister Lo, MCRegister Hi) -> std::string {
+    std::string LoStr = toAsmRegName(MRI, Lo);
+    std::string HiStr = toAsmRegName(MRI, Hi);
+    return LoStr.substr(0, 1) + "[" + LoStr.substr(1) + ":" + HiStr.substr(1) +
+           "]";
+  };
 
   if (IsLoad && Regs.size() >= 2) {
     // Load: Inst = ds_load_2addr_stride64 vdst_pair, addr
     auto Subs = getDirectSubRegs(Regs[0], MRI);
+    std::string Addr = toAsmRegName(MRI, Regs[1]);
+
+    if (IsB64) {
+      if (Subs.size() < 4)
+        return {};
+      std::string D0 = FmtPair(Subs[0], Subs[1]);
+      std::string D1 = FmtPair(Subs[2], Subs[3]);
+      return {
+          ToMnem.str() + " " + D0 + ", " + Addr + FmtOff(ScaledOff0),
+          ToMnem.str() + " " + D1 + ", " + Addr + FmtOff(ScaledOff1),
+      };
+    }
+
     if (Subs.size() < 2)
       return {};
     std::string D0 = toAsmRegName(MRI, Subs[0]);
     std::string D1 = toAsmRegName(MRI, Subs[1]);
-    std::string Addr = toAsmRegName(MRI, Regs[1]);
     return {
         ToMnem.str() + " " + D0 + ", " + Addr + FmtOff(ScaledOff0),
         ToMnem.str() + " " + D1 + ", " + Addr + FmtOff(ScaledOff1),
@@ -149,11 +186,27 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
     // Xchg: Inst = ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0,
     // data1
     auto Subs = getDirectSubRegs(Regs[0], MRI);
+    std::string Addr = toAsmRegName(MRI, Regs[1]);
+
+    if (IsB64) {
+      if (Subs.size() < 4)
+        return {};
+      std::string D0 = FmtPair(Subs[0], Subs[1]);
+      std::string D1 = FmtPair(Subs[2], Subs[3]);
+      std::string Data0 = toAsmRegRange(MRI, Regs[2]);
+      std::string Data1 = toAsmRegRange(MRI, Regs[3]);
+      return {
+          ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 +
+              FmtOff(ScaledOff0),
+          ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 +
+              FmtOff(ScaledOff1),
+      };
+    }
+
     if (Subs.size() < 2)
       return {};
     std::string D0 = toAsmRegName(MRI, Subs[0]);
     std::string D1 = toAsmRegName(MRI, Subs[1]);
-    std::string Addr = toAsmRegName(MRI, Regs[1]);
     std::string Data0 = toAsmRegName(MRI, Regs[2]);
     std::string Data1 = toAsmRegName(MRI, Regs[3]);
     return {
@@ -167,6 +220,16 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
   // Store: Inst = ds_store_2addr_stride64 addr, data0, data1
   if (Regs.size() >= 3) {
     std::string Addr = toAsmRegName(MRI, Regs[0]);
+
+    if (IsB64) {
+      std::string Data0 = toAsmRegRange(MRI, Regs[1]);
+      std::string Data1 = toAsmRegRange(MRI, Regs[2]);
+      return {
+          ToMnem.str() + " " + Addr + ", " + Data0 + FmtOff(ScaledOff0),
+          ToMnem.str() + " " + Addr + ", " + Data1 + FmtOff(ScaledOff1),
+      };
+    }
+
     std::string Data0 = toAsmRegName(MRI, Regs[1]);
     std::string Data1 = toAsmRegName(MRI, Regs[2]);
     return {
