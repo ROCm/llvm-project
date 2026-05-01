@@ -817,13 +817,18 @@ bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
     } else if (Name == "spirv-allow-unknown-intrinsics") {
       // Bare flag → allow all unknown intrinsics. With =prefix1,prefix2 →
       // restrict to listed prefixes. Matches cl::ValueOptional semantics in
-      // llvm-spirv.cpp.
+      // llvm-spirv.cpp. The translator's isUnknownIntrinsicAllowed only
+      // returns true if some prefix matches; an empty prefix matches every
+      // intrinsic name (StringRef::starts_with("") is true), so represent
+      // "allow all" as a single empty prefix rather than an empty list.
       SPIRV::TranslatorOpts::ArgList Prefixes;
       if (HasValue) {
         SmallVector<StringRef, 4> Parts;
         Value.split(Parts, ',', -1, false);
         for (StringRef P : Parts)
           Prefixes.push_back(P);
+      } else {
+        Prefixes.push_back(StringRef());
       }
       AllowUnknownIntrinsics = std::move(Prefixes);
     } else if (Name == "spirv-preserve-auxdata") {
