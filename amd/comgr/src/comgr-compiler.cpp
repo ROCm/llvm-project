@@ -706,41 +706,9 @@ const llvm::DenseMap<StringRef, SPIRV::ExtensionID> &spirvExtensionNameMap() {
   return Map;
 }
 
-bool parseSpirvVersionStr(StringRef V, SPIRV::VersionNumber &Out,
-                         raw_ostream &LogS) {
-  if (V == "1.0") Out = SPIRV::VersionNumber::SPIRV_1_0;
-  else if (V == "1.1") Out = SPIRV::VersionNumber::SPIRV_1_1;
-  else if (V == "1.2") Out = SPIRV::VersionNumber::SPIRV_1_2;
-  else if (V == "1.3") Out = SPIRV::VersionNumber::SPIRV_1_3;
-  else if (V == "1.4") Out = SPIRV::VersionNumber::SPIRV_1_4;
-  else if (V == "1.5") Out = SPIRV::VersionNumber::SPIRV_1_5;
-  else if (V == "1.6") Out = SPIRV::VersionNumber::SPIRV_1_6;
-  else {
-    LogS << "spirv-translator: unknown --spirv-max-version '" << V << "'\n";
-    return false;
-  }
-  return true;
-}
-
-bool parseDebugInfoEISStr(StringRef V, SPIRV::DebugInfoEIS &Out,
-                          raw_ostream &LogS) {
-  if (V == "legacy") Out = SPIRV::DebugInfoEIS::SPIRV_Debug;
-  else if (V == "ocl-100") Out = SPIRV::DebugInfoEIS::OpenCL_DebugInfo_100;
-  else if (V == "nonsemantic-shader-100")
-    Out = SPIRV::DebugInfoEIS::NonSemantic_Shader_DebugInfo_100;
-  else if (V == "nonsemantic-shader-200")
-    Out = SPIRV::DebugInfoEIS::NonSemantic_Shader_DebugInfo_200;
-  else {
-    LogS << "spirv-translator: unknown --spirv-debug-info-version '" << V
-         << "'\n";
-    return false;
-  }
-  return true;
-}
-
 bool parseSpirvExtList(StringRef Spec,
-                      SPIRV::TranslatorOpts::ExtensionsStatusMap &Status,
-                      raw_ostream &LogS) {
+                       SPIRV::TranslatorOpts::ExtensionsStatusMap &Status,
+                       raw_ostream &LogS) {
   const auto &Names = spirvExtensionNameMap();
   SmallVector<StringRef, 16> Items;
   Spec.split(Items, ',', -1, false);
@@ -773,9 +741,8 @@ bool parseSpirvExtList(StringRef Spec,
 // to match. Also extracts InputPath (.bc) and OutputPath (-o argument).
 // Unrecognized --spirv-* flags are logged and ignored.
 bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
-                              SPIRV::TranslatorOpts &Opts,
-                              StringRef &InputPath, StringRef &OutputPath,
-                              raw_ostream &LogS) {
+                              SPIRV::TranslatorOpts &Opts, StringRef &InputPath,
+                              StringRef &OutputPath, raw_ostream &LogS) {
   SPIRV::VersionNumber MaxVer = SPIRV::VersionNumber::MaximumVersion;
   SPIRV::TranslatorOpts::ExtensionsStatusMap ExtStatus;
   std::optional<SPIRV::DebugInfoEIS> DebugEIS;
@@ -796,7 +763,8 @@ bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
       continue;
     }
 
-    // Normalize: strip leading "--" or "-" so we can compare against bare names.
+    // Normalize: strip leading "--" or "-" so we can compare against bare
+    // names.
     StringRef Body = Arg;
     if (!Body.consume_front("--") && !Body.consume_front("-"))
       continue;
@@ -807,16 +775,41 @@ bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
     StringRef Value = HasValue ? Body.substr(EqPos + 1) : StringRef();
 
     if (Name == "spirv-max-version" && HasValue) {
-      if (!parseSpirvVersionStr(Value, MaxVer, LogS))
+      using V_ = SPIRV::VersionNumber;
+      auto Parsed = llvm::StringSwitch<std::optional<V_>>(Value)
+                        .Case("1.0", V_::SPIRV_1_0)
+                        .Case("1.1", V_::SPIRV_1_1)
+                        .Case("1.2", V_::SPIRV_1_2)
+                        .Case("1.3", V_::SPIRV_1_3)
+                        .Case("1.4", V_::SPIRV_1_4)
+                        .Case("1.5", V_::SPIRV_1_5)
+                        .Case("1.6", V_::SPIRV_1_6)
+                        .Default(std::nullopt);
+      if (!Parsed) {
+        LogS << "spirv-translator: unknown --spirv-max-version '" << Value
+             << "'\n";
         return false;
+      }
+      MaxVer = *Parsed;
     } else if (Name == "spirv-ext" && HasValue) {
       if (!parseSpirvExtList(Value, ExtStatus, LogS))
         return false;
     } else if (Name == "spirv-debug-info-version" && HasValue) {
-      SPIRV::DebugInfoEIS EIS;
-      if (!parseDebugInfoEISStr(Value, EIS, LogS))
+      using EIS_ = SPIRV::DebugInfoEIS;
+      auto Parsed = llvm::StringSwitch<std::optional<EIS_>>(Value)
+                        .Case("legacy", EIS_::SPIRV_Debug)
+                        .Case("ocl-100", EIS_::OpenCL_DebugInfo_100)
+                        .Case("nonsemantic-shader-100",
+                              EIS_::NonSemantic_Shader_DebugInfo_100)
+                        .Case("nonsemantic-shader-200",
+                              EIS_::NonSemantic_Shader_DebugInfo_200)
+                        .Default(std::nullopt);
+      if (!Parsed) {
+        LogS << "spirv-translator: unknown --spirv-debug-info-version '"
+             << Value << "'\n";
         return false;
-      DebugEIS = EIS;
+      }
+      DebugEIS = *Parsed;
     } else if (Name == "spirv-allow-unknown-intrinsics") {
       // Bare flag → allow all unknown intrinsics. With =prefix1,prefix2 →
       // restrict to listed prefixes. Matches cl::ValueOptional semantics in
