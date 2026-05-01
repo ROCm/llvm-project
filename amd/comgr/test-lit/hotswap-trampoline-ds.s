@@ -1,9 +1,13 @@
 // COM: Test HotSwap trampoline patch: ds_*_2addr_stride64_* expansion
 // COM: into two single-address DS instructions with s_wait_dscnt bump.
-// COM: Covers b32 load, b64 load, b32 store, and multi-DS stacking paths
-// COM: via the NOP sled emission mechanism. Verifies explicit s_branch
-// COM: generation for the forward/back jumps.
-// COM: See hotswap-trampoline-ds-nosled.s for the true trampoline fallback.
+// COM: Covers b32 load, b64 load, and b32 store operand variants via the
+// COM: NOP sled emission mechanism. Verifies explicit s_branch generation
+// COM: for the forward/back jumps.
+// COM:
+// COM: Companion tests:
+// COM:   hotswap-trampoline-ds-multi.s   — multi-DS stacking (bump accumulation)
+// COM:   hotswap-trampoline-ds-nosled.s  — true trampoline fallback (no NOP sled)
+// COM:   hotswap-trampoline-ds-nowait.s  — control-flow guard (no s_wait_dscnt)
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -45,13 +49,6 @@
 // DISASM: ds_store_b32 v2, v0
 // DISASM: ds_store_b32 v2, v1
 // DISASM: s_branch
-
-// COM: Kernel 4 (multi-DS stacking): two DS2 sites before one wait => 0x2
-// DISASM-LABEL: <test_multi_ds>:
-// DISASM-NOT: ds_load_2addr_stride64_b32
-// DISASM: s_branch
-// DISASM: s_branch
-// DISASM: s_wait_dscnt 0x2
 
 // COM: Idempotency: rewriting the output again should produce identical bytes.
 // RUN: hotswap-rewrite %t.out.elf \
@@ -146,41 +143,6 @@ test_ds_store_b32:
 .Ltest_ds_store_b32_end:
 .size test_ds_store_b32, .Ltest_ds_store_b32_end-test_ds_store_b32
 
-// ---- Kernel 4: multi-DS stacking (two DS2 sites, one wait) ------------------
-
-.globl test_multi_ds
-.p2align 8
-.type test_multi_ds,@function
-test_multi_ds:
-  ds_load_2addr_stride64_b32 v[0:1], v4 offset0:0 offset1:1
-  ds_load_2addr_stride64_b32 v[2:3], v4 offset0:2 offset1:3
-  s_wait_dscnt 0x0
-  s_endpgm
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-  s_nop 0
-.Ltest_multi_ds_end:
-.size test_multi_ds, .Ltest_multi_ds_end-test_multi_ds
-
 .rodata
 .p2align 8
 .amdhsa_kernel test_ds_load_b32
@@ -195,10 +157,5 @@ test_multi_ds:
 
 .amdhsa_kernel test_ds_store_b32
   .amdhsa_next_free_vgpr 3
-  .amdhsa_next_free_sgpr 1
-.end_amdhsa_kernel
-
-.amdhsa_kernel test_multi_ds
-  .amdhsa_next_free_vgpr 5
   .amdhsa_next_free_sgpr 1
 .end_amdhsa_kernel
