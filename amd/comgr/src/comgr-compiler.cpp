@@ -2440,7 +2440,8 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
 
     if (env::shouldEmitVerboseLogs()) {
       LogS << "SPIR-V Translation: amd-llvm-spirv -r --spirv-target-env=CL2.0 "
-           << getFilePath(Input, InputDir) << " "
+              "--spirv-preserve-auxdata "
+           << getFilePath(Input, InputDir) << " -o "
            << getFilePath(Output, OutputDir) << " (command line equivalent)\n";
     }
 
