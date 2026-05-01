@@ -1,6 +1,9 @@
 // COM: Test HotSwap trampoline patch: ds_*_2addr_stride64_* expansion
 // COM: into two single-address DS instructions with s_wait_dscnt bump.
-// COM: Covers b32 load, b64 load, b32 store, and multi-DS stacking paths.
+// COM: Covers b32 load, b64 load, b32 store, and multi-DS stacking paths
+// COM: via the NOP sled emission mechanism. Verifies explicit s_branch
+// COM: generation for the forward/back jumps.
+// COM: See hotswap-trampoline-ds-nosled.s for the true trampoline fallback.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -14,30 +17,40 @@
 
 // COM: --- Per-kernel checks ---
 
-// COM: Kernel 1 (b32 load): original dual-address gone, two ds_load_b32 appear
+// COM: Kernel 1 (b32 load): s_branch forward to sled, bumped wait stays
+// COM: at original position, expanded loads appear in sled area with
+// COM: s_branch back to the wait instruction.
 // DISASM-LABEL: <test_ds_load_b32>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
+// DISASM: s_branch
 // DISASM: s_wait_dscnt 0x1
 // DISASM: ds_load_b32 v0
 // DISASM: ds_load_b32 v1
+// DISASM: s_branch
 
-// COM: Kernel 2 (b64 load): original dual-address gone, two ds_load_b64 appear
+// COM: Kernel 2 (b64 load): b64 register pairs formatted as v[X:Y]
 // DISASM-LABEL: <test_ds_load_b64>:
 // DISASM-NOT: ds_load_2addr_stride64_b64
+// DISASM: s_branch
 // DISASM: s_wait_dscnt 0x1
 // DISASM: ds_load_b64 v[0:1]
 // DISASM: ds_load_b64 v[2:3]
+// DISASM: s_branch
 
-// COM: Kernel 3 (b32 store): original dual-address gone, two ds_store_b32 appear
+// COM: Kernel 3 (b32 store): store operand layout (addr, data0, data1)
 // DISASM-LABEL: <test_ds_store_b32>:
 // DISASM-NOT: ds_store_2addr_stride64_b32
+// DISASM: s_branch
 // DISASM: s_wait_dscnt 0x1
 // DISASM: ds_store_b32 v2, v0
 // DISASM: ds_store_b32 v2, v1
+// DISASM: s_branch
 
 // COM: Kernel 4 (multi-DS stacking): two DS2 sites before one wait => 0x2
 // DISASM-LABEL: <test_multi_ds>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
+// DISASM: s_branch
+// DISASM: s_branch
 // DISASM: s_wait_dscnt 0x2
 
 // COM: Idempotency: rewriting the output again should produce identical bytes.

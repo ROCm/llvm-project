@@ -254,16 +254,29 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
 // -- bumpNextWaitDscnt ------------------------------------------------------
 //
 // After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
-// in the stream must be incremented by 1 to account for the extra outstanding
-// DS operation. Uses the already-decoded MCInst to read the immediate, then
-// re-encodes the modified instruction via MCCodeEmitter.
+// in the same basic block must be incremented by 1 to account for the extra
+// outstanding DS operation. Stops at s_endpgm or any control-flow-affecting
+// instruction to avoid bumping a wait from a different kernel or branch path.
 
 static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
+  const MCInstrInfo &MCII = *Ctx.LS.MCII;
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+
   for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
-    if (Ctx.Decoded[I].Mnemonic != "s_wait_dscnt")
+    const auto &DI = Ctx.Decoded[I];
+    if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
+      continue;
+    if (DI.Mnemonic == "s_endpgm")
+      return;
+
+    const MCInstrDesc &Desc = MCII.get(DI.Inst.getOpcode());
+    if (Desc.mayAffectControlFlow(DI.Inst, MRI))
+      return;
+
+    if (DI.Mnemonic != "s_wait_dscnt")
       continue;
 
-    MCInst NewInst = Ctx.Decoded[I].Inst;
+    MCInst NewInst = DI.Inst;
     for (unsigned OpI = 0, OpE = NewInst.getNumOperands(); OpI < OpE; ++OpI) {
       MCOperand &Op = NewInst.getOperand(OpI);
       if (!Op.isImm())
@@ -282,17 +295,6 @@ static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
     Ctx.Decoded[I].Inst = NewInst;
     return;
   }
-}
-
-// -- assembleOrFail ---------------------------------------------------------
-
-static SmallVector<uint8_t> assembleOrFail(const std::string &AsmStr,
-                                           const LLVMState &LS,
-                                           const char *Context) {
-  auto Bytes = assembleSingleInst(AsmStr, LS);
-  if (Bytes.empty())
-    log() << "hotswap: " << Context << ": assembly failed: " << AsmStr << "\n";
-  return Bytes;
 }
 
 // -- patchDs2AddrStride64 ---------------------------------------------------
@@ -316,9 +318,12 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   std::string Combined;
   for (auto &Line : Expanded)
     Combined += Line + "\n";
-  auto Bytes = assembleOrFail(Combined, Ctx.LS, "ds_2addr_stride64");
-  if (Bytes.empty())
+  auto Bytes = assembleSingleInst(Combined, Ctx.LS);
+  if (Bytes.empty()) {
+    log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
+          << "\n";
     return false;
+  }
 
   std::vector<uint8_t> Replacement(Bytes.begin(), Bytes.end());
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
