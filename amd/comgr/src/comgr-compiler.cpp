@@ -754,7 +754,11 @@ bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
       continue;
     StringRef Arg(Args[I]);
 
-    if (Arg == "-o" && I + 1 < N) {
+    if (Arg == "-o") {
+      if (I + 1 >= N) {
+        LogS << "spirv-translator: '-o' requires an argument\n";
+        return false;
+      }
       OutputPath = Args[++I];
       continue;
     }
@@ -845,7 +849,7 @@ bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
 
 } // namespace
 
-// Execute amd-llvm-spirv in-process using writeSpirv
+// Execute amd-llvm-spirv in-process using writeSpirv.
 // Args format: [options...] <input.bc> -o <output.spv>
 amd_comgr_status_t executeSPIRVTranslator(ArrayRef<const char *> Args,
                                           raw_ostream &LogS) {
@@ -990,7 +994,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
 #ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
     if (ExeName.contains("llvm-spirv")) {
       if (env::shouldEmitVerboseLogs()) {
-        logArgv(LogS, "llvm-spirv", Argv);
+        logArgv(LogS, "amd-llvm-spirv", Argv);
       }
       return executeSPIRVTranslator(Arguments, LogS);
     }
