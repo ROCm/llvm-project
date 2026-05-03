@@ -1927,6 +1927,16 @@ bool Sema::ShouldWarnIfUnusedFileScopedDecl(const DeclaratorDecl *D) const {
     return false;
 
   if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
+    if (LangOpts.CUDA && Context.CUDAWrongSideOverloadCandidates.contains(FD)) {
+      bool IsHost = FD->hasAttr<CUDAHostAttr>() || !FD->hasAttr<CUDADeviceAttr>();
+      bool IsDeviceOnly =
+          !FD->hasAttr<CUDAHostAttr>() && FD->hasAttr<CUDADeviceAttr>();
+      bool IsGlobal = FD->hasAttr<CUDAGlobalAttr>();
+      if ((LangOpts.CUDAIsDevice && IsHost) ||
+          (!LangOpts.CUDAIsDevice && (IsDeviceOnly || IsGlobal)))
+        return false;
+    }
+
     if (FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation)
       return false;
     // A non-out-of-line declaration of a member specialization was implicitly
@@ -21270,14 +21280,15 @@ Sema::FunctionEmissionStatus Sema::getEmissionStatus(const FunctionDecl *FD,
         (T == CUDAFunctionTarget::Device || T == CUDAFunctionTarget::Global))
       return FunctionEmissionStatus::CUDADiscarded;
 
-    // Implicit host/device templates are only potential device functions.
-    // Do not treat host-side explicit instantiations as device-emitted unless
-    // they are actually reached from device code.
+    // Implicit host/device templates are only potential device functions. A
+    // host-side instantiation still participates in normal semantic analysis,
+    // but it should not be treated as a root for device deferred diagnostics
+    // unless it is actually reached from device code.
     if (LangOpts.CUDAIsDevice && LangOpts.OffloadImplicitHostDeviceTemplates &&
         SemaCUDA::isImplicitHostDeviceFunction(FD) && !FD->isConstexpr() &&
         !isLambdaCallOperator(FD) &&
         !Context.CUDAImplicitHostDeviceFunUsedByDevice.count(FD))
-      return FunctionEmissionStatus::CUDADiscarded;
+      return FunctionEmissionStatus::Unknown;
 
     if (IsEmittedForExternalSymbol())
       return FunctionEmissionStatus::Emitted;
