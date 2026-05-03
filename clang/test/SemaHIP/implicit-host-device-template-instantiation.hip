@@ -28,6 +28,30 @@ template <class T> T transitiveRoot() {
 template int transitiveLeaf<int>();
 template int transitiveRoot<int>();
 
+template <class T> void zeroLengthArrayHostReference() {
+  T *extra[0] = {}; // expected-error {{zero-length arrays are not permitted in HIP device code}}
+  (void)extra;
+}
+
+// A host-side explicit instantiation with a device-invalid body should also
+// stay host-only unless device code needs it.
+template void zeroLengthArrayHostReference<void>();
+
+constexpr int zeroLengthArrayConstexprHostReference() {
+  int extra[0] = {}; // expected-error {{zero-length arrays are not permitted in HIP device code}}
+  return sizeof(extra);
+}
+
+static_assert(zeroLengthArrayConstexprHostReference() == 0);
+
+void zeroLengthArrayLambdaHostReference() {
+  auto lambda = [] {
+    int extra[0] = {};
+    return sizeof(extra);
+  };
+  (void)lambda();
+}
+
 #ifdef DEVICE_USE
 __global__ void directKernel(int *out) {
   *out = directHostReference<int>(); // expected-note {{called by 'directKernel'}}
@@ -35,5 +59,21 @@ __global__ void directKernel(int *out) {
 
 __global__ void transitiveKernel(int *out) {
   *out = transitiveRoot<int>(); // expected-note {{called by 'transitiveKernel'}}
+}
+
+__global__ void zeroLengthArrayKernel() {
+  zeroLengthArrayHostReference<void>(); // expected-note {{called by 'zeroLengthArrayKernel'}}
+}
+
+__global__ void zeroLengthArrayConstexprKernel(int *out) {
+  *out = zeroLengthArrayConstexprHostReference(); // expected-note {{called by 'zeroLengthArrayConstexprKernel'}}
+}
+
+__global__ void zeroLengthArrayLambdaKernel(int *out) {
+  auto lambda = [] {
+    int extra[0] = {}; // expected-error {{zero-length arrays are not permitted in HIP device code}}
+    return sizeof(extra);
+  };
+  *out = lambda(); // expected-note {{called by 'zeroLengthArrayLambdaKernel'}}
 }
 #endif
