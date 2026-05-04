@@ -52,9 +52,6 @@ on:
 permissions:
   contents: read
 
-env:
-  test_type: ${{ inputs.test_type }}    
-
 jobs:
   # ==========================================================================
   # STAGE: foundation (generic)
@@ -71,6 +68,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -91,6 +89,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -122,6 +121,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -148,6 +148,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -168,6 +169,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -188,6 +190,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -208,6 +211,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -228,6 +232,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -255,6 +260,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
@@ -275,6 +281,7 @@ jobs:
       rocm_package_version: ${{ inputs.rocm_package_version }}
       build_variant_cmake_preset: ${{ inputs.build_variant_cmake_preset }}
       release_type: ${{ inputs.release_type }}
+      test_type: ${{ inputs.test_type }}
     permissions:
       contents: read
       id-token: write
