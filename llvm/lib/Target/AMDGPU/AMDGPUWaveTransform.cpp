@@ -1734,19 +1734,20 @@ void ControlFlowRewriter::prepareWaveCfg() {
     // (OrigSuccCond). The block participates in lane mask building as a uniform
     // conditional, conservatively contributing all active lanes.
     if (Node->Block->mayHaveInlineAsmBr()) {
-      for (MachineInstr &MI : *Node->Block) {
-        if (MI.getOpcode() == TargetOpcode::INLINEASM_BR) {
-          Info.InlineAsmBrMI = &MI;
-          for (const MachineOperand &MO : MI.operands()) {
-            if (MO.isMBB()) {
-              assert(!Info.OrigSuccCond &&
-                     "Multiple INLINEASM_BR indirect targets not yet "
-                     "supported");
-              Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
-              Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
-            }
-          }
-          break;
+      auto InlineAsmBrIt =
+          llvm::find_if(*Node->Block, [](const MachineInstr &MI) {
+            return MI.getOpcode() == TargetOpcode::INLINEASM_BR;
+          });
+
+      if (InlineAsmBrIt != Node->Block->end()) {
+        Info.InlineAsmBrMI = &*InlineAsmBrIt;
+        for (const MachineOperand &MO : InlineAsmBrIt->operands()) {
+          if (!MO.isMBB())
+            continue;
+          assert(!Info.OrigSuccCond &&
+                 "Multiple INLINEASM_BR indirect targets not yet supported");
+          Info.ImplicitBranchOpc = TargetOpcode::INLINEASM_BR;
+          Info.OrigSuccCond = ReconvergeCfg.nodeForBlock(MO.getMBB());
         }
       }
     }
