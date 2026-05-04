@@ -1760,6 +1760,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
       assert(!Info.OrigSuccFinal);
       if (Opcode == AMDGPU::SI_BRCOND || Opcode == AMDGPU::SI_BRCOND_Z) {
         assert(!Info.OrigCondition);
+        assert(!Info.OrigSuccCond);
         ZVariant = Opcode == AMDGPU::SI_BRCOND_Z;
         Info.OrigCondition = Terminator.getOperand(1).getReg();
         Info.OrigConditionUndef = Terminator.getOperand(1).isUndef();
@@ -1773,6 +1774,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  Opcode == AMDGPU::S_CBRANCH_SCC1) {
         assert(!Info.OrigCondition);
         assert(!Info.ImplicitBranchOpc);
+        assert(!Info.OrigSuccCond);
         Info.ImplicitBranchOpc = Opcode;
         Info.OrigSuccCond =
             ReconvergeCfg.nodeForBlock(Terminator.getOperand(0).getMBB());
@@ -1970,7 +1972,6 @@ void ControlFlowRewriter::rewrite() {
           assert(LaneSucc != Node->LaneSuccessors.end());
           NewTarget = LaneSucc->Wave->Block;
         }
-        NewTarget->setIsInlineAsmBrIndirectTarget();
         MO.setMBB(NewTarget);
       }
     }
@@ -2018,6 +2019,25 @@ void ControlFlowRewriter::rewrite() {
           .addMBB(Other->Block);
     }
   }
+
+// set correct IsInlineAsmBrIndirectTarget and LabelMustBeEmitted flags
+  SmallPtrSet<MachineBasicBlock *, 4> LiveCallbrTargets;
+  for (MachineBasicBlock &MBB : Function)
+    for (MachineInstr &MI : MBB)
+      if (MI.getOpcode() == TargetOpcode::INLINEASM_BR)
+        for (const MachineOperand &MO : MI.operands())
+          if (MO.isMBB())
+            LiveCallbrTargets.insert(MO.getMBB());
+
+  for (MachineBasicBlock &MBB : Function) {
+    bool ShouldBeTarget = LiveCallbrTargets.contains(&MBB);
+    if (MBB.isInlineAsmBrIndirectTarget() == ShouldBeTarget)
+      continue;
+    MBB.setIsInlineAsmBrIndirectTarget(ShouldBeTarget);
+    if (ShouldBeTarget)
+      MBB.setLabelMustBeEmitted();
+  }
+  
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
