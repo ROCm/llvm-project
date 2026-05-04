@@ -1934,6 +1934,11 @@ void ControlFlowRewriter::rewrite() {
     }
     return RegZero;
   };
+
+  // Collected during Step 1: the post-retarget MBB operands of every
+  // INLINEASM_BR. Used to rebuild IsInlineAsmBrIndirectTarget flags below.
+  SmallPtrSet<MachineBasicBlock *, 4> InlineAsmBrIndirectTargets;
+
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
     CFGNodeInfo &Info = NodeInfo.find(Node)->second;
@@ -1959,20 +1964,21 @@ void ControlFlowRewriter::rewrite() {
       for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
         if (!MO.isMBB())
           continue;
-        if (Node->Block->isSuccessor(MO.getMBB()))
-          continue;
-        MachineBasicBlock *NewTarget;
-        if (Node->Successors.size() == 1) {
-          NewTarget = Node->Successors[0]->Block;
-        } else {
-          auto LaneSucc =
-              llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
-                return succ.Lane == Info.OrigSuccCond;
-              });
-          assert(LaneSucc != Node->LaneSuccessors.end());
-          NewTarget = LaneSucc->Wave->Block;
+        if (!Node->Block->isSuccessor(MO.getMBB())) {
+          MachineBasicBlock *NewTarget;
+          if (Node->Successors.size() == 1) {
+            NewTarget = Node->Successors[0]->Block;
+          } else {
+            auto LaneSucc =
+                llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
+                  return succ.Lane == Info.OrigSuccCond;
+                });
+            assert(LaneSucc != Node->LaneSuccessors.end());
+            NewTarget = LaneSucc->Wave->Block;
+          }
+          MO.setMBB(NewTarget);
         }
-        MO.setMBB(NewTarget);
+        InlineAsmBrIndirectTargets.insert(MO.getMBB());
       }
     }
 
@@ -2020,21 +2026,14 @@ void ControlFlowRewriter::rewrite() {
     }
   }
 
-// set correct IsInlineAsmBrIndirectTarget and LabelMustBeEmitted flags
-  SmallPtrSet<MachineBasicBlock *, 4> LiveCallbrTargets;
-  for (MachineBasicBlock &MBB : Function)
-    for (MachineInstr &MI : MBB)
-      if (MI.getOpcode() == TargetOpcode::INLINEASM_BR)
-        for (const MachineOperand &MO : MI.operands())
-          if (MO.isMBB())
-            LiveCallbrTargets.insert(MO.getMBB());
-
+  // Rebuild IsInlineAsmBrIndirectTarget / LabelMustBeEmitted flags from the
+  // live INLINEASM_BR operands collected in Step 1.
   for (MachineBasicBlock &MBB : Function) {
-    bool ShouldBeTarget = LiveCallbrTargets.contains(&MBB);
-    if (MBB.isInlineAsmBrIndirectTarget() == ShouldBeTarget)
+    bool isIndirectTarget = InlineAsmBrIndirectTargets.contains(&MBB);
+    if (MBB.isInlineAsmBrIndirectTarget() == isIndirectTarget)
       continue;
-    MBB.setIsInlineAsmBrIndirectTarget(ShouldBeTarget);
-    if (ShouldBeTarget)
+    MBB.setIsInlineAsmBrIndirectTarget(isIndirectTarget);
+    if (isIndirectTarget)
       MBB.setLabelMustBeEmitted();
   }
   

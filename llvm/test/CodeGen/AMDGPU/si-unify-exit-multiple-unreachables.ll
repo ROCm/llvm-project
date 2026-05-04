@@ -10,41 +10,34 @@ define amdgpu_kernel void @kernel(i32 %a, ptr addrspace(1) %x, i32 noundef %n) {
 ; handle multiple-exits CFG. This should be correctly structurized.
 ; CHECK-LABEL: kernel:
 ; CHECK:       ; %bb.0: ; %entry
-; CHECK-NEXT:    s_load_dword s0, s[8:9], 0x10
-; CHECK-NEXT:    s_load_dword s4, s[8:9], 0x0
+; CHECK-NEXT:    s_load_dword s1, s[8:9], 0x10
+; CHECK-NEXT:    s_load_dword s0, s[8:9], 0x0
 ; CHECK-NEXT:    s_mov_b64 s[2:3], 0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    s_cmpk_lg_i32 s0, 0x100
-; CHECK-NEXT:    s_mov_b64 s[0:1], 0
-; CHECK-NEXT:    s_cbranch_scc0 .LBB0_3
+; CHECK-NEXT:    s_cmpk_lg_i32 s1, 0x100
+; CHECK-NEXT:    s_cbranch_scc0 .LBB0_2
 ; CHECK-NEXT:  ; %bb.1: ; %if.else
 ; CHECK-NEXT:    v_cmp_lt_u32_e32 vcc, 9, v0
-; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, -1
-; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; CHECK-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
-; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[0:1]
-; CHECK-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; CHECK-NEXT:    s_or_b64 s[2:3], s[2:3], s[6:7]
-; CHECK-NEXT:    s_mov_b64 exec, s[0:1]
-; CHECK-NEXT:    s_mov_b64 s[0:1], 0
+; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; CHECK-NEXT:    s_xor_b64 s[4:5], exec, s[2:3]
+; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
-; CHECK-NEXT:    s_cbranch_execz .LBB0_6
-; CHECK-NEXT:  .LBB0_2: ; %if.then3
-; CHECK-NEXT:    s_mov_b64 s[0:1], 0
-; CHECK-NEXT:  .LBB0_3: ; %if.then
-; CHECK-NEXT:    s_cmp_eq_u32 s4, 0
-; CHECK-NEXT:    s_cbranch_scc0 .LBB0_5
-; CHECK-NEXT:  ; %bb.4: ; %if.end6.sink.split
-; CHECK-NEXT:    s_load_dwordx2 s[0:1], s[8:9], 0x8
+; CHECK-NEXT:    s_cbranch_execz .LBB0_5
+; CHECK-NEXT:  .LBB0_2: ; %if.then
+; CHECK-NEXT:    s_cmp_eq_u32 s0, 0
+; CHECK-NEXT:    s_cbranch_scc0 .LBB0_4
+; CHECK-NEXT:  ; %bb.3: ; %if.end6.sink.split
+; CHECK-NEXT:    s_load_dwordx2 s[2:3], s[8:9], 0x8
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
-; CHECK-NEXT:    v_mov_b32_e32 v1, s4
+; CHECK-NEXT:    v_mov_b32_e32 v1, s0
 ; CHECK-NEXT:    s_waitcnt lgkmcnt(0)
-; CHECK-NEXT:    global_store_dword v0, v1, s[0:1]
+; CHECK-NEXT:    global_store_dword v0, v1, s[2:3]
 ; CHECK-NEXT:    s_endpgm
-; CHECK-NEXT:  .LBB0_5: ; %cond.false.i8
+; CHECK-NEXT:  .LBB0_4: ; %cond.false.i8
 ; CHECK-NEXT:    s_trap 2
 ; CHECK-NEXT:    ; divergent unreachable
-; CHECK-NEXT:  .LBB0_6: ; %UnifiedReturnBlock
+; CHECK-NEXT:  .LBB0_5: ; %UnifiedReturnBlock
 ; CHECK-NEXT:    s_endpgm
 ; UNIFY-LABEL: @kernel(
 ; UNIFY-NEXT:  entry:
@@ -72,7 +65,6 @@ define amdgpu_kernel void @kernel(i32 %a, ptr addrspace(1) %x, i32 noundef %n) {
 ; UNIFY-NEXT:    br label [[IF_END6]]
 ; UNIFY:       if.end6:
 ; UNIFY-NEXT:    ret void
-;
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %cmp = icmp eq i32 %n, 256
@@ -165,12 +157,12 @@ define amdgpu_kernel void @kernel_callbr(i32 %a, ptr addrspace(1) %x, i32 nounde
 ; UNIFY-NEXT:    [[CMP:%.*]] = icmp eq i32 [[N:%.*]], 256
 ; UNIFY-NEXT:    [[CMP32:%.*]] = zext i1 [[CMP]] to i32
 ; UNIFY-NEXT:    callbr void asm "", "r,!i"(i32 [[CMP32]])
-; UNIFY-NEXT:            to label [[IF_THEN:%.*]] [label %if.else]
+; UNIFY-NEXT:            to label [[IF_THEN:%.*]] [label [[IF_ELSE:%.*]]]
 ; UNIFY:       if.then:
 ; UNIFY-NEXT:    [[CMP1:%.*]] = icmp eq i32 [[A:%.*]], 0
 ; UNIFY-NEXT:    [[CMP1_32:%.*]] = zext i1 [[CMP1]] to i32
 ; UNIFY-NEXT:    callbr void asm "", "r,!i"(i32 [[CMP1_32]])
-; UNIFY-NEXT:            to label [[IF_END6_SINK_SPLIT:%.*]] [label %cond.false]
+; UNIFY-NEXT:            to label [[IF_END6_SINK_SPLIT:%.*]] [label [[COND_FALSE:%.*]]]
 ; UNIFY:       cond.false:
 ; UNIFY-NEXT:    call void @llvm.trap()
 ; UNIFY-NEXT:    unreachable
@@ -178,12 +170,12 @@ define amdgpu_kernel void @kernel_callbr(i32 %a, ptr addrspace(1) %x, i32 nounde
 ; UNIFY-NEXT:    [[CMP2:%.*]] = icmp ult i32 [[TID]], 10
 ; UNIFY-NEXT:    [[CMP2_32:%.*]] = zext i1 [[CMP2]] to i32
 ; UNIFY-NEXT:    callbr void asm "", "r,!i"(i32 [[CMP2_32]])
-; UNIFY-NEXT:            to label [[IF_THEN3:%.*]] [label %if.end6]
+; UNIFY-NEXT:            to label [[IF_THEN3:%.*]] [label [[IF_END6:%.*]]]
 ; UNIFY:       if.then3:
 ; UNIFY-NEXT:    [[CMP1_I7:%.*]] = icmp eq i32 [[A]], 0
 ; UNIFY-NEXT:    [[CMP1_I7_32:%.*]] = zext i1 [[CMP1_I7]] to i32
 ; UNIFY-NEXT:    callbr void asm "", "r,!i"(i32 [[CMP1_I7_32]])
-; UNIFY-NEXT:            to label [[IF_END6_SINK_SPLIT]] [label %cond.false.i8]
+; UNIFY-NEXT:            to label [[IF_END6_SINK_SPLIT]] [label [[COND_FALSE_I8:%.*]]]
 ; UNIFY:       cond.false.i8:
 ; UNIFY-NEXT:    call void @llvm.trap()
 ; UNIFY-NEXT:    unreachable
@@ -191,10 +183,9 @@ define amdgpu_kernel void @kernel_callbr(i32 %a, ptr addrspace(1) %x, i32 nounde
 ; UNIFY-NEXT:    [[X1:%.*]] = getelementptr inbounds i32, ptr addrspace(1) [[X:%.*]], i32 [[TID]]
 ; UNIFY-NEXT:    store i32 [[A]], ptr addrspace(1) [[X1]], align 4
 ; UNIFY-NEXT:    callbr void asm "", ""()
-; UNIFY-NEXT:            to label [[IF_END6:%.*]] []
+; UNIFY-NEXT:            to label [[IF_END6]] []
 ; UNIFY:       if.end6:
 ; UNIFY-NEXT:    ret void
-;
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %cmp = icmp eq i32 %n, 256
