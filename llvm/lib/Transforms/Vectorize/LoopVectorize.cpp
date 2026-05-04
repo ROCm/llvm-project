@@ -7994,10 +7994,10 @@ void LoopVectorizationPlanner::buildVPlansWithVPRecipes(ElementCount MinVF,
                        CM.getMaxSafeElements());
         RUN_VPLAN_PASS(VPlanTransforms::optimizeEVLMasks, *Plan);
       }
-
+#if FIXME_HIPSOLVER
       if (auto P = VPlanTransforms::narrowInterleaveGroups(*Plan, TTI))
         VPlans.push_back(std::move(P));
-
+#endif
       assert(verifyVPlanIsValid(*Plan) && "VPlan is invalid");
       VPlans.push_back(std::move(Plan));
     }
