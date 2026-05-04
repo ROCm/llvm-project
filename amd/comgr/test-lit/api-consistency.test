@@ -1,0 +1,3 @@
+# Static check that VERSION.txt, the public header, and the Linux exportmap
+# stay in sync. See utils/check_api_consistency.py for the full rules.
+# RUN: %python %comgr-src/utils/check_api_consistency.py --comgr-dir %comgr-src
