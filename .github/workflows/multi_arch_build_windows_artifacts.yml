@@ -330,7 +330,6 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
         run: |
           # clear cache before build and after download
-          echo 'CCC_OVERRIDE_OPTIONS=+Wno-all +-Wno-error' >> $GITHUB_ENV
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
@@ -339,6 +338,8 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
+            -DCMAKE_C_FLAGS="-Wno-error -Wno-all" \
+            -DCMAKE_CXX_FLAGS="-Wno-error -Wno-all" \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }}
 

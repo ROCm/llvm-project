@@ -275,11 +275,12 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
           BUILD_DIR: build
         run: |
-          echo 'CCC_OVERRIDE_OPTIONS=+Wno-all +-Wno-error' >> $GITHUB_ENV
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_FLAGS="-Wno-error -Wno-all" \
+            -DCMAKE_CXX_FLAGS="-Wno-error -Wno-all" \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }}            
 
