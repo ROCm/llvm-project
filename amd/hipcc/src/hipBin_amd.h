@@ -571,6 +571,11 @@ void HipBinAmd::executeHipCCCmd(vector<string> argv) {
       arg = "--cuda-device-only";
     }
 
+    if (trimarg == "--help" || trimarg == "-h") {
+      std::cerr << "Warning: hipcc is deprecated and will be removed in a future release.\n"
+                << "  Please use amdclang++ directly instead.\n"
+                << "  See https://rocm.docs.amd.com/ for migration guidance.\n";
+    }
     if (trimarg == "--version") {
       printHipVersion = 1;
     }
