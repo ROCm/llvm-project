@@ -5754,7 +5754,6 @@ static bool isUseDevicePtrItem(omp::MapInfoOp mapInfoOp) {
     SmallVector<Value> useDevicePtrVars = dataOp.getUseDevicePtrVars();
     for (auto it : useDevicePtrVars)
       if (it == mapInfoOp) {
-        llvm::errs() << "Test1\n\n\n";
         return true;
       }
   }
