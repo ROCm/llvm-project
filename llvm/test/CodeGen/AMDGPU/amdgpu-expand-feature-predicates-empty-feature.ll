@@ -2,7 +2,7 @@
 ; REQUIRES: amdgpu-registered-target
 
 ; Predicate guarding a builtin with no required target features
-. (e.g. `__builtin_amdgcn_is_invocable(__builtin_amdgcn_fence)`) is
+; (e.g. `__builtin_amdgcn_is_invocable(__builtin_amdgcn_fence)`) is
 ; encoded as a global named `llvm.amdgcn.has.` with an empty feature suffix.
 
 ; RUN: opt -S -mtriple=amdgcn-amd-amdhsa -mcpu=gfx906 -passes='amdgpu-expand-feature-predicates' %s -o - | FileCheck --check-prefix=GFX906 %s
