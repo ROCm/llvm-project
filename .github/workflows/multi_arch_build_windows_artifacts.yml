@@ -50,6 +50,8 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease". Controls artifact bucket and IAM role.'
         type: string
         default: ""
+      test_type:
+        type: string
 
 jobs:
   build_stage:
@@ -277,7 +279,7 @@ jobs:
           python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -301,7 +303,7 @@ jobs:
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
       - name: Configure PR Projects
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -320,7 +322,7 @@ jobs:
             ${{ env.extra_cmake_options }}
 
       - name: Configure All Projects
-        if: ${{ github.event_name != 'pull_request' && inputs.release_type == 'nightly' }}
+        if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
         env:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
@@ -367,8 +369,6 @@ jobs:
       #     if the workflow failed or was cancelled before the build even started though.
 
       - name: Push stage artifacts
-        env:
-          RELEASE_TYPE: ''        
         run: |
           python build_tools/artifact_manager.py push --run-id ${{ github.run_id }} \
             --stage="${STAGE_NAME}" \
@@ -376,8 +376,6 @@ jobs:
 
       - name: Upload stage logs
         if: ${{ always() }}
-        env:
-          RELEASE_TYPE: ''
         run: |
           python build_tools/github_actions/post_stage_upload.py \
             --run-id=${{ github.run_id }} \

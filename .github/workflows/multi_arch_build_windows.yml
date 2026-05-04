@@ -44,9 +44,14 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
         type: string
         default: ""
+      test_type:
+        type: string   # Temp addiiton until release type is fixed
 
 permissions:
   contents: read
+
+env:
+  test_type: ${{ inputs.test_type }}
 
 jobs:
   # ==========================================================================
