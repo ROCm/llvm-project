@@ -1935,9 +1935,12 @@ void ControlFlowRewriter::rewrite() {
     return RegZero;
   };
 
-  // Collected during Step 1: the post-retarget MBB operands of every
-  // INLINEASM_BR. Used to rebuild IsInlineAsmBrIndirectTarget flags below.
-  SmallPtrSet<MachineBasicBlock *, 4> InlineAsmBrIndirectTargets;
+  // Track blocks that lost their INLINEASM_BR indirect-target status due
+  // to retargeting and the set of blocks still referenced by some
+  // surviving INLINEASM_BR. After Step 1, any stale target not in the
+  // live set has its indirect-target flag cleared.
+  SmallPtrSet<MachineBasicBlock *, 4> StaleCallbrTargets;
+  SmallPtrSet<MachineBasicBlock *, 4> LiveCallbrTargets;
 
   // Step 1: Remove old terminators and insert new ones for uniform branches.
   for (WaveNode *Node : NodeOrder) {
@@ -1959,26 +1962,32 @@ void ControlFlowRewriter::rewrite() {
     // INLINEASM_BR is not a terminator and was preserved during terminator
     // removal. After reconvergence the original indirect target may no
     // longer be a direct MBB successor (a flow node could've been inserted).
-    // Retarget the MBB operand to the appropriate wave-successor.
+    // Retarget the MBB operand to the appropriate wave-successor and
+    // transfer the indirect-target attributes onto the new target.
     if (Info.InlineAsmBrMI) {
       for (MachineOperand &MO : Info.InlineAsmBrMI->operands()) {
         if (!MO.isMBB())
           continue;
-        if (!Node->Block->isSuccessor(MO.getMBB())) {
-          MachineBasicBlock *NewTarget;
-          if (Node->Successors.size() == 1) {
-            NewTarget = Node->Successors[0]->Block;
-          } else {
-            auto LaneSucc =
-                llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
-                  return succ.Lane == Info.OrigSuccCond;
-                });
-            assert(LaneSucc != Node->LaneSuccessors.end());
-            NewTarget = LaneSucc->Wave->Block;
-          }
-          MO.setMBB(NewTarget);
+        if (Node->Block->isSuccessor(MO.getMBB())) {
+          LiveCallbrTargets.insert(MO.getMBB());
+          continue;
         }
-        InlineAsmBrIndirectTargets.insert(MO.getMBB());
+        MachineBasicBlock *NewTarget;
+        if (Node->Successors.size() == 1) {
+          NewTarget = Node->Successors[0]->Block;
+        } else {
+          auto LaneSucc =
+              llvm::find_if(Node->LaneSuccessors, [=](const auto &succ) {
+                return succ.Lane == Info.OrigSuccCond;
+              });
+          assert(LaneSucc != Node->LaneSuccessors.end());
+          NewTarget = LaneSucc->Wave->Block;
+        }
+        StaleCallbrTargets.insert(MO.getMBB());
+        LiveCallbrTargets.insert(NewTarget);
+        NewTarget->setIsInlineAsmBrIndirectTarget();
+        NewTarget->setLabelMustBeEmitted();
+        MO.setMBB(NewTarget);
       }
     }
 
@@ -2026,17 +2035,12 @@ void ControlFlowRewriter::rewrite() {
     }
   }
 
-  // Rebuild IsInlineAsmBrIndirectTarget / LabelMustBeEmitted flags from the
-  // live INLINEASM_BR operands collected in Step 1.
-  for (MachineBasicBlock &MBB : Function) {
-    bool isIndirectTarget = InlineAsmBrIndirectTargets.contains(&MBB);
-    if (MBB.isInlineAsmBrIndirectTarget() == isIndirectTarget)
-      continue;
-    MBB.setIsInlineAsmBrIndirectTarget(isIndirectTarget);
-    if (isIndirectTarget)
-      MBB.setLabelMustBeEmitted();
-  }
-  
+  // Clear the indirect-target flag on blocks that were retargeted away,
+  // unless another surviving INLINEASM_BR still references them.
+  for (MachineBasicBlock *Stale : StaleCallbrTargets)
+    if (!LiveCallbrTargets.contains(Stale))
+      Stale->setIsInlineAsmBrIndirectTarget(false);
+
   // Step 2: Insert lane masks and new terminators for divergent nodes.
   //
   // RegMap maps (block, register) -> (masked, inverted).
