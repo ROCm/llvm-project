@@ -274,8 +274,8 @@ jobs:
           package_version: ${{ inputs.package_version }}
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
           BUILD_DIR: build
-          CCC_OVERRIDE_OPTIONS: "+Wno-all +-Wno-error"
         run: |
+          echo 'CCC_OVERRIDE_OPTIONS=+Wno-all +-Wno-error' >> $GITHUB_ENV
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \

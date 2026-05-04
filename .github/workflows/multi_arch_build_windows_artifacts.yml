@@ -328,9 +328,9 @@ jobs:
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
-          CCC_OVERRIDE_OPTIONS: "+Wno-all +-Wno-error"
         run: |
           # clear cache before build and after download
+          echo 'CCC_OVERRIDE_OPTIONS=+Wno-all +-Wno-error' >> $GITHUB_ENV
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
