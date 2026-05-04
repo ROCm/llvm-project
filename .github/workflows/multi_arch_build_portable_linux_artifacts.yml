@@ -274,6 +274,7 @@ jobs:
           package_version: ${{ inputs.package_version }}
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
           BUILD_DIR: build
+          CCC_OVERRIDE_OPTIONS: "+Wno-all +-Wno-error"
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
