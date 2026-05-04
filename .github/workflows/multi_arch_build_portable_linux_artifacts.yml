@@ -313,6 +313,8 @@ jobs:
       #     if the build succeeded but did not produce artifacts. That's _not_ useful
       #     if the workflow failed or was cancelled before the build even started though.
       - name: Push stage artifacts
+        env:
+          RELEASE_TYPE: ''        
         run: |
           python build_tools/artifact_manager.py push --run-id ${{ github.run_id }} \
             --stage="${STAGE_NAME}" \

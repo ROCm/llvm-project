@@ -277,7 +277,7 @@ jobs:
           python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_typr != 'nightly') }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -367,6 +367,8 @@ jobs:
       #     if the workflow failed or was cancelled before the build even started though.
 
       - name: Push stage artifacts
+        env:
+          RELEASE_TYPE: ''        
         run: |
           python build_tools/artifact_manager.py push --run-id ${{ github.run_id }} \
             --stage="${STAGE_NAME}" \
