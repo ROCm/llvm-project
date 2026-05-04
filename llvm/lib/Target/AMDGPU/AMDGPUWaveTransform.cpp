@@ -1782,8 +1782,7 @@ void ControlFlowRewriter::prepareWaveCfg() {
                  Opcode == AMDGPU::S_CBRANCH_VCCZ ||
                  Opcode == AMDGPU::S_CBRANCH_VCCNZ ||
                  Opcode == AMDGPU::S_CBRANCH_SCC0 ||
-                 Opcode == AMDGPU::S_CBRANCH_SCC1 ||
-                 isHardwareManagedBranch(Terminator)) {
+                 Opcode == AMDGPU::S_CBRANCH_SCC1) {
         assert(!Info.OrigCondition);
         assert(!Info.ImplicitBranchOpc);
         assert(!Info.OrigSuccCond);
