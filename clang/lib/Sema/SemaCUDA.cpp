@@ -337,7 +337,13 @@ SemaCUDA::IdentifyPreference(const FunctionDecl *Caller,
        CallerTarget == CUDAFunctionTarget::Device))
     return CFP_Native;
 
-  // (b) Calling HostDevice is OK for everyone.
+  // (b) Calling HostDevice is OK for everyone. An implicit host/device
+  // function still belongs to the active compilation side for overload
+  // preference purposes; otherwise making a host-only template implicitly
+  // device-capable can change host overload resolution.
+  if (CalleeTarget == CUDAFunctionTarget::HostDevice &&
+      isImplicitHostDeviceFunction(Callee))
+    return CFP_Native;
   if (CalleeTarget == CUDAFunctionTarget::HostDevice)
     return CFP_HostDevice;
 
