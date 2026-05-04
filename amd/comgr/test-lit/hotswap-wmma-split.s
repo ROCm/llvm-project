@@ -174,7 +174,20 @@ test_no_split_required:
 //    {f16,f32} dest) plus the f4-split's f8f6f4 product cover the full
 //    splitter table.
 //
-// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8
+// COM: Exact register slicing for the fp8_fp8 K-split (input v[0:15],
+// COM: v[8:23], v[16:23]). First half: A_lo=v[0:7], B_lo=v[8:15],
+// COM: src2=original v[16:23]. Second half: A_hi=v[8:15], B_hi=v[16:23],
+// COM: src2=dst v[16:23] (the carry from the first half). dst is unchanged
+// COM: between halves. These two DAGs replace the bare-mnemonic check for
+// COM: this opcode -- they're stricter and would catch off-by-one slicing
+// COM: that a mnemonic-only check would miss.
+// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[0:7], v[8:15], v[16:23]
+// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[8:15], v[16:23], v[16:23]
+
+// COM: Bare-mnemonic checks for the other 7 K-split products (one DAG
+// COM: per opcode -- assignment to either the first-half or second-half
+// COM: occurrence is unconstrained, which is fine because exact slicing
+// COM: is verified via the fp8_fp8 case above).
 // DISASM-DAG: v_wmma_f32_16x16x64_fp8_bf8
 // DISASM-DAG: v_wmma_f32_16x16x64_bf8_fp8
 // DISASM-DAG: v_wmma_f32_16x16x64_bf8_bf8
@@ -182,7 +195,17 @@ test_no_split_required:
 // DISASM-DAG: v_wmma_f16_16x16x64_fp8_bf8
 // DISASM-DAG: v_wmma_f16_16x16x64_bf8_fp8
 // DISASM-DAG: v_wmma_f16_16x16x64_bf8_bf8
-// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4
+
+// COM: Exact register slicing for the M-split (input dst=v[4:19],
+// COM: A=v[0:15], B=v[2:9], src2=v[4:19]). M is split in half: dst and
+// COM: src2 each yield two 8-VGPR slices (v[4:11] for the first half,
+// COM: v[12:19] for the second). A is split along M too (v[0:7] then
+// COM: v[8:15]). B is broadcast (same v[2:9] on both halves). The
+// COM: replacement opcode is v_wmma_f32_16x16x128_f8f6f4 with both
+// COM: matrix-format modifiers literally MATRIX_FMT_FP4 so the f8f6f4
+// COM: form interprets the data as f4 (matching the original opcode).
+// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[4:11], v[0:7], v[2:9], v[4:11]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[12:19], v[8:15], v[2:9], v[12:19]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
 
 // Idempotency: rewriting the patched output again should produce identical
 // bytes (the splitter only fires on K=128 mnemonics, which no longer exist

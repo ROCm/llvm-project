@@ -15,6 +15,26 @@
 ///   - v_wmma_f32_32x16x128_f4 -> two 16x16x128_f8f6f4 halves
 ///     (M dimension split, both halves use MATRIX_FMT_FP4 modifiers)
 ///
+/// Operand identification uses a per-SplitKind VOP3PWmmaLayout table that
+/// names each MCInst slot (vdst, src0, src1, src2_modifiers, src2, plus
+/// any trailing modifier slots present in the profile). AMDGPU's
+/// getNamedOperandIdx() and OpName enum live in
+/// lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.h, which is a backend-private
+/// header (not installed in the LLVM dist), so we follow the same
+/// mirror-and-document pattern that comgr-hotswap-patch-wmma-hazard.cpp
+/// uses for SIInstrFlags. The slot positions below match the VOP3P
+/// InsVOP3P dag in llvm/lib/Target/AMDGPU/VOP3PInstructions.td;
+/// validated at runtime by checking the MCInst operand count and
+/// per-slot operand kinds.
+///
+/// The K=128 fp8/bf8 family and the f4 form do not accept any modifier
+/// asm syntax (op_sel, neg_lo, neg_hi, clamp, matrix_*_reuse) per the
+/// AMDGPU asm parser, even though the TableGen profile reserves slots
+/// for some of them. extractWmmaOps() defensively refuses the rewrite
+/// if any trailing modifier slot is non-default, so future opcode
+/// evolution that exposes modifier syntax will fail loudly here rather
+/// than silently miscompile.
+///
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
@@ -98,33 +118,81 @@ SplitMatch lookupSplitRule(StringRef Mnemonic) {
   return {};
 }
 
+// -- VOP3P WMMA operand layout ----------------------------------------------
+//
+// Mirrors the per-opcode MCInst layout produced by the AMDGPU disassembler
+// for the splittable WMMA opcodes. The AMDGPU backend's
+// getNamedOperandIdx() and OpName enum (in
+// llvm/lib/Target/AMDGPU/Utils/AMDGPUBaseInfo.h) provide the canonical
+// per-opcode operand positions, but that header is backend-private and
+// not exposed to comgr -- comgr-hotswap-patch-wmma-hazard.cpp's local
+// mirror of SIInstrFlags is the established pattern for this kind of
+// cross-layer lookup. The two layouts below cover all 9 splittable
+// opcodes; runtime validation in extractWmmaOps() (operand count +
+// operand-kind check at each named position) catches drift if upstream
+// reorders the dag, in which case the table here needs an update.
+//
+// Layout source: llvm/lib/Target/AMDGPU/VOP3PInstructions.td InsVOP3P dag
+// for IsWMMA=1 with HasModifiers=0 on src0/src1 (the K=128 fp8/bf8 family
+// and the f4 form both omit Src0Mods / Src1Mods because their packed
+// integer/fp formats do not admit per-source NEG/ABS modifiers).
+
+struct VOP3PWmmaLayout {
+  unsigned NumOperands; // expected MCInst operand count for structural check
+  unsigned VDst;
+  unsigned Src0;
+  unsigned Src1;
+  unsigned Src2Mods;
+  unsigned Src2;
+  // -1 (treated as "absent") for opcodes whose profile has HasNeg=0 or
+  // HasClamp=0; the splitter then knows to skip emitting these modifiers.
+  int NegLo;
+  int NegHi;
+  int Clamp;
+};
+
+// K=128 fp8/bf8 WMMAs: vdst, src0, src1, src2_modifiers, src2, neg_lo,
+// neg_hi (7 operands, no clamp on these variants).
+constexpr VOP3PWmmaLayout LayoutK128Fp8Bf8 = {
+    /*NumOperands=*/7, /*VDst=*/0, /*Src0=*/1, /*Src1=*/2,
+    /*Src2Mods=*/3, /*Src2=*/4, /*NegLo=*/5, /*NegHi=*/6, /*Clamp=*/-1};
+
+// 32x16x128 f4: vdst, src0, src1, src2_modifiers, src2 (5 operands; no
+// neg/clamp -- VOP3PWMMA_F4_Profile sets HasNeg=0).
+constexpr VOP3PWmmaLayout Layout32x16F4 = {
+    /*NumOperands=*/5, /*VDst=*/0, /*Src0=*/1, /*Src1=*/2,
+    /*Src2Mods=*/3, /*Src2=*/4, /*NegLo=*/-1, /*NegHi=*/-1, /*Clamp=*/-1};
+
+const VOP3PWmmaLayout &layoutFor(SplitKind Kind) {
+  switch (Kind) {
+  case SplitKind::Split128to64FP8BF8:
+    return LayoutK128Fp8Bf8;
+  case SplitKind::Split32x16to16x16F4:
+    return Layout32x16F4;
+  }
+  llvm_unreachable("unknown SplitKind");
+}
+
 // -- VGPR range extraction --------------------------------------------------
 //
-// Each WMMA reg operand is a VGPR tuple (e.g. v[16:23]); the splitter needs
-// the base index and count to slice the range.
-//   - Base index: the low 10 bits of MRI.getEncodingValue(Reg). The high
-//     bits encode hardware flags (e.g. IS_VGPR = 1 << 10 on GFX). The mask
-//     matches AMDGPU::HWEncoding::REG_IDX_MASK from the AMDGPU target
-//     backend (SIDefines.h), which is target-internal and not exposed to
-//     comgr; the value 0x3ff is a stable part of the AMDGPU HW encoding.
-//   - Count: bit width of the register's smallest enclosing class divided
-//     by 32 (same pattern as AMDGPUDisassembler::CheckVGPROverflow).
-//     Using regunits() directly is wrong on GFX12+ where each VGPR_32 has
-//     two regunits (lo16 + hi16 sub-register units).
+// For a tuple register the VGPR base index is the low 10 bits of the
+// encoding value (high bits encode HW flags like IS_VGPR = 1 << 10 per
+// SIDefines.h's AMDGPU::HWEncoding). The mask 0x3ff is the stable AMDGPU
+// HW encoding -- target-internal, named locally because SIDefines.h is
+// not exposed to comgr.
+//
+// The VGPR count is the smallest enclosing MCRegisterClass's bit width
+// divided by 32, the same pattern AMDGPUDisassembler::CheckVGPROverflow
+// uses. MCRegisterInfo::regunits() is NOT the right primitive: on GFX12+
+// each VGPR_32 has two regunits (lo16 + hi16 sub-register slots), so a
+// VReg_256 (8 VGPRs, 256 bits) yields 16 regunits, not 8. The
+// smallest-class lookup is memoized per MCRegister in a thread_local
+// DenseMap, invalidated when the MCRegisterInfo pointer changes between
+// calls (each retargetCodeObjectB0A0 constructs a fresh MCRegisterInfo
+// via initLLVM, so a static cross-call cache would dangle).
 
 constexpr unsigned VgprRegIdxMask = 0x3ff;
 
-// Cache the smallest-enclosing MCRegisterClass per MCRegister. Without it,
-// every operand lookup walks all ~100 AMDGPU register classes; with it, a
-// kernel that repeatedly uses the same VGPR ranges (the common shape for
-// tile-multiply loops) hits the cache after the first WMMA. The cache is
-// thread_local because MCRegisterClass pointers are owned by the
-// MCRegisterInfo passed in, which lives for the duration of one rewrite
-// call -- using a static cache across calls would leave dangling pointers
-// when the next rewrite constructs a fresh MCRegisterInfo. Invalidation is
-// keyed on the MRI pointer: a different MRI from the previous call clears
-// the cache before any lookup. Single-threaded access by construction
-// (thread_local), so no mutex is needed.
 const MCRegisterClass *
 findSmallestEnclosingClass(MCRegister Reg, const MCRegisterInfo &MRI) {
   thread_local const MCRegisterInfo *CachedMRI = nullptr;
@@ -135,7 +203,8 @@ findSmallestEnclosingClass(MCRegister Reg, const MCRegisterInfo &MRI) {
     CachedMRI = &MRI;
   }
 
-  auto It = Cache.find(Reg.id());
+  DenseMap<unsigned, const MCRegisterClass *>::iterator It =
+      Cache.find(Reg.id());
   if (It != Cache.end())
     return It->second;
 
@@ -161,74 +230,120 @@ std::pair<int, int> getVgprRange(MCRegister Reg, const MCRegisterInfo &MRI) {
   return {Base, Count};
 }
 
-struct WmmaRegOperands {
+// -- Operand extraction -----------------------------------------------------
+
+struct WmmaOps {
+  // Register ranges (base, count). count == 0 means "not present".
   std::pair<int, int> Dst{-1, 0};
   std::pair<int, int> Src0{-1, 0};
   std::pair<int, int> Src1{-1, 0};
   std::pair<int, int> Src2{-1, 0};
-  // For VOP3P WMMAs, $src2 (the accumulator input) accepts inline constants
-  // as well as VGPRs. Clang folds a statically-zero accumulator into an
-  // immediate, which is the common shape for `C = wmma(A, B, 0)`-style code.
+
+  // src2 may be an inline immediate. Captured as the raw imm value; only
+  // imm 0 (the compiler-folded zero accumulator -- the common shape for
+  // `C = wmma(A, B, 0)`-style code) is currently safe to emit verbatim.
+  // Non-zero / FP inline constants would need MCInstPrinter-mediated
+  // formatting, which has no public single-operand entry point, so we
+  // refuse the rewrite on those rather than risk a wrong encoding.
   bool Src2IsImm = false;
   int64_t Src2Imm = 0;
+
   bool Valid = false;
 };
 
-// VOP3P WMMAs have modifier immediates interleaved between the register
-// operands (see VOP3PInstructions.td's `InsVOP3P`). The only stable way to
-// find vdst / src0 / src1 / src2 from the MCInst is to walk operands and
-// pick the first four registers in order. This is equivalent to the TableGen
-// contract for non-SWMMAC WMMAs (vdst, src0, src1, src2).
-WmmaRegOperands extractWmmaRegOperands(const MCInst &Inst,
-                                       const MCRegisterInfo &MRI) {
-  WmmaRegOperands R;
-  std::pair<int, int> *Targets[] = {&R.Dst, &R.Src0, &R.Src1, &R.Src2};
-  unsigned Found = 0;
-  unsigned LastRegIdx = 0;
-  for (unsigned I = 0, E = Inst.getNumOperands(); I < E && Found < 4; ++I) {
-    const MCOperand &Op = Inst.getOperand(I);
-    if (!Op.isReg())
-      continue;
-    std::pair<int, int> Rng = getVgprRange(Op.getReg(), MRI);
-    if (Rng.first < 0)
-      return R;
-    *Targets[Found++] = Rng;
-    LastRegIdx = I;
-  }
-  if (Found == 4) {
-    R.Valid = true;
+// Extract operands from a decoded WMMA MCInst by per-SplitKind layout.
+// Validates structurally (operand count + reg/imm kind at each named
+// position) before reading values, so a TableGen reorder upstream is
+// caught loudly rather than silently miscompiling.
+//
+// Modifier-bearing variants are NOT supported: per the AMDGPU asm parser,
+// the K=128 fp8/bf8 family and the f4 form do not accept any modifier
+// syntax (op_sel, neg_lo, neg_hi, clamp, matrix_*_reuse) at this opcode
+// level. The TableGen profile defines slots for some of these (e.g.
+// HasMatrixReuse=1 on F32_FP8BF8X128_WMMA_w32) but the asm grammar does
+// not expose them, so a well-formed disassembled MCInst always has the
+// trailing modifier slots set to 0. As a defensive check, we refuse the
+// split if any trailing slot (between Src2Mods and the end) is non-zero,
+// which would mean either (a) a manually-constructed MCInst the splitter
+// shouldn't trust or (b) upstream having added modifier support that
+// the splitter does not yet know how to preserve.
+WmmaOps extractWmmaOps(const MCInst &Inst, const MCRegisterInfo &MRI,
+                       SplitKind Kind, StringRef Mnemonic) {
+  WmmaOps R;
+  const VOP3PWmmaLayout &L = layoutFor(Kind);
+
+  if (Inst.getNumOperands() != L.NumOperands) {
+    log() << "hotswap: error: WMMA split: operand count mismatch for "
+          << Mnemonic << ": expected " << L.NumOperands << ", got "
+          << Inst.getNumOperands() << " (VOP3P layout drift -- update the "
+          << "VOP3PWmmaLayout table in comgr-hotswap-patch-wmma-split.cpp)\n";
     return R;
   }
-  // Found vdst, src0, src1 but not a register $src2. For VOP3P WMMA the
-  // disassembler-built MCInst lays out [vdst, src0, src1, src2, ...trailing
-  // modifier imms]. When clang folds a zero-initialized accumulator, $src2 is
-  // the inline immediate at index (LastRegIdx + 1) instead of a VGPR.
-  if (Found == 3) {
-    unsigned Src2Idx = LastRegIdx + 1;
-    if (Src2Idx < Inst.getNumOperands()) {
-      const MCOperand &Op = Inst.getOperand(Src2Idx);
-      if (Op.isImm()) {
-        R.Src2IsImm = true;
-        R.Src2Imm = Op.getImm();
-        R.Valid = true;
-      }
+
+  const MCOperand &VDstOp = Inst.getOperand(L.VDst);
+  const MCOperand &Src0Op = Inst.getOperand(L.Src0);
+  const MCOperand &Src1Op = Inst.getOperand(L.Src1);
+  const MCOperand &Src2ModsOp = Inst.getOperand(L.Src2Mods);
+  const MCOperand &Src2Op = Inst.getOperand(L.Src2);
+
+  if (!VDstOp.isReg() || !Src0Op.isReg() || !Src1Op.isReg() ||
+      !Src2ModsOp.isImm()) {
+    log() << "hotswap: error: WMMA split: operand kind mismatch for "
+          << Mnemonic << " (VOP3P layout drift -- update the table)\n";
+    return R;
+  }
+
+  // Defensive modifier check. src2_modifiers and any optional trailing
+  // slots (e.g. matrix_a_reuse / matrix_b_reuse) must all be the default
+  // 0 for the splitter's correctness contract: the replacement asm we
+  // emit carries no modifier suffix, so we must not silently drop a
+  // non-default value.
+  if (Src2ModsOp.getImm() != 0) {
+    log() << "hotswap: error: WMMA split: " << Mnemonic
+          << " has non-zero src2_modifiers; refusing to split (modifier "
+          << "preservation is not implemented for this opcode family)\n";
+    return R;
+  }
+  for (unsigned I = L.Src2 + 1, E = L.NumOperands; I < E; ++I) {
+    const MCOperand &Op = Inst.getOperand(I);
+    if (Op.isImm() && Op.getImm() != 0) {
+      log() << "hotswap: error: WMMA split: " << Mnemonic
+            << " has non-zero modifier at operand " << I << "; refusing "
+            << "to split (modifier preservation not implemented)\n";
+      return R;
     }
   }
+
+  R.Dst = getVgprRange(VDstOp.getReg(), MRI);
+  R.Src0 = getVgprRange(Src0Op.getReg(), MRI);
+  R.Src1 = getVgprRange(Src1Op.getReg(), MRI);
+  if (R.Dst.first < 0 || R.Src0.first < 0 || R.Src1.first < 0)
+    return R;
+
+  if (Src2Op.isReg()) {
+    R.Src2 = getVgprRange(Src2Op.getReg(), MRI);
+    if (R.Src2.first < 0)
+      return R;
+  } else if (Src2Op.isImm()) {
+    R.Src2IsImm = true;
+    R.Src2Imm = Src2Op.getImm();
+  } else {
+    return R;
+  }
+
+  R.Valid = true;
   return R;
 }
 
+// Format a VGPR range as `v[lo:hi]`.
 std::string formatVgprRange(int Base, int Count) {
   assert(Count > 0 && Base >= 0);
   return formatv("v[{0}:{1}]", Base, Base + Count - 1).str();
 }
 
-// Validate operand shapes before emitting replacement asm. The Build*Asm
-// helpers assume specific invariants (dst and src2 share width, halved
-// dimensions are even). Those hold for well-formed compiler output, but
-// validation guards against handwritten kernels, corrupted ELFs, or future
-// operand layouts producing nonsense that the trampoline assembler would
-// then reject.
-bool validateSplitOperands(SplitKind Kind, const WmmaRegOperands &R,
+// -- Operand validation -----------------------------------------------------
+
+bool validateSplitOperands(SplitKind Kind, const WmmaOps &R,
                            StringRef Mnemonic) {
   auto LogError = [&](StringRef Reason) {
     log() << "hotswap: error: WMMA split: invalid operands for " << Mnemonic
@@ -245,6 +360,20 @@ bool validateSplitOperands(SplitKind Kind, const WmmaRegOperands &R,
     }
     if (R.Dst.second != R.Src2.second) {
       LogError("dst and src2 VGPR widths differ");
+      return false;
+    }
+  } else {
+    // Inline-immediate src2 path: only integer 0 (the compiler-folded zero
+    // accumulator) is currently safe to emit. Non-zero integer literals
+    // and FP inline constants encode through different VOP3P slots than
+    // the integer-literal asm form would land in (see the asm parser's
+    // VSrc handling), so re-emitting them as `itostr(getImm())` would
+    // either fail to encode or change the instruction. Refuse and let
+    // the caller leave the original A0-incompatible opcode in place;
+    // the runtime will report an error rather than silently miscompile.
+    if (R.Src2Imm != 0) {
+      LogError("non-zero src2 inline immediate not supported (only zero "
+               "accumulator is recognized for inline-imm splits)");
       return false;
     }
   }
@@ -269,10 +398,19 @@ bool validateSplitOperands(SplitKind Kind, const WmmaRegOperands &R,
   return false;
 }
 
-// Split K in half; dst and src2 are unchanged. For the second half, src2 =
-// dst so the accumulator threads through from the first half.
+// -- Replacement asm builders -----------------------------------------------
+//
+// No modifier suffix is emitted: extractWmmaOps refuses any input with a
+// non-zero modifier slot for these opcode families (see comment there).
+// MATRIX_FMT_FP4 in buildSplit32x16Asm is added by the splitter itself --
+// not preserved from the source -- because the f4 source opcode does not
+// carry matrix_*_fmt operands but the f8f6f4 destination opcode requires
+// them to interpret the data correctly.
+
+// K-dimension split: dst and src2 are unchanged on the first half. For the
+// second half, src2 = dst (the carry from the first half).
 std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
-                                              const WmmaRegOperands &R) {
+                                              const WmmaOps &R) {
   assert(R.Dst.second > 0 && (R.Src2IsImm || R.Src2.second == R.Dst.second));
   assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
   assert(R.Src1.second > 0 && R.Src1.second % 2 == 0);
@@ -280,15 +418,17 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
   int AHalf = R.Src0.second / 2;
   int BHalf = R.Src1.second / 2;
   std::string Dst = formatVgprRange(R.Dst.first, R.Dst.second);
-  std::string C = R.Src2IsImm ? itostr(R.Src2Imm)
-                              : formatVgprRange(R.Src2.first, R.Src2.second);
+  std::string CFirst = R.Src2IsImm ? itostr(R.Src2Imm)
+                                   : formatVgprRange(R.Src2.first,
+                                                     R.Src2.second);
 
   std::vector<std::string> Out;
   Out.reserve(2);
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}", Replacement, Dst,
                         formatVgprRange(R.Src0.first, AHalf),
-                        formatVgprRange(R.Src1.first, BHalf), C)
+                        formatVgprRange(R.Src1.first, BHalf), CFirst)
                     .str());
+  // Second half: src2 = dst (the carry).
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}", Replacement, Dst,
                         formatVgprRange(R.Src0.first + AHalf, AHalf),
                         formatVgprRange(R.Src1.first + BHalf, BHalf), Dst)
@@ -296,14 +436,12 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
   return Out;
 }
 
-// Split M in half. A (src0) is split in half (A's VGPRs carry the FP4 data
-// for all 32 M rows; each half needs the A rows it accumulates over). B
-// (src1) is broadcast: each half reads the same N x K data. dst / src2 are
-// split in half by M. The replacement uses the f8f6f4 WMMA with both matrix
-// format modifiers forced to MATRIX_FMT_FP4 so the data layout matches the
-// original f4 instruction.
+// M-dimension split: A (src0) is split in half; B (src1) is broadcast; dst /
+// src2 are split in half by M. The replacement uses the f8f6f4 WMMA with
+// both matrix format modifiers forced to MATRIX_FMT_FP4 so the data layout
+// matches the original f4 instruction.
 std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
-                                            const WmmaRegOperands &R) {
+                                            const WmmaOps &R) {
   assert(R.Dst.second > 0 && R.Dst.second % 2 == 0);
   assert(R.Src2IsImm || R.Src2.second == R.Dst.second);
   assert(R.Src0.second > 0 && R.Src0.second % 2 == 0);
@@ -312,24 +450,24 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
   int DstHalf = R.Dst.second / 2;
   int AHalf = R.Src0.second / 2;
   std::string B = formatVgprRange(R.Src1.first, R.Src1.second);
-  // When src2 is an inline immediate (compiler-folded zero accumulator), both
-  // halves use the same immediate. When it's a VGPR range, each half takes
-  // its own slice (lower / upper half of M).
+  // When src2 is an inline immediate, both halves use the same value. When
+  // it's a VGPR range, each half takes its own slice (lower / upper half
+  // of M).
   std::string CLo = R.Src2IsImm ? itostr(R.Src2Imm)
                                 : formatVgprRange(R.Src2.first, DstHalf);
   std::string CHi = R.Src2IsImm
                         ? itostr(R.Src2Imm)
                         : formatVgprRange(R.Src2.first + DstHalf, DstHalf);
   constexpr StringLiteral FmtSuffix =
-      "matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
+      " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
 
   std::vector<std::string> Out;
   Out.reserve(2);
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4} {5}", Replacement,
+  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement,
                         formatVgprRange(R.Dst.first, DstHalf),
                         formatVgprRange(R.Src0.first, AHalf), B, CLo, FmtSuffix)
                     .str());
-  Out.push_back(formatv("{0} {1}, {2}, {3}, {4} {5}", Replacement,
+  Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement,
                         formatVgprRange(R.Dst.first + DstHalf, DstHalf),
                         formatVgprRange(R.Src0.first + AHalf, AHalf), B, CHi,
                         FmtSuffix)
@@ -349,7 +487,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   // Structural sanity check against the opcode side. Every WMMA variant this
   // patch handles has exactly one destination operand at the MCInstrDesc
   // level; a differing def count means the operand layout is not what
-  // extractWmmaRegOperands expects, so refuse to emit rather than produce
+  // extractWmmaOps expects, so refuse to emit rather than produce
   // silently-wrong asm.
   const MCInstrDesc &MCID = Ctx.LS.MCII->get(DI.Inst.getOpcode());
   if (MCID.getNumDefs() != 1) {
@@ -358,23 +496,23 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  WmmaRegOperands Regs = extractWmmaRegOperands(DI.Inst, *Ctx.LS.MRI);
-  if (!Regs.Valid) {
-    log() << "hotswap: error: WMMA split: could not extract 4 VGPR operands "
-          << "from " << DI.Mnemonic << "\n";
+  WmmaOps Ops = extractWmmaOps(DI.Inst, *Ctx.LS.MRI, Match.Kind, DI.Mnemonic);
+  if (!Ops.Valid) {
+    log() << "hotswap: error: WMMA split: could not extract operands from "
+          << DI.Mnemonic << "\n";
     return 0;
   }
 
-  if (!validateSplitOperands(Match.Kind, Regs, DI.Mnemonic))
+  if (!validateSplitOperands(Match.Kind, Ops, DI.Mnemonic))
     return 0;
 
   std::vector<std::string> AsmLines;
   switch (Match.Kind) {
   case SplitKind::Split128to64FP8BF8:
-    AsmLines = buildSplit128to64Asm(Match.Replacement, Regs);
+    AsmLines = buildSplit128to64Asm(Match.Replacement, Ops);
     break;
   case SplitKind::Split32x16to16x16F4:
-    AsmLines = buildSplit32x16Asm(Match.Replacement, Regs);
+    AsmLines = buildSplit32x16Asm(Match.Replacement, Ops);
     break;
   }
   if (AsmLines.empty())
