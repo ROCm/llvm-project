@@ -98,7 +98,7 @@ jobs:
           git submodule
 
       - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
-        if: ${{ github.event_name == 'workflow_dispatch' &&  }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
