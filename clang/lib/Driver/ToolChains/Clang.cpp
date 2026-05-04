@@ -4324,7 +4324,7 @@ static void RenderObjCOptions(const ToolChain &TC, const Driver &D,
     bool EnableConstantLiterals =
         Args.hasFlag(options::OPT_fobjc_constant_literals,
                      options::OPT_fno_objc_constant_literals,
-                     /*default=*/true) &&
+                     /*default=*/false) &&
         Runtime.hasConstantLiteralClasses();
     if (EnableConstantLiterals)
       CmdArgs.push_back("-fobjc-constant-literals");
@@ -5078,7 +5078,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   const llvm::Triple *AuxTriple =
-      (IsCuda || IsHIP) ? TC.getAuxTriple() : nullptr;
+      (IsCuda || IsHIP || IsSYCL) ? TC.getAuxTriple() : nullptr;
   bool IsWindowsMSVC = RawTriple.isWindowsMSVCEnvironment();
   bool IsUEFI = RawTriple.isUEFI();
   bool IsIAMCU = RawTriple.isOSIAMCU();
@@ -6607,8 +6607,22 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-std=c++98");
       else
         CmdArgs.push_back("-std=c89");
-    else
+    else {
+      if (IsSYCL) {
+        const LangStandard *LangStd =
+            LangStandard::getLangStandardForName(Std->getValue());
+        if (LangStd) {
+          // Use of -std= with 'C' is not supported for SYCL.
+          if (LangStd->getLanguage() == Language::C)
+            D.Diag(diag::err_drv_argument_not_allowed_with)
+                << Std->getAsString(Args) << "-fsycl";
+          // SYCL requires C++17 or later.
+          else if (LangStd->isCPlusPlus() && !LangStd->isCPlusPlus17())
+            D.Diag(diag::err_drv_sycl_requires_cxx17) << Std->getAsString(Args);
+        }
+      }
       Std->render(Args, CmdArgs);
+    }
 
     // If -f(no-)trigraphs appears after the language standard flag, honor it.
     if (Arg *A = Args.getLastArg(options::OPT_std_EQ, options::OPT_ansi,
@@ -6632,6 +6646,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     }
     else if (IsWindowsMSVC)
       ImplyVCPPCXXVer = true;
+
+    if (IsSYCL && types::isCXX(InputType) &&
+        !Args.hasArg(options::OPT__SLASH_std) && !IsWindowsMSVC)
+      // For SYCL, we default to -std=c++17 for all compilations. Use of -std
+      // on the command line will override. On Windows MSVC, this is handled
+      // by the ImplyVCPPCXXVer path below.
+      CmdArgs.push_back("-std=c++17");
 
     Args.AddLastArg(CmdArgs, options::OPT_ftrigraphs,
                     options::OPT_fno_trigraphs);
@@ -7614,13 +7635,30 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                              .Case("c++23preview", "-std=c++23")
                              .Case("c++latest", "-std=c++26")
                              .Default("");
+      if (IsSYCL) {
+        const LangStandard *LangStd =
+            LangStandard::getLangStandardForName(StdArg->getValue());
+        if (LangStd) {
+          // Use of /std: with 'C' is not supported for SYCL.
+          if (LangStd->getLanguage() == Language::C)
+            D.Diag(diag::err_drv_argument_not_allowed_with)
+                << StdArg->getAsString(Args) << "-fsycl";
+          // SYCL requires C++17 or later.
+          else if (LangStd->isCPlusPlus() && !LangStd->isCPlusPlus17())
+            D.Diag(diag::err_drv_sycl_requires_cxx17)
+                << StdArg->getAsString(Args);
+        }
+      }
       if (LanguageStandard.empty())
         D.Diag(clang::diag::warn_drv_unused_argument)
             << StdArg->getAsString(Args);
     }
 
     if (LanguageStandard.empty()) {
-      if (IsMSVC2015Compatible)
+      if (IsSYCL)
+        // For SYCL, C++17 is the default.
+        LanguageStandard = "-std=c++17";
+      else if (IsMSVC2015Compatible)
         LanguageStandard = "-std=c++14";
       else
         LanguageStandard = "-std=c++11";
@@ -9642,7 +9680,13 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
       OPT_fprofile_generate,
       OPT_fprofile_generate_EQ,
       OPT_fprofile_instr_generate,
-      OPT_fprofile_instr_generate_EQ};
+      OPT_fprofile_instr_generate_EQ,
+      OPT_fsanitize_EQ,
+      OPT_fno_sanitize_EQ,
+      OPT_fsanitize_minimal_runtime,
+      OPT_fno_sanitize_minimal_runtime,
+      OPT_fsanitize_trap_EQ,
+      OPT_fno_sanitize_trap_EQ};
   const llvm::DenseSet<unsigned> LinkerOptions{OPT_mllvm, OPT_Zlinker_input};
   auto ShouldForwardForToolChain = [&](Arg *A, const ToolChain &TC) {
     auto HasProfileRT = TC.getVFS().exists(
@@ -9654,6 +9698,16 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
          A->getOption().matches(OPT_fprofile_generate_EQ) ||
          A->getOption().matches(OPT_fprofile_instr_generate) ||
          A->getOption().matches(OPT_fprofile_instr_generate_EQ)))
+      return false;
+    auto HasUBSanRT = TC.getVFS().exists(
+        TC.getCompilerRT(Args, "ubsan_minimal", ToolChain::FT_Static));
+    // Don't forward sanitizer arguments if the toolchain doesn't support it.
+    // Without this check using it on the host would result in linker errors.
+    if (!HasUBSanRT &&
+        (A->getOption().matches(OPT_fsanitize_EQ) ||
+         A->getOption().matches(OPT_fno_sanitize_EQ) ||
+         A->getOption().matches(OPT_fsanitize_minimal_runtime) ||
+         A->getOption().matches(OPT_fno_sanitize_minimal_runtime)))
       return false;
     // Don't forward -mllvm to toolchains that don't support LLVM.
     return TC.HasNativeLLVMSupport() || A->getOption().getID() != OPT_mllvm;

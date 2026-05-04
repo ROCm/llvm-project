@@ -110,50 +110,47 @@ TEST(InitLLVM, UnknownProcessorFails) {
 TEST(EncodeSBranch, ForwardBranchRoundTrip) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  uint8_t Out[MinInstSize] = {};
   // s_branch SIMM16 -> PC += (SIMM16 + 1) * 4; From=0, To=8 => SIMM16=1.
-  ASSERT_TRUE(S.encodeSBranch(0, 8, Out));
-  uint32_t Encoded = readDword(Out);
+  llvm::SmallVector<uint8_t> Out = S.encodeSBranch(0, 8);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  uint32_t Encoded = readDword(Out.data());
   EXPECT_EQ(static_cast<uint16_t>(Encoded & 0xFFFFu), 1u);
 }
 
 TEST(EncodeSBranch, BackwardBranchRoundTrip) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  uint8_t Out[MinInstSize] = {};
   // From=16, To=0 => delta=-5 dwords.
-  ASSERT_TRUE(S.encodeSBranch(16, 0, Out));
-  uint32_t Encoded = readDword(Out);
+  llvm::SmallVector<uint8_t> Out = S.encodeSBranch(16, 0);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  uint32_t Encoded = readDword(Out.data());
   EXPECT_EQ(static_cast<int16_t>(Encoded & 0xFFFFu), -5);
 }
 
 TEST(EncodeSBranch, ZeroOffsetBranch) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  uint8_t Out[MinInstSize] = {};
   // PC advance of MinInstSize: SIMM16 should be 0.
-  ASSERT_TRUE(S.encodeSBranch(0, MinInstSize, Out));
-  EXPECT_EQ(readDword(Out) & 0xFFFFu, 0u);
+  llvm::SmallVector<uint8_t> Out = S.encodeSBranch(0, MinInstSize);
+  ASSERT_EQ(Out.size(), MinInstSize);
+  EXPECT_EQ(readDword(Out.data()) & 0xFFFFu, 0u);
 }
 
 TEST(EncodeSBranch, UnalignedDeltaFails) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  uint8_t Out[MinInstSize] = {};
-  EXPECT_FALSE(S.encodeSBranch(0, 7, Out));
+  EXPECT_TRUE(S.encodeSBranch(0, 7).empty());
 }
 
 TEST(EncodeSBranch, OutOfRangeFails) {
   LLVMState S = initLLVM(makeGfx1250Ident());
   ASSERT_TRUE(S.Valid);
-  uint8_t Out[MinInstSize] = {};
-  EXPECT_FALSE(S.encodeSBranch(0, 500000, Out));
+  EXPECT_TRUE(S.encodeSBranch(0, 500000).empty());
 }
 
 TEST(EncodeSBranch, FailsOnInvalidState) {
   LLVMState S; // default-constructed, Valid = false
-  uint8_t Out[MinInstSize] = {};
-  EXPECT_FALSE(S.encodeSBranch(0, 8, Out));
+  EXPECT_TRUE(S.encodeSBranch(0, 8).empty());
 }
 
 // -- assembleSingleInst / decodeTextSection round-trip ------------------------
@@ -296,4 +293,138 @@ TEST(BuildTrampoline, EmptyOnBadAsm) {
                                  /*OriginalSize=*/MinInstSize,
                                  /*TrampolineTextOffset=*/0x1000, S);
   EXPECT_TRUE(T.Bytes.empty());
+}
+
+// -- classifyWmmaNops ---------------------------------------------------------
+
+TEST(ClassifyWmmaNops, NonWmmaReturnsDefault) {
+  WmmaNopReq Req = classifyWmmaNops("v_add_f32");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, IntegerWmmaReturns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_i32_16x16x32_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Iu4Returns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_i32_16x16x64_iu4");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, F8f6f4Returns1) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x128_f8f6f4");
+  EXPECT_EQ(Req.A0Nops, 1);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Fp8_16x16x128Returns3) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x128_fp8_fp8");
+  EXPECT_EQ(Req.A0Nops, 3);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Fp8SmallReturns1) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x32_fp8_fp8");
+  EXPECT_EQ(Req.A0Nops, 1);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, F16Returns4) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x16_f16");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, Bf16Returns4) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x16_bf16");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, SwmmacIu8Returns8) {
+  WmmaNopReq Req = classifyWmmaNops("v_swmmac_i32_16x16x64_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, F32WmmaFallsToDefault) {
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f32_16x16x4_f32");
+  EXPECT_EQ(Req.A0Nops, 4);
+  EXPECT_EQ(Req.B0Nops, 4);
+}
+
+TEST(ClassifyWmmaNops, OrderingMostRestrictiveWins) {
+  // A mnemonic containing both _iu8 and _f16 should return 8 (iu8 first)
+  WmmaNopReq Req = classifyWmmaNops("v_wmma_f16_something_iu8");
+  EXPECT_EQ(Req.A0Nops, 8);
+}
+
+// -- patchScaleSrc2 -----------------------------------------------------------
+//
+// Pure byte-level tests for the VOP3PX2 scale_src2 bit-field fix.
+// The function patches bits [58:50] of a 16-byte VOP3PX2 encoding to
+// VGPR0 (0x100): byte 6 bits [7:2] cleared, byte 7 bit [2] set,
+// byte 7 bits [1:0] cleared.
+
+TEST(PatchScaleSrc2, ZeroedFieldGetsPatched) {
+  uint8_t Inst[16] = {};
+  EXPECT_TRUE(patchScaleSrc2(Inst));
+  EXPECT_EQ(Inst[6] & 0xFC, 0x00);
+  EXPECT_EQ(Inst[7] & 0x07, 0x04);
+}
+
+TEST(PatchScaleSrc2, PreservesOtherBytes) {
+  uint8_t Inst[16];
+  std::memset(Inst, 0xAA, sizeof(Inst));
+  EXPECT_TRUE(patchScaleSrc2(Inst));
+  for (size_t I = 0; I < 16; ++I) {
+    if (I == 6 || I == 7)
+      continue;
+    EXPECT_EQ(Inst[I], 0xAA) << "byte " << I << " unexpectedly modified";
+  }
+}
+
+TEST(PatchScaleSrc2, AllOnesFieldGetsPatched) {
+  uint8_t Inst[16] = {};
+  Inst[6] = 0xFF;
+  Inst[7] = 0xFF;
+  EXPECT_TRUE(patchScaleSrc2(Inst));
+  EXPECT_EQ(Inst[6] & 0xFC, 0x00);
+  EXPECT_EQ(Inst[7] & 0x07, 0x04);
+  EXPECT_EQ(Inst[7] & 0xF8, 0xF8);
+}
+
+TEST(PatchScaleSrc2, AlreadyVgpr0ReturnsFalse) {
+  uint8_t Inst[16] = {};
+  Inst[7] = 0x04;
+  EXPECT_FALSE(patchScaleSrc2(Inst));
+  EXPECT_EQ(Inst[6], 0x00);
+  EXPECT_EQ(Inst[7], 0x04);
+}
+
+TEST(PatchScaleSrc2, IsIdempotent) {
+  uint8_t Inst[16] = {};
+  Inst[6] = 0xAB;
+  Inst[7] = 0xCD;
+  EXPECT_TRUE(patchScaleSrc2(Inst));
+  uint8_t AfterFirst6 = Inst[6];
+  uint8_t AfterFirst7 = Inst[7];
+  EXPECT_FALSE(patchScaleSrc2(Inst));
+  EXPECT_EQ(Inst[6], AfterFirst6);
+  EXPECT_EQ(Inst[7], AfterFirst7);
+}
+
+TEST(PatchScaleSrc2, PreservesNonScaleSrc2Bits) {
+  uint8_t Inst[16] = {};
+  Inst[6] = 0x03 | 0xA0;
+  Inst[7] = 0xF8 | 0x02;
+  EXPECT_TRUE(patchScaleSrc2(Inst));
+  EXPECT_EQ(Inst[6] & 0x03, 0x03);
+  EXPECT_EQ(Inst[7] & 0xF8, 0xF8);
+  EXPECT_EQ(Inst[6] & 0xFC, 0x00);
+  EXPECT_EQ(Inst[7] & 0x07, 0x04);
 }

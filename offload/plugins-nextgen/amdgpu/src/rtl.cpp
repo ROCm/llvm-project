@@ -3622,7 +3622,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
     // Transparently round up to a multiple of the page size.
     auto *Pool = CoarseGrainedMemoryPools[0];
-    Size = utils::roundUp(Size, (uint64_t)Pool->getGranule());
+    Size = llvm::alignTo(Size, (uint64_t)Pool->getGranule());
 
     // Reserve the virtual address range.
     hsa_status_t Status =
@@ -4818,10 +4818,11 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (isUnifiedSharedMemory && !IsXnackEnabled) {
       MESSAGE0(
           "Running a program that requires XNACK on a system where XNACK is "
-          "disabled. This may cause problems when using an OS-allocated "
-          "pointer "
-          "inside a target region. "
-          "Re-run with HSA_XNACK=1 to remove this warning.");
+          "disabled or not supported. If your device supports XNACK, "
+          "re-run with HSA_XNACK=1. If your device does not support XNACK, "
+          "remove USM pragma and use map clauses instead. "
+          "Set OMPX_EAGER_ZERO_COPY_MAPS=1 for optimal zero-copy "
+          "performance on non-XNACK shared-memory devices.");
       if (OMPX_StrictSanityChecks)
         llvm_unreachable("User-requested hard stop on sanity check errors.");
     }
@@ -5020,14 +5021,11 @@ private:
 
     KernelArgsTy KernelArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-    if (auto Err = AMDGPUKernel.launchImpl(
-            *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
-            KernelLaunchParamsTy{}, AsyncInfoWrapper))
-      return Err;
+    auto Err = AMDGPUKernel.launchImpl(
+        *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
+        KernelLaunchParamsTy{}, AsyncInfoWrapper);
 
-    Error Err = Plugin::success();
     AsyncInfoWrapper.finalize(Err);
-
     return Err;
   }
 
@@ -6166,7 +6164,7 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   if (auto Err = AMDGPUDevice.getStream(AsyncInfoWrapper, Stream))
     return Err;
 
-  uint64_t ImplArgsOffset = utils::roundUp(
+  uint64_t ImplArgsOffset = llvm::alignTo(
       LaunchParams.Size, alignof(hsa_utils::AMDGPUImplicitArgsTy));
   if (ArgsSize > ImplArgsOffset) {
     hsa_utils::AMDGPUImplicitArgsTy *ImplArgs =

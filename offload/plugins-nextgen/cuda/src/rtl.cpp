@@ -687,7 +687,7 @@ struct CUDADeviceTy : public GenericDeviceTy {
                            "wrong device page size");
 
     // Transparently round up to a multiple of the page size.
-    Size = utils::roundUp(Size, Granularity);
+    Size = llvm::alignTo(Size, Granularity);
 
     // Reserve the virtual address range.
     CUdeviceptr DevPtr = 0;
@@ -1409,12 +1409,10 @@ private:
 
     KernelArgsTy KernelArgs = {};
     uint32_t NumBlocksAndThreads[3] = {1u, 1u, 1u};
-    if (auto Err = CUDAKernel.launchImpl(
-            *this, NumBlocksAndThreads, NumBlocksAndThreads, 0, KernelArgs,
-            KernelLaunchParamsTy{}, AsyncInfoWrapper))
-      return Err;
+    auto Err = CUDAKernel.launchImpl(*this, NumBlocksAndThreads,
+                                     NumBlocksAndThreads, 0, KernelArgs,
+                                     KernelLaunchParamsTy{}, AsyncInfoWrapper);
 
-    Error Err = Plugin::success();
     AsyncInfoWrapper.finalize(Err);
     if (Err)
       return Err;

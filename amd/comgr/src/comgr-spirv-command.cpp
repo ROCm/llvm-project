@@ -14,7 +14,7 @@
 
 #include "comgr-spirv-command.h"
 
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #include "comgr-diagnostic-handler.h"
 
 #include <LLVMSPIRVLib.h>
@@ -39,7 +39,7 @@ Expected<StringRef> SPIRVCommand::readExecuteOutput() {
 }
 
 amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
   LLVMContext Context;
   Context.setDiagnosticHandler(
       std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
@@ -56,6 +56,9 @@ amd_comgr_status_t SPIRVCommand::execute(raw_ostream &LogS) {
   Opts.enableAllExtensions();
   Opts.setDesiredBIsRepresentation(SPIRV::BIsRepresentation::OpenCL20);
   Opts.setPreserveAuxData(true);
+
+  if (!OffloadArch.empty())
+    Opts.setAMDGCNSPIRVOffloadArch(OffloadArch);
 
   if (!readSpirv(Context, Opts, ISS, M, Err)) {
     LogS << "Failed to load SPIR-V as LLVM Module: " << Err << '\n';
@@ -78,9 +81,9 @@ SPIRVCommand::ActionClass SPIRVCommand::getClass() const {
   return clang::driver::Action::ActionClass::JobClassLast + 1;
 }
 
-void SPIRVCommand::addOptionsIdentifier(HashAlgorithm &) const {
-  // do nothing, there are no options
-  return;
+void SPIRVCommand::addOptionsIdentifier(HashAlgorithm &H) const {
+  if (!OffloadArch.empty())
+    addString(H, OffloadArch);
 }
 
 Error SPIRVCommand::addInputIdentifier(HashAlgorithm &H) const {

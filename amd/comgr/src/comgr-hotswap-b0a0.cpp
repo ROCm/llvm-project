@@ -67,6 +67,7 @@ static RewriteConfig makeGfx1250B0A0Config() {
 uint32_t applyInPlacePatches(PatchContext &, size_t);
 uint32_t applyTrampolinePatches(PatchContext &, size_t);
 uint32_t applyWmmaHazardPatch(PatchContext &);
+uint32_t applyVop3px2Src2Fix(PatchContext &);
 uint32_t applyWmmaSplitPatches(PatchContext &, size_t);
 uint32_t applyScratchPatches(PatchContext &, size_t);
 CFG buildCfg(ArrayRef<InternalDecodedInst> Decoded, const MCInstrInfo &);
@@ -100,6 +101,7 @@ LLVM_ATTRIBUTE_WEAK uint32_t applyTrampolinePatches(PatchContext &, size_t) {
   return 0;
 }
 LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaHazardPatch(PatchContext &) { return 0; }
+LLVM_ATTRIBUTE_WEAK uint32_t applyVop3px2Src2Fix(PatchContext &) { return 0; }
 LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaSplitPatches(PatchContext &, size_t) {
   return 0;
 }
@@ -211,26 +213,26 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
   const LLVMState &LS = Ctx.LS;
   std::memcpy(Ctx.Text + Sled.WritePos, Replacement.data(), Replacement.size());
 
-  uint8_t BrBack[MinInstSize];
-  if (!LS.encodeSBranch(Sled.WritePos + Replacement.size(),
-                        InstOffset + InstSize, BrBack)) {
+  SmallVector<uint8_t> BrBack = LS.encodeSBranch(
+      Sled.WritePos + Replacement.size(), InstOffset + InstSize);
+  if (BrBack.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-back "
           << "at sled offset 0x"
           << utohexstr(Sled.WritePos + Replacement.size()) << " -> 0x"
           << utohexstr(InstOffset + InstSize) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack,
-              sizeof(BrBack));
+  std::memcpy(Ctx.Text + Sled.WritePos + Replacement.size(), BrBack.data(),
+              BrBack.size());
 
-  uint8_t BrFwd[MinInstSize];
-  if (!LS.encodeSBranch(InstOffset, Sled.WritePos, BrFwd)) {
+  SmallVector<uint8_t> BrFwd = LS.encodeSBranch(InstOffset, Sled.WritePos);
+  if (BrFwd.empty()) {
     log() << "hotswap: error: emitToNopSled: encodeSBranch for branch-fwd "
           << "at original offset 0x" << utohexstr(InstOffset) << " -> sled 0x"
           << utohexstr(Sled.WritePos) << " failed.\n";
     return false;
   }
-  std::memcpy(Ctx.Text + InstOffset, BrFwd, sizeof(BrFwd));
+  std::memcpy(Ctx.Text + InstOffset, BrFwd.data(), BrFwd.size());
 
   // Pad the tail of the replaced instruction slot with cached s_nop bytes
   // (pre-encoded in LLVMState at initLLVM() time).
@@ -348,7 +350,19 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     }
   }
 
+  // Whole-kernel passes below run after per-instruction patches. Earlier
+  // passes may have modified Text bytes, but the Decoded stream still holds
+  // the original MCInst/Mnemonic/Offset entries. This is safe because:
+  //  - In-place patches only change opcodes within the same encoding size,
+  //    preserving instruction boundaries and offsets.
+  //  - Trampoline patches replace the original instruction with a branch
+  //    (same size), so the Decoded entry's Offset still points at the
+  //    branch site; the WMMA classifier and VOP3PX2 mnemonic match won't
+  //    treat a branch as WMMA/VALU/VOP3PX2.
+  // If a future patch family changes instruction boundaries, the Decoded
+  // stream must be rebuilt before these passes run.
   Patched += applyWmmaHazardPatch(Ctx);
+  Patched += applyVop3px2Src2Fix(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
@@ -393,23 +407,23 @@ fixupTrampolineBranches(std::vector<Trampoline> &Trampolines, uint8_t *Text,
     uint64_t TP = TrampOffset;
     TrampOffset += T.Bytes.size();
 
-    uint8_t BrBack[MinInstSize];
-    if (!LS.encodeSBranch(TP + T.Bytes.size() - MinInstSize,
-                          T.OriginalOffset + T.OriginalSize, BrBack)) {
+    SmallVector<uint8_t> BrBack = LS.encodeSBranch(
+        TP + T.Bytes.size() - MinInstSize, T.OriginalOffset + T.OriginalSize);
+    if (BrBack.empty()) {
       log() << "hotswap: error: trampoline branch-back encoding failed at 0x"
             << utohexstr(T.OriginalOffset) << "\n";
       return false;
     }
-    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack,
-                sizeof(BrBack));
+    std::memcpy(T.Bytes.data() + T.Bytes.size() - MinInstSize, BrBack.data(),
+                BrBack.size());
 
-    uint8_t BrFwd[MinInstSize];
-    if (!LS.encodeSBranch(T.OriginalOffset, TP, BrFwd)) {
+    SmallVector<uint8_t> BrFwd = LS.encodeSBranch(T.OriginalOffset, TP);
+    if (BrFwd.empty()) {
       log() << "hotswap: error: trampoline branch-fwd encoding failed at 0x"
             << utohexstr(T.OriginalOffset) << "\n";
       return false;
     }
-    std::memcpy(Text + T.OriginalOffset, BrFwd, sizeof(BrFwd));
+    std::memcpy(Text + T.OriginalOffset, BrFwd.data(), BrFwd.size());
     // Pad the tail of the replaced slot with cached s_nop bytes.
     for (uint32_t I = MinInstSize; I < T.OriginalSize; I += MinInstSize)
       std::memcpy(Text + T.OriginalOffset + I, LS.SNopBytes.data(),
@@ -518,7 +532,7 @@ amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
     if (!fixupTrampolineBranches(Deferred, Text, Elf.textSize(), LS))
       log() << "hotswap: error: some trampolines could not be fixed up\n";
 
-    Result = Elf.growWithTrampolines(Deferred);
+    Result = Elf.growWithTrampolines(Deferred, LS.SNopBytes);
     if (!Result) {
       log() << "hotswap: error: retargetCodeObjectB0A0: "
             << "ElfView::growWithTrampolines returned null with "

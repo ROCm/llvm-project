@@ -14,3 +14,6 @@ needs SPIRV/COMGR
 breaks build of llvm
 [clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
 ---
+breaks windows build
+[cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
+---

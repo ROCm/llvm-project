@@ -256,10 +256,15 @@ void Flang::addCodegenOptions(const ArgList &Args,
           << "-frepack-arrays-contiguity=" << arg;
     }
 
+  // -fdo-concurrent and -fdo-concurrent-to-openmp are aliases. Make sure the
+  // correct alias (spelling) is added to the list of command arguments.
+  if (const Arg *A = Args.getLastArg(options::OPT_fdo_concurrent_EQ)) {
+    CmdArgs.push_back(Args.MakeArgString(A->getAsString(Args)));
+  }
+
   Args.addAllArgs(
       CmdArgs,
-      {options::OPT_fdo_concurrent_to_openmp_EQ,
-       options::OPT_flang_experimental_hlfir,
+      {options::OPT_flang_experimental_hlfir,
        options::OPT_flang_deprecated_no_hlfir,
        options::OPT_fno_ppc_native_vec_elem_order,
        options::OPT_fppc_native_vec_elem_order, options::OPT_finit_global_zero,
@@ -1090,10 +1095,19 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   addFortranDialectOptions(Args, CmdArgs);
 
-  if (Args.hasArg(options::OPT_ffast_amd_memory_allocator)) {
-    CmdArgs.push_back("-ffast-amd-memory-allocator");
-    CmdArgs.push_back("-mmlir");
-    CmdArgs.push_back("-use-alloc-runtime");
+  if (const Arg *A =
+          Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
+    StringRef Val(A->getValue());
+    if (Val != "target" && Val != "host") {
+      D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+    } else {
+      D.Diag(diag::warn_openmp_default_allocate_experimental);
+      CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
+      if (Val == "target") {
+        CmdArgs.push_back("-mmlir");
+        CmdArgs.push_back("-use-alloc-runtime");
+      }
+    }
   }
 
   // 'flang -E' always produces output that is suitable for use as fixed form
