@@ -5553,6 +5553,27 @@ VPlanTransforms::narrowInterleaveGroups(VPlan &Plan,
     StoreGroup->eraseFromParent();
   }
 
+  // Narrow any remaining VPWidenLoadRecipes in the loop body that have
+  // VPVectorPointerRecipe address operands (e.g., loads whose results feed the
+  // scalar epilogue rather than any store interleave group). In the narrowed
+  // plan VF=1, so each such wide load becomes a uniform scalar load.
+  for (auto &R : make_early_inc_range(*VectorLoop->getEntryBasicBlock())) {
+    auto *WideLoad = dyn_cast<VPWidenLoadRecipe>(&R);
+    if (!WideLoad)
+      continue;
+    VPValue *PtrOp = WideLoad->getAddr();
+    auto *VecPtr = dyn_cast<VPVectorPointerRecipe>(PtrOp);
+    if (!VecPtr)
+      continue;
+    auto *N = new VPReplicateRecipe(&WideLoad->getIngredient(),
+                                    {VecPtr->getOperand(0)},
+                                    /*IsUniform=*/true,
+                                    /*Mask=*/nullptr, {}, *WideLoad);
+    N->insertBefore(WideLoad);
+    WideLoad->replaceAllUsesWith(N);
+    WideLoad->eraseFromParent();
+  }
+
   // Adjust induction to reflect that the transformed plan only processes one
   // original iteration.
   auto *CanIV = VectorLoop->getCanonicalIV();
