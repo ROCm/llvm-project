@@ -4,7 +4,7 @@
 // RUN:    --no-gpu-bundle-output --offload-device-only -O3 %s -o %t.spv
 
 // COM: Run Comgr Translator to covert SPIRV back to LLVM IR
-// RUN: spirv-translator %t.spv -o %t.translated.bc "1024,512,256,64"
+// RUN: spirv-translator --block-sizes  "1024,512,256,64" %t.spv -o %t.translated.bc
 
 // COM: Dissasemble LLVM IR bitcode to LLVM IR text
 // RUN: %llvm-dis %t.translated.bc -o - | %FileCheck %s

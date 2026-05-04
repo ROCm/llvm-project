@@ -72,7 +72,7 @@
 
 #include "time-stat/ts-interface.h"
 
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #include <LLVMSPIRVLib.h>
 #endif
 
@@ -690,7 +690,7 @@ amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 // Execute amd-llvm-spirv in-process using writeSpirv
 // Args format: [options...] <input.bc> -o <output.spv>
 amd_comgr_status_t executeSPIRVTranslator(ArrayRef<const char *> Args,
@@ -846,7 +846,7 @@ executeCommand(const Command &Job, raw_ostream &LogS,
       }
       return executeLLVMLink(Arguments, LogS);
     }
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
     if (ExeName.contains("llvm-spirv")) {
       if (env::shouldEmitVerboseLogs()) {
         logArgv(LogS, "llvm-spirv", Argv);
@@ -2233,14 +2233,30 @@ amd_comgr_status_t AMDGPUCompiler::translateSpirvToBitcode() {
 amd_comgr_status_t
 AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
                                             DataSet *BcOutSet) {
+#ifndef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #ifdef COMGR_DISABLE_SPIRV
   LogS << "Calling AMDGPUCompiler::translateSpirvToBitcodeImpl() not "
-       << "supported. Comgr is built with -DCOMGR_DISABLE_SPIRV. Re-build LLVM "
-       << "and Comgr with LLVM-SPIRV-Translator support to continue.\n";
+       << "supported. Comgr was built with -DCOMGR_DISABLE_SPIRV=ON.\n";
+#else
+  LogS << "Calling AMDGPUCompiler::translateSpirvToBitcodeImpl() not "
+       << "supported. The LLVM-SPIRV-Translator was not found when Comgr "
+       << "was configured.\n";
+#endif
   return AMD_COMGR_STATUS_ERROR;
 #else
   if (auto Status = createTmpDirs()) {
     return Status;
+  }
+
+  // Extract GPU processor from ISA name if set, for SPIR-V feature predicate
+  // resolution. TODO: Make ISA name required for this action once users have
+  // migrated.
+  StringRef OffloadArch;
+  TargetIdentifier Ident;
+  if (ActionInfo->IsaName) {
+    if (auto Status = parseTargetIdentifier(ActionInfo->IsaName, Ident))
+      return Status;
+    OffloadArch = Ident.Processor;
   }
 
   auto Cache = CommandCache::get(LogS);
@@ -2258,7 +2274,7 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
     }
 
     SmallString<0> OutBuf;
-    SPIRVCommand SPIRV(Input, OutBuf);
+    SPIRVCommand SPIRV(Input, OutBuf, OffloadArch);
 
     amd_comgr_status_t Status;
     if (!Cache) {
@@ -2526,8 +2542,6 @@ amd_comgr_status_t AMDGPUCompiler::compileSourceToSpirv() {
   // Add SPIRV-specific compilation flags
   Args.push_back("--offload-arch=amdgcnspirv");
   Args.push_back("--no-gpu-bundle-output");
-  Args.push_back("-c");
-
 
 #if _WIN32
   Args.push_back("-fshort-wchar");
