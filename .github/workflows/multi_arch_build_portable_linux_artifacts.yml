@@ -97,6 +97,7 @@ jobs:
           git submodule status
           git submodule
 
+          
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -149,7 +150,7 @@ jobs:
         run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
