@@ -372,10 +372,18 @@ static void instrDefsUsesSCC(const MachineInstr &MI, bool &Def, bool &Use) {
 }
 
 /// Return a point at the end of the given \p MBB to insert SALU instructions
-/// for lane mask calculation. Take terminators and SCC into account.
+/// for lane mask calculation. Take terminators, INLINEASM_BR, and SCC into
+/// account.
 static MachineBasicBlock::iterator
 getSaluInsertionAtEnd(MachineBasicBlock &MBB) {
   auto InsertionPt = MBB.getFirstTerminator();
+
+  // INLINEASM_BR is not marked as a terminator, but lane mask contributions
+  // must be placed before it. Walk back past the INLINEASM_BR.
+  if (InsertionPt != MBB.begin() &&
+      std::prev(InsertionPt)->getOpcode() == TargetOpcode::INLINEASM_BR)
+    --InsertionPt;
+
   bool TerminatorsUseSCC = false;
   for (auto I = InsertionPt, E = MBB.end(); I != E; ++I) {
     bool DefsSCC;
