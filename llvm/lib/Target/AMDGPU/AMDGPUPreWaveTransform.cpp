@@ -14,6 +14,7 @@
 #include "AMDGPU.h"
 #include "GCNSubtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/InitializePasses.h"
 
 using namespace llvm;
@@ -55,8 +56,51 @@ FunctionPass *llvm::createAMDGPUPreWaveTransformPass() {
   return new AMDGPUPreWaveTransform();
 }
 
+// Drop SI_BRCOND/SI_BRCOND_Z when both arms target the same block.
+static bool dropRedundantBrCond(MachineBasicBlock &MBB,
+                                MachineRegisterInfo &MRI) {
+  MachineInstr *BrCond = nullptr;
+  for (MachineInstr &MI : MBB.terminators()) {
+    unsigned Op = MI.getOpcode();
+    if (Op == AMDGPU::SI_BRCOND || Op == AMDGPU::SI_BRCOND_Z) {
+      BrCond = &MI;
+      break;
+    }
+  }
+  if (!BrCond)
+    return false;
+
+  MachineBasicBlock *CondTarget = BrCond->getOperand(0).getMBB();
+  MachineBasicBlock *OtherTarget = nullptr;
+  MachineBasicBlock::iterator It(BrCond);
+  for (++It; It != MBB.end(); ++It) {
+    if (It->getOpcode() == AMDGPU::S_BRANCH) {
+      OtherTarget = It->getOperand(0).getMBB();
+      break;
+    }
+  }
+  if (!OtherTarget)
+    OtherTarget = MBB.getFallThrough();
+
+  if (CondTarget != OtherTarget)
+    return false;
+
+  Register Cond = BrCond->getOperand(1).getReg();
+  BrCond->eraseFromParent();
+
+  if (Cond.isVirtual() && MRI.use_nodbg_empty(Cond)) {
+    MachineInstr *Def = MRI.getUniqueVRegDef(Cond);
+    if (Def && !Def->mayLoad() && !Def->mayStore() &&
+        !Def->hasUnmodeledSideEffects())
+      Def->eraseFromParent();
+  }
+
+  return true;
+}
+
 bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   const SIInstrInfo *TII = MF.getSubtarget<GCNSubtarget>().getInstrInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
   bool Changed = false;
 
   for (MachineBasicBlock &MBB : MF) {
@@ -66,6 +110,7 @@ bool AMDGPUPreWaveTransform::runOnMachineFunction(MachineFunction &MF) {
         Changed = true;
       }
     }
+    Changed |= dropRedundantBrCond(MBB, MRI);
   }
 
   return Changed;
