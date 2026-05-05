@@ -302,6 +302,19 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
+      - name: Update the Cmake list for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name='math-libs') }}
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "rocm-libraries/projects/composablekernel" -Recurse -Include "CMakeLists.txt","*.cmake" | ForEach-Object {
+            $content = Get-Content $_.FullName -Raw
+            if ($content -match '-Werror') {
+              $updated = $content -replace '-Werror\b', '-Werror -Wno-error=lifetime-safety-intra-tu-suggestions'
+              Set-Content -Path $_.FullName -Value $updated -NoNewline
+              Write-Host "Patched: $($_.FullName)"
+            }
+          }
+          
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -338,9 +351,8 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
-            -DCMAKE_CXX_FLAGS="-Wno-error" \
-            -DCMAKE_C_FLAGS="-Wno-error" \
-            -DLLVM_ENABLE_WERROR=OFF \
+            -DCMAKE_CXX_FLAGS="-Wno-error=lifetime-safety-intra-tu-suggestions -Wno-lifetime-safety-intra-tu-suggestions" \
+            -DCMAKE_C_FLAGS="-Wno-error=lifetime-safety-intra-tu-suggestions -Wno-lifetime-safety-intra-tu-suggestions" \                 -DLLVM_ENABLE_WERROR=OFF \
             -DROCM_ENABLE_WERROR=OFF \
             -DHIP_ENABLE_WERROR=OFF \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
