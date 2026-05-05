@@ -303,7 +303,7 @@ jobs:
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
       - name: Update the Cmake list for CK (nightly)
-        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name='math-libs') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
         shell: pwsh
         run: |
           Get-ChildItem -Path "rocm-libraries/projects/composablekernel" -Recurse -Include "CMakeLists.txt","*.cmake" | ForEach-Object {
