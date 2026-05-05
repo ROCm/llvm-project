@@ -413,58 +413,6 @@ double RTNAME(Dsecnds)(double *refTime, const char *sourceFile, int line) {
 // GNU extension function TIME()
 std::int64_t RTNAME(time)() { return time(nullptr); }
 
-<<<<<<< HEAD
-=======
-// Extension function TIMEF().
-// By default, it returns number of seconds that have elapsed since the first
-// time TIMEF was called. For the first call, it returns 0.
-// FLANG_TIMEF_IN_MILLISECONDS=1 sets the resolution to milliseconds.
-double RTNAME(Timef)() {
-#ifndef _WIN32
-  // posix-compliant
-  static clock_t start = static_cast<clock_t>(-1);
-  static long ticks_per_sec = 0;
-  static Lock timef_lock;
-  static bool isInit{false};
-
-  struct tms b;
-  clock_t current;
-  double duration;
-  {
-    CriticalSection critical{timef_lock};
-    if (ticks_per_sec <= 0) {
-      ticks_per_sec = sysconf(_SC_CLK_TCK);
-      if (ticks_per_sec <= 0)
-        return 0.0;
-    }
-
-    if (times(&b) == static_cast<clock_t>(-1)) {
-      return 0.0;
-    }
-
-    current = b.tms_utime + b.tms_stime;
-
-    if (!isInit) {
-      isInit = true;
-      start = current;
-      return 0.0;
-    }
-    if (Fortran::runtime::executionEnvironment.timefInMillisec) {
-      duration =
-          (static_cast<double>(current - start) * 1000.0) / ticks_per_sec;
-    } else {
-      duration = static_cast<double>(current - start) / ticks_per_sec;
-    }
-
-    return duration;
-  }
-#else
-  // TODO: Windows implementation.
-  return 0.0;
-#endif
-}
-
->>>>>>> c25255783
 // MCLOCK: returns accumulated CPU time in ticks
 std::int32_t FORTRAN_PROCEDURE_NAME(mclock)() { return std::clock(); }
 
