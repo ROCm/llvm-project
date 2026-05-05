@@ -111,6 +111,16 @@ static cl::opt<bool>
 
 namespace {
 
+static bool isHardwareManagedBranch(MachineInstr &MI) {
+  switch (MI.getOpcode()) {
+  case AMDGPU::S_SUBVECTOR_LOOP_BEGIN:
+  case AMDGPU::S_SUBVECTOR_LOOP_END:
+    return true;
+  default:
+    return false;
+  }
+}
+
 static bool isArtificialTerminator(MachineInstr &MI) {
   // Return true for instructions that are marked as terminators to support
   // special exec management.
@@ -1785,10 +1795,6 @@ void ControlFlowRewriter::prepareWaveCfg() {
       } else if (Terminator.isReturn()) {
         assert(!Info.OrigCondition);
         Info.OrigExit = true;
-      } else {
-        assert(Opcode != AMDGPU::S_SUBVECTOR_LOOP_BEGIN &&
-               Opcode != AMDGPU::S_SUBVECTOR_LOOP_END &&
-               "wave-transform: unhandled branch opcode");
       }
     }
 
@@ -1949,9 +1955,12 @@ void ControlFlowRewriter::rewrite() {
     MachineBasicBlock::iterator MBBINodeEnd = Node->Block->end();
 
     if (!Info.OrigExit) {
-      // Remove original terminators.
+      // Remove original terminators, preserving artificial terminators
+      // (EXEC management ops) and hardware-managed branches (e.g.
+      // S_SUBVECTOR_LOOP) that pass through to assembly unchanged.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
-             !isArtificialTerminator(Node->Block->back()))
+             !isArtificialTerminator(Node->Block->back()) &&
+             !isHardwareManagedBranch(Node->Block->back()))
         Node->Block->back().eraseFromParent();
     }
 
@@ -2000,6 +2009,12 @@ void ControlFlowRewriter::rewrite() {
     }
 
     assert(Node->Successors.size() == 2);
+
+    // Hardware-managed branches handle their own EXEC and control flow
+    // atomically — no new branches needed.
+    if (!Node->Block->empty() && Node->Block->back().isBranch() &&
+        isHardwareManagedBranch(Node->Block->back()))
+      continue;
 
     if (!Node->IsDivergent) {
       // Uniform block with two successors: we must have had two original
