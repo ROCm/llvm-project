@@ -1943,7 +1943,6 @@ public:
 
   // Emission state of the root node of the current use graph.
   bool ShouldEmitRootNode;
-  bool ShouldEmitRootDiags;
 
   // Current OpenMP device context level. It is initialized to 0 and each
   // entering of device context increases it by 1 and each exit decreases
@@ -1951,8 +1950,7 @@ public:
   unsigned InOMPDeviceContext;
 
   DeferredDiagnosticsEmitter(Sema &S)
-      : Inherited(S), ShouldEmitRootNode(false), ShouldEmitRootDiags(false),
-        InOMPDeviceContext(0) {}
+      : Inherited(S), ShouldEmitRootNode(false), InOMPDeviceContext(0) {}
 
   bool shouldVisitDiscardedStmt() const { return false; }
 
@@ -2045,7 +2043,7 @@ public:
           }))
         Callers.push_back({Caller, Loc});
     }
-    if (ShouldEmitRootDiags || InOMPDeviceContext)
+    if (ShouldEmitRootNode || InOMPDeviceContext)
       FnsToEmit.insert(FD);
     // Do not revisit a function if the function body has been completely
     // visited before.
@@ -2064,15 +2062,8 @@ public:
 
   void checkRecordedDecl(Decl *D) {
     if (auto *FD = dyn_cast<FunctionDecl>(D)) {
-      Sema::FunctionEmissionStatus ES =
-          S.getEmissionStatus(FD, /*Final=*/true);
-      ShouldEmitRootDiags = ES == Sema::FunctionEmissionStatus::Emitted;
-      ShouldEmitRootNode = ShouldEmitRootDiags;
-      if (!ShouldEmitRootNode && S.getLangOpts().CUDAIsDevice &&
-          S.getLangOpts().OffloadImplicitHostDeviceTemplates &&
-          SemaCUDA::isImplicitHostDeviceFunction(FD) &&
-          !S.Context.CUDAImplicitHostDeviceFunUsedByDevice.count(FD))
-        ShouldEmitRootNode = true;
+      ShouldEmitRootNode = S.getEmissionStatus(FD, /*Final=*/true) ==
+                           Sema::FunctionEmissionStatus::Emitted;
       checkFunc(SourceLocation(), FD);
     } else
       checkVar(cast<VarDecl>(D));
