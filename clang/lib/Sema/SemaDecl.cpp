@@ -21280,14 +21280,13 @@ Sema::FunctionEmissionStatus Sema::getEmissionStatus(const FunctionDecl *FD,
         (T == CUDAFunctionTarget::Device || T == CUDAFunctionTarget::Global))
       return FunctionEmissionStatus::CUDADiscarded;
 
-    // An explicit instantiation of an implicit host/device function template is
-    // only a potential device function. Do not treat the host-side explicit
-    // instantiation as device-emitted unless device code actually reaches it.
-    TemplateSpecializationKind TSK = FD->getTemplateSpecializationKind();
+    // An implicit host/device function template is only a potential device
+    // function. Do not treat a host-side instantiation as device-emitted unless
+    // device code actually reaches it.
     if (LangOpts.CUDAIsDevice &&
-        (TSK == TSK_ExplicitInstantiationDeclaration ||
-         TSK == TSK_ExplicitInstantiationDefinition) &&
-        SemaCUDA::isImplicitHostDeviceFunction(FD) &&
+        (FD->getDescribedFunctionTemplate() ||
+         FD->isFunctionTemplateSpecialization()) &&
+        SemaCUDA::isImplicitHostDeviceFunction(FD) && !FD->isConstexpr() &&
         !Context.CUDAImplicitHostDeviceFunUsedByDevice.count(FD))
       return FunctionEmissionStatus::CUDADiscarded;
 
