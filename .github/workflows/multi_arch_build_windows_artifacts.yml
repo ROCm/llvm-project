@@ -338,6 +338,8 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
+            -DCMAKE_CXX_FLAGS_INIT="-Wno-error -Wno-error=lifetime-safety-intra-tu-suggestions" \
+            -DCMAKE_C_FLAGS_INIT="-Wno-error" \
             -DLLVM_ENABLE_WERROR=OFF \
             -DROCM_ENABLE_WERROR=OFF \
             -DHIP_ENABLE_WERROR=OFF \

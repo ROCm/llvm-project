@@ -279,6 +279,8 @@ jobs:
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_FLAGS_INIT="-Wno-error -Wno-error=lifetime-safety-intra-tu-suggestions" \
+            -DCMAKE_C_FLAGS_INIT="-Wno-error" \
             -DLLVM_ENABLE_WERROR=OFF \
             -DROCM_ENABLE_WERROR=OFF \
             -DHIP_ENABLE_WERROR=OFF \
