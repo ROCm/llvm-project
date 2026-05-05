@@ -104,7 +104,7 @@ static std::string fmtRegOperand(const MCRegisterInfo &MRI, MCRegister Reg) {
   StringRef Name(N);
   if (!Name.contains('_'))
     return toAsmRegName(MRI, Reg);
-  auto Subs = getDirectSubRegs(Reg, MRI);
+  SmallVector<MCRegister, 4> Subs = getDirectSubRegs(Reg, MRI);
   if (Subs.size() < 2)
     return toAsmRegName(MRI, Reg);
   return fmtRegPair(MRI, Subs.front(), Subs.back());
@@ -134,6 +134,8 @@ struct DsOperands {
   const MCRegisterInfo *MRI;
 };
 
+// Extract register operands and scaled offsets from a DS 2-address MCInst.
+// Offsets are scaled by 64 * element_size (stride64 encoding).
 static DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
                                     const LLVMState &LS) {
   DsOperands Ops;
@@ -166,7 +168,7 @@ static DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
 // b32: VReg_64 -> ("v0", "v1"); b64: VReg_128 -> ("v[0:1]", "v[2:3]")
 static std::pair<std::string, std::string>
 splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
-  auto Subs = getDirectSubRegs(CompoundReg, MRI);
+  SmallVector<MCRegister, 4> Subs = getDirectSubRegs(CompoundReg, MRI);
   if (IsB64) {
     if (Subs.size() < 4)
       return {};
@@ -178,20 +180,23 @@ splitDstPair(MCRegister CompoundReg, bool IsB64, const MCRegisterInfo &MRI) {
   return {toAsmRegName(MRI, Subs[0]), toAsmRegName(MRI, Subs[1])};
 }
 
+// Expand a DS 2-address load into two single-address loads (dst, addr).
 static std::vector<std::string> expandDs2AddrLoad(const DsOperands &Ops,
                                                   StringRef ToMnem) {
   if (Ops.Regs.size() < 2)
     return {};
-  auto [D0, D1] = splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
-  if (D0.empty())
+  std::pair<std::string, std::string> Dst =
+      splitDstPair(Ops.Regs[0], Ops.IsB64, *Ops.MRI);
+  if (Dst.first.empty())
     return {};
   std::string Addr = toAsmRegName(*Ops.MRI, Ops.Regs[1]);
   return {
-      ToMnem.str() + " " + D0 + ", " + Addr + fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + D1 + ", " + Addr + fmtOffset(Ops.Off1),
+      ToMnem.str() + " " + Dst.first + ", " + Addr + fmtOffset(Ops.Off0),
+      ToMnem.str() + " " + Dst.second + ", " + Addr + fmtOffset(Ops.Off1),
   };
 }
 
+// Expand a DS 2-address store into two single-address stores (addr, data).
 static std::vector<std::string> expandDs2AddrStore(const DsOperands &Ops,
                                                    StringRef ToMnem) {
   if (Ops.Regs.size() < 3)
@@ -208,13 +213,16 @@ static std::vector<std::string> expandDs2AddrStore(const DsOperands &Ops,
   };
 }
 
+// Expand a DS 2-address exchange into two single-address exchanges
+// (dst, addr, data).
 static std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
                                                   StringRef ToMnem) {
   if (Ops.Regs.size() < 4)
     return {};
   const MCRegisterInfo &MRI = *Ops.MRI;
-  auto [D0, D1] = splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
-  if (D0.empty())
+  std::pair<std::string, std::string> Dst =
+      splitDstPair(Ops.Regs[0], Ops.IsB64, MRI);
+  if (Dst.first.empty())
     return {};
   std::string Addr = toAsmRegName(MRI, Ops.Regs[1]);
   std::string Data0 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[2])
@@ -222,9 +230,9 @@ static std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
   std::string Data1 = Ops.IsB64 ? fmtRegOperand(MRI, Ops.Regs[3])
                                 : toAsmRegName(MRI, Ops.Regs[3]);
   return {
-      ToMnem.str() + " " + D0 + ", " + Addr + ", " + Data0 +
+      ToMnem.str() + " " + Dst.first + ", " + Addr + ", " + Data0 +
           fmtOffset(Ops.Off0),
-      ToMnem.str() + " " + D1 + ", " + Addr + ", " + Data1 +
+      ToMnem.str() + " " + Dst.second + ", " + Addr + ", " + Data1 +
           fmtOffset(Ops.Off1),
   };
 }
@@ -254,36 +262,43 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
 // -- bumpNextWaitDscnt ------------------------------------------------------
 //
 // After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
-// in the same basic block must be incremented by 1 to account for the extra
-// outstanding DS operation. Stops at s_endpgm or any control-flow-affecting
-// instruction to avoid bumping a wait from a different kernel or branch path.
+// in the same straight-line block must be incremented by 1 to account for the
+// extra outstanding DS operation.
+//
+// Returns true if a wait was found and bumped, false otherwise.
+//
+// If the wait is past a branch or join point, we conservatively do nothing:
+// the compiler guarantees a straight-line s_wait_dscnt follows each DS op in
+// well-formed kernels. If absent (e.g. s_endpgm terminates first), skipping
+// the bump is safe — the hardware wait counter saturates harmlessly.
 
-static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
+static bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
 
   for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
-    const auto &DI = Ctx.Decoded[I];
+    const InternalDecodedInst &DI = Ctx.Decoded[I];
     if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
       continue;
     if (DI.Mnemonic == "s_endpgm")
-      return;
+      return false;
 
+    // Stop at any control-flow instruction (branches, jumps, calls) to
+    // avoid bumping a wait that belongs to a different execution path.
     const MCInstrDesc &Desc = MCII.get(DI.Inst.getOpcode());
     if (Desc.mayAffectControlFlow(DI.Inst, MRI))
-      return;
+      return false;
 
     if (DI.Mnemonic != "s_wait_dscnt")
       continue;
 
+    // s_wait_dscnt has a single immediate operand (the wait count) at
+    // index 0. Increment it directly.
     MCInst NewInst = DI.Inst;
-    for (unsigned OpI = 0, OpE = NewInst.getNumOperands(); OpI < OpE; ++OpI) {
-      MCOperand &Op = NewInst.getOperand(OpI);
-      if (!Op.isImm())
-        continue;
-      Op.setImm(Op.getImm() + 1);
-      break;
-    }
+    MCOperand &Op = NewInst.getOperand(0);
+    if (!Op.isImm())
+      return false;
+    Op.setImm(Op.getImm() + 1);
 
     SmallVector<char, 8> Bytes;
     SmallVector<MCFixup, 2> Fixups;
@@ -293,8 +308,10 @@ static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
     std::memcpy(Ctx.Text + Off, Bytes.data(), Bytes.size());
 
     Ctx.Decoded[I].Inst = NewInst;
-    return;
+    return true;
   }
+
+  return false;
 }
 
 // -- patchDs2AddrStride64 ---------------------------------------------------
@@ -304,11 +321,12 @@ static void bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
 // bumpNextWaitDscnt adjusts the next s_wait_dscnt accordingly.
 
 static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
-  auto &DI = Ctx.Decoded[Idx];
+  InternalDecodedInst &DI = Ctx.Decoded[Idx];
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
     return false;
-  auto Expanded = expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
+  std::vector<std::string> Expanded =
+      expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (Expanded.empty()) {
     log() << "hotswap: error: ds_2addr_stride64 expansion failed for: "
           << DI.Mnemonic << "\n";
@@ -316,9 +334,9 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   }
 
   std::string Combined;
-  for (auto &Line : Expanded)
+  for (const std::string &Line : Expanded)
     Combined += Line + "\n";
-  auto Bytes = assembleSingleInst(Combined, Ctx.LS);
+  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
           << "\n";

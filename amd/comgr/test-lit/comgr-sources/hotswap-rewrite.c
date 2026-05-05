@@ -50,6 +50,10 @@ int main(int argc, char *argv[]) {
       DumpFile = argv[++I];
     else if (strcmp(argv[I], "--check-idempotent") == 0)
       CheckIdempotent = 1;
+    else {
+      fprintf(stderr, "error: unknown argument: %s\n", argv[I]);
+      return 1;
+    }
   }
 
   char *ElfBuf;
