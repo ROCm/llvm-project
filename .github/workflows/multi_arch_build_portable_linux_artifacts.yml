@@ -279,8 +279,9 @@ jobs:
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_C_FLAGS="-Wno-error -Wno-all" \
-            -DCMAKE_CXX_FLAGS="-Wno-error -Wno-all" \
+            -DLLVM_ENABLE_WERROR=OFF \
+            -DROCM_ENABLE_WERROR=OFF \
+            -DHIP_ENABLE_WERROR=OFF \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }}            
 

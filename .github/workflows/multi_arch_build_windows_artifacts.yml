@@ -338,8 +338,9 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
-            -DCMAKE_C_FLAGS="-Wno-error -Wno-all" \
-            -DCMAKE_CXX_FLAGS="-Wno-error -Wno-all" \
+            -DLLVM_ENABLE_WERROR=OFF \
+            -DROCM_ENABLE_WERROR=OFF \
+            -DHIP_ENABLE_WERROR=OFF \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }}
 
