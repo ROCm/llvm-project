@@ -4001,6 +4001,13 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
             if (!privDecl.getDeallocRegion().empty())
               continue;
             llvm::Type *allocTy = oldAlloca->getAllocatedType();
+            // Only replicate struct (box descriptor) allocas. Scalar private
+            // variables are per-thread in the parallel function's stack frame
+            // and do not need a per-iteration copy; applying the replication
+            // to scalars adds unnecessary overhead and alters codegen that
+            // existing tests rely on.
+            if (!allocTy->isStructTy())
+              continue;
             auto *newAlloca =
                 builder.CreateAlloca(allocTy, nullptr, "omp.private.alloc");
             llvm::Value *newLLVMVar = builder.CreateAddrSpaceCast(
