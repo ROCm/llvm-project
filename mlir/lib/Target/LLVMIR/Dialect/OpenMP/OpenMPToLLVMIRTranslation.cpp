@@ -3880,6 +3880,150 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
     }
   }
 
+  // For GPU SPMD DistributeForStaticLoop constructs with a separate alloca
+  // address space (e.g., addrspace(5) on AMD GPU):
+  //
+  // Step 1 — VLA scratch overflow fix:
+  //   Private VLA arrays (e.g., Fortran assumed-shape auto-arrays declared with
+  //   `real, dimension(size(b,1)) :: tmp`) cause the omp.private init region to
+  //   emit `alloca float, i64 N, addrspace(5)` inside the outlined parallel
+  //   function.  The kernel descriptor's private_segment_fixed_size is set
+  //   statically at compile time and is too small for variable N, so the
+  //   runtime data pointer lands in unmapped scratch VRAM → GPU page fault.
+  //   Fix: replace every dynamic (variable-size) alloca in allocaAddrSpace with
+  //   a device malloc call so the data pointer lives in device global memory.
+  //   TODO: insert a matching free() after the loop body callback returns;
+  //   that insertion point is not available here (deferred as a follow-up).
+  //
+  // Step 2 — box descriptor capture fix:
+  //   Fixed-size box struct allocas in allocaAddrSpace are allocated in the
+  //   parallel function and their flat pointers get captured by
+  //   applyWorkshareLoop into struct_arg, where they are shared across all
+  //   worker threads.  Fix: insert a per-invocation copy of the box at the
+  //   top of the loop body so each callback invocation has its own descriptor.
+  //   NOTE: replaceUsesWithIf must run before CreateMemCpy; creating the memcpy
+  //   first causes replaceUsesWithIf to replace its own source → self-copy.
+  if (workshareLoopType ==
+          llvm::omp::WorksharingLoopType::DistributeForStaticLoop &&
+      loopInfo) {
+    llvm::Module *M = moduleTranslation.getLLVMModule();
+    unsigned allocAS = M->getDataLayout().getAllocaAddrSpace();
+    unsigned defaultAS = M->getDataLayout().getProgramAddressSpace();
+
+    if (allocAS != defaultAS) {
+      // Step 1: replace VLA (variable-size) allocas in scratch with malloc.
+      llvm::Function *F = loopInfo->getBody()->getParent();
+      llvm::SmallVector<llvm::AllocaInst *, 4> dynaAllocas;
+      for (auto &BB : *F)
+        for (auto &I : BB)
+          if (auto *AI = llvm::dyn_cast<llvm::AllocaInst>(&I))
+            if (AI->getAddressSpace() == allocAS &&
+                !llvm::isa<llvm::ConstantInt>(AI->getArraySize()))
+              dynaAllocas.push_back(AI);
+
+      for (llvm::AllocaInst *AI : dynaAllocas) {
+        llvm::IRBuilderBase::InsertPointGuard ipg(builder);
+        builder.SetInsertPoint(AI);
+        llvm::Type *elemTy = AI->getAllocatedType();
+        uint64_t elemSize = M->getDataLayout().getTypeAllocSize(elemTy);
+        llvm::Value *count = AI->getArraySize();
+        llvm::Value *countI64 =
+            builder.CreateZExtOrTrunc(count, builder.getInt64Ty());
+        llvm::Value *byteCount =
+            (elemSize == 1)
+                ? countI64
+                : builder.CreateMul(countI64, builder.getInt64(elemSize),
+                                    "omp.vla.bytes");
+        llvm::FunctionCallee mallocFn = M->getOrInsertFunction(
+            "malloc",
+            llvm::FunctionType::get(builder.getPtrTy(defaultAS),
+                                    {builder.getInt64Ty()}, false));
+        llvm::Value *mallocPtr =
+            builder.CreateCall(mallocFn, {byteCount}, "omp.vla.malloc");
+        // NOTE: The corresponding free() must be inserted after the loop body
+        // callback completes (in the parallel function, after the distribute
+        // call).  That insertion point is not easily recoverable from here
+        // because applyWorkshareLoop outlines the callback after this block.
+        // Tracked as a follow-up; kernel-lifetime leaks are benign for now.
+        // Replace addrspacecast(AI → defaultAS) uses with the malloc result.
+        llvm::SmallVector<llvm::User *> users(AI->users());
+        for (llvm::User *U : users)
+          if (auto *ASC = llvm::dyn_cast<llvm::AddrSpaceCastInst>(U))
+            if (ASC->getDestAddressSpace() == defaultAS) {
+              ASC->replaceAllUsesWith(mallocPtr);
+              ASC->eraseFromParent();
+            }
+        if (AI->use_empty())
+          AI->eraseFromParent();
+      }
+
+      // Step 2: relocate box struct allocas into the loop body.
+      // Walk omp.wsloop → omp.distribute → omp.parallel to find private vars.
+      mlir::Operation *distOp = wsloopOp->getParentOp();
+      mlir::Operation *parOp = distOp ? distOp->getParentOp() : nullptr;
+      auto parallelOp = mlir::dyn_cast_if_present<omp::ParallelOp>(parOp);
+      if (parallelOp) {
+        PrivateVarsInfo parentPrivInfo(parallelOp);
+        if (!parentPrivInfo.blockArgs.empty()) {
+          // Collect all basic blocks that belong to the (not-yet-outlined)
+          // loop body, stopping at the latch and not re-entering the header.
+          llvm::SmallPtrSet<llvm::BasicBlock *, 32> loopBodyBlocks;
+          llvm::SmallVector<llvm::BasicBlock *> worklist = {
+              loopInfo->getBody()};
+          while (!worklist.empty()) {
+            llvm::BasicBlock *bb = worklist.pop_back_val();
+            if (bb == loopInfo->getLatch())
+              continue;
+            if (!loopBodyBlocks.insert(bb).second)
+              continue;
+            for (llvm::BasicBlock *succ : llvm::successors(bb))
+              if (succ != loopInfo->getHeader())
+                worklist.push_back(succ);
+          }
+          llvm::IRBuilderBase::InsertPointGuard ipg(builder);
+          builder.SetInsertPoint(loopInfo->getBody(),
+                                 loopInfo->getBody()->begin());
+          for (size_t i = 0; i < parentPrivInfo.blockArgs.size(); ++i) {
+            omp::PrivateClauseOp &privDecl = parentPrivInfo.privatizers[i];
+            mlir::BlockArgument blockArg = parentPrivInfo.blockArgs[i];
+            llvm::Value *oldLLVMVar =
+                moduleTranslation.lookupValue(blockArg);
+            if (!oldLLVMVar)
+              continue;
+            llvm::Value *base = oldLLVMVar;
+            if (auto *cast = llvm::dyn_cast<llvm::AddrSpaceCastInst>(base))
+              base = cast->getPointerOperand();
+            auto *oldAlloca = llvm::dyn_cast<llvm::AllocaInst>(base);
+            if (!oldAlloca || oldAlloca->getAddressSpace() != allocAS)
+              continue;
+            // Skip allocatables: their init region handles allocation
+            // explicitly, so the box struct is not a plain stack copy.
+            if (!privDecl.getDeallocRegion().empty())
+              continue;
+            llvm::Type *allocTy = oldAlloca->getAllocatedType();
+            auto *newAlloca =
+                builder.CreateAlloca(allocTy, nullptr, "omp.private.alloc");
+            llvm::Value *newLLVMVar = builder.CreateAddrSpaceCast(
+                newAlloca, builder.getPtrTy(defaultAS),
+                "omp.private.alloc.ascast");
+            // replaceUsesWithIf BEFORE CreateMemCpy: this preserves oldLLVMVar
+            // as the memcpy source, so applyWorkshareLoop sees it used in the
+            // loop body and captures it in struct_arg for the work callback.
+            oldLLVMVar->replaceUsesWithIf(newLLVMVar, [&](llvm::Use &U) {
+              auto *inst = llvm::dyn_cast<llvm::Instruction>(U.getUser());
+              return inst && loopBodyBlocks.count(inst->getParent());
+            });
+            llvm::Value *boxSizeVal = llvm::ConstantInt::get(
+                builder.getInt64Ty(),
+                M->getDataLayout().getTypeAllocSize(allocTy));
+            builder.CreateMemCpy(newLLVMVar, llvm::MaybeAlign(), oldLLVMVar,
+                                 llvm::MaybeAlign(), boxSizeVal);
+          }
+        }
+      }
+    }
+  }
+
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy wsloopIP =
       ompBuilder->applyWorkshareLoop(
           ompLoc.DL, loopInfo, allocaIP, loopNeedsBarrier,
