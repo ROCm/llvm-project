@@ -9,8 +9,6 @@ endfunction()
 canonicalize_cmake_boolean(COMGR_SPIRV_BACKEND_AVAILABLE)
 canonicalize_cmake_boolean(COMGR_SPIRV_TRANSLATOR_AVAILABLE)
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
 if (NOT DEFINED LLVM_LIT_PATH)

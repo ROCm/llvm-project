@@ -4,7 +4,7 @@ import platform
 import lit.formats
 
 config.name = "Comgr"
-config.suffixes = {".hip", ".cl", ".c", ".cpp", ".s", ".test"}
+config.suffixes = {".hip", ".cl", ".c", ".cpp", ".s"}
 config.test_format = lit.formats.ShTest(True)
 
 config.excludes = ["comgr-sources"]
@@ -39,5 +39,3 @@ config.substitutions.append(('%llvm-objdump', _fwd(config.llvm_tools_dir, 'llvm-
 config.substitutions.append(('%llvm-readelf', _fwd(config.llvm_tools_dir, 'llvm-readelf')))
 config.substitutions.append(('%FileCheck', _fwd(config.llvm_tools_dir, 'FileCheck')))
 config.substitutions.append(('%amd-llvm-spirv', _fwd(config.llvm_tools_dir, 'amd-llvm-spirv')))
-config.substitutions.append(('%python', _fwd(config.python_executable)))
-config.substitutions.append(('%comgr-src', _fwd(config.comgr_src_root)))
