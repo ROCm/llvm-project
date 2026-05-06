@@ -302,18 +302,17 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
-          #- name: Update the Cmake list for CK (nightly)
-          #if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
-          #shell: pwsh
-          #run: |
-          #Get-ChildItem -Path "rocm-libraries/projects/composablekernel" -Recurse -Include "CMakeLists.txt","*.cmake" | ForEach-Object {
-          #  $content = Get-Content $_.FullName -Raw
-          #  if ($content -match '-Werror') {
-          #    $updated = $content -replace '-Werror\b', '-Werror -Wno-error=lifetime-safety-intra-tu-suggestions'
-          #    Set-Content -Path $_.FullName -Value $updated -NoNewline
-          #    Write-Host "Patched: $($_.FullName)"
-          #  }
-          #}
+      - name: Use Wno-error for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
+        shell: pwsh
+        run: |
+          $file = "rocm-libraries/projects/composablekernel/CMakeLists.txt"
+          $content = Get-Content $file -Raw
+          if ($content -match '-Werror') {
+            $updated = $content -replace '-Werror\b', '-Wno-error'
+            Set-Content -Path $file -Value $updated -NoNewline
+            Write-Host "Patched: $file"
+          }
           
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
@@ -343,7 +342,6 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
         run: |
           # clear cache before build and after download
-          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-lifetime-safety-intra-tu-suggestions'  >> $GITHUB_ENV
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \

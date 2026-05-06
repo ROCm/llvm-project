@@ -250,12 +250,10 @@ jobs:
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
 
-          #- name: Update the Cmake list for CK (nightly)
-          #if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
-          #run: |
-          #find rocm-libraries/projects/composablekernel \
-          #  \( -name "CMakeLists.txt" -o -name "*.cmake" \) -exec \
-          #  sed -i 's/-Werror\b/-Werror -Wno-error=lifetime-safety-intra-tu-suggestions/g' {} +
+      - name: Use Wno-error for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
+        run: |
+          sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
 
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
@@ -283,7 +281,6 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
           BUILD_DIR: build
         run: |
-          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-lifetime-safety-intra-tu-suggestions'  >> $GITHUB_ENV
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
