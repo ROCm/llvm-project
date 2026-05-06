@@ -324,7 +324,8 @@ jobs:
           #extra_cmake_options: ${{ inputs.extra_cmake_options }}
           extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
         run: |
-          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-error=lifetime-safety-intra-tu-suggestions' >> $GITHUB_ENV
+          echo 'CCC_OVERRIDE_OPTIONS="+-Wno-error=lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"'
+ >> $GITHUB_ENV
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
