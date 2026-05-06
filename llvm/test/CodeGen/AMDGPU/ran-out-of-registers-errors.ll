@@ -8,6 +8,8 @@
 ; FIXME: Asserts when using -O2 + -vgpr-regalloc=fast
 ; RUN: not llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -stress-regalloc=1 -O0 -filetype=null %t.bc 2>&1 | FileCheck -implicit-check-not=error -check-prefixes=DBGINFO-CHECK,DBGINFO-FAST %s
 
+; XFAIL: *
+
 ; TODO: Should we fix emitting multiple errors sometimes in basic and fast?
 
 

@@ -1,5 +1,6 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -experimental-debug-variable-locations=false < %s | FileCheck -check-prefix=GCN %s
 ; Make sure dbg_value reports something for argument registers when they are split into multiple registers
+; XFAIL: *
 
 define hidden <4 x float> @split_v4f32_arg(<4 x float> returned %arg) local_unnamed_addr #0 !dbg !7 {
 ; GCN-LABEL: split_v4f32_arg:

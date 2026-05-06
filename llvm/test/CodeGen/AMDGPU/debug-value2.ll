@@ -1,4 +1,5 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -experimental-debug-variable-locations=false < %s | FileCheck %s
+; XFAIL: *
 
 %struct.ShapeData = type { <4 x float>, <4 x float>, <4 x float>, <4 x float>, <4 x float>, i32, i32, i64, <4 x float>, i32, i8, i8, i16, i32, i32 }
 

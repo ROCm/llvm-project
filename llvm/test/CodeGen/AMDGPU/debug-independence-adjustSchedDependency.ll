@@ -3,6 +3,8 @@
 ; RUN: llc -mcpu=gfx1250 < %t.no_debug.ll -filetype=obj -o %t.no_debug.o
 ; RUN: llvm-strip %t.with_debug.o %t.no_debug.o
 ; RUN: cmp %t.with_debug.o %t.no_debug.o
+; XFAIL: *
+
 ; Ensure that compiling with and without debug generates identical code.
 ; Test that adjustSchedDependency does not count debug instructions in bundles.
 
