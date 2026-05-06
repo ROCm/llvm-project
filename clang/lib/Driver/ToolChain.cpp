@@ -1354,6 +1354,7 @@ bool ToolChain::isThreadModelSupported(const StringRef Model) const {
 }
 
 std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
+                                         StringRef BoundArch,
                                          types::ID InputType) const {
   switch (getTriple().getArch()) {
   default:
@@ -1407,8 +1408,9 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
 }
 
 std::string ToolChain::ComputeEffectiveClangTriple(const ArgList &Args,
+                                                   StringRef BoundArch,
                                                    types::ID InputType) const {
-  return ComputeLLVMTriple(Args, InputType);
+  return ComputeLLVMTriple(Args, BoundArch, InputType);
 }
 
 std::string ToolChain::computeSysRoot() const {
@@ -1913,7 +1915,7 @@ llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
       llvm::Triple TT = normalizeOffloadTriple(A->getValue(0));
 
       // Passing device args: -Xopenmp-target=<triple> -opt=val.
-      if (TT.getTriple() == getTripleString())
+      if (TT.isCompatibleWith(getTriple()))
         Index = Args.getBaseArgs().MakeIndex(A->getValue(1));
       else
         continue;
