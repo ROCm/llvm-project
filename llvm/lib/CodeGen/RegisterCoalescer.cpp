@@ -2212,6 +2212,57 @@ bool RegisterCoalescer::joinCopy(
       if (removePartialRedundancy(CP, *CopyMI))
         return true;
 
+    // Prune orphan IMPLICIT_DEF sub-ranges from the destination's live
+    // range.  When a COPY's destination inherited IMPLICIT_DEF lanes
+    // from a source that has since been merged & pruned, the dest may
+    // hold "fossil" sub-ranges covering lanes that don't exist in the
+    // source's current live-range.  These fossils have no real value
+    // (they're propagated IMPLICIT_DEFs) but they can block FUTURE
+    // merges of dependent COPYs that re-define those lanes.  Pruning
+    // them here releases the constraint without affecting correctness
+    // (the orphan lanes were undef anyway).
+    if (!CP.isPartial() && !CP.isPhys()) {
+      Register DstReg = CP.getDstReg();
+      Register SrcReg = CP.getSrcReg();
+      LiveInterval &DstLI = LIS->getInterval(DstReg);
+      LiveInterval &SrcLI = LIS->getInterval(SrcReg);
+      if (DstLI.hasSubRanges() && SrcLI.hasSubRanges()) {
+        // Compute union of source's actual lane coverage.
+        LaneBitmask SrcLaneMask = LaneBitmask::getNone();
+        for (auto &SR : SrcLI.subranges())
+          SrcLaneMask |= SR.LaneMask;
+        // Compute orphan lanes in dest = dest_lanes & ~src_lanes.
+        LaneBitmask DstLaneMask = LaneBitmask::getNone();
+        for (auto &SR : DstLI.subranges())
+          DstLaneMask |= SR.LaneMask;
+        LaneBitmask OrphanLanes = DstLaneMask & ~SrcLaneMask;
+        if (OrphanLanes.any()) {
+          LLVM_DEBUG(dbgs()
+                     << "\tPruning orphan IMPLICIT_DEF sub-range lanes "
+                     << PrintLaneMask(OrphanLanes) << " from "
+                     << printReg(DstReg, TRI) << '\n');
+          // Refine sub-ranges so the orphan portion is its own
+          // sub-range, then clear all values from sub-ranges that lie
+          // entirely within OrphanLanes.
+          BumpPtrAllocator &Allocator = LIS->getVNInfoAllocator();
+          const SlotIndexes &Indexes = *LIS->getSlotIndexes();
+          DstLI.refineSubRanges(
+              Allocator, OrphanLanes,
+              [](LiveInterval::SubRange &) {}, Indexes, *TRI);
+          for (auto &SR : DstLI.subranges()) {
+            if ((SR.LaneMask & SrcLaneMask).none() && SR.LaneMask.any()) {
+              // Sub-range is entirely within orphan lanes — clear it.
+              while (!SR.valnos.empty())
+                SR.removeValNo(SR.valnos.back());
+            }
+          }
+          DstLI.removeEmptySubRanges();
+          LLVM_DEBUG(dbgs() << "\tDest after orphan-lane prune: " << DstLI
+                            << '\n');
+        }
+      }
+    }
+
     // Otherwise, we are unable to join the intervals.
     LLVM_DEBUG(dbgs() << "\tInterference!\n");
     Again = true; // May be possible to coalesce later.
