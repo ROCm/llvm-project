@@ -176,8 +176,9 @@ public:
   /// \param Callee target function
   ///
   /// \returns preference value for particular Caller/Callee combination.
-  CUDAFunctionPreference IdentifyPreference(const FunctionDecl *Caller,
-                                            const FunctionDecl *Callee);
+  CUDAFunctionPreference
+  IdentifyPreference(const FunctionDecl *Caller, const FunctionDecl *Callee,
+                     bool IgnoreImplicitHDAttr = false);
 
   /// Determines whether Caller may invoke Callee, based on their CUDA
   /// host/device attributes.  Returns false if the call is not allowed.

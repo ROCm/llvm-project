@@ -310,7 +310,8 @@ SemaCUDA::CUDAVariableTarget SemaCUDA::IdentifyTarget(const VarDecl *Var) {
 
 SemaCUDA::CUDAFunctionPreference
 SemaCUDA::IdentifyPreference(const FunctionDecl *Caller,
-                             const FunctionDecl *Callee) {
+                             const FunctionDecl *Callee,
+                             bool IgnoreImplicitHDAttr) {
   assert(Callee && "Callee must be valid.");
 
   // Treat ctor/dtor as host device function in device var initializer to allow
@@ -322,7 +323,7 @@ SemaCUDA::IdentifyPreference(const FunctionDecl *Caller,
     return CFP_HostDevice;
 
   CUDAFunctionTarget CallerTarget = IdentifyTarget(Caller);
-  CUDAFunctionTarget CalleeTarget = IdentifyTarget(Callee);
+  CUDAFunctionTarget CalleeTarget = IdentifyTarget(Callee, IgnoreImplicitHDAttr);
 
   // If one of the targets is invalid, the check always fails, no matter what
   // the other target is.
@@ -337,13 +338,7 @@ SemaCUDA::IdentifyPreference(const FunctionDecl *Caller,
        CallerTarget == CUDAFunctionTarget::Device))
     return CFP_Native;
 
-  // (b) Calling HostDevice is OK for everyone. An implicit host/device
-  // function still belongs to the active compilation side for overload
-  // preference purposes; otherwise making a host-only template implicitly
-  // device-capable can change host overload resolution.
-  if (CalleeTarget == CUDAFunctionTarget::HostDevice &&
-      isImplicitHostDeviceFunction(Callee))
-    return CFP_Native;
+  // (b) Calling HostDevice is OK for everyone.
   if (CalleeTarget == CUDAFunctionTarget::HostDevice)
     return CFP_HostDevice;
 

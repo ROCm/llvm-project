@@ -11289,8 +11289,36 @@ bool clang::isBetterOverloadCandidate(
   // to determine which is better.
   if (S.getLangOpts().CUDA && Cand1.Function && Cand2.Function) {
     FunctionDecl *Caller = S.getCurFunctionDecl(/*AllowLambda=*/true);
-    return S.CUDA().IdentifyPreference(Caller, Cand1.Function) >
-           S.CUDA().IdentifyPreference(Caller, Cand2.Function);
+    auto P1 = S.CUDA().IdentifyPreference(Caller, Cand1.Function);
+    auto P2 = S.CUDA().IdentifyPreference(Caller, Cand2.Function);
+    if (P1 != P2)
+      return P1 > P2;
+
+    // If two host/device candidates are otherwise tied, break ties for an
+    // implicit host/device function as if the implicit device attribute had not
+    // been added. This preserves overload resolution for pure C++ templates in
+    // host compilation while still preferring explicit device overloads in
+    // device compilation.
+    if (P1 == SemaCUDA::CFP_HostDevice) {
+      bool IsCand1ImplicitHD =
+          SemaCUDA::isImplicitHostDeviceFunction(Cand1.Function);
+      bool IsCand2ImplicitHD =
+          SemaCUDA::isImplicitHostDeviceFunction(Cand2.Function);
+      if (IsCand1ImplicitHD != IsCand2ImplicitHD) {
+        auto OriginalP1 = IsCand1ImplicitHD
+                              ? S.CUDA().IdentifyPreference(
+                                    Caller, Cand1.Function,
+                                    /*IgnoreImplicitHDAttr=*/true)
+                              : P1;
+        auto OriginalP2 = IsCand2ImplicitHD
+                              ? S.CUDA().IdentifyPreference(
+                                    Caller, Cand2.Function,
+                                    /*IgnoreImplicitHDAttr=*/true)
+                              : P2;
+        if (OriginalP1 != OriginalP2)
+          return OriginalP1 > OriginalP2;
+      }
+    }
   }
 
   // General member function overloading is handled above, so this only handles
