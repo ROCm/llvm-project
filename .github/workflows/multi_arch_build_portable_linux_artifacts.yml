@@ -283,7 +283,7 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
           BUILD_DIR: build
         run: |
-          echo 'CCC_OVERRIDE_OPTIONS="+-Wno-error=lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"' >> $GITHUB_ENV
+          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-lifetime-safety-intra-tu-suggestions'  >> $GITHUB_ENV
           cmake -B "${BUILD_DIR}" -S . -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \

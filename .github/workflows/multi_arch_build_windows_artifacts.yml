@@ -343,7 +343,7 @@ jobs:
           extra_cmake_options: ${{ inputs.extra_cmake_options }}
         run: |
           # clear cache before build and after download
-          echo 'CCC_OVERRIDE_OPTIONS="+-Wno-error=lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-intra-tu-suggestions +-Wno-lifetime-safety-cross-tu-suggestions"'  >> $GITHUB_ENV
+          echo 'CCC_OVERRIDE_OPTIONS=+-Wno-lifetime-safety-intra-tu-suggestions'  >> $GITHUB_ENV
           cd L:
           ccache -z
           cmake -B 'B:\build' -S 'L:\' -GNinja \
