@@ -55,7 +55,7 @@ define void @empty_types() !dbg !38 {
 !9 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !10, size: 64, align: 32, offset: 8, extraData: !10)
 !10 = !DIBasicType(name: "si32", size: 32, encoding: DW_ATE_signed)
 !11 = !DIDerivedType(tag: DW_TAG_pointer_type, name: "named", baseType: !10)
-!12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !10, size: 64, align: 32, offset: 8, dwarfAddressSpace: 3)
+!12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !10, size: 64, align: 32, offset: 8, addressSpace: 3)
 !13 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "composite", file: !1, line: 42, size: 64, align: 32, elements: !14)
 !14 = !{!15}
 !15 = !DISubrange(count: 4)
