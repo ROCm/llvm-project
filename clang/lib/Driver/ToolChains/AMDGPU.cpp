@@ -798,17 +798,15 @@ void AMDGPUToolChain::checkAndAddAMDGPUSanLibPaths(const ArgList &Args) {
 DerivedArgList *
 AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
                                Action::OffloadKind DeviceOffloadKind) const {
-
   DerivedArgList *DAL =
       Generic_ELF::TranslateArgs(Args, BoundArch, DeviceOffloadKind);
+  if (!DAL) {
+    DAL = new DerivedArgList(Args.getBaseArgs());
+    for (Arg *A : Args)
+      DAL->append(A);
+  }
 
   const OptTable &Opts = getDriver().getOpts();
-
-  if (!DAL)
-    DAL = new DerivedArgList(Args.getBaseArgs());
-
-  for (Arg *A : Args)
-    DAL->append(A);
 
   // Replace -mcpu=native with detected GPU.
   Arg *LastMCPUArg = DAL->getLastArg(options::OPT_mcpu_EQ);
@@ -828,7 +826,13 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
     }
   }
 
-  checkTargetID(*DAL);
+  if (!BoundArch.empty()) {
+    DAL->eraseArg(options::OPT_mcpu_EQ);
+    DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_mcpu_EQ), BoundArch);
+    checkTargetID(*DAL);
+  } else if (DeviceOffloadKind == Action::OFK_None) {
+    checkTargetID(*DAL);
+  }
 
   if (Args.getLastArgValue(options::OPT_x) != "cl")
     return DAL;
@@ -917,6 +921,29 @@ ROCMToolChain::ROCMToolChain(const Driver &D, const llvm::Triple &Triple,
     : AMDGPUToolChain(D, Triple, Args) {
   if (Triple.getEnvironment() != llvm::Triple::LLVM)
     RocmInstallation->detectDeviceLibrary();
+}
+
+DerivedArgList *
+ROCMToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
+                             Action::OffloadKind DeviceOffloadKind) const {
+  DerivedArgList *DAL =
+      AMDGPUToolChain::TranslateArgs(Args, BoundArch, DeviceOffloadKind);
+
+  // Filter out sanitizer coverage options that are not supported for AMDGPU.
+  for (Arg *A : Args) {
+    // Sanitizer coverage is currently not supported for AMDGPU.
+    if (A->getOption().matches(options::OPT_fsan_cov_Group)) {
+      // Upgrade to error if the option was explicitly specified for device
+      bool IsExplicitDevice =
+          A->getBaseArg().getOption().matches(options::OPT_Xarch_device);
+      getDriver().Diag(IsExplicitDevice
+                           ? diag::err_drv_unsupported_option_for_target
+                           : diag::warn_drv_unsupported_option_for_target)
+          << A->getAsString(Args) << getTriple().str();
+    }
+  }
+
+  return DAL;
 }
 
 void AMDGPUToolChain::addClangTargetOptions(

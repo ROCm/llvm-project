@@ -362,8 +362,6 @@ AMDGPUOpenMPToolChain::AMDGPUOpenMPToolChain(const Driver &D, const llvm::Triple
 void AMDGPUOpenMPToolChain::addClangTargetOptions(
     const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
     Action::OffloadKind DeviceOffloadingKind) const {
-  HostTC.addClangTargetOptions(DriverArgs, CC1Args, DeviceOffloadingKind);
-
   StringRef GPUArch = DriverArgs.getLastArgValue(options::OPT_march_EQ);
 
   assert(DeviceOffloadingKind == Action::OFK_OpenMP &&
@@ -440,47 +438,6 @@ void AMDGPUOpenMPToolChain::addClangTargetOptions(
     for (auto Lib : BCLibs)
       addBCLib(getDriver(), DriverArgs, CC1Args, LibraryPaths, Lib,
                /* PostClang Link? */ true);
-}
-
-llvm::opt::DerivedArgList *AMDGPUOpenMPToolChain::TranslateArgs(
-    const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
-    Action::OffloadKind DeviceOffloadKind) const {
-  DerivedArgList *DAL =
-      HostTC.TranslateArgs(Args, BoundArch, DeviceOffloadKind);
-
-  if (!DAL)
-    DAL = new DerivedArgList(Args.getBaseArgs());
-
-  const OptTable &Opts = getDriver().getOpts();
-
-  for (Arg *A : Args) {
-    // Sanitizer coverage is currently not supported for AMDGPU.
-    if (A->getOption().matches(options::OPT_fsan_cov_Group)) {
-      diagnoseUnsupportedOption(A, *DAL, Args);
-      continue;
-    }
-
-    if (A->getOption().matches(options::OPT_fsanitize_EQ) &&
-        !Args.hasFlag(options::OPT_fgpu_sanitize, options::OPT_fno_gpu_sanitize,
-                      true))
-      continue;
-
-    DAL->append(A);
-  }
-
-  if (!BoundArch.empty()) {
-    DAL->eraseArg(options::OPT_march_EQ);
-    DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_march_EQ),
-                      BoundArch);
-  }
-
-  return DAL;
-}
-
-void AMDGPUOpenMPToolChain::addClangWarningOptions(
-    ArgStringList &CC1Args) const {
-  AMDGPUToolChain::addClangWarningOptions(CC1Args);
-  HostTC.addClangWarningOptions(CC1Args);
 }
 
 ToolChain::CXXStdlibType
