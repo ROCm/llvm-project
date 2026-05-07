@@ -1,3 +1,4 @@
+; XFAIL: *
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -stress-regalloc=1 -vgpr-regalloc=greedy -filetype=null %s 2>&1 | FileCheck -check-prefixes=CHECK,GREEDY -implicit-check-not=error %s
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -stress-regalloc=1 -vgpr-regalloc=basic -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error -check-prefixes=CHECK,BASIC %s
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -stress-regalloc=1 -vgpr-regalloc=fast -filetype=null %s 2>&1 | FileCheck -implicit-check-not=error -check-prefixes=CHECK,FAST %s
@@ -7,8 +8,6 @@
 
 ; FIXME: Asserts when using -O2 + -vgpr-regalloc=fast
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -stress-regalloc=1 -O0 -filetype=null %t.bc 2>&1 | FileCheck -implicit-check-not=error -check-prefixes=DBGINFO-CHECK,DBGINFO-FAST %s
-
-; XFAIL: *
 
 ; TODO: Should we fix emitting multiple errors sometimes in basic and fast?
 
