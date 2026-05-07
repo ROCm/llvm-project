@@ -1434,6 +1434,22 @@ struct AAPointerInfoImpl
       Function *AccScope = Acc.getRemoteInst()->getFunction();
       bool AccInSameScope = AccScope == &Scope;
 
+      // Populate the ExclusionSet before any early returns — must-accesses
+      // that can be "stepped over" during reachability analysis need to be
+      // recorded regardless of whether this access is interesting for the
+      // current query direction.
+      if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
+        if (Acc.isWrite() || (isa<LoadInst>(I) && Acc.isWriteOrAssumption()))
+          ExclusionSet.insert(Acc.getRemoteInst());
+      }
+
+      // Filter accesses irrelevant to the query direction — this is the
+      // cheapest check (~1ns, two boolean flags) and eliminates the majority
+      // of accesses before any kernel-scope work.
+      if ((!FindInterferingWrites || !Acc.isWriteOrAssumption()) &&
+          (!FindInterferingReads || !Acc.isRead()))
+        return true;
+
       // If the object has kernel lifetime, accesses from disjoint kernel
       // scopes cannot interfere. Use BitVector anyCommon() for an O(N/64)
       // disjointness check where N is the number of kernels.
@@ -1449,15 +1465,6 @@ struct AAPointerInfoImpl
         if (AccBV && !ScopeKernelsBV->anyCommon(*AccBV))
           return true;
       }
-
-      if (Exact && Acc.isMustAccess() && Acc.getRemoteInst() != &I) {
-        if (Acc.isWrite() || (isa<LoadInst>(I) && Acc.isWriteOrAssumption()))
-          ExclusionSet.insert(Acc.getRemoteInst());
-      }
-
-      if ((!FindInterferingWrites || !Acc.isWriteOrAssumption()) &&
-          (!FindInterferingReads || !Acc.isRead()))
-        return true;
 
       bool Dominates = FindInterferingWrites && DT && Exact &&
                        Acc.isMustAccess() && AccInSameScope &&
