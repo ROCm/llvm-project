@@ -14,6 +14,7 @@
 
 add_flangrt_library(flang_rt.openmp STATIC SHARED
   omp_alloc.cpp
+  omp_kmpc_alloc.cpp
   omp_util.cpp
   INSTALL_WITH_TOOLCHAIN
 )
@@ -25,3 +26,20 @@ add_flangrt_library(flang_rt.openmp STATIC SHARED
 #if (TARGET flang_rt.openmp.shared)
 #  target_include_directories(flang_rt.openmp.shared PRIVATE ${FLANG_RT_UMPIRE_DIR}/include)
 #endif()
+
+# The static variant is what unit tests pick up; alias it as the unittest
+# target so flang-rt's RuntimeTests can link against it deterministically.
+if (TARGET flang_rt.openmp.static)
+  add_library(flang_rt.openmp.unittest ALIAS flang_rt.openmp.static)
+endif ()
+
+# Resolving __kmpc_* symbols at runtime in omp_kmpc_alloc.cpp requires
+# dlopen / dlsym on POSIX.
+if (NOT WIN32)
+  if (TARGET flang_rt.openmp.static)
+    target_link_libraries(flang_rt.openmp.static PUBLIC ${CMAKE_DL_LIBS})
+  endif ()
+  if (TARGET flang_rt.openmp.shared)
+    target_link_libraries(flang_rt.openmp.shared PUBLIC ${CMAKE_DL_LIBS})
+  endif ()
+endif ()
