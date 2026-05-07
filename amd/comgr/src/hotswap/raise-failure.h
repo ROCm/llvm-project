@@ -1,4 +1,4 @@
-//===- raise_failure.h - Structured raise-failure values ----------------===//
+//===- raise-failure.h - Structured raise-failure values ----------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.

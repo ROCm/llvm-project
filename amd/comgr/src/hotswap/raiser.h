@@ -9,8 +9,8 @@
 #ifndef HOTSWAP_TRANSPILER_RAISER_H
 #define HOTSWAP_TRANSPILER_RAISER_H
 
-#include "code_object_utils.h"
-#include "raise_failure.h"
+#include "code-object-utils.h"
+#include "raise-failure.h"
 
 #include "llvm/ADT/StringRef.h"
 
