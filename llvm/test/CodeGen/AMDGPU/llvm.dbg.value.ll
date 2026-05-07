@@ -1,5 +1,5 @@
-; RUN: llc -O0 -mtriple=amdgcn-unknown-amdhsa < %s | FileCheck -check-prefixes=GCN,NOOPT %s
-; RUN: llc -mtriple=amdgcn-unknown-amdhsa < %s | FileCheck -check-prefixes=GCN,OPT %s
+; RUN: llc -amdgpu-late-wave-transform=1 -O0 -mtriple=amdgcn-unknown-amdhsa < %s | FileCheck -check-prefixes=GCN,NOOPT %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-unknown-amdhsa < %s | FileCheck -check-prefixes=GCN,OPT %s
 ; XFAIL: *
 
 ; GCN-LABEL: {{^}}test_debug_value:

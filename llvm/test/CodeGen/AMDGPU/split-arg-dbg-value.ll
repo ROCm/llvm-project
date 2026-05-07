@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -experimental-debug-variable-locations=false < %s | FileCheck -check-prefix=GCN %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -experimental-debug-variable-locations=false < %s | FileCheck -check-prefix=GCN %s
 ; Make sure dbg_value reports something for argument registers when they are split into multiple registers
 ; XFAIL: *
 
