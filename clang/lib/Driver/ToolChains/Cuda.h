@@ -70,7 +70,7 @@ class LLVM_LIBRARY_VISIBILITY OpenMPLinker : public Tool {
  public:
    OpenMPLinker(const ToolChain &TC)
        : Tool("NVPTX::OpenMPLinker", "nvlink", TC) {}
-       
+
    bool hasIntegratedCPP() const override { return false; }
 
    void ConstructJob(Compilation &C, const JobAction &JA,
@@ -184,8 +184,10 @@ public:
   void AddIAMCUIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                            llvm::opt::ArgStringList &CC1Args) const override;
 
-  SanitizerMask getSupportedSanitizers() const override;
-  
+  SanitizerMask
+  getSupportedSanitizers(StringRef BoundArch,
+                         Action::OffloadKind DeviceOffloadKind) const override;
+
   VersionTuple
   computeMSVCVersion(const Driver *D,
                      const llvm::opt::ArgList &Args) const override;
