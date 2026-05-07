@@ -596,13 +596,9 @@ endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
-elseif(COMGR_STATIC_LLVM)
-  # When forcing static LLVM linkage, pull in ALL LLVM static component libs.
-  # The hand-curated list below is too narrow: clang*/lld* reach into LLVM
-  # internals (Passes, WindowsManifest, RewriteRope, IR-instrumentation,
-  # Sanitizer, Unicode, etc.) that aren't in it. Without full coverage the
-  # linker falls back to libLLVM.so for the missing symbols, defeating
-  # COMGR_STATIC_LLVM.
+else()
+  # Full static link. Reached when LLVM was built without LLVM_BUILD_LLVM_DYLIB,
+  # or when COMGR_STATIC_LLVM forced LLVM_LINK_LLVM_DYLIB=OFF above.
   #
   # llvm_map_components_to_libnames(... all) does not work in downstream
   # consumers (it reads a GLOBAL property only set during LLVM's own build),
@@ -610,29 +606,6 @@ elseif(COMGR_STATIC_LLVM)
   set(LLVM_LIBS ${LLVM_AVAILABLE_LIBS})
   list(REMOVE_ITEM LLVM_LIBS LLVM)  # bare `LLVM` is the dylib target
   list(APPEND LLVM_LIBS ${SPIRV_STATIC_LIB})
-else()
-  llvm_map_components_to_libnames(LLVM_LIBS
-    ${LLVM_TARGETS_TO_BUILD}
-    BinaryFormat
-    BitReader
-    BitWriter
-    CodeGen
-    Core
-    DebugInfoDWARF
-    Demangle
-    IRReader
-    Linker
-    MC
-    MCDisassembler
-    MCParser
-    Object
-    Option
-    Support
-    Symbolize
-    TargetParser
-    TransformUtils
-    ${SPIRV_STATIC_LIB}
-    )
 endif()
 
 target_link_options(amd_comgr
@@ -641,7 +614,7 @@ target_link_options(amd_comgr
   PRIVATE
     ${AMD_COMGR_PRIVATE_LINKER_OPTIONS})
 
-if(COMGR_STATIC_LLVM AND UNIX AND NOT APPLE)
+if(NOT LLVM_LINK_LLVM_DYLIB AND UNIX AND NOT APPLE)
   # Full set of LLVM/Clang/LLD static libs has circular deps
   # (e.g., LLVMSupport <-> clangBasic via getStackPointer). Wrap in
   # --start-group/--end-group so the linker performs multi-pass resolution.
