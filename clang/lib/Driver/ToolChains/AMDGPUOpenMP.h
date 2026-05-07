@@ -79,6 +79,7 @@ public:
   llvm::opt::DerivedArgList *
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
+
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args,
@@ -105,10 +106,6 @@ public:
   void
   AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &FlangArgs) const override;
-
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
 
   StringRef getAsanRTLPath() const {
     return RocmInstallation->getAsanRTLPath();
