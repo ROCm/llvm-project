@@ -84,10 +84,18 @@ int main(int Argc, char *Argv[]) {
 
   // Compile options: embedded libc++ headers are mapped to clang's default
   // include locations via VFS and injected as a fallback (-idirafter).
-  // No explicit -I flags needed.
+  // -nostdinc++ disables system C++ header lookup so the embedded headers
+  // are the only ones found -- without it, on systems with system libstdc++
+  // installed at clang's default search path (e.g., manylinux/RHEL with
+  // gcc-toolset), clang resolves <tuple> to the system header, which then
+  // transitively pulls in <stddef.h> and fails to resolve under HIP
+  // --offload-device-only mode (clang's libc++ stddef.h does
+  // #include_next <stddef.h> with no next stddef.h available on the device
+  // include path).
   const char *CompileOptions[] = {
       "-std=c++17",
-      "-nogpuinc"                  // Don't use GPU-specific includes
+      "-nogpuinc",                 // Don't use GPU-specific includes
+      "-nostdinc++"                // Use only the embedded libc++ headers
   };
   size_t CompileOptionsCount =
       sizeof(CompileOptions) / sizeof(CompileOptions[0]);
