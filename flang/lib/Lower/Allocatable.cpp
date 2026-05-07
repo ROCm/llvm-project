@@ -19,11 +19,13 @@
 #include "flang/Lower/Mangler.h"
 #include "flang/Lower/MultiImageFortran.h"
 #include "flang/Lower/OpenACC.h"
+#include "flang/Lower/OpenMP.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Runtime.h"
 #include "flang/Lower/StatementContext.h"
 #include "flang/Optimizer/Builder/CUFCommon.h"
 #include "flang/Optimizer/Builder/FIRBuilder.h"
+#include "flang/Optimizer/Builder/Runtime/Allocatable.h"
 #include "flang/Optimizer/Builder/Runtime/RTBuilder.h"
 #include "flang/Optimizer/Builder/Todo.h"
 #include "flang/Optimizer/Dialect/CUF/CUFOps.h"
@@ -561,6 +563,21 @@ private:
     return false;
   }
 
+  /// Emit a _FortranAOmpAllocatorStamp(descriptor, handle, align) call that
+  /// routes the immediately following AllocatableAllocate through the OpenMP
+  /// runtime using \p info.  Must be called after the descriptor has been
+  /// initialized (genAllocateObjectInit) so the descriptor memory is live
+  /// when the runtime reads/writes its allocator-index bits.
+  void genOmpAllocatorStampCall(const fir::MutableBoxValue &box,
+                                const Fortran::lower::OmpAllocatorInfo &info) {
+    mlir::Type boxNoneRefTy =
+        fir::ReferenceType::get(fir::BoxType::get(builder.getNoneType()));
+    mlir::Value descArg =
+        builder.createConvert(loc, boxNoneRefTy, box.getAddr());
+    fir::runtime::genOmpAllocatorStamp(builder, loc, descArg, info.handle,
+                                       info.align);
+  }
+
   void genSimpleAllocation(const Allocation &alloc,
                            const fir::MutableBoxValue &box) {
     bool isCudaAllocate =
@@ -589,10 +606,29 @@ private:
     // The inlined allocation path emits a plain heap allocmem that ignores the
     // allocator index; use the runtime path when we redirected an otherwise
     // plain allocatable to a managed allocator so the index is honored.
+    // If this allocatable is inside an `!$omp allocators` ALLOCATE clause,
+    // look up the (handle, align) binding registered by OpenMP.cpp.  For
+    // such allocatables we must take the runtime allocation path -- the
+    // inline fir.allocmem fast path would emit a plain host allocation and
+    // bypass the OpenMP runtime entirely, losing the allocator handle.
+    std::optional<Fortran::lower::OmpAllocatorInfo> ompAllocInfo =
+        Fortran::lower::lookupOmpAllocatorInfo(alloc.getSymbol());
+    // Any symbol that has ever appeared in an `!$omp allocators` ALLOCATE
+    // clause must keep using the runtime path for the rest of the lowering,
+    // even for allocate statements that sit textually outside the construct.
+    // Without this the descriptor's allocator-index can become inconsistent
+    // with the actual allocation source -- e.g. the descriptor is stamped
+    // kOmpAllocatorPos by a previous `!$omp allocators` allocate but a
+    // later inline fir.allocmem returns a plain malloc'd pointer, and
+    // the matching deallocate then routes to __kmpc_free which corrupts
+    // libomp's chunk metadata.
+    bool isOmpAllocatorTouched =
+        Fortran::lower::isOmpAllocatorTouchedSymbol(alloc.getSymbol());
     bool inlineAllocation = !box.isDerived() && !errorManager.hasStatSpec() &&
                             !alloc.type.IsPolymorphic() &&
                             !alloc.hasCoarraySpec() && !useAllocateRuntime &&
-                            !box.isPointer() && !implicitManagedBacking;
+                            !box.isPointer();
+    unsigned allocatorIdx = Fortran::lower::getAllocatorIdx(*cudaSymForAlloc);
     const auto &langFeatures = converter.getFoldingContext().languageFeatures();
     bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
         Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
@@ -624,6 +660,13 @@ private:
       genSetType(alloc, box, loc);
     genSetDeferredLengthParameters(alloc, box);
     genAllocateObjectBounds(alloc, box);
+    // Stamp the descriptor with the OpenMP allocator handle immediately
+    // before the allocate runtime call. The runtime consumes the
+    // thread-local stamp slot on the very next Descriptor::Allocate, so
+    // this call site must sit between genAllocateObjectBounds and
+    // genRuntimeAllocate with no intervening descriptor init or allocate.
+    if (ompAllocInfo)
+      genOmpAllocatorStampCall(box, *ompAllocInfo);
     mlir::Value stat;
     if (alloc.hasCoarraySpec()) {
       stat = Fortran::lower::genAllocateCoarray(
@@ -767,6 +810,8 @@ private:
     const auto &langFeatures = converter.getFoldingContext().languageFeatures();
     bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
         Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
+    std::optional<Fortran::lower::OmpAllocatorInfo> ompAllocInfo =
+        Fortran::lower::lookupOmpAllocatorInfo(alloc.getSymbol());
 
     bool sourceIsDevice = false;
     if (const Fortran::semantics::Symbol *sym{GetLastSymbol(sourceExpr)})
@@ -788,6 +833,11 @@ private:
     if (isDeferredLengthCharacter)
       genSetDeferredLengthParameters(alloc, box);
     genAllocateObjectBounds(alloc, box);
+    // Stamp the descriptor with the OpenMP allocator handle immediately
+    // before the allocate runtime call if this allocatable is inside
+    // `!$omp allocators`.
+    if (ompAllocInfo)
+      genOmpAllocatorStampCall(box, *ompAllocInfo);
     mlir::Value stat;
     if (alloc.hasCoarraySpec()) {
       stat = Fortran::lower::genAllocateCoarray(
@@ -1044,10 +1094,21 @@ genDeallocate(fir::FirOpBuilder &builder,
       (box.isAllocatable() || box.isPointer()) &&
       converter.getFoldingContext().languageFeatures().IsEnabled(
           Fortran::common::LanguageFeature::CudaUnified);
+  // Symbols that have ever appeared in an `!$omp allocators` ALLOCATE
+  // clause must always go through the runtime deallocate path. The
+  // descriptor's allocator-index (kOmpAllocatorPos) governs the dispatch
+  // to __kmpc_free, which is required so libomp can recover the original
+  // allocator from the chunk header. Inline fir.freemem would call
+  // plain std::free on a pointer carrying libomp metadata and crash with
+  // "double free or corruption" or similar errors. We make this check
+  // sticky (across the construct's scope) because the matching DEALLOCATE
+  // statement typically sits outside the `!$omp allocators` block.
+  bool isOmpAllocatorTouched =
+      symbol && Fortran::lower::isOmpAllocatorTouchedSymbol(*symbol);
   bool inlineDeallocation =
       !box.isDerived() && !box.isPolymorphic() && !box.hasAssumedRank() &&
       !box.isUnlimitedPolymorphic() && !errorManager.hasStatSpec() &&
-      !useAllocateRuntime && !box.isPointer() && !implicitManagedBacking;
+      !useAllocateRuntime && !box.isPointer();
   bool isCoarraySymbol = symbol && Fortran::evaluate::IsCoarray(*symbol);
 
   // Deallocate intrinsic types inline.

@@ -13,10 +13,13 @@
 #ifndef FORTRAN_LOWER_OPENMP_H
 #define FORTRAN_LOWER_OPENMP_H
 
+#include "mlir/IR/Value.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
 #include <cinttypes>
+#include <optional>
+#include <utility>
 
 namespace mlir {
 class Operation;
@@ -98,6 +101,61 @@ bool markOpenMPDeferredDeclareTargetFunctions(
     mlir::Operation *, llvm::SmallVectorImpl<OMPDeferredDeclareTargetInfo> &,
     AbstractConverter &);
 void genOpenMPRequires(mlir::Operation *, const Fortran::semantics::Symbol *);
+
+/// Information registered by the Flang lowering of the OpenMP 5.0+
+/// `!$omp allocators` construct for each allocatable listed in an ALLOCATE
+/// clause.  The lowering of the matching ALLOCATE statement (in
+/// lib/Lower/Allocatable.cpp) queries this side table via
+/// lookupOmpAllocatorInfo(); on a hit it routes the allocation through the
+/// Fortran runtime (rather than the fir.allocmem inline fast path) and
+/// emits a _FortranAOmpAllocatorStamp(descriptor, handle, align) call so
+/// that Descriptor::Allocate dispatches through __kmpc_alloc /
+/// __kmpc_aligned_alloc with the recorded handle and alignment.
+struct OmpAllocatorInfo {
+  /// MLIR value holding the OpenMP allocator handle (uintptr_t at the
+  /// runtime ABI boundary).  Non-null when the entry is live.
+  mlir::Value handle;
+  /// MLIR value holding the requested alignment in bytes (size_t at the
+  /// runtime ABI boundary).  Null means "default alignment" which the
+  /// runtime translates into a plain __kmpc_alloc call.
+  mlir::Value align;
+};
+
+/// Register \p info as the active OpenMP allocator binding for \p sym.  A
+/// subsequent lookupOmpAllocatorInfo(sym) returns the previously registered
+/// info (or nullopt, if there is none); callers are responsible for calling
+/// unregisterOmpAllocatorInfo(sym, prev) on scope exit so that nested
+/// `!$omp allocators` constructs restore the outer binding correctly.
+///
+/// Returns the previously registered info so the caller can save/restore.
+std::optional<OmpAllocatorInfo>
+registerOmpAllocatorInfo(const Fortran::semantics::Symbol &sym,
+                         OmpAllocatorInfo info);
+
+/// Restore a previously registered info (or remove the entry if \p prev is
+/// nullopt).  Should be called at the matching scope exit.
+void unregisterOmpAllocatorInfo(const Fortran::semantics::Symbol &sym,
+                                std::optional<OmpAllocatorInfo> prev);
+
+/// Look up the active OpenMP allocator binding for \p sym, if any.
+/// Returns nullopt when the symbol is not currently inside an
+/// `!$omp allocators` ALLOCATE clause.
+std::optional<OmpAllocatorInfo>
+lookupOmpAllocatorInfo(const Fortran::semantics::Symbol &sym);
+
+/// Returns true if \p sym has ever appeared in an `!$omp allocators`
+/// ALLOCATE clause in the current compilation unit.  This marker is
+/// "sticky": once set it stays set for the rest of the lowering, even
+/// after the construct's scope ends.  It is used by Allocatable.cpp to
+/// force both ALLOCATE and DEALLOCATE statements for that symbol through
+/// the Fortran runtime path (rather than the inline fir.allocmem /
+/// fir.freemem fast paths), so that the descriptor's allocator-index
+/// dispatch in Descriptor::Allocate / Descriptor::Deallocate properly
+/// routes the call through __kmpc_alloc / __kmpc_aligned_alloc /
+/// __kmpc_free.  Inline allocate/free would call malloc/free directly
+/// and corrupt libomp's chunk metadata, leading to "double free or
+/// corruption" errors at runtime.
+bool isOmpAllocatorTouchedSymbol(const Fortran::semantics::Symbol &sym);
 
 // Materialize omp.declare_mapper ops for mapper declarations found in
 // imported modules. If \p scope is null, materialize for the whole

@@ -32,6 +32,7 @@ add_flangrt_unittest(RuntimeTests
   Namelist.cpp
   Numeric.cpp
   NumericalFormatTest.cpp
+  OmpAllocator.cpp
   Pointer.cpp
   Ragged.cpp
   Random.cpp
@@ -46,8 +47,15 @@ add_flangrt_unittest(RuntimeTests
 
   LINK_LIBS
     flang_rt.runtime.unittest
+    flang_rt.openmp.unittest
 )
 target_compile_definitions(RuntimeTests PRIVATE NOT_EXE="${LLVM_TOOLS_DIR}/not${CMAKE_EXECUTABLE_SUFFIX}")
+
+# OmpAllocator.cpp defines fake __kmpc_alloc / __kmpc_free / __kmpc_global_thread_num
+# symbols that flang_rt.openmp's omp-allocator.cpp resolves at runtime via
+# dlsym(RTLD_DEFAULT, ...).  For that to succeed the executable must export its
+# dynamic symbols; enable that here (no-op on platforms where it doesn't apply).
+set_target_properties(RuntimeTests PROPERTIES ENABLE_EXPORTS ON)
 
 if (FLANG_RT_INCLUDE_CUF)
   add_subdirectory(CUDA)
