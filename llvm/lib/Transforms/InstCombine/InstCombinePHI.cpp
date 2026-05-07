@@ -337,6 +337,131 @@ bool InstCombinerImpl::foldIntegerTypedPHI(PHINode &PN) {
   return true;
 }
 
+// Fuse a pair of i64 phis introduced by struct-phi narrowing where one phi
+// tracks "full value" and the other tracks "high-half (with an invariant high
+// bit) tracker", producing a redundant `(P1 & lowmask) | P2` reconstruction in
+// the loop body.
+//
+// Pattern:
+//   P1 = phi i64 [init_full, preheader], [next_full, latch]
+//   P2 = phi i64 [init_high, preheader], [next_high, latch]
+//   recombined = or [disjoint] (and i64 P1, 0xFFFFFFFF), P2
+//   ; uses of recombined ...
+//   next_full = ... (some expression where recombined contributes; P1 is not
+//                    used directly outside the AND-mask)
+//   next_high = and i64 next_full, 0xFFFFFFFF00000000
+//
+// The two phis encode the same value at iter 1+, but disagree at iter 0
+// because P1 lacks the invariant high bit that P2 carries. The reconstruction
+// `(P1 & 0xFFFFFFFF) | P2` produces the "merged" value each iter.
+//
+// Fix: replace P1's preheader value with `(init_full & 0xFFFFFFFF) | init_high`
+// and rewrite recombined uses to use P1 directly. P2 becomes dead.
+//
+// This pattern arises e.g. from i64 induction variables that carry an
+// architectural tag in bit 63 (such as AMDGPU TDM descriptor's VALID bit on
+// global_addr) when InstCombine's struct-phi narrowing splits the descriptor
+// into per-lane phis and then phi-of-trunc folds two adjacent i32 lanes back
+// into a coupled pair of i64 phis.
+Instruction *InstCombinerImpl::foldHighHalfPhiPair(PHINode &PN) {
+  // PN = candidate P1 (the "full" phi).
+  if (!PN.getType()->isIntegerTy(64) || PN.getNumIncomingValues() != 2)
+    return nullptr;
+
+  // Find a use of PN that is `and PN, 0xFFFFFFFF` (the "low-half mask").
+  BinaryOperator *AndInst = nullptr;
+  for (User *U : PN.users()) {
+    auto *BO = dyn_cast<BinaryOperator>(U);
+    if (!BO || BO->getOpcode() != Instruction::And)
+      continue;
+    ConstantInt *CI = dyn_cast<ConstantInt>(BO->getOperand(1));
+    if (CI && CI->getValue() == APInt(64, 0xFFFFFFFFULL)) {
+      AndInst = BO;
+      break;
+    }
+  }
+  if (!AndInst || !AndInst->hasOneUse())
+    return nullptr;
+
+  // All other users of PN must depend only on the low 32 bits.  Safe patterns:
+  //   - trunc i64 PN to i32  (reads low 32 bits)
+  //   - and PN, low_mask     (already screened above; same as AndInst)
+  // The fusion changes PN's iter-0 value by OR'ing in the high invariant bits
+  // from the paired phi.  Since those high bits are above bit 31, low-bit users
+  // are unaffected.
+  for (User *U : PN.users()) {
+    if (U == AndInst)
+      continue;
+    if (auto *Trunc = dyn_cast<TruncInst>(U))
+      if (Trunc->getDestTy()->isIntegerTy(32))
+        continue;
+    return nullptr; // Unsafe user found.
+  }
+
+  // The AND must be used by an OR with another phi (P2) in the same block.
+  auto *OrInst = dyn_cast<BinaryOperator>(AndInst->user_back());
+  if (!OrInst || OrInst->getOpcode() != Instruction::Or)
+    return nullptr;
+  Value *OtherOp =
+      (OrInst->getOperand(0) == AndInst) ? OrInst->getOperand(1)
+                                         : OrInst->getOperand(0);
+  auto *P2 = dyn_cast<PHINode>(OtherOp);
+  if (!P2 || P2->getParent() != PN.getParent() ||
+      P2->getNumIncomingValues() != 2)
+    return nullptr;
+
+  // Find which incoming index is the latch (loop back-edge).
+  // Heuristic: the latch's P2 value is `and X, 0xFFFFFFFF00000000` for some X
+  // that equals PN's latch value.
+  for (unsigned I = 0; I < 2; ++I) {
+    Value *P1Latch = PN.getIncomingValue(I);
+    Value *P2Latch = P2->getIncomingValue(I);
+    BasicBlock *PreBB = PN.getIncomingBlock(1 - I);
+    if (P2->getIncomingBlock(I) != PN.getIncomingBlock(I))
+      continue;
+
+    Value *Inner;
+    ConstantInt *HighMaskCI;
+    if (!match(P2Latch,
+               m_And(m_Value(Inner), m_ConstantInt(HighMaskCI))))
+      continue;
+    if (HighMaskCI->getValue() != APInt(64, 0xFFFFFFFF00000000ULL))
+      continue;
+    if (Inner != P1Latch)
+      continue;
+
+    // Pattern matched. Build merged init: (P1Pre & 0xFFFFFFFF) | P2Pre.
+    Value *P1Pre = PN.getIncomingValue(1 - I);
+    Value *P2Pre = P2->getIncomingValue(1 - I);
+
+    IRBuilderBase::InsertPointGuard Guard(Builder);
+    Builder.SetInsertPoint(PreBB->getTerminator());
+    Value *LowOfPre = Builder.CreateAnd(
+        P1Pre, ConstantInt::get(PN.getType(), 0xFFFFFFFFULL),
+        PN.getName() + ".initlow");
+    Value *MergedInit = Builder.CreateOr(
+        LowOfPre, P2Pre, PN.getName() + ".initmerged");
+
+    // Update PN's preheader incoming value.
+    PN.setIncomingValue(1 - I, MergedInit);
+
+    // Replace uses of OrInst with PN. AndInst will become dead automatically.
+    replaceInstUsesWith(*OrInst, &PN);
+
+    // Schedule cleanup. P2 will become dead after OrInst is gone.
+    Worklist.pushUsersToWorkList(*OrInst);
+    eraseInstFromFunction(*OrInst);
+    eraseInstFromFunction(*AndInst);
+    if (P2->use_empty())
+      eraseInstFromFunction(*P2);
+    else
+      Worklist.add(P2);
+
+    return &PN; // Indicate change.
+  }
+  return nullptr;
+}
+
 // Remove RoundTrip IntToPtr/PtrToInt Cast on PHI-Operand and
 // fold Phi-operand to bitcast.
 Instruction *InstCombinerImpl::foldPHIArgIntToPtrToPHI(PHINode &PN) {
@@ -1413,6 +1538,9 @@ Instruction *InstCombinerImpl::visitPHINode(PHINode &PN) {
     return Result;
 
   if (Instruction *Result = foldPHIArgIntToPtrToPHI(PN))
+    return Result;
+
+  if (Instruction *Result = foldHighHalfPhiPair(PN))
     return Result;
 
   // If all PHI operands are the same operation, pull them through the PHI,

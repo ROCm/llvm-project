@@ -699,6 +699,7 @@ public:
   Instruction *foldPHIArgLoadIntoPHI(PHINode &PN);
   Instruction *foldPHIArgZextsIntoPHI(PHINode &PN);
   Instruction *foldPHIArgIntToPtrToPHI(PHINode &PN);
+  Instruction *foldHighHalfPhiPair(PHINode &PN);
 
   /// If the phi is within a phi web, which is formed by the def-use chain
   /// of phis and all the phis in the web are only used in the other phis.
