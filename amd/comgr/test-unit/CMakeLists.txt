@@ -78,9 +78,16 @@ target_link_libraries(HotswapElfTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapElfTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+set_target_properties(HotswapElfTests PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No
+  POSITION_INDEPENDENT_CODE ON)
 
 comgr_match_llvm_rtti(HotswapElfTests)
 
@@ -118,9 +125,16 @@ target_link_libraries(HotswapMCTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapMCTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+set_target_properties(HotswapMCTests PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No
+  POSITION_INDEPENDENT_CODE ON)
 
 comgr_match_llvm_rtti(HotswapMCTests)
 
