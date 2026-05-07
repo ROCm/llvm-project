@@ -53,6 +53,8 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease". Controls artifact bucket and IAM role.'
         type: string
         default: ""
+      test_type:
+        type: string
 
 jobs:
   build_stage:
@@ -166,10 +168,10 @@ jobs:
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
-          git submodule update --init --recursive compiler/amd-llvm
+          git submodule update --init --recursive compiler/amd-llvm          
           git submodule status
           git submodule
-            
+          
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -193,7 +195,7 @@ jobs:
       - name: Setup ccache
         run: |
           ./build_tools/setup_ccache.py \
-            --config-preset "github-oss-presubmit" \
+            --config-preset "github-oss-dev" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache"
 
@@ -222,7 +224,7 @@ jobs:
         run: ./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -246,6 +248,12 @@ jobs:
       - name: Install stage python deps
         if: ${{ steps.stage_config.outputs.pip_install_cmd || steps.stage_config_pr.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
+
+
+      - name: Use Wno-error for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
+        run: |
+          sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
 
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
@@ -300,12 +308,13 @@ jobs:
       #  with:
       #    release_type: ${{ inputs.release_type }}
 
-      - name: Configure AWS Credentials for artifact upload - temp
+      - name: Configure AWS Credentials for non-forked repos - temp
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: us-east-2
           role-to-assume: arn:aws:iam::692859939525:role/therock-ci-external
-
+          
       # TODO(#3336): Attempt upload `always()`?
       #   * If some part of the build failed, partial artifacts may be useful for debugging.
       #   * This script fails if `build_dir / "artifacts"` does not exist. That's useful
