@@ -537,12 +537,45 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
 
 } // anonymous namespace
 
+// Return-value semantics (current shared dispatcher API in b0a0.cpp):
+//   0  = either "this patch did not match the instruction" OR "matched
+//        but failed to apply" -- the dispatcher cannot distinguish the
+//        two and will fall through to the next patch class. For WMMA
+//        split mnemonics no other patch class will match, so a
+//        matched-but-failed case results in the rewriter returning
+//        SUCCESS at the API level with the original A0-incompatible
+//        opcode left in .text. The runtime will then fail to load (or
+//        worse, mis-execute) the kernel with no clear error attribution.
+//   N>0 = "matched, applied N patches" (this splitter only ever returns
+//        1 since it splits one source WMMA into one trampoline).
+//
+// chinmaydd flagged this on PR #2379 as a cross-cutting concern across
+// every patch in the hotswap subsystem: the shared `uint32_t (*)(
+// PatchContext&, size_t)` signature in b0a0.cpp's weak-stub dispatcher
+// has the same ambiguity for in-place patches (#2222), the WMMA hazard
+// patch (#2265), and any future patch. A proper fix is a separate
+// follow-up that changes the dispatcher's return type to an enum
+// (NoMatch / Patched / Failed) or threads a `bool *Aborted` through
+// PatchContext, with the dispatcher checking the failure flag and
+// short-circuiting the rewrite with AMD_COMGR_STATUS_ERROR rather than
+// silently leaving the original opcode in .text.
+//
+// For now: every "matched but failed" path below logs an error via
+// log() (so the failure is at least visible when AMD_COMGR_EMIT_VERBOSE_LOGS
+// is set) and returns 0. The early "did not match" path returns 0
+// without logging.
 uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
   SplitMatch Match = lookupSplitRule(DI.Mnemonic);
   if (!Match.Matched)
-    return 0;
+    return 0; // Did NOT match -- correct dispatcher fall-through.
+
+  // ----- All return-0 paths below are MATCHED-BUT-FAILED -----
+  // Until the dispatcher API is refactored to distinguish these cleanly,
+  // each of these is a silent miscompile risk for the runtime; the log()
+  // line is the only signal the user gets that a recognized opcode was
+  // left in .text.
 
   // Structural sanity check against the opcode side. Every WMMA variant this
   // patch handles has exactly one destination operand at the MCInstrDesc
@@ -553,18 +586,18 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   if (MCID.getNumDefs() != 1) {
     log() << "hotswap: error: WMMA split: " << DI.Mnemonic << " has "
           << MCID.getNumDefs() << " defs, expected 1\n";
-    return 0;
+    return 0; // matched-but-failed
   }
 
   WmmaOps Ops = extractWmmaOps(DI.Inst, *Ctx.LS.MRI, Match.Kind, DI.Mnemonic);
   if (!Ops.Valid) {
     log() << "hotswap: error: WMMA split: could not extract operands from "
           << DI.Mnemonic << "\n";
-    return 0;
+    return 0; // matched-but-failed
   }
 
   if (!validateSplitOperands(Match.Kind, Ops, DI.Mnemonic))
-    return 0;
+    return 0; // matched-but-failed (validateSplitOperands logs the reason)
 
   // Print the source instruction in canonical asm form. The printer is the
   // authoritative source for src2 inline-immediate formatting (FP inline
@@ -579,7 +612,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   if (!P) {
     log() << "hotswap: error: WMMA split: could not parse printed form of "
           << DI.Mnemonic << ": " << StringRef(PrintedBuf).trim() << "\n";
-    return 0;
+    return 0; // matched-but-failed
   }
 
   std::vector<std::string> AsmLines;
@@ -592,7 +625,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
     break;
   }
   if (AsmLines.empty())
-    return 0;
+    return 0; // matched-but-failed (defensive; build*Asm always returns 2)
 
   // Compute the trampoline's eventual .text offset so buildTrampoline can
   // emit relative jumps. Same accumulation pattern as emitToTrampoline in
@@ -606,7 +639,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   if (T.Bytes.empty()) {
     log() << "hotswap: error: WMMA split: trampoline assembly failed for "
           << DI.Mnemonic << "\n";
-    return 0;
+    return 0; // matched-but-failed
   }
   Ctx.OutTrampolines.emplace_back(std::move(T));
 
