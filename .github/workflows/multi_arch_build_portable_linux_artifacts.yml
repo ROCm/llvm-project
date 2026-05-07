@@ -329,6 +329,22 @@ jobs:
           sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
             compiler/pre_hook_amd-comgr.cmake
 
+      - name: Point amd-comgr at LLVM build tree (required by hotswap)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          cat >> compiler/pre_hook_amd-comgr.cmake <<'EOF'
+
+          # src/hotswap consumes AMDGPU target-private headers (SIDefines.h,
+          # AMDGPUBaseInfo.h, AMDGPUGen*.inc) that are only present in the
+          # LLVM *build* tree, not the install tree. Force LLVM_DIR to the
+          # amd-llvm build tree so comgr's find_package(LLVM CONFIG) picks
+          # up build-tree LLVMConfig.cmake.
+          if(DEFINED ENV{HOTSWAP_LLVM_BUILD_DIR})
+            set(LLVM_DIR "$ENV{HOTSWAP_LLVM_BUILD_DIR}/lib/cmake/llvm"
+                CACHE PATH "LLVM build tree (forced for hotswap)" FORCE)
+          endif()
+          EOF
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -364,6 +380,8 @@ jobs:
             ${{ env.extra_cmake_options }} 
 
       - name: Build stage
+        env:
+          HOTSWAP_LLVM_BUILD_DIR: ${{ github.workspace }}/build/compiler/amd-llvm/build
         run: |
           python build_tools/memory_monitor.py --phase Build -- \
             cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0

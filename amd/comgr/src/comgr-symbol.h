@@ -45,6 +45,17 @@ public:
 
 }; // SymbolHelper
 
+// Look up a symbol by name in an already-parsed `ObjectFile`. Walks the
+// regular symbol table the same way `amd_comgr_iterate_symbols` does for
+// relocatables / `Obj.symbols()` does for executables (the AMDGPU asm
+// printer emits kernel + `.kd` symbols into both .symtab and .dynsym, so
+// either iterator finds them). Returns an error when the symbol is
+// missing or its name accessor fails. Callers that need the symbol's
+// address / size go on to call `getAddress()` / `ELFSymbolRef::getSize()`
+// on the returned ref.
+llvm::Expected<llvm::object::SymbolRef>
+lookupSymbolByName(llvm::object::ObjectFile &Obj, llvm::StringRef Name);
+
 } // namespace COMGR
 
 #endif

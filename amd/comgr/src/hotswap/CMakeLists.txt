@@ -6,12 +6,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- LLVM ---------------------------------------------------------------------
-if(NOT TARGET LLVMSupport)
+# The MC stack uses AMDGPU target-private headers (SIDefines.h, SIInstrInfo.h,
+# AMDGPUBaseInfo.h) which transitively include TableGen-generated
+# AMDGPUGen*.inc files. Those .inc files are produced by llvm-tblgen during
+# the LLVM build and are not copied by the `install` target, so we require
+# an LLVM *build tree* rather than an install tree.
+if(TARGET LLVMSupport AND DEFINED LLVM_MAIN_SRC_DIR)
+  set(LLVM_BUILD_MAIN_SRC_DIR "${LLVM_MAIN_SRC_DIR}")
+else()
   find_package(LLVM REQUIRED CONFIG)
 endif()
 if(NOT COMMAND llvm_update_compile_flags)
   list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
   include(AddLLVM)
+endif()
+
+if(NOT DEFINED LLVM_BUILD_MAIN_SRC_DIR OR NOT LLVM_BUILD_MAIN_SRC_DIR OR
+   NOT DEFINED LLVM_BINARY_DIR OR NOT LLVM_BINARY_DIR)
+  message(FATAL_ERROR
+    "hotswap-transpiler requires an LLVM build tree (not an install tree). "
+    "The install tree does not expose AMDGPU target-private headers "
+    "(SIDefines.h, AMDGPUBaseInfo.h, AMDGPUGen*.inc). "
+    "Pass -DLLVM_DIR=<llvm-build>/lib/cmake/llvm.")
 endif()
 
 include_directories(${LLVM_INCLUDE_DIRS})
@@ -27,6 +43,9 @@ add_definitions(${LLVM_DEFINITIONS})
 # or a separate static archive.
 add_library(hotswap-transpiler OBJECT
   raiser.cpp
+  code-object-utils.cpp
+  mc-state.cpp
+  hotswap-error.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)
@@ -41,6 +60,13 @@ llvm_update_compile_flags(hotswap-transpiler)
 
 set_target_properties(hotswap-transpiler PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# AMDGPU target-private headers (not exposed by the LLVM install tree).
+target_include_directories(hotswap-transpiler PRIVATE
+  "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU"
+  "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU/Utils"
+  "${LLVM_BINARY_DIR}/lib/Target/AMDGPU"
+)
+
 # Public include root so consumers can `#include "hotswap/raiser.hpp"`.
 target_include_directories(hotswap-transpiler PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
@@ -48,7 +74,25 @@ target_include_directories(hotswap-transpiler PUBLIC
 
 target_link_libraries(hotswap-transpiler
   PUBLIC
+    # Core LLVM components, sorted alphabetically.
+    LLVMBinaryFormat
     LLVMCore
+    LLVMMC
+    LLVMMCDisassembler
+    LLVMMCParser
+    LLVMObject
     LLVMSupport
+    LLVMTarget
     LLVMTargetParser
+    # AMDGPU target components, sorted alphabetically.
+    LLVMAMDGPUAsmParser
+    LLVMAMDGPUCodeGen
+    LLVMAMDGPUDesc
+    LLVMAMDGPUDisassembler
+    LLVMAMDGPUInfo
+    LLVMAMDGPUUtils
 )
+
+# Per-file gtests live under amd/comgr/test-unit/ and follow the 3-tier
+# llvm_gtest / find_package(GTest CONFIG) / LLVM-installed fallback discovery
+# there. No standalone gtest target lives in this subdirectory.

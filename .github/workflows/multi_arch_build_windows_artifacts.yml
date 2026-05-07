@@ -376,6 +376,23 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
+      - name: Point amd-comgr at LLVM build tree (required by hotswap)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        shell: bash
+        run: |
+          cat >> compiler/pre_hook_amd-comgr.cmake <<'EOF'
+
+          # src/hotswap consumes AMDGPU target-private headers (SIDefines.h,
+          # AMDGPUBaseInfo.h, AMDGPUGen*.inc) that are only present in the
+          # LLVM *build* tree, not the install tree. Force LLVM_DIR to the
+          # amd-llvm build tree so comgr's find_package(LLVM CONFIG) picks
+          # up build-tree LLVMConfig.cmake.
+          if(DEFINED ENV{HOTSWAP_LLVM_BUILD_DIR})
+            set(LLVM_DIR "$ENV{HOTSWAP_LLVM_BUILD_DIR}/lib/cmake/llvm"
+                CACHE PATH "LLVM build tree (forced for hotswap)" FORCE)
+          endif()
+          EOF
+
       - name: Use Wno-error for CK (nightly)
         if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
         shell: pwsh
@@ -430,6 +447,8 @@ jobs:
             ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Build stage
+        env:
+          HOTSWAP_LLVM_BUILD_DIR: B:/build/compiler/amd-llvm/build
         run: |
           cd L:
           python build_tools/memory_monitor.py --phase Build -- \
