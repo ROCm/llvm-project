@@ -50,6 +50,8 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease". Controls artifact bucket and IAM role.'
         type: string
         default: ""
+      test_type:
+        type: string
 
 jobs:
   build_stage:
@@ -198,7 +200,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install python deps
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install --upgrade \
+              "boto3>=1.42.79,<1.42.85" \
+              "botocore>=1.42.79,<1.42.85" \
+               "aiobotocore>=3.4.0"
 
       - name: Install requirements
         run: |
@@ -246,7 +253,7 @@ jobs:
       - name: Setup ccache
         run: |
           python ./build_tools/setup_ccache.py \
-            --config-preset "github-oss-presubmit" \
+            --config-preset "github-oss-dev" \
             --dir "$(dirname $CCACHE_CONFIGPATH)" \
             --local-path "$CACHE_DIR/ccache" \
             --log-dir "${BUILD_DIR}/logs/ccache"
@@ -265,13 +272,14 @@ jobs:
       - name: Fetch sources
         timeout-minutes: 30
         run: |
+          cd L:
           git config fetch.parallel 10
           git config --global core.symlinks true
           git config --global core.longpaths true          
           python build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1
 
       - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
              git config --global --add safe.directory $PWD
              git log --oneline -1
@@ -294,6 +302,18 @@ jobs:
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
 
+      - name: Use Wno-error for CK (nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'math-libs') }}
+        shell: pwsh
+        run: |
+          $file = "rocm-libraries/projects/composablekernel/CMakeLists.txt"
+          $content = Get-Content $file -Raw
+          if ($content -match '-Werror') {
+            $updated = $content -replace '-Werror\b', '-Wno-error'
+            Set-Content -Path $file -Value $updated -NoNewline
+            Write-Host "Patched: $file"
+          }
+          
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -301,14 +321,17 @@ jobs:
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
           #extra_cmake_options: ${{ inputs.extra_cmake_options }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPILER=ON -DTHEROCK_ENABLE_HIP_RUNTIME=ON -DTHEROCK_ENABLE_PRIM=ON -DTHEROCK_ENABLE_BLAS=ON -DTHEROCK_ENABLE_RAND=ON -DTHEROCK_ENABLE_SOLVER=ON -DTHEROCK_ENABLE_SPARSE=ON -DTHEROCK_ENABLE_SYSDEPS=OFF  -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_OCL_RUNTIME=ON  -DTHEROCK_ENABLE_MATH_LIBS=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"        
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
         run: |
-          cmake -B "${BUILD_DIR}" -S . -GNinja \
-            --preset=${{ inputs.build_variant_cmake_preset }} \
+          cd L:
+          ccache -z
+          cmake -B 'B:\build' -S 'L:\' -GNinja \
             -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            ${{ steps.stage_config.outputs.cmake_args }}
+            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ steps.stage_config.outputs.cmake_args }} \
+            ${{ env.extra_cmake_options }}
 
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
@@ -321,7 +344,14 @@ jobs:
           # clear cache before build and after download
           cd L:
           ccache -z
-          cmake -B 'B:\build' -GNinja -S 'L:\' --preset windows-release -DTHEROCK_AMDGPU_FAMILIES=gfx1151 '-DCMAKE_C_COMPILER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/cl.exe' '-DCMAKE_CXX_COMPILER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/cl.exe' '-DCMAKE_LINKER=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\/bin/Hostx64/x64/link.exe' -DTHEROCK_BACKGROUND_BUILD_JOBS=4
+          cmake -B 'B:\build' -S 'L:\' -GNinja \
+            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
+            -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
+            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
+            ${{ steps.stage_config.outputs.cmake_args }}
 
       - name: Build stage
         run: |
@@ -345,6 +375,7 @@ jobs:
       #    release_type: ${{ inputs.release_type }}
 
       - name: Configure AWS Credentials for artifact upload - temp
+        if: ${{ github.repository == 'ROCm/TheRock' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           aws-region: us-east-2

@@ -166,7 +166,9 @@ public:
   bool processNontemporal(mlir::omp::NontemporalClauseOps &result) const;
   bool processReduction(
       mlir::Location currentLocation, mlir::omp::ReductionClauseOps &result,
-      llvm::SmallVectorImpl<const semantics::Symbol *> &reductionSyms) const;
+      llvm::SmallVectorImpl<const semantics::Symbol *> &reductionSyms,
+      llvm::DenseMap<const semantics::Symbol *, mlir::Value>
+          *reductionVarCache = nullptr) const;
   bool processTaskReduction(
       mlir::Location currentLocation, mlir::omp::TaskReductionClauseOps &result,
       llvm::SmallVectorImpl<const semantics::Symbol *> &outReductionSyms) const;
@@ -215,7 +217,8 @@ private:
       llvm::SmallVectorImpl<mlir::Value> &mapVars,
       llvm::SmallVectorImpl<const semantics::Symbol *> &mapSyms,
       llvm::StringRef mapperIdNameRef = "", bool isMotionModifier = false,
-      llvm::omp::Directive directive = llvm::omp::OMPD_unknown) const;
+      llvm::omp::Directive directive = llvm::omp::OMPD_unknown,
+      llvm::omp::Clause clause = llvm::omp::OMPC_unknown) const;
 
   lower::AbstractConverter &converter;
   semantics::SemanticsContext &semaCtx;
