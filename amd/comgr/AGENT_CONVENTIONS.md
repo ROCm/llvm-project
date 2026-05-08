@@ -72,20 +72,17 @@ fix upstream. Do not implement a parallel version inside Comgr.
   cached value. Verify any new mnemonic comparison with
   `llvm-mc -show-inst` against the target you care about.
 
-**LLVM-isms checklist.** Audit your diff for these before pushing:
+**Style.** Comgr follows the canonical LLVM coding conventions; for
+the full reference Read these source files (in this monorepo):
+
+- [`llvm/docs/CodingStandards.rst`](../../llvm/docs/CodingStandards.rst)
+- [`llvm/docs/AMDGPU/DeveloperGuideline.rst`](../../llvm/docs/AMDGPU/DeveloperGuideline.rst)
+
+Comgr-specific deviations and items recurring in code review that
+aren't covered upstream:
 
 - Avoid `auto`. Comgr leans stricter than upstream LLVM here — spell
   types out, including iterator types.
-- File-local helpers go in an anonymous namespace, not `static`.
-- `StringRef` for non-owning string parameters; `StringLiteral` for
-  compile-time string constants. Avoid `const std::string &` and
-  `const char *` outside C interop.
-- `SmallVector<T, N>` for bounded sizes; reserve `std::vector` for
-  genuinely unbounded. Don't mix container choice within one file.
-- Default-initialize every struct member.
-- `++i`, not `i++`.
-- Capitalized acronyms in identifiers: `LLVM` not `Llvm`, `MC` not
-  `Mc`.
 - ASCII only in source comments — no box-drawing dividers, no smart
   quotes, no em-dashes.
 - Pass `MCRegister` (not `unsigned`) until you need the encoded id.
@@ -143,6 +140,9 @@ and other memory bugs that won't surface in a normal release build.
 `comgr-*-X.cpp` per PR. Refactors of pre-existing Comgr code go in
 their own PR; don't bundle a refactor (e.g. of `DisassemblyInfo`) into
 a feature PR.
+
+**Tests required.** Each PR is accompanied by tests aiming for 100%
+code coverage of the change being added.
 
 **Keep the branch rebased.** Resolve conflicts before requesting
 review.
