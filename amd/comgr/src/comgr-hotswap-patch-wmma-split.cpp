@@ -496,10 +496,10 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
   int BHalf = R.Src1.second / 2;
   StringRef Dst = P.Operands[0]; // verbatim from printer (e.g. "v[16:23]")
   StringRef Src2Printed = P.Operands[3];
-  auto ModFirst = transformModifierSuffix(P.ModifierSuffix,
-                                          /*KSplitSecondHalf=*/false);
-  auto ModSecond = transformModifierSuffix(P.ModifierSuffix,
-                                           /*KSplitSecondHalf=*/true);
+  std::optional<std::string> ModFirst =
+      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/false);
+  std::optional<std::string> ModSecond =
+      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/true);
   if (!ModFirst || !ModSecond)
     return {};
 
@@ -546,8 +546,8 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
   // (with matrix_a_reuse / matrix_b_reuse stripped, same as K-split).
   constexpr StringLiteral FmtSuffix =
       " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
-  auto Mod = transformModifierSuffix(P.ModifierSuffix,
-                                     /*KSplitSecondHalf=*/false);
+  std::optional<std::string> Mod =
+      transformModifierSuffix(P.ModifierSuffix, /*KSplitSecondHalf=*/false);
   if (!Mod)
     return {};
 
@@ -656,7 +656,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
     break;
   }
   if (AsmLines.empty())
-    return 0; // matched-but-failed (defensive; build*Asm always returns 2)
+    return 0; // matched-but-failed (build*Asm rejected an unsupported modifier)
 
   // Compute the trampoline's eventual .text offset so buildTrampoline can
   // emit relative jumps. Same accumulation pattern as emitToTrampoline in
