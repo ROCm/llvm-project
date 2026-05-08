@@ -28,18 +28,20 @@
 
 // COM: Trampoline: K=64 first half uses (A_lo, B_lo, original_src2 == dst);
 // COM: K=64 second half uses (A_hi, B_hi, dst as carry). Both halves
-// COM: write back to dst v[16:23], so on this shape the visible operand
+// COM: write back to dst v[32:39], so on this shape the visible operand
 // COM: list is identical between halves -- only the sliced A/B differ.
 // COM: The two halves are emitted back-to-back in the trampoline body
 // COM: with the s_branch-back appended once at the end.
-// DISASM:       v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[0:7], v[8:15], v[16:23]
-// DISASM-NEXT:  v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[8:15], v[16:23], v[16:23]
+// COM: Operand-shape note: src0/src1 are picked disjoint from dst per the
+// COM: source pseudo's @earlyclobber $vdst contract (VOP3PInstructions.td:1444).
+// DISASM:       v_wmma_f32_16x16x64_fp8_fp8 v[32:39], v[0:7], v[16:23], v[32:39]
+// DISASM-NEXT:  v_wmma_f32_16x16x64_fp8_fp8 v[32:39], v[8:15], v[24:31], v[32:39]
 // DISASM-NEXT:  s_branch
 .globl kernel
 .p2align 8
 .type kernel,@function
 kernel:
-  v_wmma_f32_16x16x128_fp8_fp8 v[16:23], v[0:15], v[8:23], v[16:23]
+  v_wmma_f32_16x16x128_fp8_fp8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
 .size kernel, .-kernel
 

@@ -20,14 +20,15 @@
 // DISASM:       s_branch
 // DISASM:       s_endpgm
 
-// DISASM:       v_wmma_f16_16x16x64_fp8_bf8 v[20:23], v[0:7], v[8:15], v[20:23] neg_hi:[0,0,1]
-// DISASM-NEXT:  v_wmma_f16_16x16x64_fp8_bf8 v[20:23], v[8:15], v[16:23], v[20:23]{{[[:space:]]*\/\/}}
+// COM: Operand-shape note: src0/src1 disjoint from dst per @earlyclobber $vdst.
+// DISASM:       v_wmma_f16_16x16x64_fp8_bf8 v[32:35], v[0:7], v[16:23], v[32:35] neg_hi:[0,0,1]
+// DISASM-NEXT:  v_wmma_f16_16x16x64_fp8_bf8 v[32:35], v[8:15], v[24:31], v[32:35]{{[[:space:]]*\/\/}}
 // DISASM-NEXT:  s_branch
 .globl kernel
 .p2align 8
 .type kernel,@function
 kernel:
-  v_wmma_f16_16x16x128_fp8_bf8 v[20:23], v[0:15], v[8:23], v[20:23] neg_hi:[0,0,1]
+  v_wmma_f16_16x16x128_fp8_bf8 v[32:35], v[0:15], v[16:31], v[32:35] neg_hi:[0,0,1]
   s_endpgm
 .size kernel, .-kernel
 

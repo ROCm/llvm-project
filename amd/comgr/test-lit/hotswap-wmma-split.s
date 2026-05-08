@@ -7,6 +7,17 @@
 // disassembles the patched ELF and checks that the original mnemonics are
 // gone, the narrower replacement mnemonics appear in the trampoline region,
 // and non-split instructions round-trip unchanged.
+//
+// Operand-shape note: every WMMA below uses register ranges where dst is
+// disjoint from src0 and src1. The K-split second half is `WMMA dst,
+// A_hi, B_hi, dst` -- if B_hi (the upper half of the original src1)
+// overlapped dst, the second half would read B_hi from registers the
+// first half just clobbered with the partial product. Compiler-generated
+// WMMAs cannot land in that shape because the source pseudo carries
+// `@earlyclobber $vdst` (VOP3PInstructions.td:1444), so the test inputs
+// here mirror that contract -- any future change that breaks the slicing
+// would be visible in the exact-operand DAGs at the bottom rather than
+// being hidden by an incidental textual identity.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -28,8 +39,15 @@
 // COM: hex Size column; the trailing space after `\.text` skips
 // COM: `.text.<funcname>` would-be matches (none exist here, but cheap
 // COM: insurance).
-// RUN: SIZE_IN=$(%llvm-readelf -S %t.elf | awk '/\.text /{print $7; exit}') && \
-// RUN:   SIZE_OUT=$(%llvm-readelf -S %t.out.elf | awk '/\.text /{print $7; exit}') && \
+// COM: Drop `exit` from the awk one-liner: with `exit`, awk closes its
+// COM: stdin before llvm-readelf finishes writing, and LIT's pipefail
+// COM: shell propagates the SIGPIPE -> the test fails non-deterministically
+// COM: in standalone runs (only passes in the bulk LIT run because
+// COM: output buffering shifts the race). The `\.text ` pattern (with
+// COM: trailing space) matches at most one section header per ELF, so
+// COM: removing `exit` does not change the captured value.
+// RUN: SIZE_IN=$(%llvm-readelf -S %t.elf | awk '/\.text /{print $7}') && \
+// RUN:   SIZE_OUT=$(%llvm-readelf -S %t.out.elf | awk '/\.text /{print $7}') && \
 // RUN:   test $((16#$SIZE_OUT)) -gt $((16#$SIZE_IN))
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
@@ -43,7 +61,7 @@
 .p2align 8
 .type test_f32_16x16x128_fp8_fp8,@function
 test_f32_16x16x128_fp8_fp8:
-  v_wmma_f32_16x16x128_fp8_fp8 v[16:23], v[0:15], v[8:23], v[16:23]
+  v_wmma_f32_16x16x128_fp8_fp8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
 .size test_f32_16x16x128_fp8_fp8, .-test_f32_16x16x128_fp8_fp8
 
@@ -56,7 +74,7 @@ test_f32_16x16x128_fp8_fp8:
 .p2align 8
 .type test_f16_16x16x128_bf8_bf8,@function
 test_f16_16x16x128_bf8_bf8:
-  v_wmma_f16_16x16x128_bf8_bf8 v[16:19], v[0:15], v[8:23], v[16:19]
+  v_wmma_f16_16x16x128_bf8_bf8 v[32:35], v[0:15], v[16:31], v[32:35]
   s_endpgm
 .size test_f16_16x16x128_bf8_bf8, .-test_f16_16x16x128_bf8_bf8
 
@@ -69,7 +87,7 @@ test_f16_16x16x128_bf8_bf8:
 .p2align 8
 .type test_f32_32x16x128_f4,@function
 test_f32_32x16x128_f4:
-  v_wmma_f32_32x16x128_f4 v[4:19], v[0:15], v[2:9], v[4:19]
+  v_wmma_f32_32x16x128_f4 v[32:47], v[0:15], v[16:23], v[32:47]
   s_endpgm
 .size test_f32_32x16x128_f4, .-test_f32_32x16x128_f4
 
@@ -82,7 +100,7 @@ test_f32_32x16x128_f4:
 .p2align 8
 .type test_f32_16x16x128_fp8_bf8,@function
 test_f32_16x16x128_fp8_bf8:
-  v_wmma_f32_16x16x128_fp8_bf8 v[16:23], v[0:15], v[8:23], v[16:23]
+  v_wmma_f32_16x16x128_fp8_bf8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
 .size test_f32_16x16x128_fp8_bf8, .-test_f32_16x16x128_fp8_bf8
 
@@ -95,7 +113,7 @@ test_f32_16x16x128_fp8_bf8:
 .p2align 8
 .type test_f32_16x16x128_bf8_fp8,@function
 test_f32_16x16x128_bf8_fp8:
-  v_wmma_f32_16x16x128_bf8_fp8 v[16:23], v[0:15], v[8:23], v[16:23]
+  v_wmma_f32_16x16x128_bf8_fp8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
 .size test_f32_16x16x128_bf8_fp8, .-test_f32_16x16x128_bf8_fp8
 
@@ -108,7 +126,7 @@ test_f32_16x16x128_bf8_fp8:
 .p2align 8
 .type test_f32_16x16x128_bf8_bf8,@function
 test_f32_16x16x128_bf8_bf8:
-  v_wmma_f32_16x16x128_bf8_bf8 v[16:23], v[0:15], v[8:23], v[16:23]
+  v_wmma_f32_16x16x128_bf8_bf8 v[32:39], v[0:15], v[16:31], v[32:39]
   s_endpgm
 .size test_f32_16x16x128_bf8_bf8, .-test_f32_16x16x128_bf8_bf8
 
@@ -121,7 +139,7 @@ test_f32_16x16x128_bf8_bf8:
 .p2align 8
 .type test_f16_16x16x128_fp8_fp8,@function
 test_f16_16x16x128_fp8_fp8:
-  v_wmma_f16_16x16x128_fp8_fp8 v[16:19], v[0:15], v[8:23], v[16:19]
+  v_wmma_f16_16x16x128_fp8_fp8 v[32:35], v[0:15], v[16:31], v[32:35]
   s_endpgm
 .size test_f16_16x16x128_fp8_fp8, .-test_f16_16x16x128_fp8_fp8
 
@@ -134,7 +152,7 @@ test_f16_16x16x128_fp8_fp8:
 .p2align 8
 .type test_f16_16x16x128_fp8_bf8,@function
 test_f16_16x16x128_fp8_bf8:
-  v_wmma_f16_16x16x128_fp8_bf8 v[16:19], v[0:15], v[8:23], v[16:19]
+  v_wmma_f16_16x16x128_fp8_bf8 v[32:35], v[0:15], v[16:31], v[32:35]
   s_endpgm
 .size test_f16_16x16x128_fp8_bf8, .-test_f16_16x16x128_fp8_bf8
 
@@ -147,7 +165,7 @@ test_f16_16x16x128_fp8_bf8:
 .p2align 8
 .type test_f16_16x16x128_bf8_fp8,@function
 test_f16_16x16x128_bf8_fp8:
-  v_wmma_f16_16x16x128_bf8_fp8 v[16:19], v[0:15], v[8:23], v[16:19]
+  v_wmma_f16_16x16x128_bf8_fp8 v[32:35], v[0:15], v[16:31], v[32:35]
   s_endpgm
 .size test_f16_16x16x128_bf8_fp8, .-test_f16_16x16x128_bf8_fp8
 
@@ -160,7 +178,7 @@ test_f16_16x16x128_bf8_fp8:
 .p2align 8
 .type test_no_split_required,@function
 test_no_split_required:
-  v_wmma_f32_16x16x32_f16 v[16:23], v[0:7], v[8:15], v[16:23]
+  v_wmma_f32_16x16x32_f16 v[32:39], v[0:7], v[8:15], v[32:39]
   v_add_f32_e32 v0, v1, v2
   s_endpgm
 .size test_no_split_required, .-test_no_split_required
@@ -175,14 +193,14 @@ test_no_split_required:
 //    splitter table.
 //
 // COM: Exact register slicing for the fp8_fp8 K-split (input v[0:15],
-// COM: v[8:23], v[16:23]). First half: A_lo=v[0:7], B_lo=v[8:15],
-// COM: src2=original v[16:23]. Second half: A_hi=v[8:15], B_hi=v[16:23],
-// COM: src2=dst v[16:23] (the carry from the first half). dst is unchanged
+// COM: v[16:31], v[32:39]). First half: A_lo=v[0:7], B_lo=v[16:23],
+// COM: src2=original v[32:39]. Second half: A_hi=v[8:15], B_hi=v[24:31],
+// COM: src2=dst v[32:39] (the carry from the first half). dst is unchanged
 // COM: between halves. These two DAGs replace the bare-mnemonic check for
 // COM: this opcode -- they're stricter and would catch off-by-one slicing
 // COM: that a mnemonic-only check would miss.
-// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[0:7], v[8:15], v[16:23]
-// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[16:23], v[8:15], v[16:23], v[16:23]
+// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[32:39], v[0:7], v[16:23], v[32:39]
+// DISASM-DAG: v_wmma_f32_16x16x64_fp8_fp8 v[32:39], v[8:15], v[24:31], v[32:39]
 
 // COM: Bare-mnemonic checks for the other 7 K-split products (one DAG
 // COM: per opcode -- assignment to either the first-half or second-half
@@ -196,16 +214,16 @@ test_no_split_required:
 // DISASM-DAG: v_wmma_f16_16x16x64_bf8_fp8
 // DISASM-DAG: v_wmma_f16_16x16x64_bf8_bf8
 
-// COM: Exact register slicing for the M-split (input dst=v[4:19],
-// COM: A=v[0:15], B=v[2:9], src2=v[4:19]). M is split in half: dst and
-// COM: src2 each yield two 8-VGPR slices (v[4:11] for the first half,
-// COM: v[12:19] for the second). A is split along M too (v[0:7] then
-// COM: v[8:15]). B is broadcast (same v[2:9] on both halves). The
-// COM: replacement opcode is v_wmma_f32_16x16x128_f8f6f4 with both
+// COM: Exact register slicing for the M-split (input dst=v[32:47],
+// COM: A=v[0:15], B=v[16:23], src2=v[32:47]). M is split in half: dst
+// COM: and src2 each yield two 8-VGPR slices (v[32:39] for the first
+// COM: half, v[40:47] for the second). A is split along M too (v[0:7]
+// COM: then v[8:15]). B is broadcast (same v[16:23] on both halves).
+// COM: The replacement opcode is v_wmma_f32_16x16x128_f8f6f4 with both
 // COM: matrix-format modifiers literally MATRIX_FMT_FP4 so the f8f6f4
 // COM: form interprets the data as f4 (matching the original opcode).
-// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[4:11], v[0:7], v[2:9], v[4:11]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
-// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[12:19], v[8:15], v[2:9], v[12:19]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[32:39], v[0:7], v[16:23], v[32:39]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[40:47], v[8:15], v[16:23], v[40:47]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
 
 // Idempotency: rewriting the patched output again should produce identical
 // bytes (the splitter only fires on K=128 mnemonics, which no longer exist
