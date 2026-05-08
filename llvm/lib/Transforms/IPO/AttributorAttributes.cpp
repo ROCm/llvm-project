@@ -940,6 +940,8 @@ struct AA::PointerInfo::State : public AbstractState {
     OffsetBins = R.OffsetBins;
     RemoteIMap = R.RemoteIMap;
     ReturnedOffsets = R.ReturnedOffsets;
+    KernelOffsetBins = R.KernelOffsetBins;
+    ObjHasKernelLifetime = R.ObjHasKernelLifetime;
     return *this;
   }
 
@@ -951,6 +953,8 @@ struct AA::PointerInfo::State : public AbstractState {
     std::swap(OffsetBins, R.OffsetBins);
     std::swap(RemoteIMap, R.RemoteIMap);
     std::swap(ReturnedOffsets, R.ReturnedOffsets);
+    std::swap(KernelOffsetBins, R.KernelOffsetBins);
+    std::swap(ObjHasKernelLifetime, R.ObjHasKernelLifetime);
     return *this;
   }
 
@@ -992,6 +996,22 @@ protected:
   AAPointerInfo::OffsetBinsTy OffsetBins;
   DenseMap<const Instruction *, SmallVector<unsigned>> RemoteIMap;
 
+  /// Per-kernel access index for kernel-lifetime objects on GPU targets.
+  /// Maps a kernel Function* to its own OffsetBins. The nullptr key holds the
+  /// "shared" bucket for accesses with unknown or multi-kernel scope.
+  /// Only populated when ObjHasKernelLifetime is true.
+  DenseMap<const Function *, AAPointerInfo::OffsetBinsTy> KernelOffsetBins;
+
+  /// Whether the associated pointer has kernel lifetime (e.g., shared/local
+  /// GPU globals). Set by AAPointerInfoImpl via setObjHasKernelLifetime()
+  /// before the first addAccess call.
+  bool ObjHasKernelLifetime = false;
+
+public:
+  void setObjHasKernelLifetime(bool V) { ObjHasKernelLifetime = V; }
+
+protected:
+
   /// Flag to determine if the underlying pointer is reaching a return statement
   /// in the associated function or not. Returns in other functions cause
   /// invalidation.
@@ -1017,6 +1037,46 @@ protected:
     return true;
   }
 
+  /// Kernel-scope-aware variant: if QueryKernel is non-null and
+  /// KernelOffsetBins is populated, iterate only the query kernel's bin
+  /// plus the shared bin (nullptr key), skipping all other kernels' accesses.
+  template <typename F>
+  bool forallInterferingAccesses(AA::RangeTy Range, F CB,
+                                 const Function *QueryKernel) const {
+    if (!isValidState() || !ReturnedOffsets.isUnassigned())
+      return false;
+
+    if (!KernelOffsetBins.empty() && QueryKernel) {
+      auto IterateBins = [&](const AAPointerInfo::OffsetBinsTy &Bins) -> bool {
+        for (const auto &It : Bins) {
+          if (!Range.mayOverlap(It.getFirst()))
+            continue;
+          bool IsExact =
+              Range == It.getFirst() && !Range.offsetOrSizeAreUnknown();
+          for (auto Index : It.getSecond()) {
+            if (!CB(AccessList[Index], IsExact))
+              return false;
+          }
+        }
+        return true;
+      };
+
+      auto KBIt = KernelOffsetBins.find(QueryKernel);
+      if (KBIt != KernelOffsetBins.end())
+        if (!IterateBins(KBIt->second))
+          return false;
+
+      auto SharedIt = KernelOffsetBins.find(nullptr);
+      if (SharedIt != KernelOffsetBins.end())
+        if (!IterateBins(SharedIt->second))
+          return false;
+
+      return true;
+    }
+
+    return forallInterferingAccesses(Range, CB);
+  }
+
   /// See AAPointerInfo::forallInterferingAccesses.
   template <typename F>
   bool forallInterferingAccesses(Instruction &I, F CB,
@@ -1037,6 +1097,72 @@ protected:
       }
     }
     return forallInterferingAccesses(Range, CB);
+  }
+
+  /// Kernel-scope-aware variant that first computes Range from the
+  /// RemoteIMap, then routes to the kernel-aware overload.
+  template <typename F>
+  bool forallInterferingAccesses(Instruction &I, F CB, AA::RangeTy &Range,
+                                 const Function *QueryKernel) const {
+    if (!isValidState() || !ReturnedOffsets.isUnassigned())
+      return false;
+
+    auto LocalList = RemoteIMap.find(&I);
+    if (LocalList == RemoteIMap.end()) {
+      return true;
+    }
+
+    for (unsigned Index : LocalList->getSecond()) {
+      for (auto &R : AccessList[Index]) {
+        Range &= R;
+        if (Range.offsetAndSizeAreUnknown())
+          break;
+      }
+    }
+    return forallInterferingAccesses(Range, CB, QueryKernel);
+  }
+
+  /// Classify a function by its unique enclosing kernel. Returns the kernel
+  /// if the function is reachable from exactly one kernel, nullptr otherwise
+  /// (unknown scope or reachable from multiple kernels).
+  const Function *classifyKernelScope(Attributor &A,
+                                      const Function *Fn) const {
+    auto &InfoCache = A.getInfoCache();
+    if (InfoCache.isKernel(*Fn))
+      return Fn;
+    const auto *EK = InfoCache.getEnclosingKernels(*Fn);
+    if (!EK || EK->size() != 1)
+      return nullptr;
+    return *EK->begin();
+  }
+
+  /// Add an access to the per-kernel offset bins.
+  void addToKernelBins(Attributor &A, unsigned AccIndex, Instruction *RemoteI,
+                       const AAPointerInfo::RangeList &Ranges) {
+    if (!ObjHasKernelLifetime)
+      return;
+    const Function *KernelScope =
+        classifyKernelScope(A, RemoteI->getFunction());
+    for (auto Key : Ranges)
+      KernelOffsetBins[KernelScope][Key].insert(AccIndex);
+  }
+
+  /// Remove an access from the per-kernel offset bins.
+  void removeFromKernelBins(Attributor &A, unsigned AccIndex,
+                            Instruction *RemoteI,
+                            const AAPointerInfo::RangeList &Ranges) {
+    if (!ObjHasKernelLifetime)
+      return;
+    const Function *KernelScope =
+        classifyKernelScope(A, RemoteI->getFunction());
+    auto KBIt = KernelOffsetBins.find(KernelScope);
+    if (KBIt == KernelOffsetBins.end())
+      return;
+    for (auto Key : Ranges) {
+      auto BinIt = KBIt->second.find(Key);
+      if (BinIt != KBIt->second.end())
+        BinIt->second.erase(AccIndex);
+    }
   }
 
 private:
@@ -1085,6 +1211,7 @@ ChangeStatus AA::PointerInfo::State::addAccess(
            "New Access should have been at AccIndex");
     LocalList.push_back(AccIndex);
     AddToBins(AccessList[AccIndex].getRanges());
+    addToKernelBins(A, AccIndex, RemoteI, AccessList[AccIndex].getRanges());
     return ChangeStatus::CHANGED;
   }
 
@@ -1115,12 +1242,14 @@ ChangeStatus AA::PointerInfo::State::addAccess(
            "Expected bin to actually contain the Access.");
     Bin.erase(AccIndex);
   }
+  removeFromKernelBins(A, AccIndex, RemoteI, ToRemove);
 
   // Ranges that are in the new access but not the old access need to be added
   // to the offset bins.
   AAPointerInfo::RangeList ToAdd;
   AAPointerInfo::RangeList::set_difference(NewRanges, ExistingRanges, ToAdd);
   AddToBins(ToAdd);
+  addToKernelBins(A, AccIndex, RemoteI, ToAdd);
   return ChangeStatus::CHANGED;
 }
 
@@ -1411,6 +1540,20 @@ struct AAPointerInfoImpl
         };
     }
 
+    // Determine the unique query kernel for per-kernel bin routing.
+    // If the querying function is scoped to exactly one kernel, we can
+    // restrict iteration to that kernel's bin + the shared bin.
+    const Function *QueryKernel = nullptr;
+    if (ObjHasKernelLifetime && InfoCache.targetIsGPU()) {
+      if (InfoCache.isKernel(Scope)) {
+        QueryKernel = &Scope;
+      } else {
+        const auto *EK = InfoCache.getEnclosingKernels(Scope);
+        if (EK && EK->size() == 1)
+          QueryKernel = *EK->begin();
+      }
+    }
+
     // The batch BFS can safely be used as a negative filter (skip iPR when BFS
     // says "not reachable") only when iPR agrees for all paths the BFS can't
     // model. This requires:
@@ -1491,7 +1634,7 @@ struct AAPointerInfoImpl
         CrossFnGroups[AccScope].push_back({&Acc, Exact});
       return true;
     };
-    if (!State::forallInterferingAccesses(I, AccessCB, Range))
+    if (!State::forallInterferingAccesses(I, AccessCB, Range, QueryKernel))
       return false;
 
     HasBeenWrittenTo = !DominatingWrites.empty();
@@ -2180,6 +2323,26 @@ ChangeStatus AAPointerInfoFloating::updateImpl(Attributor &A) {
   ChangeStatus Changed = ChangeStatus::UNCHANGED;
   const DataLayout &DL = A.getDataLayout();
   Value &AssociatedValue = getAssociatedValue();
+
+  // Set ObjHasKernelLifetime on the State so that addAccess can populate
+  // KernelOffsetBins for kernel-lifetime objects.
+  if (auto *GV = dyn_cast<GlobalValue>(&AssociatedValue)) {
+    Module &M = *GV->getParent();
+    if (AA::isGPU(M)) {
+      switch (AA::GPUAddressSpace(GV->getType()->getPointerAddressSpace())) {
+      case AA::GPUAddressSpace::Shared:
+      case AA::GPUAddressSpace::Constant:
+      case AA::GPUAddressSpace::Local:
+        getState().setObjHasKernelLifetime(true);
+        break;
+      default:
+        break;
+      }
+    }
+  } else if (auto *AI = dyn_cast<AllocaInst>(&AssociatedValue)) {
+    getState().setObjHasKernelLifetime(
+        A.getInfoCache().isKernel(*AI->getFunction()));
+  }
 
   DenseMap<Value *, OffsetInfo> OffsetInfoMap;
   OffsetInfoMap[&AssociatedValue].insert(0);
