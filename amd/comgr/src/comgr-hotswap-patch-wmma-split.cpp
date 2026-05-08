@@ -76,6 +76,8 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <optional>
+
 using namespace llvm;
 
 namespace COMGR {
@@ -349,12 +351,16 @@ SmallVector<StringRef, 8> tokenizeModifiers(StringRef Suffix) {
 
 // Returns true if `T` is a `<Name>:[X,Y,Z]` packed-modifier token; on success,
 // fills in `Bits` with three-character views of X, Y, Z (which may be 0 or 1).
+// `Name` is checked piecewise so we never have to materialize `<Name>:[` on
+// the heap for every token (this runs once per modifier per split half).
 bool parsePackedModifier(StringRef T, StringRef Name,
                          std::array<StringRef, 3> &Bits) {
-  std::string Prefix = (Name + ":[").str();
-  if (!T.starts_with(Prefix) || !T.ends_with("]"))
+  if (!T.starts_with(Name) || !T.ends_with("]"))
     return false;
-  StringRef Inside = T.drop_front(Prefix.size()).drop_back(1);
+  T = T.drop_front(Name.size());
+  if (!T.starts_with(":["))
+    return false;
+  StringRef Inside = T.drop_front(2).drop_back(1);
   SmallVector<StringRef, 3> Parts;
   Inside.split(Parts, ",");
   if (Parts.size() != 3)
@@ -373,9 +379,30 @@ bool parsePackedModifier(StringRef T, StringRef Name,
 // that no longer applies after a split (the original data lives in a
 // different VGPR set in each half), so preserving them would assert a
 // guarantee the splitter cannot make.
-std::string transformModifierSuffix(StringRef Suffix, bool KSplitSecondHalf) {
+// Closed set of modifier tokens the splitter knows how to handle on its
+// source surface (K=128 fp8/bf8 WMMAs and the 32x16x128_f4 WMMA). Anything
+// outside this set means the source mnemonic acquired a modifier the
+// splitter has not been audited for -- failing fast (returning nullopt) is
+// safer than silently carrying it through both halves, where it could
+// double-apply or apply to the wrong half. Update this set in lockstep with
+// any new K=128/M=32 source mnemonic the splitter table grows to cover.
+bool isKnownSplitterModifier(StringRef T) {
+  if (T == "matrix_a_reuse" || T == "matrix_b_reuse")
+    return true;
+  std::array<StringRef, 3> Bits;
+  return parsePackedModifier(T, "neg_lo", Bits) ||
+         parsePackedModifier(T, "neg_hi", Bits);
+}
+
+std::optional<std::string> transformModifierSuffix(StringRef Suffix,
+                                                   bool KSplitSecondHalf) {
   std::string Out;
   for (StringRef T : tokenizeModifiers(Suffix)) {
+    if (!isKnownSplitterModifier(T)) {
+      log() << "hotswap: error: WMMA split: unsupported modifier token \""
+            << T << "\" -- splitter modifier set must be updated\n";
+      return std::nullopt;
+    }
     if (T == "matrix_a_reuse" || T == "matrix_b_reuse")
       continue;
     std::array<StringRef, 3> Bits;
@@ -469,23 +496,25 @@ std::vector<std::string> buildSplit128to64Asm(StringRef Replacement,
   int BHalf = R.Src1.second / 2;
   StringRef Dst = P.Operands[0]; // verbatim from printer (e.g. "v[16:23]")
   StringRef Src2Printed = P.Operands[3];
-  std::string ModFirst = transformModifierSuffix(P.ModifierSuffix,
-                                                 /*KSplitSecondHalf=*/false);
-  std::string ModSecond = transformModifierSuffix(P.ModifierSuffix,
-                                                  /*KSplitSecondHalf=*/true);
+  auto ModFirst = transformModifierSuffix(P.ModifierSuffix,
+                                          /*KSplitSecondHalf=*/false);
+  auto ModSecond = transformModifierSuffix(P.ModifierSuffix,
+                                           /*KSplitSecondHalf=*/true);
+  if (!ModFirst || !ModSecond)
+    return {};
 
   std::vector<std::string> Out;
   Out.reserve(2);
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
                         formatVgprRange(R.Src0.first, AHalf),
                         formatVgprRange(R.Src1.first, BHalf), Src2Printed,
-                        ModFirst)
+                        *ModFirst)
                     .str());
   // Second half: src2 = dst (the carry).
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}", Replacement, Dst,
                         formatVgprRange(R.Src0.first + AHalf, AHalf),
                         formatVgprRange(R.Src1.first + BHalf, BHalf), Dst,
-                        ModSecond)
+                        *ModSecond)
                     .str());
   return Out;
 }
@@ -517,20 +546,22 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
   // (with matrix_a_reuse / matrix_b_reuse stripped, same as K-split).
   constexpr StringLiteral FmtSuffix =
       " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
-  std::string Mod = transformModifierSuffix(P.ModifierSuffix,
-                                            /*KSplitSecondHalf=*/false);
+  auto Mod = transformModifierSuffix(P.ModifierSuffix,
+                                     /*KSplitSecondHalf=*/false);
+  if (!Mod)
+    return {};
 
   std::vector<std::string> Out;
   Out.reserve(2);
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
                         formatVgprRange(R.Dst.first, DstHalf),
                         formatVgprRange(R.Src0.first, AHalf), B, CLo,
-                        FmtSuffix, Mod)
+                        FmtSuffix, *Mod)
                     .str());
   Out.push_back(formatv("{0} {1}, {2}, {3}, {4}{5}{6}", Replacement,
                         formatVgprRange(R.Dst.first + DstHalf, DstHalf),
                         formatVgprRange(R.Src0.first + AHalf, AHalf), B, CHi,
-                        FmtSuffix, Mod)
+                        FmtSuffix, *Mod)
                     .str());
   return Out;
 }
@@ -641,7 +672,7 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
           << DI.Mnemonic << "\n";
     return 0; // matched-but-failed
   }
-  Ctx.OutTrampolines.emplace_back(std::move(T));
+  Ctx.OutTrampolines.push_back(std::move(T));
 
   log() << "hotswap: WMMA split: patched " << DI.Mnemonic << " at offset 0x"
         << utohexstr(DI.Offset) << "\n";
