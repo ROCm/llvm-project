@@ -295,6 +295,8 @@ static bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
     // s_wait_dscnt has a single immediate operand (the wait count) at
     // index 0. Increment it directly.
     MCInst NewInst = DI.Inst;
+    if (NewInst.getNumOperands() == 0)
+      return false;
     MCOperand &Op = NewInst.getOperand(0);
     if (!Op.isImm())
       return false;
