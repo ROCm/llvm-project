@@ -225,16 +225,14 @@ jobs:
              commit_log=$(./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1)
              # Save the repo and commit into json
              echo "$commit_logs" | grep "^Submodule path" | \
-             grep "checked out" | sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/" | \
-             jq -Rn --arg stage "${{ inputs.stage }}" \
-             '[inputs | split(" ") | {path: .[0], commit: .[1], stage: $stage}]' \
-             > submodule-commit-${{ inputs.stage }}.json
+             grep "checked out" | sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/" \
+             > submodule-commit-${{ inputs.stage }}.txt
 
       - name: Upload submodule commit file
         uses: actions/upload-artifact@v4
         with:
           name: submodule-commit-${{ inputs.stage }}
-          path: submodule-commit-${{ inputs.stage }}.json
+          path: submodule-commit-${{ inputs.stage }}.txt
           retention-days: 1
 
       - name: TheRock and llvm SHA
