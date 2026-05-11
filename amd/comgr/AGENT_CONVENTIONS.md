@@ -52,9 +52,28 @@ fix upstream. Do not implement a parallel version inside Comgr.
 - Apply upstream LLVM code review standards (small focused commits,
   meaningful commit messages, no unrelated changes).
 - **Avoid Windows-hostile code**:
-  - Use `LLVM_ATTRIBUTE_WEAK` (from `llvm/Support/Compiler.h`), not
-    `__attribute__((weak))`. MSVC does not understand the GCC syntax
-    and will fail to build.
+  - **Do not rely on `LLVM_ATTRIBUTE_WEAK` for cross-platform symbol
+    overriding.** PE/COFF does not honour weak symbols the way ELF
+    does (the MSVC expansion is empty), so a `LLVM_ATTRIBUTE_WEAK`
+    default in one TU plus a strong override in another silently
+    becomes a duplicate-definition link error on Windows -- or,
+    worse, a silent feature disable if the override is guarded out
+    with `#if !defined(_MSC_VER)`. This is exactly the failure mode
+    reported in
+    [issue ROCm/llvm-project#2479](https://github.com/ROCm/llvm-project/issues/2479).
+  - **Use the HotswapPatchVTable + `.def` registry contract for any
+    new `apply*`-style hotswap pass.** Each patch ships a
+    `register*Patch(HotswapPatchVTable&)` function in its
+    `comgr-hotswap-patch-*.cpp`, an alpha-ordered line in
+    `comgr-hotswap-patches.def`, and a slot on `HotswapPatchVTable`.
+    A missing registrar produces a link error at libamd_comgr link
+    time -- the loud-failure shape the weak-symbol pattern lacked.
+    See `comgr-hotswap-internal.h` and `comgr-hotswap-b0a0.cpp` for
+    the dispatcher / install flow.
+  - `LLVM_ATTRIBUTE_WEAK` remains acceptable only for the few
+    liveness / DWARF stubs that currently have no strong override
+    anywhere in tree; they migrate to the vtable contract the first
+    time a real implementation lands.
   - No GCC/Clang-only attributes without an LLVM-portable wrapper.
 - All assembly / disassembly goes through the MC layer (e.g.,
   `assembleSingleInst`, `parseAsmToMCInsts`). **No hardcoded
