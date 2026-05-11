@@ -73,6 +73,7 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -120,6 +121,83 @@ static cl::opt<bool>
     EnablePoisonReuseGuard("enable-poison-reuse-guard", cl::init(true),
                            cl::desc("Enable poison-reuse guard"));
 
+// Register-pressure / locality guards.
+//
+// The redesigned SLSR (PR #169614) can pick a basis from any block that
+// dominates the candidate (cross-BB BaseDelta / StrideDelta search and
+// compressPath path-compression). On register-pressure-sensitive targets
+// (e.g. AMDGPU) this lengthens virtual-register live ranges across loop /
+// basic-block boundaries and can cause additional spills.
+//
+// These knobs let RP-sensitive front-ends opt back into the original
+// "stay close to the candidate" locality invariant. They all default to
+// off so upstream behavior and existing lit tests are unchanged.
+//
+//   -slsr-rp-guard                  master switch; flips the locality knobs
+//                                   below to their recommended ON defaults
+//                                   unless the user overrides them.
+//   -slsr-limit-to-same-bb          reject any rewrite where Basis and C
+//                                   are not in the same BB (most strict).
+//   -slsr-limit-var-delta-to-bb     reject Base/Stride var-delta rewrites
+//                                   when the Delta value's BB != C.Ins's BB.
+//   -slsr-limit-compress-path-to-bb cap compressPath to bases in C.Ins's BB.
+//   -slsr-cross-loop-guard          reject rewrites whose basis is in a
+//                                   different innermost loop than C.
+//   -slsr-max-dom-depth=N           reject rewrites where the DomTree depth
+//                                   distance |depth(C.BB) - depth(Basis.BB)|
+//                                   exceeds N (~0u disables, default).
+static cl::opt<bool>
+    SlsrRPGuard("slsr-rp-guard", cl::init(false), cl::Hidden,
+                cl::desc("SLSR: master switch enabling register-pressure / "
+                         "locality guards at recommended defaults"));
+
+static cl::opt<bool> SlsrLimitToSameBB(
+    "slsr-limit-to-same-bb", cl::init(false), cl::Hidden,
+    cl::desc("SLSR: reject rewrites whose basis is not in C.Ins's BB"));
+
+static cl::opt<bool> SlsrLimitVarDeltaToBB(
+    "slsr-limit-var-delta-to-bb", cl::init(false), cl::Hidden,
+    cl::desc("SLSR: reject Base/Stride variable-delta rewrites when the "
+             "Delta value's BB differs from C.Ins's BB"));
+
+static cl::opt<bool> SlsrLimitCompressPathToBB(
+    "slsr-limit-compress-path-to-bb", cl::init(false), cl::Hidden,
+    cl::desc("SLSR: cap compressPath to roots within C.Ins's BB"));
+
+static cl::opt<bool>
+    SlsrCrossLoopGuard("slsr-cross-loop-guard", cl::init(false), cl::Hidden,
+                       cl::desc("SLSR: reject rewrites whose basis is in a "
+                                "different innermost loop than C"));
+
+static cl::opt<unsigned> SlsrMaxDomDepth(
+    "slsr-max-dom-depth", cl::init(~0u), cl::Hidden,
+    cl::desc("SLSR: reject rewrites where DomTree depth distance "
+             "between C.BB and Basis.BB exceeds N (default ~0u: off)"));
+
+// Helpers that fold the master `-slsr-rp-guard` switch into the per-knob
+// defaults. If the user explicitly set a knob, honor it; otherwise the
+// master switch turns it on (except `slsr-limit-to-same-bb`, which is too
+// strict to be enabled by the master switch).
+static bool slsrLimitToSameBB() {
+  return SlsrLimitToSameBB.getNumOccurrences() ? SlsrLimitToSameBB.getValue()
+                                               : false;
+}
+static bool slsrLimitVarDeltaToBB() {
+  return SlsrLimitVarDeltaToBB.getNumOccurrences()
+             ? SlsrLimitVarDeltaToBB.getValue()
+             : SlsrRPGuard.getValue();
+}
+static bool slsrLimitCompressPathToBB() {
+  return SlsrLimitCompressPathToBB.getNumOccurrences()
+             ? SlsrLimitCompressPathToBB.getValue()
+             : SlsrRPGuard.getValue();
+}
+static bool slsrCrossLoopGuard() {
+  return SlsrCrossLoopGuard.getNumOccurrences() ? SlsrCrossLoopGuard.getValue()
+                                                : SlsrRPGuard.getValue();
+}
+static unsigned slsrMaxDomDepth() { return SlsrMaxDomDepth.getValue(); }
+
 namespace {
 
 class StraightLineStrengthReduceLegacyPass : public FunctionPass {
@@ -137,6 +215,8 @@ public:
     AU.addRequired<DominatorTreeWrapperPass>();
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addRequired<TargetTransformInfoWrapperPass>();
+    AU.addRequired<LoopInfoWrapperPass>();
+    AU.addPreserved<LoopInfoWrapperPass>();
     // We do not modify the shape of the CFG.
     AU.setPreservesCFG();
   }
@@ -152,8 +232,9 @@ public:
 class StraightLineStrengthReduce {
 public:
   StraightLineStrengthReduce(const DataLayout *DL, DominatorTree *DT,
-                             ScalarEvolution *SE, TargetTransformInfo *TTI)
-      : DL(DL), DT(DT), SE(SE), TTI(TTI) {}
+                             ScalarEvolution *SE, TargetTransformInfo *TTI,
+                             LoopInfo *LI)
+      : DL(DL), DT(DT), SE(SE), TTI(TTI), LI(LI) {}
 
   // SLSR candidate. Such a candidate must be in one of the forms described in
   // the header comments.
@@ -406,6 +487,7 @@ private:
   DominatorTree *DT = nullptr;
   ScalarEvolution *SE;
   TargetTransformInfo *TTI = nullptr;
+  LoopInfo *LI = nullptr;
   std::list<Candidate> Candidates;
 
   // Map from SCEV to instructions that represent the value,
@@ -620,6 +702,7 @@ INITIALIZE_PASS_BEGIN(StraightLineStrengthReduceLegacyPass, "slsr",
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_END(StraightLineStrengthReduceLegacyPass, "slsr",
                     "Straight line strength reduction", false, false)
 
@@ -694,6 +777,48 @@ bool StraightLineStrengthReduce::candidatePredicate(Candidate *Basis,
   Value *Delta = getDelta(C, *Basis, K);
   if (!Delta)
     return false;
+
+  // Register-pressure / locality guards. See the cl::opt block at the top
+  // of this file for rationale. All guards default to off; behavior matches
+  // upstream unless an RP-sensitive target opts in via -mllvm.
+  {
+    BasicBlock *BasisBB = Basis->Ins->getParent();
+    BasicBlock *CBB = C.Ins->getParent();
+
+    // 1. Strict same-BB: reject any rewrite that crosses BBs.
+    if (slsrLimitToSameBB() && BasisBB != CBB)
+      return false;
+
+    // 2. Cross-loop guard: reject if basis and candidate are not in the
+    //    same innermost loop. Restores the "straight-line" locality the
+    //    pre-#169614 SLSR enforced for the loops we care about.
+    if (slsrCrossLoopGuard() && LI &&
+        LI->getLoopFor(BasisBB) != LI->getLoopFor(CBB))
+      return false;
+
+    // 3. Variable-delta locality: when the rewrite uses a non-constant
+    //    Base / Stride delta, require the delta-defining instruction to
+    //    live in the candidate's BB (otherwise we lengthen its live range
+    //    across blocks just to feed this rewrite).
+    if (slsrLimitVarDeltaToBB() && K != Candidate::IndexDelta &&
+        !isa<Constant>(Delta)) {
+      if (auto *DeltaI = dyn_cast<Instruction>(Delta))
+        if (DeltaI->getParent() != CBB)
+          return false;
+    }
+
+    // 4. Max DomTree depth distance between C.BB and Basis.BB.
+    if (unsigned MaxDD = slsrMaxDomDepth(); MaxDD != ~0u) {
+      if (auto *BasisN = DT->getNode(BasisBB))
+        if (auto *CN = DT->getNode(CBB)) {
+          unsigned BD = BasisN->getLevel();
+          unsigned CD = CN->getLevel();
+          unsigned Dist = CD > BD ? CD - BD : BD - CD;
+          if (Dist > MaxDD)
+            return false;
+        }
+    }
+  }
 
   // IndexDelta rewrite is not always profitable, e.g.,
   // X = B + 8 * S
@@ -810,6 +935,23 @@ auto StraightLineStrengthReduce::compressPath(Candidate &C,
 
   while (Root->Basis) {
     Candidate *NextRoot = Root->Basis;
+
+    // Register-pressure / locality guards for path compression.
+    // compressPath re-bases the rewrite onto a deeper ancestor, which
+    // extends that ancestor's live range across everything between it
+    // and C. Refuse to cross BB / loop boundaries when the user asks
+    // us to keep the rewrite local. We `break` (not `continue`) so that
+    // the previously accepted Root is retained.
+    {
+      BasicBlock *NextBB = NextRoot->Ins->getParent();
+      BasicBlock *CBB = C.Ins->getParent();
+      if (slsrLimitCompressPathToBB() && NextBB != CBB)
+        break;
+      if (slsrCrossLoopGuard() && LI &&
+          LI->getLoopFor(NextBB) != LI->getLoopFor(CBB))
+        break;
+    }
+
     if (C.Base == NextRoot->Base && C.StrideSCEV == NextRoot->StrideSCEV &&
         isSimilar(C, *NextRoot, Candidate::IndexDelta)) {
       ConstantInt *CI =
@@ -1285,7 +1427,8 @@ bool StraightLineStrengthReduceLegacyPass::runOnFunction(Function &F) {
   auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
   auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  return StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F);
+  auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+  return StraightLineStrengthReduce(DL, DT, SE, TTI, LI).runOnFunction(F);
 }
 
 bool StraightLineStrengthReduce::runOnFunction(Function &F) {
@@ -1334,14 +1477,16 @@ StraightLineStrengthReducePass::run(Function &F, FunctionAnalysisManager &AM) {
   auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
   auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
   auto *TTI = &AM.getResult<TargetIRAnalysis>(F);
+  auto *LI = &AM.getResult<LoopAnalysis>(F);
 
-  if (!StraightLineStrengthReduce(DL, DT, SE, TTI).runOnFunction(F))
+  if (!StraightLineStrengthReduce(DL, DT, SE, TTI, LI).runOnFunction(F))
     return PreservedAnalyses::all();
 
   PreservedAnalyses PA;
   PA.preserveSet<CFGAnalyses>();
   PA.preserve<DominatorTreeAnalysis>();
   PA.preserve<ScalarEvolutionAnalysis>();
+  PA.preserve<LoopAnalysis>();
   PA.preserve<TargetIRAnalysis>();
   return PA;
 }
