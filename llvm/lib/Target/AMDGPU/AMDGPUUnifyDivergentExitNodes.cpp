@@ -180,6 +180,21 @@ BasicBlock *AMDGPUUnifyDivergentExitNodesImpl::unifyReturnBlockSet(
                 SimplifyCFGOptions().bonusInstThreshold(2));
   }
 
+  // If a block's two branch targets used to be different return blocks, both
+  // now point to NewRetBlock. Replace such conditional branches with a plain
+  // unconditional branch.
+  SmallVector<BasicBlock *, 8> Preds(predecessors(NewRetBlock));
+  SmallPtrSet<BasicBlock *, 8> Seen;
+  for (BasicBlock *Pred : Preds) {
+    if (!Seen.insert(Pred).second)
+      continue;
+    auto *BI = dyn_cast<CondBrInst>(Pred->getTerminator());
+    if (BI && BI->getSuccessor(0) == BI->getSuccessor(1))
+      ConstantFoldTerminator(Pred, /*DeleteDeadConditions=*/true,
+                             /*TLI=*/nullptr,
+                             RequireAndPreserveDomTree ? &DTU : nullptr);
+  }
+
   return NewRetBlock;
 }
 
