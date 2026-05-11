@@ -166,7 +166,8 @@ CommandCache::getPolicyFromEnv(llvm::raw_ostream &LogS) {
 void CommandCache::prune() {
   Expected<bool> PrunedOrErr = pruneCache(CacheDir, Policy);
   if (!PrunedOrErr) {
-    logAllUnhandledErrors(PrunedOrErr.takeError(), LogS);
+    auto ErrorHandler = getComgrCacheErrorHandler(LogS);
+    ErrorHandler(PrunedOrErr.takeError(), "when pruning the cache");
   }
 }
 
