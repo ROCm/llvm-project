@@ -302,12 +302,14 @@ jobs:
 
       - name: Merge all submodule commit
         run: |
-          jq -s 'add | unique_by(.path)' submodule-commit-*.txt \
-            > manifest.txt
+          for f in submodule-commit-*.txt; do
+            echo "--- $f ---"
+            cat "$f"
+          done
 
-          echo "=== ALL SUBMODULES ==="
-          jq -r '.[] | "\(.stage) | \(.path) → \(.commit[0:12])"' \
-            manifest.txt
+          cat submodule-commit-*.txt | sort -u > manifest.txt
+
+          cat manifest.txt
 
       - uses: actions/upload-artifact@v4
         with:

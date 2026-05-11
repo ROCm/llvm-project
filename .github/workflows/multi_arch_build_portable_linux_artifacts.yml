@@ -226,13 +226,13 @@ jobs:
              # Save the repo and commit into json
              echo "$commit_logs" | grep "^Submodule path" | \
              grep "checked out" | sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/" \
-             > submodule-commit-${{ inputs.stage }}.txt
+             > submodule-commit-${{ inputs.stage_name }}.txt
 
       - name: Upload submodule commit file
         uses: actions/upload-artifact@v4
         with:
-          name: submodule-commit-${{ inputs.stage }}
-          path: submodule-commit-${{ inputs.stage }}.txt
+          name: submodule-commit-${{ inputs.stage_name }}
+          path: submodule-commit-${{ inputs.stage_name }}.txt
           retention-days: 1
 
       - name: TheRock and llvm SHA
