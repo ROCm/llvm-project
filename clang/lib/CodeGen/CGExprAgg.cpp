@@ -294,8 +294,27 @@ void AggExprEmitter::withReturnValueSlot(
   // We need to always provide our own temporary if destruction is required.
   // Otherwise, EmitCall will emit its own, notice that it's "unused", and end
   // its lifetime before we have the chance to emit a proper destructor call.
+  //
+  // We also need a temporary if the destination is in a different address space
+  // from the sret AS. Use the target hook to get the actual sret AS for this
+  // return type.
+  const CXXRecordDecl *RD = RetTy->getAsCXXRecordDecl();
+  LangAS SRetLangAS = CGF.CGM.getTargetCodeGenInfo().getSRetAddrSpace(RD);
+  unsigned SRetAS = CGF.getContext().getTargetAddressSpace(SRetLangAS);
+  bool CanAggregateCopy =
+      RD ? (RD->hasTrivialCopyConstructor() ||
+            RD->hasTrivialMoveConstructor() || RD->hasTrivialCopyAssignment() ||
+            RD->hasTrivialMoveAssignment() || RD->hasAttr<TrivialABIAttr>() ||
+            RD->isUnion())
+         : RetTy.isTriviallyCopyableType(CGF.getContext());
+  bool DestASMismatch = !Dest.isIgnored() && CanAggregateCopy &&
+                        Dest.getAddress()
+                                .getBasePointer()
+                                ->stripPointerCasts()
+                                ->getType()
+                                ->getPointerAddressSpace() != SRetAS;
   bool UseTemp = Dest.isPotentiallyAliased() || Dest.requiresGCollection() ||
-                 (RequiresDestruction && Dest.isIgnored());
+                 (RequiresDestruction && Dest.isIgnored()) || DestASMismatch;
 
   Address RetAddr = Address::invalid();
 
@@ -303,6 +322,14 @@ void AggExprEmitter::withReturnValueSlot(
   llvm::IntrinsicInst *LifetimeStartInst = nullptr;
   if (!UseTemp) {
     RetAddr = Dest.getAddress();
+    if (RetAddr.isValid() && RetAddr.getAddressSpace() != SRetAS) {
+      llvm::Type *SRetPtrTy =
+          llvm::PointerType::get(CGF.getLLVMContext(), SRetAS);
+      RetAddr = RetAddr.withPointer(
+          CGF.CGM.getTargetCodeGenInfo().performAddrSpaceCast(
+              CGF, RetAddr.getBasePointer(), LangAS::Default, SRetPtrTy),
+          RetAddr.isKnownNonNull());
+    }
   } else {
     RetAddr = CGF.CreateMemTempWithoutCast(RetTy, "tmp");
     if (CGF.EmitLifetimeStart(RetAddr.getBasePointer())) {
