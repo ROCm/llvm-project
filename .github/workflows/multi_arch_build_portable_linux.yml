@@ -290,7 +290,7 @@ jobs:
   # STAGE: Manifest commit log (generic)
   # ==========================================================================
   manifest_summary:
-    needs: [compiler-runtime, foundation, math-libs. comm-libs]
+    needs: [compiler-runtime, foundation, math-libs, comm-libs]
     if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:

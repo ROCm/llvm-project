@@ -234,7 +234,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: submodule-commit-${{ inputs.stage }}
-          path: submodule-commiy-${{ inputs.stage }}.json
+          path: submodule-commit-${{ inputs.stage }}.json
           retention-days: 1
 
       - name: TheRock and llvm SHA

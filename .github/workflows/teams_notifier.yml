@@ -20,7 +20,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: submodule-info-all
+          name: submodule-commit-all
 
       - name: Calculate URLs and Fetch Manifest
         id: extract_urls
