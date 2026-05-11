@@ -10,9 +10,15 @@
 /// retargetCodeObjectB0A0 orchestrator that drives the full pipeline:
 /// decode -> patch -> trampoline growth -> DWARF update.
 ///
-/// Patch entry points are declared as weak symbols returning 0. Each
-/// comgr-hotswap-patch-*.cpp file provides a strong override, allowing
-/// patches to land as independent PRs with no merge conflicts.
+/// Patch passes are dispatched through HotswapPatchVTable. The membership
+/// list lives in comgr-hotswap-patches.def; each entry corresponds to one
+/// slot on the vtable and one register*Patch function in a sibling
+/// comgr-hotswap-patch-*.cpp. installHotswapPatches() walks the .def to
+/// bind every slot; a std::call_once at the top of retargetCodeObjectB0A0
+/// drives the install exactly once per process. This replaces the prior
+/// LLVM_ATTRIBUTE_WEAK + `#if !defined(_MSC_VER)` override pattern, which
+/// silently disabled hotswap on Windows because PE/COFF does not honour
+/// weak the way ELF does (issue ROCm/llvm-project#2479).
 ///
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +26,8 @@
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
+
+#include <mutex>
 
 using namespace llvm;
 
@@ -59,18 +67,14 @@ static RewriteConfig makeGfx1250B0A0Config() {
   return Config;
 }
 
-// -- Forward declarations for patch/liveness/DWARF stubs ----------------------
+// -- Forward declarations for liveness/DWARF stubs ----------------------------
 //
-// These have weak default definitions below; patch .cpp files may provide
-// strong overrides at link time so patches can land as independent PRs.
-// Patch entry points are declared in comgr-hotswap-internal.h.
+// These have weak default definitions below; future patch .cpp files may
+// provide strong overrides at link time. The patch family (apply*) has
+// migrated to the HotswapPatchVTable contract above; these helpers stay
+// on the old pattern until they grow their first strong override, at
+// which point they migrate the same way (one .def entry + register*).
 
-uint32_t applyInPlacePatches(PatchContext &, size_t);
-uint32_t applyTrampolinePatches(PatchContext &, size_t);
-uint32_t applyWmmaHazardPatch(PatchContext &);
-uint32_t applyVop3px2Src2Fix(PatchContext &);
-uint32_t applyWmmaSplitPatches(PatchContext &, size_t);
-uint32_t applyScratchPatches(PatchContext &, size_t);
 CFG buildCfg(ArrayRef<InternalDecodedInst> Decoded, const MCInstrInfo &);
 LivenessInfo computeLiveness(ArrayRef<InternalDecodedInst> Decoded, const CFG &,
                              const MCInstrInfo &, const MCRegisterInfo &,
@@ -93,21 +97,25 @@ void patchDebugInfo(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
 void patchDebugFrame(uint8_t *Elf, size_t ElfSize, uint64_t TextAddr,
                      uint64_t TextSizeBefore, uint64_t TrampTotal);
 
-// -- Weak-symbol patch stubs --------------------------------------------------
+// -- HotswapPatchVTable plumbing ----------------------------------------------
+//
+// Patch-module forward declarations live in comgr-hotswap-internal.h
+// (driven off the same comgr-hotswap-patches.def), so libamd_comgr and
+// the unit tests share one prototype source. Here we just supply the
+// singleton accessor and the installer that walks the .def to invoke
+// each register*Patch. A missing register*Patch produces a link error
+// at libamd_comgr link time -- the loud-failure shape the weak-symbol
+// pattern lacked.
 
-LLVM_ATTRIBUTE_WEAK uint32_t applyInPlacePatches(PatchContext &, size_t) {
-  return 0;
+HotswapPatchVTable &getHotswapPatchVTable() {
+  static HotswapPatchVTable VT;
+  return VT;
 }
-LLVM_ATTRIBUTE_WEAK uint32_t applyTrampolinePatches(PatchContext &, size_t) {
-  return 0;
-}
-LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaHazardPatch(PatchContext &) { return 0; }
-LLVM_ATTRIBUTE_WEAK uint32_t applyVop3px2Src2Fix(PatchContext &) { return 0; }
-LLVM_ATTRIBUTE_WEAK uint32_t applyWmmaSplitPatches(PatchContext &, size_t) {
-  return 0;
-}
-LLVM_ATTRIBUTE_WEAK uint32_t applyScratchPatches(PatchContext &, size_t) {
-  return 0;
+
+void installHotswapPatches(HotswapPatchVTable &VT) {
+#define HOTSWAP_PATCH(Name) register##Name##Patch(VT);
+#include "comgr-hotswap-patches.def"
+#undef HOTSWAP_PATCH
 }
 
 // -- Weak-symbol liveness stubs -----------------------------------------------
@@ -283,6 +291,16 @@ buildNopSledMap(ArrayRef<InternalDecodedInst> Decoded, const LLVMState &LS) {
 
 // -- applyGfx1250B0toA0Rules --------------------------------------------------
 
+/// Per-instruction patch-pass trampoline: invokes \p Fn with (\p Ctx,
+/// \p Idx) if it is non-null, or returns 0 otherwise. nullptr means
+/// the corresponding pass family has no implementation linked in
+/// (e.g. wmma-split / scratch today), which the dispatcher treats as
+/// a no-op slot.
+static uint32_t runPerInstPass(uint32_t (*Fn)(PatchContext &, size_t),
+                               PatchContext &Ctx, size_t Idx) {
+  return Fn ? Fn(Ctx, Idx) : 0;
+}
+
 /// Main per-instruction dispatcher for the GFX1250 B0-to-A0 rewrite.
 /// Builds the NOP sled map, CFG, and VGPR liveness for the decoded stream,
 /// then walks each decoded instruction and runs the patch passes in order
@@ -320,28 +338,30 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
                    OutTrampolines,   Sleds,   Elf,  Liveness, KernelStats,
                    OutScratchPatches};
 
+  const HotswapPatchVTable &VT = getHotswapPatchVTable();
+
   for (size_t Idx = 0, E = Decoded.size(); Idx < E; ++Idx) {
     const InternalDecodedInst &DI = Decoded[Idx];
     if (DI.Mnemonic == "<unknown>")
       continue;
 
     uint32_t P = 0;
-    P += applyInPlacePatches(Ctx, Idx);
+    P += runPerInstPass(VT.applyInPlacePatches, Ctx, Idx);
     if (P) {
       Patched += P;
       continue;
     }
-    P += applyTrampolinePatches(Ctx, Idx);
+    P += runPerInstPass(VT.applyTrampolinePatches, Ctx, Idx);
     if (P) {
       Patched += P;
       continue;
     }
-    P += applyWmmaSplitPatches(Ctx, Idx);
+    P += runPerInstPass(VT.applyWmmaSplitPatches, Ctx, Idx);
     if (P) {
       Patched += P;
       continue;
     }
-    P += applyScratchPatches(Ctx, Idx);
+    P += runPerInstPass(VT.applyScratchPatches, Ctx, Idx);
     if (P) {
       Patched += P;
       continue;
@@ -359,8 +379,10 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   //    treat a branch as WMMA/VALU/VOP3PX2.
   // If a future patch family changes instruction boundaries, the Decoded
   // stream must be rebuilt before these passes run.
-  Patched += applyWmmaHazardPatch(Ctx);
-  Patched += applyVop3px2Src2Fix(Ctx);
+  if (VT.applyWmmaHazardPatch)
+    Patched += VT.applyWmmaHazardPatch(Ctx);
+  if (VT.applyVop3px2Src2Fix)
+    Patched += VT.applyVop3px2Src2Fix(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
@@ -483,6 +505,15 @@ static void runScratchVerification(WritableMemoryBuffer &OutBuf,
 amd_comgr_status_t retargetCodeObjectB0A0(const void *ElfData, size_t ElfSize,
                                           const TargetIdentifier &TargetIdent,
                                           std::unique_ptr<MemoryBuffer> &Out) {
+  // Bind every patch module's implementation into the singleton vtable.
+  // std::call_once gives us a single, deterministic install per process
+  // with no inter-TU static-init order contract. Cost is one atomic check
+  // on every entry after the first; the first call runs the .def-driven
+  // register*Patch chain in declaration order.
+  static std::once_flag InstallOnce;
+  std::call_once(InstallOnce,
+                 [] { installHotswapPatches(getHotswapPatchVTable()); });
+
   // Take a working copy so the input is preserved and we have a mutable
   // buffer to parse / patch.
   std::vector<uint8_t> Buf(static_cast<const uint8_t *>(ElfData),
