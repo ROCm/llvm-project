@@ -105,7 +105,7 @@ static const Entry kCanonTable[] = {
     //   * the raiser's generic `Unsupported instruction` diagnostic
     //     doesn't fire on these wait sites when the companion
     //     async DMA / TENSOR op has been emulated or lifted; and
-    //   * `handle_sopp.cpp`'s generic SOPP no-op arm explicitly
+    //   * `handle-sopp.cpp`'s generic SOPP no-op arm explicitly
     //     covers them.
     // See the `S_WAIT_ASYNCCNT` / `S_WAIT_TENSORCNT` CanonicalOp doc
     // block in `canonical-op.h` for the cross-target correctness
@@ -256,7 +256,7 @@ static const Entry kCanonTable[] = {
     // single entry per variant covers every AMDGPU generation back to
     // gfx6.  Writes SCC only — no scalar destination register — which
     // matches the SOPC compare shape already implemented alongside in
-    // handle_sopc.cpp.
+    // handle-sopc.cpp.
     E(S_BITCMP0_B32, S_BITCMP0_B32),
     E(S_BITCMP1_B32, S_BITCMP1_B32),
     E(S_BITCMP0_B64, S_BITCMP0_B64),

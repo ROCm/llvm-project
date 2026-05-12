@@ -55,6 +55,8 @@ add_library(hotswap-transpiler OBJECT
   reg-file.cpp
   kernarg-layout.cpp
   user-sgpr-layout.cpp
+  handle-sopp.cpp
+  handle-sopc.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)

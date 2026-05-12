@@ -39,7 +39,7 @@ Three facts make the translation tractable:
    and atomics. Any source-side `s_waitcnt` is redundant metadata
    once we have the IR dependences right — the backend rebuilds it
    for the target generation (unified `s_waitcnt` on gfx9, split
-   counters on gfx12). This is why `handle_sopp.cpp:94` treats
+   counters on gfx12). This is why `handle-sopp.cpp:94` treats
    waitcnt as a no-op. Current correctness notes do not attribute any
    tracked Hotswap regression to dropped source waitcnts.
 2. **LLVM owns atomic ordering and scope.** `AtomicOrdering` +
@@ -239,7 +239,7 @@ pre-gfx12 targets where the collapse in §5.1.b cannot represent them.
 
 When the target is pre-gfx12 (`!hasSplitBarriers`), collapse the split
 primitives to the monolithic barrier. Current implementation in
-`handle_sopp.cpp:70-84`:
+`handle-sopp.cpp:70-84`:
 
 - `S_BARRIER`, `S_BARRIER_WAIT` → `call void @llvm.amdgcn.s.barrier()`
 - `S_BARRIER_SIGNAL` → no-op (handled = true; emits nothing)
@@ -300,7 +300,7 @@ is discarded.
 #### 5.2.b No-op collapse path — pre-gfx12 targets (existing policy)
 
 When the target has only the combined counter (`!hasSplitWaitCnt`),
-all waitcnt SemOps fall through as no-ops (`handle_sopp.cpp:94`). The
+all waitcnt SemOps fall through as no-ops (`handle-sopp.cpp:94`). The
 backend's memory-model-driven waitcnt insertion on gfx950 replaces
 them.
 
@@ -502,7 +502,7 @@ waitcnt) at raise time; refuse on hit.
 
 ### T1 — Named-barrier gate (G1)
 
-Modify `handle_sopp.cpp:74-84` to read `di.getImm(0)` and refuse on
+Modify `handle-sopp.cpp:74-84` to read `di.getImm(0)` and refuse on
 non-zero. 15 LoC + one test.
 
 ### T2 — Waitcnt classification (G2)
