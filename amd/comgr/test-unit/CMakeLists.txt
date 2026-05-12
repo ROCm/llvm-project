@@ -242,6 +242,26 @@ target_include_directories(OpcodeMapTests PRIVATE
 
 comgr_configure_test_target(OpcodeMapTests)
 
+# -- WaveProjectionTests -----------------------------------------------------------------
+
+add_executable(WaveProjectionTests
+  WaveProjectionTest.cpp)
+
+target_link_libraries(WaveProjectionTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${LLVM_PTHREAD_LIB})
+comgr_link_hotswap_transpiler(WaveProjectionTests)
+
+target_include_directories(WaveProjectionTests PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  # WaveProjectionTest pulls in transpiler internals (wave-projection.h ->
+  # amdgpu-formats.h -> SIDefines.h) that need AMDGPU target-private paths.
+  "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU"
+  "${LLVM_BUILD_MAIN_SRC_DIR}/lib/Target/AMDGPU/Utils"
+  "${LLVM_BINARY_DIR}/lib/Target/AMDGPU")
+
+comgr_configure_test_target(WaveProjectionTests)
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
@@ -249,10 +269,12 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:CodeObjectUtilsTests>
   COMMAND $<TARGET_FILE:MCContextInlineSrcmgrTests>
   COMMAND $<TARGET_FILE:OpcodeMapTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>)
+  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
+  COMMAND $<TARGET_FILE:WaveProjectionTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests
   RaiserScaffoldingTests
   CodeObjectUtilsTests
   MCContextInlineSrcmgrTests
-  OpcodeMapTests)
+  OpcodeMapTests
+  WaveProjectionTests)
 add_dependencies(check-comgr test-unit)

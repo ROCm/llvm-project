@@ -49,6 +49,7 @@ add_library(hotswap-transpiler OBJECT
   canonical-op.cpp
   opcode-map.cpp
   decode.cpp
+  wave-projection.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)
