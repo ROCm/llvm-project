@@ -59,7 +59,8 @@ function(comgr_link_hotswap_transpiler target)
   target_link_libraries(${target} PRIVATE hotswap::transpiler amd_comgr)
   target_sources(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-metadata.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-symbol.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-symbol.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../test-shared/standalone-init.cpp)
   target_include_directories(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include
