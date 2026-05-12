@@ -51,6 +51,10 @@ add_library(hotswap-transpiler OBJECT
   decode.cpp
   wave-projection.cpp
   setpc-analysis.cpp
+  raise-context.cpp
+  reg-file.cpp
+  kernarg-layout.cpp
+  user-sgpr-layout.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)

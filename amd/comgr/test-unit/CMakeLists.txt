@@ -63,7 +63,7 @@ function(comgr_link_hotswap_transpiler target)
   target_include_directories(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include
-    # Tests that pull in transpiler internals (wave_projection.h,
+    # Tests that pull in transpiler internals (wave-projection.h,
     # opcode-map.h, ...) need AMDGPU target-private headers too:
     # SIDefines.h, SIInstrInfo.h, AMDGPUBaseInfo.h live in the LLVM
     # source tree, AMDGPUGen*.inc files in the LLVM build tree.
@@ -262,6 +262,21 @@ target_include_directories(WaveProjectionTests PRIVATE
 
 comgr_configure_test_target(WaveProjectionTests)
 
+# -- KernargLayoutTests -----------------------------------------------------------------
+
+add_executable(KernargLayoutTests
+  KernargLayoutTest.cpp)
+
+target_link_libraries(KernargLayoutTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${LLVM_PTHREAD_LIB})
+comgr_link_hotswap_transpiler(KernargLayoutTests)
+
+target_include_directories(KernargLayoutTests PRIVATE
+  ${COMGR_GTEST_INCLUDE_DIRS})
+
+comgr_configure_test_target(KernargLayoutTests)
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
@@ -270,11 +285,13 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:MCContextInlineSrcmgrTests>
   COMMAND $<TARGET_FILE:OpcodeMapTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
-  COMMAND $<TARGET_FILE:WaveProjectionTests>)
+  COMMAND $<TARGET_FILE:WaveProjectionTests>
+  COMMAND $<TARGET_FILE:KernargLayoutTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests
   RaiserScaffoldingTests
   CodeObjectUtilsTests
   MCContextInlineSrcmgrTests
   OpcodeMapTests
-  WaveProjectionTests)
+  WaveProjectionTests
+  KernargLayoutTests)
 add_dependencies(check-comgr test-unit)
