@@ -104,46 +104,57 @@ enum class SplitKind {
   Split32x16to16x16F4,
 };
 
-struct SplitRow {
-  StringLiteral Mnemonic;
+struct SplitRule {
   SplitKind Kind;
-  StringLiteral Replacement;
+  StringRef Replacement;
 };
 
 // Sole source of truth for what can be split and what it becomes; the
-// dispatcher in applyWmmaSplitPatches selects the emitter from SplitKind only.
-constexpr SplitRow SplitTable[] = {
-    {"v_wmma_f16_16x16x128_fp8_fp8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f16_16x16x64_fp8_fp8"},
-    {"v_wmma_f16_16x16x128_fp8_bf8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f16_16x16x64_fp8_bf8"},
-    {"v_wmma_f16_16x16x128_bf8_fp8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f16_16x16x64_bf8_fp8"},
-    {"v_wmma_f16_16x16x128_bf8_bf8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f16_16x16x64_bf8_bf8"},
-    {"v_wmma_f32_16x16x128_fp8_fp8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f32_16x16x64_fp8_fp8"},
-    {"v_wmma_f32_16x16x128_fp8_bf8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f32_16x16x64_fp8_bf8"},
-    {"v_wmma_f32_16x16x128_bf8_fp8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f32_16x16x64_bf8_fp8"},
-    {"v_wmma_f32_16x16x128_bf8_bf8", SplitKind::Split128to64FP8BF8,
-     "v_wmma_f32_16x16x64_bf8_bf8"},
-    {"v_wmma_f32_32x16x128_f4", SplitKind::Split32x16to16x16F4,
-     "v_wmma_f32_16x16x128_f8f6f4"},
-};
+// dispatcher in applyWmmaSplitPatches selects the emitter from SplitKind
+// only. Function-local static so the StringMap is built exactly once per
+// process (StringMap is not constexpr-initializable; the per-process build
+// cost is tiny -- 9 inserts).
+const StringMap<SplitRule> &getSplitTable() {
+  static const StringMap<SplitRule> Table = []() {
+    StringMap<SplitRule> M;
+    M.try_emplace("v_wmma_f16_16x16x128_fp8_fp8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f16_16x16x64_fp8_fp8"});
+    M.try_emplace("v_wmma_f16_16x16x128_fp8_bf8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f16_16x16x64_fp8_bf8"});
+    M.try_emplace("v_wmma_f16_16x16x128_bf8_fp8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f16_16x16x64_bf8_fp8"});
+    M.try_emplace("v_wmma_f16_16x16x128_bf8_bf8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f16_16x16x64_bf8_bf8"});
+    M.try_emplace("v_wmma_f32_16x16x128_fp8_fp8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f32_16x16x64_fp8_fp8"});
+    M.try_emplace("v_wmma_f32_16x16x128_fp8_bf8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f32_16x16x64_fp8_bf8"});
+    M.try_emplace("v_wmma_f32_16x16x128_bf8_fp8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f32_16x16x64_bf8_fp8"});
+    M.try_emplace("v_wmma_f32_16x16x128_bf8_bf8",
+                  SplitRule{SplitKind::Split128to64FP8BF8,
+                            "v_wmma_f32_16x16x64_bf8_bf8"});
+    M.try_emplace("v_wmma_f32_32x16x128_f4",
+                  SplitRule{SplitKind::Split32x16to16x16F4,
+                            "v_wmma_f32_16x16x128_f8f6f4"});
+    return M;
+  }();
+  return Table;
+}
 
-struct SplitMatch {
-  SplitKind Kind;
-  StringRef Replacement;
-  bool Matched = false;
-};
-
-SplitMatch lookupSplitRule(StringRef Mnemonic) {
-  for (const SplitRow &Row : SplitTable)
-    if (Mnemonic == Row.Mnemonic)
-      return {Row.Kind, Row.Replacement, true};
-  return {};
+std::optional<SplitRule> lookupSplitRule(StringRef Mnemonic) {
+  const StringMap<SplitRule> &Table = getSplitTable();
+  StringMap<SplitRule>::const_iterator It = Table.find(Mnemonic);
+  if (It == Table.end())
+    return std::nullopt;
+  return It->second;
 }
 
 // -- VOP3P WMMA operand layout ----------------------------------------------
@@ -239,11 +250,11 @@ struct WmmaOps {
   std::pair<int, int> Src1{-1, 0};
   std::pair<int, int> Src2{-1, 0}; // valid only when Src2IsImm == false
   bool Src2IsImm = false;
-  bool Valid = false;
 };
 
-WmmaOps extractWmmaOps(const MCInst &Inst, const MCRegisterInfo &MRI,
-                       SplitKind Kind, StringRef Mnemonic) {
+std::optional<WmmaOps> extractWmmaOps(const MCInst &Inst,
+                                      const MCRegisterInfo &MRI,
+                                      SplitKind Kind, StringRef Mnemonic) {
   WmmaOps R;
   const VOP3PWmmaLayout &L = layoutFor(Kind);
 
@@ -252,7 +263,7 @@ WmmaOps extractWmmaOps(const MCInst &Inst, const MCRegisterInfo &MRI,
           << Mnemonic << ": expected " << L.NumOperands << ", got "
           << Inst.getNumOperands() << " (VOP3P layout drift -- update the "
           << "VOP3PWmmaLayout table in comgr-hotswap-patch-wmma-split.cpp)\n";
-    return R;
+    return std::nullopt;
   }
 
   const MCOperand &VDstOp = Inst.getOperand(L.VDst);
@@ -265,26 +276,25 @@ WmmaOps extractWmmaOps(const MCInst &Inst, const MCRegisterInfo &MRI,
       !Src2ModsOp.isImm()) {
     log() << "hotswap: error: WMMA split: operand kind mismatch for "
           << Mnemonic << " (VOP3P layout drift -- update the table)\n";
-    return R;
+    return std::nullopt;
   }
 
   R.Dst = getVgprRange(VDstOp.getReg(), MRI);
   R.Src0 = getVgprRange(Src0Op.getReg(), MRI);
   R.Src1 = getVgprRange(Src1Op.getReg(), MRI);
   if (R.Dst.first < 0 || R.Src0.first < 0 || R.Src1.first < 0)
-    return R;
+    return std::nullopt;
 
   if (Src2Op.isReg()) {
     R.Src2 = getVgprRange(Src2Op.getReg(), MRI);
     if (R.Src2.first < 0)
-      return R;
+      return std::nullopt;
   } else if (Src2Op.isImm()) {
     R.Src2IsImm = true;
   } else {
-    return R;
+    return std::nullopt;
   }
 
-  R.Valid = true;
   return R;
 }
 
@@ -598,8 +608,8 @@ std::vector<std::string> buildSplit32x16Asm(StringRef Replacement,
 uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
 
-  SplitMatch Match = lookupSplitRule(DI.Mnemonic);
-  if (!Match.Matched)
+  std::optional<SplitRule> Match = lookupSplitRule(DI.Mnemonic);
+  if (!Match)
     return 0; // Did NOT match -- correct dispatcher fall-through.
 
   // ----- All return-0 paths below are MATCHED-BUT-FAILED -----
@@ -620,14 +630,15 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
     return 0; // matched-but-failed
   }
 
-  WmmaOps Ops = extractWmmaOps(DI.Inst, *Ctx.LS.MRI, Match.Kind, DI.Mnemonic);
-  if (!Ops.Valid) {
+  std::optional<WmmaOps> Ops =
+      extractWmmaOps(DI.Inst, *Ctx.LS.MRI, Match->Kind, DI.Mnemonic);
+  if (!Ops) {
     log() << "hotswap: error: WMMA split: could not extract operands from "
           << DI.Mnemonic << "\n";
     return 0; // matched-but-failed
   }
 
-  if (!validateSplitOperands(Match.Kind, Ops, DI.Mnemonic))
+  if (!validateSplitOperands(Match->Kind, *Ops, DI.Mnemonic))
     return 0; // matched-but-failed (validateSplitOperands logs the reason)
 
   // Print the source instruction in canonical asm form. The printer is the
@@ -647,12 +658,12 @@ uint32_t applyWmmaSplitPatches(PatchContext &Ctx, size_t Idx) {
   }
 
   std::vector<std::string> AsmLines;
-  switch (Match.Kind) {
+  switch (Match->Kind) {
   case SplitKind::Split128to64FP8BF8:
-    AsmLines = buildSplit128to64Asm(Match.Replacement, *P, Ops);
+    AsmLines = buildSplit128to64Asm(Match->Replacement, *P, *Ops);
     break;
   case SplitKind::Split32x16to16x16F4:
-    AsmLines = buildSplit32x16Asm(Match.Replacement, *P, Ops);
+    AsmLines = buildSplit32x16Asm(Match->Replacement, *P, *Ops);
     break;
   }
   if (AsmLines.empty())
