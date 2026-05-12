@@ -107,6 +107,7 @@ set(SOURCES
   src/comgr-hotswap-elf.cpp
   src/comgr-hotswap-llvm.cpp
   src/comgr-hotswap-patch-inplace.cpp
+  src/comgr-hotswap-patch-sethalt-fix.cpp
   src/comgr-hotswap-patch-vop3px-wrap.cpp
   src/comgr-hotswap-patch-vop3px2-src2.cpp
   src/comgr-hotswap-patch-wmma-hazard.cpp

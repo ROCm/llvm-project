@@ -404,6 +404,12 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
   // rewind path can safely retry.
   if (VT.applyVop3pxWrapPatch)
     Patched += VT.applyVop3pxWrapPatch(Ctx);
+  // sethalt-fix: defensive in-place s_sethalt -> s_nop. LLVM almost
+  // never emits s_sethalt (only via int_amdgcn_s_sethalt in debug
+  // builds), so this pass is dormant on production code; it exists to
+  // catch hand-written assembly / inline asm that ships s_sethalt.
+  if (VT.applySethaltFixPatch)
+    Patched += VT.applySethaltFixPatch(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
