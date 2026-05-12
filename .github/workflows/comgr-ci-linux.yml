@@ -221,11 +221,20 @@ jobs:
         # is Comgr's first-class ASAN option (see amd/comgr/CMakeLists.txt):
         # sets -fsanitize=address + -fno-omit-frame-pointer on C/CXX, links
         # libsan, and handles the shared-library-with-asan special case.
+        #
+        # CMAKE_BUILD_RPATH bakes the compiler-rt runtime dir into every
+        # built binary so libclang_rt.asan-x86_64.so resolves at process
+        # start. Comgr is a shared library, so Comgr's CMakeLists picks
+        # -shared-libsan (avoids ODR violation when multiple consumers load
+        # amd_comgr.so) — but that means the .so is needed at runtime.
         run: |
+          ASAN_RPATH=$($PWD/build/bin/clang -print-runtime-dir)
+          echo "ASAN runtime dir: $ASAN_RPATH"
           cmake -G Ninja -S amd/comgr -B build-comgr-asan \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$PWD/build/bin/clang \
             -DCMAKE_CXX_COMPILER=$PWD/build/bin/clang++ \
+            -DCMAKE_BUILD_RPATH="$ASAN_RPATH" \
             -DCMAKE_PREFIX_PATH="$PWD/build;$PWD/build-device-libs" \
             -DLLVM_DIR=$PWD/build/lib/cmake/llvm \
             -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD/llvm/projects/SPIRV-LLVM-Translator \
