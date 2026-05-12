@@ -109,6 +109,7 @@ set(SOURCES
   src/comgr-hotswap-patch-inplace.cpp
   src/comgr-hotswap-patch-vop3px2-src2.cpp
   src/comgr-hotswap-patch-wmma-hazard.cpp
+  src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
@@ -562,6 +563,7 @@ else()
     Support
     Symbolize
     TargetParser
+    TransformUtils
     ${SPIRV_STATIC_LIB}
     )
 endif()
