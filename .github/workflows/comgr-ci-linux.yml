@@ -39,22 +39,34 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      # compiler-rt is enabled via LLVM_ENABLE_RUNTIMES so the just-built
+      # clang has its own libclang_rt.asan available. The Test Comgr (ASAN)
+      # job uses clang (not gcc) to compile Comgr so -fsanitize=address
+      # resolves to LLVM's runtime, not the distro's libasan. BUILTINS off
+      # to keep build time down — sanitizers don't need them on x86_64.
       - name: Configure LLVM
         run: |
           cmake -G Ninja -S llvm -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
+            -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+            -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+            -DCOMPILER_RT_BUILD_PROFILE=OFF \
+            -DCOMPILER_RT_BUILD_MEMPROF=OFF \
+            -DCOMPILER_RT_BUILD_XRAY=OFF \
+            -DCOMPILER_RT_BUILD_ORC=OFF \
             -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86;SPIRV" \
             -DLLVM_INCLUDE_TESTS=ON \
             -DLLVM_INSTALL_GTEST=ON \
             -DLLVM_LIT_ARGS="-sv --no-progress-bar"
 
-      - name: Build LLVM + Clang + amd-llvm-spirv + test deps
+      - name: Build LLVM + Clang + amd-llvm-spirv + compiler-rt + test deps
         # *-test-depends pulls in FileCheck, llvm-dis, etc. used by Comgr's
-        # lit suite (test-lit's only declared dep is amd_comgr; tool deps
-        # are implicit at lit-cfg substitution time).
-        run: ninja -C build llvm-test-depends clang-test-depends amd-llvm-spirv
+        # lit suite. `runtimes` builds compiler-rt's sanitizer libs (used
+        # by the Test Comgr (ASAN) job).
+        run: ninja -C build llvm-test-depends clang-test-depends amd-llvm-spirv runtimes
 
       - name: Configure device-libs
         run: |
@@ -203,13 +215,17 @@ jobs:
           rm -rf build-comgr
 
       - name: Configure Comgr (ASAN)
-        # ADDRESS_SANITIZER=ON is Comgr's first-class ASAN option (see
-        # amd/comgr/CMakeLists.txt). It sets -fsanitize=address +
-        # -fno-omit-frame-pointer on C/CXX, links libsan, and handles
-        # the shared-library-with-asan special case Comgr's build needs.
+        # Use the just-built clang as compiler so -fsanitize=address links
+        # LLVM-shipped libclang_rt.asan (built via LLVM_ENABLE_RUNTIMES in
+        # the Build job) instead of the distro's libasan. ADDRESS_SANITIZER=ON
+        # is Comgr's first-class ASAN option (see amd/comgr/CMakeLists.txt):
+        # sets -fsanitize=address + -fno-omit-frame-pointer on C/CXX, links
+        # libsan, and handles the shared-library-with-asan special case.
         run: |
           cmake -G Ninja -S amd/comgr -B build-comgr-asan \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=$PWD/build/bin/clang \
+            -DCMAKE_CXX_COMPILER=$PWD/build/bin/clang++ \
             -DCMAKE_PREFIX_PATH="$PWD/build;$PWD/build-device-libs" \
             -DLLVM_DIR=$PWD/build/lib/cmake/llvm \
             -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD/llvm/projects/SPIRV-LLVM-Translator \
