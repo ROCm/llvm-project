@@ -441,12 +441,13 @@ TEST(PatchScaleSrc2, PreservesNonScaleSrc2Bits) {
 //      kept as a worked example for future patch authors. Wrong-slot
 //      bugs in the other register*Patch functions are caught via the
 //      install end-to-end test below.
-//   2. End-to-end install: defaults are null, .def entries get bound,
-//      slots without a .def entry stay null (the dispatcher's no-op
-//      contract).
-//   3. The Meyers singleton accessor is a real singleton and bindings
-//      persist on it (production install path in retargetCodeObjectB0A0
-//      relies on this).
+//   2. End-to-end install: a default-constructed vtable has null slots,
+//      installHotswapPatches() binds every .def entry, and slots without
+//      a .def entry stay null (the dispatcher's no-op contract).
+//   3. The production singleton accessor returns the same fully-bound
+//      vtable on every call -- the initializer eagerly runs the install
+//      under the C++11 magic-static rule, so production code never sees
+//      an empty vtable.
 
 TEST(HotswapPatchVTable, RegisterInPlaceBindsOnlyInPlaceSlot) {
   HotswapPatchVTable VT;
@@ -477,22 +478,27 @@ TEST(HotswapPatchVTable, InstallBindsRegisteredAndLeavesUnregisteredNull) {
   EXPECT_NE(VT.applyTrampolinePatches, nullptr);
   EXPECT_NE(VT.applyWmmaHazardPatch, nullptr);
   EXPECT_NE(VT.applyVop3px2Src2Fix, nullptr);
+  EXPECT_NE(VT.applyWmmaSplitPatches, nullptr);
 
   // Slots without a .def entry stay null; the dispatcher relies on
-  // this to treat unimplemented pass families (wmma-split, scratch
-  // today) as no-op.
-  EXPECT_EQ(VT.applyWmmaSplitPatches, nullptr);
+  // this to treat unimplemented pass families (scratch today) as no-op.
   EXPECT_EQ(VT.applyScratchPatches, nullptr);
 }
 
-TEST(HotswapPatchVTable, ProcessSingletonIdentityAndInstallPersists) {
+TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
   HotswapPatchVTable &VT1 = getHotswapPatchVTable();
   HotswapPatchVTable &VT2 = getHotswapPatchVTable();
   EXPECT_EQ(&VT1, &VT2);
 
-  installHotswapPatches(VT1);
-  EXPECT_NE(VT2.applyInPlacePatches, nullptr);
-  EXPECT_NE(VT2.applyTrampolinePatches, nullptr);
-  EXPECT_NE(VT2.applyWmmaHazardPatch, nullptr);
-  EXPECT_NE(VT2.applyVop3px2Src2Fix, nullptr);
+  // The singleton's initializer runs installHotswapPatches() on first
+  // access, so every .def-backed slot is already bound by the time the
+  // first reference is handed out. Pinning this contract here keeps the
+  // dispatcher safe to call getHotswapPatchVTable() without any explicit
+  // install step at the entry point.
+  EXPECT_NE(VT1.applyInPlacePatches, nullptr);
+  EXPECT_NE(VT1.applyTrampolinePatches, nullptr);
+  EXPECT_NE(VT1.applyWmmaHazardPatch, nullptr);
+  EXPECT_NE(VT1.applyVop3px2Src2Fix, nullptr);
+  EXPECT_NE(VT1.applyWmmaSplitPatches, nullptr);
+  EXPECT_EQ(VT1.applyScratchPatches, nullptr);
 }

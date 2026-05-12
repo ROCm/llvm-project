@@ -521,8 +521,13 @@ struct PatchContext {
 // comgr-hotswap-patches.def; each entry there corresponds to one slot
 // below and one register*Patch function in a sibling
 // comgr-hotswap-patch-*.cpp. nullptr slots are treated as no-op by the
-// dispatcher, so an unmigrated pass family (e.g. wmma-split, scratch) is
-// safe to leave unbound until its first strong override lands.
+// dispatcher, so an unmigrated pass family (e.g. scratch) is safe to
+// leave unbound until its first strong override lands.
+//
+// The singleton accessor below eagerly installs every registered slot in
+// its own initializer, so production callers never observe an empty
+// vtable. installHotswapPatches() is still exported for unit tests that
+// want to drive the install against a local HotswapPatchVTable.
 
 struct HotswapPatchVTable {
   // Per-instruction passes: called in declaration order; first non-zero
@@ -539,17 +544,23 @@ struct HotswapPatchVTable {
   uint32_t (*applyVop3px2Src2Fix)(PatchContext &) = nullptr;
 };
 
-/// Process-wide HotswapPatchVTable singleton (Meyers-style; thread-safe
-/// under C++11). Populated once by installHotswapPatches(); the dispatcher
-/// gates that install on a std::call_once at the top of
-/// retargetCodeObjectB0A0 so no inter-TU static-init contract is required.
-HotswapPatchVTable &getHotswapPatchVTable();
-
 /// Walk comgr-hotswap-patches.def and bind every patch module's
 /// implementation into \p VT by calling its register*Patch function.
 /// A missing register*Patch produces a link error, which is the
-/// loud-failure shape the weak-symbol pattern lacked.
+/// loud-failure shape the weak-symbol pattern lacked. Production code
+/// never calls this directly; it runs inside getHotswapPatchVTable()'s
+/// initializer. Exposed here so unit tests can drive the install against
+/// a local HotswapPatchVTable.
 void installHotswapPatches(HotswapPatchVTable &VT);
+
+/// Process-wide HotswapPatchVTable singleton (Meyers-style). The
+/// initializer eagerly calls installHotswapPatches() on its own storage,
+/// so every reference returned here is to a fully bound vtable. C++11
+/// [stmt.dcl]/4 guarantees the initializer runs exactly once and is safe
+/// under concurrent first access, which removes the need for an explicit
+/// std::call_once at the entry point and any inter-TU static-init order
+/// contract on the patch modules.
+HotswapPatchVTable &getHotswapPatchVTable();
 
 // Forward-declare every patch module's installer from the central .def
 // registry. Patch modules define these in their comgr-hotswap-patch-*.cpp;
