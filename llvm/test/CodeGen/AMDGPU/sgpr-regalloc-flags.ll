@@ -25,6 +25,7 @@
 ; DEFAULT: Greedy Register Allocator
 ; DEFAULT-NEXT: Virtual Register Rewriter
 ; DEFAULT-NEXT: Stack Slot Coloring
+; DEFAULT-NEXT: AMDGPU Reserve Allocated VGPRs
 ; DEFAULT-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-NEXT: SI lower SGPR spill instructions
 ; DEFAULT: Greedy Register Allocator
@@ -39,6 +40,7 @@
 ; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: AMDGPU Control Flow Wave Transform
 ; O0-NEXT: Fast Register Allocator
+; O0-NEXT: AMDGPU Reserve Allocated VGPRs
 ; O0-NEXT: Machine Cycle Info Analysis
 ; O0-NEXT: SI lower SGPR spill instructions
 ; O0-NEXT: Fast Register Allocator
@@ -65,6 +67,7 @@
 ; BASIC-DEFAULT: Basic Register Allocator
 ; BASIC-DEFAULT-NEXT: Virtual Register Rewriter
 ; BASIC-DEFAULT-NEXT: Stack Slot Coloring
+; BASIC-DEFAULT-NEXT: AMDGPU Reserve Allocated VGPRs
 ; BASIC-DEFAULT-NEXT: Machine Cycle Info Analysis
 ; BASIC-DEFAULT-NEXT: SI lower SGPR spill instructions
 ; BASIC-DEFAULT: Greedy Register Allocator
@@ -86,6 +89,7 @@
 ; DEFAULT-BASIC: Greedy Register Allocator
 ; DEFAULT-BASIC-NEXT: Virtual Register Rewriter
 ; DEFAULT-BASIC-NEXT: Stack Slot Coloring
+; DEFAULT-BASIC-NEXT: AMDGPU Reserve Allocated VGPRs
 ; DEFAULT-BASIC-NEXT: Machine Cycle Info Analysis
 ; DEFAULT-BASIC-NEXT: SI lower SGPR spill instructions
 ; DEFAULT-BASIC: Basic Register Allocator
@@ -111,6 +115,7 @@
 ; BASIC-BASIC: Basic Register Allocator
 ; BASIC-BASIC-NEXT: Virtual Register Rewriter
 ; BASIC-BASIC-NEXT: Stack Slot Coloring
+; BASIC-BASIC-NEXT: AMDGPU Reserve Allocated VGPRs
 ; BASIC-BASIC-NEXT: Machine Cycle Info Analysis
 ; BASIC-BASIC-NEXT: SI lower SGPR spill instructions
 ; BASIC-BASIC: Basic Register Allocator

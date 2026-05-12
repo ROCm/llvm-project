@@ -1,4 +1,4 @@
-; RUN: llc -mcpu=gfx950 -o - -verify-regalloc %s | FileCheck %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mcpu=gfx950 -o - -verify-regalloc %s | FileCheck %s
 ;
 ; This test is extremely fragile and chances are it won't test what it
 ; was meant to pretty quickly.

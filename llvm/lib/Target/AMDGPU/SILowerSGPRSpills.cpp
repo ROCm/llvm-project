@@ -601,36 +601,20 @@ bool SILowerSGPRSpills::run(MachineFunction &MF) {
       }
     }
 
-    if (unsigned NumWwmRegs = FuncInfo->getSGPRSpillVGPRs().size()) {
-      // Identify the VGPRs for wwm-regalloc pipeline.
-      BitVector RegMask(TRI->getNumRegs());
-      if (FuncInfo->getVGPRAllocMask().empty()) {
-        // This is the early wave-transform path with the structurizer and no
-        // vector register allocations are scheduled so far. Now determine the
-        // registers for WWM allocation and then reserve the complement set as a
-        // mask for perlane VGPR allocation.
+    // This is the early wave-transform path with the structurizer and no
+    // vector register allocations are scheduled so far. Now determine the
+    // registers for WWM allocation and then reserve the complement set as a
+    // mask for perlane VGPR allocation.
+    if (FuncInfo->getVGPRAllocMask().empty()) {
+      if (unsigned NumWwmRegs = FuncInfo->getSGPRSpillVGPRs().size()) {
+        // Identify the VGPRs for wwm-regalloc pipeline.
+        BitVector RegMask(TRI->getNumRegs());
         TRI->determineVGPRsForWwmAlloc(MF, RegMask, NumWwmRegs);
-      } else {
-        // The late wave-transform path with the WWM regmask already computed.
-        // Now compute the new mask to reserve the physical registers allocated
-        // earlier during perlane-VGPR pipeline. All free registers found at
-        // this point can be used for wwm-regalloc. This can turn out to be an
-        // advantage in most cases as we see more free registers than we
-        // initially reserved for wwm-alloc.
-        auto [MaxNumVGPRs, MaxNumAGPRs] =
-            ST.getMaxNumVectorRegs(MF.getFunction());
 
-        for (unsigned RegI = AMDGPU::VGPR0, RegE = AMDGPU::VGPR0 + MaxNumVGPRs;
-             RegI < RegE; ++RegI) {
-          if (MRI.isPhysRegUsed(RegI, /*SkipRegMaskTest=*/true))
-            continue;
-
-          TRI->markSuperRegs(RegMask, RegI);
-        }
+        // The complement VGPR mask should be saved.
+        RegMask.flip().clearBitsNotInMask(TRI->getAllVGPRRegMask());
+        FuncInfo->updateVGPRAllocMask(RegMask);
       }
-      // The complement VGPR mask should be saved.
-      RegMask.flip().clearBitsNotInMask(TRI->getAllVGPRRegMask());
-      FuncInfo->updateVGPRAllocMask(RegMask);
     }
 
     updateDbgValueInsts(DbgValInsts, SpillFIs);

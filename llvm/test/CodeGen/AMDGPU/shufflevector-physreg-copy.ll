@@ -214,12 +214,12 @@ define void @shufflevector_v2i32_11_physreg_even_vgpr_pair_copy(ptr addrspace(1)
 ; GFX90A-LABEL: shufflevector_v2i32_11_physreg_even_vgpr_pair_copy:
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX90A-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX90A-NEXT:    ;;#ASMSTART
 ; GFX90A-NEXT:    ; def v4, v5
 ; GFX90A-NEXT:    ;;#ASMEND
 ; GFX90A-NEXT:    v_mov_b32_e32 v2, v5
-; GFX90A-NEXT:    v_mov_b32_e32 v3, v5
+; GFX90A-NEXT:    v_mov_b32_e32 v0, 0
+; GFX90A-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX90A-NEXT:    global_store_dwordx2 v0, v[2:3], s[16:17]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
@@ -227,13 +227,12 @@ define void @shufflevector_v2i32_11_physreg_even_vgpr_pair_copy(ptr addrspace(1)
 ; GFX940-LABEL: shufflevector_v2i32_11_physreg_even_vgpr_pair_copy:
 ; GFX940:       ; %bb.0:
 ; GFX940-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX940-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX940-NEXT:    ;;#ASMSTART
 ; GFX940-NEXT:    ; def v4, v5
 ; GFX940-NEXT:    ;;#ASMEND
-; GFX940-NEXT:    s_nop 0
+; GFX940-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX940-NEXT:    v_mov_b32_e32 v2, v5
-; GFX940-NEXT:    v_mov_b32_e32 v3, v5
+; GFX940-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX940-NEXT:    global_store_dwordx2 v0, v[2:3], s[0:1]
 ; GFX940-NEXT:    s_waitcnt vmcnt(0)
 ; GFX940-NEXT:    s_setpc_b64 s[30:31]
@@ -387,13 +386,13 @@ define void @shufflevector_v4i32_1132_physreg_even_vgpr_quad_copy(ptr addrspace(
 ; GFX90A-LABEL: shufflevector_v4i32_1132_physreg_even_vgpr_quad_copy:
 ; GFX90A:       ; %bb.0:
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX90A-NEXT:    v_mov_b32_e32 v8, 0
 ; GFX90A-NEXT:    ;;#ASMSTART
 ; GFX90A-NEXT:    ; def v4, v5, v6, v7
 ; GFX90A-NEXT:    ;;#ASMEND
 ; GFX90A-NEXT:    v_mov_b32_e32 v0, v5
+; GFX90A-NEXT:    v_mov_b32_e32 v8, 0
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], v[6:7], v[6:7] op_sel:[1,0]
-; GFX90A-NEXT:    v_mov_b32_e32 v1, v5
+; GFX90A-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX90A-NEXT:    global_store_dwordx4 v8, v[0:3], s[16:17]
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
@@ -401,14 +400,13 @@ define void @shufflevector_v4i32_1132_physreg_even_vgpr_quad_copy(ptr addrspace(
 ; GFX940-LABEL: shufflevector_v4i32_1132_physreg_even_vgpr_quad_copy:
 ; GFX940:       ; %bb.0:
 ; GFX940-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX940-NEXT:    v_mov_b32_e32 v8, 0
 ; GFX940-NEXT:    ;;#ASMSTART
 ; GFX940-NEXT:    ; def v4, v5, v6, v7
 ; GFX940-NEXT:    ;;#ASMEND
-; GFX940-NEXT:    s_nop 0
+; GFX940-NEXT:    v_mov_b32_e32 v8, 0
 ; GFX940-NEXT:    v_mov_b32_e32 v0, v5
 ; GFX940-NEXT:    v_pk_mov_b32 v[2:3], v[6:7], v[6:7] op_sel:[1,0]
-; GFX940-NEXT:    v_mov_b32_e32 v1, v5
+; GFX940-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX940-NEXT:    global_store_dwordx4 v8, v[0:3], s[0:1]
 ; GFX940-NEXT:    s_waitcnt vmcnt(0)
 ; GFX940-NEXT:    s_setpc_b64 s[30:31]
@@ -739,7 +737,7 @@ define i32 @shufflevector_v4i32_3210_physreg_even_vgpr_quad_copy_other_use_elt(p
 ; GFX900-NEXT:    v_mov_b32_e32 v8, v6
 ; GFX900-NEXT:    v_mov_b32_e32 v10, v4
 ; GFX900-NEXT:    global_store_dwordx4 v0, v[7:10], s[16:17]
-; GFX900-NEXT:    v_mov_b32_e32 v0, v6
+; GFX900-NEXT:    v_mov_b32_e32 v0, v8
 ; GFX900-NEXT:    s_waitcnt vmcnt(0)
 ; GFX900-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -755,7 +753,7 @@ define i32 @shufflevector_v4i32_3210_physreg_even_vgpr_quad_copy_other_use_elt(p
 ; GFX90A-NEXT:    v_mov_b32_e32 v8, v7
 ; GFX90A-NEXT:    v_mov_b32_e32 v11, v4
 ; GFX90A-NEXT:    global_store_dwordx4 v0, v[8:11], s[16:17]
-; GFX90A-NEXT:    v_mov_b32_e32 v0, v6
+; GFX90A-NEXT:    v_mov_b32_e32 v0, v9
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -772,7 +770,7 @@ define i32 @shufflevector_v4i32_3210_physreg_even_vgpr_quad_copy_other_use_elt(p
 ; GFX940-NEXT:    v_mov_b32_e32 v8, v7
 ; GFX940-NEXT:    v_mov_b32_e32 v11, v4
 ; GFX940-NEXT:    global_store_dwordx4 v0, v[8:11], s[0:1]
-; GFX940-NEXT:    v_mov_b32_e32 v0, v6
+; GFX940-NEXT:    v_mov_b32_e32 v0, v9
 ; GFX940-NEXT:    s_waitcnt vmcnt(0)
 ; GFX940-NEXT:    s_setpc_b64 s[30:31]
   %asm = call { i32, i32, i32, i32 } asm "; def $0, $1, $2, $3", "={v4},={v5},={v6},={v7}"()

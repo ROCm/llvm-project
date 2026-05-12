@@ -159,7 +159,7 @@ define i64 @cmpxchg_private_i64(ptr addrspace(5) %ptr) {
 ; GCN-NEXT:    v_mov_b32_e32 v2, v0
 ; GCN-NEXT:    v_add_i32_e32 v3, vcc, 4, v2
 ; GCN-NEXT:    buffer_load_dword v1, v3, s[0:3], 0 offen
-; GCN-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 offen
+; GCN-NEXT:    buffer_load_dword v0, v2, s[0:3], 0 offen
 ; GCN-NEXT:    s_mov_b32 s7, 0xf000
 ; GCN-NEXT:    s_mov_b32 s6, -1
 ; GCN-NEXT:    s_waitcnt vmcnt(0)

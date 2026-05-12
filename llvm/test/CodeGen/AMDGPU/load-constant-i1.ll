@@ -10111,7 +10111,7 @@ define amdgpu_kernel void @constant_sextload_v64i1_to_v64i64(ptr addrspace(1) %o
 ; GFX6-NEXT:    s_lshr_b32 s12, s7, 22
 ; GFX6-NEXT:    s_bfe_i64 s[8:9], s[16:17], 0x10000
 ; GFX6-NEXT:    s_bfe_i64 s[10:11], s[4:5], 0x10000
-; GFX6-NEXT:    v_mov_b32_e32 v9, s25
+; GFX6-NEXT:    v_mov_b32_e32 v9, v8
 ; GFX6-NEXT:    buffer_store_dwordx4 v[6:9], off, s[0:3], 0 offset:496
 ; GFX6-NEXT:    s_waitcnt expcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v6, s10

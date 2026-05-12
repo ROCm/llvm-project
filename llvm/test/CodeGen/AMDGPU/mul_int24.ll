@@ -687,7 +687,7 @@ define amdgpu_kernel void @simplify_i24_crash(ptr addrspace(1) %out, i32 %arg0, 
 ; SI-NEXT:    s_bfe_i32 s1, s2, 0x180000
 ; SI-NEXT:    s_mul_i32 s0, s0, s1
 ; SI-NEXT:    v_mov_b32_e32 v0, s0
-; SI-NEXT:    v_mov_b32_e32 v1, s0
+; SI-NEXT:    v_mov_b32_e32 v1, v0
 ; SI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[4:7], 0
 ; SI-NEXT:    s_endpgm
 ;
@@ -709,7 +709,7 @@ define amdgpu_kernel void @simplify_i24_crash(ptr addrspace(1) %out, i32 %arg0, 
 ; VI-NEXT:    s_bfe_i32 s5, s6, 0x180000
 ; VI-NEXT:    s_mul_i32 s4, s4, s5
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
-; VI-NEXT:    v_mov_b32_e32 v1, s4
+; VI-NEXT:    v_mov_b32_e32 v1, v0
 ; VI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; VI-NEXT:    s_endpgm
 ;
@@ -731,7 +731,7 @@ define amdgpu_kernel void @simplify_i24_crash(ptr addrspace(1) %out, i32 %arg0, 
 ; GFX9-NEXT:    s_bfe_i32 s5, s10, 0x180000
 ; GFX9-NEXT:    s_mul_i32 s4, s4, s5
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s4
-; GFX9-NEXT:    v_mov_b32_e32 v1, s4
+; GFX9-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX9-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; GFX9-NEXT:    s_endpgm
 ;
