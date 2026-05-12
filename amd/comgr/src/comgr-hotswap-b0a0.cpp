@@ -474,6 +474,8 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     Patched += VT.applyWmmaHazardPatch(Ctx);
   if (VT.applyVop3px2Src2Fix)
     Patched += VT.applyVop3px2Src2Fix(Ctx);
+  if (VT.applySethaltFixPatch)
+    Patched += VT.applySethaltFixPatch(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();
