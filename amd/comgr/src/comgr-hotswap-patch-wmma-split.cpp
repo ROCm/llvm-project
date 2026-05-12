@@ -115,37 +115,26 @@ struct SplitRule {
 // process (StringMap is not constexpr-initializable; the per-process build
 // cost is tiny -- 9 inserts).
 const StringMap<SplitRule> &getSplitTable() {
-  static const StringMap<SplitRule> Table = []() {
-    StringMap<SplitRule> M;
-    M.try_emplace("v_wmma_f16_16x16x128_fp8_fp8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f16_16x16x64_fp8_fp8"});
-    M.try_emplace("v_wmma_f16_16x16x128_fp8_bf8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f16_16x16x64_fp8_bf8"});
-    M.try_emplace("v_wmma_f16_16x16x128_bf8_fp8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f16_16x16x64_bf8_fp8"});
-    M.try_emplace("v_wmma_f16_16x16x128_bf8_bf8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f16_16x16x64_bf8_bf8"});
-    M.try_emplace("v_wmma_f32_16x16x128_fp8_fp8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f32_16x16x64_fp8_fp8"});
-    M.try_emplace("v_wmma_f32_16x16x128_fp8_bf8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f32_16x16x64_fp8_bf8"});
-    M.try_emplace("v_wmma_f32_16x16x128_bf8_fp8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f32_16x16x64_bf8_fp8"});
-    M.try_emplace("v_wmma_f32_16x16x128_bf8_bf8",
-                  SplitRule{SplitKind::Split128to64FP8BF8,
-                            "v_wmma_f32_16x16x64_bf8_bf8"});
-    M.try_emplace("v_wmma_f32_32x16x128_f4",
-                  SplitRule{SplitKind::Split32x16to16x16F4,
-                            "v_wmma_f32_16x16x128_f8f6f4"});
-    return M;
-  }();
+  static const StringMap<SplitRule> Table = {
+      {"v_wmma_f16_16x16x128_fp8_fp8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f16_16x16x64_fp8_fp8"}},
+      {"v_wmma_f16_16x16x128_fp8_bf8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f16_16x16x64_fp8_bf8"}},
+      {"v_wmma_f16_16x16x128_bf8_fp8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f16_16x16x64_bf8_fp8"}},
+      {"v_wmma_f16_16x16x128_bf8_bf8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f16_16x16x64_bf8_bf8"}},
+      {"v_wmma_f32_16x16x128_fp8_fp8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f32_16x16x64_fp8_fp8"}},
+      {"v_wmma_f32_16x16x128_fp8_bf8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f32_16x16x64_fp8_bf8"}},
+      {"v_wmma_f32_16x16x128_bf8_fp8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f32_16x16x64_bf8_fp8"}},
+      {"v_wmma_f32_16x16x128_bf8_bf8",
+       {SplitKind::Split128to64FP8BF8, "v_wmma_f32_16x16x64_bf8_bf8"}},
+      {"v_wmma_f32_32x16x128_f4",
+       {SplitKind::Split32x16to16x16F4, "v_wmma_f32_16x16x128_f8f6f4"}},
+  };
   return Table;
 }
 
