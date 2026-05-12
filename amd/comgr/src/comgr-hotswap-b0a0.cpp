@@ -396,6 +396,14 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
     Patched += VT.applyWmmaHazardPatch(Ctx);
   if (VT.applyVop3px2Src2Fix)
     Patched += VT.applyVop3px2Src2Fix(Ctx);
+  // The VOP3PX2 wrap pass must run after the K=128 splitter (it relies
+  // on the splitter having already eliminated 32x16x128_f4 and emitted
+  // f8f6f4 into trampolines). The wrap pass scans both Decoded[] and
+  // trampoline bodies and prepends an LD_SCALE prefix to each standalone
+  // f8f6f4 WMMA, turning it into a VOP3PX2 that the trap handler's
+  // rewind path can safely retry.
+  if (VT.applyVop3pxWrapPatch)
+    Patched += VT.applyVop3pxWrapPatch(Ctx);
 
   for (const llvm::StringMapEntry<KernelPatchStats> &KV : KernelStats) {
     StringRef KName = KV.first();

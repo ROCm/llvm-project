@@ -26,8 +26,12 @@
 // DISASM:       s_branch
 // DISASM:       s_endpgm
 
-// DISASM:       v_wmma_f32_16x16x128_f8f6f4 v[64:71], v[0:7], v[2:9], 1.0 matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4
-// DISASM-NEXT:  v_wmma_f32_16x16x128_f8f6f4 v[72:79], v[8:15], v[2:9], 1.0 matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4
+// COM: After the K=128 splitter emits two f8f6f4 halves into a trampoline,
+// COM: the VOP3PX2 wrap pass prepends an inline-0 LD_SCALE prefix to each.
+// COM: The fused VOP3PX2 disassembles as v_wmma_scale_f32_16x16x128_f8f6f4
+// COM: with `, 0, 0` for the two scale operands (= scale 1.0, no-op).
+// DISASM:       v_wmma_scale_f32_16x16x128_f8f6f4 v[64:71], v[0:7], v[2:9], 1.0, 0, 0 matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM-NEXT:  v_wmma_scale_f32_16x16x128_f8f6f4 v[72:79], v[8:15], v[2:9], 1.0, 0, 0 matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4
 // DISASM-NEXT:  s_branch
 .globl kernel
 .p2align 8

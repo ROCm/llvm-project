@@ -542,6 +542,7 @@ struct HotswapPatchVTable {
   // loop completes.
   uint32_t (*applyWmmaHazardPatch)(PatchContext &) = nullptr;
   uint32_t (*applyVop3px2Src2Fix)(PatchContext &) = nullptr;
+  uint32_t (*applyVop3pxWrapPatch)(PatchContext &) = nullptr;
 };
 
 /// Walk comgr-hotswap-patches.def and bind every patch module's

@@ -222,8 +222,14 @@ test_no_split_required:
 // COM: The replacement opcode is v_wmma_f32_16x16x128_f8f6f4 with both
 // COM: matrix-format modifiers literally MATRIX_FMT_FP4 so the f8f6f4
 // COM: form interprets the data as f4 (matching the original opcode).
-// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[32:39], v[0:7], v[16:23], v[32:39]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
-// DISASM-DAG: v_wmma_f32_16x16x128_f8f6f4 v[40:47], v[8:15], v[16:23], v[40:47]{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// COM: After the VOP3PX2 wrap pass runs, each f8f6f4 in the trampoline gets
+// COM: an inline-0 LD_SCALE prefix prepended; the disassembler greedily
+// COM: matches the 16-byte fused VOP3PX2, so the disassembly shows
+// COM: `v_wmma_scale_f32_16x16x128_f8f6f4 ... , 0, 0 ...` instead of the
+// COM: bare f8f6f4 mnemonic. The `, 0, 0` are the two scale operands
+// COM: (= scale 1.0, no-op).
+// DISASM-DAG: v_wmma_scale_f32_16x16x128_f8f6f4 v[32:39], v[0:7], v[16:23], v[32:39], 0, 0{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
+// DISASM-DAG: v_wmma_scale_f32_16x16x128_f8f6f4 v[40:47], v[8:15], v[16:23], v[40:47], 0, 0{{.*}}matrix_a_fmt:MATRIX_FMT_FP4{{.*}}matrix_b_fmt:MATRIX_FMT_FP4
 
 // Idempotency: rewriting the patched output again should produce identical
 // bytes (the splitter only fires on K=128 mnemonics, which no longer exist
