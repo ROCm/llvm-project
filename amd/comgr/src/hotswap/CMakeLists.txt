@@ -50,6 +50,7 @@ add_library(hotswap-transpiler OBJECT
   opcode-map.cpp
   decode.cpp
   wave-projection.cpp
+  setpc-analysis.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)
