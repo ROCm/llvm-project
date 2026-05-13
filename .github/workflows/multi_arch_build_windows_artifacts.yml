@@ -267,6 +267,12 @@ jobs:
           sed -i '/Install llvm-lit script/,/^  ")/d' \
             compiler/pre_hook_amd-llvm.cmake
 
+      - name: Skip hip-tests on Windows (ROCm root not available)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/^  if(THEROCK_BUILD_TESTING)/,/^  endif(THEROCK_BUILD_TESTING)/d' \
+            core/CMakeLists.txt
+
       #- name: Setup ccache
       #  run: |
       #    ./build_tools/setup_ccache.py \
