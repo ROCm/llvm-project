@@ -2193,6 +2193,16 @@ bool ModuleAddressSanitizer::shouldInstrumentGlobal(GlobalVariable *G) const {
       return false;
     }
 
+    // Do not instrument HIP/CUDA fat binary wrapper sections. These sections
+    // contain tightly-packed arrays of __CudaFatBinaryWrapper structs (24
+    // bytes each). The HIP runtime and tools like rocm-kpack walk these
+    // sections assuming a contiguous 24-byte stride. Adding redzones would
+    // break this layout assumption.
+    // See https://github.com/ROCm/TheRock/issues/4680
+    if (Section == ".hipFatBinSegment" || Section == ".nvFatBinSegment") {
+      return false;
+    }
+
     // Do not instrument user-defined sections (with names resembling
     // valid C identifiers)
     if (TargetTriple.isOSBinFormatELF()) {
