@@ -539,6 +539,10 @@ extern char &SIModeRegisterID;
 void initializeAMDGPUInsertDelayAluLegacyPass(PassRegistry &);
 extern char &AMDGPUInsertDelayAluID;
 
+FunctionPass *createAMDGPULatePerfHintAnalysisPass();
+void initializeAMDGPULatePerfHintAnalysisPass(PassRegistry &);
+extern char &AMDGPULatePerfHintAnalysisID;
+
 void initializeAMDGPULowerVGPREncodingLegacyPass(PassRegistry &);
 extern char &AMDGPULowerVGPREncodingLegacyID;
 

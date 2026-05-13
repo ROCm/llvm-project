@@ -61,9 +61,6 @@ protected:
   // Functions with the amdgpu_cs_chain or amdgpu_cs_chain_preserve CC.
   bool IsChainFunction = false;
 
-  // Function may be memory bound.
-  bool MemoryBound = false;
-
   // Kernel may need limited waves per EU for better performance.
   bool WaveLimiter = false;
 
@@ -71,6 +68,9 @@ protected:
 
 public:
   AMDGPUMachineFunctionInfo(const Function &F, const AMDGPUSubtarget &ST);
+  
+  // Function may be memory bound.
+  bool MemoryBound = false;
 
   uint64_t getExplicitKernArgSize() const { return ExplicitKernArgSize; }
 
