@@ -249,6 +249,12 @@ jobs:
           sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
             cmake/therock_subproject.cmake compiler/CMakeLists.txt
 
+      - name: Auto-forward THEROCK_BUILD_COMGR_TESTS to subprojects
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/THEROCK_BUILD_TESTING/a\  THEROCK_BUILD_COMGR_TESTS' \
+            cmake/therock_subproject.cmake
+
       - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
