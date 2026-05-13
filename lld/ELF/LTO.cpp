@@ -379,7 +379,8 @@ SmallVector<std::unique_ptr<InputFile>, 0> BitcodeCompiler::compile() {
   }
 
   if (!ctx.arg.thinLTOCacheDir.empty())
-    pruneCache(ctx.arg.thinLTOCacheDir, ctx.arg.thinLTOCachePolicy, files);
+    check(
+        pruneCache(ctx.arg.thinLTOCacheDir, ctx.arg.thinLTOCachePolicy, files));
 
   if (!ctx.arg.ltoObjPath.empty()) {
     saveBuffer(buf[0].second, ctx.arg.ltoObjPath);
@@ -437,4 +438,8 @@ SmallVector<std::unique_ptr<InputFile>, 0> BitcodeCompiler::compile() {
       ret.push_back(createObjFile(ctx, MemoryBufferRef(objBuf, ltoObjName)));
   }
   return ret;
+}
+
+void BitcodeCompiler::setBitcodeLibFuncs(ArrayRef<StringRef> bitcodeLibFuncs) {
+  ltoObj->setBitcodeLibFuncs(bitcodeLibFuncs);
 }

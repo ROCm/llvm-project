@@ -333,13 +333,6 @@ bool CodeGenAction::beginSourceFileAction() {
     opts.doConcurrentMappingKind = DoConcurrentMappingKind::DCMK_None;
   }
 
-  if (opts.doConcurrentMappingKind != DoConcurrentMappingKind::DCMK_None) {
-    unsigned diagID = ci.getDiagnostics().getCustomDiagID(
-        clang::DiagnosticsEngine::Warning,
-        "Mapping `do concurrent` to OpenMP is still experimental.");
-    ci.getDiagnostics().Report(diagID);
-  }
-
   if (isOpenMPEnabled) {
     opts.isTargetDevice = false;
     if (auto offloadMod = llvm::dyn_cast<mlir::omp::OffloadModuleInterface>(
@@ -1349,8 +1342,6 @@ void CodeGenAction::executeAction() {
   clang::DiagnosticsEngine &diags = ci.getDiagnostics();
   const CodeGenOptions &codeGenOpts = ci.getInvocation().getCodeGenOpts();
   const TargetOptions &targetOpts = ci.getInvocation().getTargetOpts();
-  Fortran::lower::LoweringOptions &loweringOpts =
-      ci.getInvocation().getLoweringOpts();
   mlir::DefaultTimingManager &timingMgr = ci.getTimingManager();
   mlir::TimingScope &timingScopeRoot = ci.getTimingScopeRoot();
 
@@ -1379,16 +1370,12 @@ void CodeGenAction::executeAction() {
   }
 
   if (action == BackendActionTy::Backend_EmitFIR) {
-    if (loweringOpts.getLowerToHighLevelFIR()) {
-      lowerHLFIRToFIR();
-    }
+    lowerHLFIRToFIR();
     mlirModule->print(ci.isOutputStreamNull() ? *os : ci.getOutputStream());
     return;
   }
 
   if (action == BackendActionTy::Backend_EmitHLFIR) {
-    assert(loweringOpts.getLowerToHighLevelFIR() &&
-           "Lowering must have been configured to emit HLFIR");
     mlirModule->print(ci.isOutputStreamNull() ? *os : ci.getOutputStream());
     return;
   }

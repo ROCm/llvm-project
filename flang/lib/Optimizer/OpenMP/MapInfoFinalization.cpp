@@ -103,27 +103,70 @@ public:
     });
   }
 
-  /// Return true if the given path is already present in
-  /// op.getMembersIndexAttr().
-  static bool mappedIndexPathExists(mlir::omp::MapInfoOp op,
-                                    llvm::ArrayRef<int64_t> indexPath) {
-    if (mlir::ArrayAttr attr = op.getMembersIndexAttr()) {
-      for (mlir::Attribute list : attr) {
-        auto listAttr = mlir::cast<mlir::ArrayAttr>(list);
-        if (listAttr.size() != indexPath.size())
-          continue;
+  /// Find a member MapInfoOp by its index path.
+  /// \param op The parent MapInfoOp to search in
+  /// \param indexPath The index path to find
+  /// \return The member MapInfoOp if found, or null MapInfoOp if not found
+  static mlir::omp::MapInfoOp
+  findMemberByIndexPath(mlir::omp::MapInfoOp op,
+                        llvm::ArrayRef<int64_t> indexPath) {
+    mlir::ArrayAttr attr = op.getMembersIndexAttr();
+    if (!attr)
+      return mlir::omp::MapInfoOp();
+
+    size_t memberIdx = 0;
+    for (mlir::Attribute list : attr) {
+      auto listAttr = mlir::cast<mlir::ArrayAttr>(list);
+      if (listAttr.size() == indexPath.size()) {
         bool allEq = true;
-        for (auto [i, val] : llvm::enumerate(listAttr)) {
-          if (mlir::cast<mlir::IntegerAttr>(val).getInt() != indexPath[i]) {
+        for (size_t j = 0; j < listAttr.size(); ++j) {
+          auto indexAttr = mlir::cast<mlir::IntegerAttr>(listAttr[j]);
+          if (indexAttr.getInt() != indexPath[j]) {
             allEq = false;
             break;
           }
         }
-        if (allEq)
-          return true;
+        if (allEq) {
+          if (auto memberOp = mlir::dyn_cast_if_present<mlir::omp::MapInfoOp>(
+                  op.getMembers()[memberIdx].getDefiningOp()))
+            return memberOp;
+        }
       }
+      ++memberIdx;
     }
-    return false;
+    return mlir::omp::MapInfoOp();
+  }
+
+  /// Return true if the given path is already present in
+  /// op.getMembersIndexAttr().
+  static bool mappedIndexPathExists(mlir::omp::MapInfoOp op,
+                                    llvm::ArrayRef<int64_t> indexPath) {
+    return findMemberByIndexPath(op, indexPath) != nullptr;
+  }
+
+  /// Get the map type of the nearest explicitly mapped parent for a member.
+  /// "Explicitly mapped" means the map type does NOT have the implicit flag.
+  ///
+  /// \param parentOp The parent MapInfoOp containing members
+  /// \param memberIndex The index path to the child member (e.g., [1, 2, 3])
+  /// \return The map type of the nearest explicitly mapped ancestor, or
+  ///         the parentOp's map type if no explicit ancestor is found.
+  static mlir::omp::ClauseMapFlags
+  getExplicitlyMappedParentMapType(mlir::omp::MapInfoOp parentOp,
+                                   llvm::ArrayRef<int64_t> memberIndex) {
+    llvm::SmallVector<int64_t> currentPath(memberIndex.begin(),
+                                           memberIndex.end());
+
+    while (!currentPath.empty()) {
+      if (auto memberOp = findMemberByIndexPath(parentOp, currentPath)) {
+        if (!bitEnumContainsAll(memberOp.getMapType(),
+                                mlir::omp::ClauseMapFlags::implicit))
+          return memberOp.getMapType();
+      }
+      currentPath.pop_back();
+    }
+
+    return parentOp.getMapType();
   }
 
   /// Build a compact string key for an index path for set-based
@@ -195,10 +238,15 @@ public:
             .first,
         /*dataExvIsAssumedSize=*/false, loc);
 
+    // Get the map type from the nearest explicitly mapped parent, falling back
+    // to the top-level parent's map type if no explicit ancestor is found.
+    mlir::omp::ClauseMapFlags mapType =
+        getExplicitlyMappedParentMapType(op, indexPath);
+
     mlir::omp::MapInfoOp fieldMapOp = mlir::omp::MapInfoOp::create(
         builder, loc, coordRef.getType(), coordRef,
         mlir::TypeAttr::get(fir::unwrapRefType(coordRef.getType())),
-        op.getMapTypeAttr(),
+        builder.getAttr<mlir::omp::ClauseMapFlagsAttr>(mapType),
         builder.getAttr<mlir::omp::VariableCaptureKindAttr>(
             mlir::omp::VariableCaptureKind::ByRef),
         /*varPtrPtr=*/mlir::Value{}, /*varPtrPtr=*/mlir::TypeAttr{},
@@ -371,12 +419,16 @@ public:
   /// base address (BoxOffsetOp) and a MapInfoOp for it. The most
   /// important thing to note is that we normally move the bounds from
   /// the descriptor map onto the base address map.
+  ///
+  /// \p parentOp is the MapInfoOp being expanded (the descriptor map before
+  /// this pass splits it). Lowering attaches a NameLoc there for the Fortran
+  /// map text. New ops created here use its location so NameLoc is preserved.
   mlir::omp::MapInfoOp
   genBaseAddrMap(mlir::Value descriptor, mlir::omp::MapInfoOp parentOp,
                  mlir::omp::ClauseMapFlags mapType, fir::FirOpBuilder &builder,
                  bool isRefPtee = false,
                  mlir::FlatSymbolRefAttr mapperId = mlir::FlatSymbolRefAttr()) {
-    mlir::Location loc = descriptor.getLoc();
+    mlir::Location loc = parentOp->getLoc();
     mlir::Value baseAddrAddr = fir::BoxOffsetOp::create(
         builder, loc, descriptor, fir::BoxFieldAttr::base_addr);
 
@@ -493,36 +545,26 @@ public:
     }
   }
 
-  // This functions aims to insert new maps derived from existing maps into the
-  // corresponding clause list, interlinking it correctly with block arguments
-  // where required .
-  void addDerivedMemberToTarget(
+  // This functions aims to insert a new attach maps derived from existing maps
+  // into the corresponding clause list, interlinking it correctly with block
+  // arguments where required. It only inserts these into the map lists, no
+  // other type of Map clause-like list receives attach maps regardless of the
+  // original list of the map it's derived from.
+  void addAttachMemberToTarget(
       mlir::omp::MapInfoOp owner, mlir::omp::MapInfoOp derived,
       llvm::SmallVectorImpl<ParentAndPlacement> &mapMemberUsers,
       fir::FirOpBuilder &builder, mlir::Operation *target) {
     auto addOperands = [&](mlir::MutableOperandRange &mapVarsArr,
                            mlir::Operation *directiveOp,
                            unsigned blockArgInsertIndex = 0) {
-      // Check we're inserting into the correct MapInfoOp list
-      if (!llvm::is_contained(mapVarsArr.getAsOperandRange(),
-                              mapMemberUsers.empty()
-                                  ? owner.getResult()
-                                  : mapMemberUsers[0].parent.getResult()))
-        return;
-
       // Check we're not inserting a duplicate map.
       if (llvm::is_contained(mapVarsArr.getAsOperandRange(),
                              derived.getResult()))
         return;
 
-      // There doesn't appear to be a simple way to convert MutableOperandRange
-      // to a vector currently, so we instead use a for_each to populate our
-      // vector.
       llvm::SmallVector<mlir::Value> newMapOps;
       newMapOps.reserve(mapVarsArr.size());
-      llvm::for_each(
-          mapVarsArr.getAsOperandRange(),
-          [&newMapOps](mlir::Value oper) { newMapOps.push_back(oper); });
+      llvm::copy(mapVarsArr.getAsOperandRange(), std::back_inserter(newMapOps));
 
       newMapOps.push_back(derived);
       if (directiveOp) {
@@ -534,7 +576,21 @@ public:
       mapVarsArr.assign(newMapOps);
     };
 
-    insertIntoMapClauseInterface(target, addOperands);
+    auto argIface =
+        llvm::dyn_cast<mlir::omp::BlockArgOpenMPOpInterface>(target);
+
+    if (auto mapClauseOwner =
+            llvm::dyn_cast<mlir::omp::MapClauseOwningOpInterface>(target)) {
+      mlir::MutableOperandRange mapVarsArr = mapClauseOwner.getMapVarsMutable();
+      unsigned blockArgInsertIndex =
+          argIface
+              ? argIface.getMapBlockArgsStart() + argIface.numMapBlockArgs()
+              : 0;
+      addOperands(mapVarsArr,
+                  llvm::dyn_cast_if_present<mlir::omp::TargetOp>(
+                      argIface.getOperation()),
+                  blockArgInsertIndex);
+    }
   }
 
   // We add all mapped record members not directly used in the target region
@@ -759,8 +815,8 @@ public:
 
     // Has to be added to the target immediately, as we expect all maps
     // processed by this pass to have a user that is a target.
-    addDerivedMemberToTarget(descMapOp, implicitAttachMap, mapMemberUsers,
-                             builder, target);
+    addAttachMemberToTarget(descMapOp, implicitAttachMap, mapMemberUsers,
+                            builder, target);
     return implicitAttachMap;
   }
 
@@ -896,8 +952,6 @@ public:
     // TODO: map the addendum segment of the descriptor, similarly to the
     // base address/data pointer member.
     bool isHasDeviceAddrFlag = isHasDeviceAddr(op, *target);
-    bool isUseDeviceFlag =
-        isUseDeviceAddr(op, *target) || isUseDevicePtr(op, *target);
     bool isAttachNever =
         (op.getMapType() & mlir::omp::ClauseMapFlags::attach_never) ==
         mlir::omp::ClauseMapFlags::attach_never;
@@ -944,18 +998,11 @@ public:
           /*mapperId*/ mlir::FlatSymbolRefAttr(), op.getNameAttr(),
           /*partial_map=*/builder.getBoolAttr(false));
 
-      // If we're a map exiting construct we skip the generation of the
-      // attach map, it should be unnecessary in these cases as it exists to
-      // bind the pointer and pointee and shouldn't increment or decrement
-      // the ref counter on its own. However, equally having it doesn't
-      // cause issues either, it's just ideal to remove the noise where
-      // feasible.
-      // TODO: Extend this to perhaps check for target updates and target data
-      //  with release and from applied.
-      if (!llvm::isa<mlir::omp::TargetExitDataOp>(target) && !isAttachNever)
+      if (!isAttachNever)
         genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                              mlir::omp::ClauseMapFlags::ref_ptr,
                              isAttachAlways);
+
       op.replaceAllUsesWith(newMapInfoOp.getResult());
       op->erase();
     } else if ((op.getMapType() & mlir::omp::ClauseMapFlags::ref_ptee) ==
@@ -975,14 +1022,7 @@ public:
       auto newMapInfoOp = genBaseAddrMap(descriptor, op, op.getMapType(),
                                          builder, /*IsRefPtee=*/true, mapperId);
 
-      // If we're a map exiting construct we skip the generation of the attach
-      // map, it should be unnecessary in these cases as it exists to bind the
-      // pointer and pointee and shouldn't increment or decrement the ref
-      // counter on its own. However, equally having it doesn't cause issues
-      // either, it's just ideal to remove the noise where feasible.
-      // TODO: Extend this to perhaps check for target updates and target data
-      //  with release and from applied.
-      if (!llvm::isa<mlir::omp::TargetExitDataOp>(target) && !isAttachNever)
+      if (!isAttachNever)
         genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
                              mlir::omp::ClauseMapFlags::ref_ptee,
                              isAttachAlways, newMapInfoOp.getVarPtrPtr());
@@ -1036,13 +1076,10 @@ public:
           /*partial_map=*/builder.getBoolAttr(false));
 
       mlir::Operation *attachMap = nullptr;
-      // NOTE: Can probably skip attach on present checks
-      if (!llvm::isa<mlir::omp::TargetExitDataOp>(target) && !isAttachNever &&
-          !isHasDeviceAddrFlag && !isUseDeviceFlag)
-        attachMap = genImplicitAttachMap(
-            op, descriptor, mapMemberUsers, target, builder,
-            mlir::omp::ClauseMapFlags::ref_ptr_ptee, isAttachAlways,
-            baseAddr.getVarPtrPtr());
+      if (!isAttachNever && !isHasDeviceAddrFlag)
+        genImplicitAttachMap(op, descriptor, mapMemberUsers, target, builder,
+                             mlir::omp::ClauseMapFlags::ref_ptr_ptee,
+                             isAttachAlways, baseAddr.getVarPtrPtr());
 
       op.replaceAllUsesWith(newMapInfoOp.getResult());
       op->erase();
@@ -1225,6 +1262,18 @@ public:
       deferrableDesc.clear();
       expandedBaseAddr.clear();
 
+      func->walk([&](mlir::omp::MapInfoOp op) {
+        mlir::Operation *targetUser = getFirstTargetUser(op);
+        assert(targetUser && "expected user of map operation was not found");
+        addImplicitMembersToTarget(op, builder, targetUser);
+      });
+
+      // Walk all of the existing maps for parents with child maps and then
+      // make sure to appropriately bind them to the target region that the
+      // parent is bound to. Necessary for the next implicit record member
+      // map step which depends on this canonicalization step. This step
+      // is executed again as the final step of this pass to maintain
+      // map to block argument consistency.
       func->walk([&](mlir::omp::MapInfoOp op) {
         mlir::Operation *targetUser = getFirstTargetUser(op);
         assert(targetUser && "expected user of map operation was not found");
@@ -1448,7 +1497,7 @@ public:
         // this pass to support multiple users, as we may wish to have a map
         // be re-used by multiple users (e.g. across multiple targets that map
         // the variable and have identical map properties).
-        auto assertCheck = [&](mlir::omp::MapInfoOp op) {
+        [[maybe_unused]] auto assertCheck = [&](mlir::omp::MapInfoOp op) {
           if (llvm::hasSingleElement(op->getUsers()))
             return true;
 
@@ -1459,14 +1508,13 @@ public:
           // for the moment.
           bool targetUser = false;
           for (auto *user : op->getUsers()) {
-            if (!llvm::isa<
+            if (targetUser &&
+                !llvm::isa<
                     mlir::omp::TargetOp, mlir::omp::TargetDataOp,
                     mlir::omp::TargetUpdateOp, mlir::omp::TargetExitDataOp,
                     mlir::omp::TargetEnterDataOp,
-                    mlir::omp::DeclareMapperInfoOp, mlir::omp::MapInfoOp>(
-                    user))
+                    mlir::omp::DeclareMapperInfoOp, mlir::omp::MapInfoOp>(user))
               return false;
-
 
             // We do not handle multiple target users currently.
             if (targetUser &&

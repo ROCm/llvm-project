@@ -151,10 +151,14 @@ static llvm::cl::opt<bool>
                  llvm::cl::init(true));
 
 static llvm::cl::opt<std::string> enableDoConcurrentToOpenMPConversion(
-    "fdo-concurrent-to-openmp",
+    "fdo-concurrent",
     llvm::cl::desc(
         "Try to map `do concurrent` loops to OpenMP [none|host|device]"),
     llvm::cl::init("none"));
+
+static llvm::cl::alias enableDoConcurrentToOpenMPConversionAlias(
+    "fdo-concurrent-to-openmp", llvm::cl::desc("Alias for -fdo-concurrent"),
+    llvm::cl::aliasopt(enableDoConcurrentToOpenMPConversion), llvm::cl::Hidden);
 
 static llvm::cl::opt<bool>
     enableOpenMPGPU("fopenmp-is-gpu",
@@ -222,10 +226,6 @@ static llvm::cl::opt<bool> enableNoPPCNativeVecElemOrder(
     "fno-ppc-native-vector-element-order",
     llvm::cl::desc("no PowerPC native vector element order."),
     llvm::cl::init(false));
-
-static llvm::cl::opt<bool> useHLFIR("hlfir",
-                                    llvm::cl::desc("Lower to high level FIR"),
-                                    llvm::cl::init(true));
 
 static llvm::cl::opt<bool> enableCUDA("fcuda",
                                       llvm::cl::desc("enable CUDA Fortran"),
@@ -475,7 +475,6 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
   // Use default lowering options for bbc.
   Fortran::lower::LoweringOptions loweringOptions{};
   loweringOptions.setNoPPCNativeVecElemOrder(enableNoPPCNativeVecElemOrder);
-  loweringOptions.setLowerToHighLevelFIR(useHLFIR || emitHLFIR);
   loweringOptions.setIntegerWrapAround(integerWrapAround);
   loweringOptions.setInitGlobalZero(initGlobalZero);
   loweringOptions.setReallocateLHS(reallocateLHS);
@@ -557,7 +556,7 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
       return mlir::failure();
     }
 
-    if (emitFIR && useHLFIR) {
+    if (emitFIR) {
       // lower HLFIR to FIR
       fir::EnableOpenMP enableOmp =
           enableOpenMP ? fir::EnableOpenMP::Full : fir::EnableOpenMP::None;

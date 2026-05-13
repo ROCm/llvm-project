@@ -101,6 +101,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/StringSaver.h"
@@ -667,7 +668,9 @@ static llvm::Triple computeTargetTriple(const Driver &D,
     return Target;
 
   // On AIX, the env OBJECT_MODE may affect the resulting arch variant.
-  if (Target.isOSAIX()) {
+  // However, if --target was explicitly specified, it takes precedence.
+#ifdef _AIX
+  if (!Args.hasArg(options::OPT_target)) {
     if (std::optional<std::string> ObjectModeValue =
             llvm::sys::Process::GetEnv("OBJECT_MODE")) {
       StringRef ObjectMode = *ObjectModeValue;
@@ -685,6 +688,7 @@ static llvm::Triple computeTargetTriple(const Driver &D,
         Target.setArch(AT);
     }
   }
+#endif
 
   // Currently the only architecture supported by *-uefi triples are x86_64.
   if (Target.isUEFI() && Target.getArch() != llvm::Triple::x86_64)
@@ -2400,12 +2404,42 @@ void Driver::PrintHelp(bool ShowHidden) const {
                       VisibilityMask);
 }
 
+/// Read and display additional version info from a local file if present.
+static void PrintLocalVersionInfo(StringRef ExecutablePath, raw_ostream &OS) {
+  SmallString<128> VersionInfoPath;
+
+  // Check if environment variable specifies a custom path
+  if (const char *EnvPath = ::getenv("LLVM_VERSION_INFO_FILE")) {
+    VersionInfoPath = EnvPath;
+  } else {
+    // Try same directory as executable
+    VersionInfoPath = llvm::sys::path::parent_path(ExecutablePath);
+    llvm::sys::path::append(VersionInfoPath, ".llvm-version-info");
+  }
+
+  // Read the version info file
+  llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> FileOrErr =
+      llvm::MemoryBuffer::getFile(VersionInfoPath);
+
+  if (!FileOrErr)
+    return;
+
+  StringRef Contents = FileOrErr.get()->getBuffer();
+  if (Contents.empty())
+    return;
+
+  // Print the additional version info
+  OS << Contents.trim() << " ";
+}
+
 void Driver::PrintVersion(const Compilation &C, raw_ostream &OS) const {
   if (IsFlangMode()) {
+    PrintLocalVersionInfo(ClangExecutable, OS);
     OS << getClangToolFullVersion("flang") << '\n';
   } else {
     // FIXME: The following handlers should use a callback mechanism, we don't
     // know what the client would like to do.
+    PrintLocalVersionInfo(ClangExecutable, OS);
     OS << getClangFullVersion() << '\n';
   }
   const ToolChain &TC = C.getDefaultToolChain();
@@ -4886,7 +4920,7 @@ Driver::getOffloadArchs(Compilation &C, const llvm::opt::DerivedArgList &Args,
           auto GPUsOrErr = TC.getSystemGPUArchs(Args);
           if (!GPUsOrErr) {
             TC.getDriver().Diag(diag::err_drv_undetermined_gpu_arch)
-                << llvm::Triple::getArchTypeName(TC.getArch())
+                << TC.getTriple().getArchName()
                 << llvm::toString(GPUsOrErr.takeError()) << "--offload-arch";
             continue;
           }
@@ -4929,7 +4963,9 @@ Driver::getOffloadArchs(Compilation &C, const llvm::opt::DerivedArgList &Args,
   // Fill in the default architectures if not provided explicitly.
   if (Archs.empty()) {
     if (Kind == Action::OFK_Cuda) {
-      Archs.insert(OffloadArchToString(OffloadArch::CudaDefault));
+      Archs.insert(OffloadArchToString(TC.getTriple().isSPIRV()
+                                           ? OffloadArch::Unused
+                                           : OffloadArch::CudaDefault));
     } else if (Kind == Action::OFK_HIP) {
       Archs.insert(OffloadArchToString(TC.getTriple().isSPIRV()
                                            ? OffloadArch::Generic
@@ -4945,8 +4981,8 @@ Driver::getOffloadArchs(Compilation &C, const llvm::opt::DerivedArgList &Args,
         auto ArchsOrErr = TC.getSystemGPUArchs(Args);
         if (!ArchsOrErr) {
           TC.getDriver().Diag(diag::err_drv_undetermined_gpu_arch)
-              << llvm::Triple::getArchTypeName(TC.getArch())
-              << llvm::toString(ArchsOrErr.takeError()) << "--offload-arch";
+              << TC.getArchName() << llvm::toString(ArchsOrErr.takeError())
+              << "--offload-arch";
         } else if (!ArchsOrErr->empty()) {
           for (auto Arch : *ArchsOrErr)
             Archs.insert(Args.MakeArgStringRef(Arch));
@@ -6038,6 +6074,7 @@ static void handleTimeTrace(Compilation &C, const ArgList &Args,
       Path = DumpDir->getValue();
       Path += llvm::sys::path::stem(BaseInput);
       Path += OffloadingPrefix;
+      Path += ".json";
     } else if (!OffloadingPrefix.empty()) {
       // For offloading, derive path from -o output directory combined with
       // the input filename and offload prefix.
@@ -6046,10 +6083,11 @@ static void handleTimeTrace(Compilation &C, const ArgList &Args,
       if (Arg *FinalOutput = Args.getLastArg(options::OPT_o))
         Path = llvm::sys::path::parent_path(FinalOutput->getValue());
       llvm::sys::path::append(Path, TraceName);
+      Path += ".json";
     } else {
       Path = Result.getFilename();
+      llvm::sys::path::replace_extension(Path, "json");
     }
-    llvm::sys::path::replace_extension(Path, "json");
   }
   const char *ResultFile = C.getArgs().MakeArgString(Path);
   C.addTimeTraceFile(ResultFile, JA);
@@ -6231,11 +6269,12 @@ InputInfoList Driver::BuildJobsForActionNoCache(
   const ArgList &Args =
       C.getArgsForToolChain(TC, BoundArch, A->getOffloadingDeviceKind());
   if (InputInfos.size() != 1) {
-    EffectiveTriple = llvm::Triple(ToolTC.ComputeEffectiveClangTriple(Args));
+    EffectiveTriple =
+        llvm::Triple(ToolTC.ComputeEffectiveClangTriple(Args, BoundArch));
   } else {
     // Pass along the input type if it can be unambiguously determined.
-    EffectiveTriple = llvm::Triple(
-        ToolTC.ComputeEffectiveClangTriple(Args, InputInfos[0].getType()));
+    EffectiveTriple = llvm::Triple(ToolTC.ComputeEffectiveClangTriple(
+        Args, BoundArch, InputInfos[0].getType()));
   }
   RegisterEffectiveTriple TripleRAII(ToolTC, EffectiveTriple);
 
@@ -6326,8 +6365,8 @@ InputInfoList Driver::BuildJobsForActionNoCache(
   }
 
   if (CCCPrintBindings && !CCGenDiagnostics) {
-    llvm::errs() << "# \"" << T->getToolChain().getTripleString() << '"'
-                 << " - \"" << T->getName() << "\", inputs: [";
+    llvm::errs() << "# \"" << T->getToolChain().getEffectiveTriple().str()
+                 << '"' << " - \"" << T->getName() << "\", inputs: [";
     for (unsigned i = 0, e = InputInfos.size(); i != e; ++i) {
       llvm::errs() << InputInfos[i].getAsString();
       if (i + 1 != e)
@@ -7194,7 +7233,12 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       break;
     case llvm::Triple::Vulkan:
     case llvm::Triple::ShaderModel:
-      TC = std::make_unique<toolchains::HLSLToolChain>(*this, Target, Args);
+      if ((Target.getArch() == llvm::Triple::spirv32 ||
+           Target.getArch() == llvm::Triple::spirv64) &&
+          !usesInput(Args, types::isHLSL))
+        TC = std::make_unique<toolchains::SPIRVToolChain>(*this, Target, Args);
+      else
+        TC = std::make_unique<toolchains::HLSLToolChain>(*this, Target, Args);
       break;
     case llvm::Triple::ChipStar:
       TC = std::make_unique<toolchains::HIPSPVToolChain>(*this, Target, Args);

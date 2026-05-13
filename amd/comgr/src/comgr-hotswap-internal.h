@@ -295,15 +295,23 @@ struct LLVMState {
   /// NOP-sled padding paths instead of a hardcoded encoding.
   llvm::SmallVector<uint8_t, 4> SNopBytes;
 
+  /// Cached `v_nop` MCInst, resolved at initLLVM() time. Used by the WMMA
+  /// co-execution hazard patch to build trampolines without string
+  /// round-trips.
+  llvm::MCInst VNopInst;
+
   bool Valid = false;
 
-  /// Encode a relative `s_branch` from \p FromOffset to \p ToOffset, writing
-  /// MinInstSize bytes to \p OutBytes. Returns false if the delta is
-  /// unaligned, out of the 16-bit signed dword range, or if this LLVMState
-  /// is not valid / has no cached s_branch opcode. Uses MCCodeEmitter for
-  /// the encoding so no hardcoded opcode bits appear in the hotswap code.
-  [[nodiscard]] bool encodeSBranch(uint64_t FromOffset, uint64_t ToOffset,
-                                   uint8_t OutBytes[]) const;
+  /// Encode a relative `s_branch` from \p FromOffset to \p ToOffset and
+  /// return the MinInstSize encoded bytes. Returns an empty vector if the
+  /// delta is unaligned, out of the 16-bit signed dword range, or if this
+  /// LLVMState is not valid / has no cached s_branch opcode. Uses
+  /// MCCodeEmitter for the encoding so no hardcoded opcode bits appear in
+  /// the hotswap code. Empty-on-failure matches the convention used by
+  /// encodeMCInst() and assembleSingleInst() so the same idiom applies
+  /// uniformly across the MC layer.
+  [[nodiscard]] llvm::SmallVector<uint8_t>
+  encodeSBranch(uint64_t FromOffset, uint64_t ToOffset) const;
 };
 
 // -- Decoded instruction ------------------------------------------------------
@@ -344,6 +352,12 @@ Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
                            uint64_t OriginalOffset, uint32_t OriginalSize,
                            uint64_t TrampolineTextOffset, const LLVMState &LS);
 
+/// Overload that accepts pre-decoded MCInst instructions directly,
+/// encoding them via MCCodeEmitter without a string round-trip.
+Trampoline buildTrampoline(llvm::ArrayRef<llvm::MCInst> Insts,
+                           uint64_t OriginalOffset, uint32_t OriginalSize,
+                           uint64_t TrampolineTextOffset, const LLVMState &LS);
+
 /// Return true iff any register operand of \p WmmaInst overlaps the
 /// destination operand of \p ValuInst (for WMMA/VALU co-execution hazard
 /// detection). Delegates aliasing to MCRegisterInfo::regsOverlap so
@@ -352,6 +366,20 @@ Trampoline buildTrampoline(llvm::ArrayRef<std::string> AsmLines,
 bool checkVgprOverlap(const llvm::MCInst &WmmaInst,
                       const llvm::MCInst &ValuInst,
                       const llvm::MCRegisterInfo &MRI);
+
+/// WMMA/SWMMAC A0 vs B0 v_nop spacing requirement.
+struct WmmaNopReq {
+  int A0Nops = 4;
+  int B0Nops = 4;
+};
+
+/// Classify the A0/B0 v_nop requirement for a WMMA/SWMMAC mnemonic.
+WmmaNopReq classifyWmmaNops(llvm::StringRef Mnemonic);
+
+/// Patch the VOP3PX2 scale_src2 field (bits [58:50]) to VGPR0 encoding
+/// (0x100) in a 16-byte instruction buffer. Returns true if the field
+/// was modified (false if already set to the target value).
+bool patchScaleSrc2(uint8_t *InstBytes);
 
 // -- VGPR liveness types ------------------------------------------------------
 
@@ -468,6 +496,80 @@ struct PatchContext {
   llvm::StringMap<KernelPatchStats> &KernelStats;
   std::vector<ScratchPatchInfo> &OutScratchPatches;
 };
+
+// -- Trampoline emission helpers (defined in comgr-hotswap-b0a0.cpp) ----------
+
+[[nodiscard]] bool emitToNopSled(PatchContext &Ctx, NopSled &Sled,
+                                 uint64_t InstOffset, uint32_t InstSize,
+                                 llvm::ArrayRef<uint8_t> Replacement);
+[[nodiscard]] bool emitToTrampoline(PatchContext &Ctx, uint64_t InstOffset,
+                                    uint32_t InstSize,
+                                    llvm::ArrayRef<uint8_t> Replacement);
+[[nodiscard]] bool emitReplacementCode(PatchContext &Ctx, uint64_t InstOffset,
+                                       uint32_t InstSize,
+                                       llvm::ArrayRef<uint8_t> Replacement);
+
+// -- Patch dispatch vtable ----------------------------------------------------
+//
+// Function-pointer dispatch table that replaces the prior LLVM_ATTRIBUTE_WEAK
+// + `#if !defined(_MSC_VER)` override pattern. PE/COFF does not honour weak
+// the way ELF does, so on Windows the weak stubs silently won every patch
+// call and the feature was a no-op (issue ROCm/llvm-project#2479).
+//
+// Patch modules supply their implementations through register*Patch
+// functions invoked by installHotswapPatches(). The membership list is
+// comgr-hotswap-patches.def; each entry there corresponds to one slot
+// below and one register*Patch function in a sibling
+// comgr-hotswap-patch-*.cpp. nullptr slots are treated as no-op by the
+// dispatcher, so an unmigrated pass family (e.g. scratch) is safe to
+// leave unbound until its first strong override lands.
+//
+// The singleton accessor below eagerly installs every registered slot in
+// its own initializer, so production callers never observe an empty
+// vtable. installHotswapPatches() is still exported for unit tests that
+// want to drive the install against a local HotswapPatchVTable.
+
+struct HotswapPatchVTable {
+  // Per-instruction passes: called in declaration order; first non-zero
+  // return wins for an instruction (matches the pre-vtable dispatcher
+  // behaviour in applyGfx1250B0toA0Rules).
+  uint32_t (*applyInPlacePatches)(PatchContext &, size_t) = nullptr;
+  uint32_t (*applyTrampolinePatches)(PatchContext &, size_t) = nullptr;
+  uint32_t (*applyWmmaSplitPatches)(PatchContext &, size_t) = nullptr;
+  uint32_t (*applyScratchPatches)(PatchContext &, size_t) = nullptr;
+
+  // Whole-kernel passes: called once per kernel after the per-instruction
+  // loop completes.
+  uint32_t (*applyWmmaHazardPatch)(PatchContext &) = nullptr;
+  uint32_t (*applyVop3px2Src2Fix)(PatchContext &) = nullptr;
+};
+
+/// Walk comgr-hotswap-patches.def and bind every patch module's
+/// implementation into \p VT by calling its register*Patch function.
+/// A missing register*Patch produces a link error, which is the
+/// loud-failure shape the weak-symbol pattern lacked. Production code
+/// never calls this directly; it runs inside getHotswapPatchVTable()'s
+/// initializer. Exposed here so unit tests can drive the install against
+/// a local HotswapPatchVTable.
+void installHotswapPatches(HotswapPatchVTable &VT);
+
+/// Process-wide HotswapPatchVTable singleton (Meyers-style). The
+/// initializer eagerly calls installHotswapPatches() on its own storage,
+/// so every reference returned here is to a fully bound vtable. C++11
+/// [stmt.dcl]/4 guarantees the initializer runs exactly once and is safe
+/// under concurrent first access, which removes the need for an explicit
+/// std::call_once at the entry point and any inter-TU static-init order
+/// contract on the patch modules.
+HotswapPatchVTable &getHotswapPatchVTable();
+
+// Forward-declare every patch module's installer from the central .def
+// registry. Patch modules define these in their comgr-hotswap-patch-*.cpp;
+// installHotswapPatches() consumes them; unit tests under test-unit/ also
+// invoke them directly. A patches.def line with no matching definition
+// produces a libamd_comgr / HotswapMCTests link error.
+#define HOTSWAP_PATCH(Name) void register##Name##Patch(HotswapPatchVTable &);
+#include "comgr-hotswap-patches.def"
+#undef HOTSWAP_PATCH
 
 // -- Function declarations (B0-to-A0 policy layer) ----------------------------
 

@@ -174,6 +174,9 @@ def warn_drv_unsupported_openmp_library : Warning<
 def warn_openacc_experimental : Warning<
 "OpenACC is NOT supported for AMDGPU">;
 
+def warn_openmp_default_allocate_experimental : Warning<
+  "-fopenmp-default-allocate= is an experimental feature">;
+
 def err_drv_invalid_thread_model_for_target : Error<
   "invalid thread model '%0' in '%1' for this target">;
 def err_drv_invalid_linker_name : Error<
@@ -244,6 +247,8 @@ def err_drv_argument_not_allowed_with : Error<
 def warn_drv_argument_not_allowed_with : Warning<
   "invalid argument '%0' not allowed with '%1'">,
   InGroup<OptionIgnored>;
+def err_drv_sycl_requires_cxx17 : Error<
+  "SYCL requires C++17 or later; '%0' is not supported">;
 def err_drv_cannot_open_randomize_layout_seed_file : Error<
   "cannot read randomize layout seed file '%0'">;
 def err_drv_invalid_version_number : Error<

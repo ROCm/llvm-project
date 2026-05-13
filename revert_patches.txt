@@ -14,9 +14,12 @@ needs SPIRV/COMGR
 breaks build of llvm
 [clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
 ---
-breaks reduction_teams aomp_mappings_newrt
-[Offload] Make kernel dynamic memory handling more generic (#194403)
+breaks windows build
+[cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-breaks smoke, smoke-fort-limbo
-[Clang] Emit LLVM flatten attribute instead of per-callsite alwaysinline (#188615)
+Breaks comgr build
+Reland "[Clang][CodeGen] Report when an alias points to an incompatible target" (#195550)
+---
+breaks smoke tests clang-313307_simple_spmd
+[clang] use QualType addrspace when making an alloca (#181390) (
 ---

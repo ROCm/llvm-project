@@ -38,7 +38,9 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/ReplaceConstant.h"
+#include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/NVPTXAddrSpace.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -437,6 +439,11 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       result = todo("thread_limit with multi-dimensional values");
   };
 
+  auto checkDynGroupprivate = [&todo](auto op, LogicalResult &result) {
+    if (op.getDynGroupprivateSize())
+      result = todo("dyn_groupprivate");
+  };
+
   LogicalResult result = success();
   llvm::TypeSwitch<Operation &>(op)
       .Case([&](omp::DistributeOp op) {
@@ -461,6 +468,7 @@ static LogicalResult checkImplementationStatus(Operation &op) {
         checkPrivate(op, result);
         checkNumTeams(op, result);
         checkThreadLimit(op, result);
+        checkDynGroupprivate(op, result);
       })
       .Case([&](omp::TaskOp op) {
         checkAllocate(op, result);
@@ -5080,7 +5088,8 @@ static Value getBaseValueForTypeLookup(Value value) {
 
 static llvm::SmallString<64>
 getDeclareTargetRefPtrSuffix(LLVM::GlobalOp globalOp,
-                             llvm::OpenMPIRBuilder &ompBuilder) {
+                             llvm::OpenMPIRBuilder &ompBuilder,
+                             llvm::vfs::FileSystem &vfs) {
   llvm::SmallString<64> suffix;
   llvm::raw_svector_ostream os(suffix);
   if (globalOp.getVisibility() == mlir::SymbolTable::Visibility::Private) {
@@ -5090,10 +5099,9 @@ getDeclareTargetRefPtrSuffix(LLVM::GlobalOp globalOp,
           llvm::StringRef(loc.getFilename()), loc.getLine());
     };
 
-    auto vfs = llvm::vfs::getRealFileSystem();
     os << llvm::format(
         "_%x",
-        ompBuilder.getTargetEntryUniqueInfo(fileInfoCallBack, *vfs).FileID);
+        ompBuilder.getTargetEntryUniqueInfo(fileInfoCallBack, vfs).FileID);
   }
   os << "_decl_tgt_ref_ptr";
 
@@ -5140,8 +5148,8 @@ getRefPtrIfDeclareTarget(Value value,
           (declareTargetGlobal.getDeclareTargetCaptureClause() ==
                omp::DeclareTargetCaptureClause::to &&
            ompBuilder->Config.hasRequiresUnifiedSharedMemory())) {
-        llvm::SmallString<64> suffix =
-            getDeclareTargetRefPtrSuffix(gOp, *ompBuilder);
+        llvm::SmallString<64> suffix = getDeclareTargetRefPtrSuffix(
+            gOp, *ompBuilder, moduleTranslation.getFileSystem());
 
         if (gOp.getSymName().contains(suffix))
           return moduleTranslation.getLLVMModule()->getNamedValue(
@@ -5466,7 +5474,16 @@ static void collectMapDataFromMapOperands(
       // the same base pointer and an equivelant member count, but
       // that is a loose definition, we may have to extend to check
       // for other fields (varPtrPtr/invidiual members being mapped)
-      if (basePtr == val && mapData.IsAMapping[index] &&
+      // Note: Attach maps are not the same as a normal data transfer
+      // they specify to the runtime to perform an attach map and they
+      // (at least at the moment) are never something we would aim to
+      // return in a use_dev_* clause, so they are skipped in terms of
+      // duplicate maps.
+      bool isAttachMap =
+          (mapData.Types[index] &
+           llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH) ==
+          llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH;
+      if (!isAttachMap && basePtr == val && mapData.IsAMapping[index] &&
           memberCount == mapOp.getMembers().size()) {
         found = true;
         mapData.Types[index] |=
@@ -5497,20 +5514,7 @@ static void collectMapDataFromMapOperands(
                                 ? mapOp.getVarPtrPtrType().value()
                                 : mapOp.getVarPtrType();
         mapData.BaseType.push_back(moduleTranslation.convertType(baseTy));
-
-        // If we're an attach map, we need to maintain the size currently, even
-        // if we're not sending data, as the runtime (at least currently)
-        // expects a size greater than 0.
-        if ((convertClauseMapFlags(mapOp.getMapType()) &
-             llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH) ==
-            llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_ATTACH) {
-          mapData.Sizes.push_back(getSizeInBytes(
-              dl, baseTy, mapOp, mapData.Pointers.back(),
-              mapData.BaseType.back(), builder, moduleTranslation));
-        } else {
-          mapData.Sizes.push_back(builder.getInt64(0));
-        }
-
+        mapData.Sizes.push_back(builder.getInt64(0));
         mapData.MapClause.push_back(mapOp.getOperation());
         mapData.Types.push_back(
             llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM);
@@ -5836,6 +5840,19 @@ static bool checkIfPointerMap(omp::MapInfoOp mapOp) {
   return false;
 }
 
+static bool isUseDevicePtrItem(omp::MapInfoOp mapInfoOp) {
+  assert(mapInfoOp->hasOneUse() &&
+         "Expected only one use of omp.map_info item");
+  if (auto dataOp =
+          dyn_cast<omp::TargetDataOp>(mapInfoOp->use_begin()->getOwner())) {
+    SmallVector<Value> useDevicePtrVars = dataOp.getUseDevicePtrVars();
+    for (auto it : useDevicePtrVars)
+      if (it == mapInfoOp) {
+        return true;
+      }
+  }
+  return false;
+}
 static void
 processIndividualMap(llvm::IRBuilderBase &builder,
                      llvm::OpenMPIRBuilder &ompBuilder, MapInfoData &mapData,
@@ -5862,9 +5879,8 @@ processIndividualMap(llvm::IRBuilderBase &builder,
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_TARGET_PARAM;
 
   if (mapInfoOp.getMapCaptureType() == omp::VariableCaptureKind::ByCopy &&
-      !isPtrTy)
+      !isPtrTy && !isUseDevicePtrItem(mapInfoOp))
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_LITERAL;
-
   // if we have a pointer and it's part of a MEMBER_OF mapping we do not apply
   // MEMBER_OF, as the runtime currently has a work-around that utilises
   // MEMBER_OF to prevent reference updating in certain scenarios instead of
@@ -5873,16 +5889,8 @@ processIndividualMap(llvm::IRBuilderBase &builder,
   // the host, and then expect it to not be updated in a subsequent impliict map
   // (such as an implicit map on a target).
   if (memberOfFlag != llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_NONE) {
-    // If we are in a declare mapper, we apply MEMBER_OF even if it's an attach
-    // or pointer map, this is to make the MEMBER_OF flag uniform across all
-    // maps within the declare mapper, as even if we do not apply it here on
-    // nestings greater than the first layer we will have a member of flag
-    // applied automatically. So, we canonicalize it here, which keeps the
-    // behaviour of pointer/data maps consistent across layers.
-    if ((!isPtrTy && !isAttachMap) ||
-        mapInfoOp->getParentOfType<omp::DeclareMapperOp>()) {
+    if (!isPtrTy && !isAttachMap)
       ompBuilder.setCorrectMemberOfFlag(mapFlag, memberOfFlag);
-    }
 
     // The return parameter should be the over-riding parent in cases where we
     // have a return parameter that is echoed to all members, the main case of
@@ -5899,8 +5907,7 @@ processIndividualMap(llvm::IRBuilderBase &builder,
   // map-backs in certain cases where an implicit declare mapepr has been
   // emitted for a target region. Applying MAP_PTR_AND_OBJ in these situations
   // circumvents this.
-  if (isPtrTy && !isAttachMap && (mapData.IsDeclareTarget[mapDataIdx] ||
-                  mapInfoOp->getParentOfType<omp::DeclareMapperOp>()))
+  if (isPtrTy && !isAttachMap && mapData.IsDeclareTarget[mapDataIdx])
     mapFlag |= llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_PTR_AND_OBJ;
 
   // if we're provided a mapDataParentIdx, then the data being mapped is
@@ -6518,7 +6525,8 @@ emitUserDefinedMapper(Operation *op, llvm::IRBuilderBase &builder,
   };
 
   llvm::Expected<llvm::Function *> newFn = ompBuilder->emitUserDefinedMapper(
-      genMapInfoCB, varType, mapperFuncName, customMapperCB);
+      genMapInfoCB, varType, mapperFuncName, customMapperCB,
+      /*PreserveMemberOfFlags=*/true);
   if (!newFn)
     return newFn.takeError();
   if ([[maybe_unused]] llvm::Function *mappedFunc =
@@ -6957,23 +6965,19 @@ convertFlagsAttr(Operation *op, mlir::omp::FlagsAttr attribute,
 
 static void getTargetEntryUniqueInfo(llvm::TargetRegionEntryInfo &targetInfo,
                                      omp::TargetOp targetOp,
+                                     llvm::OpenMPIRBuilder &ompBuilder,
+                                     llvm::vfs::FileSystem &vfs,
                                      llvm::StringRef parentName = "") {
   auto fileLoc = targetOp.getLoc()->findInstanceOf<FileLineColLoc>();
-
   assert(fileLoc && "No file found from location");
-  StringRef fileName = fileLoc.getFilename().getValue();
 
-  llvm::sys::fs::UniqueID id;
-  uint64_t line = fileLoc.getLine();
-  if (auto ec = llvm::sys::fs::getUniqueID(fileName, id)) {
-    size_t fileHash = llvm::hash_value(fileName.str());
-    size_t deviceId = 0xdeadf17e;
-    targetInfo =
-        llvm::TargetRegionEntryInfo(parentName, deviceId, fileHash, line);
-  } else {
-    targetInfo = llvm::TargetRegionEntryInfo(parentName, id.getDevice(),
-                                             id.getFile(), line);
-  }
+  auto fileInfoCallBack = [&fileLoc]() {
+    return std::pair<std::string, uint64_t>(
+        llvm::StringRef(fileLoc.getFilename()), fileLoc.getLine());
+  };
+
+  targetInfo =
+      ompBuilder.getTargetEntryUniqueInfo(fileInfoCallBack, vfs, parentName);
 }
 
 static void
@@ -7553,6 +7557,22 @@ initTargetRuntimeAttrs(llvm::IRBuilderBase &builder,
   }
 }
 
+static llvm::omp::OMPDynGroupprivateFallbackType
+getDynGroupprivateFallbackType(omp::FallbackModifierAttr fallbackAttr) {
+  omp::FallbackModifier fb = fallbackAttr ? fallbackAttr.getValue()
+                                          : omp::FallbackModifier::default_mem;
+  switch (fb) {
+  case omp::FallbackModifier::abort:
+    return llvm::omp::OMPDynGroupprivateFallbackType::Abort;
+  case omp::FallbackModifier::null:
+    return llvm::omp::OMPDynGroupprivateFallbackType::Null;
+  case omp::FallbackModifier::default_mem:
+    return llvm::omp::OMPDynGroupprivateFallbackType::DefaultMem;
+  }
+
+  llvm_unreachable("unexpected dyn_groupprivate fallback type");
+}
+
 static LogicalResult
 convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
                  LLVM::ModuleTranslation &moduleTranslation) {
@@ -7744,7 +7764,9 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
 
   llvm::TargetRegionEntryInfo entryInfo;
 
-  getTargetEntryUniqueInfo(entryInfo, targetOp, parentName);
+  getTargetEntryUniqueInfo(entryInfo, targetOp,
+                           *moduleTranslation.getOpenMPBuilder(),
+                           moduleTranslation.getFileSystem(), parentName);
 
   MapInfoData mapData;
   collectMapDataFromMapOperands(mapData, mapVars, moduleTranslation, dl,
@@ -7870,12 +7892,23 @@ convertOmpTarget(Operation &opInst, llvm::IRBuilderBase &builder,
   if (Value targetIfCond = targetOp.getIfExpr())
     ifCond = moduleTranslation.lookupValue(targetIfCond);
 
+  Value dynGroupPrivateSize = targetOp.getDynGroupprivateSize();
+  llvm::Value *dynSizeVal = nullptr;
+  if (dynGroupPrivateSize) {
+    dynSizeVal = moduleTranslation.lookupValue(dynGroupPrivateSize);
+    dynSizeVal = builder.CreateIntCast(dynSizeVal, builder.getInt32Ty(),
+                                       /*isSigned=*/false);
+  }
+
+  llvm::omp::OMPDynGroupprivateFallbackType fallbackType =
+      getDynGroupprivateFallbackType(targetOp.getDynGroupprivateFallbackAttr());
+
   llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
       moduleTranslation.getOpenMPBuilder()->createTarget(
           ompLoc, isOffloadEntry, allocaIP, builder.saveIP(), deallocBlocks,
           info, entryInfo, defaultAttrs, runtimeAttrs, ifCond, kernelInput,
           genMapInfoCB, bodyCB, argAccessorCB, customMapperCB, dependencies,
-          targetOp.getNowait());
+          targetOp.getNowait(), dynSizeVal, fallbackType);
 
   if (failed(handleError(afterIP, opInst)))
     return failure();
@@ -8041,11 +8074,11 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
                                                      lineNo);
       };
 
-      auto vfs = llvm::vfs::getRealFileSystem();
+      llvm::vfs::FileSystem &vfs = moduleTranslation.getFileSystem();
 
       ompBuilder->registerTargetGlobalVariable(
           captureClause, deviceClause, isDeclaration, isExternallyVisible,
-          ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, *vfs),
+          ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
           mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
           /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr,
           gVal->getType(), gVal);
@@ -8061,7 +8094,7 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
           ptrTy = llvm::PointerType::get(llvmModule->getContext(), 0);
         ompBuilder->getAddrOfDeclareTargetVar(
             captureClause, deviceClause, isDeclaration, isExternallyVisible,
-            ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, *vfs),
+            ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
             mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
             ptrTy, /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr);
       }
@@ -8147,9 +8180,8 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::amendOperation(
               if (auto filepathAttr = dyn_cast<StringAttr>(attr)) {
                 llvm::OpenMPIRBuilder *ompBuilder =
                     moduleTranslation.getOpenMPBuilder();
-                auto VFS = llvm::vfs::getRealFileSystem();
-                ompBuilder->loadOffloadInfoMetadata(*VFS,
-                                                    filepathAttr.getValue());
+                ompBuilder->loadOffloadInfoMetadata(
+                    moduleTranslation.getFileSystem(), filepathAttr.getValue());
                 return success();
               }
               return failure();
@@ -8499,6 +8531,76 @@ convertFreeSharedMemOp(omp::FreeSharedMemOp freeMemOp,
   return success();
 }
 
+/// Converts an OpenMP groupprivate operation into LLVM IR.
+static LogicalResult
+convertOmpGroupprivate(Operation &opInst, llvm::IRBuilderBase &builder,
+                       LLVM::ModuleTranslation &moduleTranslation) {
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  auto groupprivateOp = cast<omp::GroupprivateOp>(opInst);
+
+  if (failed(checkImplementationStatus(opInst)))
+    return failure();
+
+  bool isTargetDevice = ompBuilder->Config.isTargetDevice();
+
+  // Determine whether group-private storage should be allocated based on
+  // device_type. When not specified, default to 'any' (allocate on both).
+  bool shouldAllocate = true;
+  switch (groupprivateOp.getDeviceType().value_or(
+      mlir::omp::DeclareTargetDeviceType::any)) {
+  case mlir::omp::DeclareTargetDeviceType::host:
+    shouldAllocate = !isTargetDevice;
+    break;
+  case mlir::omp::DeclareTargetDeviceType::nohost:
+    shouldAllocate = isTargetDevice;
+    break;
+  case mlir::omp::DeclareTargetDeviceType::any:
+    shouldAllocate = true;
+    break;
+  }
+
+  // Look up the global variable directly by symbol name.
+  LLVM::GlobalOp global = SymbolTable::lookupNearestSymbolFrom<LLVM::GlobalOp>(
+      &opInst, groupprivateOp.getSymNameAttr());
+  if (!global)
+    return opInst.emitError()
+           << "expected symbol '" << groupprivateOp.getSymName()
+           << "' to reference an LLVM global variable";
+
+  llvm::GlobalValue *globalValue = moduleTranslation.lookupGlobal(global);
+  llvm::Type *varType = moduleTranslation.convertType(global.getType());
+  std::string varName = globalValue->getName().str();
+
+  llvm::Value *resultPtr;
+  if (shouldAllocate && isTargetDevice) {
+    llvm::Module *llvmModule = moduleTranslation.getLLVMModule();
+    llvm::Triple targetTriple(llvmModule->getTargetTriple());
+    unsigned sharedAddressSpace;
+    if (targetTriple.isAMDGCN())
+      sharedAddressSpace = llvm::AMDGPUAS::LOCAL_ADDRESS;
+    else if (targetTriple.isNVPTX())
+      sharedAddressSpace = llvm::NVPTXAS::ADDRESS_SPACE_SHARED;
+    else
+      return opInst.emitError() << "groupprivate is not supported for target: "
+                                << targetTriple.str();
+    llvm::GlobalVariable *sharedVar = new llvm::GlobalVariable(
+        *llvmModule, varType, /*isConstant=*/false,
+        llvm::GlobalValue::InternalLinkage, llvm::PoisonValue::get(varType),
+        varName, /*InsertBefore=*/nullptr, llvm::GlobalValue::NotThreadLocal,
+        sharedAddressSpace,
+        /*isExternallyInitialized=*/false);
+    resultPtr = sharedVar;
+  } else {
+    if (shouldAllocate && !isTargetDevice)
+      opInst.emitWarning("groupprivate directive is currently ignored on the "
+                         "host, using original global");
+    resultPtr = globalValue;
+  }
+
+  moduleTranslation.mapValue(opInst.getResult(0), resultPtr);
+  return success();
+}
+
 /// Given an OpenMP MLIR operation, create the corresponding LLVM IR (including
 /// OpenMP runtime calls).
 LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
@@ -8724,6 +8826,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           })
           .Case([&](omp::FreeSharedMemOp op) {
             return convertFreeSharedMemOp(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::GroupprivateOp) {
+            return convertOmpGroupprivate(*op, builder, moduleTranslation);
           })
           .Default([&](Operation *inst) {
             return inst->emitError()

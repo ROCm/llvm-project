@@ -6076,9 +6076,14 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
                               SourceLocation RParenLoc,
                               bool IsExecConfig) {
   // Bail out early if calling a builtin with custom typechecking.
+  // For HLSL builtin aliases, argument conversion is still needed because
+  // overload resolution may have selected a conversion sequence (e.g.,
+  // vector-to-scalar truncation) that must be applied before the custom
+  // type checker runs.
   if (FDecl)
     if (unsigned ID = FDecl->getBuiltinID())
-      if (Context.BuiltinInfo.hasCustomTypechecking(ID))
+      if (Context.BuiltinInfo.hasCustomTypechecking(ID) &&
+          !(Context.getLangOpts().HLSL && FDecl->hasAttr<BuiltinAliasAttr>()))
         return false;
 
   // C99 6.5.2.2p7 - the arguments are implicitly converted, as if by
@@ -6914,6 +6919,15 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 
     FunctionDecl *FDecl = dyn_cast<FunctionDecl>(NDecl);
     if (FDecl && FDecl->getBuiltinID()) {
+      const llvm::Triple &Triple = Context.getTargetInfo().getTriple();
+      if (Triple.isSPIRV() && Triple.getVendor() == llvm::Triple::AMD) {
+        if (Context.BuiltinInfo.isTSBuiltin(FDecl->getBuiltinID()) &&
+            !Context.BuiltinInfo.isAuxBuiltinID(FDecl->getBuiltinID())) {
+          AMDGPU().AddPotentiallyUnguardedBuiltinUser(cast<FunctionDecl>(
+              getFunctionLevelDeclContext(/*AllowLambda=*/true)));
+        }
+      }
+
       // Rewrite the function decl for this builtin by replacing parameters
       // with no explicit address space with the address space of the arguments
       // in ArgExprs.
@@ -7196,6 +7210,18 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
 
   // Bail out early if calling a builtin with custom type checking.
   if (BuiltinID && Context.BuiltinInfo.hasCustomTypechecking(BuiltinID)) {
+    // For HLSL builtin aliases, the call was resolved via overload resolution
+    // which may have selected a conversion sequence (e.g., vector-to-scalar
+    // truncation). Convert arguments to match the declared prototype before
+    // the custom type checker runs, otherwise the builtin will operate on
+    // the unconverted argument types.
+    if (getLangOpts().HLSL && FDecl && FDecl->hasAttr<BuiltinAliasAttr>()) {
+      if (const auto *P = FDecl->getType()->getAs<FunctionProtoType>()) {
+        if (ConvertArgumentsForCall(TheCall, Fn, FDecl, P, Args, RParenLoc,
+                                    IsExecConfig))
+          return ExprError();
+      }
+    }
     ExprResult E = CheckBuiltinFunctionCall(FDecl, BuiltinID, TheCall);
     if (!E.isInvalid() && Context.BuiltinInfo.isImmediate(BuiltinID))
       E = CheckForImmediateInvocation(E, FDecl);
@@ -13936,6 +13962,11 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
     if (RHS.isInvalid())
       return QualType();
 
+    if (LHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      LHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(LHS.get());
+    if (RHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      RHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(RHS.get());
+
     if (!LHS.get()->getType()->isScalarType() ||
         !RHS.get()->getType()->isScalarType())
       return InvalidOperands(Loc, LHS, RHS);
@@ -16351,7 +16382,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
         break;
       } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
         resultType = Context.getLogicalOperationType();
-        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
+        Input = AMDGPU().ExpandAMDGPUPredicateBuiltIn(InputExpr);
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -21221,7 +21252,7 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
 
   if (!E->isTypeDependent()) {
     if (E->getType() == Context.AMDGPUFeaturePredicateTy)
-      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
+      return AMDGPU().ExpandAMDGPUPredicateBuiltIn(E);
 
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4
