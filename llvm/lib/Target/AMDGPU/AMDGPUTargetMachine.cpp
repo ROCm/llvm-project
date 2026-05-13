@@ -17,6 +17,7 @@
 #include "AMDGPUTargetMachine.h"
 #include "AMDGPU.h"
 #include "AMDGPUAliasAnalysis.h"
+#include "AMDGPUAsyncMarkScheduling.h"
 #include "AMDGPUBarrierLatency.h"
 #include "AMDGPUCoExecSchedStrategy.h"
 #include "AMDGPUCtorDtorLowering.h"
@@ -760,6 +761,7 @@ createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -768,6 +770,7 @@ createGCNMaxILPMachineScheduler(MachineSchedContext *C) {
   ScheduleDAGMILive *DAG =
       new GCNScheduleDAGMILive(C, std::make_unique<GCNMaxILPSchedStrategy>(C));
   DAG->addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::Initial));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -782,6 +785,7 @@ createGCNMaxMemoryClauseMachineScheduler(MachineSchedContext *C) {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -794,6 +798,7 @@ createIterativeGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
   if (ST.shouldClusterStores())
     DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::Initial));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -801,6 +806,7 @@ static ScheduleDAGInstrs *createMinRegScheduler(MachineSchedContext *C) {
   auto *DAG = new GCNIterativeScheduler(
       C, GCNIterativeScheduler::SCHEDULE_MINREGFORCED);
   DAG->addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::Initial));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -813,6 +819,7 @@ createIterativeILPMachineScheduler(MachineSchedContext *C) {
     DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
   DAG->addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::Initial));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -911,6 +918,7 @@ AMDGPUTargetMachine::createMachineScheduler(MachineSchedContext *C) const {
   DAG->addMutation(createLoadClusterDAGMutation(DAG->TII, DAG->TRI));
   if (ST.shouldClusterStores())
     DAG->addMutation(createStoreClusterDAGMutation(DAG->TII, DAG->TRI));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 
@@ -1364,6 +1372,7 @@ GCNTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  DAG->addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   return DAG;
 }
 //===----------------------------------------------------------------------===//

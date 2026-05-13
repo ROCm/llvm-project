@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "GCNIterativeScheduler.h"
+#include "AMDGPUAsyncMarkScheduling.h"
 #include "AMDGPUIGroupLP.h"
 #include "GCNSchedStrategy.h"
 #include "SIMachineFunctionInfo.h"
@@ -136,6 +137,7 @@ void GCNIterativeScheduler::swapIGLPMutations(const Region &R, bool IsReentry) {
                                 : AMDGPU::SchedulingPhase::Initial;
 
     addMutation(createIGroupLPDAGMutation(SchedPhase));
+    addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   }
 }
 

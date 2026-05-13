@@ -1,0 +1,109 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -run-pass=machine-scheduler \
+# RUN:     -debug-only=machine-scheduler -o /dev/null %s 2>&1 \
+# RUN:     | FileCheck %s
+
+# REQUIRES: asserts
+
+# Two-batch case: load, load, MARK, load, MARK, WAIT.
+# After 4 IMPLICIT_DEF set-up SUs (SU(0)..SU(3)), the async ops and
+# marks become SU(4)..SU(9):
+#   SU(4), SU(5), SU(7) = async loads
+#   SU(6), SU(8)        = ASYNCMARKs
+#   SU(9)               = WAIT_ASYNCMARK
+#
+# CHECK-LABEL: two_batches:%bb.0
+# CHECK-LABEL: SU(4):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(5):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(6):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(4):{{.*}}Artificial
+# CHECK-NEXT:     SU(5):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(7):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(8):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(6):{{.*}}Artificial
+# CHECK-NEXT:     SU(7):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(9):{{.*}}WAIT_ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK:          SU(8):{{.*}}Artificial
+# CHECK-NEXT:   Pressure Diff
+---
+name:            two_batches
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    %0:vreg_64_align2 = IMPLICIT_DEF
+    %1:vgpr_32 = IMPLICIT_DEF
+    %2:vreg_64_align2 = IMPLICIT_DEF
+    %3:vgpr_32 = IMPLICIT_DEF
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 %1, %0, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 %3, %2, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 %1, %0, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...
+
+# ASYNCMARK is exempt from dependencies with non-async memory ops, but
+# still picks up rule-2 edges from the surrounding async LDS DMAs and a
+# rule-1 edge to WAIT_ASYNCMARK. Mix a non-async read, non-async write,
+# and LDS read/write on each side, plus an async load on each side.
+#
+# After 5 IMPLICIT_DEFs (SU(0)..SU(4)):
+#   SU(5)  = GLOBAL_LOAD_DWORD            (before MARK, non-async read)
+#   SU(6)  = DS_READ_B32                  (before MARK, lds read)
+#   SU(7)  = GLOBAL_STORE_DWORD           (before MARK, non-async write)
+#   SU(8)  = GLOBAL_LOAD_ASYNC_TO_LDS_B32 (before MARK, async)
+#   SU(9)  = ASYNCMARK
+#   SU(10) = BUFFER_LOAD_DWORD_OFFSET     (after MARK, non-async read)
+#   SU(11) = DS_WRITE_B32                 (after MARK, lds write)
+#   SU(12) = BUFFER_STORE_DWORD_OFFSET    (after MARK, non-async write)
+#   SU(13) = GLOBAL_LOAD_ASYNC_TO_LDS_B32 (after MARK, async)
+#   SU(14) = WAIT_ASYNCMARK
+#
+# Asserting MARK's full Predecessors/Successors with CHECK-NEXT
+# guarantees that none of the six non-async memory ops are connected to
+# the MARK - only the two async loads and the WAIT are.
+#
+# CHECK-LABEL: mixed_around_mark:%bb.0
+# CHECK-LABEL: SU(5):{{.*}}GLOBAL_LOAD_DWORD
+# CHECK-LABEL: SU(6):{{.*}}DS_READ_B32
+# CHECK-LABEL: SU(7):{{.*}}GLOBAL_STORE_DWORD
+# CHECK-LABEL: SU(8):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(9):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(8):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-NEXT:     SU(13):{{.*}}Artificial
+# CHECK-NEXT:     SU(14):{{.*}}Artificial
+# CHECK-NEXT:   Pressure Diff
+# CHECK-LABEL: SU(10):{{.*}}BUFFER_LOAD_DWORD_OFFSET
+# CHECK-LABEL: SU(11):{{.*}}DS_WRITE_B32
+# CHECK-LABEL: SU(12):{{.*}}BUFFER_STORE_DWORD_OFFSET
+# CHECK-LABEL: SU(13):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(14):{{.*}}WAIT_ASYNCMARK
+---
+name:            mixed_around_mark
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    %0:vreg_64_align2 = IMPLICIT_DEF
+    %1:vreg_64_align2 = IMPLICIT_DEF
+    %2:vgpr_32 = IMPLICIT_DEF
+    %3:vgpr_32 = IMPLICIT_DEF
+    %4:sgpr_128 = IMPLICIT_DEF
+    %5:vgpr_32 = GLOBAL_LOAD_DWORD %0, 0, 0, implicit $exec :: (load (s32), addrspace 1)
+    %6:vgpr_32 = DS_READ_B32 %2, 0, 0, implicit $m0, implicit $exec :: (load (s32), addrspace 3)
+    GLOBAL_STORE_DWORD %0, %3, 0, 0, implicit $exec :: (store (s32), addrspace 1)
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 %3, %1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    %7:vgpr_32 = BUFFER_LOAD_DWORD_OFFSET %4, 0, 0, 0, 0, implicit $exec :: (load (s32))
+    DS_WRITE_B32 %2, %3, 0, 0, implicit $m0, implicit $exec :: (store (s32), addrspace 3)
+    BUFFER_STORE_DWORD_OFFSET %3, %4, 0, 0, 0, 0, implicit $exec :: (store (s32))
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 %3, %1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...

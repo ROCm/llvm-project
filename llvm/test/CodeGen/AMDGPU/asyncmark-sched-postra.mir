@@ -1,0 +1,169 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1250 -passes=postmisched \
+# RUN:     -debug-only=machine-scheduler -o /dev/null %s 2>&1 \
+# RUN:     | FileCheck %s
+
+# REQUIRES: asserts
+
+# Pins the artificial edges added by the AMDGPU AsyncMark scheduling DAG
+# mutation across bundled and non-bundled shapes. Each test verifies the
+# `Predecessors:` block of the next ASYNCMARK / WAIT_ASYNCMARK in the
+# scheduler's SU dump.
+
+--- |
+  define void @bundle_mem_then_mark() { unreachable }
+  define void @bundle_mark_then_mem() { unreachable }
+  define void @nonbundle_two_batches() { unreachable }
+  define void @mixed_around_mark() { unreachable }
+...
+
+# A BUNDLE { async load, ASYNCMARK } is self-tagged: the in-bundle MARK
+# clears PostMarkAsyncMemOp, so the bundle is not pushed to the pending-
+# async list. The next ASYNCMARK gets exactly two artificial predecessors
+# (rule 1 from the bundle, rule 2 from the standalone load).
+#
+# CHECK-LABEL: bundle_mem_then_mark:%bb.0
+# CHECK-LABEL: SU(0):{{.*}}BUNDLE
+# CHECK-LABEL: SU(1):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(2):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(0):{{.*}}Artificial
+# CHECK-NEXT:     SU(1):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(3):{{.*}}WAIT_ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK:          SU(2):{{.*}}Artificial
+# CHECK-NEXT: ExitSU:
+---
+name:            bundle_mem_then_mark
+tracksRegLiveness: true
+machineFunctionInfo:
+  occupancy:       8
+body:             |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2, $vgpr4_vgpr5, $vgpr3
+
+    BUNDLE implicit-def $asynccnt, implicit $vgpr0_vgpr1, implicit $vgpr2, implicit $exec, implicit $asynccnt {
+      GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr2, $vgpr0_vgpr1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+      ASYNCMARK
+    }
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr3, $vgpr4_vgpr5, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...
+
+# A BUNDLE { ASYNCMARK, async load }: the in-bundle MARK does not tag the
+# trailing in-bundle mem, so the bundle is classified Mark|Post and is
+# pushed to the pending-async list. The next external ASYNCMARK chains to
+# the bundle (the LastMark + drain edges fold into a single artificial
+# predecessor in the dump).
+#
+# CHECK-LABEL: bundle_mark_then_mem:%bb.0
+# CHECK-LABEL: SU(0):{{.*}}BUNDLE
+# CHECK-LABEL: SU(1):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(0):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(2):{{.*}}WAIT_ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK:          SU(1):{{.*}}Artificial
+# CHECK-NEXT: ExitSU:
+---
+name:            bundle_mark_then_mem
+tracksRegLiveness: true
+machineFunctionInfo:
+  occupancy:       8
+body:             |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2
+
+    BUNDLE implicit-def $asynccnt, implicit $vgpr0_vgpr1, implicit $vgpr2, implicit $exec, implicit $asynccnt {
+      ASYNCMARK
+      GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr2, $vgpr0_vgpr1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    }
+    ASYNCMARK
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...
+
+# Two-batch non-bundled case: load, load, MARK1, load, MARK2, WAIT.
+# MARK1 drains both pending loads (SU(0), SU(1)). MARK2 chains to MARK1
+# (rule 1) and drains the third load (rule 2). WAIT chains to MARK2.
+#
+# CHECK-LABEL: nonbundle_two_batches:%bb.0
+# CHECK-LABEL: SU(0):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(1):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(2):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(0):{{.*}}Artificial
+# CHECK-NEXT:     SU(1):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(3):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(4):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(2):{{.*}}Artificial
+# CHECK-NEXT:     SU(3):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-LABEL: SU(5):{{.*}}WAIT_ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK:          SU(4):{{.*}}Artificial
+# CHECK-NEXT: ExitSU:
+---
+name:            nonbundle_two_batches
+tracksRegLiveness: true
+machineFunctionInfo:
+  occupancy:       8
+body:             |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr2, $vgpr4_vgpr5, $vgpr3
+
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr2, $vgpr0_vgpr1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr3, $vgpr4_vgpr5, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr2, $vgpr0_vgpr1, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...
+
+# ASYNCMARK has no dependencies with non-async memory ops. With async
+# loads and a mix of non-async reads/writes on both sides, MARK's full
+# pred/succ list contains only the async loads and the WAIT.
+#
+# CHECK-LABEL: mixed_around_mark:%bb.0
+# CHECK-LABEL: SU(0):{{.*}}GLOBAL_LOAD_DWORD
+# CHECK-LABEL: SU(1):{{.*}}DS_READ_B32
+# CHECK-LABEL: SU(2):{{.*}}GLOBAL_STORE_DWORD
+# CHECK-LABEL: SU(3):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(4):{{.*}}ASYNCMARK
+# CHECK:        Predecessors:
+# CHECK-NEXT:     SU(3):{{.*}}Artificial
+# CHECK-NEXT:   Successors:
+# CHECK-NEXT:     SU(8):{{.*}}Artificial
+# CHECK-NEXT:     SU(9):{{.*}}Artificial
+# CHECK-NEXT: SU(5):{{.*}}BUFFER_LOAD_DWORD_OFFSET
+# CHECK-LABEL: SU(6):{{.*}}DS_WRITE_B32
+# CHECK-LABEL: SU(7):{{.*}}BUFFER_STORE_DWORD_OFFSET
+# CHECK-LABEL: SU(8):{{.*}}GLOBAL_LOAD_ASYNC_TO_LDS_B32
+# CHECK-LABEL: SU(9):{{.*}}WAIT_ASYNCMARK
+---
+name:            mixed_around_mark
+tracksRegLiveness: true
+machineFunctionInfo:
+  occupancy:       8
+body:             |
+  bb.0:
+    liveins: $vgpr0_vgpr1, $vgpr4_vgpr5, $vgpr2, $vgpr3, $sgpr0_sgpr1_sgpr2_sgpr3
+
+    $vgpr6 = GLOBAL_LOAD_DWORD $vgpr0_vgpr1, 0, 0, implicit $exec :: (load (s32), addrspace 1)
+    $vgpr7 = DS_READ_B32 $vgpr2, 0, 0, implicit $m0, implicit $exec :: (load (s32), addrspace 3)
+    GLOBAL_STORE_DWORD $vgpr0_vgpr1, $vgpr3, 0, 0, implicit $exec :: (store (s32), addrspace 1)
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr3, $vgpr4_vgpr5, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    ASYNCMARK
+    $vgpr8 = BUFFER_LOAD_DWORD_OFFSET $sgpr0_sgpr1_sgpr2_sgpr3, 0, 0, 0, 0, implicit $exec :: (load (s32))
+    DS_WRITE_B32 $vgpr2, $vgpr3, 0, 0, implicit $m0, implicit $exec :: (store (s32), addrspace 3)
+    BUFFER_STORE_DWORD_OFFSET $vgpr3, $sgpr0_sgpr1_sgpr2_sgpr3, 0, 0, 0, 0, implicit $exec :: (store (s32))
+    GLOBAL_LOAD_ASYNC_TO_LDS_B32 $vgpr3, $vgpr4_vgpr5, 0, 0, implicit-def $asynccnt, implicit $exec, implicit $asynccnt :: (load (s32), addrspace 1), (store (s32), addrspace 3)
+    WAIT_ASYNCMARK 0
+    S_ENDPGM 0
+...
