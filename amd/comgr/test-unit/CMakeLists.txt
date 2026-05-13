@@ -146,6 +146,8 @@ target_link_libraries(RaiserScaffoldingTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(RaiserScaffoldingTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS})
 
 comgr_configure_test_target(RaiserScaffoldingTests)
