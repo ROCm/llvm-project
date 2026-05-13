@@ -106,6 +106,8 @@ public:
   GCNSubtarget &initializeSubtargetDependencies(const Triple &TT, StringRef GPU,
                                                 StringRef FS);
 
+  bool enablePostRAMachineScheduler() const override { return false; }
+
   /// Diagnose inconsistent subtarget features before attempting to codegen
   /// function \p F.
   void checkSubtargetFeatures(const Function &F) const;

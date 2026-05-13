@@ -20,6 +20,7 @@
 #include "AMDGPUBarrierLatency.h"
 #include "AMDGPUCoExecSchedStrategy.h"
 #include "AMDGPUCtorDtorLowering.h"
+#include "AMDGPUDSReadMFMALatency.h"
 #include "AMDGPUExportClustering.h"
 #include "AMDGPUExportKernelRuntimeHandles.h"
 #include "AMDGPUHazardLatency.h"
@@ -621,6 +622,11 @@ static cl::opt<bool> EnableRewritePartialRegUses(
     cl::desc("Enable rewrite partial reg uses pass"), cl::init(true),
     cl::Hidden);
 
+static cl::opt<bool> EnableLatePerfHintAnalysis(
+  "amdgpu-enable-late-perf-hint-analysis",
+  cl::desc("Enable late perf hint analysis"), cl::init(false),
+  cl::Hidden);
+
 static cl::opt<bool> EnableHipStdPar(
   "amdgpu-enable-hipstdpar",
   cl::desc("Enable HIP Standard Parallelism Offload support"), cl::init(false),
@@ -708,6 +714,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPURewriteUndefForPHILegacyPass(*PR);
   initializeSIAnnotateControlFlowLegacyPass(*PR);
   initializeAMDGPUInsertDelayAluLegacyPass(*PR);
+  initializeAMDGPULatePerfHintAnalysisPass(*PR);
   initializeAMDGPULowerVGPREncodingLegacyPass(*PR);
   initializeSIInsertHardClausesLegacyPass(*PR);
   initializeSIInsertWaitcntsLegacyPass(*PR);
@@ -760,6 +767,8 @@ createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  if (C->MF->getInfo<SIMachineFunctionInfo>()->MemoryBound)
+    DAG->addMutation(createAMDGPUDSReadMFMALatencyDAGMutation(C->MF));
   return DAG;
 }
 
@@ -1364,6 +1373,8 @@ GCNTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
   DAG->addMutation(createAMDGPUBarrierLatencyDAGMutation(C->MF));
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
+  if (C->MF->getInfo<SIMachineFunctionInfo>()->MemoryBound)
+    DAG->addMutation(createAMDGPUDSReadMFMALatencyDAGMutation(C->MF));
   return DAG;
 }
 //===----------------------------------------------------------------------===//
@@ -1428,6 +1439,9 @@ AMDGPUPassConfig::AMDGPUPassConfig(TargetMachine &TM, PassManagerBase &PM)
   // Garbage collection is not supported.
   disablePass(&GCLoweringID);
   disablePass(&ShadowStackGCLoweringID);
+  
+  disablePass(&PostMachineSchedulerID);
+  disablePass(&PostRASchedulerID);
 }
 
 void AMDGPUPassConfig::addEarlyCSEOrGVNPass() {
@@ -1743,6 +1757,9 @@ void GCNPassConfig::addFastRegAlloc() {
 void GCNPassConfig::addPreRegAlloc() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(&AMDGPUPrepareAGPRAllocLegacyID);
+
+  if (true || EnableLatePerfHintAnalysis)
+    addPass(&AMDGPULatePerfHintAnalysisID);
 }
 
 void GCNPassConfig::addOptimizedRegAlloc() {
@@ -2245,7 +2262,7 @@ AMDGPUCodeGenPassBuilder::AMDGPUCodeGenPassBuilder(
     GCNTargetMachine &TM, const CGPassBuilderOption &Opts,
     PassInstrumentationCallbacks *PIC)
     : CodeGenPassBuilder(TM, Opts, PIC) {
-  Opt.MISchedPostRA = true;
+  Opt.MISchedPostRA = false;
   Opt.RequiresCodeGenSCCOrder = true;
   // Exceptions and StackMaps are not supported, so these passes will never do
   // anything.
