@@ -462,6 +462,20 @@ def : HWWriteRes<WriteBarrier,           [HWBranch],       2000>;
 
 def : InstRW<[WriteCopy], (instrs COPY)>;
 
+// WMMA/SWMMAC pipeline scheduling for gfx1200/gfx1201
+// INT4 WMMA (iu4/iu8) = 4-pass XDL, FP/BF WMMA = 2-pass XDL
+let ReleaseAtCycles = [8] in
+def : HWWriteRes<WriteXDL2PassWMMA, [HWXDL], 8>;
+let ReleaseAtCycles = [16] in
+def : HWWriteRes<WriteXDL4PassWMMA, [HWXDL], 16>;
+
+def : HWWriteRes<Write4PassWMMA,  [HWVALU], 16>;
+def : HWWriteRes<Write8PassWMMA,  [HWVALU], 32>;
+def : HWWriteRes<Write16PassWMMA, [HWVALU], 64>;
+
+def : InstRW<[WriteXDL2PassWMMA], (instregex "^V_[S]*WMMA[C]*_.*_(FP8|BF8|BF16|F16)_w32")>;
+def : InstRW<[WriteXDL4PassWMMA], (instregex "^V_[S]*WMMA[C]*_.*_(IU8|IU4)_w32")>;
+
 }  // End SchedModel = GFX12SpeedModel
 
 // Check if any matrix inputs are interpreted as f8 in an f8f6f4
