@@ -195,7 +195,16 @@ GCNRewritePartialRegUsesImpl::getAllocatableAndAlignedRegClassMask(
     BV.resize(TRI->getNumRegClasses());
     for (unsigned ClassID = 0; ClassID < TRI->getNumRegClasses(); ++ClassID) {
       auto *RC = TRI->getRegClass(ClassID);
-      if (RC->isAllocatable() && TRI->isRegClassAligned(RC, AlignNumBits))
+      if (!RC->isAllocatable())
+        continue;
+      // Tuple alignment (e.g. align2) is a property of multi-register tuples:
+      // it constrains where the first register of the tuple lands. For a
+      // single-register class there is no tuple, so the alignment flag of the
+      // source RC cannot be violated by picking such a class. Always allow
+      // single-register classes regardless of AlignNumBits; this lets a use of
+      // one sub-lane of e.g. vreg_64_align2 shrink to vgpr_32.
+      if (TRI->getRegSizeInBits(*RC) <= 32 ||
+          TRI->isRegClassAligned(RC, AlignNumBits))
         BV.set(ClassID);
     }
   }
@@ -265,7 +274,12 @@ GCNRewritePartialRegUsesImpl::getRegClassWithShiftedSubregs(
   }
 #ifndef NDEBUG
   if (MinRC) {
-    assert(MinRC->isAllocatable() && TRI->isRegClassAligned(MinRC, RCAlign));
+    assert(MinRC->isAllocatable());
+    // Single-register classes are intentionally allowed even when they don't
+    // satisfy the source RC's tuple alignment, because tuple alignment is
+    // vacuous for a non-tuple class (see getAllocatableAndAlignedRegClassMask).
+    assert(TRI->getRegSizeInBits(*MinRC) <= 32 ||
+           TRI->isRegClassAligned(MinRC, RCAlign));
     for (auto [OldSubReg, NewSubReg] : SubRegs)
       // Check that all registers in MinRC support NewSubReg subregister.
       assert(TRI->isSubRegValidForRegClass(MinRC, NewSubReg));
