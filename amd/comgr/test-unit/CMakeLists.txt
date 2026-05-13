@@ -152,7 +152,7 @@ target_link_libraries(RaiserScaffoldingTests PRIVATE
 target_include_directories(RaiserScaffoldingTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
-  ${COMGR_GTEST_INCLUDE_DIRS})
+  ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 
 comgr_configure_test_target(RaiserScaffoldingTests)
