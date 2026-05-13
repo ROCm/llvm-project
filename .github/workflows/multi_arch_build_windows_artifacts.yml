@@ -261,6 +261,12 @@ jobs:
           sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
             compiler/pre_hook_amd-comgr.cmake
 
+      - name: Remove llvm-lit install/wrapper code (fails on Windows)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/Install llvm-lit script/,/^  ")/d' \
+            compiler/pre_hook_amd-llvm.cmake
+
       #- name: Setup ccache
       #  run: |
       #    ./build_tools/setup_ccache.py \
