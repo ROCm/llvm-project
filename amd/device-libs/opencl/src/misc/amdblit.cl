@@ -789,12 +789,13 @@ __amd_streamOpsDecrement(
     __global atomic_ulong* ptrUlong,
     ulong value) {
 
-    // Use atomic_fetch_add_explicit as a workaround for known hardware limitations affecting
-    // atomic_fetch_sub_explicit over PCIe.
-    if (ptrUint) {
-      atomic_fetch_add_explicit (ptrUint, -value,  memory_order_relaxed, memory_scope_all_svm_devices);
-    } else {
-      atomic_fetch_add_explicit  (ptrUlong, -value,  memory_order_relaxed, memory_scope_all_svm_devices);
+    __attribute__((atomic(remote_memory, fine_grained_memory)))
+    {
+      if (ptrUint) {
+        __scoped_atomic_fetch_sub((volatile uint*)ptrUint, (uint)value, memory_order_relaxed, __MEMORY_SCOPE_SYSTEM);
+      } else {
+        __scoped_atomic_fetch_sub((volatile ulong*)ptrUlong, value, memory_order_relaxed, __MEMORY_SCOPE_SYSTEM);
+      }
     }
 }
 
