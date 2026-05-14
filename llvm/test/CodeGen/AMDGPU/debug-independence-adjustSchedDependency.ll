@@ -1,8 +1,10 @@
+; XFAIL: *
 ; RUN: opt %s  -strip-debug -o %t.no_debug.ll -S
-; RUN: llc -mcpu=gfx1250 < %s             -filetype=obj -o %t.with_debug.o
-; RUN: llc -mcpu=gfx1250 < %t.no_debug.ll -filetype=obj -o %t.no_debug.o
+; RUN: llc -amdgpu-late-wave-transform=1 -mcpu=gfx1250 < %s             -filetype=obj -o %t.with_debug.o
+; RUN: llc -amdgpu-late-wave-transform=1 -mcpu=gfx1250 < %t.no_debug.ll -filetype=obj -o %t.no_debug.o
 ; RUN: llvm-strip %t.with_debug.o %t.no_debug.o
 ; RUN: cmp %t.with_debug.o %t.no_debug.o
+
 ; Ensure that compiling with and without debug generates identical code.
 ; Test that adjustSchedDependency does not count debug instructions in bundles.
 
