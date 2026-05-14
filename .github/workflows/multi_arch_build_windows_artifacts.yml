@@ -351,7 +351,7 @@ jobs:
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
           #extra_cmake_options: ${{ inputs.extra_cmake_options }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
         run: |
           cd L:
           ccache -z
@@ -361,7 +361,8 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ env.extra_cmake_options }}
+            ${{ env.extra_cmake_options }} \
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '' }}
 
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
@@ -369,7 +370,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON"
+          extra_cmake_options: "${{ inputs.extra_cmake_options }}"
         run: |
           # clear cache before build and after download
           cd L:
@@ -381,7 +382,8 @@ jobs:
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
-            ${{ steps.stage_config.outputs.cmake_args }}
+            ${{ steps.stage_config.outputs.cmake_args }} \
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '' }}
 
       - name: Build stage
         run: |
