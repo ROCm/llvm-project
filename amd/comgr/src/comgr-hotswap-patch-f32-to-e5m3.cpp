@@ -15,15 +15,10 @@
 /// provides the strong override of applyScratchPatches that detects CLAMP=1
 /// FP8 conversions and emits software emulation sequences.
 ///
-/// Covered instructions (implementation order):
-///   1. v_cvt_pk_fp8_f32  — F32 pack to FP8 (this file, done)
-///   2. v_cvt_sr_fp8_f32  — F32 stochastic-round to FP8 (done)
-///   3. v_cvt_f32_fp8     — FP8 unpack to F32 (done)
-///
-/// Design documents:
-///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_pk_fp8_f32.md
-///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_sr_fp8_f32.md
-///   docs/scratch-patches/1_f32_to_e5m3/v_cvt_f32_fp8.md
+/// Covered instructions:
+///   1. v_cvt_pk_fp8_f32  — F32 pack to FP8
+///   2. v_cvt_sr_fp8_f32  — F32 stochastic-round to FP8
+///   3. v_cvt_f32_fp8     — FP8 unpack to F32
 ///
 //===----------------------------------------------------------------------===//
 
@@ -194,11 +189,17 @@ void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
   OS << "v_cmp_lt_u32 0x80, " << Tmp << "\n";
   OS << "v_add_co_ci_u32 " << Out << ", 0, " << Out << "\n";
 
-  // Safety clamp: cap at UE5M3 max 0xFE so NaN override ordering works.
-  // NOTE: this is effectively a no-op for overflow/Inf — F16 +Inf yields
-  // 0xF8 after >>7 which is below 0xFE.  The full UE5M3 exponent-31
-  // octave (0xF8–0xFE) is unreachable via F16 intermediate; see design doc
-  // §4.3 "Overflow / Inf handling" for accepted limitation details.
+  // Safety clamp: cap at UE5M3 max finite (0xFE) so NaN override works.
+  //
+  // Accepted limitation: this is effectively a no-op for overflow/Inf
+  // because the F16 intermediate clips large F32 values to F16 +Inf
+  // (0x7C00), which yields 0xF8 (= 0x7C00 >> 7), not 0xFE.  B0 hardware
+  // would produce 0xFE for the same inputs via its native F32 → UE5M3
+  // path.  The practical impact is that the 7 UE5M3 values 0xF9–0xFE
+  // (the exponent-31 octave above +Inf's F16 projection) are unreachable
+  // via our F16 intermediate.  This is a known precision gap affecting
+  // only extreme finite values (> 57344.0); ML inference workloads
+  // normalize inputs to ranges well below this threshold.
   OS << "v_min_u32 " << Out << ", 0xFE, " << Out << "\n";
 
   // NaN override: if original F32 was NaN, force 0xFF.
@@ -365,9 +366,10 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 ///
 /// The SR path injects stochastic noise into the F32 mantissa before the
 /// F16 intermediate conversion, replicating the ISA pseudocode (§17.6.94).
-/// Unlike the PK path, no explicit RTE rounding block is needed — the noise
-/// makes simple truncation statistically equivalent to unbiased rounding.
-/// See design doc v_cvt_sr_fp8_f32.md §3 for the full rationale.
+/// Unlike the PK path, no explicit RTE rounding block is needed — the
+/// stochastic noise makes simple truncation statistically equivalent to
+/// unbiased rounding (the noise carry already provides the correct
+/// rounding probability without guard-bit extraction).
 ///
 /// Scratch: 2 VGPRs (Out + Tmp), 1 SGPR (s0 for NaN flag).
 uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
@@ -543,10 +545,10 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 /// Patch a CLAMP=1 `v_cvt_f32_fp8` (UE5M3 → F32 unpack).
 ///
 /// The unpack path extracts a UE5M3 byte from the source VGPR (position
-/// selected by OPSEL[1:0]), converts it to F32 via a left-shift-7 → F16 →
+/// selected by byte_sel), converts it to F32 via a left-shift-7 → F16 →
 /// F32 pipeline, and applies fixups for the exponent-31 octave (bytes
-/// 0xF8–0xFE) and UE5M3 NaN (byte 0xFF).  See design doc v_cvt_f32_fp8.md
-/// §3–§5 for the full rationale.
+/// 0xF8–0xFE, which the F16 path maps to +Inf instead of finite values)
+/// and UE5M3 NaN (byte 0xFF).
 ///
 /// Only VOP3 (_e64) encoding can carry CLAMP=1; VOP1 has no CLAMP bit and
 /// is skipped.  No source modifiers exist on this instruction (OPF_NOABS,
