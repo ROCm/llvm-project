@@ -13,11 +13,10 @@
 
 namespace llvm {
 class AMDGPUReserveAllocatedVGPRsPass
-    : public PassInfoMixin<AMDGPUReserveAllocatedVGPRsPass> {
+    : public RequiredPassInfoMixin<AMDGPUReserveAllocatedVGPRsPass> {
 public:
   PreservedAnalyses run(MachineFunction &MF,
                         MachineFunctionAnalysisManager &MFAM);
-  static bool isRequired() { return true; }
 };
 } // namespace llvm
 
