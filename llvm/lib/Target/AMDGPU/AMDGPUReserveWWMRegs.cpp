@@ -99,12 +99,6 @@ bool AMDGPUReserveWWMRegs::run(MachineFunction &MF) {
   // The renamable flag can't be set for reserved registers. Reset the flag for
   // MOs involving wwm-regs as they will be reserved during vgpr-regalloc
   // pipeline.
-  //
-  // TODO-WAVETRANSFORM: This is not needed in the late WT flow, as its last in the RA
-  // pipeline, so we now don't need to reset the renamable flag. Because this was
-  // workaround for the old flow, where perlane VGPR allocation was done later,
-  // so we need to reserve the allocated WWM Regs. This has to be avoided when
-  // we completely remove the structurizer-based flow.
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   for (Register Reg : MFI->getWWMReservedRegs()) {
     for (MachineOperand &MO : MRI.reg_operands(Reg))
