@@ -241,10 +241,6 @@ ElfView::getKernelVgprCount(StringRef KernelName,
 std::optional<uint32_t>
 ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
   namespace hsa = amdhsa;
-  // findKernelDescriptor never writes through the returned pointer in this
-  // call path but is shared (non-const) with updateKernelDescriptor. The
-  // const_cast on `this` keeps the read-only accessor const-correct without
-  // duplicating the lookup helper.
   const uint8_t *Kd =
       const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
   if (!Kd) {
@@ -257,6 +253,30 @@ ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
               Kd + offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
               sizeof(LdsSize));
   return LdsSize;
+}
+
+// -- ElfView::getKernelSgprCount ----------------------------------------------
+
+std::optional<unsigned>
+ElfView::getKernelSgprCount(StringRef KernelName,
+                            unsigned SgprGranuleSize) const {
+  if (SgprGranuleSize == 0) {
+    log() << "hotswap: error: getKernelSgprCount: SgprGranuleSize is 0 for "
+          << "kernel '" << KernelName << "'.\n";
+    return std::nullopt;
+  }
+  namespace hsa = amdhsa;
+  uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelSgprCount: kernel descriptor symbol '"
+          << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t Rsrc1;
+  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  uint32_t Granulated = AMDHSA_BITS_GET(
+      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
+  return (Granulated + 1) * SgprGranuleSize;
 }
 
 // -- ElfView::updateKernelDescriptor ------------------------------------------

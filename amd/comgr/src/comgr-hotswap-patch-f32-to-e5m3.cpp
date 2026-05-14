@@ -27,10 +27,6 @@
 ///
 //===----------------------------------------------------------------------===//
 
-// MSVC does not support weak symbols; guard the strong override to avoid
-// LNK2005 duplicate definition errors (tracked in #2294 / #2285).
-#if !defined(_MSC_VER)
-
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
@@ -57,6 +53,7 @@ static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
 }
 
 static std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
+static std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
 
 /// Strip True16 sub-register suffixes (`.l`, `.h`) from a register name.
 /// Newer LLVM MCInstPrinter builds emit these for instructions like
@@ -258,14 +255,36 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string T1Name = vgprName(*T1);
   std::string T2Name = vgprName(*T2);
 
+  // Allocate scratch SGPRs: 2 for NaN flags + 1 for VCC save.
+  std::optional<unsigned> KdSgprs =
+      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
+  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
+
+  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
+  std::optional<unsigned> NaN0Sgpr = SgprAlloc.alloc();
+  std::optional<unsigned> NaN1Sgpr = SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  if (!NaN0Sgpr || !NaN1Sgpr || !VccSaveSgpr) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 3 scratch "
+          << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string NaN0Name = sgprName(*NaN0Sgpr);
+  std::string NaN1Name = sgprName(*NaN1Sgpr);
+  std::string VccSaveName = sgprName(*VccSaveSgpr);
+
   std::string Asm;
   raw_string_ostream AsmOS(Asm);
 
+  // Save VCC before clobbering it with v_cmp_* instructions.
+  AsmOS << "s_mov_b32 " << VccSaveName << ", vcc_lo\n";
+
   // --- src0 → byte in T0 (scratch: T2) ---
-  emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, "s0");
+  emitF32ToUE5M3(AsmOS, Src0Str, Src0Bare, T0Name, T2Name, NaN0Name);
 
   // --- src1 → byte in T1 (scratch: T2) ---
-  emitF32ToUE5M3(AsmOS, Src1Str, Src1Bare, T1Name, T2Name, "s1");
+  emitF32ToUE5M3(AsmOS, Src1Str, Src1Bare, T1Name, T2Name, NaN1Name);
 
   // Pack: T0[15:0] = { byte1, byte0 }
   AsmOS << "v_lshl_or_b32 " << T0Name << ", " << T1Name << ", 8, " << T0Name
@@ -281,6 +300,9 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
           << VdstStr << "\n";
   }
 
+  // Restore VCC to its pre-patch value.
+  AsmOS << "s_mov_b32 vcc_lo, " << VccSaveName << "\n";
+
   SmallVector<uint8_t> ReplacementBytes = assembleSingleInst(Asm, Ctx.LS);
   if (ReplacementBytes.empty()) {
     log() << "hotswap: error: cvt_pk_fp8_f32: assembly failed for "
@@ -292,11 +314,14 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned Extra = Alloc.extraVgprsNeeded();
-  if (Extra > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = Extra;
-  Stats.ScratchReused += 3 - Extra;
-  Stats.ScratchAboveKd += Extra;
+  unsigned ExtraV = Alloc.extraVgprsNeeded();
+  if (ExtraV > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = ExtraV;
+  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
+  if (ExtraS > Stats.ExtraSgprs)
+    Stats.ExtraSgprs = ExtraS;
+  Stats.ScratchReused += 3 - ExtraV;
+  Stats.ScratchAboveKd += ExtraV;
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
@@ -372,14 +397,34 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string OutName = vgprName(*Out);
   std::string TmpName = vgprName(*Tmp);
 
+  // Allocate scratch SGPRs: 1 for NaN flag + 1 for VCC save.
+  std::optional<unsigned> KdSgprs =
+      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
+  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
+
+  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
+  std::optional<unsigned> NaNSgpr = SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  if (!NaNSgpr || !VccSaveSgpr) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 2 scratch "
+          << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string NaNName = sgprName(*NaNSgpr);
+  std::string VccSaveName = sgprName(*VccSaveSgpr);
+
   std::string Asm;
   raw_string_ostream AsmOS(Asm);
+
+  // Save VCC before clobbering it with v_cmp_* instructions.
+  AsmOS << "s_mov_b32 " << VccSaveName << ", vcc_lo\n";
 
   // --- NaN detection (before max destroys NaN) ---
   // v_and_b32 strips the sign, making this modifier-agnostic.
   AsmOS << "v_and_b32 " << TmpName << ", 0x7FFFFFFF, " << Src0Bare << "\n";
   AsmOS << "v_cmp_lt_u32 0x7F800000, " << TmpName << "\n";
-  AsmOS << "s_mov_b32 s0, vcc_lo\n";
+  AsmOS << "s_mov_b32 " << NaNName << ", vcc_lo\n";
 
   // --- Clamp negative (UE5M3 is unsigned) ---
   // Source modifiers on src0 are applied natively by v_max_f32 VOP3.
@@ -405,7 +450,7 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   AsmOS << "v_min_u32 " << OutName << ", 0xFE, " << OutName << "\n";
 
   // --- NaN override ---
-  AsmOS << "s_mov_b32 vcc_lo, s0\n";
+  AsmOS << "s_mov_b32 vcc_lo, " << NaNName << "\n";
   AsmOS << "v_mov_b32 " << TmpName << ", 0xFF\n";
   AsmOS << "v_cndmask_b32 " << OutName << ", " << OutName << ", " << TmpName
         << "\n";
@@ -424,6 +469,9 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
           << OutName << ", " << VdstStr << "\n";
   }
 
+  // Restore VCC to its pre-patch value.
+  AsmOS << "s_mov_b32 vcc_lo, " << VccSaveName << "\n";
+
   SmallVector<uint8_t> ReplacementBytes = assembleSingleInst(Asm, Ctx.LS);
   if (ReplacementBytes.empty()) {
     log() << "hotswap: error: cvt_sr_fp8_f32: assembly failed for "
@@ -435,11 +483,14 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned Extra = Alloc.extraVgprsNeeded();
-  if (Extra > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = Extra;
-  Stats.ScratchReused += 2 - Extra;
-  Stats.ScratchAboveKd += Extra;
+  unsigned ExtraV = Alloc.extraVgprsNeeded();
+  if (ExtraV > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = ExtraV;
+  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
+  if (ExtraS > Stats.ExtraSgprs)
+    Stats.ExtraSgprs = ExtraS;
+  Stats.ScratchReused += 2 - ExtraV;
+  Stats.ScratchAboveKd += ExtraV;
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
@@ -517,8 +568,30 @@ static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   std::string OutName = vgprName(*Out);
   std::string TmpName = vgprName(*Tmp);
 
+  // Allocate scratch SGPRs: NaN flag + exp-31 flag + VCC save.
+  std::optional<unsigned> KdSgprs =
+      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
+  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
+
+  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
+  std::optional<unsigned> NaNSgpr = SgprAlloc.alloc();
+  std::optional<unsigned> Exp31Sgpr = SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  if (!NaNSgpr || !Exp31Sgpr || !VccSaveSgpr) {
+    log() << "hotswap: error: cvt_f32_fp8: unable to allocate 3 scratch "
+          << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+
+  std::string NaNName = sgprName(*NaNSgpr);
+  std::string Exp31Name = sgprName(*Exp31Sgpr);
+  std::string VccSaveName = sgprName(*VccSaveSgpr);
+
   std::string Asm;
   raw_string_ostream AsmOS(Asm);
+
+  // Save VCC before clobbering it with v_cmp_* instructions.
+  AsmOS << "s_mov_b32 " << VccSaveName << ", vcc_lo\n";
 
   // --- Byte extraction (byte_sel known at patch time) ---
   switch (ByteSel) {
@@ -538,11 +611,11 @@ static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
 
   // --- NaN detection (byte == 0xFF) ---
   AsmOS << "v_cmp_eq_u32 0xFF, " << OutName << "\n";
-  AsmOS << "s_mov_b32 s0, vcc_lo\n";
+  AsmOS << "s_mov_b32 " << NaNName << ", vcc_lo\n";
 
   // --- Exp-31 detection (byte >= 0xF8) ---
   AsmOS << "v_cmp_lt_u32 0xF7, " << OutName << "\n";
-  AsmOS << "s_mov_b32 s1, vcc_lo\n";
+  AsmOS << "s_mov_b32 " << Exp31Name << ", vcc_lo\n";
 
   // --- Exp-31 direct F32 construction ---
   AsmOS << "v_and_b32 " << TmpName << ", 0x07, " << OutName << "\n";
@@ -554,15 +627,18 @@ static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   AsmOS << "v_cvt_f32_f16 " << OutName << ", " << OutName << "\n";
 
   // --- Select exp-31 fixup ---
-  AsmOS << "s_mov_b32 vcc_lo, s1\n";
+  AsmOS << "s_mov_b32 vcc_lo, " << Exp31Name << "\n";
   AsmOS << "v_cndmask_b32 " << OutName << ", " << OutName << ", " << TmpName
         << "\n";
 
   // --- NaN override (byte 0xFF → hardware qNaN 0x7FA3D000) ---
-  AsmOS << "s_mov_b32 vcc_lo, s0\n";
+  AsmOS << "s_mov_b32 vcc_lo, " << NaNName << "\n";
   AsmOS << "v_mov_b32 " << TmpName << ", 0x7FA3D000\n";
   AsmOS << "v_cndmask_b32 " << VdstStr << ", " << OutName << ", " << TmpName
         << "\n";
+
+  // Restore VCC to its pre-patch value.
+  AsmOS << "s_mov_b32 vcc_lo, " << VccSaveName << "\n";
 
   SmallVector<uint8_t> ReplacementBytes = assembleSingleInst(Asm, Ctx.LS);
   if (ReplacementBytes.empty()) {
@@ -575,11 +651,14 @@ static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
     return 0;
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned Extra = Alloc.extraVgprsNeeded();
-  if (Extra > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = Extra;
-  Stats.ScratchReused += 2 - Extra;
-  Stats.ScratchAboveKd += Extra;
+  unsigned ExtraV = Alloc.extraVgprsNeeded();
+  if (ExtraV > Stats.ExtraVgprs)
+    Stats.ExtraVgprs = ExtraV;
+  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
+  if (ExtraS > Stats.ExtraSgprs)
+    Stats.ExtraSgprs = ExtraS;
+  Stats.ScratchReused += 2 - ExtraV;
+  Stats.ScratchAboveKd += ExtraV;
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
@@ -617,7 +696,9 @@ uint32_t applyScratchPatches(PatchContext &Ctx, size_t Idx) {
   return 0;
 }
 
+void registerScratchPatch(HotswapPatchVTable &VT) {
+  VT.applyScratchPatches = applyScratchPatches;
+}
+
 } // namespace hotswap
 } // namespace COMGR
-
-#endif // !defined(_MSC_VER)

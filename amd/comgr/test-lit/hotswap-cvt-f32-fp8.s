@@ -23,8 +23,10 @@
 
 // BYTE0-LABEL: <test_cvt_f32_fp8_byte0>:
 // BYTE0:       s_branch
+// COM: --- VCC save ---
+// BYTE0:       s_mov_b32
 // COM: --- Byte extraction (byte_sel=0: v_and_b32) ---
-// BYTE0:       v_and_b32{{.*}}0xff, v1
+// BYTE0-NEXT:  v_and_b32{{.*}}0xff, v1
 // COM: --- NaN detection ---
 // BYTE0-NEXT:  v_cmp_eq_u32{{.*}}0xff
 // BYTE0-NEXT:  s_mov_b32
@@ -45,6 +47,8 @@
 // BYTE0-NEXT:  s_mov_b32
 // BYTE0-NEXT:  v_mov_b32{{.*}}0x7fa3d000
 // BYTE0-NEXT:  v_cndmask_b32{{.*}}v0,
+// COM: --- VCC restore ---
+// BYTE0-NEXT:  s_mov_b32
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: CLAMP=1 byte_sel=2 patch (v_bfe_u32 extraction).
@@ -53,7 +57,7 @@
 
 // BYTE2-LABEL: <test_cvt_f32_fp8_byte2>:
 // BYTE2:       s_branch
-// COM: --- Byte extraction (byte_sel=2: v_bfe_u32) ---
+// COM: --- VCC save + Byte extraction (anchor on unique src v6) ---
 // BYTE2:       v_bfe_u32{{.*}}v6, 16, 8
 // COM: --- NaN detection ---
 // BYTE2-NEXT:  v_cmp_eq_u32{{.*}}0xff
@@ -75,6 +79,8 @@
 // BYTE2-NEXT:  s_mov_b32
 // BYTE2-NEXT:  v_mov_b32{{.*}}0x7fa3d000
 // BYTE2-NEXT:  v_cndmask_b32{{.*}}v5,
+// COM: --- VCC restore ---
+// BYTE2-NEXT:  s_mov_b32
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: CLAMP=0 (E4M3) instruction is NOT patched.

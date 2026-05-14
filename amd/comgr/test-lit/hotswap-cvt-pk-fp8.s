@@ -22,8 +22,10 @@
 
 // LOW-LABEL: <test_cvt_pk_fp8_low>:
 // LOW:       s_branch
+// COM: --- VCC save ---
+// LOW:       s_mov_b32
 // COM: --- src0 conversion ---
-// LOW:       v_and_b32{{.*}}0x7fffffff, v1
+// LOW-NEXT:  v_and_b32{{.*}}0x7fffffff, v1
 // LOW-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // LOW-NEXT:  s_mov_b32
 // LOW-NEXT:  v_max_num_f32{{.*}}, 0, v1
@@ -57,6 +59,8 @@
 // COM: --- pack + merge (low half) ---
 // LOW-NEXT:  v_lshl_or_b32
 // LOW-NEXT:  v_bfi_b32 v0,
+// COM: --- VCC restore ---
+// LOW-NEXT:  s_mov_b32
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: CLAMP=1 high-half patch.
@@ -65,7 +69,7 @@
 
 // HIGH-LABEL: <test_cvt_pk_fp8_high>:
 // HIGH:       s_branch
-// COM: --- src0 conversion ---
+// COM: --- VCC save + src0 conversion (anchor on unique src v6) ---
 // HIGH:       v_and_b32{{.*}}0x7fffffff, v6
 // HIGH-NEXT:  v_cmp_lt_u32{{.*}}0x7f800000
 // HIGH-NEXT:  s_mov_b32
@@ -101,6 +105,8 @@
 // HIGH-NEXT:  v_lshl_or_b32
 // HIGH-NEXT:  v_lshlrev_b32
 // HIGH-NEXT:  v_bfi_b32 v5,
+// COM: --- VCC restore ---
+// HIGH-NEXT:  s_mov_b32
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: CLAMP=0 (E4M3) instruction is NOT patched.
