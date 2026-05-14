@@ -362,7 +362,7 @@ jobs:
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
             ${{ env.extra_cmake_options }} \
-            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '' }}
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
@@ -383,7 +383,7 @@ jobs:
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '' }}
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Build stage
         run: |
