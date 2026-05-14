@@ -37,12 +37,14 @@ using namespace llvm;
 namespace COMGR {
 namespace hotswap {
 
+namespace {
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
-                            uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
+bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
+                     ArrayRef<uint8_t> Replacement) {
   Trampoline T;
   T.OriginalOffset = InstOffset;
   T.OriginalSize = InstSize;
@@ -52,90 +54,96 @@ static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
   return true;
 }
 
-static std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
-static std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
+std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
+std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
 
-/// Strip True16 sub-register suffixes (`.l`, `.h`) from a register name.
-/// Newer LLVM MCInstPrinter builds emit these for instructions like
-/// v_cvt_pk_fp8_f32 that write to a 16-bit half, but the 32-bit ALU
-/// instructions in our replacement sequences don't accept them.
-static std::string stripTrue16Suffix(StringRef S) {
-  if (S.ends_with(".l") || S.ends_with(".h"))
-    return S.drop_back(2).str();
-  return S.str();
+/// Convert an MCRegister to its assembly name (e.g. VGPR0 → "v0").
+/// The MCRegisterInfo name is the tablegen C identifier (e.g. "VGPR0",
+/// "SGPR0", "VCC_LO"); we map it to the assembler name used in inline asm.
+/// True16 sub-register names ("VGPR0_LO16") are mapped to the 32-bit
+/// parent since the replacement sequences only use 32-bit ALU instructions.
+std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
+  const char *N = MRI.getName(Reg);
+  if (!N)
+    return {};
+  StringRef S(N);
+  // True16 sub-registers: VGPR0_LO16 / VGPR0_HI16 → use 32-bit parent.
+  if (S.contains("_LO16") || S.contains("_HI16"))
+    S = S.take_until([](char C) { return C == '_'; });
+  if (S.consume_front("VGPR"))
+    return ("v" + S).str();
+  if (S.consume_front("SGPR"))
+    return ("s" + S).str();
+  return S.lower();
 }
 
-/// Strip neg/abs modifier wrappers from a printed operand, returning the
-/// bare register or literal name.  Handles `-v1`, `neg(v1)`, `|v1|`,
-/// `abs(v1)`, and combinations like `-|v1|` or `neg(abs(v1))`.
-/// Also strips True16 `.l`/`.h` suffixes from the resulting bare name.
-static std::string stripModifiers(StringRef Op) {
-  Op = Op.trim();
-  if (Op.starts_with("-"))
-    Op = Op.drop_front(1);
-  if (Op.starts_with("neg(") && Op.ends_with(")"))
-    Op = Op.drop_front(4).drop_back(1);
-  if (Op.starts_with("|") && Op.ends_with("|"))
-    Op = Op.drop_front(1).drop_back(1);
-  if (Op.starts_with("abs(") && Op.ends_with(")"))
-    Op = Op.drop_front(4).drop_back(1);
-  if (Op.starts_with("-"))
-    Op = Op.drop_front(1);
-  if (Op.starts_with("|") && Op.ends_with("|"))
-    Op = Op.drop_front(1).drop_back(1);
-  return stripTrue16Suffix(Op);
+/// Format a source operand with its SISrcMods modifier flags for use in
+/// floating-point ALU instructions (e.g. v_max_num_f32).
+/// SISrcMods: NEG=1, ABS=2.
+std::string fmtModifiedSrc(StringRef BareReg, unsigned Mods) {
+  bool Neg = Mods & 1;
+  bool Abs = Mods & 2;
+  std::string R = BareReg.str();
+  if (Abs)
+    R = "abs(" + R + ")";
+  if (Neg)
+    R = "-" + R;
+  return R;
 }
 
-/// Parse the printed operands of a 2-operand instruction.  Expects MCInst-
-/// Printer output shaped like "  mnemonic dst, src0 [modifiers...]".
-/// Returns true on success and fills \p Dst, \p Src0 with the trimmed
-/// operand strings.  Trailing modifiers (byte_sel, clamp, etc.) are stripped
-/// from Src0.
-static bool parseTwoOperands(const MCInst &Inst, const LLVMState &LS,
-                             std::string &Dst, std::string &Src0) {
-  std::string Buf;
-  raw_string_ostream OS(Buf);
-  LS.MCIP->printInst(&Inst, 0, "", *LS.STI, OS);
+// -- VOP3 operand layout structs -------------------------------------------
+//
+// Mirrors the MCInst operand order produced by the AMDGPU disassembler for
+// the FP8 conversion instructions.  The indices below are validated at
+// runtime in each patch function; a mismatch logs an error and bails out
+// rather than silently reading the wrong operand.  This follows the same
+// pattern as VOP3PWmmaLayout in comgr-hotswap-patch-wmma-split.cpp.
 
-  StringRef S = StringRef(Buf).ltrim();
-  auto [Mnem, Rest] = S.split(' ');
-  Rest = Rest.ltrim();
+// VOP3 MCInst layout for the two-source FP8 pack / stochastic-round
+// instructions.  op_sel and byte_sel are NOT separate MCInst operands; they
+// are folded into the src-modifier immediates by the AMDGPU disassembler.
+//
+// MCInst operand order (verified at runtime):
+//   [0] vdst       (reg)
+//   [1] src0_mods  (imm – SISrcMods flags including OP_SEL bits)
+//   [2] src0       (reg)
+//   [3] src1_mods  (imm)
+//   [4] src1       (reg)
+//   [5] clamp      (imm)
+//   [6] vdst_in    (reg – tied to vdst)
+struct VOP3Fp8TwoSrcLayout {
+  unsigned NumOperands;
+  unsigned VDst;
+  unsigned Src0Mods;
+  unsigned Src0;
+  unsigned Src1Mods;
+  unsigned Src1;
+  unsigned Clamp;
+  unsigned VDstIn;
+};
 
-  SmallVector<StringRef, 4> Parts;
-  Rest.split(Parts, ',');
-  if (Parts.size() < 2)
-    return false;
+// v_cvt_f32_fp8 (gfx1250, VOP3 unpack – no source modifiers):
+//   [0] vdst       (reg)
+//   [1] src0       (reg)
+//   [2] clamp      (imm)
+//   [3] byte_sel   (imm)
+struct VOP3Fp8UnpackLayout {
+  unsigned NumOperands;
+  unsigned VDst;
+  unsigned Src0;
+  unsigned Clamp;
+  unsigned ByteSel;
+};
 
-  Dst = stripTrue16Suffix(Parts[0].trim());
-  Src0 = Parts[1].trim().split(' ').first.str();
-  return !Dst.empty() && !Src0.empty();
-}
+constexpr VOP3Fp8TwoSrcLayout TwoSrcFp8Layout = {
+    /*NumOperands=*/7, /*VDst=*/0,
+    /*Src0Mods=*/1,    /*Src0=*/2,
+    /*Src1Mods=*/3,    /*Src1=*/4,
+    /*Clamp=*/5,       /*VDstIn=*/6};
 
-/// Parse the printed operands of a 3-operand instruction.  Expects MCInst-
-/// Printer output shaped like "  mnemonic dst, src0, src1 [modifiers...]".
-/// Returns true on success and fills \p Dst, \p Src0, \p Src1 with the
-/// trimmed operand strings (including any neg/abs wrappers).
-static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
-                               std::string &Dst, std::string &Src0,
-                               std::string &Src1) {
-  std::string Buf;
-  raw_string_ostream OS(Buf);
-  LS.MCIP->printInst(&Inst, 0, "", *LS.STI, OS);
-
-  StringRef S = StringRef(Buf).ltrim();
-  auto [Mnem, Rest] = S.split(' ');
-  Rest = Rest.ltrim();
-
-  SmallVector<StringRef, 4> Parts;
-  Rest.split(Parts, ',');
-  if (Parts.size() < 3)
-    return false;
-
-  Dst = stripTrue16Suffix(Parts[0].trim());
-  Src0 = Parts[1].trim().str();
-  Src1 = Parts[2].trim().split(' ').first.str();
-  return !Dst.empty() && !Src0.empty() && !Src1.empty();
-}
+constexpr VOP3Fp8UnpackLayout UnpackFp8Layout = {/*NumOperands=*/4, /*VDst=*/0,
+                                                 /*Src0=*/1, /*Clamp=*/2,
+                                                 /*ByteSel=*/3};
 
 // ---------------------------------------------------------------------------
 // Per-source F32 → UE5M3 conversion with full fixups
@@ -159,10 +167,9 @@ static bool parseThreeOperands(const MCInst &Inst, const LLVMState &LS,
 /// into separate registers (which would require a 3rd VGPR per source), we
 /// use the identity: round_up = (guard_bits * 2 + lsb) > 128, where
 /// guard_bits = F16[6:0].  This collapses the entire RTE decision into a
-/// single integer comparison.  See design doc §4.3 for derivation.
-static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
-                           StringRef BareSrc, StringRef Out, StringRef Tmp,
-                           StringRef NanSgpr) {
+/// single integer comparison via v_bfi_b32 + v_cmp + v_add_co_ci_u32.
+void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
+                    StringRef Out, StringRef Tmp, StringRef NanSgpr) {
   // NaN detection: (|src| > 0x7F800000) ⇒ NaN.
   // v_and_b32 strips the sign, so neg/abs modifiers don't affect this test.
   // VOPC form: literal in src0, VGPR in src1 (implicit VCC write).
@@ -205,7 +212,7 @@ static void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src,
 // v_cvt_pk_fp8_f32 patch  (Case 1, instruction 1)
 // ---------------------------------------------------------------------------
 
-static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
+uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   if (DI.Size != 8) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unexpected inst size " << DI.Size
@@ -213,22 +220,36 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  const uint8_t *Raw = Ctx.Text + DI.Offset;
-  bool Clamp = (Raw[1] >> 7) & 1;
-  if (!Clamp)
-    return 0;
+  const MCInst &Inst = DI.Inst;
+  const VOP3Fp8TwoSrcLayout &L = TwoSrcFp8Layout;
 
-  bool WriteHigh = (Raw[1] >> 6) & 1;
-
-  std::string VdstStr, Src0Str, Src1Str;
-  if (!parseThreeOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str, Src1Str)) {
-    log() << "hotswap: error: cvt_pk_fp8_f32: failed to parse operands at "
-          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+  if (Inst.getNumOperands() < L.NumOperands) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: operand count mismatch: "
+          << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
 
-  std::string Src0Bare = stripModifiers(Src0Str);
-  std::string Src1Bare = stripModifiers(Src1Str);
+  if (!Inst.getOperand(L.Clamp).isImm() ||
+      Inst.getOperand(L.Clamp).getImm() == 0)
+    return 0;
+
+  // OPSEL[3] (write-high) is folded into src0_mods by the disassembler.
+  // SISrcMods encodes OP_SEL_1 at bit 3 (value 8).
+  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
+                          ? Inst.getOperand(L.Src0Mods).getImm()
+                          : 0;
+  bool WriteHigh = (Src0Mods >> 3) & 1;
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
+  std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
+  std::string Src1Bare = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
+  unsigned Src1Mods = Inst.getOperand(L.Src1Mods).isImm()
+                          ? Inst.getOperand(L.Src1Mods).getImm()
+                          : 0;
+  std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
+  std::string Src1Str = fmtModifiedSrc(Src1Bare, Src1Mods);
 
   // findKernelAtOffset takes a virtual address.
   std::string KernelName =
@@ -349,7 +370,7 @@ static uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
 /// See design doc v_cvt_sr_fp8_f32.md §3 for the full rationale.
 ///
 /// Scratch: 2 VGPRs (Out + Tmp), 1 SGPR (s0 for NaN flag).
-static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
+uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   if (DI.Size != 8) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unexpected inst size " << DI.Size
@@ -357,23 +378,33 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  const uint8_t *Raw = Ctx.Text + DI.Offset;
-  bool Clamp = (Raw[1] >> 7) & 1;
-  if (!Clamp)
-    return 0;
+  const MCInst &Inst = DI.Inst;
+  const VOP3Fp8TwoSrcLayout &L = TwoSrcFp8Layout;
 
-  // OPSEL[3:2] selects which byte of vdst to write (0–3).
-  unsigned ByteSel = (Raw[1] >> 5) & 0x3;
-
-  std::string VdstStr, Src0Str, Src1Str;
-  if (!parseThreeOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str, Src1Str)) {
-    log() << "hotswap: error: cvt_sr_fp8_f32: failed to parse operands at "
-          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+  if (Inst.getNumOperands() < L.NumOperands) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: operand count mismatch: "
+          << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
 
-  // Only src0 supports neg/abs modifiers; src1 is U32 with no modifiers.
-  std::string Src0Bare = stripModifiers(Src0Str);
+  if (!Inst.getOperand(L.Clamp).isImm() ||
+      Inst.getOperand(L.Clamp).getImm() == 0)
+    return 0;
+
+  // byte_sel = OPSEL[3:2] at dword-0 bits [6:5] (byte 1 bits [6:5]).
+  // Not exposed as a separate MCInst operand.
+  const uint8_t *Raw = Ctx.Text + DI.Offset;
+  unsigned ByteSel = (Raw[1] >> 5) & 0x3;
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
+  std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
+  std::string Src1Str = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
+  unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
+                          ? Inst.getOperand(L.Src0Mods).getImm()
+                          : 0;
+  std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
 
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
@@ -522,29 +553,33 @@ static uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
 /// OPF_NONEG) so no modifier forwarding is needed.
 ///
 /// Scratch: 2 VGPRs (Out + Tmp), 2 SGPRs (s0 for NaN flag, s1 for exp-31).
-static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
+uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   // VOP1 (4 bytes) has no CLAMP bit; only VOP3 (8 bytes) needs patching.
   if (DI.Size != 8)
     return 0;
 
-  const uint8_t *Raw = Ctx.Text + DI.Offset;
-  bool Clamp = (Raw[1] >> 7) & 1;
-  if (!Clamp)
-    return 0;
+  const MCInst &Inst = DI.Inst;
+  const VOP3Fp8UnpackLayout &L = UnpackFp8Layout;
 
-  // OPSEL[1:0] at dword 0 bits [12:11] (byte 1 bits [4:3]).
-  // Reversed mapping: byte_sel = OPSEL[0]*2 + OPSEL[1].
-  unsigned Opsel1 = (Raw[1] >> 4) & 1;
-  unsigned Opsel0 = (Raw[1] >> 3) & 1;
-  unsigned ByteSel = Opsel0 * 2 + Opsel1;
-
-  std::string VdstStr, Src0Str;
-  if (!parseTwoOperands(DI.Inst, Ctx.LS, VdstStr, Src0Str)) {
-    log() << "hotswap: error: cvt_f32_fp8: failed to parse operands at "
-          << "offset 0x" << utohexstr(DI.Offset) << "\n";
+  if (Inst.getNumOperands() < L.NumOperands) {
+    log() << "hotswap: error: cvt_f32_fp8: operand count mismatch: "
+          << "expected " << L.NumOperands << ", got " << Inst.getNumOperands()
+          << " at offset 0x" << utohexstr(DI.Offset) << "\n";
     return 0;
   }
+
+  if (!Inst.getOperand(L.Clamp).isImm() ||
+      Inst.getOperand(L.Clamp).getImm() == 0)
+    return 0;
+
+  unsigned ByteSel = Inst.getOperand(L.ByteSel).isImm()
+                         ? Inst.getOperand(L.ByteSel).getImm()
+                         : 0;
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
+  std::string Src0Str = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
 
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
@@ -672,6 +707,8 @@ static uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
 
   return 1;
 }
+
+} // anonymous namespace
 
 // ---------------------------------------------------------------------------
 // applyScratchPatches — strong override
