@@ -3914,6 +3914,22 @@ bool SIRegisterInfo::getRegAllocationHints(Register VirtReg,
     }
     return false;
   }
+  case AMDGPURI::BankHint: {
+    unsigned Bank = Hint.second;
+    if (Bank > 3)
+      return false;
+    unsigned BankStart = Bank * 256;
+    unsigned BankEnd = BankStart + 256;
+    unsigned Count = 0;
+    for (MCPhysReg PhysReg : Order) {
+      unsigned HWIdx = getHWRegIndex(PhysReg);
+      if (HWIdx >= BankStart && HWIdx < BankEnd) {
+        Hints.push_back(PhysReg);
+        ++Count;
+      }
+    }
+    return false;
+  }
   default:
     return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF,
                                                      VRM);

@@ -472,7 +472,7 @@ public:
                       << "\n");
 
     ST = &MF.getSubtarget<GCNSubtarget>();
-    if (!ST->hasDelayAlu())
+    if (!ST->hasDelayAlu() || ST->hasGFX1250Insts())
       return false;
 
     SII = ST->getInstrInfo();

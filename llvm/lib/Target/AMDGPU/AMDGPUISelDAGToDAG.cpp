@@ -3263,6 +3263,23 @@ void AMDGPUDAGToDAGISel::SelectINTRINSIC_WO_CHAIN(SDNode *N) {
   case Intrinsic::amdgcn_interp_p1_f16:
     SelectInterpP1F16(N);
     return;
+  case Intrinsic::amdgcn_set_vgpr_bank: {
+    SDValue Src = N->getOperand(1);
+    SDValue Bank = N->getOperand(2);
+    EVT VT = N->getValueType(0);
+    unsigned PseudoOpc;
+    switch (VT.getSizeInBits()) {
+    case 32: PseudoOpc = AMDGPU::V_SET_BANK_B32; break;
+    case 64: PseudoOpc = AMDGPU::V_SET_BANK_B64; break;
+    case 128: PseudoOpc = AMDGPU::V_SET_BANK_B128; break;
+    case 256: PseudoOpc = AMDGPU::V_SET_BANK_B256; break;
+    default: SelectCode(N); return;
+    }
+    SDValue BankImm = CurDAG->getTargetConstant(
+        cast<ConstantSDNode>(Bank)->getZExtValue(), SDLoc(N), MVT::i32);
+    CurDAG->SelectNodeTo(N, PseudoOpc, N->getVTList(), {Src, BankImm});
+    return;
+  }
   case Intrinsic::amdgcn_permlane16_swap:
   case Intrinsic::amdgcn_permlane32_swap: {
     if ((IntrID == Intrinsic::amdgcn_permlane16_swap &&

@@ -177,6 +177,9 @@ private:
   /// Handle single \p MI. \return true if changed.
   bool runOnMachineInstr(MachineInstr &MI);
 
+  /// Reorder instructions within a MBB to minimize bank switches.
+  void reorderForBankLocality(MachineBasicBlock &MBB);
+
   /// Compute the mode for a single \p MI given \p Ops operands
   /// bit mapping. Optionally takes second array \p Ops2 for VOPD.
   /// If provided and an operand from \p Ops is not a VGPR, then \p Ops2
@@ -541,6 +544,237 @@ bool AMDGPULowerVGPREncoding::handleSetregMode(MachineInstr &MI) {
   return true;
 }
 
+// True execution barriers that split reorder regions.
+static bool isBarrierInstr(const MachineInstr &MI, const SIInstrInfo *TII) {
+  if (MI.isTerminator() || MI.isCall() || MI.isInlineAsm())
+    return true;
+  unsigned Opc = MI.getOpcode();
+  if (TII->isBarrier(Opc))
+    return true;
+  if (Opc == AMDGPU::SCHED_BARRIER || Opc == AMDGPU::SCHED_GROUP_BARRIER)
+    return true;
+  return false;
+}
+
+// Instructions that should not be moved but don't split regions.
+// Other instructions CAN be moved past these.
+static bool isPinnedInstr(const MachineInstr &MI, const SIInstrInfo *TII) {
+  if (MI.isBundled())
+    return true;
+  unsigned Opc = MI.getOpcode();
+  if (TII->isWaitcnt(Opc))
+    return true;
+  if (Opc == AMDGPU::S_NOP || Opc == AMDGPU::S_CLAUSE ||
+      Opc == AMDGPU::S_DELAY_ALU || Opc == AMDGPU::S_SETREG_IMM32_B32)
+    return true;
+  return false;
+}
+
+// Check if two instructions have a register dependency (RAW, WAR, or WAW).
+static bool hasRegDep(const MachineInstr &A, const MachineInstr &B,
+                      const SIRegisterInfo *TRI) {
+  for (const auto &MOA : A.operands()) {
+    if (!MOA.isReg() || !MOA.getReg().isPhysical())
+      continue;
+    for (const auto &MOB : B.operands()) {
+      if (!MOB.isReg() || !MOB.getReg().isPhysical())
+        continue;
+      if (!TRI->regsOverlap(MOA.getReg(), MOB.getReg()))
+        continue;
+      // RAW: A defines, B reads
+      if (MOA.isDef() && !MOB.isDef())
+        return true;
+      // WAR: A reads, B defines
+      if (!MOA.isDef() && MOB.isDef())
+        return true;
+      // WAW: both define
+      if (MOA.isDef() && MOB.isDef())
+        return true;
+    }
+  }
+  return false;
+}
+
+void AMDGPULowerVGPREncoding::reorderForBankLocality(MachineBasicBlock &MBB) {
+  // Split instructions into regions separated by fixed instructions.
+  // Reorder within each region to minimize bank switches.
+  SmallVector<MachineInstr *, 512> Instrs;
+  for (auto &MI : MBB.instrs()) {
+    if (MI.isMetaInstruction())
+      continue;
+    Instrs.push_back(&MI);
+  }
+
+  if (Instrs.size() <= 2)
+    return;
+
+  // Find region boundaries (true execution barriers only).
+  SmallVector<int, 64> BarrierIndices;
+  int nPinned = 0;
+  for (int i = 0, e = Instrs.size(); i < e; ++i) {
+    if (isBarrierInstr(*Instrs[i], TII))
+      BarrierIndices.push_back(i);
+    else if (isPinnedInstr(*Instrs[i], TII))
+      ++nPinned;
+  }
+
+  LLVM_DEBUG(dbgs() << "  Bank reorder: " << Instrs.size() << " instrs, "
+                    << BarrierIndices.size() << " barriers, "
+                    << nPinned << " pinned\n");
+
+  // Compute mode for an instruction. Returns empty mode if no VGPR operands.
+  auto getInstrMode = [&](MachineInstr *MI) -> ModeTy {
+    ModeTy Mode;
+    auto Ops = AMDGPU::getVGPRLoweringOperandTables(MI->getDesc());
+    if (Ops.first)
+      computeMode(Mode, *MI, Ops.first, Ops.second);
+    return Mode;
+  };
+
+  // Count how many operand slots differ between running mode and new mode.
+  // Returns 0 if compatible (no s_set_vgpr_msb needed).
+  auto modeCost = [](const ModeTy &Running, const ModeTy &New) -> int {
+    int Cost = 0;
+    for (unsigned I = 0; I < OpNum; ++I) {
+      if (!New.Ops[I].MSBits.has_value())
+        continue;
+      if (Running.Ops[I].MSBits.value_or(0) != *New.Ops[I].MSBits)
+        ++Cost;
+    }
+    return Cost;
+  };
+
+  // Update running mode with a new instruction's mode (incremental).
+  auto updateRunning = [](ModeTy &Running, const ModeTy &New) {
+    for (unsigned I = 0; I < OpNum; ++I) {
+      if (New.Ops[I].MSBits.has_value())
+        Running.Ops[I].MSBits = New.Ops[I].MSBits;
+    }
+  };
+
+  // Process each region between fixed instructions.
+  int TotalSwaps = 0;
+  auto processRegion = [&](int Start, int End) {
+    if (End - Start <= 1)
+      return;
+
+    LLVM_DEBUG(dbgs() << "    Region [" << Start << ", " << End
+                      << ") size=" << (End - Start) << "\n");
+
+    const int W = 256; // look-ahead window size
+    ModeTy RunningMode;
+    int Swaps = 0;
+
+    // Track recent VALU instructions for delay-alu penalty.
+    SmallVector<int, 4> RecentVALU;
+
+    // Check if instruction has RAW dependency on any of the last N placed VALUs.
+    auto hasRecentVALUDep = [&](const MachineInstr &MI) -> int {
+      for (int r = RecentVALU.size() - 1, dist = 1;
+           r >= 0 && dist <= 4; --r, ++dist) {
+        const MachineInstr &Prev = *Instrs[RecentVALU[r]];
+        // Check RAW: Prev defines a reg that MI reads.
+        for (const auto &MOPrev : Prev.operands()) {
+          if (!MOPrev.isReg() || !MOPrev.isDef() || !MOPrev.getReg().isPhysical())
+            continue;
+          for (const auto &MOMI : MI.operands()) {
+            if (!MOMI.isReg() || MOMI.isDef() || !MOMI.getReg().isPhysical())
+              continue;
+            if (TRI->regsOverlap(MOPrev.getReg(), MOMI.getReg()))
+              return dist; // RAW at distance dist
+          }
+        }
+      }
+      return 0; // no recent dependency
+    };
+
+    for (int i = Start; i < End; ++i) {
+      // Skip pinned instructions — they stay in place but don't block others.
+      if (isPinnedInstr(*Instrs[i], TII))
+        continue;
+
+      int BestJ = i;
+      int BestCost = 9999;
+
+      // Look ahead in the window for the best instruction.
+      int WindowEnd = std::min(i + W, End);
+      for (int j = i; j < WindowEnd; ++j) {
+        // Skip pinned instructions — can't be moved.
+        if (isPinnedInstr(*Instrs[j], TII))
+          continue;
+
+        // Check if Instrs[j] is independent of all Instrs[i..j-1].
+        bool Independent = true;
+        for (int k = i; k < j; ++k) {
+          if (hasRegDep(*Instrs[k], *Instrs[j], TRI)) {
+            Independent = false;
+            break;
+          }
+        }
+        if (!Independent)
+          continue;
+
+        ModeTy ModeJ = getInstrMode(Instrs[j]);
+        int bankCost = modeCost(RunningMode, ModeJ);
+
+        // Add delay-alu penalty: if this VALU reads from a recent VALU,
+        // add penalty proportional to proximity.
+        int delayCost = 0;
+        if (SIInstrInfo::isVALU(*Instrs[j])) {
+          int dep = hasRecentVALUDep(*Instrs[j]);
+          if (dep > 0)
+            delayCost = 5 - dep; // dep=1 → penalty 4, dep=4 → penalty 1
+        }
+
+        int cost = bankCost * 100 + delayCost;
+
+        if (cost < BestCost) {
+          BestJ = j;
+          BestCost = cost;
+          if (cost == 0)
+            break; // perfect: zero bank cost and zero delay cost
+        }
+      }
+
+      // Move BestJ to position i if it's not already there.
+      if (BestJ != i) {
+        MachineInstr *Best = Instrs[BestJ];
+        Best->moveBefore(Instrs[i]);
+        for (int k = BestJ; k > i; --k)
+          Instrs[k] = Instrs[k - 1];
+        Instrs[i] = Best;
+        ++Swaps;
+      }
+
+      // Update running mode.
+      updateRunning(RunningMode, getInstrMode(Instrs[i]));
+
+      // Track recent VALU for delay-alu avoidance.
+      if (SIInstrInfo::isVALU(*Instrs[i]))
+        RecentVALU.push_back(i);
+    }
+    TotalSwaps += Swaps;
+    LLVM_DEBUG(dbgs() << "      " << Swaps << " swaps\n");
+  };
+
+  // Run multiple passes — each pass improves on the previous ordering.
+  for (int Pass = 0; Pass < 3; ++Pass) {
+    int PassSwaps = TotalSwaps;
+    int RegionStart = 0;
+    for (int bi : BarrierIndices) {
+      processRegion(RegionStart, bi);
+      RegionStart = bi + 1;
+    }
+    processRegion(RegionStart, Instrs.size());
+    LLVM_DEBUG(dbgs() << "  Pass " << Pass << ": " << (TotalSwaps - PassSwaps)
+                      << " swaps\n");
+    if (TotalSwaps == PassSwaps)
+      break; // no improvement, stop
+  }
+
+  LLVM_DEBUG(dbgs() << "  Bank reorder total: " << TotalSwaps << " swaps\n");
+}
+
 bool AMDGPULowerVGPREncoding::run(MachineFunction &MF) {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   if (!ST.has1024AddressableVGPRs())
@@ -556,6 +790,9 @@ bool AMDGPULowerVGPREncoding::run(MachineFunction &MF) {
   ClauseLen = ClauseRemaining = 0;
   CurrentMode = {};
   for (auto &MBB : MF) {
+    // Reorder instructions for bank locality before inserting s_set_vgpr_msb.
+    reorderForBankLocality(MBB);
+
     MostRecentModeSet = nullptr;
     NeedNopBeforeSetVGPRMSB = false;
     this->MBB = &MBB;

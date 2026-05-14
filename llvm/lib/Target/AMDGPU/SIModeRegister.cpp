@@ -281,6 +281,12 @@ void SIModeRegister::processBlockPhase1(MachineBasicBlock &MBB,
 
       unsigned Mask = maskTrailingOnes<unsigned>(Width) << Offset;
 
+      // This pass only tracks the DP rounding mode (bits [3:2]).  Skip
+      // setreg instructions that modify unrelated MODE bits (e.g. the
+      // REPLAY_MODE bit 25 set by SIFrameLowering on gfx12+).
+      if (!(Mask & DefaultStatus.Mask))
+        continue;
+
       // If an InsertionPoint is set we will insert a setreg there.
       if (InsertionPoint) {
         insertSetreg(MBB, InsertionPoint, TII, IPChange.delta(NewInfo->Change));

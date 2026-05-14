@@ -2182,22 +2182,14 @@ bool GCNHazardRecognizer::hasWMMAToVALURegOverlap(
       return true;
   }
 
-  // WMMA reads or writes, VALU writes.
-  Register A0 = TII.getNamedOperand(WMMA, AMDGPU::OpName::src0)->getReg();
-  Register B0 = TII.getNamedOperand(WMMA, AMDGPU::OpName::src1)->getReg();
-  SmallVector<Register, 4> WMMARegs({D0, A0, B0});
-
-  if (SIInstrInfo::isSWMMAC(WMMA)) {
-    Register Idx0 = TII.getNamedOperand(WMMA, AMDGPU::OpName::src2)->getReg();
-    WMMARegs.push_back(Idx0);
-  }
-
+  // WMMA writes (WAW only), VALU writes.
+  // Skip WAR check for WMMA src0/src1: WMMA reads sources in the first
+  // pipeline stage, so a co-executing VALU writing the same register does
+  // not create a real hazard — the WMMA has already consumed the value.
   for (const MachineOperand &ValuDef : MI.defs()) {
     Register VDstReg = ValuDef.getReg();
-    for (Register WMMAReg : WMMARegs) {
-      if (TRI.regsOverlap(VDstReg, WMMAReg))
-        return true;
-    }
+    if (TRI.regsOverlap(VDstReg, D0))
+      return true;
   }
   return false;
 }
