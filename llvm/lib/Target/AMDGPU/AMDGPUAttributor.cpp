@@ -1295,6 +1295,9 @@ struct AAAMDGPUMinAGPRAlloc
                                         /*OnlyFirstRequired=*/true);
     if (MinNumAGPR == 0)
       indicateOptimisticFixpoint();
+
+    if (hasSanitizerAttributes(*F))
+      indicatePessimisticFixpoint();
   }
 
   const std::string getAsStr(Attributor *A) const override {
