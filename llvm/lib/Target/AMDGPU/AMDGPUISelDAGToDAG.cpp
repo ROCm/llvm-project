@@ -926,7 +926,7 @@ bool AMDGPUDAGToDAGISel::isSDWAOperand(const SDNode *N) const {
 bool AMDGPUDAGToDAGISel::isUniformBr(const SDNode *N) const {
   const BasicBlock *BB = FuncInfo->MBB->getBasicBlock();
   const Instruction *Term = BB->getTerminator();
-  return !CurDAG->getUniformityInfo()->isDivergent(Term);
+  return !CurDAG->getUniformityInfo()->isDivergentAtDef(Term);
 }
 
 bool AMDGPUDAGToDAGISel::isUnneededShiftMask(const SDNode *N,
