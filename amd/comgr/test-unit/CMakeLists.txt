@@ -98,10 +98,14 @@ comgr_configure_test_target(HotswapElfTests)
 
 add_executable(HotswapMCTests
   HotswapMCTest.cpp
+  ../src/comgr-hotswap-b0a0.cpp
   ../src/comgr-hotswap-elf.cpp
   ../src/comgr-hotswap-llvm.cpp
+  ../src/comgr-hotswap-patch-inplace.cpp
+  ../src/comgr-hotswap-patch-trampoline.cpp
   ../src/comgr-hotswap-patch-vop3px2-src2.cpp
   ../src/comgr-hotswap-patch-wmma-hazard.cpp
+  ../src/comgr-hotswap-patch-wmma-split.cpp
   ../src/comgr-env.cpp)
 
 llvm_map_components_to_libnames(COMGR_TEST_UNIT_MC_LIBS
@@ -148,7 +152,8 @@ target_link_libraries(RaiserScaffoldingTests PRIVATE
 target_include_directories(RaiserScaffoldingTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
-  ${COMGR_GTEST_INCLUDE_DIRS})
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 
 comgr_configure_test_target(RaiserScaffoldingTests)
 
