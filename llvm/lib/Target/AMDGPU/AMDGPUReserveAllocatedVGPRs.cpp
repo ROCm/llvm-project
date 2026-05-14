@@ -13,7 +13,7 @@
 /// (SILowerSGPRSpills, WWM regalloc, PEI / scavenger, ...) do not reuse them.
 ///
 /// This pass should be invoked at the end of the perlane VGPR allocation in
-/// the LWT flow. It records the perlane-allocated physical VGPRs into
+/// the LWT flow. It records the allocated perlane physical VGPRs into
 /// SIMachineFunctionInfo's VGPRAllocMask, so that later phases see them as
 /// reserved through SIRegisterInfo::getReservedRegs().
 //
@@ -99,7 +99,7 @@ bool AMDGPUReserveAllocatedVGPRs::run(MachineFunction &MF) {
   // The renamable flag can't be set for reserved registers. Reset the flag on
   // machine operands referencing the perlane-allocated VGPRs (and their tuple
   // super-registers) as they are marked as reserved during the subsequent
-  // SGPR/WWM regalloc rounds.
+  // SGPR and WWM regalloc rounds.
   for (unsigned Reg : RegMask.set_bits()) {
     for (MachineOperand &MO : MRI.reg_operands(Reg))
       MO.setIsRenamable(false);

@@ -1996,7 +1996,7 @@ void SIFrameLowering::determineCalleeSaves(MachineFunction &MF,
   }
 
   sort(SortedWWMVGPRs, std::greater<Register>());
-  // TODO-WAVETRANSFORM: This is not needed in the late WT flow because the WWM
+  // TODO-WAVETRANSFORM: This is not needed in the late wave-transform flow because the WWM
   // allocation is done from the lowest available VGPRs. This has to be avoided
   // when we completely remove the structurizer-based flow.
   // Also, we need to change the selection of VGPR from lowest availble VGPR for

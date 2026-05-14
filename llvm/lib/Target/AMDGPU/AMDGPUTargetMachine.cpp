@@ -2005,7 +2005,7 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
   addPass(&StackSlotColoringID);
 
   // In LWT flow, it reserves the physical VGPRs allocated for the perlane VGPR.
-  // This is needed as the Subsequent passes like, SILowerSGPRSpills, WWM
+  // This is needed as the subsequent passes like, SILowerSGPRSpills, WWM
   // regalloc, PEI/scavenger consult getReservedRegs() and must not reuse those
   // already allocated VGPRs for the SGPR spills or other WWM allocations.
   if (LateWaveTransform)
