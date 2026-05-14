@@ -8,7 +8,7 @@
 //
 /// \file
 /// In the late-WaveTransform (LWT) pipeline, perlane VGPR allocation runs
-/// before the SGPR-spill / WWM-regalloc rounds. The physical VGPRs picked by
+/// before the SGPR-spill and WWM-regalloc rounds. The physical VGPRs picked by
 /// that early perlane allocation must be preserved so that subsequent passes
 /// (SILowerSGPRSpills, WWM regalloc, PEI / scavenger, ...) do not reuse them.
 ///
