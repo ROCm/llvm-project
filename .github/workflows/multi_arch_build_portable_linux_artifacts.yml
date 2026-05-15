@@ -63,6 +63,11 @@ jobs:
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       options: -v /runner/config:/home/awsconfig/
@@ -83,6 +88,13 @@ jobs:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
 
+      
+      - name: Cherry-pick PR-5268 for comm-libs fix
+        run: |
+          git fetch origin pull/5268/head:pr-5268
+          git checkout compiler/amd-staging
+          git cherry-pick pr-5268
+            
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
         run: |
