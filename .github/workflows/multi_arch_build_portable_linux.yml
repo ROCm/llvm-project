@@ -136,7 +136,7 @@ jobs:
       # See comment on math-libs fail-fast above.
       fail-fast: false
       matrix:
-        family_info: ${{ fromJSON(inputs.matrix_per_family_json) }}    
+        family_info: ${{ fromJSON(inputs.matrix_per_family_json) }} 
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
@@ -291,7 +291,7 @@ jobs:
   # ==========================================================================
   manifest_summary:
     needs: [compiler-runtime, foundation, math-libs, comm-libs]
-    if: ${{ !cancelled() && !failure() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Download all stage submodule commit
