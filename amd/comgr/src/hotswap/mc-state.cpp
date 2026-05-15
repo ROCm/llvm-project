@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "mc-state.h"
+#include "hotswap-error.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCInstrInfo.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetSelect.h"
 
 using namespace llvm;
@@ -18,19 +18,19 @@ namespace COMGR::hotswap {
 
 const char kAMDGPUTriple[] = "amdgcn-amd-amdhsa";
 
-std::unique_ptr<MCSubtargetInfo>
+Expected<std::unique_ptr<MCSubtargetInfo>>
 buildSubtargetInfo(const Target &Target, StringRef Isa) {
   Triple Triple(kAMDGPUTriple);
   std::unique_ptr<MCSubtargetInfo> Sti(
       Target.createMCSubtargetInfo(Triple, Isa, ""));
   if (!Sti)
-    report_fatal_error(Twine("transpiler: failed to create MCSubtargetInfo "
-                             "for ISA '") +
-                       Isa + "'");
+    return makeHotswapError("buildSubtargetInfo: failed to create "
+                            "MCSubtargetInfo for ISA '" +
+                            Isa + "'");
   return Sti;
 }
 
-bool initMCState(MCState &State, StringRef TargetIsa) {
+Error initMCState(MCState &State, StringRef TargetIsa) {
   LLVMInitializeAMDGPUTargetInfo();
   LLVMInitializeAMDGPUTarget();
   LLVMInitializeAMDGPUTargetMC();
@@ -39,17 +39,23 @@ bool initMCState(MCState &State, StringRef TargetIsa) {
   LLVMInitializeAMDGPUAsmPrinter();
 
   Triple Triple(kAMDGPUTriple);
-  std::string Error;
-  State.Target = TargetRegistry::lookupTarget(Triple, Error);
+  std::string LookupError;
+  State.Target = TargetRegistry::lookupTarget(Triple, LookupError);
   if (!State.Target)
-    report_fatal_error(Twine("transpiler: Target lookup for '") +
-                       kAMDGPUTriple + "' failed: " + Error);
+    return makeHotswapError(Twine("initMCState: Target lookup for '") +
+                            kAMDGPUTriple + "' failed: " + LookupError);
 
   State.InstrInfo.reset(State.Target->createMCInstrInfo());
   State.RegInfo.reset(State.Target->createMCRegInfo(Triple));
-  State.SubtargetInfo = buildSubtargetInfo(*State.Target, TargetIsa);
+  Expected<std::unique_ptr<MCSubtargetInfo>> StiOrErr =
+      buildSubtargetInfo(*State.Target, TargetIsa);
+  if (!StiOrErr)
+    return StiOrErr.takeError();
+  State.SubtargetInfo = std::move(*StiOrErr);
   State.AsmInfo.reset(State.Target->createMCAsmInfo(
       *State.RegInfo, Triple, MCTargetOptions()));
+  if (!State.AsmInfo)
+    return makeHotswapError("initMCState: createMCAsmInfo returned null");
   State.Ctx = std::make_unique<MCContext>(Triple, *State.AsmInfo,
                                          *State.RegInfo,
                                          *State.SubtargetInfo);
@@ -76,10 +82,14 @@ bool initMCState(MCState &State, StringRef TargetIsa) {
   State.Ctx->initInlineSourceManager();
   State.Disasm.reset(
       State.Target->createMCDisassembler(*State.SubtargetInfo, *State.Ctx));
+  if (!State.Disasm)
+    return makeHotswapError("initMCState: createMCDisassembler returned null");
   State.Printer.reset(State.Target->createMCInstPrinter(
       Triple, 0, *State.AsmInfo, *State.InstrInfo, *State.RegInfo));
+  if (!State.Printer)
+    return makeHotswapError("initMCState: createMCInstPrinter returned null");
   State.Printer->setPrintImmHex(true);
-  return true;
+  return Error::success();
 }
 
 std::string getMnemonic(const MCState &Mc, const MCInst &Inst) {

@@ -57,8 +57,13 @@ function(comgr_link_hotswap_transpiler target)
   # `code-object-utils.cpp` calls into to wrap raw ELF bytes for the
   # `metadata::getMetadataRoot` / `metadata::getElfIsaName` paths.
   target_link_libraries(${target} PRIVATE hotswap::transpiler amd_comgr)
+  # `code-object-utils.cpp` also references `COMGR::lookupSymbolByName`
+  # (defined in `comgr-symbol.cpp`); the version-script on amd_comgr.so
+  # hides every C++ symbol, so the helper must be compiled in directly
+  # alongside the metadata helpers.
   target_sources(${target} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-metadata.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-metadata.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/comgr-symbol.cpp)
   target_include_directories(${target} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_BINARY_DIR}/../include

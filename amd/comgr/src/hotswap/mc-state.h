@@ -9,16 +9,17 @@
 #ifndef HOTSWAP_TRANSPILER_MC_STATE_H
 #define HOTSWAP_TRANSPILER_MC_STATE_H
 // Include LLVM MC headers needed for the unique_ptrs
-#include "llvm/MC/MCDisassembler/MCDisassembler.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDisassembler/MCDisassembler.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstPrinter.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCInstPrinter.h"
-#include "llvm/MC/MCInst.h"
 #include "llvm/MC/TargetRegistry.h"
-#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 #include <memory>
 #include <string>
 
@@ -38,13 +39,17 @@ struct MCState {
 // The AMDGPU triple shared by every MC object we construct here.
 extern const char kAMDGPUTriple[];
 
-bool initMCState(MCState &State, llvm::StringRef TargetIsa);
+// Populate `State` with the AMDGPU MC stack for `TargetIsa`. Returns
+// `Error::success()` on success; on failure returns either a
+// hotswap-originated `HotswapError` (Target lookup, MCSubtargetInfo /
+// MCAsmInfo / MCDisassembler / MCInstPrinter creation failures) or
+// forwards an upstream LLVM ErrorInfo unchanged.
+llvm::Error initMCState(MCState &State, llvm::StringRef TargetIsa);
 
 // Thin wrapper around Target::createMCSubtargetInfo for the AMDGPU triple.
 // Returns a fully populated MCSubtargetInfo (feature bits honour the CPU
-// name). Aborts via report_fatal_error on failure — we never want a silent
-// empty subtarget.
-std::unique_ptr<llvm::MCSubtargetInfo>
+// name) or a `HotswapError` when the Target rejects the ISA string.
+llvm::Expected<std::unique_ptr<llvm::MCSubtargetInfo>>
 buildSubtargetInfo(const llvm::Target &Target, llvm::StringRef Isa);
 
 std::string getMnemonic(const MCState &Mc, const llvm::MCInst &Inst);

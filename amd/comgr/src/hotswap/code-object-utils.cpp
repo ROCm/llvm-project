@@ -10,6 +10,7 @@
 
 #include "../comgr-metadata.h"
 #include "../comgr-symbol.h"
+#include "hotswap-error.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
@@ -28,104 +29,91 @@ namespace {
 // AMDGPU asm printer emits it there); we map the symbol's virtual
 // address to its file-level byte offset within the section's contents
 // and copy the canonical 64-byte structure. Any mismatch (missing
-// symbol, wrong size, address not within .rodata) is reported and
-// produces `false`.
+// symbol, wrong size, address not within .rodata) is returned as an
+// `llvm::Error` -- forwarded LLVM errors keep their original
+// ErrorInfo type, hotswap-detected mismatches use `HotswapError`.
 //
 // We deliberately key off the symbol rather than the MsgPack metadata:
 // the MsgPack notes do not include kernarg_preload_length /
 // preload_offset, and that information is essential for modelling the
 // gfx1250 user-SGPR ABI in Phase 4 of the raiser.
-bool readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
-                               llvm::StringRef KernelName,
-                               llvm::MutableArrayRef<uint8_t> Out) {
+llvm::Error readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
+                                      llvm::StringRef KernelName,
+                                      llvm::MutableArrayRef<uint8_t> Out) {
   constexpr size_t KdSize = sizeof(llvm::amdhsa::kernel_descriptor_t);
   assert(Out.size() == KdSize &&
          "kernel descriptor is sizeof(kernel_descriptor_t) bytes");
   std::string KdSymName = (KernelName + ".kd").str();
 
   std::optional<llvm::object::SectionRef> RodataSec;
-  for (const auto &Sec : Obj.sections()) {
-    auto NameOrErr = Sec.getName();
-    if (!NameOrErr) {
-      llvm::errs()
-          << "transpiler: readKernelDescriptorBytes: failed to read section "
-             "name while scanning for .rodata: "
-          << llvm::toString(NameOrErr.takeError()) << "\n";
-      continue;
-    }
+  for (const llvm::object::SectionRef &Sec : Obj.sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
+    if (!NameOrErr)
+      return NameOrErr.takeError();
     if (*NameOrErr == ".rodata") {
       RodataSec = Sec;
       break;
     }
   }
-  if (!RodataSec) {
-    llvm::errs() << "transpiler: readKernelDescriptorBytes: no .rodata "
-                    "section in code object\n";
-    return false;
-  }
+  if (!RodataSec)
+    return makeHotswapError(
+        "readKernelDescriptorBytes: no .rodata section in code object");
 
   uint64_t RodataAddr = RodataSec->getAddress();
   uint64_t RodataSize = RodataSec->getSize();
-  auto RodataContentsOrErr = RodataSec->getContents();
-  if (!RodataContentsOrErr) {
-    llvm::errs()
-        << "transpiler: readKernelDescriptorBytes: failed to read .rodata "
-           "section contents: "
-        << llvm::toString(RodataContentsOrErr.takeError()) << "\n";
-    return false;
-  }
-  auto RodataContents = *RodataContentsOrErr;
+  llvm::Expected<llvm::StringRef> RodataContentsOrErr =
+      RodataSec->getContents();
+  if (!RodataContentsOrErr)
+    return RodataContentsOrErr.takeError();
+  llvm::StringRef RodataContents = *RodataContentsOrErr;
 
-  auto SymOrErr = COMGR::lookupSymbolByName(Obj, KdSymName);
-  if (!SymOrErr) {
-    llvm::errs() << "transpiler: readKernelDescriptorBytes: "
-                 << llvm::toString(SymOrErr.takeError()) << "\n";
-    return false;
-  }
-  auto AddrOrErr = SymOrErr->getAddress();
-  if (!AddrOrErr) {
-    llvm::errs() << "transpiler: readKernelDescriptorBytes: failed to read "
-                    "address of symbol '"
-                 << KdSymName
-                 << "': " << llvm::toString(AddrOrErr.takeError()) << "\n";
-    return false;
-  }
+  llvm::Expected<llvm::object::SymbolRef> SymOrErr =
+      COMGR::lookupSymbolByName(Obj, KdSymName);
+  if (!SymOrErr)
+    return SymOrErr.takeError();
+  llvm::Expected<uint64_t> AddrOrErr = SymOrErr->getAddress();
+  if (!AddrOrErr)
+    return AddrOrErr.takeError();
   uint64_t SymAddr = *AddrOrErr;
 
-  if (SymAddr < RodataAddr || SymAddr + KdSize > RodataAddr + RodataSize) {
-    llvm::errs() << "transpiler: readKernelDescriptorBytes: symbol '"
-                 << KdSymName << "' at 0x" << llvm::utohexstr(SymAddr)
-                 << " is not contained within .rodata [0x"
-                 << llvm::utohexstr(RodataAddr) << ", 0x"
-                 << llvm::utohexstr(RodataAddr + RodataSize) << ")\n";
-    return false;
-  }
+  if (SymAddr < RodataAddr || SymAddr + KdSize > RodataAddr + RodataSize)
+    return makeHotswapError("readKernelDescriptorBytes: symbol '" + KdSymName +
+                            "' at 0x" + llvm::utohexstr(SymAddr) +
+                            " is not contained within .rodata [0x" +
+                            llvm::utohexstr(RodataAddr) + ", 0x" +
+                            llvm::utohexstr(RodataAddr + RodataSize) + ")");
 
   uint64_t Off = SymAddr - RodataAddr;
-  if (Off + KdSize > RodataContents.size()) {
-    llvm::errs() << "transpiler: readKernelDescriptorBytes: symbol '"
-                 << KdSymName << "' offset 0x" << llvm::utohexstr(Off) << " + "
-                 << KdSize << " exceeds .rodata contents size 0x"
-                 << llvm::utohexstr(RodataContents.size()) << "\n";
-    return false;
-  }
+  if (Off + KdSize > RodataContents.size())
+    return makeHotswapError("readKernelDescriptorBytes: symbol '" + KdSymName +
+                            "' offset 0x" + llvm::utohexstr(Off) + " + " +
+                            llvm::Twine(KdSize) +
+                            " exceeds .rodata contents size 0x" +
+                            llvm::utohexstr(RodataContents.size()));
 
-  llvm::ArrayRef<uint8_t> Src(
-      RodataContents.bytes_begin() + Off, KdSize);
+  llvm::ArrayRef<uint8_t> Src(RodataContents.bytes_begin() + Off, KdSize);
   llvm::copy(Src, Out.begin());
-  return true;
+  return llvm::Error::success();
 }
 
 // Parse the four KD register fields we care about into `meta`. The
 // 64-byte block is read straight into a `kernel_descriptor_t` so each
 // field comes from its struct member instead of an offset + read32le
 // call against a raw byte buffer.
+//
+// KD-bytes lookup is a follow-on best-effort step: extractKernelMeta
+// returns a usable KernelMeta for the MsgPack-derived fields even when
+// the .rodata KD blob is unreachable. We log the underlying Error here
+// (keeping the existing diagnostic surface) and leave
+// `Meta.HasKernelDescriptor == false` -- the caller is contractually
+// expected to refuse the lift in that case.
 void populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
                                     KernelMeta &Meta) {
   llvm::amdhsa::kernel_descriptor_t Kd{};
   llvm::MutableArrayRef<uint8_t> KdBytes(reinterpret_cast<uint8_t *>(&Kd),
                                          sizeof(Kd));
-  if (!readKernelDescriptorBytes(Obj, Meta.Name, KdBytes)) {
+  if (llvm::Error E = readKernelDescriptorBytes(Obj, Meta.Name, KdBytes)) {
+    llvm::logAllUnhandledErrors(std::move(E), llvm::errs(), "transpiler: ");
     Meta.HasKernelDescriptor = false;
     return;
   }
@@ -177,131 +165,114 @@ void forEachKernelNode(llvm::msgpack::Document &Doc, Fn &&CB) {
 
 } // namespace
 
-TextSection extractTextSection(llvm::MemoryBufferRef ElfData) {
-  TextSection Result;
-  auto ObjOrErr = llvm::object::ObjectFile::createELFObjectFile(ElfData);
-  if (!ObjOrErr) {
-    llvm::errs() << "transpiler: Failed to parse ELF: "
-                 << llvm::toString(ObjOrErr.takeError()) << "\n";
-    return Result;
-  }
-  for (const auto &Sec : (*ObjOrErr)->sections()) {
-    auto NameOrErr = Sec.getName();
-    if (!NameOrErr) {
-      llvm::errs() << "transpiler: extractTextSection: failed to read section "
-                      "name while scanning for .text: "
-                   << llvm::toString(NameOrErr.takeError()) << "\n";
-      continue;
-    }
+llvm::Expected<TextSection> extractTextSection(llvm::MemoryBufferRef ElfData) {
+  llvm::Expected<std::unique_ptr<llvm::object::ObjectFile>> ObjOrErr =
+      llvm::object::ObjectFile::createELFObjectFile(ElfData);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
+  for (const llvm::object::SectionRef &Sec : (*ObjOrErr)->sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
+    if (!NameOrErr)
+      return NameOrErr.takeError();
     if (*NameOrErr != ".text")
       continue;
-    auto ContentsOrErr = Sec.getContents();
-    if (!ContentsOrErr) {
-      llvm::errs() << "transpiler: extractTextSection: failed to read .text "
-                      "section contents: "
-                   << llvm::toString(ContentsOrErr.takeError()) << "\n";
-      continue;
-    }
+    llvm::Expected<llvm::StringRef> ContentsOrErr = Sec.getContents();
+    if (!ContentsOrErr)
+      return ContentsOrErr.takeError();
+    TextSection Result;
     Result.Bytes.assign(ContentsOrErr->begin(), ContentsOrErr->end());
     Result.Offset = Sec.getAddress();
     Result.Size = Sec.getSize();
-    Result.Valid = true;
     return Result;
   }
-  llvm::errs() << "transpiler: .text section not found in ELF\n";
-  return Result;
+  return makeHotswapError("extractTextSection: .text section not found in ELF");
 }
 
-llvm::SmallVector<std::string> listKernelNames(llvm::MemoryBufferRef ElfData) {
-  llvm::SmallVector<std::string> Names;
+llvm::Expected<llvm::SmallVector<std::string>>
+listKernelNames(llvm::MemoryBufferRef ElfData) {
   COMGR::DataMeta Meta;
   Meta.MetaDoc = std::make_shared<COMGR::MetaDocument>();
   Meta.DocNode = Meta.MetaDoc->Document.getRoot();
   if (COMGR::metadata::getMetadataRoot(ElfData, &Meta) !=
-      AMD_COMGR_STATUS_SUCCESS) {
-    llvm::errs() << "transpiler: listKernelNames: no AMDGPU metadata note\n";
-    return Names;
-  }
+      AMD_COMGR_STATUS_SUCCESS)
+    return makeHotswapError("listKernelNames: no AMDGPU metadata note");
 
+  llvm::SmallVector<std::string> Names;
   forEachKernelNode(Meta.MetaDoc->Document,
                     [&](llvm::msgpack::MapDocNode &KMap) {
-                      if (auto *N = findInMap(KMap, ".name"))
+                      if (llvm::msgpack::DocNode *N = findInMap(KMap, ".name"))
                         Names.push_back(N->toString());
                     });
   return Names;
 }
 
-KernelMeta extractKernelMeta(llvm::MemoryBufferRef ElfData,
-                             llvm::StringRef KernelName) {
-  KernelMeta Meta;
-
-  auto ObjOrErr = llvm::object::ObjectFile::createELFObjectFile(ElfData);
-  if (!ObjOrErr) {
-    llvm::errs() << "transpiler: extractKernelMeta: Failed to parse ELF: "
-                 << llvm::toString(ObjOrErr.takeError()) << "\n";
-    return Meta;
-  }
+llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
+                                             llvm::StringRef KernelName) {
+  llvm::Expected<std::unique_ptr<llvm::object::ObjectFile>> ObjOrErr =
+      llvm::object::ObjectFile::createELFObjectFile(ElfData);
+  if (!ObjOrErr)
+    return ObjOrErr.takeError();
 
   COMGR::DataMeta MetaDoc;
   MetaDoc.MetaDoc = std::make_shared<COMGR::MetaDocument>();
   MetaDoc.DocNode = MetaDoc.MetaDoc->Document.getRoot();
   if (COMGR::metadata::getMetadataRoot(ElfData, &MetaDoc) !=
-      AMD_COMGR_STATUS_SUCCESS) {
-    llvm::errs() << "transpiler: extractKernelMeta: no AMDGPU metadata note\n";
-    return Meta;
-  }
+      AMD_COMGR_STATUS_SUCCESS)
+    return makeHotswapError("extractKernelMeta: no AMDGPU metadata note");
+
+  KernelMeta Meta;
   bool MatchedKernel = false;
   forEachKernelNode(MetaDoc.MetaDoc->Document,
                     [&](llvm::msgpack::MapDocNode &KMap) {
     if (MatchedKernel)
       return;
-    auto *NameNode = findInMap(KMap, ".name");
+    llvm::msgpack::DocNode *NameNode = findInMap(KMap, ".name");
     if (!NameNode || NameNode->toString() != KernelName)
       return;
     MatchedKernel = true;
     Meta.Name = NameNode->toString();
 
-    if (auto *N = findInMap(KMap, ".kernarg_segment_size"))
+    if (llvm::msgpack::DocNode *N = findInMap(KMap, ".kernarg_segment_size"))
       Meta.KernargSegmentSize = nodeAsInt(*N);
-    if (auto *N = findInMap(KMap, ".group_segment_fixed_size"))
+    if (llvm::msgpack::DocNode *N =
+            findInMap(KMap, ".group_segment_fixed_size"))
       Meta.GroupSegmentFixedSize = nodeAsInt(*N);
-    if (auto *N = findInMap(KMap, ".private_segment_fixed_size"))
+    if (llvm::msgpack::DocNode *N =
+            findInMap(KMap, ".private_segment_fixed_size"))
       Meta.PrivateSegmentFixedSize = nodeAsInt(*N);
-    if (auto *N = findInMap(KMap, ".max_flat_workgroup_size"))
+    if (llvm::msgpack::DocNode *N = findInMap(KMap, ".max_flat_workgroup_size"))
       Meta.MaxFlatWorkgroupSize = nodeAsInt(*N);
 
-    if (auto *Args = findInMap(KMap, ".args");
+    if (llvm::msgpack::DocNode *Args = findInMap(KMap, ".args");
         Args && Args->isArray()) {
-      for (auto &ArgNode : Args->getArray()) {
+      for (llvm::msgpack::DocNode &ArgNode : Args->getArray()) {
         if (!ArgNode.isMap())
           continue;
-        auto &AMap = ArgNode.getMap();
+        llvm::msgpack::MapDocNode &AMap = ArgNode.getMap();
         KernelArgMeta Am;
-        if (auto *N = findInMap(AMap, ".name"))
+        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".name"))
           Am.Name = N->toString();
-        if (auto *N = findInMap(AMap, ".offset"))
+        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".offset"))
           Am.Offset = nodeAsInt(*N);
-        if (auto *N = findInMap(AMap, ".size"))
+        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".size"))
           Am.Size = nodeAsInt(*N);
-        if (auto *N = findInMap(AMap, ".value_kind"))
+        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".value_kind"))
           Am.ValueKind = N->toString();
-        if (auto *N = findInMap(AMap, ".address_space"))
+        if (llvm::msgpack::DocNode *N = findInMap(AMap, ".address_space"))
           Am.AddressSpace = nodeAsInt(*N);
         Meta.Args.push_back(Am);
       }
     }
   });
 
-  if (!MatchedKernel) {
-    llvm::errs() << "transpiler: extractKernelMeta: kernel '" << KernelName
-                 << "' not found in metadata\n";
-    return Meta;
-  }
+  if (!MatchedKernel)
+    return makeHotswapError("extractKernelMeta: kernel '" + KernelName +
+                            "' not found in metadata");
 
   // Fill the KD-register fields from .rodata. Sets Meta.HasKernelDescriptor
-  // on success and emits a diagnostic on failure; the caller (raiser /
-  // Phase-4 init) is responsible for refusing the lift if the field is
-  // false rather than silently assuming a hardcoded SGPR layout.
+  // on success and logs the underlying Error on failure; the caller
+  // (raiser / Phase-4 init) is responsible for refusing the lift if the
+  // field is false rather than silently assuming a hardcoded SGPR layout.
   populateKernelDescriptorFields(*ObjOrErr->get(), Meta);
   return Meta;
 }
@@ -309,35 +280,34 @@ KernelMeta extractKernelMeta(llvm::MemoryBufferRef ElfData,
 llvm::Expected<uint64_t>
 findKernelSymbolOffset(llvm::MemoryBufferRef ElfData,
                        llvm::StringRef KernelName) {
-  auto ObjOrErr = llvm::object::ObjectFile::createELFObjectFile(ElfData);
+  llvm::Expected<std::unique_ptr<llvm::object::ObjectFile>> ObjOrErr =
+      llvm::object::ObjectFile::createELFObjectFile(ElfData);
   if (!ObjOrErr)
-    return llvm::createStringError(
-        llvm::inconvertibleErrorCode(),
-        "findKernelSymbolOffset: Failed to parse ELF: " +
-            llvm::toString(ObjOrErr.takeError()));
+    return ObjOrErr.takeError();
 
   uint64_t TextBase = UINT64_MAX;
-  for (const auto &Sec : (*ObjOrErr)->sections()) {
-    auto NameOrErr = Sec.getName();
-    if (NameOrErr && *NameOrErr == ".text") {
+  for (const llvm::object::SectionRef &Sec : (*ObjOrErr)->sections()) {
+    llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
+    if (!NameOrErr)
+      return NameOrErr.takeError();
+    if (*NameOrErr == ".text") {
       TextBase = Sec.getAddress();
       break;
     }
   }
   if (TextBase == UINT64_MAX)
-    return llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                   "no .text section in ELF");
+    return makeHotswapError("findKernelSymbolOffset: no .text section in ELF");
 
-  auto SymOrErr = COMGR::lookupSymbolByName(**ObjOrErr, KernelName);
+  llvm::Expected<llvm::object::SymbolRef> SymOrErr =
+      COMGR::lookupSymbolByName(**ObjOrErr, KernelName);
   if (!SymOrErr)
     return SymOrErr.takeError();
-  auto AddrOrErr = SymOrErr->getAddress();
+  llvm::Expected<uint64_t> AddrOrErr = SymOrErr->getAddress();
   if (!AddrOrErr)
     return AddrOrErr.takeError();
   if (*AddrOrErr < TextBase)
-    return llvm::createStringError(
-        llvm::inconvertibleErrorCode(),
-        "symbol '" + KernelName + "' address < .text base");
+    return makeHotswapError("findKernelSymbolOffset: symbol '" + KernelName +
+                            "' address < .text base");
   return *AddrOrErr - TextBase;
 }
 

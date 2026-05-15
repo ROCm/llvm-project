@@ -49,6 +49,7 @@
 #include "hotswap/mc-state.h"
 
 #include "llvm/MC/MCContext.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/TargetSelect.h"
 
 #include "gtest/gtest.h"
@@ -93,9 +94,11 @@ TEST(MCContextInlineSrcMgr, HotswapInitMCStateAttachesInlineSourceManager) {
   ensureAMDGPURegistered();
 
   COMGR::hotswap::MCState state;
-  ASSERT_TRUE(COMGR::hotswap::initMCState(state, "gfx942"))
+  llvm::Error InitErr = COMGR::hotswap::initMCState(state, "gfx942");
+  ASSERT_FALSE(static_cast<bool>(InitErr))
       << "initMCState('gfx942') must succeed on an AMDGPU-enabled LLVM "
-         "build (InitializeAllTargetMCs was just run above)";
+         "build (InitializeAllTargetMCs was just run above): "
+      << llvm::toString(std::move(InitErr));
 
   ASSERT_NE(state.Ctx, nullptr)
       << "initMCState must construct an MCContext — the fix we are "
@@ -133,11 +136,15 @@ TEST(MCContextInlineSrcMgr, SecondMCStateAlsoGetsInlineSourceManager) {
   ensureAMDGPURegistered();
 
   COMGR::hotswap::MCState first;
-  ASSERT_TRUE(COMGR::hotswap::initMCState(first, "gfx942"));
+  llvm::Error FirstErr = COMGR::hotswap::initMCState(first, "gfx942");
+  ASSERT_FALSE(static_cast<bool>(FirstErr))
+      << llvm::toString(std::move(FirstErr));
   EXPECT_NE(first.Ctx->getInlineSourceManager(), nullptr);
 
   COMGR::hotswap::MCState second;
-  ASSERT_TRUE(COMGR::hotswap::initMCState(second, "gfx942"));
+  llvm::Error SecondErr = COMGR::hotswap::initMCState(second, "gfx942");
+  ASSERT_FALSE(static_cast<bool>(SecondErr))
+      << llvm::toString(std::move(SecondErr));
   EXPECT_NE(second.Ctx->getInlineSourceManager(), nullptr)
       << "Second initMCState on the same target must also produce an "
          "MCContext with a non-null InlineSrcMgr — a one-shot init "

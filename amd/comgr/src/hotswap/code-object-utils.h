@@ -25,7 +25,6 @@ struct TextSection {
   llvm::SmallVector<uint8_t, 0> Bytes;
   uint64_t Offset = 0;
   uint64_t Size = 0;
-  bool Valid = false;
 };
 
 struct KernelArgMeta {
@@ -109,10 +108,11 @@ struct KernelMeta {
   }
 };
 
-TextSection extractTextSection(llvm::MemoryBufferRef ElfData);
-llvm::SmallVector<std::string> listKernelNames(llvm::MemoryBufferRef ElfData);
-KernelMeta extractKernelMeta(llvm::MemoryBufferRef ElfData,
-                             llvm::StringRef KernelName);
+llvm::Expected<TextSection> extractTextSection(llvm::MemoryBufferRef ElfData);
+llvm::Expected<llvm::SmallVector<std::string>>
+listKernelNames(llvm::MemoryBufferRef ElfData);
+llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
+                                             llvm::StringRef KernelName);
 llvm::Expected<uint64_t> findKernelSymbolOffset(llvm::MemoryBufferRef ElfData,
                                                 llvm::StringRef KernelName);
 
