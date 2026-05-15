@@ -132,11 +132,6 @@ jobs:
   comm-libs:
     needs: compiler-runtime
     if: ${{ !cancelled() && !failure() && !contains(inputs.prebuilt_stages, 'comm-libs') }}
-    strategy:
-      # See comment on math-libs fail-fast above.
-      fail-fast: false
-      matrix:
-        family_info: ${{ fromJSON(inputs.matrix_per_family_json) }}
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts.yml
     secrets: inherit
     with:
