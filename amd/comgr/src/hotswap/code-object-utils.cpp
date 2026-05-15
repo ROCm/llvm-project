@@ -101,12 +101,13 @@ llvm::Error readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
 // field comes from its struct member instead of an offset + read32le
 // call against a raw byte buffer.
 //
-// KD-bytes lookup is a follow-on best-effort step: extractKernelMeta
-// returns a usable KernelMeta for the MsgPack-derived fields even when
-// the .rodata KD blob is unreachable. We log the underlying Error here
-// (keeping the existing diagnostic surface) and leave
-// `Meta.HasKernelDescriptor == false` -- the caller is contractually
-// expected to refuse the lift in that case.
+// KD-bytes lookup is partial-success: extractKernelMeta returns a
+// usable KernelMeta for the MsgPack-derived fields even when the
+// .rodata KD blob is unreachable. We log the underlying Error here
+// (no silent return on failure -- AGENT_CONVENTIONS section 2) and
+// leave `Meta.HasKernelDescriptor == false`. The raiser refuses the
+// lift in that case for non-empty inputs; empty-input scaffolding
+// mode skips the check.
 void populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
                                     KernelMeta &Meta) {
   llvm::amdhsa::kernel_descriptor_t Kd{};
@@ -269,10 +270,9 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
     return makeHotswapError("extractKernelMeta: kernel '" + KernelName +
                             "' not found in metadata");
 
-  // Fill the KD-register fields from .rodata. Sets Meta.HasKernelDescriptor
-  // on success and logs the underlying Error on failure; the caller
-  // (raiser / Phase-4 init) is responsible for refusing the lift if the
-  // field is false rather than silently assuming a hardcoded SGPR layout.
+  // Fill the KD-register fields from .rodata. Partial-success: KD
+  // failures log + leave Meta.HasKernelDescriptor false; the raiser
+  // gates its non-empty-input lift on that flag.
   populateKernelDescriptorFields(*ObjOrErr->get(), Meta);
   return Meta;
 }

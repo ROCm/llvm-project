@@ -81,9 +81,13 @@ struct KernelMeta {
   //     the user-SGPR layout, but useful for diagnostics and for future
   //     wave-size-aware decisions. Captured for completeness.
   //
-  // `hasKernelDescriptor` is true iff parsing succeeded. We do not silently
-  // fall back to a hardcoded layout when it is false — the caller is
-  // expected to refuse the lift instead.
+  // `HasKernelDescriptor` is true iff the .rodata KD bytes parsed
+  // cleanly. extractKernelMeta treats KD parse failure as a partial
+  // success (logs the underlying Error, returns the MsgPack-derived
+  // fields, leaves this flag false) so callers who only need the
+  // MsgPack metadata are not blocked by a missing KD. raiseToIR
+  // gates its non-empty-input lift on this flag -- empty-input
+  // scaffolding mode skips the check.
   bool HasKernelDescriptor = false;
   uint32_t ComputePgmRsrc1 = 0;
   uint32_t ComputePgmRsrc2 = 0;
