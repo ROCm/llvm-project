@@ -24,6 +24,6 @@ MATH_MANGLE(cospi)(half x)
     half c = (r.i & (short)1) == (short)0 ? sc.c : sc.s;
     c = r.i > (short)1 ? -c : c;
 
-    return c;
+    return c + 0.0h;
 }
 

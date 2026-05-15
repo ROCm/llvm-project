@@ -22,6 +22,6 @@ MATH_MANGLE(cospi)(float x)
     float c = (r.i & 1) != 0 ? sc.s : sc.c;
     c = r.i > 1 ? -c : c;
 
-    return c;
+    return c + 0.0f;
 }
 
