@@ -87,6 +87,8 @@ jobs:
       - name: Cherry-pick PR-5268 for comm-libs fix
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
           git fetch origin pull/5268/head:pr-5268
           git checkout compiler/amd-staging
           commit=$(git log --merges --format="%H" -n 1 pr-5268)
