@@ -285,7 +285,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION='' -DCMAKE_HIP_FLAGS='-mllvm -amdgpu-enable-vopd=0' -DCMAKE_CXX_FLAGS='-mllvm -amdgpu-enable-vopd=0'"
+          extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
           BUILD_DIR: build           
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
@@ -302,7 +302,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON -DCMAKE_HIP_FLAGS='-mllvm -amdgpu-enable-vopd=0' -DCMAKE_CXX_FLAGS='-mllvm -amdgpu-enable-vopd=0'"
+          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON"
           BUILD_DIR: build
         run: |
           cmake -B "${BUILD_DIR}" -S . -GNinja \
@@ -315,6 +315,10 @@ jobs:
 
       - name: Build stage
         run: |
+          if [ "${STAGE_NAME}" = "comm-libs" ]; then
+            sed -i 's/\(--offload-arch=\)/--offload-extra-arg=-mllvm --offload-extra-arg=-amdgpu-enable-vopd=0 \1/' \
+              rocm-systems/projects/rccl/tools/rccl-device-compile
+          fi
           python build_tools/memory_monitor.py --phase Build -- \
             cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
