@@ -84,12 +84,12 @@ jobs:
           ref: 'compiler/amd-staging'
           fetch-depth: 0
       
-      - name: Cherry-pick PR-5268 for comm-libs fix
+      - name: Cherry-pick PR-5276 for comm-libs fix
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
-          git fetch origin pull/5268/head:pr-5268
+          git fetch origin pull/5276/head:pr-5276
           git checkout compiler/amd-staging
           for pr_commit in $(git rev-list --no-merges compiler/amd-staging..pr-5268); do
             git cherry-pick "$pr_commit" || git cherry-pick --skip
