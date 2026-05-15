@@ -38,17 +38,6 @@ namespace {
 // Helpers
 // ---------------------------------------------------------------------------
 
-bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset, uint32_t InstSize,
-                     ArrayRef<uint8_t> Replacement) {
-  Trampoline T;
-  T.OriginalOffset = InstOffset;
-  T.OriginalSize = InstSize;
-  T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
-  T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
-  Ctx.OutTrampolines.emplace_back(std::move(T));
-  return true;
-}
-
 std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
 std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
 
@@ -57,6 +46,9 @@ std::string sgprName(unsigned N) { return ("s" + Twine(N)).str(); }
 /// "SGPR0", "VCC_LO"); we map it to the assembler name used in inline asm.
 /// True16 sub-register names ("VGPR0_LO16") are mapped to the 32-bit
 /// parent since the replacement sequences only use 32-bit ALU instructions.
+// TODO: Extract toAsmRegName into comgr-hotswap-internal.h as a shared
+// utility. A similar version exists in comgr-hotswap-patch-trampoline.cpp.
+// This one additionally handles True16 suffixes. Tracked in #2253.
 std::string toAsmRegName(const MCRegisterInfo &MRI, MCRegister Reg) {
   const char *N = MRI.getName(Reg);
   if (!N)
@@ -140,6 +132,34 @@ constexpr VOP3Fp8UnpackLayout UnpackFp8Layout = {/*NumOperands=*/4, /*VDst=*/0,
                                                  /*Src0=*/1, /*Clamp=*/2,
                                                  /*ByteSel=*/3};
 
+// -- Scratch allocation helper -----------------------------------------------
+
+struct ScratchAllocation {
+  ScratchAllocator VgprAlloc;
+  ScratchSgprAllocator SgprAlloc;
+  std::string KernelName;
+};
+
+std::optional<ScratchAllocation> allocateScratch(PatchContext &Ctx,
+                                                 size_t Idx) {
+  const InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  std::string KernelName =
+      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
+  std::optional<unsigned> KdVgprs =
+      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
+  unsigned VgprKdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
+  ScratchAllocator VgprAlloc(Ctx.Liveness.LiveBefore[Idx], VgprKdCount,
+                             Ctx.Config.MaxVgprs);
+
+  std::optional<unsigned> KdSgprs =
+      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
+  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
+  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
+
+  return ScratchAllocation{std::move(VgprAlloc), std::move(SgprAlloc),
+                           std::move(KernelName)};
+}
+
 // ---------------------------------------------------------------------------
 // Per-source F32 → UE5M3 conversion with full fixups
 // ---------------------------------------------------------------------------
@@ -154,7 +174,7 @@ constexpr VOP3Fp8UnpackLayout UnpackFp8Layout = {/*NumOperands=*/4, /*VDst=*/0,
 ///   \p Out   — output VGPR, receives UE5M3 byte in bits [7:0]
 ///   \p Tmp   — scratch VGPR, clobbered
 ///   \p NanSgpr — SGPR name (e.g. "s0") for saving/restoring the NaN flag
-///   \p Src   — full operand with modifiers (used in v_max_f32)
+///   \p Src   — full operand with modifiers (used in v_max_num_f32)
 ///   \p BareSrc — bare register name (used in v_and_b32 for NaN detect)
 ///   VCC is clobbered.
 ///
@@ -172,8 +192,9 @@ void emitF32ToUE5M3(raw_string_ostream &OS, StringRef Src, StringRef BareSrc,
   OS << "v_cmp_lt_u32 0x7F800000, " << Tmp << "\n";
   OS << "s_mov_b32 " << NanSgpr << ", vcc_lo\n";
 
-  // Clamp to non-negative → F16.  Source modifiers are applied by v_max_f32.
-  OS << "v_max_f32 " << Out << ", 0, " << Src << "\n";
+  // Clamp to non-negative → F16.  Source modifiers are applied by
+  // v_max_num_f32.
+  OS << "v_max_num_f32 " << Out << ", 0, " << Src << "\n";
   OS << "v_cvt_f16_f32 " << Out << ", " << Out << "\n";
 
   // RTE rounding: extract guard_bits = F16[6:0], shift to get preliminary
@@ -243,6 +264,12 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   bool WriteHigh = (Src0Mods >> 3) & 1;
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg() ||
+      !Inst.getOperand(L.Src1).isReg()) {
+    log() << "hotswap: error: cvt_pk_fp8_f32: unexpected imm operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
   std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
   std::string Src1Bare = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
@@ -252,21 +279,16 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
   std::string Src1Str = fmtModifiedSrc(Src1Bare, Src1Mods);
 
-  // findKernelAtOffset takes a virtual address.
-  std::string KernelName =
-      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
-  std::optional<unsigned> KdVgprs =
-      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
-  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
-
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
-                         Ctx.Config.MaxVgprs);
+  auto Scratch = allocateScratch(Ctx, Idx);
+  if (!Scratch)
+    return 0;
+  ScratchAllocation &SA = *Scratch;
 
   // 3 scratch VGPRs: T0 (src0 byte), T1 (src1 byte), T2 (shared scratch
   // for NaN detection and RTE rounding intermediates within each source).
-  std::optional<unsigned> T0 = Alloc.alloc();
-  std::optional<unsigned> T1 = Alloc.alloc();
-  std::optional<unsigned> T2 = Alloc.alloc();
+  std::optional<unsigned> T0 = SA.VgprAlloc.alloc();
+  std::optional<unsigned> T1 = SA.VgprAlloc.alloc();
+  std::optional<unsigned> T2 = SA.VgprAlloc.alloc();
   if (!T0 || !T1 || !T2) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 3 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -277,15 +299,9 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string T1Name = vgprName(*T1);
   std::string T2Name = vgprName(*T2);
 
-  // Allocate scratch SGPRs: 2 for NaN flags + 1 for VCC save.
-  std::optional<unsigned> KdSgprs =
-      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
-  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
-
-  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
-  std::optional<unsigned> NaN0Sgpr = SgprAlloc.alloc();
-  std::optional<unsigned> NaN1Sgpr = SgprAlloc.alloc();
-  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  std::optional<unsigned> NaN0Sgpr = SA.SgprAlloc.alloc();
+  std::optional<unsigned> NaN1Sgpr = SA.SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SA.SgprAlloc.alloc();
   if (!NaN0Sgpr || !NaN1Sgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_pk_fp8_f32: unable to allocate 3 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -332,22 +348,22 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
-  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned ExtraV = Alloc.extraVgprsNeeded();
-  if (ExtraV > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = ExtraV;
-  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
-  if (ExtraS > Stats.ExtraSgprs)
-    Stats.ExtraSgprs = ExtraS;
-  Stats.ScratchReused += 3 - ExtraV;
-  Stats.ScratchAboveKd += ExtraV;
+  if (!SA.KernelName.empty()) {
+    KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
+    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
+    Stats.ExtraSgprs =
+        std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
+    Stats.ScratchReused += 3 - ExtraV;
+    Stats.ScratchAboveKd += ExtraV;
+  }
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
-  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Info.ScratchRegs = SA.VgprAlloc.LiveAtPoint;
   Ctx.OutScratchPatches.push_back(std::move(Info));
 
   log() << "hotswap: cvt_pk_fp8_f32: patched CLAMP=1 (E5M3) at offset 0x"
@@ -394,33 +410,41 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
       Inst.getOperand(L.Clamp).getImm() == 0)
     return 0;
 
-  // byte_sel = OPSEL[3:2] at dword-0 bits [6:5] (byte 1 bits [6:5]).
-  // Not exposed as a separate MCInst operand.
+  // byte_sel = OPSEL[3:2] in the VOP3 dword-0 encoding (bits [13:12]).
+  // Unlike WriteHigh (OPSEL[3] at SISrcMods bit 3), the disassembler does
+  // NOT fold byte_sel's OPSEL[3:2] into src0_mods for v_cvt_sr_fp8_f32 —
+  // they are only accessible from the raw encoding.
   const uint8_t *Raw = Ctx.Text + DI.Offset;
   unsigned ByteSel = (Raw[1] >> 5) & 0x3;
 
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-  std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
-  std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
-  std::string Src1Str = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
   unsigned Src0Mods = Inst.getOperand(L.Src0Mods).isImm()
                           ? Inst.getOperand(L.Src0Mods).getImm()
                           : 0;
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg() ||
+      !Inst.getOperand(L.Src1).isReg()) {
+    log() << "hotswap: error: cvt_sr_fp8_f32: unexpected imm operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
+  std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
+  std::string Src0Bare = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
+  // src1 is U32 stochastic noise — ISA does not define NEG/ABS on integer
+  // operands (OPF_NEG_1/OPF_ABS_1 absent for this opcode), so we use the
+  // bare register name without modifier wrapping.
+  std::string Src1Str = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
   std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
 
-  std::string KernelName =
-      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
-  std::optional<unsigned> KdVgprs =
-      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
-  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
-
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
-                         Ctx.Config.MaxVgprs);
+  auto Scratch = allocateScratch(Ctx, Idx);
+  if (!Scratch)
+    return 0;
+  ScratchAllocation &SA = *Scratch;
 
   // 2 scratch VGPRs: Out (conversion result + noise intermediate), Tmp (NaN
   // flag save + noise computation).
-  std::optional<unsigned> Out = Alloc.alloc();
-  std::optional<unsigned> Tmp = Alloc.alloc();
+  std::optional<unsigned> Out = SA.VgprAlloc.alloc();
+  std::optional<unsigned> Tmp = SA.VgprAlloc.alloc();
   if (!Out || !Tmp) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 2 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -430,14 +454,8 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string OutName = vgprName(*Out);
   std::string TmpName = vgprName(*Tmp);
 
-  // Allocate scratch SGPRs: 1 for NaN flag + 1 for VCC save.
-  std::optional<unsigned> KdSgprs =
-      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
-  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
-
-  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
-  std::optional<unsigned> NaNSgpr = SgprAlloc.alloc();
-  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  std::optional<unsigned> NaNSgpr = SA.SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SA.SgprAlloc.alloc();
   if (!NaNSgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_sr_fp8_f32: unable to allocate 2 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -460,8 +478,8 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   AsmOS << "s_mov_b32 " << NaNName << ", vcc_lo\n";
 
   // --- Clamp negative (UE5M3 is unsigned) ---
-  // Source modifiers on src0 are applied natively by v_max_f32 VOP3.
-  AsmOS << "v_max_f32 " << OutName << ", 0, " << Src0Str << "\n";
+  // Source modifiers on src0 are applied natively by v_max_num_f32 VOP3.
+  AsmOS << "v_max_num_f32 " << OutName << ", 0, " << Src0Str << "\n";
 
   // --- Stochastic noise injection ---
   // Replicate ISA pseudocode: add S1[31:12] to F32 mantissa, truncate back
@@ -471,7 +489,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   AsmOS << "v_add_u32 " << TmpName << ", " << TmpName << ", " << OutName
         << "\n";
   AsmOS << "v_and_b32 " << TmpName << ", 0x007FFFFF, " << TmpName << "\n";
-  AsmOS << "v_max_f32 " << OutName << ", 0, " << Src0Str << "\n";
+  AsmOS << "v_max_num_f32 " << OutName << ", 0, " << Src0Str << "\n";
   AsmOS << "v_bfi_b32 " << OutName << ", 0x007FFFFF, " << TmpName << ", "
         << OutName << "\n";
 
@@ -512,22 +530,22 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
-  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned ExtraV = Alloc.extraVgprsNeeded();
-  if (ExtraV > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = ExtraV;
-  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
-  if (ExtraS > Stats.ExtraSgprs)
-    Stats.ExtraSgprs = ExtraS;
-  Stats.ScratchReused += 2 - ExtraV;
-  Stats.ScratchAboveKd += ExtraV;
+  if (!SA.KernelName.empty()) {
+    KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
+    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
+    Stats.ExtraSgprs =
+        std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
+    Stats.ScratchReused += 2 - ExtraV;
+    Stats.ScratchAboveKd += ExtraV;
+  }
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
-  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Info.ScratchRegs = SA.VgprAlloc.LiveAtPoint;
   Ctx.OutScratchPatches.push_back(std::move(Info));
 
   log() << "hotswap: cvt_sr_fp8_f32: patched CLAMP=1 (E5M3) at offset 0x"
@@ -580,22 +598,23 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
                          : 0;
 
   const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  if (!Inst.getOperand(L.VDst).isReg() || !Inst.getOperand(L.Src0).isReg()) {
+    log() << "hotswap: error: cvt_f32_fp8: unexpected imm operand at 0x"
+          << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
   std::string Src0Str = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
 
-  std::string KernelName =
-      Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
-  std::optional<unsigned> KdVgprs =
-      Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
-  unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
-
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
-                         Ctx.Config.MaxVgprs);
+  auto Scratch = allocateScratch(Ctx, Idx);
+  if (!Scratch)
+    return 0;
+  ScratchAllocation &SA = *Scratch;
 
   // 2 scratch VGPRs: Out (byte extraction → F16 path → result),
   // Tmp (exp-31 direct construction + NaN constant).
-  std::optional<unsigned> Out = Alloc.alloc();
-  std::optional<unsigned> Tmp = Alloc.alloc();
+  std::optional<unsigned> Out = SA.VgprAlloc.alloc();
+  std::optional<unsigned> Tmp = SA.VgprAlloc.alloc();
   if (!Out || !Tmp) {
     log() << "hotswap: error: cvt_f32_fp8: unable to allocate 2 scratch "
           << "VGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -605,15 +624,9 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   std::string OutName = vgprName(*Out);
   std::string TmpName = vgprName(*Tmp);
 
-  // Allocate scratch SGPRs: NaN flag + exp-31 flag + VCC save.
-  std::optional<unsigned> KdSgprs =
-      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
-  unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
-
-  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
-  std::optional<unsigned> NaNSgpr = SgprAlloc.alloc();
-  std::optional<unsigned> Exp31Sgpr = SgprAlloc.alloc();
-  std::optional<unsigned> VccSaveSgpr = SgprAlloc.alloc();
+  std::optional<unsigned> NaNSgpr = SA.SgprAlloc.alloc();
+  std::optional<unsigned> Exp31Sgpr = SA.SgprAlloc.alloc();
+  std::optional<unsigned> VccSaveSgpr = SA.SgprAlloc.alloc();
   if (!NaNSgpr || !Exp31Sgpr || !VccSaveSgpr) {
     log() << "hotswap: error: cvt_f32_fp8: unable to allocate 3 scratch "
           << "SGPRs at offset 0x" << utohexstr(DI.Offset) << "\n";
@@ -684,22 +697,22 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, ReplacementBytes))
     return 0;
 
-  KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-  unsigned ExtraV = Alloc.extraVgprsNeeded();
-  if (ExtraV > Stats.ExtraVgprs)
-    Stats.ExtraVgprs = ExtraV;
-  unsigned ExtraS = SgprAlloc.extraSgprsNeeded();
-  if (ExtraS > Stats.ExtraSgprs)
-    Stats.ExtraSgprs = ExtraS;
-  Stats.ScratchReused += 2 - ExtraV;
-  Stats.ScratchAboveKd += ExtraV;
+  if (!SA.KernelName.empty()) {
+    KernelPatchStats &Stats = Ctx.KernelStats[SA.KernelName];
+    unsigned ExtraV = SA.VgprAlloc.extraVgprsNeeded();
+    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, ExtraV);
+    Stats.ExtraSgprs =
+        std::max(Stats.ExtraSgprs, SA.SgprAlloc.extraSgprsNeeded());
+    Stats.ScratchReused += 2 - ExtraV;
+    Stats.ScratchAboveKd += ExtraV;
+  }
 
   ScratchPatchInfo Info;
   Info.Offset = DI.Offset;
-  Info.ScratchRegs = Alloc.LiveAtPoint;
+  Info.ScratchRegs = SA.VgprAlloc.LiveAtPoint;
   Ctx.OutScratchPatches.push_back(std::move(Info));
 
   log() << "hotswap: cvt_f32_fp8: patched CLAMP=1 (E5M3) at offset 0x"

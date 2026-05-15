@@ -5,6 +5,11 @@
 // COM: replacement sequence covers: byte extraction, NaN detection, exp-31
 // COM: detection, exp-31 direct F32 construction, F16 base path, exp-31
 // COM: select, and NaN override.
+// COM:
+// COM: Companion tests:
+// COM:   hotswap-cvt-fp8-bytesel.s  — all 4 byte_sel positions
+// COM:   hotswap-cvt-fp8-nosled.s   — trampoline fallback path
+// COM:   hotswap-cvt-fp8-multi.s    — multi-site stacking
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,11 +20,17 @@
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=1 byte_sel=0 patch — original site has s_branch, and
-// COM: the trampoline contains the full unpack conversion sequence.
-// COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=BYTE0 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=BYTE2 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
+
+// ---- Kernel 1: CLAMP=1, byte_sel=0 (should be patched) -----------------------
+//
+// COM: Original site is replaced with s_branch forward to trampoline.
+// COM: Trampoline body: VCC save, byte extraction (v_and_b32 0xff),
+// COM: NaN detection (v_cmp_eq_u32 0xff), exp-31 detection (v_cmp_lt_u32),
+// COM: exp-31 direct F32 construction, F16 base path (v_lshlrev + v_cvt_f32_f16),
+// COM: exp-31 select (v_cndmask), NaN override (v_cndmask), VCC restore.
 
 // BYTE0-LABEL: <test_cvt_f32_fp8_byte0>:
 // BYTE0:       s_branch
@@ -50,10 +61,21 @@
 // COM: --- VCC restore ---
 // BYTE0-NEXT:  s_mov_b32
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=1 byte_sel=2 patch (v_bfe_u32 extraction).
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=BYTE2 %s
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+.globl test_cvt_f32_fp8_byte0
+.p2align 8
+.type test_cvt_f32_fp8_byte0,@function
+test_cvt_f32_fp8_byte0:
+  v_cvt_f32_fp8 v0, v1 clamp
+  s_endpgm
+.Ltest_cvt_f32_fp8_byte0_end:
+.size test_cvt_f32_fp8_byte0, .Ltest_cvt_f32_fp8_byte0_end-test_cvt_f32_fp8_byte0
+
+// ---- Kernel 2: CLAMP=1, byte_sel=2 (v_bfe_u32 extraction) --------------------
+//
+// COM: Byte extraction for byte_sel=2 uses v_bfe_u32 (offset=16, width=8)
+// COM: instead of v_and_b32.
 
 // BYTE2-LABEL: <test_cvt_f32_fp8_byte2>:
 // BYTE2:       s_branch
@@ -82,28 +104,6 @@
 // COM: --- VCC restore ---
 // BYTE2-NEXT:  s_mov_b32
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=0 (E4M3) instruction is NOT patched.
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
-
-// NOCLAMP-LABEL: <test_cvt_f32_fp8_noclamp>:
-// NOCLAMP-NEXT:  v_cvt_f32_fp8
-
-.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
-.text
-
-// --- Kernel 1: CLAMP=1, byte_sel=0 (should be patched) ---
-.globl test_cvt_f32_fp8_byte0
-.p2align 8
-.type test_cvt_f32_fp8_byte0,@function
-test_cvt_f32_fp8_byte0:
-  v_cvt_f32_fp8 v0, v1 clamp
-  s_endpgm
-.Ltest_cvt_f32_fp8_byte0_end:
-.size test_cvt_f32_fp8_byte0, .Ltest_cvt_f32_fp8_byte0_end-test_cvt_f32_fp8_byte0
-
-// --- Kernel 2: CLAMP=1, byte_sel=2 (raw encoding for OPSEL[1:0]) ---
 .globl test_cvt_f32_fp8_byte2
 .p2align 8
 .type test_cvt_f32_fp8_byte2,@function
@@ -117,7 +117,11 @@ test_cvt_f32_fp8_byte2:
 .Ltest_cvt_f32_fp8_byte2_end:
 .size test_cvt_f32_fp8_byte2, .Ltest_cvt_f32_fp8_byte2_end-test_cvt_f32_fp8_byte2
 
-// --- Kernel 3: no clamp (should NOT be patched) ---
+// ---- Kernel 3: no clamp (should NOT be patched) -------------------------------
+
+// NOCLAMP-LABEL: <test_cvt_f32_fp8_noclamp>:
+// NOCLAMP-NEXT:  v_cvt_f32_fp8
+
 .globl test_cvt_f32_fp8_noclamp
 .p2align 8
 .type test_cvt_f32_fp8_noclamp,@function

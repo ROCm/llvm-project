@@ -4,6 +4,11 @@
 // COM: with clamp (E5M3 mode), runs the hotswap rewrite, and verifies the
 // COM: replacement sequence covers: NaN detection, base F32->F16->UE5M3
 // COM: conversion, RTE rounding, overflow clamping, and NaN override.
+// COM:
+// COM: Companion tests:
+// COM:   hotswap-cvt-fp8-modifiers.s — source modifier variants
+// COM:   hotswap-cvt-fp8-nosled.s    — trampoline fallback path
+// COM:   hotswap-cvt-fp8-multi.s     — multi-site stacking
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -14,11 +19,15 @@
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=1 low-half patch — original site has s_branch, and
-// COM: the trampoline contains the full per-source conversion sequence.
-// COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=LOW %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=HIGH %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
+
+// ---- Kernel 1: CLAMP=1, low half (should be patched) --------------------------
+//
+// COM: Original site is replaced with s_branch. Trampoline body: VCC save,
+// COM: two per-source F32→UE5M3 conversions (15 instructions each), pack
+// COM: into 16-bit pair, merge into low half of vdst via v_bfi_b32, VCC restore.
 
 // LOW-LABEL: <test_cvt_pk_fp8_low>:
 // LOW:       s_branch
@@ -62,10 +71,21 @@
 // COM: --- VCC restore ---
 // LOW-NEXT:  s_mov_b32
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=1 high-half patch.
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=HIGH %s
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+.globl test_cvt_pk_fp8_low
+.p2align 8
+.type test_cvt_pk_fp8_low,@function
+test_cvt_pk_fp8_low:
+  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
+  s_endpgm
+.Ltest_cvt_pk_fp8_low_end:
+.size test_cvt_pk_fp8_low, .Ltest_cvt_pk_fp8_low_end-test_cvt_pk_fp8_low
+
+// ---- Kernel 2: CLAMP=1, high half (raw encoding for op_sel[3]=1) --------------
+//
+// COM: Same conversion sequence as low, but final merge uses shift + bfi to
+// COM: write the packed bytes into the upper 16 bits of vdst.
 
 // HIGH-LABEL: <test_cvt_pk_fp8_high>:
 // HIGH:       s_branch
@@ -108,28 +128,6 @@
 // COM: --- VCC restore ---
 // HIGH-NEXT:  s_mov_b32
 
-// COM: -----------------------------------------------------------------------
-// COM: Verify: CLAMP=0 (E4M3) instruction is NOT patched.
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOCLAMP %s
-
-// NOCLAMP-LABEL: <test_cvt_pk_fp8_noclamp>:
-// NOCLAMP-NEXT:  v_cvt_pk_fp8_f32
-
-.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
-.text
-
-// --- Kernel 1: CLAMP=1, low half (should be patched) ---
-.globl test_cvt_pk_fp8_low
-.p2align 8
-.type test_cvt_pk_fp8_low,@function
-test_cvt_pk_fp8_low:
-  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
-  s_endpgm
-.Ltest_cvt_pk_fp8_low_end:
-.size test_cvt_pk_fp8_low, .Ltest_cvt_pk_fp8_low_end-test_cvt_pk_fp8_low
-
-// --- Kernel 2: CLAMP=1, high half (raw encoding for op_sel[3]=1) ---
 .globl test_cvt_pk_fp8_high
 .p2align 8
 .type test_cvt_pk_fp8_high,@function
@@ -143,7 +141,11 @@ test_cvt_pk_fp8_high:
 .Ltest_cvt_pk_fp8_high_end:
 .size test_cvt_pk_fp8_high, .Ltest_cvt_pk_fp8_high_end-test_cvt_pk_fp8_high
 
-// --- Kernel 3: no clamp (should NOT be patched) ---
+// ---- Kernel 3: no clamp (should NOT be patched) -------------------------------
+
+// NOCLAMP-LABEL: <test_cvt_pk_fp8_noclamp>:
+// NOCLAMP-NEXT:  v_cvt_pk_fp8_f32
+
 .globl test_cvt_pk_fp8_noclamp
 .p2align 8
 .type test_cvt_pk_fp8_noclamp,@function
