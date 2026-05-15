@@ -91,9 +91,7 @@ jobs:
           git config --global user.name "Z1 cciauto"
           git fetch origin pull/5268/head:pr-5268
           git checkout compiler/amd-staging
-          commit=$(git log --merges --format="%H" -n 1 pr-5268)
-          echo "Merge commit: $commit"
-          git cherry-pick -m 1 $commit
+          git cherry-pick $(git rev-list compiler/amd-staging..pr-5268)
             
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
