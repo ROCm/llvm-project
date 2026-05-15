@@ -15806,11 +15806,13 @@ define void @flat_atomic_xchg_i64_saddr_ret_a_a(ptr inreg %ptr) #0 {
 ; GFX90A-NEXT:    s_mov_b64 s[6:7], src_private_base
 ; GFX90A-NEXT:    s_addc_u32 s5, s17, 0
 ; GFX90A-NEXT:    s_cmp_eq_u32 s5, s7
-; GFX90A-NEXT:    s_cselect_b64 s[6:7], -1, 0
-; GFX90A-NEXT:    s_andn2_b64 vcc, exec, s[6:7]
 ; GFX90A-NEXT:    ;;#ASMSTART
 ; GFX90A-NEXT:    ; def a[0:1]
 ; GFX90A-NEXT:    ;;#ASMEND
+; GFX90A-NEXT:    s_cselect_b64 s[6:7], -1, 0
+; GFX90A-NEXT:    v_accvgpr_read_b32 v0, a0
+; GFX90A-NEXT:    s_andn2_b64 vcc, exec, s[6:7]
+; GFX90A-NEXT:    v_accvgpr_read_b32 v1, a1
 ; GFX90A-NEXT:    s_cbranch_vccnz .LBB193_2
 ; GFX90A-NEXT:  ; %bb.1: ; %atomicrmw.private
 ; GFX90A-NEXT:    s_cmp_lg_u64 s[4:5], 0
@@ -15828,8 +15830,6 @@ define void @flat_atomic_xchg_i64_saddr_ret_a_a(ptr inreg %ptr) #0 {
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0)
 ; GFX90A-NEXT:    s_setpc_b64 s[30:31]
 ; GFX90A-NEXT:  .LBB193_2: ; %atomicrmw.global
-; GFX90A-NEXT:    v_accvgpr_read_b32 v0, a0
-; GFX90A-NEXT:    v_accvgpr_read_b32 v1, a1
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], s[4:5], s[4:5] op_sel:[0,1]
 ; GFX90A-NEXT:    flat_atomic_swap_x2 v[0:1], v[2:3], v[0:1] glc
 ; GFX90A-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
@@ -15847,11 +15847,13 @@ define void @flat_atomic_xchg_i64_saddr_ret_a_a(ptr inreg %ptr) #0 {
 ; GFX950-NEXT:    s_mov_b64 s[2:3], src_private_base
 ; GFX950-NEXT:    s_addc_u32 s1, s1, 0
 ; GFX950-NEXT:    s_cmp_eq_u32 s1, s3
-; GFX950-NEXT:    s_cselect_b64 s[2:3], -1, 0
-; GFX950-NEXT:    s_andn2_b64 vcc, exec, s[2:3]
 ; GFX950-NEXT:    ;;#ASMSTART
 ; GFX950-NEXT:    ; def a[0:1]
 ; GFX950-NEXT:    ;;#ASMEND
+; GFX950-NEXT:    s_cselect_b64 s[2:3], -1, 0
+; GFX950-NEXT:    v_accvgpr_read_b32 v0, a0
+; GFX950-NEXT:    s_andn2_b64 vcc, exec, s[2:3]
+; GFX950-NEXT:    v_accvgpr_read_b32 v1, a1
 ; GFX950-NEXT:    s_cbranch_vccnz .LBB193_2
 ; GFX950-NEXT:  ; %bb.1: ; %atomicrmw.private
 ; GFX950-NEXT:    s_cmp_lg_u64 s[0:1], 0
@@ -15865,8 +15867,6 @@ define void @flat_atomic_xchg_i64_saddr_ret_a_a(ptr inreg %ptr) #0 {
 ; GFX950-NEXT:    s_waitcnt vmcnt(0)
 ; GFX950-NEXT:    s_setpc_b64 s[30:31]
 ; GFX950-NEXT:  .LBB193_2: ; %atomicrmw.global
-; GFX950-NEXT:    v_accvgpr_read_b32 v0, a0
-; GFX950-NEXT:    v_accvgpr_read_b32 v1, a1
 ; GFX950-NEXT:    v_mov_b64_e32 v[2:3], s[0:1]
 ; GFX950-NEXT:    flat_atomic_swap_x2 v[0:1], v[2:3], v[0:1] sc0
 ; GFX950-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)

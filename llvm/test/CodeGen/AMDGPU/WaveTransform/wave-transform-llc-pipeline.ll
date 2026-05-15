@@ -107,6 +107,7 @@
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        AMDGPU Control Flow Wave Transform
 ; GCN-O0-NEXT:        Fast Register Allocator
+; GCN-O0-NEXT:        AMDGPU Reserve Allocated VGPRs
 ; GCN-O0-NEXT:        Machine Cycle Info Analysis
 ; GCN-O0-NEXT:        SI lower SGPR spill instructions
 ; GCN-O0-NEXT:        Fast Register Allocator
@@ -415,6 +416,7 @@
 ; GCN-O3-NEXT:        Greedy Register Allocator
 ; GCN-O3-NEXT:        Virtual Register Rewriter
 ; GCN-O3-NEXT:        Stack Slot Coloring
+; GCN-O3-NEXT:        AMDGPU Reserve Allocated VGPRs
 ; GCN-O3-NEXT:        Machine Cycle Info Analysis
 ; GCN-O3-NEXT:        SI lower SGPR spill instructions
 ; GCN-O3-NEXT:        Live Stack Slot Analysis

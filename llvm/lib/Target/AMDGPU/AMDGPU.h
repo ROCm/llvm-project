@@ -180,6 +180,9 @@ extern char &AMDGPUPrepareAGPRAllocLegacyID;
 void initializeAMDGPUPartitionVGPRsForRALegacyPass(PassRegistry &);
 extern char &AMDGPUPartitionVGPRsForRALegacyID;
 
+void initializeAMDGPUReserveAllocatedVGPRsLegacyPass(PassRegistry &);
+extern char &AMDGPUReserveAllocatedVGPRsLegacyID;
+
 void initializeAMDGPUReserveWWMRegsLegacyPass(PassRegistry &);
 extern char &AMDGPUReserveWWMRegsLegacyID;
 

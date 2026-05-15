@@ -33,6 +33,7 @@
 #include "AMDGPUPreloadKernArgProlog.h"
 #include "AMDGPUPrepareAGPRAlloc.h"
 #include "AMDGPURemoveIncompatibleFunctions.h"
+#include "AMDGPUReserveAllocatedVGPRs.h"
 #include "AMDGPUReserveWWMRegs.h"
 #include "AMDGPUResourceUsageAnalysis.h"
 #include "AMDGPUSplitModule.h"
@@ -711,6 +712,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPULowerBufferFatPointersPass(*PR);
   initializeAMDGPULowerIntrinsicsLegacyPass(*PR);
   initializeAMDGPUPartitionVGPRsForRALegacyPass(*PR);
+  initializeAMDGPUReserveAllocatedVGPRsLegacyPass(*PR);
   initializeAMDGPUReserveWWMRegsLegacyPass(*PR);
   initializeAMDGPURewriteAGPRCopyMFMALegacyPass(*PR);
   initializeAMDGPURewriteOutArgumentsPass(*PR);
@@ -1901,11 +1903,6 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
-    // TODO-WAVETRANSFORM:
-    // Short-term plan: we want to preserve physical registers that have been
-    // allocated so that they are not used for sgpr-spilling and other WWMs.
-    //    addPass(&AMDGPUReserveAllocatedVGPRsID);
-
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with
     // WWM virtual VGPRs (including those used in SGPR spilling). In that way,
@@ -1915,6 +1912,13 @@ bool GCNPassConfig::addRegAssignAndRewriteFast() {
   }
 
   addPass(createSGPRAllocPass(false));
+
+  // In LWT flow, it reserves the physical VGPRs allocated for the perlane VGPR.
+  // This is needed as the Subsequent passes like, SILowerSGPRSpills, WWM
+  // regalloc, PEI/scavenger consult getReservedRegs() and must not reuse those
+  // already allocated VGPRs for the SGPR spills or other WWM allocations.
+  if (LateWaveTransform)
+    addPass(&AMDGPUReserveAllocatedVGPRsLegacyID);
 
   // Equivalent of PEI for SGPRs.
   addPass(&SILowerSGPRSpillsLegacyID);
@@ -1971,11 +1975,6 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     // Perform the WaveTransform now.
     addPass(createAMDGPUWaveTransformPass());
 
-    // TODO-WAVETRANSFORM:
-    // Short-term plan: we want to preserve physical registers that have been
-    // allocated so that they are not used for sgpr-spilling and other WWMs.
-    //    addPass(&AMDGPUReserveAllocatedVGPRsID);
-
     // Long-tem plan: we want to update the liveness of those allocated physical
     // VGPRs on the whole-wave CFG so that they have correct interferences with
     // WWM virtual VGPRs (including those used in SGPR spilling). In that way,
@@ -2004,6 +2003,13 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
   // stack slot coloring to try to optimize the SGPR spill stack indices before
   // attempting the custom SGPR spill lowering.
   addPass(&StackSlotColoringID);
+
+  // In LWT flow, it reserves the physical VGPRs allocated for the perlane VGPR.
+  // This is needed as the subsequent passes like, SILowerSGPRSpills, WWM
+  // regalloc, PEI/scavenger consult getReservedRegs() and must not reuse those
+  // already allocated VGPRs for the SGPR spills or other WWM allocations.
+  if (LateWaveTransform)
+    addPass(&AMDGPUReserveAllocatedVGPRsLegacyID);
 
   // Equivalent of PEI for SGPRs.
   addPass(&SILowerSGPRSpillsLegacyID);

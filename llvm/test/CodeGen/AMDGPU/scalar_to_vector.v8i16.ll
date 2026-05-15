@@ -12,12 +12,12 @@ define amdgpu_kernel void @scalar_to_vector_v8i16(<2 x i32> %in, ptr %out) #0 {
 ; GFX900-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX900-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX900-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX900-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX900-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX900-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX900-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX900-NEXT:    v_mov_b32_e32 v2, s1
-; GFX900-NEXT:    v_mov_b32_e32 v3, s0
-; GFX900-NEXT:    v_mov_b32_e32 v4, s0
+; GFX900-NEXT:    v_mov_b32_e32 v3, v1
+; GFX900-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX900-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX900-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX900-NEXT:    s_endpgm
@@ -29,12 +29,12 @@ define amdgpu_kernel void @scalar_to_vector_v8i16(<2 x i32> %in, ptr %out) #0 {
 ; GFX906-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX906-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX906-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX906-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX906-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX906-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX906-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX906-NEXT:    v_mov_b32_e32 v2, s1
-; GFX906-NEXT:    v_mov_b32_e32 v3, s0
-; GFX906-NEXT:    v_mov_b32_e32 v4, s0
+; GFX906-NEXT:    v_mov_b32_e32 v3, v1
+; GFX906-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX906-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX906-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX906-NEXT:    s_endpgm
@@ -46,12 +46,12 @@ define amdgpu_kernel void @scalar_to_vector_v8i16(<2 x i32> %in, ptr %out) #0 {
 ; GFX908-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX908-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX908-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX908-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX908-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX908-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX908-NEXT:    v_mov_b32_e32 v2, s1
-; GFX908-NEXT:    v_mov_b32_e32 v3, s0
-; GFX908-NEXT:    v_mov_b32_e32 v4, s0
+; GFX908-NEXT:    v_mov_b32_e32 v3, v1
+; GFX908-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX908-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX908-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX908-NEXT:    s_endpgm
@@ -64,12 +64,12 @@ define amdgpu_kernel void @scalar_to_vector_v8i16(<2 x i32> %in, ptr %out) #0 {
 ; GFX90A-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX90A-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX90A-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, s3
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, s2, v0
-; GFX90A-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, s1
-; GFX90A-NEXT:    v_mov_b32_e32 v4, s0
-; GFX90A-NEXT:    v_mov_b32_e32 v5, s0
+; GFX90A-NEXT:    v_mov_b32_e32 v4, v2
+; GFX90A-NEXT:    v_mov_b32_e32 v5, v2
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX90A-NEXT:    flat_store_dwordx4 v[0:1], v[2:5]
 ; GFX90A-NEXT:    s_endpgm
@@ -99,12 +99,12 @@ define amdgpu_kernel void @scalar_to_vector_v8f16(<2 x float> %in, ptr %out) #0 
 ; GFX900-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX900-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX900-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX900-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX900-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX900-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX900-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX900-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX900-NEXT:    v_mov_b32_e32 v4, s0
-; GFX900-NEXT:    v_mov_b32_e32 v3, s0
+; GFX900-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX900-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX900-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX900-NEXT:    s_endpgm
@@ -116,12 +116,12 @@ define amdgpu_kernel void @scalar_to_vector_v8f16(<2 x float> %in, ptr %out) #0 
 ; GFX906-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX906-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX906-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX906-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX906-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX906-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX906-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX906-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX906-NEXT:    v_mov_b32_e32 v4, s0
-; GFX906-NEXT:    v_mov_b32_e32 v3, s0
+; GFX906-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX906-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX906-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX906-NEXT:    s_endpgm
@@ -133,12 +133,12 @@ define amdgpu_kernel void @scalar_to_vector_v8f16(<2 x float> %in, ptr %out) #0 
 ; GFX908-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX908-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX908-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX908-NEXT:    v_mov_b32_e32 v6, s3
 ; GFX908-NEXT:    v_add_co_u32_e32 v5, vcc, s2, v0
-; GFX908-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX908-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX908-NEXT:    v_mov_b32_e32 v4, s0
-; GFX908-NEXT:    v_mov_b32_e32 v3, s0
+; GFX908-NEXT:    v_mov_b32_e32 v3, v1
 ; GFX908-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
 ; GFX908-NEXT:    flat_store_dwordx4 v[5:6], v[1:4]
 ; GFX908-NEXT:    s_endpgm
@@ -151,12 +151,12 @@ define amdgpu_kernel void @scalar_to_vector_v8f16(<2 x float> %in, ptr %out) #0 
 ; GFX90A-NEXT:    s_add_u32 flat_scratch_lo, s12, s17
 ; GFX90A-NEXT:    s_addc_u32 flat_scratch_hi, s13, 0
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX90A-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX90A-NEXT:    v_mov_b32_e32 v1, s3
 ; GFX90A-NEXT:    v_add_co_u32_e32 v0, vcc, s2, v0
-; GFX90A-NEXT:    v_mov_b32_e32 v2, s0
 ; GFX90A-NEXT:    v_mov_b32_e32 v3, s1
 ; GFX90A-NEXT:    v_mov_b32_e32 v5, s0
-; GFX90A-NEXT:    v_mov_b32_e32 v4, s0
+; GFX90A-NEXT:    v_mov_b32_e32 v4, v2
 ; GFX90A-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX90A-NEXT:    flat_store_dwordx4 v[0:1], v[2:5]
 ; GFX90A-NEXT:    s_endpgm

@@ -527,9 +527,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    ds_load_b64 v[0:1], v0
 ; GFX12-NEXT:    s_mov_b32 s0, -1
 ; GFX12-NEXT:    s_mov_b32 s0, 0
+; GFX12-NEXT:    ds_load_b64 v[0:1], v2
 ; GFX12-NEXT:  .LBB4_1: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_dscnt 0x0
@@ -568,9 +568,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    ds_load_b64 v[0:1], v0
 ; GFX11-NEXT:    s_mov_b32 s0, -1
 ; GFX11-NEXT:    s_mov_b32 s0, 0
+; GFX11-NEXT:    ds_load_b64 v[0:1], v2
 ; GFX11-NEXT:  .LBB4_1: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
@@ -598,9 +598,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    ds_read_b64 v[0:1], v0
 ; GFX10-NEXT:    s_mov_b32 s4, -1
 ; GFX10-NEXT:    s_mov_b32 s4, 0
+; GFX10-NEXT:    ds_read_b64 v[0:1], v2
 ; GFX10-NEXT:  .LBB4_1: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
@@ -636,7 +636,7 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    v_mov_b32_e32 v2, v0
-; GFX908-NEXT:    ds_read_b64 v[0:1], v0
+; GFX908-NEXT:    ds_read_b64 v[0:1], v2
 ; GFX908-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX908-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX908-NEXT:  .LBB4_1: ; %atomicrmw.start
@@ -662,9 +662,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX8-LABEL: local_atomic_fadd_ret_f64:
 ; GFX8:       ; %bb.0:
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX8-NEXT:    s_mov_b32 m0, -1
 ; GFX8-NEXT:    v_mov_b32_e32 v2, v0
-; GFX8-NEXT:    ds_read_b64 v[0:1], v0
+; GFX8-NEXT:    s_mov_b32 m0, -1
+; GFX8-NEXT:    ds_read_b64 v[0:1], v2
 ; GFX8-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX8-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX8-NEXT:  .LBB4_1: ; %atomicrmw.start
@@ -690,9 +690,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX7-LABEL: local_atomic_fadd_ret_f64:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    v_mov_b32_e32 v2, v0
-; GFX7-NEXT:    ds_read_b64 v[0:1], v0
+; GFX7-NEXT:    s_mov_b32 m0, -1
+; GFX7-NEXT:    ds_read_b64 v[0:1], v2
 ; GFX7-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX7-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX7-NEXT:  .LBB4_1: ; %atomicrmw.start
@@ -718,9 +718,9 @@ define double @local_atomic_fadd_ret_f64(ptr addrspace(3) %ptr) nounwind {
 ; GFX6-LABEL: local_atomic_fadd_ret_f64:
 ; GFX6:       ; %bb.0:
 ; GFX6-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX6-NEXT:    s_mov_b32 m0, -1
 ; GFX6-NEXT:    v_mov_b32_e32 v2, v0
-; GFX6-NEXT:    ds_read_b64 v[0:1], v0
+; GFX6-NEXT:    s_mov_b32 m0, -1
+; GFX6-NEXT:    ds_read_b64 v[0:1], v2
 ; GFX6-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX6-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX6-NEXT:  .LBB4_1: ; %atomicrmw.start
@@ -755,9 +755,9 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    ds_load_b64 v[0:1], v0 offset:65528
 ; GFX12-NEXT:    s_mov_b32 s0, -1
 ; GFX12-NEXT:    s_mov_b32 s0, 0
+; GFX12-NEXT:    ds_load_b64 v[0:1], v2 offset:65528
 ; GFX12-NEXT:  .LBB5_1: ; %atomicrmw.start
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_wait_dscnt 0x0
@@ -796,9 +796,9 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-NEXT:    v_mov_b32_e32 v2, v0
-; GFX11-NEXT:    ds_load_b64 v[0:1], v0 offset:65528
 ; GFX11-NEXT:    s_mov_b32 s0, -1
 ; GFX11-NEXT:    s_mov_b32 s0, 0
+; GFX11-NEXT:    ds_load_b64 v[0:1], v2 offset:65528
 ; GFX11-NEXT:  .LBB5_1: ; %atomicrmw.start
 ; GFX11-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
@@ -826,9 +826,9 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX10:       ; %bb.0:
 ; GFX10-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    ds_read_b64 v[0:1], v0 offset:65528
 ; GFX10-NEXT:    s_mov_b32 s4, -1
 ; GFX10-NEXT:    s_mov_b32 s4, 0
+; GFX10-NEXT:    ds_read_b64 v[0:1], v2 offset:65528
 ; GFX10-NEXT:  .LBB5_1: ; %atomicrmw.start
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-NEXT:    s_waitcnt lgkmcnt(0)
@@ -864,7 +864,7 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX908:       ; %bb.0:
 ; GFX908-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX908-NEXT:    v_mov_b32_e32 v2, v0
-; GFX908-NEXT:    ds_read_b64 v[0:1], v0 offset:65528
+; GFX908-NEXT:    ds_read_b64 v[0:1], v2 offset:65528
 ; GFX908-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX908-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX908-NEXT:  .LBB5_1: ; %atomicrmw.start
@@ -890,9 +890,9 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX8-LABEL: local_atomic_fadd_ret_f64__offset:
 ; GFX8:       ; %bb.0:
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX8-NEXT:    s_mov_b32 m0, -1
 ; GFX8-NEXT:    v_mov_b32_e32 v2, v0
-; GFX8-NEXT:    ds_read_b64 v[0:1], v0 offset:65528
+; GFX8-NEXT:    s_mov_b32 m0, -1
+; GFX8-NEXT:    ds_read_b64 v[0:1], v2 offset:65528
 ; GFX8-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX8-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX8-NEXT:  .LBB5_1: ; %atomicrmw.start
@@ -918,9 +918,9 @@ define double @local_atomic_fadd_ret_f64__offset(ptr addrspace(3) %ptr) nounwind
 ; GFX7-LABEL: local_atomic_fadd_ret_f64__offset:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX7-NEXT:    s_mov_b32 m0, -1
 ; GFX7-NEXT:    v_mov_b32_e32 v2, v0
-; GFX7-NEXT:    ds_read_b64 v[0:1], v0 offset:65528
+; GFX7-NEXT:    s_mov_b32 m0, -1
+; GFX7-NEXT:    ds_read_b64 v[0:1], v2 offset:65528
 ; GFX7-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX7-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX7-NEXT:  .LBB5_1: ; %atomicrmw.start

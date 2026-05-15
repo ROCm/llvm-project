@@ -3825,8 +3825,9 @@ define amdgpu_kernel void @local_zextload_v64i16_to_v64i32(ptr addrspace(3) %out
 ; VI-DS128-NEXT:    s_add_u32 s88, s88, s11
 ; VI-DS128-NEXT:    s_waitcnt lgkmcnt(3)
 ; VI-DS128-NEXT:    v_lshrrev_b32_e32 v3, 16, v11
+; VI-DS128-NEXT:    v_lshrrev_b32_e32 v1, 16, v10
 ; VI-DS128-NEXT:    s_addc_u32 s89, s89, 0
-; VI-DS128-NEXT:    v_lshrrev_b32_e32 v2, 16, v10
+; VI-DS128-NEXT:    v_mov_b32_e32 v2, v1
 ; VI-DS128-NEXT:    v_mov_b32_e32 v4, v3
 ; VI-DS128-NEXT:    v_and_b32_e32 v3, 0xffff, v11
 ; VI-DS128-NEXT:    v_and_b32_e32 v1, 0xffff, v10
@@ -3961,8 +3962,9 @@ define amdgpu_kernel void @local_zextload_v64i16_to_v64i32(ptr addrspace(3) %out
 ; GFX9-DS128-NEXT:    s_add_u32 s12, s12, s11
 ; GFX9-DS128-NEXT:    s_waitcnt lgkmcnt(3)
 ; GFX9-DS128-NEXT:    v_lshrrev_b32_e32 v3, 16, v11
+; GFX9-DS128-NEXT:    v_lshrrev_b32_e32 v1, 16, v10
 ; GFX9-DS128-NEXT:    s_addc_u32 s13, s13, 0
-; GFX9-DS128-NEXT:    v_lshrrev_b32_e32 v2, 16, v10
+; GFX9-DS128-NEXT:    v_mov_b32_e32 v2, v1
 ; GFX9-DS128-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX9-DS128-NEXT:    v_and_b32_e32 v3, 0xffff, v11
 ; GFX9-DS128-NEXT:    v_and_b32_e32 v1, 0xffff, v10
