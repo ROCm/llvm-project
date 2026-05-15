@@ -91,7 +91,7 @@ jobs:
           git config --global user.name "Z1 cciauto"
           git fetch origin pull/5276/head:pr-5276
           git checkout compiler/amd-staging
-          for pr_commit in $(git rev-list --no-merges compiler/amd-staging..pr-5268); do
+          for pr_commit in $(git rev-list --no-merges compiler/amd-staging..pr-5276); do
             git cherry-pick "$pr_commit" || git cherry-pick --skip
           done
             
