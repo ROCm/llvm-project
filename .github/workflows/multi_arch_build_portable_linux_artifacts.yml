@@ -82,11 +82,13 @@ jobs:
         with:
           repository: "ROCm/TheRock"
           ref: 'compiler/amd-staging'
+          fetch-depth: 0
       
       - name: Cherry-pick PR-5268 for comm-libs fix
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch origin pull/5268/head:pr-5268
-          git checkout compiler/amd-staging
+          #git checkout compiler/amd-staging
           git cherry-pick pr-5268
             
       - name: Update Submodule Pointer to the PR
