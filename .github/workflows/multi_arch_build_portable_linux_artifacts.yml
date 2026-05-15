@@ -88,8 +88,10 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch origin pull/5268/head:pr-5268
-          #git checkout compiler/amd-staging
-          git cherry-pick pr-5268
+          git checkout compiler/amd-staging
+          commit=$(git log --merges --format="%H" -n 1 pr-5268)
+          echo "Merge commit: $commit"
+          git cherry-pick -m 1 $commit
             
       - name: Update Submodule Pointer to the PR
         if: ${{ github.event_name == 'pull_request' }}
