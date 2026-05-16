@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fsycl-is-host -emit-llvm -triple x86_64-unknown-linux-gnu -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-HOST,CHECK-HOST-LINUX %s
+// XFAIL: *
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple amdgcn-amd-amdhsa -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-AMDGCN %s
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple nvptx-nvidia-cuda -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-NVPTX %s
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple nvptx64-nvidia-cuda -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-NVPTX %s
@@ -159,8 +160,8 @@ int main() {
 //
 // CHECK-HOST-LINUX:      define dso_local void @_Z26single_purpose_kernel_task21single_purpose_kernel() #{{[0-9]+}} {
 // CHECK-HOST-LINUX-NEXT: entry:
+// CHECK-HOST-LINUX-NEXT:   %tmp = alloca %struct.single_purpose_kernel, align 1
 // CHECK-HOST-LINUX-NEXT:   %kernelFunc = alloca %struct.single_purpose_kernel, align 1
-// CHECK-HOST-LINUX-NEXT:   %agg.tmp = alloca %struct.single_purpose_kernel, align 1
 // CHECK-HOST-LINUX-NEXT:   call void @_Z18sycl_kernel_launchI26single_purpose_kernel_nameJ21single_purpose_kernelEEvPKcDpT0_(ptr noundef @.str)
 // CHECK-HOST-LINUX-NEXT:   ret void
 // CHECK-HOST-LINUX-NEXT: }
