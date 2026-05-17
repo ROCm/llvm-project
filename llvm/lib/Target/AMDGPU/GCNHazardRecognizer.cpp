@@ -20,7 +20,9 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/TargetParser.h"
+#include <fstream>
 
 using namespace llvm;
 
@@ -1274,10 +1276,22 @@ int GCNHazardRecognizer::checkReadM0Hazards(MachineInstr *MI) const {
          getWaitStatesSinceDef(AMDGPU::M0, IsHazardFn, ReadM0WaitStates);
 }
 
+static std::ofstream &getVnopLog() {
+  static std::ofstream f("/tmp/vnop_trace.log", std::ios::app);
+  return f;
+}
+
 void GCNHazardRecognizer::emitVNops(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator InsertPt,
                                     int WaitStatesNeeded, bool IsHoisting) {
   const DebugLoc &DL = IsHoisting ? DebugLoc() : InsertPt->getDebugLoc();
+  {
+    std::string s;
+    raw_string_ostream os(s);
+    InsertPt->print(os);
+    getVnopLog() << "[VNOP-DBG] emitVNops: " << WaitStatesNeeded
+                 << " v_nops before: " << s << std::flush;
+  }
   for (int I = 0; I < WaitStatesNeeded; ++I)
     BuildMI(MBB, InsertPt, DL, TII.get(AMDGPU::V_NOP_e32));
 }
@@ -1980,6 +1994,8 @@ bool GCNHazardRecognizer::fixVALUTransCoexecutionHazards(MachineInstr *MI) {
   if (::getWaitStatesSince(IsTransHazardFn, MI, IsExpiredFn) == HasVALU)
     return false;
 
+  { std::string s; raw_string_ostream os(s); MI->print(os);
+    getVnopLog() << "[VNOP-DBG] fixVALUTransCoexec: 1 v_nop before: " << s << std::flush; }
   BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII->get(AMDGPU::V_NOP_e32));
   return true;
 }
@@ -2033,6 +2049,8 @@ bool GCNHazardRecognizer::fixWMMAHazards(MachineInstr *MI) {
       std::numeric_limits<int>::max())
     return false;
 
+  { std::string s; raw_string_ostream os(s); MI->print(os);
+    getVnopLog() << "[VNOP-DBG] fixWMMAHazards: 1 v_nop before: " << s << std::flush; }
   BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII->get(AMDGPU::V_NOP_e32));
 
   return true;
@@ -2273,6 +2291,10 @@ bool GCNHazardRecognizer::fixWMMACoexecutionHazards(MachineInstr *MI) {
   int WaitStatesNeeded = checkWMMACoexecutionHazards(MI);
   if (WaitStatesNeeded <= 0)
     return false;
+
+  { std::string s; raw_string_ostream os(s); MI->print(os);
+    getVnopLog() << "[VNOP-DBG] fixWMMACoexec: " << WaitStatesNeeded
+                 << " v_nops needed before: " << s << std::flush; }
 
   if (EnableWMMAVnopHoisting && tryHoistWMMAVnopsFromLoop(MI, WaitStatesNeeded))
     return true;
@@ -3854,6 +3876,8 @@ bool GCNHazardRecognizer::fixSetRegMode(MachineInstr *MI) {
       MI->getOperand(1).getImm() != AMDGPU::Hwreg::ID_MODE)
     return false;
 
+  { std::string s; raw_string_ostream os(s); MI->print(os);
+    getVnopLog() << "[VNOP-DBG] fixSetRegMode: 2 v_nops before: " << s << std::flush; }
   BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII.get(AMDGPU::V_NOP_e32));
   BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII.get(AMDGPU::V_NOP_e32));
   return true;

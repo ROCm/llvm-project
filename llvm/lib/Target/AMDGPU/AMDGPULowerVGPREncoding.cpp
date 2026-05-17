@@ -564,8 +564,9 @@ static bool isPinnedInstr(const MachineInstr &MI, const SIInstrInfo *TII) {
   unsigned Opc = MI.getOpcode();
   if (TII->isWaitcnt(Opc))
     return true;
-  if (Opc == AMDGPU::S_NOP || Opc == AMDGPU::S_CLAUSE ||
-      Opc == AMDGPU::S_DELAY_ALU || Opc == AMDGPU::S_SETREG_IMM32_B32)
+  if (Opc == AMDGPU::S_NOP || Opc == AMDGPU::V_NOP_e32 ||
+      Opc == AMDGPU::S_CLAUSE || Opc == AMDGPU::S_DELAY_ALU ||
+      Opc == AMDGPU::S_SETREG_IMM32_B32)
     return true;
   return false;
 }
@@ -600,8 +601,11 @@ void AMDGPULowerVGPREncoding::reorderForBankLocality(MachineBasicBlock &MBB) {
   // Reorder within each region to minimize bank switches.
   SmallVector<MachineInstr *, 512> Instrs;
   for (auto &MI : MBB.instrs()) {
-    if (MI.isMetaInstruction())
-      continue;
+    if (MI.isMetaInstruction()) {
+      unsigned Opc = MI.getOpcode();
+      if (Opc != AMDGPU::SCHED_BARRIER && Opc != AMDGPU::SCHED_GROUP_BARRIER)
+        continue;
+    }
     Instrs.push_back(&MI);
   }
 
