@@ -2809,48 +2809,21 @@ protected:
 
 Error AMDGPUStreamTy::recordEvent(AMDGPUEventTy &Event,
                                   AMDGPUSignalTy *ReusedSignal) {
-  if (Queue == nullptr)
-    return Plugin::error(ErrorCode::INVALID_NULL_POINTER,
-                         "target queue was nullptr");
-
-  // One use for the stream slot and one for the event timing signal.
-  const uint32_t OutputSignalUses = 2;
-
-  // Reuse the provided signal or retrieve one for the operation's output.
-  AMDGPUSignalTy *OutputSignal = ReusedSignal;
-  if (!OutputSignal) {
-    if (auto Err = SignalManager.getResource(OutputSignal))
-      return Err;
-  }
-
-  OutputSignal->reset();
-  OutputSignal->increaseUseCount(OutputSignalUses);
-
+  // LCOMPILER-2211 experiment: revert to pre-34028294e49b behaviour where
+  // recordEvent did NOT enqueue a barrier marker packet. Elapsed-time queries
+  // will be broken on this build, but that feature is not used by babelstream.
   std::lock_guard<std::mutex> StreamLock(Mutex);
-
-  // Consume stream slot and compute dependencies.
-  auto [Curr, InputSignal] = consume(OutputSignal);
-
-  // Materialize the event as a real marker on the queue. Elapsed-time queries
-  // need a packet-backed completion signal to retrieve dispatch timing.
-  if (auto Err = Queue->pushBarrier(OutputSignal, InputSignal, nullptr)) {
-    rollbackConsumedSlot(Curr);
-
-    if (OutputSignal->decreaseUseCount(OutputSignalUses)) {
-      if (auto ReturnErr = SignalManager.returnResource(OutputSignal))
-        return joinErrors(std::move(Err), std::move(ReturnErr));
-    }
-
-    return Err;
+  if (size() > 0) {
+    Event.RecordedSyncCycle = SyncCycle;
+    Event.RecordedSlot = last();
+    assert(Event.RecordedSyncCycle >= 0 && "Invalid recorded sync cycle");
+    assert(Event.RecordedSlot >= 0 && "Invalid recorded slot");
+  } else {
+    Event.RecordedSyncCycle = -1;
+    Event.RecordedSlot = -1;
   }
-
-  Event.RecordedSlot = Curr;
-  Event.RecordedSyncCycle = SyncCycle;
-  Event.TimingSignal = OutputSignal;
-
-  assert(Event.RecordedSyncCycle >= 0 && "Invalid recorded sync cycle");
-  assert(Event.RecordedSlot >= 0 && "Invalid recorded slot");
-
+  Event.TimingSignal = nullptr;
+  (void)ReusedSignal;
   return Plugin::success();
 }
 
