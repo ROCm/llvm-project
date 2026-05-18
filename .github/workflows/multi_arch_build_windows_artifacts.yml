@@ -270,7 +270,7 @@ jobs:
       - name: Skip hip-tests on Windows (ROCm root not available)
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          sed -i '/^  if(THEROCK_BUILD_TESTING)/,/^  endif(THEROCK_BUILD_TESTING)/d' \
+          sed -i '/^if(THEROCK_BUILD_TESTING)/,/^endif(THEROCK_BUILD_TESTING)/d' \
             core/CMakeLists.txt
 
       - name: Force offload-arch build on Windows (needed for HIP compiler identification)
