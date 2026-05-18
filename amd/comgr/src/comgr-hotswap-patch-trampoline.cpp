@@ -12,11 +12,16 @@
 ///     DS instructions
 ///   - tensor_load_to_lds     : prepend s_pack_hh_b32_b16 to clear multicast
 ///     routing bits in the group descriptor's base SGPR
+///   - ds_*_addtid_b32        : compute the LDS address through the ALU and
+///     issue a regular ds_*_b32, bypassing the A0 16-bit M0 truncation
+///     (DEGFXMI400-12025). On B0 the DS unit reads 20 bits of M0; on A0 it
+///     reads only 16, silently dropping bits [19:16].
 ///
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -556,6 +561,200 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
   return true;
 }
 
+// -- ADDTID swap table (StringSwitch) ---------------------------------------
+//
+// Maps each ADDTID DS mnemonic to its plain DS replacement. The lane-id
+// expression that ADDTID encodes implicitly is materialised in the ALU by
+// the trampoline body, then a regular DS op consumes the computed address.
+
+StringRef getAddtidReplacement(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_addtid_b32", "ds_load_b32")
+      .Case("ds_store_addtid_b32", "ds_store_b32")
+      .Default("");
+}
+
+// LDS allocations strictly above this threshold are unreachable through
+// ADDTID once hotswapped to A0, because A0 truncates M0 to 16 bits. The
+// patch itself is still applied (the lane-id math runs through the ALU);
+// this constant only gates a diagnostic so users with oversized LDS
+// allocations are warned that values may still be silently wrong.
+// Derived from the M0 bit-width on A0 so the magic number stays out of
+// the source: 1 << 16 = 65536 bytes addressable per ADDTID encoding.
+constexpr uint32_t AddtidLdsLimitA0 = 1u << 16;
+
+// ADDTID MCInst operand layout (AddtidOpReg / AddtidOpOffset / AddtidOpGds)
+// lives in comgr-hotswap-internal.h so the layout pin is shared with the unit
+// tests in HotswapMCTest.cpp.
+
+// GDS=1 ADDTID is not reachable through the gfx12 assembler -- the asm
+// parser rejects the `gds` modifier on this subtarget, so any MCInst
+// produced by clang/llvm-mc has GDS=0. This predicate stays as
+// defense-in-depth for hand-crafted byte input or future subtargets that
+// re-enable the encoding through the same MCInst slot. Because the path
+// is unreachable on gfx12 it is not exercised by lit; coverage exists via
+// AddTid.{Load,Store}AddTidDecodesWithExpectedLayout pinning the operand
+// shape that this predicate consumes.
+bool isAddtidGds(const MCInst &Inst) {
+  if (Inst.getNumOperands() <= AddtidOpGds)
+    return false;
+  const MCOperand &Op = Inst.getOperand(AddtidOpGds);
+  return Op.isImm() && Op.getImm() != 0;
+}
+
+std::optional<uint32_t> getAddtidOffset(const MCInst &Inst) {
+  if (Inst.getNumOperands() <= AddtidOpOffset)
+    return std::nullopt;
+  const MCOperand &Op = Inst.getOperand(AddtidOpOffset);
+  if (!Op.isImm())
+    return std::nullopt;
+  return static_cast<uint32_t>(Op.getImm());
+}
+
+// Build the trampoline asm for a ds_load_addtid_b32 site. The destination
+// VGPR is reused as the address-compute scratch because the load overwrites
+// it, so no extra VGPR allocation is needed for the load path.
+//
+// The replacement reproduces the ADDTID address computation in the ALU:
+//   lane_id = mbcnt_lo(-1, 0)    ; for waveN, then mbcnt_hi(-1, lane_id)
+//   addr    = m0 + lane_id * 4   ; + offset (folded into the DS encoding)
+std::vector<std::string> buildAddtidLoadAsm(StringRef VName, uint32_t Offset,
+                                            StringRef ToMnem) {
+  std::string V(VName);
+  std::vector<std::string> Lines;
+  Lines.push_back("v_mbcnt_lo_u32_b32 " + V + ", -1, 0");
+  Lines.push_back("v_mbcnt_hi_u32_b32 " + V + ", -1, " + V);
+  Lines.push_back("v_lshlrev_b32 " + V + ", 2, " + V);
+  Lines.push_back("v_add_nc_u32 " + V + ", m0, " + V);
+  Lines.push_back(ToMnem.str() + " " + V + ", " + V + fmtOffset(Offset));
+  return Lines;
+}
+
+// Build the trampoline asm for a ds_store_addtid_b32 site. \p VTmpName is a
+// scratch VGPR holding the computed address; \p VDataName is the original
+// data VGPR. Operand order for ds_store_b32 is (addr, data).
+std::vector<std::string> buildAddtidStoreAsm(StringRef VTmpName,
+                                             StringRef VDataName,
+                                             uint32_t Offset,
+                                             StringRef ToMnem) {
+  std::string VTmp(VTmpName);
+  std::string VData(VDataName);
+  std::vector<std::string> Lines;
+  Lines.push_back("v_mbcnt_lo_u32_b32 " + VTmp + ", -1, 0");
+  Lines.push_back("v_mbcnt_hi_u32_b32 " + VTmp + ", -1, " + VTmp);
+  Lines.push_back("v_lshlrev_b32 " + VTmp + ", 2, " + VTmp);
+  Lines.push_back("v_add_nc_u32 " + VTmp + ", m0, " + VTmp);
+  Lines.push_back(ToMnem.str() + " " + VTmp + ", " + VData + fmtOffset(Offset));
+  return Lines;
+}
+
+// -- patchDsAddtid ----------------------------------------------------------
+//
+// Trampoline expansion for ds_load_addtid_b32 / ds_store_addtid_b32 on
+// A0. The replacement materialises the ADDTID address through the ALU
+// (so the full 32-bit M0 is used) and issues a regular ds_*_b32. GDS=1
+// is rejected: the rewrite stays a no-op so the original (broken on A0)
+// instruction is preserved and the failure is loud in the verbose log.
+
+bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
+  InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  StringRef ToMnem = getAddtidReplacement(DI.Mnemonic);
+  if (ToMnem.empty())
+    return false;
+
+  if (isAddtidGds(DI.Inst)) {
+    log() << "hotswap: error: " << DI.Mnemonic << " with GDS=1 at 0x"
+          << utohexstr(DI.Offset)
+          << " is not supported; leaving original instruction in place\n";
+    return false;
+  }
+
+  std::optional<uint32_t> OffsetOpt = getAddtidOffset(DI.Inst);
+  if (!OffsetOpt) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": missing/non-immediate offset\n";
+    return false;
+  }
+  uint32_t Offset = *OffsetOpt;
+
+  if (DI.Inst.getNumOperands() <= AddtidOpReg ||
+      !DI.Inst.getOperand(AddtidOpReg).isReg() ||
+      !DI.Inst.getOperand(AddtidOpReg).getReg()) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": missing register operand\n";
+    return false;
+  }
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  MCRegister Reg = MCRegister(DI.Inst.getOperand(AddtidOpReg).getReg());
+  std::string RegName = toAsmRegName(MRI, Reg);
+  if (RegName.empty()) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": cannot resolve register name\n";
+    return false;
+  }
+
+  bool IsLoad = DI.Mnemonic == "ds_load_addtid_b32";
+  std::vector<std::string> AsmLines;
+
+  if (IsLoad) {
+    AsmLines = buildAddtidLoadAsm(RegName, Offset, ToMnem);
+  } else {
+    // Store path needs a scratch VGPR for the address-compute temporary
+    // because the original data VGPR must be preserved as the store source.
+    std::optional<unsigned> TmpVgpr = allocScratchVgpr(Ctx, Idx);
+    if (!TmpVgpr) {
+      std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
+      std::optional<uint32_t> LdsSize =
+          Ctx.Elf.getKernelStaticLdsSize(KernelName);
+      // LdsSize covers only the static (compile-time-fixed) LDS allocation;
+      // dynamic LDS is added by the host at dispatch and not visible in the
+      // ELF, so this check is a "definitely exceeds 64 KiB" lower bound.
+      // Kernels that fit statically but overflow with dynamic LDS will not
+      // trip this warning.
+      if (LdsSize && *LdsSize > AddtidLdsLimitA0)
+        log() << "hotswap: warning: kernel '" << KernelName << "' uses "
+              << DI.Mnemonic << " with static LDS " << *LdsSize << " bytes (> "
+              << AddtidLdsLimitA0
+              << "); A0 16-bit M0 truncation may produce silently wrong "
+                 "results at 0x"
+              << utohexstr(DI.Offset) << "\n";
+      log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+            << utohexstr(DI.Offset) << ": no scratch VGPR available\n";
+      return false;
+    }
+
+    ScratchPatchInfo SPI;
+    SPI.Offset = DI.Offset;
+    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
+    SPI.ScratchRegs.set(*TmpVgpr);
+    Ctx.OutScratchPatches.push_back(std::move(SPI));
+
+    std::string TmpName = ("v" + Twine(*TmpVgpr)).str();
+    AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
+  }
+
+  std::string Combined;
+  for (const std::string &Line : AsmLines)
+    Combined += Line + "\n";
+  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  if (Bytes.empty()) {
+    log() << "hotswap: error: " << DI.Mnemonic
+          << " trampoline assembly failed at 0x" << utohexstr(DI.Offset)
+          << "\n";
+    return false;
+  }
+
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Bytes))
+    return false;
+
+  log() << "hotswap: trampoline: " << DI.Mnemonic << " -> " << ToMnem
+        << " at 0x" << utohexstr(DI.Offset) << " (offset=" << Offset << ", "
+        << RegName << ")\n";
+  DI.Mnemonic = "<replaced>";
+  return true;
+}
+
 } // anonymous namespace
 
 // -- applyTrampolinePatches -------------------------------------------------
@@ -565,6 +764,7 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 //
 //   ds_*_2addr_stride64_*  -> split into two single-address DS ops
 //   tensor_load_to_lds     -> prepend s_pack_hh_b32_b16 (+ save/restore)
+//   ds_*_addtid_b32        -> materialise lane-id math in ALU, then ds_*_b32
 
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
@@ -574,6 +774,9 @@ static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
 
   if (Mnem == "tensor_load_to_lds")
     return patchTensorLoadToLds(Ctx, Idx) ? 1 : 0;
+
+  if (!getAddtidReplacement(Mnem).empty())
+    return patchDsAddtid(Ctx, Idx) ? 1 : 0;
 
   return 0;
 }
