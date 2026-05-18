@@ -8,8 +8,13 @@
 /// \file
 /// Strong-symbol override for applyTrampolinePatches. Handles B0 errata
 /// whose fix is larger than the original instruction:
-///   - ds_*_2addr_stride64_*  : one 8B DS instruction -> two single-address
-///     DS instructions
+///   - ds_*_2addr_*           : one 8B DS instruction -> two single-address
+///     DS instructions. Covers both the stride64 and non-stride64 encodings:
+///     A0 requires DS2 addresses to be aligned to the payload size, while
+///     B0 dropped that restriction, so a B0-compiled binary may emit a
+///     2-address DS instruction with unaligned offsets that silently
+///     corrupts LDS on A0. The expansion uses two single-address ops with
+///     byte offsets scaled appropriately for each encoding.
 ///   - tensor_load_to_lds     : prepend s_pack_hh_b32_b16 to clear multicast
 ///     routing bits in the group descriptor's base SGPR
 ///   - ds_*_addtid_b32        : compute the LDS address through the ALU and
@@ -39,16 +44,27 @@ namespace COMGR {
 namespace hotswap {
 namespace {
 
-// -- DS stride64 swap table (StringSwitch) ----------------------------------
+// -- DS 2-address swap table (StringSwitch) ---------------------------------
 //
-// Maps each 2-address DS mnemonic to its single-address replacement.
+// Maps each 2-address DS mnemonic to its single-address replacement. Covers
+// both encodings -- the stride64 variants pack the index*64*ElemBytes
+// stride into each per-operand offset field, while the non-stride64
+// variants encode raw index*ElemBytes byte offsets. The single-address
+// replacement is the same regardless of encoding; only the offset scale
+// differs (see extractDsOperands).
 
 StringRef getDs2AddrReplacement(StringRef Mnemonic) {
   return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_2addr_b32", "ds_load_b32")
+      .Case("ds_load_2addr_b64", "ds_load_b64")
       .Case("ds_load_2addr_stride64_b32", "ds_load_b32")
       .Case("ds_load_2addr_stride64_b64", "ds_load_b64")
+      .Case("ds_store_2addr_b32", "ds_store_b32")
+      .Case("ds_store_2addr_b64", "ds_store_b64")
       .Case("ds_store_2addr_stride64_b32", "ds_store_b32")
       .Case("ds_store_2addr_stride64_b64", "ds_store_b64")
+      .Case("ds_storexchg_2addr_rtn_b32", "ds_storexchg_rtn_b32")
+      .Case("ds_storexchg_2addr_rtn_b64", "ds_storexchg_rtn_b64")
       .Case("ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32")
       .Case("ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64")
       .Default("");
@@ -120,10 +136,12 @@ std::string fmtOffset(uint32_t Offset) {
 // -- DS expansion -----------------------------------------------------------
 //
 // Expands one DS 2-address instruction into two single-address assembly
-// strings. The three operation types have different operand layouts:
-//   Load:  ds_load_2addr_stride64  vdst_pair, addr, off0, off1
-//   Store: ds_store_2addr_stride64 addr, data0, data1, off0, off1
-//   Xchg:  ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0, data1, ...
+// strings. The three operation types have different operand layouts (the
+// stride64 and non-stride64 encodings share identical operand layouts;
+// only the offset scale differs):
+//   Load:  ds_load_2addr[_stride64]  vdst_pair, addr, off0, off1
+//   Store: ds_store_2addr[_stride64] addr, data0, data1, off0, off1
+//   Xchg:  ds_storexchg_2addr[_stride64]_rtn vdst_pair, addr, data0, data1, ...
 //
 // For b32 operations, destinations are split into individual VGPRs.
 // For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
@@ -137,7 +155,12 @@ struct DsOperands {
 };
 
 // Extract register operands and scaled offsets from a DS 2-address MCInst.
-// Offsets are scaled by 64 * element_size (stride64 encoding).
+// The per-operand immediate fields hold dword indices that the hardware
+// scales differently for the two encodings: the non-stride64 forms encode
+// (index * ElemBytes) byte offsets, while the stride64 forms encode
+// (index * 64 * ElemBytes) byte offsets. The replacement single-address
+// instructions take byte offsets directly, so we materialise the scaled
+// value here once and let the layout-specific helpers consume it.
 DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
                              const LLVMState &LS) {
   DsOperands Ops;
@@ -159,7 +182,7 @@ DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
   }
 
   uint32_t ElemBytes = FromMnem.contains("_b64") ? 8 : 4;
-  uint32_t Scale = 64 * ElemBytes;
+  uint32_t Scale = FromMnem.contains("_stride64_") ? 64 * ElemBytes : ElemBytes;
   Ops.Off0 = static_cast<uint32_t>(RawOff0) * Scale;
   Ops.Off1 = static_cast<uint32_t>(RawOff1) * Scale;
   Ops.IsB64 = (ElemBytes == 8);
@@ -250,6 +273,9 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
 
   if (FromMnem.starts_with("ds_load"))
     return expandDs2AddrLoad(Ops, ToMnem);
+  // Order matters: "ds_storexchg" must be checked before "ds_store" since
+  // the latter is a prefix of the former and would otherwise greedily match
+  // the xchg mnemonics.
   if (FromMnem.starts_with("ds_storexchg"))
     return expandDs2AddrXchg(Ops, ToMnem);
   if (FromMnem.starts_with("ds_store"))
@@ -330,13 +356,17 @@ bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
   return false;
 }
 
-// -- patchDs2AddrStride64 ---------------------------------------------------
+// -- patchDs2Addr -----------------------------------------------------------
 //
-// Expand one ds_*_2addr_stride64_* instruction into two single-address DS
-// instructions. The split doubles the outstanding DS operation count, so
-// bumpNextWaitDscnt adjusts the next s_wait_dscnt accordingly.
+// Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
+// single-address DS instructions. Each split adds one outstanding DS op, so
+// bumpNextWaitDscnt increments the next non-drain s_wait_dscnt by +1 per
+// split and preserves drains verbatim. Because that helper writes the bumped
+// immediate back into Ctx.Decoded[I].Inst, adjacent DS2 sites that target
+// the same non-drain wait accumulate (the second call observes the first
+// call's update, so N splits before one wait produce a K -> K+N update).
 
-bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
+bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
@@ -344,8 +374,8 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   std::vector<std::string> Expanded =
       expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (Expanded.empty()) {
-    log() << "hotswap: error: ds_2addr_stride64 expansion failed for: "
-          << DI.Mnemonic << "\n";
+    log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
+          << "\n";
     return false;
   }
 
@@ -354,8 +384,7 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
     Combined += Line + "\n";
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
-    log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
-          << "\n";
+    log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
     return false;
   }
 
@@ -363,7 +392,10 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return false;
 
-  bumpNextWaitDscnt(Ctx, Idx);
+  // Return value intentionally discarded: false is a normal outcome when the
+  // wait is a drain (preserved), absent before s_endpgm/branch, or carries a
+  // non-immediate operand -- none of which are errors at this site.
+  (void)bumpNextWaitDscnt(Ctx, Idx);
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -840,7 +872,8 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 // Strong-symbol override. Handles B0 errata that produce replacement code
 // larger than the original instruction slot:
 //
-//   ds_*_2addr_stride64_*  -> split into two single-address DS ops
+//   ds_*_2addr_*           -> split into two single-address DS ops
+//     (covers both the stride64 and non-stride64 encodings)
 //   tensor_load_to_lds     -> prepend s_pack_hh_b32_b16 (+ save/restore)
 //   ds_*_addtid_b32        -> materialise lane-id math in ALU, then ds_*_b32
 
@@ -848,7 +881,7 @@ static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
   if (!getDs2AddrReplacement(Mnem).empty())
-    return patchDs2AddrStride64(Ctx, Idx) ? 1 : 0;
+    return patchDs2Addr(Ctx, Idx) ? 1 : 0;
 
   if (Mnem == "tensor_load_to_lds")
     return patchTensorLoadToLds(Ctx, Idx) ? 1 : 0;
