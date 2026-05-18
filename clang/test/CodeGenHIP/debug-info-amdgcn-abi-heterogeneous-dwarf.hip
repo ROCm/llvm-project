@@ -83,792 +83,789 @@ struct StructMultipleElements {
 };
 
 // CHECK-LABEL: define dso_local void @_Z21Test_Func_StructEmpty11StructEmpty(
-// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG26:![0-9]+]] {
+// CHECK-SAME: ) #[[ATTR0:[0-9]+]] !dbg [[DBG25:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[TMP:%.*]] = alloca [[STRUCT_STRUCTEMPTY:%.*]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP0:%.*]] = addrspacecast ptr addrspace(5) [[TMP]] to ptr
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP]], [[META31:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTEMPTY]])), [[META32:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG33:![0-9]+]]
+// CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTEMPTY:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META30:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTEMPTY]])), [[META31:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG32:![0-9]+]]
 //
 __device__ void Test_Func_StructEmpty(StructEmpty) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z21Test_Kern_StructEmpty11StructEmpty(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTEMPTY:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1:[0-9]+]] !dbg [[DBG34:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTEMPTY:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1:[0-9]+]] !dbg [[DBG33:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTEMPTY]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 1, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META36:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTEMPTY]])), [[META37:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG38:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTEMPTY]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 1, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META35:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTEMPTY]])), [[META36:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG37:![0-9]+]]
 //
 __global__ void Test_Kern_StructEmpty(StructEmpty) {}
 // CHECK-LABEL: define dso_local void @_Z29Test_Func_StructSingleElement19StructSingleElement(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG39:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG38:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEELEMENT:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META46:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENT]])), [[META47:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG48:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META45:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENT]])), [[META46:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG47:![0-9]+]]
 //
 __device__ void Test_Func_StructSingleElement(StructSingleElement) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z29Test_Kern_StructSingleElement19StructSingleElement(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG49:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG48:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEELEMENT:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META51:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENT]])), [[META52:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG53:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META50:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENT]])), [[META51:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG52:![0-9]+]]
 //
 __global__ void Test_Kern_StructSingleElement(StructSingleElement) {}
 // CHECK-LABEL: define dso_local void @_Z38Test_Func_StructSingleElementRecursive28StructSingleElementRecursive(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG54:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG53:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT:%.*]], ptr addrspace(5) [[COERCE_DIVE]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE1]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT:%.*]], ptr [[COERCE_DIVE]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META61:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]])), [[META62:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG63:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META60:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]])), [[META61:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG62:![0-9]+]]
 //
 __device__ void Test_Func_StructSingleElementRecursive(StructSingleElementRecursive) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z38Test_Kern_StructSingleElementRecursive28StructSingleElementRecursive(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG64:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG63:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT:%.*]], ptr addrspace(5) [[COERCE_DIVE]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE1]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    [[COERCE_DIVE1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEELEMENT:%.*]], ptr [[COERCE_DIVE]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META66:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]])), [[META67:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG68:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META65:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEELEMENTRECURSIVE]])), [[META66:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG67:![0-9]+]]
 //
 __global__ void Test_Kern_StructSingleElementRecursive(StructSingleElementRecursive) {}
 // CHECK-LABEL: define dso_local void @_Z38Test_Func_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG69:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG68:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META86:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]])), [[META87:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG88:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META85:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]])), [[META86:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG87:![0-9]+]]
 //
 __device__ void Test_Func_StructTrivialCopyTrivialMove(StructTrivialCopyTrivialMove) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z38Test_Kern_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG89:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG88:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META91:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]])), [[META92:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG93:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META90:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYTRIVIALMOVE]])), [[META91:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG92:![0-9]+]]
 //
 __global__ void Test_Kern_StructTrivialCopyTrivialMove(StructTrivialCopyTrivialMove) {}
 // CHECK-LABEL: define dso_local void @_Z33Test_Func_StructNoCopyTrivialMove23StructNoCopyTrivialMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG94:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG93:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNOCOPYTRIVIALMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYTRIVIALMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYTRIVIALMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META111:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYTRIVIALMOVE]])), [[META112:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG113:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META110:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYTRIVIALMOVE]])), [[META111:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG112:![0-9]+]]
 //
 __device__ void Test_Func_StructNoCopyTrivialMove(StructNoCopyTrivialMove) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z33Test_Kern_StructNoCopyTrivialMove23StructNoCopyTrivialMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG114:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG113:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNOCOPYTRIVIALMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYTRIVIALMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYTRIVIALMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META116:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYTRIVIALMOVE]])), [[META117:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG118:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META115:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYTRIVIALMOVE]])), [[META116:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG117:![0-9]+]]
 //
 __global__ void Test_Kern_StructNoCopyTrivialMove(StructNoCopyTrivialMove) {}
 // CHECK-LABEL: define dso_local void @_Z33Test_Func_StructTrivialCopyNoMove23StructTrivialCopyNoMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG119:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG118:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTTRIVIALCOPYNOMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYNOMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYNOMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META136:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYNOMOVE]])), [[META137:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG138:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META135:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYNOMOVE]])), [[META136:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG137:![0-9]+]]
 //
 __device__ void Test_Func_StructTrivialCopyNoMove(StructTrivialCopyNoMove) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z33Test_Kern_StructTrivialCopyNoMove23StructTrivialCopyNoMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG139:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG138:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTTRIVIALCOPYNOMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYNOMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTTRIVIALCOPYNOMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META141:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYNOMOVE]])), [[META142:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG143:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META140:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTTRIVIALCOPYNOMOVE]])), [[META141:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG142:![0-9]+]]
 //
 __global__ void Test_Kern_StructTrivialCopyNoMove(StructTrivialCopyNoMove) {}
 // CHECK-LABEL: define dso_local void @_Z28Test_Func_StructNoCopyNoMove18StructNoCopyNoMove(
-// CHECK-SAME: ptr addrspace(5) noundef dead_on_return [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG144:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(5) noundef dead_on_return [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG143:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTINDIRECT_ADDR:%.*]] = alloca ptr, align 8, addrspace(5)
-// CHECK-NEXT:    [[DOTINDIRECT_ADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTINDIRECT_ADDR]] to ptr
-// CHECK-NEXT:    store ptr addrspace(5) [[TMP0]], ptr [[DOTINDIRECT_ADDR_ASCAST]], align 8
+// CHECK-NEXT:    store ptr addrspace(5) [[TMP0]], ptr addrspace(5) [[DOTINDIRECT_ADDR]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTINDIRECT_ADDR]], [[META161:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYNOMOVE:%.*]])), [[META162:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG163:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTINDIRECT_ADDR]], [[META160:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYNOMOVE:%.*]])), [[META161:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG162:![0-9]+]]
 //
 __device__ void Test_Func_StructNoCopyNoMove(StructNoCopyNoMove) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z28Test_Kern_StructNoCopyNoMove18StructNoCopyNoMove(
-// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG164:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG163:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNOCOPYNOMOVE:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYNOMOVE]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNOCOPYNOMOVE]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META166:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYNOMOVE]])), [[META167:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG168:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META165:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNOCOPYNOMOVE]])), [[META166:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG167:![0-9]+]]
 //
 __global__ void Test_Kern_StructNoCopyNoMove(StructNoCopyNoMove) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct2Bytes12StructNBytesILj2EE(
-// CHECK-SAME: i16 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG169:![0-9]+]] {
+// CHECK-SAME: i16 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG168:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    store i16 [[DOTCOERCE]], ptr addrspace(5) [[TMP0]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    store i16 [[DOTCOERCE]], ptr [[TMP1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META182:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES]])), [[META183:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG184:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META181:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES]])), [[META182:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG183:![0-9]+]]
 //
 __device__ void Test_Func_Struct2Bytes(StructNBytes<2>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct2Bytes12StructNBytesILj2EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG185:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG184:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 2, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META187:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES]])), [[META188:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG189:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 2, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META186:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES]])), [[META187:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG188:![0-9]+]]
 //
 __global__ void Test_Kern_Struct2Bytes(StructNBytes<2>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct3Bytes12StructNBytesILj3EE(
-// CHECK-SAME: i32 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG190:![0-9]+]] {
+// CHECK-SAME: i32 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG189:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_0:%.*]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[COERCE_VAL_II:%.*]] = trunc i32 [[DOTCOERCE]] to i24
-// CHECK-NEXT:    store i24 [[COERCE_VAL_II]], ptr [[TMP1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META203:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_0]])), [[META204:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG205:![0-9]+]]
+// CHECK-NEXT:    store i24 [[COERCE_VAL_II]], ptr addrspace(5) [[TMP0]], align 1
+// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META202:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_0]])), [[META203:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG204:![0-9]+]]
 //
 __device__ void Test_Func_Struct3Bytes(StructNBytes<3>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct3Bytes12StructNBytesILj3EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_0:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG206:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_0:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG205:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_0]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 3, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META208:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_0]])), [[META209:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG210:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_0]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 3, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META207:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_0]])), [[META208:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG209:![0-9]+]]
 //
 __global__ void Test_Kern_Struct3Bytes(StructNBytes<3>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct4Bytes12StructNBytesILj4EE(
-// CHECK-SAME: i32 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG211:![0-9]+]] {
+// CHECK-SAME: i32 [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG210:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_1:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    store i32 [[DOTCOERCE]], ptr addrspace(5) [[TMP0]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    store i32 [[DOTCOERCE]], ptr [[TMP1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META224:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_1]])), [[META225:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG226:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META223:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_1]])), [[META224:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG225:![0-9]+]]
 //
 __device__ void Test_Func_Struct4Bytes(StructNBytes<4>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct4Bytes12StructNBytesILj4EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_1:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG227:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_1:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG226:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_1]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 4, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META229:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_1]])), [[META230:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG231:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_1]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 4, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META228:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_1]])), [[META229:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG230:![0-9]+]]
 //
 __global__ void Test_Kern_Struct4Bytes(StructNBytes<4>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct5Bytes12StructNBytesILj5EE(
-// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG232:![0-9]+]] {
+// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG231:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_2:%.*]], align 1, addrspace(5)
 // CHECK-NEXT:    [[TMP_COERCE:%.*]] = alloca [2 x i32], align 4, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[TMP_COERCE_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[TMP_COERCE]] to ptr
 // CHECK-NEXT:    store [2 x i32] [[DOTCOERCE]], ptr [[TMP_COERCE_ASCAST]], align 4
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 1 [[TMP1]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 5, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META245:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_2]])), [[META246:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG247:![0-9]+]]
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p0.i64(ptr addrspace(5) align 1 [[TMP0]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 5, i1 false)
+// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META244:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_2]])), [[META245:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG246:![0-9]+]]
 //
 __device__ void Test_Func_Struct5Bytes(StructNBytes<5>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct5Bytes12StructNBytesILj5EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_2:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG248:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_2:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG247:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_2]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 5, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META250:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_2]])), [[META251:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG252:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_2]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 5, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META249:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_2]])), [[META250:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG251:![0-9]+]]
 //
 __global__ void Test_Kern_Struct5Bytes(StructNBytes<5>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct6Bytes12StructNBytesILj6EE(
-// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG253:![0-9]+]] {
+// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG252:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_3:%.*]], align 1, addrspace(5)
 // CHECK-NEXT:    [[TMP_COERCE:%.*]] = alloca [2 x i32], align 4, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[TMP_COERCE_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[TMP_COERCE]] to ptr
 // CHECK-NEXT:    store [2 x i32] [[DOTCOERCE]], ptr [[TMP_COERCE_ASCAST]], align 4
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 1 [[TMP1]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 6, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META266:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_3]])), [[META267:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG268:![0-9]+]]
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p0.i64(ptr addrspace(5) align 1 [[TMP0]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 6, i1 false)
+// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META265:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_3]])), [[META266:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG267:![0-9]+]]
 //
 __device__ void Test_Func_Struct6Bytes(StructNBytes<6>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct6Bytes12StructNBytesILj6EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_3:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG269:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_3:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG268:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_3]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 6, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META271:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_3]])), [[META272:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG273:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_3]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 6, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META270:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_3]])), [[META271:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG272:![0-9]+]]
 //
 __global__ void Test_Kern_Struct6Bytes(StructNBytes<6>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct7Bytes12StructNBytesILj7EE(
-// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG274:![0-9]+]] {
+// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG273:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_4:%.*]], align 1, addrspace(5)
 // CHECK-NEXT:    [[TMP_COERCE:%.*]] = alloca [2 x i32], align 4, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[TMP_COERCE_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[TMP_COERCE]] to ptr
 // CHECK-NEXT:    store [2 x i32] [[DOTCOERCE]], ptr [[TMP_COERCE_ASCAST]], align 4
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p0.i64(ptr align 1 [[TMP1]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 7, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META287:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_4]])), [[META288:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG289:![0-9]+]]
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p0.i64(ptr addrspace(5) align 1 [[TMP0]], ptr align 4 [[TMP_COERCE_ASCAST]], i64 7, i1 false)
+// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META286:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_4]])), [[META287:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG288:![0-9]+]]
 //
 __device__ void Test_Func_Struct7Bytes(StructNBytes<7>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct7Bytes12StructNBytesILj7EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_4:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG290:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_4:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG289:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_4]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 7, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META292:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_4]])), [[META293:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG294:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_4]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 7, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META291:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_4]])), [[META292:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG293:![0-9]+]]
 //
 __global__ void Test_Kern_Struct7Bytes(StructNBytes<7>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct8Bytes12StructNBytesILj8EE(
-// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG295:![0-9]+]] {
+// CHECK-SAME: [2 x i32] [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG294:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_5:%.*]], align 1, addrspace(5)
+// CHECK-NEXT:    store [2 x i32] [[DOTCOERCE]], ptr addrspace(5) [[TMP0]], align 1
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    store [2 x i32] [[DOTCOERCE]], ptr [[TMP1]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META308:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_5]])), [[META309:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG310:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META307:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_5]])), [[META308:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG309:![0-9]+]]
 //
 __device__ void Test_Func_Struct8Bytes(StructNBytes<8>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct8Bytes12StructNBytesILj8EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_5:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG311:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_5:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG310:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_5]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 8, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META313:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_5]])), [[META314:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG315:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_5]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 8, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META312:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_5]])), [[META313:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG314:![0-9]+]]
 //
 __global__ void Test_Kern_Struct8Bytes(StructNBytes<8>) {}
 // CHECK-LABEL: define dso_local void @_Z22Test_Func_Struct9Bytes12StructNBytesILj9EE(
-// CHECK-SAME: i8 [[DOTCOERCE0:%.*]], [8 x i8] [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG316:![0-9]+]] {
+// CHECK-SAME: i8 [[DOTCOERCE0:%.*]], [8 x i8] [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG315:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTNBYTES_6:%.*]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNBYTES_6]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store i8 [[DOTCOERCE0]], ptr [[TMP2]], align 1
-// CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNBYTES_6]], ptr [[TMP1]], i32 0, i32 1
-// CHECK-NEXT:    store [8 x i8] [[DOTCOERCE1]], ptr [[TMP3]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META329:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_6]])), [[META330:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG331:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNBYTES_6]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store i8 [[DOTCOERCE0]], ptr addrspace(5) [[TMP1]], align 1
+// CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTNBYTES_6]], ptr addrspace(5) [[TMP0]], i32 0, i32 1
+// CHECK-NEXT:    store [8 x i8] [[DOTCOERCE1]], ptr addrspace(5) [[TMP2]], align 1
+// CHECK-NEXT:    [[TMP3:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META328:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_6]])), [[META329:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG330:![0-9]+]]
 //
 __device__ void Test_Func_Struct9Bytes(StructNBytes<9>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z22Test_Kern_Struct9Bytes12StructNBytesILj9EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_6:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG332:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_6:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG331:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_6]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 9, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META334:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_6]])), [[META335:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG336:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_6]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 9, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META333:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_6]])), [[META334:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG335:![0-9]+]]
 //
 __global__ void Test_Kern_Struct9Bytes(StructNBytes<9>) {}
 // CHECK-LABEL: define dso_local void @_Z23Test_Func_Struct64Bytes12StructNBytesILj64EE(
-// CHECK-SAME: ptr addrspace(5) noundef byref([[STRUCT_STRUCTNBYTES_7:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG337:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(5) noundef byref([[STRUCT_STRUCTNBYTES_7:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG336:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_7]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p5.i64(ptr align 1 [[TMP1]], ptr addrspace(5) align 1 [[TMP0]], i64 64, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META350:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_7]])), [[META351:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG352:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_7]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(5) align 1 [[TMP0]], i64 64, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META349:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_7]])), [[META350:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG351:![0-9]+]]
 //
 __device__ void Test_Func_Struct64Bytes(StructNBytes<64>) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z23Test_Kern_Struct64Bytes12StructNBytesILj64EE(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_7:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG353:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTNBYTES_7:%.*]]) align 1 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG352:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTNBYTES_7]], align 1, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 64, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META355:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_7]])), [[META356:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG357:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTNBYTES_7]], align 1, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 1 [[TMP1]], ptr addrspace(4) align 1 [[TMP0]], i64 64, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META354:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTNBYTES_7]])), [[META355:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG356:![0-9]+]]
 //
 __global__ void Test_Kern_Struct64Bytes(StructNBytes<64>) {}
 // CHECK-LABEL: define dso_local void @_Z15Test_Func_Int8Tc(
-// CHECK-SAME: i8 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG358:![0-9]+]] {
+// CHECK-SAME: i8 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG357:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META362:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META363:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG364:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META361:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META362:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG363:![0-9]+]]
 //
 __device__ void Test_Func_Int8T(int8_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z15Test_Kern_Int8Tc(
-// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG365:![0-9]+]] {
+// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG364:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META367:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META368:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG369:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META366:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META367:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG368:![0-9]+]]
 //
 __global__ void Test_Kern_Int8T(int8_t) {}
 // CHECK-LABEL: define dso_local void @_Z16Test_Func_UInt8Th(
-// CHECK-SAME: i8 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG370:![0-9]+]] {
+// CHECK-SAME: i8 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG369:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META374:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META375:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG376:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META373:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META374:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG375:![0-9]+]]
 //
 __device__ void Test_Func_UInt8T(uint8_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z16Test_Kern_UInt8Th(
-// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG377:![0-9]+]] {
+// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG376:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META379:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META380:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG381:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META378:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META379:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG380:![0-9]+]]
 //
 __global__ void Test_Kern_UInt8T(uint8_t) {}
 // CHECK-LABEL: define dso_local void @_Z16Test_Func_Int16Ts(
-// CHECK-SAME: i16 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG382:![0-9]+]] {
+// CHECK-SAME: i16 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG381:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META386:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META387:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG388:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META385:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META386:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG387:![0-9]+]]
 //
 __device__ void Test_Func_Int16T(int16_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z16Test_Kern_Int16Ts(
-// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG389:![0-9]+]] {
+// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG388:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META391:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META392:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG393:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META390:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META391:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG392:![0-9]+]]
 //
 __global__ void Test_Kern_Int16T(int16_t) {}
 // CHECK-LABEL: define dso_local void @_Z17Test_Func_UInt16Tt(
-// CHECK-SAME: i16 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG394:![0-9]+]] {
+// CHECK-SAME: i16 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG393:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META398:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META399:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG400:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META397:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META398:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG399:![0-9]+]]
 //
 __device__ void Test_Func_UInt16T(uint16_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z17Test_Kern_UInt16Tt(
-// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG401:![0-9]+]] {
+// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG400:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META403:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META404:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG405:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META402:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META403:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG404:![0-9]+]]
 //
 __global__ void Test_Kern_UInt16T(uint16_t) {}
 // CHECK-LABEL: define dso_local void @_Z16Test_Func_Int32Ti(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG406:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG405:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META410:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META411:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG412:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META409:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META410:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG411:![0-9]+]]
 //
 __device__ void Test_Func_Int32T(int32_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z16Test_Kern_Int32Ti(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG413:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG412:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META415:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META416:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG417:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META414:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META415:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG416:![0-9]+]]
 //
 __global__ void Test_Kern_Int32T(int32_t) {}
 // CHECK-LABEL: define dso_local void @_Z17Test_Func_UInt32Tj(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG418:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG417:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META422:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META423:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG424:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META421:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META422:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG423:![0-9]+]]
 //
 __device__ void Test_Func_UInt32T(uint32_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z17Test_Kern_UInt32Tj(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG425:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG424:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META427:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META428:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG429:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META426:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META427:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG428:![0-9]+]]
 //
 __global__ void Test_Kern_UInt32T(uint32_t) {}
 // CHECK-LABEL: define dso_local void @_Z16Test_Func_Int64Tl(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG430:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG429:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META434:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META435:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG436:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META433:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META434:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG435:![0-9]+]]
 //
 __device__ void Test_Func_Int64T(int64_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z16Test_Kern_Int64Tl(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG437:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG436:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META439:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META440:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG441:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META438:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META439:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG440:![0-9]+]]
 //
 __global__ void Test_Kern_Int64T(int64_t) {}
 // CHECK-LABEL: define dso_local void @_Z17Test_Func_UInt64Tm(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG442:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG441:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META446:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META447:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG448:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META445:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META446:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG447:![0-9]+]]
 //
 __device__ void Test_Func_UInt64T(uint64_t) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z17Test_Kern_UInt64Tm(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG449:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG448:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META451:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META452:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG453:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META450:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META451:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG452:![0-9]+]]
 //
 __global__ void Test_Kern_UInt64T(uint64_t) {}
 // CHECK-LABEL: define dso_local void @_Z19Test_Func_EnumInt8T9EnumInt8T(
-// CHECK-SAME: i8 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG454:![0-9]+]] {
+// CHECK-SAME: i8 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG453:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META458:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META459:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG460:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META457:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META458:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG459:![0-9]+]]
 //
 __device__ void Test_Func_EnumInt8T(EnumInt8T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z19Test_Kern_EnumInt8T9EnumInt8T(
-// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG461:![0-9]+]] {
+// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG460:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META463:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META464:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG465:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META462:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META463:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG464:![0-9]+]]
 //
 __global__ void Test_Kern_EnumInt8T(EnumInt8T) {}
 // CHECK-LABEL: define dso_local void @_Z20Test_Func_EnumUInt8T10EnumUInt8T(
-// CHECK-SAME: i8 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG466:![0-9]+]] {
+// CHECK-SAME: i8 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG465:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META470:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META471:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG472:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META469:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META470:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG471:![0-9]+]]
 //
 __device__ void Test_Func_EnumUInt8T(EnumUInt8T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z20Test_Kern_EnumUInt8T10EnumUInt8T(
-// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG473:![0-9]+]] {
+// CHECK-SAME: i8 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG472:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i8 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META475:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META476:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG477:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META474:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META475:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG476:![0-9]+]]
 //
 __global__ void Test_Kern_EnumUInt8T(EnumUInt8T) {}
 // CHECK-LABEL: define dso_local void @_Z20Test_Func_EnumInt16T10EnumInt16T(
-// CHECK-SAME: i16 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG478:![0-9]+]] {
+// CHECK-SAME: i16 noundef signext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG477:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META482:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META483:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG484:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META481:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META482:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG483:![0-9]+]]
 //
 __device__ void Test_Func_EnumInt16T(EnumInt16T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z20Test_Kern_EnumInt16T10EnumInt16T(
-// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG485:![0-9]+]] {
+// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG484:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META487:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META488:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG489:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META486:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META487:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG488:![0-9]+]]
 //
 __global__ void Test_Kern_EnumInt16T(EnumInt16T) {}
 // CHECK-LABEL: define dso_local void @_Z21Test_Func_EnumUInt16T11EnumUInt16T(
-// CHECK-SAME: i16 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG490:![0-9]+]] {
+// CHECK-SAME: i16 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG489:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META494:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META495:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG496:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META493:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META494:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG495:![0-9]+]]
 //
 __device__ void Test_Func_EnumUInt16T(EnumUInt16T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z21Test_Kern_EnumUInt16T11EnumUInt16T(
-// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG497:![0-9]+]] {
+// CHECK-SAME: i16 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG496:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i16, align 2, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i16 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 2
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META499:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META500:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG501:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META498:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i16)), [[META499:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG500:![0-9]+]]
 //
 __global__ void Test_Kern_EnumUInt16T(EnumUInt16T) {}
 // CHECK-LABEL: define dso_local void @_Z20Test_Func_EnumInt32T10EnumInt32T(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG502:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG501:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META506:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META507:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG508:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META505:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META506:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG507:![0-9]+]]
 //
 __device__ void Test_Func_EnumInt32T(EnumInt32T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z20Test_Kern_EnumInt32T10EnumInt32T(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG509:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG508:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META511:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META512:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG513:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META510:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META511:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG512:![0-9]+]]
 //
 __global__ void Test_Kern_EnumInt32T(EnumInt32T) {}
 // CHECK-LABEL: define dso_local void @_Z21Test_Func_EnumUInt32T11EnumUInt32T(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG514:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG513:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META518:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META519:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG520:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META517:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META518:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG519:![0-9]+]]
 //
 __device__ void Test_Func_EnumUInt32T(EnumUInt32T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z21Test_Kern_EnumUInt32T11EnumUInt32T(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG521:![0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG520:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i32, align 4, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i32 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META523:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META524:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG525:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META522:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META523:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG524:![0-9]+]]
 //
 __global__ void Test_Kern_EnumUInt32T(EnumUInt32T) {}
 // CHECK-LABEL: define dso_local void @_Z20Test_Func_EnumInt64T10EnumInt64T(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG526:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG525:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META530:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META531:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG532:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META529:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META530:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG531:![0-9]+]]
 //
 __device__ void Test_Func_EnumInt64T(EnumInt64T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z20Test_Kern_EnumInt64T10EnumInt64T(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG533:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG532:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META535:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META536:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG537:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META534:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META535:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG536:![0-9]+]]
 //
 __global__ void Test_Kern_EnumInt64T(EnumInt64T) {}
 // CHECK-LABEL: define dso_local void @_Z21Test_Func_EnumUInt64T11EnumUInt64T(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG538:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG537:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META542:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META543:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG544:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META541:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META542:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG543:![0-9]+]]
 //
 __device__ void Test_Func_EnumUInt64T(EnumUInt64T) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z21Test_Kern_EnumUInt64T11EnumUInt64T(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG545:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG544:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META547:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META548:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG549:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META546:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META547:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG548:![0-9]+]]
 //
 __global__ void Test_Kern_EnumUInt64T(EnumUInt64T) {}
 // CHECK-LABEL: define dso_local void @_Z27Test_Func_PromotableIntegerb(
-// CHECK-SAME: i1 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG550:![0-9]+]] {
+// CHECK-SAME: i1 noundef zeroext [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG549:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[STOREDV:%.*]] = zext i1 [[TMP0]] to i8
 // CHECK-NEXT:    store i8 [[STOREDV]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META555:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META556:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG557:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META554:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META555:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG556:![0-9]+]]
 //
 __device__ void Test_Func_PromotableInteger(bool) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z27Test_Kern_PromotableIntegerb(
-// CHECK-SAME: i1 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG558:![0-9]+]] {
+// CHECK-SAME: i1 noundef [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG557:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i8, align 1, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[STOREDV:%.*]] = zext i1 [[TMP0]] to i8
 // CHECK-NEXT:    store i8 [[STOREDV]], ptr [[DOTADDR_ASCAST]], align 1
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META560:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META561:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG562:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META559:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i8)), [[META560:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG561:![0-9]+]]
 //
 __global__ void Test_Kern_PromotableInteger(bool) {}
 // CHECK-LABEL: define dso_local void @_Z17Test_Func_PointerPi(
-// CHECK-SAME: ptr noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG563:![0-9]+]] {
+// CHECK-SAME: ptr noundef [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG562:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META568:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META569:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG570:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META567:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META568:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG569:![0-9]+]]
 //
 __device__ void Test_Func_Pointer(int32_t *) {}
 // FIXME: There is a store, load, store sequence through another alloca here,
 // which I don't understand the intent of
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z17Test_Kern_PointerPi(
-// CHECK-SAME: ptr addrspace(1) noundef [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG571:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(1) noundef [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG570:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
-// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr [[TMP1]], align 8
-// CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[TMP1]], align 8
-// CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META573:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META574:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG575:![0-9]+]]
+// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr addrspace(5) [[TMP0]], align 8
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr addrspace(5) [[TMP0]], align 8
+// CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR_ASCAST]], align 8
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META572:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META573:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG574:![0-9]+]]
 //
 __global__ void Test_Kern_Pointer(int32_t *) {}
 // CHECK-LABEL: define dso_local void @_Z19Test_Func_ReferenceRi(
-// CHECK-SAME: ptr noundef nonnull align 4 dereferenceable(4) [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG576:![0-9]+]] {
+// CHECK-SAME: ptr noundef nonnull align 4 dereferenceable(4) [[TMP0:%.*]]) #[[ATTR0]] !dbg [[DBG575:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    store ptr [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META581:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META582:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG583:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META580:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META581:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG582:![0-9]+]]
 //
 __device__ void Test_Func_Reference(int32_t &) {}
 // FIXME: There is a store, load, store sequence through another alloca here,
 // which I don't understand the intent of
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z19Test_Kern_ReferenceRi(
-// CHECK-SAME: ptr addrspace(1) noundef nonnull align 4 dereferenceable(4) [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG584:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(1) noundef nonnull align 4 dereferenceable(4) [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG583:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca ptr, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca ptr, align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
-// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr [[TMP1]], align 8
-// CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[TMP1]], align 8
-// CHECK-NEXT:    store ptr [[TMP2]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META586:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META587:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG588:![0-9]+]]
+// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr addrspace(5) [[TMP0]], align 8
+// CHECK-NEXT:    [[TMP1:%.*]] = load ptr, ptr addrspace(5) [[TMP0]], align 8
+// CHECK-NEXT:    store ptr [[TMP1]], ptr [[DOTADDR_ASCAST]], align 8
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META585:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(ptr)), [[META586:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG587:![0-9]+]]
 //
 __global__ void Test_Kern_Reference(int32_t &) {}
 // CHECK-LABEL: define dso_local void @_Z36Test_Func_StructSinglePointerElement26StructSinglePointerElement(
-// CHECK-SAME: ptr [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG589:![0-9]+]] {
+// CHECK-SAME: ptr [[DOTCOERCE:%.*]]) #[[ATTR0]] !dbg [[DBG588:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEPOINTERELEMENT:%.*]], align 8, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEPOINTERELEMENT]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store ptr [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEPOINTERELEMENT]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store ptr [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META596:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEPOINTERELEMENT]])), [[META597:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG598:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META595:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEPOINTERELEMENT]])), [[META596:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG597:![0-9]+]]
 //
 __device__ void Test_Func_StructSinglePointerElement(StructSinglePointerElement) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z36Test_Kern_StructSinglePointerElement26StructSinglePointerElement(
-// CHECK-SAME: ptr addrspace(1) [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG599:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(1) [[DOTCOERCE:%.*]]) #[[ATTR1]] !dbg [[DBG598:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTSINGLEPOINTERELEMENT:%.*]], align 8, addrspace(5)
+// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEPOINTERELEMENT]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr addrspace(5) [[COERCE_DIVE]], align 8
 // CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[COERCE_DIVE:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTSINGLEPOINTERELEMENT]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store ptr addrspace(1) [[DOTCOERCE]], ptr [[COERCE_DIVE]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META601:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEPOINTERELEMENT]])), [[META602:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG603:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META600:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTSINGLEPOINTERELEMENT]])), [[META601:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG602:![0-9]+]]
 //
 __global__ void Test_Kern_StructSinglePointerElement(StructSinglePointerElement) {}
 // CHECK-LABEL: define dso_local void @_Z31Test_Func_StructPointerElements21StructPointerElements(
-// CHECK-SAME: ptr [[DOTCOERCE0:%.*]], ptr [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG604:![0-9]+]] {
+// CHECK-SAME: ptr [[DOTCOERCE0:%.*]], ptr [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG603:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP0:%.*]] = alloca [[STRUCT_STRUCTPOINTERELEMENTS:%.*]], align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
-// CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTPOINTERELEMENTS]], ptr [[TMP1]], i32 0, i32 0
-// CHECK-NEXT:    store ptr [[DOTCOERCE0]], ptr [[TMP2]], align 8
-// CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTPOINTERELEMENTS]], ptr [[TMP1]], i32 0, i32 1
-// CHECK-NEXT:    store ptr [[DOTCOERCE1]], ptr [[TMP3]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META614:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTPOINTERELEMENTS]])), [[META615:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG616:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTPOINTERELEMENTS]], ptr addrspace(5) [[TMP0]], i32 0, i32 0
+// CHECK-NEXT:    store ptr [[DOTCOERCE0]], ptr addrspace(5) [[TMP1]], align 8
+// CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTPOINTERELEMENTS]], ptr addrspace(5) [[TMP0]], i32 0, i32 1
+// CHECK-NEXT:    store ptr [[DOTCOERCE1]], ptr addrspace(5) [[TMP2]], align 8
+// CHECK-NEXT:    [[TMP3:%.*]] = addrspacecast ptr addrspace(5) [[TMP0]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP0]], [[META613:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTPOINTERELEMENTS]])), [[META614:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG615:![0-9]+]]
 //
 __device__ void Test_Func_StructPointerElements(StructPointerElements) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z31Test_Kern_StructPointerElements21StructPointerElements(
-// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTPOINTERELEMENTS:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG617:![0-9]+]] {
+// CHECK-SAME: ptr addrspace(4) noundef byref([[STRUCT_STRUCTPOINTERELEMENTS:%.*]]) align 8 [[TMP0:%.*]]) #[[ATTR1]] !dbg [[DBG616:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTPOINTERELEMENTS]], align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP1:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 8 [[TMP1]], ptr addrspace(4) align 8 [[TMP0]], i64 16, i1 false)
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META619:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTPOINTERELEMENTS]])), [[META620:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG621:![0-9]+]]
+// CHECK-NEXT:    [[TMP1:%.*]] = alloca [[STRUCT_STRUCTPOINTERELEMENTS]], align 8, addrspace(5)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[TMP1]], ptr addrspace(4) align 8 [[TMP0]], i64 16, i1 false)
+// CHECK-NEXT:    [[TMP2:%.*]] = addrspacecast ptr addrspace(5) [[TMP1]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP1]], [[META618:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTPOINTERELEMENTS]])), [[META619:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG620:![0-9]+]]
 //
 __global__ void Test_Kern_StructPointerElements(StructPointerElements) {}
 // CHECK-LABEL: define dso_local void @_Z37Test_Func_ParamRegLimitExpandedStructlllllli22StructMultipleElements(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i32 noundef [[TMP6:%.*]], i32 [[DOTCOERCE0:%.*]], i64 [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG622:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i32 noundef [[TMP6:%.*]], i32 [[DOTCOERCE0:%.*]], i64 [[DOTCOERCE1:%.*]]) #[[ATTR0]] !dbg [[DBG621:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP7:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]], align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
@@ -878,7 +875,6 @@ __global__ void Test_Kern_StructPointerElements(StructPointerElements) {}
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR5:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR6:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[TMP8:%.*]] = addrspacecast ptr addrspace(5) [[TMP7]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR1]] to ptr
 // CHECK-NEXT:    [[DOTADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR2]] to ptr
@@ -886,32 +882,33 @@ __global__ void Test_Kern_StructPointerElements(StructPointerElements) {}
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
 // CHECK-NEXT:    [[DOTADDR5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR5]] to ptr
 // CHECK-NEXT:    [[DOTADDR6_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR6]] to ptr
-// CHECK-NEXT:    [[TMP9:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTMULTIPLEELEMENTS]], ptr [[TMP8]], i32 0, i32 0
-// CHECK-NEXT:    store i32 [[DOTCOERCE0]], ptr [[TMP9]], align 8
-// CHECK-NEXT:    [[TMP10:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTMULTIPLEELEMENTS]], ptr [[TMP8]], i32 0, i32 1
-// CHECK-NEXT:    store i64 [[DOTCOERCE1]], ptr [[TMP10]], align 8
+// CHECK-NEXT:    [[TMP8:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTMULTIPLEELEMENTS]], ptr addrspace(5) [[TMP7]], i32 0, i32 0
+// CHECK-NEXT:    store i32 [[DOTCOERCE0]], ptr addrspace(5) [[TMP8]], align 8
+// CHECK-NEXT:    [[TMP9:%.*]] = getelementptr inbounds nuw [[STRUCT_STRUCTMULTIPLEELEMENTS]], ptr addrspace(5) [[TMP7]], i32 0, i32 1
+// CHECK-NEXT:    store i64 [[DOTCOERCE1]], ptr addrspace(5) [[TMP9]], align 8
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META630:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META638:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META629:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META637:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP1]], ptr [[DOTADDR1_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META631:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META639:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META630:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META638:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP2]], ptr [[DOTADDR2_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META632:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META640:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META631:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META639:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP3]], ptr [[DOTADDR3_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META633:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META641:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META632:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META640:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP4]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META634:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META642:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META633:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META641:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP5]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META635:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META643:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META634:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META642:![0-9]+]])
 // CHECK-NEXT:    store i32 [[TMP6]], ptr [[DOTADDR6_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META636:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META644:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP7]], [[META637:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META645:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG646:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META635:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META643:![0-9]+]])
+// CHECK-NEXT:    [[TMP10:%.*]] = addrspacecast ptr addrspace(5) [[TMP7]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP7]], [[META636:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META644:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG645:![0-9]+]]
 //
 __device__ void Test_Func_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int32_t, StructMultipleElements) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z37Test_Kern_ParamRegLimitExpandedStructlllllli22StructMultipleElements(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i32 noundef [[TMP6:%.*]], ptr addrspace(4) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR1]] !dbg [[DBG647:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i32 noundef [[TMP6:%.*]], ptr addrspace(4) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR1]] !dbg [[DBG646:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
+// CHECK-NEXT:    [[TMP8:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR1:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR2:%.*]] = alloca i64, align 8, addrspace(5)
@@ -919,7 +916,6 @@ __device__ void Test_Func_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t,
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR5:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR6:%.*]] = alloca i32, align 4, addrspace(5)
-// CHECK-NEXT:    [[TMP8:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR1]] to ptr
 // CHECK-NEXT:    [[DOTADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR2]] to ptr
@@ -927,29 +923,30 @@ __device__ void Test_Func_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t,
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
 // CHECK-NEXT:    [[DOTADDR5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR5]] to ptr
 // CHECK-NEXT:    [[DOTADDR6_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR6]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 8 [[TMP8]], ptr addrspace(4) align 8 [[TMP7]], i64 16, i1 false)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[TMP8]], ptr addrspace(4) align 8 [[TMP7]], i64 16, i1 false)
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META649:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META657:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META648:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META656:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP1]], ptr [[DOTADDR1_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META650:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META658:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META649:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META657:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP2]], ptr [[DOTADDR2_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META651:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META659:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META650:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META658:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP3]], ptr [[DOTADDR3_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META652:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META660:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META651:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META659:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP4]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META653:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META661:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META652:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META660:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP5]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META654:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META662:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META653:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META661:![0-9]+]])
 // CHECK-NEXT:    store i32 [[TMP6]], ptr [[DOTADDR6_ASCAST]], align 4
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META655:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META663:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META656:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META664:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG665:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META654:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), [[META662:![0-9]+]])
+// CHECK-NEXT:    [[TMP9:%.*]] = addrspacecast ptr addrspace(5) [[TMP8]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP8]], [[META655:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META663:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG664:![0-9]+]]
 //
 __global__ void Test_Kern_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int32_t, StructMultipleElements) {}
 // CHECK-LABEL: define dso_local void @_Z39Test_Func_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i64 noundef [[TMP6:%.*]], ptr addrspace(5) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR0]] !dbg [[DBG666:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i64 noundef [[TMP6:%.*]], ptr addrspace(5) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR0]] !dbg [[DBG665:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
+// CHECK-NEXT:    [[TMP8:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR1:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR2:%.*]] = alloca i64, align 8, addrspace(5)
@@ -957,7 +954,6 @@ __global__ void Test_Kern_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t,
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR5:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR6:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP8:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR1]] to ptr
 // CHECK-NEXT:    [[DOTADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR2]] to ptr
@@ -965,29 +961,30 @@ __global__ void Test_Kern_ParamRegLimitExpandedStruct(int64_t, int64_t, int64_t,
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
 // CHECK-NEXT:    [[DOTADDR5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR5]] to ptr
 // CHECK-NEXT:    [[DOTADDR6_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR6]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p5.i64(ptr align 8 [[TMP8]], ptr addrspace(5) align 8 [[TMP7]], i64 16, i1 false)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p5.i64(ptr addrspace(5) align 8 [[TMP8]], ptr addrspace(5) align 8 [[TMP7]], i64 16, i1 false)
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META670:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META678:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META669:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META677:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP1]], ptr [[DOTADDR1_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META671:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META679:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META670:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META678:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP2]], ptr [[DOTADDR2_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META672:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META680:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META671:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META679:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP3]], ptr [[DOTADDR3_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META673:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META681:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META672:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META680:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP4]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META674:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META682:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META673:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META681:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP5]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META675:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META683:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META674:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META682:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP6]], ptr [[DOTADDR6_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META676:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META684:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META677:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META685:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG686:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META675:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META683:![0-9]+]])
+// CHECK-NEXT:    [[TMP9:%.*]] = addrspacecast ptr addrspace(5) [[TMP8]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP8]], [[META676:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META684:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG685:![0-9]+]]
 //
 __device__ void Test_Func_ParamRegLimitUnexpandedStruct(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, StructMultipleElements) {}
 // CHECK-LABEL: define dso_local amdgpu_kernel void @_Z39Test_Kern_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements(
-// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i64 noundef [[TMP6:%.*]], ptr addrspace(4) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR1]] !dbg [[DBG687:![0-9]+]] {
+// CHECK-SAME: i64 noundef [[TMP0:%.*]], i64 noundef [[TMP1:%.*]], i64 noundef [[TMP2:%.*]], i64 noundef [[TMP3:%.*]], i64 noundef [[TMP4:%.*]], i64 noundef [[TMP5:%.*]], i64 noundef [[TMP6:%.*]], ptr addrspace(4) noundef byref([[STRUCT_STRUCTMULTIPLEELEMENTS:%.*]]) align 8 [[TMP7:%.*]]) #[[ATTR1]] !dbg [[DBG686:![0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
-// CHECK-NEXT:    [[COERCE:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
+// CHECK-NEXT:    [[TMP8:%.*]] = alloca [[STRUCT_STRUCTMULTIPLEELEMENTS]], align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR1:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR2:%.*]] = alloca i64, align 8, addrspace(5)
@@ -995,7 +992,6 @@ __device__ void Test_Func_ParamRegLimitUnexpandedStruct(int64_t, int64_t, int64_
 // CHECK-NEXT:    [[DOTADDR4:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR5:%.*]] = alloca i64, align 8, addrspace(5)
 // CHECK-NEXT:    [[DOTADDR6:%.*]] = alloca i64, align 8, addrspace(5)
-// CHECK-NEXT:    [[TMP8:%.*]] = addrspacecast ptr addrspace(5) [[COERCE]] to ptr
 // CHECK-NEXT:    [[DOTADDR_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR]] to ptr
 // CHECK-NEXT:    [[DOTADDR1_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR1]] to ptr
 // CHECK-NEXT:    [[DOTADDR2_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR2]] to ptr
@@ -1003,23 +999,24 @@ __device__ void Test_Func_ParamRegLimitUnexpandedStruct(int64_t, int64_t, int64_
 // CHECK-NEXT:    [[DOTADDR4_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR4]] to ptr
 // CHECK-NEXT:    [[DOTADDR5_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR5]] to ptr
 // CHECK-NEXT:    [[DOTADDR6_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[DOTADDR6]] to ptr
-// CHECK-NEXT:    call void @llvm.memcpy.p0.p4.i64(ptr align 8 [[TMP8]], ptr addrspace(4) align 8 [[TMP7]], i64 16, i1 false)
+// CHECK-NEXT:    call void @llvm.memcpy.p5.p4.i64(ptr addrspace(5) align 8 [[TMP8]], ptr addrspace(4) align 8 [[TMP7]], i64 16, i1 false)
 // CHECK-NEXT:    store i64 [[TMP0]], ptr [[DOTADDR_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META689:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META697:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR]], [[META688:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META696:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP1]], ptr [[DOTADDR1_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META690:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META698:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR1]], [[META689:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META697:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP2]], ptr [[DOTADDR2_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META691:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META699:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR2]], [[META690:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META698:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP3]], ptr [[DOTADDR3_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META692:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META700:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR3]], [[META691:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META699:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP4]], ptr [[DOTADDR4_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META693:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META701:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR4]], [[META692:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META700:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP5]], ptr [[DOTADDR5_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META694:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META702:![0-9]+]])
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR5]], [[META693:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META701:![0-9]+]])
 // CHECK-NEXT:    store i64 [[TMP6]], ptr [[DOTADDR6_ASCAST]], align 8
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META695:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META703:![0-9]+]])
-// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[COERCE]], [[META696:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META704:![0-9]+]])
-// CHECK-NEXT:    ret void, !dbg [[DBG705:![0-9]+]]
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[DOTADDR6]], [[META694:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i64)), [[META702:![0-9]+]])
+// CHECK-NEXT:    [[TMP9:%.*]] = addrspacecast ptr addrspace(5) [[TMP8]] to ptr
+// CHECK-NEXT:      #dbg_declare(ptr addrspace(5) [[TMP8]], [[META695:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_STRUCTMULTIPLEELEMENTS]])), [[META703:![0-9]+]])
+// CHECK-NEXT:    ret void, !dbg [[DBG704:![0-9]+]]
 //
 __global__ void Test_Kern_ParamRegLimitUnexpandedStruct(int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, int64_t, StructMultipleElements) {}
 //.
@@ -1044,684 +1041,684 @@ __global__ void Test_Kern_ParamRegLimitUnexpandedStruct(int64_t, int64_t, int64_
 // CHECK: [[META18]] = !DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)
 // CHECK: [[META19]] = !DICompositeType(tag: DW_TAG_enumeration_type, name: "EnumUInt64T", file: [[META4]], line: 72, baseType: [[META20:![0-9]+]], size: 64, elements: [[META6]], identifier: "_ZTS11EnumUInt64T")
 // CHECK: [[META20]] = !DIBasicType(name: "unsigned long", size: 64, encoding: DW_ATE_unsigned)
-// CHECK: [[DBG26]] = distinct !DISubprogram(name: "Test_Func_StructEmpty", linkageName: "_Z21Test_Func_StructEmpty11StructEmpty", scope: [[META4]], file: [[META4]], line: 93, type: [[META27:![0-9]+]], scopeLine: 93, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META30:![0-9]+]])
-// CHECK: [[META27]] = !DISubroutineType(types: [[META28:![0-9]+]])
-// CHECK: [[META28]] = !{null, [[META29:![0-9]+]]}
-// CHECK: [[META29]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructEmpty", file: [[META4]], line: 32, size: 8, flags: DIFlagTypePassByValue, elements: [[META6]], identifier: "_ZTS11StructEmpty")
-// CHECK: [[META30]] = !{[[META31]]}
-// CHECK: [[META31]] = !DILocalVariable(arg: 1, scope: [[DBG26]], file: [[META4]], line: 93, type: [[META29]])
-// CHECK: [[META32]] = !DILocation(line: 93, column: 50, scope: [[DBG26]])
-// CHECK: [[DBG33]] = !DILocation(line: 93, column: 53, scope: [[DBG26]])
-// CHECK: [[DBG34]] = distinct !DISubprogram(name: "Test_Kern_StructEmpty", linkageName: "_Z21Test_Kern_StructEmpty11StructEmpty", scope: [[META4]], file: [[META4]], line: 103, type: [[META27]], scopeLine: 103, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META35:![0-9]+]])
-// CHECK: [[META35]] = !{[[META36]]}
-// CHECK: [[META36]] = !DILocalVariable(arg: 1, scope: [[DBG34]], file: [[META4]], line: 103, type: [[META29]])
-// CHECK: [[META37]] = !DILocation(line: 103, column: 50, scope: [[DBG34]])
-// CHECK: [[DBG38]] = !DILocation(line: 103, column: 53, scope: [[DBG34]])
-// CHECK: [[DBG39]] = distinct !DISubprogram(name: "Test_Func_StructSingleElement", linkageName: "_Z29Test_Func_StructSingleElement19StructSingleElement", scope: [[META4]], file: [[META4]], line: 114, type: [[META40:![0-9]+]], scopeLine: 114, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META45:![0-9]+]])
-// CHECK: [[META40]] = !DISubroutineType(types: [[META41:![0-9]+]])
-// CHECK: [[META41]] = !{null, [[META42:![0-9]+]]}
-// CHECK: [[META42]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSingleElement", file: [[META4]], line: 33, size: 8, flags: DIFlagTypePassByValue, elements: [[META43:![0-9]+]], identifier: "_ZTS19StructSingleElement")
-// CHECK: [[META43]] = !{[[META44:![0-9]+]]}
-// CHECK: [[META44]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META42]], file: [[META4]], line: 34, baseType: [[META5]], size: 8)
-// CHECK: [[META45]] = !{[[META46]]}
-// CHECK: [[META46]] = !DILocalVariable(arg: 1, scope: [[DBG39]], file: [[META4]], line: 114, type: [[META42]])
-// CHECK: [[META47]] = !DILocation(line: 114, column: 66, scope: [[DBG39]])
-// CHECK: [[DBG48]] = !DILocation(line: 114, column: 69, scope: [[DBG39]])
-// CHECK: [[DBG49]] = distinct !DISubprogram(name: "Test_Kern_StructSingleElement", linkageName: "_Z29Test_Kern_StructSingleElement19StructSingleElement", scope: [[META4]], file: [[META4]], line: 125, type: [[META40]], scopeLine: 125, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META50:![0-9]+]])
-// CHECK: [[META50]] = !{[[META51]]}
-// CHECK: [[META51]] = !DILocalVariable(arg: 1, scope: [[DBG49]], file: [[META4]], line: 125, type: [[META42]])
-// CHECK: [[META52]] = !DILocation(line: 125, column: 66, scope: [[DBG49]])
-// CHECK: [[DBG53]] = !DILocation(line: 125, column: 69, scope: [[DBG49]])
-// CHECK: [[DBG54]] = distinct !DISubprogram(name: "Test_Func_StructSingleElementRecursive", linkageName: "_Z38Test_Func_StructSingleElementRecursive28StructSingleElementRecursive", scope: [[META4]], file: [[META4]], line: 137, type: [[META55:![0-9]+]], scopeLine: 137, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META60:![0-9]+]])
-// CHECK: [[META55]] = !DISubroutineType(types: [[META56:![0-9]+]])
-// CHECK: [[META56]] = !{null, [[META57:![0-9]+]]}
-// CHECK: [[META57]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSingleElementRecursive", file: [[META4]], line: 36, size: 8, flags: DIFlagTypePassByValue, elements: [[META58:![0-9]+]], identifier: "_ZTS28StructSingleElementRecursive")
-// CHECK: [[META58]] = !{[[META59:![0-9]+]]}
-// CHECK: [[META59]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META57]], file: [[META4]], line: 37, baseType: [[META42]], size: 8)
-// CHECK: [[META60]] = !{[[META61]]}
-// CHECK: [[META61]] = !DILocalVariable(arg: 1, scope: [[DBG54]], file: [[META4]], line: 137, type: [[META57]])
-// CHECK: [[META62]] = !DILocation(line: 137, column: 84, scope: [[DBG54]])
-// CHECK: [[DBG63]] = !DILocation(line: 137, column: 87, scope: [[DBG54]])
-// CHECK: [[DBG64]] = distinct !DISubprogram(name: "Test_Kern_StructSingleElementRecursive", linkageName: "_Z38Test_Kern_StructSingleElementRecursive28StructSingleElementRecursive", scope: [[META4]], file: [[META4]], line: 149, type: [[META55]], scopeLine: 149, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META65:![0-9]+]])
-// CHECK: [[META65]] = !{[[META66]]}
-// CHECK: [[META66]] = !DILocalVariable(arg: 1, scope: [[DBG64]], file: [[META4]], line: 149, type: [[META57]])
-// CHECK: [[META67]] = !DILocation(line: 149, column: 84, scope: [[DBG64]])
-// CHECK: [[DBG68]] = !DILocation(line: 149, column: 87, scope: [[DBG64]])
-// CHECK: [[DBG69]] = distinct !DISubprogram(name: "Test_Func_StructTrivialCopyTrivialMove", linkageName: "_Z38Test_Func_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 160, type: [[META70:![0-9]+]], scopeLine: 160, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META85:![0-9]+]])
-// CHECK: [[META70]] = !DISubroutineType(types: [[META71:![0-9]+]])
-// CHECK: [[META71]] = !{null, [[META72:![0-9]+]]}
-// CHECK: [[META72]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructTrivialCopyTrivialMove", file: [[META4]], line: 39, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META73:![0-9]+]], identifier: "_ZTS28StructTrivialCopyTrivialMove")
-// CHECK: [[META73]] = !{[[META74:![0-9]+]], [[META75:![0-9]+]], [[META81:![0-9]+]]}
-// CHECK: [[META74]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META72]], file: [[META4]], line: 40, baseType: [[META5]], size: 8)
-// CHECK: [[META75]] = !DISubprogram(name: "StructTrivialCopyTrivialMove", linkageName: "_ZN28StructTrivialCopyTrivialMoveC4ERKS_", scope: [[META72]], file: [[META4]], line: 41, type: [[META76:![0-9]+]], scopeLine: 41, flags: DIFlagPrototyped, spFlags: 0)
-// CHECK: [[META76]] = !DISubroutineType(types: [[META77:![0-9]+]])
-// CHECK: [[META77]] = !{null, [[META78:![0-9]+]], [[META79:![0-9]+]]}
-// CHECK: [[META78]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META72]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
-// CHECK: [[META79]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META80:![0-9]+]], size: 64, addressSpace: 1)
-// CHECK: [[META80]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META72]])
-// CHECK: [[META81]] = !DISubprogram(name: "StructTrivialCopyTrivialMove", linkageName: "_ZN28StructTrivialCopyTrivialMoveC4EOS_", scope: [[META72]], file: [[META4]], line: 42, type: [[META82:![0-9]+]], scopeLine: 42, flags: DIFlagPrototyped, spFlags: 0)
-// CHECK: [[META82]] = !DISubroutineType(types: [[META83:![0-9]+]])
-// CHECK: [[META83]] = !{null, [[META78]], [[META84:![0-9]+]]}
-// CHECK: [[META84]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META72]], size: 64, addressSpace: 1)
-// CHECK: [[META85]] = !{[[META86]]}
-// CHECK: [[META86]] = !DILocalVariable(arg: 1, scope: [[DBG69]], file: [[META4]], line: 160, type: [[META72]])
-// CHECK: [[META87]] = !DILocation(line: 160, column: 84, scope: [[DBG69]])
-// CHECK: [[DBG88]] = !DILocation(line: 160, column: 87, scope: [[DBG69]])
-// CHECK: [[DBG89]] = distinct !DISubprogram(name: "Test_Kern_StructTrivialCopyTrivialMove", linkageName: "_Z38Test_Kern_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 171, type: [[META70]], scopeLine: 171, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META90:![0-9]+]])
-// CHECK: [[META90]] = !{[[META91]]}
-// CHECK: [[META91]] = !DILocalVariable(arg: 1, scope: [[DBG89]], file: [[META4]], line: 171, type: [[META72]])
-// CHECK: [[META92]] = !DILocation(line: 171, column: 84, scope: [[DBG89]])
-// CHECK: [[DBG93]] = !DILocation(line: 171, column: 87, scope: [[DBG89]])
-// CHECK: [[DBG94]] = distinct !DISubprogram(name: "Test_Func_StructNoCopyTrivialMove", linkageName: "_Z33Test_Func_StructNoCopyTrivialMove23StructNoCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 182, type: [[META95:![0-9]+]], scopeLine: 182, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META110:![0-9]+]])
-// CHECK: [[META95]] = !DISubroutineType(types: [[META96:![0-9]+]])
-// CHECK: [[META96]] = !{null, [[META97:![0-9]+]]}
-// CHECK: [[META97]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNoCopyTrivialMove", file: [[META4]], line: 44, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META98:![0-9]+]], identifier: "_ZTS23StructNoCopyTrivialMove")
-// CHECK: [[META98]] = !{[[META99:![0-9]+]], [[META100:![0-9]+]], [[META106:![0-9]+]]}
-// CHECK: [[META99]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META97]], file: [[META4]], line: 45, baseType: [[META5]], size: 8)
-// CHECK: [[META100]] = !DISubprogram(name: "StructNoCopyTrivialMove", linkageName: "_ZN23StructNoCopyTrivialMoveC4ERKS_", scope: [[META97]], file: [[META4]], line: 46, type: [[META101:![0-9]+]], scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
-// CHECK: [[META101]] = !DISubroutineType(types: [[META102:![0-9]+]])
-// CHECK: [[META102]] = !{null, [[META103:![0-9]+]], [[META104:![0-9]+]]}
-// CHECK: [[META103]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META97]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
-// CHECK: [[META104]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META105:![0-9]+]], size: 64, addressSpace: 1)
-// CHECK: [[META105]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META97]])
-// CHECK: [[META106]] = !DISubprogram(name: "StructNoCopyTrivialMove", linkageName: "_ZN23StructNoCopyTrivialMoveC4EOS_", scope: [[META97]], file: [[META4]], line: 47, type: [[META107:![0-9]+]], scopeLine: 47, flags: DIFlagPrototyped, spFlags: 0)
-// CHECK: [[META107]] = !DISubroutineType(types: [[META108:![0-9]+]])
-// CHECK: [[META108]] = !{null, [[META103]], [[META109:![0-9]+]]}
-// CHECK: [[META109]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META97]], size: 64, addressSpace: 1)
-// CHECK: [[META110]] = !{[[META111]]}
-// CHECK: [[META111]] = !DILocalVariable(arg: 1, scope: [[DBG94]], file: [[META4]], line: 182, type: [[META97]])
-// CHECK: [[META112]] = !DILocation(line: 182, column: 74, scope: [[DBG94]])
-// CHECK: [[DBG113]] = !DILocation(line: 182, column: 77, scope: [[DBG94]])
-// CHECK: [[DBG114]] = distinct !DISubprogram(name: "Test_Kern_StructNoCopyTrivialMove", linkageName: "_Z33Test_Kern_StructNoCopyTrivialMove23StructNoCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 193, type: [[META95]], scopeLine: 193, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META115:![0-9]+]])
-// CHECK: [[META115]] = !{[[META116]]}
-// CHECK: [[META116]] = !DILocalVariable(arg: 1, scope: [[DBG114]], file: [[META4]], line: 193, type: [[META97]])
-// CHECK: [[META117]] = !DILocation(line: 193, column: 74, scope: [[DBG114]])
-// CHECK: [[DBG118]] = !DILocation(line: 193, column: 77, scope: [[DBG114]])
-// CHECK: [[DBG119]] = distinct !DISubprogram(name: "Test_Func_StructTrivialCopyNoMove", linkageName: "_Z33Test_Func_StructTrivialCopyNoMove23StructTrivialCopyNoMove", scope: [[META4]], file: [[META4]], line: 204, type: [[META120:![0-9]+]], scopeLine: 204, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META135:![0-9]+]])
-// CHECK: [[META120]] = !DISubroutineType(types: [[META121:![0-9]+]])
-// CHECK: [[META121]] = !{null, [[META122:![0-9]+]]}
-// CHECK: [[META122]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructTrivialCopyNoMove", file: [[META4]], line: 49, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META123:![0-9]+]], identifier: "_ZTS23StructTrivialCopyNoMove")
-// CHECK: [[META123]] = !{[[META124:![0-9]+]], [[META125:![0-9]+]], [[META131:![0-9]+]]}
-// CHECK: [[META124]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META122]], file: [[META4]], line: 50, baseType: [[META5]], size: 8)
-// CHECK: [[META125]] = !DISubprogram(name: "StructTrivialCopyNoMove", linkageName: "_ZN23StructTrivialCopyNoMoveC4ERKS_", scope: [[META122]], file: [[META4]], line: 51, type: [[META126:![0-9]+]], scopeLine: 51, flags: DIFlagPrototyped, spFlags: 0)
-// CHECK: [[META126]] = !DISubroutineType(types: [[META127:![0-9]+]])
-// CHECK: [[META127]] = !{null, [[META128:![0-9]+]], [[META129:![0-9]+]]}
-// CHECK: [[META128]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META122]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
-// CHECK: [[META129]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META130:![0-9]+]], size: 64, addressSpace: 1)
-// CHECK: [[META130]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META122]])
-// CHECK: [[META131]] = !DISubprogram(name: "StructTrivialCopyNoMove", linkageName: "_ZN23StructTrivialCopyNoMoveC4EOS_", scope: [[META122]], file: [[META4]], line: 52, type: [[META132:![0-9]+]], scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
-// CHECK: [[META132]] = !DISubroutineType(types: [[META133:![0-9]+]])
-// CHECK: [[META133]] = !{null, [[META128]], [[META134:![0-9]+]]}
-// CHECK: [[META134]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META122]], size: 64, addressSpace: 1)
-// CHECK: [[META135]] = !{[[META136]]}
-// CHECK: [[META136]] = !DILocalVariable(arg: 1, scope: [[DBG119]], file: [[META4]], line: 204, type: [[META122]])
-// CHECK: [[META137]] = !DILocation(line: 204, column: 74, scope: [[DBG119]])
-// CHECK: [[DBG138]] = !DILocation(line: 204, column: 77, scope: [[DBG119]])
-// CHECK: [[DBG139]] = distinct !DISubprogram(name: "Test_Kern_StructTrivialCopyNoMove", linkageName: "_Z33Test_Kern_StructTrivialCopyNoMove23StructTrivialCopyNoMove", scope: [[META4]], file: [[META4]], line: 215, type: [[META120]], scopeLine: 215, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META140:![0-9]+]])
-// CHECK: [[META140]] = !{[[META141]]}
-// CHECK: [[META141]] = !DILocalVariable(arg: 1, scope: [[DBG139]], file: [[META4]], line: 215, type: [[META122]])
-// CHECK: [[META142]] = !DILocation(line: 215, column: 74, scope: [[DBG139]])
-// CHECK: [[DBG143]] = !DILocation(line: 215, column: 77, scope: [[DBG139]])
-// CHECK: [[DBG144]] = distinct !DISubprogram(name: "Test_Func_StructNoCopyNoMove", linkageName: "_Z28Test_Func_StructNoCopyNoMove18StructNoCopyNoMove", scope: [[META4]], file: [[META4]], line: 226, type: [[META145:![0-9]+]], scopeLine: 226, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META160:![0-9]+]])
-// CHECK: [[META145]] = !DISubroutineType(types: [[META146:![0-9]+]])
-// CHECK: [[META146]] = !{null, [[META147:![0-9]+]]}
-// CHECK: [[META147]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNoCopyNoMove", file: [[META4]], line: 54, size: 8, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: [[META148:![0-9]+]], identifier: "_ZTS18StructNoCopyNoMove")
-// CHECK: [[META148]] = !{[[META149:![0-9]+]], [[META150:![0-9]+]], [[META156:![0-9]+]]}
-// CHECK: [[META149]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META147]], file: [[META4]], line: 55, baseType: [[META5]], size: 8)
-// CHECK: [[META150]] = !DISubprogram(name: "StructNoCopyNoMove", linkageName: "_ZN18StructNoCopyNoMoveC4ERKS_", scope: [[META147]], file: [[META4]], line: 56, type: [[META151:![0-9]+]], scopeLine: 56, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
-// CHECK: [[META151]] = !DISubroutineType(types: [[META152:![0-9]+]])
-// CHECK: [[META152]] = !{null, [[META153:![0-9]+]], [[META154:![0-9]+]]}
-// CHECK: [[META153]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META147]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
-// CHECK: [[META154]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META155:![0-9]+]], size: 64, addressSpace: 1)
-// CHECK: [[META155]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META147]])
-// CHECK: [[META156]] = !DISubprogram(name: "StructNoCopyNoMove", linkageName: "_ZN18StructNoCopyNoMoveC4EOS_", scope: [[META147]], file: [[META4]], line: 57, type: [[META157:![0-9]+]], scopeLine: 57, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
-// CHECK: [[META157]] = !DISubroutineType(types: [[META158:![0-9]+]])
-// CHECK: [[META158]] = !{null, [[META153]], [[META159:![0-9]+]]}
-// CHECK: [[META159]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META147]], size: 64, addressSpace: 1)
-// CHECK: [[META160]] = !{[[META161]]}
-// CHECK: [[META161]] = !DILocalVariable(arg: 1, scope: [[DBG144]], file: [[META4]], line: 226, type: [[META147]])
-// CHECK: [[META162]] = !DILocation(line: 226, column: 64, scope: [[DBG144]])
-// CHECK: [[DBG163]] = !DILocation(line: 226, column: 67, scope: [[DBG144]])
-// CHECK: [[DBG164]] = distinct !DISubprogram(name: "Test_Kern_StructNoCopyNoMove", linkageName: "_Z28Test_Kern_StructNoCopyNoMove18StructNoCopyNoMove", scope: [[META4]], file: [[META4]], line: 237, type: [[META145]], scopeLine: 237, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META165:![0-9]+]])
-// CHECK: [[META165]] = !{[[META166]]}
-// CHECK: [[META166]] = !DILocalVariable(arg: 1, scope: [[DBG164]], file: [[META4]], line: 237, type: [[META147]])
-// CHECK: [[META167]] = !DILocation(line: 237, column: 64, scope: [[DBG164]])
-// CHECK: [[DBG168]] = !DILocation(line: 237, column: 67, scope: [[DBG164]])
-// CHECK: [[DBG169]] = distinct !DISubprogram(name: "Test_Func_Struct2Bytes", linkageName: "_Z22Test_Func_Struct2Bytes12StructNBytesILj2EE", scope: [[META4]], file: [[META4]], line: 247, type: [[META170:![0-9]+]], scopeLine: 247, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META181:![0-9]+]])
-// CHECK: [[META170]] = !DISubroutineType(types: [[META171:![0-9]+]])
-// CHECK: [[META171]] = !{null, [[META172:![0-9]+]]}
-// CHECK: [[META172]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<2U>", file: [[META4]], line: 60, size: 16, flags: DIFlagTypePassByValue, elements: [[META173:![0-9]+]], templateParams: [[META179:![0-9]+]], identifier: "_ZTS12StructNBytesILj2EE")
-// CHECK: [[META173]] = !{[[META174:![0-9]+]], [[META175:![0-9]+]]}
-// CHECK: [[META174]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META172]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META175]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META172]], file: [[META4]], line: 63, baseType: [[META176:![0-9]+]], size: 8, offset: 8)
-// CHECK: [[META176]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 8, elements: [[META177:![0-9]+]])
-// CHECK: [[META177]] = !{[[META178:![0-9]+]]}
-// CHECK: [[META178]] = !DISubrange(count: 1)
-// CHECK: [[META179]] = !{[[META180:![0-9]+]]}
-// CHECK: [[META180]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 2)
-// CHECK: [[META181]] = !{[[META182]]}
-// CHECK: [[META182]] = !DILocalVariable(arg: 1, scope: [[DBG169]], file: [[META4]], line: 247, type: [[META172]])
-// CHECK: [[META183]] = !DILocation(line: 247, column: 55, scope: [[DBG169]])
-// CHECK: [[DBG184]] = !DILocation(line: 247, column: 58, scope: [[DBG169]])
-// CHECK: [[DBG185]] = distinct !DISubprogram(name: "Test_Kern_Struct2Bytes", linkageName: "_Z22Test_Kern_Struct2Bytes12StructNBytesILj2EE", scope: [[META4]], file: [[META4]], line: 257, type: [[META170]], scopeLine: 257, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META186:![0-9]+]])
-// CHECK: [[META186]] = !{[[META187]]}
-// CHECK: [[META187]] = !DILocalVariable(arg: 1, scope: [[DBG185]], file: [[META4]], line: 257, type: [[META172]])
-// CHECK: [[META188]] = !DILocation(line: 257, column: 55, scope: [[DBG185]])
-// CHECK: [[DBG189]] = !DILocation(line: 257, column: 58, scope: [[DBG185]])
-// CHECK: [[DBG190]] = distinct !DISubprogram(name: "Test_Func_Struct3Bytes", linkageName: "_Z22Test_Func_Struct3Bytes12StructNBytesILj3EE", scope: [[META4]], file: [[META4]], line: 268, type: [[META191:![0-9]+]], scopeLine: 268, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META202:![0-9]+]])
-// CHECK: [[META191]] = !DISubroutineType(types: [[META192:![0-9]+]])
-// CHECK: [[META192]] = !{null, [[META193:![0-9]+]]}
-// CHECK: [[META193]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<3U>", file: [[META4]], line: 60, size: 24, flags: DIFlagTypePassByValue, elements: [[META194:![0-9]+]], templateParams: [[META200:![0-9]+]], identifier: "_ZTS12StructNBytesILj3EE")
-// CHECK: [[META194]] = !{[[META195:![0-9]+]], [[META196:![0-9]+]]}
-// CHECK: [[META195]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META193]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META196]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META193]], file: [[META4]], line: 63, baseType: [[META197:![0-9]+]], size: 16, offset: 8)
-// CHECK: [[META197]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 16, elements: [[META198:![0-9]+]])
-// CHECK: [[META198]] = !{[[META199:![0-9]+]]}
-// CHECK: [[META199]] = !DISubrange(count: 2)
-// CHECK: [[META200]] = !{[[META201:![0-9]+]]}
-// CHECK: [[META201]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 3)
-// CHECK: [[META202]] = !{[[META203]]}
-// CHECK: [[META203]] = !DILocalVariable(arg: 1, scope: [[DBG190]], file: [[META4]], line: 268, type: [[META193]])
-// CHECK: [[META204]] = !DILocation(line: 268, column: 55, scope: [[DBG190]])
-// CHECK: [[DBG205]] = !DILocation(line: 268, column: 58, scope: [[DBG190]])
-// CHECK: [[DBG206]] = distinct !DISubprogram(name: "Test_Kern_Struct3Bytes", linkageName: "_Z22Test_Kern_Struct3Bytes12StructNBytesILj3EE", scope: [[META4]], file: [[META4]], line: 278, type: [[META191]], scopeLine: 278, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META207:![0-9]+]])
-// CHECK: [[META207]] = !{[[META208]]}
-// CHECK: [[META208]] = !DILocalVariable(arg: 1, scope: [[DBG206]], file: [[META4]], line: 278, type: [[META193]])
-// CHECK: [[META209]] = !DILocation(line: 278, column: 55, scope: [[DBG206]])
-// CHECK: [[DBG210]] = !DILocation(line: 278, column: 58, scope: [[DBG206]])
-// CHECK: [[DBG211]] = distinct !DISubprogram(name: "Test_Func_Struct4Bytes", linkageName: "_Z22Test_Func_Struct4Bytes12StructNBytesILj4EE", scope: [[META4]], file: [[META4]], line: 288, type: [[META212:![0-9]+]], scopeLine: 288, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META223:![0-9]+]])
-// CHECK: [[META212]] = !DISubroutineType(types: [[META213:![0-9]+]])
-// CHECK: [[META213]] = !{null, [[META214:![0-9]+]]}
-// CHECK: [[META214]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<4U>", file: [[META4]], line: 60, size: 32, flags: DIFlagTypePassByValue, elements: [[META215:![0-9]+]], templateParams: [[META221:![0-9]+]], identifier: "_ZTS12StructNBytesILj4EE")
-// CHECK: [[META215]] = !{[[META216:![0-9]+]], [[META217:![0-9]+]]}
-// CHECK: [[META216]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META214]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META217]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META214]], file: [[META4]], line: 63, baseType: [[META218:![0-9]+]], size: 24, offset: 8)
-// CHECK: [[META218]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 24, elements: [[META219:![0-9]+]])
-// CHECK: [[META219]] = !{[[META220:![0-9]+]]}
-// CHECK: [[META220]] = !DISubrange(count: 3)
-// CHECK: [[META221]] = !{[[META222:![0-9]+]]}
-// CHECK: [[META222]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 4)
-// CHECK: [[META223]] = !{[[META224]]}
-// CHECK: [[META224]] = !DILocalVariable(arg: 1, scope: [[DBG211]], file: [[META4]], line: 288, type: [[META214]])
-// CHECK: [[META225]] = !DILocation(line: 288, column: 55, scope: [[DBG211]])
-// CHECK: [[DBG226]] = !DILocation(line: 288, column: 58, scope: [[DBG211]])
-// CHECK: [[DBG227]] = distinct !DISubprogram(name: "Test_Kern_Struct4Bytes", linkageName: "_Z22Test_Kern_Struct4Bytes12StructNBytesILj4EE", scope: [[META4]], file: [[META4]], line: 298, type: [[META212]], scopeLine: 298, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META228:![0-9]+]])
-// CHECK: [[META228]] = !{[[META229]]}
-// CHECK: [[META229]] = !DILocalVariable(arg: 1, scope: [[DBG227]], file: [[META4]], line: 298, type: [[META214]])
-// CHECK: [[META230]] = !DILocation(line: 298, column: 55, scope: [[DBG227]])
-// CHECK: [[DBG231]] = !DILocation(line: 298, column: 58, scope: [[DBG227]])
-// CHECK: [[DBG232]] = distinct !DISubprogram(name: "Test_Func_Struct5Bytes", linkageName: "_Z22Test_Func_Struct5Bytes12StructNBytesILj5EE", scope: [[META4]], file: [[META4]], line: 311, type: [[META233:![0-9]+]], scopeLine: 311, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META244:![0-9]+]])
-// CHECK: [[META233]] = !DISubroutineType(types: [[META234:![0-9]+]])
-// CHECK: [[META234]] = !{null, [[META235:![0-9]+]]}
-// CHECK: [[META235]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<5U>", file: [[META4]], line: 60, size: 40, flags: DIFlagTypePassByValue, elements: [[META236:![0-9]+]], templateParams: [[META242:![0-9]+]], identifier: "_ZTS12StructNBytesILj5EE")
-// CHECK: [[META236]] = !{[[META237:![0-9]+]], [[META238:![0-9]+]]}
-// CHECK: [[META237]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META235]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META238]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META235]], file: [[META4]], line: 63, baseType: [[META239:![0-9]+]], size: 32, offset: 8)
-// CHECK: [[META239]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 32, elements: [[META240:![0-9]+]])
-// CHECK: [[META240]] = !{[[META241:![0-9]+]]}
-// CHECK: [[META241]] = !DISubrange(count: 4)
-// CHECK: [[META242]] = !{[[META243:![0-9]+]]}
-// CHECK: [[META243]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 5)
-// CHECK: [[META244]] = !{[[META245]]}
-// CHECK: [[META245]] = !DILocalVariable(arg: 1, scope: [[DBG232]], file: [[META4]], line: 311, type: [[META235]])
-// CHECK: [[META246]] = !DILocation(line: 311, column: 55, scope: [[DBG232]])
-// CHECK: [[DBG247]] = !DILocation(line: 311, column: 58, scope: [[DBG232]])
-// CHECK: [[DBG248]] = distinct !DISubprogram(name: "Test_Kern_Struct5Bytes", linkageName: "_Z22Test_Kern_Struct5Bytes12StructNBytesILj5EE", scope: [[META4]], file: [[META4]], line: 321, type: [[META233]], scopeLine: 321, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META249:![0-9]+]])
-// CHECK: [[META249]] = !{[[META250]]}
-// CHECK: [[META250]] = !DILocalVariable(arg: 1, scope: [[DBG248]], file: [[META4]], line: 321, type: [[META235]])
-// CHECK: [[META251]] = !DILocation(line: 321, column: 55, scope: [[DBG248]])
-// CHECK: [[DBG252]] = !DILocation(line: 321, column: 58, scope: [[DBG248]])
-// CHECK: [[DBG253]] = distinct !DISubprogram(name: "Test_Func_Struct6Bytes", linkageName: "_Z22Test_Func_Struct6Bytes12StructNBytesILj6EE", scope: [[META4]], file: [[META4]], line: 334, type: [[META254:![0-9]+]], scopeLine: 334, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META265:![0-9]+]])
-// CHECK: [[META254]] = !DISubroutineType(types: [[META255:![0-9]+]])
-// CHECK: [[META255]] = !{null, [[META256:![0-9]+]]}
-// CHECK: [[META256]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<6U>", file: [[META4]], line: 60, size: 48, flags: DIFlagTypePassByValue, elements: [[META257:![0-9]+]], templateParams: [[META263:![0-9]+]], identifier: "_ZTS12StructNBytesILj6EE")
-// CHECK: [[META257]] = !{[[META258:![0-9]+]], [[META259:![0-9]+]]}
-// CHECK: [[META258]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META256]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META259]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META256]], file: [[META4]], line: 63, baseType: [[META260:![0-9]+]], size: 40, offset: 8)
-// CHECK: [[META260]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 40, elements: [[META261:![0-9]+]])
-// CHECK: [[META261]] = !{[[META262:![0-9]+]]}
-// CHECK: [[META262]] = !DISubrange(count: 5)
-// CHECK: [[META263]] = !{[[META264:![0-9]+]]}
-// CHECK: [[META264]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 6)
-// CHECK: [[META265]] = !{[[META266]]}
-// CHECK: [[META266]] = !DILocalVariable(arg: 1, scope: [[DBG253]], file: [[META4]], line: 334, type: [[META256]])
-// CHECK: [[META267]] = !DILocation(line: 334, column: 55, scope: [[DBG253]])
-// CHECK: [[DBG268]] = !DILocation(line: 334, column: 58, scope: [[DBG253]])
-// CHECK: [[DBG269]] = distinct !DISubprogram(name: "Test_Kern_Struct6Bytes", linkageName: "_Z22Test_Kern_Struct6Bytes12StructNBytesILj6EE", scope: [[META4]], file: [[META4]], line: 344, type: [[META254]], scopeLine: 344, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META270:![0-9]+]])
-// CHECK: [[META270]] = !{[[META271]]}
-// CHECK: [[META271]] = !DILocalVariable(arg: 1, scope: [[DBG269]], file: [[META4]], line: 344, type: [[META256]])
-// CHECK: [[META272]] = !DILocation(line: 344, column: 55, scope: [[DBG269]])
-// CHECK: [[DBG273]] = !DILocation(line: 344, column: 58, scope: [[DBG269]])
-// CHECK: [[DBG274]] = distinct !DISubprogram(name: "Test_Func_Struct7Bytes", linkageName: "_Z22Test_Func_Struct7Bytes12StructNBytesILj7EE", scope: [[META4]], file: [[META4]], line: 357, type: [[META275:![0-9]+]], scopeLine: 357, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META286:![0-9]+]])
-// CHECK: [[META275]] = !DISubroutineType(types: [[META276:![0-9]+]])
-// CHECK: [[META276]] = !{null, [[META277:![0-9]+]]}
-// CHECK: [[META277]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<7U>", file: [[META4]], line: 60, size: 56, flags: DIFlagTypePassByValue, elements: [[META278:![0-9]+]], templateParams: [[META284:![0-9]+]], identifier: "_ZTS12StructNBytesILj7EE")
-// CHECK: [[META278]] = !{[[META279:![0-9]+]], [[META280:![0-9]+]]}
-// CHECK: [[META279]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META277]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META280]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META277]], file: [[META4]], line: 63, baseType: [[META281:![0-9]+]], size: 48, offset: 8)
-// CHECK: [[META281]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 48, elements: [[META282:![0-9]+]])
-// CHECK: [[META282]] = !{[[META283:![0-9]+]]}
-// CHECK: [[META283]] = !DISubrange(count: 6)
-// CHECK: [[META284]] = !{[[META285:![0-9]+]]}
-// CHECK: [[META285]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 7)
-// CHECK: [[META286]] = !{[[META287]]}
-// CHECK: [[META287]] = !DILocalVariable(arg: 1, scope: [[DBG274]], file: [[META4]], line: 357, type: [[META277]])
-// CHECK: [[META288]] = !DILocation(line: 357, column: 55, scope: [[DBG274]])
-// CHECK: [[DBG289]] = !DILocation(line: 357, column: 58, scope: [[DBG274]])
-// CHECK: [[DBG290]] = distinct !DISubprogram(name: "Test_Kern_Struct7Bytes", linkageName: "_Z22Test_Kern_Struct7Bytes12StructNBytesILj7EE", scope: [[META4]], file: [[META4]], line: 367, type: [[META275]], scopeLine: 367, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META291:![0-9]+]])
-// CHECK: [[META291]] = !{[[META292]]}
-// CHECK: [[META292]] = !DILocalVariable(arg: 1, scope: [[DBG290]], file: [[META4]], line: 367, type: [[META277]])
-// CHECK: [[META293]] = !DILocation(line: 367, column: 55, scope: [[DBG290]])
-// CHECK: [[DBG294]] = !DILocation(line: 367, column: 58, scope: [[DBG290]])
-// CHECK: [[DBG295]] = distinct !DISubprogram(name: "Test_Func_Struct8Bytes", linkageName: "_Z22Test_Func_Struct8Bytes12StructNBytesILj8EE", scope: [[META4]], file: [[META4]], line: 377, type: [[META296:![0-9]+]], scopeLine: 377, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META307:![0-9]+]])
-// CHECK: [[META296]] = !DISubroutineType(types: [[META297:![0-9]+]])
-// CHECK: [[META297]] = !{null, [[META298:![0-9]+]]}
-// CHECK: [[META298]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<8U>", file: [[META4]], line: 60, size: 64, flags: DIFlagTypePassByValue, elements: [[META299:![0-9]+]], templateParams: [[META305:![0-9]+]], identifier: "_ZTS12StructNBytesILj8EE")
-// CHECK: [[META299]] = !{[[META300:![0-9]+]], [[META301:![0-9]+]]}
-// CHECK: [[META300]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META298]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META301]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META298]], file: [[META4]], line: 63, baseType: [[META302:![0-9]+]], size: 56, offset: 8)
-// CHECK: [[META302]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 56, elements: [[META303:![0-9]+]])
-// CHECK: [[META303]] = !{[[META304:![0-9]+]]}
-// CHECK: [[META304]] = !DISubrange(count: 7)
-// CHECK: [[META305]] = !{[[META306:![0-9]+]]}
-// CHECK: [[META306]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 8)
-// CHECK: [[META307]] = !{[[META308]]}
-// CHECK: [[META308]] = !DILocalVariable(arg: 1, scope: [[DBG295]], file: [[META4]], line: 377, type: [[META298]])
-// CHECK: [[META309]] = !DILocation(line: 377, column: 55, scope: [[DBG295]])
-// CHECK: [[DBG310]] = !DILocation(line: 377, column: 58, scope: [[DBG295]])
-// CHECK: [[DBG311]] = distinct !DISubprogram(name: "Test_Kern_Struct8Bytes", linkageName: "_Z22Test_Kern_Struct8Bytes12StructNBytesILj8EE", scope: [[META4]], file: [[META4]], line: 387, type: [[META296]], scopeLine: 387, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META312:![0-9]+]])
-// CHECK: [[META312]] = !{[[META313]]}
-// CHECK: [[META313]] = !DILocalVariable(arg: 1, scope: [[DBG311]], file: [[META4]], line: 387, type: [[META298]])
-// CHECK: [[META314]] = !DILocation(line: 387, column: 55, scope: [[DBG311]])
-// CHECK: [[DBG315]] = !DILocation(line: 387, column: 58, scope: [[DBG311]])
-// CHECK: [[DBG316]] = distinct !DISubprogram(name: "Test_Func_Struct9Bytes", linkageName: "_Z22Test_Func_Struct9Bytes12StructNBytesILj9EE", scope: [[META4]], file: [[META4]], line: 400, type: [[META317:![0-9]+]], scopeLine: 400, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META328:![0-9]+]])
-// CHECK: [[META317]] = !DISubroutineType(types: [[META318:![0-9]+]])
-// CHECK: [[META318]] = !{null, [[META319:![0-9]+]]}
-// CHECK: [[META319]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<9U>", file: [[META4]], line: 60, size: 72, flags: DIFlagTypePassByValue, elements: [[META320:![0-9]+]], templateParams: [[META326:![0-9]+]], identifier: "_ZTS12StructNBytesILj9EE")
-// CHECK: [[META320]] = !{[[META321:![0-9]+]], [[META322:![0-9]+]]}
-// CHECK: [[META321]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META319]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META322]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META319]], file: [[META4]], line: 63, baseType: [[META323:![0-9]+]], size: 64, offset: 8)
-// CHECK: [[META323]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 64, elements: [[META324:![0-9]+]])
-// CHECK: [[META324]] = !{[[META325:![0-9]+]]}
-// CHECK: [[META325]] = !DISubrange(count: 8)
-// CHECK: [[META326]] = !{[[META327:![0-9]+]]}
-// CHECK: [[META327]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 9)
-// CHECK: [[META328]] = !{[[META329]]}
-// CHECK: [[META329]] = !DILocalVariable(arg: 1, scope: [[DBG316]], file: [[META4]], line: 400, type: [[META319]])
-// CHECK: [[META330]] = !DILocation(line: 400, column: 55, scope: [[DBG316]])
-// CHECK: [[DBG331]] = !DILocation(line: 400, column: 58, scope: [[DBG316]])
-// CHECK: [[DBG332]] = distinct !DISubprogram(name: "Test_Kern_Struct9Bytes", linkageName: "_Z22Test_Kern_Struct9Bytes12StructNBytesILj9EE", scope: [[META4]], file: [[META4]], line: 410, type: [[META317]], scopeLine: 410, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META333:![0-9]+]])
-// CHECK: [[META333]] = !{[[META334]]}
-// CHECK: [[META334]] = !DILocalVariable(arg: 1, scope: [[DBG332]], file: [[META4]], line: 410, type: [[META319]])
-// CHECK: [[META335]] = !DILocation(line: 410, column: 55, scope: [[DBG332]])
-// CHECK: [[DBG336]] = !DILocation(line: 410, column: 58, scope: [[DBG332]])
-// CHECK: [[DBG337]] = distinct !DISubprogram(name: "Test_Func_Struct64Bytes", linkageName: "_Z23Test_Func_Struct64Bytes12StructNBytesILj64EE", scope: [[META4]], file: [[META4]], line: 420, type: [[META338:![0-9]+]], scopeLine: 420, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META349:![0-9]+]])
-// CHECK: [[META338]] = !DISubroutineType(types: [[META339:![0-9]+]])
-// CHECK: [[META339]] = !{null, [[META340:![0-9]+]]}
-// CHECK: [[META340]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<64U>", file: [[META4]], line: 60, size: 512, flags: DIFlagTypePassByValue, elements: [[META341:![0-9]+]], templateParams: [[META347:![0-9]+]], identifier: "_ZTS12StructNBytesILj64EE")
-// CHECK: [[META341]] = !{[[META342:![0-9]+]], [[META343:![0-9]+]]}
-// CHECK: [[META342]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META340]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
-// CHECK: [[META343]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META340]], file: [[META4]], line: 63, baseType: [[META344:![0-9]+]], size: 504, offset: 8)
-// CHECK: [[META344]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 504, elements: [[META345:![0-9]+]])
-// CHECK: [[META345]] = !{[[META346:![0-9]+]]}
-// CHECK: [[META346]] = !DISubrange(count: 63)
-// CHECK: [[META347]] = !{[[META348:![0-9]+]]}
-// CHECK: [[META348]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 64)
-// CHECK: [[META349]] = !{[[META350]]}
-// CHECK: [[META350]] = !DILocalVariable(arg: 1, scope: [[DBG337]], file: [[META4]], line: 420, type: [[META340]])
-// CHECK: [[META351]] = !DILocation(line: 420, column: 57, scope: [[DBG337]])
-// CHECK: [[DBG352]] = !DILocation(line: 420, column: 60, scope: [[DBG337]])
-// CHECK: [[DBG353]] = distinct !DISubprogram(name: "Test_Kern_Struct64Bytes", linkageName: "_Z23Test_Kern_Struct64Bytes12StructNBytesILj64EE", scope: [[META4]], file: [[META4]], line: 430, type: [[META338]], scopeLine: 430, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META354:![0-9]+]])
-// CHECK: [[META354]] = !{[[META355]]}
-// CHECK: [[META355]] = !DILocalVariable(arg: 1, scope: [[DBG353]], file: [[META4]], line: 430, type: [[META340]])
-// CHECK: [[META356]] = !DILocation(line: 430, column: 57, scope: [[DBG353]])
-// CHECK: [[DBG357]] = !DILocation(line: 430, column: 60, scope: [[DBG353]])
-// CHECK: [[DBG358]] = distinct !DISubprogram(name: "Test_Func_Int8T", linkageName: "_Z15Test_Func_Int8Tc", scope: [[META4]], file: [[META4]], line: 440, type: [[META359:![0-9]+]], scopeLine: 440, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META361:![0-9]+]])
-// CHECK: [[META359]] = !DISubroutineType(types: [[META360:![0-9]+]])
-// CHECK: [[META360]] = !{null, [[META5]]}
-// CHECK: [[META361]] = !{[[META362]]}
-// CHECK: [[META362]] = !DILocalVariable(arg: 1, scope: [[DBG358]], file: [[META4]], line: 440, type: [[META5]])
-// CHECK: [[META363]] = !DILocation(line: 440, column: 39, scope: [[DBG358]])
-// CHECK: [[DBG364]] = !DILocation(line: 440, column: 42, scope: [[DBG358]])
-// CHECK: [[DBG365]] = distinct !DISubprogram(name: "Test_Kern_Int8T", linkageName: "_Z15Test_Kern_Int8Tc", scope: [[META4]], file: [[META4]], line: 450, type: [[META359]], scopeLine: 450, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META366:![0-9]+]])
-// CHECK: [[META366]] = !{[[META367]]}
-// CHECK: [[META367]] = !DILocalVariable(arg: 1, scope: [[DBG365]], file: [[META4]], line: 450, type: [[META5]])
-// CHECK: [[META368]] = !DILocation(line: 450, column: 39, scope: [[DBG365]])
-// CHECK: [[DBG369]] = !DILocation(line: 450, column: 42, scope: [[DBG365]])
-// CHECK: [[DBG370]] = distinct !DISubprogram(name: "Test_Func_UInt8T", linkageName: "_Z16Test_Func_UInt8Th", scope: [[META4]], file: [[META4]], line: 460, type: [[META371:![0-9]+]], scopeLine: 460, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META373:![0-9]+]])
-// CHECK: [[META371]] = !DISubroutineType(types: [[META372:![0-9]+]])
-// CHECK: [[META372]] = !{null, [[META8]]}
-// CHECK: [[META373]] = !{[[META374]]}
-// CHECK: [[META374]] = !DILocalVariable(arg: 1, scope: [[DBG370]], file: [[META4]], line: 460, type: [[META8]])
-// CHECK: [[META375]] = !DILocation(line: 460, column: 41, scope: [[DBG370]])
-// CHECK: [[DBG376]] = !DILocation(line: 460, column: 44, scope: [[DBG370]])
-// CHECK: [[DBG377]] = distinct !DISubprogram(name: "Test_Kern_UInt8T", linkageName: "_Z16Test_Kern_UInt8Th", scope: [[META4]], file: [[META4]], line: 470, type: [[META371]], scopeLine: 470, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META378:![0-9]+]])
-// CHECK: [[META378]] = !{[[META379]]}
-// CHECK: [[META379]] = !DILocalVariable(arg: 1, scope: [[DBG377]], file: [[META4]], line: 470, type: [[META8]])
-// CHECK: [[META380]] = !DILocation(line: 470, column: 41, scope: [[DBG377]])
-// CHECK: [[DBG381]] = !DILocation(line: 470, column: 44, scope: [[DBG377]])
-// CHECK: [[DBG382]] = distinct !DISubprogram(name: "Test_Func_Int16T", linkageName: "_Z16Test_Func_Int16Ts", scope: [[META4]], file: [[META4]], line: 480, type: [[META383:![0-9]+]], scopeLine: 480, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META385:![0-9]+]])
-// CHECK: [[META383]] = !DISubroutineType(types: [[META384:![0-9]+]])
-// CHECK: [[META384]] = !{null, [[META10]]}
-// CHECK: [[META385]] = !{[[META386]]}
-// CHECK: [[META386]] = !DILocalVariable(arg: 1, scope: [[DBG382]], file: [[META4]], line: 480, type: [[META10]])
-// CHECK: [[META387]] = !DILocation(line: 480, column: 41, scope: [[DBG382]])
-// CHECK: [[DBG388]] = !DILocation(line: 480, column: 44, scope: [[DBG382]])
-// CHECK: [[DBG389]] = distinct !DISubprogram(name: "Test_Kern_Int16T", linkageName: "_Z16Test_Kern_Int16Ts", scope: [[META4]], file: [[META4]], line: 490, type: [[META383]], scopeLine: 490, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META390:![0-9]+]])
-// CHECK: [[META390]] = !{[[META391]]}
-// CHECK: [[META391]] = !DILocalVariable(arg: 1, scope: [[DBG389]], file: [[META4]], line: 490, type: [[META10]])
-// CHECK: [[META392]] = !DILocation(line: 490, column: 41, scope: [[DBG389]])
-// CHECK: [[DBG393]] = !DILocation(line: 490, column: 44, scope: [[DBG389]])
-// CHECK: [[DBG394]] = distinct !DISubprogram(name: "Test_Func_UInt16T", linkageName: "_Z17Test_Func_UInt16Tt", scope: [[META4]], file: [[META4]], line: 500, type: [[META395:![0-9]+]], scopeLine: 500, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META397:![0-9]+]])
-// CHECK: [[META395]] = !DISubroutineType(types: [[META396:![0-9]+]])
-// CHECK: [[META396]] = !{null, [[META12]]}
-// CHECK: [[META397]] = !{[[META398]]}
-// CHECK: [[META398]] = !DILocalVariable(arg: 1, scope: [[DBG394]], file: [[META4]], line: 500, type: [[META12]])
-// CHECK: [[META399]] = !DILocation(line: 500, column: 43, scope: [[DBG394]])
-// CHECK: [[DBG400]] = !DILocation(line: 500, column: 46, scope: [[DBG394]])
-// CHECK: [[DBG401]] = distinct !DISubprogram(name: "Test_Kern_UInt16T", linkageName: "_Z17Test_Kern_UInt16Tt", scope: [[META4]], file: [[META4]], line: 510, type: [[META395]], scopeLine: 510, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META402:![0-9]+]])
-// CHECK: [[META402]] = !{[[META403]]}
-// CHECK: [[META403]] = !DILocalVariable(arg: 1, scope: [[DBG401]], file: [[META4]], line: 510, type: [[META12]])
-// CHECK: [[META404]] = !DILocation(line: 510, column: 43, scope: [[DBG401]])
-// CHECK: [[DBG405]] = !DILocation(line: 510, column: 46, scope: [[DBG401]])
-// CHECK: [[DBG406]] = distinct !DISubprogram(name: "Test_Func_Int32T", linkageName: "_Z16Test_Func_Int32Ti", scope: [[META4]], file: [[META4]], line: 520, type: [[META407:![0-9]+]], scopeLine: 520, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META409:![0-9]+]])
-// CHECK: [[META407]] = !DISubroutineType(types: [[META408:![0-9]+]])
-// CHECK: [[META408]] = !{null, [[META14]]}
-// CHECK: [[META409]] = !{[[META410]]}
-// CHECK: [[META410]] = !DILocalVariable(arg: 1, scope: [[DBG406]], file: [[META4]], line: 520, type: [[META14]])
-// CHECK: [[META411]] = !DILocation(line: 520, column: 41, scope: [[DBG406]])
-// CHECK: [[DBG412]] = !DILocation(line: 520, column: 44, scope: [[DBG406]])
-// CHECK: [[DBG413]] = distinct !DISubprogram(name: "Test_Kern_Int32T", linkageName: "_Z16Test_Kern_Int32Ti", scope: [[META4]], file: [[META4]], line: 530, type: [[META407]], scopeLine: 530, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META414:![0-9]+]])
-// CHECK: [[META414]] = !{[[META415]]}
-// CHECK: [[META415]] = !DILocalVariable(arg: 1, scope: [[DBG413]], file: [[META4]], line: 530, type: [[META14]])
-// CHECK: [[META416]] = !DILocation(line: 530, column: 41, scope: [[DBG413]])
-// CHECK: [[DBG417]] = !DILocation(line: 530, column: 44, scope: [[DBG413]])
-// CHECK: [[DBG418]] = distinct !DISubprogram(name: "Test_Func_UInt32T", linkageName: "_Z17Test_Func_UInt32Tj", scope: [[META4]], file: [[META4]], line: 540, type: [[META419:![0-9]+]], scopeLine: 540, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META421:![0-9]+]])
-// CHECK: [[META419]] = !DISubroutineType(types: [[META420:![0-9]+]])
-// CHECK: [[META420]] = !{null, [[META16]]}
-// CHECK: [[META421]] = !{[[META422]]}
-// CHECK: [[META422]] = !DILocalVariable(arg: 1, scope: [[DBG418]], file: [[META4]], line: 540, type: [[META16]])
-// CHECK: [[META423]] = !DILocation(line: 540, column: 43, scope: [[DBG418]])
-// CHECK: [[DBG424]] = !DILocation(line: 540, column: 46, scope: [[DBG418]])
-// CHECK: [[DBG425]] = distinct !DISubprogram(name: "Test_Kern_UInt32T", linkageName: "_Z17Test_Kern_UInt32Tj", scope: [[META4]], file: [[META4]], line: 550, type: [[META419]], scopeLine: 550, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META426:![0-9]+]])
-// CHECK: [[META426]] = !{[[META427]]}
-// CHECK: [[META427]] = !DILocalVariable(arg: 1, scope: [[DBG425]], file: [[META4]], line: 550, type: [[META16]])
-// CHECK: [[META428]] = !DILocation(line: 550, column: 43, scope: [[DBG425]])
-// CHECK: [[DBG429]] = !DILocation(line: 550, column: 46, scope: [[DBG425]])
-// CHECK: [[DBG430]] = distinct !DISubprogram(name: "Test_Func_Int64T", linkageName: "_Z16Test_Func_Int64Tl", scope: [[META4]], file: [[META4]], line: 560, type: [[META431:![0-9]+]], scopeLine: 560, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META433:![0-9]+]])
-// CHECK: [[META431]] = !DISubroutineType(types: [[META432:![0-9]+]])
-// CHECK: [[META432]] = !{null, [[META18]]}
-// CHECK: [[META433]] = !{[[META434]]}
-// CHECK: [[META434]] = !DILocalVariable(arg: 1, scope: [[DBG430]], file: [[META4]], line: 560, type: [[META18]])
-// CHECK: [[META435]] = !DILocation(line: 560, column: 41, scope: [[DBG430]])
-// CHECK: [[DBG436]] = !DILocation(line: 560, column: 44, scope: [[DBG430]])
-// CHECK: [[DBG437]] = distinct !DISubprogram(name: "Test_Kern_Int64T", linkageName: "_Z16Test_Kern_Int64Tl", scope: [[META4]], file: [[META4]], line: 570, type: [[META431]], scopeLine: 570, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META438:![0-9]+]])
-// CHECK: [[META438]] = !{[[META439]]}
-// CHECK: [[META439]] = !DILocalVariable(arg: 1, scope: [[DBG437]], file: [[META4]], line: 570, type: [[META18]])
-// CHECK: [[META440]] = !DILocation(line: 570, column: 41, scope: [[DBG437]])
-// CHECK: [[DBG441]] = !DILocation(line: 570, column: 44, scope: [[DBG437]])
-// CHECK: [[DBG442]] = distinct !DISubprogram(name: "Test_Func_UInt64T", linkageName: "_Z17Test_Func_UInt64Tm", scope: [[META4]], file: [[META4]], line: 580, type: [[META443:![0-9]+]], scopeLine: 580, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META445:![0-9]+]])
-// CHECK: [[META443]] = !DISubroutineType(types: [[META444:![0-9]+]])
-// CHECK: [[META444]] = !{null, [[META20]]}
-// CHECK: [[META445]] = !{[[META446]]}
-// CHECK: [[META446]] = !DILocalVariable(arg: 1, scope: [[DBG442]], file: [[META4]], line: 580, type: [[META20]])
-// CHECK: [[META447]] = !DILocation(line: 580, column: 43, scope: [[DBG442]])
-// CHECK: [[DBG448]] = !DILocation(line: 580, column: 46, scope: [[DBG442]])
-// CHECK: [[DBG449]] = distinct !DISubprogram(name: "Test_Kern_UInt64T", linkageName: "_Z17Test_Kern_UInt64Tm", scope: [[META4]], file: [[META4]], line: 590, type: [[META443]], scopeLine: 590, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META450:![0-9]+]])
-// CHECK: [[META450]] = !{[[META451]]}
-// CHECK: [[META451]] = !DILocalVariable(arg: 1, scope: [[DBG449]], file: [[META4]], line: 590, type: [[META20]])
-// CHECK: [[META452]] = !DILocation(line: 590, column: 43, scope: [[DBG449]])
-// CHECK: [[DBG453]] = !DILocation(line: 590, column: 46, scope: [[DBG449]])
-// CHECK: [[DBG454]] = distinct !DISubprogram(name: "Test_Func_EnumInt8T", linkageName: "_Z19Test_Func_EnumInt8T9EnumInt8T", scope: [[META4]], file: [[META4]], line: 600, type: [[META455:![0-9]+]], scopeLine: 600, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META457:![0-9]+]])
-// CHECK: [[META455]] = !DISubroutineType(types: [[META456:![0-9]+]])
-// CHECK: [[META456]] = !{null, [[META3]]}
-// CHECK: [[META457]] = !{[[META458]]}
-// CHECK: [[META458]] = !DILocalVariable(arg: 1, scope: [[DBG454]], file: [[META4]], line: 600, type: [[META3]])
-// CHECK: [[META459]] = !DILocation(line: 600, column: 46, scope: [[DBG454]])
-// CHECK: [[DBG460]] = !DILocation(line: 600, column: 49, scope: [[DBG454]])
-// CHECK: [[DBG461]] = distinct !DISubprogram(name: "Test_Kern_EnumInt8T", linkageName: "_Z19Test_Kern_EnumInt8T9EnumInt8T", scope: [[META4]], file: [[META4]], line: 610, type: [[META455]], scopeLine: 610, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META462:![0-9]+]])
-// CHECK: [[META462]] = !{[[META463]]}
-// CHECK: [[META463]] = !DILocalVariable(arg: 1, scope: [[DBG461]], file: [[META4]], line: 610, type: [[META3]])
-// CHECK: [[META464]] = !DILocation(line: 610, column: 46, scope: [[DBG461]])
-// CHECK: [[DBG465]] = !DILocation(line: 610, column: 49, scope: [[DBG461]])
-// CHECK: [[DBG466]] = distinct !DISubprogram(name: "Test_Func_EnumUInt8T", linkageName: "_Z20Test_Func_EnumUInt8T10EnumUInt8T", scope: [[META4]], file: [[META4]], line: 620, type: [[META467:![0-9]+]], scopeLine: 620, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META469:![0-9]+]])
-// CHECK: [[META467]] = !DISubroutineType(types: [[META468:![0-9]+]])
-// CHECK: [[META468]] = !{null, [[META7]]}
-// CHECK: [[META469]] = !{[[META470]]}
-// CHECK: [[META470]] = !DILocalVariable(arg: 1, scope: [[DBG466]], file: [[META4]], line: 620, type: [[META7]])
-// CHECK: [[META471]] = !DILocation(line: 620, column: 48, scope: [[DBG466]])
-// CHECK: [[DBG472]] = !DILocation(line: 620, column: 51, scope: [[DBG466]])
-// CHECK: [[DBG473]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt8T", linkageName: "_Z20Test_Kern_EnumUInt8T10EnumUInt8T", scope: [[META4]], file: [[META4]], line: 630, type: [[META467]], scopeLine: 630, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META474:![0-9]+]])
-// CHECK: [[META474]] = !{[[META475]]}
-// CHECK: [[META475]] = !DILocalVariable(arg: 1, scope: [[DBG473]], file: [[META4]], line: 630, type: [[META7]])
-// CHECK: [[META476]] = !DILocation(line: 630, column: 48, scope: [[DBG473]])
-// CHECK: [[DBG477]] = !DILocation(line: 630, column: 51, scope: [[DBG473]])
-// CHECK: [[DBG478]] = distinct !DISubprogram(name: "Test_Func_EnumInt16T", linkageName: "_Z20Test_Func_EnumInt16T10EnumInt16T", scope: [[META4]], file: [[META4]], line: 640, type: [[META479:![0-9]+]], scopeLine: 640, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META481:![0-9]+]])
-// CHECK: [[META479]] = !DISubroutineType(types: [[META480:![0-9]+]])
-// CHECK: [[META480]] = !{null, [[META9]]}
-// CHECK: [[META481]] = !{[[META482]]}
-// CHECK: [[META482]] = !DILocalVariable(arg: 1, scope: [[DBG478]], file: [[META4]], line: 640, type: [[META9]])
-// CHECK: [[META483]] = !DILocation(line: 640, column: 48, scope: [[DBG478]])
-// CHECK: [[DBG484]] = !DILocation(line: 640, column: 51, scope: [[DBG478]])
-// CHECK: [[DBG485]] = distinct !DISubprogram(name: "Test_Kern_EnumInt16T", linkageName: "_Z20Test_Kern_EnumInt16T10EnumInt16T", scope: [[META4]], file: [[META4]], line: 650, type: [[META479]], scopeLine: 650, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META486:![0-9]+]])
-// CHECK: [[META486]] = !{[[META487]]}
-// CHECK: [[META487]] = !DILocalVariable(arg: 1, scope: [[DBG485]], file: [[META4]], line: 650, type: [[META9]])
-// CHECK: [[META488]] = !DILocation(line: 650, column: 48, scope: [[DBG485]])
-// CHECK: [[DBG489]] = !DILocation(line: 650, column: 51, scope: [[DBG485]])
-// CHECK: [[DBG490]] = distinct !DISubprogram(name: "Test_Func_EnumUInt16T", linkageName: "_Z21Test_Func_EnumUInt16T11EnumUInt16T", scope: [[META4]], file: [[META4]], line: 660, type: [[META491:![0-9]+]], scopeLine: 660, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META493:![0-9]+]])
-// CHECK: [[META491]] = !DISubroutineType(types: [[META492:![0-9]+]])
-// CHECK: [[META492]] = !{null, [[META11]]}
-// CHECK: [[META493]] = !{[[META494]]}
-// CHECK: [[META494]] = !DILocalVariable(arg: 1, scope: [[DBG490]], file: [[META4]], line: 660, type: [[META11]])
-// CHECK: [[META495]] = !DILocation(line: 660, column: 50, scope: [[DBG490]])
-// CHECK: [[DBG496]] = !DILocation(line: 660, column: 53, scope: [[DBG490]])
-// CHECK: [[DBG497]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt16T", linkageName: "_Z21Test_Kern_EnumUInt16T11EnumUInt16T", scope: [[META4]], file: [[META4]], line: 670, type: [[META491]], scopeLine: 670, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META498:![0-9]+]])
-// CHECK: [[META498]] = !{[[META499]]}
-// CHECK: [[META499]] = !DILocalVariable(arg: 1, scope: [[DBG497]], file: [[META4]], line: 670, type: [[META11]])
-// CHECK: [[META500]] = !DILocation(line: 670, column: 50, scope: [[DBG497]])
-// CHECK: [[DBG501]] = !DILocation(line: 670, column: 53, scope: [[DBG497]])
-// CHECK: [[DBG502]] = distinct !DISubprogram(name: "Test_Func_EnumInt32T", linkageName: "_Z20Test_Func_EnumInt32T10EnumInt32T", scope: [[META4]], file: [[META4]], line: 680, type: [[META503:![0-9]+]], scopeLine: 680, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META505:![0-9]+]])
-// CHECK: [[META503]] = !DISubroutineType(types: [[META504:![0-9]+]])
-// CHECK: [[META504]] = !{null, [[META13]]}
-// CHECK: [[META505]] = !{[[META506]]}
-// CHECK: [[META506]] = !DILocalVariable(arg: 1, scope: [[DBG502]], file: [[META4]], line: 680, type: [[META13]])
-// CHECK: [[META507]] = !DILocation(line: 680, column: 48, scope: [[DBG502]])
-// CHECK: [[DBG508]] = !DILocation(line: 680, column: 51, scope: [[DBG502]])
-// CHECK: [[DBG509]] = distinct !DISubprogram(name: "Test_Kern_EnumInt32T", linkageName: "_Z20Test_Kern_EnumInt32T10EnumInt32T", scope: [[META4]], file: [[META4]], line: 690, type: [[META503]], scopeLine: 690, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META510:![0-9]+]])
-// CHECK: [[META510]] = !{[[META511]]}
-// CHECK: [[META511]] = !DILocalVariable(arg: 1, scope: [[DBG509]], file: [[META4]], line: 690, type: [[META13]])
-// CHECK: [[META512]] = !DILocation(line: 690, column: 48, scope: [[DBG509]])
-// CHECK: [[DBG513]] = !DILocation(line: 690, column: 51, scope: [[DBG509]])
-// CHECK: [[DBG514]] = distinct !DISubprogram(name: "Test_Func_EnumUInt32T", linkageName: "_Z21Test_Func_EnumUInt32T11EnumUInt32T", scope: [[META4]], file: [[META4]], line: 700, type: [[META515:![0-9]+]], scopeLine: 700, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META517:![0-9]+]])
-// CHECK: [[META515]] = !DISubroutineType(types: [[META516:![0-9]+]])
-// CHECK: [[META516]] = !{null, [[META15]]}
-// CHECK: [[META517]] = !{[[META518]]}
-// CHECK: [[META518]] = !DILocalVariable(arg: 1, scope: [[DBG514]], file: [[META4]], line: 700, type: [[META15]])
-// CHECK: [[META519]] = !DILocation(line: 700, column: 50, scope: [[DBG514]])
-// CHECK: [[DBG520]] = !DILocation(line: 700, column: 53, scope: [[DBG514]])
-// CHECK: [[DBG521]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt32T", linkageName: "_Z21Test_Kern_EnumUInt32T11EnumUInt32T", scope: [[META4]], file: [[META4]], line: 710, type: [[META515]], scopeLine: 710, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META522:![0-9]+]])
-// CHECK: [[META522]] = !{[[META523]]}
-// CHECK: [[META523]] = !DILocalVariable(arg: 1, scope: [[DBG521]], file: [[META4]], line: 710, type: [[META15]])
-// CHECK: [[META524]] = !DILocation(line: 710, column: 50, scope: [[DBG521]])
-// CHECK: [[DBG525]] = !DILocation(line: 710, column: 53, scope: [[DBG521]])
-// CHECK: [[DBG526]] = distinct !DISubprogram(name: "Test_Func_EnumInt64T", linkageName: "_Z20Test_Func_EnumInt64T10EnumInt64T", scope: [[META4]], file: [[META4]], line: 720, type: [[META527:![0-9]+]], scopeLine: 720, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META529:![0-9]+]])
-// CHECK: [[META527]] = !DISubroutineType(types: [[META528:![0-9]+]])
-// CHECK: [[META528]] = !{null, [[META17]]}
-// CHECK: [[META529]] = !{[[META530]]}
-// CHECK: [[META530]] = !DILocalVariable(arg: 1, scope: [[DBG526]], file: [[META4]], line: 720, type: [[META17]])
-// CHECK: [[META531]] = !DILocation(line: 720, column: 48, scope: [[DBG526]])
-// CHECK: [[DBG532]] = !DILocation(line: 720, column: 51, scope: [[DBG526]])
-// CHECK: [[DBG533]] = distinct !DISubprogram(name: "Test_Kern_EnumInt64T", linkageName: "_Z20Test_Kern_EnumInt64T10EnumInt64T", scope: [[META4]], file: [[META4]], line: 730, type: [[META527]], scopeLine: 730, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META534:![0-9]+]])
-// CHECK: [[META534]] = !{[[META535]]}
-// CHECK: [[META535]] = !DILocalVariable(arg: 1, scope: [[DBG533]], file: [[META4]], line: 730, type: [[META17]])
-// CHECK: [[META536]] = !DILocation(line: 730, column: 48, scope: [[DBG533]])
-// CHECK: [[DBG537]] = !DILocation(line: 730, column: 51, scope: [[DBG533]])
-// CHECK: [[DBG538]] = distinct !DISubprogram(name: "Test_Func_EnumUInt64T", linkageName: "_Z21Test_Func_EnumUInt64T11EnumUInt64T", scope: [[META4]], file: [[META4]], line: 740, type: [[META539:![0-9]+]], scopeLine: 740, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META541:![0-9]+]])
-// CHECK: [[META539]] = !DISubroutineType(types: [[META540:![0-9]+]])
-// CHECK: [[META540]] = !{null, [[META19]]}
-// CHECK: [[META541]] = !{[[META542]]}
-// CHECK: [[META542]] = !DILocalVariable(arg: 1, scope: [[DBG538]], file: [[META4]], line: 740, type: [[META19]])
-// CHECK: [[META543]] = !DILocation(line: 740, column: 50, scope: [[DBG538]])
-// CHECK: [[DBG544]] = !DILocation(line: 740, column: 53, scope: [[DBG538]])
-// CHECK: [[DBG545]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt64T", linkageName: "_Z21Test_Kern_EnumUInt64T11EnumUInt64T", scope: [[META4]], file: [[META4]], line: 750, type: [[META539]], scopeLine: 750, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META546:![0-9]+]])
-// CHECK: [[META546]] = !{[[META547]]}
-// CHECK: [[META547]] = !DILocalVariable(arg: 1, scope: [[DBG545]], file: [[META4]], line: 750, type: [[META19]])
-// CHECK: [[META548]] = !DILocation(line: 750, column: 50, scope: [[DBG545]])
-// CHECK: [[DBG549]] = !DILocation(line: 750, column: 53, scope: [[DBG545]])
-// CHECK: [[DBG550]] = distinct !DISubprogram(name: "Test_Func_PromotableInteger", linkageName: "_Z27Test_Func_PromotableIntegerb", scope: [[META4]], file: [[META4]], line: 761, type: [[META551:![0-9]+]], scopeLine: 761, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META554:![0-9]+]])
-// CHECK: [[META551]] = !DISubroutineType(types: [[META552:![0-9]+]])
-// CHECK: [[META552]] = !{null, [[META553:![0-9]+]]}
-// CHECK: [[META553]] = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
-// CHECK: [[META554]] = !{[[META555]]}
-// CHECK: [[META555]] = !DILocalVariable(arg: 1, scope: [[DBG550]], file: [[META4]], line: 761, type: [[META553]])
-// CHECK: [[META556]] = !DILocation(line: 761, column: 49, scope: [[DBG550]])
-// CHECK: [[DBG557]] = !DILocation(line: 761, column: 52, scope: [[DBG550]])
-// CHECK: [[DBG558]] = distinct !DISubprogram(name: "Test_Kern_PromotableInteger", linkageName: "_Z27Test_Kern_PromotableIntegerb", scope: [[META4]], file: [[META4]], line: 772, type: [[META551]], scopeLine: 772, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META559:![0-9]+]])
-// CHECK: [[META559]] = !{[[META560]]}
-// CHECK: [[META560]] = !DILocalVariable(arg: 1, scope: [[DBG558]], file: [[META4]], line: 772, type: [[META553]])
-// CHECK: [[META561]] = !DILocation(line: 772, column: 49, scope: [[DBG558]])
-// CHECK: [[DBG562]] = !DILocation(line: 772, column: 52, scope: [[DBG558]])
-// CHECK: [[DBG563]] = distinct !DISubprogram(name: "Test_Func_Pointer", linkageName: "_Z17Test_Func_PointerPi", scope: [[META4]], file: [[META4]], line: 782, type: [[META564:![0-9]+]], scopeLine: 782, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META567:![0-9]+]])
-// CHECK: [[META564]] = !DISubroutineType(types: [[META565:![0-9]+]])
-// CHECK: [[META565]] = !{null, [[META566:![0-9]+]]}
-// CHECK: [[META566]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META14]], size: 64, addressSpace: 1)
-// CHECK: [[META567]] = !{[[META568]]}
-// CHECK: [[META568]] = !DILocalVariable(arg: 1, scope: [[DBG563]], file: [[META4]], line: 782, type: [[META566]])
-// CHECK: [[META569]] = !DILocation(line: 782, column: 44, scope: [[DBG563]])
-// CHECK: [[DBG570]] = !DILocation(line: 782, column: 47, scope: [[DBG563]])
-// CHECK: [[DBG571]] = distinct !DISubprogram(name: "Test_Kern_Pointer", linkageName: "_Z17Test_Kern_PointerPi", scope: [[META4]], file: [[META4]], line: 798, type: [[META564]], scopeLine: 798, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META572:![0-9]+]])
-// CHECK: [[META572]] = !{[[META573]]}
-// CHECK: [[META573]] = !DILocalVariable(arg: 1, scope: [[DBG571]], file: [[META4]], line: 798, type: [[META566]])
-// CHECK: [[META574]] = !DILocation(line: 798, column: 44, scope: [[DBG571]])
-// CHECK: [[DBG575]] = !DILocation(line: 798, column: 47, scope: [[DBG571]])
-// CHECK: [[DBG576]] = distinct !DISubprogram(name: "Test_Func_Reference", linkageName: "_Z19Test_Func_ReferenceRi", scope: [[META4]], file: [[META4]], line: 808, type: [[META577:![0-9]+]], scopeLine: 808, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META580:![0-9]+]])
-// CHECK: [[META577]] = !DISubroutineType(types: [[META578:![0-9]+]])
-// CHECK: [[META578]] = !{null, [[META579:![0-9]+]]}
-// CHECK: [[META579]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META14]], size: 64, addressSpace: 1)
-// CHECK: [[META580]] = !{[[META581]]}
-// CHECK: [[META581]] = !DILocalVariable(arg: 1, scope: [[DBG576]], file: [[META4]], line: 808, type: [[META579]])
-// CHECK: [[META582]] = !DILocation(line: 808, column: 46, scope: [[DBG576]])
-// CHECK: [[DBG583]] = !DILocation(line: 808, column: 49, scope: [[DBG576]])
-// CHECK: [[DBG584]] = distinct !DISubprogram(name: "Test_Kern_Reference", linkageName: "_Z19Test_Kern_ReferenceRi", scope: [[META4]], file: [[META4]], line: 824, type: [[META577]], scopeLine: 824, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META585:![0-9]+]])
-// CHECK: [[META585]] = !{[[META586]]}
-// CHECK: [[META586]] = !DILocalVariable(arg: 1, scope: [[DBG584]], file: [[META4]], line: 824, type: [[META579]])
-// CHECK: [[META587]] = !DILocation(line: 824, column: 46, scope: [[DBG584]])
-// CHECK: [[DBG588]] = !DILocation(line: 824, column: 49, scope: [[DBG584]])
-// CHECK: [[DBG589]] = distinct !DISubprogram(name: "Test_Func_StructSinglePointerElement", linkageName: "_Z36Test_Func_StructSinglePointerElement26StructSinglePointerElement", scope: [[META4]], file: [[META4]], line: 835, type: [[META590:![0-9]+]], scopeLine: 835, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META595:![0-9]+]])
-// CHECK: [[META590]] = !DISubroutineType(types: [[META591:![0-9]+]])
-// CHECK: [[META591]] = !{null, [[META592:![0-9]+]]}
-// CHECK: [[META592]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSinglePointerElement", file: [[META4]], line: 73, size: 64, flags: DIFlagTypePassByValue, elements: [[META593:![0-9]+]], identifier: "_ZTS26StructSinglePointerElement")
-// CHECK: [[META593]] = !{[[META594:![0-9]+]]}
-// CHECK: [[META594]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META592]], file: [[META4]], line: 74, baseType: [[META566]], size: 64)
-// CHECK: [[META595]] = !{[[META596]]}
-// CHECK: [[META596]] = !DILocalVariable(arg: 1, scope: [[DBG589]], file: [[META4]], line: 835, type: [[META592]])
-// CHECK: [[META597]] = !DILocation(line: 835, column: 80, scope: [[DBG589]])
-// CHECK: [[DBG598]] = !DILocation(line: 835, column: 83, scope: [[DBG589]])
-// CHECK: [[DBG599]] = distinct !DISubprogram(name: "Test_Kern_StructSinglePointerElement", linkageName: "_Z36Test_Kern_StructSinglePointerElement26StructSinglePointerElement", scope: [[META4]], file: [[META4]], line: 846, type: [[META590]], scopeLine: 846, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META600:![0-9]+]])
-// CHECK: [[META600]] = !{[[META601]]}
-// CHECK: [[META601]] = !DILocalVariable(arg: 1, scope: [[DBG599]], file: [[META4]], line: 846, type: [[META592]])
-// CHECK: [[META602]] = !DILocation(line: 846, column: 80, scope: [[DBG599]])
-// CHECK: [[DBG603]] = !DILocation(line: 846, column: 83, scope: [[DBG599]])
-// CHECK: [[DBG604]] = distinct !DISubprogram(name: "Test_Func_StructPointerElements", linkageName: "_Z31Test_Func_StructPointerElements21StructPointerElements", scope: [[META4]], file: [[META4]], line: 859, type: [[META605:![0-9]+]], scopeLine: 859, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META613:![0-9]+]])
-// CHECK: [[META605]] = !DISubroutineType(types: [[META606:![0-9]+]])
-// CHECK: [[META606]] = !{null, [[META607:![0-9]+]]}
-// CHECK: [[META607]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructPointerElements", file: [[META4]], line: 76, size: 128, flags: DIFlagTypePassByValue, elements: [[META608:![0-9]+]], identifier: "_ZTS21StructPointerElements")
-// CHECK: [[META608]] = !{[[META609:![0-9]+]], [[META610:![0-9]+]]}
-// CHECK: [[META609]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META607]], file: [[META4]], line: 77, baseType: [[META566]], size: 64)
-// CHECK: [[META610]] = !DIDerivedType(tag: DW_TAG_member, name: "Element1", scope: [[META607]], file: [[META4]], line: 78, baseType: [[META611:![0-9]+]], size: 64, offset: 64)
-// CHECK: [[META611]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META612:![0-9]+]], size: 64, addressSpace: 1)
-// CHECK: [[META612]] = !DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)
-// CHECK: [[META613]] = !{[[META614]]}
-// CHECK: [[META614]] = !DILocalVariable(arg: 1, scope: [[DBG604]], file: [[META4]], line: 859, type: [[META607]])
-// CHECK: [[META615]] = !DILocation(line: 859, column: 70, scope: [[DBG604]])
-// CHECK: [[DBG616]] = !DILocation(line: 859, column: 73, scope: [[DBG604]])
-// CHECK: [[DBG617]] = distinct !DISubprogram(name: "Test_Kern_StructPointerElements", linkageName: "_Z31Test_Kern_StructPointerElements21StructPointerElements", scope: [[META4]], file: [[META4]], line: 869, type: [[META605]], scopeLine: 869, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META618:![0-9]+]])
-// CHECK: [[META618]] = !{[[META619]]}
-// CHECK: [[META619]] = !DILocalVariable(arg: 1, scope: [[DBG617]], file: [[META4]], line: 869, type: [[META607]])
-// CHECK: [[META620]] = !DILocation(line: 869, column: 70, scope: [[DBG617]])
-// CHECK: [[DBG621]] = !DILocation(line: 869, column: 73, scope: [[DBG617]])
-// CHECK: [[DBG622]] = distinct !DISubprogram(name: "Test_Func_ParamRegLimitExpandedStruct", linkageName: "_Z37Test_Func_ParamRegLimitExpandedStructlllllli22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 910, type: [[META623:![0-9]+]], scopeLine: 910, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META629:![0-9]+]])
-// CHECK: [[META623]] = !DISubroutineType(types: [[META624:![0-9]+]])
-// CHECK: [[META624]] = !{null, [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META14]], [[META625:![0-9]+]]}
-// CHECK: [[META625]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructMultipleElements", file: [[META4]], line: 80, size: 128, flags: DIFlagTypePassByValue, elements: [[META626:![0-9]+]], identifier: "_ZTS22StructMultipleElements")
-// CHECK: [[META626]] = !{[[META627:![0-9]+]], [[META628:![0-9]+]]}
-// CHECK: [[META627]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META625]], file: [[META4]], line: 81, baseType: [[META14]], size: 32)
-// CHECK: [[META628]] = !DIDerivedType(tag: DW_TAG_member, name: "Element1", scope: [[META625]], file: [[META4]], line: 82, baseType: [[META18]], size: 64, offset: 64)
-// CHECK: [[META629]] = !{[[META630]], [[META631]], [[META632]], [[META633]], [[META634]], [[META635]], [[META636]], [[META637]]}
-// CHECK: [[META630]] = !DILocalVariable(arg: 1, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META631]] = !DILocalVariable(arg: 2, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META632]] = !DILocalVariable(arg: 3, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META633]] = !DILocalVariable(arg: 4, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META634]] = !DILocalVariable(arg: 5, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META635]] = !DILocalVariable(arg: 6, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META18]])
-// CHECK: [[META636]] = !DILocalVariable(arg: 7, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META14]])
-// CHECK: [[META637]] = !DILocalVariable(arg: 8, scope: [[DBG622]], file: [[META4]], line: 910, type: [[META625]])
-// CHECK: [[META638]] = !DILocation(line: 910, column: 62, scope: [[DBG622]])
-// CHECK: [[META639]] = !DILocation(line: 910, column: 71, scope: [[DBG622]])
-// CHECK: [[META640]] = !DILocation(line: 910, column: 80, scope: [[DBG622]])
-// CHECK: [[META641]] = !DILocation(line: 910, column: 89, scope: [[DBG622]])
-// CHECK: [[META642]] = !DILocation(line: 910, column: 98, scope: [[DBG622]])
-// CHECK: [[META643]] = !DILocation(line: 910, column: 107, scope: [[DBG622]])
-// CHECK: [[META644]] = !DILocation(line: 910, column: 116, scope: [[DBG622]])
-// CHECK: [[META645]] = !DILocation(line: 910, column: 140, scope: [[DBG622]])
-// CHECK: [[DBG646]] = !DILocation(line: 910, column: 143, scope: [[DBG622]])
-// CHECK: [[DBG647]] = distinct !DISubprogram(name: "Test_Kern_ParamRegLimitExpandedStruct", linkageName: "_Z37Test_Kern_ParamRegLimitExpandedStructlllllli22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 948, type: [[META623]], scopeLine: 948, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META648:![0-9]+]])
-// CHECK: [[META648]] = !{[[META649]], [[META650]], [[META651]], [[META652]], [[META653]], [[META654]], [[META655]], [[META656]]}
-// CHECK: [[META649]] = !DILocalVariable(arg: 1, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META650]] = !DILocalVariable(arg: 2, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META651]] = !DILocalVariable(arg: 3, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META652]] = !DILocalVariable(arg: 4, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META653]] = !DILocalVariable(arg: 5, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META654]] = !DILocalVariable(arg: 6, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META18]])
-// CHECK: [[META655]] = !DILocalVariable(arg: 7, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META14]])
-// CHECK: [[META656]] = !DILocalVariable(arg: 8, scope: [[DBG647]], file: [[META4]], line: 948, type: [[META625]])
-// CHECK: [[META657]] = !DILocation(line: 948, column: 62, scope: [[DBG647]])
-// CHECK: [[META658]] = !DILocation(line: 948, column: 71, scope: [[DBG647]])
-// CHECK: [[META659]] = !DILocation(line: 948, column: 80, scope: [[DBG647]])
-// CHECK: [[META660]] = !DILocation(line: 948, column: 89, scope: [[DBG647]])
-// CHECK: [[META661]] = !DILocation(line: 948, column: 98, scope: [[DBG647]])
-// CHECK: [[META662]] = !DILocation(line: 948, column: 107, scope: [[DBG647]])
-// CHECK: [[META663]] = !DILocation(line: 948, column: 116, scope: [[DBG647]])
-// CHECK: [[META664]] = !DILocation(line: 948, column: 140, scope: [[DBG647]])
-// CHECK: [[DBG665]] = !DILocation(line: 948, column: 143, scope: [[DBG647]])
-// CHECK: [[DBG666]] = distinct !DISubprogram(name: "Test_Func_ParamRegLimitUnexpandedStruct", linkageName: "_Z39Test_Func_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 986, type: [[META667:![0-9]+]], scopeLine: 986, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META669:![0-9]+]])
-// CHECK: [[META667]] = !DISubroutineType(types: [[META668:![0-9]+]])
-// CHECK: [[META668]] = !{null, [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META625]]}
-// CHECK: [[META669]] = !{[[META670]], [[META671]], [[META672]], [[META673]], [[META674]], [[META675]], [[META676]], [[META677]]}
-// CHECK: [[META670]] = !DILocalVariable(arg: 1, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META671]] = !DILocalVariable(arg: 2, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META672]] = !DILocalVariable(arg: 3, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META673]] = !DILocalVariable(arg: 4, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META674]] = !DILocalVariable(arg: 5, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META675]] = !DILocalVariable(arg: 6, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META676]] = !DILocalVariable(arg: 7, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META18]])
-// CHECK: [[META677]] = !DILocalVariable(arg: 8, scope: [[DBG666]], file: [[META4]], line: 986, type: [[META625]])
-// CHECK: [[META678]] = !DILocation(line: 986, column: 64, scope: [[DBG666]])
-// CHECK: [[META679]] = !DILocation(line: 986, column: 73, scope: [[DBG666]])
-// CHECK: [[META680]] = !DILocation(line: 986, column: 82, scope: [[DBG666]])
-// CHECK: [[META681]] = !DILocation(line: 986, column: 91, scope: [[DBG666]])
-// CHECK: [[META682]] = !DILocation(line: 986, column: 100, scope: [[DBG666]])
-// CHECK: [[META683]] = !DILocation(line: 986, column: 109, scope: [[DBG666]])
-// CHECK: [[META684]] = !DILocation(line: 986, column: 118, scope: [[DBG666]])
-// CHECK: [[META685]] = !DILocation(line: 986, column: 142, scope: [[DBG666]])
-// CHECK: [[DBG686]] = !DILocation(line: 986, column: 145, scope: [[DBG666]])
-// CHECK: [[DBG687]] = distinct !DISubprogram(name: "Test_Kern_ParamRegLimitUnexpandedStruct", linkageName: "_Z39Test_Kern_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 1024, type: [[META667]], scopeLine: 1024, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META688:![0-9]+]])
-// CHECK: [[META688]] = !{[[META689]], [[META690]], [[META691]], [[META692]], [[META693]], [[META694]], [[META695]], [[META696]]}
-// CHECK: [[META689]] = !DILocalVariable(arg: 1, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META690]] = !DILocalVariable(arg: 2, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META691]] = !DILocalVariable(arg: 3, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META692]] = !DILocalVariable(arg: 4, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META693]] = !DILocalVariable(arg: 5, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META694]] = !DILocalVariable(arg: 6, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META695]] = !DILocalVariable(arg: 7, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META18]])
-// CHECK: [[META696]] = !DILocalVariable(arg: 8, scope: [[DBG687]], file: [[META4]], line: 1024, type: [[META625]])
-// CHECK: [[META697]] = !DILocation(line: 1024, column: 64, scope: [[DBG687]])
-// CHECK: [[META698]] = !DILocation(line: 1024, column: 73, scope: [[DBG687]])
-// CHECK: [[META699]] = !DILocation(line: 1024, column: 82, scope: [[DBG687]])
-// CHECK: [[META700]] = !DILocation(line: 1024, column: 91, scope: [[DBG687]])
-// CHECK: [[META701]] = !DILocation(line: 1024, column: 100, scope: [[DBG687]])
-// CHECK: [[META702]] = !DILocation(line: 1024, column: 109, scope: [[DBG687]])
-// CHECK: [[META703]] = !DILocation(line: 1024, column: 118, scope: [[DBG687]])
-// CHECK: [[META704]] = !DILocation(line: 1024, column: 142, scope: [[DBG687]])
-// CHECK: [[DBG705]] = !DILocation(line: 1024, column: 145, scope: [[DBG687]])
+// CHECK: [[DBG25]] = distinct !DISubprogram(name: "Test_Func_StructEmpty", linkageName: "_Z21Test_Func_StructEmpty11StructEmpty", scope: [[META4]], file: [[META4]], line: 93, type: [[META26:![0-9]+]], scopeLine: 93, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META29:![0-9]+]])
+// CHECK: [[META26]] = !DISubroutineType(types: [[META27:![0-9]+]])
+// CHECK: [[META27]] = !{null, [[META28:![0-9]+]]}
+// CHECK: [[META28]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructEmpty", file: [[META4]], line: 32, size: 8, flags: DIFlagTypePassByValue, elements: [[META6]], identifier: "_ZTS11StructEmpty")
+// CHECK: [[META29]] = !{[[META30]]}
+// CHECK: [[META30]] = !DILocalVariable(arg: 1, scope: [[DBG25]], file: [[META4]], line: 93, type: [[META28]])
+// CHECK: [[META31]] = !DILocation(line: 93, column: 50, scope: [[DBG25]])
+// CHECK: [[DBG32]] = !DILocation(line: 93, column: 53, scope: [[DBG25]])
+// CHECK: [[DBG33]] = distinct !DISubprogram(name: "Test_Kern_StructEmpty", linkageName: "_Z21Test_Kern_StructEmpty11StructEmpty", scope: [[META4]], file: [[META4]], line: 103, type: [[META26]], scopeLine: 103, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META34:![0-9]+]])
+// CHECK: [[META34]] = !{[[META35]]}
+// CHECK: [[META35]] = !DILocalVariable(arg: 1, scope: [[DBG33]], file: [[META4]], line: 103, type: [[META28]])
+// CHECK: [[META36]] = !DILocation(line: 103, column: 50, scope: [[DBG33]])
+// CHECK: [[DBG37]] = !DILocation(line: 103, column: 53, scope: [[DBG33]])
+// CHECK: [[DBG38]] = distinct !DISubprogram(name: "Test_Func_StructSingleElement", linkageName: "_Z29Test_Func_StructSingleElement19StructSingleElement", scope: [[META4]], file: [[META4]], line: 114, type: [[META39:![0-9]+]], scopeLine: 114, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META44:![0-9]+]])
+// CHECK: [[META39]] = !DISubroutineType(types: [[META40:![0-9]+]])
+// CHECK: [[META40]] = !{null, [[META41:![0-9]+]]}
+// CHECK: [[META41]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSingleElement", file: [[META4]], line: 33, size: 8, flags: DIFlagTypePassByValue, elements: [[META42:![0-9]+]], identifier: "_ZTS19StructSingleElement")
+// CHECK: [[META42]] = !{[[META43:![0-9]+]]}
+// CHECK: [[META43]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META41]], file: [[META4]], line: 34, baseType: [[META5]], size: 8)
+// CHECK: [[META44]] = !{[[META45]]}
+// CHECK: [[META45]] = !DILocalVariable(arg: 1, scope: [[DBG38]], file: [[META4]], line: 114, type: [[META41]])
+// CHECK: [[META46]] = !DILocation(line: 114, column: 66, scope: [[DBG38]])
+// CHECK: [[DBG47]] = !DILocation(line: 114, column: 69, scope: [[DBG38]])
+// CHECK: [[DBG48]] = distinct !DISubprogram(name: "Test_Kern_StructSingleElement", linkageName: "_Z29Test_Kern_StructSingleElement19StructSingleElement", scope: [[META4]], file: [[META4]], line: 125, type: [[META39]], scopeLine: 125, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META49:![0-9]+]])
+// CHECK: [[META49]] = !{[[META50]]}
+// CHECK: [[META50]] = !DILocalVariable(arg: 1, scope: [[DBG48]], file: [[META4]], line: 125, type: [[META41]])
+// CHECK: [[META51]] = !DILocation(line: 125, column: 66, scope: [[DBG48]])
+// CHECK: [[DBG52]] = !DILocation(line: 125, column: 69, scope: [[DBG48]])
+// CHECK: [[DBG53]] = distinct !DISubprogram(name: "Test_Func_StructSingleElementRecursive", linkageName: "_Z38Test_Func_StructSingleElementRecursive28StructSingleElementRecursive", scope: [[META4]], file: [[META4]], line: 137, type: [[META54:![0-9]+]], scopeLine: 137, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META59:![0-9]+]])
+// CHECK: [[META54]] = !DISubroutineType(types: [[META55:![0-9]+]])
+// CHECK: [[META55]] = !{null, [[META56:![0-9]+]]}
+// CHECK: [[META56]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSingleElementRecursive", file: [[META4]], line: 36, size: 8, flags: DIFlagTypePassByValue, elements: [[META57:![0-9]+]], identifier: "_ZTS28StructSingleElementRecursive")
+// CHECK: [[META57]] = !{[[META58:![0-9]+]]}
+// CHECK: [[META58]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META56]], file: [[META4]], line: 37, baseType: [[META41]], size: 8)
+// CHECK: [[META59]] = !{[[META60]]}
+// CHECK: [[META60]] = !DILocalVariable(arg: 1, scope: [[DBG53]], file: [[META4]], line: 137, type: [[META56]])
+// CHECK: [[META61]] = !DILocation(line: 137, column: 84, scope: [[DBG53]])
+// CHECK: [[DBG62]] = !DILocation(line: 137, column: 87, scope: [[DBG53]])
+// CHECK: [[DBG63]] = distinct !DISubprogram(name: "Test_Kern_StructSingleElementRecursive", linkageName: "_Z38Test_Kern_StructSingleElementRecursive28StructSingleElementRecursive", scope: [[META4]], file: [[META4]], line: 149, type: [[META54]], scopeLine: 149, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META64:![0-9]+]])
+// CHECK: [[META64]] = !{[[META65]]}
+// CHECK: [[META65]] = !DILocalVariable(arg: 1, scope: [[DBG63]], file: [[META4]], line: 149, type: [[META56]])
+// CHECK: [[META66]] = !DILocation(line: 149, column: 84, scope: [[DBG63]])
+// CHECK: [[DBG67]] = !DILocation(line: 149, column: 87, scope: [[DBG63]])
+// CHECK: [[DBG68]] = distinct !DISubprogram(name: "Test_Func_StructTrivialCopyTrivialMove", linkageName: "_Z38Test_Func_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 160, type: [[META69:![0-9]+]], scopeLine: 160, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META84:![0-9]+]])
+// CHECK: [[META69]] = !DISubroutineType(types: [[META70:![0-9]+]])
+// CHECK: [[META70]] = !{null, [[META71:![0-9]+]]}
+// CHECK: [[META71]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructTrivialCopyTrivialMove", file: [[META4]], line: 39, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META72:![0-9]+]], identifier: "_ZTS28StructTrivialCopyTrivialMove")
+// CHECK: [[META72]] = !{[[META73:![0-9]+]], [[META74:![0-9]+]], [[META80:![0-9]+]]}
+// CHECK: [[META73]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META71]], file: [[META4]], line: 40, baseType: [[META5]], size: 8)
+// CHECK: [[META74]] = !DISubprogram(name: "StructTrivialCopyTrivialMove", linkageName: "_ZN28StructTrivialCopyTrivialMoveC4ERKS_", scope: [[META71]], file: [[META4]], line: 41, type: [[META75:![0-9]+]], scopeLine: 41, flags: DIFlagPrototyped, spFlags: 0)
+// CHECK: [[META75]] = !DISubroutineType(types: [[META76:![0-9]+]])
+// CHECK: [[META76]] = !{null, [[META77:![0-9]+]], [[META78:![0-9]+]]}
+// CHECK: [[META77]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META71]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
+// CHECK: [[META78]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META79:![0-9]+]], size: 64, addressSpace: 1)
+// CHECK: [[META79]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META71]])
+// CHECK: [[META80]] = !DISubprogram(name: "StructTrivialCopyTrivialMove", linkageName: "_ZN28StructTrivialCopyTrivialMoveC4EOS_", scope: [[META71]], file: [[META4]], line: 42, type: [[META81:![0-9]+]], scopeLine: 42, flags: DIFlagPrototyped, spFlags: 0)
+// CHECK: [[META81]] = !DISubroutineType(types: [[META82:![0-9]+]])
+// CHECK: [[META82]] = !{null, [[META77]], [[META83:![0-9]+]]}
+// CHECK: [[META83]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META71]], size: 64, addressSpace: 1)
+// CHECK: [[META84]] = !{[[META85]]}
+// CHECK: [[META85]] = !DILocalVariable(arg: 1, scope: [[DBG68]], file: [[META4]], line: 160, type: [[META71]])
+// CHECK: [[META86]] = !DILocation(line: 160, column: 84, scope: [[DBG68]])
+// CHECK: [[DBG87]] = !DILocation(line: 160, column: 87, scope: [[DBG68]])
+// CHECK: [[DBG88]] = distinct !DISubprogram(name: "Test_Kern_StructTrivialCopyTrivialMove", linkageName: "_Z38Test_Kern_StructTrivialCopyTrivialMove28StructTrivialCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 171, type: [[META69]], scopeLine: 171, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META89:![0-9]+]])
+// CHECK: [[META89]] = !{[[META90]]}
+// CHECK: [[META90]] = !DILocalVariable(arg: 1, scope: [[DBG88]], file: [[META4]], line: 171, type: [[META71]])
+// CHECK: [[META91]] = !DILocation(line: 171, column: 84, scope: [[DBG88]])
+// CHECK: [[DBG92]] = !DILocation(line: 171, column: 87, scope: [[DBG88]])
+// CHECK: [[DBG93]] = distinct !DISubprogram(name: "Test_Func_StructNoCopyTrivialMove", linkageName: "_Z33Test_Func_StructNoCopyTrivialMove23StructNoCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 182, type: [[META94:![0-9]+]], scopeLine: 182, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META109:![0-9]+]])
+// CHECK: [[META94]] = !DISubroutineType(types: [[META95:![0-9]+]])
+// CHECK: [[META95]] = !{null, [[META96:![0-9]+]]}
+// CHECK: [[META96]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNoCopyTrivialMove", file: [[META4]], line: 44, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META97:![0-9]+]], identifier: "_ZTS23StructNoCopyTrivialMove")
+// CHECK: [[META97]] = !{[[META98:![0-9]+]], [[META99:![0-9]+]], [[META105:![0-9]+]]}
+// CHECK: [[META98]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META96]], file: [[META4]], line: 45, baseType: [[META5]], size: 8)
+// CHECK: [[META99]] = !DISubprogram(name: "StructNoCopyTrivialMove", linkageName: "_ZN23StructNoCopyTrivialMoveC4ERKS_", scope: [[META96]], file: [[META4]], line: 46, type: [[META100:![0-9]+]], scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
+// CHECK: [[META100]] = !DISubroutineType(types: [[META101:![0-9]+]])
+// CHECK: [[META101]] = !{null, [[META102:![0-9]+]], [[META103:![0-9]+]]}
+// CHECK: [[META102]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META96]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
+// CHECK: [[META103]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META104:![0-9]+]], size: 64, addressSpace: 1)
+// CHECK: [[META104]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META96]])
+// CHECK: [[META105]] = !DISubprogram(name: "StructNoCopyTrivialMove", linkageName: "_ZN23StructNoCopyTrivialMoveC4EOS_", scope: [[META96]], file: [[META4]], line: 47, type: [[META106:![0-9]+]], scopeLine: 47, flags: DIFlagPrototyped, spFlags: 0)
+// CHECK: [[META106]] = !DISubroutineType(types: [[META107:![0-9]+]])
+// CHECK: [[META107]] = !{null, [[META102]], [[META108:![0-9]+]]}
+// CHECK: [[META108]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META96]], size: 64, addressSpace: 1)
+// CHECK: [[META109]] = !{[[META110]]}
+// CHECK: [[META110]] = !DILocalVariable(arg: 1, scope: [[DBG93]], file: [[META4]], line: 182, type: [[META96]])
+// CHECK: [[META111]] = !DILocation(line: 182, column: 74, scope: [[DBG93]])
+// CHECK: [[DBG112]] = !DILocation(line: 182, column: 77, scope: [[DBG93]])
+// CHECK: [[DBG113]] = distinct !DISubprogram(name: "Test_Kern_StructNoCopyTrivialMove", linkageName: "_Z33Test_Kern_StructNoCopyTrivialMove23StructNoCopyTrivialMove", scope: [[META4]], file: [[META4]], line: 193, type: [[META94]], scopeLine: 193, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META114:![0-9]+]])
+// CHECK: [[META114]] = !{[[META115]]}
+// CHECK: [[META115]] = !DILocalVariable(arg: 1, scope: [[DBG113]], file: [[META4]], line: 193, type: [[META96]])
+// CHECK: [[META116]] = !DILocation(line: 193, column: 74, scope: [[DBG113]])
+// CHECK: [[DBG117]] = !DILocation(line: 193, column: 77, scope: [[DBG113]])
+// CHECK: [[DBG118]] = distinct !DISubprogram(name: "Test_Func_StructTrivialCopyNoMove", linkageName: "_Z33Test_Func_StructTrivialCopyNoMove23StructTrivialCopyNoMove", scope: [[META4]], file: [[META4]], line: 204, type: [[META119:![0-9]+]], scopeLine: 204, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META134:![0-9]+]])
+// CHECK: [[META119]] = !DISubroutineType(types: [[META120:![0-9]+]])
+// CHECK: [[META120]] = !{null, [[META121:![0-9]+]]}
+// CHECK: [[META121]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructTrivialCopyNoMove", file: [[META4]], line: 49, size: 8, flags: DIFlagTypePassByValue | DIFlagNonTrivial, elements: [[META122:![0-9]+]], identifier: "_ZTS23StructTrivialCopyNoMove")
+// CHECK: [[META122]] = !{[[META123:![0-9]+]], [[META124:![0-9]+]], [[META130:![0-9]+]]}
+// CHECK: [[META123]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META121]], file: [[META4]], line: 50, baseType: [[META5]], size: 8)
+// CHECK: [[META124]] = !DISubprogram(name: "StructTrivialCopyNoMove", linkageName: "_ZN23StructTrivialCopyNoMoveC4ERKS_", scope: [[META121]], file: [[META4]], line: 51, type: [[META125:![0-9]+]], scopeLine: 51, flags: DIFlagPrototyped, spFlags: 0)
+// CHECK: [[META125]] = !DISubroutineType(types: [[META126:![0-9]+]])
+// CHECK: [[META126]] = !{null, [[META127:![0-9]+]], [[META128:![0-9]+]]}
+// CHECK: [[META127]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META121]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
+// CHECK: [[META128]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META129:![0-9]+]], size: 64, addressSpace: 1)
+// CHECK: [[META129]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META121]])
+// CHECK: [[META130]] = !DISubprogram(name: "StructTrivialCopyNoMove", linkageName: "_ZN23StructTrivialCopyNoMoveC4EOS_", scope: [[META121]], file: [[META4]], line: 52, type: [[META131:![0-9]+]], scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
+// CHECK: [[META131]] = !DISubroutineType(types: [[META132:![0-9]+]])
+// CHECK: [[META132]] = !{null, [[META127]], [[META133:![0-9]+]]}
+// CHECK: [[META133]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META121]], size: 64, addressSpace: 1)
+// CHECK: [[META134]] = !{[[META135]]}
+// CHECK: [[META135]] = !DILocalVariable(arg: 1, scope: [[DBG118]], file: [[META4]], line: 204, type: [[META121]])
+// CHECK: [[META136]] = !DILocation(line: 204, column: 74, scope: [[DBG118]])
+// CHECK: [[DBG137]] = !DILocation(line: 204, column: 77, scope: [[DBG118]])
+// CHECK: [[DBG138]] = distinct !DISubprogram(name: "Test_Kern_StructTrivialCopyNoMove", linkageName: "_Z33Test_Kern_StructTrivialCopyNoMove23StructTrivialCopyNoMove", scope: [[META4]], file: [[META4]], line: 215, type: [[META119]], scopeLine: 215, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META139:![0-9]+]])
+// CHECK: [[META139]] = !{[[META140]]}
+// CHECK: [[META140]] = !DILocalVariable(arg: 1, scope: [[DBG138]], file: [[META4]], line: 215, type: [[META121]])
+// CHECK: [[META141]] = !DILocation(line: 215, column: 74, scope: [[DBG138]])
+// CHECK: [[DBG142]] = !DILocation(line: 215, column: 77, scope: [[DBG138]])
+// CHECK: [[DBG143]] = distinct !DISubprogram(name: "Test_Func_StructNoCopyNoMove", linkageName: "_Z28Test_Func_StructNoCopyNoMove18StructNoCopyNoMove", scope: [[META4]], file: [[META4]], line: 225, type: [[META144:![0-9]+]], scopeLine: 225, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META159:![0-9]+]])
+// CHECK: [[META144]] = !DISubroutineType(types: [[META145:![0-9]+]])
+// CHECK: [[META145]] = !{null, [[META146:![0-9]+]]}
+// CHECK: [[META146]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNoCopyNoMove", file: [[META4]], line: 54, size: 8, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: [[META147:![0-9]+]], identifier: "_ZTS18StructNoCopyNoMove")
+// CHECK: [[META147]] = !{[[META148:![0-9]+]], [[META149:![0-9]+]], [[META155:![0-9]+]]}
+// CHECK: [[META148]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META146]], file: [[META4]], line: 55, baseType: [[META5]], size: 8)
+// CHECK: [[META149]] = !DISubprogram(name: "StructNoCopyNoMove", linkageName: "_ZN18StructNoCopyNoMoveC4ERKS_", scope: [[META146]], file: [[META4]], line: 56, type: [[META150:![0-9]+]], scopeLine: 56, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
+// CHECK: [[META150]] = !DISubroutineType(types: [[META151:![0-9]+]])
+// CHECK: [[META151]] = !{null, [[META152:![0-9]+]], [[META153:![0-9]+]]}
+// CHECK: [[META152]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META146]], size: 64, flags: DIFlagArtificial | DIFlagObjectPointer, addressSpace: 1)
+// CHECK: [[META153]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META154:![0-9]+]], size: 64, addressSpace: 1)
+// CHECK: [[META154]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[META146]])
+// CHECK: [[META155]] = !DISubprogram(name: "StructNoCopyNoMove", linkageName: "_ZN18StructNoCopyNoMoveC4EOS_", scope: [[META146]], file: [[META4]], line: 57, type: [[META156:![0-9]+]], scopeLine: 57, flags: DIFlagPrototyped, spFlags: DISPFlagDeleted)
+// CHECK: [[META156]] = !DISubroutineType(types: [[META157:![0-9]+]])
+// CHECK: [[META157]] = !{null, [[META152]], [[META158:![0-9]+]]}
+// CHECK: [[META158]] = !DIDerivedType(tag: DW_TAG_rvalue_reference_type, baseType: [[META146]], size: 64, addressSpace: 1)
+// CHECK: [[META159]] = !{[[META160]]}
+// CHECK: [[META160]] = !DILocalVariable(arg: 1, scope: [[DBG143]], file: [[META4]], line: 225, type: [[META146]])
+// CHECK: [[META161]] = !DILocation(line: 225, column: 64, scope: [[DBG143]])
+// CHECK: [[DBG162]] = !DILocation(line: 225, column: 67, scope: [[DBG143]])
+// CHECK: [[DBG163]] = distinct !DISubprogram(name: "Test_Kern_StructNoCopyNoMove", linkageName: "_Z28Test_Kern_StructNoCopyNoMove18StructNoCopyNoMove", scope: [[META4]], file: [[META4]], line: 236, type: [[META144]], scopeLine: 236, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META164:![0-9]+]])
+// CHECK: [[META164]] = !{[[META165]]}
+// CHECK: [[META165]] = !DILocalVariable(arg: 1, scope: [[DBG163]], file: [[META4]], line: 236, type: [[META146]])
+// CHECK: [[META166]] = !DILocation(line: 236, column: 64, scope: [[DBG163]])
+// CHECK: [[DBG167]] = !DILocation(line: 236, column: 67, scope: [[DBG163]])
+// CHECK: [[DBG168]] = distinct !DISubprogram(name: "Test_Func_Struct2Bytes", linkageName: "_Z22Test_Func_Struct2Bytes12StructNBytesILj2EE", scope: [[META4]], file: [[META4]], line: 246, type: [[META169:![0-9]+]], scopeLine: 246, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META180:![0-9]+]])
+// CHECK: [[META169]] = !DISubroutineType(types: [[META170:![0-9]+]])
+// CHECK: [[META170]] = !{null, [[META171:![0-9]+]]}
+// CHECK: [[META171]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<2U>", file: [[META4]], line: 60, size: 16, flags: DIFlagTypePassByValue, elements: [[META172:![0-9]+]], templateParams: [[META178:![0-9]+]], identifier: "_ZTS12StructNBytesILj2EE")
+// CHECK: [[META172]] = !{[[META173:![0-9]+]], [[META174:![0-9]+]]}
+// CHECK: [[META173]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META171]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META174]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META171]], file: [[META4]], line: 63, baseType: [[META175:![0-9]+]], size: 8, offset: 8)
+// CHECK: [[META175]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 8, elements: [[META176:![0-9]+]])
+// CHECK: [[META176]] = !{[[META177:![0-9]+]]}
+// CHECK: [[META177]] = !DISubrange(count: 1)
+// CHECK: [[META178]] = !{[[META179:![0-9]+]]}
+// CHECK: [[META179]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 2)
+// CHECK: [[META180]] = !{[[META181]]}
+// CHECK: [[META181]] = !DILocalVariable(arg: 1, scope: [[DBG168]], file: [[META4]], line: 246, type: [[META171]])
+// CHECK: [[META182]] = !DILocation(line: 246, column: 55, scope: [[DBG168]])
+// CHECK: [[DBG183]] = !DILocation(line: 246, column: 58, scope: [[DBG168]])
+// CHECK: [[DBG184]] = distinct !DISubprogram(name: "Test_Kern_Struct2Bytes", linkageName: "_Z22Test_Kern_Struct2Bytes12StructNBytesILj2EE", scope: [[META4]], file: [[META4]], line: 256, type: [[META169]], scopeLine: 256, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META185:![0-9]+]])
+// CHECK: [[META185]] = !{[[META186]]}
+// CHECK: [[META186]] = !DILocalVariable(arg: 1, scope: [[DBG184]], file: [[META4]], line: 256, type: [[META171]])
+// CHECK: [[META187]] = !DILocation(line: 256, column: 55, scope: [[DBG184]])
+// CHECK: [[DBG188]] = !DILocation(line: 256, column: 58, scope: [[DBG184]])
+// CHECK: [[DBG189]] = distinct !DISubprogram(name: "Test_Func_Struct3Bytes", linkageName: "_Z22Test_Func_Struct3Bytes12StructNBytesILj3EE", scope: [[META4]], file: [[META4]], line: 267, type: [[META190:![0-9]+]], scopeLine: 267, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META201:![0-9]+]])
+// CHECK: [[META190]] = !DISubroutineType(types: [[META191:![0-9]+]])
+// CHECK: [[META191]] = !{null, [[META192:![0-9]+]]}
+// CHECK: [[META192]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<3U>", file: [[META4]], line: 60, size: 24, flags: DIFlagTypePassByValue, elements: [[META193:![0-9]+]], templateParams: [[META199:![0-9]+]], identifier: "_ZTS12StructNBytesILj3EE")
+// CHECK: [[META193]] = !{[[META194:![0-9]+]], [[META195:![0-9]+]]}
+// CHECK: [[META194]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META192]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META195]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META192]], file: [[META4]], line: 63, baseType: [[META196:![0-9]+]], size: 16, offset: 8)
+// CHECK: [[META196]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 16, elements: [[META197:![0-9]+]])
+// CHECK: [[META197]] = !{[[META198:![0-9]+]]}
+// CHECK: [[META198]] = !DISubrange(count: 2)
+// CHECK: [[META199]] = !{[[META200:![0-9]+]]}
+// CHECK: [[META200]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 3)
+// CHECK: [[META201]] = !{[[META202]]}
+// CHECK: [[META202]] = !DILocalVariable(arg: 1, scope: [[DBG189]], file: [[META4]], line: 267, type: [[META192]])
+// CHECK: [[META203]] = !DILocation(line: 267, column: 55, scope: [[DBG189]])
+// CHECK: [[DBG204]] = !DILocation(line: 267, column: 58, scope: [[DBG189]])
+// CHECK: [[DBG205]] = distinct !DISubprogram(name: "Test_Kern_Struct3Bytes", linkageName: "_Z22Test_Kern_Struct3Bytes12StructNBytesILj3EE", scope: [[META4]], file: [[META4]], line: 277, type: [[META190]], scopeLine: 277, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META206:![0-9]+]])
+// CHECK: [[META206]] = !{[[META207]]}
+// CHECK: [[META207]] = !DILocalVariable(arg: 1, scope: [[DBG205]], file: [[META4]], line: 277, type: [[META192]])
+// CHECK: [[META208]] = !DILocation(line: 277, column: 55, scope: [[DBG205]])
+// CHECK: [[DBG209]] = !DILocation(line: 277, column: 58, scope: [[DBG205]])
+// CHECK: [[DBG210]] = distinct !DISubprogram(name: "Test_Func_Struct4Bytes", linkageName: "_Z22Test_Func_Struct4Bytes12StructNBytesILj4EE", scope: [[META4]], file: [[META4]], line: 287, type: [[META211:![0-9]+]], scopeLine: 287, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META222:![0-9]+]])
+// CHECK: [[META211]] = !DISubroutineType(types: [[META212:![0-9]+]])
+// CHECK: [[META212]] = !{null, [[META213:![0-9]+]]}
+// CHECK: [[META213]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<4U>", file: [[META4]], line: 60, size: 32, flags: DIFlagTypePassByValue, elements: [[META214:![0-9]+]], templateParams: [[META220:![0-9]+]], identifier: "_ZTS12StructNBytesILj4EE")
+// CHECK: [[META214]] = !{[[META215:![0-9]+]], [[META216:![0-9]+]]}
+// CHECK: [[META215]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META213]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META216]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META213]], file: [[META4]], line: 63, baseType: [[META217:![0-9]+]], size: 24, offset: 8)
+// CHECK: [[META217]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 24, elements: [[META218:![0-9]+]])
+// CHECK: [[META218]] = !{[[META219:![0-9]+]]}
+// CHECK: [[META219]] = !DISubrange(count: 3)
+// CHECK: [[META220]] = !{[[META221:![0-9]+]]}
+// CHECK: [[META221]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 4)
+// CHECK: [[META222]] = !{[[META223]]}
+// CHECK: [[META223]] = !DILocalVariable(arg: 1, scope: [[DBG210]], file: [[META4]], line: 287, type: [[META213]])
+// CHECK: [[META224]] = !DILocation(line: 287, column: 55, scope: [[DBG210]])
+// CHECK: [[DBG225]] = !DILocation(line: 287, column: 58, scope: [[DBG210]])
+// CHECK: [[DBG226]] = distinct !DISubprogram(name: "Test_Kern_Struct4Bytes", linkageName: "_Z22Test_Kern_Struct4Bytes12StructNBytesILj4EE", scope: [[META4]], file: [[META4]], line: 297, type: [[META211]], scopeLine: 297, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META227:![0-9]+]])
+// CHECK: [[META227]] = !{[[META228]]}
+// CHECK: [[META228]] = !DILocalVariable(arg: 1, scope: [[DBG226]], file: [[META4]], line: 297, type: [[META213]])
+// CHECK: [[META229]] = !DILocation(line: 297, column: 55, scope: [[DBG226]])
+// CHECK: [[DBG230]] = !DILocation(line: 297, column: 58, scope: [[DBG226]])
+// CHECK: [[DBG231]] = distinct !DISubprogram(name: "Test_Func_Struct5Bytes", linkageName: "_Z22Test_Func_Struct5Bytes12StructNBytesILj5EE", scope: [[META4]], file: [[META4]], line: 310, type: [[META232:![0-9]+]], scopeLine: 310, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META243:![0-9]+]])
+// CHECK: [[META232]] = !DISubroutineType(types: [[META233:![0-9]+]])
+// CHECK: [[META233]] = !{null, [[META234:![0-9]+]]}
+// CHECK: [[META234]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<5U>", file: [[META4]], line: 60, size: 40, flags: DIFlagTypePassByValue, elements: [[META235:![0-9]+]], templateParams: [[META241:![0-9]+]], identifier: "_ZTS12StructNBytesILj5EE")
+// CHECK: [[META235]] = !{[[META236:![0-9]+]], [[META237:![0-9]+]]}
+// CHECK: [[META236]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META234]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META237]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META234]], file: [[META4]], line: 63, baseType: [[META238:![0-9]+]], size: 32, offset: 8)
+// CHECK: [[META238]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 32, elements: [[META239:![0-9]+]])
+// CHECK: [[META239]] = !{[[META240:![0-9]+]]}
+// CHECK: [[META240]] = !DISubrange(count: 4)
+// CHECK: [[META241]] = !{[[META242:![0-9]+]]}
+// CHECK: [[META242]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 5)
+// CHECK: [[META243]] = !{[[META244]]}
+// CHECK: [[META244]] = !DILocalVariable(arg: 1, scope: [[DBG231]], file: [[META4]], line: 310, type: [[META234]])
+// CHECK: [[META245]] = !DILocation(line: 310, column: 55, scope: [[DBG231]])
+// CHECK: [[DBG246]] = !DILocation(line: 310, column: 58, scope: [[DBG231]])
+// CHECK: [[DBG247]] = distinct !DISubprogram(name: "Test_Kern_Struct5Bytes", linkageName: "_Z22Test_Kern_Struct5Bytes12StructNBytesILj5EE", scope: [[META4]], file: [[META4]], line: 320, type: [[META232]], scopeLine: 320, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META248:![0-9]+]])
+// CHECK: [[META248]] = !{[[META249]]}
+// CHECK: [[META249]] = !DILocalVariable(arg: 1, scope: [[DBG247]], file: [[META4]], line: 320, type: [[META234]])
+// CHECK: [[META250]] = !DILocation(line: 320, column: 55, scope: [[DBG247]])
+// CHECK: [[DBG251]] = !DILocation(line: 320, column: 58, scope: [[DBG247]])
+// CHECK: [[DBG252]] = distinct !DISubprogram(name: "Test_Func_Struct6Bytes", linkageName: "_Z22Test_Func_Struct6Bytes12StructNBytesILj6EE", scope: [[META4]], file: [[META4]], line: 333, type: [[META253:![0-9]+]], scopeLine: 333, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META264:![0-9]+]])
+// CHECK: [[META253]] = !DISubroutineType(types: [[META254:![0-9]+]])
+// CHECK: [[META254]] = !{null, [[META255:![0-9]+]]}
+// CHECK: [[META255]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<6U>", file: [[META4]], line: 60, size: 48, flags: DIFlagTypePassByValue, elements: [[META256:![0-9]+]], templateParams: [[META262:![0-9]+]], identifier: "_ZTS12StructNBytesILj6EE")
+// CHECK: [[META256]] = !{[[META257:![0-9]+]], [[META258:![0-9]+]]}
+// CHECK: [[META257]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META255]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META258]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META255]], file: [[META4]], line: 63, baseType: [[META259:![0-9]+]], size: 40, offset: 8)
+// CHECK: [[META259]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 40, elements: [[META260:![0-9]+]])
+// CHECK: [[META260]] = !{[[META261:![0-9]+]]}
+// CHECK: [[META261]] = !DISubrange(count: 5)
+// CHECK: [[META262]] = !{[[META263:![0-9]+]]}
+// CHECK: [[META263]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 6)
+// CHECK: [[META264]] = !{[[META265]]}
+// CHECK: [[META265]] = !DILocalVariable(arg: 1, scope: [[DBG252]], file: [[META4]], line: 333, type: [[META255]])
+// CHECK: [[META266]] = !DILocation(line: 333, column: 55, scope: [[DBG252]])
+// CHECK: [[DBG267]] = !DILocation(line: 333, column: 58, scope: [[DBG252]])
+// CHECK: [[DBG268]] = distinct !DISubprogram(name: "Test_Kern_Struct6Bytes", linkageName: "_Z22Test_Kern_Struct6Bytes12StructNBytesILj6EE", scope: [[META4]], file: [[META4]], line: 343, type: [[META253]], scopeLine: 343, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META269:![0-9]+]])
+// CHECK: [[META269]] = !{[[META270]]}
+// CHECK: [[META270]] = !DILocalVariable(arg: 1, scope: [[DBG268]], file: [[META4]], line: 343, type: [[META255]])
+// CHECK: [[META271]] = !DILocation(line: 343, column: 55, scope: [[DBG268]])
+// CHECK: [[DBG272]] = !DILocation(line: 343, column: 58, scope: [[DBG268]])
+// CHECK: [[DBG273]] = distinct !DISubprogram(name: "Test_Func_Struct7Bytes", linkageName: "_Z22Test_Func_Struct7Bytes12StructNBytesILj7EE", scope: [[META4]], file: [[META4]], line: 356, type: [[META274:![0-9]+]], scopeLine: 356, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META285:![0-9]+]])
+// CHECK: [[META274]] = !DISubroutineType(types: [[META275:![0-9]+]])
+// CHECK: [[META275]] = !{null, [[META276:![0-9]+]]}
+// CHECK: [[META276]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<7U>", file: [[META4]], line: 60, size: 56, flags: DIFlagTypePassByValue, elements: [[META277:![0-9]+]], templateParams: [[META283:![0-9]+]], identifier: "_ZTS12StructNBytesILj7EE")
+// CHECK: [[META277]] = !{[[META278:![0-9]+]], [[META279:![0-9]+]]}
+// CHECK: [[META278]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META276]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META279]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META276]], file: [[META4]], line: 63, baseType: [[META280:![0-9]+]], size: 48, offset: 8)
+// CHECK: [[META280]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 48, elements: [[META281:![0-9]+]])
+// CHECK: [[META281]] = !{[[META282:![0-9]+]]}
+// CHECK: [[META282]] = !DISubrange(count: 6)
+// CHECK: [[META283]] = !{[[META284:![0-9]+]]}
+// CHECK: [[META284]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 7)
+// CHECK: [[META285]] = !{[[META286]]}
+// CHECK: [[META286]] = !DILocalVariable(arg: 1, scope: [[DBG273]], file: [[META4]], line: 356, type: [[META276]])
+// CHECK: [[META287]] = !DILocation(line: 356, column: 55, scope: [[DBG273]])
+// CHECK: [[DBG288]] = !DILocation(line: 356, column: 58, scope: [[DBG273]])
+// CHECK: [[DBG289]] = distinct !DISubprogram(name: "Test_Kern_Struct7Bytes", linkageName: "_Z22Test_Kern_Struct7Bytes12StructNBytesILj7EE", scope: [[META4]], file: [[META4]], line: 366, type: [[META274]], scopeLine: 366, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META290:![0-9]+]])
+// CHECK: [[META290]] = !{[[META291]]}
+// CHECK: [[META291]] = !DILocalVariable(arg: 1, scope: [[DBG289]], file: [[META4]], line: 366, type: [[META276]])
+// CHECK: [[META292]] = !DILocation(line: 366, column: 55, scope: [[DBG289]])
+// CHECK: [[DBG293]] = !DILocation(line: 366, column: 58, scope: [[DBG289]])
+// CHECK: [[DBG294]] = distinct !DISubprogram(name: "Test_Func_Struct8Bytes", linkageName: "_Z22Test_Func_Struct8Bytes12StructNBytesILj8EE", scope: [[META4]], file: [[META4]], line: 376, type: [[META295:![0-9]+]], scopeLine: 376, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META306:![0-9]+]])
+// CHECK: [[META295]] = !DISubroutineType(types: [[META296:![0-9]+]])
+// CHECK: [[META296]] = !{null, [[META297:![0-9]+]]}
+// CHECK: [[META297]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<8U>", file: [[META4]], line: 60, size: 64, flags: DIFlagTypePassByValue, elements: [[META298:![0-9]+]], templateParams: [[META304:![0-9]+]], identifier: "_ZTS12StructNBytesILj8EE")
+// CHECK: [[META298]] = !{[[META299:![0-9]+]], [[META300:![0-9]+]]}
+// CHECK: [[META299]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META297]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META300]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META297]], file: [[META4]], line: 63, baseType: [[META301:![0-9]+]], size: 56, offset: 8)
+// CHECK: [[META301]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 56, elements: [[META302:![0-9]+]])
+// CHECK: [[META302]] = !{[[META303:![0-9]+]]}
+// CHECK: [[META303]] = !DISubrange(count: 7)
+// CHECK: [[META304]] = !{[[META305:![0-9]+]]}
+// CHECK: [[META305]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 8)
+// CHECK: [[META306]] = !{[[META307]]}
+// CHECK: [[META307]] = !DILocalVariable(arg: 1, scope: [[DBG294]], file: [[META4]], line: 376, type: [[META297]])
+// CHECK: [[META308]] = !DILocation(line: 376, column: 55, scope: [[DBG294]])
+// CHECK: [[DBG309]] = !DILocation(line: 376, column: 58, scope: [[DBG294]])
+// CHECK: [[DBG310]] = distinct !DISubprogram(name: "Test_Kern_Struct8Bytes", linkageName: "_Z22Test_Kern_Struct8Bytes12StructNBytesILj8EE", scope: [[META4]], file: [[META4]], line: 386, type: [[META295]], scopeLine: 386, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META311:![0-9]+]])
+// CHECK: [[META311]] = !{[[META312]]}
+// CHECK: [[META312]] = !DILocalVariable(arg: 1, scope: [[DBG310]], file: [[META4]], line: 386, type: [[META297]])
+// CHECK: [[META313]] = !DILocation(line: 386, column: 55, scope: [[DBG310]])
+// CHECK: [[DBG314]] = !DILocation(line: 386, column: 58, scope: [[DBG310]])
+// CHECK: [[DBG315]] = distinct !DISubprogram(name: "Test_Func_Struct9Bytes", linkageName: "_Z22Test_Func_Struct9Bytes12StructNBytesILj9EE", scope: [[META4]], file: [[META4]], line: 399, type: [[META316:![0-9]+]], scopeLine: 399, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META327:![0-9]+]])
+// CHECK: [[META316]] = !DISubroutineType(types: [[META317:![0-9]+]])
+// CHECK: [[META317]] = !{null, [[META318:![0-9]+]]}
+// CHECK: [[META318]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<9U>", file: [[META4]], line: 60, size: 72, flags: DIFlagTypePassByValue, elements: [[META319:![0-9]+]], templateParams: [[META325:![0-9]+]], identifier: "_ZTS12StructNBytesILj9EE")
+// CHECK: [[META319]] = !{[[META320:![0-9]+]], [[META321:![0-9]+]]}
+// CHECK: [[META320]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META318]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META321]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META318]], file: [[META4]], line: 63, baseType: [[META322:![0-9]+]], size: 64, offset: 8)
+// CHECK: [[META322]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 64, elements: [[META323:![0-9]+]])
+// CHECK: [[META323]] = !{[[META324:![0-9]+]]}
+// CHECK: [[META324]] = !DISubrange(count: 8)
+// CHECK: [[META325]] = !{[[META326:![0-9]+]]}
+// CHECK: [[META326]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 9)
+// CHECK: [[META327]] = !{[[META328]]}
+// CHECK: [[META328]] = !DILocalVariable(arg: 1, scope: [[DBG315]], file: [[META4]], line: 399, type: [[META318]])
+// CHECK: [[META329]] = !DILocation(line: 399, column: 55, scope: [[DBG315]])
+// CHECK: [[DBG330]] = !DILocation(line: 399, column: 58, scope: [[DBG315]])
+// CHECK: [[DBG331]] = distinct !DISubprogram(name: "Test_Kern_Struct9Bytes", linkageName: "_Z22Test_Kern_Struct9Bytes12StructNBytesILj9EE", scope: [[META4]], file: [[META4]], line: 409, type: [[META316]], scopeLine: 409, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META332:![0-9]+]])
+// CHECK: [[META332]] = !{[[META333]]}
+// CHECK: [[META333]] = !DILocalVariable(arg: 1, scope: [[DBG331]], file: [[META4]], line: 409, type: [[META318]])
+// CHECK: [[META334]] = !DILocation(line: 409, column: 55, scope: [[DBG331]])
+// CHECK: [[DBG335]] = !DILocation(line: 409, column: 58, scope: [[DBG331]])
+// CHECK: [[DBG336]] = distinct !DISubprogram(name: "Test_Func_Struct64Bytes", linkageName: "_Z23Test_Func_Struct64Bytes12StructNBytesILj64EE", scope: [[META4]], file: [[META4]], line: 419, type: [[META337:![0-9]+]], scopeLine: 419, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META348:![0-9]+]])
+// CHECK: [[META337]] = !DISubroutineType(types: [[META338:![0-9]+]])
+// CHECK: [[META338]] = !{null, [[META339:![0-9]+]]}
+// CHECK: [[META339]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructNBytes<64U>", file: [[META4]], line: 60, size: 512, flags: DIFlagTypePassByValue, elements: [[META340:![0-9]+]], templateParams: [[META346:![0-9]+]], identifier: "_ZTS12StructNBytesILj64EE")
+// CHECK: [[META340]] = !{[[META341:![0-9]+]], [[META342:![0-9]+]]}
+// CHECK: [[META341]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META339]], file: [[META4]], line: 62, baseType: [[META5]], size: 8)
+// CHECK: [[META342]] = !DIDerivedType(tag: DW_TAG_member, name: "Elements", scope: [[META339]], file: [[META4]], line: 63, baseType: [[META343:![0-9]+]], size: 504, offset: 8)
+// CHECK: [[META343]] = !DICompositeType(tag: DW_TAG_array_type, baseType: [[META5]], size: 504, elements: [[META344:![0-9]+]])
+// CHECK: [[META344]] = !{[[META345:![0-9]+]]}
+// CHECK: [[META345]] = !DISubrange(count: 63)
+// CHECK: [[META346]] = !{[[META347:![0-9]+]]}
+// CHECK: [[META347]] = !DITemplateValueParameter(name: "N", type: [[META16]], value: i32 64)
+// CHECK: [[META348]] = !{[[META349]]}
+// CHECK: [[META349]] = !DILocalVariable(arg: 1, scope: [[DBG336]], file: [[META4]], line: 419, type: [[META339]])
+// CHECK: [[META350]] = !DILocation(line: 419, column: 57, scope: [[DBG336]])
+// CHECK: [[DBG351]] = !DILocation(line: 419, column: 60, scope: [[DBG336]])
+// CHECK: [[DBG352]] = distinct !DISubprogram(name: "Test_Kern_Struct64Bytes", linkageName: "_Z23Test_Kern_Struct64Bytes12StructNBytesILj64EE", scope: [[META4]], file: [[META4]], line: 429, type: [[META337]], scopeLine: 429, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META353:![0-9]+]])
+// CHECK: [[META353]] = !{[[META354]]}
+// CHECK: [[META354]] = !DILocalVariable(arg: 1, scope: [[DBG352]], file: [[META4]], line: 429, type: [[META339]])
+// CHECK: [[META355]] = !DILocation(line: 429, column: 57, scope: [[DBG352]])
+// CHECK: [[DBG356]] = !DILocation(line: 429, column: 60, scope: [[DBG352]])
+// CHECK: [[DBG357]] = distinct !DISubprogram(name: "Test_Func_Int8T", linkageName: "_Z15Test_Func_Int8Tc", scope: [[META4]], file: [[META4]], line: 439, type: [[META358:![0-9]+]], scopeLine: 439, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META360:![0-9]+]])
+// CHECK: [[META358]] = !DISubroutineType(types: [[META359:![0-9]+]])
+// CHECK: [[META359]] = !{null, [[META5]]}
+// CHECK: [[META360]] = !{[[META361]]}
+// CHECK: [[META361]] = !DILocalVariable(arg: 1, scope: [[DBG357]], file: [[META4]], line: 439, type: [[META5]])
+// CHECK: [[META362]] = !DILocation(line: 439, column: 39, scope: [[DBG357]])
+// CHECK: [[DBG363]] = !DILocation(line: 439, column: 42, scope: [[DBG357]])
+// CHECK: [[DBG364]] = distinct !DISubprogram(name: "Test_Kern_Int8T", linkageName: "_Z15Test_Kern_Int8Tc", scope: [[META4]], file: [[META4]], line: 449, type: [[META358]], scopeLine: 449, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META365:![0-9]+]])
+// CHECK: [[META365]] = !{[[META366]]}
+// CHECK: [[META366]] = !DILocalVariable(arg: 1, scope: [[DBG364]], file: [[META4]], line: 449, type: [[META5]])
+// CHECK: [[META367]] = !DILocation(line: 449, column: 39, scope: [[DBG364]])
+// CHECK: [[DBG368]] = !DILocation(line: 449, column: 42, scope: [[DBG364]])
+// CHECK: [[DBG369]] = distinct !DISubprogram(name: "Test_Func_UInt8T", linkageName: "_Z16Test_Func_UInt8Th", scope: [[META4]], file: [[META4]], line: 459, type: [[META370:![0-9]+]], scopeLine: 459, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META372:![0-9]+]])
+// CHECK: [[META370]] = !DISubroutineType(types: [[META371:![0-9]+]])
+// CHECK: [[META371]] = !{null, [[META8]]}
+// CHECK: [[META372]] = !{[[META373]]}
+// CHECK: [[META373]] = !DILocalVariable(arg: 1, scope: [[DBG369]], file: [[META4]], line: 459, type: [[META8]])
+// CHECK: [[META374]] = !DILocation(line: 459, column: 41, scope: [[DBG369]])
+// CHECK: [[DBG375]] = !DILocation(line: 459, column: 44, scope: [[DBG369]])
+// CHECK: [[DBG376]] = distinct !DISubprogram(name: "Test_Kern_UInt8T", linkageName: "_Z16Test_Kern_UInt8Th", scope: [[META4]], file: [[META4]], line: 469, type: [[META370]], scopeLine: 469, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META377:![0-9]+]])
+// CHECK: [[META377]] = !{[[META378]]}
+// CHECK: [[META378]] = !DILocalVariable(arg: 1, scope: [[DBG376]], file: [[META4]], line: 469, type: [[META8]])
+// CHECK: [[META379]] = !DILocation(line: 469, column: 41, scope: [[DBG376]])
+// CHECK: [[DBG380]] = !DILocation(line: 469, column: 44, scope: [[DBG376]])
+// CHECK: [[DBG381]] = distinct !DISubprogram(name: "Test_Func_Int16T", linkageName: "_Z16Test_Func_Int16Ts", scope: [[META4]], file: [[META4]], line: 479, type: [[META382:![0-9]+]], scopeLine: 479, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META384:![0-9]+]])
+// CHECK: [[META382]] = !DISubroutineType(types: [[META383:![0-9]+]])
+// CHECK: [[META383]] = !{null, [[META10]]}
+// CHECK: [[META384]] = !{[[META385]]}
+// CHECK: [[META385]] = !DILocalVariable(arg: 1, scope: [[DBG381]], file: [[META4]], line: 479, type: [[META10]])
+// CHECK: [[META386]] = !DILocation(line: 479, column: 41, scope: [[DBG381]])
+// CHECK: [[DBG387]] = !DILocation(line: 479, column: 44, scope: [[DBG381]])
+// CHECK: [[DBG388]] = distinct !DISubprogram(name: "Test_Kern_Int16T", linkageName: "_Z16Test_Kern_Int16Ts", scope: [[META4]], file: [[META4]], line: 489, type: [[META382]], scopeLine: 489, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META389:![0-9]+]])
+// CHECK: [[META389]] = !{[[META390]]}
+// CHECK: [[META390]] = !DILocalVariable(arg: 1, scope: [[DBG388]], file: [[META4]], line: 489, type: [[META10]])
+// CHECK: [[META391]] = !DILocation(line: 489, column: 41, scope: [[DBG388]])
+// CHECK: [[DBG392]] = !DILocation(line: 489, column: 44, scope: [[DBG388]])
+// CHECK: [[DBG393]] = distinct !DISubprogram(name: "Test_Func_UInt16T", linkageName: "_Z17Test_Func_UInt16Tt", scope: [[META4]], file: [[META4]], line: 499, type: [[META394:![0-9]+]], scopeLine: 499, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META396:![0-9]+]])
+// CHECK: [[META394]] = !DISubroutineType(types: [[META395:![0-9]+]])
+// CHECK: [[META395]] = !{null, [[META12]]}
+// CHECK: [[META396]] = !{[[META397]]}
+// CHECK: [[META397]] = !DILocalVariable(arg: 1, scope: [[DBG393]], file: [[META4]], line: 499, type: [[META12]])
+// CHECK: [[META398]] = !DILocation(line: 499, column: 43, scope: [[DBG393]])
+// CHECK: [[DBG399]] = !DILocation(line: 499, column: 46, scope: [[DBG393]])
+// CHECK: [[DBG400]] = distinct !DISubprogram(name: "Test_Kern_UInt16T", linkageName: "_Z17Test_Kern_UInt16Tt", scope: [[META4]], file: [[META4]], line: 509, type: [[META394]], scopeLine: 509, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META401:![0-9]+]])
+// CHECK: [[META401]] = !{[[META402]]}
+// CHECK: [[META402]] = !DILocalVariable(arg: 1, scope: [[DBG400]], file: [[META4]], line: 509, type: [[META12]])
+// CHECK: [[META403]] = !DILocation(line: 509, column: 43, scope: [[DBG400]])
+// CHECK: [[DBG404]] = !DILocation(line: 509, column: 46, scope: [[DBG400]])
+// CHECK: [[DBG405]] = distinct !DISubprogram(name: "Test_Func_Int32T", linkageName: "_Z16Test_Func_Int32Ti", scope: [[META4]], file: [[META4]], line: 519, type: [[META406:![0-9]+]], scopeLine: 519, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META408:![0-9]+]])
+// CHECK: [[META406]] = !DISubroutineType(types: [[META407:![0-9]+]])
+// CHECK: [[META407]] = !{null, [[META14]]}
+// CHECK: [[META408]] = !{[[META409]]}
+// CHECK: [[META409]] = !DILocalVariable(arg: 1, scope: [[DBG405]], file: [[META4]], line: 519, type: [[META14]])
+// CHECK: [[META410]] = !DILocation(line: 519, column: 41, scope: [[DBG405]])
+// CHECK: [[DBG411]] = !DILocation(line: 519, column: 44, scope: [[DBG405]])
+// CHECK: [[DBG412]] = distinct !DISubprogram(name: "Test_Kern_Int32T", linkageName: "_Z16Test_Kern_Int32Ti", scope: [[META4]], file: [[META4]], line: 529, type: [[META406]], scopeLine: 529, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META413:![0-9]+]])
+// CHECK: [[META413]] = !{[[META414]]}
+// CHECK: [[META414]] = !DILocalVariable(arg: 1, scope: [[DBG412]], file: [[META4]], line: 529, type: [[META14]])
+// CHECK: [[META415]] = !DILocation(line: 529, column: 41, scope: [[DBG412]])
+// CHECK: [[DBG416]] = !DILocation(line: 529, column: 44, scope: [[DBG412]])
+// CHECK: [[DBG417]] = distinct !DISubprogram(name: "Test_Func_UInt32T", linkageName: "_Z17Test_Func_UInt32Tj", scope: [[META4]], file: [[META4]], line: 539, type: [[META418:![0-9]+]], scopeLine: 539, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META420:![0-9]+]])
+// CHECK: [[META418]] = !DISubroutineType(types: [[META419:![0-9]+]])
+// CHECK: [[META419]] = !{null, [[META16]]}
+// CHECK: [[META420]] = !{[[META421]]}
+// CHECK: [[META421]] = !DILocalVariable(arg: 1, scope: [[DBG417]], file: [[META4]], line: 539, type: [[META16]])
+// CHECK: [[META422]] = !DILocation(line: 539, column: 43, scope: [[DBG417]])
+// CHECK: [[DBG423]] = !DILocation(line: 539, column: 46, scope: [[DBG417]])
+// CHECK: [[DBG424]] = distinct !DISubprogram(name: "Test_Kern_UInt32T", linkageName: "_Z17Test_Kern_UInt32Tj", scope: [[META4]], file: [[META4]], line: 549, type: [[META418]], scopeLine: 549, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META425:![0-9]+]])
+// CHECK: [[META425]] = !{[[META426]]}
+// CHECK: [[META426]] = !DILocalVariable(arg: 1, scope: [[DBG424]], file: [[META4]], line: 549, type: [[META16]])
+// CHECK: [[META427]] = !DILocation(line: 549, column: 43, scope: [[DBG424]])
+// CHECK: [[DBG428]] = !DILocation(line: 549, column: 46, scope: [[DBG424]])
+// CHECK: [[DBG429]] = distinct !DISubprogram(name: "Test_Func_Int64T", linkageName: "_Z16Test_Func_Int64Tl", scope: [[META4]], file: [[META4]], line: 559, type: [[META430:![0-9]+]], scopeLine: 559, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META432:![0-9]+]])
+// CHECK: [[META430]] = !DISubroutineType(types: [[META431:![0-9]+]])
+// CHECK: [[META431]] = !{null, [[META18]]}
+// CHECK: [[META432]] = !{[[META433]]}
+// CHECK: [[META433]] = !DILocalVariable(arg: 1, scope: [[DBG429]], file: [[META4]], line: 559, type: [[META18]])
+// CHECK: [[META434]] = !DILocation(line: 559, column: 41, scope: [[DBG429]])
+// CHECK: [[DBG435]] = !DILocation(line: 559, column: 44, scope: [[DBG429]])
+// CHECK: [[DBG436]] = distinct !DISubprogram(name: "Test_Kern_Int64T", linkageName: "_Z16Test_Kern_Int64Tl", scope: [[META4]], file: [[META4]], line: 569, type: [[META430]], scopeLine: 569, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META437:![0-9]+]])
+// CHECK: [[META437]] = !{[[META438]]}
+// CHECK: [[META438]] = !DILocalVariable(arg: 1, scope: [[DBG436]], file: [[META4]], line: 569, type: [[META18]])
+// CHECK: [[META439]] = !DILocation(line: 569, column: 41, scope: [[DBG436]])
+// CHECK: [[DBG440]] = !DILocation(line: 569, column: 44, scope: [[DBG436]])
+// CHECK: [[DBG441]] = distinct !DISubprogram(name: "Test_Func_UInt64T", linkageName: "_Z17Test_Func_UInt64Tm", scope: [[META4]], file: [[META4]], line: 579, type: [[META442:![0-9]+]], scopeLine: 579, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META444:![0-9]+]])
+// CHECK: [[META442]] = !DISubroutineType(types: [[META443:![0-9]+]])
+// CHECK: [[META443]] = !{null, [[META20]]}
+// CHECK: [[META444]] = !{[[META445]]}
+// CHECK: [[META445]] = !DILocalVariable(arg: 1, scope: [[DBG441]], file: [[META4]], line: 579, type: [[META20]])
+// CHECK: [[META446]] = !DILocation(line: 579, column: 43, scope: [[DBG441]])
+// CHECK: [[DBG447]] = !DILocation(line: 579, column: 46, scope: [[DBG441]])
+// CHECK: [[DBG448]] = distinct !DISubprogram(name: "Test_Kern_UInt64T", linkageName: "_Z17Test_Kern_UInt64Tm", scope: [[META4]], file: [[META4]], line: 589, type: [[META442]], scopeLine: 589, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META449:![0-9]+]])
+// CHECK: [[META449]] = !{[[META450]]}
+// CHECK: [[META450]] = !DILocalVariable(arg: 1, scope: [[DBG448]], file: [[META4]], line: 589, type: [[META20]])
+// CHECK: [[META451]] = !DILocation(line: 589, column: 43, scope: [[DBG448]])
+// CHECK: [[DBG452]] = !DILocation(line: 589, column: 46, scope: [[DBG448]])
+// CHECK: [[DBG453]] = distinct !DISubprogram(name: "Test_Func_EnumInt8T", linkageName: "_Z19Test_Func_EnumInt8T9EnumInt8T", scope: [[META4]], file: [[META4]], line: 599, type: [[META454:![0-9]+]], scopeLine: 599, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META456:![0-9]+]])
+// CHECK: [[META454]] = !DISubroutineType(types: [[META455:![0-9]+]])
+// CHECK: [[META455]] = !{null, [[META3]]}
+// CHECK: [[META456]] = !{[[META457]]}
+// CHECK: [[META457]] = !DILocalVariable(arg: 1, scope: [[DBG453]], file: [[META4]], line: 599, type: [[META3]])
+// CHECK: [[META458]] = !DILocation(line: 599, column: 46, scope: [[DBG453]])
+// CHECK: [[DBG459]] = !DILocation(line: 599, column: 49, scope: [[DBG453]])
+// CHECK: [[DBG460]] = distinct !DISubprogram(name: "Test_Kern_EnumInt8T", linkageName: "_Z19Test_Kern_EnumInt8T9EnumInt8T", scope: [[META4]], file: [[META4]], line: 609, type: [[META454]], scopeLine: 609, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META461:![0-9]+]])
+// CHECK: [[META461]] = !{[[META462]]}
+// CHECK: [[META462]] = !DILocalVariable(arg: 1, scope: [[DBG460]], file: [[META4]], line: 609, type: [[META3]])
+// CHECK: [[META463]] = !DILocation(line: 609, column: 46, scope: [[DBG460]])
+// CHECK: [[DBG464]] = !DILocation(line: 609, column: 49, scope: [[DBG460]])
+// CHECK: [[DBG465]] = distinct !DISubprogram(name: "Test_Func_EnumUInt8T", linkageName: "_Z20Test_Func_EnumUInt8T10EnumUInt8T", scope: [[META4]], file: [[META4]], line: 619, type: [[META466:![0-9]+]], scopeLine: 619, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META468:![0-9]+]])
+// CHECK: [[META466]] = !DISubroutineType(types: [[META467:![0-9]+]])
+// CHECK: [[META467]] = !{null, [[META7]]}
+// CHECK: [[META468]] = !{[[META469]]}
+// CHECK: [[META469]] = !DILocalVariable(arg: 1, scope: [[DBG465]], file: [[META4]], line: 619, type: [[META7]])
+// CHECK: [[META470]] = !DILocation(line: 619, column: 48, scope: [[DBG465]])
+// CHECK: [[DBG471]] = !DILocation(line: 619, column: 51, scope: [[DBG465]])
+// CHECK: [[DBG472]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt8T", linkageName: "_Z20Test_Kern_EnumUInt8T10EnumUInt8T", scope: [[META4]], file: [[META4]], line: 629, type: [[META466]], scopeLine: 629, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META473:![0-9]+]])
+// CHECK: [[META473]] = !{[[META474]]}
+// CHECK: [[META474]] = !DILocalVariable(arg: 1, scope: [[DBG472]], file: [[META4]], line: 629, type: [[META7]])
+// CHECK: [[META475]] = !DILocation(line: 629, column: 48, scope: [[DBG472]])
+// CHECK: [[DBG476]] = !DILocation(line: 629, column: 51, scope: [[DBG472]])
+// CHECK: [[DBG477]] = distinct !DISubprogram(name: "Test_Func_EnumInt16T", linkageName: "_Z20Test_Func_EnumInt16T10EnumInt16T", scope: [[META4]], file: [[META4]], line: 639, type: [[META478:![0-9]+]], scopeLine: 639, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META480:![0-9]+]])
+// CHECK: [[META478]] = !DISubroutineType(types: [[META479:![0-9]+]])
+// CHECK: [[META479]] = !{null, [[META9]]}
+// CHECK: [[META480]] = !{[[META481]]}
+// CHECK: [[META481]] = !DILocalVariable(arg: 1, scope: [[DBG477]], file: [[META4]], line: 639, type: [[META9]])
+// CHECK: [[META482]] = !DILocation(line: 639, column: 48, scope: [[DBG477]])
+// CHECK: [[DBG483]] = !DILocation(line: 639, column: 51, scope: [[DBG477]])
+// CHECK: [[DBG484]] = distinct !DISubprogram(name: "Test_Kern_EnumInt16T", linkageName: "_Z20Test_Kern_EnumInt16T10EnumInt16T", scope: [[META4]], file: [[META4]], line: 649, type: [[META478]], scopeLine: 649, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META485:![0-9]+]])
+// CHECK: [[META485]] = !{[[META486]]}
+// CHECK: [[META486]] = !DILocalVariable(arg: 1, scope: [[DBG484]], file: [[META4]], line: 649, type: [[META9]])
+// CHECK: [[META487]] = !DILocation(line: 649, column: 48, scope: [[DBG484]])
+// CHECK: [[DBG488]] = !DILocation(line: 649, column: 51, scope: [[DBG484]])
+// CHECK: [[DBG489]] = distinct !DISubprogram(name: "Test_Func_EnumUInt16T", linkageName: "_Z21Test_Func_EnumUInt16T11EnumUInt16T", scope: [[META4]], file: [[META4]], line: 659, type: [[META490:![0-9]+]], scopeLine: 659, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META492:![0-9]+]])
+// CHECK: [[META490]] = !DISubroutineType(types: [[META491:![0-9]+]])
+// CHECK: [[META491]] = !{null, [[META11]]}
+// CHECK: [[META492]] = !{[[META493]]}
+// CHECK: [[META493]] = !DILocalVariable(arg: 1, scope: [[DBG489]], file: [[META4]], line: 659, type: [[META11]])
+// CHECK: [[META494]] = !DILocation(line: 659, column: 50, scope: [[DBG489]])
+// CHECK: [[DBG495]] = !DILocation(line: 659, column: 53, scope: [[DBG489]])
+// CHECK: [[DBG496]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt16T", linkageName: "_Z21Test_Kern_EnumUInt16T11EnumUInt16T", scope: [[META4]], file: [[META4]], line: 669, type: [[META490]], scopeLine: 669, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META497:![0-9]+]])
+// CHECK: [[META497]] = !{[[META498]]}
+// CHECK: [[META498]] = !DILocalVariable(arg: 1, scope: [[DBG496]], file: [[META4]], line: 669, type: [[META11]])
+// CHECK: [[META499]] = !DILocation(line: 669, column: 50, scope: [[DBG496]])
+// CHECK: [[DBG500]] = !DILocation(line: 669, column: 53, scope: [[DBG496]])
+// CHECK: [[DBG501]] = distinct !DISubprogram(name: "Test_Func_EnumInt32T", linkageName: "_Z20Test_Func_EnumInt32T10EnumInt32T", scope: [[META4]], file: [[META4]], line: 679, type: [[META502:![0-9]+]], scopeLine: 679, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META504:![0-9]+]])
+// CHECK: [[META502]] = !DISubroutineType(types: [[META503:![0-9]+]])
+// CHECK: [[META503]] = !{null, [[META13]]}
+// CHECK: [[META504]] = !{[[META505]]}
+// CHECK: [[META505]] = !DILocalVariable(arg: 1, scope: [[DBG501]], file: [[META4]], line: 679, type: [[META13]])
+// CHECK: [[META506]] = !DILocation(line: 679, column: 48, scope: [[DBG501]])
+// CHECK: [[DBG507]] = !DILocation(line: 679, column: 51, scope: [[DBG501]])
+// CHECK: [[DBG508]] = distinct !DISubprogram(name: "Test_Kern_EnumInt32T", linkageName: "_Z20Test_Kern_EnumInt32T10EnumInt32T", scope: [[META4]], file: [[META4]], line: 689, type: [[META502]], scopeLine: 689, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META509:![0-9]+]])
+// CHECK: [[META509]] = !{[[META510]]}
+// CHECK: [[META510]] = !DILocalVariable(arg: 1, scope: [[DBG508]], file: [[META4]], line: 689, type: [[META13]])
+// CHECK: [[META511]] = !DILocation(line: 689, column: 48, scope: [[DBG508]])
+// CHECK: [[DBG512]] = !DILocation(line: 689, column: 51, scope: [[DBG508]])
+// CHECK: [[DBG513]] = distinct !DISubprogram(name: "Test_Func_EnumUInt32T", linkageName: "_Z21Test_Func_EnumUInt32T11EnumUInt32T", scope: [[META4]], file: [[META4]], line: 699, type: [[META514:![0-9]+]], scopeLine: 699, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META516:![0-9]+]])
+// CHECK: [[META514]] = !DISubroutineType(types: [[META515:![0-9]+]])
+// CHECK: [[META515]] = !{null, [[META15]]}
+// CHECK: [[META516]] = !{[[META517]]}
+// CHECK: [[META517]] = !DILocalVariable(arg: 1, scope: [[DBG513]], file: [[META4]], line: 699, type: [[META15]])
+// CHECK: [[META518]] = !DILocation(line: 699, column: 50, scope: [[DBG513]])
+// CHECK: [[DBG519]] = !DILocation(line: 699, column: 53, scope: [[DBG513]])
+// CHECK: [[DBG520]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt32T", linkageName: "_Z21Test_Kern_EnumUInt32T11EnumUInt32T", scope: [[META4]], file: [[META4]], line: 709, type: [[META514]], scopeLine: 709, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META521:![0-9]+]])
+// CHECK: [[META521]] = !{[[META522]]}
+// CHECK: [[META522]] = !DILocalVariable(arg: 1, scope: [[DBG520]], file: [[META4]], line: 709, type: [[META15]])
+// CHECK: [[META523]] = !DILocation(line: 709, column: 50, scope: [[DBG520]])
+// CHECK: [[DBG524]] = !DILocation(line: 709, column: 53, scope: [[DBG520]])
+// CHECK: [[DBG525]] = distinct !DISubprogram(name: "Test_Func_EnumInt64T", linkageName: "_Z20Test_Func_EnumInt64T10EnumInt64T", scope: [[META4]], file: [[META4]], line: 719, type: [[META526:![0-9]+]], scopeLine: 719, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META528:![0-9]+]])
+// CHECK: [[META526]] = !DISubroutineType(types: [[META527:![0-9]+]])
+// CHECK: [[META527]] = !{null, [[META17]]}
+// CHECK: [[META528]] = !{[[META529]]}
+// CHECK: [[META529]] = !DILocalVariable(arg: 1, scope: [[DBG525]], file: [[META4]], line: 719, type: [[META17]])
+// CHECK: [[META530]] = !DILocation(line: 719, column: 48, scope: [[DBG525]])
+// CHECK: [[DBG531]] = !DILocation(line: 719, column: 51, scope: [[DBG525]])
+// CHECK: [[DBG532]] = distinct !DISubprogram(name: "Test_Kern_EnumInt64T", linkageName: "_Z20Test_Kern_EnumInt64T10EnumInt64T", scope: [[META4]], file: [[META4]], line: 729, type: [[META526]], scopeLine: 729, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META533:![0-9]+]])
+// CHECK: [[META533]] = !{[[META534]]}
+// CHECK: [[META534]] = !DILocalVariable(arg: 1, scope: [[DBG532]], file: [[META4]], line: 729, type: [[META17]])
+// CHECK: [[META535]] = !DILocation(line: 729, column: 48, scope: [[DBG532]])
+// CHECK: [[DBG536]] = !DILocation(line: 729, column: 51, scope: [[DBG532]])
+// CHECK: [[DBG537]] = distinct !DISubprogram(name: "Test_Func_EnumUInt64T", linkageName: "_Z21Test_Func_EnumUInt64T11EnumUInt64T", scope: [[META4]], file: [[META4]], line: 739, type: [[META538:![0-9]+]], scopeLine: 739, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META540:![0-9]+]])
+// CHECK: [[META538]] = !DISubroutineType(types: [[META539:![0-9]+]])
+// CHECK: [[META539]] = !{null, [[META19]]}
+// CHECK: [[META540]] = !{[[META541]]}
+// CHECK: [[META541]] = !DILocalVariable(arg: 1, scope: [[DBG537]], file: [[META4]], line: 739, type: [[META19]])
+// CHECK: [[META542]] = !DILocation(line: 739, column: 50, scope: [[DBG537]])
+// CHECK: [[DBG543]] = !DILocation(line: 739, column: 53, scope: [[DBG537]])
+// CHECK: [[DBG544]] = distinct !DISubprogram(name: "Test_Kern_EnumUInt64T", linkageName: "_Z21Test_Kern_EnumUInt64T11EnumUInt64T", scope: [[META4]], file: [[META4]], line: 749, type: [[META538]], scopeLine: 749, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META545:![0-9]+]])
+// CHECK: [[META545]] = !{[[META546]]}
+// CHECK: [[META546]] = !DILocalVariable(arg: 1, scope: [[DBG544]], file: [[META4]], line: 749, type: [[META19]])
+// CHECK: [[META547]] = !DILocation(line: 749, column: 50, scope: [[DBG544]])
+// CHECK: [[DBG548]] = !DILocation(line: 749, column: 53, scope: [[DBG544]])
+// CHECK: [[DBG549]] = distinct !DISubprogram(name: "Test_Func_PromotableInteger", linkageName: "_Z27Test_Func_PromotableIntegerb", scope: [[META4]], file: [[META4]], line: 760, type: [[META550:![0-9]+]], scopeLine: 760, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META553:![0-9]+]])
+// CHECK: [[META550]] = !DISubroutineType(types: [[META551:![0-9]+]])
+// CHECK: [[META551]] = !{null, [[META552:![0-9]+]]}
+// CHECK: [[META552]] = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
+// CHECK: [[META553]] = !{[[META554]]}
+// CHECK: [[META554]] = !DILocalVariable(arg: 1, scope: [[DBG549]], file: [[META4]], line: 760, type: [[META552]])
+// CHECK: [[META555]] = !DILocation(line: 760, column: 49, scope: [[DBG549]])
+// CHECK: [[DBG556]] = !DILocation(line: 760, column: 52, scope: [[DBG549]])
+// CHECK: [[DBG557]] = distinct !DISubprogram(name: "Test_Kern_PromotableInteger", linkageName: "_Z27Test_Kern_PromotableIntegerb", scope: [[META4]], file: [[META4]], line: 771, type: [[META550]], scopeLine: 771, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META558:![0-9]+]])
+// CHECK: [[META558]] = !{[[META559]]}
+// CHECK: [[META559]] = !DILocalVariable(arg: 1, scope: [[DBG557]], file: [[META4]], line: 771, type: [[META552]])
+// CHECK: [[META560]] = !DILocation(line: 771, column: 49, scope: [[DBG557]])
+// CHECK: [[DBG561]] = !DILocation(line: 771, column: 52, scope: [[DBG557]])
+// CHECK: [[DBG562]] = distinct !DISubprogram(name: "Test_Func_Pointer", linkageName: "_Z17Test_Func_PointerPi", scope: [[META4]], file: [[META4]], line: 781, type: [[META563:![0-9]+]], scopeLine: 781, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META566:![0-9]+]])
+// CHECK: [[META563]] = !DISubroutineType(types: [[META564:![0-9]+]])
+// CHECK: [[META564]] = !{null, [[META565:![0-9]+]]}
+// CHECK: [[META565]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META14]], size: 64, addressSpace: 1)
+// CHECK: [[META566]] = !{[[META567]]}
+// CHECK: [[META567]] = !DILocalVariable(arg: 1, scope: [[DBG562]], file: [[META4]], line: 781, type: [[META565]])
+// CHECK: [[META568]] = !DILocation(line: 781, column: 44, scope: [[DBG562]])
+// CHECK: [[DBG569]] = !DILocation(line: 781, column: 47, scope: [[DBG562]])
+// CHECK: [[DBG570]] = distinct !DISubprogram(name: "Test_Kern_Pointer", linkageName: "_Z17Test_Kern_PointerPi", scope: [[META4]], file: [[META4]], line: 796, type: [[META563]], scopeLine: 796, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META571:![0-9]+]])
+// CHECK: [[META571]] = !{[[META572]]}
+// CHECK: [[META572]] = !DILocalVariable(arg: 1, scope: [[DBG570]], file: [[META4]], line: 796, type: [[META565]])
+// CHECK: [[META573]] = !DILocation(line: 796, column: 44, scope: [[DBG570]])
+// CHECK: [[DBG574]] = !DILocation(line: 796, column: 47, scope: [[DBG570]])
+// CHECK: [[DBG575]] = distinct !DISubprogram(name: "Test_Func_Reference", linkageName: "_Z19Test_Func_ReferenceRi", scope: [[META4]], file: [[META4]], line: 806, type: [[META576:![0-9]+]], scopeLine: 806, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META579:![0-9]+]])
+// CHECK: [[META576]] = !DISubroutineType(types: [[META577:![0-9]+]])
+// CHECK: [[META577]] = !{null, [[META578:![0-9]+]]}
+// CHECK: [[META578]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[META14]], size: 64, addressSpace: 1)
+// CHECK: [[META579]] = !{[[META580]]}
+// CHECK: [[META580]] = !DILocalVariable(arg: 1, scope: [[DBG575]], file: [[META4]], line: 806, type: [[META578]])
+// CHECK: [[META581]] = !DILocation(line: 806, column: 46, scope: [[DBG575]])
+// CHECK: [[DBG582]] = !DILocation(line: 806, column: 49, scope: [[DBG575]])
+// CHECK: [[DBG583]] = distinct !DISubprogram(name: "Test_Kern_Reference", linkageName: "_Z19Test_Kern_ReferenceRi", scope: [[META4]], file: [[META4]], line: 821, type: [[META576]], scopeLine: 821, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META584:![0-9]+]])
+// CHECK: [[META584]] = !{[[META585]]}
+// CHECK: [[META585]] = !DILocalVariable(arg: 1, scope: [[DBG583]], file: [[META4]], line: 821, type: [[META578]])
+// CHECK: [[META586]] = !DILocation(line: 821, column: 46, scope: [[DBG583]])
+// CHECK: [[DBG587]] = !DILocation(line: 821, column: 49, scope: [[DBG583]])
+// CHECK: [[DBG588]] = distinct !DISubprogram(name: "Test_Func_StructSinglePointerElement", linkageName: "_Z36Test_Func_StructSinglePointerElement26StructSinglePointerElement", scope: [[META4]], file: [[META4]], line: 832, type: [[META589:![0-9]+]], scopeLine: 832, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META594:![0-9]+]])
+// CHECK: [[META589]] = !DISubroutineType(types: [[META590:![0-9]+]])
+// CHECK: [[META590]] = !{null, [[META591:![0-9]+]]}
+// CHECK: [[META591]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructSinglePointerElement", file: [[META4]], line: 73, size: 64, flags: DIFlagTypePassByValue, elements: [[META592:![0-9]+]], identifier: "_ZTS26StructSinglePointerElement")
+// CHECK: [[META592]] = !{[[META593:![0-9]+]]}
+// CHECK: [[META593]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META591]], file: [[META4]], line: 74, baseType: [[META565]], size: 64)
+// CHECK: [[META594]] = !{[[META595]]}
+// CHECK: [[META595]] = !DILocalVariable(arg: 1, scope: [[DBG588]], file: [[META4]], line: 832, type: [[META591]])
+// CHECK: [[META596]] = !DILocation(line: 832, column: 80, scope: [[DBG588]])
+// CHECK: [[DBG597]] = !DILocation(line: 832, column: 83, scope: [[DBG588]])
+// CHECK: [[DBG598]] = distinct !DISubprogram(name: "Test_Kern_StructSinglePointerElement", linkageName: "_Z36Test_Kern_StructSinglePointerElement26StructSinglePointerElement", scope: [[META4]], file: [[META4]], line: 843, type: [[META589]], scopeLine: 843, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META599:![0-9]+]])
+// CHECK: [[META599]] = !{[[META600]]}
+// CHECK: [[META600]] = !DILocalVariable(arg: 1, scope: [[DBG598]], file: [[META4]], line: 843, type: [[META591]])
+// CHECK: [[META601]] = !DILocation(line: 843, column: 80, scope: [[DBG598]])
+// CHECK: [[DBG602]] = !DILocation(line: 843, column: 83, scope: [[DBG598]])
+// CHECK: [[DBG603]] = distinct !DISubprogram(name: "Test_Func_StructPointerElements", linkageName: "_Z31Test_Func_StructPointerElements21StructPointerElements", scope: [[META4]], file: [[META4]], line: 856, type: [[META604:![0-9]+]], scopeLine: 856, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META612:![0-9]+]])
+// CHECK: [[META604]] = !DISubroutineType(types: [[META605:![0-9]+]])
+// CHECK: [[META605]] = !{null, [[META606:![0-9]+]]}
+// CHECK: [[META606]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructPointerElements", file: [[META4]], line: 76, size: 128, flags: DIFlagTypePassByValue, elements: [[META607:![0-9]+]], identifier: "_ZTS21StructPointerElements")
+// CHECK: [[META607]] = !{[[META608:![0-9]+]], [[META609:![0-9]+]]}
+// CHECK: [[META608]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META606]], file: [[META4]], line: 77, baseType: [[META565]], size: 64)
+// CHECK: [[META609]] = !DIDerivedType(tag: DW_TAG_member, name: "Element1", scope: [[META606]], file: [[META4]], line: 78, baseType: [[META610:![0-9]+]], size: 64, offset: 64)
+// CHECK: [[META610]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[META611:![0-9]+]], size: 64, addressSpace: 1)
+// CHECK: [[META611]] = !DIBasicType(name: "float", size: 32, encoding: DW_ATE_float)
+// CHECK: [[META612]] = !{[[META613]]}
+// CHECK: [[META613]] = !DILocalVariable(arg: 1, scope: [[DBG603]], file: [[META4]], line: 856, type: [[META606]])
+// CHECK: [[META614]] = !DILocation(line: 856, column: 70, scope: [[DBG603]])
+// CHECK: [[DBG615]] = !DILocation(line: 856, column: 73, scope: [[DBG603]])
+// CHECK: [[DBG616]] = distinct !DISubprogram(name: "Test_Kern_StructPointerElements", linkageName: "_Z31Test_Kern_StructPointerElements21StructPointerElements", scope: [[META4]], file: [[META4]], line: 866, type: [[META604]], scopeLine: 866, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META617:![0-9]+]])
+// CHECK: [[META617]] = !{[[META618]]}
+// CHECK: [[META618]] = !DILocalVariable(arg: 1, scope: [[DBG616]], file: [[META4]], line: 866, type: [[META606]])
+// CHECK: [[META619]] = !DILocation(line: 866, column: 70, scope: [[DBG616]])
+// CHECK: [[DBG620]] = !DILocation(line: 866, column: 73, scope: [[DBG616]])
+// CHECK: [[DBG621]] = distinct !DISubprogram(name: "Test_Func_ParamRegLimitExpandedStruct", linkageName: "_Z37Test_Func_ParamRegLimitExpandedStructlllllli22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 907, type: [[META622:![0-9]+]], scopeLine: 907, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META628:![0-9]+]])
+// CHECK: [[META622]] = !DISubroutineType(types: [[META623:![0-9]+]])
+// CHECK: [[META623]] = !{null, [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META14]], [[META624:![0-9]+]]}
+// CHECK: [[META624]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "StructMultipleElements", file: [[META4]], line: 80, size: 128, flags: DIFlagTypePassByValue, elements: [[META625:![0-9]+]], identifier: "_ZTS22StructMultipleElements")
+// CHECK: [[META625]] = !{[[META626:![0-9]+]], [[META627:![0-9]+]]}
+// CHECK: [[META626]] = !DIDerivedType(tag: DW_TAG_member, name: "Element0", scope: [[META624]], file: [[META4]], line: 81, baseType: [[META14]], size: 32)
+// CHECK: [[META627]] = !DIDerivedType(tag: DW_TAG_member, name: "Element1", scope: [[META624]], file: [[META4]], line: 82, baseType: [[META18]], size: 64, offset: 64)
+// CHECK: [[META628]] = !{[[META629]], [[META630]], [[META631]], [[META632]], [[META633]], [[META634]], [[META635]], [[META636]]}
+// CHECK: [[META629]] = !DILocalVariable(arg: 1, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META630]] = !DILocalVariable(arg: 2, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META631]] = !DILocalVariable(arg: 3, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META632]] = !DILocalVariable(arg: 4, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META633]] = !DILocalVariable(arg: 5, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META634]] = !DILocalVariable(arg: 6, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META18]])
+// CHECK: [[META635]] = !DILocalVariable(arg: 7, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META14]])
+// CHECK: [[META636]] = !DILocalVariable(arg: 8, scope: [[DBG621]], file: [[META4]], line: 907, type: [[META624]])
+// CHECK: [[META637]] = !DILocation(line: 907, column: 62, scope: [[DBG621]])
+// CHECK: [[META638]] = !DILocation(line: 907, column: 71, scope: [[DBG621]])
+// CHECK: [[META639]] = !DILocation(line: 907, column: 80, scope: [[DBG621]])
+// CHECK: [[META640]] = !DILocation(line: 907, column: 89, scope: [[DBG621]])
+// CHECK: [[META641]] = !DILocation(line: 907, column: 98, scope: [[DBG621]])
+// CHECK: [[META642]] = !DILocation(line: 907, column: 107, scope: [[DBG621]])
+// CHECK: [[META643]] = !DILocation(line: 907, column: 116, scope: [[DBG621]])
+// CHECK: [[META644]] = !DILocation(line: 907, column: 140, scope: [[DBG621]])
+// CHECK: [[DBG645]] = !DILocation(line: 907, column: 143, scope: [[DBG621]])
+// CHECK: [[DBG646]] = distinct !DISubprogram(name: "Test_Kern_ParamRegLimitExpandedStruct", linkageName: "_Z37Test_Kern_ParamRegLimitExpandedStructlllllli22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 945, type: [[META622]], scopeLine: 945, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META647:![0-9]+]])
+// CHECK: [[META647]] = !{[[META648]], [[META649]], [[META650]], [[META651]], [[META652]], [[META653]], [[META654]], [[META655]]}
+// CHECK: [[META648]] = !DILocalVariable(arg: 1, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META649]] = !DILocalVariable(arg: 2, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META650]] = !DILocalVariable(arg: 3, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META651]] = !DILocalVariable(arg: 4, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META652]] = !DILocalVariable(arg: 5, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META653]] = !DILocalVariable(arg: 6, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META18]])
+// CHECK: [[META654]] = !DILocalVariable(arg: 7, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META14]])
+// CHECK: [[META655]] = !DILocalVariable(arg: 8, scope: [[DBG646]], file: [[META4]], line: 945, type: [[META624]])
+// CHECK: [[META656]] = !DILocation(line: 945, column: 62, scope: [[DBG646]])
+// CHECK: [[META657]] = !DILocation(line: 945, column: 71, scope: [[DBG646]])
+// CHECK: [[META658]] = !DILocation(line: 945, column: 80, scope: [[DBG646]])
+// CHECK: [[META659]] = !DILocation(line: 945, column: 89, scope: [[DBG646]])
+// CHECK: [[META660]] = !DILocation(line: 945, column: 98, scope: [[DBG646]])
+// CHECK: [[META661]] = !DILocation(line: 945, column: 107, scope: [[DBG646]])
+// CHECK: [[META662]] = !DILocation(line: 945, column: 116, scope: [[DBG646]])
+// CHECK: [[META663]] = !DILocation(line: 945, column: 140, scope: [[DBG646]])
+// CHECK: [[DBG664]] = !DILocation(line: 945, column: 143, scope: [[DBG646]])
+// CHECK: [[DBG665]] = distinct !DISubprogram(name: "Test_Func_ParamRegLimitUnexpandedStruct", linkageName: "_Z39Test_Func_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 983, type: [[META666:![0-9]+]], scopeLine: 983, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META668:![0-9]+]])
+// CHECK: [[META666]] = !DISubroutineType(types: [[META667:![0-9]+]])
+// CHECK: [[META667]] = !{null, [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META18]], [[META624]]}
+// CHECK: [[META668]] = !{[[META669]], [[META670]], [[META671]], [[META672]], [[META673]], [[META674]], [[META675]], [[META676]]}
+// CHECK: [[META669]] = !DILocalVariable(arg: 1, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META670]] = !DILocalVariable(arg: 2, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META671]] = !DILocalVariable(arg: 3, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META672]] = !DILocalVariable(arg: 4, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META673]] = !DILocalVariable(arg: 5, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META674]] = !DILocalVariable(arg: 6, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META675]] = !DILocalVariable(arg: 7, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META18]])
+// CHECK: [[META676]] = !DILocalVariable(arg: 8, scope: [[DBG665]], file: [[META4]], line: 983, type: [[META624]])
+// CHECK: [[META677]] = !DILocation(line: 983, column: 64, scope: [[DBG665]])
+// CHECK: [[META678]] = !DILocation(line: 983, column: 73, scope: [[DBG665]])
+// CHECK: [[META679]] = !DILocation(line: 983, column: 82, scope: [[DBG665]])
+// CHECK: [[META680]] = !DILocation(line: 983, column: 91, scope: [[DBG665]])
+// CHECK: [[META681]] = !DILocation(line: 983, column: 100, scope: [[DBG665]])
+// CHECK: [[META682]] = !DILocation(line: 983, column: 109, scope: [[DBG665]])
+// CHECK: [[META683]] = !DILocation(line: 983, column: 118, scope: [[DBG665]])
+// CHECK: [[META684]] = !DILocation(line: 983, column: 142, scope: [[DBG665]])
+// CHECK: [[DBG685]] = !DILocation(line: 983, column: 145, scope: [[DBG665]])
+// CHECK: [[DBG686]] = distinct !DISubprogram(name: "Test_Kern_ParamRegLimitUnexpandedStruct", linkageName: "_Z39Test_Kern_ParamRegLimitUnexpandedStructlllllll22StructMultipleElements", scope: [[META4]], file: [[META4]], line: 1021, type: [[META666]], scopeLine: 1021, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META0]], retainedNodes: [[META687:![0-9]+]])
+// CHECK: [[META687]] = !{[[META688]], [[META689]], [[META690]], [[META691]], [[META692]], [[META693]], [[META694]], [[META695]]}
+// CHECK: [[META688]] = !DILocalVariable(arg: 1, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META689]] = !DILocalVariable(arg: 2, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META690]] = !DILocalVariable(arg: 3, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META691]] = !DILocalVariable(arg: 4, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META692]] = !DILocalVariable(arg: 5, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META693]] = !DILocalVariable(arg: 6, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META694]] = !DILocalVariable(arg: 7, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META18]])
+// CHECK: [[META695]] = !DILocalVariable(arg: 8, scope: [[DBG686]], file: [[META4]], line: 1021, type: [[META624]])
+// CHECK: [[META696]] = !DILocation(line: 1021, column: 64, scope: [[DBG686]])
+// CHECK: [[META697]] = !DILocation(line: 1021, column: 73, scope: [[DBG686]])
+// CHECK: [[META698]] = !DILocation(line: 1021, column: 82, scope: [[DBG686]])
+// CHECK: [[META699]] = !DILocation(line: 1021, column: 91, scope: [[DBG686]])
+// CHECK: [[META700]] = !DILocation(line: 1021, column: 100, scope: [[DBG686]])
+// CHECK: [[META701]] = !DILocation(line: 1021, column: 109, scope: [[DBG686]])
+// CHECK: [[META702]] = !DILocation(line: 1021, column: 118, scope: [[DBG686]])
+// CHECK: [[META703]] = !DILocation(line: 1021, column: 142, scope: [[DBG686]])
+// CHECK: [[DBG704]] = !DILocation(line: 1021, column: 145, scope: [[DBG686]])
 //.
