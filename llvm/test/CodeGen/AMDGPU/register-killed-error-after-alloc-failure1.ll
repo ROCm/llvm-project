@@ -1,4 +1,4 @@
-; RUN: not llc -mtriple=amdgcn -mcpu=gfx908 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR -implicit-check-not=error %s
+; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx908 -filetype=null %s 2>&1 | FileCheck -check-prefix=ERR -implicit-check-not=error %s
 
 ; ERR: error: inline assembly requires more registers than available
 ; ERR-NOT: ERROR
@@ -17,7 +17,7 @@ define void @foo(<32 x i32> addrspace(1)* %arg) #0 {
   %vgpr2 = extractvalue %asm.output %asm, 2
   %vgpr3 = extractvalue %asm.output %asm, 3
   %vgpr4 = extractvalue %asm.output %asm, 4
-  call void asm sideeffect "; clobber", "~{a[0:31]},~{v[0:31]}"()
+  call void asm sideeffect "; clobber", "~{a[0:31]},~{v[0:23]}"()
   call void asm sideeffect "; use $0","v"(<16 x i32> %vgpr0)
   call void asm sideeffect "; use $0","v"(<8 x i32> %vgpr1)
   call void asm sideeffect "; use $0","v"(<4 x i32> %vgpr2)
