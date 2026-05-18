@@ -112,7 +112,8 @@ public:
       return 0;
     }
 
-    friend raw_ostream &operator <<(raw_ostream &OS, AMDGPUOperand::Modifiers Mods);
+    friend raw_ostream &operator<<(raw_ostream &OS,
+                                   AMDGPUOperand::Modifiers Mods);
   };
 
   enum ImmTy {
