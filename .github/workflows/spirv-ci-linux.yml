@@ -47,9 +47,15 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Pinned llvm-project SHA for test jobs: $SHA"
 
-      - name: Checkout SPIRV-LLVM-Translator (PR head)
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
           path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
           fetch-depth: 1
           persist-credentials: false
@@ -151,9 +157,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout SPIRV-LLVM-Translator (PR head)
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
           path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
           fetch-depth: 1
           persist-credentials: false
@@ -253,9 +265,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout SPIRV-LLVM-Translator (PR head)
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
           path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
           fetch-depth: 1
           persist-credentials: false
@@ -296,9 +314,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout SPIRV-LLVM-Translator (PR head)
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
           path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
           fetch-depth: 1
           persist-credentials: false
