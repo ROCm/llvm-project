@@ -273,6 +273,12 @@ jobs:
           sed -i '/^  if(THEROCK_BUILD_TESTING)/,/^  endif(THEROCK_BUILD_TESTING)/d' \
             core/CMakeLists.txt
 
+      - name: Force offload-arch build on Windows (needed for HIP compiler identification)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/-DCLANG_TOOL_OFFLOAD_ARCH_BUILD=${THEROCK_CONDITION_IS_NON_WINDOWS}/-DCLANG_TOOL_OFFLOAD_ARCH_BUILD=ON/' \
+            compiler/CMakeLists.txt
+
       #- name: Setup ccache
       #  run: |
       #    ./build_tools/setup_ccache.py \
