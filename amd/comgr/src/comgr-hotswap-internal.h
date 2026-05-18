@@ -183,6 +183,11 @@ public:
   std::optional<unsigned> getKernelVgprCount(llvm::StringRef KernelName,
                                              unsigned VgprGranuleSize) const;
 
+  /// Read group_segment_fixed_size (LDS allocation, bytes) from the kernel
+  /// descriptor for \p KernelName. Returns std::nullopt if the descriptor
+  /// symbol is missing.
+  std::optional<uint32_t> getKernelLdsSize(llvm::StringRef KernelName) const;
+
   /// Update the RSRC1 VGPR/SGPR granule counts in the kernel descriptor for
   /// \p KernelName by adding \p ExtraVgprs / \p ExtraSgprs, using
   /// \p VgprGranuleSize / \p SgprGranuleSize so the call is ISA-agnostic.

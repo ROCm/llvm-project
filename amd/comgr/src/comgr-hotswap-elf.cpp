@@ -231,6 +231,24 @@ ElfView::getKernelVgprCount(StringRef KernelName,
   return (Granulated + 1) * VgprGranuleSize;
 }
 
+std::optional<uint32_t> ElfView::getKernelLdsSize(StringRef KernelName) const {
+  // findKernelDescriptor never writes through the returned pointer in this
+  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // const_cast on `this` keeps the read-only accessor const-correct without
+  // duplicating the lookup helper.
+  const uint8_t *Kd =
+      const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelLdsSize: kernel descriptor symbol '"
+          << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t LdsSize;
+  std::memcpy(&LdsSize, Kd + amdhsa::GROUP_SEGMENT_FIXED_SIZE_OFFSET,
+              sizeof(LdsSize));
+  return LdsSize;
+}
+
 // -- ElfView::updateKernelDescriptor ------------------------------------------
 
 void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
