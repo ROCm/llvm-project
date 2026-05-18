@@ -19,9 +19,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    outputs:
-      llvm_project_sha: ${{ steps.resolve_llvm_sha.outputs.sha }}
-
     steps:
       # Long path support for the deep llvm-project tree under runner workspace.
       - name: Enable git long paths
@@ -43,25 +40,16 @@ jobs:
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
 
-      - name: Checkout llvm-project (amd-staging)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: amd-staging
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
-
-      # Capture the resolved amd-staging SHA so test jobs can pin to the
-      # exact commit this build used. Without this, test jobs re-resolve
-      # `amd-staging` and may land on a newer commit if upstream merged
-      # mid-run, triggering a cascade rebuild against an older build.ninja.
-      - name: Resolve llvm-project SHA
-        id: resolve_llvm_sha
-        run: |
-          SHA=$(git -C llvm-project rev-parse HEAD)
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "Pinned llvm-project SHA for test jobs: $SHA"
 
       - name: Checkout SPIRV-LLVM-Translator (amd-staging)
         # Pinned to amd-staging because llvm-project PRs don't change
@@ -176,11 +164,13 @@ jobs:
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
 
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
@@ -224,11 +214,14 @@ jobs:
             | sort -u > build/spirv-fails-pr.txt || true
           echo "PR head failures:"; cat build/spirv-fails-pr.txt
 
-      - name: Switch translator to amd-staging tip for baseline
+      - name: Switch llvm-project to amd-staging tip for baseline
+        # PRs on llvm-project change llvm/clang/lld, not the translator, so the
+        # baseline-diff swap target is llvm-project. Use explicit upstream URL
+        # because `origin` may be a fork on PR runs.
         if: always()
         run: |
-          cd llvm-project/llvm/projects/SPIRV-LLVM-Translator
-          git fetch --depth=1 origin amd-staging
+          cd llvm-project
+          git fetch --depth=1 https://github.com/ROCm/llvm-project.git amd-staging
           git checkout FETCH_HEAD
 
       - name: Test - SPIRV Translator [baseline amd-staging]
@@ -292,11 +285,13 @@ jobs:
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
 
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
@@ -357,11 +352,13 @@ jobs:
       - name: Install zstd via vcpkg
         run: vcpkg install zstd:x64-windows
 
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false

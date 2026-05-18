@@ -19,33 +19,21 @@ jobs:
     timeout-minutes: 120
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
-    outputs:
-      llvm_project_sha: ${{ steps.resolve_llvm_sha.outputs.sha }}
-
     steps:
       # ---- Checkout ---------------------------------------------------------
-      # llvm-project at amd-staging tip provides the host LLVM/Clang/LLD plus
-      # the amd/ subprojects (device-libs, comgr). The SPIRV translator PR
-      # head is overlaid in-tree under llvm/projects/.
-      - name: Checkout llvm-project (amd-staging)
+      # llvm-project at PR head (this repo) provides LLVM/Clang/LLD + amd/
+      # subprojects (device-libs, comgr). The SPIRV translator is pinned to
+      # amd-staging and overlaid in-tree under llvm/projects/.
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: amd-staging
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
-
-      # Capture the resolved amd-staging SHA so test jobs can pin to the
-      # exact commit this build used. Without this, test jobs re-resolve
-      # `amd-staging` and may land on a newer commit if upstream merged
-      # mid-run, triggering a cascade rebuild against an older build.ninja.
-      - name: Resolve llvm-project SHA
-        id: resolve_llvm_sha
-        run: |
-          SHA=$(git -C llvm-project rev-parse HEAD)
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "Pinned llvm-project SHA for test jobs: $SHA"
 
       - name: Checkout SPIRV-LLVM-Translator (amd-staging)
         # Pinned to amd-staging because llvm-project PRs don't change
@@ -148,11 +136,13 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
@@ -196,17 +186,20 @@ jobs:
             | sort -u > build/spirv-fails-pr.txt || true
           echo "PR head failures:"; cat build/spirv-fails-pr.txt
 
-      - name: Switch translator to amd-staging tip for baseline
+      - name: Switch llvm-project to amd-staging tip for baseline
+        # PRs on llvm-project change llvm/clang/lld, not the translator, so the
+        # baseline-diff swap target is llvm-project. Use explicit upstream URL
+        # because `origin` may be a fork on PR runs.
         if: always()
         run: |
-          cd llvm-project/llvm/projects/SPIRV-LLVM-Translator
-          git fetch --depth=1 origin amd-staging
+          cd llvm-project
+          git fetch --depth=1 https://github.com/ROCm/llvm-project.git amd-staging
           git checkout FETCH_HEAD
 
       - name: Test - SPIRV Translator [baseline amd-staging]
-        # Re-run the lit suite with the translator at amd-staging tip so the
-        # comment script can compute the per-PR delta (new vs fixed vs
-        # pre-existing). Incremental rebuild — only translator objects change.
+        # Re-run the lit suite with llvm-project at amd-staging tip to compute
+        # the per-PR delta vs PR-head failures. Incremental rebuild — only
+        # changed LLVM libs are recompiled and the translator is relinked.
         if: always()
         id: check_spirv_baseline
         continue-on-error: true
@@ -256,11 +249,13 @@ jobs:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
 
     steps:
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
@@ -305,11 +300,13 @@ jobs:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
 
     steps:
-      - name: Checkout llvm-project (pinned to Build job SHA)
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/llvm-project
-          ref: ${{ needs.build.outputs.llvm_project_sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: llvm-project
           fetch-depth: 1
           persist-credentials: false
