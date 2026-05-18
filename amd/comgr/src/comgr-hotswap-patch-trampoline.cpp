@@ -258,14 +258,17 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
 //
 // After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
 // in the same straight-line block must be incremented by 1 to account for the
-// extra outstanding DS operation.
+// extra outstanding DS operation -- except when the wait is a drain
+// (s_wait_dscnt 0), which must stay a drain after any number of splits
+// (relaxing it would let split halves escape; see #2585 for the deferred
+// general non-drain refinement).
 //
 // Returns true if a wait was found and bumped, false otherwise.
 //
 // If the wait is past a branch or join point, we conservatively do nothing:
 // the compiler guarantees a straight-line s_wait_dscnt follows each DS op in
 // well-formed kernels. If absent (e.g. s_endpgm terminates first), skipping
-// the bump is safe — the hardware wait counter saturates harmlessly.
+// the bump is safe -- the hardware wait counter saturates harmlessly.
 
 bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
   const MCInstrInfo &MCII = *Ctx.LS.MCII;
@@ -288,13 +291,19 @@ bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
       continue;
 
     // s_wait_dscnt has a single immediate operand (the wait count) at
-    // index 0. Increment it directly.
+    // index 0; increment it directly. The drain case is handled below.
     if (DI.Inst.getNumOperands() == 0)
       return false;
     MCInst NewInst = DI.Inst;
     MCOperand &Op = NewInst.getOperand(0);
     if (!Op.isImm())
       return false;
+    if (Op.getImm() == 0)
+      return false;
+    // TODO(#2585): the +1 is conservative for K > 0 -- it over-bumps splits
+    // of "must-complete" ops at the wait. That's suboptimal stall behavior,
+    // never a hazard. The drain (K == 0) over-bump WOULD be a hazard and is
+    // handled above; the general fix needs outstanding-DS analysis.
     Op.setImm(Op.getImm() + 1);
 
     SmallVector<char, 8> Bytes;
