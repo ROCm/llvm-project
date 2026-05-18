@@ -217,9 +217,7 @@ static Register simplifyMachinePHI(MachineInstr &PHI, MachineRegisterInfo &MRI,
   // originally carried IMPLICIT_DEF.
   if (HasImplicitDefInput) {
     MachineInstr *DefCommonReg = MRI.getVRegDef(CommonReg);
-    MachineBasicBlock *DefMBB = DefCommonReg->getParent();
-    MachineBasicBlock *PHIBB = PHI.getParent();
-    if (DefCommonReg && MDT.dominates(DefMBB, PHIBB))
+    if (DefCommonReg && MDT.dominates(DefCommonReg, &PHI))
       return CommonReg;
   }
 
