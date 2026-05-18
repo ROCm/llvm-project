@@ -486,7 +486,6 @@ CodeGenModule::CodeGenModule(ASTContext &C,
       llvm::PointerType::get(LLVMContext, DL.getProgramAddressSpace());
   ConstGlobalsPtrTy = llvm::PointerType::get(
       LLVMContext, C.getTargetAddressSpace(GetGlobalConstantAddressSpace()));
-  ASTAllocaAddressSpace = getTargetCodeGenInfo().getASTAllocaAddressSpace();
 
   // Build C++20 Module initializers.
   // TODO: Add Microsoft here once we know the mangling required for the
@@ -1721,6 +1720,9 @@ void CodeGenModule::Release() {
   if (getCodeGenOpts().StackProtectorGuardOffset != INT_MAX)
     getModule().setStackProtectorGuardOffset(
         getCodeGenOpts().StackProtectorGuardOffset);
+  if (getCodeGenOpts().StackProtectorGuardValueWidth != UINT_MAX)
+    getModule().setStackProtectorGuardValueWidth(
+        getCodeGenOpts().StackProtectorGuardValueWidth);
   if (getCodeGenOpts().StackAlignment)
     getModule().setOverrideStackAlignment(getCodeGenOpts().StackAlignment);
   if (getCodeGenOpts().SkipRaxSetup)
@@ -10482,6 +10484,10 @@ void CodeGenModule::moveLazyEmissionStates(CodeGenModule *NewBuilder) {
   assert(NewBuilder->DeferredVTables.empty() &&
          "Newly created module should not have deferred vtables");
   NewBuilder->DeferredVTables = std::move(DeferredVTables);
+
+  assert(NewBuilder->EmittedVTables.empty() &&
+         "Newly created module should not have defined vtables");
+  NewBuilder->EmittedVTables = std::move(EmittedVTables);
 
   assert(NewBuilder->MangledDeclNames.empty() &&
          "Newly created module should not have mangled decl names");
