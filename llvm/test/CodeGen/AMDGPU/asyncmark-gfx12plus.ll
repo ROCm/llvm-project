@@ -310,29 +310,28 @@ define amdgpu_kernel void @test_pipelined_loop_with_global(ptr addrspace(1) %foo
 ; SDAG-NEXT:    s_clause 0x1
 ; SDAG-NEXT:    s_load_b96 s[8:10], s[4:5], 0x24 nv
 ; SDAG-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34 nv
-; SDAG-NEXT:    v_mov_b32_e32 v0, 0
 ; SDAG-NEXT:    s_wait_kmcnt 0x0
+; SDAG-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s10
 ; SDAG-NEXT:    s_load_b32 s6, s[8:9], 0x0
 ; SDAG-NEXT:    s_load_b32 s7, s[0:1], 0x0
-; SDAG-NEXT:    v_mov_b32_e32 v1, s10
 ; SDAG-NEXT:    s_add_co_i32 s11, s10, 4
 ; SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; SDAG-NEXT:    v_dual_mov_b32 v3, 4 :: v_dual_mov_b32 v4, s11
-; SDAG-NEXT:    s_load_b32 s11, s[4:5], 0x44 nv
-; SDAG-NEXT:    s_clause 0x2
 ; SDAG-NEXT:    global_load_async_to_lds_b32 v1, v0, s[8:9] offset:4 nv
-; SDAG-NEXT:    ; asyncmark
-; SDAG-NEXT:    global_load_b32 v1, v0, s[8:9] offset:4
-; SDAG-NEXT:    global_load_b32 v2, v0, s[0:1] offset:4
-; SDAG-NEXT:    s_wait_xcnt 0x0
-; SDAG-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 8
-; SDAG-NEXT:    s_add_nc_u64 s[4:5], s[8:9], 8
 ; SDAG-NEXT:    s_wait_kmcnt 0x0
 ; SDAG-NEXT:    v_dual_mov_b32 v5, s6 :: v_dual_mov_b32 v6, s7
+; SDAG-NEXT:    ; asyncmark
+; SDAG-NEXT:    s_clause 0x1
+; SDAG-NEXT:    global_load_b32 v1, v0, s[8:9] offset:4
+; SDAG-NEXT:    global_load_b32 v2, v0, s[0:1] offset:4
 ; SDAG-NEXT:    s_mov_b64 s[6:7], s[2:3]
 ; SDAG-NEXT:    global_load_async_to_lds_b32 v4, v3, s[8:9] offset:4 nv
 ; SDAG-NEXT:    s_wait_loadcnt 0x0
 ; SDAG-NEXT:    v_dual_mov_b32 v3, v1 :: v_dual_mov_b32 v4, v2
+; SDAG-NEXT:    s_load_b32 s11, s[4:5], 0x44 nv
+; SDAG-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 8
+; SDAG-NEXT:    s_wait_xcnt 0x0
+; SDAG-NEXT:    s_add_nc_u64 s[4:5], s[8:9], 8
 ; SDAG-NEXT:    s_mov_b32 s8, 2
 ; SDAG-NEXT:    s_mov_b32 s9, s10
 ; SDAG-NEXT:    ; asyncmark
@@ -356,6 +355,7 @@ define amdgpu_kernel void @test_pipelined_loop_with_global(ptr addrspace(1) %foo
 ; SDAG-NEXT:    s_add_co_i32 s9, s9, 4
 ; SDAG-NEXT:    ds_load_b32 v9, v9
 ; SDAG-NEXT:    v_mov_b32_e32 v5, v1
+; SDAG-NEXT:    s_wait_kmcnt 0x0
 ; SDAG-NEXT:    s_cmp_lt_i32 s8, s11
 ; SDAG-NEXT:    s_wait_xcnt 0x0
 ; SDAG-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 4

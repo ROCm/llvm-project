@@ -2897,18 +2897,19 @@ define float @test_vector_reduce_fmin_v16float(<16 x float> %v) {
 ; GFX12-GISEL-NEXT:    v_dual_max_num_f32 v4, v7, v7 :: v_dual_max_num_f32 v5, v8, v8
 ; GFX12-GISEL-NEXT:    v_dual_max_num_f32 v6, v9, v9 :: v_dual_max_num_f32 v7, v10, v10
 ; GFX12-GISEL-NEXT:    v_dual_max_num_f32 v8, v11, v11 :: v_dual_max_num_f32 v9, v12, v12
-; GFX12-GISEL-NEXT:    v_dual_max_num_f32 v10, v13, v13 :: v_dual_max_num_f32 v11, v14, v14
-; GFX12-GISEL-NEXT:    v_max_num_f32_e32 v12, v15, v15
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_3)
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
 ; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v3, v3, v4 :: v_dual_min_num_f32 v4, v5, v6
-; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v5, v7, v8 :: v_dual_min_num_f32 v6, v9, v10
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
-; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v7, v11, v12 :: v_dual_min_num_f32 v0, v0, v1
+; GFX12-GISEL-NEXT:    v_dual_max_num_f32 v10, v13, v13 :: v_dual_max_num_f32 v11, v14, v14
+; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v5, v7, v8 :: v_dual_min_num_f32 v0, v0, v1
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_1) | instid1(VALU_DEP_3)
+; GFX12-GISEL-NEXT:    v_min_num_f32_e32 v6, v9, v10
+; GFX12-GISEL-NEXT:    v_max_num_f32_e32 v12, v15, v15
 ; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v1, v2, v3 :: v_dual_min_num_f32 v2, v4, v5
 ; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
-; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v3, v6, v7 :: v_dual_min_num_f32 v0, v0, v1
+; GFX12-GISEL-NEXT:    v_dual_min_num_f32 v7, v11, v12 :: v_dual_min_num_f32 v0, v0, v1
+; GFX12-GISEL-NEXT:    v_min_num_f32_e32 v3, v6, v7
+; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_min_num_f32_e32 v1, v2, v3
-; GFX12-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-GISEL-NEXT:    v_min_num_f32_e32 v0, v0, v1
 ; GFX12-GISEL-NEXT:    s_setpc_b64 s[30:31]
 entry:

@@ -283,11 +283,12 @@ define amdgpu_kernel void @copy_constant(ptr addrspace(1) nocapture %d, ptr addr
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_load_b128 s[8:11], s[2:3], 0x0
 ; GFX12-NEXT:    s_add_co_i32 s6, s6, -1
-; GFX12-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_cmp_lg_u32 s6, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_dual_mov_b32 v1, s8 :: v_dual_mov_b32 v2, s9
 ; GFX12-NEXT:    v_dual_mov_b32 v3, s10 :: v_dual_mov_b32 v4, s11
+; GFX12-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
 ; GFX12-NEXT:    global_store_b128 v0, v[1:4], s[0:1]
 ; GFX12-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 16
 ; GFX12-NEXT:    s_cbranch_scc1 .LBB2_2
@@ -309,11 +310,12 @@ define amdgpu_kernel void @copy_constant(ptr addrspace(1) nocapture %d, ptr addr
 ; GFX12-SPREFETCH-NEXT:    s_prefetch_data s[2:3], 0xb0, null, 0
 ; GFX12-SPREFETCH-NEXT:    s_load_b128 s[8:11], s[2:3], 0x0
 ; GFX12-SPREFETCH-NEXT:    s_add_co_i32 s6, s6, -1
-; GFX12-SPREFETCH-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
+; GFX12-SPREFETCH-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-SPREFETCH-NEXT:    s_cmp_lg_u32 s6, 0
 ; GFX12-SPREFETCH-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SPREFETCH-NEXT:    v_dual_mov_b32 v1, s8 :: v_dual_mov_b32 v2, s9
 ; GFX12-SPREFETCH-NEXT:    v_dual_mov_b32 v3, s10 :: v_dual_mov_b32 v4, s11
+; GFX12-SPREFETCH-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
 ; GFX12-SPREFETCH-NEXT:    global_store_b128 v0, v[1:4], s[0:1]
 ; GFX12-SPREFETCH-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 16
 ; GFX12-SPREFETCH-NEXT:    s_cbranch_scc1 .LBB2_2
@@ -336,12 +338,13 @@ define amdgpu_kernel void @copy_constant(ptr addrspace(1) nocapture %d, ptr addr
 ; GFX12ES2-SPREFETCH-NEXT:    s_prefetch_data s[2:3], 0xb0, null, 0
 ; GFX12ES2-SPREFETCH-NEXT:    s_load_b128 s[8:11], s[2:3], 0x0
 ; GFX12ES2-SPREFETCH-NEXT:    s_add_co_i32 s6, s6, -1
-; GFX12ES2-SPREFETCH-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
+; GFX12ES2-SPREFETCH-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12ES2-SPREFETCH-NEXT:    s_cmp_lg_u32 s6, 0
 ; GFX12ES2-SPREFETCH-NEXT:    s_wait_kmcnt 0x0
 ; GFX12ES2-SPREFETCH-NEXT:    s_wait_alu depctr_vm_vsrc(0)
 ; GFX12ES2-SPREFETCH-NEXT:    v_dual_mov_b32 v1, s8 :: v_dual_mov_b32 v2, s9
 ; GFX12ES2-SPREFETCH-NEXT:    v_dual_mov_b32 v3, s10 :: v_dual_mov_b32 v4, s11
+; GFX12ES2-SPREFETCH-NEXT:    s_add_nc_u64 s[2:3], s[2:3], 16
 ; GFX12ES2-SPREFETCH-NEXT:    s_wait_alu depctr_va_vdst(0)
 ; GFX12ES2-SPREFETCH-NEXT:    global_store_b128 v0, v[1:4], s[0:1]
 ; GFX12ES2-SPREFETCH-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 16

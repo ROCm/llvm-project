@@ -297,9 +297,9 @@ define amdgpu_kernel void @raw_buffer_atomic_min_rtn_f32_off4_slc(<4 x i32> inre
 ; GFX12-NEXT:    s_clause 0x1
 ; GFX12-NEXT:    s_load_b96 s[8:10], s[4:5], 0x34
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
-; GFX12-NEXT:    s_mov_b32 s4, 4
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v1, s9
+; GFX12-NEXT:    s_mov_b32 s4, 4
 ; GFX12-NEXT:    buffer_atomic_min_num_f32 v0, v1, s[0:3], s4 offen th:TH_ATOMIC_NT_RETURN
 ; GFX12-NEXT:    v_mov_b32_e32 v1, s10
 ; GFX12-NEXT:    s_wait_loadcnt 0x0

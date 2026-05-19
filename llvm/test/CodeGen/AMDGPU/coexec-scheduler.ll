@@ -116,11 +116,11 @@ define amdgpu_kernel void @ds_wmma(ptr addrspace(3) %base, ptr addrspace(1) %out
 ; GCN-NEXT:    v_dual_mov_b32 v19, v0 :: v_dual_mov_b32 v20, v0
 ; GCN-NEXT:    v_cndmask_b32_e64 v24, 0, 1, s0
 ; GCN-NEXT:    v_dual_mov_b32 v21, v0 :: v_dual_mov_b32 v22, v0
-; GCN-NEXT:    v_dual_mov_b32 v23, v0 :: v_dual_mov_b32 v25, v0
-; GCN-NEXT:    v_mov_b32_e32 v26, v0
-; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GCN-NEXT:    v_mov_b32_e32 v23, v0
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s0, 1, v24
-; GCN-NEXT:    v_dual_mov_b32 v24, v0 :: v_dual_mov_b32 v27, v0
+; GCN-NEXT:    v_dual_mov_b32 v24, v0 :: v_dual_mov_b32 v25, v0
+; GCN-NEXT:    v_dual_mov_b32 v26, v0 :: v_dual_mov_b32 v27, v0
 ; GCN-NEXT:    v_dual_mov_b32 v28, v0 :: v_dual_mov_b32 v29, v0
 ; GCN-NEXT:    v_dual_mov_b32 v30, v0 :: v_dual_mov_b32 v31, v0
 ; GCN-NEXT:  .LBB0_1: ; %loop
@@ -393,11 +393,11 @@ define amdgpu_kernel void @ds_wmma_permute(ptr addrspace(3) %base, ptr addrspace
 ; GCN-NEXT:    v_dual_mov_b32 v19, v0 :: v_dual_mov_b32 v20, v0
 ; GCN-NEXT:    v_cndmask_b32_e64 v24, 0, 1, s0
 ; GCN-NEXT:    v_dual_mov_b32 v21, v0 :: v_dual_mov_b32 v22, v0
-; GCN-NEXT:    v_dual_mov_b32 v23, v0 :: v_dual_mov_b32 v25, v0
-; GCN-NEXT:    v_mov_b32_e32 v26, v0
-; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_4)
+; GCN-NEXT:    v_mov_b32_e32 v23, v0
+; GCN-NEXT:    s_delay_alu instid0(VALU_DEP_3)
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s0, 1, v24
-; GCN-NEXT:    v_dual_mov_b32 v24, v0 :: v_dual_mov_b32 v27, v0
+; GCN-NEXT:    v_dual_mov_b32 v24, v0 :: v_dual_mov_b32 v25, v0
+; GCN-NEXT:    v_dual_mov_b32 v26, v0 :: v_dual_mov_b32 v27, v0
 ; GCN-NEXT:    v_dual_mov_b32 v28, v0 :: v_dual_mov_b32 v29, v0
 ; GCN-NEXT:    v_dual_mov_b32 v30, v0 :: v_dual_mov_b32 v31, v0
 ; GCN-NEXT:  .LBB1_1: ; %loop

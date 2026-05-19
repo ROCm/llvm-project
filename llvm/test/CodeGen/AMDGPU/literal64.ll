@@ -430,7 +430,7 @@ define amdgpu_ps <2 x float> @v_fma_f64(double %a, double %b) {
 ; GFX13-SDAG-NEXT:    v_fmaak_f64 v[0:1], v[0:1], v[4:5], 0x4069033333333333
 ; GFX13-SDAG-NEXT:    v_fmac_f64_e32 v[2:3], v[0:1], v[4:5]
 ; GFX13-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX13-SDAG-NEXT:    v_dual_mov_b32 v0, v2 :: v_dual_mov_b32 v1, v3
+; GFX13-SDAG-NEXT:    v_dual_mov_b32 v1, v3 :: v_dual_mov_b32 v0, v2
 ; GFX13-SDAG-NEXT:    ; return to shader part epilog
 ;
 ; GFX13-GISEL-LABEL: v_fma_f64:
@@ -444,7 +444,7 @@ define amdgpu_ps <2 x float> @v_fma_f64(double %a, double %b) {
 ; GFX13-GISEL-NEXT:    v_fmaak_f64 v[0:1], v[0:1], v[4:5], 0x4069033333333333
 ; GFX13-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX13-GISEL-NEXT:    v_fmac_f64_e32 v[2:3], v[0:1], v[4:5]
-; GFX13-GISEL-NEXT:    v_dual_mov_b32 v0, v2 :: v_dual_mov_b32 v1, v3
+; GFX13-GISEL-NEXT:    v_dual_mov_b32 v1, v3 :: v_dual_mov_b32 v0, v2
 ; GFX13-GISEL-NEXT:    ; return to shader part epilog
   %r1 = call double @llvm.fma.f64(double %a, double %b, double 153.1) nounwind readnone
   %r2 = call double @llvm.fma.f64(double %a, double %r1, double 200.1) nounwind readnone

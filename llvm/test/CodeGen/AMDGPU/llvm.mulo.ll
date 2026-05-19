@@ -310,17 +310,18 @@ define { i64, i1 } @smulo_i64_v_v(i64 %x, i64 %y) {
 ; GFX12-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 0, v5
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v6, v7, v2, vcc_lo
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_3)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v5, v9, v10, vcc_lo
-; GFX12-NEXT:    v_ashrrev_i32_e32 v2, 31, v1
 ; GFX12-NEXT:    v_sub_co_u32 v4, vcc_lo, v6, v4
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_3) | instid1(VALU_DEP_3)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(SKIP_4) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_subrev_co_ci_u32_e64 v7, null, 0, v5, vcc_lo
 ; GFX12-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 0, v3
-; GFX12-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
-; GFX12-NEXT:    v_dual_cndmask_b32 v4, v6, v4 :: v_dual_cndmask_b32 v5, v5, v7
+; GFX12-NEXT:    v_cndmask_b32_e32 v4, v6, v4, vcc_lo
+; GFX12-NEXT:    v_ashrrev_i32_e32 v2, 31, v1
+; GFX12-NEXT:    v_mov_b32_e32 v3, v2
+; GFX12-NEXT:    v_cndmask_b32_e32 v5, v5, v7, vcc_lo
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_cmp_ne_u64_e32 vcc_lo, v[4:5], v[2:3]
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)

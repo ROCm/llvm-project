@@ -150,10 +150,10 @@ define amdgpu_kernel void @gep_as0_uniform(ptr %p, i64 %offset, ptr %ret) {
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x0
 ; GFX12-NEXT:    s_load_b64 s[4:5], s[4:5], 0x10
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v1, s5
+; GFX12-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_add_nc_u64 s[0:1], s[0:1], s[2:3]
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
 ; GFX12-NEXT:    flat_store_b64 v[0:1], v[2:3]
 ; GFX12-NEXT:    s_endpgm
@@ -313,11 +313,12 @@ define amdgpu_kernel void @multi_gep_as0_uniform(ptr %p, i64 %offset, ptr %ret) 
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x0
 ; GFX12-NEXT:    s_load_b64 s[4:5], s[4:5], 0x10
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
 ; GFX12-NEXT:    v_dual_mov_b32 v0, s4 :: v_dual_mov_b32 v1, s5
-; GFX12-NEXT:    s_add_nc_u64 s[0:1], s[0:1], s[2:3]
+; GFX12-NEXT:    s_lshl_b64 s[2:3], s[2:3], 2
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX12-NEXT:    s_add_nc_u64 s[0:1], s[0:1], s[2:3]
 ; GFX12-NEXT:    s_add_nc_u64 s[0:1], s[0:1], 5
+; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX12-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
 ; GFX12-NEXT:    flat_store_b64 v[0:1], v[2:3]
 ; GFX12-NEXT:    s_endpgm

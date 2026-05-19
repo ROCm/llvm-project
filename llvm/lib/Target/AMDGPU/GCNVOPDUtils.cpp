@@ -296,8 +296,40 @@ struct VOPDPairingMutation : ScheduleDAGMutation {
         if (!hasLessThanNumFused(*JSUI, 2) ||
             !shouldScheduleAdjacent(TII, ST, IMI, *JMI))
           continue;
-        if (fuseInstructionPair(*DAG, *ISUI, *JSUI))
+        if (fuseInstructionPair(*DAG, *ISUI, *JSUI)) {
+          // fuseInstructionPair only constrains direct successors of ISUI and
+          // direct predecessors of JSUI. Independent sibling SUnits — those
+          // sharing a strong predecessor with JSUI but not directly ordered
+          // relative to it — can still be scheduled between the fused pair if
+          // they have longer critical paths. Add Artificial edges to force
+          // such siblings after JSUI.
+          // This is only needed on GFX12+ where the VOPD pairing constraints
+          // are stricter.
+          if (ST.hasGFX12Insts()) {
+            for (const SDep &PredDep : JSUI->Preds) {
+              if (PredDep.isWeak())
+                continue;
+              SUnit *PredSU = PredDep.getSUnit();
+              for (const SDep &SibDep : PredSU->Succs) {
+                if (SibDep.isWeak())
+                  continue;
+                SUnit *SibSU = SibDep.getSUnit();
+                if (SibSU == &*ISUI || SibSU == &*JSUI ||
+                    SibSU->isBoundaryNode())
+                  continue;
+                // Skip if already ordered relative to JSUI.
+                if (JSUI->isSucc(SibSU) || JSUI->isPred(SibSU))
+                  continue;
+                // Skip if adding JSUI→SibSU would create a cycle through the
+                // cluster edge: SibSU→ISUI→JSUI→SibSU.
+                if (ISUI->isPred(SibSU))
+                  continue;
+                DAG->addEdge(SibSU, SDep(&*JSUI, SDep::Artificial));
+              }
+            }
+          }
           break;
+        }
       }
     }
     LLVM_DEBUG(dbgs() << "Completed VOPDPairingMutation\n");

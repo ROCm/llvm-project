@@ -15,7 +15,7 @@ define float @missing_truncate_promote_bswap(i32 %arg) {
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_perm_b32 v0, 0, v0, 0xc0c0001
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-NEXT:    v_cvt_f32_f16_e32 v0, v0
+; GFX12-NEXT:    v_cvt_f32_f16_e32 v0, v0.l
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-ESM-LABEL: missing_truncate_promote_bswap:
@@ -28,7 +28,7 @@ define float @missing_truncate_promote_bswap(i32 %arg) {
 ; GFX12-ESM-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-ESM-NEXT:    v_perm_b32 v0, 0, v0, 0xc0c0001
 ; GFX12-ESM-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-ESM-NEXT:    v_cvt_f32_f16_e32 v0, v0
+; GFX12-ESM-NEXT:    v_cvt_f32_f16_e32 v0, v0.l
 ; GFX12-ESM-NEXT:    s_wait_alu depctr_va_vdst(0)
 ; GFX12-ESM-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_SCHED_MODE, 0, 2), 0
 ; GFX12-ESM-NEXT:    s_setpc_b64 s[30:31]
@@ -52,11 +52,11 @@ define amdgpu_kernel void @main(i32 %arg) {
 ; GFX12-NEXT:    v_mov_b32_e32 v31, v0
 ; GFX12-NEXT:    s_load_b64 s[12:13], s[6:7], 0x0
 ; GFX12-NEXT:    s_add_nc_u64 s[8:9], s[4:5], 40
-; GFX12-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-NEXT:    s_mov_b64 s[6:7], s[2:3]
 ; GFX12-NEXT:    s_mov_b32 s32, 0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_mov_b32_e32 v0, s14
+; GFX12-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-NEXT:    s_swappc_b64 s[30:31], s[12:13]
 ; GFX12-NEXT:    s_endpgm
 ;
@@ -72,11 +72,11 @@ define amdgpu_kernel void @main(i32 %arg) {
 ; GFX12-ESM-NEXT:    v_mov_b32_e32 v31, v0
 ; GFX12-ESM-NEXT:    s_load_b64 s[12:13], s[6:7], 0x0
 ; GFX12-ESM-NEXT:    s_add_nc_u64 s[8:9], s[4:5], 40
-; GFX12-ESM-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-ESM-NEXT:    s_mov_b64 s[6:7], s[2:3]
 ; GFX12-ESM-NEXT:    s_mov_b32 s32, 0
 ; GFX12-ESM-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-ESM-NEXT:    v_mov_b32_e32 v0, s14
+; GFX12-ESM-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX12-ESM-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_SCHED_MODE, 0, 2), 0
 ; GFX12-ESM-NEXT:    s_swappc_b64 s[30:31], s[12:13]
 ; GFX12-ESM-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_SCHED_MODE, 0, 2), 2

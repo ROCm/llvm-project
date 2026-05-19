@@ -637,13 +637,13 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX12-SDAG-LABEL: global_atomic_usub_sat_sgpr_base_offset:
 ; GFX12-SDAG:       ; %bb.0:
 ; GFX12-SDAG-NEXT:    s_load_b96 s[0:2], s[4:5], 0x0
-; GFX12-SDAG-NEXT:    v_mov_b32_e32 v0, 0
-; GFX12-SDAG-NEXT:    s_load_b64 s[4:5], s[4:5], 0x10
 ; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
-; GFX12-SDAG-NEXT:    v_mov_b32_e32 v1, s2
+; GFX12-SDAG-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
+; GFX12-SDAG-NEXT:    s_load_b64 s[4:5], s[4:5], 0x10
 ; GFX12-SDAG-NEXT:    global_atomic_sub_clamp_u32 v1, v0, v1, s[0:1] offset:4096 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-SDAG-NEXT:    global_inv scope:SCOPE_DEV
+; GFX12-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-SDAG-NEXT:    global_store_b32 v0, v1, s[4:5]
 ; GFX12-SDAG-NEXT:    s_endpgm
   %gep = getelementptr i32, ptr addrspace(1) %ptr, i64 1024

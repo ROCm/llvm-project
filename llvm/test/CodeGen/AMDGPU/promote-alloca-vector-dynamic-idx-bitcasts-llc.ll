@@ -192,7 +192,6 @@ define amdgpu_kernel void @test_bitcast_llc_v128i8_v16i8(ptr addrspace(1) %out, 
 ; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    s_lshl_b32 m0, s38, 2
-; GFX12-NEXT:    v_dual_mov_b32 v30, s30 :: v_dual_mov_b32 v31, s31
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s4 :: v_dual_mov_b32 v5, s5
 ; GFX12-NEXT:    v_dual_mov_b32 v6, s6 :: v_dual_mov_b32 v7, s7
 ; GFX12-NEXT:    v_dual_mov_b32 v8, s8 :: v_dual_mov_b32 v9, s9
@@ -206,6 +205,7 @@ define amdgpu_kernel void @test_bitcast_llc_v128i8_v16i8(ptr addrspace(1) %out, 
 ; GFX12-NEXT:    v_dual_mov_b32 v24, s24 :: v_dual_mov_b32 v25, s25
 ; GFX12-NEXT:    v_dual_mov_b32 v26, s26 :: v_dual_mov_b32 v27, s27
 ; GFX12-NEXT:    v_dual_mov_b32 v28, s28 :: v_dual_mov_b32 v29, s29
+; GFX12-NEXT:    v_dual_mov_b32 v30, s30 :: v_dual_mov_b32 v31, s31
 ; GFX12-NEXT:    v_movrels_b32_e32 v34, v3
 ; GFX12-NEXT:    v_movrels_b32_e32 v33, v2
 ; GFX12-NEXT:    v_movrels_b32_e32 v32, v1

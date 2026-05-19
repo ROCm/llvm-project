@@ -1003,8 +1003,9 @@ define amdgpu_kernel void @suaddo64(ptr addrspace(1) %out, ptr addrspace(1) %car
 ; GFX1250-NEXT:    s_load_b256 s[8:15], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_add_co_u32 s0, s12, s14
-; GFX1250-NEXT:    s_add_co_ci_u32 s1, s13, s15
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v0, s0
+; GFX1250-NEXT:    s_add_co_ci_u32 s1, s13, s15
 ; GFX1250-NEXT:    s_cselect_b32 s0, -1, 0
 ; GFX1250-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v3, 0, 1, s0
@@ -1018,8 +1019,9 @@ define amdgpu_kernel void @suaddo64(ptr addrspace(1) %out, ptr addrspace(1) %car
 ; GFX13-NEXT:    s_load_b256 s[0:7], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_add_co_u32 s4, s4, s6
-; GFX13-NEXT:    s_add_co_ci_u32 s5, s5, s7
+; GFX13-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX13-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v0, s4
+; GFX13-NEXT:    s_add_co_ci_u32 s5, s5, s7
 ; GFX13-NEXT:    s_cselect_b32 s4, -1, 0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX13-NEXT:    v_cndmask_b32_e64 v3, 0, 1, s4
@@ -2252,8 +2254,9 @@ define amdgpu_kernel void @susubo64(ptr addrspace(1) %out, ptr addrspace(1) %car
 ; GFX1250-NEXT:    s_load_b256 s[8:15], s[4:5], 0x24 nv
 ; GFX1250-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-NEXT:    s_sub_co_u32 s0, s12, s14
-; GFX1250-NEXT:    s_sub_co_ci_u32 s1, s13, s15
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v0, s0
+; GFX1250-NEXT:    s_sub_co_ci_u32 s1, s13, s15
 ; GFX1250-NEXT:    s_cselect_b32 s0, -1, 0
 ; GFX1250-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v3, 0, 1, s0
@@ -2267,8 +2270,9 @@ define amdgpu_kernel void @susubo64(ptr addrspace(1) %out, ptr addrspace(1) %car
 ; GFX13-NEXT:    s_load_b256 s[0:7], s[4:5], 0x24 nv
 ; GFX13-NEXT:    s_wait_kmcnt 0x0
 ; GFX13-NEXT:    s_sub_co_u32 s4, s4, s6
-; GFX13-NEXT:    s_sub_co_ci_u32 s5, s5, s7
+; GFX13-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX13-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v0, s4
+; GFX13-NEXT:    s_sub_co_ci_u32 s5, s5, s7
 ; GFX13-NEXT:    s_cselect_b32 s4, -1, 0
 ; GFX13-NEXT:    v_mov_b32_e32 v1, s5
 ; GFX13-NEXT:    v_cndmask_b32_e64 v3, 0, 1, s4

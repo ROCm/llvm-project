@@ -217,7 +217,7 @@ define amdgpu_kernel void @uniform_value_float(ptr addrspace(1) %out, float %in)
 ; GFX12DAGISEL-NEXT:    v_readfirstlane_b32 s2, v0
 ; GFX12DAGISEL-NEXT:    s_wait_alu depctr_va_sdst(0)
 ; GFX12DAGISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12DAGISEL-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
+; GFX12DAGISEL-NEXT:    v_dual_mov_b32 v1, s2 :: v_dual_mov_b32 v0, 0
 ; GFX12DAGISEL-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; GFX12DAGISEL-NEXT:    s_endpgm
 entry:

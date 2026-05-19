@@ -681,34 +681,36 @@ define void @v_constained_fma_v4f64_fpexcept_strict_uni(<4 x double> inreg %x, <
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_readfirstlane_b32 s4, v0
 ; GFX12-NEXT:    v_readfirstlane_b32 s5, v1
-; GFX12-NEXT:    v_readfirstlane_b32 s8, v4
-; GFX12-NEXT:    v_readfirstlane_b32 s9, v5
 ; GFX12-NEXT:    v_readfirstlane_b32 s6, v2
 ; GFX12-NEXT:    v_readfirstlane_b32 s7, v3
-; GFX12-NEXT:    v_dual_mov_b32 v0, s28 :: v_dual_mov_b32 v1, s29
+; GFX12-NEXT:    v_readfirstlane_b32 s8, v4
+; GFX12-NEXT:    v_readfirstlane_b32 s9, v5
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    v_dual_mov_b32 v2, s4 :: v_dual_mov_b32 v3, s5
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_4)
 ; GFX12-NEXT:    v_dual_mov_b32 v8, s8 :: v_dual_mov_b32 v9, s9
 ; GFX12-NEXT:    v_dual_mov_b32 v4, s6 :: v_dual_mov_b32 v5, s7
-; GFX12-NEXT:    v_fma_f64 v[0:1], s[0:1], s[20:21], v[0:1]
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
-; GFX12-NEXT:    v_fma_f64 v[2:3], s[2:3], s[22:23], v[2:3]
+; GFX12-NEXT:    v_dual_mov_b32 v2, s4 :: v_dual_mov_b32 v3, s5
+; GFX12-NEXT:    v_dual_mov_b32 v0, s28 :: v_dual_mov_b32 v1, s29
 ; GFX12-NEXT:    v_fma_f64 v[8:9], s[18:19], s[26:27], v[8:9]
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
 ; GFX12-NEXT:    v_fma_f64 v[4:5], s[16:17], s[24:25], v[4:5]
-; GFX12-NEXT:    v_readfirstlane_b32 s0, v0
-; GFX12-NEXT:    v_readfirstlane_b32 s1, v1
+; GFX12-NEXT:    v_fma_f64 v[2:3], s[2:3], s[22:23], v[2:3]
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
+; GFX12-NEXT:    v_fma_f64 v[0:1], s[0:1], s[20:21], v[0:1]
+; GFX12-NEXT:    v_readfirstlane_b32 s7, v9
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_4) | instskip(NEXT) | instid1(VALU_DEP_4)
+; GFX12-NEXT:    v_readfirstlane_b32 s4, v4
 ; GFX12-NEXT:    v_readfirstlane_b32 s2, v2
 ; GFX12-NEXT:    v_readfirstlane_b32 s3, v3
-; GFX12-NEXT:    v_readfirstlane_b32 s7, v9
-; GFX12-NEXT:    v_readfirstlane_b32 s4, v4
+; GFX12-NEXT:    v_readfirstlane_b32 s0, v0
+; GFX12-NEXT:    v_readfirstlane_b32 s1, v1
 ; GFX12-NEXT:    v_readfirstlane_b32 s5, v5
 ; GFX12-NEXT:    v_readfirstlane_b32 s6, v8
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
-; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
+; GFX12-NEXT:    v_dual_mov_b32 v11, s7 :: v_dual_mov_b32 v0, s0
+; GFX12-NEXT:    v_dual_mov_b32 v1, s1 :: v_dual_mov_b32 v2, s2
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
-; GFX12-NEXT:    v_dual_mov_b32 v11, s7 :: v_dual_mov_b32 v10, s6
+; GFX12-NEXT:    v_dual_mov_b32 v3, s3 :: v_dual_mov_b32 v10, s6
 ; GFX12-NEXT:    v_dual_mov_b32 v9, s5 :: v_dual_mov_b32 v8, s4
 ; GFX12-NEXT:    s_clause 0x1
 ; GFX12-NEXT:    global_store_b128 v[6:7], v[0:3], off

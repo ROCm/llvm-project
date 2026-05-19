@@ -688,9 +688,9 @@ define amdgpu_kernel void @sgemm_inner_loop_read2_sequence(ptr addrspace(1) %C, 
 ; GFX1250-NEXT:    s_wait_dscnt 0x2
 ; GFX1250-NEXT:    v_add_f32_e32 v0, v4, v0
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
-; GFX1250-NEXT:    v_dual_add_f32 v0, v0, v1 :: v_dual_mov_b32 v1, 0
+; GFX1250-NEXT:    v_add_f32_e32 v0, v0, v1
 ; GFX1250-NEXT:    s_wait_dscnt 0x1
-; GFX1250-NEXT:    v_add_f32_e32 v0, v0, v6
+; GFX1250-NEXT:    v_dual_add_f32 v0, v0, v6 :: v_dual_mov_b32 v1, 0
 ; GFX1250-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; GFX1250-NEXT:    v_add_f32_e32 v0, v0, v7
 ; GFX1250-NEXT:    s_wait_dscnt 0x0

@@ -842,13 +842,13 @@ define i64 @test_unsigned_i64_f64(double %f) nounwind {
 ; GFX12-GI-NEXT:    v_mul_f64_e32 v[4:5], 0x3df00000, v[2:3]
 ; GFX12-GI-NEXT:    v_floor_f64_e32 v[4:5], v[4:5]
 ; GFX12-GI-NEXT:    v_fma_f64 v[2:3], 0xc1f00000, v[4:5], v[2:3]
-; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v4, v[4:5]
 ; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v6, v[2:3]
 ; GFX12-GI-NEXT:    v_dual_mov_b32 v2, -1 :: v_dual_mov_b32 v3, 0x43efffff
+; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v4, v[4:5]
 ; GFX12-GI-NEXT:    v_cmp_gt_f64_e64 s0, v[0:1], v[2:3]
 ; GFX12-GI-NEXT:    s_wait_alu depctr_va_vcc(0)
-; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v4, 0, vcc_lo
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v5, v6, 0, vcc_lo
+; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v4, 0, vcc_lo
 ; GFX12-GI-NEXT:    s_wait_alu depctr_va_sdst(0)
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v0, v5, -1, s0
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v1, -1, s0
@@ -1121,13 +1121,13 @@ define i64 @test_s_unsigned_i64_f64(double inreg %f) nounwind {
 ; GFX12-GI-NEXT:    v_mul_f64_e32 v[2:3], 0x3df00000, v[0:1]
 ; GFX12-GI-NEXT:    v_floor_f64_e32 v[2:3], v[2:3]
 ; GFX12-GI-NEXT:    v_fma_f64 v[0:1], 0xc1f00000, v[2:3], v[0:1]
-; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v2, v[2:3]
 ; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v4, v[0:1]
 ; GFX12-GI-NEXT:    v_dual_mov_b32 v0, -1 :: v_dual_mov_b32 v1, 0x43efffff
+; GFX12-GI-NEXT:    v_cvt_u32_f64_e32 v2, v[2:3]
 ; GFX12-GI-NEXT:    v_cmp_gt_f64_e32 vcc_lo, s[0:1], v[0:1]
 ; GFX12-GI-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v2, 0, s2
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v3, v4, 0, s2
+; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v2, 0, s2
 ; GFX12-GI-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v0, v3, -1, vcc_lo
 ; GFX12-GI-NEXT:    v_cndmask_b32_e64 v1, v1, -1, vcc_lo

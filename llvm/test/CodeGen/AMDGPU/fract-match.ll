@@ -393,9 +393,8 @@ define <2 x float> @safe_math_fract_v2f32_const_splat_poison(<2 x float> %x, ptr
 ; GFX12-NEXT:    v_floor_f32_e32 v5, v1
 ; GFX12-NEXT:    v_cmp_u_f32_e32 vcc_lo, v0, v0
 ; GFX12-NEXT:    v_cmp_class_f32_e64 s0, v0, 0x204
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3)
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_dual_sub_f32 v6, v0, v4 :: v_dual_sub_f32 v7, v1, v5
-; GFX12-NEXT:    global_store_b64 v[2:3], v[4:5], off
 ; GFX12-NEXT:    s_wait_alu depctr_va_vcc(0)
 ; GFX12-NEXT:    v_cndmask_b32_e32 v6, v6, v0, vcc_lo
 ; GFX12-NEXT:    v_cmp_u_f32_e32 vcc_lo, v1, v1
@@ -404,8 +403,8 @@ define <2 x float> @safe_math_fract_v2f32_const_splat_poison(<2 x float> %x, ptr
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
 ; GFX12-NEXT:    v_cndmask_b32_e64 v0, v6, 0, s0
 ; GFX12-NEXT:    v_cmp_class_f32_e64 s0, v1, 0x204
+; GFX12-NEXT:    global_store_b64 v[2:3], v[4:5], off
 ; GFX12-NEXT:    s_wait_alu depctr_va_sdst(0)
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-NEXT:    v_cndmask_b32_e64 v1, v7, 0, s0
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
   %floor = tail call <2 x float> @llvm.floor.v2f32(<2 x float> %x)

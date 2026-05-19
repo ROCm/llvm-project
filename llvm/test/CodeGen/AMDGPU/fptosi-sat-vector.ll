@@ -4400,8 +4400,8 @@ define <8 x i8> @test_signed_v8f16_v8i8(<8 x half> %f) {
 ; GFX12-FAKE16-NEXT:    v_or_b32_e32 v0, v0, v1
 ; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v9
 ; GFX12-FAKE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[4:5]
-; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-FAKE16-NEXT:    v_mov_b32_e32 v4, v8
+; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-TRUE16-LABEL: test_signed_v8f16_v8i8:
@@ -5110,8 +5110,8 @@ define <8 x i64> @test_signed_v8f16_v8i64(<8 x half> %f) {
 ; GFX12-FAKE16-NEXT:    v_ashrrev_i32_e32 v1, 31, v0
 ; GFX12-FAKE16-NEXT:    v_ashrrev_i32_e32 v5, 31, v4
 ; GFX12-FAKE16-NEXT:    v_ashrrev_i32_e32 v9, 31, v8
-; GFX12-FAKE16-NEXT:    v_ashrrev_i32_e32 v13, 31, v12
 ; GFX12-FAKE16-NEXT:    v_dual_mov_b32 v2, v16 :: v_dual_mov_b32 v3, v17
+; GFX12-FAKE16-NEXT:    v_ashrrev_i32_e32 v13, 31, v12
 ; GFX12-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-TRUE16-LABEL: test_signed_v8f16_v8i64:
@@ -5144,8 +5144,8 @@ define <8 x i64> @test_signed_v8f16_v8i64(<8 x half> %f) {
 ; GFX12-TRUE16-NEXT:    v_ashrrev_i32_e32 v1, 31, v0
 ; GFX12-TRUE16-NEXT:    v_ashrrev_i32_e32 v5, 31, v4
 ; GFX12-TRUE16-NEXT:    v_ashrrev_i32_e32 v9, 31, v8
-; GFX12-TRUE16-NEXT:    v_ashrrev_i32_e32 v13, 31, v12
 ; GFX12-TRUE16-NEXT:    v_dual_mov_b32 v2, v16 :: v_dual_mov_b32 v3, v17
+; GFX12-TRUE16-NEXT:    v_ashrrev_i32_e32 v13, 31, v12
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-GI-LABEL: test_signed_v8f16_v8i64:
@@ -5788,8 +5788,8 @@ define <8 x i8> @test_s_signed_v8f16_v8i8(<8 x half> inreg %f) {
 ; GFX12-FAKE16-NEXT:    v_or_b32_e32 v0, v0, v1
 ; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v9
 ; GFX12-FAKE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[4:5]
-; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-FAKE16-NEXT:    v_mov_b32_e32 v4, v8
+; GFX12-FAKE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-TRUE16-LABEL: test_s_signed_v8f16_v8i8:
@@ -5852,8 +5852,8 @@ define <8 x i8> @test_s_signed_v8f16_v8i8(<8 x half> inreg %f) {
 ; GFX12-TRUE16-NEXT:    v_or_b32_e32 v0, v0, v1
 ; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e32 v1, 8, v9
 ; GFX12-TRUE16-NEXT:    v_lshrrev_b64 v[3:4], 24, v[4:5]
-; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-TRUE16-NEXT:    v_mov_b32_e32 v4, v8
+; GFX12-TRUE16-NEXT:    v_lshrrev_b32_e32 v5, 8, v5
 ; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-GI-LABEL: test_s_signed_v8f16_v8i8:

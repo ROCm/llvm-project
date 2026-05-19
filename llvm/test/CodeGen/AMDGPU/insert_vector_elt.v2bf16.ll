@@ -1571,12 +1571,12 @@ define amdgpu_kernel void @v_insertelement_v8bf16_dynamic(ptr addrspace(1) %out,
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 4
 ; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v3, 16, v3 :: v_dual_lshrrev_b32 v6, 16, v2
+; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v7, 16, v1 :: v_dual_lshrrev_b32 v8, 16, v0
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 5
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v2, v2, s4, s3
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 2
-; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v7, 16, v1 :: v_dual_lshrrev_b32 v8, 16, v0
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v3, v3, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 3
@@ -2167,30 +2167,31 @@ define amdgpu_kernel void @v_insertelement_v16bf16_dynamic(ptr addrspace(1) %out
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 7
 ; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x1
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v9, v3, s4, s2
+; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v3, 16, v3 :: v_dual_lshrrev_b32 v10, 16, v2
+; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v11, 16, v1 :: v_dual_lshrrev_b32 v12, 16, v0
+; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
+; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v13, 16, v7 :: v_dual_lshrrev_b32 v14, 16, v6
+; GFX1250-FAKE16-NEXT:    v_lshrrev_b32_e32 v15, 16, v5
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 4
-; GFX1250-FAKE16-NEXT:    v_lshrrev_b32_e32 v3, 16, v3
+; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v3, v3, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 5
-; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v10, 16, v2 :: v_dual_lshrrev_b32 v11, 16, v1
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v2, v2, s4, s3
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s3, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 2
-; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v3, v3, s4, s2
+; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v10, v10, s4, s3
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 3
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v1, v1, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 0
-; GFX1250-FAKE16-NEXT:    s_wait_loadcnt 0x0
-; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v12, 16, v0 :: v_dual_lshrrev_b32 v13, 16, v7
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v11, v11, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 1
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v0, v0, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 14
-; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v10, v10, s4, s3
 ; GFX1250-FAKE16-NEXT:    v_perm_b32 v3, v3, v9, 0x5040100
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v9, v12, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
@@ -2198,7 +2199,6 @@ define amdgpu_kernel void @v_insertelement_v16bf16_dynamic(ptr addrspace(1) %out
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v7, v7, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1250-FAKE16-NEXT:    s_cmp_eq_u32 s5, 12
-; GFX1250-FAKE16-NEXT:    v_dual_lshrrev_b32 v14, 16, v6 :: v_dual_lshrrev_b32 v15, 16, v5
 ; GFX1250-FAKE16-NEXT:    v_perm_b32 v2, v10, v2, 0x5040100
 ; GFX1250-FAKE16-NEXT:    v_cndmask_b32_e64 v10, v13, s4, s2
 ; GFX1250-FAKE16-NEXT:    s_cselect_b32 s2, -1, 0
