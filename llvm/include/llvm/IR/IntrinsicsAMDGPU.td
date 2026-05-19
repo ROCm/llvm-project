@@ -4262,4 +4262,12 @@ def int_amdgcn_addrspacecast_nonnull : DefaultAttrsIntrinsic<
 /// incoming block.
 def int_amdgcn_dead: DefaultAttrsIntrinsic<[llvm_any_ty], [],
     [IntrNoMem]>;
+
+// Hint the register allocator to place the result in a specific VGPR bank.
+// Bank 0 = v0-v255, bank 1 = v256-v511, bank 2 = v512-v767, bank 3 = v768-v1023.
+// This is an identity function at the IR level; the bank argument is consumed
+// by a pre-RA pass that sets register allocation hints.
+def int_amdgcn_set_vgpr_bank : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 }

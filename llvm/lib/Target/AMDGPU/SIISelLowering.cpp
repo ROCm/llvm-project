@@ -18279,6 +18279,17 @@ SITargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI_,
         return std::pair(0U, nullptr);
       break;
     }
+  } else if (Constraint == "VW" && Subtarget->has1024AddressableVGPRs()) {
+    const unsigned BitWidth = VT.getSizeInBits();
+    switch (BitWidth) {
+    case 1:
+      return std::pair(0U, nullptr);
+    default:
+      RC = TRI->getVGPRClassForBitWidth(BitWidth);
+      if (!RC)
+        return std::pair(0U, nullptr);
+      break;
+    }
   }
 
   // We actually support i128, i16 and f16 as inline parameters
@@ -18373,7 +18384,7 @@ SITargetLowering::getConstraintType(StringRef Constraint) const {
       return C_RegisterClass;
     }
   } else if (Constraint.size() == 2) {
-    if (Constraint == "VA")
+    if (Constraint == "VA" || Constraint == "VW")
       return C_RegisterClass;
   }
   if (isImmConstraint(Constraint)) {
