@@ -1,5 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir %s | FileCheck %s --enable-var-scope
-
+// REQUIRES: stability
 
 llvm.func @tile_2d_loop(%baseptr: !llvm.ptr, %tc1: i32, %tc2: i32, %ts1: i32, %ts2: i32) -> () {
   %literal_outer = omp.new_cli

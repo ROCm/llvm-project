@@ -1,5 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir -split-input-file %s | FileCheck %s
-
+// REQUIRES: stability
 // CHECK-LABEL: define void @test_stand_alone_directives()
 llvm.func @test_stand_alone_directives() {
   // CHECK: [[OMP_THREAD:%.*]] = call i32 @__kmpc_global_thread_num(ptr @{{[0-9]+}})
