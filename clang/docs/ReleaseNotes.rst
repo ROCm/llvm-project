@@ -510,6 +510,8 @@ Improvements to Clang's diagnostics
 
 - Added warnings for floating-point exception function calls (fenv.h) without enabling
   floating-point exception behavior via the appropriate flags or pragmas. (#GH128239)
+  
+- The diagnostics around ``__block`` now explain why a variable cannot be marked ``__block``. (#GH197213)
 
 Improvements to Clang's time-trace
 ----------------------------------
