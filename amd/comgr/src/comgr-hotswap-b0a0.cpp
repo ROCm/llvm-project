@@ -45,9 +45,13 @@ namespace hotswap {
 // target-specific opcode bits should land here.
 
 static constexpr unsigned Gfx1250MaxVgprs = 256;
-// GFX12 wave32 VGPR granularity; SGPR granularity is a fixed 16 across all
-// AMDGPU generations Comgr's hotswap currently supports.
-static constexpr unsigned Gfx1250VgprGranuleSize = 8;
+// GFX1250 wave32 VGPR ENCODING granularity is 16 (per
+// AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
+// not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
+// decode/encode helpers (getKernelVgprCount / updateKernelDescriptor) to
+// interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT. SGPR
+// granularity is a fixed 16 across every GFX generation hotswap supports.
+static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 static constexpr unsigned Gfx1250SgprGranuleSize = 16;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
