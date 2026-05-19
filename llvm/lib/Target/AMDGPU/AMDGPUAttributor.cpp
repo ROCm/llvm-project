@@ -443,17 +443,24 @@ struct AAAMDAttributesFunction : public AAAMDAttributes {
     // calls introduced later in pipeline will have flat scratch accesses.
     // FIXME: FLAT_SCRATCH_INIT will not be required here if device-libs
     // implementation for `asan_malloc_impl` is updated.
+    // HEAP_PTR and LDS_KERNEL_ID are also needed because `asan_malloc_impl`
+    // uses the heap, and the LDS kernel ID is required to locate it.
+    // These calls are injected after the attributor runs, so we must
+    // conservatively assume they are needed for any sanitized function.
     const bool HasSanitizerAttrs = hasSanitizerAttributes(*F);
     if (HasSanitizerAttrs) {
       removeAssumedBits(IMPLICIT_ARG_PTR);
       removeAssumedBits(HOSTCALL_PTR);
       removeAssumedBits(FLAT_SCRATCH_INIT);
+      removeAssumedBits(HEAP_PTR);
+      removeAssumedBits(LDS_KERNEL_ID);
     }
 
     for (auto Attr : ImplicitAttrs) {
       if (HasSanitizerAttrs &&
           (Attr.first == IMPLICIT_ARG_PTR || Attr.first == HOSTCALL_PTR ||
-           Attr.first == FLAT_SCRATCH_INIT))
+           Attr.first == FLAT_SCRATCH_INIT || Attr.first == HEAP_PTR ||
+           Attr.first == LDS_KERNEL_ID))
         continue;
 
       if (F->hasFnAttribute(Attr.second))
