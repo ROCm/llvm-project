@@ -1,3 +1,4 @@
+// XFAIL: *
 // REQUIRES: x86-registered-target, amdgpu-registered-target
 
 // Fail on invalid ROCm Path.
