@@ -662,6 +662,7 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
+  addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
 
   // Divergent because asanrtl.bc does not use the standard compiler-rt
   // semantics. Skip this if `-fsanitize=address` is set.
