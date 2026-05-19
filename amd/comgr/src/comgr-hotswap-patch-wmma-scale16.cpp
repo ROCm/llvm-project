@@ -334,6 +334,14 @@ static unsigned extractSrc1(const uint8_t *Raw) {
   return ((Raw[13] >> 1) & 0x7Fu) | ((Raw[14] & 0x03u) << 7);
 }
 
+// SRC2 (9-bit): bits [122:114] of the 128-bit VOP3PX instruction
+// (per VOP3PInstructions.td let Inst{122-114} = src2).
+//   src2[5:0] = byte[14] bits [7:2]
+//   src2[8:6] = byte[15] bits [2:0]
+static unsigned extractSrc2(const uint8_t *Raw) {
+  return ((Raw[14] >> 2) & 0x3Fu) | ((Raw[15] & 0x07u) << 6);
+}
+
 // ---------------------------------------------------------------------------
 // VOP3PX3 modifier field extraction
 // ---------------------------------------------------------------------------
@@ -350,6 +358,31 @@ static unsigned extractAScaleFmt(const uint8_t *Raw) {
 
 static unsigned extractBScaleFmt(const uint8_t *Raw) { return Raw[1] & 0x3; }
 
+// VOP3PX neg_lo / neg_hi bits live in the WMMA uop's modifier fields
+// (bytes 8..15), per VOP3PInstructions.td VOP3PX2e:
+//   Inst{72} = neg_hi src0   -> byte[9]  bit 0
+//   Inst{73} = neg_hi src1   -> byte[9]  bit 1
+//   Inst{74} = neg_hi src2   -> byte[9]  bit 2
+//   Inst{125} = neg_lo src0  -> byte[15] bit 5
+//   Inst{126} = neg_lo src1  -> byte[15] bit 6
+//   Inst{127} = neg_lo src2  -> byte[15] bit 7
+//
+// For the wmma_scale16_f32_32x16x128_f4 source profile only src2's neg_lo
+// is wired by the intrinsic (it's the c_mod=NEG path: builtin's c_mod
+// short maps to src2_modifiers and the assembler prints `neg_lo:[0,0,1]`
+// when the bit is set). src0/src1 neg bits are extracted defensively in
+// case a future profile wires them.
+//
+// Returns a 6-bit packed value with bit layout matching the AMDGPU printer
+// list order [src0, src1, src2] for each of {neg_lo, neg_hi}:
+//   bit 0 = neg_lo src0, bit 1 = neg_lo src1, bit 2 = neg_lo src2,
+//   bit 3 = neg_hi src0, bit 4 = neg_hi src1, bit 5 = neg_hi src2.
+static unsigned extractNegFlags(const uint8_t *Raw) {
+  unsigned NegLo = (Raw[15] >> 5) & 0x7; // src0/1/2 neg_lo
+  unsigned NegHi = Raw[9] & 0x7;         // src0/1/2 neg_hi
+  return NegLo | (NegHi << 3);
+}
+
 // Format a scale operand for assembly output. Returns the operand string
 // (e.g. "v42" for VGPRs, "s0" for SGPRs). Returns "" on unsupported encoding.
 static std::string formatScaleOp(unsigned Enc,
@@ -363,6 +396,54 @@ static std::string formatScaleOp(unsigned Enc,
   return "";
 }
 
+// Format the original SRC2/C operand for one M-split half.
+//
+// The source 32x16 form's C operand may be:
+//   - An inline integer immediate (encodings 128..208 = ints -16..64;
+//     0 = encoding 128 is the common case when the kernel uses an
+//     all-zero accumulator that the compiler folds to inline-imm 0).
+//   - An inline float immediate (encodings 240..247 = 0.5/1.0/2.0/4.0
+//     and signed variants).
+//   - A VGPR range v[c:c+15] (encoding >= 256).
+//   - An SGPR (encoding 0..105; not expected for WMMA accumulators).
+//
+// For inline immediates the same value applies to both halves (each half
+// has its own accumulator slice on M-split, no carry between halves).
+// For a VGPR range the source's v[c:c+15] is sliced to v[c:c+7] for
+// half-0 and v[c+8:c+15] for half-1, mirroring how dst is split.
+//
+// Returns "" if the encoding falls in a range we don't know how to print
+// (the caller logs an error and bails). Inline integer / float immediates
+// share the standard AMDGPU encoding numbering -- the assembler accepts
+// either the decoded literal (e.g. "0", "1.0") or the raw encoding
+// printed as decimal.
+static std::string formatSrc2(unsigned Enc, unsigned DstBase, unsigned Half) {
+  if (Enc >= VgprEncBase) {
+    unsigned Base = (Enc - VgprEncBase) + Half * 8;
+    return ("v[" + Twine(Base) + ":" + Twine(Base + 7) + "]").str();
+  }
+  // Integer inline immediates: 128 + N for N in [-16, 64].
+  if (Enc >= 128 && Enc <= 192)
+    return Twine(static_cast<int>(Enc) - 128).str();
+  if (Enc >= 193 && Enc <= 208)
+    return Twine(192 - static_cast<int>(Enc)).str();
+  // Float inline immediates: 240=0.5, 241=1.0, 242=2.0, 243=4.0,
+  // 244=-0.5, 245=-1.0, 246=-2.0, 247=-4.0.
+  switch (Enc) {
+  case 240: return "0.5";
+  case 241: return "1.0";
+  case 242: return "2.0";
+  case 243: return "4.0";
+  case 244: return "-0.5";
+  case 245: return "-1.0";
+  case 246: return "-2.0";
+  case 247: return "-4.0";
+  }
+  // SGPRs and unrecognized encodings fall through. WMMA accumulators are
+  // architecturally VGPR-or-immediate; an SGPR here would be malformed input.
+  return "";
+}
+
 // ---------------------------------------------------------------------------
 // v_wmma_scale16_f32_32x16x128_f4 → 2× v_wmma_scale_f32_16x16x128_f8f6f4
 // ---------------------------------------------------------------------------
@@ -372,8 +453,14 @@ static std::string formatScaleOp(unsigned Enc,
 // block-16→block-32 scale reduction as the 16x16 case.
 //
 // Register mapping (linear VGPR packing):
-//   Half 0: D=v[d:d+7], A=v[a:a+7], B=v[b:b+7], C=v[d:d+7]
-//   Half 1: D=v[d+8:d+15], A=v[a+8:a+15], B=v[b:b+7], C=v[d+8:d+15]
+//   Half 0: D=v[d:d+7],   A=v[a:a+7],   B=v[b:b+7], C=<src2-half-0>
+//   Half 1: D=v[d+8:d+15], A=v[a+8:a+15], B=v[b:b+7], C=<src2-half-1>
+//
+// C tracks the source's src2 operand:
+//   - inline-imm (e.g. 0 when the kernel accumulator is folded by clang):
+//     same literal on both halves (no accumulator carry on M-split)
+//   - VGPR range v[c:c+15]: sliced to v[c:c+7] / v[c+8:c+15]
+// See formatSrc2 above.
 //
 // Scale operands are shared: both halves use the same reduced B32 scale.
 // SCALE_OPSEL[0] (matrix_a_scale) selects the thread-half for A scales:
@@ -405,6 +492,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
 
   unsigned ABase = Src0Enc - VgprEncBase;
   unsigned BBase = Src1Enc - VgprEncBase;
+  unsigned Src2Enc = extractSrc2(Raw);
 
   unsigned ScaleSrc0Enc = extractScaleSrc0(Raw);
   unsigned ScaleSrc1Enc = extractScaleSrc1(Raw);
@@ -425,6 +513,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   bool OrigBScaleRow1 = extractBScaleRow1(Raw);
   unsigned AScaleFmt = extractAScaleFmt(Raw);
   unsigned BScaleFmt = extractBScaleFmt(Raw);
+  unsigned NegFlags = extractNegFlags(Raw);
 
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
@@ -499,13 +588,27 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     unsigned HalfD = DBase + Half * 8;
     unsigned HalfA = ABase + Half * 8;
 
+    // C (src2) tracks the source's encoding: for an inline immediate the
+    // same literal applies to both halves (M-split has no accumulator
+    // carry between halves); for a VGPR range we slice it the same way
+    // as D. Always sourcing C from HalfD is wrong when the kernel
+    // accumulator is folded to inline-imm 0 -- the WMMA would then read
+    // arbitrary stale bytes from D's range as the accumulator input.
+    std::string CStr = formatSrc2(Src2Enc, DBase, Half);
+    if (CStr.empty()) {
+      log() << "hotswap: error: wmma_scale16: 32x16 unsupported src2 "
+            << "encoding 0x" << utohexstr(Src2Enc) << " at offset 0x"
+            << utohexstr(DI.Offset) << "\n";
+      return 0;
+    }
+
     std::string WmmaAsm;
     raw_string_ostream WOS(WmmaAsm);
 
     WOS << "v_wmma_scale_f32_16x16x128_f8f6f4" << " v[" << HalfD << ":"
         << (HalfD + 7) << "]," << " v[" << HalfA << ":" << (HalfA + 7) << "],"
-        << " v[" << BBase << ":" << (BBase + 7) << "]," << " v[" << HalfD << ":"
-        << (HalfD + 7) << "]," << " " << ScaleAStr << ", " << ScaleBStr
+        << " v[" << BBase << ":" << (BBase + 7) << "]," << " " << CStr
+        << "," << " " << ScaleAStr << ", " << ScaleBStr
         << " matrix_a_fmt:MATRIX_FMT_FP4 matrix_b_fmt:MATRIX_FMT_FP4";
 
     if (Half == 1)
@@ -520,6 +623,22 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       WOS << " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E5M3";
     else if (BScaleFmt == 2)
       WOS << " matrix_b_scale_fmt:MATRIX_SCALE_FMT_E4M3";
+
+    // Propagate per-source neg_lo / neg_hi modifiers to both halves.
+    // M-split has no accumulator carry between halves, so each half
+    // gets the full set of source modifiers verbatim. The printer
+    // formats these as `neg_lo:[a,b,c]` / `neg_hi:[a,b,c]` lists; we
+    // emit them only when at least one bit in the corresponding triple
+    // is set, since `neg_lo:[0,0,0]` is the default and most asm
+    // dialects omit it.
+    unsigned NegLo = NegFlags & 0x7;
+    unsigned NegHi = (NegFlags >> 3) & 0x7;
+    if (NegLo != 0)
+      WOS << " neg_lo:[" << ((NegLo >> 0) & 1) << "," << ((NegLo >> 1) & 1)
+          << "," << ((NegLo >> 2) & 1) << "]";
+    if (NegHi != 0)
+      WOS << " neg_hi:[" << ((NegHi >> 0) & 1) << "," << ((NegHi >> 1) & 1)
+          << "," << ((NegHi >> 2) & 1) << "]";
 
     WOS << "\n";
 
