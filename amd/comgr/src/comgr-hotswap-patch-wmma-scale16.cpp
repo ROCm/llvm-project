@@ -180,6 +180,20 @@ static SmallVector<uint8_t> rewriteScale16ToScale(const uint8_t *OrigRaw,
   // Must be called after writeScaleSrc0 because both share byte [5].
   writeScaleSrc1(Rewritten.data(), NewScaleSrc1Enc);
 
+  // scale_src2 [58:50] = 0x100 (VGPR0). The field is architecturally
+  // unused on VOP3PX2 but if left at 0 the SQ mis-decodes it as an SGPR
+  // reference and stalls the SALU for 3 cycles. The in-place
+  // applyVop3px2Src2Fix pass patches this on user-emitted v_wmma_scale_*
+  // instructions in .text. Trampoline-emitted forms are NOT in Decoded[]
+  // on the first rewrite pass, so the in-place fix doesn't see them; on
+  // a second rewrite the trampolines have been appended to .text and the
+  // fix fires, producing different bytes than pass 1 -- breaking
+  // idempotency. Baking 0x100 here keeps wrap-emitted trampolines
+  // bit-identical across passes and avoids the SALU stall. Same trick
+  // PR #2 (VOP3PX2 wrap pass) uses in its LdScalePrefix bytes.
+  Rewritten[6] &= 0x03;                         // clear scale_src2[5:0]
+  Rewritten[7] = (Rewritten[7] & 0xF8) | 0x04;  // set scale_src2[8]=1, clear [7:6]
+
   return Rewritten;
 }
 
@@ -196,10 +210,16 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  // Idempotency: if the preceding instruction is s_branch, this site was
-  // already patched (the branch targets the trampoline we previously emitted).
-  if (Idx > 0 && StringRef(Ctx.Decoded[Idx - 1].Mnemonic) == "s_branch")
-    return 0;
+  // Skip offsets another patch has already claimed (Trampoline entries
+  // are appended to OutTrampolines before fixupTrampolineBranches
+  // overwrites the original site with s_branch). Mirrors PR #2's wrap
+  // pass; the previous `Decoded[Idx-1] == s_branch` heuristic never
+  // fired meaningfully because Decoded[] is built from the original
+  // .text and the dispatcher's mnemonic narrowing already filters out
+  // sites the patch has rewritten on a re-rewrite.
+  for (const Trampoline &T : Ctx.OutTrampolines)
+    if (T.OriginalOffset == DI.Offset)
+      return 0;
 
   const uint8_t *Raw = Ctx.Text + DI.Offset;
 
@@ -475,8 +495,11 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     return 0;
   }
 
-  if (Idx > 0 && StringRef(Ctx.Decoded[Idx - 1].Mnemonic) == "s_branch")
-    return 0;
+  // Skip offsets another patch has already claimed. Mirrors the 16x16
+  // path (see patchWmmaScale16_16x16 for the rationale).
+  for (const Trampoline &T : Ctx.OutTrampolines)
+    if (T.OriginalOffset == DI.Offset)
+      return 0;
 
   const uint8_t *Raw = Ctx.Text + DI.Offset;
 
@@ -649,6 +672,15 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
             << VOP3PXSize << ") at offset 0x" << utohexstr(DI.Offset) << "\n";
       return 0;
     }
+
+    // Same scale_src2 = 0x100 (VGPR0) bake-in as the 16x16 path. The
+    // assembler leaves scale_src2 = 0x80 (SGPR mis-decoded) by default;
+    // applyVop3px2Src2Fix would patch it on a second rewrite (breaking
+    // idempotency) and the SALU would stall 3 cycles per invocation on
+    // first execution. See rewriteScale16ToScale's comment for the full
+    // story.
+    HalfBytes[6] &= 0x03;
+    HalfBytes[7] = (HalfBytes[7] & 0xF8) | 0x04;
 
     Replacement.insert(Replacement.end(), HalfBytes.begin(), HalfBytes.end());
   }
