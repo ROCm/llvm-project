@@ -1737,13 +1737,14 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
     BitVector SpillFIs(MFI.getObjectIndexEnd(), false);
     BitVector NonVGPRSpillFIs(MFI.getObjectIndexEnd(), false);
 
-    bool SeenDbgInstr = false;
+    // To gather DBG_VALUE and DBG_VALUE_LIST instructions.
+    MIVector DbgValInsts;
 
     for (MachineBasicBlock &MBB : MF) {
       for (MachineInstr &MI : llvm::make_early_inc_range(MBB)) {
         int FrameIndex;
         if (MI.isDebugInstr())
-          SeenDbgInstr = true;
+          DbgValInsts.push_back(&MI);
 
         if (TII->isVGPRSpill(MI)) {
           // Try to eliminate stack used by VGPR spills before frame
@@ -1784,8 +1785,8 @@ void SIFrameLowering::processFunctionBeforeFrameFinalized(
 
       MBB.sortUniqueLiveIns();
 
-      if (!SpillFIs.empty() && SeenDbgInstr)
-        clearDebugInfoForSpillFIs(MFI, MBB, SpillFIs);
+      if (!SpillFIs.empty() && !DbgValInsts.empty())
+        updateDbgValueInstsForSpillFIs(DbgValInsts, SpillFIs);
     }
   }
 

@@ -12,13 +12,36 @@
 namespace llvm {
 
 class BitVector;
-class MachineBasicBlock;
-class MachineFrameInfo;
 
-/// Replace frame index operands with null registers in debug value instructions
-/// for the specified spill frame indices.
-void clearDebugInfoForSpillFIs(MachineFrameInfo &MFI, MachineBasicBlock &MBB,
-                               const BitVector &SpillFIs);
+using MIVector = SmallVector<MachineInstr *>;
+
+// Update DBG_VALUE and DBG_VALUE_LIST instructions so that they correctly
+// reflect performed stack to VGPR spills.
+// Examples:
+//  DBG_VALUE  %stack.8, 0, !"next", !DIExpression(DIOpArg(0, ptr addrspace(5)),
+//                                                 DIOpDeref(i32))
+//    --->
+//  DBG_VALUE  %249 : vgpr_32, 0, !"next", !DIExpression(DIOpArg(0, i32),
+//                                                       DIOpConstant(i8 40),
+//                                                       DIOpByteOffset(i32))
+//
+//
+//  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, ptr addrspace(5)),
+//                                        DIOpDeref(i32),
+//                                        DIOpArg(1, ptr addrspace(5)),
+//                                        DIOpDeref(i32),
+//                                        DIOpAdd()),
+//                 %stack.9, %stack.5
+//    --->
+//  DBG_VALUE_LIST !"next", !DIExpression(DIOpArg(0, i32),
+//                                        DIOpConstant(i8 40),
+//                                        DIOpByteOffset(i32),
+//                                        DIOpArg(1, ptr addrspace(5)),
+//                                        DIOpDeref(i32),
+//                                        DIOpAdd()),
+//                 %14 : vgpr_32, %stack.5
+//
+void updateDbgValueInstsForSpillFIs(MIVector &Insts, const BitVector &SpillFIs);
 
 } // end namespace llvm
 
