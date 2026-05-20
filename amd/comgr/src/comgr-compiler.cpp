@@ -1807,17 +1807,15 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
   auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
     // if supplied file isn't a package, return an error
-    if (Input->DataKind != AMD_COMGR_DATA_KIND_PACKAGE) {
+    if (Input->DataKind != AMD_COMGR_DATA_KIND_PACKAGE)
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
-    }
 
     llvm::SmallVector<llvm::object::OffloadFile> Files;
 
     llvm::StringRef DataBuffer(Input->Data, Input->Size);
     llvm::MemoryBufferRef DataBufferRef(DataBuffer, "package_data");
-    if (llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
+    if (llvm::object::extractOffloadBinaries(DataBufferRef, Files))
       return AMD_COMGR_STATUS_ERROR;
-    }
 
     // Generate random name if none provided
     if (!strcmp(Input->Name, "")) {
@@ -1830,9 +1828,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     // Write input file system so that the offload-binary API can process
     // TODO: Switch write to VFS
     SmallString<128> InputFilePath = getFilePath(Input, InputDir);
-    if (auto Status = outputToFile(Input, InputFilePath)) {
+    if (auto Status = outputToFile(Input, InputFilePath))
       return Status;
-    }
 
     // Generate prefix for output files
     StringRef OutputPrefix = Input->Name;
@@ -1899,15 +1896,12 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     }
 
     UnpackageCommand Unpackage(Files, TargetNames, OutputFileNames);
-    if (Cache) {
-      if (auto Status = Cache->execute(Unpackage, LogS)) {
+    if (Cache)
+      if (auto Status = Cache->execute(Unpackage, LogS))
         return Status;
-      }
-    } else {
-      if (auto Status = Unpackage.execute(LogS)) {
+    else
+      if (auto Status = Unpackage.execute(LogS))
         return Status;
-      }
-    }
 
     auto *DataKind = DataKinds.begin();
     for (StringRef OutputFilePath : OutputFileNames) {
