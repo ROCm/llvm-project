@@ -9,6 +9,10 @@
 #ifndef LLVM_LIB_TARGET_AMDGPU_SISPILLUTILS_H
 #define LLVM_LIB_TARGET_AMDGPU_SISPILLUTILS_H
 
+#include "llvm/ADT/BitVector.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/IR/DebugInfoMetadata.h"
+
 namespace llvm {
 
 class BitVector;
