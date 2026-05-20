@@ -1,6 +1,9 @@
-# Linux variant of the Comgr CI: builds LLVM/Clang/translator/Comgr in one
-# job and runs the Comgr lit + ctest + gtest suites in a single test job
-# that consumes a GHA artifact uploaded by the build job.
+# Linux variant of the Comgr CI: builds LLVM/Clang/translator/device-libs
+# (with compiler-rt sanitizers) in one job, then a single ASAN test job
+# rebuilds Comgr with -fsanitize=address and runs the Comgr lit + ctest +
+# gtest suites via check-comgr. Non-ASAN Comgr coverage already runs in
+# TheRock's Multi-Arch CI compiler-runtime stage, so this workflow focuses
+# on ASAN.
 
 name: Comgr Compiler CI - Linux
 
@@ -9,7 +12,9 @@ on:
 
 jobs:
   # =====================================================================
-  # Build LLVM + Clang + amd-llvm-spirv + device-libs + Comgr.
+  # Build LLVM + Clang + amd-llvm-spirv + compiler-rt + device-libs.
+  # Comgr is not built here; the ASAN test job rebuilds it from scratch
+  # with -DADDRESS_SANITIZER=ON against this LLVM.
   # Strip binaries and upload the build trees as a single artifact for
   # the test job to consume.
   # =====================================================================
@@ -78,31 +83,16 @@ jobs:
       - name: Build device-libs
         run: ninja -C build-device-libs
 
-      - name: Configure Comgr
-        # LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR points Comgr at
-        # the in-tree translator headers so COMGR_SPIRV_TRANSLATOR_AVAILABLE
-        # turns ON (otherwise translator-dependent lit tests are UNSUPPORTED).
-        run: |
-          cmake -G Ninja -S amd/comgr -B build-comgr \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$PWD/build;$PWD/build-device-libs" \
-            -DLLVM_DIR=$PWD/build/lib/cmake/llvm \
-            -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD/llvm/projects/SPIRV-LLVM-Translator \
-            -DBUILD_TESTING=ON
-
-      - name: Build Comgr
-        run: ninja -C build-comgr amd_comgr
-
       - name: Strip binaries
         run: |
-          find build build-comgr build-device-libs \
+          find build build-device-libs \
             -type f \( -executable -o -name '*.so*' -o -name '*.a' \) \
             -exec strip --strip-unneeded {} + 2>/dev/null || true
 
       # Tar before upload: actions/upload-artifact@v4 strips +x bits and
       # excludes hidden files (loses FetchContent .git dirs).
       - name: Tar build trees
-        run: tar -cf linux-build-tree.tar build build-comgr build-device-libs
+        run: tar -cf linux-build-tree.tar build build-device-libs
 
       - name: Upload build tree artifact
         uses: actions/upload-artifact@v4
@@ -114,67 +104,11 @@ jobs:
           if-no-files-found: error
 
   # =====================================================================
-  # Test - Comgr (lit + gtest + ctest)
-  # =====================================================================
-  test_comgr:
-    name: Test Comgr
-    needs: build
-    runs-on: azure-linux-scale-rocm
-    timeout-minutes: 30
-    container:
-      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
-
-    steps:
-      - name: Checkout llvm-project (PR head)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: ROCm/SPIRV-LLVM-Translator
-          ref: amd-staging
-          path: llvm/projects/SPIRV-LLVM-Translator
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Download build tree artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: comgr-linux-build-tree
-
-      # touch build.ninja so it's newer than CMakeCache.txt — without it
-      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
-      - name: Untar build trees
-        run: |
-          tar -xmf linux-build-tree.tar
-          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
-
-      - name: Test - Comgr (check-comgr)
-        # check-comgr depends on test-lit (runs lit suite) and test-unit
-        # (runs gtest binaries via its COMMAND block), then runs ctest for
-        # the legacy C tests. Single target = all three test layers.
-        id: check_comgr
-        run: ninja -C build-comgr check-comgr
-
-      - name: Show failed Comgr ctest output
-        # check-comgr invokes ctest without --output-on-failure, so failures
-        # show "***Failed" with no stderr. Re-run any failed cases verbosely
-        # and redirect comgr's internal log buffer to stderr so clang errors
-        # from inside amd_comgr_do_action() surface (otherwise comgr just
-        # returns AMD_COMGR_STATUS_ERROR with no detail).
-        if: failure() && steps.check_comgr.conclusion == 'failure'
-        env:
-          AMD_COMGR_REDIRECT_LOGS: stderr
-        run: ctest --test-dir build-comgr --output-on-failure --rerun-failed
-
-  # =====================================================================
-  # Test - Comgr (ASAN): rebuild only Comgr with -fsanitize=address against
-  # the non-ASAN LLVM from the build artifact. ASAN interceptors hook the
-  # process-global malloc, so allocations from non-ASAN LLVM code linked
-  # into amd_comgr.so still route through ASAN's allocator and get tracked.
+  # Test - Comgr (ASAN): build Comgr with -fsanitize=address against the
+  # non-ASAN LLVM from the build artifact, then run check-comgr (lit +
+  # ctest + gtest). ASAN interceptors hook the process-global malloc, so
+  # allocations from non-ASAN LLVM code linked into amd_comgr.so still
+  # route through ASAN's allocator and get tracked.
   # detect_leaks=0 because LLVM has known long-lived allocations that look
   # like leaks at process exit.
   # =====================================================================
@@ -208,11 +142,11 @@ jobs:
           name: comgr-linux-build-tree
 
       - name: Untar build trees
+        # touch build.ninja so it's newer than CMakeCache.txt — without it
+        # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
         run: |
           tar -xmf linux-build-tree.tar
           touch build/build.ninja build-device-libs/build.ninja
-          # Drop the non-ASAN Comgr build; we'll rebuild into build-comgr-asan/.
-          rm -rf build-comgr
 
       - name: Configure Comgr (ASAN)
         # Use the just-built clang as compiler so -fsanitize=address links
