@@ -357,8 +357,8 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
                           raw_ostream &LogS) {
   // Get the target specific parser.
   std::string Error;
-  const Target *TheTarget =
-      TargetRegistry::lookupTarget(llvm::Triple(Opts.Triple), Error);
+  const Target *TheTarget = TargetRegistry::lookupTarget(
+    llvm::Triple(Opts.Triple), Error);
   if (!TheTarget) {
     return Diags.Report(diag::err_target_unknown_triple) << Opts.Triple;
   }
@@ -385,8 +385,8 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
   // it later.
   SrcMgr.setIncludeDirs(Opts.IncludePaths);
 
-  std::unique_ptr<MCRegisterInfo> MRI(
-      TheTarget->createMCRegInfo(llvm::Triple(Opts.Triple)));
+  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(
+      llvm::Triple(Opts.Triple)));
   assert(MRI && "Unable to create target register info!");
 
   llvm::MCTargetOptions MCOptions;
@@ -415,8 +415,8 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
   }
 
   std::unique_ptr<MCObjectFileInfo> MOFI(new MCObjectFileInfo());
-  std::unique_ptr<MCSubtargetInfo> STI(TheTarget->createMCSubtargetInfo(
-      llvm::Triple(Opts.Triple), Opts.CPU, FS));
+  std::unique_ptr<MCSubtargetInfo> STI(
+      TheTarget->createMCSubtargetInfo(llvm::Triple(Opts.Triple), Opts.CPU, FS));
 
   MCContext Ctx(Triple(Opts.Triple), MAI.get(), MRI.get(), STI.get(), &SrcMgr);
   Ctx.setObjectFileInfo(MOFI.get());
@@ -458,9 +458,8 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
   // FIXME: There is a bit of code duplication with addPassesToEmitFile.
   if (Opts.OutputType == AssemblerInvocation::FT_Asm) {
     std::unique_ptr<MCInstPrinter> InstructionPrinter(
-        TheTarget->createMCInstPrinter(llvm::Triple(Opts.Triple),
-                                       Opts.OutputAsmVariant, *MAI, *MCII,
-                                       *MRI));
+      TheTarget->createMCInstPrinter(
+         llvm::Triple(Opts.Triple), Opts.OutputAsmVariant, *MAI, *MCII, *MRI));
     std::unique_ptr<MCCodeEmitter> MCE;
     std::unique_ptr<MCAsmBackend> MAB;
     if (Opts.ShowEncoding) {
@@ -469,8 +468,7 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
       MAB.reset(TheTarget->createMCAsmBackend(*STI, *MRI, Options));
     }
     auto FOut = std::make_unique<formatted_raw_ostream>(*Out);
-    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut),
-                                           std::move(InstructionPrinter),
+    Str.reset(TheTarget->createAsmStreamer(Ctx, std::move(FOut), std::move(InstructionPrinter),
                                            std::move(MCE), std::move(MAB)));
   } else if (Opts.OutputType == AssemblerInvocation::FT_Null) {
     Str.reset(createNullStreamer(Ctx));
@@ -764,8 +762,8 @@ AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {
   TheDriver.setCheckInputsExist(false);
 
   // We do not want the driver to promote -include into -include-pch.
-  // Otherwise, the driver may pick PCH in the wrong format, without
-  // permissions, in the process's CWD.
+  // Otherwise, the driver may pick PCH in the wrong format, without permissions,
+  // in the process's CWD.
   TheDriver.setProbePrecompiled(false);
 
   // Log arguments used to build compilation
@@ -1622,8 +1620,8 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
 
     if (Input->DataKind == AMD_COMGR_DATA_KIND_BC) {
       if (env::shouldEmitVerboseLogs()) {
-        LogS << "\t     Linking Bitcode: " << InputDir << path::get_separator()
-             << Input->Name << "\n";
+        LogS << "\t     Linking Bitcode: " << InputDir << path::get_separator() << Input->Name
+             << "\n";
       }
 
       // The data in Input outlives Mod, and the linker destructs Mod after
@@ -1644,8 +1642,8 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
         return AMD_COMGR_STATUS_ERROR;
     } else if (Input->DataKind == AMD_COMGR_DATA_KIND_BC_BUNDLE) {
       if (env::shouldEmitVerboseLogs()) {
-        LogS << "      Linking Bundle: " << InputDir << path::get_separator()
-             << Input->Name << "\n";
+        LogS << "      Linking Bundle: " << InputDir << path::get_separator() << Input->Name
+             << "\n";
       }
 
       // Determine desired bundle entry ID
@@ -1687,8 +1685,7 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
       // on Windows. Replace with '_'
       std::replace(OutputFileName.begin(), OutputFileName.end(), ':', '_');
 
-      std::string OutputFilePath =
-          OutputDir.str().str() + path::get_separator().str() + OutputFileName;
+      std::string OutputFilePath = OutputDir.str().str() + path::get_separator().str() + OutputFileName;
       BundlerConfig.OutputFileNames.push_back(OutputFilePath);
 
       OffloadBundler Bundler(BundlerConfig);
@@ -1743,8 +1740,8 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
     // Unbundle bitcode archive
     else if (Input->DataKind == AMD_COMGR_DATA_KIND_AR_BUNDLE) {
       if (env::shouldEmitVerboseLogs()) {
-        LogS << "\t     Linking Archive: " << InputDir << path::get_separator()
-             << Input->Name << "\n";
+        LogS << "\t     Linking Archive: " << InputDir << path::get_separator() << Input->Name
+             << "\n";
       }
 
       // Determine desired bundle entry ID
@@ -1789,8 +1786,7 @@ amd_comgr_status_t AMDGPUCompiler::linkBitcodeToBitcode() {
       // on Windows. Replace with '_'
       std::replace(OutputFileName.begin(), OutputFileName.end(), ':', '_');
 
-      std::string OutputFilePath =
-          OutputDir.str().str() + path::get_separator().str() + OutputFileName;
+      std::string OutputFilePath = OutputDir.str().str() + path::get_separator().str() + OutputFileName;
       BundlerConfig.OutputFileNames.push_back(OutputFilePath);
 
       OffloadBundler Bundler(BundlerConfig);
@@ -2330,6 +2326,7 @@ amd_comgr_status_t AMDGPUCompiler::compileSourceToSpirv() {
   Args.push_back("--offload-arch=amdgcnspirv");
   Args.push_back("--no-gpu-bundle-output");
   Args.push_back("-c");
+
 
 #if _WIN32
   Args.push_back("-fshort-wchar");
