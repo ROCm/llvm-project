@@ -8,7 +8,6 @@
 
 #include "SISpillUtils.h"
 #include "SIMachineFunctionInfo.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
