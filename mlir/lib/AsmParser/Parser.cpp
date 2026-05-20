@@ -198,6 +198,45 @@ InFlightDiagnostic Parser::emitError(const Twine &message) {
   return emitError(SMLoc::getFromPointer(loc.getPointer() - 1), message);
 }
 
+/// Find the start of a line comment (`//`) in the given string, ignoring
+/// occurrences inside string literals. Returns StringRef::npos if no comment
+/// is found.
+static size_t findCommentStart(StringRef line) {
+  // Fast path: no comment in line at all.
+  size_t slashPos = line.find("//");
+  if (slashPos == StringRef::npos)
+    return StringRef::npos;
+
+  // Fast path: comment at start of line, or no quote before the '//'.
+  if (slashPos == 0)
+    return 0;
+  size_t quotePos = line.find('"');
+  if (quotePos == StringRef::npos || quotePos > slashPos)
+    return slashPos;
+
+  // A quote appears before '//'. Parse carefully to handle string literals.
+  bool inString = false;
+  for (size_t i = 0, e = line.size(); i < e; ++i) {
+    char c = line[i];
+    if (inString) {
+      // Skip escaped characters inside strings.
+      if (c == '\\') {
+        ++i;
+        continue;
+      }
+      if (c == '"')
+        inString = false;
+    } else {
+      if (c == '"') {
+        inString = true;
+      } else if (c == '/' && i + 1 < e && line[i + 1] == '/') {
+        return i;
+      }
+    }
+  }
+  return StringRef::npos;
+}
+
 InFlightDiagnostic Parser::emitError(SMLoc loc, const Twine &message) {
   auto diag = mlir::emitError(getEncodedSourceLocation(loc), message);
 
@@ -247,16 +286,15 @@ InFlightDiagnostic Parser::emitWrongTokenError(const Twine &message) {
     // Drop the \n so we emit the diagnostic at the end of the line.
     startOfBuffer = startOfBuffer.drop_back();
 
-    // Check to see if the preceding line has a comment on it.  We assume that a
-    // `//` is the start of a comment, which is mostly correct.
-    // TODO: This will do the wrong thing for // in a string literal.
+    // Check to see if the preceding line has a comment on it.
     auto prevLine = startOfBuffer;
     size_t newLineIndex = prevLine.find_last_of("\n\r");
     if (newLineIndex != StringRef::npos)
       prevLine = prevLine.drop_front(newLineIndex);
 
-    // If we find a // in the current line, then emit the diagnostic before it.
-    size_t commentStart = prevLine.find("//");
+    // If we find a // in the current line (outside of string literals), then
+    // emit the diagnostic before it.
+    size_t commentStart = findCommentStart(prevLine);
     if (commentStart != StringRef::npos)
       startOfBuffer = startOfBuffer.drop_back(prevLine.size() - commentStart);
   }
@@ -822,6 +860,12 @@ private:
   /// their first reference, to allow checking for use of undefined values.
   DenseMap<Value, SMLoc> forwardRefPlaceholders;
 
+  /// Operations that define the placeholders. These are kept until the end of
+  /// of the lifetime of the parser because some custom parsers may store
+  /// references to them in local state and use them after forward references
+  /// have been resolved.
+  DenseSet<Operation *> forwardRefOps;
+
   /// Deffered locations: when parsing `loc(#loc42)` we add an entry to this
   /// map. After parsing the definition `#loc42 = ...` we'll patch back users
   /// of this location.
@@ -849,11 +893,11 @@ OperationParser::OperationParser(ParserState &state, ModuleOp topLevelOp)
 }
 
 OperationParser::~OperationParser() {
-  for (auto &fwd : forwardRefPlaceholders) {
+  for (Operation *op : forwardRefOps) {
     // Drop all uses of undefined forward declared reference and destroy
     // defining operation.
-    fwd.first.dropAllUses();
-    fwd.first.getDefiningOp()->destroy();
+    op->dropAllUses();
+    op->destroy();
   }
   for (const auto &scope : forwardRef) {
     for (const auto &fwd : scope) {
@@ -1009,7 +1053,6 @@ ParseResult OperationParser::addDefinition(UnresolvedOperand useInfo,
     // the actual definition instead, delete the forward ref, and remove it
     // from our set of forward references we track.
     existing.replaceAllUsesWith(value);
-    existing.getDefiningOp()->destroy();
     forwardRefPlaceholders.erase(existing);
 
     // If a definition of the value already exists, replace it in the assembly
@@ -1193,9 +1236,10 @@ Value OperationParser::createForwardRefPlaceholder(SMLoc loc, Type type) {
   auto name = OperationName("builtin.unrealized_conversion_cast", getContext());
   auto *op = Operation::create(
       getEncodedSourceLocation(loc), name, type, /*operands=*/{},
-      /*attributes=*/NamedAttrList(), /*properties=*/nullptr,
+      /*attributes=*/NamedAttrList(), /*properties=*/PropertyRef(),
       /*successors=*/{}, /*numRegions=*/0);
   forwardRefPlaceholders[op->getResult(0)] = loc;
+  forwardRefOps.insert(op);
   return op->getResult(0);
 }
 
@@ -2125,7 +2169,7 @@ OperationParser::parseCustomOperation(ArrayRef<ResultRecord> resultIDs) {
     parseAssemblyFn = *dialectHook;
   }
   getState().defaultDialectStack.push_back(defaultDialect);
-  auto restoreDefaultDialect = llvm::make_scope_exit(
+  llvm::scope_exit restoreDefaultDialect(
       [&]() { getState().defaultDialectStack.pop_back(); });
 
   // If the custom op parser crashes, produce some indication to help
@@ -2271,7 +2315,7 @@ ParseResult OperationParser::parseRegionBody(Region &region, SMLoc startLoc,
 
   // Parse the first block directly to allow for it to be unnamed.
   auto owningBlock = std::make_unique<Block>();
-  auto failureCleanup = llvm::make_scope_exit([&] {
+  llvm::scope_exit failureCleanup([&] {
     if (owningBlock) {
       // If parsing failed, as indicated by the fact that `owningBlock` still
       // owns the block, drop all forward references from preceding operations
@@ -2376,7 +2420,7 @@ ParseResult OperationParser::parseBlock(Block *&block) {
   // only in the case of a successful parse. This ensures that the Block
   // allocated is released if the parse fails and control returns early.
   std::unique_ptr<Block> inflightBlock;
-  auto cleanupOnFailure = llvm::make_scope_exit([&] {
+  llvm::scope_exit cleanupOnFailure([&] {
     if (inflightBlock)
       inflightBlock->dropAllDefinedValueUses();
   });
@@ -2511,10 +2555,15 @@ ParseResult OperationParser::parseOptionalBlockArgList(Block *owner) {
 
 ParseResult OperationParser::codeCompleteSSAUse() {
   for (IsolatedSSANameScope &scope : isolatedNameScopes) {
-    for (auto &it : scope.values) {
-      if (it.second.empty())
-        continue;
-      Value frontValue = it.second.front().value;
+    // Collect and sort SSA value names for deterministic completion ordering.
+    SmallVector<StringRef> sortedNames;
+    for (auto &it : scope.values)
+      if (!it.second.empty())
+        sortedNames.push_back(it.getKey());
+    llvm::sort(sortedNames);
+
+    for (StringRef name : sortedNames) {
+      Value frontValue = scope.values[name].front().value;
 
       std::string detailData;
       llvm::raw_string_ostream detailOS(detailData);
@@ -2535,11 +2584,11 @@ ParseResult OperationParser::codeCompleteSSAUse() {
       // FIXME: We should define a policy for packed values, e.g. with a limit
       // on the detail size, but it isn't clear what would be useful right now.
       // For now we just only emit the first type.
-      if (it.second.size() > 1)
+      if (scope.values[name].size() > 1)
         detailOS << ", ...";
 
       state.codeCompleteContext->appendSSAValueCompletion(
-          it.getKey(), std::move(detailData));
+          name, std::move(detailData));
     }
   }
 

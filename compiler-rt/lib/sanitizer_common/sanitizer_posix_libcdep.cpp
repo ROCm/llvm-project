@@ -188,12 +188,13 @@ static uptr GetAltStackSize() {
   return SIGSTKSZ * 4;
 }
 
-void SetAlternateSignalStack() {
+void* SetAlternateSignalStack() {
   stack_t altstack, oldstack;
   CHECK_EQ(0, sigaltstack(nullptr, &oldstack));
   // If the alternate stack is already in place, do nothing.
   // Android always sets an alternate stack, but it's too small for us.
-  if (!SANITIZER_ANDROID && !(oldstack.ss_flags & SS_DISABLE)) return;
+  if (!SANITIZER_ANDROID && !(oldstack.ss_flags & SS_DISABLE))
+    return nullptr;
   // TODO(glider): the mapped stack should have the MAP_STACK flag in the
   // future. It is not required by man 2 sigaltstack now (they're using
   // malloc()).
@@ -201,9 +202,10 @@ void SetAlternateSignalStack() {
   altstack.ss_sp = (char *)MmapOrDie(altstack.ss_size, __func__);
   altstack.ss_flags = 0;
   CHECK_EQ(0, sigaltstack(&altstack, nullptr));
+  return altstack.ss_sp;
 }
 
-void UnsetAlternateSignalStack() {
+void UnsetAlternateSignalStack(void* altstack_base) {
   stack_t altstack, oldstack;
   altstack.ss_sp = nullptr;
   altstack.ss_flags = SS_DISABLE;
@@ -219,7 +221,9 @@ void UnsetAlternateSignalStack() {
   if (oldstack.ss_size == altstack.ss_size)
     UnmapOrDie(oldstack.ss_sp, oldstack.ss_size);
 #else
-  UnmapOrDie(oldstack.ss_sp, oldstack.ss_size);
+  if (altstack_base && altstack_base == oldstack.ss_sp) {
+    UnmapOrDie(oldstack.ss_sp, oldstack.ss_size);
+  }
 #endif
 }
 
@@ -573,11 +577,10 @@ pid_t StartSubprocess(const char *program, const char *const argv[],
       internal_close(stderr_fd);
     }
 
-#  if SANITIZER_FREEBSD
-    internal_close_range(3, ~static_cast<fd_t>(0), 0);
-#  else
-    for (int fd = sysconf(_SC_OPEN_MAX); fd > 2; fd--) internal_close(fd);
-#  endif
+    // Close all fds except stdin/stdout/stderr before exec.
+    // Fallback to the loop if close_range is not supported.
+    if (internal_close_range(3, ~static_cast<fd_t>(0), 0) != 0)
+      for (int fd = sysconf(_SC_OPEN_MAX); fd > 2; fd--) internal_close(fd);
 
     internal_execve(program, const_cast<char **>(&argv[0]),
                     const_cast<char *const *>(envp));

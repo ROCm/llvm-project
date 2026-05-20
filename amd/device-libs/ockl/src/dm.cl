@@ -382,13 +382,22 @@ before(gmask_t gm, uint l)
 }
 
 // The kind of the smallest block that can hold sz bytes
-static uint
+static kind_t
 size_to_kind(uint sz)
 {
     sz = sz < 16 ? 16 : sz;
     uint b = 31 - OCKL_MANGLE_U32(clz)(sz);
     uint v = 1 << b;
     return ((b - 4) << 1) + (sz > v) + (sz > (v | (v >> 1)));
+}
+
+// Assume size >= align
+static kind_t
+aligned_size_to_kind(uint align, uint sz)
+{
+    kind_t k = size_to_kind(sz);
+    uint a = 1U << (((k >> 1) + 4) - (k & 1));
+    return k + (a < align);
 }
 
 // The size of a block of kind k
@@ -479,7 +488,7 @@ __ockl_dm_dealloc(ulong addr)
 // The is the malloc implementation for sizes greater
 // than ALLOC_THRESHOLD
 static __global void *
-non_slab_malloc(size_t sz)
+non_slab_alloc(size_t sz)
 {
     ulong addr = __ockl_devmem_request(0, sz);
 
@@ -925,36 +934,77 @@ block_find(__global sdata_t *sdp, kind_t k, gmask_t gm)
     uint ll = leader(gm);
 
     __global slab_t *sp = 0;
-    uint i = 0;
+    uint start = 0;
     if (l == ll) {
         sp = (__global slab_t *)AL(&sdp->saddr, memory_order_relaxed);
-        i = AFA(&sp->start, members(gm), memory_order_relaxed);
+        start = AFA(&sp->start, members(gm), memory_order_relaxed);
     }
     sp = gcast(sp, ll);
-    i = gcast(i, ll);
-    i = (((i + position(gm)) << 5) % num_blocks(k)) >> 5;
+    start = gcast(start, ll);
 
     uint n = (num_blocks(k) + 31) >> 5;
+    uint i = ((start << 5) % num_blocks(k)) >> 5;
+
     for (;;) {
-        __global atomic_uint *p = sp->in_use + i;
-        uint m = AL(p, memory_order_relaxed);
-        if (m != ~0) {
-            uint b = BUILTIN_CTZ_U32(~m);
-            uint mm = AFO(p, 1 << b, memory_order_relaxed);
-            if ((mm & (1 << b)) == 0) {
-                uint ii = (i << 5) + b;
-                return (__global void *)((__global char *)sp + block_offset(k) + kind_to_size(k)*ii);
+        gmask_t am = __builtin_amdgcn_ballot_w64(1) & gm;
+        uint lll = leader(am);
+        uint b = 0;
+        uint w = 0;
+        uint u = 0;
+
+        if (l == lll) {
+            __global atomic_uint *p = sp->in_use + i;
+            u = AL(p, memory_order_relaxed);
+            if (~u) {
+                b = BUILTIN_CTZ_U32(~u);
+                uint nam = members(am);
+                w = 32 - b;
+                w = w > nam ? nam : w;
+                uint addu = (w == 32) ? ~0U : ((1U << w) - 1U);
+                addu <<= b;
+                u = AFO(p, addu, memory_order_relaxed);
             }
         }
+
+        b = gcast(b, lll);
+        w = gcast(w, lll);
+        u = gcast(u, lll);
+
+        if (w) {
+            uint al = position(am);
+            if (al < w) {
+                uint bit = b + al;
+                if ((u & (1u << bit)) == 0) {
+                    uint ii = (i << 5) + bit;
+                    return (__global void *)((__global char *)sp + block_offset(k) + kind_to_size(k)*ii);
+                }
+            }
+        }
+
         i = (i + 1) % n;
     }
 }
 
 // This is the malloc implementation for sizes that fit in some kind of block
 static __global void *
-slab_malloc(int sz)
+slab_alloc(uint sz)
 {
     kind_t k = size_to_kind(sz);
+    __global heap_t *hp = get_heap_ptr();
+    gmask_t gm = match(k);
+
+    __global sdata_t *sdp = slab_find(hp, k, gm);
+    if (sdp != (__global sdata_t *)0)
+        return block_find(sdp, k, gm);
+
+    return (__global void *)0;
+}
+
+// This variant returns an aligned address
+static __global void *
+slab_aligned_alloc(uint align, uint sz)
+{
+    kind_t k = aligned_size_to_kind(align, sz);
     __global heap_t *hp = get_heap_ptr();
     gmask_t gm = match(k);
 
@@ -973,9 +1023,25 @@ __ockl_dm_alloc(ulong sz)
         return (__global void *)0;
 
     if (sz > ALLOC_THRESHOLD)
-        return non_slab_malloc(sz);
+        return non_slab_alloc(sz);
 
-    return slab_malloc(sz);
+    return slab_alloc(sz);
+}
+
+// public aligned_alloc() entrypoint
+__attribute__((cold)) __global void *
+__ockl_dm_aligned_alloc(ulong align, ulong sz)
+{
+    if (sz == 0)
+        return (__global void *)0;
+
+    sz = sz < align ? align : sz;
+    sz = (align > 1024 && sz > 2048 && sz < 4096) ? 4096 : sz;
+
+    if (sz > ALLOC_THRESHOLD)
+        return non_slab_alloc(sz);
+
+    return slab_aligned_alloc(align, sz);
 }
 
 // Initialize the heap
@@ -1240,7 +1306,7 @@ __ockl_dm_hinfo(ulong *rp)
 #if defined NON_SLAB_TRACKING
 // return a snapshot of the current number of nonslab allocations
 // which haven't been deallocated
-__attribute__((cold)) ulong
+__attribute__((cold,weak)) ulong
 __ockl_dm_nna(void)
 {
     __global heap_t *hp = get_heap_ptr();

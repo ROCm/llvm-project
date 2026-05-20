@@ -39,11 +39,19 @@ target_compile_definitions(LLVMOffload PRIVATE
   DEBUG_PREFIX="Liboffload"
 )
 
-set_target_properties(LLVMOffload PROPERTIES
-                      POSITION_INDEPENDENT_CODE ON
-                      INSTALL_RPATH "$ORIGIN"
-                      BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-install(TARGETS LLVMOffload LIBRARY COMPONENT LLVMOffload DESTINATION "${OFFLOAD_INSTALL_LIBDIR}")
+# Don't override an externally defined RPATH
+if(NOT DEFINED CMAKE_INSTALL_RPATH)
+  set_target_properties(LLVMOffload PROPERTIES
+                        POSITION_INDEPENDENT_CODE ON
+                        INSTALL_RPATH "$ORIGIN:$ORIGIN/../lib:$ORIGIN/../../lib"
+                        BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
+else()
+  set_target_properties(LLVMOffload PROPERTIES
+                        POSITION_INDEPENDENT_CODE ON
+                        INSTALL_RPATH ${CMAKE_INSTALL_RPATH}
+                        BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
+endif()
+install(TARGETS LLVMOffload LIBRARY COMPONENT offload DESTINATION "${OFFLOAD_INSTALL_LIBDIR}")
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/API/OffloadAPI.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/offload)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/API/OffloadPrint.hpp DESTINATION ${CMAKE_INSTALL_PREFIX}/include/offload)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/API/OffloadAPI.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/offload COMPONENT offload)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/API/OffloadPrint.hpp DESTINATION ${CMAKE_INSTALL_PREFIX}/include/offload COMPONENT offload)

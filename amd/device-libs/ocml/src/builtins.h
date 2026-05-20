@@ -41,7 +41,7 @@
 #define BUILTIN_ABS_F16 __builtin_fabsf16
 #define BUILTIN_ABS_2F16 __builtin_elementwise_abs
 
-#define BUILTIN_BITALIGN_B32 __builtin_amdgcn_alignbit
+#define BUILTIN_FSHR_B32(x, y, z) __builtin_elementwise_fshr(x, y, z)
 
 #define BUILTIN_CEIL_F32 __builtin_ceilf
 #define BUILTIN_CEIL_F64 __builtin_ceil
@@ -91,45 +91,62 @@
 #define BUILTIN_FLOOR_2F16 __builtin_elementwise_floor
 
 // These will codegen to v_fract_{f16|f32|f64} as appropriate.
-#define BUILTIN_FRACTION_F32(X) ({                              \
-    const float _x = X;                                         \
-    const float _floor_x = BUILTIN_FLOOR_F32(_x);               \
-    float _f = BUILTIN_MIN_F32(_x - _floor_x, 0x1.fffffep-1f);  \
-    if (!FINITE_ONLY_OPT()) {                                   \
-        _f = BUILTIN_ISNAN_F32(_x) ? _x : _f;                   \
-        _f = BUILTIN_ISINF_F32(_x) ? 0.0f : _f;                  \
-    }                                                           \
-    _f;                                                         \
-})
+#define BUILTIN_FRACTION_F32(X)                                                                                        \
+    ({                                                                                                                 \
+        const float _x = X;                                                                                            \
+        const float _floor_x = BUILTIN_FLOOR_F32(_x);                                                                  \
+        const float _x_sub_floor = _x - _floor_x;                                                                      \
+        float _f = _x_sub_floor >= 0x1.fffffep-1f ? 0x1.fffffep-1f : _x_sub_floor;                                     \
+        if (!FINITE_ONLY_OPT()) {                                                                                      \
+            _f = BUILTIN_ISINF_F32(_x) ? 0.0f : _f;                                                                    \
+        }                                                                                                              \
+        _f;                                                                                                            \
+    })
 
-#define BUILTIN_FRACTION_F64(X) ({                                      \
-    const double _x = X;                                                \
-    const double _floor_x = BUILTIN_FLOOR_F64(_x);                       \
-    double _f = BUILTIN_MIN_F64(_x - _floor_x, 0x1.fffffffffffffp-1);   \
-    if (!FINITE_ONLY_OPT()) {                                           \
-        _f = BUILTIN_ISNAN_F64(_x) ? _x : _f;                            \
-        _f = BUILTIN_ISINF_F64(_x) ? 0.0 : _f;                           \
-    }                                                                   \
-    _f;                                                                 \
-})
+// Perform the non-finite component of fract
+#define BUILTIN_FRACTION_F64_IMPL(X)                                                                                   \
+    ({                                                                                                                 \
+        const double _x = X;                                                                                           \
+        const double _floor_x = BUILTIN_FLOOR_F64(_x);                                                                 \
+        const double _x_sub_floor = _x - _floor_x;                                                                     \
+        double _f = _x_sub_floor >= 0x1.fffffffffffffp-1 ? 0x1.fffffffffffffp-1 : _x_sub_floor;                        \
+        _f;                                                                                                            \
+    })
 
-#define BUILTIN_FRACTION_F16(X) ({                                      \
-    const half _x = X;                                                  \
-    const half _floor_x = BUILTIN_FLOOR_F16(_x);                        \
-    half _f = BUILTIN_MIN_F16(_x - _floor_x, 0x1.ffcp-1h);              \
-    if (!FINITE_ONLY_OPT()) {                                           \
-        _f = BUILTIN_ISNAN_F16(_x) ? _x : _f;                           \
-        _f = BUILTIN_ISINF_F16(_x) ? 0.0h : _f;                         \
-    }                                                                   \
-    _f;                                                                 \
-})
+// Apply the edge case fixups of BUILTIN_FRACTION_F64. \p F should be the result
+// of BUILTIN_FRACTION_F64_IMPL, \p X should be a value that is known to have
+// the same finiteness as \p F. i.e., if isnan(X) == isnan(F), and isinf(X) ==
+// isinf(F).
+#define BUILTIN_FRACTION_F64_FIXUP(F, X)                                                                               \
+    ({                                                                                                                 \
+        const double _x = X;                                                                                           \
+        double _f = F;                                                                                                 \
+        if (!FINITE_ONLY_OPT()) {                                                                                      \
+            _f = BUILTIN_ISINF_F64(_x) ? 0.0 : _f;                                                                     \
+        }                                                                                                              \
+        _f;                                                                                                            \
+    })
+
+#define BUILTIN_FRACTION_F64(X) BUILTIN_FRACTION_F64_FIXUP(BUILTIN_FRACTION_F64_IMPL(X), X)
+
+#define BUILTIN_FRACTION_F16(X)                                                                                        \
+    ({                                                                                                                 \
+        const half _x = X;                                                                                             \
+        const half _floor_x = BUILTIN_FLOOR_F16(_x);                                                                   \
+        const half _x_sub_floor = _x - _floor_x;                                                                       \
+        half _f = _x_sub_floor >= 0x1.ffcp-1h ? 0x1.ffcp-1h : _x_sub_floor;                                            \
+        if (!FINITE_ONLY_OPT()) {                                                                                      \
+            _f = BUILTIN_ISINF_F16(_x) ? 0.0h : _f;                                                                    \
+        }                                                                                                              \
+        _f;                                                                                                            \
+    })
 
 #define BUILTIN_MAD_U32(A,B,C) ((A)*(B)+(C))
 
 #define BUILTIN_MAX_F32 __builtin_fmaxf
 #define BUILTIN_MAX_F64 __builtin_fmax
 #define BUILTIN_MAX_F16 __builtin_fmaxf16
-#define BUILTIN_MAX_2F16 __builtin_elementwise_max
+#define BUILTIN_MAX_2F16 __builtin_elementwise_maximum
 
 #define BUILTIN_MAX_S32(A,B) ((A) < (B) ? (B) : (A))
 #define BUILTIN_MAX_U32(A,B) ((A) < (B) ? (B) : (A))
@@ -137,7 +154,7 @@
 #define BUILTIN_MIN_F32 __builtin_fminf
 #define BUILTIN_MIN_F64 __builtin_fmin
 #define BUILTIN_MIN_F16 __builtin_fminf16
-#define BUILTIN_MIN_2F16 __builtin_elementwise_min
+#define BUILTIN_MIN_2F16 __builtin_elementwise_minimum
 
 #define BUILTIN_MIN_S32(A,B) ((A) < (B) ? (A) : (B))
 #define BUILTIN_MIN_U32(A,B) ((A) < (B) ? (A) : (B))
@@ -155,6 +172,7 @@
 #define BUILTIN_EXP2_F16 __builtin_exp2f16
 
 #define BUILTIN_EXP_F32 __builtin_expf
+#define BUILTIN_EXP10_F32 __builtin_exp10f
 
 #define BUILTIN_AMDGPU_LOG2_F32 __builtin_amdgcn_logf
 #define BUILTIN_LOG2_F32 __builtin_log2f
@@ -232,6 +250,7 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
 #define BUILTIN_FLDEXP_F32 __builtin_ldexpf
 #define BUILTIN_FLDEXP_F64 __builtin_ldexp
 #define BUILTIN_FLDEXP_F16 __builtin_ldexpf16
+#define BUILTIN_FLDEXP_2F16 __builtin_elementwise_ldexp
 
 #define BUILTIN_FREXP_F32 __builtin_frexpf
 #define BUILTIN_FREXP_F64 __builtin_frexp
@@ -240,7 +259,7 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
 #define BUILTIN_FREXP_EXP_F32(X)                                               \
     ({                                                                         \
         int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
+        __builtin_frexpf(X, &_exp);                                            \
         _exp;                                                                  \
     })
 
@@ -258,33 +277,15 @@ static inline half __ocml_priv_rsqrt_f16(half x) {
         _exp;                                                                  \
     })
 
-#define BUILTIN_FREXP_MANT_F32(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf(X, &_exp);                                            \
-    })
-
-#define BUILTIN_FREXP_MANT_F64(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexp(X, &_exp);                                             \
-    })
-
-#define BUILTIN_FREXP_MANT_F16(X)                                              \
-    ({                                                                         \
-        int _exp;                                                              \
-        __builtin_frexpf16(X, &_exp);                                          \
-    })
-
 #define BUILTIN_CMAX_F32 __builtin_fmaxf
 #define BUILTIN_CMAX_F64 __builtin_fmax
 #define BUILTIN_CMAX_F16 __builtin_fmaxf16
-#define BUILTIN_CMAX_2F16 __builtin_elementwise_max
+#define BUILTIN_CMAX_2F16 __builtin_elementwise_maximum
 
 #define BUILTIN_CMIN_F32 __builtin_fminf
 #define BUILTIN_CMIN_F64 __builtin_fmin
 #define BUILTIN_CMIN_F16 __builtin_fminf16
-#define BUILTIN_CMIN_2F16 __builtin_elementwise_min
+#define BUILTIN_CMIN_2F16 __builtin_elementwise_minimum
 
 #define BUILTIN_AMDGPU_TRIG_PREOP_F64 __builtin_amdgcn_trig_preop
 

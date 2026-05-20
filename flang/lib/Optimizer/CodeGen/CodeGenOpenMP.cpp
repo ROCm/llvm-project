@@ -245,7 +245,8 @@ struct TargetAllocMemOpConversion
       size = mlir::LLVM::MulOp::create(rewriter, loc, ity, size, scaleSize);
     for (mlir::Value opnd : adaptor.getOperands().drop_front())
       size = mlir::LLVM::MulOp::create(
-          rewriter, loc, ity, size, integerCast(lowerTy(), loc, rewriter, ity, opnd));
+          rewriter, loc, ity, size,
+          integerCast(lowerTy(), loc, rewriter, ity, opnd));
     auto mallocTyWidth = lowerTy().getIndexTypeBitwidth();
     auto mallocTy =
         mlir::IntegerType::get(rewriter.getContext(), mallocTyWidth);
@@ -259,6 +260,21 @@ struct TargetAllocMemOpConversion
     return mlir::success();
   }
 };
+
+struct DeclareMapperOpConversion
+    : public OpenMPFIROpConversion<mlir::omp::DeclareMapperOp> {
+  using OpenMPFIROpConversion::OpenMPFIROpConversion;
+
+  llvm::LogicalResult
+  matchAndRewrite(mlir::omp::DeclareMapperOp curOp, OpAdaptor adaptor,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    rewriter.startOpModification(curOp);
+    curOp.setType(convertObjectType(lowerTy(), curOp.getType()));
+    rewriter.finalizeOpModification(curOp);
+    return mlir::success();
+  }
+};
+
 } // namespace
 
 void fir::populateOpenMPFIRToLLVMConversionPatterns(
@@ -266,4 +282,5 @@ void fir::populateOpenMPFIRToLLVMConversionPatterns(
   patterns.add<MapInfoOpConversion>(converter);
   patterns.add<PrivateClauseOpConversion>(converter);
   patterns.add<TargetAllocMemOpConversion>(converter);
+  patterns.add<DeclareMapperOpConversion>(converter);
 }

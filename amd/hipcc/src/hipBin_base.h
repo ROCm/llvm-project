@@ -50,6 +50,7 @@ THE SOFTWARE.
 # define HIP_COMPILE_CXX_AS_HIP         "HIP_COMPILE_CXX_AS_HIP"
 # define HIPCC_VERBOSE                  "HIPCC_VERBOSE"
 # define HCC_AMDGPU_TARGET              "HCC_AMDGPU_TARGET"
+# define HIP_CLANG_LAUNCHER             "HIP_CLANG_LAUNCHER"
 
 # define HIP_BASE_VERSION_DEFAULT     "9999"
 
@@ -154,6 +155,7 @@ struct EnvVariables {
   string hipClangHccCompactModeEnv_ = "";
   string hipCompileCxxAsHipEnv_ = "";
   string hccAmdGpuTargetEnv_ = "";
+  string hipClangLauncher_ = "";
   friend std::ostream& operator <<(std::ostream& os, const EnvVariables& var) {
     os << "Path: "                           << var.path_ << endl;
     os << "Hip Path: "                       << var.hipPathEnv_ << endl;
@@ -178,6 +180,7 @@ struct EnvVariables {
     os << "Hip Compile Cxx as Hip: "         <<
            var.hipCompileCxxAsHipEnv_ << endl;
     os << "Hcc Amd Gpu Target: "             << var.hccAmdGpuTargetEnv_ << endl;
+    os << "Hip Clang launcher: "             << var.hipClangLauncher_ << endl;
     return os;
   }
 };
@@ -316,20 +319,40 @@ void HipBinBase::readEnvVariables() {
     envVariables_.hipClangHccCompactModeEnv_ = hipClangHccCompactMode;
   if (const char* hipCompileCxxAsHip = std::getenv(HIP_COMPILE_CXX_AS_HIP))
     envVariables_.hipCompileCxxAsHipEnv_ = hipCompileCxxAsHip;
+  if (const char* hipClangLuancher = std::getenv(HIP_CLANG_LAUNCHER))
+    envVariables_.hipClangLauncher_ = hipClangLuancher;
 }
 
 // constructs the HIP path
 void HipBinBase::constructHipPath() {
-  // we need to use --hip-path option
+  // The --hip-path argument option takes precedence over all other settings.
   string hip_path_name = gethip_pathOption();
   if (!hip_path_name.empty()) {
     variables_.hipPathEnv_ = hip_path_name;
-  } else if (envVariables_.hipPathEnv_.empty()) {
-    fs::path full_path(hipcc::utils::getSelfPath());
-    variables_.hipPathEnv_ = (full_path.parent_path()).string();
-  } else {
-    variables_.hipPathEnv_ = envVariables_.hipPathEnv_;
+    return;
   }
+
+  fs::path full_path(hipcc::utils::getSelfPath());
+  fs::path parent_path = full_path.parent_path();
+
+  // Next, check for `../lib/llvm/bin/`, the standard ROCm install structure.
+  fs::path llvm_path = parent_path / "lib" / "llvm" / "bin";
+  if (fs::exists(llvm_path)) {
+    variables_.hipPathEnv_ = parent_path.string();
+    return;
+  }
+
+  // Otherwise, check the HIP_PATH environment variable from the HIP SDK.
+  // Normally an environment variable setting could take precedence over an
+  // implicit path, but this environment variable is set by system-wide installs
+  // and self-contained builds/installs should not be reading that global state.
+  if (!envVariables_.hipPathEnv_.empty()) {
+    variables_.hipPathEnv_ = envVariables_.hipPathEnv_;
+    return;
+  }
+
+  // Finally, fallback to the parent path (the standard ROCm install structure).
+  variables_.hipPathEnv_ = parent_path.string();
 }
 
 

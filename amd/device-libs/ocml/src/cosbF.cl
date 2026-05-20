@@ -32,8 +32,8 @@ MATH_PRIVATE(cosb)(float x, int n, float p)
     r.i = (r.i - b - n) & 3;
 
 #if defined EXTRA_PRECISION
-    float ph = AS_FLOAT(0xbf490fdb ^ (b ? 0x80000000 : 0));
-    float pl = AS_FLOAT(0x32bbbd2e ^ (b ? 0x80000000 : 0));
+    float ph = AS_FLOAT(0xbf490fdb ^ (b ? SIGNBIT_SP32 : 0));
+    float pl = AS_FLOAT(0x32bbbd2e ^ (b ? SIGNBIT_SP32 : 0));
 
     float sh, sl;
 
@@ -47,14 +47,14 @@ MATH_PRIVATE(cosb)(float x, int n, float p)
 
     struct scret sc = MATH_PRIVATE(sincosred2)(sh, sl);
 #else
-    r.hi = r.hi - p + AS_FLOAT(0xbf490fdb ^ (b ? 0x80000000 : 0));
+    r.hi = r.hi - p + AS_FLOAT(0xbf490fdb ^ (b ? SIGNBIT_SP32 : 0));
 
     struct scret sc = MATH_PRIVATE(sincosred)(r.hi);
 #endif
     sc.s = -sc.s;
 
     float c =  (r.i & 1) != 0 ? sc.s : sc.c;
-    c = AS_FLOAT(AS_INT(c) ^ (r.i > 1 ? 0x80000000 : 0));
+    c = AS_FLOAT(AS_INT(c) ^ (r.i > 1 ? SIGNBIT_SP32 : 0));
     return c;
 }
 

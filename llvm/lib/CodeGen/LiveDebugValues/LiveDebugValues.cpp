@@ -103,9 +103,7 @@ INITIALIZE_PASS(LiveDebugValuesLegacy, DEBUG_TYPE, "Live DEBUG_VALUE analysis",
                 false, false)
 
 /// Default construct and initialize the pass.
-LiveDebugValuesLegacy::LiveDebugValuesLegacy() : MachineFunctionPass(ID) {
-  initializeLiveDebugValuesLegacyPass(*PassRegistry::getPassRegistry());
-}
+LiveDebugValuesLegacy::LiveDebugValuesLegacy() : MachineFunctionPass(ID) {}
 
 LiveDebugValues::LiveDebugValues() {
   InstrRefImpl =
@@ -157,8 +155,7 @@ bool LiveDebugValues::run(MachineFunction &MF,
 
 bool llvm::debuginfoShouldUseDebugInstrRef(const Triple &T) {
   // Enable by default on x86_64, disable if explicitly turned off on cmdline.
-  if ((T.getArch() == llvm::Triple::x86_64 ||
-       T.getArch() == llvm::Triple::amdgcn) &&
+  if ((T.getArch() == llvm::Triple::x86_64 || T.isAMDGCN()) &&
       ValueTrackingVariableLocations != cl::boolOrDefault::BOU_FALSE)
     return true;
 

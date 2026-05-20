@@ -11,18 +11,17 @@
 double
 MATH_MANGLE(cospi)(double x)
 {
+    if (!FINITE_ONLY_OPT())
+        x = BUILTIN_ISINF_F64(x) ? QNAN_F64 : x;
+
     double ax = BUILTIN_ABS_F64(x);
     struct redret r = MATH_PRIVATE(trigpired)(ax);
     struct scret sc = MATH_PRIVATE(sincospired)(r.hi);
     sc.s = -sc.s;
 
-    double c = (r.i & 1) == 0 ? sc.c : sc.s;
-    c = r.i > 1 ? -c : c;
+    long c = AS_LONG((r.i & 1) != 0 ? sc.s : sc.c);
+    c ^= r.i > 1 ? SIGNBIT_DP64 : 0;
 
-    if (!FINITE_ONLY_OPT() && !BUILTIN_ISFINITE_F64(ax)) {
-        c = QNAN_F64;
-    }
-
-    return c;
+    return AS_DOUBLE(c);
 }
 

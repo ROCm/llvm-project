@@ -22,6 +22,12 @@ class AmdgpuMemFuncs {
   static void Deallocate(void *p);
   static bool GetPointerInfo(uptr ptr, DevicePointerInfo* ptr_info);
   static uptr GetPageSize();
+  static void RegisterSystemEventHandlers();
+  static bool IsAmdgpuRuntimeShutdown();
+  static void ClearAmdgpuRuntimeShutdownState();
+
+ private:
+  static void NotifyAmdgpuRuntimeShutdown();
 };
 
 struct AmdgpuAllocationInfo : public DeviceAllocationInfo {

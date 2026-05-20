@@ -217,19 +217,19 @@ define fastcc i32 @foo() {
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr93
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr94
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION undefined $sgpr95
-  ; CHECK-NEXT:   S_WAITCNT 0
+  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0_Expcnt_0_Lgkmcnt_0
   ; CHECK-NEXT:   $sgpr16 = S_MOV_B32 $sgpr33
   ; CHECK-NEXT:   $sgpr33 = S_MOV_B32 $sgpr32
   ; CHECK-NEXT:   $sgpr17 = S_OR_SAVEEXEC_B32 -1, implicit-def $exec, implicit-def dead $scc, implicit $exec
-  ; CHECK-NEXT:   BUFFER_STORE_DWORD_OFFSET $vgpr40, $sgpr0_sgpr1_sgpr2_sgpr3, $sgpr33, 0, 0, 0, implicit $exec :: (store (s32) into %stack.1, addrspace 5)
+  ; CHECK-NEXT:   BUFFER_STORE_DWORD_OFFSET $vgpr40, $sgpr0_sgpr1_sgpr2_sgpr3, $sgpr33, 0, 0, 0, implicit $exec :: ("amdgpu-thread-private" store (s32) into %stack.1, addrspace 5)
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION offset $vgpr40, 0
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr17
   ; CHECK-NEXT:   $vgpr40 = V_WRITELANE_B32 killed $sgpr16, 2, undef $vgpr40
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION llvm_vector_registers $sgpr33, $vgpr40, 2, 32
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_register $sgpr33
-  ; CHECK-NEXT:   $vgpr40 = V_WRITELANE_B32 killed $sgpr30, 0, $vgpr40
+  ; CHECK-NEXT:   $vgpr40 = V_WRITELANE_B32 killed $sgpr30, 0, $vgpr40, implicit-def $sgpr30_sgpr31, implicit $sgpr30_sgpr31
   ; CHECK-NEXT:   $sgpr32 = frame-setup S_ADDK_I32 $sgpr32, 512, implicit-def dead $scc
-  ; CHECK-NEXT:   $vgpr40 = V_WRITELANE_B32 killed $sgpr31, 1, $vgpr40
+  ; CHECK-NEXT:   $vgpr40 = V_WRITELANE_B32 killed $sgpr31, 1, $vgpr40, implicit $sgpr30_sgpr31
   ; CHECK-NEXT:   frame-setup CFI_INSTRUCTION llvm_vector_registers $pc_reg, $vgpr40, 0, 32, $vgpr40, 1, 32
   ; CHECK-NEXT:   BUNDLE implicit-def $sgpr16_sgpr17, implicit-def $sgpr16, implicit-def $scc, implicit-def $sgpr17 {
   ; CHECK-NEXT:     $sgpr16_sgpr17 = S_GETPC_B64
@@ -240,7 +240,7 @@ define fastcc i32 @foo() {
   ; CHECK-NEXT:   BUFFER_GL1_INV implicit $exec
   ; CHECK-NEXT:   BUFFER_GL0_INV implicit $exec
   ; CHECK-NEXT:   renamable $sgpr16_sgpr17 = S_LOAD_DWORDX2_IMM killed renamable $sgpr16_sgpr17, 0, 0 :: (dereferenceable invariant load (s64) from got, addrspace 4)
-  ; CHECK-NEXT:   S_WAITCNT 49279
+  ; CHECK-NEXT:   S_WAITCNT .Lgkmcnt_0
   ; CHECK-NEXT:   dead $sgpr30_sgpr31 = SI_CALL killed renamable $sgpr16_sgpr17, @bar, csr_amdgpu, implicit killed $sgpr4_sgpr5, implicit killed $sgpr6_sgpr7, implicit killed $sgpr8_sgpr9, implicit killed $sgpr10_sgpr11, implicit killed $sgpr12, implicit killed $sgpr13, implicit killed $sgpr14, implicit killed $sgpr15, implicit killed $vgpr31, implicit $sgpr0_sgpr1_sgpr2_sgpr3
   ; CHECK-NEXT:   $vcc_lo = S_MOV_B32 $exec_lo
   ; CHECK-NEXT: {{  $}}
@@ -251,16 +251,16 @@ define fastcc i32 @foo() {
   ; CHECK-NEXT:   S_CBRANCH_VCCNZ %bb.1, implicit $vcc_lo
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.DummyReturnBlock:
-  ; CHECK-NEXT:   $sgpr30 = V_READLANE_B32 $vgpr40, 0
+  ; CHECK-NEXT:   $sgpr30 = V_READLANE_B32 $vgpr40, 0, implicit-def $sgpr30_sgpr31
   ; CHECK-NEXT:   $sgpr31 = V_READLANE_B32 $vgpr40, 1
   ; CHECK-NEXT:   $sgpr32 = S_MOV_B32 $sgpr33
   ; CHECK-NEXT:   $sgpr4 = V_READLANE_B32 $vgpr40, 2
   ; CHECK-NEXT:   $sgpr5 = S_OR_SAVEEXEC_B32 -1, implicit-def $exec, implicit-def dead $scc, implicit $exec
-  ; CHECK-NEXT:   $vgpr40 = BUFFER_LOAD_DWORD_OFFSET $sgpr0_sgpr1_sgpr2_sgpr3, $sgpr33, 0, 0, 0, implicit $exec :: (load (s32) from %stack.1, addrspace 5)
+  ; CHECK-NEXT:   $vgpr40 = BUFFER_LOAD_DWORD_OFFSET $sgpr0_sgpr1_sgpr2_sgpr3, $sgpr33, 0, 0, 0, implicit $exec :: ("amdgpu-thread-private" load (s32) from %stack.1, addrspace 5)
   ; CHECK-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr5
   ; CHECK-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa_register $sgpr32
   ; CHECK-NEXT:   $sgpr33 = S_MOV_B32 killed $sgpr4
-  ; CHECK-NEXT:   S_WAITCNT 16240
+  ; CHECK-NEXT:   S_WAITCNT .Vmcnt_0
   ; CHECK-NEXT:   S_SETPC_B64_return undef $sgpr30_sgpr31, implicit undef $vgpr0
   fence acquire
   call fastcc void @bar()

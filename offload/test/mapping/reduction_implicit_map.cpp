@@ -1,4 +1,5 @@
 // RUN: %libomptarget-compilexx-run-and-check-generic
+// UNSUPPORTED: intelgpu
 
 // amdgcn does not have printf definition
 // UNSUPPORTED: amdgcn-amd-amdhsa

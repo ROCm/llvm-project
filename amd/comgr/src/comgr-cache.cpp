@@ -20,6 +20,7 @@
 
 #include <llvm/ADT/StringExtras.h>
 #include <llvm/Support/Caching.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Support/MemoryBuffer.h>
 
 namespace COMGR {
@@ -162,7 +163,13 @@ CommandCache::getPolicyFromEnv(llvm::raw_ostream &LogS) {
   return *PolicyOrErr;
 }
 
-void CommandCache::prune() { pruneCache(CacheDir, Policy); }
+void CommandCache::prune() {
+  Expected<bool> PrunedOrErr = pruneCache(CacheDir, Policy);
+  if (!PrunedOrErr) {
+    auto ErrorHandler = getComgrCacheErrorHandler(LogS);
+    ErrorHandler(PrunedOrErr.takeError(), "when pruning the cache");
+  }
+}
 
 std::unique_ptr<CommandCache> CommandCache::get(raw_ostream &LogS) {
   StringRef CacheDir = env::getCacheDirectory();
@@ -174,11 +181,13 @@ std::unique_ptr<CommandCache> CommandCache::get(raw_ostream &LogS) {
   if (!Policy)
     return nullptr;
 
-  return std::unique_ptr<CommandCache>(new CommandCache(CacheDir, *Policy));
+  return std::unique_ptr<CommandCache>(
+      new CommandCache(CacheDir, *Policy, LogS));
 }
 
-CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy)
-    : CacheDir(CacheDir.str()), Policy(Policy) {
+CommandCache::CommandCache(StringRef CacheDir, const CachePruningPolicy &Policy,
+                           llvm::raw_ostream &LogS)
+    : CacheDir(CacheDir.str()), Policy(Policy), LogS(LogS) {
   assert(!CacheDir.empty());
 }
 

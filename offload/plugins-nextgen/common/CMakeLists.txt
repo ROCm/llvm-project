@@ -10,9 +10,22 @@ add_public_tablegen_target(PluginErrcodes)
 if(OFFLOAD_ENABLE_EMISSARY_APIS)
   set(emissary_sources
     src/Emissary.cpp
-    src/EmissaryFortrt.cpp
     src/EmissaryPrint.cpp
   )
+  # EmissaryFortrt requires flang_rt; only include when available.
+  if(TARGET flang_rt.runtime.static)
+    set(OFFLOAD_HAS_EMISSARY_FORTRT TRUE)
+  else()
+    get_clang_resource_dir(CLANG_RESOURCE_LIBDIR PREFIX ${LLVM_BINARY_DIR} SUBDIR "lib/${LLVM_DEFAULT_TARGET_TRIPLE}")
+    string(REPLACE "${LLVM_LIBDIR_SUFFIX}" "" CLANG_RESOURCE_LIBDIR_NORMALIZED "${CLANG_RESOURCE_LIBDIR}")
+    find_library(LIBFLANG_RT flang_rt.runtime PATHS "${CLANG_RESOURCE_LIBDIR_NORMALIZED}")
+    if(LIBFLANG_RT)
+      set(OFFLOAD_HAS_EMISSARY_FORTRT TRUE)
+    endif()
+  endif()
+  if(OFFLOAD_HAS_EMISSARY_FORTRT)
+    list(APPEND emissary_sources src/EmissaryFortrt.cpp)
+  endif()
 endif()
 
 # NOTE: Don't try to build `PluginInterface` using `add_llvm_library` because we
@@ -21,13 +34,14 @@ add_library(PluginCommon OBJECT
   src/PluginInterface.cpp
   src/GlobalHandler.cpp
   src/JIT.cpp
+  src/RecordReplay.cpp
   src/RPC.cpp
   src/OffloadError.cpp
   src/Utils/ELF.cpp
   src/GenericProfiler.cpp
   ${emissary_sources}
 )
-add_dependencies(PluginCommon intrinsics_gen PluginErrcodes)
+add_dependencies(PluginCommon intrinsics_gen PluginErrcodes OffloadAPI)
 
 # Only enable JIT for those targets that LLVM can support.
 set(supported_jit_targets AMDGPU NVPTX)
@@ -44,9 +58,14 @@ endif()
 # Include the RPC server from the `libc` project.
 include(FindLibcCommonUtils)
 target_link_libraries(PluginCommon PRIVATE llvm-libc-common-utilities)
-if(OFFLOAD_ENABLE_EMISSARY_APIS AND LIBOMPTARGET_BUILD_DEVICE_FORTRT)
-  target_link_libraries(PluginCommon PRIVATE flang_rt.runtime
-  -L${CMAKE_BINARY_DIR}/../../lib  -L${CMAKE_INSTALL_PREFIX}/lib)
+if(OFFLOAD_ENABLE_EMISSARY_APIS AND OFFLOAD_HAS_EMISSARY_FORTRT)
+  if(TARGET flang_rt.runtime.static)
+    target_link_libraries(PluginCommon PRIVATE flang_rt.runtime.static
+      -L${CMAKE_BINARY_DIR}/../../lib  -L${CMAKE_INSTALL_PREFIX}/lib)
+  else()
+    target_link_libraries(PluginCommon PRIVATE ${LIBFLANG_RT})
+  endif()
+  target_compile_definitions(PluginCommon PRIVATE OFFLOAD_HAS_EMISSARY_FORTRT)
 endif()
 
 if (OMPT_TARGET_DEFAULT AND LIBOMPTARGET_OMPT_SUPPORT)
@@ -69,9 +88,14 @@ if (OMPT_TARGET_DEFAULT AND LIBOMPTARGET_OMPT_SUPPORT)
 
 endif()
 
+if (TARGET flang_rt.runtime.static)
+  target_link_libraries(PluginCommon PRIVATE flang_rt.runtime.static)
+  target_compile_definitions(PluginCommon PRIVATE OFFLOAD_HAS_FLANG_RT)
+endif()
+
 # Define the TARGET_NAME and DEBUG_PREFIX.
 target_compile_definitions(PluginCommon PRIVATE
-  TARGET_NAME="PluginInterface"
+  TARGET_NAME=PluginInterface
   DEBUG_PREFIX="PluginInterface"
 )
 
@@ -86,6 +110,7 @@ endif()
 target_include_directories(PluginCommon PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}/include
+  ${CMAKE_CURRENT_BINARY_DIR}/../../liboffload/API
   ${LIBOMPTARGET_LLVM_INCLUDE_DIRS}
   ${LIBOMPTARGET_BINARY_INCLUDE_DIR}
   ${LIBOMPTARGET_INCLUDE_DIR}

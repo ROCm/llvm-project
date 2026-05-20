@@ -88,6 +88,11 @@ static cl::opt<bool> ManifestInternal(
 
 static cl::opt<int> MaxHeapToStackSize("max-heap-to-stack-size", cl::init(128),
                                        cl::Hidden);
+static cl::opt<unsigned> MaxAccessesPerAAPointerInfo(
+    "attributor-max-pi-accesses", cl::Hidden,
+    cl::desc("Maximum number of accesses in a single AAPointerInfo instance "
+             "before going pessimistic (0 = unlimited)"),
+    cl::init(512));
 
 template <>
 unsigned llvm::PotentialConstantIntValuesState::MaxPotentialValues = 0;
@@ -664,11 +669,10 @@ static void followUsesInMBEC(AAType &AA, Attributor &A, StateType &S,
   if (S.isAtFixpoint())
     return;
 
-  SmallVector<const BranchInst *, 4> BrInsts;
+  SmallVector<const CondBrInst *, 4> BrInsts;
   auto Pred = [&](const Instruction *I) {
-    if (const BranchInst *Br = dyn_cast<BranchInst>(I))
-      if (Br->isConditional())
-        BrInsts.push_back(Br);
+    if (const CondBrInst *Br = dyn_cast<CondBrInst>(I))
+      BrInsts.push_back(Br);
     return true;
   };
 
@@ -705,7 +709,7 @@ static void followUsesInMBEC(AAType &AA, Attributor &A, StateType &S,
   // }
 
   Explorer->checkForAllContext(&CtxI, Pred);
-  for (const BranchInst *Br : BrInsts) {
+  for (const CondBrInst *Br : BrInsts) {
     StateType ParentState;
 
     // The known state of the parent state is a conjunction of children's
@@ -939,6 +943,10 @@ ChangeStatus AA::PointerInfo::State::addAccess(
     Attributor &A, const AAPointerInfo::RangeList &Ranges, Instruction &I,
     std::optional<Value *> Content, AAPointerInfo::AccessKind Kind, Type *Ty,
     Instruction *RemoteI) {
+  if (MaxAccessesPerAAPointerInfo > 0 &&
+      AccessList.size() >= MaxAccessesPerAAPointerInfo)
+    return indicatePessimisticFixpoint();
+
   RemoteI = RemoteI ? RemoteI : &I;
 
   // Check if we have an access for this instruction, if not, simply add it.
@@ -1093,7 +1101,14 @@ struct AAPointerInfoImpl
     HasBeenWrittenTo = false;
 
     SmallPtrSet<const Access *, 8> DominatingWrites;
-    SmallVector<std::pair<const Access *, bool>, 8> InterferingAccesses;
+
+    // All Accesses are not equal. AccessCB partitions them into two groups.
+    // IntraFnAccesses: When RemoteI is in the same function as I (Scope).
+    // See CanSkipAccessBatch below (Batch Reachability Optimization)
+    // InterFnAccesses: When RemoteI is in a different function as I. Processed
+    // by CanSkipAccess.
+    SmallVector<std::pair<const Access *, bool>, 8> IntraFnAccesses;
+    SmallVector<std::pair<const Access *, bool>, 8> InterFnAccesses;
 
     Function &Scope = *I.getFunction();
     bool IsKnownNoSync;
@@ -1184,14 +1199,10 @@ struct AAPointerInfoImpl
     auto HasKernelLifetime = [&](Value *V, Module &M) {
       if (!AA::isGPU(M))
         return false;
-      switch (AA::GPUAddressSpace(V->getType()->getPointerAddressSpace())) {
-      case AA::GPUAddressSpace::Shared:
-      case AA::GPUAddressSpace::Constant:
-      case AA::GPUAddressSpace::Local:
-        return true;
-      default:
-        return false;
-      };
+      unsigned VAS = V->getType()->getPointerAddressSpace();
+      return AA::isGPUSharedAddressSpace(M, VAS) ||
+             AA::isGPUConstantAddressSpace(M, VAS) ||
+             AA::isGPULocalAddressSpace(M, VAS);
     };
 
     // The IsLiveInCalleeCB will be used by the AA::isPotentiallyReachable query
@@ -1253,9 +1264,21 @@ struct AAPointerInfoImpl
 
       // Track if all interesting accesses are in the same `nosync` function as
       // the given instruction.
-      AllInSameNoSyncFn &= Acc.getRemoteInst()->getFunction() == &Scope;
+      AllInSameNoSyncFn &= AccInSameScope;
 
-      InterferingAccesses.push_back({&Acc, Exact});
+      // Only truly local accesses (LocalI == RemoteI) use the batch BFS path.
+      // Imported accesses (from translateAndAddStateFromCallee) have
+      // LocalI != RemoteI: LocalI is the call site, RemoteI is the actual
+      // instruction in the callee. For recursive calls, RemoteI is in the
+      // same function but at a different invocation context. The batch BFS
+      // would incorrectly check block-level reachability between I and
+      // RemoteI, missing the call-site indirection. These must go through
+      // CanSkipAccess with isPotentiallyReachable, which correctly handles
+      // cross-invocation reachability via the call graph.
+      if (AccInSameScope && Acc.getLocalInst() == Acc.getRemoteInst())
+        IntraFnAccesses.push_back({&Acc, Exact});
+      else
+        InterFnAccesses.push_back({&Acc, Exact});
       return true;
     };
     if (!State::forallInterferingAccesses(I, AccessCB, Range))
@@ -1278,8 +1301,9 @@ struct AAPointerInfoImpl
     auto CanSkipAccess = [&](const Access &Acc, bool Exact) {
       if (SkipCB && SkipCB(Acc))
         return true;
-      if (!CanIgnoreThreading(Acc))
+      if (!CanIgnoreThreading(Acc)) {
         return false;
+      }
 
       // Check read (RAW) dependences and write (WAR) dependences as necessary.
       // If we successfully excluded all effects we are interested in, the
@@ -1344,13 +1368,297 @@ struct AAPointerInfoImpl
       return LeastDominatingWriteInst != Acc.getRemoteInst();
     };
 
-    // Run the user callback on all accesses we cannot skip and return if
-    // that succeeded for all or not.
-    for (auto &It : InterferingAccesses) {
-      if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
-          !CanSkipAccess(*It.first, It.second)) {
-        if (!UserCB(*It.first, It.second))
+    {
+      // Batch reachability optimization for CanSkipAccess.
+      //
+      // Without this optimization, each interfering access would trigger two
+      // independent AA::isPotentiallyReachable calls. Each call traverses the
+      // CFG from scratch. With N interfering accesses, this is 2 * N
+      // independent BFS traversals over the same function's CFG — redundant
+      // work.
+      //
+      // This optimization pre-computes two block-level reachability sets:
+      //   ReachableFromI: all basic blocks reachable forward from I's block
+      //   ReachableToI:   all basic blocks that can reach I's block (backward)
+      //
+      // These are computed lazily (on first use) via a single BFS each,
+      // respecting the ExclusionSet (must-write barriers) and liveness
+      // (dead edges from AAIsDead). Then for each intra-function access,
+      // a cheap set lookup replaces the full isPotentiallyReachable call:
+      //   - ReadChecked:  if Acc's block is NOT in ReachableFromI, I can't
+      //                   reach Acc, so Acc's read can't observe I's write.
+      //   - WriteChecked: if Acc's block is NOT in ReachableToI, Acc can't
+      //                   reach I, so Acc's write can't affect I's read.
+      //
+      // If the block-level check is inconclusive, we fall back to
+      // isPotentiallyReachable.
+      //
+      //
+
+      DenseSet<const BasicBlock *> ReachableFromI;
+      bool ReachableFromIComputed = false;
+
+      DenseSet<const BasicBlock *> ReachableToI;
+      bool ReachableToIComputed = false;
+
+      // Map each basic block to the ExclusionSet instructions it contains.
+      // Built once and shared across the BFS helpers and same-block checks
+      // in CanSkipAccessBatch, replacing per-use iteration over ExclusionSet.
+      DenseMap<const BasicBlock *, SmallVector<const Instruction *, 2>>
+          ExcludedBlockInsts;
+      for (const Instruction *ExclI : ExclusionSet)
+        ExcludedBlockInsts[ExclI->getParent()].push_back(ExclI);
+
+      // Lazily compute forward reachability from I's block.
+      // BFS over successor edges within Scope, skipping dead edges (AAIsDead)
+      // and not traversing past ExclusionSet blocks (must-write barriers).
+      // I's block is always traversed (its successors are always explored).
+      // Other blocks containing ExclusionSet instructions are added to the
+      // reachable set but their successors are NOT explored.
+      //
+      // Note: we do NOT block I's block even if it contains an ExclusionSet
+      // instruction after I. This matches isPotentiallyReachable /
+      // isReachableImpl semantics, which check SuccBB == ToBB before
+      // ExclusionBlocks and thus always consider direct successors as
+      // reachable.
+      auto EnsureReachableFromI = [&]() {
+        if (ReachableFromIComputed)
+          return;
+
+        const BasicBlock *FromBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(FromBB);
+        ReachableFromI.insert(FromBB);
+
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          // Don't traverse past ExclusionSet blocks (must-write barriers),
+          // but always traverse I's own block.
+          if (BB != FromBB && ExcludedBlockInsts.count(BB))
+            continue;
+
+          for (const BasicBlock *SuccBB : successors(BB)) {
+            if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB))
+              continue;
+
+            if (ReachableFromI.insert(SuccBB).second)
+              Worklist.push_back(SuccBB);
+          }
+        }
+        ReachableFromIComputed = true;
+      };
+
+      // Lazily compute backward reachability to I's block.
+      // BFS over predecessor edges within Scope, skipping dead edges and
+      // not traversing past ExclusionSet blocks. This is the mirror of
+      // EnsureReachableFromI: it answers "can Acc reach I?" rather than
+      // "can I reach Acc?".
+      //
+      // Lazily compute backward reachability to I's block.
+      // BFS over predecessor edges within Scope, skipping dead edges and
+      // not traversing past ExclusionSet blocks. This is the mirror of
+      // EnsureReachableFromI: it answers "can Acc reach I?" rather than
+      // "can I reach Acc?".
+      //
+      // As with EnsureReachableFromI, I's block is always traversed
+      // (its predecessors are always explored) to match isPotentiallyReachable
+      // semantics.
+      auto EnsureReachableToI = [&]() {
+        if (ReachableToIComputed)
+          return;
+
+        const BasicBlock *ToBB = I.getParent();
+        SmallVector<const BasicBlock *, 16> Worklist;
+        Worklist.push_back(ToBB);
+        ReachableToI.insert(ToBB);
+
+        const auto *LivenessAA = A.getAAFor<AAIsDead>(
+            QueryingAA, IRPosition::function(Scope), DepClassTy::OPTIONAL);
+
+        while (!Worklist.empty()) {
+          const BasicBlock *BB = Worklist.pop_back_val();
+
+          for (const BasicBlock *PredBB : predecessors(BB)) {
+            if (LivenessAA && LivenessAA->isEdgeDead(PredBB, BB))
+              continue;
+
+            if (!ReachableToI.insert(PredBB).second)
+              continue;
+
+            // Don't traverse past ExclusionSet blocks, but always
+            // traverse I's own block (ToBB).
+            bool Blocked = (PredBB != ToBB && ExcludedBlockInsts.count(PredBB));
+
+            if (!Blocked)
+              Worklist.push_back(PredBB);
+          }
+        }
+        ReachableToIComputed = true;
+      };
+
+      // Batch variant of CanSkipAccess for intra-function accesses.
+      //
+      // The batch BFS can safely be used as a negative filter (skip iPR when
+      // BFS says "not reachable") only when iPR agrees for all paths the BFS
+      // can't model. This requires:
+      //   (a) norecurse: instructionCanReach can't find paths back to Scope
+      //   (b) GoBackwardsCB returns false for Scope: iPR won't step back to
+      //   callers
+      // Both hold for allocas in norecurse functions where
+      // GoBackwardsCB(*Scope) = IsLiveInCalleeCB(*Scope) = (AIFn != Scope) =
+      // false.
+      //
+      // When BFSSafe is true (alloca in norecurse fn), the BFS is used as a
+      // negative filter: if Acc's block is NOT in the reachable set,
+      // isPotentiallyReachable would also return false, so we can directly
+      // set Checked = true without calling isPotentiallyReachable.
+      //
+      // When BFSSafe is false, the BFS cannot be a negative filter because
+      // isPotentiallyreachable considers inter-procedural and cross-invocation
+      // paths that the BFS can't model. In that case, we skip the BFS entirely
+      // and only use the same-block optimization (which doesn't depend on the
+      // BFS).
+      bool BFSSafe = false;
+      if (isa<AllocaInst>(&getAssociatedValue()) && IsLiveInCalleeCB)
+        BFSSafe = true;
+
+      auto CanSkipAccessBatch = [&](const Access &Acc, bool Exact) {
+        if (SkipCB && SkipCB(Acc))
+          return true;
+        if (!CanIgnoreThreading(Acc)) {
           return false;
+        }
+
+        bool ReadChecked = !FindInterferingReads;
+        bool WriteChecked = !FindInterferingWrites;
+
+        // Forward reachability: can I reach Acc?
+        if (!ReadChecked) {
+          if (BFSSafe) {
+            EnsureReachableFromI();
+            bool BlockReachable =
+                ReachableFromI.count(Acc.getRemoteInst()->getParent());
+
+            if (!BlockReachable) {
+              // BFS-safe negative filter: the BFS is a complete model of
+              // reachability for allocas in norecurse functions.
+              ReadChecked = true;
+            } else if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                       I.comesBefore(Acc.getRemoteInst())) {
+              // Same-block optimization.
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (I.comesBefore(ExclI) &&
+                      ExclI->comesBefore(Acc.getRemoteInst())) {
+                    ReadChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            // Not BFS-safe: only apply same-block optimization.
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                I.comesBefore(Acc.getRemoteInst())) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (I.comesBefore(ExclI) &&
+                      ExclI->comesBefore(Acc.getRemoteInst())) {
+                    ReadChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (!ReadChecked) {
+            if (!AA::isPotentiallyReachable(A, I, *Acc.getRemoteInst(),
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB)) {
+              ReadChecked = true;
+            }
+          }
+        }
+
+        // Backward reachability: can Acc reach I?
+        if (!WriteChecked) {
+          if (BFSSafe) {
+            EnsureReachableToI();
+            bool BlockReachable =
+                ReachableToI.count(Acc.getRemoteInst()->getParent());
+
+            if (!BlockReachable) {
+              WriteChecked = true;
+            } else if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                       Acc.getRemoteInst()->comesBefore(&I)) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (Acc.getRemoteInst()->comesBefore(ExclI) &&
+                      ExclI->comesBefore(&I)) {
+                    WriteChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          } else {
+            if (I.getParent() == Acc.getRemoteInst()->getParent() &&
+                Acc.getRemoteInst()->comesBefore(&I)) {
+              auto It = ExcludedBlockInsts.find(I.getParent());
+              if (It != ExcludedBlockInsts.end()) {
+                for (const Instruction *ExclI : It->second) {
+                  if (Acc.getRemoteInst()->comesBefore(ExclI) &&
+                      ExclI->comesBefore(&I)) {
+                    WriteChecked = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (!WriteChecked) {
+            if (!AA::isPotentiallyReachable(A, *Acc.getRemoteInst(), I,
+                                            QueryingAA, &ExclusionSet,
+                                            IsLiveInCalleeCB)) {
+              WriteChecked = true;
+            }
+          }
+        }
+        if (ReadChecked && WriteChecked)
+          return true;
+
+        if (!DT || !UseDominanceReasoning)
+          return false;
+        if (!DominatingWrites.count(&Acc))
+          return false;
+        return LeastDominatingWriteInst != Acc.getRemoteInst();
+      };
+
+      // Process intra-function accesses.
+      for (auto &It : IntraFnAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccessBatch(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
+      }
+
+      // Process cross-function accesses.
+      for (auto &It : InterFnAccesses) {
+        if ((!AllInSameNoSyncFn && !IsThreadLocalObj && !ExecDomainAA) ||
+            !CanSkipAccess(*It.first, It.second)) {
+          if (!UserCB(*It.first, It.second))
+            return false;
+        }
       }
     }
     return true;
@@ -2149,9 +2457,12 @@ bool AANoSync::isAlignedBarrier(const CallBase &CB, bool ExecutedAligned) {
   switch (CB.getIntrinsicID()) {
   case Intrinsic::nvvm_barrier_cta_sync_aligned_all:
   case Intrinsic::nvvm_barrier_cta_sync_aligned_count:
-  case Intrinsic::nvvm_barrier0_and:
-  case Intrinsic::nvvm_barrier0_or:
-  case Intrinsic::nvvm_barrier0_popc:
+  case Intrinsic::nvvm_barrier_cta_red_and_aligned_all:
+  case Intrinsic::nvvm_barrier_cta_red_and_aligned_count:
+  case Intrinsic::nvvm_barrier_cta_red_or_aligned_all:
+  case Intrinsic::nvvm_barrier_cta_red_or_aligned_count:
+  case Intrinsic::nvvm_barrier_cta_red_popc_aligned_all:
+  case Intrinsic::nvvm_barrier_cta_red_popc_aligned_count:
     return true;
   case Intrinsic::amdgcn_s_barrier:
     if (ExecutedAligned)
@@ -2194,15 +2505,6 @@ bool AANoSync::isNonRelaxedAtomic(const Instruction *I) {
 
   return (Ordering != AtomicOrdering::Unordered &&
           Ordering != AtomicOrdering::Monotonic);
-}
-
-/// Return true if this intrinsic is nosync.  This is only used for intrinsics
-/// which would be nosync except that they have a volatile flag.  All other
-/// intrinsics are simply annotated with the nosync attribute in Intrinsics.td.
-bool AANoSync::isNoSyncIntrinsic(const Instruction *I) {
-  if (auto *MI = dyn_cast<MemIntrinsic>(I))
-    return !MI->isVolatile();
-  return false;
 }
 
 namespace {
@@ -2368,8 +2670,11 @@ struct AANoFreeFloating : AANoFreeImpl {
         Follow = true;
         return true;
       }
-      if (isa<StoreInst>(UserI) || isa<LoadInst>(UserI))
+      if (isa<LoadInst>(UserI))
         return true;
+
+      if (isa<StoreInst>(UserI))
+        return U.getOperandNo() == StoreInst::getPointerOperandIndex();
 
       if (isa<ReturnInst>(UserI) && getIRPosition().isArgumentPosition())
         return true;
@@ -2953,8 +3258,8 @@ struct AAUndefinedBehaviorImpl : public AAUndefinedBehavior {
     const size_t NoUBPrevSize = AssumedNoUBInsts.size();
 
     auto InspectMemAccessInstForUB = [&](Instruction &I) {
-      // Lang ref now states volatile store is not UB, let's skip them.
-      if (I.isVolatile() && I.mayWriteToMemory())
+      // Volatile accesses on null are not necessarily UB.
+      if (I.isVolatile())
         return true;
 
       // Skip instructions that are already saved.
@@ -3008,11 +3313,7 @@ struct AAUndefinedBehaviorImpl : public AAUndefinedBehavior {
         return true;
 
       // We know we have a branch instruction.
-      auto *BrInst = cast<BranchInst>(&I);
-
-      // Unconditional branches are never considered UB.
-      if (BrInst->isUnconditional())
-        return true;
+      auto *BrInst = cast<CondBrInst>(&I);
 
       // Either we stopped and the appropriate action was taken,
       // or we got back a simplified value to continue.
@@ -3126,7 +3427,7 @@ struct AAUndefinedBehaviorImpl : public AAUndefinedBehavior {
                                Instruction::AtomicRMW},
                               UsedAssumedInformation,
                               /* CheckBBLivenessOnly */ true);
-    A.checkForAllInstructions(InspectBrInstForUB, *this, {Instruction::Br},
+    A.checkForAllInstructions(InspectBrInstForUB, *this, {Instruction::CondBr},
                               UsedAssumedInformation,
                               /* CheckBBLivenessOnly */ true);
     A.checkForAllCallLikeInstructions(InspectCallSiteForUB, *this,
@@ -3169,13 +3470,8 @@ struct AAUndefinedBehaviorImpl : public AAUndefinedBehavior {
     case Instruction::Store:
     case Instruction::AtomicCmpXchg:
     case Instruction::AtomicRMW:
+    case Instruction::CondBr:
       return !AssumedNoUBInsts.count(I);
-    case Instruction::Br: {
-      auto *BrInst = cast<BranchInst>(I);
-      if (BrInst->isUnconditional())
-        return false;
-      return !AssumedNoUBInsts.count(I);
-    } break;
     default:
       return false;
     }
@@ -3354,6 +3650,17 @@ struct AAWillReturnImpl : public AAWillReturn {
     bool UsedAssumedInformation = false;
     if (!A.checkForAllCallLikeInstructions(CheckForWillReturn, *this,
                                            UsedAssumedInformation))
+      return indicatePessimisticFixpoint();
+
+    auto CheckForVolatile = [&](Instruction &I) {
+      // Volatile operations are not willreturn.
+      return !I.isVolatile();
+    };
+    if (!A.checkForAllInstructions(CheckForVolatile, *this,
+                                   {Instruction::Load, Instruction::Store,
+                                    Instruction::AtomicCmpXchg,
+                                    Instruction::AtomicRMW},
+                                   UsedAssumedInformation))
       return indicatePessimisticFixpoint();
 
     return ChangeStatus::UNCHANGED;
@@ -3704,15 +4011,48 @@ struct AAIntraFnReachabilityFunction final
                             IsTemporaryRQI);
     }
 
-    SmallPtrSet<const BasicBlock *, 16> Visited;
+    // Optimization: Use DT DFS numbers for visited set if available.
+    // This avoids SmallPtrSet allocation and hashing overhead.
+    if (DT) {
+      if (VisitedMap.empty()) {
+        // Resize once.
+        if (auto *Root = DT->getRootNode())
+          VisitedMap.resize(Root->getDFSNumOut() + 1, 0);
+      }
+      // Increment query ID.
+      CurrentQueryID++;
+      if (CurrentQueryID == 0) {
+        // Wrap around handling: clear map.
+        std::fill(VisitedMap.begin(), VisitedMap.end(), 0);
+        CurrentQueryID = 1;
+      }
+    }
+
     SmallVector<const BasicBlock *, 16> Worklist;
     Worklist.push_back(FromBB);
+
+    // Fallback visited set if DT is not available.
+    SmallPtrSet<const BasicBlock *, 16> VisitedFallback;
 
     DenseSet<std::pair<const BasicBlock *, const BasicBlock *>> LocalDeadEdges;
     while (!Worklist.empty()) {
       const BasicBlock *BB = Worklist.pop_back_val();
-      if (!Visited.insert(BB).second)
-        continue;
+
+      if (DT) {
+        unsigned DFSNum = DT->getNode(BB)->getDFSNumIn();
+        if (DFSNum < VisitedMap.size()) {
+          if (VisitedMap[DFSNum] == CurrentQueryID)
+            continue;
+          VisitedMap[DFSNum] = CurrentQueryID;
+        } else {
+          // Should not happen if DT is consistent, but fallback safely.
+          if (!VisitedFallback.insert(BB).second)
+            continue;
+        }
+      } else {
+        if (!VisitedFallback.insert(BB).second)
+          continue;
+      }
       for (const BasicBlock *SuccBB : successors(BB)) {
         if (LivenessAA && LivenessAA->isEdgeDead(BB, SuccBB)) {
           LocalDeadEdges.insert({BB, SuccBB});
@@ -3753,6 +4093,12 @@ private:
 
   /// The dominator tree of the function to short-circuit reasoning.
   const DominatorTree *DT = nullptr;
+
+  /// Visited map for graph traversal using DT DFS numbers.
+  std::vector<unsigned> VisitedMap;
+
+  /// Current query ID for VisitedMap.
+  unsigned CurrentQueryID = 0;
 };
 } // namespace
 
@@ -4152,6 +4498,9 @@ struct AAIsDeadValueImpl : public AAIsDead {
   /// Determine if \p I is assumed to be side-effect free.
   bool isAssumedSideEffectFree(Attributor &A, Instruction *I) {
     if (!I || wouldInstructionBeTriviallyDead(I))
+      return true;
+
+    if (!I->isTerminator() && !I->mayHaveSideEffects())
       return true;
 
     auto *CB = dyn_cast<CallBase>(I);
@@ -4704,26 +5053,30 @@ identifyAliveSuccessors(Attributor &A, const InvokeInst &II,
 }
 
 static bool
-identifyAliveSuccessors(Attributor &A, const BranchInst &BI,
+identifyAliveSuccessors(Attributor &, const UncondBrInst &BI,
+                        AbstractAttribute &,
+                        SmallVectorImpl<const Instruction *> &AliveSuccessors) {
+  AliveSuccessors.push_back(&BI.getSuccessor()->front());
+  return false;
+}
+
+static bool
+identifyAliveSuccessors(Attributor &A, const CondBrInst &BI,
                         AbstractAttribute &AA,
                         SmallVectorImpl<const Instruction *> &AliveSuccessors) {
   bool UsedAssumedInformation = false;
-  if (BI.getNumSuccessors() == 1) {
-    AliveSuccessors.push_back(&BI.getSuccessor(0)->front());
+  std::optional<Constant *> C =
+      A.getAssumedConstant(*BI.getCondition(), AA, UsedAssumedInformation);
+  if (!C || isa_and_nonnull<UndefValue>(*C)) {
+    // No value yet, assume both edges are dead.
+  } else if (isa_and_nonnull<ConstantInt>(*C)) {
+    const BasicBlock *SuccBB =
+        BI.getSuccessor(1 - cast<ConstantInt>(*C)->getValue().getZExtValue());
+    AliveSuccessors.push_back(&SuccBB->front());
   } else {
-    std::optional<Constant *> C =
-        A.getAssumedConstant(*BI.getCondition(), AA, UsedAssumedInformation);
-    if (!C || isa_and_nonnull<UndefValue>(*C)) {
-      // No value yet, assume both edges are dead.
-    } else if (isa_and_nonnull<ConstantInt>(*C)) {
-      const BasicBlock *SuccBB =
-          BI.getSuccessor(1 - cast<ConstantInt>(*C)->getValue().getZExtValue());
-      AliveSuccessors.push_back(&SuccBB->front());
-    } else {
-      AliveSuccessors.push_back(&BI.getSuccessor(0)->front());
-      AliveSuccessors.push_back(&BI.getSuccessor(1)->front());
-      UsedAssumedInformation = false;
-    }
+    AliveSuccessors.push_back(&BI.getSuccessor(0)->front());
+    AliveSuccessors.push_back(&BI.getSuccessor(1)->front());
+    UsedAssumedInformation = false;
   }
   return UsedAssumedInformation;
 }
@@ -4836,8 +5189,12 @@ ChangeStatus AAIsDeadFunction::updateImpl(Attributor &A) {
       UsedAssumedInformation = identifyAliveSuccessors(A, cast<InvokeInst>(*I),
                                                        *this, AliveSuccessors);
       break;
-    case Instruction::Br:
-      UsedAssumedInformation = identifyAliveSuccessors(A, cast<BranchInst>(*I),
+    case Instruction::UncondBr:
+      UsedAssumedInformation = identifyAliveSuccessors(
+          A, cast<UncondBrInst>(*I), *this, AliveSuccessors);
+      break;
+    case Instruction::CondBr:
+      UsedAssumedInformation = identifyAliveSuccessors(A, cast<CondBrInst>(*I),
                                                        *this, AliveSuccessors);
       break;
     case Instruction::Switch:
@@ -6688,12 +7045,17 @@ struct AAValueSimplifyCallSiteArgument : AAValueSimplifyFloating {
 namespace {
 struct AAHeapToStackFunction final : public AAHeapToStack {
 
+  static bool isGlobalizedLocal(const CallBase &CB) {
+    Attribute A = CB.getFnAttr("alloc-family");
+    return A.isValid() && A.getValueAsString() == "__kmpc_alloc_shared";
+  }
+
   struct AllocationInfo {
     /// The call that allocates the memory.
     CallBase *const CB;
 
-    /// The library function id for the allocation.
-    LibFunc LibraryFunctionId = NotLibFunc;
+    /// Whether this allocation is an OpenMP globalized local variable.
+    bool IsGlobalizedLocal = false;
 
     /// The status wrt. a rewrite.
     enum {
@@ -6762,8 +7124,7 @@ struct AAHeapToStackFunction final : public AAHeapToStack {
         if (nullptr != getInitialValueOfAllocation(CB, TLI, I8Ty)) {
           AllocationInfo *AI = new (A.Allocator) AllocationInfo{CB};
           AllocationInfos[CB] = AI;
-          if (TLI)
-            TLI->getLibFunc(*CB, AI->LibraryFunctionId);
+          AI->IsGlobalizedLocal = isGlobalizedLocal(*CB);
         }
       }
       return true;
@@ -6857,13 +7218,11 @@ struct AAHeapToStackFunction final : public AAHeapToStack {
                         << "\n");
 
       auto Remark = [&](OptimizationRemark OR) {
-        LibFunc IsAllocShared;
-        if (TLI->getLibFunc(*AI.CB, IsAllocShared))
-          if (IsAllocShared == LibFunc___kmpc_alloc_shared)
-            return OR << "Moving globalized variable to the stack.";
+        if (AI.IsGlobalizedLocal)
+          return OR << "Moving globalized variable to the stack.";
         return OR << "Moving memory allocation from the heap to the stack.";
       };
-      if (AI.LibraryFunctionId == LibFunc___kmpc_alloc_shared)
+      if (AI.IsGlobalizedLocal)
         A.emitRemark<OptimizationRemark>(AI.CB, "OMP110", Remark);
       else
         A.emitRemark<OptimizationRemark>(AI.CB, "HeapToStack", Remark);
@@ -6917,7 +7276,7 @@ struct AAHeapToStackFunction final : public AAHeapToStack {
 
       if (auto *II = dyn_cast<InvokeInst>(AI.CB)) {
         auto *NBB = II->getNormalDest();
-        BranchInst::Create(NBB, AI.CB->getParent());
+        UncondBrInst::Create(NBB, AI.CB->getParent());
         A.deleteAfterManifest(*AI.CB);
       } else {
         A.deleteAfterManifest(*AI.CB);
@@ -7110,8 +7469,8 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
       return false;
     }
 
-    // __kmpc_alloc_shared and __kmpc_alloc_free are by construction matched.
-    if (AI.LibraryFunctionId != LibFunc___kmpc_alloc_shared) {
+    // __kmpc_alloc_shared and __kmpc_free_shared are by construction matched.
+    if (!AI.IsGlobalizedLocal) {
       Instruction *CtxI = isa<InvokeInst>(AI.CB) ? AI.CB : AI.CB->getNextNode();
       if (!Explorer || !Explorer->findInContextOf(UniqueFree, CtxI)) {
         LLVM_DEBUG(dbgs() << "[H2S] unique free call might not be executed "
@@ -7161,8 +7520,7 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
             A, this, CBIRP, DepClassTy::OPTIONAL, IsKnownNoFree);
 
         if (!IsAssumedNoCapture ||
-            (AI.LibraryFunctionId != LibFunc___kmpc_alloc_shared &&
-             !IsAssumedNoFree)) {
+            (!AI.IsGlobalizedLocal && !IsAssumedNoFree)) {
           AI.HasPotentiallyFreeingUnknownUses |= !IsAssumedNoFree;
 
           // Emit a missed remark if this is missed OpenMP globalization.
@@ -7173,8 +7531,7 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
                       "parameter as `__attribute__((noescape))` to override.";
           };
 
-          if (ValidUsesOnly &&
-              AI.LibraryFunctionId == LibFunc___kmpc_alloc_shared)
+          if (ValidUsesOnly && AI.IsGlobalizedLocal)
             A.emitRemark<OptimizationRemarkMissed>(CB, "OMP113", Remark);
 
           LLVM_DEBUG(dbgs() << "[H2S] Bad user: " << *UserI << "\n");
@@ -7235,8 +7592,7 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
     }
 
     std::optional<APInt> Size = getSize(A, *this, AI);
-    if (AI.LibraryFunctionId != LibFunc___kmpc_alloc_shared &&
-        MaxHeapToStackSize != -1) {
+    if (!AI.IsGlobalizedLocal && MaxHeapToStackSize != -1) {
       if (!Size || Size->ugt(MaxHeapToStackSize)) {
         LLVM_DEBUG({
           if (!Size)
@@ -7270,9 +7626,8 @@ ChangeStatus AAHeapToStackFunction::updateImpl(Attributor &A) {
 
     // Check if we still think we can move it into the entry block. If the
     // alloca comes from a converted __kmpc_alloc_shared then we can usually
-    // ignore the potential compilations associated with loops.
-    bool IsGlobalizedLocal =
-        AI.LibraryFunctionId == LibFunc___kmpc_alloc_shared;
+    // ignore the potential complications associated with loops.
+    bool IsGlobalizedLocal = AI.IsGlobalizedLocal;
     if (AI.MoveAllocaIntoEntry &&
         (!Size.has_value() ||
          (!IsGlobalizedLocal && IsInLoop(*AI.CB->getParent()))))
@@ -8705,11 +9060,12 @@ void AAMemoryLocationImpl::categorizePtrValue(
 
     // Filter accesses to constant (GPU) memory if we have an AS at the access
     // site or the object is known to actually have the associated AS.
-    if ((AccessAS == (unsigned)AA::GPUAddressSpace::Constant ||
-         (ObjectAS == (unsigned)AA::GPUAddressSpace::Constant &&
-          isIdentifiedObject(&Obj))) &&
-        AA::isGPU(*I.getModule()))
-      return true;
+    if (AA::isGPU(A.getModule())) {
+      if (AA::isGPUConstantAddressSpace(A.getModule(), AccessAS) ||
+          (AA::isGPUConstantAddressSpace(A.getModule(), ObjectAS) &&
+           isIdentifiedObject(&Obj)))
+        return true;
+    }
 
     if (isa<UndefValue>(&Obj))
       return true;
@@ -9013,15 +9369,9 @@ struct AADenormalFPMathFunction final : AADenormalFPMathImpl {
 
   void initialize(Attributor &A) override {
     const Function *F = getAnchorScope();
-    DenormalMode Mode = F->getDenormalModeRaw();
-    DenormalMode ModeF32 = F->getDenormalModeF32Raw();
+    DenormalFPEnv DenormEnv = F->getDenormalFPEnv();
 
-    // TODO: Handling this here prevents handling the case where a callee has a
-    // fixed denormal-fp-math with dynamic denormal-fp-math-f32, but called from
-    // a function with a fully fixed mode.
-    if (ModeF32 == DenormalMode::getInvalid())
-      ModeF32 = Mode;
-    Known = DenormalState{Mode, ModeF32};
+    Known = DenormalState{DenormEnv.DefaultMode, DenormEnv.F32Mode};
     if (isModeFixed())
       indicateFixpoint();
   }
@@ -9057,19 +9407,17 @@ struct AADenormalFPMathFunction final : AADenormalFPMathImpl {
     LLVMContext &Ctx = getAssociatedFunction()->getContext();
 
     SmallVector<Attribute, 2> AttrToAdd;
-    SmallVector<StringRef, 2> AttrToRemove;
-    if (Known.Mode == DenormalMode::getDefault()) {
-      AttrToRemove.push_back("denormal-fp-math");
-    } else {
-      AttrToAdd.push_back(
-          Attribute::get(Ctx, "denormal-fp-math", Known.Mode.str()));
-    }
+    SmallVector<Attribute::AttrKind, 2> AttrToRemove;
 
-    if (Known.ModeF32 != Known.Mode) {
-      AttrToAdd.push_back(
-          Attribute::get(Ctx, "denormal-fp-math-f32", Known.ModeF32.str()));
+    // TODO: Change to use DenormalFPEnv everywhere.
+    DenormalFPEnv KnownEnv(Known.Mode, Known.ModeF32);
+
+    if (KnownEnv == DenormalFPEnv::getDefault()) {
+      AttrToRemove.push_back(Attribute::DenormalFPEnv);
     } else {
-      AttrToRemove.push_back("denormal-fp-math-f32");
+      AttrToAdd.push_back(Attribute::get(
+          Ctx, Attribute::DenormalFPEnv,
+          DenormalFPEnv(Known.Mode, Known.ModeF32).toIntValue()));
     }
 
     auto &IRP = getIRPosition();
@@ -9080,7 +9428,7 @@ struct AADenormalFPMathFunction final : AADenormalFPMathImpl {
   }
 
   void trackStatistics() const override {
-    STATS_DECLTRACK_FN_ATTR(denormal_fp_math)
+    STATS_DECLTRACK_FN_ATTR(denormal_fpenv)
   }
 };
 } // namespace
@@ -10055,7 +10403,7 @@ struct AAPotentialConstantValuesFloating : AAPotentialConstantValuesImpl {
     bool OnlyLeft = false, OnlyRight = false;
     if (C && *C && (*C)->isOneValue())
       OnlyLeft = true;
-    else if (C && *C && (*C)->isZeroValue())
+    else if (C && *C && (*C)->isNullValue())
       OnlyRight = true;
 
     bool LHSContainsUndef = false, RHSContainsUndef = false;
@@ -10483,13 +10831,32 @@ struct AANoFPClassImpl : AANoFPClass {
       addKnownBits(Attr.getNoFPClass());
     }
 
-    const DataLayout &DL = A.getDataLayout();
+    Instruction *CtxI = getCtxI();
+
     if (getPositionKind() != IRPosition::IRP_RETURNED) {
-      KnownFPClass KnownFPClass = computeKnownFPClass(&V, DL);
+      const DataLayout &DL = A.getDataLayout();
+      InformationCache &InfoCache = A.getInfoCache();
+
+      const DominatorTree *DT = nullptr;
+      AssumptionCache *AC = nullptr;
+      const TargetLibraryInfo *TLI = nullptr;
+      Function *F = getAnchorScope();
+      if (F) {
+        TLI = InfoCache.getTargetLibraryInfoForFunction(*F);
+        if (!F->isDeclaration()) {
+          DT =
+              InfoCache.getAnalysisResultForFunction<DominatorTreeAnalysis>(*F);
+          AC = InfoCache.getAnalysisResultForFunction<AssumptionAnalysis>(*F);
+        }
+      }
+
+      SimplifyQuery Q(DL, TLI, DT, AC, CtxI);
+
+      KnownFPClass KnownFPClass = computeKnownFPClass(&V, fcAllFlags, Q);
       addKnownBits(~KnownFPClass.KnownFPClasses);
     }
 
-    if (Instruction *CtxI = getCtxI())
+    if (CtxI)
       followUsesInMBEC(*this, A, getState(), *CtxI);
   }
 
@@ -12524,13 +12891,13 @@ struct AAIndirectCallInfoCallSite : public AAIndirectCallInfo {
       BasicBlock *CBBB = CB->getParent();
       A.registerManifestAddedBasicBlock(*ThenTI->getParent());
       A.registerManifestAddedBasicBlock(*IP->getParent());
-      auto *SplitTI = cast<BranchInst>(LastCmp->getNextNode());
+      auto *SplitTI = cast<CondBrInst>(LastCmp->getNextNode());
       BasicBlock *ElseBB;
       if (&*IP == CB) {
         ElseBB = BasicBlock::Create(ThenTI->getContext(), "",
                                     ThenTI->getFunction(), CBBB);
         A.registerManifestAddedBasicBlock(*ElseBB);
-        IP = BranchInst::Create(CBBB, ElseBB)->getIterator();
+        IP = UncondBrInst::Create(CBBB, ElseBB)->getIterator();
         SplitTI->replaceUsesOfWith(CBBB, ElseBB);
       } else {
         ElseBB = IP->getParent();
@@ -12763,7 +13130,7 @@ private:
     case IRP_CALL_SITE_RETURNED: {
       const auto &CB = cast<CallBase>(getAnchorValue());
       return !isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(
-          &CB, /*MustPreserveNullness=*/false);
+          &CB, /*MustPreserveOffset=*/false);
     }
     case IRP_ARGUMENT: {
       const Function *F = getAssociatedFunction();
@@ -12898,7 +13265,7 @@ private:
 
     if (const auto *CB = dyn_cast<CallBase>(&getAnchorValue())) {
       if (isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(
-              CB, /*MustPreserveNullness=*/false)) {
+              CB, /*MustPreserveOffset=*/false)) {
         for (const Value *Arg : CB->args()) {
           if (!IsLocallyInvariantLoadIfPointer(*Arg))
             return indicatePessimisticFixpoint();
@@ -12944,7 +13311,7 @@ struct AAInvariantLoadPointerCallSiteReturned final
 
     const auto &CB = cast<CallBase>(getAnchorValue());
     if (isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(
-            &CB, /*MustPreserveNullness=*/false))
+            &CB, /*MustPreserveOffset=*/false))
       return AAInvariantLoadPointerImpl::initialize(A);
 
     if (F->onlyReadsMemory() && F->hasNoSync())
@@ -13239,7 +13606,7 @@ struct AAAddressSpaceCallSiteArgument final : AAAddressSpaceImpl {
 
 // TODO: this is similar to AAAddressSpace, most of the code should be merged.
 // But merging it created failing cased on gateway test that cannot be
-// reproduced locally. So should open a seperated PR to hande the merge of
+// reproduced locally. So should open a separated PR to handle the merge of
 // AANoAliasAddrSpace and AAAddressSpace attribute
 
 namespace {

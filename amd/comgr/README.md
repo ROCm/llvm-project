@@ -80,16 +80,34 @@ may be enabled during development via `-DADDRESS_SANITIZER=On` during the Comgr
 **Static Comgr:** Comgr can be built as a static library by passing
 `-DCOMGR_BUILD_SHARED_LIBS=OFF` during the Comgr `cmake` step.
 
+**Static LLVM Linking:** When building Comgr as a shared library within a
+super-project, you can statically link LLVM/Clang into Comgr by passing
+`-DCOMGR_STATIC_LLVM=ON`. By default (`OFF`), Comgr respects the existing
+`LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB` settings.
+
+**Windows DLL Name:** On Windows, the DLL is named `amd_comgr.dll` by default.
+To override this, pass `-DCOMGR_DLL_NAME=<name>.dll` during the Comgr `cmake`
+step (e.g., `-DCOMGR_DLL_NAME=amd_comgr_3.dll`).
+
 **SPIRV Support:** To enable SPIRV support, checkout
 [SPIRV-LLVM-Translator](https://github.com/ROCm/SPIRV-LLVM-Translator) in
 `llvm/projects` or `llvm/tools` and build using the above instructions, with the
 exception that the `-DCMAKE_PREFIX_PATH` for llvm-project must be an install
 path (specified with `-DCMAKE_INSTALL_PREFIX=/path/to/install/dir` and populated
-with `make install`) rather than the build path.
+with `make install`) rather than the build path. Minimal SPIRV support requires
+that the translator be found when configuring Comgr. At configure time Comgr
+detects translator and backend independently, and `-DCOMGR_DISABLE_SPIRV` is the
+only Comgr CMake option for SPIR-V.
 
 Comgr SPIRV-related APIs can be disabled by passing
 `-DCOMGR_DISABLE_SPIRV=1` during the Comgr `cmake` step. This removes any
-dependency on LLVM SPIRV libraries or the llvm-spirv tool.
+dependency on LLVM SPIRV libraries, the llvm-spirv tool or the SPIRV backend in LLVM.
+If `-DCOMGR_DISABLE_SPIRV` is unset or set to zero, Comgr will have the SPIR-V backend
+available when `SPIRV` is included in `-DLLVM_TARGETS_TO_BUILD` (for example
+`-DLLVM_TARGETS_TO_BUILD="AMDGPU;X86;SPIRV"` when configuring LLVM). That does
+not yet make the SPIR-V backend the default path for SPIR-V code generation in
+Comgr, even when it is found; by default, SPIR-V code generation still uses the
+translator path.
 
 **Code Coverage Instrumentation:** Comgr supports source-based [code coverage
 via clang](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html), and
@@ -202,6 +220,10 @@ include:
   include additional Comgr-specific informational messages.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
+* `AMD_COMGR_DRIVER_OPTIONS_APPEND`: If set, the space-separated options are
+  appended to all clang driver invocations. This can be used to inject
+  additional compiler flags for debugging or experimentation without modifying
+  the application code.
 
 ### VFS
 Comgr implements support for an in-memory, virtual filesystem (VFS) for storing
@@ -217,6 +239,43 @@ By default, VFS is turned on.
   without having to modify system-wide environment variables.
 * If `AMD_COMGR_SAVE_TEMPS` is set and not "0", VFS support is turned off irrespective
   of `AMD_COMGR_USE_VFS` or the use of `amd_comgr_action_info_set_vfs`.
+
+### Embedded libc++ Headers for HIPRTC
+
+Comgr embeds a subset of libc++ headers to enable HIPRTC programs to use
+standard C++ features without requiring system C++ headers. At runtime, the
+embedded headers are mapped via VFS to clang's default include locations:
+
+* libc++ headers: `<install>/include/c++/v1/`
+* Clang builtin headers: `<resource-dir>/include/`
+
+Because the headers live at the standard clang locations, the clang driver finds
+them automatically — no explicit `-I` flags are needed. The libc++ path is
+injected with `-idirafter`, so system C++ headers (libstdc++ or a host libc++)
+always take priority when available. The embedded headers only serve as a
+fallback for environments without C++ development headers (e.g., driver-only
+installs or minimal containers).
+
+**Supported headers (C++17 or later, no system C library dependencies):**
+* `<type_traits>`, `<limits>`, `<tuple>`, `<cstdint>`, `<cstddef>`
+* `<initializer_list>`
+* `<concepts>` (requires C++20)
+
+**Unsupported headers (require system C headers):**
+
+The following headers require system C library headers (e.g., `<cstring>`,
+`<climits>`) and are not included in the embedded set:
+* `<optional>`, `<variant>` (require `<cstring>` for `std::hash`)
+* `<ratio>` (requires `<climits>`)
+* `<array>`, `<functional>` (require `<cstdlib>`, `<cstring>`)
+
+**Build option:**
+* `COMGR_EMBED_LIBCXX_HEADERS`: Set to `OFF` to disable embedding libc++ headers
+  and reduce library size (default: `ON`).
+
+**Debugging:**
+* Use `AMD_COMGR_SAVE_LLVM_TEMPS=1` to see expanded headers in the `.hipi`
+  preprocessor output file.
 
 Versioning
 ----------

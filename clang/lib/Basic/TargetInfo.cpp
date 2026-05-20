@@ -52,6 +52,8 @@ static const LangASMap FakeAddrSpaceMap = {
     15, // hlsl_private
     16, // hlsl_device
     17, // hlsl_input
+    18, // hlsl_output
+    19, // hlsl_push_constant
     20, // wasm_funcref
 };
 
@@ -129,6 +131,7 @@ TargetInfo::TargetInfo(const llvm::Triple &T) : Triple(T) {
   MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 0;
   MaxVectorAlign = 0;
   MaxTLSAlign = 0;
+  VectorsAreElementAligned = false;
   SizeType = UnsignedLong;
   PtrDiffType = SignedLong;
   IntMaxType = SignedLongLong;
@@ -637,6 +640,13 @@ bool TargetInfo::callGlobalDeleteInDeletingDtor(
   return false;
 }
 
+bool TargetInfo::emitVectorDeletingDtors(const LangOptions &LangOpts) const {
+  if (getCXXABI() == TargetCXXABI::Microsoft &&
+      LangOpts.getClangABICompat() > LangOptions::ClangABI::Ver21)
+    return true;
+  return false;
+}
+
 bool TargetInfo::areDefaultedSMFStillPOD(const LangOptions &LangOpts) const {
   return LangOpts.getClangABICompat() > LangOptions::ClangABI::Ver15;
 }
@@ -1103,4 +1113,21 @@ TargetInfo::simplifyConstraint(StringRef Constraint,
     }
   }
   return Result;
+}
+
+unsigned clang::Microsoft64BitMinGlobalAlign(uint64_t TypeSize) {
+  // MSVC does size based alignment for arm64 based on alignment section in
+  // below document. Replicate that to keep alignment consistent with object
+  // files compiled by MSVC.
+  // https://docs.microsoft.com/en-us/cpp/build/arm64-windows-abi-conventions
+  // The same is done for x64, but not documented.
+
+  if (TypeSize >= 512) // TypeSize >= 64 bytes
+    return 128;        // align type at least 16 bytes
+  if (TypeSize >= 64)  // TypeSize >= 8 bytes
+    return 64;         // align type at least 8 bytes
+  if (TypeSize >= 16)  // TypeSize >= 2 bytes
+    return 32;         // align type at least 4 bytes
+
+  return 0;
 }

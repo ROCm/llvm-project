@@ -23,13 +23,13 @@ namespace impl {
 /// Lookup a device-side function using a host pointer /p HstPtr using the table
 /// provided by the device plugin. The table is an ordered pair of host and
 /// device pointers sorted on the value of the host pointer.
-static void *indirectCallLookup(void *HstPtr) {
+static FnPtrTy indirectCallLookup(FnPtrTy HstPtr) {
   if (!HstPtr)
     return nullptr;
 
   struct IndirectCallTable {
-    void *HstPtr;
-    void *DevPtr;
+    FnPtrTy HstPtr;
+    FnPtrTy DevPtr;
   };
   IndirectCallTable *Table =
       reinterpret_cast<IndirectCallTable *>(config::getIndirectCallTablePtr());
@@ -89,7 +89,7 @@ double omp_get_wtime(void) {
   return static_cast<double>(__builtin_readsteadycounter()) * omp_get_wtick();
 }
 
-void *__llvm_omp_indirect_call_lookup(void *HstPtr) {
+FnPtrTy __llvm_omp_indirect_call_lookup(FnPtrTy HstPtr) {
   return ompx::impl::indirectCallLookup(HstPtr);
 }
 
@@ -131,7 +131,6 @@ unsigned long long __llvm_omp_host_call(void *fn, void *data, size_t size) {
   Port.recv([&](rpc::Buffer *Buffer, uint32_t) {
     Ret = static_cast<unsigned long long>(Buffer->data[0]);
   });
-  Port.close();
   return Ret;
 }
 
@@ -145,7 +144,6 @@ __attribute__((noinline)) void *__alt_libc_malloc(size_t sz) {
       [&](rpc::Buffer *buffer, uint32_t) {
         ptr = reinterpret_cast<void *>(buffer->data[0]);
       });
-  Port.close();
   return ptr;
 }
 __attribute__((noinline)) void __alt_libc_free(void *ptr) {
@@ -154,7 +152,6 @@ __attribute__((noinline)) void __alt_libc_free(void *ptr) {
   Port.send([=](rpc::Buffer *buffer, uint32_t) {
     buffer->data[0] = (uint64_t)ptr;
   });
-  Port.close();
   return;
 }
 // Calls to __llvm_omp_emissary_rpc and __llvm_omp_emissary_premalloc are
@@ -168,7 +165,6 @@ __attribute__((noinline)) void *__llvm_omp_emissary_premalloc64(size_t sz) {
       [&](rpc::Buffer *buffer, uint32_t) {
         ptr = reinterpret_cast<void *>(buffer->data[0]);
       });
-  Port.close();
   return ptr;
 }
 void *__llvm_omp_emissary_premalloc(uint32_t sz32) {
@@ -180,7 +176,6 @@ __attribute__((noinline)) void __llvm_omp_emissary_free(void *ptr) {
   Port.send([=](rpc::Buffer *buffer, uint32_t) {
     buffer->data[0] = (uint64_t)ptr;
   });
-  Port.close();
   return;
 }
 __attribute__((noinline)) unsigned long long
@@ -193,9 +188,14 @@ __llvm_omp_emissary_rpc(void* fn, void *data) {
   Port.recv([&](rpc::Buffer *Buffer, uint32_t) {
     Ret = static_cast<unsigned long long>(Buffer->data[0]);
   });
-  Port.close();
   return Ret;
 }
+}
+
+// C++ ABI helpers.
+extern "C" {
+[[gnu::weak]] void __cxa_pure_virtual(void) { __builtin_trap(); }
+[[gnu::weak]] void __cxa_deleted_virtual(void) { __builtin_trap(); }
 }
 
 ///}

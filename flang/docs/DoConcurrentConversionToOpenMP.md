@@ -27,7 +27,7 @@ are:
 ## Usage
 
 In order to enable `do concurrent` to OpenMP mapping, `flang` adds a new
-compiler flag: `-fdo-concurrent-to-openmp`. This flag has 3 possible values:
+compiler flag: `-fdo-concurrent` (and its alias `-fdo-concurrent-to-openmp`). This flag has 3 possible values:
 1. `host`: this maps `do concurrent` loops to run in parallel on the host CPU.
    This maps such loops to the equivalent of `omp parallel do`.
 2. `device`: this maps `do concurrent` loops to run in parallel on a target device.
@@ -36,9 +36,13 @@ compiler flag: `-fdo-concurrent-to-openmp`. This flag has 3 possible values:
 3. `none`: this disables `do concurrent` mapping altogether. In that case, such
    loops are emitted as sequential loops.
 
-The `-fdo-concurrent-to-openmp` compiler switch is currently available only when
+The `-fdo-concurrent` (or `-fdo-concurrent-to-openmp`) compiler switch is currently available only when
 OpenMP is also enabled. So you need to provide the following options to flang in
 order to enable it:
+```
+flang ... -fopenmp -fdo-concurrent=[host|device|none] ...
+```
+or using the alias:
 ```
 flang ... -fopenmp -fdo-concurrent-to-openmp=[host|device|none] ...
 ```
@@ -47,11 +51,18 @@ See `-fopenmp-targets` and `--offload-arch` for more info.
 
 ## Current status
 
-Under the hood, `do concurrent` mapping is implemented in the
-`DoConcurrentConversionPass`. This is still an experimental pass which means
-that:
-* It has been tested in a very limited way so far.
-* It has been tested mostly on simple synthetic inputs.
+As of LLVM 22, flang adds more extensive support for parallelizing `do concurrent` loops
+on the CPU and the GPU. In particular, the local specifier, partial support for reduce,
+and automatic mapping of user-defined types are now supported.
+On the CPU, we validated the feature using [FIATS](https://github.com/BerkeleyLab/fiats)
+inference and training codes where `do concurrent` and OpenMP had very similar 
+acceleration results (for more information, see: [1]).
+On the GPU, we have basic support that is still in progress. We have offload tests for 
+1D and 2D saxpy. We also validated using codes that do not make extensive use of user-defined
+types and allocatables.
+
+[1] Automatically Parallelizing Batch Inference on Deep Neural Networks Using Fiats
+and Fortran 2023 “Do Concurrent” (https://link.springer.com/chapter/10.1007/978-3-032-07612-0_11)
 
 ### Loop nest detection
 
@@ -219,7 +230,7 @@ exceptions to this are:
      `flang/test/Transforms/DoConcurrent/locally_destroyed_temp.f90`.
 
 Implicit mapping detection (for mapping to the target device) is still quite
-limited and work to make it smarter is underway for both OpenMP in general 
+limited and work to make it smarter is underway for both OpenMP in general
 and `do concurrent` mapping.
 
 #### Non-perfectly-nested loops' IVs
@@ -318,7 +329,7 @@ as well.
 
 Similar to locality specifiers, mapping reductions from `do concurrent` to OpenMP
 is also still an open TODO. We can potentially extend the MLIR infrastructure
-proposed in the previous section to share reduction records among the different 
+proposed in the previous section to share reduction records among the different
 relevant dialects as well.
 
 ### More advanced detection of loop nests

@@ -74,6 +74,8 @@ int main(int argc, char **argv) {
   }
 
   // Set linkage of every external definition to linkonce_odr.
+  // This is required to avoid duplicate symbol errors when linking
+  // device code from multiple translation units with -fgpu-rdc.
   for (Module::iterator i = M->begin(), e = M->end(); i != e; ++i) {
     if (!i->isDeclaration() && i->getLinkage() == GlobalValue::ExternalLinkage) {
         i->setLinkage(GlobalValue::LinkOnceODRLinkage);
@@ -93,7 +95,6 @@ int main(int argc, char **argv) {
         i->setLinkage(GlobalValue::LinkOnceODRLinkage);
     }
   }
-
 
   if (OutputFilename.empty()) {
     errs() << "no output file\n";

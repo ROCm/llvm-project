@@ -25,6 +25,7 @@
 using namespace llvm;
 using namespace llvm::ELF;
 using namespace llvm::object;
+using namespace llvm::omp::target::debug;
 
 bool utils::elf::isELF(StringRef Buffer) {
   switch (identify_magic(Buffer)) {
@@ -35,7 +36,7 @@ bool utils::elf::isELF(StringRef Buffer) {
   case file_magic::elf_core:
     return true;
   default:
-    DP("Not an ELF image!\n");
+    ODBG(ODT_Tool) << "Not an ELF image!";
     return false;
   }
 }
@@ -138,14 +139,14 @@ getSymbolFromGnuHashTable(StringRef Name, const typename ELFT::GnuHash &HashTab,
        I >= SymOffset && I < SymTab.size(); I = I + 1) {
     const uint32_t ChainHash = Chain[I - SymOffset];
 
-    if ((NameHash | 0x1) != (ChainHash | 0x1))
-      continue;
-
-    if (SymTab[I].st_name >= StrTab.size())
-      return createError("symbol [index " + Twine(I) +
-                         "] has invalid st_name: " + Twine(SymTab[I].st_name));
-    if (StrTab.drop_front(SymTab[I].st_name).data() == Name)
-      return &SymTab[I];
+    if ((NameHash | 0x1) == (ChainHash | 0x1)) {
+      if (SymTab[I].st_name >= StrTab.size())
+        return createError(
+            "symbol [index " + Twine(I) +
+            "] has invalid st_name: " + Twine(SymTab[I].st_name));
+      if (StrTab.drop_front(SymTab[I].st_name).data() == Name)
+        return &SymTab[I];
+    }
 
     if (ChainHash & 0x1)
       return nullptr;

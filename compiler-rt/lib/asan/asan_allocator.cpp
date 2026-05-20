@@ -93,6 +93,11 @@ class ChunkHeader {
   atomic_uint8_t chunk_state;
   u8 alloc_type : 2;
   u8 lsan_tag : 2;
+#if SANITIZER_WINDOWS
+  // True if this was a zero-size allocation upgraded to size 1.
+  // Used to report the original size (0) to the user via HeapSize/RtlSizeHeap.
+  u8 from_zero_alloc : 1;
+#endif
 
   // align < 8 -> 0
   // else      -> log2(min(align, 512)) - 2
@@ -615,6 +620,9 @@ struct Allocator {
     uptr chunk_beg = user_beg - kChunkHeaderSize;
     AsanChunk *m = reinterpret_cast<AsanChunk *>(chunk_beg);
     m->alloc_type = alloc_type;
+#if SANITIZER_WINDOWS
+    m->from_zero_alloc = upgraded_from_zero;
+#endif
     CHECK(size);
     m->SetUsedSize(size);
     m->user_requested_alignment_log = user_requested_alignment_log;
@@ -755,12 +763,26 @@ struct Allocator {
                                 (AllocType)alloc_type);
       }
     } else {
-      if (flags()->new_delete_type_mismatch &&
-          (alloc_type == FROM_NEW || alloc_type == FROM_NEW_BR) &&
-          ((delete_size && delete_size != m->UsedSize()) ||
-           ComputeUserRequestedAlignmentLog(delete_alignment) !=
-               m->user_requested_alignment_log)) {
-        ReportNewDeleteTypeMismatch(p, delete_size, delete_alignment, stack);
+      switch (alloc_type) {
+        case FROM_NEW:
+        case FROM_NEW_BR:
+          if (flags()->new_delete_type_mismatch &&
+              ((delete_size && delete_size != m->UsedSize()) ||
+               ComputeUserRequestedAlignmentLog(delete_alignment) !=
+                   m->user_requested_alignment_log)) {
+            ReportNewDeleteTypeMismatch(p, delete_size, delete_alignment,
+                                        stack);
+          }
+          break;
+        case FROM_MALLOC:
+          if (flags()->free_size_mismatch &&
+              ((delete_size && delete_size != m->UsedSize()) ||
+               (delete_alignment &&
+                ComputeUserRequestedAlignmentLog(delete_alignment) !=
+                    m->user_requested_alignment_log))) {
+            ReportFreeSizeMismatch(p, delete_size, delete_alignment, stack);
+          }
+          break;
       }
     }
 
@@ -796,13 +818,14 @@ struct Allocator {
     return new_ptr;
   }
 
-  void *Calloc(uptr nmemb, uptr size, BufferedStackTrace *stack) {
+  void* Calloc(uptr nmemb, uptr size, BufferedStackTrace* stack,
+               uptr align = 8) {
     if (UNLIKELY(CheckForCallocOverflow(size, nmemb))) {
       if (AllocatorMayReturnNull())
         return nullptr;
       ReportCallocOverflow(nmemb, size, stack);
     }
-    void *ptr = Allocate(nmemb * size, 8, stack, FROM_MALLOC, false);
+    void* ptr = Allocate(nmemb * size, align, stack, FROM_MALLOC, false);
     // If the memory comes from the secondary allocator no need to clear it
     // as it comes directly from mmap.
     if (ptr && allocator.FromPrimary(ptr))
@@ -866,6 +889,23 @@ struct Allocator {
     if (m->Beg() != p) return 0;
     return m->UsedSize();
   }
+
+#if SANITIZER_WINDOWS
+  // Returns true if the allocation at p was a zero-size request that was
+  // internally upgraded to size 1.
+  bool FromZeroAllocation(uptr p) {
+    return reinterpret_cast<AsanChunk*>(p - kChunkHeaderSize)->from_zero_alloc;
+  }
+
+  // Marks an existing size 1 allocation as having originally been zero-size.
+  // Used by SharedReAlloc which augments size 0 to 1 before calling
+  // asan_realloc, bypassing Allocate's own zero-size tracking.
+  void MarkAsZeroAllocation(uptr p) {
+    AsanChunk* m = reinterpret_cast<AsanChunk*>(p - kChunkHeaderSize);
+    m->from_zero_alloc = 1;
+    PoisonShadow(p, ASAN_SHADOW_GRANULARITY, kAsanHeapLeftRedzoneMagic);
+  }
+#endif
 
   uptr AllocationSizeFast(uptr p) {
     return reinterpret_cast<AsanChunk *>(p - kChunkHeaderSize)->UsedSize();
@@ -1022,6 +1062,15 @@ void asan_free(void *ptr, BufferedStackTrace *stack) {
   instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC);
 }
 
+void asan_free_sized(void* ptr, uptr size, BufferedStackTrace* stack) {
+  instance.Deallocate(ptr, size, /*delete_alignment=*/0, stack, FROM_MALLOC);
+}
+
+void asan_free_aligned_sized(void* ptr, uptr alignment, uptr size,
+                             BufferedStackTrace* stack) {
+  instance.Deallocate(ptr, size, alignment, stack, FROM_MALLOC);
+}
+
 void *asan_malloc(uptr size, BufferedStackTrace *stack) {
   return SetErrnoOnNull(instance.Allocate(size, 8, stack, FROM_MALLOC, true));
 }
@@ -1029,6 +1078,16 @@ void *asan_malloc(uptr size, BufferedStackTrace *stack) {
 void *asan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack) {
   return SetErrnoOnNull(instance.Calloc(nmemb, size, stack));
 }
+
+#if SANITIZER_AIX
+void* asan_vec_malloc(uptr size, BufferedStackTrace* stack) {
+  return SetErrnoOnNull(instance.Allocate(size, 16, stack, FROM_MALLOC, true));
+}
+
+void* asan_vec_calloc(uptr nmemb, uptr size, BufferedStackTrace* stack) {
+  return SetErrnoOnNull(instance.Calloc(nmemb, size, stack, 16));
+}
+#endif
 
 void *asan_reallocarray(void *p, uptr nmemb, uptr size,
                         BufferedStackTrace *stack) {
@@ -1119,6 +1178,17 @@ uptr asan_malloc_usable_size(const void *ptr, uptr pc, uptr bp) {
     GET_STACK_TRACE_FATAL(pc, bp);
     ReportMallocUsableSizeNotOwned((uptr)ptr, &stack);
   }
+#if SANITIZER_WINDOWS
+  // Zero-size allocations are internally upgraded to size 1 so that
+  // malloc(0)/new(0) return unique non-NULL pointers as required by the
+  // standard. Windows heap APIs (HeapSize, RtlSizeHeap, _msize) should still
+  // report the originally requested size (0).
+  if (usable_size > 0 &&
+      instance.FromZeroAllocation(reinterpret_cast<uptr>(ptr))) {
+    DCHECK(usable_size == 1);
+    return 0;
+  }
+#endif
   return usable_size;
 }
 
@@ -1215,9 +1285,24 @@ void asan_delete_array_sized_aligned(void *ptr, uptr size, uptr alignment,
   asan_delete_sized_aligned(ptr, size, alignment, stack, /*array=*/true);
 }
 
-uptr asan_mz_size(const void *ptr) {
-  return instance.AllocationSize(reinterpret_cast<uptr>(ptr));
+uptr asan_mz_size(const void* ptr) {
+  uptr size = instance.AllocationSize(reinterpret_cast<uptr>(ptr));
+
+#if SANITIZER_WINDOWS
+  if (size > 0 && instance.FromZeroAllocation(reinterpret_cast<uptr>(ptr))) {
+    DCHECK(size == 1);
+    return 0;
+  }
+#endif
+
+  return size;
 }
+
+#if SANITIZER_WINDOWS
+void asan_mark_zero_allocation(void* ptr) {
+  instance.MarkAsZeroAllocation(reinterpret_cast<uptr>(ptr));
+}
+#endif
 
 void asan_mz_force_lock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   instance.ForceLock();
@@ -1385,6 +1470,7 @@ int __asan_update_allocation_context(void* addr) {
 }
 
 #if SANITIZER_AMDGPU
+DECLARE_REAL(hsa_status_t, hsa_init);
 DECLARE_REAL(hsa_status_t, hsa_amd_agents_allow_access, uint32_t num_agents,
   const hsa_agent_t *agents, const uint32_t *flags, const void *ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_memory_pool_allocate,
@@ -1403,9 +1489,10 @@ DECLARE_REAL(hsa_status_t, hsa_amd_vmem_address_free, void* ptr, size_t size)
 DECLARE_REAL(hsa_status_t, hsa_amd_pointer_info, const void* ptr,
              hsa_amd_pointer_info_t* info, void* (*alloc)(size_t),
              uint32_t* num_agents_accessible, hsa_agent_t** accessible)
+DECLARE_REAL(hsa_status_t, hsa_amd_register_system_event_handler,
+             hsa_amd_system_event_callback_t, void*)
 
 namespace __asan {
-
 // Always align to page boundary to match current ROCr behavior
 static const size_t kPageSize_ = 4096;
 
@@ -1481,17 +1568,46 @@ hsa_status_t asan_hsa_amd_ipc_memory_attach(const hsa_amd_ipc_memory_t *handle,
   hsa_status_t status = REAL(hsa_amd_ipc_memory_attach)(
     handle, len_, num_agents, mapping_agents, mapped_ptr);
   if (status == HSA_STATUS_SUCCESS && mapped_ptr) {
-    *mapped_ptr = reinterpret_cast<void *>(reinterpret_cast<uptr>(*mapped_ptr) +
-                                           kPageSize_);
+    uptr mapped_base = reinterpret_cast<uptr>(*mapped_ptr);
+    uptr user_beg = mapped_base + kPageSize_;
+    uptr tail_beg = RoundUpTo(user_beg + len, ASAN_SHADOW_GRANULARITY);
+    uptr mapped_end = mapped_base + kPageSize_ + RoundUpTo(len, kPageSize_);
+
+    PoisonShadow(mapped_base, kPageSize_, kAsanHeapLeftRedzoneMagic);
+
+    if (mapped_end > tail_beg)
+      PoisonShadow(tail_beg, mapped_end - tail_beg, kAsanHeapLeftRedzoneMagic);
+
+    uptr size_rounded_down = RoundDownTo(len, ASAN_SHADOW_GRANULARITY);
+    if (size_rounded_down)
+      PoisonShadow(user_beg, size_rounded_down, 0);
+
+    if (len != size_rounded_down && CanPoisonMemory()) {
+      u8 *shadow = (u8 *)MemToShadow(user_beg + size_rounded_down);
+      *shadow = flags()->poison_partial
+                    ? static_cast<u8>(len & (ASAN_SHADOW_GRANULARITY - 1))
+                    : 0;
+    }
+
+    *mapped_ptr = reinterpret_cast<void *>(user_beg);
   }
   return status;
 }
 
 hsa_status_t asan_hsa_amd_ipc_memory_detach(void *mapped_ptr) {
   static_assert(AP_.kMetadataSize == 0, "Expression below requires this");
-  void *mapped_ptr_ =
-      reinterpret_cast<void *>(reinterpret_cast<uptr>(mapped_ptr) - kPageSize_);
-  return REAL(hsa_amd_ipc_memory_detach)(mapped_ptr_);
+  uptr mapped_base = reinterpret_cast<uptr>(mapped_ptr) - kPageSize_;
+
+  hsa_amd_pointer_info_t info;
+  info.size = sizeof(hsa_amd_pointer_info_t);
+  if (REAL(hsa_amd_pointer_info)(reinterpret_cast<void *>(mapped_base), &info,
+                                 nullptr, nullptr, nullptr) ==
+      HSA_STATUS_SUCCESS) {
+    PoisonShadow(mapped_base, info.sizeInBytes, 0);
+    FlushUnneededASanShadowMemory(mapped_base, info.sizeInBytes);
+  }
+
+  return REAL(hsa_amd_ipc_memory_detach)(reinterpret_cast<void *>(mapped_base));
 }
 
 hsa_status_t asan_hsa_amd_vmem_address_reserve_align(
@@ -1576,6 +1692,18 @@ hsa_status_t asan_hsa_amd_pointer_info(const void* ptr,
   }
   return REAL(hsa_amd_pointer_info)(ptr, info, alloc, num_agents_accessible,
                                     accessible);
+}
+
+hsa_status_t asan_hsa_init() {
+  hsa_status_t status = REAL(hsa_init)();
+  if (status == HSA_STATUS_SUCCESS) {
+    // Only clear state when recovering from a prior shutdown (avoids clearing
+    // amdgpu_event_registered on every refcount bump and re-registering).
+    if (__sanitizer::AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown())
+      __sanitizer::AmdgpuMemFuncs::ClearAmdgpuRuntimeShutdownState();
+    __sanitizer::AmdgpuMemFuncs::RegisterSystemEventHandlers();
+  }
+  return status;
 }
 
 }  // namespace __asan

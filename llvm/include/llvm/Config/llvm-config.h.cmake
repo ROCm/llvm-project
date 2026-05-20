@@ -17,7 +17,7 @@
 /* The number of commits in the linear history from the
  * start of the universe up to the latest llvm main commit
  * that has been merged */
-#define LLVM_MAIN_REVISION 561674
+#define LLVM_MAIN_REVISION 580661
 
 /* Define if LLVM_ENABLE_DUMP is enabled */
 #cmakedefine LLVM_ENABLE_DUMP
@@ -130,6 +130,9 @@
 /* Define if llvm_unreachable should be optimized with undefined behavior
  * in non assert builds */
 #cmakedefine01 LLVM_UNREACHABLE_OPTIMIZE
+
+/* Define if building LLVM with LLVM_ENABLE_IO_SANDBOX */
+#cmakedefine01 LLVM_ENABLE_IO_SANDBOX
 
 /* Define to 1 if you have the DIA SDK installed, and to 0 if you don't. */
 #cmakedefine01 LLVM_ENABLE_DIA_SDK

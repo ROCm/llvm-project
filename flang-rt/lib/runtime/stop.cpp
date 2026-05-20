@@ -23,18 +23,21 @@
 #include <thread>
 #endif
 
-#ifdef HAVE_BACKTRACE
+#if defined(HAVE_BACKTRACE) && !defined(__AMDGPU__) && !defined(__NVPTX__)
 #include BACKTRACE_HEADER
 #endif
 
 extern "C" {
 
 [[maybe_unused]] static void DescribeIEEESignaledExceptions() {
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
+#if defined(RT_DEVICE_COMPILATION) || RT_GPU_TARGET
+  unsigned excepts{}; // No fenv support on the device.
+#else
 #ifdef fetestexcept // a macro in some environments; omit std::
   auto excepts{fetestexcept(FE_ALL_EXCEPT)};
 #else
   auto excepts{std::fetestexcept(FE_ALL_EXCEPT)};
+#endif
 #endif
   if (excepts) {
     std::fputs("IEEE arithmetic exceptions signaled:", stderr);
@@ -65,15 +68,16 @@ extern "C" {
 #endif
     std::fputc('\n', stderr);
   }
-#endif
 }
 
 static void CloseAllExternalUnits(const char *why) {
+#if !RT_GPU_TARGET
   Fortran::runtime::io::IoErrorHandler handler{why};
   Fortran::runtime::io::ExternalFileUnit::CloseAll(handler);
+#endif
 }
 
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
+#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatement)(
     int code, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -107,12 +111,15 @@ static void CloseAllExternalUnits(const char *why) {
   }
   if (RTNAME(GetMainThreadId)() != std::this_thread::get_id())
     std::abort();
-  std::exit(code);
+  if (isErrorStop)
+    Fortran::runtime::ErrorExit(code);
+  else
+    Fortran::runtime::NormalExit(code);
 #endif
 }
 #endif
 
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
+#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatementText)(
     const char *code, std::size_t length, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -139,14 +146,15 @@ static void CloseAllExternalUnits(const char *why) {
   if (RTNAME(GetMainThreadId)() != std::this_thread::get_id())
     std::abort();
   if (isErrorStop) {
-    std::exit(EXIT_FAILURE);
+    Fortran::runtime::ErrorExit(EXIT_FAILURE);
   } else {
-    std::exit(EXIT_SUCCESS);
+    Fortran::runtime::NormalExit(EXIT_SUCCESS);
   }
 #endif
 }
 #endif
 
+#if !RT_GPU_TARGET
 static bool StartPause() {
   if (Fortran::runtime::io::IsATerminal(0)) {
     Fortran::runtime::io::IoErrorHandler handler{"PAUSE statement"};
@@ -160,7 +168,7 @@ static void EndPause() {
   std::fflush(nullptr);
   if (std::fgetc(stdin) == EOF) {
     CloseAllExternalUnits("PAUSE statement");
-    std::exit(EXIT_SUCCESS);
+    Fortran::runtime::ErrorExit(EXIT_SUCCESS);
   }
 }
 
@@ -186,25 +194,38 @@ void RTNAME(PauseStatementText)(const char *code, std::size_t length) {
     EndPause();
   }
 }
+#endif
 
 [[noreturn]] void RTNAME(FailImageStatement)() {
-  Fortran::runtime::NotifyOtherImagesOfFailImageStatement();
   CloseAllExternalUnits("FAIL IMAGE statement");
-  std::exit(EXIT_FAILURE);
+  Fortran::runtime::NotifyOtherImagesOfFailImageStatement();
+  Fortran::runtime::NormalExit(EXIT_FAILURE);
 }
 
 [[noreturn]] void RTNAME(ProgramEndStatement)() {
   CloseAllExternalUnits("END statement");
-  std::exit(EXIT_SUCCESS);
+  Fortran::runtime::NormalExit(EXIT_SUCCESS);
+}
+
+void RTNAME(RegisterImagesNormalEndCallback)(void (*callback)(int)) {
+  Fortran::runtime::SetNormalEndCallback(callback);
+}
+
+void RTNAME(RegisterImagesErrorCallback)(void (*callback)(int)) {
+  Fortran::runtime::SetErrorCallback(callback);
+}
+
+void RTNAME(RegisterFailImageCallback)(void (*callback)(void)) {
+  Fortran::runtime::SetFailImageCallback(callback);
 }
 
 [[noreturn]] void RTNAME(Exit)(int status) {
   CloseAllExternalUnits("CALL EXIT()");
-  std::exit(status);
+  Fortran::runtime::NormalExit(status);
 }
 
 static RT_NOINLINE_ATTR void PrintBacktrace() {
-#ifdef HAVE_BACKTRACE
+#if defined(HAVE_BACKTRACE) && !defined(__AMDGPU__) && !defined(__NVPTX__)
   // TODO: Need to parse DWARF information to print function line numbers
   constexpr int MAX_CALL_STACK{999};
   void *buffer[MAX_CALL_STACK];
@@ -228,7 +249,7 @@ static RT_NOINLINE_ATTR void PrintBacktrace() {
 
 #endif
 }
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
+#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_OPTNONE_ATTR void RTNAME(Abort)() {
 #ifdef HAVE_BACKTRACE
   PrintBacktrace();

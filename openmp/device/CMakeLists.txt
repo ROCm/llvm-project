@@ -2,7 +2,7 @@
 set(req_ver "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
 if(LLVM_VERSION_MAJOR AND NOT (CMAKE_CXX_COMPILER_ID MATCHES "[Cc]lang" AND
    ${CMAKE_CXX_COMPILER_VERSION} VERSION_EQUAL "${req_ver}"))
-  message(FATAL_ERROR "Cannot build GPU device runtime. CMake compiler "
+   message(WARNING "openmp for GPU requires an up-to-date clang. CMake compiler "
                       "'${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}' "
                       " is not 'Clang ${req_ver}'.")
 endif()
@@ -25,7 +25,6 @@ set(src_files
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Mapping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Misc.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Parallelism.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/Profiling.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Reduction.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/State.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/Synchronization.cpp
@@ -40,7 +39,12 @@ set(src_files
   ${emissary_sources}
 
 )
-if(NOT LLVM_TARGETS_TO_BUILD OR "AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
+# Only link AMD ockl/ocml device libraries when actually building for AMDGCN.
+# The previous condition checked LLVM_TARGETS_TO_BUILD which includes all backends
+# (e.g. X86;AMDGPU;NVPTX), causing ockl.bc/ocml.bc to be linked into NVPTX builds
+# and contaminating the NVPTX DeviceRTL bitcode with AMDGCN intrinsics.
+if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
+   "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^amdgcn")
   find_package(AMDDeviceLibs REQUIRED CONFIG
                HINTS ${CMAKE_BINARY_DIR}/../../tools/rocm-device-libs
                      ${CMAKE_BINARY_DIR}/../rocm-device-libs-prefix/src/rocm-device-libs-build
@@ -48,6 +52,7 @@ if(NOT LLVM_TARGETS_TO_BUILD OR "AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
   )
   get_target_property(_ocml_bc ocml IMPORTED_LOCATION)
   get_target_property(_ockl_bc ockl IMPORTED_LOCATION)
+  get_target_property(_asanrtl_bc asanrtl IMPORTED_LOCATION)
 
   if(NOT _ockl_bc)
     message(FATAL_ERROR "Could not find ockl.bc")
@@ -55,7 +60,18 @@ if(NOT LLVM_TARGETS_TO_BUILD OR "AMDGPU" IN_LIST LLVM_TARGETS_TO_BUILD)
   if(NOT _ocml_bc)
     message(FATAL_ERROR "Could not find ocml.bc")
   endif()
-  list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc}")
+  if(NOT _asanrtl_bc)
+    message(FATAL_ERROR "Could not find asanrtl.bc")
+  endif()
+  if(SANITIZER_AMDGPU)
+    list(APPEND compile_flags "SHELL: -DSANITIZER_AMDGPU=1")
+    # For ASan: Don't link asanrtl.bc and ockl.bc at compile time of libompdevice.a
+    # They will be linked once in POST_BUILD step to avoid duplicates symbols
+    # Note: Oclc control constants are provided using Platform.h
+    #
+  else()
+    list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ockl_bc}")
+  endif()
   list(APPEND compile_flags "SHELL: -Xclang -mlink-builtin-bitcode -Xclang ${_ocml_bc}")
 endif()
 
@@ -87,13 +103,16 @@ if("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn" OR
 elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^nvptx" OR
        "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^nvptx")
   set(target_name "nvptx")
-  list(APPEND compile_flags --cuda-feature=+ptx63)
+  list(APPEND compile_options --cuda-feature=+ptx63)
+elseif("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" OR
+       "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  set(target_name "spirv") 
 endif()
 
 # Trick to combine these into a bitcode file via the linker's LTO pass.
 add_executable(libompdevice ${src_files})
 set_target_properties(libompdevice PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   LINKER_LANGUAGE CXX
   BUILD_RPATH ""
   INSTALL_RPATH ""
@@ -110,26 +129,61 @@ target_include_directories(libompdevice PRIVATE
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../libc
                            ${CMAKE_CURRENT_SOURCE_DIR}/../../offload/include)
 target_compile_options(libompdevice PRIVATE ${compile_options} ${compile_flags})
-target_link_options(libompdevice PRIVATE
-                    "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+if(NOT "${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^spirv" AND
+   NOT "${CMAKE_CXX_COMPILER_TARGET}" MATCHES "^spirv")
+  target_link_options(libompdevice PRIVATE
+                  "-flto" "-r" "-nostdlib" "-Wl,--lto-emit-llvm")
+else()
+  target_link_options(libompdevice PRIVATE
+                  "-nostdlib" "-emit-llvm")
+endif()
+
 if(LLVM_DEFAULT_TARGET_TRIPLE)
   target_link_options(libompdevice PRIVATE "--target=${LLVM_DEFAULT_TARGET_TRIPLE}")
 endif()
+
+# For SANITIZER_AMDGPU: Use llvm-link POST_BUILD to merge ASAN runtime and OCKL
+# into the device library bitcode to resolve all and __asan_* __ockl_* symbols
+if(SANITIZER_AMDGPU)
+  find_program(LLVM_LINK_EXECUTABLE NAMES llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
+  if(NOT LLVM_LINK_EXECUTABLE)
+    message(FATAL_ERROR "llvm-link not found")
+  endif()
+  add_custom_command(TARGET libompdevice POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy 
+      ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc
+      ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc.tmp
+    COMMAND ${LLVM_LINK_EXECUTABLE}
+      ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc.tmp
+      ${_asanrtl_bc}
+      ${_ockl_bc}
+      --only-needed
+      -o ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc
+    COMMAND ${CMAKE_COMMAND} -E remove
+      ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc.tmp
+    COMMENT "Merging asanrtl.bc and ockl.bc into libomptarget-${target_name}.bc"
+  )
+endif()
+
 install(TARGETS libompdevice
         PERMISSIONS OWNER_WRITE OWNER_READ GROUP_READ WORLD_READ
-        DESTINATION ${OPENMP_INSTALL_LIBDIR})
+        DESTINATION ${OPENMP_INSTALL_LIBDIR}
+        COMPONENT openmp)
 
 add_library(ompdevice.all_objs OBJECT IMPORTED)
 set_property(TARGET ompdevice.all_objs APPEND PROPERTY IMPORTED_OBJECTS
-             ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc)
+              ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-${target_name}.bc)
 
 # Archive all the object files generated above into a static library
 add_library(ompdevice STATIC)
 add_dependencies(ompdevice libompdevice)
 set_target_properties(ompdevice PROPERTIES
-  ARCHIVE_OUTPUT_DIRECTORY "${OPENMP_INSTALL_LIBDIR}"
-  ARCHIVE_OUTPUT_NAME ompdevice
+   ARCHIVE_OUTPUT_DIRECTORY "${OPENMP_INSTALL_LIBDIR}"
+   ARCHIVE_OUTPUT_NAME ompdevice
   LINKER_LANGUAGE CXX
 )
 target_link_libraries(ompdevice PRIVATE ompdevice.all_objs)
-install(TARGETS ompdevice ARCHIVE DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+install(TARGETS ompdevice ARCHIVE DESTINATION "${OPENMP_INSTALL_LIBDIR}"
+        COMPONENT openmp)
+
+openmp_register_meta_dep(ompdevice)

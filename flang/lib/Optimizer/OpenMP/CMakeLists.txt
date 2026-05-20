@@ -8,7 +8,7 @@ add_flang_library(FlangOpenMPTransforms
   GlobalFiltering.cpp
   MapsForPrivatizedSymbols.cpp
   MapInfoFinalization.cpp
-  MarkDeclareTarget.cpp
+  DeleteUnreachableTargets.cpp
   LowerWorkdistribute.cpp
   LowerWorkshare.cpp
   LowerNontemporal.cpp
@@ -37,6 +37,7 @@ add_flang_library(FlangOpenMPTransforms
   MLIRFuncDialect
   MLIRMathTransforms
   MLIROpenMPDialect
+  MLIROpenMPTransforms
   MLIRIR
   MLIRPass
   MLIRTransformUtils

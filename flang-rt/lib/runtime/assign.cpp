@@ -7,9 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Runtime/assign.h"
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__)) || not defined(EMBED_FLANG_RT_GPU_LLVM_IR)
-#include "flang/Runtime/stop.h"
-#endif
 #include "flang-rt/runtime/assign-impl.h"
 #include "flang-rt/runtime/derived.h"
 #include "flang-rt/runtime/descriptor.h"
@@ -651,8 +648,7 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
         }
       }
       break;
-    case typeInfo::Component::Genre::Pointer:
-    case typeInfo::Component::Genre::PointerDevice: {
+    case typeInfo::Component::Genre::Pointer: {
       std::size_t componentByteSize{
           this->component_->SizeInBytes(this->instance_)};
       if (IS_COMPONENTWISE && toIsContiguous_ && fromIsContiguous_) {
@@ -684,7 +680,6 @@ RT_API_ATTRS int DerivedAssignTicket<IS_COMPONENTWISE>::Continue(
       }
     } break;
     case typeInfo::Component::Genre::Allocatable:
-    case typeInfo::Component::Genre::AllocatableDevice:
     case typeInfo::Component::Genre::Automatic: {
       auto *toDesc{reinterpret_cast<Descriptor *>(
           this->instance_.template Element<char>(this->subscripts_) +

@@ -20,6 +20,7 @@
 #include "clang/AST/MangleNumberingContext.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/DiagnosticAST.h"
 #include "clang/Basic/TargetInfo.h"
 
 using namespace clang;
@@ -39,13 +40,12 @@ namespace {
 /// refer to the anonymous union, and there is therefore no need to mangle its name.
 ///
 /// Returns the name of anonymous union VarDecl or nullptr if it is not found.
-static const IdentifierInfo *findAnonymousUnionVarDeclName(const VarDecl& VD) {
+static const IdentifierInfo *findAnonymousUnionVarDeclName(const VarDecl &VD) {
   const RecordType *RT = VD.getType()->getAs<RecordType>();
   assert(RT && "type of VarDecl is expected to be RecordType.");
-  assert(RT->getOriginalDecl()->isUnion() && "RecordType is expected to be a union.");
-  if (const FieldDecl *FD = RT->getOriginalDecl()->findFirstNamedDataMember()) {
+  assert(RT->getDecl()->isUnion() && "RecordType is expected to be a union.");
+  if (const FieldDecl *FD = RT->getDecl()->findFirstNamedDataMember())
     return FD->getIdentifier();
-  }
 
   return nullptr;
 }
@@ -215,9 +215,7 @@ public:
         MicrosoftNumberingContext::getManglingNumber(TD, MSLocalManglingNumber);
     if (DeviceN > 0xFFFF || HostN > 0xFFFF) {
       DiagnosticsEngine &Diags = TD->getASTContext().getDiagnostics();
-      unsigned DiagID = Diags.getCustomDiagID(
-          DiagnosticsEngine::Error, "Mangling number exceeds limit (65535)");
-      Diags.Report(TD->getLocation(), DiagID);
+      Diags.Report(TD->getLocation(), diag::err_ms_mangle_number_overflow);
     }
     return (DeviceN << 16) | HostN;
   }

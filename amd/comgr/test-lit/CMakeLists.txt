@@ -1,4 +1,4 @@
-function(cannonicalize_cmake_boolean var)
+function(canonicalize_cmake_boolean var)
     if(${var})
         set(${var} 1 PARENT_SCOPE)
     else()
@@ -6,16 +6,18 @@ function(cannonicalize_cmake_boolean var)
     endif()
 endfunction()
 
-cannonicalize_cmake_boolean(COMGR_DISABLE_SPIRV)
+canonicalize_cmake_boolean(COMGR_SPIRV_BACKEND_AVAILABLE)
+canonicalize_cmake_boolean(COMGR_SPIRV_TRANSLATOR_AVAILABLE)
 
 configure_file(lit.site.cfg.py.in lit.site.cfg.py @ONLY)
 
 if (NOT DEFINED LLVM_LIT_PATH)
-  # Comgr source build
-  if (EXISTS "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-    set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/../../bin/llvm-lit")
-  # LLVM external projects build
-  else()
+  find_program(LLVM_LIT_PATH
+    NAMES llvm-lit llvm-lit.py llvm-lit.cmd
+    PATHS "${LLVM_TOOLS_BINARY_DIR}/../../bin" "${LLVM_TOOLS_BINARY_DIR}"
+    NO_DEFAULT_PATH
+  )
+  if (NOT LLVM_LIT_PATH)
     set(LLVM_LIT_PATH "${LLVM_TOOLS_BINARY_DIR}/llvm-lit")
   endif()
 endif()
@@ -23,6 +25,7 @@ message("-- LLVM_LIT_PATH: ${LLVM_LIT_PATH}")
 
 add_custom_target(test-lit COMMAND "${LLVM_LIT_PATH}"
                   "${CMAKE_CURRENT_BINARY_DIR}" -v)
+add_dependencies(test-lit amd_comgr)
 
 macro(add_comgr_lit_binary name lang)
   add_executable("${name}" "comgr-sources/${name}.${lang}")
@@ -41,6 +44,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 add_comgr_lit_binary(source-to-bc-with-dev-libs c)
 add_comgr_lit_binary(spirv-translator c)
 add_comgr_lit_binary(compile-opencl-minimal c)
+add_comgr_lit_binary(compile-hip-minimal c)
+add_comgr_lit_binary(compile-hip-asan c)
 add_comgr_lit_binary(spirv-to-reloc c)
 add_comgr_lit_binary(source-to-spirv c)
 add_comgr_lit_binary(unbundle c)
@@ -49,5 +54,6 @@ add_comgr_lit_binary(get-version c)
 add_comgr_lit_binary(status-string c)
 add_comgr_lit_binary(data-action c)
 add_comgr_lit_binary(lookup-code-object c)
+add_comgr_lit_binary(hotswap-rewrite c)
 
 add_dependencies(check-comgr test-lit)

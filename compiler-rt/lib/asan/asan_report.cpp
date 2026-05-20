@@ -269,6 +269,14 @@ void ReportNewDeleteTypeMismatch(uptr addr, uptr delete_size,
   in_report.ReportError(error);
 }
 
+void ReportFreeSizeMismatch(uptr addr, uptr delete_size, uptr delete_alignment,
+                            BufferedStackTrace* free_stack) {
+  ScopedInErrorReport in_report;
+  ErrorFreeSizeMismatch error(GetCurrentTidOrInvalid(), free_stack, addr,
+                              delete_size, delete_alignment);
+  in_report.ReportError(error);
+}
+
 void ReportFreeNotMalloced(uptr addr, BufferedStackTrace *free_stack) {
   ScopedInErrorReport in_report;
   ErrorFreeNotMalloced error(GetCurrentTidOrInvalid(), free_stack, addr);
@@ -372,11 +380,11 @@ void ReportStringFunctionMemoryRangesOverlap(const char *function,
   in_report.ReportError(error);
 }
 
-void ReportStringFunctionSizeOverflow(uptr offset, uptr size,
-                                      BufferedStackTrace *stack) {
+void ReportStringFunctionSizeOverflow(uptr offset, uptr size, bool is_write,
+                                      BufferedStackTrace* stack) {
   ScopedInErrorReport in_report;
   ErrorStringFunctionSizeOverflow error(GetCurrentTidOrInvalid(), stack, offset,
-                                        size);
+                                        size, is_write);
   in_report.ReportError(error);
 }
 
@@ -569,6 +577,106 @@ void ReportNonselfError(uptr *nonself_callstack, u32 n_nonself_callstack,
   }
 }
 
+static constexpr uptr kNonselfLeakCapacity = 1024;
+static constexpr int kMaxTrackedDevices = 16;
+
+struct NonselfLeak {
+  u64 alloc_pc;        // hash key (0 = empty slot)
+  u64 total_bytes;
+  u64 count;
+  int device_id;
+  s64 vma_adjust;
+  int fd;
+  u64 file_extent_size;
+  u64 file_extent_start;
+};
+
+static NonselfLeak nonself_leak_table[kNonselfLeakCapacity];
+
+static NonselfLeak *NonselfLeakFind(u64 pc, int device_id) {
+  uptr idx = (uptr)(pc * 0x9e3779b97f4a7c15ULL) & (kNonselfLeakCapacity - 1);
+  for (uptr i = 0; i < kNonselfLeakCapacity; i++) {
+    NonselfLeak *slot = &nonself_leak_table[idx];
+    if (slot->alloc_pc == 0)
+      return slot;
+    if (slot->alloc_pc == pc && slot->device_id == device_id)
+      return slot;
+    idx = (idx + 1) & (kNonselfLeakCapacity - 1);
+  }
+  return nullptr;
+}
+
+void ReportNonselfLeak(u64 alloc_pc, u64 alloc_size, int device_id,
+                       const char *device_name, s64 vma_adjust, int fd,
+                       u64 file_extent_size, u64 file_extent_start) {
+  if (!common_flags()->detect_leaks)
+    return;
+
+  if (device_id == -1) {
+    struct { u64 bytes; u64 count; } dev_totals[kMaxTrackedDevices] = {};
+
+    for (uptr i = 0; i < kNonselfLeakCapacity; i++) {
+      NonselfLeak *e = &nonself_leak_table[i];
+      if (e->alloc_pc == 0)
+        continue;
+
+      Printf("Leak of %llu byte(s) in %llu allocation(s) on %s device %d "
+             "from:\n",
+             e->total_bytes, e->count,
+             device_name ? device_name : "unknown", e->device_id);
+
+      InternalScopedString source_location;
+      source_location.AppendF("    #0 0x%llx", e->alloc_pc);
+#if SANITIZER_AMDGPU
+      source_location.Append(" in ");
+      __sanitizer::AMDGPUCodeObjectSymbolizer symbolizer;
+      symbolizer.Init(e->fd, e->file_extent_start, e->file_extent_size);
+      if (!symbolizer.SymbolizePC(e->alloc_pc - e->vma_adjust, source_location))
+        source_location.Append("<unavailable>\n");
+      symbolizer.Release();
+#else
+      source_location.Append(" (<unavailable>)\n");
+#endif
+      Printf("%s", source_location.data());
+
+      if (e->device_id >= 0 && e->device_id < kMaxTrackedDevices) {
+        dev_totals[e->device_id].bytes += e->total_bytes;
+        dev_totals[e->device_id].count += e->count;
+      }
+    }
+
+    for (int i = 0; i < kMaxTrackedDevices; i++) {
+      if (dev_totals[i].count > 0)
+        Printf(
+            "SUMMARY: AddressSanitizer: %llu byte(s) leaked in %llu "
+            "allocation(s) on %s device %d.\n",
+            dev_totals[i].bytes, dev_totals[i].count,
+            device_name ? device_name : "unknown", i);
+    }
+
+    internal_memset(nonself_leak_table, 0, sizeof(nonself_leak_table));
+    return;
+  }
+
+  NonselfLeak *slot = NonselfLeakFind(alloc_pc, device_id);
+  if (!slot)
+    return;
+
+  if (slot->alloc_pc == 0) {
+    slot->alloc_pc = alloc_pc;
+    slot->total_bytes = alloc_size;
+    slot->count = 1;
+    slot->device_id = device_id;
+    slot->vma_adjust = vma_adjust;
+    slot->fd = fd;
+    slot->file_extent_size = file_extent_size;
+    slot->file_extent_start = file_extent_start;
+  } else {
+    slot->total_bytes += alloc_size;
+    slot->count++;
+  }
+}
+
 }  // namespace __asan
 
 // --------------------------- Interface --------------------- {{{1
@@ -633,6 +741,148 @@ int __asan_get_report_access_type() {
 uptr __asan_get_report_access_size() {
   if (ScopedInErrorReport::CurrentError().kind == kErrorKindGeneric)
     return ScopedInErrorReport::CurrentError().Generic.access_size;
+  return 0;
+}
+
+int __asan_get_report_src_address(uptr* out_addr, uptr* out_size) {
+  ErrorDescription& err = ScopedInErrorReport::CurrentError();
+  if (err.kind == kErrorKindGeneric && !err.Generic.is_write) {
+    if (out_addr)
+      *out_addr = err.Generic.addr_description.Address();
+    if (out_size)
+      *out_size = err.Generic.access_size;
+    return 1;
+  }
+  if (err.kind == kErrorKindStringFunctionMemoryRangesOverlap) {
+    if (out_addr)
+      *out_addr =
+          err.StringFunctionMemoryRangesOverlap.addr2_description.Address();
+    if (out_size)
+      *out_size = err.StringFunctionMemoryRangesOverlap.length2;
+    return 1;
+  }
+  if (err.kind == kErrorKindStringFunctionSizeOverflow &&
+      !err.StringFunctionSizeOverflow.is_write) {
+    if (out_addr)
+      *out_addr = err.StringFunctionSizeOverflow.addr_description.Address();
+    if (out_size)
+      *out_size = err.StringFunctionSizeOverflow.size;
+    return 1;
+  }
+  if (err.kind == kErrorKindMallocUsableSizeNotOwned) {
+    if (out_addr)
+      *out_addr = err.MallocUsableSizeNotOwned.addr_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  if (err.kind == kErrorKindSanitizerGetAllocatedSizeNotOwned) {
+    if (out_addr)
+      *out_addr =
+          err.SanitizerGetAllocatedSizeNotOwned.addr_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  return 0;
+}
+
+int __asan_get_report_dest_address(uptr* out_addr, uptr* out_size) {
+  ErrorDescription& err = ScopedInErrorReport::CurrentError();
+  if (err.kind == kErrorKindGeneric && err.Generic.is_write) {
+    if (out_addr)
+      *out_addr = err.Generic.addr_description.Address();
+    if (out_size)
+      *out_size = err.Generic.access_size;
+    return 1;
+  }
+  if (err.kind == kErrorKindStringFunctionMemoryRangesOverlap) {
+    if (out_addr)
+      *out_addr =
+          err.StringFunctionMemoryRangesOverlap.addr1_description.Address();
+    if (out_size)
+      *out_size = err.StringFunctionMemoryRangesOverlap.length1;
+    return 1;
+  }
+  if (err.kind == kErrorKindStringFunctionSizeOverflow &&
+      err.StringFunctionSizeOverflow.is_write) {
+    if (out_addr)
+      *out_addr = err.StringFunctionSizeOverflow.addr_description.Address();
+    if (out_size)
+      *out_size = err.StringFunctionSizeOverflow.size;
+    return 1;
+  }
+  return 0;
+}
+
+int __asan_get_report_dealloc_address(uptr* out_addr, uptr* out_size) {
+  ErrorDescription& err = ScopedInErrorReport::CurrentError();
+  if (err.kind == kErrorKindDoubleFree) {
+    if (out_addr)
+      *out_addr = err.DoubleFree.addr_description.addr;
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  if (err.kind == kErrorKindNewDeleteTypeMismatch) {
+    if (out_addr)
+      *out_addr = err.NewDeleteTypeMismatch.addr_description.addr;
+    if (out_size)
+      *out_size = err.NewDeleteTypeMismatch.delete_size;
+    return 1;
+  }
+  if (err.kind == kErrorKindFreeNotMalloced) {
+    if (out_addr)
+      *out_addr = err.FreeNotMalloced.addr_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  if (err.kind == kErrorKindAllocTypeMismatch) {
+    if (out_addr)
+      *out_addr = err.AllocTypeMismatch.addr_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  return 0;
+}
+
+int __asan_get_report_first_address(uptr* out_addr, uptr* out_size) {
+  ErrorDescription& err = ScopedInErrorReport::CurrentError();
+  if (err.kind == kErrorKindInvalidPointerPair) {
+    if (out_addr)
+      *out_addr = err.InvalidPointerPair.addr1_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  if (err.kind == kErrorKindODRViolation) {
+    if (out_addr)
+      *out_addr = err.ODRViolation.global1.beg;
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  return 0;
+}
+
+int __asan_get_report_second_address(uptr* out_addr, uptr* out_size) {
+  ErrorDescription& err = ScopedInErrorReport::CurrentError();
+  if (err.kind == kErrorKindInvalidPointerPair) {
+    if (out_addr)
+      *out_addr = err.InvalidPointerPair.addr2_description.Address();
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
+  if (err.kind == kErrorKindODRViolation) {
+    if (out_addr)
+      *out_addr = err.ODRViolation.global2.beg;
+    if (out_size)
+      *out_size = 0;
+    return 1;
+  }
   return 0;
 }
 

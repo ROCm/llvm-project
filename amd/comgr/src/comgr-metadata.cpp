@@ -61,35 +61,40 @@ getELFObjectFileBase(DataObject *DataP) {
 
 // Try to merge "amdhsa.kernels" from DocNode @p From to @p To.
 // The merge is allowed only if
-// 1. "amdhsa.printf" record is not existing in either of the nodes.
-// 2. "amdhsa.version" exists and is same.
-// 3. "amdhsa.kernels" exists in both nodes.
+// 1. "amdhsa.version" exists and is same.
+// 2. "amdhsa.kernels" exists in both nodes.
+//
+// "amdhsa.printf" is copied from @p From if @p To doesn't have it.
+// If both have it, the merge is allowed only if they are identical
+// (as expected from LTO partitions sharing the same module-level
+// llvm.printf.fmts metadata).
 //
 // If merge is possible the function merges Kernel records
 // to @p To and returns @c true.
+// @p DestDoc is the document into which merged nodes are deep copied.
 bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
                       const StringRef VersionStrKey,
                       const StringRef PrintfStrKey,
-                      const StringRef KernelStrKey) {
+                      const StringRef KernelStrKey,
+                      llvm::msgpack::Document &DestDoc) {
   if (!From.isMap()) {
     return false;
   }
 
   if (To.isEmpty()) {
-    To = From;
+    To = DestDoc.copyNode(From);
     return true;
   }
 
   assert(To.isMap());
 
   if (From.getMap().find(PrintfStrKey) != From.getMap().end()) {
-    /* Check if both have Printf records */
     if (To.getMap().find(PrintfStrKey) != To.getMap().end()) {
-      return false;
+      if (From.getMap()[PrintfStrKey] != To.getMap()[PrintfStrKey])
+        return false;
+    } else {
+      To.getMap()[PrintfStrKey] = DestDoc.copyNode(From.getMap()[PrintfStrKey]);
     }
-
-    /* Add Printf record for 'To' */
-    To.getMap()[PrintfStrKey] = From.getMap()[PrintfStrKey];
   }
 
   auto &FromMapNode = From.getMap();
@@ -129,7 +134,7 @@ bool mergeNoteRecords(llvm::msgpack::DocNode &From, llvm::msgpack::DocNode &To,
 
   auto &ToKernelRecords = ToKernelArray->second.getArray();
   for (auto Kernel : FromKernelArray->second.getArray()) {
-    ToKernelRecords.push_back(Kernel);
+    ToKernelRecords.push_back(DestDoc.copyNode(Kernel));
   }
 
   return true;
@@ -166,16 +171,17 @@ bool processNote(const Elf_Note<ELFT> &Note, DataMeta *MetaP,
     MetaP->MetaDoc->EmitIntegerBooleans = true;
     MetaP->MetaDoc->RawDocumentList.push_back(std::string(DescString));
 
-    /* TODO add support for merge using readFromBlob merge function */
-    auto &Document = MetaP->MetaDoc->Document;
-
-    Document.clear();
-    if (!Document.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(), false)) {
+    // Use a temporary document for parsing to avoid invalidating Root.
+    // DocNode contains pointers to memory owned by its Document, so reusing
+    // the same Document for parsing would invalidate nodes accumulated in Root.
+    llvm::msgpack::Document TempDoc;
+    if (!TempDoc.readFromBlob(MetaP->MetaDoc->RawDocumentList.back(), false)) {
       return false;
     }
 
-    return mergeNoteRecords(Document.getRoot(), Root, "amdhsa.version",
-                            "amdhsa.printf", "amdhsa.kernels");
+    return mergeNoteRecords(TempDoc.getRoot(), Root, "amdhsa.version",
+                            "amdhsa.printf", "amdhsa.kernels",
+                            MetaP->MetaDoc->Document);
   }
   return false;
 }
@@ -684,6 +690,8 @@ amd_comgr_status_t lookUpCodeObject(DataObject *DataP,
     if (Reader.readFixedString(BundleEntryID, BundleEntryIDSize)) {
       return AMD_COMGR_STATUS_ERROR;
     }
+    // The encoded size may include a null terminator; strip it.
+    BundleEntryID = BundleEntryID.rtrim('\0');
 
     const auto OffloadAndTargetId = BundleEntryID.split('-');
     if (OffloadAndTargetId.first != OffloadKindHip &&

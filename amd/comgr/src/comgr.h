@@ -221,6 +221,7 @@ struct DataAction {
 
   std::vector<std::string> BundleEntryIDs;
   std::vector<std::string> PackageEntryIDs;
+  std::vector<size_t> BlockSizes;
 
 private:
   std::vector<std::string> ListOptions;

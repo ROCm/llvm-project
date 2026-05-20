@@ -1,7 +1,22 @@
 ---
-revert: breaks rocBLAS build
-d57230c7 [AMDGPU][MC] Disallow op_sel in some VOP3P dot instructions (#100485)
+rocwmma and CK needs changes
+[AMDGPU][NFC] Change AMDGPU builtins to use ExtVector (#176033)
 ---
-breaks build of ROCmValidationSuite
-[C2y] Support WG14 N3457, the __COUNTER__ macro (#162662)
+breaks build of hipblaslt
+[AMDGPU][AsmParser] Forbid Fake16 instructions in Real16 mode (#176934)
+---
+breaks rocgdb UT
+[Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
+---
+needs SPIRV/COMGR
+18e695890306 [SPIRV][AMDGPU][clang][CodeGen][opt] Add late-resolved 
+---
+breaks build of llvm
+[clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
+---
+breaks windows build
+[cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
+---
+needs dbg team to merge
+[MC][Dwarf] Add custom CFI pseudo-ops for use in AMD
 ---

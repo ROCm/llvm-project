@@ -13,24 +13,30 @@
 extern CONSTATTR float2 MATH_PRIVATE(epln)(float);
 extern CONSTATTR float MATH_PRIVATE(expep)(float2);
 
-static float fast_expylnx(float ax, float y)
+static float
+fast_expylnx(float x, float y)
 {
+    float ax = BUILTIN_ABS_F32(x);
     return BUILTIN_EXP2_F32(y * BUILTIN_LOG2_F32(ax));
 }
 
-static float compute_expylnx_int(float ax, int ny)
+static float
+compute_expylnx_int(float x, int ny)
 {
     if (UNSAFE_MATH_OPT())
-        return fast_expylnx(ax, (float)ny);
+        return fast_expylnx(x, (float)ny);
 
+    float ax = BUILTIN_ABS_F32(x);
     int nyh = ny & 0xffff0000;
     float2 y = fadd((float)nyh, (float)(ny - nyh));
     return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
 }
 
 // root version of compute_expylnx_int
-static float compute_exp_inverse_y_lnx_int(float ax, int ny)
+static float
+compute_exp_inverse_y_lnx_int(float x, int ny)
 {
+    float ax = BUILTIN_ABS_F32(x);
     if (UNSAFE_MATH_OPT()) {
         float y = MATH_FAST_RCP((float)ny);
         return fast_expylnx(ax, y);
@@ -42,10 +48,13 @@ static float compute_exp_inverse_y_lnx_int(float ax, int ny)
     return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
 }
 
-static float compute_expylnx_float(float ax, float y)
+static float
+compute_expylnx_float(float x, float y)
 {
     if (UNSAFE_MATH_OPT())
-        return fast_expylnx(ax, y);
+        return fast_expylnx(x, y);
+
+    float ax = BUILTIN_ABS_F32(x);
     return MATH_PRIVATE(expep)(omul(y, MATH_PRIVATE(epln)(ax)));
 }
 
@@ -65,17 +74,11 @@ static bool is_odd_integer(float ay) {
 
 #if defined(COMPILING_POW)
 
-CONSTATTR float
-MATH_MANGLE(pow)(float x, float y)
+CONSTATTR
+static float
+pow_fixup(float x, float y, float expylnx)
 {
-    if (x == 1.0f)
-        y = 1.0f;
-    if (y == 0.0f)
-        x = 1.0f;
-
     float ax = BUILTIN_ABS_F32(x);
-    float expylnx = compute_expylnx_float(ax, y);
-
     bool is_odd_y = is_odd_integer(y);
 
     float ret = BUILTIN_COPYSIGN_F32(expylnx, is_odd_y ? x : 1.0f);
@@ -102,15 +105,26 @@ MATH_MANGLE(pow)(float x, float y)
     return ret;
 }
 
+CONSTATTR float
+MATH_MANGLE(pow)(float x, float y)
+{
+    if (x == 1.0f)
+        y = 1.0f;
+    if (y == 0.0f)
+        x = 1.0f;
+
+    float expylnx = compute_expylnx_float(x, y);
+
+    return pow_fixup(x, y, expylnx);
+}
+
 #elif defined(COMPILING_POWR)
 
-CONSTATTR float
-MATH_MANGLE(powr)(float x, float y)
+CONSTATTR
+static float
+powr_fixup(float x, float y, float expylnx)
 {
-    if (x < 0.0f)
-        x = QNAN_F32;
-
-    float ret = compute_expylnx_float(x, y);
+    float ret = expylnx;
 
     // Now all the edge cases
     float iz = y < 0.0f ? PINF_F32 : 0.0f;
@@ -131,7 +145,32 @@ MATH_MANGLE(powr)(float x, float y)
     return ret;
 }
 
+CONSTATTR float
+MATH_MANGLE(powr)(float x, float y)
+{
+    if (x < 0.0f)
+        x = QNAN_F32;
+
+    float expylnx = compute_expylnx_float(x, y);
+    return powr_fixup(x, y, expylnx);
+}
+
 #elif defined(COMPILING_POWN)
+
+CONSTATTR
+static float
+pown_fixup(float x, int ny, float expylnx)
+{
+    bool is_odd_y = ny & 1;
+
+    float ret = BUILTIN_COPYSIGN_F32(expylnx, is_odd_y ? x : 1.0f);
+
+    // Now all the edge cases
+    if (BUILTIN_ISINF_F32(x) || x == 0.0f)
+        ret = BUILTIN_COPYSIGN_F32((x == 0.0f) ^ (ny < 0) ? 0.0f : PINF_F32,
+                                   is_odd_y ? x : 0.0f);
+    return ret;
+}
 
 CONSTATTR float
 MATH_MANGLE(pown)(float x, int ny)
@@ -139,34 +178,22 @@ MATH_MANGLE(pown)(float x, int ny)
     if (ny == 0)
         x = 1.0f;
 
-    float ax = BUILTIN_ABS_F32(x);
-    float expylnx = compute_expylnx_int(ax, ny);
-
-    bool is_odd_y = ny & 1;
-
-    float ret = BUILTIN_COPYSIGN_F32(expylnx, is_odd_y ? x : 1.0f);
-
-    // Now all the edge cases
-    if (BUILTIN_ISINF_F32(ax) || x == 0.0f)
-        ret = BUILTIN_COPYSIGN_F32((x == 0.0f) ^ (ny < 0) ? 0.0f : PINF_F32,
-                                   is_odd_y ? x : 0.0f);
-    return ret;
+    float expylnx = compute_expylnx_int(x, ny);
+    return pown_fixup(x, ny, expylnx);
 }
 
 #elif defined(COMPILING_ROOTN)
 
-CONSTATTR float
-MATH_MANGLE(rootn)(float x, int ny)
+CONSTATTR
+static float
+rootn_fixup(float x, int ny, float expylnx)
 {
-    float ax = BUILTIN_ABS_F32(x);
-    float expylnx = compute_exp_inverse_y_lnx_int(ax, ny);
-
     bool is_odd_y = ny & 1;
 
     float ret = BUILTIN_COPYSIGN_F32(expylnx, is_odd_y ? x : 1.0f);
 
     // Now all the edge cases
-    if (BUILTIN_ISINF_F32(ax) || x == 0.0f)
+    if (BUILTIN_ISINF_F32(x) || x == 0.0f)
         ret = BUILTIN_COPYSIGN_F32((x == 0.0f) ^ (ny < 0) ? 0.0f : PINF_F32,
                                    is_odd_y ? x : 0.0f);
 
@@ -174,6 +201,13 @@ MATH_MANGLE(rootn)(float x, int ny)
         ret = QNAN_F32;
 
     return ret;
+}
+
+CONSTATTR float
+MATH_MANGLE(rootn)(float x, int ny)
+{
+    float expylnx = compute_exp_inverse_y_lnx_int(x, ny);
+    return rootn_fixup(x, ny, expylnx);
 }
 
 #else

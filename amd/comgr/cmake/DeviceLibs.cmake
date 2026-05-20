@@ -1,4 +1,133 @@
 set(INC_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
+set(LIB_DIR ${CMAKE_CURRENT_BINARY_DIR}/lib)
+
+
+set(RUNTIME_TARGET_DEPENDENCIES)
+
+foreach(runtime ${LLVM_ENABLE_RUNTIMES})
+  # FIXME: Some runtimes don't define a top level target that matches
+  # the project name
+  list(APPEND RUNTIME_TARGET_DEPENDENCIES $<TARGET_NAME_IF_EXISTS:${runtime}>)
+endforeach()
+
+set(GEN_RESOURCE_DIR_FILE ${LIB_DIR}/resource_dir.cpp)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(CLANG_RESOURCE_DIR "lib/clang/${LLVM_VERSION_MAJOR}")
+else()
+  # TODO: This should be the only supported build path
+  include(GetClangResourceDir)
+  get_clang_resource_dir(CLANG_RESOURCE_DIR PREFIX ${LLVM_BINARY_DIR})
+endif()
+
+# Detect the files that will be embedded from the built resource
+# directory, so that there is a content dependency.
+#
+# TODO: It would be better if the runtimes build exported specific
+# targets in a structured way instead of adding direct file
+# dependencies.
+#
+# Keep this in sync with EmbedResourceDir.cmake
+file(GLOB_RECURSE embedded_files
+     LIST_DIRECTORIES false
+     CONFIGURE_DEPENDS
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.bc"
+     "${CLANG_RESOURCE_DIR}/lib/amd*/*.a")
+
+# Clear values from the same scope before branching. include() shares the
+# caller's variable scope; without resetting, a prior set of
+# resource_directory_object_archive could survive when COMGR_USE_INCBIN is on
+# but embedded_files is empty, and we would still link a stale archive path.
+# The other two are initialized for symmetry so unset branches start empty.
+set(resource_directory_object_archive "")
+set(non_source_dependency "")
+set(tool_depends "")
+
+if(COMGR_USE_INCBIN)
+  # Only produce and link a static archive when there are objects to
+  # pack. Otherwise EmbedResourceDir.cmake skips ar and link would
+  # fail looking for a missing library (e.g. empty resource dir at
+  # configure time or before runtimes populate lib/clang).
+  if(embedded_files)
+    set(resource_directory_object_archive
+        "${LIB_DIR}/resource_directory${CMAKE_STATIC_LIBRARY_SUFFIX}")
+  endif()
+  set(tool_depends ${CMAKE_AR})
+else()
+  # FIXME: Dependency hack. This is an output file which is never
+  # produced. This creates a file dependency between the
+  # add_custom_command and the embed-resource-dir target. When using
+  # #embed or bc2h, we are generating a c++ source added to a library
+  # target. For some reason we need an additional dependency not added
+  # to a build target in order to ensure embed-resource-dir is rebuilt
+  # on resource directory content changes.
+  set(non_source_dependency artificial_non_source_dependency)
+endif()
+
+set(embed_resource_outputs ${GEN_RESOURCE_DIR_FILE})
+if(resource_directory_object_archive)
+  list(APPEND embed_resource_outputs ${resource_directory_object_archive})
+endif()
+if(non_source_dependency)
+  list(APPEND embed_resource_outputs ${non_source_dependency})
+endif()
+
+# TODO: Stop using bc2h. Really we ought to be able to rely on #embed,
+# but it's not supported by the oldest supported versions of host
+# compilers. Until then, this should switch to rc on windows to embed
+# the binaries.
+#
+# TODO: Also compress this
+add_custom_command(
+  OUTPUT ${embed_resource_outputs}
+  COMMAND ${CMAKE_COMMAND}
+    -DBC2H_BINARY=$<TARGET_FILE:bc2h>
+    -DGEN_RESOURCE_DIR_FILE=${GEN_RESOURCE_DIR_FILE}
+    -DCLANG_RESOURCE_DIR=${CLANG_RESOURCE_DIR}
+    -DCOMGR_USE_EMBED=${COMGR_USE_EMBED}
+    -DCOMGR_USE_INCBIN=${COMGR_USE_INCBIN}
+    -DRESOURCE_DIRECTORY_ARCHIVE=${resource_directory_object_archive}
+    -DOBJCOPY_OUTPUT_FORMAT=${OBJCOPY_OUTPUT_FORMAT}
+    -DCMAKE_AR=${CMAKE_AR}
+    -DCMAKE_OBJCOPY=${CMAKE_OBJCOPY}
+    -DCMAKE_ASM_COMPILER=${CMAKE_ASM_COMPILER}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedResourceDir.cmake
+  DEPENDS bc2h
+          ${LLVM_ENABLE_RUNTIMES}
+          ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedResourceDir.cmake
+          ${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedFiles.cmake
+          ${RESOURCE_DIRECTORY_DEPENDENCIES}
+          ${tool_depends}
+          ${embedded_files}
+  COMMENT "Embedding clang resource directory"
+  WORKING_DIRECTORY ${LIB_DIR}
+  USES_TERMINAL
+  VERBATIM)
+
+add_custom_target(embed-resource-dir DEPENDS ${embed_resource_outputs})
+
+# This must not directly add GEN_RESOURCE_DIR_FILE as a source file of
+# the library here. This must create the library, add the dependency
+# on the custom target before adding the source to the library target.
+add_library(embed-resource-dir-lib OBJECT)
+set_target_properties(embed-resource-dir-lib PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED Yes
+  CXX_EXTENSIONS No
+  POSITION_INDEPENDENT_CODE ON)
+add_dependencies(embed-resource-dir-lib embed-resource-dir)
+target_sources(embed-resource-dir-lib PRIVATE ${GEN_RESOURCE_DIR_FILE})
+
+target_include_directories(embed-resource-dir-lib PRIVATE ${LLVM_INCLUDE_DIRS})
+target_link_libraries(embed-resource-dir-lib PRIVATE ${LLVM_LIBS})
+
+if(resource_directory_object_archive)
+  target_link_libraries(amd_comgr PRIVATE ${resource_directory_object_archive})
+endif()
+
+target_include_directories(embed-resource-dir-lib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(amd_comgr PRIVATE embed-resource-dir-lib)
+
 
 set(GEN_LIBRARY_INC_FILE ${INC_DIR}/libraries.inc)
 set(GEN_LIBRARY_DEFS_INC_FILE ${INC_DIR}/libraries_defs.inc)
@@ -49,7 +178,7 @@ foreach(AMDGCN_LIB_TARGET ${AMD_DEVICE_LIBS_TARGETS})
     COMMAND bc2h ${bc_lib_path}
                  ${INC_DIR}/${header}
                  "${AMDGCN_LIB_TARGET_ID}_lib"
-    DEPENDS bc2h ${AMDGCN_LIB_TARGET} ${bc_lib_path}
+    DEPENDS bc2h ${AMDGCN_LIB_TARGET} ${bc_lib_path} ${bc_lib_path}
     COMMENT "Generating ${AMDGCN_LIB_TARGET}.inc"
   )
   set_property(DIRECTORY APPEND PROPERTY

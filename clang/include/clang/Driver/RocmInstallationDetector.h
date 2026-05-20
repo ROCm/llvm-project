@@ -82,7 +82,6 @@ private:
     bool FiniteOnly;
     bool UnsafeMathOpt;
     bool FastRelaxedMath;
-    bool CorrectSqrt;
     bool GPUSan;
   };
 
@@ -142,12 +141,13 @@ private:
   // Asan runtime library
   SmallString<0> AsanRTL;
 
+  // OpenMP ASan runtime library
+  SmallString<0> OpenMPASanRTLPath;
+
   // Libraries swapped based on compile flags.
   ConditionalLibrary WavefrontSize64;
   ConditionalLibrary FiniteOnly;
   ConditionalLibrary UnsafeMath;
-  ConditionalLibrary DenormalsAreZero;
-  ConditionalLibrary CorrectlyRoundedSqrt;
 
   // Maps ABI version to library path. The version number is in the format of
   // three digits as used in the ABI version library name.
@@ -160,9 +160,7 @@ private:
 
   bool allGenericLibsValid() const {
     return !OCML.empty() && !OCKL.empty() && !OpenCL.empty() &&
-           WavefrontSize64.isValid() && FiniteOnly.isValid() &&
-           UnsafeMath.isValid() && DenormalsAreZero.isValid() &&
-           CorrectlyRoundedSqrt.isValid();
+           WavefrontSize64.isValid();
   }
 
   void scanLibDevicePath(llvm::StringRef Path);
@@ -180,7 +178,7 @@ public:
   RocmInstallationDetector(const Driver &D, const llvm::Triple &HostTriple,
                            const llvm::opt::ArgList &Args,
                            bool DetectHIPRuntime = true,
-                           bool DetectDeviceLib = false);
+                           bool DetectOpenMPRuntime = true);
 
   /// Get file paths of default bitcode libraries common to AMDGPU based
   /// toolchains.
@@ -242,24 +240,19 @@ public:
   /// Returns empty string of Asan runtime library is not available.
   StringRef getAsanRTLPath() const { return AsanRTL; }
 
+  /// Returns empty string of OpenMP Asan runtime library is not available.
+  StringRef getOpenMPASanRTLPath() const { return OpenMPASanRTLPath; }
+
   StringRef getWavefrontSize64Path(bool Enabled) const {
     return WavefrontSize64.get(Enabled);
   }
 
   StringRef getFiniteOnlyPath(bool Enabled) const {
-    return FiniteOnly.get(Enabled);
+    return FiniteOnly.isValid() ? FiniteOnly.get(Enabled) : "";
   }
 
   StringRef getUnsafeMathPath(bool Enabled) const {
-    return UnsafeMath.get(Enabled);
-  }
-
-  StringRef getDenormalsAreZeroPath(bool Enabled) const {
-    return DenormalsAreZero.get(Enabled);
-  }
-
-  StringRef getCorrectlyRoundedSqrtPath(bool Enabled) const {
-    return CorrectlyRoundedSqrt.get(Enabled);
+    return UnsafeMath.isValid() ? UnsafeMath.get(Enabled) : "";
   }
 
   StringRef getABIVersionPath(DeviceLibABIVersion ABIVer) const {
@@ -282,6 +275,7 @@ public:
 
   void detectDeviceLibrary();
   void detectHIPRuntime();
+  void detectOpenMPRuntime();
 
   /// Get the values for --rocm-device-lib-path arguments
   ArrayRef<std::string> getRocmDeviceLibPathArg() const {

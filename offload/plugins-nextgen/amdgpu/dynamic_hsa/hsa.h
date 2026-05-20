@@ -99,9 +99,11 @@ typedef enum {
 typedef enum {
   HSA_SYSTEM_INFO_VERSION_MAJOR = 0,
   HSA_SYSTEM_INFO_VERSION_MINOR = 1,
-  HSA_AMD_SYSTEM_INFO_SVM_SUPPORTED = 0x201;
-}
-hsa_system_info_t;
+  HSA_SYSTEM_INFO_TIMESTAMP = 2,
+  HSA_SYSTEM_INFO_TIMESTAMP_FREQUENCY = 3,
+  HSA_AMD_SYSTEM_INFO_SVM_SUPPORTED = 0x201,
+  HSA_AMD_SYSTEM_INFO_XNACK_ENABLED = 0x206,
+} hsa_system_info_t;
 
 typedef enum {
   HSA_AGENT_FEATURE_KERNEL_DISPATCH = 1,
@@ -115,6 +117,13 @@ typedef struct hsa_region_s {
 typedef struct hsa_isa_s {
   uint64_t handle;
 } hsa_isa_t;
+
+typedef enum {
+  HSA_ACCESS_PERMISSION_NONE = 0,
+  HSA_ACCESS_PERMISSION_RO = 1,
+  HSA_ACCESS_PERMISSION_WO = 2,
+  HSA_ACCESS_PERMISSION_RW = 3
+} hsa_access_permission_t;
 
 hsa_status_t hsa_system_get_info(hsa_system_info_t attribute, void *value);
 

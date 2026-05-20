@@ -33,34 +33,26 @@ using namespace llvm::opt;
 #define NULL_FILE "/dev/null"
 #endif
 
-void AMDGCN::Linker::constructLlvmLinkCommand(Compilation &C,
-                                         const JobAction &JA,
-                                         const InputInfoList &Inputs,
-                                         const InputInfo &Output,
-                                         const llvm::opt::ArgList &Args) const {
-  // Construct llvm-link command.
-  // The output from llvm-link is a bitcode file.
-  ArgStringList LlvmLinkArgs;
+void AMDGCN::Linker::constructLLVMLinkCommand(
+    Compilation &C, const JobAction &JA, const InputInfoList &Inputs,
+    const InputInfo &Output, const llvm::opt::ArgList &Args) const {
 
-  assert(!Inputs.empty() && "Must have at least one input.");
+  ArgStringList LinkerInputs;
 
-  LlvmLinkArgs.append({"-o", Output.getFilename()});
   for (auto Input : Inputs)
-    LlvmLinkArgs.push_back(Input.getFilename());
+    if (Input.isFilename())
+      LinkerInputs.push_back(Input.getFilename());
 
   // Look for archive of bundled bitcode in arguments, and add temporary files
   // for the extracted archive of bitcode to inputs.
   auto TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
-  AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LlvmLinkArgs, "amdgcn",
+  AddStaticDeviceLibsLinking(C, *this, JA, Inputs, Args, LinkerInputs, "amdgcn",
                              TargetID,
                              /*IsBitCodeSDL=*/true,
                              /*PostClangLink=*/false);
 
-  const char *LlvmLink =
-    Args.MakeArgString(getToolChain().GetProgramPath("llvm-link"));
-  C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
-                                         LlvmLink, LlvmLinkArgs, Inputs,
-                                         Output));
+  tools::constructLLVMLinkCommand(C, *this, JA, Inputs, LinkerInputs, Output,
+                                  Args);
 }
 
 void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
@@ -91,7 +83,7 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
   // Add features to mattr such as cumode
   std::string MAttrString = "-plugin-opt=-mattr=";
   for (auto OneFeature : unifyTargetFeatures(Features)) {
-    MAttrString.append(Args.MakeArgString(OneFeature));
+    MAttrString.append(Args.MakeArgStringRef(OneFeature));
     if (OneFeature != Features.back())
       MAttrString.append(",");
   }
@@ -102,10 +94,9 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
   // Since AMDGPU backend currently does not support ISA-level linking, all
   // called functions need to be imported.
   if (IsThinLTO) {
-    LldArgs.push_back(Args.MakeArgString("-plugin-opt=-force-import-all"));
-    LldArgs.push_back(Args.MakeArgString("-plugin-opt=-avail-extern-to-local"));
-    LldArgs.push_back(Args.MakeArgString(
-        "-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3"));
+    LldArgs.push_back("-plugin-opt=-force-import-all");
+    LldArgs.push_back("-plugin-opt=-avail-extern-to-local");
+    LldArgs.push_back("-plugin-opt=-avail-extern-gv-in-addrspace-to-local=3");
   }
 
   if (Arg *A = Args.getLastArgNoClaim(options::OPT_g_Group))
@@ -142,7 +133,7 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
       LldArgs.push_back(
           Args.MakeArgString(Twine("-plugin-opt=") + SplitArg.second));
     } else {
-      LldArgs.push_back(Args.MakeArgString(ArgVal));
+      LldArgs.push_back(Args.MakeArgStringRef(ArgVal));
     }
     Arg->claim();
   }
@@ -161,7 +152,7 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
 
   LldArgs.push_back("--no-whole-archive");
 
-  const char *Lld = Args.MakeArgString(getToolChain().GetProgramPath("lld"));
+  const char *Lld = Args.MakeArgStringRef(getToolChain().GetProgramPath("lld"));
   C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
                                          Lld, LldArgs, Inputs, Output));
 }
@@ -185,7 +176,7 @@ void AMDGCN::Linker::constructLinkAndEmitSpirvCommand(
       Args.hasFlag(options::OPT_use_spirv_backend,
                    options::OPT_no_use_spirv_backend, /*Default=*/false);
 
-  constructLlvmLinkCommand(C, JA, Inputs, LinkedBCFile, Args);
+  constructLLVMLinkCommand(C, JA, Inputs, LinkedBCFile, Args);
 
   if (UseSPIRVBackend) {
     // This code handles the case in the new driver when --offload-device-only
@@ -193,11 +184,10 @@ void AMDGCN::Linker::constructLinkAndEmitSpirvCommand(
     // compiled to SPIR-V.
 
     llvm::opt::ArgStringList CmdArgs;
-    const char *Triple =
-        C.getArgs().MakeArgString("-triple=spirv64-amd-amdhsa");
 
-    CmdArgs.append({"-cc1", Triple, "-emit-obj", "-disable-llvm-optzns",
-                    LinkedBCFile.getFilename(), "-o", Output.getFilename()});
+    CmdArgs.append({"-cc1", "-triple=spirv64-amd-amdhsa", "-emit-obj",
+                    "-disable-llvm-optzns", LinkedBCFile.getFilename(), "-o",
+                    Output.getFilename()});
 
     const Driver &Driver = getToolChain().getDriver();
     const char *Exec = Driver.getClangProgramPath();
@@ -226,8 +216,7 @@ void AMDGCN::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                   const InputInfoList &Inputs,
                                   const ArgList &Args,
                                   const char *LinkingOutput) const {
-  if (Inputs.size() > 0 &&
-      Inputs[0].getType() == types::TY_Image &&
+  if (!Inputs.empty() && Inputs[0].getType() == types::TY_Image &&
       JA.getType() == types::TY_Object)
     return HIP::constructGenerateObjFileFromHIPFatBinary(C, Output, Inputs,
                                                          Args, JA, *this);
@@ -237,7 +226,7 @@ void AMDGCN::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                           Args, *this);
 
   if (JA.getType() == types::TY_LLVM_BC)
-    return constructLlvmLinkCommand(C, JA, Inputs, Output, Args);
+    return constructLLVMLinkCommand(C, JA, Inputs, Output, Args);
 
   if (getToolChain().getEffectiveTriple().isSPIRV())
     return constructLinkAndEmitSpirvCommand(C, JA, Inputs, Output, Args);
@@ -278,17 +267,16 @@ void HIPAMDToolChain::addClangTargetOptions(
   StringRef MaxThreadsPerBlock =
       DriverArgs.getLastArgValue(options::OPT_gpu_max_threads_per_block_EQ);
   if (!MaxThreadsPerBlock.empty()) {
-    std::string ArgStr =
-        (Twine("--gpu-max-threads-per-block=") + MaxThreadsPerBlock).str();
-    CC1Args.push_back(DriverArgs.MakeArgStringRef(ArgStr));
+    CC1Args.push_back(DriverArgs.MakeArgString(
+        Twine("--gpu-max-threads-per-block=") + MaxThreadsPerBlock));
   }
-
-  CC1Args.push_back("-fcuda-allow-variadic-functions");
 
   // Default to "hidden" visibility, as object level linking will not be
   // supported for the foreseeable future.
+  // TODO: remove the SPIR-V bypass once it can encode (hidden) visibility.
   if (!DriverArgs.hasArg(options::OPT_fvisibility_EQ,
-                         options::OPT_fvisibility_ms_compat)) {
+                         options::OPT_fvisibility_ms_compat) &&
+      !getEffectiveTriple().isSPIRV()) {
     CC1Args.append({"-fvisibility=hidden"});
     CC1Args.push_back("-fapply-global-visibility-to-externs");
   }
@@ -311,7 +299,7 @@ void HIPAMDToolChain::addClangTargetOptions(
   for (auto BCFile : getDeviceLibs(DriverArgs, DeviceOffloadingKind)) {
     CC1Args.push_back(BCFile.ShouldInternalize ? "-mlink-builtin-bitcode"
                                                : "-mlink-bitcode-file");
-    CC1Args.push_back(DriverArgs.MakeArgString(BCFile.Path));
+    CC1Args.push_back(DriverArgs.MakeArgStringRef(BCFile.Path));
   }
 }
 
@@ -402,15 +390,18 @@ llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
 HIPAMDToolChain::getDeviceLibs(const llvm::opt::ArgList &DriverArgs,
                                Action::OffloadKind DeviceOffloadingKind) const {
   llvm::SmallVector<BitCodeLibraryInfo, 12> BCLibs;
+  const llvm::Triple &TT = getEffectiveTriple();
+
   if (!DriverArgs.hasFlag(options::OPT_offloadlib, options::OPT_no_offloadlib,
                           true) ||
+      TT.getEnvironment() == llvm::Triple::LLVM ||
       getGPUArch(DriverArgs) == "amdgcnspirv")
     return {};
   ArgStringList LibraryPaths;
 
   // Find in --hip-device-lib-path and HIP_LIBRARY_PATH.
   for (StringRef Path : RocmInstallation->getRocmDeviceLibPathArg())
-    LibraryPaths.push_back(DriverArgs.MakeArgString(Path));
+    LibraryPaths.push_back(DriverArgs.MakeArgStringRef(Path));
 
   addDirectoryList(DriverArgs, LibraryPaths, "", "HIP_DEVICE_LIB_PATH");
 
@@ -442,8 +433,8 @@ HIPAMDToolChain::getDeviceLibs(const llvm::opt::ArgList &DriverArgs,
     assert(!GpuArch.empty() && "Must have an explicit GPU arch.");
 
     // Add common device libraries like ocml etc.
-    for (auto N : getCommonDeviceLibNames(DriverArgs, GpuArch.str(),
-                                          DeviceOffloadingKind))
+    for (auto N :
+         getCommonDeviceLibNames(DriverArgs, GpuArch, DeviceOffloadingKind))
       BCLibs.emplace_back(N);
 
     // Add instrument lib.

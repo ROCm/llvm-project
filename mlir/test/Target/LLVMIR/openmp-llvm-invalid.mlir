@@ -92,6 +92,30 @@ llvm.func @omp_threadprivate() {
 
 // -----
 
+llvm.func @wsloop_linear(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
+  // expected-error @below {{Ill-formed type attributes for linear variables}}
+  omp.wsloop linear(%x : !llvm.ptr = %step : i32) {
+     omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
+       omp.yield
+     }
+  } {linear_var_types = []}
+  llvm.return
+}
+
+// -----
+
+llvm.func @simd_linear(%lb : i32, %ub : i32, %step : i32, %x : !llvm.ptr) {
+  // expected-error @below {{Ill-formed type attributes for linear variables}} 
+  omp.simd linear(%x : !llvm.ptr = %step : i32) {
+     omp.loop_nest (%iv) : i32 = (%lb) to (%ub) step (%step) {
+       omp.yield
+     }
+  } {linear_var_types = []}
+  llvm.return
+}
+
+// -----
+
 module attributes {llvm.target_triple = "amdgcn-amd-amdhsa", omp.is_target_device = true} {
   llvm.func @host_op_in_device(%arg0 : !llvm.ptr) {
     // expected-error @below {{unsupported host op found in device}}

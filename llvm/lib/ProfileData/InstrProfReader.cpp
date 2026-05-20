@@ -662,7 +662,7 @@ Error RawInstrProfReader<IntPtrT>::readHeader(
     // These sizes in the raw file are zero because we constructed them in the
     // Correlator.
     if (!(DataSize == 0 && NamesSize == 0 && CountersDelta == 0 &&
-          NamesDelta == 0))
+          BitmapDelta == 0 && NamesDelta == 0))
       return error(instrprof_error::unexpected_correlation_info);
     Data = Correlator->getDataPointer();
     DataEnd = Data + Correlator->getDataSize();
@@ -1554,6 +1554,12 @@ memprof::AllMemProfData IndexedMemProfReader::getAllMemProfData() const {
   }
   // Populate the data access profiles for yaml output.
   if (DataAccessProfileData != nullptr) {
+    AllMemProfData.YamlifiedDataAccessProfiles.Records.reserve(
+        DataAccessProfileData->getRecords().size());
+    AllMemProfData.YamlifiedDataAccessProfiles.KnownColdSymbols.reserve(
+        DataAccessProfileData->getKnownColdSymbols().size());
+    AllMemProfData.YamlifiedDataAccessProfiles.KnownColdStrHashes.reserve(
+        DataAccessProfileData->getKnownColdHashes().size());
     for (const auto &[SymHandleRef, RecordRef] :
          DataAccessProfileData->getRecords())
       AllMemProfData.YamlifiedDataAccessProfiles.Records.push_back(
@@ -1565,6 +1571,19 @@ memprof::AllMemProfData IndexedMemProfReader::getAllMemProfData() const {
     for (uint64_t Hash : DataAccessProfileData->getKnownColdHashes())
       AllMemProfData.YamlifiedDataAccessProfiles.KnownColdStrHashes.push_back(
           Hash);
+    llvm::stable_sort(AllMemProfData.YamlifiedDataAccessProfiles.Records,
+                      [](const llvm::memprof::DataAccessProfRecord &lhs,
+                         const llvm::memprof::DataAccessProfRecord &rhs) {
+                        return lhs.AccessCount > rhs.AccessCount;
+                      });
+    llvm::stable_sort(
+        AllMemProfData.YamlifiedDataAccessProfiles.KnownColdSymbols,
+        [](const std::string &lhs, const std::string &rhs) {
+          return lhs < rhs;
+        });
+    llvm::stable_sort(
+        AllMemProfData.YamlifiedDataAccessProfiles.KnownColdStrHashes,
+        [](const uint64_t &lhs, const uint64_t &rhs) { return lhs < rhs; });
   }
   return AllMemProfData;
 }

@@ -99,12 +99,23 @@ llvm::Error DeviceTy::init() {
   // Enables recording kernels if set.
   BoolEnvar OMPX_RecordKernel("LIBOMPTARGET_RECORD", false);
   if (OMPX_RecordKernel) {
-    // Enables saving the device memory kernel output post execution if set.
-    BoolEnvar OMPX_ReplaySaveOutput("LIBOMPTARGET_RR_SAVE_OUTPUT", false);
+    BoolEnvar OMPX_RecordOutput("LIBOMPTARGET_RECORD_OUTPUT", true);
+    Int64Envar OMPX_RecordMemSize("LIBOMPTARGET_RECORD_MEMSIZE",
+                                  8 * 1024 * 1024 * 1024ULL);
+    Int32Envar OMPX_RecordDevice("LIBOMPTARGET_RECORD_DEVICE", 0);
+    StringEnvar OMPX_RecordOutputDir("LIBOMPTARGET_RECORD_DIR", "");
+    BoolEnvar OMPX_EmitRecordReport("LIBOMPTARGET_RECORD_REPORT", false);
+    if (OMPX_RecordDevice != RTLDeviceID)
+      return llvm::Error::success();
 
-    uint64_t ReqPtrArgOffset;
-    RTL->initialize_record_replay(RTLDeviceID, 0, nullptr, true,
-                                  OMPX_ReplaySaveOutput, ReqPtrArgOffset);
+    Ret = RTL->initialize_record_replay(
+        RTLDeviceID, OMPX_RecordMemSize, nullptr,
+        /*IsRecord=*/true, /*IsNative=*/true, OMPX_RecordOutput,
+        OMPX_EmitRecordReport, OMPX_RecordOutputDir.get().c_str());
+    if (Ret != OFFLOAD_SUCCESS)
+      return error::createOffloadError(error::ErrorCode::BACKEND_FAILURE,
+                                       "failed to initialize RR in device %d\n",
+                                       DeviceID);
   }
 
   return llvm::Error::success();
@@ -204,6 +215,20 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,
                                      "failed to load binary %p", Img);
 
+  AsyncInfoTy AsyncInfo(*this);
+  // From the image, read whether fast reduction is enabled (optional symbol).
+  void *IsFastReductionEnabledPtr;
+  if (!RTL->get_global(Binary, sizeof(int8_t),
+                       "__omp_plugin_enable_fast_reduction",
+                       &IsFastReductionEnabledPtr)) {
+    int8_t IsFastReductionEnabled;
+    if (!retrieveData(&IsFastReductionEnabled, IsFastReductionEnabledPtr,
+                      sizeof(int8_t), AsyncInfo) &&
+        !synchronize(AsyncInfo))
+      RTL->getDevice(RTLDeviceID)
+          .setIsFastReductionEnabled(IsFastReductionEnabled);
+  }
+
   // This symbol is optional.
   void *DeviceEnvironmentPtr;
   if (RTL->get_global(Binary, sizeof(DeviceEnvironmentTy),
@@ -221,7 +246,7 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
   DeviceEnvironment.NumDevices = RTL->getNumDevices();
   // TODO: The device ID used here is not the real device ID used by OpenMP.
   DeviceEnvironment.DeviceNum = RTLDeviceID;
-  DeviceEnvironment.DynamicMemSize = GenericDevice.getDynamicMemorySize();
+  DeviceEnvironment.DynamicMemSize = 0;
   DeviceEnvironment.ClockFrequency = GenericDevice.getClockFrequency();
   DeviceEnvironment.IndirectCallTable =
       reinterpret_cast<uintptr_t>(CallTablePairOrErr->first);
@@ -229,7 +254,6 @@ DeviceTy::loadBinary(__tgt_device_image *Img) {
   DeviceEnvironment.HardwareParallelism =
       GenericDevice.getHardwareParallelism();
 
-  AsyncInfoTy AsyncInfo(*this);
   if (submitData(DeviceEnvironmentPtr, &DeviceEnvironment,
                  sizeof(DeviceEnvironment), AsyncInfo))
     return error::createOffloadError(error::ErrorCode::INVALID_BINARY,
@@ -281,7 +305,7 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataSubmitRAII(
           RegionInterface.getCallbacks<ompt_target_data_transfer_to_device>(),
-          omp_get_initial_device(), HstPtrBegin, DeviceID, TgtPtrBegin, Size,
+          omp_initial_device, HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       // Only if 'TracedDeviceId' is actually traced, AsyncInfo->OmptEventInfo
       // is set and a trace record generated. Otherwise: No OMPT device tracing.
@@ -311,7 +335,7 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
   OMPT_IF_BUILT(
       InterfaceRAII TargetDataRetrieveRAII(
           RegionInterface.getCallbacks<ompt_target_data_transfer_from_device>(),
-          DeviceID, TgtPtrBegin, omp_get_initial_device(), HstPtrBegin, Size,
+          DeviceID, TgtPtrBegin, omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);
       // Only if 'TracedDeviceId' is actually traced, AsyncInfo->OmptEventInfo
       // is set and a trace record generated. Otherwise: No OMPT device tracing.
@@ -385,11 +409,12 @@ int32_t DeviceTy::notifyDataUnmapped(void *HstPtr) {
 // Run region on device
 int32_t DeviceTy::launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
                                ptrdiff_t *TgtOffsets, KernelArgsTy &KernelArgs,
+                               KernelExtraArgsTy *KernelExtraArgs,
                                AsyncInfoTy &AsyncInfo) {
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);
   return RTL->launch_kernel(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-                            &KernelArgs, AsyncInfo);
+                            &KernelArgs, KernelExtraArgs, AsyncInfo);
 }
 
 // Run region on device

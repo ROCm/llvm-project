@@ -11,9 +11,12 @@
 float
 MATH_MANGLE(cos)(float x)
 {
+    if (!FINITE_ONLY_OPT())
+        x = BUILTIN_ISINF_F32(x) ? QNAN_F32 : x;
+
     float ax = BUILTIN_ABS_F32(x);
 
-    struct redret r = MATH_PRIVATE(trigred)(AS_FLOAT(ax));
+    struct redret r = MATH_PRIVATE(trigred)(ax);
 
 #if defined EXTRA_PRECISION
     struct scret sc = MATH_PRIVATE(sincosred2)(r.hi, r.lo);
@@ -23,12 +26,7 @@ MATH_MANGLE(cos)(float x)
     sc.s = -sc.s;
 
     float c =  (r.i & 1) != 0 ? sc.s : sc.c;
-    c = AS_FLOAT(AS_INT(c) ^ (r.i > 1 ? 0x80000000 : 0));
-
-    if (!FINITE_ONLY_OPT()) {
-        c = BUILTIN_ISFINITE_F32(ax) ? c : QNAN_F32;
-    }
+    c = AS_FLOAT(AS_INT(c) ^ (r.i > 1 ? SIGNBIT_SP32 : 0));
 
     return c;
 }
-

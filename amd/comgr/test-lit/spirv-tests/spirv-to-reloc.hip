@@ -1,7 +1,6 @@
-// REQUIRES: comgr-has-spirv
-
+// REQUIRES: comgr-has-spirv-translator
 // COM: Generate a SPIR-V file from a HIP kernel
-// RUN: clang -x hip --offload-arch=amdgcnspirv -nogpulib -nogpuinc \
+// RUN: %clang -x hip --offload-arch=amdgcnspirv -nogpulib -nogpuinc \
 // RUN:    --no-gpu-bundle-output --offload-device-only -O3 %s -o %t.spv \
 // RUN:    -fvisibility=hidden -fno-autolink -fexceptions -fcolor-diagnostics
 
@@ -15,7 +14,6 @@
 // RUN: grep '\-fexceptions' spirv-flags.txt
 // RUN: grep '\-fcolor-diagnostics' spirv-flags.txt
 // RUN: grep '\-O3' spirv-flags.txt
-// RUN: grep '\-mcode-object-version=5' spirv-flags.txt
 
 // RUN: rm spirv-flags.txt
 

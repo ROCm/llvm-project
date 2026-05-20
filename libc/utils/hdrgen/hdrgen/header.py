@@ -75,6 +75,30 @@ LLVM_LICENSE_TEXT = [
     "SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception",
 ]
 
+PROXY_TEMPLATE = """\
+//===-- Implementation proxy header for <{header}> --===//
+//
+{license_lines}
+//
+//===---------------------------------------------------------------------===//
+
+#ifndef {guard}
+#define {guard}
+
+#ifdef LIBC_FULL_BUILD
+
+{include_lines}
+{macro_lines}
+
+#else // Overlay mode
+
+#include <{header}>
+
+#endif // LLVM_LIBC_FULL_BUILD
+
+#endif // {guard}
+"""
+
 
 class HeaderFile:
     def __init__(self, name):
@@ -151,17 +175,19 @@ class HeaderFile:
                     PurePosixPath("llvm-libc-types") / f"{typ.name}.h",
                 )
                 for typ in self.all_types()
+                if typ.guard is None
             }
             | {
-                PurePosixPath("llvm-libc-macros") / f"{attr}.h"
+                PurePosixPath("llvm-libc-macros") / f"{attr.split('(')[0]}.h"
                 for attr in self.all_attributes() - COMMON_ATTRIBUTES
             }
         )
 
-    def header_guard(self):
-        return "_LLVM_LIBC_" + "_".join(
-            word.upper() for word in NONIDENTIFIER.split(self.name) if word
-        )
+    def header_guard(self, proxy=False):
+        words = [word.upper() for word in NONIDENTIFIER.split(self.name) if word]
+        if proxy:
+            return "LLVM_LIBC_HDR_" + "_".join(words[:-1]) + "_PROXY_H"
+        return "_LLVM_LIBC_" + "_".join(words)
 
     def library_description(self):
         descriptions = LIBRARY_DESCRIPTIONS | self.extra_standards
@@ -203,44 +229,86 @@ class HeaderFile:
             license_lines=self.license_lines(),
         )
 
-    def public_api(self):
+    def include_lines(self, with_common=False):
         # Python 3.12 has .relative_to(dir, walk_up=True) for this.
         path_prefix = PurePosixPath("../" * (len(PurePosixPath(self.name).parents) - 1))
 
         def relpath(file):
             return path_prefix / file
 
-        content = []
-
-        if self.template_file is None:
-            # This always goes before all the other includes, which are sorted.
-            # It's implicitly emitted here when using the default template so
-            # it can get the right relative path.  Custom template files should
-            # all have it explicitly with their right particular relative path.
-            content.append('#include "{file!s}"'.format(file=relpath(COMMON_HEADER)))
-
-        content += [
+        # This always goes before all the other includes, which are sorted.
+        # It's implicitly emitted here when using the default template so
+        # it can get the right relative path.  Custom template files should
+        # all have it explicitly with their right particular relative path.
+        content = [
             f"#include {file}"
-            for file in sorted(
+            for file in ([f'"{relpath(COMMON_HEADER)!s}"'] if with_common else [])
+            + sorted(
                 file if isinstance(file, str) else f'"{relpath(file)!s}"'
                 for file in self.includes()
             )
         ]
 
+        # Add guarded types
+        current_guard = None
+        has_seen_guard = False
+        for typ in sorted(self.types):
+            if typ.guard is None:
+                continue
+            if not has_seen_guard:
+                has_seen_guard = True
+                content.append("")
+            path = COMPILER_HEADER_TYPES.get(
+                typ.name,
+                PurePosixPath("llvm-libc-types") / f"{typ.name}.h",
+            )
+            self.emit_guard(content, current_guard, typ.guard)
+            current_guard = typ.guard
+            content.append(f'#include "{relpath(path)!s}"')
+        self.emit_guard(content, current_guard, None)
+
+        return content
+
+    def macro_lines(self):
+        content = []
         for macro in sorted(self.macros):
             # When there is nothing to define, the Macro object converts to str
             # as an empty string.  Don't emit a blank line for those cases.
             if str(macro):
                 content.extend(["", f"{macro}"])
+        return content
 
+    def enum_lines(self):
+        content = []
         if self.enumerations:
             combined_enum_content = ",\n  ".join(
                 str(enum) for enum in self.enumerations
             )
             content.append(f"\nenum {{\n  {combined_enum_content},\n}};")
+        return content
 
-        content.append("\n__BEGIN_C_DECLS\n")
+    def proxy_contents(self):
+        return PROXY_TEMPLATE.format(
+            header=self.name,
+            guard=self.header_guard(proxy=True),
+            license_lines=self.license_lines(),
+            include_lines="\n".join(self.include_lines()),
+            macro_lines="\n".join(self.macro_lines()),
+        )
 
+    def public_api(self):
+        content = (
+            self.include_lines(self.template_file is None)
+            + self.macro_lines()
+            + self.enum_lines()
+        )
+        content.append("")
+        has_decls = self.functions or self.objects
+        if has_decls:
+            content.append("__BEGIN_C_DECLS")
+            content.append("")
+
+        # Emit function declarations.
         current_guard = None
         last_name = None
         for function in sorted(self.functions):
@@ -248,37 +316,20 @@ class HeaderFile:
             # elide the blank line between the declarations.
             if last_name == function.name_without_underscores():
                 content.pop()
-            if function.guard == None and current_guard == None:
-                content.append(str(function) + " __NOEXCEPT;")
-                content.append("")
-            else:
-                if current_guard == None:
-                    current_guard = function.guard
-                    content.append(f"#ifdef {current_guard}")
-                    content.append(str(function) + " __NOEXCEPT;")
-                    content.append("")
-                elif current_guard == function.guard:
-                    content.append(str(function) + " __NOEXCEPT;")
-                    content.append("")
-                else:
-                    content.pop()
-                    content.append(f"#endif // {current_guard}")
-                    content.append("")
-                    current_guard = function.guard
-                    if current_guard is not None:
-                        content.append(f"#ifdef {current_guard}")
-                    content.append(str(function) + " __NOEXCEPT;")
-                    content.append("")
-            last_name = function.name_without_underscores()
-        if current_guard != None:
-            content.pop()
-            content.append(f"#endif // {current_guard}")
+            self.emit_guard(content, current_guard, function.guard)
+            current_guard = function.guard
+            content.append(str(function) + " __NOEXCEPT;")
             content.append("")
+            last_name = function.name_without_underscores()
+        self.emit_guard(content, current_guard, None)
 
+        # Emit object declarations.
         content.extend(str(object) for object in self.objects)
         if self.objects:
             content.append("")
-        content.append("__END_C_DECLS")
+
+        if has_decls:
+            content.append("__END_C_DECLS")
 
         return "\n".join(content)
 
@@ -288,3 +339,13 @@ class HeaderFile:
             "standards": self.standards,
             "includes": sorted(str(file) for file in {COMMON_HEADER} | self.includes()),
         }
+
+    def emit_guard(self, content, current_guard, new_guard):
+        if current_guard != new_guard:
+            if current_guard is not None:
+                if content[-1] == "":
+                    content.pop()
+                content.append(f"#endif // {current_guard}")
+                content.append("")
+            if new_guard is not None:
+                content.append(f"#ifdef {new_guard}")

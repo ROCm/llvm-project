@@ -50,6 +50,7 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -102,6 +103,12 @@ static cl::opt<bool> DisableOpenMPOptSPMDization(
     "openmp-opt-disable-spmdization",
     cl::desc("Disable OpenMP optimizations involving SPMD-ization."),
     cl::Hidden, cl::init(false));
+
+static cl::opt<bool> DisableOpenMPOptCallbackSPMDization(
+    "openmp-opt-disable-callback-spmdization",
+    cl::desc("Disable OpenMP optimizations involving SPMD-ization in runtime "
+             "functions taking callbacks."),
+    cl::Hidden, cl::init(true));
 
 static cl::opt<bool> DisableOpenMPOptFolding(
     "openmp-opt-disable-folding",
@@ -544,6 +551,24 @@ struct OMPInformationCache : public InformationCache {
     collectUses(RFI, /*CollectStats*/ false);
   }
 
+  void setCallbackMetadata(Function *F, unsigned ArgNo, ArrayRef<int> Indices,
+                           bool IsVarArg) {
+    if (!F)
+      return;
+
+    LLVMContext &Ctx = F->getContext();
+    MDBuilder MDB(Ctx);
+
+    // Create the new callback encoding for this runtime function
+    MDNode *NewCallbackEncoding =
+        MDB.createCallbackEncoding(ArgNo, Indices, IsVarArg);
+
+    if (!F->getMetadata(LLVMContext::MD_callback))
+      // No existing metadata, create new with single entry
+      F->addMetadata(LLVMContext::MD_callback,
+                     *MDNode::get(Ctx, {NewCallbackEncoding}));
+  }
+
   // Helper function to recollect uses of all runtime functions.
   void recollectUses() {
     for (int Idx = 0; Idx < RFIs.size(); ++Idx)
@@ -627,8 +652,13 @@ struct OMPInformationCache : public InformationCache {
       });                                                                      \
     }                                                                          \
   }
-#include "llvm/Frontend/OpenMP/OMPKinds.def"
+#define OMP_RTL_CB_INFO(_Enum, _Name, _ArgNo, _ArgIndices, _IsVarArg)          \
+  {                                                                            \
+    Function *F = M.getFunction(_Name);                                        \
+    setCallbackMetadata(F, _ArgNo, _ArgIndices, _IsVarArg);                    \
+  }
 
+#include "llvm/Frontend/OpenMP/OMPKinds.def"
     // Remove the `noinline` attribute from `__kmpc`, `ompx::` and `omp_`
     // functions, except if `optnone` is present.
     if (isOpenMPDevice(M)) {
@@ -862,9 +892,6 @@ struct OffloadArray {
   /// fails.
   /// This MUST be used immediately after the construction of the object.
   bool initialize(AllocaInst &Array, Instruction &Before) {
-    if (!Array.getAllocatedType()->isArrayTy())
-      return false;
-
     if (!getValues(Array, Before))
       return false;
 
@@ -882,8 +909,13 @@ private:
   /// \p Array, leaving StoredValues with the values stored before the
   /// instruction \p Before is reached.
   bool getValues(AllocaInst &Array, Instruction &Before) {
-    // Initialize container.
-    const uint64_t NumValues = Array.getAllocatedType()->getArrayNumElements();
+    // Initialize containers.
+    const DataLayout &DL = Array.getDataLayout();
+    std::optional<TypeSize> ArraySize = Array.getAllocationSize(DL);
+    if (!ArraySize || !ArraySize->isFixed())
+      return false;
+    const unsigned int PointerSize = DL.getPointerSize();
+    const uint64_t NumValues = ArraySize->getFixedValue() / PointerSize;
     StoredValues.assign(NumValues, nullptr);
     LastAccesses.assign(NumValues, nullptr);
 
@@ -892,9 +924,6 @@ private:
     BasicBlock *BB = Array.getParent();
     if (BB != Before.getParent())
       return false;
-
-    const DataLayout &DL = Array.getDataLayout();
-    const unsigned int PointerSize = DL.getPointerSize();
 
     for (Instruction &I : *BB) {
       if (&I == &Before)
@@ -909,8 +938,11 @@ private:
           GetPointerBaseWithConstantOffset(S->getPointerOperand(), Offset, DL);
       if (Dst == &Array) {
         int64_t Idx = Offset / PointerSize;
-        StoredValues[Idx] = getUnderlyingObject(S->getValueOperand());
-        LastAccesses[Idx] = S;
+        // Ignore updates that must be UB (probably in dead code at runtime)
+        if ((uint64_t)Idx < NumValues) {
+          StoredValues[Idx] = getUnderlyingObject(S->getValueOperand());
+          LastAccesses[Idx] = S;
+        }
       }
     }
 
@@ -1086,8 +1118,8 @@ private:
     SmallDenseMap<BasicBlock *, SmallPtrSet<Instruction *, 4>> BB2PRMap;
 
     BasicBlock *StartBB = nullptr, *EndBB = nullptr;
-    auto BodyGenCB = [&](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                         ArrayRef<InsertPointTy> DeallocIPs) {
+    auto BodyGenCB = [&](InsertPointTy AllocaIP, InsertPointTy CodeGenIP,
+                         ArrayRef<BasicBlock *> DeallocBlocks) {
       BasicBlock *CGStartBB = CodeGenIP.getBlock();
       BasicBlock *CGEndBB =
           SplitBlock(CGStartBB, &*CodeGenIP.getPoint(), DT, LI);
@@ -1127,8 +1159,8 @@ private:
       const DebugLoc DL = ParentBB->getTerminator()->getDebugLoc();
       ParentBB->getTerminator()->eraseFromParent();
 
-      auto BodyGenCB = [&](InsertPointTy AllocIP, InsertPointTy CodeGenIP,
-                           ArrayRef<InsertPointTy> DeallocIPs) {
+      auto BodyGenCB = [&](InsertPointTy AllocaIP, InsertPointTy CodeGenIP,
+                           ArrayRef<BasicBlock *> DeallocBlocks) {
         BasicBlock *CGStartBB = CodeGenIP.getBlock();
         BasicBlock *CGEndBB =
             SplitBlock(CGStartBB, &*CodeGenIP.getPoint(), DT, LI);
@@ -1186,7 +1218,7 @@ private:
       cantFail(
           OMPInfoCache.OMPBuilder.createBarrier(SeqAfterIP, OMPD_parallel));
 
-      BranchInst::Create(SeqAfterBB, SeqAfterIP.getBlock());
+      UncondBrInst::Create(SeqAfterBB, SeqAfterIP.getBlock());
 
       LLVM_DEBUG(dbgs() << TAG << "After sequential inlining " << *OuterFn
                         << "\n");
@@ -1258,10 +1290,10 @@ private:
       // avoid overriding binding settings, and without explicit cancellation.
       OpenMPIRBuilder::InsertPointTy AfterIP =
           cantFail(OMPInfoCache.OMPBuilder.createParallel(
-              Loc, AllocaIP, /* DeallocIPs */ {}, BodyGenCB, PrivCB, FiniCB,
+              Loc, AllocaIP, /* DeallocBlocks */ {}, BodyGenCB, PrivCB, FiniCB,
               nullptr, nullptr, OMP_PROC_BIND_default,
               /* IsCancellable */ false));
-      BranchInst::Create(AfterBB, AfterIP.getBlock());
+      UncondBrInst::Create(AfterBB, AfterIP.getBlock());
 
       // Perform the actual outlining.
       OMPInfoCache.OMPBuilder.finalize(OriginalFn);
@@ -2920,9 +2952,9 @@ struct AAExecutionDomainFunction : public AAExecutionDomain {
 
   // Check if the edge into the successor block contains a condition that only
   // lets the main thread execute it.
-  static bool isInitialThreadOnlyEdge(Attributor &A, BranchInst *Edge,
+  static bool isInitialThreadOnlyEdge(Attributor &A, CondBrInst *Edge,
                                       BasicBlock &SuccessorBB) {
-    if (!Edge || !Edge->isConditional())
+    if (!Edge)
       return false;
     if (Edge->getSuccessor(0) != &SuccessorBB)
       return false;
@@ -3129,7 +3161,7 @@ ChangeStatus AAExecutionDomainFunction::updateImpl(Attributor &A) {
         if (LivenessAA && LivenessAA->isEdgeDead(PredBB, &BB))
           continue;
         bool InitialEdgeOnly = isInitialThreadOnlyEdge(
-            A, dyn_cast<BranchInst>(PredBB->getTerminator()), BB);
+            A, dyn_cast<CondBrInst>(PredBB->getTerminator()), BB);
         mergeInPredecessor(A, ED, BEDMap[PredBB], InitialEdgeOnly);
       }
     }
@@ -4061,7 +4093,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
           OMPInfoCache.OMPBuilder.getOrCreateSrcLocStr(Loc, SrcLocStrSize);
       Value *Ident =
           OMPInfoCache.OMPBuilder.getOrCreateIdent(SrcLocStr, SrcLocStrSize);
-      BranchInst::Create(RegionCheckTidBB, ParentBB)->setDebugLoc(DL);
+      UncondBrInst::Create(RegionCheckTidBB, ParentBB)->setDebugLoc(DL);
 
       // Add check for Tid in RegionCheckTidBB
       RegionCheckTidBB->getTerminator()->eraseFromParent();
@@ -4221,7 +4253,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
                          ConstantInt::get(ThreadIdInBlock->getType(), 0),
                          "thread.is_main", InitBB);
     IsMainThread->setDebugLoc(DLoc);
-    BranchInst::Create(ReturnBB, UserCodeBB, IsMainThread, InitBB);
+    CondBrInst::Create(IsMainThread, ReturnBB, UserCodeBB, InitBB);
   }
 
   bool changeToSPMDMode(Attributor &A, ChangeStatus &Changed) {
@@ -4490,7 +4522,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
                          ConstantInt::getAllOnesValue(KernelInitCB->getType()),
                          "thread.is_worker", InitBB);
     IsWorker->setDebugLoc(DLoc);
-    BranchInst::Create(IsWorkerCheckBB, UserCodeEntryBB, IsWorker, InitBB);
+    CondBrInst::Create(IsWorker, IsWorkerCheckBB, UserCodeEntryBB, InitBB);
 
     Module &M = *Kernel->getParent();
     FunctionCallee BlockHwSizeFn =
@@ -4514,8 +4546,8 @@ struct AAKernelInfoFunction : AAKernelInfo {
         ICmpInst::ICmp, llvm::CmpInst::ICMP_SLT, KernelInitCB, BlockSize,
         "thread.is_main_or_worker", IsWorkerCheckBB);
     IsMainOrWorker->setDebugLoc(DLoc);
-    BranchInst::Create(StateMachineBeginBB, StateMachineFinishedBB,
-                       IsMainOrWorker, IsWorkerCheckBB);
+    CondBrInst::Create(IsMainOrWorker, StateMachineBeginBB,
+                       StateMachineFinishedBB, IsWorkerCheckBB);
 
     // Create local storage for the work function pointer.
     const DataLayout &DL = M.getDataLayout();
@@ -4570,13 +4602,12 @@ struct AAKernelInfoFunction : AAKernelInfo {
                          Constant::getNullValue(VoidPtrTy), "worker.is_done",
                          StateMachineBeginBB);
     IsDone->setDebugLoc(DLoc);
-    BranchInst::Create(StateMachineFinishedBB, StateMachineIsActiveCheckBB,
-                       IsDone, StateMachineBeginBB)
+    CondBrInst::Create(IsDone, StateMachineFinishedBB,
+                       StateMachineIsActiveCheckBB, StateMachineBeginBB)
         ->setDebugLoc(DLoc);
 
-    BranchInst::Create(StateMachineIfCascadeCurrentBB,
-                       StateMachineDoneBarrierBB, IsActiveWorker,
-                       StateMachineIsActiveCheckBB)
+    CondBrInst::Create(IsActiveWorker, StateMachineIfCascadeCurrentBB,
+                       StateMachineDoneBarrierBB, StateMachineIsActiveCheckBB)
         ->setDebugLoc(DLoc);
 
     Value *ZeroArg =
@@ -4596,7 +4627,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
           StateMachineEndParallelBB);
       CallInst::Create(ParallelRegion, {ZeroArg, GTid}, "", PRExecuteBB)
           ->setDebugLoc(DLoc);
-      BranchInst::Create(StateMachineEndParallelBB, PRExecuteBB)
+      UncondBrInst::Create(StateMachineEndParallelBB, PRExecuteBB)
           ->setDebugLoc(DLoc);
 
       BasicBlock *PRNextBB =
@@ -4618,7 +4649,7 @@ struct AAKernelInfoFunction : AAKernelInfo {
         IsPR = ConstantInt::getTrue(Ctx);
       }
 
-      BranchInst::Create(PRExecuteBB, PRNextBB, IsPR,
+      CondBrInst::Create(IsPR, PRExecuteBB, PRNextBB,
                          StateMachineIfCascadeCurrentBB)
           ->setDebugLoc(DLoc);
       StateMachineIfCascadeCurrentBB = PRNextBB;
@@ -4634,8 +4665,8 @@ struct AAKernelInfoFunction : AAKernelInfo {
                        StateMachineIfCascadeCurrentBB)
           ->setDebugLoc(DLoc);
     }
-    BranchInst::Create(StateMachineEndParallelBB,
-                       StateMachineIfCascadeCurrentBB)
+    UncondBrInst::Create(StateMachineEndParallelBB,
+                         StateMachineIfCascadeCurrentBB)
         ->setDebugLoc(DLoc);
 
     FunctionCallee EndParallelFn =
@@ -4645,12 +4676,12 @@ struct AAKernelInfoFunction : AAKernelInfo {
         CallInst::Create(EndParallelFn, {}, "", StateMachineEndParallelBB);
     OMPInfoCache.setCallingConvention(EndParallelFn, EndParallel);
     EndParallel->setDebugLoc(DLoc);
-    BranchInst::Create(StateMachineDoneBarrierBB, StateMachineEndParallelBB)
+    UncondBrInst::Create(StateMachineDoneBarrierBB, StateMachineEndParallelBB)
         ->setDebugLoc(DLoc);
 
     CallInst::Create(BarrierFn, {Ident, GTid}, "", StateMachineDoneBarrierBB)
         ->setDebugLoc(DLoc);
-    BranchInst::Create(StateMachineBeginBB, StateMachineDoneBarrierBB)
+    UncondBrInst::Create(StateMachineBeginBB, StateMachineDoneBarrierBB)
         ->setDebugLoc(DLoc);
 
     return true;
@@ -4779,6 +4810,43 @@ struct AAKernelInfoFunction : AAKernelInfo {
     bool AllSPMDStatesWereFixed = true;
     auto CheckCallInst = [&](Instruction &I) {
       auto &CB = cast<CallBase>(I);
+      auto &OMPInfoCache = static_cast<OMPInformationCache &>(A.getInfoCache());
+      Function *Callee = CB.getCalledFunction();
+      const auto &It = OMPInfoCache.RuntimeFunctionIDMap.find(Callee);
+      if (It != OMPInfoCache.RuntimeFunctionIDMap.end()) {
+        MDNode *CallbackMD = Callee->getMetadata(LLVMContext::MD_callback);
+        // If this runtime function has callbacks, we need to look at them
+        // to find potential parallel regions.
+        if (CallbackMD && CallbackMD->getNumOperands() > 0) {
+          // TODO: Handle multiple callbacks?
+          MDNode *OpMD = cast<MDNode>(CallbackMD->getOperand(0).get());
+          if (OpMD && OpMD->getNumOperands() > 0) {
+            auto *CBArgCM = cast<ConstantAsMetadata>(OpMD->getOperand(0));
+            const unsigned int ArgNo =
+                cast<ConstantInt>(CBArgCM->getValue())->getZExtValue();
+            auto *LoopRegion = dyn_cast<Function>(
+                CB.getArgOperand(ArgNo)->stripPointerCasts());
+            // Only analyze the callback if we have a concrete function
+            // definition. Declarations cannot be analyzed interprocedurally.
+            if (LoopRegion && !LoopRegion->isDeclaration()) {
+              LLVM_DEBUG(dbgs() << "[OpenMPOpt] Analyzing callback function: "
+                                << LoopRegion->getName() << "\n");
+              auto *FnAA = A.getAAFor<AAKernelInfo>(
+                  *this, IRPosition::function(*LoopRegion),
+                  DepClassTy::OPTIONAL);
+              if (FnAA) {
+                getState() ^= FnAA->getState();
+                AllSPMDStatesWereFixed &=
+                    FnAA->SPMDCompatibilityTracker.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedKnownParallelRegions.isAtFixpoint();
+                AllParallelRegionStatesWereFixed &=
+                    FnAA->ReachedUnknownParallelRegions.isAtFixpoint();
+              }
+            }
+          }
+        }
+      }
       auto *CBAA = A.getAAFor<AAKernelInfo>(
           *this, IRPosition::callsite_function(CB), DepClassTy::OPTIONAL);
       if (!CBAA)
@@ -4954,7 +5022,12 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         // state based on the callee state in updateImpl.
         return;
       }
-      if (NumCallees > 1) {
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !Callee->hasMetadata(LLVMContext::MD_callback)) {
         indicatePessimisticFixpoint();
         return;
       }
@@ -4975,6 +5048,7 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_barrier:
       case OMPRTL___kmpc_nvptx_parallel_reduce_nowait_v2:
       case OMPRTL___kmpc_nvptx_teams_reduce_nowait_v2:
+      case OMPRTL___kmpc_reduction_get_fixed_buffer:
       case OMPRTL___kmpc_error:
       case OMPRTL___kmpc_flush:
       case OMPRTL___kmpc_get_hardware_thread_id_in_block:
@@ -5062,16 +5136,10 @@ struct AAKernelInfoCallSite : AAKernelInfo {
       case OMPRTL___kmpc_for_static_loop_4u:
       case OMPRTL___kmpc_for_static_loop_8:
       case OMPRTL___kmpc_for_static_loop_8u:
-        // Parallel regions might be reached by these calls, as they take a
-        // callback argument potentially containing arbitrary user-provided
-        // code.
-        ReachedUnknownParallelRegions.insert(&CB);
-        // TODO: The presence of these calls on their own does not prevent a
-        // kernel from being SPMD-izable. We mark it as such because we need
-        // further changes in order to also consider the contents of the
-        // callbacks passed to them.
-        SPMDCompatibilityTracker.indicatePessimisticFixpoint();
-        SPMDCompatibilityTracker.insert(&CB);
+        if (DisableOpenMPOptCallbackSPMDization) {
+          SPMDCompatibilityTracker.indicatePessimisticFixpoint();
+          SPMDCompatibilityTracker.insert(&CB);
+        }
         break;
       default:
         // Unknown OpenMP runtime calls cannot be executed in SPMD-mode,
@@ -5124,7 +5192,12 @@ struct AAKernelInfoCallSite : AAKernelInfo {
         getState() = FnAA->getState();
         return ChangeStatus::CHANGED;
       }
-      if (NumCallees > 1)
+      // Check if we have multiple possible callees. This usually indicates an
+      // indirect call where we don't know the target, requiring a pessimistic
+      // fixpoint. However, for callback functions, multiple edges are expected:
+      // one to the runtime function and other through callback parameters.
+      // These are analyzable, so we exclude them from the pessimistic check.
+      if (NumCallees > 1 && !F->hasMetadata(LLVMContext::MD_callback))
         return indicatePessimisticFixpoint();
 
       CallBase &CB = cast<CallBase>(getAssociatedValue());

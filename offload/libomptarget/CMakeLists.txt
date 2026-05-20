@@ -1,9 +1,7 @@
 message(STATUS "Building offloading runtime library libomptarget.")
 
-if(LIBOMP_STANDALONE)
-  set(LIBOMP ${LIBOMP_STANDALONE})
-else()
-  set(LIBOMP omp)
+if(NOT TARGET "omp")
+  message(FATAL_ERROR "Error: omp target dependency of libomptarget not found. Please ensure 'openmp' is on LLVM_ENABLE_RUNTIMES list.")
 endif()
 
 add_llvm_library(omptarget
@@ -37,7 +35,7 @@ add_llvm_library(omptarget
 
   LINK_LIBS
   PUBLIC
-  ${LIBOMP}
+  omp
 
   NO_INSTALL_RPATH
   BUILDTREE_ONLY
@@ -118,7 +116,7 @@ endif()
 set_target_properties(omptarget PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       BUILD_RPATH "$ORIGIN:${CMAKE_CURRENT_BINARY_DIR}/..")
-install(TARGETS omptarget LIBRARY COMPONENT omptarget DESTINATION "${OFFLOAD_INSTALL_LIBDIR}")
+install(TARGETS omptarget LIBRARY COMPONENT offload DESTINATION "${OFFLOAD_INSTALL_LIBDIR}")
 
 #===============================================================================
 # Ensure that omptarget does not contain a mixture of static and dynamically

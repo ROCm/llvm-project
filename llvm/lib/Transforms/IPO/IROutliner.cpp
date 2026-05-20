@@ -221,28 +221,12 @@ OutlinableRegion::findCorrespondingBlockIn(const OutlinableRegion &Other,
 static void replaceTargetsFromPHINode(BasicBlock *PHIBlock, BasicBlock *Find,
                                       BasicBlock *Replace,
                                       DenseSet<BasicBlock *> &Included) {
-  for (PHINode &PN : PHIBlock->phis()) {
-    for (unsigned Idx = 0, PNEnd = PN.getNumIncomingValues(); Idx != PNEnd;
-         ++Idx) {
+  for (PHINode &PN : PHIBlock->phis())
+    for (BasicBlock *Incoming : PN.blocks())
       // Check if the incoming block is included in the set of blocks being
       // outlined.
-      BasicBlock *Incoming = PN.getIncomingBlock(Idx);
-      if (!Included.contains(Incoming))
-        continue;
-
-      BranchInst *BI = dyn_cast<BranchInst>(Incoming->getTerminator());
-      assert(BI && "Not a branch instruction?");
-      // Look over the branching instructions into this block to see if we
-      // used to branch to Find in this outlined block.
-      for (unsigned Succ = 0, End = BI->getNumSuccessors(); Succ != End;
-           Succ++) {
-        // If we have found the block to replace, we do so here.
-        if (BI->getSuccessor(Succ) != Find)
-          continue;
-        BI->setSuccessor(Succ, Replace);
-      }
-    }
-  }
+      if (Included.contains(Incoming))
+        Incoming->getTerminator()->replaceSuccessorWith(Find, Replace);
 }
 
 
@@ -311,7 +295,7 @@ void OutlinableRegion::splitCandidate() {
 
     if (NumPredsOutsideRegion > 1)
       return;
-    
+
     It++;
   }
 
@@ -319,7 +303,7 @@ void OutlinableRegion::splitCandidate() {
   // the BasicBlock, we ignore this region for now.
   if (isa<PHINode>(StartInst) && StartInst != &*StartBB->begin())
     return;
-  
+
   // If the region ends with a PHINode, but does not contain all of the phi node
   // instructions of the region, we ignore it for now.
   if (isa<PHINode>(BackInst) &&
@@ -529,8 +513,7 @@ InstructionCost OutlinableRegion::getBenefit(TargetTransformInfo &TTI) {
 /// not.
 static Value *findOutputMapping(const DenseMap<Value *, Value *> OutputMappings,
                                 Value *Input) {
-  DenseMap<Value *, Value *>::const_iterator OutputMapping =
-      OutputMappings.find(Input);
+  auto OutputMapping = OutputMappings.find(Input);
   if (OutputMapping != OutputMappings.end())
     return OutputMapping->second;
   return Input;
@@ -740,9 +723,6 @@ static void moveFunctionData(Function &Old, Function &New,
         continue;
       }
 
-      // From this point we are only handling call instructions.
-      CallInst *CI = cast<CallInst>(&Val);
-
       // Edit the scope of called functions inside of outlined functions.
       if (DISubprogram *SP = New.getSubprogram()) {
         DILocation *DI = DILocation::get(New.getContext(), 0, 0, SP);
@@ -948,8 +928,7 @@ findExtractedInputToOverallInputMapping(OutlinableRegion &Region,
     assert(InputOpt && "Global value number not found?");
     Value *Input = *InputOpt;
 
-    DenseMap<unsigned, unsigned>::iterator AggArgIt =
-        Group.CanonicalNumberToAggArg.find(CanonicalNumber);
+    auto AggArgIt = Group.CanonicalNumberToAggArg.find(CanonicalNumber);
 
     if (!Group.InputTypesSet) {
       Group.ArgumentTypes.push_back(Input->getType());
@@ -1543,23 +1522,11 @@ static BasicBlock *findOrCreatePHIBlock(OutlinableGroup &Group, Value *RetVal) {
                                             ReturnBB->getParent());
   PhiBlockForRetVal->second = PHIBlock;
 
-  // We find the predecessors of the return block in the newly created outlined
-  // function in order to point them to the new PHIBlock rather than the already
-  // existing return block.
-  SmallVector<BranchInst *, 2> BranchesToChange;
-  for (BasicBlock *Pred : predecessors(ReturnBB))
-    BranchesToChange.push_back(cast<BranchInst>(Pred->getTerminator()));
+  // We replace all branches to the return block in the newly created outlined
+  // function to point to the new PHIBlock.
+  ReturnBB->replaceAllUsesWith(PHIBlock);
 
-  // Now we mark the branch instructions found, and change the references of the
-  // return block to the newly created PHIBlock.
-  for (BranchInst *BI : BranchesToChange)
-    for (unsigned Succ = 0, End = BI->getNumSuccessors(); Succ < End; Succ++) {
-      if (BI->getSuccessor(Succ) != ReturnBB)
-        continue;
-      BI->setSuccessor(Succ, PHIBlock);
-    }
-
-  BranchInst::Create(ReturnBB, PHIBlock);
+  UncondBrInst::Create(ReturnBB, PHIBlock);
 
   return PhiBlockForRetVal->second;
 }
@@ -1592,7 +1559,7 @@ static Value *
 getPassedArgumentAndAdjustArgumentLocation(const Argument *A,
                                            const OutlinableRegion &Region) {
   unsigned ArgNum = A->getArgNo();
-  
+
   // If it is a constant, we can look at our mapping from when we created
   // the outputs to figure out what the constant value is.
   if (auto It = Region.AggArgToConstant.find(ArgNum);
@@ -1664,8 +1631,8 @@ findOrCreatePHIInBlock(PHINode &PN, OutlinableRegion &Region,
                        const DenseMap<Value *, Value *> &OutputMappings,
                        DenseSet<PHINode *> &UsedPHIs) {
   OutlinableGroup &Group = *Region.Parent;
-  
-  
+
+
   // A list of the canonical numbering assigned to each incoming value, paired
   // with the incoming block for the PHINode passed into this function.
   SmallVector<std::pair<unsigned, BasicBlock *>> PNCanonNums;
@@ -1757,13 +1724,12 @@ findOrCreatePHIInBlock(PHINode &PN, OutlinableRegion &Region,
       NewPN->setIncomingValue(Idx, Val);
       continue;
     }
-    
+
     // Find the corresponding value in the overall function.
     IncomingVal = findOutputMapping(OutputMappings, IncomingVal);
     Value *Val = Region.findCorrespondingValueIn(*FirstRegion, IncomingVal);
     assert(Val && "Value is nullptr?");
-    DenseMap<Value *, Value *>::iterator RemappedIt =
-        FirstRegion->RemappedArguments.find(Val);
+    auto RemappedIt = FirstRegion->RemappedArguments.find(Val);
     if (RemappedIt != FirstRegion->RemappedArguments.end())
       Val = RemappedIt->second;
     NewPN->setIncomingValue(Idx, Val);
@@ -1956,8 +1922,7 @@ std::optional<unsigned> findDuplicateOutputBlock(
   for (DenseMap<Value *, BasicBlock *> &CompBBs : OutputStoreBBs) {
     Mismatch = false;
     for (std::pair<Value *, BasicBlock *> &VToB : CompBBs) {
-      DenseMap<Value *, BasicBlock *>::iterator OutputBBIt =
-          OutputBBs.find(VToB.first);
+      auto OutputBBIt = OutputBBs.find(VToB.first);
       if (OutputBBIt == OutputBBs.end()) {
         Mismatch = true;
         break;
@@ -1972,7 +1937,7 @@ std::optional<unsigned> findDuplicateOutputBlock(
 
       BasicBlock::iterator NIt = OutputBB->begin();
       for (Instruction &I : *CompBB) {
-        if (isa<BranchInst>(&I))
+        if (isa<UncondBrInst, CondBrInst>(&I))
           continue;
 
         if (!I.isIdenticalTo(&(*NIt))) {
@@ -2009,7 +1974,7 @@ analyzeAndPruneOutputBlocks(DenseMap<Value *, BasicBlock *> &BlocksToPrune,
   for (std::pair<Value *, BasicBlock *> &VtoBB : BlocksToPrune) {
     RetValueForBB = VtoBB.first;
     NewBB = VtoBB.second;
-  
+
     // If there are no instructions, we remove it from the module, and also
     // mark the value for removal from the return value to output block mapping.
     if (NewBB->size() == 0) {
@@ -2017,7 +1982,7 @@ analyzeAndPruneOutputBlocks(DenseMap<Value *, BasicBlock *> &BlocksToPrune,
       ToRemove.push_back(RetValueForBB);
       continue;
     }
-    
+
     // Mark that we could not remove all the blocks since they were not all
     // empty.
     AllRemoved = false;
@@ -2030,7 +1995,7 @@ analyzeAndPruneOutputBlocks(DenseMap<Value *, BasicBlock *> &BlocksToPrune,
   // Mark the region as having the no output scheme.
   if (AllRemoved)
     Region.OutputBlockNum = -1;
-  
+
   return AllRemoved;
 }
 
@@ -2082,12 +2047,11 @@ static void alignOutputBlockWithAggFunc(
   for (std::pair<Value *, BasicBlock *> &VtoBB : OutputBBs) {
     RetValueForBB = VtoBB.first;
     NewBB = VtoBB.second;
-    DenseMap<Value *, BasicBlock *>::iterator VBBIt =
-        EndBBs.find(RetValueForBB);
+    auto VBBIt = EndBBs.find(RetValueForBB);
     LLVM_DEBUG(dbgs() << "Create output block for region in"
                       << Region.ExtractedFunction << " to "
                       << *NewBB);
-    BranchInst::Create(VBBIt->second, NewBB);
+    UncondBrInst::Create(VBBIt->second, NewBB);
     OutputStoreBBs.back().insert(std::make_pair(RetValueForBB, NewBB));
   }
 }
@@ -2106,7 +2070,7 @@ static void createAndInsertBasicBlocks(DenseMap<Value *, BasicBlock *> &OldMap,
                                        Function *ParentFunc, Twine BaseName) {
   unsigned Idx = 0;
   std::vector<Value *> SortedKeys;
-  
+
   getSortedConstantKeys(SortedKeys, OldMap);
 
   for (Value *RetVal : SortedKeys) {
@@ -2161,8 +2125,7 @@ void createSwitchStatement(
 
       unsigned Idx = 0;
       for (DenseMap<Value *, BasicBlock *> &OutputStoreBB : OutputStoreBBs) {
-        DenseMap<Value *, BasicBlock *>::iterator OSBBIt =
-            OutputStoreBB.find(OutputBlock.first);
+        auto OSBBIt = OutputStoreBB.find(OutputBlock.first);
 
         if (OSBBIt == OutputStoreBB.end())
           continue;
@@ -2191,8 +2154,7 @@ void createSwitchStatement(
                       << *OG.OutlinedFunction << "\n");
     DenseMap<Value *, BasicBlock *> OutputBlocks = OutputStoreBBs[0];
     for (std::pair<Value *, BasicBlock *> &VBPair : OutputBlocks) {
-      DenseMap<Value *, BasicBlock *>::iterator EndBBIt =
-          EndBBs.find(VBPair.first);
+      auto EndBBIt = EndBBs.find(VBPair.first);
       assert(EndBBIt != EndBBs.end() && "Could not find end block");
       BasicBlock *EndBB = EndBBIt->second;
       BasicBlock *OutputBB = VBPair.second;
@@ -2206,25 +2168,13 @@ void createSwitchStatement(
   }
 }
 
-/// Fill the new function that will serve as the replacement function for all of
-/// the extracted regions of a certain structure from the first region in the
-/// list of regions.  Replace this first region's extracted function with the
-/// new overall function.
-///
-/// \param [in] M - The module we are outlining from.
-/// \param [in] CurrentGroup - The group of regions to be outlined.
-/// \param [in,out] OutputStoreBBs - The output blocks for each different
-/// set of stores needed for the different functions.
-/// \param [in,out] FuncsToRemove - Extracted functions to erase from module
-/// once outlining is complete.
-/// \param [in] OutputMappings - Extracted functions to erase from module
-/// once outlining is complete.
-static void fillOverallFunction(
+void IROutliner::fillOverallFunction(
     Module &M, OutlinableGroup &CurrentGroup,
     std::vector<DenseMap<Value *, BasicBlock *>> &OutputStoreBBs,
-    std::vector<Function *> &FuncsToRemove,
-    const DenseMap<Value *, Value *> &OutputMappings) {
+    std::vector<Function *> &FuncsToRemove) {
   OutlinableRegion *CurrentOS = CurrentGroup.Regions[0];
+
+  TargetTransformInfo &TTI = getTTI(*CurrentOS->StartBB->getParent());
 
   // Move first extracted function's instructions into new function.
   LLVM_DEBUG(dbgs() << "Move instructions from "
@@ -2234,8 +2184,14 @@ static void fillOverallFunction(
                    *CurrentGroup.OutlinedFunction, CurrentGroup.EndBBs);
 
   // Transfer the attributes from the function to the new function.
-  for (Attribute A : CurrentOS->ExtractedFunction->getAttributes().getFnAttrs())
+  for (Attribute A :
+       CurrentOS->ExtractedFunction->getAttributes().getFnAttrs()) {
+    if (!TTI.shouldCopyAttributeWhenOutliningFrom(CurrentOS->ExtractedFunction,
+                                                  A))
+      continue;
+
     CurrentGroup.OutlinedFunction->addFnAttr(A);
+  }
 
   // Create a new set of output blocks for the first extracted function.
   DenseMap<Value *, BasicBlock *> NewBBs;
@@ -2252,10 +2208,9 @@ static void fillOverallFunction(
   if (!analyzeAndPruneOutputBlocks(NewBBs, *CurrentOS)) {
     OutputStoreBBs.push_back(DenseMap<Value *, BasicBlock *>());
     for (std::pair<Value *, BasicBlock *> &VToBB : NewBBs) {
-      DenseMap<Value *, BasicBlock *>::iterator VBBIt =
-          CurrentGroup.EndBBs.find(VToBB.first);
+      auto VBBIt = CurrentGroup.EndBBs.find(VToBB.first);
       BasicBlock *EndBB = VBBIt->second;
-      BranchInst::Create(EndBB, VToBB.second);
+      UncondBrInst::Create(EndBB, VToBB.second);
       OutputStoreBBs.back().insert(VToBB);
     }
   }
@@ -2277,8 +2232,7 @@ void IROutliner::deduplicateExtractedSections(
 
   OutlinableRegion *CurrentOS;
 
-  fillOverallFunction(M, CurrentGroup, OutputStoreBBs, FuncsToRemove,
-                      OutputMappings);
+  fillOverallFunction(M, CurrentGroup, OutputStoreBBs, FuncsToRemove);
 
   for (unsigned Idx = 1; Idx < CurrentGroup.Regions.size(); Idx++) {
     CurrentOS = CurrentGroup.Regions[Idx];
@@ -2326,8 +2280,7 @@ static bool nextIRInstructionDataMatchesNextInst(IRInstructionData &ID) {
   if (!ID.Inst->isTerminator())
     NextModuleInst = ID.Inst->getNextNode();
   else if (NextIDLInst != nullptr)
-    NextModuleInst =
-        &*NextIDIt->Inst->getParent()->instructionsWithoutDebug().begin();
+    NextModuleInst = &*NextIDIt->Inst->getParent()->begin();
 
   if (NextIDLInst && NextIDLInst != NextModuleInst)
     return false;
@@ -2389,7 +2342,7 @@ void IROutliner::pruneIncompatibleRegions(
   // outlinining a call instruction, we ignore it as a space saving.
   if (FirstCandidate.getLength() == 2) {
     if (isa<CallInst>(FirstCandidate.front()->Inst) &&
-        isa<BranchInst>(FirstCandidate.back()->Inst))
+        isa<UncondBrInst, CondBrInst>(FirstCandidate.back()->Inst))
       return;
   }
 
@@ -2421,7 +2374,7 @@ void IROutliner::pruneIncompatibleRegions(
     if (FnForCurrCand.hasOptNone())
       continue;
 
-    if (FnForCurrCand.hasFnAttribute("nooutline")) {
+    if (FnForCurrCand.hasFnAttribute(Attribute::NoOutline)) {
       LLVM_DEBUG({
         dbgs() << "... Skipping function with nooutline attribute: "
                << FnForCurrCand.getName() << "\n";
@@ -2546,7 +2499,7 @@ static InstructionCost findCostForOutputBlocks(Module &M,
   // of the region.
   DenseSet<BasicBlock *> FoundBlocks;
   for (IRInstructionData &ID : Candidate) {
-    if (!isa<BranchInst>(ID.Inst))
+    if (!isa<UncondBrInst, CondBrInst>(ID.Inst))
       continue;
 
     for (Value *V : ID.OperVals) {
@@ -2575,8 +2528,8 @@ static InstructionCost findCostForOutputBlocks(Module &M,
       OutputCost += StoreCost * NumOutputBranches;
     }
 
-    InstructionCost BranchCost =
-        TTI.getCFInstrCost(Instruction::Br, TargetTransformInfo::TCK_CodeSize);
+    InstructionCost BranchCost = TTI.getCFInstrCost(
+        Instruction::UncondBr, TargetTransformInfo::TCK_CodeSize);
     LLVM_DEBUG(dbgs() << "Adding " << BranchCost << " to the current cost for"
                       << " a branch instruction\n");
     OutputCost += BranchCost * NumOutputBranches;
@@ -2589,8 +2542,8 @@ static InstructionCost findCostForOutputBlocks(Module &M,
         Instruction::ICmp, Type::getInt32Ty(M.getContext()),
         Type::getInt32Ty(M.getContext()), CmpInst::BAD_ICMP_PREDICATE,
         TargetTransformInfo::TCK_CodeSize);
-    InstructionCost BranchCost =
-        TTI.getCFInstrCost(Instruction::Br, TargetTransformInfo::TCK_CodeSize);
+    InstructionCost BranchCost = TTI.getCFInstrCost(
+        Instruction::CondBr, TargetTransformInfo::TCK_CodeSize);
 
     unsigned DifferentBlocks = CurrentGroup.OutputGVNCombinations.size();
     InstructionCost TotalCost = ComparisonCost * BranchCost * DifferentBlocks;
