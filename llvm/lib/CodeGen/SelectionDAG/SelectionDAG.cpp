@@ -11536,10 +11536,22 @@ SDValue SelectionDAG::simplifySelect(SDValue Cond, SDValue T, SDValue F) {
   // select, ?, T, undef --> T
   if (Cond.isUndef())
     return isConstantValueOfAnyType(T) ? T : F;
-  if (T.isUndef())
-    return isGuaranteedNotToBePoison(F) ? F : getFreeze(F);
-  if (F.isUndef())
-    return isGuaranteedNotToBePoison(T) ? T : getFreeze(T);
+  // Only freeze when arm has poison flags; always-freezing cycles with
+  // visitFREEZE on large IR (ROCm/llvm-project#2616).
+  if (T.isUndef()) {
+    if (isGuaranteedNotToBePoison(F))
+      return F;
+    if (F->hasPoisonGeneratingFlags())
+      return getFreeze(F);
+    return SDValue();
+  }
+  if (F.isUndef()) {
+    if (isGuaranteedNotToBePoison(T))
+      return T;
+    if (T->hasPoisonGeneratingFlags())
+      return getFreeze(T);
+    return SDValue();
+  }
 
   // select true, T, F --> T
   // select false, T, F --> F

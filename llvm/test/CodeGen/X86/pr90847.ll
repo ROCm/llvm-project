@@ -16,7 +16,8 @@ define i32 @PR90847(<8 x float> %x) nounwind {
 ; AVX1-NEXT:    vcmpeqps %ymm0, %ymm1, %ymm0
 ; AVX1-NEXT:    vmovmskps %ymm0, %ecx
 ; AVX1-NEXT:    movl $32, %eax
-; AVX1-NEXT:    rep bsfl %ecx, %eax
+; AVX1-NEXT:    bsfl %ecx, %eax
+; AVX1-NEXT:    cmovel %eax, %eax
 ; AVX1-NEXT:    vzeroupper
 ; AVX1-NEXT:    retq
 ;
@@ -31,7 +32,8 @@ define i32 @PR90847(<8 x float> %x) nounwind {
 ; AVX2-NEXT:    vcmpeqps %ymm0, %ymm1, %ymm0
 ; AVX2-NEXT:    vmovmskps %ymm0, %ecx
 ; AVX2-NEXT:    movl $32, %eax
-; AVX2-NEXT:    rep bsfl %ecx, %eax
+; AVX2-NEXT:    bsfl %ecx, %eax
+; AVX2-NEXT:    cmovel %eax, %eax
 ; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    retq
 entry:

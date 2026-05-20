@@ -1155,6 +1155,9 @@ define <4 x float> @foo() {
 ; CHECK-NEXT:    vmovss {{.*#+}} xmm0 = mem[0],zero,zero,zero
 ; CHECK-NEXT:    # EVEX TO VEX Compression encoding: [0xc5,0xfa,0x10,0x00]
 ; CHECK-NEXT:    vfmsub213ss {rd-sae}, %xmm0, %xmm0, %xmm0 # encoding: [0x62,0xf2,0x7d,0x38,0xab,0xc0]
+; CHECK-NEXT:    movb $1, %al # encoding: [0xb0,0x01]
+; CHECK-NEXT:    kmovw %eax, %k1 # encoding: [0xc5,0xf8,0x92,0xc8]
+; CHECK-NEXT:    vmovss %xmm0, %xmm0, %xmm0 {%k1} # encoding: [0x62,0xf1,0x7e,0x09,0x10,0xc0]
 ; CHECK-NEXT:    ret{{[l|q]}} # encoding: [0xc3]
 entry:
   %0 = load <4 x float>, ptr undef, align 16
