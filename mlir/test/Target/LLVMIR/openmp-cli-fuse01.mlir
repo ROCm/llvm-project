@@ -1,5 +1,5 @@
 // RUN: mlir-translate -mlir-to-llvmir %s | FileCheck %s --enable-var-scope
-
+// REQUIRES: stability
 
 llvm.func @fuse_trivial_loops(%baseptr: !llvm.ptr, %tc1: i32, %tc2: i32) -> () {
   %literal_cli1 = omp.new_cli
