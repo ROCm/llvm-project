@@ -14,6 +14,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/STLExtras.h"
 #include <comgr-unpackage-command.h>
 
 #include <llvm/ADT/StringMap.h>
@@ -92,10 +93,9 @@ Expected<StringRef> UnpackageCommand::readExecuteOutput() {
 
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   StringMap<StringRef> Worklist;
-  const auto *Output = OutputFileNames.begin();
-  for (auto &Target : TargetNames) {
-    Worklist[Target] = *Output;
-    ++Output;
+  for (const auto &[Output, Target] :
+       llvm::zip_equal(OutputFileNames, TargetNames)) {
+    Worklist[Target] = Output;
   }
 
   for (const llvm::object::OffloadFile &File : Files) {

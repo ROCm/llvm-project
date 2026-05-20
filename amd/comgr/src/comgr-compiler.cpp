@@ -37,6 +37,7 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Options/Options.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -1903,31 +1904,26 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       if (auto Status = Unpackage.execute(LogS))
         return Status;
 
-    auto *DataKind = DataKinds.begin();
-    for (StringRef OutputFilePath : OutputFileNames) {
+    for (const auto &[DataKind, OutputFilePath] :
+         llvm::zip_equal(DataKinds, OutputFileNames)) {
 
       amd_comgr_data_t ResultT;
 
-      if (auto Status = amd_comgr_create_data(*DataKind, &ResultT)) {
+      if (auto Status = amd_comgr_create_data(DataKind, &ResultT))
         return Status;
-      }
 
       // ResultT can be released after addition to the data_set
       ScopedDataObjectReleaser SDOR(ResultT);
 
       DataObject *Result = DataObject::convert(ResultT);
-      if (auto Status = inputFromFile(Result, OutputFilePath)) {
+      if (auto Status = inputFromFile(Result, OutputFilePath))
         return Status;
-      }
 
       StringRef OutputFileName = sys::path::filename(OutputFilePath);
       Result->setName(OutputFileName);
 
-      if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT)) {
+      if (auto Status = amd_comgr_data_set_add(OutSetT, ResultT))
         return Status;
-      }
-
-      ++DataKind;
     }
   }
 
