@@ -28,19 +28,21 @@ TEST(ElfView, RejectsNonElfInput) {
   llvm::consumeError(ViewOrErr.takeError());
 }
 
-// -- ElfView::getKernelLdsSize ------------------------------------------------
+// -- ElfView::getKernelStaticLdsSize ------------------------------------------
 //
-// getKernelLdsSize reads group_segment_fixed_size from a kernel descriptor
-// symbol "<KernelName>.kd". Two unit tests cover the helper:
+// getKernelStaticLdsSize reads group_segment_fixed_size (the *static* LDS
+// allocation; dynamic LDS is set by the host at dispatch time and not
+// visible in the ELF) from a kernel descriptor symbol "<KernelName>.kd".
+// Two unit tests cover the helper:
 //   * negative path: no .kd symbol -> std::nullopt
 //   * positive path: hand-crafted ELF with a .kd symbol pointing at an
 //                    embedded kernel descriptor -> the embedded LDS size
 // Real gfx1250 code-object coverage is added by the lit tests in #2302.
 
-TEST(ElfView, GetKernelLdsSizeReturnsNulloptWhenKdMissing) {
+TEST(ElfView, GetKernelStaticLdsSizeReturnsNulloptWhenKdMissing) {
   // Build a minimal valid ELF64: header + .text + .shstrtab. ELFFile::create
-  // succeeds, but no .kd symbol exists, so getKernelLdsSize must take the
-  // missing-KD branch.
+  // succeeds, but no .kd symbol exists, so getKernelStaticLdsSize must take
+  // the missing-KD branch.
   using namespace llvm::ELF;
   static constexpr size_t BufSize = 512;
   alignas(8) uint8_t Buf[BufSize] = {};
@@ -91,16 +93,17 @@ TEST(ElfView, GetKernelLdsSizeReturnsNulloptWhenKdMissing) {
 
   llvm::Expected<ElfView> ViewOrErr = ElfView::create(Buf, BufSize);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  EXPECT_EQ(ViewOrErr->getKernelLdsSize("nonexistent_kernel"), std::nullopt);
+  EXPECT_EQ(ViewOrErr->getKernelStaticLdsSize("nonexistent_kernel"),
+            std::nullopt);
 }
 
-TEST(ElfView, GetKernelLdsSizeReadsLdsSizeFromKernelDescriptor) {
+TEST(ElfView, GetKernelStaticLdsSizeReadsLdsSizeFromKernelDescriptor) {
   // Build a minimal AMDGPU ELF64 with the section topology that
   // findKernelDescriptor walks: 6 sections (NULL, .text, .rodata, .strtab,
   // .symtab, .shstrtab). The kernel descriptor is embedded at the start of
   // .rodata with a known group_segment_fixed_size value, and a symbol named
-  // "test_kernel.kd" in .symtab points at it. getKernelLdsSize must return
-  // the embedded LDS size unchanged.
+  // "test_kernel.kd" in .symtab points at it. getKernelStaticLdsSize must
+  // return the embedded static-LDS size unchanged.
   using namespace llvm::ELF;
   static constexpr size_t BufSize = 1024;
   alignas(8) uint8_t Buf[BufSize] = {};
@@ -213,7 +216,8 @@ TEST(ElfView, GetKernelLdsSizeReadsLdsSizeFromKernelDescriptor) {
 
   llvm::Expected<ElfView> ViewOrErr = ElfView::create(Buf, BufSize);
   ASSERT_TRUE((bool)ViewOrErr) << llvm::toString(ViewOrErr.takeError());
-  std::optional<uint32_t> Lds = ViewOrErr->getKernelLdsSize("test_kernel");
+  std::optional<uint32_t> Lds =
+      ViewOrErr->getKernelStaticLdsSize("test_kernel");
   ASSERT_TRUE(Lds.has_value());
   EXPECT_EQ(*Lds, TestLdsSize);
 }
