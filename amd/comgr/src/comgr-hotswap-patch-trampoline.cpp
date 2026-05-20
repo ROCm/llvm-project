@@ -259,9 +259,12 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
 // After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
 // in the same straight-line block must be incremented by 1 to account for the
 // extra outstanding DS operation -- except when the wait is a drain
-// (s_wait_dscnt 0), which must stay a drain after any number of splits
-// (relaxing it would let split halves escape; see #2585 for the deferred
-// general non-drain refinement).
+// (s_wait_dscnt 0), which must stay a drain after any number of splits.
+// Relaxing a drain would let the split halves escape into a downstream data
+// hazard, so drains are preserved verbatim and only non-drain (K > 0) waits
+// are bumped here. A general dataflow-based bump (computed from the live
+// outstanding-DS count at the wait site) would subsume both cases; that
+// refinement is deferred and tracked outside the source tree.
 //
 // Returns true if a wait was found and bumped, false otherwise.
 //
@@ -300,10 +303,12 @@ bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
       return false;
     if (Op.getImm() == 0)
       return false;
-    // TODO(#2585): the +1 is conservative for K > 0 -- it over-bumps splits
-    // of "must-complete" ops at the wait. That's suboptimal stall behavior,
-    // never a hazard. The drain (K == 0) over-bump WOULD be a hazard and is
-    // handled above; the general fix needs outstanding-DS analysis.
+    // The +1 here is conservative for K > 0: it over-bumps splits of
+    // "must-complete" operations at the wait site. That is a suboptimal
+    // stall, never a correctness hazard. The drain (K == 0) over-bump
+    // WOULD be a hazard and is handled by the early return above. A
+    // precise replacement needs outstanding-DS dataflow at the wait
+    // site, which subsumes the drain special-case naturally.
     Op.setImm(Op.getImm() + 1);
 
     SmallVector<char, 8> Bytes;

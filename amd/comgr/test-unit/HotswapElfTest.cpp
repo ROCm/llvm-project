@@ -12,6 +12,8 @@
 
 using namespace COMGR::hotswap;
 
+// -- ElfView::create ----------------------------------------------------------
+
 TEST(ElfView, RejectsTruncatedInput) {
   uint8_t Garbage[] = {0x7f, 'E', 'L', 'F', 0, 0, 0, 0};
   llvm::Expected<ElfView> ViewOrErr = ElfView::create(Garbage, sizeof(Garbage));
