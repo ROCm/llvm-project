@@ -242,7 +242,7 @@ bool CodeGenModule::tryEmitCUDADeviceInvalidFunctionBody(GlobalDecl GD,
   if (!getLangOpts().CUDAIsDevice)
     return false;
   const auto *FD = dyn_cast<FunctionDecl>(GD.getDecl());
-  if (!FD || !getContext().CUDADeviceInvalidFuncs.count(FD))
+  if (!FD || !getContext().CUDADeviceInvalidFuncs.count(FD->getCanonicalDecl()))
     return false;
   llvm::BasicBlock *BB =
       llvm::BasicBlock::Create(getLLVMContext(), "entry", Fn);
