@@ -96,6 +96,54 @@ static bool isSetBankPseudo(unsigned Opcode) {
   }
 }
 
+static bool isSetBankOffsetPseudo(unsigned Opcode) {
+  switch (Opcode) {
+  case AMDGPU::V_SET_BANK_OFFSET_B32:
+  case AMDGPU::V_SET_BANK_OFFSET_B64:
+  case AMDGPU::V_SET_BANK_OFFSET_B128:
+  case AMDGPU::V_SET_BANK_OFFSET_B256:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// Walk the SSA use chain of \p Reg and propagate BankOffsetHints through
+/// COPY, REG_SEQUENCE, INSERT_SUBREG, SUBREG_TO_REG, and PHI so that the
+/// exact physical-register preference survives coalescing AND loop back-edges.
+static void propagateBankOffsetHint(MachineRegisterInfo &MRI, Register Reg,
+                                    unsigned Encoded,
+                                    SmallDenseSet<unsigned, 32> &Visited) {
+  if (!Reg.isVirtual() || !Visited.insert(Reg.id()).second)
+    return;
+
+  for (MachineInstr &UseMI : MRI.use_nodbg_instructions(Reg)) {
+    Register DefReg;
+    switch (UseMI.getOpcode()) {
+    case TargetOpcode::COPY:
+    case TargetOpcode::REG_SEQUENCE:
+    case TargetOpcode::INSERT_SUBREG:
+    case TargetOpcode::SUBREG_TO_REG:
+    case TargetOpcode::PHI:
+      DefReg = UseMI.getOperand(0).getReg();
+      break;
+    default:
+      continue;
+    }
+    if (!DefReg.isVirtual())
+      continue;
+
+    const auto &Existing = MRI.getRegAllocationHint(DefReg);
+    // Don't overwrite a stronger or conflicting hint.
+    if (Existing.first != 0 &&
+        (Existing.first != AMDGPURI::BankOffsetHint || Existing.second != Encoded))
+      continue;
+
+    MRI.setRegAllocationHint(DefReg, AMDGPURI::BankOffsetHint, Encoded);
+    propagateBankOffsetHint(MRI, DefReg, Encoded, Visited);
+  }
+}
+
 bool AMDGPUSetBankHints::runOnMachineFunction(MachineFunction &MF) {
   const GCNSubtarget &ST = MF.getSubtarget<GCNSubtarget>();
   if (!ST.has1024AddressableVGPRs())
@@ -109,35 +157,63 @@ bool AMDGPUSetBankHints::runOnMachineFunction(MachineFunction &MF) {
 
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB) {
-      if (!isSetBankPseudo(MI.getOpcode()))
-        continue;
+      if (isSetBankPseudo(MI.getOpcode())) {
+        Register DstReg = MI.getOperand(0).getReg();
+        Register SrcReg = MI.getOperand(1).getReg();
+        unsigned Bank = MI.getOperand(2).getImm();
 
-      Register DstReg = MI.getOperand(0).getReg();
-      Register SrcReg = MI.getOperand(1).getReg();
-      unsigned Bank = MI.getOperand(2).getImm();
+        if (Bank > 3)
+          Bank = 0;
 
-      if (Bank > 3)
-        Bank = 0;
+        // Set bank hint on both destination and source vregs so the hint
+        // survives COPY coalescing regardless of which register is eliminated.
+        if (DstReg.isVirtual())
+          MRI.setRegAllocationHint(DstReg, AMDGPURI::BankHint, Bank);
+        if (SrcReg.isVirtual())
+          MRI.setRegAllocationHint(SrcReg, AMDGPURI::BankHint, Bank);
 
-      // Set bank hint on both destination and source vregs so the hint
-      // survives COPY coalescing regardless of which register is eliminated.
-      if (DstReg.isVirtual())
-        MRI.setRegAllocationHint(DstReg, AMDGPURI::BankHint, Bank);
-      if (SrcReg.isVirtual())
-        MRI.setRegAllocationHint(SrcReg, AMDGPURI::BankHint, Bank);
+        // Propagate hints through REG_SEQUENCE / COPY / INSERT_SUBREG so
+        // the bank preference reaches larger registers that survive coalescing.
+        SmallDenseSet<unsigned, 32> Visited;
+        if (DstReg.isVirtual())
+          propagateBankHint(MRI, DstReg, Bank, Visited);
 
-      // Propagate hints through REG_SEQUENCE / COPY / INSERT_SUBREG so
-      // the bank preference reaches larger registers that survive coalescing.
-      SmallDenseSet<unsigned, 32> Visited;
-      if (DstReg.isVirtual())
-        propagateBankHint(MRI, DstReg, Bank, Visited);
+        // Replace pseudo with COPY.
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY), DstReg)
+            .addReg(SrcReg, getRegState(MI.getOperand(1)));
 
-      // Replace pseudo with COPY.
-      BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY), DstReg)
-          .addReg(SrcReg, getRegState(MI.getOperand(1)));
+        ToErase.push_back(&MI);
+        Changed = true;
+      } else if (isSetBankOffsetPseudo(MI.getOpcode())) {
+        Register DstReg = MI.getOperand(0).getReg();
+        Register SrcReg = MI.getOperand(1).getReg();
+        unsigned Bank   = MI.getOperand(2).getImm();
+        unsigned Offset = MI.getOperand(3).getImm();
 
-      ToErase.push_back(&MI);
-      Changed = true;
+        if (Bank > 3) Bank = 0;
+        if (Offset > 255) Offset = 0;
+
+        // Encode bank+offset as a single value for BankOffsetHint:
+        //   encoded = bank * 256 + offset  (== target HWIdx in the bank)
+        unsigned Encoded = Bank * 256 + Offset;
+
+        if (DstReg.isVirtual())
+          MRI.setRegAllocationHint(DstReg, AMDGPURI::BankOffsetHint, Encoded);
+        if (SrcReg.isVirtual())
+          MRI.setRegAllocationHint(SrcReg, AMDGPURI::BankOffsetHint, Encoded);
+
+        // Propagate through COPY/PHI chains so the hint survives coalescing
+        // and loop back-edges (scf.for_ → PHI nodes in MIR).
+        SmallDenseSet<unsigned, 32> VisitedOff;
+        if (DstReg.isVirtual())
+          propagateBankOffsetHint(MRI, DstReg, Encoded, VisitedOff);
+
+        BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY), DstReg)
+            .addReg(SrcReg, getRegState(MI.getOperand(1)));
+
+        ToErase.push_back(&MI);
+        Changed = true;
+      }
     }
   }
 

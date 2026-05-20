@@ -142,6 +142,18 @@ let isAsCheapAsAMove = 1, isReMaterializable = 1, hasSideEffects = 0,
                                        (ins VReg_128:$src, i32imm:$bank)>;
   def V_SET_BANK_B256 : VPseudoInstSI<(outs VReg_256:$vdst),
                                        (ins VReg_256:$src, i32imm:$bank)>;
+
+  // Pinned variants: carry both bank and offset within the bank (0-255).
+  // The pre-RA pass sets BankOffsetHint = bank*256+offset so the allocator
+  // targets exactly that one physical register (single-candidate hint).
+  def V_SET_BANK_OFFSET_B32 : VPseudoInstSI<(outs VGPR_32:$vdst),
+                                      (ins VGPR_32:$src, i32imm:$bank, i32imm:$offset)>;
+  def V_SET_BANK_OFFSET_B64 : VPseudoInstSI<(outs VReg_64:$vdst),
+                                      (ins VReg_64:$src, i32imm:$bank, i32imm:$offset)>;
+  def V_SET_BANK_OFFSET_B128 : VPseudoInstSI<(outs VReg_128:$vdst),
+                                       (ins VReg_128:$src, i32imm:$bank, i32imm:$offset)>;
+  def V_SET_BANK_OFFSET_B256 : VPseudoInstSI<(outs VReg_256:$vdst),
+                                       (ins VReg_256:$src, i32imm:$bank, i32imm:$offset)>;
 }
 
 // 64-bit vector move instruction. This is mainly used by the

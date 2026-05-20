@@ -3930,9 +3930,66 @@ bool SIRegisterInfo::getRegAllocationHints(Register VirtReg,
     }
     return false;
   }
-  default:
+  case AMDGPURI::BankOffsetHint: {
+    // Encoded = bank * 256 + offset → exact target HWIdx.
+    // Push only the single physical register matching that HWIdx so the
+    // allocator has one strong candidate (no fallback within the bank).
+    unsigned TargetHWIdx = Hint.second;
+    for (MCPhysReg PhysReg : Order) {
+      if (getHWRegIndex(PhysReg) == TargetHWIdx) {
+        Hints.push_back(PhysReg);
+        break;
+      }
+    }
+    return false;
+  }
+  default: {
+    // For gfx1250 with 1024 addressable VGPRs: the RegisterCoalescer overwrites
+    // BankHint/BankOffsetHint (type 3/4) with a type-0 coalescing hint when it
+    // processes COPY chains from V_SET_BANK_* pseudos.  Recover the original
+    // bank preference by walking the COPY chain up to 4 levels, looking for a
+    // vreg that still carries BankOffsetHint or BankHint.
+    if (Hint.first == 0 && Hint.second.isVirtual() &&
+        ST.has1024AddressableVGPRs()) {
+      Register Cur = Hint.second;
+      for (int Depth = 0; Depth < 4 && Cur.isVirtual(); ++Depth) {
+        auto [HT, HV] = MRI.getRegAllocationHint(Cur);
+        if (HT == AMDGPURI::BankOffsetHint) {
+          unsigned TargetHWIdx = HV;
+          for (MCPhysReg PhysReg : Order) {
+            if (getHWRegIndex(PhysReg) == TargetHWIdx) {
+              Hints.push_back(PhysReg);
+              break;
+            }
+          }
+          return false;
+        }
+        if (HT == AMDGPURI::BankHint && HV <= 3) {
+          unsigned BankStart = HV * 256, BankEnd = BankStart + 256;
+          for (MCPhysReg PhysReg : Order) {
+            unsigned HWIdx = getHWRegIndex(PhysReg);
+            if (HWIdx >= BankStart && HWIdx < BankEnd)
+              Hints.push_back(PhysReg);
+          }
+          return false;
+        }
+        // Walk one step back through a COPY def.
+        // Use def_instr_iterator to avoid the getVRegDef SSA assertion
+        // (after PHI elimination a vreg may have multiple defs).
+        const MachineInstr *DefMI = nullptr;
+        for (const MachineInstr &D : MRI.def_instructions(Cur)) {
+          if (DefMI) { DefMI = nullptr; break; }  // multiple defs → stop
+          DefMI = &D;
+        }
+        if (!DefMI || DefMI->getOpcode() != TargetOpcode::COPY) break;
+        const MachineOperand &SrcOp = DefMI->getOperand(1);
+        if (!SrcOp.isReg() || !SrcOp.getReg().isVirtual()) break;
+        Cur = SrcOp.getReg();
+      }
+    }
     return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF,
                                                      VRM);
+  }
   }
 }
 

@@ -4270,4 +4270,12 @@ def int_amdgcn_dead: DefaultAttrsIntrinsic<[llvm_any_ty], [],
 def int_amdgcn_set_vgpr_bank : DefaultAttrsIntrinsic<
   [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty],
   [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+
+// Like set_vgpr_bank but also pins to a specific register offset within the
+// bank (0-255). Encodes bank=[1:0] offset=[7:0] as two separate immediates.
+// The pre-RA pass sets a BankOffsetHint so the allocator targets exactly
+// bank*256+offset, giving a single-candidate hint (much stronger than BankHint).
+def int_amdgcn_set_vgpr_bank_offset : DefaultAttrsIntrinsic<
+  [llvm_any_ty], [LLVMMatchType<0>, llvm_i32_ty, llvm_i32_ty],
+  [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 }

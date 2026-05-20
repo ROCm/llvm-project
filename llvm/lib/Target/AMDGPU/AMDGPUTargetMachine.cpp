@@ -1681,6 +1681,7 @@ void GCNPassConfig::addOptimizedRegAlloc() {
   if (EnableDCEInRA)
     insertPass(&DetectDeadLanesID, &DeadMachineInstructionElimID);
 
+
   // FIXME: when an instruction has a Killed operand, and the instruction is
   // inside a bundle, seems only the BUNDLE instruction appears as the Kills of
   // the register in LiveVariables, this would trigger a failure in verifier,
