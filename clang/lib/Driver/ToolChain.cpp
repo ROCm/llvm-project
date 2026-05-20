@@ -1802,8 +1802,6 @@ SanitizerMask ToolChain::getSupportedSanitizers() const {
     Res |= SanitizerKind::MemTag;
   if (getTriple().isBPF())
     Res |= SanitizerKind::KernelAddress;
-  if (getTriple().isAMDGPU())
-    Res |= SanitizerKind::Address;
   return Res;
 }
 

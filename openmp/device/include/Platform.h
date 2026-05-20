@@ -21,126 +21,124 @@ namespace platform {
 // define them here.
 extern "C" {
 
-#define USED __attribute__((used))
-
 // Disable unsafe math optimizations in the implementation.
-USED extern const inline bool __oclc_unsafe_math_opt = 0;
+extern const inline bool __oclc_unsafe_math_opt = 0;
 
 // Disable denormalization at zero optimizations in the implementation.
-USED extern const inline bool __oclc_daz_opt = 0;
+extern const inline bool __oclc_daz_opt = 0;
 
 // Disable rounding optimizations for 32-bit square roots.
-USED extern const inline bool __oclc_correctly_rounded_sqrt32 = 1;
+extern const inline bool __oclc_correctly_rounded_sqrt32 = 1;
 
 // Disable finite math optimizations.
-USED extern const inline bool __oclc_finite_only_opt = 0;
+extern const inline bool __oclc_finite_only_opt = 0;
 
 // Spoof this to wave64 since we only compile for a single architecture.
-USED extern const inline bool __oclc_wavefrontsize64 = 1;
+extern const inline bool __oclc_wavefrontsize64 = 1;
 
 // This is only relevant for statically resolving `malloc`, set to COV6.
-USED extern const inline bool __oclc_ABI_version = 600;
+extern const inline bool __oclc_ABI_version = 600;
 
 #if defined(__gfx700__)
-USED extern const inline unsigned __oclc_ISA_version = 7000;
+extern const inline unsigned __oclc_ISA_version = 7000;
 #elif defined(__gfx701__)
-USED extern const inline unsigned __oclc_ISA_version = 7001;
+extern const inline unsigned __oclc_ISA_version = 7001;
 #elif defined(__gfx702__)
-USED extern const inline unsigned __oclc_ISA_version = 7002;
+extern const inline unsigned __oclc_ISA_version = 7002;
 #elif defined(__gfx703__)
-USED extern const inline unsigned __oclc_ISA_version = 7003;
+extern const inline unsigned __oclc_ISA_version = 7003;
 #elif defined(__gfx704__)
-USED extern const inline unsigned __oclc_ISA_version = 7004;
+extern const inline unsigned __oclc_ISA_version = 7004;
 #elif defined(__gfx705__)
-USED extern const inline unsigned __oclc_ISA_version = 7005;
+extern const inline unsigned __oclc_ISA_version = 7005;
 #elif defined(__gfx801__)
-USED extern const inline unsigned __oclc_ISA_version = 8001;
+extern const inline unsigned __oclc_ISA_version = 8001;
 #elif defined(__gfx802__)
-USED extern const inline unsigned __oclc_ISA_version = 8002;
+extern const inline unsigned __oclc_ISA_version = 8002;
 #elif defined(__gfx803__)
-USED extern const inline unsigned __oclc_ISA_version = 8003;
+extern const inline unsigned __oclc_ISA_version = 8003;
 #elif defined(__gfx805__)
-USED extern const inline unsigned __oclc_ISA_version = 8005;
+extern const inline unsigned __oclc_ISA_version = 8005;
 #elif defined(__gfx810__)
-USED extern const inline unsigned __oclc_ISA_version = 8100;
+extern const inline unsigned __oclc_ISA_version = 8100;
 #elif defined(__gfx900__)
-USED extern const inline unsigned __oclc_ISA_version = 9000;
+extern const inline unsigned __oclc_ISA_version = 9000;
 #elif defined(__gfx902__)
-USED extern const inline unsigned __oclc_ISA_version = 9002;
+extern const inline unsigned __oclc_ISA_version = 9002;
 #elif defined(__gfx904__)
-USED extern const inline unsigned __oclc_ISA_version = 9004;
+extern const inline unsigned __oclc_ISA_version = 9004;
 #elif defined(__gfx906__)
-USED extern const inline unsigned __oclc_ISA_version = 9006;
+extern const inline unsigned __oclc_ISA_version = 9006;
 #elif defined(__gfx908__)
-USED extern const inline unsigned __oclc_ISA_version = 9008;
+extern const inline unsigned __oclc_ISA_version = 9008;
 #elif defined(__gfx909__)
-USED extern const inline unsigned __oclc_ISA_version = 9009;
+extern const inline unsigned __oclc_ISA_version = 9009;
 #elif defined(__gfx90a__)
-USED extern const inline unsigned __oclc_ISA_version = 9010;
+extern const inline unsigned __oclc_ISA_version = 9010;
 #elif defined(__gfx90c__)
-USED extern const inline unsigned __oclc_ISA_version = 9012;
+extern const inline unsigned __oclc_ISA_version = 9012;
 #elif defined(__gfx942__)
-USED extern const inline unsigned __oclc_ISA_version = 9402;
+extern const inline unsigned __oclc_ISA_version = 9402;
 #elif defined(__gfx950__)
-USED extern const inline unsigned __oclc_ISA_version = 9500;
+extern const inline unsigned __oclc_ISA_version = 9500;
 #elif defined(__gfx1010__)
-USED extern const inline unsigned __oclc_ISA_version = 10100;
+extern const inline unsigned __oclc_ISA_version = 10100;
 #elif defined(__gfx1011__)
-USED extern const inline unsigned __oclc_ISA_version = 10101;
+extern const inline unsigned __oclc_ISA_version = 10101;
 #elif defined(__gfx1012__)
-USED extern const inline unsigned __oclc_ISA_version = 10102;
+extern const inline unsigned __oclc_ISA_version = 10102;
 #elif defined(__gfx1013__)
-USED extern const inline unsigned __oclc_ISA_version = 10103;
+extern const inline unsigned __oclc_ISA_version = 10103;
 #elif defined(__gfx1030__)
-USED extern const inline unsigned __oclc_ISA_version = 10300;
+extern const inline unsigned __oclc_ISA_version = 10300;
 #elif defined(__gfx1031__)
-USED extern const inline unsigned __oclc_ISA_version = 10301;
+extern const inline unsigned __oclc_ISA_version = 10301;
 #elif defined(__gfx1032__)
-USED extern const inline unsigned __oclc_ISA_version = 10302;
+extern const inline unsigned __oclc_ISA_version = 10302;
 #elif defined(__gfx1033__)
-USED extern const inline unsigned __oclc_ISA_version = 10303;
+extern const inline unsigned __oclc_ISA_version = 10303;
 #elif defined(__gfx1034__)
-USED extern const inline unsigned __oclc_ISA_version = 10304;
+extern const inline unsigned __oclc_ISA_version = 10304;
 #elif defined(__gfx1035__)
-USED extern const inline unsigned __oclc_ISA_version = 10305;
+extern const inline unsigned __oclc_ISA_version = 10305;
 #elif defined(__gfx1036__)
-USED extern const inline unsigned __oclc_ISA_version = 10306;
+extern const inline unsigned __oclc_ISA_version = 10306;
 #elif defined(__gfx1100__)
-USED extern const inline unsigned __oclc_ISA_version = 11000;
+extern const inline unsigned __oclc_ISA_version = 11000;
 #elif defined(__gfx1101__)
-USED extern const inline unsigned __oclc_ISA_version = 11001;
+extern const inline unsigned __oclc_ISA_version = 11001;
 #elif defined(__gfx1102__)
-USED extern const inline unsigned __oclc_ISA_version = 11002;
+extern const inline unsigned __oclc_ISA_version = 11002;
 #elif defined(__gfx1103__)
-USED extern const inline unsigned __oclc_ISA_version = 11003;
+extern const inline unsigned __oclc_ISA_version = 11003;
 #elif defined(__gfx1150__)
-USED extern const inline unsigned __oclc_ISA_version = 11500;
+extern const inline unsigned __oclc_ISA_version = 11500;
 #elif defined(__gfx1151__)
-USED extern const inline unsigned __oclc_ISA_version = 11501;
+extern const inline unsigned __oclc_ISA_version = 11501;
 #elif defined(__gfx1152__)
-USED extern const inline unsigned __oclc_ISA_version = 11502;
+extern const inline unsigned __oclc_ISA_version = 11502;
 #elif defined(__gfx1153__)
-USED extern const inline unsigned __oclc_ISA_version = 11503;
+extern const inline unsigned __oclc_ISA_version = 11503;
 #elif defined(__gfx1200__)
-USED extern const inline unsigned __oclc_ISA_version = 12000;
+extern const inline unsigned __oclc_ISA_version = 12000;
 #elif defined(__gfx1201__)
-USED extern const inline unsigned __oclc_ISA_version = 12001;
+extern const inline unsigned __oclc_ISA_version = 12001;
 #elif defined(__gfx9_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 9000;
+extern const inline unsigned __oclc_ISA_version = 9000;
 #elif defined(__gfx9_4_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 9402;
+extern const inline unsigned __oclc_ISA_version = 9402;
 #elif defined(__gfx10_1_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 10100;
+extern const inline unsigned __oclc_ISA_version = 10100;
 #elif defined(__gfx10_3_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 10300;
+extern const inline unsigned __oclc_ISA_version = 10300;
 #elif defined(__gfx11_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 11003;
+extern const inline unsigned __oclc_ISA_version = 11003;
 #elif defined(__gfx12_generic__)
-USED extern const inline unsigned __oclc_ISA_version = 12000;
+extern const inline unsigned __oclc_ISA_version = 12000;
 #else
 // The only thing this controls that we care about is fast FMA.
 // FIXME: We need to stop relying on the DeviceRTL math libs this way.
-USED extern const inline unsigned __oclc_ISA_version = 7001;
+extern const inline unsigned __oclc_ISA_version = 7001;
 #endif
 }
 
