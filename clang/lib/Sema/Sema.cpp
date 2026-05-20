@@ -2069,9 +2069,65 @@ public:
       checkVar(cast<VarDecl>(D));
   }
 
+  // CUDA/HIP: an implicit __host__ __device__ function reached via an
+  // explicit template instantiation is added as an artificial walker root
+  // so that its body is checked for device-incompatible calls. If such a
+  // function has no organic device caller in this TU and its body would
+  // emit errors, suppress the diagnostics and mark it for trap-body codegen.
+  // Returns true if diags for FD were suppressed.
+  bool maybeSuppressForImplicitHDInst(const FunctionDecl *FD,
+                                      ArrayRef<PartialDiagnosticAt> Diags) {
+    if (!S.LangOpts.CUDAIsDevice)
+      return false;
+    const auto *HAttr = FD->getAttr<CUDAHostAttr>();
+    const auto *DAttr = FD->getAttr<CUDADeviceAttr>();
+    if (!HAttr || !DAttr || !HAttr->isImplicit() || !DAttr->isImplicit())
+      return false;
+    // Reachable via an explicit template instantiation? Either the function
+    // itself is an explicit-inst function template specialization, or it is
+    // a member of an explicitly instantiated class template.
+    auto IsExplicitInstTSK = [](TemplateSpecializationKind TSK) {
+      return TSK == TSK_ExplicitInstantiationDeclaration ||
+             TSK == TSK_ExplicitInstantiationDefinition;
+    };
+    bool IsExplicitInst =
+        IsExplicitInstTSK(FD->getTemplateSpecializationKind());
+    if (!IsExplicitInst) {
+      if (const auto *MD = dyn_cast<CXXMethodDecl>(FD))
+        if (const auto *Spec =
+                dyn_cast<ClassTemplateSpecializationDecl>(MD->getParent()))
+          IsExplicitInst =
+              IsExplicitInstTSK(Spec->getTemplateSpecializationKind());
+    }
+    if (!IsExplicitInst)
+      return false;
+    // Has any organic (non-artificial-root) device caller?
+    auto CallersIt = S.CUDA().DeviceKnownEmittedFns.find(FD);
+    if (CallersIt != S.CUDA().DeviceKnownEmittedFns.end() &&
+        !CallersIt->second.empty())
+      return false;
+    // Only suppress if at least one diag is error-level (would have blocked
+    // compilation). Warnings still propagate normally.
+    bool HasError = false;
+    for (const PartialDiagnosticAt &PDAt : Diags) {
+      if (S.getDiagnostics().getDiagnosticLevel(PDAt.second.getDiagID(),
+                                                PDAt.first) >=
+          DiagnosticsEngine::Error) {
+        HasError = true;
+        break;
+      }
+    }
+    if (!HasError)
+      return false;
+    S.Context.CUDADeviceInvalidFuncs.insert(FD);
+    return true;
+  }
+
   void emitDeferredDiags(const FunctionDecl *FD) {
     auto It = S.DeviceDeferredDiags.find(FD);
     if (It == S.DeviceDeferredDiags.end())
+      return;
+    if (maybeSuppressForImplicitHDInst(FD, It->second))
       return;
     bool HasWarningOrError = false;
     for (PartialDiagnosticAt &PDAt : It->second) {
@@ -2102,6 +2158,41 @@ void Sema::emitDeferredDiags() {
   if (ExternalSource)
     ExternalSource->ReadDeclsToCheckForDeferredDiags(
         DeclsToCheckForDeferredDiags);
+
+  // CUDA/HIP device side: add implicit __host__ __device__ functions reached
+  // via explicit template instantiations as walker roots. This covers
+  // members of explicitly instantiated class templates and explicit
+  // instantiations of function templates. The walker decides whether such a
+  // function would emit device-side errors; if so we suppress them and
+  // CodeGen emits a trap body so the explicit instantiation can compile
+  // even when the body would otherwise pull in host-only callees.
+  if (LangOpts.CUDAIsDevice) {
+    auto IsImplicitHD = [](const FunctionDecl *FD) {
+      const auto *HAttr = FD->getAttr<CUDAHostAttr>();
+      const auto *DAttr = FD->getAttr<CUDADeviceAttr>();
+      return HAttr && DAttr && HAttr->isImplicit() && DAttr->isImplicit();
+    };
+    auto IsExplicitInstTSK = [](TemplateSpecializationKind TSK) {
+      return TSK == TSK_ExplicitInstantiationDeclaration ||
+             TSK == TSK_ExplicitInstantiationDefinition;
+    };
+    for (Decl *D : Context.getTranslationUnitDecl()->decls()) {
+      if (auto *Spec = dyn_cast<ClassTemplateSpecializationDecl>(D)) {
+        if (!IsExplicitInstTSK(Spec->getTemplateSpecializationKind()))
+          continue;
+        CXXRecordDecl *RD = Spec->getDefinition();
+        if (!RD)
+          continue;
+        for (CXXMethodDecl *M : RD->methods())
+          if (IsImplicitHD(M))
+            DeclsToCheckForDeferredDiags.insert(M);
+      } else if (auto *FD = dyn_cast<FunctionDecl>(D)) {
+        if (IsExplicitInstTSK(FD->getTemplateSpecializationKind()) &&
+            IsImplicitHD(FD))
+          DeclsToCheckForDeferredDiags.insert(FD);
+      }
+    }
+  }
 
   if ((DeviceDeferredDiags.empty() && !LangOpts.OpenMP) ||
       DeclsToCheckForDeferredDiags.empty())

@@ -1486,6 +1486,13 @@ public:
   // are needed or if they are alias to each other.
   llvm::Function *codegenCXXStructor(GlobalDecl GD);
 
+  /// If \p GD names a function that Sema's deferred-diag walker marked as
+  /// device-invalid (implicit __host__ __device__ reachable via an explicit
+  /// template instantiation, whose body would emit device-side errors),
+  /// emit a `call @llvm.trap(); ret <T> poison` body into \p Fn and return
+  /// true. Otherwise return false and let the caller emit the real body.
+  bool tryEmitCUDADeviceInvalidFunctionBody(GlobalDecl GD, llvm::Function *Fn);
+
   /// Return the address of the constructor/destructor of the given type.
   llvm::Constant *
   getAddrOfCXXStructor(GlobalDecl GD, const CGFunctionInfo *FnInfo = nullptr,
