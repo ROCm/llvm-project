@@ -707,18 +707,24 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
       std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
       std::optional<uint32_t> LdsSize =
           Ctx.Elf.getKernelStaticLdsSize(KernelName);
-      // LdsSize covers only the static (compile-time-fixed) LDS allocation;
-      // dynamic LDS is added by the host at dispatch and not visible in the
-      // ELF, so this check is a "definitely exceeds 64 KiB" lower bound.
-      // Kernels that fit statically but overflow with dynamic LDS will not
-      // trip this warning.
-      if (LdsSize && *LdsSize > AddtidLdsLimitA0)
-        log() << "hotswap: warning: kernel '" << KernelName << "' uses "
-              << DI.Mnemonic << " with static LDS " << *LdsSize << " bytes (> "
-              << AddtidLdsLimitA0
-              << "); A0 16-bit M0 truncation may produce silently wrong "
-                 "results at 0x"
-              << utohexstr(DI.Offset) << "\n";
+      // Trampoline could not be applied: the original ds_*_addtid_b32 stays
+      // in the code object and will silently truncate M0 to 16 bits on A0
+      // (DEGFXMI400-12025) whenever the runtime LDS layout exceeds 64 KiB.
+      // Static LDS is visible in the kernel descriptor; dynamic LDS added
+      // by the host at dispatch (hidden_dynamic_lds_size kernarg or a
+      // dynamic_shared_pointer user arg) is not. The warning therefore
+      // fires unconditionally rather than gating on the visible lower
+      // bound -- a follow-up will use ElfView::kernelUsesDynamicLds to
+      // tighten the condition to (static>64KiB || dynamicUsed).
+      log() << "hotswap: warning: kernel '" << KernelName << "' uses "
+            << DI.Mnemonic
+            << "; trampoline could not be applied, so A0 16-bit M0"
+               " truncation may produce silently wrong results when runtime"
+               " LDS (static + dynamic) exceeds "
+            << AddtidLdsLimitA0 << " bytes";
+      if (LdsSize)
+        log() << " (static LDS = " << *LdsSize << " bytes)";
+      log() << " at 0x" << utohexstr(DI.Offset) << "\n";
       log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
             << utohexstr(DI.Offset) << ": no scratch VGPR available\n";
       return false;
