@@ -2288,8 +2288,7 @@ bool SIFrameLowering::spillCalleeSavedRegisters(
                 CS.getDstReg())
             .addReg(Reg, getKillRegState(true));
       } else {
-        const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(
-            Reg, Reg == SITRI->getReturnAddressReg(*MF) ? MVT::i64 : MVT::i32);
+        const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
         // If this value was already livein, we probably have a direct use of
         // the incoming register value, so don't kill at the spill point. This
         // happens since we pass some special inputs (workgroup IDs) in the
