@@ -7,8 +7,12 @@
 // COM: addtid.s which exercises the in-place NOP-sled path on the same
 // COM: opcode.
 // COM:
-// COM: DISASM convention: the kernel-local sequence (s_branch, s_wait_dscnt,
-// COM: s_endpgm) is checked with a strict DISASM-NEXT chain. The trampoline
+// COM: DISASM convention: the kernel-local sequence (s_branch, structural
+// COM: s_nop pad, s_wait_dscnt, s_endpgm) is checked with a strict
+// COM: DISASM-NEXT chain. The s_nop is structural: ds_load_addtid_b32 is
+// COM: 8 bytes, s_branch is 4 bytes, so emitToTrampoline always pads the
+// COM: tail half of the original instruction slot with one s_nop -- pinning
+// COM: it here catches any change to that padding scheme. The trampoline
 // COM: body lives in a separate region appended by growWithTrampolines, so
 // COM: the second block uses a non-consecutive 'DISASM:' on v_mbcnt_lo to
 // COM: skip over the kernel terminator and any padding the assembler emits
@@ -35,6 +39,7 @@
 // DISASM-LABEL: <test_addtid_nosled>:
 // DISASM-NOT:   ds_load_addtid_b32
 // DISASM:       s_branch
+// DISASM-NEXT:  s_nop 0
 // DISASM-NEXT:  s_wait_dscnt 0x0
 // DISASM-NEXT:  s_endpgm
 
