@@ -580,10 +580,14 @@ TEST(AddTid, LoadTrampolineAsmAssemblesAndDecodes) {
   ASSERT_TRUE(S.Valid);
 
   // Replacement asm for ds_load_addtid_b32 v7 offset:64.
+  // The v_and_b32 with 0xfffff masks M0 to the 20 bits that B0's DS unit
+  // would have read, keeping the rewrite bit-exact with B0 hardware
+  // regardless of stale bits in M0[31:20] on entry.
   std::string Asm = "v_mbcnt_lo_u32_b32 v7, -1, 0\n"
                     "v_mbcnt_hi_u32_b32 v7, -1, v7\n"
                     "v_lshlrev_b32 v7, 2, v7\n"
                     "v_add_nc_u32 v7, m0, v7\n"
+                    "v_and_b32 v7, 0xfffff, v7\n"
                     "ds_load_b32 v7, v7 offset:64\n";
 
   llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
@@ -591,12 +595,13 @@ TEST(AddTid, LoadTrampolineAsmAssemblesAndDecodes) {
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 5u);
+  ASSERT_EQ(Decoded.size(), 6u);
   EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
   EXPECT_EQ(Decoded[1].Mnemonic, "v_mbcnt_hi_u32_b32");
   EXPECT_EQ(Decoded[2].Mnemonic, "v_lshlrev_b32");
   EXPECT_EQ(Decoded[3].Mnemonic, "v_add_nc_u32");
-  EXPECT_EQ(Decoded[4].Mnemonic, "ds_load_b32");
+  EXPECT_EQ(Decoded[4].Mnemonic, "v_and_b32");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_load_b32");
 }
 
 TEST(AddTid, StoreTrampolineAsmAssemblesAndDecodes) {
@@ -604,11 +609,14 @@ TEST(AddTid, StoreTrampolineAsmAssemblesAndDecodes) {
   ASSERT_TRUE(S.Valid);
 
   // Replacement asm for ds_store_addtid_b32 v10 offset:0 with v42 as the
-  // address-compute scratch (the data VGPR v10 is not clobbered).
+  // address-compute scratch (the data VGPR v10 is not clobbered). The
+  // v_and_b32 with 0xfffff masks M0 to the 20-bit DS-unit width; see
+  // LoadTrampolineAsmAssemblesAndDecodes for the rationale.
   std::string Asm = "v_mbcnt_lo_u32_b32 v42, -1, 0\n"
                     "v_mbcnt_hi_u32_b32 v42, -1, v42\n"
                     "v_lshlrev_b32 v42, 2, v42\n"
                     "v_add_nc_u32 v42, m0, v42\n"
+                    "v_and_b32 v42, 0xfffff, v42\n"
                     "ds_store_b32 v42, v10\n";
 
   llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
@@ -616,12 +624,13 @@ TEST(AddTid, StoreTrampolineAsmAssemblesAndDecodes) {
 
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 5u);
+  ASSERT_EQ(Decoded.size(), 6u);
   EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
   EXPECT_EQ(Decoded[1].Mnemonic, "v_mbcnt_hi_u32_b32");
   EXPECT_EQ(Decoded[2].Mnemonic, "v_lshlrev_b32");
   EXPECT_EQ(Decoded[3].Mnemonic, "v_add_nc_u32");
-  EXPECT_EQ(Decoded[4].Mnemonic, "ds_store_b32");
+  EXPECT_EQ(Decoded[4].Mnemonic, "v_and_b32");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_store_b32");
 }
 
 TEST(AddTid, LoadTrampolineThroughBuildTrampoline) {
@@ -631,7 +640,7 @@ TEST(AddTid, LoadTrampolineThroughBuildTrampoline) {
   std::vector<std::string> AsmLines = {
       "v_mbcnt_lo_u32_b32 v3, -1, 0", "v_mbcnt_hi_u32_b32 v3, -1, v3",
       "v_lshlrev_b32 v3, 2, v3",      "v_add_nc_u32 v3, m0, v3",
-      "ds_load_b32 v3, v3 offset:0",
+      "v_and_b32 v3, 0xfffff, v3",    "ds_load_b32 v3, v3 offset:0",
   };
 
   Trampoline T = buildTrampoline(AsmLines, /*OriginalOffset=*/0x100,
@@ -642,11 +651,11 @@ TEST(AddTid, LoadTrampolineThroughBuildTrampoline) {
   EXPECT_EQ(T.OriginalOffset, 0x100u);
   EXPECT_EQ(T.OriginalSize, 4u);
 
-  // 5 body instructions + 1 branch-back tail.
+  // 6 body instructions + 1 branch-back tail.
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(T.Bytes.data(), T.Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 6u);
-  EXPECT_EQ(Decoded[5].Mnemonic, "s_branch");
+  ASSERT_EQ(Decoded.size(), 7u);
+  EXPECT_EQ(Decoded[6].Mnemonic, "s_branch");
 }
 
 TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
@@ -661,7 +670,7 @@ TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
   std::vector<std::string> AsmLines = {
       "v_mbcnt_lo_u32_b32 v42, -1, 0", "v_mbcnt_hi_u32_b32 v42, -1, v42",
       "v_lshlrev_b32 v42, 2, v42",     "v_add_nc_u32 v42, m0, v42",
-      "ds_store_b32 v42, v10",
+      "v_and_b32 v42, 0xfffff, v42",   "ds_store_b32 v42, v10",
   };
 
   Trampoline T = buildTrampoline(AsmLines, /*OriginalOffset=*/0x180,
@@ -672,11 +681,11 @@ TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
   EXPECT_EQ(T.OriginalOffset, 0x180u);
   EXPECT_EQ(T.OriginalSize, 4u);
 
-  // 5 body instructions + 1 branch-back tail, matching the load variant.
+  // 6 body instructions + 1 branch-back tail, matching the load variant.
   std::vector<InternalDecodedInst> Decoded;
   ASSERT_TRUE(decodeTextSection(T.Bytes.data(), T.Bytes.size(), S, Decoded));
-  ASSERT_EQ(Decoded.size(), 6u);
+  ASSERT_EQ(Decoded.size(), 7u);
   EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
-  EXPECT_EQ(Decoded[4].Mnemonic, "ds_store_b32");
-  EXPECT_EQ(Decoded[5].Mnemonic, "s_branch");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_store_b32");
+  EXPECT_EQ(Decoded[6].Mnemonic, "s_branch");
 }

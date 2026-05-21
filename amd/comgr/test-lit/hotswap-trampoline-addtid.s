@@ -3,8 +3,9 @@
 // COM: On A0 the DS unit truncates M0 to 16 bits, so ADDTID address
 // COM: encodings (M0 + lane_id*4 + offset) silently wrap above 64KB
 // COM: (DEGFXMI400-12025). The trampoline materialises the lane-id math
-// COM: in the ALU using the full 32-bit M0 and issues a regular
-// COM: ds_load_b32 / ds_store_b32, bypassing the buggy address path.
+// COM: in the ALU using M0 masked to 20 bits (matching B0's DS-unit M0
+// COM: read width) and issues a regular ds_load_b32 / ds_store_b32,
+// COM: bypassing the buggy address path.
 // COM:
 // COM: Coverage:
 // COM:   test_addtid_load        : ds_load_addtid_b32 + offset (NOP sled)
@@ -21,49 +22,26 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: Kernel 1: ds_load_addtid_b32 with non-zero offset.
-// COM:   Original site is replaced with s_branch (forward to NOP sled);
-// COM:   the sled body computes lane_id*4 + m0 in vDST, then reads LDS
-// COM:   with the original offset folded into the DS encoding; finally
-// COM:   s_branch returns to the next instruction past the original.
-// DISASM-LABEL: <test_addtid_load>:
-// DISASM-NOT: ds_load_addtid_b32
-// DISASM: s_branch
-// DISASM: v_mbcnt_lo_u32_b32
-// DISASM-NEXT: v_mbcnt_hi_u32_b32
-// DISASM: v_lshlrev_b32
-// DISASM-NEXT: v_add_nc_u32
-// DISASM: ds_load_b32
-// DISASM: s_branch
-
-// COM: Kernel 2: ds_load_addtid_b32 with offset:0 (offset suffix omitted).
-// DISASM-LABEL: <test_addtid_load_zero>:
-// DISASM-NOT: ds_load_addtid_b32
-// DISASM: s_branch
-// DISASM: v_mbcnt_lo_u32_b32
-// DISASM: ds_load_b32
-// DISASM: s_branch
-
-// COM: Kernel 3: ds_store_addtid_b32. Scratch VGPR holds the computed
-// COM: address; original data VGPR is preserved as the store source.
-// DISASM-LABEL: <test_addtid_store>:
-// DISASM-NOT: ds_store_addtid_b32
-// DISASM: s_branch
-// DISASM: v_mbcnt_lo_u32_b32
-// DISASM: v_add_nc_u32
-// DISASM: ds_store_b32
-// DISASM: s_branch
-
-// COM: Idempotency: rewriting the output a second time must produce
-// COM: identical bytes (the patched body has no ADDTID mnemonic so the
-// COM: dispatcher leaves it untouched on subsequent runs).
-// RUN: hotswap-rewrite %t.out.elf \
-// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
-// RUN:   --check-idempotent \
-// RUN:   | %FileCheck --check-prefix=IDEM %s
-// IDEM: IDEMPOTENT: YES
-
 // ---- Kernel 1: ds_load_addtid_b32 with offset --------------------------------
+//
+// COM: Original site is replaced with s_branch (forward to NOP sled). The
+// COM: sled body computes lane_id*4 + m0 in the load's destination VGPR (v5),
+// COM: masks the result to 20 bits to match B0's DS-unit M0 read width, then
+// COM: reads LDS with the original offset folded into the DS encoding, and
+// COM: finally s_branch returns to the instruction following the original.
+// COM: Operand-pinned matches catch any regression that drops the offset,
+// COM: swaps operand order, or changes the shift / add scalar source.
+
+// DISASM-LABEL: <test_addtid_load>:
+// DISASM-NOT:   ds_load_addtid_b32
+// DISASM:       s_branch
+// DISASM:       v_mbcnt_lo_u32_b32 v5, -1, 0
+// DISASM-NEXT:  v_mbcnt_hi_u32_b32 v5, -1, v5
+// DISASM-NEXT:  v_lshlrev_b32_e32 v5, 2, v5
+// DISASM-NEXT:  v_add_nc_u32_e32 v5, m0, v5
+// DISASM-NEXT:  v_and_b32_e32 v5, 0xfffff, v5
+// DISASM-NEXT:  ds_load_b32 v5, v5 offset:128
+// DISASM-NEXT:  s_branch
 
 .amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 .text
@@ -93,8 +71,32 @@ test_addtid_load:
 .Ltest_addtid_load_end:
 .size test_addtid_load, .Ltest_addtid_load_end-test_addtid_load
 
-// ---- Kernel 2: ds_load_addtid_b32 with offset:0 ------------------------------
+.rodata
+.p2align 8
+.amdhsa_kernel test_addtid_load
+  .amdhsa_next_free_vgpr 6
+  .amdhsa_next_free_sgpr 1
+.end_amdhsa_kernel
 
+// ---- Kernel 2: ds_load_addtid_b32 with offset:0 ------------------------------
+//
+// COM: Same expansion as kernel 1 but with offset:0. The disassembler omits
+// COM: the offset suffix entirely when the encoded offset is zero, so the
+// COM: ds_load_b32 line drops `offset:N` -- the test pins this so a future
+// COM: change that always emits `offset:0` would surface here.
+
+// DISASM-LABEL: <test_addtid_load_zero>:
+// DISASM-NOT:   ds_load_addtid_b32
+// DISASM:       s_branch
+// DISASM:       v_mbcnt_lo_u32_b32 v6, -1, 0
+// DISASM-NEXT:  v_mbcnt_hi_u32_b32 v6, -1, v6
+// DISASM-NEXT:  v_lshlrev_b32_e32 v6, 2, v6
+// DISASM-NEXT:  v_add_nc_u32_e32 v6, m0, v6
+// DISASM-NEXT:  v_and_b32_e32 v6, 0xfffff, v6
+// DISASM-NEXT:  ds_load_b32 v6, v6
+// DISASM-NEXT:  s_branch
+
+.text
 .globl test_addtid_load_zero
 .p2align 8
 .type test_addtid_load_zero,@function
@@ -121,8 +123,34 @@ test_addtid_load_zero:
 .Ltest_addtid_load_zero_end:
 .size test_addtid_load_zero, .Ltest_addtid_load_zero_end-test_addtid_load_zero
 
-// ---- Kernel 3: ds_store_addtid_b32 ------------------------------------------
+.rodata
+.amdhsa_kernel test_addtid_load_zero
+  .amdhsa_next_free_vgpr 7
+  .amdhsa_next_free_sgpr 1
+.end_amdhsa_kernel
 
+// ---- Kernel 3: ds_store_addtid_b32 ------------------------------------------
+//
+// COM: Store path needs a separate scratch VGPR for the address-compute
+// COM: temporary because the original data VGPR (v8) must be preserved as
+// COM: the store source. The scratch register comes from allocScratchVgpr;
+// COM: the exact index varies with liveness, so we capture it through a
+// COM: FileCheck regex variable [[VTMP]] and pin it across the body. Most
+// COM: importantly: the ds_store_b32 operand order must be (addr, data) =
+// COM: ([[VTMP]], v8) -- a swap would silently corrupt the LDS layout.
+
+// DISASM-LABEL: <test_addtid_store>:
+// DISASM-NOT:   ds_store_addtid_b32
+// DISASM:       s_branch
+// DISASM:       v_mbcnt_lo_u32_b32 [[VTMP:v[0-9]+]], -1, 0
+// DISASM-NEXT:  v_mbcnt_hi_u32_b32 [[VTMP]], -1, [[VTMP]]
+// DISASM-NEXT:  v_lshlrev_b32_e32 [[VTMP]], 2, [[VTMP]]
+// DISASM-NEXT:  v_add_nc_u32_e32 [[VTMP]], m0, [[VTMP]]
+// DISASM-NEXT:  v_and_b32_e32 [[VTMP]], 0xfffff, [[VTMP]]
+// DISASM-NEXT:  ds_store_b32 [[VTMP]], v8 offset:64
+// DISASM-NEXT:  s_branch
+
+.text
 .globl test_addtid_store
 .p2align 8
 .type test_addtid_store,@function
@@ -150,18 +178,16 @@ test_addtid_store:
 .size test_addtid_store, .Ltest_addtid_store_end-test_addtid_store
 
 .rodata
-.p2align 8
-.amdhsa_kernel test_addtid_load
-  .amdhsa_next_free_vgpr 6
-  .amdhsa_next_free_sgpr 1
-.end_amdhsa_kernel
-
-.amdhsa_kernel test_addtid_load_zero
-  .amdhsa_next_free_vgpr 7
-  .amdhsa_next_free_sgpr 1
-.end_amdhsa_kernel
-
 .amdhsa_kernel test_addtid_store
   .amdhsa_next_free_vgpr 9
   .amdhsa_next_free_sgpr 1
 .end_amdhsa_kernel
+
+// COM: Idempotency: rewriting the output a second time must produce
+// COM: identical bytes (the patched body has no ADDTID mnemonic so the
+// COM: dispatcher leaves it untouched on subsequent runs).
+// RUN: hotswap-rewrite %t.out.elf \
+// RUN:   amdgcn-amd-amdhsa--gfx1250 amdgcn-amd-amdhsa--gfx1250 \
+// RUN:   --check-idempotent \
+// RUN:   | %FileCheck --check-prefix=IDEM %s
+// IDEM: IDEMPOTENT: YES

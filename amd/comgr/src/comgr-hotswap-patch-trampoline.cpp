@@ -602,13 +602,16 @@ bool isAddtidGds(const MCInst &Inst) {
   return Op.isImm() && Op.getImm() != 0;
 }
 
-std::optional<uint32_t> getAddtidOffset(const MCInst &Inst) {
+// The DS offset field is a 16-bit immediate per the gfx12 ISA encoding;
+// returning uint16_t keeps the field width visible at the type level and
+// lets callers widen explicitly when needed.
+std::optional<uint16_t> getAddtidOffset(const MCInst &Inst) {
   if (Inst.getNumOperands() <= AddtidOpOffset)
     return std::nullopt;
   const MCOperand &Op = Inst.getOperand(AddtidOpOffset);
   if (!Op.isImm())
     return std::nullopt;
-  return static_cast<uint32_t>(Op.getImm());
+  return static_cast<uint16_t>(Op.getImm());
 }
 
 // Build the trampoline asm for a ds_load_addtid_b32 site. The destination
@@ -616,16 +619,30 @@ std::optional<uint32_t> getAddtidOffset(const MCInst &Inst) {
 // it, so no extra VGPR allocation is needed for the load path.
 //
 // The replacement reproduces the ADDTID address computation in the ALU:
-//   lane_id = mbcnt_lo(-1, 0)    ; for waveN, then mbcnt_hi(-1, lane_id)
+//   lane_id = mbcnt_lo(-1, 0)    ; lanes 0-31 contribute via exec_lo
+//             mbcnt_hi(-1, V)    ;   lanes 32-63 (wave64) extend through
+//                                ;   exec_hi; in wave32 exec_hi is zero so
+//                                ;   the hi step is a no-op (the sequence
+//                                ;   is identical for both wave sizes)
 //   addr    = m0 + lane_id * 4   ; + offset (folded into the DS encoding)
-std::vector<std::string> buildAddtidLoadAsm(StringRef VName, uint32_t Offset,
-                                            StringRef ToMnem) {
+//
+// Address mask: B0 hardware reads only 20 bits of M0 at the DS unit, so any
+// junk in M0[31:20] (e.g. left over from s_sendmsg or other M0 producers) is
+// ignored. v_add_nc_u32 reads M0 as a full 32-bit scalar source, so we mask
+// the post-add result to the same 20 bits to stay bit-exact with B0 across
+// the entire reachable LDS range (gfx1250 LDS <= 320 KiB and lane_id*4 <=
+// 0xFC, so the sum fits comfortably below 1 MiB and the mask is a no-op for
+// any conforming M0 -- the mask only fires defensively when M0[31:20] is
+// non-zero on entry).
+SmallVector<std::string, 8> buildAddtidLoadAsm(StringRef VName, uint16_t Offset,
+                                               StringRef ToMnem) {
   std::string V(VName);
-  std::vector<std::string> Lines;
+  SmallVector<std::string, 8> Lines;
   Lines.push_back("v_mbcnt_lo_u32_b32 " + V + ", -1, 0");
   Lines.push_back("v_mbcnt_hi_u32_b32 " + V + ", -1, " + V);
   Lines.push_back("v_lshlrev_b32 " + V + ", 2, " + V);
   Lines.push_back("v_add_nc_u32 " + V + ", m0, " + V);
+  Lines.push_back("v_and_b32 " + V + ", 0xfffff, " + V);
   Lines.push_back(ToMnem.str() + " " + V + ", " + V + fmtOffset(Offset));
   return Lines;
 }
@@ -633,17 +650,21 @@ std::vector<std::string> buildAddtidLoadAsm(StringRef VName, uint32_t Offset,
 // Build the trampoline asm for a ds_store_addtid_b32 site. \p VTmpName is a
 // scratch VGPR holding the computed address; \p VDataName is the original
 // data VGPR. Operand order for ds_store_b32 is (addr, data).
-std::vector<std::string> buildAddtidStoreAsm(StringRef VTmpName,
-                                             StringRef VDataName,
-                                             uint32_t Offset,
-                                             StringRef ToMnem) {
+//
+// Same mbcnt_lo/mbcnt_hi pair and 20-bit M0 mask as the load path; see
+// buildAddtidLoadAsm above for the full rationale.
+SmallVector<std::string, 8> buildAddtidStoreAsm(StringRef VTmpName,
+                                                StringRef VDataName,
+                                                uint16_t Offset,
+                                                StringRef ToMnem) {
   std::string VTmp(VTmpName);
   std::string VData(VDataName);
-  std::vector<std::string> Lines;
+  SmallVector<std::string, 8> Lines;
   Lines.push_back("v_mbcnt_lo_u32_b32 " + VTmp + ", -1, 0");
   Lines.push_back("v_mbcnt_hi_u32_b32 " + VTmp + ", -1, " + VTmp);
   Lines.push_back("v_lshlrev_b32 " + VTmp + ", 2, " + VTmp);
   Lines.push_back("v_add_nc_u32 " + VTmp + ", m0, " + VTmp);
+  Lines.push_back("v_and_b32 " + VTmp + ", 0xfffff, " + VTmp);
   Lines.push_back(ToMnem.str() + " " + VTmp + ", " + VData + fmtOffset(Offset));
   return Lines;
 }
@@ -658,9 +679,12 @@ std::vector<std::string> buildAddtidStoreAsm(StringRef VTmpName,
 
 bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  // The dispatcher in applyTrampolinePatchesImpl already gates on
+  // !getAddtidReplacement(Mnem).empty(), so by contract we only see
+  // ds_load_addtid_b32 / ds_store_addtid_b32 here.
   StringRef ToMnem = getAddtidReplacement(DI.Mnemonic);
-  if (ToMnem.empty())
-    return false;
+  assert(!ToMnem.empty() &&
+         "patchDsAddtid called for non-ADDTID mnemonic; caller must filter");
 
   if (isAddtidGds(DI.Inst)) {
     log() << "hotswap: error: " << DI.Mnemonic << " with GDS=1 at 0x"
@@ -669,13 +693,13 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
     return false;
   }
 
-  std::optional<uint32_t> OffsetOpt = getAddtidOffset(DI.Inst);
+  std::optional<uint16_t> OffsetOpt = getAddtidOffset(DI.Inst);
   if (!OffsetOpt) {
     log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
           << utohexstr(DI.Offset) << ": missing/non-immediate offset\n";
     return false;
   }
-  uint32_t Offset = *OffsetOpt;
+  uint16_t Offset = *OffsetOpt;
 
   if (DI.Inst.getNumOperands() <= AddtidOpReg ||
       !DI.Inst.getOperand(AddtidOpReg).isReg() ||
@@ -695,15 +719,16 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
   }
 
   bool IsLoad = DI.Mnemonic == "ds_load_addtid_b32";
-  std::vector<std::string> AsmLines;
+  SmallVector<std::string, 8> AsmLines;
+  std::optional<unsigned> StoreScratchVgpr;
 
   if (IsLoad) {
     AsmLines = buildAddtidLoadAsm(RegName, Offset, ToMnem);
   } else {
     // Store path needs a scratch VGPR for the address-compute temporary
     // because the original data VGPR must be preserved as the store source.
-    std::optional<unsigned> TmpVgpr = allocScratchVgpr(Ctx, Idx);
-    if (!TmpVgpr) {
+    StoreScratchVgpr = allocScratchVgpr(Ctx, Idx);
+    if (!StoreScratchVgpr) {
       std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
       std::optional<uint32_t> LdsSize =
           Ctx.Elf.getKernelStaticLdsSize(KernelName);
@@ -730,13 +755,7 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
       return false;
     }
 
-    ScratchPatchInfo SPI;
-    SPI.Offset = DI.Offset;
-    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-    SPI.ScratchRegs.set(*TmpVgpr);
-    Ctx.OutScratchPatches.push_back(std::move(SPI));
-
-    std::string TmpName = ("v" + Twine(*TmpVgpr)).str();
+    std::string TmpName = ("v" + Twine(*StoreScratchVgpr)).str();
     AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
   }
 
@@ -753,6 +772,18 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
 
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Bytes))
     return false;
+
+  // Record the scratch-VGPR reservation only after the patch is committed:
+  // any earlier failure (assembly, sled/trampoline emission) leaves no
+  // bytes at DI.Offset to back the reservation, so OutScratchPatches must
+  // not advertise a scratch slot for it.
+  if (StoreScratchVgpr) {
+    ScratchPatchInfo SPI;
+    SPI.Offset = DI.Offset;
+    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
+    SPI.ScratchRegs.set(*StoreScratchVgpr);
+    Ctx.OutScratchPatches.push_back(std::move(SPI));
+  }
 
   log() << "hotswap: trampoline: " << DI.Mnemonic << " -> " << ToMnem
         << " at 0x" << utohexstr(DI.Offset) << " (offset=" << Offset << ", "
