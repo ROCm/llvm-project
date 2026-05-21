@@ -36,19 +36,18 @@ constexpr llvm::StringLiteral AMDGPUTriple = "amdgcn-amd-amdhsa";
 //     without standing up a real ISA / metadata pair.
 //
 //   * Non-empty mode (anything else): the input is treated as a real
-//     lift request. Both strings must be non-empty, `SourceISA` must
-//     parse via `llvm::AMDGPU::parseArchAMDGCN`, and the kernel
-//     descriptor must have been parsed successfully (signaled by
-//     `Meta.HasKernelDescriptor`). A partially-empty input
-//     (e.g. empty kernel name with a real ISA) is rejected as
-//     malformed.
+//     lift request. Both strings must be non-empty and `SourceISA` must
+//     parse via `llvm::AMDGPU::parseArchAMDGCN`. A partially-empty input
+//     (e.g. empty kernel name with a real ISA) is rejected as malformed.
+//     Kernel-descriptor validity is enforced by `extractKernelMeta`
+//     before `raiseToIR` is called.
 //
 // Ideally we would reuse `COMGR::parseTargetIdentifier`, but that helper
 // currently lives behind the comgr-metadata layer in `src/comgr.cpp` and
 // is not reachable from the hotswap subproject. As a stop-gap, validate
 // the AMDGPU processor name through `llvm::AMDGPU::parseArchAMDGCN`.
 llvm::Error validateInputs(llvm::StringRef SourceISA,
-                           llvm::StringRef KernelName, const KernelMeta &Meta) {
+                           llvm::StringRef KernelName) {
   if (SourceISA.empty() && KernelName.empty())
     return llvm::Error::success();
 
@@ -70,9 +69,6 @@ llvm::Error validateInputs(llvm::StringRef SourceISA,
     return makeHotswapError("raiseToIR: source ISA '" + SourceISA +
                             "' does not name an AMDGPU GPU");
 
-  if (!Meta.HasKernelDescriptor)
-    return makeHotswapError("raiseToIR: kernel '" + KernelName +
-                            "' has no parsed kernel descriptor");
   return llvm::Error::success();
 }
 
@@ -83,7 +79,7 @@ llvm::Expected<RaiseResult> raiseToIR(llvm::StringRef SourceISA,
                                       const KernelMeta &Meta) {
   using namespace llvm;
 
-  if (Error E = validateInputs(SourceISA, KernelName, Meta))
+  if (Error E = validateInputs(SourceISA, KernelName))
     return std::move(E);
 
   RaiseResult Result;

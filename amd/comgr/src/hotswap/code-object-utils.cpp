@@ -118,21 +118,11 @@ llvm::Error readKernelDescriptorBytes(llvm::object::ObjectFile &Obj,
 // field comes from its struct member instead of an offset + read32le
 // call against a raw byte buffer.
 //
-// KD-bytes lookup is partial-success: extractKernelMeta returns a
-// usable KernelMeta for the MsgPack-derived fields even when the
-// .rodata KD blob is unreachable. We log the underlying Error here
-// (no silent return on failure -- AGENT_CONVENTIONS section 2) and
-// leave `Meta.HasKernelDescriptor == false`. The raiser refuses the
-// lift in that case for non-empty inputs; empty-input scaffolding
-// mode skips the check.
-void populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
-                                    KernelMeta &Meta) {
+llvm::Error populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
+                                           KernelMeta &Meta) {
   KernelDescriptorBuffer KdBytes{};
-  if (llvm::Error E = readKernelDescriptorBytes(Obj, Meta.Name, KdBytes)) {
-    llvm::logAllUnhandledErrors(std::move(E), llvm::errs(), "transpiler: ");
-    Meta.HasKernelDescriptor = false;
-    return;
-  }
+  if (llvm::Error E = readKernelDescriptorBytes(Obj, Meta.Name, KdBytes))
+    return E;
   llvm::amdhsa::kernel_descriptor_t Kd{};
   static_assert(sizeof(Kd) == std::tuple_size_v<KernelDescriptorBuffer>,
                 "KernelDescriptorBuffer must match kernel_descriptor_t size");
@@ -142,7 +132,7 @@ void populateKernelDescriptorFields(llvm::object::ObjectFile &Obj,
   Meta.ComputePgmRsrc2 = Kd.compute_pgm_rsrc2;
   Meta.KernelCodeProperties = Kd.kernel_code_properties;
   Meta.KernargPreload = Kd.kernarg_preload;
-  Meta.HasKernelDescriptor = true;
+  return llvm::Error::success();
 }
 
 // Look up `Key` in `Map`. Returns null when the key is absent.
@@ -287,10 +277,8 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
     return makeHotswapError("extractKernelMeta: kernel '" + KernelName +
                             "' not found in metadata");
 
-  // Fill the KD-register fields from .rodata. Partial-success: KD
-  // failures log + leave Meta.HasKernelDescriptor false; the raiser
-  // gates its non-empty-input lift on that flag.
-  populateKernelDescriptorFields(*ObjOrErr->get(), Meta);
+  if (llvm::Error E = populateKernelDescriptorFields(*ObjOrErr->get(), Meta))
+    return std::move(E);
   return Meta;
 }
 

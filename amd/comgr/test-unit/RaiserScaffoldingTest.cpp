@@ -12,10 +12,11 @@
 //     bypassed and a placeholder module with a single AMDGPU_KERNEL
 //     `ret void` function is produced.
 //
-//   * Non-empty input: SourceISA must parse as AMDGPU, both strings
-//     must be non-empty, and Meta.HasKernelDescriptor must be true.
-//     Failures surface as `HotswapError` (Comgr's distinct
-//     `llvm::ErrorInfo` subclass for hotswap-detected conditions).
+//   * Non-empty input: SourceISA must parse as AMDGPU and both strings
+//     must be non-empty. Failures surface as `HotswapError` (Comgr's
+//     distinct `llvm::ErrorInfo` subclass for hotswap-detected conditions).
+//     Kernel-descriptor validity is enforced by `extractKernelMeta`, not
+//     `raiseToIR`.
 //
 // Partial-empty input (one string empty, the other non-empty) is
 // treated as malformed and rejected.
@@ -38,14 +39,9 @@
 
 namespace {
 
-// Build a KernelMeta with HasKernelDescriptor=true so non-empty-input
-// raiseToIR calls don't trip the KD precondition. Tests that want to
-// exercise the missing-KD rejection construct their own KernelMeta
-// directly.
 COMGR::hotswap::KernelMeta makeKernelMeta(llvm::StringRef Name) {
   COMGR::hotswap::KernelMeta Meta;
   Meta.Name = Name.str();
-  Meta.HasKernelDescriptor = true;
   return Meta;
 }
 
@@ -95,9 +91,7 @@ TEST(RaiserScaffolding, KernelFunctionIsAMDGPUKernelWithRetVoid) {
 }
 
 // Empty input (both ISA and kernel name empty) bypasses validation and
-// produces a placeholder module. The KernelMeta is allowed to be a
-// default-constructed value -- in particular, HasKernelDescriptor=false
-// is fine, because the scaffolding-mode bypass skips that check.
+// produces a placeholder module. The KernelMeta may be default-constructed.
 TEST(RaiserScaffolding, EmptyInputProducesValidModule) {
   COMGR::hotswap::KernelMeta Meta;
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
@@ -143,22 +137,6 @@ TEST(RaiserScaffolding, EmptyKernelNameWithNonEmptyIsaIsRejected) {
   COMGR::hotswap::KernelMeta Meta = makeKernelMeta("");
   llvm::Expected<COMGR::hotswap::RaiseResult> Result =
       COMGR::hotswap::raiseToIR("gfx942", "", Meta);
-
-  ASSERT_FALSE(static_cast<bool>(Result));
-  llvm::Error Err = Result.takeError();
-  EXPECT_TRUE(isHotswapError(Err));
-  llvm::consumeError(std::move(Err));
-}
-
-// Non-empty input with HasKernelDescriptor=false is rejected -- this
-// is the production precondition the raiser enforces for any real
-// lift request.
-TEST(RaiserScaffolding, MissingKernelDescriptorIsRejected) {
-  COMGR::hotswap::KernelMeta Meta;
-  Meta.Name = "kernel";
-  Meta.HasKernelDescriptor = false;
-  llvm::Expected<COMGR::hotswap::RaiseResult> Result =
-      COMGR::hotswap::raiseToIR("gfx942", "kernel", Meta);
 
   ASSERT_FALSE(static_cast<bool>(Result));
   llvm::Error Err = Result.takeError();

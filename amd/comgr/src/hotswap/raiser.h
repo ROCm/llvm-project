@@ -38,9 +38,10 @@ struct RaiseResult {
 //     module is returned. Useful for stubbing the raiser in tests
 //     without setting up a real ISA.
 //
-//   * Non-empty mode (anything else): both strings must be non-empty,
-//     `SourceISA` must parse via `llvm::AMDGPU::parseArchAMDGCN`, and
-//     `Meta.HasKernelDescriptor` must be true.
+//   * Non-empty mode (anything else): both strings must be non-empty and
+//     `SourceISA` must parse via `llvm::AMDGPU::parseArchAMDGCN`. Callers
+//     must supply `Meta` from a successful `extractKernelMeta` (which
+//     requires a parsed `<kernelName>.kd` in `.rodata`).
 //
 // Returns a `HotswapError` on rejected input; once wired in, decoder
 // failures will likewise propagate as `llvm::Error` (forwarded from

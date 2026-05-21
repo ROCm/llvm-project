@@ -111,15 +111,6 @@ struct KernelMeta {
   //   * computePgmRsrc1       (KD bytes 48-51): not strictly required for
   //     the user-SGPR layout, but useful for diagnostics and for future
   //     wave-size-aware decisions. Captured for completeness.
-  //
-  // `HasKernelDescriptor` is true iff the .rodata KD bytes parsed
-  // cleanly. extractKernelMeta treats KD parse failure as a partial
-  // success (logs the underlying Error, returns the MsgPack-derived
-  // fields, leaves this flag false) so callers who only need the
-  // MsgPack metadata are not blocked by a missing KD. raiseToIR
-  // gates its non-empty-input lift on this flag -- empty-input
-  // scaffolding mode skips the check.
-  bool HasKernelDescriptor = false;
   uint32_t ComputePgmRsrc1 = 0;
   uint32_t ComputePgmRsrc2 = 0;
   uint16_t KernelCodeProperties = 0;
@@ -157,9 +148,9 @@ listKernelNames(llvm::MemoryBufferRef ElfData);
 
 /// Extract the per-kernel metadata for `KernelName` from the MsgPack notes
 /// in `ElfData`, including the kernel-descriptor register fields read out
-/// of `.rodata`. KD-bytes lookup is best-effort: a usable KernelMeta is
-/// still returned for the MsgPack-derived fields when the .rodata KD blob
-/// is unreachable, with `HasKernelDescriptor == false`.
+/// of `.rodata` via the `<kernelName>.kd` symbol. Returns the underlying
+/// `llvm::Error` (typically `HotswapError`) when the MsgPack note is
+/// missing, the kernel name is not found, or the KD blob cannot be read.
 llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
                                              llvm::StringRef KernelName);
 
