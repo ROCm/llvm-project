@@ -257,6 +257,22 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; CHECK-NEXT:  .LBB7_4: ; %END
 ; CHECK-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; CHECK-NEXT:    s_and_b64 exec, exec, s[14:15]
+; CHECK-NEXT:  .LBB7_2:
+; CHECK-NEXT:    s_or_b64 exec, exec, s[16:17]
+; CHECK-NEXT:    s_xor_b64 s[12:13], exec, vcc
+; CHECK-NEXT:    s_and_b64 s[12:13], s[12:13], exec
+; CHECK-NEXT:    s_mov_b64 exec, vcc
+; CHECK-NEXT:    ; divergent control-flow edge
+; CHECK-NEXT:    s_cbranch_execz .LBB7_4
+; CHECK-NEXT:  .LBB7_3: ; %ELSE
+; CHECK-NEXT:    image_sample v1, v0, s[0:7], s[8:11] dmask:0x1
+; CHECK-NEXT:    s_and_b64 exec, exec, s[14:15]
+; CHECK-NEXT:    s_waitcnt vmcnt(0)
+; CHECK-NEXT:    image_sample v1, v1, s[0:7], s[8:11] dmask:0x1
+; CHECK-NEXT:    s_waitcnt vmcnt(0)
+; CHECK-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
+; CHECK-NEXT:  .LBB7_4: ; %END
+; CHECK-NEXT:    s_or_b64 exec, exec, s[12:13]
 ; CHECK-NEXT:    v_mov_b32_e32 v0, v2
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    ; return to shader part epilog
