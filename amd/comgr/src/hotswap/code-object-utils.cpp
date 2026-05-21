@@ -13,6 +13,7 @@
 #include "hotswap-error.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
@@ -199,9 +200,7 @@ llvm::Expected<TextSection> extractTextSection(llvm::MemoryBufferRef ElfData) {
     if (!ContentsOrErr)
       return ContentsOrErr.takeError();
     TextSection Result;
-    Result.Bytes.assign(ContentsOrErr->begin(), ContentsOrErr->end());
-    Result.Offset = Sec.getAddress();
-    Result.Size = Sec.getSize();
+    Result.Bytes = llvm::arrayRefFromStringRef<uint8_t>(*ContentsOrErr);
     return Result;
   }
   return makeHotswapError("extractTextSection: .text section not found in ELF");

@@ -43,7 +43,7 @@ struct MCState {
   std::unique_ptr<llvm::MCInstrInfo> InstrInfo;
   std::unique_ptr<llvm::MCRegisterInfo> RegInfo;
   std::unique_ptr<llvm::MCSubtargetInfo> SubtargetInfo;
-  std::unique_ptr<const llvm::MCAsmInfo> AsmInfo;
+  std::unique_ptr<llvm::MCAsmInfo> AsmInfo;
   std::unique_ptr<llvm::MCContext> Ctx;
   std::unique_ptr<llvm::MCDisassembler> Disasm;
   std::unique_ptr<llvm::MCInstPrinter> Printer;
