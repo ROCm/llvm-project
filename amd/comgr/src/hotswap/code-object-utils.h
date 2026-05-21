@@ -31,17 +31,10 @@
 
 namespace COMGR::hotswap {
 
-/// Raw bytes of the AMDGPU `.text` section, as returned by
-/// `extractTextSection`. The byte buffer is owned by the `TextSection` --
-/// the underlying ELF MemoryBuffer is not borrowed across the call.
-/// `Offset` and `Size` mirror the section header's `sh_addr` / `sh_size`
-/// for callers that need to relate raw `.text` byte positions back to
-/// ELF virtual addresses (e.g. relocation handling or symbol-offset
-/// arithmetic against the on-disk ELF).
+/// Non-owning view of the AMDGPU `.text` section bytes in `ElfData`, as
+/// returned by `extractTextSection`. `ElfData` must outlive this struct.
 struct TextSection {
-  llvm::SmallVector<uint8_t> Bytes;
-  uint64_t Offset = 0;
-  uint64_t Size = 0;
+  llvm::ArrayRef<uint8_t> Bytes;
 };
 
 /// One entry of the kernel argument table extracted from the AMDGPU MsgPack
@@ -49,7 +42,17 @@ struct TextSection {
 /// constructor defaults below.
 struct KernelArgMeta {
   std::string Name;
+  /// Byte offset of this argument within the kernel's kernarg segment, from
+  /// AMDHSA `.offset`. Explicit and `hidden_*` args share one flat layout:
+  /// `KernelMeta::implicitArgsBase()` is the 8-byte-aligned end of the
+  /// explicit region; hidden slots start at that offset. Used to map
+  /// kernarg-segment SMEM loads (offset from the kernarg SGPR pair) to a
+  /// specific metadata entry.
   uint32_t Offset = 0;
+  /// Size in bytes of this argument's slot, from AMDHSA `.size`. Together
+  /// with `Offset`, defines the half-open range `[Offset, Offset+Size)` for
+  /// byte-level containment checks (e.g. which hidden field a load reads,
+  /// and the in-arg byte index for multi-byte hidden values).
   uint32_t Size = 0;
   /// AMDHSA `.value_kind` enum spelling (e.g. `by_value`, `global_buffer`,
   /// `hidden_global_offset_x`). Kept as a string because the AMDHSA spec
@@ -140,8 +143,9 @@ struct KernelMeta {
   }
 };
 
-/// Extract the `.text` section bytes from `ElfData`. Returns a
-/// `HotswapError` when the ELF parses but has no `.text` section;
+/// Extract a non-owning view of the `.text` section bytes from `ElfData`.
+/// The returned `TextSection` is only valid while `ElfData` remains alive.
+/// Returns a `HotswapError` when the ELF parses but has no `.text` section;
 /// forwards `llvm::object` parse errors unchanged.
 llvm::Expected<TextSection> extractTextSection(llvm::MemoryBufferRef ElfData);
 
