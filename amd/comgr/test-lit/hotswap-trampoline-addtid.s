@@ -11,6 +11,15 @@
 // COM:   test_addtid_load        : ds_load_addtid_b32 + offset (NOP sled)
 // COM:   test_addtid_load_zero   : ds_load_addtid_b32 + offset:0
 // COM:   test_addtid_store       : ds_store_addtid_b32 needs a scratch VGPR
+// COM:
+// COM: DISASM-NEXT vs DISASM convention used throughout this file: the
+// COM: original ADDTID site is replaced in place by an s_branch, then the
+// COM: NOP-sled padding follows (variable size, depends on how many s_nops
+// COM: were available inside the kernel) and only after the sled does the
+// COM: trampoline body start. The gap is bridged with a non-consecutive
+// COM: 'DISASM:' on v_mbcnt_lo so FileCheck skips over the sled NOPs;
+// COM: every instruction inside the trampoline body is then chained with
+// COM: 'DISASM-NEXT:' so the body itself is verified bit-for-bit.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -133,7 +142,7 @@ test_addtid_load_zero:
 //
 // COM: Store path needs a separate scratch VGPR for the address-compute
 // COM: temporary because the original data VGPR (v8) must be preserved as
-// COM: the store source. The scratch register comes from allocScratchVgpr;
+// COM: the store source. The scratch register comes from tryAllocScratchVgpr;
 // COM: the exact index varies with liveness, so we capture it through a
 // COM: FileCheck regex variable [[VTMP]] and pin it across the body. Most
 // COM: importantly: the ds_store_b32 operand order must be (addr, data) =

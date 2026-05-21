@@ -435,8 +435,22 @@ bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx,
   return true;
 }
 
-// -- allocScratchVgpr -------------------------------------------------------
-std::optional<unsigned> allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
+// -- scratch-VGPR allocation ------------------------------------------------
+//
+// Allocation is split into a pure try-step and a commit-step so callers can
+// decide a scratch VGPR before assembling/emitting the patch and then only
+// charge the kernel descriptor for the extra VGPRs once the patch is known
+// to have landed. Bumping KernelPatchStats inside the try-step would leave
+// orphan VGPR reservations in the kernel descriptor whenever assembly or
+// emission failed downstream.
+
+struct ScratchAlloc {
+  unsigned Vgpr = 0;
+  std::string KernelName;
+  unsigned ExtraVgprsNeeded = 0;
+};
+
+std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
   unsigned KdVgprs = 0;
@@ -450,13 +464,21 @@ std::optional<unsigned> allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   if (!ScratchOpt)
     return std::nullopt;
 
-  if (Alloc.extraVgprsNeeded() > 0 && !KernelName.empty()) {
-    KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.extraVgprsNeeded());
-    Stats.ScratchAboveKd += Alloc.extraVgprsNeeded();
-  }
+  ScratchAlloc Out;
+  Out.Vgpr = *ScratchOpt;
+  Out.KernelName = std::move(KernelName);
+  Out.ExtraVgprsNeeded = Alloc.extraVgprsNeeded();
+  return Out;
+}
 
-  return *ScratchOpt;
+// Apply the kernel-descriptor accounting for a scratch VGPR. Must be called
+// only after the corresponding patch has been emitted successfully.
+void commitScratchVgpr(PatchContext &Ctx, const ScratchAlloc &Alloc) {
+  if (Alloc.ExtraVgprsNeeded == 0 || Alloc.KernelName.empty())
+    return;
+  KernelPatchStats &Stats = Ctx.KernelStats[Alloc.KernelName];
+  Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.ExtraVgprsNeeded);
+  Stats.ScratchAboveKd += Alloc.ExtraVgprsNeeded;
 }
 
 // -- patchTensorLoadToLds ---------------------------------------------------
@@ -511,20 +533,14 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
   const uint8_t *OrigInst = Ctx.Text + DI.Offset;
 
   if (SgprLive) {
-    std::optional<unsigned> ScratchVgpr = allocScratchVgpr(Ctx, Idx);
+    std::optional<ScratchAlloc> ScratchVgpr = tryAllocScratchVgpr(Ctx, Idx);
     if (!ScratchVgpr) {
       log() << "hotswap: error: tensor_load_to_lds: no scratch VGPR "
                "available\n";
       return false;
     }
 
-    ScratchPatchInfo SPI;
-    SPI.Offset = DI.Offset;
-    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-    SPI.ScratchRegs.set(*ScratchVgpr);
-    Ctx.OutScratchPatches.push_back(std::move(SPI));
-
-    std::string V = "v" + std::to_string(*ScratchVgpr);
+    std::string V = "v" + std::to_string(ScratchVgpr->Vgpr);
     std::string SaveAsm = "v_writelane_b32 " + V + ", " + BaseSreg + ", 0";
     std::string RestoreAsm = "v_readlane_b32 " + BaseSreg + ", " + V + ", 0";
     SmallVector<uint8_t> Save = assembleSingleInst(SaveAsm, Ctx.LS);
@@ -542,6 +558,17 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 
     if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return false;
+
+    // Record the scratch reservation only after the patch is committed:
+    // any earlier failure (assembly, emission) leaves nothing at DI.Offset
+    // to back the reservation, and bumping the kernel descriptor would
+    // reserve VGPRs the code object never uses.
+    ScratchPatchInfo SPI;
+    SPI.Offset = DI.Offset;
+    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
+    SPI.ScratchRegs.set(ScratchVgpr->Vgpr);
+    Ctx.OutScratchPatches.push_back(std::move(SPI));
+    commitScratchVgpr(Ctx, *ScratchVgpr);
 
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg
           << " live, save/restore via " << V << "\n";
@@ -572,6 +599,13 @@ StringRef getAddtidReplacement(StringRef Mnemonic) {
       .Case("ds_load_addtid_b32", "ds_load_b32")
       .Case("ds_store_addtid_b32", "ds_store_b32")
       .Default("");
+}
+
+// Predicate that pins the load/store dispatch alongside getAddtidReplacement
+// so the two stay in sync if the table grows. Avoids a string compare in
+// patchDsAddtid that would silently diverge from the StringSwitch above.
+bool isAddtidLoad(StringRef Mnemonic) {
+  return Mnemonic == "ds_load_addtid_b32";
 }
 
 // LDS allocations strictly above this threshold are unreachable through
@@ -616,7 +650,10 @@ std::optional<uint16_t> getAddtidOffset(const MCInst &Inst) {
 
 // Build the trampoline asm for a ds_load_addtid_b32 site. The destination
 // VGPR is reused as the address-compute scratch because the load overwrites
-// it, so no extra VGPR allocation is needed for the load path.
+// it, so no extra VGPR allocation is needed for the load path. Reusing the
+// destination as both source operands of ds_load_b32 (`ds_load_b32 vN, vN`)
+// is well-defined on gfx12: the DS unit reads vaddr from the operand file
+// before vdst is written, so the same VGPR can serve both roles.
 //
 // The replacement reproduces the ADDTID address computation in the ALU:
 //   lane_id = mbcnt_lo(-1, 0)    ; lanes 0-31 contribute via exec_lo
@@ -624,7 +661,8 @@ std::optional<uint16_t> getAddtidOffset(const MCInst &Inst) {
 //                                ;   exec_hi; in wave32 exec_hi is zero so
 //                                ;   the hi step is a no-op (the sequence
 //                                ;   is identical for both wave sizes)
-//   addr    = m0 + lane_id * 4   ; + offset (folded into the DS encoding)
+//   addr    = m0 + lane_id * 4   ; + offset (folded into the DS encoding by
+//                                ;   the assembler when ToMnem is emitted)
 //
 // Address mask: B0 hardware reads only 20 bits of M0 at the DS unit, so any
 // junk in M0[31:20] (e.g. left over from s_sendmsg or other M0 producers) is
@@ -634,10 +672,10 @@ std::optional<uint16_t> getAddtidOffset(const MCInst &Inst) {
 // 0xFC, so the sum fits comfortably below 1 MiB and the mask is a no-op for
 // any conforming M0 -- the mask only fires defensively when M0[31:20] is
 // non-zero on entry).
-SmallVector<std::string, 8> buildAddtidLoadAsm(StringRef VName, uint16_t Offset,
-                                               StringRef ToMnem) {
+SmallVector<std::string> buildAddtidLoadAsm(StringRef VName, uint16_t Offset,
+                                            StringRef ToMnem) {
   std::string V(VName);
-  SmallVector<std::string, 8> Lines;
+  SmallVector<std::string> Lines;
   Lines.push_back("v_mbcnt_lo_u32_b32 " + V + ", -1, 0");
   Lines.push_back("v_mbcnt_hi_u32_b32 " + V + ", -1, " + V);
   Lines.push_back("v_lshlrev_b32 " + V + ", 2, " + V);
@@ -653,13 +691,13 @@ SmallVector<std::string, 8> buildAddtidLoadAsm(StringRef VName, uint16_t Offset,
 //
 // Same mbcnt_lo/mbcnt_hi pair and 20-bit M0 mask as the load path; see
 // buildAddtidLoadAsm above for the full rationale.
-SmallVector<std::string, 8> buildAddtidStoreAsm(StringRef VTmpName,
-                                                StringRef VDataName,
-                                                uint16_t Offset,
-                                                StringRef ToMnem) {
+SmallVector<std::string> buildAddtidStoreAsm(StringRef VTmpName,
+                                             StringRef VDataName,
+                                             uint16_t Offset,
+                                             StringRef ToMnem) {
   std::string VTmp(VTmpName);
   std::string VData(VDataName);
-  SmallVector<std::string, 8> Lines;
+  SmallVector<std::string> Lines;
   Lines.push_back("v_mbcnt_lo_u32_b32 " + VTmp + ", -1, 0");
   Lines.push_back("v_mbcnt_hi_u32_b32 " + VTmp + ", -1, " + VTmp);
   Lines.push_back("v_lshlrev_b32 " + VTmp + ", 2, " + VTmp);
@@ -718,18 +756,20 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
     return false;
   }
 
-  bool IsLoad = DI.Mnemonic == "ds_load_addtid_b32";
-  SmallVector<std::string, 8> AsmLines;
-  std::optional<unsigned> StoreScratchVgpr;
+  bool IsLoad = isAddtidLoad(DI.Mnemonic);
+  SmallVector<std::string> AsmLines;
+  std::optional<ScratchAlloc> StoreScratch;
 
   if (IsLoad) {
     AsmLines = buildAddtidLoadAsm(RegName, Offset, ToMnem);
   } else {
     // Store path needs a scratch VGPR for the address-compute temporary
     // because the original data VGPR must be preserved as the store source.
-    StoreScratchVgpr = allocScratchVgpr(Ctx, Idx);
-    if (!StoreScratchVgpr) {
+    StoreScratch = tryAllocScratchVgpr(Ctx, Idx);
+    if (!StoreScratch) {
       std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
+      StringRef KernelDisplay =
+          KernelName.empty() ? StringRef("<unknown>") : StringRef(KernelName);
       std::optional<uint32_t> LdsSize =
           Ctx.Elf.getKernelStaticLdsSize(KernelName);
       // Trampoline could not be applied: the original ds_*_addtid_b32 stays
@@ -741,7 +781,7 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
       // fires unconditionally rather than gating on the visible lower
       // bound -- a follow-up will use ElfView::kernelUsesDynamicLds to
       // tighten the condition to (static>64KiB || dynamicUsed).
-      log() << "hotswap: warning: kernel '" << KernelName << "' uses "
+      log() << "hotswap: warning: kernel '" << KernelDisplay << "' uses "
             << DI.Mnemonic
             << "; trampoline could not be applied, so A0 16-bit M0"
                " truncation may produce silently wrong results when runtime"
@@ -755,7 +795,7 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
       return false;
     }
 
-    std::string TmpName = ("v" + Twine(*StoreScratchVgpr)).str();
+    std::string TmpName = ("v" + Twine(StoreScratch->Vgpr)).str();
     AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
   }
 
@@ -773,16 +813,17 @@ bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Bytes))
     return false;
 
-  // Record the scratch-VGPR reservation only after the patch is committed:
+  // Commit the scratch-VGPR reservation only after the patch is in place:
   // any earlier failure (assembly, sled/trampoline emission) leaves no
-  // bytes at DI.Offset to back the reservation, so OutScratchPatches must
-  // not advertise a scratch slot for it.
-  if (StoreScratchVgpr) {
+  // bytes at DI.Offset to back the reservation, so neither the descriptor
+  // accounting nor OutScratchPatches must advertise a slot for it.
+  if (StoreScratch) {
     ScratchPatchInfo SPI;
     SPI.Offset = DI.Offset;
     SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-    SPI.ScratchRegs.set(*StoreScratchVgpr);
+    SPI.ScratchRegs.set(StoreScratch->Vgpr);
     Ctx.OutScratchPatches.push_back(std::move(SPI));
+    commitScratchVgpr(Ctx, *StoreScratch);
   }
 
   log() << "hotswap: trampoline: " << DI.Mnemonic << " -> " << ToMnem

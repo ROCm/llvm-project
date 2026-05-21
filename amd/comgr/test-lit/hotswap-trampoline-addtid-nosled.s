@@ -6,6 +6,15 @@
 // COM: .text via growWithTrampolines. Companion to hotswap-trampoline-
 // COM: addtid.s which exercises the in-place NOP-sled path on the same
 // COM: opcode.
+// COM:
+// COM: DISASM convention: the kernel-local sequence (s_branch, s_wait_dscnt,
+// COM: s_endpgm) is checked with a strict DISASM-NEXT chain. The trampoline
+// COM: body lives in a separate region appended by growWithTrampolines, so
+// COM: the second block uses a non-consecutive 'DISASM:' on v_mbcnt_lo to
+// COM: skip over the kernel terminator and any padding the assembler emits
+// COM: between regions, then DISASM-NEXT chains every body instruction so
+// COM: regressions in the math sequence, the 20-bit mask, or the operand
+// COM: order of ds_load_b32 are caught.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
