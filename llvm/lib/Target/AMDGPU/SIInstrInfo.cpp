@@ -3228,10 +3228,45 @@ bool SIInstrInfo::analyzeBranchImpl(MachineBasicBlock &MBB,
                                     MachineBasicBlock *&FBB,
                                     SmallVectorImpl<MachineOperand> &Cond,
                                     bool AllowModify) const {
-  if (I->getOpcode() == AMDGPU::S_BRANCH) {
+  unsigned Opc = I->getOpcode();
+  if (Opc == AMDGPU::S_BRANCH) {
     // Unconditional Branch
     TBB = I->getOperand(0).getMBB();
     return false;
+  }
+
+  if (Opc == AMDGPU::SI_BRCOND || Opc == AMDGPU::SI_BRCOND_Z) {
+    // SI_BRCOND/SI_BRCOND_Z are thread-level divergent branch pseudos with
+    // lane-level semantics (per-lane condition register). They cannot be
+    // analyzed as standard wave-level branches because:
+    //
+    // 1. Critical Edge Prevention: Returning true (cannot analyze) prevents
+    //    canSplitCriticalEdge() from splitting edges involving these branches.
+    //    The edge splitting is unwanted as the copies inserted during PHI
+    //    elimination are executed by only active threads at each predecessor
+    //    block guaranteeing no overwrite to the value in question.
+    //
+    // 2. Semantic Mismatch: Standard branch analysis assumes uniform control
+    //    flow (all lanes take same path). SI_BRCOND represents divergent flow
+    //    where different lanes may take different paths. Branch folding,
+    //    if-conversion, and similar optimizations might make wrong judgement
+    //    and make incorrect foldings. Make them unanalyzable would prevent such
+    //    instances.
+    //
+    // 3. Deferred Lowering: These pseudos will be lowered by WaveTransform
+    //    pass into proper EXEC mask manipulation and wave-level branches
+    //    (S_MOV_B64_term exec, S_CBRANCH_EXECZ, etc.). Optimizing before
+    //    lowering would interfere with WaveTransform's reconverging algorithm
+    //    and would lead to suboptimal transforms.
+    //
+    // This is now consistent with legacy pipeline behavior where SI_IF
+    // (structurizer pseudo) is also not analyzed by this function.
+    //
+    // TODO-WAVETRANSFORM: We may need to revisit this fix. Currently, these
+    // instructions are marked with isBranch and forced here to make them
+    // non-analyzable. May be we should reconsider removing the isBranch field
+    // and make it behave similar to SI_IF while making it non-analyzable.
+    return true;
   }
 
   BranchPredicate Pred = getBranchPredicate(I->getOpcode());

@@ -31,7 +31,7 @@ define internal fastcc void @svm_node_closure_bsdf(ptr addrspace(1) %sd, ptr %st
 ; GCN-NOT: v_writelane_b32
 ; GCN: s_waitcnt vmcnt(0)
 ; GCN: s_setpc_b64 s[30:31]
-; GCN: s_movk_i32 s24, 0x60
+; GCN: s_movk_i32 s{{[0-9]+}}, 0x60
 ; GCN-NOT: s31
 ; GCN-NOT: v_readlane_b32
 entry:

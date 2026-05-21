@@ -52,7 +52,7 @@ body:             |
     %11:sreg_32 = S_ADD_U32 %10, 1, implicit-def $scc
     %12:sreg_32 = V_CMP_NE_U32_e64 %11, %0, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %12
+    SI_BRCOND %bb.1, killed %12, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.2
 
   bb.2:
@@ -131,7 +131,7 @@ body:             |
     %11:sreg_32 = S_ADD_U32 %10, 1, implicit-def $scc
     %12:sreg_32 = V_CMP_NE_U32_e64 %11, %0, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %12
+    SI_BRCOND %bb.1, killed %12, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.2
 
   bb.2:
@@ -139,7 +139,7 @@ body:             |
 
     %20:sreg_32 = V_CMP_NE_U32_e64 %11, %1, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %20
+    SI_BRCOND %bb.1, killed %20, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.3
 
   bb.3:
@@ -213,7 +213,7 @@ body:             |
 
     %20:sreg_32 = V_CMP_NE_U32_e64 %11, %1, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %20
+    SI_BRCOND %bb.1, killed %20, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.3
 
   bb.3:
@@ -293,7 +293,7 @@ body:             |
     %11:sreg_32 = S_ADD_U32 %10, 1, implicit-def $scc
     %12:sreg_32 = V_CMP_NE_U32_e64 %11, %0, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %12
+    SI_BRCOND %bb.1, killed %12, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.2
 
   bb.2:
@@ -502,7 +502,7 @@ body:             |
     successors: %bb.2, %bb.4
 
     %11:sreg_32 = V_CMP_NE_U32_e64 %10, %0, implicit $exec
-    SI_BRCOND %bb.2, killed %11
+    SI_BRCOND %bb.2, killed %11, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.2:
@@ -510,13 +510,13 @@ body:             |
 
     %20:vgpr_32 = V_ADD_U32_e64 %10, 1, 0, implicit $exec
     %21:sreg_32 = V_CMP_NE_U32_e64 %20, %1, implicit $exec
-    SI_BRCOND %bb.3, killed %21
+    SI_BRCOND %bb.3, killed %21, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.3:
     %30:sreg_32 = V_CMP_NE_U32_e64 %20, %2, implicit $exec
     %10:vgpr_32 = COPY %20
-    SI_BRCOND %bb.1, killed %30
+    SI_BRCOND %bb.1, killed %30, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.2
 
   bb.4:
@@ -711,14 +711,14 @@ body:             |
     %21:vgpr_32 = V_ADD_U32_e64 %20, 1, 0, implicit $exec
     %22:sreg_32 = V_CMP_NE_U32_e64 %21, %1, implicit $exec
     %20:vgpr_32 = COPY %21
-    SI_BRCOND %bb.2, killed %22
+    SI_BRCOND %bb.2, killed %22, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.3
 
   bb.3:
     %30:vgpr_32 = V_ADD_U32_e64 %10, 1, 0, implicit $exec
     %31:sreg_32 = V_CMP_NE_U32_e64 %30, %0, implicit $exec
     %10:vgpr_32 = COPY %30
-    SI_BRCOND %bb.1, killed %31
+    SI_BRCOND %bb.1, killed %31, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.4:
@@ -870,7 +870,7 @@ body:             |
 
     %11:sreg_32 = S_ADD_U32 %10, 1, implicit-def $scc
     %12:sreg_32 = V_CMP_NE_U32_e64 %11, %0, implicit $exec
-    SI_BRCOND %bb.2, killed %12
+    SI_BRCOND %bb.2, killed %12, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.3
 
   bb.2:
@@ -878,7 +878,7 @@ body:             |
 
     %20:sreg_32 = V_CMP_NE_U32_e64 %11, %1, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %20
+    SI_BRCOND %bb.1, killed %20, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.3:
@@ -886,7 +886,7 @@ body:             |
 
     %30:sreg_32 = V_CMP_NE_U32_e64 %11, %2, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %30
+    SI_BRCOND %bb.1, killed %30, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.5
 
   bb.4:
@@ -1039,7 +1039,7 @@ body:             |
 
     %20:sreg_32 = V_CMP_NE_U32_e64 %11, %1, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %20
+    SI_BRCOND %bb.1, killed %20, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.3:
@@ -1047,7 +1047,7 @@ body:             |
 
     %30:sreg_32 = V_CMP_NE_U32_e64 %11, %2, implicit $exec
     %10:sreg_32 = COPY %11
-    SI_BRCOND %bb.1, killed %30
+    SI_BRCOND %bb.1, killed %30, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.5
 
   bb.4:
@@ -1211,7 +1211,7 @@ body:             |
 
     %11:sreg_32 = S_ADD_U32 %10, 1, implicit-def $scc
     %12:sreg_32 = V_CMP_NE_U32_e64 %11, %0, implicit $exec
-    SI_BRCOND %bb.2, killed %12
+    SI_BRCOND %bb.2, killed %12, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.3
 
   bb.2:

@@ -38,7 +38,7 @@ body:             |
     %8:vgpr_32 = COPY $vgpr0
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 %8, killed %15, implicit $exec
-    SI_BRCOND %bb.2, killed %16
+    SI_BRCOND %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -85,7 +85,7 @@ body:             |
     %8:vgpr_32 = COPY $vgpr0
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 %8, killed %15, implicit $exec
-    SI_BRCOND_Z %bb.2, killed %16
+    SI_BRCOND_Z %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -133,7 +133,7 @@ body:             |
     %8:vgpr_32 = COPY $vgpr0
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 %8, killed %15, implicit $exec
-    SI_BRCOND %bb.2, killed %16
+    SI_BRCOND %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -194,7 +194,7 @@ body:             |
     %8:vgpr_32 = COPY $vgpr0
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 %8, killed %15, implicit $exec
-    SI_BRCOND %bb.2, killed %16
+    SI_BRCOND %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -387,21 +387,21 @@ body:             |
     %10:vgpr_32 = COPY $vgpr2
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 killed %8, %15, implicit $exec
-    SI_BRCOND %bb.2, killed %16
+    SI_BRCOND %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
     successors: %bb.3, %bb.4
 
     %17:sreg_32 = V_CMP_EQ_U32_e64 killed %9, %15, implicit $exec
-    SI_BRCOND %bb.3, killed %17
+    SI_BRCOND %bb.3, killed %17, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.2:
     successors: %bb.5, %bb.6
 
     %18:sreg_32 = V_CMP_EQ_U32_e64 killed %10, %15, implicit $exec
-    SI_BRCOND %bb.6, killed %18
+    SI_BRCOND %bb.6, killed %18, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.5
 
   bb.3:
@@ -540,14 +540,14 @@ body:             |
     successors: %bb.3, %bb.4
 
     %17:sreg_32 = V_CMP_EQ_U32_e64 killed %9, %15, implicit $exec
-    SI_BRCOND %bb.3, killed %17
+    SI_BRCOND %bb.3, killed %17, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.2:
     successors: %bb.5, %bb.6
 
     %18:sreg_32 = V_CMP_EQ_U32_e64 killed %10, %15, implicit $exec
-    SI_BRCOND %bb.6, killed %18
+    SI_BRCOND %bb.6, killed %18, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.5
 
   bb.3:
@@ -661,7 +661,7 @@ body:             |
     %10:sgpr_32 = COPY $sgpr2
     %15:sreg_32 = S_MOV_B32 0
     %16:sreg_32 = V_CMP_EQ_U32_e64 killed %8, %15, implicit $exec
-    SI_BRCOND %bb.2, killed %16
+    SI_BRCOND %bb.2, killed %16, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -766,7 +766,7 @@ body:             |
     %1:sreg_32 = COPY $sgpr0
     %2:sreg_32 = S_MOV_B32 0
     %3:sreg_32 = V_CMP_EQ_U32_e64 %0, %2, implicit $exec
-    SI_BRCOND %bb.2, killed %3
+    SI_BRCOND %bb.2, killed %3, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -1073,7 +1073,7 @@ body:             |
     %0:vgpr_32 = COPY $vgpr0
     %1:sreg_32 = S_MOV_B32 0
     %2:sreg_32 = V_CMP_EQ_U32_e64 %0, killed %1, implicit $exec
-    SI_BRCOND %bb.2, killed %2
+    SI_BRCOND %bb.2, killed %2, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -1136,7 +1136,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_]], $vgpr0, implicit $exec
-  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[V_CMP_EQ_U32_e64_1]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[V_CMP_EQ_U32_e64_1]], implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.3
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.3:
@@ -1180,7 +1180,7 @@ body:             |
     liveins: $vgpr0, $vgpr4, $vgpr5, $sgpr30_sgpr31
 
     %8:sreg_32 = V_CMP_EQ_U32_e64 0, killed $vgpr5, implicit $exec
-    SI_BRCOND %bb.5, %8
+    SI_BRCOND %bb.5, %8, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.1
 
   bb.1:
@@ -1195,7 +1195,7 @@ body:             |
 
     %26:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
     %27:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %26, $vgpr0, implicit $exec
-    %28:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %27, implicit-def $exec, implicit-def dead $scc, implicit $exec
+    %28:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %27, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
 
   bb.3:
     successors: %bb.2(0x40000000), %bb.4(0x40000000)
@@ -1258,7 +1258,7 @@ body:             |
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT:   [[V_READFIRSTLANE_B32_:%[0-9]+]]:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
   ; POSTWT-NEXT:   [[V_CMP_EQ_U32_e64_:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 [[V_READFIRSTLANE_B32_]], $vgpr0, implicit $exec
-  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[V_CMP_EQ_U32_e64_]], implicit-def $exec, implicit-def dead $scc, implicit $exec
+  ; POSTWT-NEXT:   [[S_AND_SAVEEXEC_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 [[V_CMP_EQ_U32_e64_]], implicit-def dead $exec, implicit-def dead $scc, implicit $exec
   ; POSTWT-NEXT:   S_BRANCH %bb.2
   ; POSTWT-NEXT: {{  $}}
   ; POSTWT-NEXT: bb.2:
@@ -1326,7 +1326,7 @@ body:             |
 
     %27:sreg_32_xm0 = V_READFIRSTLANE_B32 $vgpr0, implicit $exec
     %28:sreg_32_xm0_xexec = V_CMP_EQ_U32_e64 %27, $vgpr0, implicit $exec
-    %29:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %28, implicit-def $exec, implicit-def dead $scc, implicit $exec
+    %29:sreg_32_xm0_xexec = S_AND_SAVEEXEC_B32 %28, implicit-def dead $exec, implicit-def dead $scc, implicit $exec
 
   bb.2:
     successors: %bb.1(0x40000000), %bb.3(0x40000000)
@@ -1344,7 +1344,7 @@ body:             |
 
     $exec_lo = S_MOV_B32 %26
     %10:sreg_32 = V_CMP_EQ_U32_e64 0, killed $vgpr5, implicit $exec
-    SI_BRCOND %bb.5, %10
+    SI_BRCOND %bb.5, %10, implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
     S_BRANCH %bb.4
 
   bb.4:
