@@ -60,9 +60,9 @@
 #include "llvm/Support/Threading.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/YAMLParser.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/PPCTargetParser.h"
-#include "llvm/TargetParser/TargetParser.h"
 #include <optional>
 
 using namespace clang::driver;
@@ -120,6 +120,10 @@ static bool useFramePointerForTargetByDefault(const llvm::opt::ArgList &Args,
   case llvm::Triple::loongarch32:
   case llvm::Triple::loongarch64:
   case llvm::Triple::m68k:
+  case llvm::Triple::mips64:
+  case llvm::Triple::mips64el:
+  case llvm::Triple::mips:
+  case llvm::Triple::mipsel:
     return !clang::driver::tools::areOptimizationsEnabled(Args);
   default:
     break;
@@ -702,10 +706,7 @@ void tools::AddTargetFeature(const ArgList &Args,
 /// Get the (LLVM) name of the AMDGPU gpu we are targeting.
 static std::string getAMDGPUTargetGPU(const llvm::Triple &T,
                                       const ArgList &Args) {
-  Arg *MArch = Args.getLastArg(options::OPT_march_EQ);
   Arg *A = Args.getLastArg(options::OPT_mcpu_EQ);
-  if (!A)
-    A = Args.getLastArg(options::OPT_march_EQ);
   if (!A)
     A = Args.getLastArg(options::OPT_offload_arch_EQ);
   if (A) {
@@ -720,8 +721,6 @@ static std::string getAMDGPUTargetGPU(const llvm::Triple &T,
         .Case("aruba", "cayman")
         .Default(GPUName.str());
   }
-  if (MArch)
-    return getProcessorFromTargetID(T, MArch->getValue()).str();
   return "";
 }
 
@@ -1931,7 +1930,7 @@ bool tools::addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   }
   // If there is a static runtime with no dynamic list, force all the symbols
   // to be dynamic to be sure we export sanitizer interface functions.
-  if (AddExportDynamic)
+  if (AddExportDynamic && !TC.getTriple().isNVPTX())
     CmdArgs.push_back("--export-dynamic");
 
   if (SanArgs.hasCrossDsoCfi() && !AddExportDynamic)
@@ -3317,8 +3316,7 @@ void tools::addOpenCLBuiltinsLib(const Driver &D, const llvm::Triple &TT,
 
   // First check for a CPU-specific library in <ResourceDir>/lib/<triple>/<CPU>.
   // TODO: Factor this into common logic that checks for valid subtargets.
-  if (const Arg *CPUArg =
-          DriverArgs.getLastArg(options::OPT_mcpu_EQ, options::OPT_march_EQ)) {
+  if (const Arg *CPUArg = DriverArgs.getLastArg(options::OPT_mcpu_EQ)) {
     StringRef CPU = CPUArg->getValue();
     if (!CPU.empty()) {
       SmallString<128> CPUPath(BasePath);

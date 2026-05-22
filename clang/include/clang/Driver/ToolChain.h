@@ -565,6 +565,10 @@ public:
   // Returns Triple without the OSs version.
   llvm::Triple getTripleWithoutOSVersion() const;
 
+  /// Returns the target-specific path for Flang's intrinsic modules in the
+  /// resource directory if it exists.
+  std::optional<std::string> getDefaultIntrinsicModuleDir() const;
+
   // Returns the target specific runtime path if it exists.
   std::optional<std::string> getRuntimePath() const;
 
@@ -686,7 +690,7 @@ public:
   /// ComputeLLVMTriple - Return the LLVM target triple to use, after taking
   /// command line arguments into account.
   virtual std::string
-  ComputeLLVMTriple(const llvm::opt::ArgList &Args,
+  ComputeLLVMTriple(const llvm::opt::ArgList &Args, StringRef BoundArch = {},
                     types::ID InputType = types::TY_INVALID) const;
 
   /// ComputeEffectiveClangTriple - Return the Clang triple to use for this
@@ -694,9 +698,10 @@ public:
   /// example, on Darwin the -mmacos-version-min= command line argument (which
   /// sets the deployment target) determines the version in the triple passed to
   /// Clang.
-  virtual std::string ComputeEffectiveClangTriple(
-      const llvm::opt::ArgList &Args,
-      types::ID InputType = types::TY_INVALID) const;
+  virtual std::string
+  ComputeEffectiveClangTriple(const llvm::opt::ArgList &Args,
+                              StringRef BoundArch = {},
+                              types::ID InputType = types::TY_INVALID) const;
 
   /// getDefaultObjCRuntime - Return the default Objective-C runtime
   /// for this platform.
@@ -863,7 +868,9 @@ public:
                                 llvm::opt::ArgStringList &CmdArgs) const {}
 
   /// Return sanitizers which are available in this toolchain.
-  virtual SanitizerMask getSupportedSanitizers() const;
+  virtual SanitizerMask
+  getSupportedSanitizers(StringRef BoundArch,
+                         Action::OffloadKind DeviceOffloadKind) const;
 
   /// Return sanitizers which are enabled by default.
   virtual SanitizerMask getDefaultSanitizers() const {

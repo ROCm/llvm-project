@@ -68,10 +68,11 @@
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/TargetParser/Host.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include "time-stat/ts-interface.h"
 
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #include <LLVMSPIRVLib.h>
 #endif
 
@@ -417,7 +418,7 @@ bool executeAssemblerImpl(AssemblerInvocation &Opts, DiagnosticsEngine &Diags,
   std::unique_ptr<MCSubtargetInfo> STI(
       TheTarget->createMCSubtargetInfo(llvm::Triple(Opts.Triple), Opts.CPU, FS));
 
-  MCContext Ctx(Triple(Opts.Triple), MAI.get(), MRI.get(), STI.get(), &SrcMgr);
+  MCContext Ctx(Triple(Opts.Triple), *MAI, *MRI, *STI, &SrcMgr);
   Ctx.setObjectFileInfo(MOFI.get());
 
   bool PIC = false;
@@ -689,22 +690,179 @@ amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-#ifndef COMGR_DISABLE_SPIRV
-// Execute amd-llvm-spirv in-process using writeSpirv
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
+namespace {
+
+// Map "SPV_…" extension name → SPIRV::ExtensionID using the x-macro shipped
+// with the translator. Mirrors the table that amd-llvm-spirv builds in
+// parseSPVExtOption (llvm-spirv.cpp).
+const llvm::DenseMap<StringRef, SPIRV::ExtensionID> &spirvExtensionNameMap() {
+  static const auto Map = []() {
+    llvm::DenseMap<StringRef, SPIRV::ExtensionID> M;
+#define EXT(X) M[#X] = SPIRV::ExtensionID::X;
+#include "LLVMSPIRVExtensions.inc"
+#undef EXT
+    return M;
+  }();
+  return Map;
+}
+
+bool parseSpirvExtList(StringRef Spec,
+                       SPIRV::TranslatorOpts::ExtensionsStatusMap &Status,
+                       raw_ostream &LogS) {
+  const auto &Names = spirvExtensionNameMap();
+  SmallVector<StringRef, 16> Items;
+  Spec.split(Items, ',', -1, false);
+  for (StringRef Item : Items) {
+    if (Item.empty() || (Item.front() != '+' && Item.front() != '-')) {
+      LogS << "spirv-translator: invalid --spirv-ext value '" << Item
+           << "' (expected +EXT or -EXT)\n";
+      return false;
+    }
+    bool Allow = Item.front() == '+';
+    StringRef Name = Item.drop_front();
+    if (Name == "all") {
+      for (const auto &E : Names)
+        Status[E.second] = Allow;
+      continue;
+    }
+    auto It = Names.find(Name);
+    if (It == Names.end()) {
+      LogS << "spirv-translator: unknown extension '" << Name
+           << "' in --spirv-ext\n";
+      return false;
+    }
+    Status[It->second] = Allow;
+  }
+  return true;
+}
+
+// Parse the --spirv-* subset of the amd-llvm-spirv CLI that the HIPAMD clang
+// driver emits (see clang/lib/Driver/ToolChains/HIPAMD.cpp), populating Opts
+// to match. Also extracts InputPath (.bc) and OutputPath (-o argument).
+// Unrecognized --spirv-* flags are logged and ignored.
+bool parseSPIRVTranslatorArgs(ArrayRef<const char *> Args,
+                              SPIRV::TranslatorOpts &Opts, StringRef &InputPath,
+                              StringRef &OutputPath, raw_ostream &LogS) {
+  SPIRV::VersionNumber MaxVer = SPIRV::VersionNumber::MaximumVersion;
+  SPIRV::TranslatorOpts::ExtensionsStatusMap ExtStatus;
+  std::optional<SPIRV::DebugInfoEIS> DebugEIS;
+  std::optional<SPIRV::TranslatorOpts::ArgList> AllowUnknownIntrinsics;
+  bool PreserveAux = false;
+
+  for (size_t I = 0, N = Args.size(); I < N; ++I) {
+    if (!Args[I])
+      continue;
+    StringRef Arg(Args[I]);
+
+    if (Arg == "-o") {
+      if (I + 1 >= N) {
+        LogS << "spirv-translator: '-o' requires an argument\n";
+        return false;
+      }
+      OutputPath = Args[++I];
+      continue;
+    }
+    if (Arg.ends_with(".bc")) {
+      InputPath = Arg;
+      continue;
+    }
+
+    // Normalize: strip leading "--" or "-" so we can compare against bare
+    // names.
+    StringRef Body = Arg;
+    if (!Body.consume_front("--") && !Body.consume_front("-"))
+      continue;
+
+    auto EqPos = Body.find('=');
+    StringRef Name = Body.substr(0, EqPos);
+    bool HasValue = EqPos != StringRef::npos;
+    StringRef Value = HasValue ? Body.substr(EqPos + 1) : StringRef();
+
+    if (Name == "spirv-max-version" && HasValue) {
+      using V_ = SPIRV::VersionNumber;
+      auto Parsed = llvm::StringSwitch<std::optional<V_>>(Value)
+                        .Case("1.0", V_::SPIRV_1_0)
+                        .Case("1.1", V_::SPIRV_1_1)
+                        .Case("1.2", V_::SPIRV_1_2)
+                        .Case("1.3", V_::SPIRV_1_3)
+                        .Case("1.4", V_::SPIRV_1_4)
+                        .Case("1.5", V_::SPIRV_1_5)
+                        .Case("1.6", V_::SPIRV_1_6)
+                        .Default(std::nullopt);
+      if (!Parsed) {
+        LogS << "spirv-translator: unknown --spirv-max-version '" << Value
+             << "'\n";
+        return false;
+      }
+      MaxVer = *Parsed;
+    } else if (Name == "spirv-ext" && HasValue) {
+      if (!parseSpirvExtList(Value, ExtStatus, LogS))
+        return false;
+    } else if (Name == "spirv-debug-info-version" && HasValue) {
+      using EIS_ = SPIRV::DebugInfoEIS;
+      auto Parsed = llvm::StringSwitch<std::optional<EIS_>>(Value)
+                        .Case("legacy", EIS_::SPIRV_Debug)
+                        .Case("ocl-100", EIS_::OpenCL_DebugInfo_100)
+                        .Case("nonsemantic-shader-100",
+                              EIS_::NonSemantic_Shader_DebugInfo_100)
+                        .Case("nonsemantic-shader-200",
+                              EIS_::NonSemantic_Shader_DebugInfo_200)
+                        .Default(std::nullopt);
+      if (!Parsed) {
+        LogS << "spirv-translator: unknown --spirv-debug-info-version '"
+             << Value << "'\n";
+        return false;
+      }
+      DebugEIS = *Parsed;
+    } else if (Name == "spirv-allow-unknown-intrinsics") {
+      // Bare flag → allow all unknown intrinsics. With =prefix1,prefix2 →
+      // restrict to listed prefixes. Matches cl::ValueOptional semantics in
+      // llvm-spirv.cpp. The translator's isUnknownIntrinsicAllowed only
+      // returns true if some prefix matches; an empty prefix matches every
+      // intrinsic name (StringRef::starts_with("") is true), so represent
+      // "allow all" as a single empty prefix rather than an empty list.
+      SPIRV::TranslatorOpts::ArgList Prefixes;
+      if (HasValue) {
+        SmallVector<StringRef, 4> Parts;
+        Value.split(Parts, ',', -1, false);
+        for (StringRef P : Parts)
+          Prefixes.push_back(P);
+      } else {
+        Prefixes.push_back(StringRef());
+      }
+      AllowUnknownIntrinsics = std::move(Prefixes);
+    } else if (Name == "spirv-preserve-auxdata") {
+      PreserveAux = true;
+    } else if (Name == "spirv-lower-const-expr") {
+      // No-op: this is a global cl::opt with cl::init(true) in
+      // SPIRVLowerConstExpr.cpp; the default already matches. Recognized so we
+      // don't warn.
+    } else if (Name.starts_with("spirv-")) {
+      LogS << "spirv-translator: ignoring unrecognized flag '" << Arg << "'\n";
+    }
+  }
+
+  Opts = SPIRV::TranslatorOpts(MaxVer, ExtStatus);
+  if (PreserveAux)
+    Opts.setPreserveAuxData(true);
+  if (DebugEIS)
+    Opts.setDebugInfoEIS(*DebugEIS);
+  if (AllowUnknownIntrinsics)
+    Opts.setSPIRVAllowUnknownIntrinsics(*AllowUnknownIntrinsics);
+  return true;
+}
+
+} // namespace
+
+// Execute amd-llvm-spirv in-process using writeSpirv.
 // Args format: [options...] <input.bc> -o <output.spv>
 amd_comgr_status_t executeSPIRVTranslator(ArrayRef<const char *> Args,
                                           raw_ostream &LogS) {
-  // Parse args: find input .bc and -o <output>
   StringRef InputPath, OutputPath;
-
-  for (size_t I = 0; I < Args.size(); ++I) {
-    StringRef Arg(Args[I]);
-    if (Arg == "-o" && I + 1 < Args.size()) {
-      OutputPath = Args[++I];
-    } else if (Arg.ends_with(".bc")) {
-      InputPath = Arg;
-    }
-  }
+  SPIRV::TranslatorOpts Opts;
+  if (!parseSPIRVTranslatorArgs(Args, Opts, InputPath, OutputPath, LogS))
+    return AMD_COMGR_STATUS_ERROR;
 
   if (InputPath.empty() || OutputPath.empty()) {
     LogS << "spirv-translator: missing input or output files\n";
@@ -725,12 +883,6 @@ amd_comgr_status_t executeSPIRVTranslator(ArrayRef<const char *> Args,
     Err.print("spirv-translator", LogS);
     return AMD_COMGR_STATUS_ERROR;
   }
-
-  // Configure SPIRV translator options (match amd-llvm-spirv defaults)
-  SPIRV::TranslatorOpts Opts;
-  Opts.enableAllExtensions();
-  Opts.setPreserveAuxData(true);
-  Opts.setSPIRVAllowUnknownIntrinsics({"llvm.amdgcn"});
 
   // Translate to SPIRV
   std::string ErrMsg;
@@ -845,10 +997,10 @@ executeCommand(const Command &Job, raw_ostream &LogS,
       }
       return executeLLVMLink(Arguments, LogS);
     }
-#ifndef COMGR_DISABLE_SPIRV
+#ifdef COMGR_SPIRV_TRANSLATOR_AVAILABLE
     if (ExeName.contains("llvm-spirv")) {
       if (env::shouldEmitVerboseLogs()) {
-        logArgv(LogS, "llvm-spirv", Argv);
+        logArgv(LogS, "amd-llvm-spirv", Argv);
       }
       return executeSPIRVTranslator(Arguments, LogS);
     }
@@ -949,7 +1101,15 @@ amd_comgr_status_t AMDGPUCompiler::createTmpDirs() {
                            std::to_string(Id++));
 
   ProfilePoint Point("CreateDir");
-  if (fs::createUniqueDirectory(TmpDirPrefix, TmpDir)) {
+  if (std::error_code EC = fs::createUniqueDirectory(TmpDirPrefix, TmpDir)) {
+    if (env::shouldEmitVerboseLogs()) {
+      LogS << "comgr-compiler: failed to create temporary directory '"
+           << TmpDirPrefix << "': " << EC.message() << "\n";
+      const char *TmpDirEnv = std::getenv("TMPDIR");
+      if (TmpDirEnv)
+        LogS << "comgr-compiler: TMPDIR='" << TmpDirEnv
+             << "' may not exist or be writable\n";
+    }
     return AMD_COMGR_STATUS_ERROR;
   }
 
@@ -2232,14 +2392,30 @@ amd_comgr_status_t AMDGPUCompiler::translateSpirvToBitcode() {
 amd_comgr_status_t
 AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
                                             DataSet *BcOutSet) {
+#ifndef COMGR_SPIRV_TRANSLATOR_AVAILABLE
 #ifdef COMGR_DISABLE_SPIRV
   LogS << "Calling AMDGPUCompiler::translateSpirvToBitcodeImpl() not "
-       << "supported. Comgr is built with -DCOMGR_DISABLE_SPIRV. Re-build LLVM "
-       << "and Comgr with LLVM-SPIRV-Translator support to continue.\n";
+       << "supported. Comgr was built with -DCOMGR_DISABLE_SPIRV=ON.\n";
+#else
+  LogS << "Calling AMDGPUCompiler::translateSpirvToBitcodeImpl() not "
+       << "supported. The LLVM-SPIRV-Translator was not found when Comgr "
+       << "was configured.\n";
+#endif
   return AMD_COMGR_STATUS_ERROR;
 #else
   if (auto Status = createTmpDirs()) {
     return Status;
+  }
+
+  // Extract GPU processor from ISA name if set, for SPIR-V feature predicate
+  // resolution. TODO: Make ISA name required for this action once users have
+  // migrated.
+  StringRef OffloadArch;
+  TargetIdentifier Ident;
+  if (ActionInfo->IsaName) {
+    if (auto Status = parseTargetIdentifier(ActionInfo->IsaName, Ident))
+      return Status;
+    OffloadArch = Ident.Processor;
   }
 
   auto Cache = CommandCache::get(LogS);
@@ -2257,7 +2433,7 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
     }
 
     SmallString<0> OutBuf;
-    SPIRVCommand SPIRV(Input, OutBuf);
+    SPIRVCommand SPIRV(Input, OutBuf, OffloadArch);
 
     amd_comgr_status_t Status;
     if (!Cache) {
@@ -2289,7 +2465,8 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
 
     if (env::shouldEmitVerboseLogs()) {
       LogS << "SPIR-V Translation: amd-llvm-spirv -r --spirv-target-env=CL2.0 "
-           << getFilePath(Input, InputDir) << " "
+              "--spirv-preserve-auxdata "
+           << getFilePath(Input, InputDir) << " -o "
            << getFilePath(Output, OutputDir) << " (command line equivalent)\n";
     }
 
@@ -2300,8 +2477,164 @@ AMDGPUCompiler::translateSpirvToBitcodeImpl(DataSet *SpirvInSet,
     }
   }
 
+  // If block sizes are specified, clone kernels for each block size
+  if (!ActionInfo->BlockSizes.empty()) {
+    if (auto Status = cloneKernelsInBitcode(BcOutSet)) {
+      return Status;
+    }
+  }
+
   return AMD_COMGR_STATUS_SUCCESS;
 #endif
+}
+
+amd_comgr_status_t AMDGPUCompiler::cloneKernelsInBitcode(DataSet *BcSet) {
+  if (ActionInfo->BlockSizes.empty()) {
+    // Nothing to do
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
+  if (env::shouldEmitVerboseLogs()) {
+    LogS << "Cloning kernels for block sizes:";
+    for (size_t BlockSize : ActionInfo->BlockSizes) {
+      LogS << " " << BlockSize;
+    }
+    LogS << "\n";
+  }
+
+  // For each bitcode module, clone kernels for each block size
+  LLVMContext Context;
+  Context.setDiagnosticHandler(
+      std::make_unique<AMDGPUCompilerDiagnosticHandler>(LogS), true);
+
+  // We need to clone all bitcode modules and replace them in the set
+  SmallVector<DataObject *, 8> OriginalBitcodes =
+      BcSet->DataObjects.takeVector();
+
+  for (auto *Input : OriginalBitcodes) {
+    if (Input->DataKind != AMD_COMGR_DATA_KIND_BC) {
+      LogS << "Unexpected input data kind for " << Input->Name << "\n";
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    // Parse the bitcode module
+    SMDiagnostic Err;
+    MemoryBufferRef BufferRef(StringRef(Input->Data, Input->Size), Input->Name);
+    auto M = parseIR(BufferRef, Err, Context);
+    if (!M) {
+      LogS << "Failed to parse bitcode module: " << Input->Name << "\n";
+      Err.print("comgr", LogS);
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
+    // Clone kernels for each block size
+    SmallVector<Function *, 16> OriginalKernels;
+    for (Function &F : *M) {
+      // Check if this is a kernel function (SPIR-V kernels use SPIR_KERNEL
+      // calling convention)
+      if ((F.getCallingConv() == llvm::CallingConv::AMDGPU_KERNEL ||
+           F.getCallingConv() == llvm::CallingConv::SPIR_KERNEL) &&
+          !F.isDeclaration()) {
+        OriginalKernels.push_back(&F);
+      }
+    }
+
+    if (env::shouldEmitVerboseLogs()) {
+      LogS << "Found " << OriginalKernels.size() << " kernel(s) in module "
+           << Input->Name << "\n";
+    }
+
+    for (Function *OrigKernel : OriginalKernels) {
+      // Determine the bounds of the original kernel.
+      auto FlatWGSizeAttr =
+          OrigKernel->getFnAttribute("amdgpu-flat-work-group-size");
+      std::pair<size_t, size_t> OriginalBlockSizeLimits{1ul, 1024ul};
+      if (FlatWGSizeAttr.isValid()) {
+        StringRef Val = FlatWGSizeAttr.getValueAsString();
+        std::pair<StringRef, StringRef> Sizes = Val.split(',');
+        if (!Sizes.first.empty())
+          Sizes.first.getAsInteger(10, OriginalBlockSizeLimits.first);
+        if (!Sizes.second.empty())
+          Sizes.second.getAsInteger(10, OriginalBlockSizeLimits.second);
+      }
+
+      std::string OriginalName = OrigKernel->getName().str();
+      std::string BlockSizeLowerBound =
+          std::to_string(OriginalBlockSizeLimits.first);
+
+      for (size_t BlockSize : ActionInfo->BlockSizes) {
+        if (BlockSize == OriginalBlockSizeLimits.second) {
+          // Keep the original kernel with its original name and block size
+          continue;
+        }
+
+        if (BlockSize < OriginalBlockSizeLimits.first) {
+          if (env::shouldEmitVerboseLogs()) {
+            LogS << "Cannot clone kernel for block size " << BlockSize
+                 << " since it is smaller than the minimum block size of "
+                 << OriginalBlockSizeLimits.first << "\n";
+          }
+          continue;
+        }
+
+        if (BlockSize > OriginalBlockSizeLimits.second) {
+          if (env::shouldEmitVerboseLogs()) {
+            LogS << "Cannot clone kernel for block size " << BlockSize
+                 << " since it is larger than the maximum block size of "
+                 << OriginalBlockSizeLimits.second << "\n";
+          }
+          continue;
+        }
+
+        if (env::shouldEmitVerboseLogs()) {
+          LogS << "Cloning " << OrigKernel->getName()
+               << " for block size: " << BlockSize << "\n";
+        }
+
+        // Create a clone of the kernel
+        ValueToValueMapTy VMap;
+        Function *ClonedKernel = CloneFunction(OrigKernel, VMap);
+
+        // Ensure calling convention is preserved (should be AMDGPU_KERNEL)
+        ClonedKernel->setCallingConv(OrigKernel->getCallingConv());
+
+        // Rename the cloned kernel with block size suffix
+        std::string NewName = OriginalName + ".bs" + std::to_string(BlockSize);
+        ClonedKernel->setName(NewName);
+
+        // Remove the old amdgpu-flat-work-group-size attribute and add the new
+        // one
+        ClonedKernel->removeFnAttr("amdgpu-flat-work-group-size");
+        ClonedKernel->addFnAttr("amdgpu-flat-work-group-size",
+                                BlockSizeLowerBound + "," +
+                                    std::to_string(BlockSize));
+
+        if (env::shouldEmitVerboseLogs()) {
+          LogS << "  Cloned " << OrigKernel->getName() << " -> " << NewName
+               << "\n";
+        }
+      }
+    }
+
+    // Write the modified module to a bitcode buffer
+    SmallString<0> BitcodeBuffer;
+    raw_svector_ostream OS(BitcodeBuffer);
+    WriteBitcodeToFile(*M, OS);
+
+    // Update the existing data object with the cloned bitcode
+    Input->setData(BitcodeBuffer);
+
+    if (env::shouldSaveTemps()) {
+      if (auto Status = outputToFile(Input, getFilePath(Input, OutputDir))) {
+        return Status;
+      }
+    }
+
+    // Re-add the modified bitcode to the set
+    BcSet->DataObjects.insert(Input);
+  }
+
+  return AMD_COMGR_STATUS_SUCCESS;
 }
 
 amd_comgr_status_t AMDGPUCompiler::compileSpirvToRelocatable() {
@@ -2369,8 +2702,6 @@ amd_comgr_status_t AMDGPUCompiler::compileSourceToSpirv() {
   // Add SPIRV-specific compilation flags
   Args.push_back("--offload-arch=amdgcnspirv");
   Args.push_back("--no-gpu-bundle-output");
-  Args.push_back("-c");
-
 
 #if _WIN32
   Args.push_back("-fshort-wchar");

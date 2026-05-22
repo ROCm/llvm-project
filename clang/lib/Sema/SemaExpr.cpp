@@ -6076,9 +6076,14 @@ Sema::ConvertArgumentsForCall(CallExpr *Call, Expr *Fn,
                               SourceLocation RParenLoc,
                               bool IsExecConfig) {
   // Bail out early if calling a builtin with custom typechecking.
+  // For HLSL builtin aliases, argument conversion is still needed because
+  // overload resolution may have selected a conversion sequence (e.g.,
+  // vector-to-scalar truncation) that must be applied before the custom
+  // type checker runs.
   if (FDecl)
     if (unsigned ID = FDecl->getBuiltinID())
-      if (Context.BuiltinInfo.hasCustomTypechecking(ID))
+      if (Context.BuiltinInfo.hasCustomTypechecking(ID) &&
+          !(Context.getLangOpts().HLSL && FDecl->hasAttr<BuiltinAliasAttr>()))
         return false;
 
   // C99 6.5.2.2p7 - the arguments are implicitly converted, as if by
@@ -6914,6 +6919,15 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 
     FunctionDecl *FDecl = dyn_cast<FunctionDecl>(NDecl);
     if (FDecl && FDecl->getBuiltinID()) {
+      const llvm::Triple &Triple = Context.getTargetInfo().getTriple();
+      if (Triple.isSPIRV() && Triple.getVendor() == llvm::Triple::AMD) {
+        if (Context.BuiltinInfo.isTSBuiltin(FDecl->getBuiltinID()) &&
+            !Context.BuiltinInfo.isAuxBuiltinID(FDecl->getBuiltinID())) {
+          AMDGPU().AddPotentiallyUnguardedBuiltinUser(cast<FunctionDecl>(
+              getFunctionLevelDeclContext(/*AllowLambda=*/true)));
+        }
+      }
+
       // Rewrite the function decl for this builtin by replacing parameters
       // with no explicit address space with the address space of the arguments
       // in ArgExprs.
@@ -7196,6 +7210,18 @@ ExprResult Sema::BuildResolvedCallExpr(Expr *Fn, NamedDecl *NDecl,
 
   // Bail out early if calling a builtin with custom type checking.
   if (BuiltinID && Context.BuiltinInfo.hasCustomTypechecking(BuiltinID)) {
+    // For HLSL builtin aliases, the call was resolved via overload resolution
+    // which may have selected a conversion sequence (e.g., vector-to-scalar
+    // truncation). Convert arguments to match the declared prototype before
+    // the custom type checker runs, otherwise the builtin will operate on
+    // the unconverted argument types.
+    if (getLangOpts().HLSL && FDecl && FDecl->hasAttr<BuiltinAliasAttr>()) {
+      if (const auto *P = FDecl->getType()->getAs<FunctionProtoType>()) {
+        if (ConvertArgumentsForCall(TheCall, Fn, FDecl, P, Args, RParenLoc,
+                                    IsExecConfig))
+          return ExprError();
+      }
+    }
     ExprResult E = CheckBuiltinFunctionCall(FDecl, BuiltinID, TheCall);
     if (!E.isInvalid() && Context.BuiltinInfo.isImmediate(BuiltinID))
       E = CheckForImmediateInvocation(E, FDecl);
@@ -7585,12 +7611,12 @@ Sema::ActOnInitList(SourceLocation LBraceLoc, MultiExprArg InitArgList,
     }
   }
 
-  return BuildInitList(LBraceLoc, InitArgList, RBraceLoc);
+  return BuildInitList(LBraceLoc, InitArgList, RBraceLoc, /*IsExplicit=*/true);
 }
 
-ExprResult
-Sema::BuildInitList(SourceLocation LBraceLoc, MultiExprArg InitArgList,
-                    SourceLocation RBraceLoc) {
+ExprResult Sema::BuildInitList(SourceLocation LBraceLoc,
+                               MultiExprArg InitArgList,
+                               SourceLocation RBraceLoc, bool IsExplicit) {
   // Semantic analysis for initializers is done by ActOnDeclarator() and
   // CheckInitializer() - it requires knowledge of the object being initialized.
 
@@ -7608,8 +7634,8 @@ Sema::BuildInitList(SourceLocation LBraceLoc, MultiExprArg InitArgList,
     }
   }
 
-  InitListExpr *E =
-      new (Context) InitListExpr(Context, LBraceLoc, InitArgList, RBraceLoc);
+  InitListExpr *E = new (Context)
+      InitListExpr(Context, LBraceLoc, InitArgList, RBraceLoc, IsExplicit);
   E->setType(Context.VoidTy); // FIXME: just a place holder for now.
   return E;
 }
@@ -8278,8 +8304,9 @@ ExprResult Sema::BuildVectorLiteral(SourceLocation LParenLoc,
   }
   // FIXME: This means that pretty-printing the final AST will produce curly
   // braces instead of the original commas.
-  InitListExpr *initE = new (Context) InitListExpr(Context, LiteralLParenLoc,
-                                                   initExprs, LiteralRParenLoc);
+  InitListExpr *initE =
+      new (Context) InitListExpr(Context, LiteralLParenLoc, initExprs,
+                                 LiteralRParenLoc, /*isExplicit=*/false);
   initE->setType(Ty);
   return BuildCompoundLiteralExpr(LParenLoc, TInfo, RParenLoc, initE);
 }
@@ -10036,8 +10063,8 @@ static void ConstructTransparentUnion(Sema &S, ASTContext &C,
   // Build an initializer list that designates the appropriate member
   // of the transparent union.
   Expr *E = EResult.get();
-  InitListExpr *Initializer = new (C) InitListExpr(C, SourceLocation(),
-                                                   E, SourceLocation());
+  InitListExpr *Initializer = new (C) InitListExpr(
+      C, SourceLocation(), E, SourceLocation(), /*isExplicit=*/false);
   Initializer->setType(UnionType);
   Initializer->setInitializedFieldInUnion(Field);
 
@@ -13936,6 +13963,11 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
     if (RHS.isInvalid())
       return QualType();
 
+    if (LHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      LHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(LHS.get());
+    if (RHS.get()->getType() == Context.AMDGPUFeaturePredicateTy)
+      RHS = AMDGPU().ExpandAMDGPUPredicateBuiltIn(RHS.get());
+
     if (!LHS.get()->getType()->isScalarType() ||
         !RHS.get()->getType()->isScalarType())
       return InvalidOperands(Loc, LHS, RHS);
@@ -14621,15 +14653,7 @@ void Sema::DiagnoseCommaOperator(const Expr *LHS, SourceLocation Loc) {
   // The listed locations are the initialization and increment portions
   // of a for loop.  The additional checks are on the condition of
   // if statements, do/while loops, and for loops.
-  // Differences in scope flags for C89 mode requires the extra logic.
-  const unsigned ForIncrementFlags =
-      getLangOpts().C99 || getLangOpts().CPlusPlus
-          ? Scope::ControlScope | Scope::ContinueScope | Scope::BreakScope
-          : Scope::ContinueScope | Scope::BreakScope;
-  const unsigned ForInitFlags = Scope::ControlScope | Scope::DeclScope;
-  const unsigned ScopeFlags = getCurScope()->getFlags();
-  if ((ScopeFlags & ForIncrementFlags) == ForIncrementFlags ||
-      (ScopeFlags & ForInitFlags) == ForInitFlags)
+  if (getCurScope()->isControlScope())
     return;
 
   // If there are multiple comma operators used together, get the RHS of the
@@ -16351,7 +16375,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
         break;
       } else if (resultType == Context.AMDGPUFeaturePredicateTy) {
         resultType = Context.getLogicalOperationType();
-        Input = AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast<CallExpr>(InputExpr));
+        Input = AMDGPU().ExpandAMDGPUPredicateBuiltIn(InputExpr);
         break;
       } else {
         return ExprError(Diag(OpLoc, diag::err_typecheck_unary_expr)
@@ -21221,7 +21245,7 @@ ExprResult Sema::CheckBooleanCondition(SourceLocation Loc, Expr *E,
 
   if (!E->isTypeDependent()) {
     if (E->getType() == Context.AMDGPUFeaturePredicateTy)
-      return AMDGPU().ExpandAMDGPUPredicateBI(dyn_cast_or_null<CallExpr>(E));
+      return AMDGPU().ExpandAMDGPUPredicateBuiltIn(E);
 
     if (getLangOpts().CPlusPlus)
       return CheckCXXBooleanCondition(E, IsConstexpr); // C++ 6.4p4

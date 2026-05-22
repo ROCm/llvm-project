@@ -91,6 +91,7 @@ enum Kind {
   kw_unwind,
   kw_datalayout,
   kw_volatile,
+  kw_elementwise,
   kw_atomic,
   kw_unordered,
   kw_monotonic,
@@ -525,12 +526,14 @@ enum Kind {
   DIOp,                // DIOpFoo
   DbgRecordType,       // dbg_foo
   DwarfEnumKind,       // DW_APPLE_ENUM_KIND_foo
+  FloatLiteral,        // Unparsed float literal
 
   // Type valued tokens (TyVal).
   Type,
 
-  APFloat, // APFloatVal
-  APSInt   // APSInt
+  FloatHexLiteral, // f0x..., stored as APSInt
+  APFloat,         // APFloatVal
+  APSInt           // APSInt
 };
 } // end namespace lltok
 } // end namespace llvm

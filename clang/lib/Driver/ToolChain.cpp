@@ -963,15 +963,20 @@ void ToolChain::addFortranRuntimeLibs(const ArgList &Args,
       CmdArgs.push_back("-lexecinfo");
   }
 
-  // libomp needs libatomic for atomic operations if using libgcc
   if (Args.hasFlag(options::OPT_fopenmp, options::OPT_fopenmp_EQ,
                    options::OPT_fno_openmp, false)) {
+    CmdArgs.push_back("-lflang_rt.openmp");
+
+    // libomp needs libatomic for atomic operations if using libgcc
     Driver::OpenMPRuntimeKind OMPRuntime = getDriver().getOpenMPRuntime(Args);
     ToolChain::RuntimeLibType RuntimeLib = GetRuntimeLibType(Args);
     if ((OMPRuntime == Driver::OMPRT_OMP &&
          RuntimeLib == ToolChain::RLT_Libgcc) &&
         !getTriple().isKnownWindowsMSVCEnvironment()) {
-      CmdArgs.push_back("-latomic");
+      if (getTriple().isOSAIX())
+        CmdArgs.push_back("-lcompiler_rt");
+      else
+        CmdArgs.push_back("-latomic");
     }
   }
 }
@@ -1135,6 +1140,12 @@ ToolChain::getTargetSubDirPath(StringRef BaseDir) const {
     return getFallbackAndroidTargetPath(BaseDir);
 
   return {};
+}
+
+std::optional<std::string> ToolChain::getDefaultIntrinsicModuleDir() const {
+  SmallString<128> P(D.ResourceDir);
+  llvm::sys::path::append(P, "finclude", "flang");
+  return getTargetSubDirPath(P);
 }
 
 std::optional<std::string> ToolChain::getRuntimePath() const {
@@ -1352,6 +1363,7 @@ bool ToolChain::isThreadModelSupported(const StringRef Model) const {
 }
 
 std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
+                                         StringRef BoundArch,
                                          types::ID InputType) const {
   switch (getTriple().getArch()) {
   default:
@@ -1405,8 +1417,9 @@ std::string ToolChain::ComputeLLVMTriple(const ArgList &Args,
 }
 
 std::string ToolChain::ComputeEffectiveClangTriple(const ArgList &Args,
+                                                   StringRef BoundArch,
                                                    types::ID InputType) const {
-  return ComputeLLVMTriple(Args, InputType);
+  return ComputeLLVMTriple(Args, BoundArch, InputType);
 }
 
 std::string ToolChain::computeSysRoot() const {
@@ -1765,7 +1778,9 @@ ToolChain::getSystemGPUArchs(const llvm::opt::ArgList &Args) const {
   return SmallVector<std::string>();
 }
 
-SanitizerMask ToolChain::getSupportedSanitizers() const {
+SanitizerMask
+ToolChain::getSupportedSanitizers(StringRef BoundArch,
+                                  Action::OffloadKind DeviceOffloadKind) const {
   // Return sanitizers which don't require runtime support and are not
   // platform dependent.
 
@@ -1911,7 +1926,7 @@ llvm::opt::DerivedArgList *ToolChain::TranslateOpenMPTargetArgs(
       llvm::Triple TT = normalizeOffloadTriple(A->getValue(0));
 
       // Passing device args: -Xopenmp-target=<triple> -opt=val.
-      if (TT.getTriple() == getTripleString())
+      if (TT.isCompatibleWith(getTriple()))
         Index = Args.getBaseArgs().MakeIndex(A->getValue(1));
       else
         continue;

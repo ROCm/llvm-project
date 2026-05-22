@@ -90,7 +90,7 @@ public:
                 std::unique_ptr<MCCodeEmitter> emitter,
                 std::unique_ptr<MCAsmBackend> asmbackend)
       : MCAsmBaseStreamer(Context), OSOwner(std::move(os)), OS(*OSOwner),
-        MAI(Context.getAsmInfo()), InstPrinter(std::move(printer)),
+        MAI(&Context.getAsmInfo()), InstPrinter(std::move(printer)),
         Assembler(std::make_unique<MCAssembler>(
             Context, std::move(asmbackend), std::move(emitter),
             (asmbackend) ? asmbackend->createObjectWriter(NullStream)
@@ -116,7 +116,7 @@ public:
       break;
     case MCTargetOptions::DefaultDwarfDirectory:
       UseDwarfDirectory =
-          Context.getAsmInfo()->enableDwarfFileDirectoryDefault();
+          Context.getAsmInfo().enableDwarfFileDirectoryDefault();
       break;
     }
   }
@@ -400,8 +400,7 @@ public:
   void emitCFILLVMRegisterPair(int64_t Register, int64_t R1, int64_t R1Size,
                                int64_t R2, int64_t R2Size, SMLoc Loc) override;
   void emitCFILLVMVectorRegisters(
-      int64_t Register,
-      std::vector<MCCFIInstruction::VectorRegisterWithLane> VRs,
+      int64_t Register, ArrayRef<MCCFIInstruction::VectorRegisterWithLane> VRs,
       SMLoc Loc) override;
   void emitCFILLVMVectorOffset(int64_t Register, int64_t RegisterSize,
                                int64_t MaskRegister, int64_t MaskRegisterSize,
@@ -2219,7 +2218,7 @@ void MCAsmStreamer::emitCFILLVMRegisterPair(int64_t Register, int64_t R1,
 }
 
 void MCAsmStreamer::emitCFILLVMVectorRegisters(
-    int64_t Register, std::vector<MCCFIInstruction::VectorRegisterWithLane> VRs,
+    int64_t Register, ArrayRef<MCCFIInstruction::VectorRegisterWithLane> VRs,
     SMLoc Loc) {
   MCStreamer::emitCFILLVMVectorRegisters(Register, VRs, Loc);
 
@@ -2779,9 +2778,9 @@ void MCAsmStreamer::emitDwarfLineEndEntry(MCSection *Section,
 
   if (!EndLabel)
     EndLabel = TextSection->getEndSymbol(Ctx);
-  const MCAsmInfo *AsmInfo = Ctx.getAsmInfo();
+  const MCAsmInfo &AsmInfo = Ctx.getAsmInfo();
   emitDwarfAdvanceLineAddr(INT64_MAX, LastLabel, EndLabel,
-                           AsmInfo->getCodePointerSize());
+                           AsmInfo.getCodePointerSize());
 }
 
 // Generate DWARF line sections for assembly mode without .loc/.file

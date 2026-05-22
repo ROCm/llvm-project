@@ -225,10 +225,38 @@ ElfView::getKernelVgprCount(StringRef KernelName,
     return std::nullopt;
   }
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   uint32_t Granulated = AMDHSA_BITS_GET(
       Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
   return (Granulated + 1) * VgprGranuleSize;
+}
+
+// Reads the static (compile-time-fixed) LDS allocation from the kernel
+// descriptor's group_segment_fixed_size field. Dynamic LDS is added by the
+// host at dispatch time and is not visible here -- see the declaration's
+// doc comment for the full lower-bound caveat.
+
+std::optional<uint32_t>
+ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
+  namespace hsa = amdhsa;
+  // findKernelDescriptor never writes through the returned pointer in this
+  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // const_cast on `this` keeps the read-only accessor const-correct without
+  // duplicating the lookup helper.
+  const uint8_t *Kd =
+      const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelStaticLdsSize: kernel descriptor "
+          << "symbol '" << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t LdsSize;
+  std::memcpy(&LdsSize,
+              Kd + offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
+              sizeof(LdsSize));
+  return LdsSize;
 }
 
 // -- ElfView::updateKernelDescriptor ------------------------------------------
@@ -248,7 +276,9 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
   }
 
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   if (ExtraVgprs != 0 && VgprGranuleSize != 0) {
     uint32_t Current = AMDHSA_BITS_GET(
         Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
@@ -271,7 +301,8 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
                     hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT,
                     std::min<uint32_t>(Current + Extra, MaxGran));
   }
-  std::memcpy(Kd + KdRsrc1Offset, &Rsrc1, sizeof(Rsrc1));
+  std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              &Rsrc1, sizeof(Rsrc1));
 }
 
 // -- Section/program header adjustment for trampoline growth ------------------
@@ -314,6 +345,14 @@ static void adjustSectionHeaders(uint8_t *Elf, size_t ElfSize,
       uint64_t NewOffset = ShOffset + TrampTotal;
       std::memcpy(Sh + offsetof(Shdr, sh_offset), &NewOffset,
                   sizeof(NewOffset));
+      uint64_t ShFlags;
+      std::memcpy(&ShFlags, Sh + offsetof(Shdr, sh_flags), sizeof(ShFlags));
+      if (ShFlags & ELF::SHF_ALLOC) {
+        uint64_t ShAddr;
+        std::memcpy(&ShAddr, Sh + offsetof(Shdr, sh_addr), sizeof(ShAddr));
+        ShAddr += TrampTotal;
+        std::memcpy(Sh + offsetof(Shdr, sh_addr), &ShAddr, sizeof(ShAddr));
+      }
     }
   }
 }
@@ -354,6 +393,14 @@ static void adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
     } else if (POffset > TextOffset) {
       POffset += TrampTotal;
       std::memcpy(Ph + offsetof(Phdr, p_offset), &POffset, sizeof(POffset));
+      uint64_t PVaddr;
+      std::memcpy(&PVaddr, Ph + offsetof(Phdr, p_vaddr), sizeof(PVaddr));
+      PVaddr += TrampTotal;
+      std::memcpy(Ph + offsetof(Phdr, p_vaddr), &PVaddr, sizeof(PVaddr));
+      uint64_t PPaddr;
+      std::memcpy(&PPaddr, Ph + offsetof(Phdr, p_paddr), sizeof(PPaddr));
+      PPaddr += TrampTotal;
+      std::memcpy(Ph + offsetof(Phdr, p_paddr), &PPaddr, sizeof(PPaddr));
     }
   }
 }
@@ -361,7 +408,8 @@ static void adjustProgramHeaders(uint8_t *Elf, size_t ElfSize,
 // -- ElfView::growWithTrampolines ---------------------------------------------
 
 std::unique_ptr<WritableMemoryBuffer>
-ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
+ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines,
+                             ArrayRef<uint8_t> SNopBytes) const {
   const size_t InputSize = size();
   const uint8_t *Input = data();
 
@@ -380,27 +428,28 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
     return nullptr;
   }
 
-  // Enforce the invariant: no SHF_ALLOC section may start past `.text`. We
-  // only shift file offsets, not virtual addresses, so any loaded section
-  // appearing after `.text` would end up with stale sh_addr / p_vaddr.
   uint64_t TextEnd = textOffset() + textSize();
+
+  // Pad TrampTotal to the maximum alignment of all post-.text sections so
+  // that shifting file offsets preserves sh_addralign invariants. The
+  // sh_addr update in adjustSectionHeaders is still gated on SHF_ALLOC.
+  uint64_t MaxPostTextAlign = 1;
   for (const ELFT::Shdr &Shdr : Sections) {
-    if (!(Shdr.sh_flags & ELF::SHF_ALLOC))
+    if (Shdr.sh_offset <= textOffset())
       continue;
-    if (Shdr.sh_offset < TextEnd)
-      continue;
-    Expected<StringRef> NameOrErr = File.getSectionName(Shdr);
-    StringRef Name = NameOrErr ? *NameOrErr : StringRef("<unknown>");
-    if (!NameOrErr)
-      consumeError(NameOrErr.takeError());
-    log() << "hotswap: error: growWithTrampolines refuses to run: "
-          << "SHF_ALLOC section '" << Name << "' starts at file offset "
-          << Shdr.sh_offset << " which is past .text end " << TextEnd
-          << "; virtual address shifting is not implemented.\n";
+    if (Shdr.sh_addralign > MaxPostTextAlign)
+      MaxPostTextAlign = Shdr.sh_addralign;
+  }
+  size_t PaddedTrampTotal = llvm::alignTo(TrampTotal, MaxPostTextAlign);
+  if (PaddedTrampTotal > SIZE_MAX - InputSize) {
+    log() << "hotswap: error: growWithTrampolines: padded trampoline bytes ("
+          << PaddedTrampTotal << ") + ELF size (" << InputSize
+          << ") overflow size_t.\n";
     return nullptr;
   }
+  size_t PadBytes = PaddedTrampTotal - TrampTotal;
 
-  const size_t NewSize = InputSize + TrampTotal;
+  const size_t NewSize = InputSize + PaddedTrampTotal;
   std::unique_ptr<WritableMemoryBuffer> Buf =
       WritableMemoryBuffer::getNewUninitMemBuffer(NewSize);
   if (!Buf) {
@@ -417,15 +466,25 @@ ElfView::growWithTrampolines(ArrayRef<Trampoline> Trampolines) const {
     std::memcpy(Out + Pos, T.Bytes.data(), T.Bytes.size());
     Pos += T.Bytes.size();
   }
+  if (PadBytes > 0 && SNopBytes.size() == MinInstSize) {
+    for (size_t I = 0; I < PadBytes; I += MinInstSize)
+      std::memcpy(Out + Pos + I, SNopBytes.data(), MinInstSize);
+    Pos += PadBytes;
+  } else if (PadBytes > 0) {
+    std::memset(Out + Pos, 0, PadBytes);
+    Pos += PadBytes;
+  }
   if (TextEnd < InputSize)
     std::memcpy(Out + Pos, Input + TextEnd, InputSize - TextEnd);
 
-  adjustSectionHeaders(Out, NewSize, textOffset(), textSize(), TrampTotal);
-  adjustProgramHeaders(Out, NewSize, textOffset(), textSize(), TrampTotal);
+  adjustSectionHeaders(Out, NewSize, textOffset(), textSize(),
+                       PaddedTrampTotal);
+  adjustProgramHeaders(Out, NewSize, textOffset(), textSize(),
+                       PaddedTrampTotal);
   log() << "hotswap: growWithTrampolines: grew ELF from " << InputSize << " to "
         << NewSize << " bytes (" << Trampolines.size() << " trampoline"
         << (Trampolines.size() == 1 ? "" : "s") << ", " << TrampTotal
-        << " bytes appended).\n";
+        << " trampoline bytes + " << PadBytes << " alignment padding).\n";
   return Buf;
 }
 

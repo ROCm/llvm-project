@@ -138,6 +138,8 @@ void Flang::addDebugOptions(const llvm::opt::ArgList &Args, const JobAction &JA,
                    options::OPT_foffload_global_filtering,
                    options::OPT_fno_offload_global_filtering,
                    options::OPT_funsigned, options::OPT_fno_unsigned,
+                   options::OPT_facc_allow_default_none_scalars,
+                   options::OPT_fno_acc_allow_default_none_scalars,
                    options::OPT_finstrument_functions});
 
   if (Args.hasArg(options::OPT_fopenacc)) {
@@ -256,11 +258,15 @@ void Flang::addCodegenOptions(const ArgList &Args,
           << "-frepack-arrays-contiguity=" << arg;
     }
 
+  // -fdo-concurrent and -fdo-concurrent-to-openmp are aliases. Make sure the
+  // correct alias (spelling) is added to the list of command arguments.
+  if (const Arg *A = Args.getLastArg(options::OPT_fdo_concurrent_EQ)) {
+    CmdArgs.push_back(Args.MakeArgString(A->getAsString(Args)));
+  }
+
   Args.addAllArgs(
       CmdArgs,
       {options::OPT_fdo_concurrent_to_openmp_EQ,
-       options::OPT_flang_experimental_hlfir,
-       options::OPT_flang_deprecated_no_hlfir,
        options::OPT_fno_ppc_native_vec_elem_order,
        options::OPT_fppc_native_vec_elem_order, options::OPT_finit_global_zero,
        options::OPT_fno_init_global_zero, options::OPT_frepack_arrays,
@@ -277,18 +283,13 @@ void Flang::addCodegenOptions(const ArgList &Args,
 void Flang::addLTOOptions(const ArgList &Args, ArgStringList &CmdArgs) const {
   const ToolChain &TC = getToolChain();
   const Driver &D = TC.getDriver();
-  DiagnosticsEngine &Diags = D.getDiags();
   LTOKind LTOMode = D.getLTOMode();
   // LTO mode is parsed by the Clang driver library.
   assert(LTOMode != LTOK_Unknown && "Unknown LTO mode.");
   if (LTOMode == LTOK_Full)
     CmdArgs.push_back("-flto=full");
-  else if (LTOMode == LTOK_Thin) {
-    Diags.Report(
-        Diags.getCustomDiagID(DiagnosticsEngine::Warning,
-                              "the option '-flto=thin' is a work in progress"));
+  else if (LTOMode == LTOK_Thin)
     CmdArgs.push_back("-flto=thin");
-  }
   Args.addAllArgs(CmdArgs, {options::OPT_ffat_lto_objects,
                             options::OPT_fno_fat_lto_objects});
 }
@@ -1090,10 +1091,19 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
 
   addFortranDialectOptions(Args, CmdArgs);
 
-  if (Args.hasArg(options::OPT_ffast_amd_memory_allocator)) {
-    CmdArgs.push_back("-ffast-amd-memory-allocator");
-    CmdArgs.push_back("-mmlir");
-    CmdArgs.push_back("-use-alloc-runtime");
+  if (const Arg *A =
+          Args.getLastArg(options::OPT_fopenmp_default_allocate_EQ)) {
+    StringRef Val(A->getValue());
+    if (Val != "target" && Val != "host") {
+      D.Diag(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
+    } else {
+      D.Diag(diag::warn_openmp_default_allocate_experimental);
+      CmdArgs.push_back(Args.MakeArgString("-fopenmp-default-allocate=" + Val));
+      if (Val == "target") {
+        CmdArgs.push_back("-mmlir");
+        CmdArgs.push_back("-use-alloc-runtime");
+      }
+    }
   }
 
   // 'flang -E' always produces output that is suitable for use as fixed form
@@ -1195,6 +1205,38 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   // Pass the path to compiler resource files.
   CmdArgs.push_back("-resource-dir");
   CmdArgs.push_back(D.ResourceDir.c_str());
+
+  // Default intrinsic module dirs must be added after any user-provided dirs in
+  // -fintrinsic-modules-path since the default dirs have lower precedence than
+  // user-provided dirs
+  if (std::optional<std::string> IntrModPath =
+          TC.getDefaultIntrinsicModuleDir()) {
+    CmdArgs.push_back("-fintrinsic-modules-path");
+    CmdArgs.push_back(Args.MakeArgString(*IntrModPath));
+  }
+
+  // Ideally, every target triple has its own set of builtin modules since they
+  // are compiled with platform-dependent conditionals such as `#if __x86_64__`.
+  // However, getting the builtin modules for offload targets requires building
+  // the flang-rt and openmp for those targets as well:
+  // -DLLVM_RUNTIME_TARGETS=default;amdgcn-amd-amdhsa;nvptx64-nvidia-cuda.
+  // To reduce friction when build systems have not yet been updated, we also
+  // add the host's builtin module to the search path (with lower priority), in
+  // case a module file has not been found for the offload targets itself.
+  // FIXME: This workaround may mix module files targeting different triples and
+  //        should eventually be removed.
+  auto &&HostTCs =
+      C.getOffloadToolChains<clang::driver::OffloadAction ::OFK_Host>();
+  for (auto [OKind, HostTC] : llvm::make_range(HostTCs.first, HostTCs.second)) {
+    if (HostTC == &TC)
+      continue;
+
+    if (std::optional<std::string> IntrModPath =
+            HostTC->getDefaultIntrinsicModuleDir()) {
+      CmdArgs.push_back("-fintrinsic-modules-path");
+      CmdArgs.push_back(Args.MakeArgString(*IntrModPath));
+    }
+  }
 
   // Offloading related options
   addOffloadOptions(C, Inputs, JA, Args, CmdArgs);

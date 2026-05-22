@@ -22,8 +22,8 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/VirtualFileSystem.h"
+#include "llvm/TargetParser/AMDGPUTargetParser.h"
 #include "llvm/TargetParser/Host.h"
-#include "llvm/TargetParser/TargetParser.h"
 #include <optional>
 #include <system_error>
 
@@ -663,6 +663,12 @@ void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   getToolChain().addProfileRTLibs(Args, CmdArgs);
 
+  // Divergent because asanrtl.bc does not use the standard compiler-rt
+  // semantics. Skip this if `-fsanitize=address` is set.
+  const SanitizerArgs &SanArgs = getToolChain().getSanitizerArgs(Args);
+  if (!SanArgs.needsAsanRt())
+    addSanitizerRuntimes(getToolChain(), Args, CmdArgs);
+
   if (Args.hasArg(options::OPT_stdlib))
     CmdArgs.append({"-lc", "-lm"});
   if (Args.hasArg(options::OPT_startfiles)) {
@@ -688,12 +694,7 @@ void amdgpu::getAMDGPUTargetFeatures(const Driver &D,
                                      StringRef TcTargetID) {
   // Add target ID features to -target-feature options. No diagnostics should
   // be emitted here since invalid target ID is diagnosed at other places.
-  StringRef TargetID;
-  if (Args.hasArg(options::OPT_mcpu_EQ))
-    TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
-  else if (Args.hasArg(options::OPT_march_EQ))
-    TargetID = Args.getLastArgValue(options::OPT_march_EQ);
-
+  StringRef TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
   // Use this toolchain's TargetID if mcpu is not defined
   if (TargetID.empty() && !TcTargetID.empty())
     TargetID = TcTargetID;
@@ -804,6 +805,13 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
   for (Arg *A : Args)
     DAL->append(A);
 
+  // AMDGPU is intended to use `-mcpu` but we accept `-march` for legacy.
+  if (Arg *A = DAL->getLastArg(options::OPT_march_EQ)) {
+    DAL->eraseArg(options::OPT_march_EQ);
+    if (!DAL->hasArg(options::OPT_mcpu_EQ))
+      DAL->AddJoinedArg(A, Opts.getOption(options::OPT_mcpu_EQ), A->getValue());
+  }
+
   // Replace -mcpu=native with detected GPU.
   Arg *LastMCPUArg = DAL->getLastArg(options::OPT_mcpu_EQ);
   if (LastMCPUArg && StringRef(LastMCPUArg->getValue()) == "native") {
@@ -811,14 +819,12 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
     auto GPUsOrErr = getSystemGPUArchs(Args);
     if (!GPUsOrErr) {
       getDriver().Diag(diag::err_drv_undetermined_gpu_arch)
-          << llvm::Triple::getArchTypeName(getArch())
-          << llvm::toString(GPUsOrErr.takeError()) << "-mcpu";
+          << getArchName() << llvm::toString(GPUsOrErr.takeError()) << "-mcpu";
     } else {
       auto &GPUs = *GPUsOrErr;
-      if (llvm::SmallSet<std::string, 1>(GPUs.begin(), GPUs.end()).size() > 1)
+      if (!llvm::all_equal(GPUs))
         getDriver().Diag(diag::warn_drv_multi_gpu_arch)
-            << llvm::Triple::getArchTypeName(getArch())
-            << llvm::join(GPUs, ", ") << "-mcpu";
+            << getArchName() << llvm::join(GPUs, ", ") << "-mcpu";
       DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_mcpu_EQ),
                         Args.MakeArgString(GPUs.front()));
     }
@@ -831,10 +837,6 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
 
   // Phase 1 (.cl -> .bc)
   if (Args.hasArg(options::OPT_c) && Args.hasArg(options::OPT_emit_llvm)) {
-    DAL->AddFlagArg(nullptr, Opts.getOption(getTriple().isArch64Bit()
-                                                ? options::OPT_m64
-                                                : options::OPT_m32));
-
     // Have to check OPT_O4, OPT_O0 & OPT_Ofast separately
     // as they defined that way in Options.td
     if (!Args.hasArg(options::OPT_O, options::OPT_O0, options::OPT_O4,
@@ -1158,7 +1160,7 @@ bool AMDGPUToolChain::shouldSkipArgument(const llvm::opt::Arg *A) const {
 
 llvm::SmallVector<ToolChain::BitCodeLibraryInfo, 12>
 ROCMToolChain::getCommonDeviceLibNames(
-    const llvm::opt::ArgList &DriverArgs, const std::string &GPUArch,
+    const llvm::opt::ArgList &DriverArgs, llvm::StringRef GPUArch,
     Action::OffloadKind DeviceOffloadingKind) const {
   auto Kind = llvm::AMDGPU::parseArchAMDGCN(GPUArch);
   const StringRef CanonArch = llvm::AMDGPU::getArchNameAMDGCN(Kind);

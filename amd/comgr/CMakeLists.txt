@@ -12,6 +12,31 @@ message("Comgr Version: ${ver_major}.${ver_minor}.0")
 project(amd_comgr VERSION "${ver_major}.${ver_minor}.0" LANGUAGES C CXX)
 set(amd_comgr_NAME "${PROJECT_NAME}")
 
+# Static API consistency check: verify VERSION.txt, the public header
+# (include/amd_comgr.h.in), and the Linux exportmap (src/exportmap.in)
+# stay in sync. Runs at configure time so the gate applies to every
+# Comgr build.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(_comgr_api_check_script
+  "${CMAKE_CURRENT_SOURCE_DIR}/utils/check_api_consistency.py")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/amd_comgr.h.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/exportmap.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/VERSION.txt"
+  "${_comgr_api_check_script}")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" "${_comgr_api_check_script}"
+          --comgr-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+  RESULT_VARIABLE _comgr_api_check_rc
+  OUTPUT_VARIABLE _comgr_api_check_out
+  ERROR_VARIABLE _comgr_api_check_err
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_STRIP_TRAILING_WHITESPACE)
+if(NOT _comgr_api_check_rc EQUAL 0)
+  message(FATAL_ERROR "${_comgr_api_check_err}")
+endif()
+message(STATUS "${_comgr_api_check_out}")
+
 # Get git branch and commit hash to add to log for easier debugging.
 execute_process(
   COMMAND git log -1 --format=%h
@@ -78,8 +103,13 @@ set(SOURCES
   src/comgr-env.cpp
   src/comgr-hotswap.cpp
   src/comgr-hotswap-b0a0.cpp
+  src/comgr-hotswap-patch-trampoline.cpp
   src/comgr-hotswap-elf.cpp
   src/comgr-hotswap-llvm.cpp
+  src/comgr-hotswap-patch-inplace.cpp
+  src/comgr-hotswap-patch-vop3px2-src2.cpp
+  src/comgr-hotswap-patch-wmma-hazard.cpp
+  src/comgr-hotswap-patch-wmma-split.cpp
   src/comgr-libcxx-headers.cpp
   src/comgr-metadata.cpp
   src/comgr-signal.cpp
@@ -88,6 +118,16 @@ set(SOURCES
   src/comgr-symbolizer.cpp
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
+
+# Hotswap binary transpiler, opt-in. The hotswap project lives under
+# amd/comgr/src/hotswap as a private COMGR subproject. When enabled, we
+# link the hotswap OBJECT library into amd_comgr (its TUs land directly
+# in amd_comgr.so so hotswap files can call comgr-metadata helpers
+# without a layering inversion) and compile the
+# comgr-hotswap-transpile.cpp entry point. When disabled, the
+# amd_comgr_hotswap_transpile API is simply not provided.
+option(COMGR_ENABLE_HOTSWAP_TRANSPILE
+  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" OFF)
 
 # Add Windows resource file for version info
 if(WIN32)
@@ -167,6 +207,16 @@ target_include_directories(amd_comgr
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# The hotswap subdirectory is added unconditionally below (around the
+# add_subdirectory(src/hotswap) line) so the OBJECT library is available
+# to the test-unit suite; here we opt amd_comgr into linking the
+# transpiler in (its TUs land in amd_comgr.so) and exposing the
+# `amd_comgr_hotswap_transpile` entry point.
+if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
+  target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)
+  target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
+endif()
+
 message("")
 message("------------LLVM_DIR: ${LLVM_DIR}")
 message("---LLVM_INCLUDE_DIRS: ${LLVM_INCLUDE_DIRS}")
@@ -222,7 +272,22 @@ option(COMGR_USE_INCBIN "Use the gnu .incbin assembler directive" ${default_use_
 
 option(COMGR_DISABLE_SPIRV "To disable SPIRV in Comgr" OFF)
 
-if (NOT COMGR_DISABLE_SPIRV)
+set(COMGR_SPIRV_TRANSLATOR_AVAILABLE OFF)
+set(COMGR_SPIRV_BACKEND_AVAILABLE OFF)
+
+if (COMGR_DISABLE_SPIRV)
+  message("-- Comgr SPIRV disabled (-DCOMGR_DISABLE_SPIRV)")
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_DISABLE_SPIRV")
+else()
+  if ("SPIRV" IN_LIST LLVM_TARGETS_TO_BUILD)
+    set(COMGR_SPIRV_BACKEND_AVAILABLE ON)
+    message("-- LLVM SPIRV target found (SPIRV backend available in Comgr)")
+  else()
+    message("-- LLVM SPIRV target not found (SPIRV backend unavailable in Comgr)")
+    message("-- LLVM targets configured: ${LLVM_TARGETS_TO_BUILD}")
+    message("-- SPIRV must be set in -DLLVM_TARGETS_TO_BUILD when building LLVM")
+  endif()
+
   # Candidate include paths for LLVMSPIRVLib.h:
   # 1. ${LLVM_INCLUDE_DIRS}/LLVMSPIRVLib (standalone build)
   # 2. ${LLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR}/include (external project)
@@ -236,24 +301,30 @@ if (NOT COMGR_DISABLE_SPIRV)
       "${CMAKE_SOURCE_DIR}/projects/SPIRV-LLVM-Translator/include"
     NO_DEFAULT_PATH
   )
-  if (NOT EXISTS "${FOUND_SPIRV_INCLUDE_DIR}/LLVMSPIRVLib.h")
-    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h not found")
-    set(COMGR_DISABLE_SPIRV ON)
+  if (EXISTS "${FOUND_SPIRV_INCLUDE_DIR}/LLVMSPIRVLib.h")
+    set(COMGR_SPIRV_TRANSLATOR_AVAILABLE ON)
+    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h found at ${FOUND_SPIRV_INCLUDE_DIR} (SPIRV translator available in Comgr)")
   else()
-    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h found at ${FOUND_SPIRV_INCLUDE_DIR}")
+    message("-- LLVMSPIRVLib/LLVMSPIRVLib.h not found (SPIRV translator unavailable in Comgr)")
   endif()
+
+  if (COMGR_SPIRV_TRANSLATOR_AVAILABLE)
+    target_include_directories(amd_comgr
+        PRIVATE
+          "${FOUND_SPIRV_INCLUDE_DIR}")
+  endif()
+
 endif()
 
-if(${COMGR_DISABLE_SPIRV})
-    list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_DISABLE_SPIRV")
-  message("-- Comgr SPIRV Disabled")
-else()
-  message("-- Comgr SPIRV Enabled")
-  target_include_directories(amd_comgr
-      PRIVATE
-        "${FOUND_SPIRV_INCLUDE_DIR}")
-endif()
+message("-- COMGR_SPIRV_TRANSLATOR_AVAILABLE: ${COMGR_SPIRV_TRANSLATOR_AVAILABLE}")
+message("-- COMGR_SPIRV_BACKEND_AVAILABLE: ${COMGR_SPIRV_BACKEND_AVAILABLE}")
 
+if (COMGR_SPIRV_TRANSLATOR_AVAILABLE)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_SPIRV_TRANSLATOR_AVAILABLE")
+endif()
+if (COMGR_SPIRV_BACKEND_AVAILABLE)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS "COMGR_SPIRV_BACKEND_AVAILABLE")
+endif()
 
 if (UNIX)
   list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS
@@ -482,12 +553,12 @@ set(LLD_LIBS
   lldELF
   lldCommon)
 
-if (${COMGR_DISABLE_SPIRV})
-  set(SPIRV_DYNAMIC_LIB "")
-  set(SPIRV_STATIC_LIB "")
-else()
+if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
   set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
   set(SPIRV_STATIC_LIB "SPIRVAMDLib")
+else()
+  set(SPIRV_DYNAMIC_LIB "")
+  set(SPIRV_STATIC_LIB "")
 endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
@@ -512,6 +583,7 @@ else()
     Support
     Symbolize
     TargetParser
+    TransformUtils
     ${SPIRV_STATIC_LIB}
     )
 endif()
@@ -552,6 +624,12 @@ if (NOT WIN32)
       c
       ${CMAKE_DL_LIBS})
 endif()
+
+# Hotswap subproject — IR-level transpiler library + supporting tools.
+# Always added so the static library is available to the test-unit suite;
+# linking into amd_comgr happens in a later patch via the
+# COMGR_ENABLE_HOTSWAP_TRANSPILE option.
+add_subdirectory(src/hotswap)
 
 include(CTest)
 if(BUILD_TESTING)

@@ -151,6 +151,14 @@ struct AsyncInfoWrapperTy {
     return getQueueAs<Ty>();
   }
 
+  /// Explicitly synchronize with the __tgt_async_info's pending operations
+  /// regardless of which async info this object wraps. The associated
+  /// underlying queue (if any) will not be released. Calling this function does
+  /// not obviate the need to call the finalize function later. This function is
+  /// intended for specific use cases where a synchronous operation needs to
+  /// explicitly wait for the operations already on the queue.
+  Error synchronize();
+
   /// Synchronize with the __tgt_async_info's pending operations if it's the
   /// internal async info. The error associated to the asynchronous operations
   /// issued in this queue must be provided in \p Err. This function will update
@@ -419,8 +427,7 @@ struct GenericKernelTy {
   Error launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
                ptrdiff_t *ArgOffsets, KernelArgsTy &KernelArgs,
                KernelExtraArgsTy *KernelExtraArgs,
-               AsyncInfoWrapperTy &AsyncInfoWrapper,
-               RecordReplayTy::HandleTy *RRHandle = nullptr) const;
+               AsyncInfoWrapperTy &AsyncInfoWrapper) const;
   virtual Error launchImpl(GenericDeviceTy &GenericDevice,
                            uint32_t NumThreads[3], uint32_t NumBlocks[3],
                            uint32_t DynBlockMemSize, KernelArgsTy &KernelArgs,
@@ -429,6 +436,15 @@ struct GenericKernelTy {
 
   virtual Expected<uint64_t> maxGroupSize(GenericDeviceTy &GenericDevice,
                                           uint64_t DynamicMemSize) const = 0;
+
+  /// Get the maximum number of work groups that can be launched cooperatively.
+  virtual Expected<uint32_t>
+  getMaxCooperativeGroupCount(GenericDeviceTy &GenericDevice,
+                              const uint32_t NumThreads[3],
+                              uint32_t DynBlockMemSize) const {
+    return Plugin::error(error::ErrorCode::UNSUPPORTED,
+                         "cooperative launch not supported");
+  }
 
   /// Get the kernel name.
   const char *getName() const { return Name.c_str(); }
@@ -592,18 +608,21 @@ private:
     return std::make_pair(false, BlockSize);
   }
 
-  /// Get the number of threads and blocks for the kernel based on the
-  /// user-defined threads and block clauses.
-  virtual uint32_t getNumThreads(GenericDeviceTy &GenericDevice,
-                                 uint32_t ThreadLimitClause[3]) const;
+  /// Get the effective number of threads for the kernel based on the
+  /// user-defined number of threads.
+  virtual uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
+                                          uint32_t UserThreadLimit[3]) const;
 
+  /// Get the effective number of blocks for the kernel based on the
+  /// user-defined number of blocks and the loop trip count.
   /// The number of threads \p NumThreads can be adjusted by this method.
   /// \p IsNumThreadsFromUser is true is \p NumThreads is defined by user via
   /// thread_limit clause.
-  virtual
-  uint32_t getNumBlocks(GenericDeviceTy &GenericDevice,
-                        uint32_t BlockLimitClause[3], uint64_t LoopTripCount,
-                        uint32_t &NumThreads, bool IsNumThreadsFromUser) const;
+  virtual uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
+                                         uint32_t UserNumBlocks[3],
+                                         uint64_t LoopTripCount,
+                                         uint32_t &EffectiveNumThreads,
+                                         bool IsNumThreadsFromUser) const;
 
   /// The kernel name.
   std::string Name;
@@ -1150,17 +1169,20 @@ struct GenericDeviceTy : public DeviceAllocatorTy {
                                     AsyncInfoWrapperTy &AsyncInfo) = 0;
 
   /// Create an event.
-  Error createEvent(void **EventPtrStorage);
-  virtual Error createEventImpl(void **EventPtrStorage) = 0;
+  Error createEvent(void **EventPtrStorage, bool EnableProfiling = false);
+  virtual Error createEventImpl(void **EventPtrStorage,
+                                bool EnableProfiling) = 0;
 
   /// Destroy an event.
-  Error destroyEvent(void *Event);
-  virtual Error destroyEventImpl(void *EventPtr) = 0;
+  Error destroyEvent(void *Event, bool EnableProfiling = false);
+  virtual Error destroyEventImpl(void *EventPtr, bool EnableProfiling) = 0;
 
   /// Start the recording of the event.
-  Error recordEvent(void *Event, __tgt_async_info *AsyncInfo);
+  Error recordEvent(void *Event, __tgt_async_info *AsyncInfo,
+                    bool EnableProfiling = false);
   virtual Error recordEventImpl(void *EventPtr,
-                                AsyncInfoWrapperTy &AsyncInfoWrapper) = 0;
+                                AsyncInfoWrapperTy &AsyncInfoWrapper,
+                                bool EnableProfiling) = 0;
 
   /// Wait for an event to finish. Notice this wait is asynchronous if the
   /// __tgt_async_info is not nullptr.

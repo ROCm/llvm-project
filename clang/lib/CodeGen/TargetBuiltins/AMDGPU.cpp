@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsR600.h"
+#include "llvm/IR/IntrinsicsSPIRV.h"
 #include "llvm/IR/MemoryModelRelaxationAnnotations.h"
 #include "llvm/Support/AMDGPUAddrSpace.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -382,6 +383,30 @@ static llvm::AtomicOrdering mapCABIAtomicOrdering(unsigned AO) {
   llvm_unreachable("Unknown AtomicOrderingCABI enum");
 }
 
+// Map a __MEMORY_SCOPE_* integer constant to the AMDGPU-specific syncscope.
+// Invalid scope values are mapped to system scope (empty string).
+static StringRef getAMDGPUSyncScopeStr(CodeGenModule &CGM, unsigned ScopeInt,
+                                       llvm::AtomicOrdering AO) {
+  AtomicScopeGenericModel ScopeModel;
+  if (!ScopeModel.isValid(ScopeInt))
+    return "";
+  clang::SyncScope Scope = ScopeModel.map(ScopeInt);
+  return CGM.getTargetCodeGenInfo().getLLVMSyncScopeStr(CGM.getLangOpts(),
+                                                        Scope, AO);
+}
+
+/// Convert a __MEMORY_SCOPE_* integer constant to a metadata node containing
+/// the target-specific sync scope string.
+static llvm::MetadataAsValue *emitScopeMD(
+    CodeGenFunction &CGF, unsigned ScopeInt,
+    llvm::AtomicOrdering AO = llvm::AtomicOrdering::SequentiallyConsistent) {
+  StringRef ScopeStr = getAMDGPUSyncScopeStr(CGF.CGM, ScopeInt, AO);
+  llvm::LLVMContext &Ctx = CGF.CGM.getLLVMContext();
+  llvm::MDNode *MD =
+      llvm::MDNode::get(Ctx, {llvm::MDString::get(Ctx, ScopeStr)});
+  return llvm::MetadataAsValue::get(Ctx, MD);
+}
+
 // For processing memory ordering and memory scope arguments of various
 // amdgcn builtins.
 // \p Order takes a C++11 compatible memory-ordering specifier and converts
@@ -406,33 +431,9 @@ void CodeGenFunction::ProcessOrderScopeAMDGCN(Value *Order, Value *Scope,
   }
 
   // Older builtins had an enum argument for the memory scope.
-  const char *SSN = nullptr;
-  int scope = cast<llvm::ConstantInt>(Scope)->getZExtValue();
-  switch (scope) {
-  case AtomicScopeGenericModel::System: // __MEMORY_SCOPE_SYSTEM
-    SSID = llvm::SyncScope::System;
-    break;
-  case AtomicScopeGenericModel::Device: // __MEMORY_SCOPE_DEVICE
-    SSN = getTarget().getTriple().isSPIRV() ? "device" : "agent";
-    break;
-  case AtomicScopeGenericModel::Workgroup: // __MEMORY_SCOPE_WRKGRP
-    SSN = "workgroup";
-    break;
-  case AtomicScopeGenericModel::Cluster: // __MEMORY_SCOPE_CLUSTR
-    SSN = getTarget().getTriple().isSPIRV() ? "workgroup" : "cluster";
-    break;
-  case AtomicScopeGenericModel::Wavefront: // __MEMORY_SCOPE_WVFRNT
-    SSN = getTarget().getTriple().isSPIRV() ? "subgroup" : "wavefront";
-    break;
-  case AtomicScopeGenericModel::Single: // __MEMORY_SCOPE_SINGLE
-    SSID = llvm::SyncScope::SingleThread;
-    break;
-  default:
-    SSID = llvm::SyncScope::System;
-    break;
-  }
-  if (SSN)
-    SSID = getLLVMContext().getOrInsertSyncScopeID(SSN);
+  unsigned scope = cast<llvm::ConstantInt>(Scope)->getZExtValue();
+  StringRef SSN = getAMDGPUSyncScopeStr(CGM, scope, AO);
+  SSID = getLLVMContext().getOrInsertSyncScopeID(SSN);
 }
 
 void CodeGenFunction::AddAMDGPUFenceAddressSpaceMMRA(llvm::Instruction *Inst,
@@ -458,16 +459,17 @@ void CodeGenFunction::AddAMDGPUFenceAddressSpaceMMRA(llvm::Instruction *Inst,
   Inst->setMetadata(LLVMContext::MD_mmra, MMRAMetadata::getMD(Ctx, MMRAs));
 }
 
-static Value *GetOrInsertAMDGPUPredicate(CodeGenFunction &CGF, Twine Name) {
-  auto PTy = IntegerType::getInt1Ty(CGF.getLLVMContext());
+static Value *GetAMDGPUPredicate(CodeGenFunction &CGF, Twine Name) {
+  Constant *SpecId = ConstantInt::getAllOnesValue(CGF.Int32Ty);
 
-  auto *P = cast<GlobalVariable>(
-      CGF.CGM.getModule().getOrInsertGlobal(Name.str(), PTy));
-  P->setConstant(true);
-  P->setExternallyInitialized(true);
+  LLVMContext &Ctx = CGF.getLLVMContext();
+  MDNode *Predicate = MDNode::get(Ctx, MDString::get(Ctx, Name.str()));
+  std::vector<Value *> Args = {SpecId, ConstantInt::getFalse(Ctx),
+                               MetadataAsValue::get(Ctx, Predicate)};
+  CallInst *Call = CGF.Builder.CreateIntrinsic(
+      Intrinsic::spv_named_boolean_spec_constant, Args);
 
-  return CGF.Builder.CreateLoad(
-      RawAddress(P, PTy, CharUnits::One(), KnownNonNull));
+  return Call;
 }
 
 static Intrinsic::ID getIntrinsicIDforWaveReduction(unsigned BuiltinID) {
@@ -925,22 +927,14 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
       break;
     }
 
-    LLVMContext &Ctx = CGM.getLLVMContext();
     llvm::Type *LoadTy = ConvertType(E->getType());
     llvm::Value *Addr = EmitScalarExpr(E->getArg(0));
 
     auto *AOExpr = cast<llvm::ConstantInt>(EmitScalarExpr(E->getArg(1)));
     auto *ScopeExpr = cast<llvm::ConstantInt>(EmitScalarExpr(E->getArg(2)));
-
-    auto Scope = static_cast<SyncScope>(ScopeExpr->getZExtValue());
     llvm::AtomicOrdering AO = mapCABIAtomicOrdering(AOExpr->getZExtValue());
 
-    StringRef ScopeStr = CGM.getTargetCodeGenInfo().getLLVMSyncScopeStr(
-        CGM.getLangOpts(), Scope, AO);
-
-    llvm::MDNode *MD =
-        llvm::MDNode::get(Ctx, {llvm::MDString::get(Ctx, ScopeStr)});
-    llvm::Value *ScopeMD = llvm::MetadataAsValue::get(Ctx, MD);
+    llvm::Value *ScopeMD = emitScopeMD(*this, ScopeExpr->getZExtValue(), AO);
     llvm::Function *F = CGM.getIntrinsic(IID, {LoadTy});
     return Builder.CreateCall(F, {Addr, AOExpr, ScopeMD});
   }
@@ -1054,7 +1048,7 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
            "__builtin_amdgcn_processor_is should never reach CodeGen for "
            "concrete targets!");
     StringRef Proc = cast<clang::StringLiteral>(E->getArg(0))->getString();
-    return GetOrInsertAMDGPUPredicate(*this, "llvm.amdgcn.is." + Proc);
+    return GetAMDGPUPredicate(*this, "is." + Proc);
   }
   case AMDGPU::BI__builtin_amdgcn_is_invocable: {
     assert(CGM.getTriple().isSPIRV() &&
@@ -1064,7 +1058,7 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
         cast<DeclRefExpr>(E->getArg(0))->getReferencedDeclOfCallee());
     StringRef RF =
         getContext().BuiltinInfo.getRequiredFeatures(FD->getBuiltinID());
-    return GetOrInsertAMDGPUPredicate(*this, "llvm.amdgcn.has." + RF);
+    return GetAMDGPUPredicate(*this, "has." + RF);
   }
   case AMDGPU::BI__builtin_amdgcn_read_exec:
     return EmitAMDGCNBallotForExec(*this, E, Int64Ty, Int64Ty, false);
@@ -2223,6 +2217,18 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
   case Builtin::BI__builtin_scalbn:
     return emitBinaryExpMaybeConstrainedFPBuiltin(
         *this, E, Intrinsic::ldexp, Intrinsic::experimental_constrained_ldexp);
+  case AMDGPU::BI__builtin_amdgcn_permlane_bcast:
+    return emitBuiltinWithOneOverloadedType<3>(
+        *this, E, Intrinsic::amdgcn_permlane_bcast);
+  case AMDGPU::BI__builtin_amdgcn_permlane_up:
+    return emitBuiltinWithOneOverloadedType<3>(*this, E,
+                                               Intrinsic::amdgcn_permlane_up);
+  case AMDGPU::BI__builtin_amdgcn_permlane_down:
+    return emitBuiltinWithOneOverloadedType<3>(*this, E,
+                                               Intrinsic::amdgcn_permlane_down);
+  case AMDGPU::BI__builtin_amdgcn_permlane_xor:
+    return emitBuiltinWithOneOverloadedType<3>(*this, E,
+                                               Intrinsic::amdgcn_permlane_xor);
   default:
     return nullptr;
   }
