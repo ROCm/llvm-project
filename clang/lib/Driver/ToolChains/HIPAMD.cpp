@@ -198,7 +198,7 @@ void AMDGCN::Linker::constructLinkAndEmitSpirvCommand(
     // Emit SPIR-V binary using the translator
     llvm::opt::ArgStringList TrArgs{
         "--spirv-max-version=1.6",
-        "--spirv-ext=+all,-SPV_KHR_untyped_pointers",
+        "--spirv-ext=+all",
         "--spirv-allow-unknown-intrinsics",
         "--spirv-lower-const-expr",
         "--spirv-preserve-auxdata",
@@ -369,7 +369,8 @@ void HIPAMDToolChain::AddHIPIncludeArgs(const ArgList &DriverArgs,
   RocmInstallation->AddHIPIncludeArgs(DriverArgs, CC1Args);
 }
 
-SanitizerMask HIPAMDToolChain::getSupportedSanitizers() const {
+SanitizerMask HIPAMDToolChain::getSupportedSanitizers(
+    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
   // The HIPAMDToolChain only supports sanitizers in the sense that it allows
   // sanitizer arguments on the command line if they are supported by the host
   // toolchain. The HIPAMDToolChain will later filter unsupported sanitizers
@@ -378,7 +379,9 @@ SanitizerMask HIPAMDToolChain::getSupportedSanitizers() const {
   // This behavior is necessary because the host and device toolchains
   // invocations often share the command line, so the device toolchain must
   // tolerate flags meant only for the host toolchain.
-  return HostTC.getSupportedSanitizers();
+  //
+  // FIXME: Be accurate and use DeviceOffloadKind.
+  return HostTC.getSupportedSanitizers(BoundArch, DeviceOffloadKind);
 }
 
 VersionTuple HIPAMDToolChain::computeMSVCVersion(const Driver *D,

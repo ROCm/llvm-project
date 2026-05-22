@@ -1139,6 +1139,12 @@ ToolChain::getTargetSubDirPath(StringRef BaseDir) const {
   return {};
 }
 
+std::optional<std::string> ToolChain::getDefaultIntrinsicModuleDir() const {
+  SmallString<128> P(D.ResourceDir);
+  llvm::sys::path::append(P, "finclude", "flang");
+  return getTargetSubDirPath(P);
+}
+
 std::optional<std::string> ToolChain::getRuntimePath() const {
   SmallString<128> P(D.ResourceDir);
   llvm::sys::path::append(P, "lib");
@@ -1769,7 +1775,9 @@ ToolChain::getSystemGPUArchs(const llvm::opt::ArgList &Args) const {
   return SmallVector<std::string>();
 }
 
-SanitizerMask ToolChain::getSupportedSanitizers() const {
+SanitizerMask
+ToolChain::getSupportedSanitizers(StringRef BoundArch,
+                                  Action::OffloadKind DeviceOffloadKind) const {
   // Return sanitizers which don't require runtime support and are not
   // platform dependent.
 
