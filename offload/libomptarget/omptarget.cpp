@@ -1020,7 +1020,7 @@ postProcessingTargetDataEnd(DeviceTy *Device,
         const bool isZeroCopy = PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY;
         const bool isUSMMode =
             PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY;
-        if (*ShadowPtr.HstPtrAddr == nullptr || isZeroCopy || isUSMMode)
+        if (isZeroCopy || isUSMMode)
           return OFFLOAD_SUCCESS;
         constexpr int64_t VoidPtrSize = sizeof(void *);
         if (ShadowPtr.PtrSize > VoidPtrSize) {
@@ -1468,7 +1468,7 @@ static int targetDataContiguous(ident_t *Loc, DeviceTy &Device, void *ArgsBase,
                   PM->getRequirements() & OMPX_REQ_AUTO_ZERO_COPY;
               const bool isUSMMode =
                   PM->getRequirements() & OMP_REQ_UNIFIED_SHARED_MEMORY;
-              if (*ShadowPtr.HstPtrAddr == nullptr || isZeroCopy || isUSMMode)
+              if (isZeroCopy || isUSMMode)
                 return OFFLOAD_SUCCESS;
               constexpr int64_t VoidPtrSize = sizeof(void *);
               if (ShadowPtr.PtrSize > VoidPtrSize) {
