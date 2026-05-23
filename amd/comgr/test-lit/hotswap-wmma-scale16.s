@@ -99,6 +99,16 @@
 // SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4
 
 // COM: -----------------------------------------------------------------------
+// COM: Verify: 32x16 split preserves float inline-immediate src2.
+// COM: -----------------------------------------------------------------------
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SRC2FLOAT %s
+
+// SRC2FLOAT-LABEL: <test_wmma_scale16_32x16_src2_neg_half>:
+// SRC2FLOAT:       s_branch
+// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4{{.*}}, -0.5,
+// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4{{.*}}, -0.5,
+
+// COM: -----------------------------------------------------------------------
 // COM: Verify: regular Scale instruction is NOT patched.
 // COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NOPATCH %s
@@ -140,7 +150,17 @@ test_wmma_scale16_32x16:
 .Ltest_wmma_scale16_32x16_end:
 .size test_wmma_scale16_32x16, .Ltest_wmma_scale16_32x16_end-test_wmma_scale16_32x16
 
-// --- Kernel 3: regular Scale (should NOT be patched) ---
+// --- Kernel 3: Scale16 32x16 with float inline src2 (should preserve src2) ---
+.globl test_wmma_scale16_32x16_src2_neg_half
+.p2align 8
+.type test_wmma_scale16_32x16_src2_neg_half,@function
+test_wmma_scale16_32x16_src2_neg_half:
+  v_wmma_scale16_f32_32x16x128_f4 v[0:15], v[16:31], v[32:39], -0.5, v[40:41], v[42:43]
+  s_endpgm
+.Ltest_wmma_scale16_32x16_src2_neg_half_end:
+.size test_wmma_scale16_32x16_src2_neg_half, .Ltest_wmma_scale16_32x16_src2_neg_half_end-test_wmma_scale16_32x16_src2_neg_half
+
+// --- Kernel 4: regular Scale (should NOT be patched) ---
 .globl test_wmma_scale_16x16
 .p2align 8
 .type test_wmma_scale_16x16,@function
@@ -157,6 +177,10 @@ test_wmma_scale_16x16:
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel
 .amdhsa_kernel test_wmma_scale16_32x16
+  .amdhsa_next_free_vgpr 44
+  .amdhsa_next_free_sgpr 2
+.end_amdhsa_kernel
+.amdhsa_kernel test_wmma_scale16_32x16_src2_neg_half
   .amdhsa_next_free_vgpr 44
   .amdhsa_next_free_sgpr 2
 .end_amdhsa_kernel

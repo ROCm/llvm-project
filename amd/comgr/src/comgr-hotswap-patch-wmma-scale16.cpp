@@ -422,8 +422,8 @@ static std::string formatScaleOp(unsigned Enc,
 //   - An inline integer immediate (encodings 128..208 = ints -16..64;
 //     0 = encoding 128 is the common case when the kernel uses an
 //     all-zero accumulator that the compiler folds to inline-imm 0).
-//   - An inline float immediate (encodings 240..247 = 0.5/1.0/2.0/4.0
-//     and signed variants).
+//   - An inline float immediate (encodings 240..247 cover 0.5, -0.5,
+//     1.0, -1.0, 2.0, -2.0, 4.0, -4.0).
 //   - A VGPR range v[c:c+15] (encoding >= 256).
 //   - An SGPR (encoding 0..105; not expected for WMMA accumulators).
 //
@@ -447,17 +447,25 @@ static std::string formatSrc2(unsigned Enc, unsigned DstBase, unsigned Half) {
     return Twine(static_cast<int>(Enc) - 128).str();
   if (Enc >= 193 && Enc <= 208)
     return Twine(192 - static_cast<int>(Enc)).str();
-  // Float inline immediates: 240=0.5, 241=1.0, 242=2.0, 243=4.0,
-  // 244=-0.5, 245=-1.0, 246=-2.0, 247=-4.0.
+  // Float inline immediates: 240=0.5, 241=-0.5, 242=1.0, 243=-1.0,
+  // 244=2.0, 245=-2.0, 246=4.0, 247=-4.0.
   switch (Enc) {
-  case 240: return "0.5";
-  case 241: return "1.0";
-  case 242: return "2.0";
-  case 243: return "4.0";
-  case 244: return "-0.5";
-  case 245: return "-1.0";
-  case 246: return "-2.0";
-  case 247: return "-4.0";
+  case 240:
+    return "0.5";
+  case 241:
+    return "-0.5";
+  case 242:
+    return "1.0";
+  case 243:
+    return "-1.0";
+  case 244:
+    return "2.0";
+  case 245:
+    return "-2.0";
+  case 246:
+    return "4.0";
+  case 247:
+    return "-4.0";
   }
   // SGPRs and unrecognized encodings fall through. WMMA accumulators are
   // architecturally VGPR-or-immediate; an SGPR here would be malformed input.
