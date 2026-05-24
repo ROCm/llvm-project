@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=amdgcn -mcpu=gfx600 -mattr=+mad-mac-f32-insts < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
-; XUN: llc -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
+; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=gfx600 -mattr=+mad-mac-f32-insts < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
+; XUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
 
  ; FIXME: None of these trigger madmk emission anymore. It is still
  ; possible, but requires the correct registers to be used which is
@@ -188,8 +188,8 @@ define amdgpu_kernel void @madmk_add_inline_imm_f32(ptr addrspace(1) noalias %ou
 }
 
 ; SI-LABEL: {{^}}kill_madmk_verifier_error:
-; SI: s_or_b64
 ; SI: s_xor_b64
+; SI: s_or_b64
 ; SI: v_mac_f32_e32 {{v[0-9]+}}, 0x472aee8c, {{v[0-9]+}}
 define amdgpu_kernel void @kill_madmk_verifier_error() #0 {
 bb:
