@@ -31,31 +31,31 @@
 
 // Define OMPT device tracing function entry points
 #define defineOmptTracingFn(Name)                                              \
-  libomptarget_##Name##_t llvm::omp::target::ompt::Name##_fn = nullptr;
+  libomptarget_##Name##_t llvm::offload::ompt::Name##_fn = nullptr;
 FOREACH_OMPT_DEVICE_TRACING_FN_IMPLEMENTAIONS(defineOmptTracingFn)
 #undef defineOmptTracingFn
 
 // Define OMPT device tracing function mutexes
 #define defineOmptTracingFnMutex(Name)                                         \
-  std::mutex llvm::omp::target::ompt::Name##_mutex;
+  std::mutex llvm::offload::ompt::Name##_mutex;
 FOREACH_OMPT_DEVICE_TRACING_FN_IMPLEMENTAIONS(defineOmptTracingFnMutex)
 #undef defineOmptTracingFnMutex
 
-std::mutex llvm::omp::target::ompt::DeviceIdWritingMutex;
+std::mutex llvm::offload::ompt::DeviceIdWritingMutex;
 
-using namespace llvm::omp::target::ompt;
-using namespace llvm::omp::target::debug;
-
-std::shared_ptr<llvm::sys::DynamicLibrary>
-    llvm::omp::target::ompt::ParentLibrary(nullptr);
-
-double llvm::omp::target::ompt::HostToDeviceSlope = .0;
-double llvm::omp::target::ompt::HostToDeviceOffset = .0;
-
-std::map<ompt_device_t *, int32_t> llvm::omp::target::ompt::Devices;
+using namespace llvm::offload::ompt;
+using namespace llvm::offload::debug;
 
 std::shared_ptr<llvm::sys::DynamicLibrary>
-llvm::omp::target::ompt::getParentLibrary() {
+    llvm::offload::ompt::ParentLibrary(nullptr);
+
+double llvm::offload::ompt::HostToDeviceSlope = .0;
+double llvm::offload::ompt::HostToDeviceOffset = .0;
+
+std::map<ompt_device_t *, int32_t> llvm::offload::ompt::Devices;
+
+std::shared_ptr<llvm::sys::DynamicLibrary>
+llvm::offload::ompt::getParentLibrary() {
   static bool ParentLibraryAssigned = false;
   if (!ParentLibraryAssigned) {
     setParentLibrary("libomptarget.so");
@@ -64,7 +64,7 @@ llvm::omp::target::ompt::getParentLibrary() {
   return ParentLibrary;
 }
 
-void llvm::omp::target::ompt::setParentLibrary(const char *Filename) {
+void llvm::offload::ompt::setParentLibrary(const char *Filename) {
   if (ParentLibrary)
     return;
   std::string ErrorMsg;
@@ -74,7 +74,7 @@ void llvm::omp::target::ompt::setParentLibrary(const char *Filename) {
     REPORT() << "Failed to set parent library: " << ErrorMsg.c_str();
 }
 
-int llvm::omp::target::ompt::getDeviceId(ompt_device_t *Device) {
+int llvm::offload::ompt::getDeviceId(ompt_device_t *Device) {
   // Block other threads, which might trigger an erase (for the same device)
   std::unique_lock<std::mutex> Lock(DeviceIdWritingMutex);
   auto DeviceIterator = Devices.find(Device);
@@ -85,8 +85,7 @@ int llvm::omp::target::ompt::getDeviceId(ompt_device_t *Device) {
   return DeviceIterator->second;
 }
 
-void llvm::omp::target::ompt::setDeviceId(ompt_device_t *Device,
-                                          int32_t DeviceId) {
+void llvm::offload::ompt::setDeviceId(ompt_device_t *Device, int32_t DeviceId) {
   assert(Device && "Mapping device ID to nullptr is not allowed");
   if (Device == nullptr || DeviceId < 0) {
     REPORT() << "Failed to set ID=%d for Device=" << DeviceId << Device;
@@ -106,7 +105,7 @@ void llvm::omp::target::ompt::setDeviceId(ompt_device_t *Device,
   Devices.emplace(Device, DeviceId);
 }
 
-void llvm::omp::target::ompt::removeDeviceId(ompt_device_t *Device) {
+void llvm::offload::ompt::removeDeviceId(ompt_device_t *Device) {
   int DeviceId = getDeviceId(Device);
   if (DeviceId < 0) {
     REPORT() << "Tried to remove Device= " << Device <<  " ID=" << DeviceId;
@@ -153,7 +152,7 @@ ompt_start_trace(ompt_device_t *Device, ompt_callback_buffer_request_t Request,
     std::unique_lock<std::mutex> Lock(ompt_start_trace_mutex);
 
     if (Request && Complete) {
-      llvm::omp::target::ompt::enableDeviceTracing(DeviceId);
+      llvm::offload::ompt::enableDeviceTracing(DeviceId);
       // Enable asynchronous memory copy profiling
       setOmptAsyncCopyProfile(/*Enable=*/true);
       // Enable queue dispatch profiling
@@ -195,7 +194,7 @@ OMPT_API_ROUTINE int ompt_stop_trace(ompt_device_t *Device) {
   {
     // Protect the function pointer
     std::unique_lock<std::mutex> Lock(ompt_stop_trace_mutex);
-    llvm::omp::target::ompt::disableDeviceTracing(DeviceId);
+    llvm::offload::ompt::disableDeviceTracing(DeviceId);
     // Disable asynchronous memory copy profiling
     setOmptAsyncCopyProfile(/*Enable=*/false);
     // Disable queue dispatch profiling
@@ -271,8 +270,8 @@ OMPT_API_ROUTINE double ompt_translate_time(ompt_device_t *Device,
   return TranslatedTime;
 }
 
-void llvm::omp::target::ompt::setOmptTimestamp(uint64_t StartTime,
-                                               uint64_t EndTime) {
+void llvm::offload::ompt::setOmptTimestamp(uint64_t StartTime,
+                                           uint64_t EndTime) {
   std::unique_lock<std::mutex> Lock(ompt_set_timestamp_mutex);
   ensureFuncPtrLoaded<libomptarget_ompt_set_timestamp_t>(
       "libomptarget_ompt_set_timestamp", &ompt_set_timestamp_fn);
@@ -280,13 +279,12 @@ void llvm::omp::target::ompt::setOmptTimestamp(uint64_t StartTime,
   ompt_set_timestamp_fn(StartTime, EndTime);
 }
 
-void llvm::omp::target::ompt::setOmptHostToDeviceRate(double Slope,
-                                                      double Offset) {
+void llvm::offload::ompt::setOmptHostToDeviceRate(double Slope, double Offset) {
   HostToDeviceSlope = Slope;
   HostToDeviceOffset = Offset;
 }
 
-void llvm::omp::target::ompt::setOmptGrantedNumTeams(uint64_t NumTeams) {
+void llvm::offload::ompt::setOmptGrantedNumTeams(uint64_t NumTeams) {
   std::unique_lock<std::mutex> Lock(ompt_set_granted_teams_mutex);
   ensureFuncPtrLoaded<libomptarget_ompt_set_granted_teams_t>(
       "libomptarget_ompt_set_granted_teams", &ompt_set_granted_teams_fn);
@@ -294,8 +292,8 @@ void llvm::omp::target::ompt::setOmptGrantedNumTeams(uint64_t NumTeams) {
   ompt_set_granted_teams_fn(NumTeams);
 }
 
-ompt_interface_fn_t llvm::omp::target::ompt::lookupDeviceTracingFn(
-    const char *InterfaceFunctionName) {
+ompt_interface_fn_t
+llvm::offload::ompt::lookupDeviceTracingFn(const char *InterfaceFunctionName) {
 #define compareAgainst(AvailableFunction)                                      \
   if (strcmp(InterfaceFunctionName, #AvailableFunction) == 0)                  \
     return (ompt_interface_fn_t)AvailableFunction;

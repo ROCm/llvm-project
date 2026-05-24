@@ -84,12 +84,10 @@
 #include "hsa/hsa_ext_amd.h"
 #endif
 
-using namespace llvm::omp::target;
+using namespace llvm::offload;
 using namespace llvm::omp::xteam_red;
 using namespace llvm::offload::debug;
 using namespace error;
-
-using namespace llvm::omp::target::debug;
 
 // AMDGPU-specific, so not using the common ones from the device independent
 // includes.
@@ -116,8 +114,7 @@ void setHSATicksToTimeConstant() { TicksToTime = setTicksToTime(); }
 
 /// Forward declare
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 struct AMDGPUSignalTy;
@@ -173,8 +170,7 @@ getOrNullProfilerSpecificData(AsyncInfoWrapperTy &AsyncInfoWrapper) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 /// Enable/disable async copy profiling.
@@ -210,8 +206,7 @@ static double getTimeOfDay() {
 }
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 /// Forward declarations for all specialized data structures.
@@ -5867,7 +5862,7 @@ struct AMDGPUPluginTy final : public GenericPluginTy {
 
     // This should probably be ASO-only
     UInt32Envar KernTrace("LIBOMPTARGET_KERNEL_TRACE", 0);
-    llvm::omp::target::plugin::PrintKernelTrace = KernTrace.get();
+    llvm::offload::plugin::PrintKernelTrace = KernTrace.get();
 
     // Register event handler to detect memory errors on the devices.
     Status = hsa_amd_register_system_event_handler(eventHandler, this);
@@ -6672,29 +6667,28 @@ void setHSAQueueProfiling(void *Device, int Enable) {
 }
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #ifdef OMPT_SUPPORT
-namespace llvm::omp::target::plugin {
+namespace llvm::offload::plugin {
 
 /// Enable/disable kernel profiling for the given device.
 void setOmptQueueProfile(void *Device, int Enable) {
   setHSAQueueProfiling(Device, Enable);
 }
 
-} // namespace llvm::omp::target::plugin
+} // namespace llvm::offload::plugin
 
 /// Enable/disable kernel profiling for the given device.
 void setGlobalOmptKernelProfile(void *Device, int Enable) {
-  llvm::omp::target::plugin::setHSAQueueProfiling(Device, Enable);
+  llvm::offload::plugin::setHSAQueueProfiling(Device, Enable);
 }
 
 #endif
 
 extern "C" {
-llvm::omp::target::plugin::GenericPluginTy *createPlugin_amdgpu() {
-  return new llvm::omp::target::plugin::AMDGPUPluginTy();
+llvm::offload::plugin::GenericPluginTy *createPlugin_amdgpu() {
+  return new llvm::offload::plugin::AMDGPUPluginTy();
 }
 }

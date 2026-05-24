@@ -35,17 +35,15 @@
 #include <limits>
 
 using namespace llvm;
-using namespace omp;
-using namespace target;
+using namespace offload;
 using namespace plugin;
 using namespace error;
 using namespace llvm::offload::debug;
 
-namespace llvm::omp::target::plugin {
+namespace llvm::offload::plugin {
 // Used for kernel tracing implementation
 int PrintKernelTrace = 0;
-} // namespace llvm::omp::target::plugin
-
+} // namespace llvm::offload::plugin
 
 AsyncInfoWrapperTy::AsyncInfoWrapperTy(GenericDeviceTy &Device,
                                        __tgt_async_info *AsyncInfoPtr)

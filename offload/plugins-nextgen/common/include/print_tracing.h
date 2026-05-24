@@ -16,7 +16,7 @@ enum PrintTraceControlBits {
   HOST_SERVICE_TRACING = 16 // Print host tracing
 };
 
-namespace llvm::omp::target::plugin {
+namespace llvm::offload::plugin {
 extern int PrintKernelTrace; // set by environment variable
 }
 #endif

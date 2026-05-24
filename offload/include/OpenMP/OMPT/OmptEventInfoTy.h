@@ -19,8 +19,7 @@
 struct ompt_record_ompt_t;
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace ompt {
 
 /// Holds info needed to fill asynchronous trace records
@@ -32,8 +31,7 @@ struct OmptEventInfoTy {
 };
 
 } // namespace ompt
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #endif // OFFLOAD_INCLUDE_OPENMP_OMPT_OMPTEVENTINFOTY_H

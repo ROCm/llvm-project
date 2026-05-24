@@ -706,7 +706,7 @@ template <uint32_t InfoId> static constexpr const char *InfoIdToODT() {
 
 // Transform the INFO id to the corresponding debug type and print the message
 #define INFO_DEBUG_INT(_flags, _id, ...)                                       \
-  ODBG(::llvm::omp::target::debug::InfoIdToODT<_flags>())                      \
+  ODBG(::llvm::omp::target::debug::InfoIdToODT<_flags>())                          \
       << FORMAT_TO_STR(__VA_ARGS__);
 
 // Define default format for pointers

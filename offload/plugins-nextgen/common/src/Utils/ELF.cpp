@@ -25,7 +25,7 @@
 using namespace llvm;
 using namespace llvm::ELF;
 using namespace llvm::object;
-using namespace llvm::omp::target::debug;
+using namespace llvm::offload::debug;
 
 bool utils::elf::isELF(StringRef Buffer) {
   switch (identify_magic(Buffer)) {

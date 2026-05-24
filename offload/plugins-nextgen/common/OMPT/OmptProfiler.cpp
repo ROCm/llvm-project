@@ -15,7 +15,7 @@
 #include "PluginInterface.h"
 #include "Shared/Debug.h"
 
-using namespace llvm::omp::target;
+using namespace llvm::offload;
 
 void ompt::OmptProfilerTy::handleInit(plugin::GenericDeviceTy *Device,
                                       plugin::GenericPluginTy *Plugin) {
@@ -34,8 +34,8 @@ void ompt::OmptProfilerTy::handleInit(plugin::GenericDeviceTy *Device,
   }
 }
 
-void ompt::OmptProfilerTy::handleDeinit(
-    plugin::GenericDeviceTy *Device, target::plugin::GenericPluginTy *Plugin) {
+void ompt::OmptProfilerTy::handleDeinit(plugin::GenericDeviceTy *Device,
+                                        plugin::GenericPluginTy *Plugin) {
   auto DeviceId = Device->getDeviceId();
 
   if (ompt::Initialized) {

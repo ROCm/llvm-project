@@ -23,8 +23,7 @@
 #define DEBUG_PREFIX "OMPT"
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace ompt {
 
 #define declareOmptCallback(Name, Type, Code) extern Name##_t Name##_fn;
@@ -70,8 +69,7 @@ void connectLibrary();
 extern bool Initialized;
 
 } // namespace ompt
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #pragma pop_macro("DEBUG_PREFIX")

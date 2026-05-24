@@ -38,7 +38,7 @@
 using llvm::SmallVector;
 
 #ifdef OMPT_SUPPORT
-using namespace llvm::omp::target::ompt;
+using namespace llvm::offload::ompt;
 #endif
 using namespace llvm::omp::target::debug;
 
@@ -473,8 +473,8 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
 
   int Rc = OFFLOAD_SUCCESS;
   bool IsMultiDeviceKernel = false;
-  Rc = target(Loc, *DeviceOrErr, HostPtr, *KernelArgs, AsyncInfo,
-              /*InMultiDeviceMode*/ NumMultiDevices > 0, IsMultiDeviceKernel);
+  Rc = ::target(Loc, *DeviceOrErr, HostPtr, *KernelArgs, AsyncInfo,
+                /*InMultiDeviceMode*/ NumMultiDevices > 0, IsMultiDeviceKernel);
 
   // Check if this is a multi-device kernel.
   SmallVector<TargetAsyncInfoTy *, 8> TargetAsyncInfos;
@@ -528,8 +528,8 @@ static inline int targetKernel(ident_t *Loc, int64_t DeviceId, int32_t NumTeams,
       TargetAsyncInfos.emplace_back(LocalTAI);
 
       // No need to check the global multi device value for this kernel.
-      if (target(Loc, *DeviceOrErr, HostPtr, *KernelArgs, AsyncInfoMD, false,
-                 IsMultiDeviceKernel) != OFFLOAD_SUCCESS)
+      if (::target(Loc, *DeviceOrErr, HostPtr, *KernelArgs, AsyncInfoMD, false,
+                   IsMultiDeviceKernel) != OFFLOAD_SUCCESS)
         Rc = OFFLOAD_FAIL;
     }
   }

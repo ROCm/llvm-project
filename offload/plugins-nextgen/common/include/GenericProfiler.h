@@ -23,8 +23,7 @@
 #include <tuple>
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 struct GenericDeviceTy;
@@ -185,8 +184,7 @@ private:
   uint64_t getDeviceTimeStamp(GenericDeviceTy *D);
 };
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
   //
 #endif

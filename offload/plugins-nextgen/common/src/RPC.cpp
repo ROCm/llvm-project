@@ -18,8 +18,7 @@
 #include "shared/rpc_server.h"
 
 using namespace llvm;
-using namespace omp;
-using namespace target;
+using namespace offload;
 
 #ifdef OFFLOAD_ENABLE_EMISSARY_APIS
 #include "Emissary.h"

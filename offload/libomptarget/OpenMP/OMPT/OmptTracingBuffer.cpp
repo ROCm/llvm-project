@@ -84,7 +84,7 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
       initTraceRecordMetaData(NewCursor);
       DeviceBuf->Cursor.store(NewCursor, std::memory_order_release);
 
-      ODBG(ODT_Tool) << "Thread " << llvm::omp::target::ompt::getThreadId()
+      ODBG(ODT_Tool) << "Thread " << llvm::offload::ompt::getThreadId()
                      << ": Assigned " << RecSize << " bytes at " << NewCursor
                      << " in existing buffer " << DeviceBuf->Start
                      << " for device " << DeviceId;
@@ -105,8 +105,8 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
   void *NewBuffer = nullptr;
   size_t TotalBytes = 0;
   // TODO Move the buffer allocation to a helper thread
-  llvm::omp::target::ompt::ompt_callback_buffer_request(DeviceId, &NewBuffer,
-                                                        &TotalBytes);
+  llvm::offload::ompt::ompt_callback_buffer_request(DeviceId, &NewBuffer,
+                                                    &TotalBytes);
 
   // The caller should handle nullptr by not tracing for this event.
   if (NewBuffer == nullptr || TotalBytes < RecSize)
@@ -134,7 +134,7 @@ void *OmptTracingBufferMgr::assignCursor(ompt_callbacks_t Type,
   if (OMPX_FlushOnBufferFull && ToBeFlushedCursor)
     triggerFlushOnBufferFull(ToBeFlushedCursor, ToBeFlushedBuf);
 
-  ODBG(ODT_Tool) << "Thread " << llvm::omp::target::ompt::getThreadId()
+  ODBG(ODT_Tool) << "Thread " << llvm::offload::ompt::getThreadId()
                  << ": Assigned " << RecSize << " bytes at " << NewBuffer
                  << " in new buffer with id " << NewBufId << " for device "
                  << DeviceId;
@@ -201,8 +201,7 @@ void OmptTracingBufferMgr::driveCompletion() {
     }
     FlushCv.wait(flush_lock, [this] {
       return DoneTracing ||
-             (!Id2FlushMdMap.empty() &&
-              llvm::omp::target::ompt::TracingActive) ||
+             (!Id2FlushMdMap.empty() && llvm::offload::ompt::TracingActive) ||
              isThisThreadFlushWaitedUpon();
     });
     if (isThisThreadFlushWaitedUpon()) {
@@ -376,10 +375,10 @@ void OmptTracingBufferMgr::dispatchCallback(int64_t DeviceId, void *Buffer,
   // There is a small window when the buffer-completion callback may
   // be invoked even after tracing has been disabled.
   // Note that we don't want to hold a lock when dispatching the callback.
-  if (llvm::omp::target::ompt::isTracedDevice(DeviceId)) {
+  if (llvm::offload::ompt::isTracedDevice(DeviceId)) {
     ODBG(ODT_Tool) << "Dispatch callback w/ range (inclusive) to be flushed: "
                    << FirstCursor << " -> " << LastCursor;
-    llvm::omp::target::ompt::ompt_callback_buffer_complete(
+    llvm::offload::ompt::ompt_callback_buffer_complete(
         DeviceId, Buffer,
         /* bytes returned in this callback */
         (char *)getNextTR(LastCursor) - (char *)FirstCursor,
@@ -397,10 +396,10 @@ void OmptTracingBufferMgr::dispatchBufferOwnedCallback(
   // There is a small window when the buffer-completion callback may
   // be invoked even after tracing has been disabled.
   // Note that we don't want to hold a lock when dispatching the callback.
-  if (llvm::omp::target::ompt::isTracedDevice(flush_info.FlushBuf->DeviceId)) {
+  if (llvm::offload::ompt::isTracedDevice(flush_info.FlushBuf->DeviceId)) {
     ODBG(ODT_Tool) << "Dispatch callback with buffer "
              << flush_info.FlushBuf->Start << " owned";
-    llvm::omp::target::ompt::ompt_callback_buffer_complete(
+    llvm::offload::ompt::ompt_callback_buffer_complete(
         flush_info.FlushBuf->DeviceId, flush_info.FlushBuf->Start, 0,
         (ompt_buffer_cursor_t)0, true /* buffer owned */);
   }
@@ -737,7 +736,7 @@ void OmptTracingBufferMgr::shutdownHelperThreads() {
 }
 
 void OmptTracingBufferMgr::flushAndShutdownHelperThreads() {
-  std::unique_lock<std::mutex> Lock(llvm::omp::target::ompt::TraceControlMutex);
+  std::unique_lock<std::mutex> Lock(llvm::offload::ompt::TraceControlMutex);
   // Flush buffers for all devices.
   if (OMPX_FlushOnShutdown)
     flushAllBuffers(MAX_NUM_DEVICES);

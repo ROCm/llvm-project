@@ -659,16 +659,16 @@ Expected<DeviceTy &> PluginManager::getDevice(uint32_t DeviceNo) {
 
 #include "OmptProfiler.h"
 
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::ompt::OmptProfilerTy>();
+  return std::make_unique<llvm::offload::ompt::OmptProfilerTy>();
 }
 
 #else
 
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
+  return std::make_unique<llvm::offload::plugin::GenericProfilerTy>();
 }
 
 #endif

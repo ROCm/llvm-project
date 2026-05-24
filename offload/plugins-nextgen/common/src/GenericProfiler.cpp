@@ -15,15 +15,13 @@
 #include <cstdint>
 #include <memory>
 
-__attribute__((weak))
-std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+__attribute__((weak)) std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach() {
-  return std::make_unique<llvm::omp::target::plugin::GenericProfilerTy>();
+  return std::make_unique<llvm::offload::plugin::GenericProfilerTy>();
 }
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 
 uint64_t GenericProfilerTy::getDeviceTimeStamp(GenericDeviceTy *D) {
@@ -32,6 +30,5 @@ uint64_t GenericProfilerTy::getDeviceTimeStamp(GenericDeviceTy *D) {
   return 0;
 }
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm

@@ -26,8 +26,7 @@
 #define DEBUG_PREFIX "OMPT"
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace ompt {
 
 /// After a timestamp has been read, reset it.
@@ -143,8 +142,7 @@ extern thread_local uint64_t ThreadId;
 extern bool TracingActive;
 
 } // namespace ompt
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #pragma pop_macro("DEBUG_PREFIX")

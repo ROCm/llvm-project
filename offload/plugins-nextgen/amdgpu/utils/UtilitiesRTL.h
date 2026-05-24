@@ -20,11 +20,10 @@
 
 #include "llvm/Frontend/Offloading/Utility.h"
 
-using namespace llvm::omp::target::debug;
+using namespace llvm::offload::debug;
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 namespace hsa_utils {
 
@@ -136,6 +135,5 @@ void initImplArg(AMDGPUImplicitArgsTy *Base,
 
 } // namespace hsa_utils
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm

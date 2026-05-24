@@ -34,32 +34,32 @@
 #undef DEBUG_PREFIX
 #define DEBUG_PREFIX "OMPT"
 
-using namespace llvm::omp::target::ompt;
+using namespace llvm::offload::ompt;
 
-std::mutex llvm::omp::target::ompt::DeviceAccessMutex;
-std::mutex llvm::omp::target::ompt::TraceAccessMutex;
-std::mutex llvm::omp::target::ompt::TraceControlMutex;
-std::mutex llvm::omp::target::ompt::TraceHashThreadMutex;
-std::mutex llvm::omp::target::ompt::BufferManagementFnMutex;
+std::mutex llvm::offload::ompt::DeviceAccessMutex;
+std::mutex llvm::offload::ompt::TraceAccessMutex;
+std::mutex llvm::offload::ompt::TraceControlMutex;
+std::mutex llvm::offload::ompt::TraceHashThreadMutex;
+std::mutex llvm::offload::ompt::BufferManagementFnMutex;
 
 std::unordered_map<int /*DeviceId*/, std::pair<ompt_callback_buffer_request_t,
                                                ompt_callback_buffer_complete_t>>
-    llvm::omp::target::ompt::BufferManagementFns;
+    llvm::offload::ompt::BufferManagementFns;
 
-thread_local uint32_t llvm::omp::target::ompt::TraceRecordNumGrantedTeams = 0;
-thread_local uint64_t llvm::omp::target::ompt::TraceRecordStartTime = 0;
-thread_local uint64_t llvm::omp::target::ompt::TraceRecordStopTime = 0;
-thread_local uint64_t llvm::omp::target::ompt::ThreadId =
+thread_local uint32_t llvm::offload::ompt::TraceRecordNumGrantedTeams = 0;
+thread_local uint64_t llvm::offload::ompt::TraceRecordStartTime = 0;
+thread_local uint64_t llvm::offload::ompt::TraceRecordStopTime = 0;
+thread_local uint64_t llvm::offload::ompt::ThreadId =
     std::numeric_limits<uint64_t>::max();
 
-std::map<int32_t, uint64_t> llvm::omp::target::ompt::TracedDevices;
+std::map<int32_t, uint64_t> llvm::offload::ompt::TracedDevices;
 
-bool llvm::omp::target::ompt::TracingActive = false;
+bool llvm::offload::ompt::TracingActive = false;
 
-void llvm::omp::target::ompt::resetTimestamp(uint64_t *T) { *T = 0; }
+void llvm::offload::ompt::resetTimestamp(uint64_t *T) { *T = 0; }
 
 ompt_callback_buffer_request_t
-llvm::omp::target::ompt::getBufferRequestFn(int DeviceId) {
+llvm::offload::ompt::getBufferRequestFn(int DeviceId) {
   std::unique_lock<std::mutex> Lock(BufferManagementFnMutex);
   auto BufferMgrItr = BufferManagementFns.find(DeviceId);
   if (BufferMgrItr == BufferManagementFns.end()) {
@@ -69,7 +69,7 @@ llvm::omp::target::ompt::getBufferRequestFn(int DeviceId) {
 }
 
 ompt_callback_buffer_complete_t
-llvm::omp::target::ompt::getBufferCompleteFn(int DeviceId) {
+llvm::offload::ompt::getBufferCompleteFn(int DeviceId) {
   std::unique_lock<std::mutex> Lock(BufferManagementFnMutex);
   auto BufferMgrItr = BufferManagementFns.find(DeviceId);
   if (BufferMgrItr == BufferManagementFns.end()) {
@@ -78,7 +78,7 @@ llvm::omp::target::ompt::getBufferCompleteFn(int DeviceId) {
   return BufferMgrItr->second.second;
 }
 
-void llvm::omp::target::ompt::setBufferManagementFns(
+void llvm::offload::ompt::setBufferManagementFns(
     int DeviceId, ompt_callback_buffer_request_t ReqFn,
     ompt_callback_buffer_complete_t CmpltFn) {
   std::unique_lock<std::mutex> Lock(BufferManagementFnMutex);
@@ -91,7 +91,7 @@ void llvm::omp::target::ompt::setBufferManagementFns(
   BufferManagementFns[DeviceId] = std::make_pair(ReqFn, CmpltFn);
 }
 
-void llvm::omp::target::ompt::removeBufferManagementFns(int DeviceId) {
+void llvm::offload::ompt::removeBufferManagementFns(int DeviceId) {
   std::unique_lock<std::mutex> Lock(BufferManagementFnMutex);
   auto BufferMgrItr = BufferManagementFns.find(DeviceId);
   if (BufferMgrItr == BufferManagementFns.end()) {
@@ -102,18 +102,18 @@ void llvm::omp::target::ompt::removeBufferManagementFns(int DeviceId) {
   BufferManagementFns.erase(BufferMgrItr);
 }
 
-bool llvm::omp::target::ompt::isAllDeviceTracingStopped() {
+bool llvm::offload::ompt::isAllDeviceTracingStopped() {
   std::unique_lock<std::mutex> Lock(BufferManagementFnMutex);
   return BufferManagementFns.empty();
 }
 
-void llvm::omp::target::ompt::ompt_callback_buffer_request(
+void llvm::offload::ompt::ompt_callback_buffer_request(
     int DeviceId, ompt_buffer_t **BufferPtr, size_t *Bytes) {
   if (auto Fn = getBufferRequestFn(DeviceId))
     Fn(DeviceId, BufferPtr, Bytes);
 }
 
-void llvm::omp::target::ompt::ompt_callback_buffer_complete(
+void llvm::offload::ompt::ompt_callback_buffer_complete(
     int DeviceId, ompt_buffer_t *Buffer, size_t Bytes,
     ompt_buffer_cursor_t BeginCursor, int BufferOwned) {
   if (auto Fn = getBufferCompleteFn(DeviceId))
@@ -135,7 +135,7 @@ inline bool checkDeviceTracingState(const uint64_t &TracingTypes) {
   return TracingTypes & 1UL;
 }
 
-void llvm::omp::target::ompt::enableDeviceTracing(int DeviceId) {
+void llvm::offload::ompt::enableDeviceTracing(int DeviceId) {
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   auto Device = TracedDevices.find(DeviceId);
   if (Device == TracedDevices.end()) {
@@ -148,7 +148,7 @@ void llvm::omp::target::ompt::enableDeviceTracing(int DeviceId) {
   TracingActive = true;
 }
 
-void llvm::omp::target::ompt::disableDeviceTracing(int DeviceId) {
+void llvm::offload::ompt::disableDeviceTracing(int DeviceId) {
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   auto Device = TracedDevices.find(DeviceId);
   if (Device == TracedDevices.end()) {
@@ -167,13 +167,12 @@ void llvm::omp::target::ompt::disableDeviceTracing(int DeviceId) {
   TracingActive = false;
 }
 
-bool llvm::omp::target::ompt::isTracingEnabled(int DeviceId,
-                                               unsigned int EventTy) {
+bool llvm::offload::ompt::isTracingEnabled(int DeviceId, unsigned int EventTy) {
   return TracingActive && isTracedDevice(DeviceId) &&
          isTracingTypeGroupEnabled(DeviceId, EventTy);
 }
 
-bool llvm::omp::target::ompt::isTracedDevice(int DeviceId) {
+bool llvm::offload::ompt::isTracedDevice(int DeviceId) {
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   auto Device = TracedDevices.find(DeviceId);
   if (Device != TracedDevices.end())
@@ -182,8 +181,8 @@ bool llvm::omp::target::ompt::isTracedDevice(int DeviceId) {
   return false;
 }
 
-bool llvm::omp::target::ompt::isTracingTypeEnabled(int DeviceId,
-                                                   unsigned int EventTy) {
+bool llvm::offload::ompt::isTracingTypeEnabled(int DeviceId,
+                                               unsigned int EventTy) {
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   // Make sure we do not shift more than std::numeric_limits<uint64_t>::digits
   assert(EventTy < 64 && "Shift limit exceeded: EventTy must be less than 64");
@@ -193,8 +192,8 @@ bool llvm::omp::target::ompt::isTracingTypeEnabled(int DeviceId,
   return false;
 }
 
-bool llvm::omp::target::ompt::isTracingTypeGroupEnabled(int DeviceId,
-                                                        unsigned int EventTy) {
+bool llvm::offload::ompt::isTracingTypeGroupEnabled(int DeviceId,
+                                                    unsigned int EventTy) {
   std::unique_lock<std::mutex> Lock(DeviceAccessMutex);
   // Make sure we do not shift more than std::numeric_limits<uint64_t>::digits
   assert(EventTy < 64 && "Shift limit exceeded: EventTy must be less than 64");
@@ -227,9 +226,9 @@ bool llvm::omp::target::ompt::isTracingTypeGroupEnabled(int DeviceId,
   return false;
 }
 
-void llvm::omp::target::ompt::setTracingTypeEnabled(uint64_t &TracedEventTy,
-                                                    bool Enable,
-                                                    unsigned int EventTy) {
+void llvm::offload::ompt::setTracingTypeEnabled(uint64_t &TracedEventTy,
+                                                bool Enable,
+                                                unsigned int EventTy) {
   // Make sure we do not shift more than std::numeric_limits<uint64_t>::digits
   assert(EventTy < 64 && "Shift limit exceeded: EventTy must be less than 64");
   if (EventTy < 64) {
@@ -240,9 +239,9 @@ void llvm::omp::target::ompt::setTracingTypeEnabled(uint64_t &TracedEventTy,
   }
 }
 
-ompt_set_result_t
-llvm::omp::target::ompt::setTraceEventTy(int DeviceId, unsigned int Enable,
-                                         unsigned int EventTy) {
+ompt_set_result_t llvm::offload::ompt::setTraceEventTy(int DeviceId,
+                                                       unsigned int Enable,
+                                                       unsigned int EventTy) {
   if (DeviceId < 0) {
     REPORT() << "Failed to set trace event type for DeviceId=" << DeviceId;
     return ompt_set_never;
@@ -303,7 +302,7 @@ llvm::omp::target::ompt::setTraceEventTy(int DeviceId, unsigned int Enable,
   }
 }
 
-uint64_t llvm::omp::target::ompt::getThreadId() {
+uint64_t llvm::offload::ompt::getThreadId() {
   // Grab the value from thread local storage, if valid.
   if (ThreadId != std::numeric_limits<uint64_t>::max())
     return ThreadId;
@@ -753,7 +752,7 @@ ompt_set_result_t libomptarget_ompt_set_trace_ompt(int DeviceId,
                                                    unsigned int Enable,
                                                    unsigned int EventTy) {
   std::unique_lock<std::mutex> Lock(TraceAccessMutex);
-  return llvm::omp::target::ompt::setTraceEventTy(DeviceId, Enable, EventTy);
+  return llvm::offload::ompt::setTraceEventTy(DeviceId, Enable, EventTy);
 }
 
 // Device-independent entry point for ompt_start_trace
@@ -770,9 +769,8 @@ int libomptarget_ompt_start_trace(int DeviceId,
   std::unique_lock<std::mutex> Lock(TraceControlMutex);
   if (Request && Complete) {
     // Set buffer related functions
-    llvm::omp::target::ompt::setBufferManagementFns(DeviceId, Request,
-                                                    Complete);
-    llvm::omp::target::ompt::enableDeviceTracing(DeviceId);
+    llvm::offload::ompt::setBufferManagementFns(DeviceId, Request, Complete);
+    llvm::offload::ompt::enableDeviceTracing(DeviceId);
     TRM->startHelperThreads();
     // Success
     return 1;
@@ -818,7 +816,7 @@ int libomptarget_ompt_stop_trace(int DeviceId) {
   if (isAllDeviceTracingStopped()) {
     // TODO shutdown should perhaps return a status
     TRM->shutdownHelperThreads();
-    llvm::omp::target::ompt::disableDeviceTracing(DeviceId);
+    llvm::offload::ompt::disableDeviceTracing(DeviceId);
   }
   return Status;
 }

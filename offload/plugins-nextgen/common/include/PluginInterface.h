@@ -53,16 +53,14 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Triple.h"
 
-extern std::unique_ptr<llvm::omp::target::plugin::GenericProfilerTy>
+extern std::unique_ptr<llvm::offload::plugin::GenericProfilerTy>
 getProfilerToAttach();
 
 using namespace llvm::offload::debug;
-using namespace llvm::omp::target::debug;
+using namespace llvm::omp;
 
 namespace llvm {
-namespace omp {
-namespace target {
-
+namespace offload {
 namespace plugin {
 
 struct GenericPluginTy;
@@ -2365,8 +2363,7 @@ protected:
 };
 
 } // namespace plugin
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #endif // OPENMP_LIBOMPTARGET_PLUGINS_COMMON_PLUGININTERFACE_H

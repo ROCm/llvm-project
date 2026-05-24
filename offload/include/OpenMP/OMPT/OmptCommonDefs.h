@@ -47,20 +47,20 @@
 
 #define OMPT_API_ROUTINE static
 
-#define OMPT_CALLBACK_AVAILABLE(fn) (llvm::omp::target::ompt::Initialized && fn)
+#define OMPT_CALLBACK_AVAILABLE(fn) (llvm::offload::ompt::Initialized && fn)
 
 #define OMPT_IF_BUILT(stmt) stmt
 
 #define OMPT_IF_ENABLED(stmts)                                                 \
   do {                                                                         \
-    if (llvm::omp::target::ompt::Initialized) {                                \
+    if (llvm::offload::ompt::Initialized) {                                    \
       stmts                                                                    \
     }                                                                          \
   } while (0)
 
 #define OMPT_IF_TRACING_ENABLED(stmts)                                         \
   do {                                                                         \
-    if (llvm::omp::target::ompt::TracingActive) {                              \
+    if (llvm::offload::ompt::TracingActive) {                                  \
       stmts                                                                    \
     }                                                                          \
   } while (0)
@@ -79,7 +79,7 @@
 
 #define performIfOmptInitialized(stmt)                                         \
   do {                                                                         \
-    if (llvm::omp::target::ompt::Initialized) {                                \
+    if (llvm::offload::ompt::Initialized) {                                    \
       stmt;                                                                    \
     }                                                                          \
   } while (0)

@@ -31,11 +31,10 @@
 
 extern uint64_t getSystemTimestampInNs();
 
-using namespace llvm::omp::target::debug;
+using namespace llvm::offload::debug;
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace plugin {
 struct GenericDeviceTy;
 struct GenericPluginTy;
@@ -156,8 +155,7 @@ private:
   std::atomic<bool> OmptInitialized;
 };
 } // namespace ompt
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #pragma pop_macro("DEBUG_PREFIX")

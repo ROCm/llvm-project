@@ -32,8 +32,7 @@ extern void setGlobalOmptKernelProfile(void *Device, int Enable);
 extern uint64_t getSystemTimestampInNs();
 
 namespace llvm {
-namespace omp {
-namespace target {
+namespace offload {
 namespace ompt {
 
 // Declare OMPT device tracing function entry points
@@ -122,8 +121,7 @@ void ensureFuncPtrLoaded(const std::string &FuncName, FT *FuncPtr) {
 }
 
 } // namespace ompt
-} // namespace target
-} // namespace omp
+} // namespace offload
 } // namespace llvm
 
 #pragma pop_macro("DEBUG_PREFIX")
