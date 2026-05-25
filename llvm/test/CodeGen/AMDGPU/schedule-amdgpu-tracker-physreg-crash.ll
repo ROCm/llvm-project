@@ -1,6 +1,8 @@
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -mattr=+xnack -amdgpu-use-amdgpu-trackers=1  2>&1  < %s | FileCheck -check-prefixes=ERR-GCNTRACKERS %s
 ; RUN: not llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -mattr=+xnack 2>&1  < %s | FileCheck -check-prefixes=GCN %s
 
+; TODO-WAVETRANSFORM: We need to make changes to make second RUN line work later  here when late-wave transform pipeline is set as the default one.
+
 %asm.output = type { <16 x i32>, <16 x i32>, <16 x i32>, <8 x i32>, <2 x i32>, i32, ; sgprs
                      <16 x i32>, <7 x i32>, ; vgprs
                      i64 ; vcc
