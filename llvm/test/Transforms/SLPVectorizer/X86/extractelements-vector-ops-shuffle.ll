@@ -4,9 +4,9 @@
 define double @test() {
 ; CHECK-LABEL: define double @test() {
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[TMP0:%.*]] = load <2 x double>, ptr getelementptr inbounds ([13 x double], ptr null, i64 0, i64 5), align 8
-; CHECK-NEXT:    [[TMP1:%.*]] = load <2 x double>, ptr getelementptr inbounds ([13 x double], ptr null, i64 0, i64 8), align 16
-; CHECK-NEXT:    [[TMP2:%.*]] = shufflevector <2 x double> [[TMP0]], <2 x double> [[TMP1]], <2 x i32> <i32 1, i32 3>
+; CHECK-NEXT:    [[TMP1:%.*]] = load <2 x double>, ptr getelementptr inbounds ([13 x double], ptr null, i64 0, i64 5), align 8
+; CHECK-NEXT:    [[TMP8:%.*]] = load <2 x double>, ptr getelementptr inbounds ([13 x double], ptr null, i64 0, i64 8), align 16
+; CHECK-NEXT:    [[TMP2:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> [[TMP8]], <2 x i32> <i32 1, i32 3>
 ; CHECK-NEXT:    [[TMP3:%.*]] = shufflevector <2 x double> [[TMP2]], <2 x double> poison, <4 x i32> <i32 0, i32 1, i32 0, i32 1>
 ; CHECK-NEXT:    [[TMP4:%.*]] = shufflevector <4 x double> [[TMP3]], <4 x double> <double 0.000000e+00, double 0.000000e+00, double poison, double poison>, <4 x i32> <i32 4, i32 5, i32 0, i32 1>
 ; CHECK-NEXT:    [[TMP5:%.*]] = fmul <4 x double> [[TMP4]], zeroinitializer
@@ -15,8 +15,8 @@ define double @test() {
 ; CHECK-NEXT:    store double [[TMP7]], ptr null, align 16
 ; CHECK-NEXT:    br label [[BB:%.*]]
 ; CHECK:       bb:
-; CHECK-NEXT:    [[TMP8:%.*]] = shufflevector <2 x double> [[TMP1]], <2 x double> [[TMP0]], <4 x i32> <i32 1, i32 0, i32 3, i32 2>
-; CHECK-NEXT:    [[TMP9:%.*]] = fmul <4 x double> [[TMP8]], zeroinitializer
+; CHECK-NEXT:    [[TMP10:%.*]] = shufflevector <2 x double> [[TMP8]], <2 x double> [[TMP1]], <4 x i32> <i32 1, i32 0, i32 3, i32 2>
+; CHECK-NEXT:    [[TMP9:%.*]] = fmul <4 x double> [[TMP10]], zeroinitializer
 ; CHECK-NEXT:    [[TMP16:%.*]] = call double @llvm.vector.reduce.fadd.v4f64(double -0.000000e+00, <4 x double> [[TMP9]])
 ; CHECK-NEXT:    ret double [[TMP16]]
 ;

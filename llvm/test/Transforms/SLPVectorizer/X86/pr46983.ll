@@ -142,10 +142,9 @@ define void @store_i64(ptr nocapture %0, i32 %1, i32 %2) {
 ; CHECK-AVX-NEXT:    [[TMP9:%.*]] = load i64, ptr [[TMP6]], align 8, !tbaa [[LONG_TBAA5]]
 ; CHECK-AVX-NEXT:    [[TMP10:%.*]] = mul i64 [[TMP8]], [[TMP4]]
 ; CHECK-AVX-NEXT:    [[TMP11:%.*]] = mul i64 [[TMP9]], [[TMP4]]
-; CHECK-AVX-NEXT:    [[TMP12:%.*]] = lshr i64 [[TMP10]], 15
-; CHECK-AVX-NEXT:    [[TMP13:%.*]] = lshr i64 [[TMP11]], 15
-; CHECK-AVX-NEXT:    [[TMP14:%.*]] = trunc i64 [[TMP12]] to i32
-; CHECK-AVX-NEXT:    [[TMP15:%.*]] = trunc i64 [[TMP13]] to i32
+; CHECK-AVX-NEXT:    [[TMP12:%.*]] = insertelement <2 x i64> poison, i64 [[TMP11]], i32 0
+; CHECK-AVX-NEXT:    [[TMP13:%.*]] = insertelement <2 x i64> [[TMP12]], i64 [[TMP10]], i32 1
+; CHECK-AVX-NEXT:    [[TMP14:%.*]] = lshr <2 x i64> [[TMP13]], splat (i64 15)
 ; CHECK-AVX-NEXT:    [[TMP16:%.*]] = load i64, ptr [[TMP5]], align 8, !tbaa [[LONG_TBAA5]]
 ; CHECK-AVX-NEXT:    [[TMP17:%.*]] = load i64, ptr [[TMP0]], align 8, !tbaa [[LONG_TBAA5]]
 ; CHECK-AVX-NEXT:    [[TMP18:%.*]] = mul i64 [[TMP16]], [[TMP4]]
@@ -153,14 +152,12 @@ define void @store_i64(ptr nocapture %0, i32 %1, i32 %2) {
 ; CHECK-AVX-NEXT:    [[TMP20:%.*]] = insertelement <2 x i64> poison, i64 [[TMP19]], i32 0
 ; CHECK-AVX-NEXT:    [[TMP21:%.*]] = insertelement <2 x i64> [[TMP20]], i64 [[TMP18]], i32 1
 ; CHECK-AVX-NEXT:    [[TMP22:%.*]] = lshr <2 x i64> [[TMP21]], splat (i64 15)
-; CHECK-AVX-NEXT:    [[TMP23:%.*]] = trunc <2 x i64> [[TMP22]] to <2 x i32>
-; CHECK-AVX-NEXT:    [[TMP24:%.*]] = shufflevector <2 x i32> [[TMP23]], <2 x i32> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; CHECK-AVX-NEXT:    [[TMP25:%.*]] = insertelement <4 x i32> [[TMP24]], i32 [[TMP15]], i32 2
-; CHECK-AVX-NEXT:    [[TMP26:%.*]] = insertelement <4 x i32> [[TMP25]], i32 [[TMP14]], i32 3
-; CHECK-AVX-NEXT:    [[TMP27:%.*]] = icmp ult <4 x i32> [[TMP26]], splat (i32 255)
+; CHECK-AVX-NEXT:    [[TMP23:%.*]] = shufflevector <2 x i64> [[TMP14]], <2 x i64> poison, <4 x i32> <i32 0, i32 1, i32 0, i32 1>
 ; CHECK-AVX-NEXT:    [[TMP28:%.*]] = shufflevector <2 x i64> [[TMP22]], <2 x i64> poison, <4 x i32> <i32 0, i32 1, i32 poison, i32 poison>
-; CHECK-AVX-NEXT:    [[TMP29:%.*]] = insertelement <4 x i64> [[TMP28]], i64 [[TMP13]], i32 2
-; CHECK-AVX-NEXT:    [[TMP30:%.*]] = insertelement <4 x i64> [[TMP29]], i64 [[TMP12]], i32 3
+; CHECK-AVX-NEXT:    [[TMP24:%.*]] = shufflevector <2 x i64> [[TMP14]], <2 x i64> [[TMP22]], <4 x i32> <i32 2, i32 3, i32 0, i32 1>
+; CHECK-AVX-NEXT:    [[TMP25:%.*]] = trunc <4 x i64> [[TMP24]] to <4 x i32>
+; CHECK-AVX-NEXT:    [[TMP27:%.*]] = icmp ult <4 x i32> [[TMP25]], splat (i32 255)
+; CHECK-AVX-NEXT:    [[TMP30:%.*]] = shufflevector <4 x i64> [[TMP28]], <4 x i64> [[TMP23]], <4 x i32> <i32 0, i32 1, i32 4, i32 5>
 ; CHECK-AVX-NEXT:    [[TMP31:%.*]] = and <4 x i64> [[TMP30]], splat (i64 4294967295)
 ; CHECK-AVX-NEXT:    [[TMP32:%.*]] = select <4 x i1> [[TMP27]], <4 x i64> [[TMP31]], <4 x i64> splat (i64 255)
 ; CHECK-AVX-NEXT:    store <4 x i64> [[TMP32]], ptr [[TMP0]], align 8, !tbaa [[LONG_TBAA5]]
