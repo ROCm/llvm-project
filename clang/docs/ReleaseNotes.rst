@@ -207,6 +207,9 @@ Resolutions to C++ Defect Reports
 - Clang now allows omitting ``typename`` before a template name in a
   conversion operator, implementing `CWG2413 <https://wg21.link/cwg2413>`_.
 
+- Clang now uses non-reference types for structured bindings whose initializer
+  returns a prvalue. This resolves `CWG3135 <https://wg21.link/cwg3135>`_.
+
 C Language Changes
 ------------------
 
@@ -541,8 +544,12 @@ Improvements to Clang's diagnostics
 - Clang now errors when a function declaration aliases a variable or vice versa. (#GH195550)
 
 - Added ``-Wattribute-alias`` to diagnose type mismatches between an alias and its aliased function. (#GH195550)
-  
+
 - The diagnostics around ``__block`` now explain why a variable cannot be marked ``__block``. (#GH197213)
+
+- Extended ``-Wnonportable-include-path`` to warn about trailing whitespace and dots in ``#include`` paths. (#GH190610)
+
+- Clang now emits error when attribute is missing closing ``]]`` followed by ``;;``. (#GH187223)
 
 Improvements to Clang's time-trace
 ----------------------------------
