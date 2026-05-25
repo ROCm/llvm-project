@@ -666,6 +666,7 @@ def SI_BR_UNDEF : SPseudoInstSI <(outs), (ins SOPPBrTarget:$simm16)> {
   let isBranch = 1;
 }
 
+let Uses = [EXEC], Defs = [EXEC,VCC] in {
 // Pseudo thread-level conditional branch used in WaveTransform mode.
 // It takes a virtual lanemask register as the condition. Semantically,
 // a current active lane jumps to the target if its cond-bit is set to 1,
@@ -690,6 +691,8 @@ def SI_BRCOND_Z
   // let usesCustomInserter = 1;
   let isBranch = 1;
 }
+} // End Uses = [EXEC], Defs = [EXEC,VCC]
+
 def SI_PS_LIVE : PseudoInstSI <
   (outs SReg_1:$dst), (ins),
   [(set i1:$dst, (int_amdgcn_ps_live))]> {

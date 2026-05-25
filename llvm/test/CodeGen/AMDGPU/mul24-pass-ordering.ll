@@ -57,64 +57,64 @@ define void @lsr_order_mul24_1(i32 %arg, i32 %arg1, i32 %arg2, ptr addrspace(3) 
 ; GFX9-LABEL: lsr_order_mul24_1:
 ; GFX9:       ; %bb.0: ; %bb
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    v_cmp_ge_u32_e32 vcc, v0, v1
-; GFX9-NEXT:    s_xor_b64 s[6:7], vcc, exec
+; GFX9-NEXT:    v_cmp_ge_u32_e64 s[4:5], v0, v1
+; GFX9-NEXT:    v_and_b32_e32 v5, 1, v18
+; GFX9-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
+; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v5
 ; GFX9-NEXT:    s_mov_b64 s[4:5], -1
-; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
+; GFX9-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_3
 ; GFX9-NEXT:  .LBB1_1: ; %bb19
-; GFX9-NEXT:    v_cvt_f32_u32_e32 v5, v6
-; GFX9-NEXT:    v_and_b32_e32 v7, 1, v18
-; GFX9-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v7
-; GFX9-NEXT:    v_cndmask_b32_e64 v18, 0, -1, vcc
-; GFX9-NEXT:    v_rcp_iflag_f32_e32 v5, v5
+; GFX9-NEXT:    v_cvt_f32_u32_e32 v7, v6
 ; GFX9-NEXT:    v_add_u32_e32 v4, v4, v0
+; GFX9-NEXT:    v_cndmask_b32_e64 v5, 0, -1, vcc
 ; GFX9-NEXT:    v_and_b32_e32 v6, 0xffffff, v6
-; GFX9-NEXT:    v_lshl_add_u32 v7, v4, 2, v3
-; GFX9-NEXT:    v_lshlrev_b32_e32 v8, 2, v2
-; GFX9-NEXT:    v_add_u32_e32 v9, v17, v12
-; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v18
+; GFX9-NEXT:    v_rcp_iflag_f32_e32 v7, v7
+; GFX9-NEXT:    v_lshl_add_u32 v8, v4, 2, v3
+; GFX9-NEXT:    v_lshlrev_b32_e32 v9, 2, v2
+; GFX9-NEXT:    v_add_u32_e32 v12, v17, v12
 ; GFX9-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX9-NEXT:    ; implicit-def: $vgpr3
 ; GFX9-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX9-NEXT:  .LBB1_2: ; %bb23
 ; GFX9-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-NEXT:    v_cvt_f32_u32_e32 v3, v0
-; GFX9-NEXT:    v_add_u32_e32 v12, v17, v0
-; GFX9-NEXT:    v_madak_f32 v3, v3, v5, 0x3727c5ac
+; GFX9-NEXT:    v_madak_f32 v3, v3, v7, 0x3727c5ac
 ; GFX9-NEXT:    v_cvt_u32_f32_e32 v3, v3
 ; GFX9-NEXT:    v_mul_u32_u24_e32 v18, v3, v6
 ; GFX9-NEXT:    v_add_u32_e32 v19, v3, v16
-; GFX9-NEXT:    v_add_u32_e32 v3, v9, v0
+; GFX9-NEXT:    v_add_u32_e32 v3, v17, v0
+; GFX9-NEXT:    v_sub_u32_e32 v20, v3, v18
+; GFX9-NEXT:    v_add_u32_e32 v3, v12, v0
 ; GFX9-NEXT:    v_sub_u32_e32 v3, v3, v18
-; GFX9-NEXT:    v_sub_u32_e32 v12, v12, v18
-; GFX9-NEXT:    v_cmp_lt_u32_e64 s[4:5], v19, v13
-; GFX9-NEXT:    v_mad_u64_u32 v[18:19], s[6:7], v19, v15, v[3:4]
-; GFX9-NEXT:    v_cmp_lt_u32_e64 s[6:7], v12, v14
-; GFX9-NEXT:    s_and_b64 s[4:5], s[4:5], s[6:7]
+; GFX9-NEXT:    v_cmp_lt_u32_e32 vcc, v19, v13
+; GFX9-NEXT:    v_mad_u64_u32 v[18:19], s[4:5], v19, v15, v[3:4]
+; GFX9-NEXT:    v_cmp_lt_u32_e64 s[4:5], v20, v14
+; GFX9-NEXT:    s_and_b64 s[4:5], vcc, s[4:5]
 ; GFX9-NEXT:    v_cndmask_b32_e64 v3, 0, -1, s[4:5]
-; GFX9-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v3
-; GFX9-NEXT:    s_and_b64 s[4:5], s[4:5], vcc
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, 0, v18, s[4:5]
+; GFX9-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
+; GFX9-NEXT:    v_cmp_ne_u32_e64 s[4:5], 0, v5
+; GFX9-NEXT:    s_and_b64 vcc, vcc, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e32 v3, 0, v18, vcc
 ; GFX9-NEXT:    v_lshlrev_b64 v[18:19], 2, v[3:4]
 ; GFX9-NEXT:    v_add_u32_e32 v0, v0, v2
-; GFX9-NEXT:    v_add_co_u32_e64 v18, s[6:7], v10, v18
-; GFX9-NEXT:    v_addc_co_u32_e64 v19, s[6:7], v11, v19, s[6:7]
+; GFX9-NEXT:    v_add_co_u32_e64 v18, s[4:5], v10, v18
+; GFX9-NEXT:    v_addc_co_u32_e64 v19, s[4:5], v11, v19, s[4:5]
 ; GFX9-NEXT:    global_load_dword v3, v[18:19], off
-; GFX9-NEXT:    v_cmp_lt_u32_e64 s[6:7], v0, v1
+; GFX9-NEXT:    v_cmp_lt_u32_e64 s[4:5], v0, v1
+; GFX9-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
+; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[8:9]
 ; GFX9-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, 0, v3, s[4:5]
-; GFX9-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; GFX9-NEXT:    ds_write_b32 v7, v3
-; GFX9-NEXT:    v_add_u32_e32 v7, v7, v8
-; GFX9-NEXT:    s_or_b64 s[8:9], s[8:9], s[4:5]
-; GFX9-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9-NEXT:    v_cndmask_b32_e32 v3, 0, v3, vcc
+; GFX9-NEXT:    ds_write_b32 v8, v3
+; GFX9-NEXT:    v_add_u32_e32 v8, v8, v9
+; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB1_2
 ; GFX9-NEXT:  .LBB1_3: ; %.loopexit
-; GFX9-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX9-NEXT:    s_or_b64 exec, exec, s[6:7]
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
 bb:
