@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClauseProcessor.h"
-#include "flang/Lower/OpenMP/Utils.h"
+#include "Utils.h"
 
 #include "flang/Lower/ConvertCall.h"
 #include "flang/Lower/ConvertExprToHLFIR.h"

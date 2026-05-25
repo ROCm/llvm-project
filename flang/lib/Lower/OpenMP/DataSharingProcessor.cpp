@@ -12,8 +12,8 @@
 
 #include "DataSharingProcessor.h"
 
+#include "Utils.h"
 #include "flang/Lower/ConvertVariable.h"
-#include "flang/Lower/OpenMP/Utils.h"
 #include "flang/Lower/PFTBuilder.h"
 #include "flang/Lower/Support/PrivateReductionUtils.h"
 #include "flang/Lower/Support/Utils.h"

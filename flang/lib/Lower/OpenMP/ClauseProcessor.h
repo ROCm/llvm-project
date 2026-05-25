@@ -13,7 +13,7 @@
 #define FORTRAN_LOWER_CLAUSEPROCESSOR_H
 
 #include "ClauseFinder.h"
-#include "flang/Lower/OpenMP/Utils.h"
+#include "Utils.h"
 #include "flang/Lower/AbstractConverter.h"
 #include "flang/Lower/Bridge.h"
 #include "flang/Lower/DirectivesCommon.h"

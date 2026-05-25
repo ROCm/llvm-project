@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <flang/Lower/OpenMP/Utils.h>
+#include "Utils.h"
 
 #include "ClauseFinder.h"
 #include "flang/Evaluate/fold.h"
