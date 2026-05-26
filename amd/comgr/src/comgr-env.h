@@ -29,9 +29,12 @@ bool shouldEmitVerboseLogs();
 /// Return whether the environment requests time statistics collection.
 bool needTimeStatistics();
 
-/// If environment variable LLVM_PATH is set, return the environment variable,
-/// otherwise return the default LLVM path.
-llvm::StringRef getLLVMPath();
+/// Path to the clang executable. AMD_COMGR_CLANG_EXECUTABLE, else
+/// <LLVM_PATH>/bin/clang for back-compat, else empty.
+llvm::StringRef getClangExecutable();
+
+/// LLVM install root, derived from getClangExecutable().
+llvm::StringRef getLLVMInstallDir();
 
 /// If environment variable AMD_COMGR_CACHE_POLICY is set, return the
 /// environment variable, otherwise return empty
