@@ -14,7 +14,6 @@
 
 #include "comgr-env.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/VirtualFileSystem.h"
 
@@ -66,7 +65,7 @@ bool shouldEmitVerboseLogs() {
   return VerboseLogs && StringRef(VerboseLogs) != "0";
 }
 
-llvm::StringRef getClangExecutable() {
+llvm::StringRef getClangExecutablePath() {
   static const std::string Path = [] {
     if (const char *E = std::getenv("AMD_COMGR_CLANG_EXECUTABLE"))
       if (E[0] != '\0')
@@ -84,7 +83,7 @@ llvm::StringRef getClangExecutable() {
 
 llvm::StringRef getLLVMInstallDir() {
   static const std::string Dir =
-      sys::path::parent_path(sys::path::parent_path(getClangExecutable())).str();
+      sys::path::parent_path(sys::path::parent_path(getClangExecutablePath())).str();
   return Dir;
 }
 

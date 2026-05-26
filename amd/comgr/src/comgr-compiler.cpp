@@ -1050,7 +1050,7 @@ AMDGPUCompiler::executeInProcessDriver(ArrayRef<const char *> Args) {
 
   ProcessWarningOptions(Diags, *DiagOpts, *OverlayFS, /*ReportDiags=*/false);
 
-  StringRef ClangExecutable = env::getClangExecutable();
+  StringRef ClangExecutable = env::getClangExecutablePath();
   if (env::shouldEmitVerboseLogs()) {
     LogS << "    Clang Executable: " << ClangExecutable << "\n";
   }
@@ -1479,7 +1479,7 @@ amd_comgr_status_t AMDGPUCompiler::outputResource(llvm::StringRef Path,
 }
 
 amd_comgr_status_t AMDGPUCompiler::addDeviceLibraries() {
-  std::string ClangResourceDir = GetResourcesPath(env::getClangExecutable());
+  std::string ClangResourceDir = GetResourcesPath(env::getClangExecutablePath());
 
   NoGpuLib = false;
 
@@ -2750,7 +2750,7 @@ AMDGPUCompiler::AMDGPUCompiler(DataAction *ActionInfo, DataSet *InSet,
       OverlayFS->pushOverlay(InMemoryFS);
     }
 
-    std::string ResourceDir = GetResourcesPath(env::getClangExecutable());
+    std::string ResourceDir = GetResourcesPath(env::getClangExecutablePath());
 
     // libc++ headers → <install>/include/c++/v1/<relative-path>
     SmallString<256> LibcxxBase(env::getLLVMInstallDir());
