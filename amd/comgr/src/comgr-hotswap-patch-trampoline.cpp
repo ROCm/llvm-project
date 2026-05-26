@@ -146,12 +146,21 @@ std::string fmtOffset(uint32_t Offset) {
 // For b32 operations, destinations are split into individual VGPRs.
 // For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
 
+// Maximum byte offset encodable in a single-address DS instruction's
+// 16-bit immediate offset field on gfx12. The replacement we emit uses
+// this field directly, so any scaled byte offset that exceeds it cannot
+// be represented and the patch must be skipped.
+constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
+
 struct DsOperands {
   SmallVector<MCRegister, 4> Regs;
-  uint32_t Off0;
-  uint32_t Off1;
-  bool IsB64;
-  const MCRegisterInfo *MRI;
+  uint32_t Off0 = 0;
+  uint32_t Off1 = 0;
+  bool IsB64 = false;
+  // Cleared if extractDsOperands cannot produce an offset that fits the
+  // single-address DS encoding; callers must check before consuming Off*.
+  bool Valid = true;
+  const MCRegisterInfo *MRI = nullptr;
 };
 
 // Extract register operands and scaled offsets from a DS 2-address MCInst.
@@ -161,6 +170,13 @@ struct DsOperands {
 // (index * 64 * ElemBytes) byte offsets. The replacement single-address
 // instructions take byte offsets directly, so we materialise the scaled
 // value here once and let the layout-specific helpers consume it.
+//
+// Range check: the stride64 b64 encoding can scale a raw 8-bit index up to
+// 255 * 64 * 8 = 130560 bytes, which overflows the single-address 16-bit
+// offset field (max 0xFFFF = 65535). When that happens the patch is not
+// representable in this expansion shape and we mark the operand bag
+// invalid so the caller leaves the original (broken-on-A0) instruction
+// in place rather than emitting a silently-truncated replacement.
 DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
                              const LLVMState &LS) {
   DsOperands Ops;
@@ -183,8 +199,23 @@ DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
 
   uint32_t ElemBytes = FromMnem.contains("_b64") ? 8 : 4;
   uint32_t Scale = FromMnem.contains("_stride64_") ? 64 * ElemBytes : ElemBytes;
-  Ops.Off0 = static_cast<uint32_t>(RawOff0) * Scale;
-  Ops.Off1 = static_cast<uint32_t>(RawOff1) * Scale;
+  // Compute scaled offsets in 64-bit so an oversize stride64_b64 index
+  // does not silently wrap when assigned to Off*.
+  uint64_t Scaled0 = static_cast<uint64_t>(RawOff0) * Scale;
+  uint64_t Scaled1 = static_cast<uint64_t>(RawOff1) * Scale;
+  if (Scaled0 > Ds1AddrOffsetMax || Scaled1 > Ds1AddrOffsetMax) {
+    log() << "hotswap: error: " << FromMnem
+          << " scaled offsets exceed the single-address DS 16-bit field "
+             "(off0=raw "
+          << RawOff0 << " * scale " << Scale << " = " << Scaled0
+          << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
+          << Scaled1 << ", max " << Ds1AddrOffsetMax
+          << "); leaving original instruction in place\n";
+    Ops.Valid = false;
+    return Ops;
+  }
+  Ops.Off0 = static_cast<uint32_t>(Scaled0);
+  Ops.Off1 = static_cast<uint32_t>(Scaled1);
   Ops.IsB64 = (ElemBytes == 8);
   return Ops;
 }
@@ -270,15 +301,17 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
                                        StringRef ToMnem, const LLVMState &LS) {
   DsOperands Ops = extractDsOperands(Inst, FromMnem, LS);
+  if (!Ops.Valid)
+    return {};
 
-  if (FromMnem.starts_with("ds_load"))
+  // Use the trailing underscore so the three prefixes are disjoint
+  // ("ds_load_", "ds_store_", "ds_storexchg_"); without it "ds_store" is a
+  // prefix of "ds_storexchg" and the dispatch order would matter.
+  if (FromMnem.starts_with("ds_load_"))
     return expandDs2AddrLoad(Ops, ToMnem);
-  // Order matters: "ds_storexchg" must be checked before "ds_store" since
-  // the latter is a prefix of the former and would otherwise greedily match
-  // the xchg mnemonics.
-  if (FromMnem.starts_with("ds_storexchg"))
+  if (FromMnem.starts_with("ds_storexchg_"))
     return expandDs2AddrXchg(Ops, ToMnem);
-  if (FromMnem.starts_with("ds_store"))
+  if (FromMnem.starts_with("ds_store_"))
     return expandDs2AddrStore(Ops, ToMnem);
 
   log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
