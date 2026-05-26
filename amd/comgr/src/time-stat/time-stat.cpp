@@ -34,7 +34,7 @@
 
 #if defined(__FreeBSD__) && !defined(CLOCK_MONOTONIC_RAW)
 #define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
-#endif 
+#endif
 
 using namespace llvm;
 using namespace COMGR;
