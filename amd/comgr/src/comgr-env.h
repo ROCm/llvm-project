@@ -29,6 +29,9 @@ bool shouldEmitVerboseLogs();
 /// Return whether the environment requests time statistics collection.
 bool needTimeStatistics();
 
+// Return granularity of time statistics (ms, us, ns)
+llvm::StringRef getTimeStatisticsGranularity();
+
 /// If environment variable LLVM_PATH is set, return the environment variable,
 /// otherwise return the default LLVM path.
 llvm::StringRef getLLVMPath();

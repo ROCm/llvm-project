@@ -59,6 +59,17 @@ bool needTimeStatistics() {
   return TimeStatistics && StringRef(TimeStatistics) != "0";
 }
 
+llvm::StringRef getTimeStatisticsGranularity() {
+  static const char *TimeStatisticsGranularity = getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
+  bool ValidGranularity = StringRef(TimeStatisticsGranularity) == "ms"
+                       || StringRef(TimeStatisticsGranularity) == "us"
+                       || StringRef(TimeStatisticsGranularity) == "ns";
+  if (ValidGranularity) {
+    return TimeStatisticsGranularity;
+  }
+  return "ms";
+}
+
 bool shouldEmitVerboseLogs() {
   static char *VerboseLogs = getenv("AMD_COMGR_EMIT_VERBOSE_LOGS");
   return VerboseLogs && StringRef(VerboseLogs) != "0";
