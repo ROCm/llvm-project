@@ -223,13 +223,17 @@ jobs:
         timeout-minutes: 30
         run: |
              commit_log=$(./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1)
-             echo "$commit_log" | grep "checked out" | \
-             sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/" | \
              while read path commit; do
-                url=$(git config -f .gitmodules --get "submodule.${path}.url")
-                repo=$(basename "$url" .git)
-                echo "$repo $commit"
-             done > submodule-commit-${{ inputs.stage_name }}.txt
+               url=$(git config -f .gitmodules --get "submodule.${path}.url" 2>/dev/null)
+               if [ -n "$url" ]; then
+                  repo=$(basename "$url" .git)
+               else
+                  repo="${path##*/}"
+               fi
+               echo "$repo $commit"
+             done < <(echo "$commit_log" | grep "checked out" | \
+              sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/") \
+               > submodule-commit-${STAGE_NAME}.txt
 
       - name: Upload submodule commit file
         uses: actions/upload-artifact@v4
