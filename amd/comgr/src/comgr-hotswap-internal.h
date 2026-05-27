@@ -118,6 +118,17 @@ static constexpr uint32_t MinInstSize = 4;
 static constexpr int64_t BranchOffsetMin = -32768;
 static constexpr int64_t BranchOffsetMax = 32767;
 
+// MCInst operand layout for ds_load_addtid_b32 / ds_store_addtid_b32. Shared
+// between the trampoline patch (comgr-hotswap-patch-trampoline.cpp) and the
+// unit tests that pin the layout (HotswapMCTest.cpp) so a tablegen change
+// upstream is caught in one place.
+//   operand 0: vdst (load) / data0 (store) -- VGPR register
+//   operand 1: combined offset             -- immediate
+//   operand 2: gds                         -- immediate (0 = LDS, 1 = GDS)
+static constexpr unsigned AddtidOpReg = 0;
+static constexpr unsigned AddtidOpOffset = 1;
+static constexpr unsigned AddtidOpGds = 2;
+
 // -- ElfView ------------------------------------------------------------------
 //
 // Thin wrapper around llvm::object::ELFFile<ELF64LE> that owns the structural
