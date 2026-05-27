@@ -147,7 +147,7 @@ std::string fmtOffset(uint32_t Offset) {
 // For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
 
 // Maximum byte offset encodable in a single-address DS instruction's
-// 16-bit immediate offset field on gfx12. The replacement we emit uses
+// 16-bit immediate offset field on gfx1250. The replacement we emit uses
 // this field directly, so any scaled byte offset that exceeds it cannot
 // be represented and the patch must be skipped.
 constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
@@ -157,9 +157,6 @@ struct DsOperands {
   uint32_t Off0 = 0;
   uint32_t Off1 = 0;
   bool IsB64 = false;
-  // Cleared if extractDsOperands cannot produce an offset that fits the
-  // single-address DS encoding; callers must check before consuming Off*.
-  bool Valid = true;
   const MCRegisterInfo *MRI = nullptr;
 };
 
@@ -174,11 +171,11 @@ struct DsOperands {
 // Range check: the stride64 b64 encoding can scale a raw 8-bit index up to
 // 255 * 64 * 8 = 130560 bytes, which overflows the single-address 16-bit
 // offset field (max 0xFFFF = 65535). When that happens the patch is not
-// representable in this expansion shape and we mark the operand bag
-// invalid so the caller leaves the original (broken-on-A0) instruction
-// in place rather than emitting a silently-truncated replacement.
-DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
-                             const LLVMState &LS) {
+// representable in this expansion shape; std::nullopt signals the failure
+// to the caller, which leaves the original (broken-on-A0) instruction in
+// place rather than emitting a silently-truncated replacement.
+std::optional<DsOperands>
+extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
   DsOperands Ops;
   Ops.MRI = LS.MRI.get();
 
@@ -211,8 +208,7 @@ DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
           << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
           << Scaled1 << ", max " << Ds1AddrOffsetMax
           << "); leaving original instruction in place\n";
-    Ops.Valid = false;
-    return Ops;
+    return std::nullopt;
   }
   Ops.Off0 = static_cast<uint32_t>(Scaled0);
   Ops.Off1 = static_cast<uint32_t>(Scaled1);
@@ -300,19 +296,19 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 
 std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
                                        StringRef ToMnem, const LLVMState &LS) {
-  DsOperands Ops = extractDsOperands(Inst, FromMnem, LS);
-  if (!Ops.Valid)
+  std::optional<DsOperands> Ops = extractDsOperands(Inst, FromMnem, LS);
+  if (!Ops)
     return {};
 
   // Use the trailing underscore so the three prefixes are disjoint
   // ("ds_load_", "ds_store_", "ds_storexchg_"); without it "ds_store" is a
   // prefix of "ds_storexchg" and the dispatch order would matter.
   if (FromMnem.starts_with("ds_load_"))
-    return expandDs2AddrLoad(Ops, ToMnem);
+    return expandDs2AddrLoad(*Ops, ToMnem);
   if (FromMnem.starts_with("ds_storexchg_"))
-    return expandDs2AddrXchg(Ops, ToMnem);
+    return expandDs2AddrXchg(*Ops, ToMnem);
   if (FromMnem.starts_with("ds_store_"))
-    return expandDs2AddrStore(Ops, ToMnem);
+    return expandDs2AddrStore(*Ops, ToMnem);
 
   log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
   return {};
