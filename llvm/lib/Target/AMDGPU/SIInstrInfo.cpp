@@ -3025,6 +3025,8 @@ bool SIInstrInfo::hasDivergentBranch(const MachineBasicBlock *MBB) const {
   for (const MachineInstr &MI : MBB->terminators()) {
     if (MI.getOpcode() == AMDGPU::SI_IF || MI.getOpcode() == AMDGPU::SI_ELSE ||
         MI.getOpcode() == AMDGPU::SI_LOOP ||
+        MI.getOpcode() == AMDGPU::SI_BRCOND ||
+        MI.getOpcode() == AMDGPU::SI_BRCOND_Z ||
         MI.getOpcode() == AMDGPU::SI_WAVE_CF_EDGE)
       return true;
   }

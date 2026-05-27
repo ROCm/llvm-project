@@ -14,11 +14,9 @@ define i32 @fp_save_restore_in_temp_sgpr(ptr addrspace(5) nocapture readonly byv
   ; GCN:   $sgpr7 = frame-setup COPY $sgpr33
   ; GCN: bb.1.lp_end:
   ; GCN:   liveins: $sgpr6, $sgpr7, $vgpr1, $sgpr4_sgpr5
-  ; GCN: bb.2:
-  ; GCN:   liveins: $sgpr7, $sgpr4_sgpr5
-  ; GCN: bb.3.lp_begin:
+  ; GCN: bb.2.lp_begin:
   ; GCN:   liveins: $sgpr6, $sgpr7, $vgpr1, $sgpr4_sgpr5
-  ; GCN: bb.4.end:
+  ; GCN: bb.3.end:
   ; GCN:   liveins: $sgpr7, $vgpr0, $sgpr4_sgpr5
   ; GCN:   $sgpr33 = frame-destroy COPY $sgpr7
 begin:
