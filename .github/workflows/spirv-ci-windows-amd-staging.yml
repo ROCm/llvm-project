@@ -1,9 +1,9 @@
 # Windows variant of the SPIRV CI: builds LLVM/Clang/translator/Comgr in
 # one job and runs SPIRV-relevant test suites in parallel test jobs that
-# consume a GHA artifact uploaded by the build job. Mirrors spirv-ci-linux.yml
+# consume a GHA artifact uploaded by the build job. Mirrors spirv-ci-linux-amd-staging.yml
 # in shape; differs in runner, MSVC env setup, no container, no strip.
 
-name: SPIRV Compiler CI - Windows
+name: SPIRV Compiler CI - Windows - amd-staging
 
 on:
   workflow_call:
