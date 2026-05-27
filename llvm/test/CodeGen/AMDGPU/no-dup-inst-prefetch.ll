@@ -6,47 +6,45 @@ define amdgpu_cs void @_amdgpu_cs_main(float %0, i32 %1) {
 ; GFX10-LABEL: _amdgpu_cs_main:
 ; GFX10:       ; %bb.0: ; %branch1_true
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; GFX10-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-NEXT:    s_mov_b32 s4, 0
-; GFX10-NEXT:    s_mov_b32 s1, 0
-; GFX10-NEXT:    s_mov_b32 s0, -1
-; GFX10-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc_lo
-; GFX10-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
 ; GFX10-NEXT:    v_mov_b32_e32 v2, 0
+; GFX10-NEXT:    v_mov_b32_e32 v3, 0
+; GFX10-NEXT:    s_mov_b32 s0, 0
+; GFX10-NEXT:    s_mov_b32 s4, 0
+; GFX10-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
+; GFX10-NEXT:    s_mov_b32 s1, -1
 ; GFX10-NEXT:    .p2align 6
 ; GFX10-NEXT:  .LBB0_1: ; %bb
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX10-NEXT:    s_and_b32 s0, exec_lo, vcc_lo
-; GFX10-NEXT:    s_xor_b32 s0, vcc_lo, -1
-; GFX10-NEXT:    s_and_b32 s0, s0, exec_lo
-; GFX10-NEXT:    s_xor_b32 s2, exec_lo, s0
+; GFX10-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
+; GFX10-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX10-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX10-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX10-NEXT:    s_or_b32 s1, s1, s2
-; GFX10-NEXT:    s_mov_b32 exec_lo, s0
+; GFX10-NEXT:    s_or_b32 s4, s4, s2
+; GFX10-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execz .LBB0_3
 ; GFX10-NEXT:  .LBB0_2: ; %branch2_merge
 ; GFX10-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; GFX10-NEXT:    s_mov_b32 s5, s4
-; GFX10-NEXT:    s_mov_b32 s6, s4
-; GFX10-NEXT:    s_mov_b32 s7, s4
-; GFX10-NEXT:    s_mov_b32 s8, s4
-; GFX10-NEXT:    s_mov_b32 s9, s4
-; GFX10-NEXT:    s_mov_b32 s10, s4
-; GFX10-NEXT:    s_mov_b32 s11, s4
-; GFX10-NEXT:    s_mov_b32 s12, s4
-; GFX10-NEXT:    s_mov_b32 s13, s4
-; GFX10-NEXT:    s_mov_b32 s14, s4
-; GFX10-NEXT:    s_mov_b32 s15, s4
-; GFX10-NEXT:    image_sample_lz v2, [v1, v1, v2], s[8:15], s[4:7] dmask:0x1 dim:SQ_RSRC_IMG_3D
+; GFX10-NEXT:    s_mov_b32 s1, s0
+; GFX10-NEXT:    s_mov_b32 s2, s0
+; GFX10-NEXT:    s_mov_b32 s3, s0
+; GFX10-NEXT:    s_mov_b32 s8, s0
+; GFX10-NEXT:    s_mov_b32 s9, s0
+; GFX10-NEXT:    s_mov_b32 s10, s0
+; GFX10-NEXT:    s_mov_b32 s11, s0
+; GFX10-NEXT:    s_mov_b32 s12, s0
+; GFX10-NEXT:    s_mov_b32 s13, s0
+; GFX10-NEXT:    s_mov_b32 s14, s0
+; GFX10-NEXT:    s_mov_b32 s15, s0
+; GFX10-NEXT:    image_sample_lz v3, [v2, v2, v3], s[8:15], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_3D
 ; GFX10-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-NEXT:    v_fma_f32 v2, v2, v0, 0
-; GFX10-NEXT:    v_cmp_gt_f32_e64 s0, 0, v2
-; GFX10-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX10-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX10-NEXT:    s_or_b32 s1, s1, s2
-; GFX10-NEXT:    s_mov_b32 exec_lo, s0
+; GFX10-NEXT:    v_fma_f32 v3, v3, v0, 0
+; GFX10-NEXT:    v_cmp_gt_f32_e32 vcc_lo, 0, v3
+; GFX10-NEXT:    v_mov_b32_e32 v3, v0
+; GFX10-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX10-NEXT:    s_and_b32 s1, s1, exec_lo
+; GFX10-NEXT:    s_or_b32 s4, s4, s1
+; GFX10-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-NEXT:    ; divergent control-flow edge
 ; GFX10-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX10-NEXT:  .LBB0_3: ; %loop0_merge
@@ -55,51 +53,47 @@ define amdgpu_cs void @_amdgpu_cs_main(float %0, i32 %1) {
 ; GFX12-LABEL: _amdgpu_cs_main:
 ; GFX12:       ; %bb.0: ; %branch1_true
 ; GFX12-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; GFX12-NEXT:    v_mov_b32_e32 v1, 0
+; GFX12-NEXT:    v_dual_mov_b32 v2, 0 :: v_dual_mov_b32 v3, 0
+; GFX12-NEXT:    s_mov_b32 s0, 0
 ; GFX12-NEXT:    s_mov_b32 s4, 0
-; GFX12-NEXT:    s_mov_b32 s1, 0
-; GFX12-NEXT:    s_mov_b32 s0, -1
-; GFX12-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc_lo
-; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX12-NEXT:    v_mov_b32_e32 v2, 0
+; GFX12-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
+; GFX12-NEXT:    s_mov_b32 s1, -1
 ; GFX12-NEXT:  .LBB0_1: ; %bb
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX12-NEXT:    s_and_b32 s0, exec_lo, vcc_lo
-; GFX12-NEXT:    s_xor_b32 s0, vcc_lo, -1
-; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX12-NEXT:    s_and_b32 s0, s0, exec_lo
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
+; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
+; GFX12-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
+; GFX12-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s1
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s4, s4, s2
+; GFX12-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execz .LBB0_3
 ; GFX12-NEXT:  .LBB0_2: ; %branch2_merge
 ; GFX12-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; GFX12-NEXT:    s_mov_b32 s5, s4
-; GFX12-NEXT:    s_mov_b32 s6, s4
-; GFX12-NEXT:    s_mov_b32 s7, s4
-; GFX12-NEXT:    s_mov_b32 s8, s4
-; GFX12-NEXT:    s_mov_b32 s9, s4
-; GFX12-NEXT:    s_mov_b32 s10, s4
-; GFX12-NEXT:    s_mov_b32 s11, s4
-; GFX12-NEXT:    s_mov_b32 s12, s4
-; GFX12-NEXT:    s_mov_b32 s13, s4
-; GFX12-NEXT:    s_mov_b32 s14, s4
-; GFX12-NEXT:    s_mov_b32 s15, s4
-; GFX12-NEXT:    image_sample_lz v2, [v1, v1, v2], s[8:15], s[4:7] dmask:0x1 dim:SQ_RSRC_IMG_3D
+; GFX12-NEXT:    s_mov_b32 s1, s0
+; GFX12-NEXT:    s_mov_b32 s2, s0
+; GFX12-NEXT:    s_mov_b32 s3, s0
+; GFX12-NEXT:    s_mov_b32 s8, s0
+; GFX12-NEXT:    s_mov_b32 s9, s0
+; GFX12-NEXT:    s_mov_b32 s10, s0
+; GFX12-NEXT:    s_mov_b32 s11, s0
+; GFX12-NEXT:    s_mov_b32 s12, s0
+; GFX12-NEXT:    s_mov_b32 s13, s0
+; GFX12-NEXT:    s_mov_b32 s14, s0
+; GFX12-NEXT:    s_mov_b32 s15, s0
+; GFX12-NEXT:    image_sample_lz v3, [v2, v2, v3], s[8:15], s[0:3] dmask:0x1 dim:SQ_RSRC_IMG_3D
 ; GFX12-NEXT:    s_wait_samplecnt 0x0
-; GFX12-NEXT:    v_fma_f32 v2, v2, v0, 0
+; GFX12-NEXT:    v_fma_f32 v3, v3, v0, 0
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(SALU_CYCLE_1)
-; GFX12-NEXT:    v_cmp_gt_f32_e64 s0, 0, v2
-; GFX12-NEXT:    v_mov_b32_e32 v2, v0
-; GFX12-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX12-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX12-NEXT:    v_cmp_gt_f32_e32 vcc_lo, 0, v3
+; GFX12-NEXT:    v_mov_b32_e32 v3, v0
+; GFX12-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX12-NEXT:    s_and_b32 s1, s1, exec_lo
 ; GFX12-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX12-NEXT:    s_or_b32 s1, s1, s2
-; GFX12-NEXT:    s_mov_b32 exec_lo, s0
+; GFX12-NEXT:    s_or_b32 s4, s4, s1
+; GFX12-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX12-NEXT:    ; divergent control-flow edge
 ; GFX12-NEXT:    s_cbranch_execnz .LBB0_1
 ; GFX12-NEXT:  .LBB0_3: ; %loop0_merge
