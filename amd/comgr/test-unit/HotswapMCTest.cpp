@@ -502,3 +502,190 @@ TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
   EXPECT_NE(VT1.applyWmmaSplitPatches, nullptr);
   EXPECT_EQ(VT1.applyScratchPatches, nullptr);
 }
+
+// -- DS ADDTID trampoline support ---------------------------------------------
+//
+// Tests for the ds_load_addtid_b32 / ds_store_addtid_b32 trampoline patch
+// (DEGFXMI400-12025). Coverage is bottom-up: first that the encode/decode
+// of ADDTID instructions exposes the expected MCInst operand layout, then
+// that the trampoline replacement asm round-trips through the MC layer,
+// then that buildTrampoline integrates a full ADDTID body.
+
+namespace {
+
+// AddtidOpReg / AddtidOpOffset / AddtidOpGds operand-layout constants live
+// in comgr-hotswap-internal.h and are imported by the COMGR::hotswap using-
+// declaration at the top of this file.
+
+// Decode a single instruction string and return the resulting MCInst, or
+// llvm::None on failure. Aborts the test if assemble/decode fail so the
+// caller can dereference unconditionally.
+llvm::MCInst decodeOne(llvm::StringRef Asm, const LLVMState &S) {
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
+  EXPECT_FALSE(Bytes.empty()) << "failed to assemble: " << Asm.str();
+  std::vector<InternalDecodedInst> Decoded;
+  EXPECT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded))
+      << "failed to decode: " << Asm.str();
+  EXPECT_EQ(Decoded.size(), 1u) << "expected one inst for: " << Asm.str();
+  return Decoded.empty() ? llvm::MCInst() : Decoded[0].Inst;
+}
+
+} // namespace
+
+TEST(AddTid, LoadAddTidDecodesWithExpectedLayout) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::MCInst Inst = decodeOne("ds_load_addtid_b32 v5 offset:128", S);
+  ASSERT_GE(Inst.getNumOperands(), 3u);
+
+  // Direct operand access: register, then offset, then gds bit. No
+  // print-and-parse round-trip -- production code uses the same operand
+  // indices to reach the destination VGPR.
+  EXPECT_TRUE(Inst.getOperand(AddtidOpReg).isReg());
+  EXPECT_NE(Inst.getOperand(AddtidOpReg).getReg(), 0u);
+  EXPECT_TRUE(Inst.getOperand(AddtidOpOffset).isImm());
+  EXPECT_EQ(Inst.getOperand(AddtidOpOffset).getImm(), 128);
+  EXPECT_TRUE(Inst.getOperand(AddtidOpGds).isImm());
+  EXPECT_EQ(Inst.getOperand(AddtidOpGds).getImm(), 0);
+
+  // Production code uses MRI.getName() to resolve the VGPR identifier
+  // ("VGPR5" for v5); pin that so a tablegen rename in upstream catches
+  // here rather than silently breaking the trampoline.
+  const char *N = S.MRI->getName(Inst.getOperand(AddtidOpReg).getReg());
+  ASSERT_NE(N, nullptr);
+  EXPECT_STREQ(N, "VGPR5");
+}
+
+TEST(AddTid, StoreAddTidDecodesWithExpectedLayout) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  llvm::MCInst Inst = decodeOne("ds_store_addtid_b32 v10 offset:256", S);
+  ASSERT_GE(Inst.getNumOperands(), 3u);
+  EXPECT_TRUE(Inst.getOperand(AddtidOpReg).isReg());
+  EXPECT_NE(Inst.getOperand(AddtidOpReg).getReg(), 0u);
+  EXPECT_TRUE(Inst.getOperand(AddtidOpOffset).isImm());
+  EXPECT_EQ(Inst.getOperand(AddtidOpOffset).getImm(), 256);
+  EXPECT_TRUE(Inst.getOperand(AddtidOpGds).isImm());
+  EXPECT_EQ(Inst.getOperand(AddtidOpGds).getImm(), 0);
+
+  const char *N = S.MRI->getName(Inst.getOperand(AddtidOpReg).getReg());
+  ASSERT_NE(N, nullptr);
+  EXPECT_STREQ(N, "VGPR10");
+}
+
+TEST(AddTid, LoadTrampolineAsmAssemblesAndDecodes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Replacement asm for ds_load_addtid_b32 v7 offset:64.
+  // The v_and_b32 with 0xfffff masks M0 to the 20 bits that B0's DS unit
+  // would have read, keeping the rewrite bit-exact with B0 hardware
+  // regardless of stale bits in M0[31:20] on entry.
+  std::string Asm = "v_mbcnt_lo_u32_b32 v7, -1, 0\n"
+                    "v_mbcnt_hi_u32_b32 v7, -1, v7\n"
+                    "v_lshlrev_b32 v7, 2, v7\n"
+                    "v_add_nc_u32 v7, m0, v7\n"
+                    "v_and_b32 v7, 0xfffff, v7\n"
+                    "ds_load_b32 v7, v7 offset:64\n";
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
+  EXPECT_EQ(Decoded[1].Mnemonic, "v_mbcnt_hi_u32_b32");
+  EXPECT_EQ(Decoded[2].Mnemonic, "v_lshlrev_b32");
+  EXPECT_EQ(Decoded[3].Mnemonic, "v_add_nc_u32");
+  EXPECT_EQ(Decoded[4].Mnemonic, "v_and_b32");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_load_b32");
+}
+
+TEST(AddTid, StoreTrampolineAsmAssemblesAndDecodes) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  // Replacement asm for ds_store_addtid_b32 v10 offset:0 with v42 as the
+  // address-compute scratch (the data VGPR v10 is not clobbered). The
+  // v_and_b32 with 0xfffff masks M0 to the 20-bit DS-unit width; see
+  // LoadTrampolineAsmAssemblesAndDecodes for the rationale.
+  std::string Asm = "v_mbcnt_lo_u32_b32 v42, -1, 0\n"
+                    "v_mbcnt_hi_u32_b32 v42, -1, v42\n"
+                    "v_lshlrev_b32 v42, 2, v42\n"
+                    "v_add_nc_u32 v42, m0, v42\n"
+                    "v_and_b32 v42, 0xfffff, v42\n"
+                    "ds_store_b32 v42, v10\n";
+
+  llvm::SmallVector<uint8_t> Bytes = assembleSingleInst(Asm, S);
+  ASSERT_FALSE(Bytes.empty());
+
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(Bytes.data(), Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 6u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
+  EXPECT_EQ(Decoded[1].Mnemonic, "v_mbcnt_hi_u32_b32");
+  EXPECT_EQ(Decoded[2].Mnemonic, "v_lshlrev_b32");
+  EXPECT_EQ(Decoded[3].Mnemonic, "v_add_nc_u32");
+  EXPECT_EQ(Decoded[4].Mnemonic, "v_and_b32");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_store_b32");
+}
+
+TEST(AddTid, LoadTrampolineThroughBuildTrampoline) {
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<std::string> AsmLines = {
+      "v_mbcnt_lo_u32_b32 v3, -1, 0", "v_mbcnt_hi_u32_b32 v3, -1, v3",
+      "v_lshlrev_b32 v3, 2, v3",      "v_add_nc_u32 v3, m0, v3",
+      "v_and_b32 v3, 0xfffff, v3",    "ds_load_b32 v3, v3 offset:0",
+  };
+
+  Trampoline T = buildTrampoline(AsmLines, /*OriginalOffset=*/0x100,
+                                 /*OriginalSize=*/4,
+                                 /*TrampolineTextOffset=*/0x2000, S);
+
+  ASSERT_FALSE(T.Bytes.empty());
+  EXPECT_EQ(T.OriginalOffset, 0x100u);
+  EXPECT_EQ(T.OriginalSize, 4u);
+
+  // 6 body instructions + 1 branch-back tail.
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(T.Bytes.data(), T.Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  EXPECT_EQ(Decoded[6].Mnemonic, "s_branch");
+}
+
+TEST(AddTid, StoreTrampolineThroughBuildTrampoline) {
+  // Mirror of LoadTrampolineThroughBuildTrampoline for the store path, where
+  // the data VGPR (v10) must be preserved and an allocator-supplied scratch
+  // VGPR (v42) holds the computed address. The two register operands of
+  // ds_store_b32 carry independent VGPR indices, which is what distinguishes
+  // this from the load case (which can fold dst back into address).
+  LLVMState S = initLLVM(makeGfx1250Ident());
+  ASSERT_TRUE(S.Valid);
+
+  std::vector<std::string> AsmLines = {
+      "v_mbcnt_lo_u32_b32 v42, -1, 0", "v_mbcnt_hi_u32_b32 v42, -1, v42",
+      "v_lshlrev_b32 v42, 2, v42",     "v_add_nc_u32 v42, m0, v42",
+      "v_and_b32 v42, 0xfffff, v42",   "ds_store_b32 v42, v10",
+  };
+
+  Trampoline T = buildTrampoline(AsmLines, /*OriginalOffset=*/0x180,
+                                 /*OriginalSize=*/4,
+                                 /*TrampolineTextOffset=*/0x2040, S);
+
+  ASSERT_FALSE(T.Bytes.empty());
+  EXPECT_EQ(T.OriginalOffset, 0x180u);
+  EXPECT_EQ(T.OriginalSize, 4u);
+
+  // 6 body instructions + 1 branch-back tail, matching the load variant.
+  std::vector<InternalDecodedInst> Decoded;
+  ASSERT_TRUE(decodeTextSection(T.Bytes.data(), T.Bytes.size(), S, Decoded));
+  ASSERT_EQ(Decoded.size(), 7u);
+  EXPECT_EQ(Decoded[0].Mnemonic, "v_mbcnt_lo_u32_b32");
+  EXPECT_EQ(Decoded[5].Mnemonic, "ds_store_b32");
+  EXPECT_EQ(Decoded[6].Mnemonic, "s_branch");
+}
