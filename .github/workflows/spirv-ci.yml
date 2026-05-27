@@ -1,8 +1,7 @@
 # Top-level dispatcher for the SPIRV-focused CI on amd-staging.
-# Dispatches to per-platform reusable workflows. Add Windows by adding
-# a windows_release job + spirv-ci-windows.yml.
+# Dispatches to per-platform reusable workflows.
 
-name: SPIRV Compiler CI
+name: SPIRV Compiler CI - amd-staging
 
 on:
   pull_request:
@@ -20,10 +19,10 @@ concurrency:
 jobs:
   linux_release:
     name: Linux::release
-    uses: ./.github/workflows/spirv-ci-linux.yml
+    uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
     secrets: inherit
 
   windows_release:
     name: Windows::release
-    uses: ./.github/workflows/spirv-ci-windows.yml
+    uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
     secrets: inherit
