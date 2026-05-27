@@ -83,10 +83,24 @@ public:
     SuitableAlign = 128;
     LongDoubleWidth = LongDoubleAlign = 128;
     LongDoubleFormat = &llvm::APFloat::PPCDoubleDouble();
+    BFloat16Width = BFloat16Align = 16;
+    BFloat16Format = &llvm::APFloat::BFloat();
     HasStrictFP = true;
     HasIbm128 = true;
     HasUnalignedAccess = true;
+    // _Float16 and __bf16 are supported on all PowerPC Linux targets via
+    // software promotion to float32, matching the approach used by AArch64 and
+    // RISC-V. AIX, soft-float, and SPE targets clear these flags in
+    // handleTargetFeatures() since their ABI has not yet been defined.
+    HasFloat16 = true;
+    HasFastHalfType = false;
+    HasBFloat16 = true;
   }
+
+  // PowerPC uses the LLVM 'half' IR type for _Float16 throughout codegen;
+  // the backend soft-promotes via TypeSoftPromoteHalf.  Do not emit
+  // __gnu_h2f_ieee / __gnu_f2h_ieee conversion intrinsics.
+  bool useFP16ConversionIntrinsics() const override { return false; }
 
   // Set the language option for altivec based on our value.
   void adjust(DiagnosticsEngine &Diags, LangOptions &Opts,
