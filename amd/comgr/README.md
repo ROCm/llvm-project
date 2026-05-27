@@ -127,14 +127,14 @@ HTML for investigation:
     $ make -j
     $ make test test-lit
     $ cd profiles
-    # Manually aggregate the data and create text report.
+#Manually aggregate the data and create text report.
     $ $LLVM_PROJECT/bin/llvm-profdata merge -sparse *.profraw -o \
         comgr_test.profdata # merge and index data
     $ $LLVM_PROJECT/bin/llvm-cov report ../libamd_comgr.so \
         -instr-profile=comgr_test.profdata \
         -ignore-filename-regex="[cl].*/include/*" # show test report without \
         includes
-    # Or use python script to aggregate the data and create html report.
+#Or use python script to aggregate the data and create html report.
     $ $LLVM_PROJECT/../llvm/utils/prepare-code-coverage-artifact.py \
         --preserve-profiles $LLVM_PROJECT/bin/llvm-profdata \
         $LLVM_PROJECT/bin/llvm-cov . html ../libamd_comgr.so \
@@ -220,6 +220,9 @@ include:
   include additional Comgr-specific informational messages.
 * `AMD_COMGR_TIME_STATISTICS`: If this is set, and is not "0", logs will
   include additional Comgr-specific timing information for compilation actions.
+* `AMD_COMGR_TIME_STATISTICS_GRANULARITY`: If this is set to "us" or "ns",
+  Comgr-specific timing information in logs will be in units of "us" or "ns"
+  respectively. Defaults to "ms" otherwise.
 * `AMD_COMGR_DRIVER_OPTIONS_APPEND`: If set, the space-separated options are
   appended to all clang driver invocations. This can be used to inject
   additional compiler flags for debugging or experimentation without modifying
