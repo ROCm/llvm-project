@@ -59,14 +59,28 @@ bool needTimeStatistics() {
   return TimeStatistics && StringRef(TimeStatistics) != "0";
 }
 
+uint32_t getGranularityUnitsPerSecond() {
+  static const char *TimeStatisticsGranularity =
+      getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
+  if (!TimeStatisticsGranularity)
+    return 1e3;
+  StringRef G(TimeStatisticsGranularity);
+  if (G == "us")
+    return 1e6;
+  else if (G == "ns")
+    return 1e9;
+  else
+    return 1e3;
+}
+
 llvm::StringRef getTimeStatisticsGranularity() {
-  static const char *TimeStatisticsGranularity = getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
-  bool ValidGranularity = StringRef(TimeStatisticsGranularity) == "ms"
-                       || StringRef(TimeStatisticsGranularity) == "us"
-                       || StringRef(TimeStatisticsGranularity) == "ns";
-  if (ValidGranularity) {
-    return TimeStatisticsGranularity;
-  }
+  static const char *TimeStatisticsGranularity =
+      getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
+  if (!TimeStatisticsGranularity)
+    return "ms";
+  StringRef G(TimeStatisticsGranularity);
+  if (G == "ms" || G == "us" || G == "ns")
+    return G;
   return "ms";
 }
 
