@@ -344,33 +344,33 @@ define i32 @needs_align1024_stack_args_used_inside_loop(ptr addrspace(5) nocaptu
 ; GCN-NEXT:    s_mov_b32 s10, s34
 ; GCN-NEXT:    s_and_b32 s33, s33, 0xffff0000
 ; GCN-NEXT:    s_mov_b32 s34, s32
-; GCN-NEXT:    v_lshrrev_b32_e64 v1, 6, s34
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
-; GCN-NEXT:    s_mov_b32 s6, 0
-; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:    s_add_i32 s32, s32, 0x30000
+; GCN-NEXT:    v_lshrrev_b32_e64 v1, 6, s34
 ; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], s33 offset:1024
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
+; GCN-NEXT:    s_mov_b32 s6, 0
+; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:  .LBB10_1: ; %loop_body
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GCN-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 offen
+; GCN-NEXT:    buffer_load_dword v0, v1, s[0:3], 0 offen
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
-; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, s6, v2
+; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, s6, v0
 ; GCN-NEXT:    s_xor_b64 s[8:9], exec, vcc
 ; GCN-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GCN-NEXT:    s_mov_b64 exec, vcc
 ; GCN-NEXT:    ; divergent control-flow edge
-; GCN-NEXT:    s_cbranch_execz .LBB10_4
+; GCN-NEXT:    s_cbranch_execz .LBB10_3
 ; GCN-NEXT:  .LBB10_2: ; %loop_end
 ; GCN-NEXT:    ; in Loop: Header=BB10_1 Depth=1
 ; GCN-NEXT:    s_add_i32 s6, s6, 1
 ; GCN-NEXT:    v_add_u32_e32 v1, vcc, 4, v1
+; GCN-NEXT:    v_mov_b32_e32 v0, 1
 ; GCN-NEXT:    s_cmp_eq_u32 s6, 9
 ; GCN-NEXT:    s_cbranch_scc0 .LBB10_1
-; GCN-NEXT:  ; %bb.3:
-; GCN-NEXT:    v_mov_b32_e32 v0, 1
-; GCN-NEXT:  .LBB10_4: ; %exit
+; GCN-NEXT:  .LBB10_3: ; %exit
 ; GCN-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GCN-NEXT:    s_mov_b32 s32, s34
 ; GCN-NEXT:    s_mov_b32 s34, s10

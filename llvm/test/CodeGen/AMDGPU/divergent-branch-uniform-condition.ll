@@ -161,12 +161,13 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:  .LBB1_1: ; %Flow
 ; ISA-NEXT:    ; in Loop: Header=BB1_2 Depth=1
 ; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
-; ISA-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; ISA-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
-; ISA-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; ISA-NEXT:    v_cndmask_b32_e64 v2, 0, -1, s[2:3]
+; ISA-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; ISA-NEXT:    s_xor_b64 s[6:7], exec, s[2:3]
+; ISA-NEXT:    s_and_b64 s[6:7], s[6:7], exec
 ; ISA-NEXT:    s_mov_b32 s4, 1
-; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], s[8:9]
-; ISA-NEXT:    s_mov_b64 exec, s[6:7]
+; ISA-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; ISA-NEXT:    s_mov_b64 exec, s[2:3]
 ; ISA-NEXT:    ; divergent control-flow edge
 ; ISA-NEXT:    s_cbranch_execz .LBB1_4
 ; ISA-NEXT:  .LBB1_2: ; %loop
@@ -182,10 +183,9 @@ define amdgpu_ps void @i1_copy_assert(i1 %v4) {
 ; ISA-NEXT:    s_branch .LBB1_1
 ; ISA-NEXT:  .LBB1_4: ; %Flow2
 ; ISA-NEXT:    s_or_b64 exec, exec, s[0:1]
-; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[2:3]
-; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; ISA-NEXT:    v_mov_b32_e32 v1, 0
-; ISA-NEXT:    v_cndmask_b32_e64 v0, 0, 1.0, vcc
+; ISA-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v2
+; ISA-NEXT:    v_mov_b32_e32 v0, 0
+; ISA-NEXT:    v_cndmask_b32_e64 v1, 0, 1.0, vcc
 ; ISA-NEXT:    exp mrt0, off, off, off, off
 ; ISA-NEXT:    s_endpgm
 start:

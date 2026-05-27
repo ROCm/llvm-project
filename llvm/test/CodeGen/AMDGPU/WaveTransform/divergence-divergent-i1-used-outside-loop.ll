@@ -345,6 +345,7 @@ define void @divergent_i1_icmp_used_outside_loop(i32 %v0, i32 %v1, ptr addrspace
   ; CHECK-NEXT: bb.4.loop.break.block:
   ; CHECK-NEXT:   successors: %bb.6(0x04000000), %bb.5(0x7c000000)
   ; CHECK-NEXT: {{  $}}
+  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed [[V_CMP_EQ_U32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_EQ_U32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_EQ_U32_e64 [[PHI]], [[COPY4]], implicit $exec
   ; CHECK-NEXT:   [[COPY7:%[0-9]+]]:vgpr_32 = COPY [[PHI]], implicit $exec
   ; CHECK-NEXT:   SI_BRCOND %bb.6, killed [[V_CMP_EQ_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
@@ -359,7 +360,6 @@ define void @divergent_i1_icmp_used_outside_loop(i32 %v0, i32 %v1, ptr addrspace
   ; CHECK-NEXT: bb.6.cond.block.1:
   ; CHECK-NEXT:   successors: %bb.7(0x40000000), %bb.8(0x40000000)
   ; CHECK-NEXT: {{  $}}
-  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed [[V_CMP_EQ_U32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 0, killed [[V_CNDMASK_B32_e64_]], implicit $exec
   ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, killed [[V_CMP_NE_U32_e64_1]], implicit $exec
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_2:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 1, killed [[V_CNDMASK_B32_e64_1]], implicit $exec
