@@ -2,7 +2,7 @@
 # one job and runs SPIRV-relevant test suites in parallel test jobs that
 # consume a GHA artifact uploaded by the build job.
 
-name: SPIRV Compiler CI - Linux
+name: SPIRV Compiler CI - Linux - amd-staging
 
 on:
   workflow_call:
