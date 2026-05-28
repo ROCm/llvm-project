@@ -255,6 +255,13 @@ public:
   virtual void overridePostRASchedPolicy(MachineSchedPolicy &Policy,
                                          const SchedRegion &Region) const {}
 
+  /// Return true if the post-RA machine scheduler should preserve \p SU's
+  /// relative order with other SUnits for which this hook returns true in the
+  /// same scheduling region.
+  virtual bool shouldPreservePostRASchedOrder(const SUnit &SU) const {
+    return false;
+  }
+
   // Perform target-specific adjustments to the latency of a schedule
   // dependency.
   // If a pair of operands is associated with the schedule dependency, DefOpIdx

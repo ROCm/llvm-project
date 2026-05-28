@@ -119,8 +119,6 @@ public:
   GCNSubtarget &initializeSubtargetDependencies(const Triple &TT, StringRef GPU,
                                                 StringRef FS);
 
-  bool enablePostRAMachineScheduler() const override { return false; }
-
   /// Diagnose inconsistent subtarget features before attempting to codegen
   /// function \p F.
   void checkSubtargetFeatures(const Function &F) const;
@@ -492,6 +490,8 @@ public:
 
   void overridePostRASchedPolicy(MachineSchedPolicy &Policy,
                                  const SchedRegion &Region) const override;
+
+  bool shouldPreservePostRASchedOrder(const SUnit &SU) const override;
 
   void mirFileLoaded(MachineFunction &MF) const override;
 
