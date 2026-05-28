@@ -104,7 +104,7 @@ ProfilePoint::~ProfilePoint() {
 class PerfTimerWindows : public PerfTimerImpl {
 
 public:
-  PerfTimerWindows(){};
+  PerfTimerWindows() {};
   virtual bool Init() override {
     LARGE_INTEGER li;
     if (QueryPerformanceCounter(&li))
@@ -120,7 +120,7 @@ public:
     }
     // QueryPerformanceFrequency returns counts per second
     // If we need milliseconds we divide by 10^3
-    uint32_t GranularityPerSecond = env::getGranularityUnitsPerSecond();
+    GranularityPerSecond = env::getGranularityUnitsPerSecond();
     PCFreq = li.QuadPart / GranularityPerSecond;
     return true;
   }
@@ -155,7 +155,7 @@ public:
     }
     // clock_getres returns counts per nanosecond
     // If we need milliseconds we multiply by 10^6
-    uint32_t GranularityPerSecond = env::getGranularityUnitsPerSecond();
+    GranularityPerSecond = env::getGranularityUnitsPerSecond();
     PCFreq = (Res.tv_sec * 1e9 + Res.tv_nsec) * (1e9 / GranularityPerSecond);
     return true;
   }

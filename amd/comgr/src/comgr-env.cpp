@@ -60,17 +60,12 @@ bool needTimeStatistics() {
 }
 
 uint32_t getGranularityUnitsPerSecond() {
-  static const char *TimeStatisticsGranularity =
-      getenv("AMD_COMGR_TIME_STATISTICS_GRANULARITY");
-  if (!TimeStatisticsGranularity)
-    return 1e3;
-  StringRef G(TimeStatisticsGranularity);
+  StringRef G = getTimeStatisticsGranularity();
   if (G == "us")
     return 1e6;
   else if (G == "ns")
     return 1e9;
-  else
-    return 1e3;
+  return 1e3;
 }
 
 llvm::StringRef getTimeStatisticsGranularity() {
