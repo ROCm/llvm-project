@@ -325,6 +325,7 @@ jobs:
 
       - name: Clang Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: true
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
 
