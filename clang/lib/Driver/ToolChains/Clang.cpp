@@ -7058,6 +7058,14 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       else
         CmdArgs.push_back("-fno-openmp-target-multi-device");
 
+      for (Arg *A : Args.filtered(options::OPT_fopenmp_target_xteam_scan,
+                                  options::OPT_fno_openmp_target_xteam_scan,
+                                  options::OPT_fopenmp_target_xteam_no_loop_scan,
+                                  options::OPT_fno_openmp_target_xteam_no_loop_scan))
+        D.Diag(diag::warn_drv_deprecated_custom)
+            << A->getAsString(Args)
+            << "will be removed in a future revision of the OpenMP implementation.";
+
       if (Args.hasFlag(options::OPT_fopenmp_target_xteam_scan,
                        options::OPT_fno_openmp_target_xteam_scan, false))
         CmdArgs.push_back("-fopenmp-target-xteam-scan");
