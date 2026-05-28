@@ -128,15 +128,15 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 
 // CHECK: %[[LOAD_ALLOCATABLE_MEMBER_BADDR:.*]] = load ptr, ptr %[[ALLOCATABLE_MEMBER_BADDR]], align 8
 // CHECK: %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[LOAD_ALLOCATABLE_MEMBER_BADDR]], i64 0
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_1:.*]] = getelementptr i32, ptr %[[ALLOCATABLE_MEMBER_BADDR]], i64 1
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_1:.*]] = getelementptr %_QFtest_derived_type_allocatable_map_operand_and_block_additionTone_layer, ptr %[[ARG]], i32 1
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_2:.*]] = ptrtoaddr ptr %[[DTYPE_SIZE_SEGMENT_CALC_1]] to i64
-// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[DTYPE_ALLOCATABLE_MEMBER_GEP]] to i64
+// CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_3:.*]] = ptrtoaddr ptr %[[ARG]] to i64
 // CHECK: %[[DTYPE_SIZE_SEGMENT_CALC_4:.*]] = sub i64 %[[DTYPE_SIZE_SEGMENT_CALC_2]], %[[DTYPE_SIZE_SEGMENT_CALC_3]]
 
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [4 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [4 x ptr], ptr %.offload_ptrs, i32 0, i32 0
-// CHECK:  store ptr %[[DTYPE_ALLOCATABLE_MEMBER_GEP]], ptr %[[OFFLOAD_PTRS]], align 8
+// CHECK:  store ptr %[[ARG]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [4 x i64], ptr %.offload_sizes, i32 0, i32 0
 // CHECK:  store i64 %[[DTYPE_SIZE_SEGMENT_CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [4 x ptr], ptr %.offload_baseptrs, i32 0, i32 1
@@ -256,15 +256,15 @@ module attributes {omp.is_target_device = false, omp.target_triples = ["amdgcn-a
 // CHECK: %[[NESTED_ALLOCATABLE_MEMBER_BADDR_GEP:.*]] = getelementptr { ptr, i64, i32, i8, i8, i8, i8, [1 x [3 x i64]] }, ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]], i32 0, i32 0
 // CHECK:  %[[LOAD_CALC_1:.*]] = load ptr, ptr %[[NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], align 8
 // CHECK:  %[[ARR_OFFSET:.*]] = getelementptr inbounds i32, ptr %[[LOAD_CALC_1]], i64 0
-// CHECK:  %[[CALC_1:.*]] = getelementptr i32, ptr %[[NESTED_ALLOCATABLE_MEMBER_BADDR_GEP]], i64 1
+// CHECK:  %[[CALC_1:.*]] = getelementptr %_QFtest_nested_derived_type_alloca_map_operand_and_block_additionTtop_layer, ptr %[[ARG]], i32 1
 // CHECK:  %[[CALC_2:.*]] = ptrtoaddr ptr %[[CALC_1]] to i64
-// CHECK:  %[[CALC_3:.*]] = ptrtoaddr ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]] to i64
+// CHECK:  %[[CALC_3:.*]] = ptrtoaddr ptr %[[ARG]] to i64
 // CHECK:  %[[CALC_4:.*]] = sub i64 %[[CALC_2]], %[[CALC_3]]
 
 // CHECK:  %[[BASE_PTRS:.*]] = getelementptr inbounds [4 x ptr], ptr %.offload_baseptrs, i32 0, i32 0
 // CHECK:  store ptr %[[ARG]], ptr %[[BASE_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_PTRS:.*]] = getelementptr inbounds [4 x ptr], ptr %.offload_ptrs, i32 0, i32 0
-// CHECK:  store ptr %[[NESTED_ALLOCATABLE_MEMBER_GEP]], ptr %[[OFFLOAD_PTRS]], align 8
+// CHECK:  store ptr %[[ARG]], ptr %[[OFFLOAD_PTRS]], align 8
 // CHECK:  %[[OFFLOAD_SIZES:.*]] = getelementptr inbounds [4 x i64], ptr %.offload_sizes, i32 0, i32 0
 // CHECK:  store i64 %[[CALC_4]], ptr %[[OFFLOAD_SIZES]], align 8
 

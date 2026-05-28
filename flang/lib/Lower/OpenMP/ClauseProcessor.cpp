@@ -1854,36 +1854,32 @@ void ClauseProcessor::processMapObjects(
 
       if (mapperIdName == "__implicit_mapper") {
         mapperIdName = getDefaultMapperID(objectTypeSpec);
-        // Currently we do not apply implicit compiler generated delcare mappers
-        // to enter, exit or update directives. However, we will syntheize one
-        // below if we're not a target enter/exit/update and no user defined
-        // implicit declare mapper has been defined and we meet the other
-        // conditions
-        // TODO/FIXME: Loosen this restriction to comply with the OpenMP
-        // specification.
         auto *userDefinedDefault =
             converter.getModuleOp().lookupSymbol(mapperIdName);
-        if (!userDefinedDefault && !parentObj.has_value() &&
-            (directive != llvm::omp::Directive::OMPD_target_enter_data &&
-             directive != llvm::omp::Directive::OMPD_target_exit_data &&
-             directive != llvm::omp::Directive::OMPD_target_update)) {
-          bool isAllocOrPointer =
-              semantics::IsAllocatableOrObjectPointer(object.sym());
+        if (!userDefinedDefault && !parentObj.has_value()) {
+          bool isAlloc = semantics::IsAllocatable(*object.sym());
           bool isPointer = semantics::IsPointer(*object.sym());
           bool isImplicitMap =
               (mapTypeBits & mlir::omp::ClauseMapFlags::implicit) ==
               mlir::omp::ClauseMapFlags::implicit;
           bool needsDefaultMapper =
-              isAllocOrPointer ||
-              requiresImplicitDefaultDeclareMapper(*objectTypeSpec);
+              isAlloc || requiresImplicitDefaultDeclareMapper(*objectTypeSpec);
           // For implicit captures, avoid synthesizing default mappers for
-          // pointer entities (which can over-map pointer payloads) and for
-          // plain non-allocatable/non-pointer entities. Keep implicit mapper
-          // support for allocatables.
-          if (isImplicitMap && (isPointer || !isAllocOrPointer))
+          // pointer entities (which can over-map pointer payloads). Keep
+          // implicit mapper support for allocatables and for plain
+          // non-allocatable/non-pointer entities. This is important as we
+          // wish to apply deep-copy semantics to allocatable members, but
+          // not pointer members. This rule is also applicable to the parent
+          // as well, except when it is explicitly mapped.
+          if (isImplicitMap && isPointer)
             needsDefaultMapper = false;
-          mapperId = addImplicitMapper(object, mapperIdName,
-                                       /*allowGenerate=*/needsDefaultMapper);
+          mapperId = addImplicitMapper(
+              object, mapperIdName,
+              /*allowGenerate=*/
+              converter.getLoweringOptions()
+                      .getOpenMPImplicitAllocatableComponentMap()
+                  ? needsDefaultMapper
+                  : false);
         }
       }
 

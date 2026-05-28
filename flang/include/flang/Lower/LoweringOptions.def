@@ -89,5 +89,9 @@ ENUM_LOWERINGOPT(PreserveUseDebugInfo, unsigned, 1, 0)
 /// Portable, Extremum, ExtremeNum). Default: Legacy.
 ENUM_LOWERINGOPT(FPMaxminBehavior, Fortran::common::FPMaxminBehavior, 2, 0)
 
+/// If true (default), enable implicit mapping of allocatable components in
+/// derived types when they are implicitly captured or explicitly mapped.
+ENUM_LOWERINGOPT(OpenMPImplicitAllocatableComponentMap, unsigned, 1, 1)
+
 #undef LOWERINGOPT
 #undef ENUM_LOWERINGOPT

@@ -1179,6 +1179,8 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
         CmdArgs.push_back("-fopenmp-force-usm");
       Args.AddLastArg(CmdArgs, options::OPT_fopenmp_simd,
                       options::OPT_fno_openmp_simd);
+      Args.AddLastArg(CmdArgs,
+                      options::OPT_fopenmp_implicit_allocatable_comp_map_EQ);
 
       // FIXME: Clang supports a whole bunch more flags here.
       break;

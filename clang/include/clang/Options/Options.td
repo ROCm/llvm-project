@@ -9036,6 +9036,20 @@ def fopenmp_host_ir_file_path : Separate<["-"], "fopenmp-host-ir-file-path">,
 } // let Visibility = [CC1Option, FC1Option]
 
 //===----------------------------------------------------------------------===//
+// OpenMP Fotran Options
+//===----------------------------------------------------------------------===//
+
+let Visibility = [FlangOption, FC1Option] in {
+
+  def fopenmp_implicit_allocatable_comp_map_EQ
+    : Joined<["-"], "fopenmp-implicit-allocatable-component-map=">,
+      HelpText<"Enable implicit mapping of allocatable components in derived types, the default is enable">,
+      Group<f_Group>,
+      Values<"enable,disable">;
+
+} // let Visibility = [FlangOption, FC1Option]
+
+//===----------------------------------------------------------------------===//
 // SYCL Options
 //===----------------------------------------------------------------------===//
 
