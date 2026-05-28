@@ -3196,6 +3196,7 @@ void GCNPostScheduleDAGMILive::schedule() {
     SavedMutations.clear();
     SavedMutations.swap(Mutations);
     addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PostRA));
+    addMutation(createPostRASchedOrderDAGMutation());
   }
 
   ScheduleDAGMI::schedule();

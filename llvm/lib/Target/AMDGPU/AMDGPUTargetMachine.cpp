@@ -1375,6 +1375,7 @@ GCNTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   DAG->addMutation(createAMDGPUHazardLatencyDAGMutation(C->MF));
   if (C->MF->getInfo<SIMachineFunctionInfo>()->MemoryBound)
     DAG->addMutation(createAMDGPUDSReadMFMALatencyDAGMutation(C->MF));
+  DAG->addMutation(createPostRASchedOrderDAGMutation());
   return DAG;
 }
 //===----------------------------------------------------------------------===//
@@ -1439,9 +1440,6 @@ AMDGPUPassConfig::AMDGPUPassConfig(TargetMachine &TM, PassManagerBase &PM)
   // Garbage collection is not supported.
   disablePass(&GCLoweringID);
   disablePass(&ShadowStackGCLoweringID);
-  
-  disablePass(&PostMachineSchedulerID);
-  disablePass(&PostRASchedulerID);
 }
 
 void AMDGPUPassConfig::addEarlyCSEOrGVNPass() {
@@ -2262,7 +2260,7 @@ AMDGPUCodeGenPassBuilder::AMDGPUCodeGenPassBuilder(
     GCNTargetMachine &TM, const CGPassBuilderOption &Opts,
     PassInstrumentationCallbacks *PIC)
     : CodeGenPassBuilder(TM, Opts, PIC) {
-  Opt.MISchedPostRA = false;
+  Opt.MISchedPostRA = true;
   Opt.RequiresCodeGenSCCOrder = true;
   // Exceptions and StackMaps are not supported, so these passes will never do
   // anything.
