@@ -408,13 +408,13 @@ define amdgpu_ps float @test_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64-LABEL: test_wwm1:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -422,13 +422,13 @@ define amdgpu_ps float @test_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32-LABEL: test_wwm1:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -445,13 +445,13 @@ define amdgpu_ps float @test_wwm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64-LABEL: test_wwm2:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_u32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_u32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -459,13 +459,13 @@ define amdgpu_ps float @test_wwm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32-LABEL: test_wwm2:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -491,19 +491,21 @@ define amdgpu_ps float @test_wwm3(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB13_2
 ; GFX9-W64-NEXT:  .LBB13_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX9-W64-NEXT:  .LBB13_2: ; %endif
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -514,18 +516,20 @@ define amdgpu_ps float @test_wwm3(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB13_2
 ; GFX10-W32-NEXT:  .LBB13_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX10-W32-NEXT:  .LBB13_2: ; %endif
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -558,16 +562,18 @@ define amdgpu_ps float @test_wwm4(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB14_2
 ; GFX9-W64-NEXT:  .LBB14_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB14_2: ; %endif
@@ -580,15 +586,17 @@ define amdgpu_ps float @test_wwm4(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB14_2
 ; GFX10-W32-NEXT:  .LBB14_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB14_2: ; %endif
@@ -618,18 +626,18 @@ define amdgpu_ps float @test_wwm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX9-W64-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -638,20 +646,20 @@ define amdgpu_ps float @test_wwm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX10-W32-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s2
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -676,21 +684,23 @@ define amdgpu_ps float @test_wwm6_then() {
 ; GFX9-W64-LABEL: test_wwm6_then:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB16_2
 ; GFX9-W64-NEXT:  .LBB16_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
 ; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB16_2: ; %endif
@@ -700,21 +710,23 @@ define amdgpu_ps float @test_wwm6_then() {
 ; GFX10-W32-LABEL: test_wwm6_then:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB16_2
 ; GFX10-W32-NEXT:  .LBB16_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
 ; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB16_2: ; %endif
@@ -749,21 +761,22 @@ define amdgpu_ps float @test_wwm6_loop() {
 ; GFX9-W64-LABEL: test_wwm6_loop:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX9-W64-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX9-W64-NEXT:  .LBB17_1: ; %loop
 ; GFX9-W64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v0, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_add_u32_e32 v3, -1, v3
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, vcc
@@ -779,21 +792,22 @@ define amdgpu_ps float @test_wwm6_loop() {
 ; GFX10-W32-LABEL: test_wwm6_loop:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX10-W32-NEXT:    s_mov_b32 s0, -1
 ; GFX10-W32-NEXT:    s_mov_b32 s0, 0
-; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
+; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v2, -1, v0
 ; GFX10-W32-NEXT:  .LBB17_1: ; %loop
 ; GFX10-W32-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
-; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v0, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v3, -1, v3
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v2, -1, v2
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
@@ -829,28 +843,28 @@ endloop:
 define amdgpu_ps void @test_wwm_set_inactive1(i32 inreg %idx) {
 ; GFX9-W64-LABEL: test_wwm_set_inactive1:
 ; GFX9-W64:       ; %bb.0: ; %main_body
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s[0:1]
-; GFX9-W64-NEXT:    v_add_u32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_cndmask_b32_e64 v1, 0, v1, s[0:1]
+; GFX9-W64-NEXT:    v_add_u32_e32 v1, v1, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-W64-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_endpgm
 ;
 ; GFX10-W32-LABEL: test_wwm_set_inactive1:
 ; GFX10-W32:       ; %bb.0: ; %main_body
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s0
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v0, v0, v0
+; GFX10-W32-NEXT:    v_cndmask_b32_e64 v1, 0, v1, s0
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v1, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-W32-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_endpgm
 main_body:
   %src = call float @llvm.amdgcn.struct.ptr.buffer.load.f32(ptr addrspace(8) poison, i32 %idx, i32 0, i32 0, i32 0)
@@ -869,13 +883,13 @@ define amdgpu_ps float @test_strict_wqm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -884,13 +898,13 @@ define amdgpu_ps float @test_strict_wqm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -908,13 +922,13 @@ define amdgpu_ps float @test_strict_wqm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_u32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_u32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -923,13 +937,13 @@ define amdgpu_ps float @test_strict_wqm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -955,20 +969,22 @@ define amdgpu_ps float @test_strict_wqm3(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB21_2
 ; GFX9-W64-NEXT:  .LBB21_1: ; %if
-; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
+; GFX9-W64-NEXT:    s_mov_b64 s[4:5], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX9-W64-NEXT:  .LBB21_2: ; %endif
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -979,19 +995,21 @@ define amdgpu_ps float @test_strict_wqm3(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB21_2
 ; GFX10-W32-NEXT:  .LBB21_1: ; %if
-; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX10-W32-NEXT:  .LBB21_2: ; %endif
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -1024,17 +1042,19 @@ define amdgpu_ps float @test_strict_wqm4(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB22_2
 ; GFX9-W64-NEXT:  .LBB22_1: ; %if
-; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
+; GFX9-W64-NEXT:    s_mov_b64 s[4:5], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB22_2: ; %endif
@@ -1047,16 +1067,18 @@ define amdgpu_ps float @test_strict_wqm4(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB22_2
 ; GFX10-W32-NEXT:  .LBB22_1: ; %if
-; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB22_2: ; %endif
@@ -1086,19 +1108,19 @@ define amdgpu_ps float @test_strict_wqm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 s[4:5], exec
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX9-W64-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -1107,22 +1129,22 @@ define amdgpu_ps float @test_strict_wqm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
-; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX10-W32-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s2
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -1148,22 +1170,24 @@ define amdgpu_ps float @test_strict_wqm6_then() {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB24_2
 ; GFX9-W64-NEXT:  .LBB24_1: ; %if
-; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
+; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v0, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB24_2: ; %endif
@@ -1174,22 +1198,24 @@ define amdgpu_ps float @test_strict_wqm6_then() {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB24_2
 ; GFX10-W32-NEXT:  .LBB24_1: ; %if
-; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v0, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB24_2: ; %endif
@@ -1225,23 +1251,24 @@ define amdgpu_ps float @test_strict_wqm6_loop() {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX9-W64-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX9-W64-NEXT:  .LBB25_1: ; %loop
 ; GFX9-W64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v0, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_add_u32_e32 v3, -1, v3
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, vcc
@@ -1258,23 +1285,24 @@ define amdgpu_ps float @test_strict_wqm6_loop() {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX10-W32-NEXT:    s_mov_b32 s0, -1
 ; GFX10-W32-NEXT:    s_mov_b32 s0, 0
-; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
+; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v2, -1, v0
 ; GFX10-W32-NEXT:  .LBB25_1: ; %loop
 ; GFX10-W32-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v0, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v3, -1, v3
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v2, -1, v2
 ; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
@@ -1311,10 +1339,11 @@ define amdgpu_ps void @test_set_inactive2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64-LABEL: test_set_inactive2:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s0
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    s_nop 0
 ; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    ; kill: def $vgpr1 killed $vgpr1 killed $exec
 ; GFX9-W64-NEXT:    ; kill: def $vgpr2 killed $vgpr2 killed $exec
@@ -1327,8 +1356,8 @@ define amdgpu_ps void @test_set_inactive2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32-LABEL: test_set_inactive2:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s1
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    s_clause 0x1
 ; GFX10-W32-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
@@ -1364,28 +1393,29 @@ define amdgpu_ps float @test_control_flow_0(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB27_2
 ; GFX9-W64-NEXT:  .LBB27_1: ; %IF
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    image_sample v2, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:  .LBB27_2:
-; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[14:15]
 ; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, vcc
+; GFX9-W64-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB27_4
 ; GFX9-W64-NEXT:  .LBB27_3: ; %ELSE
-; GFX9-W64-NEXT:    s_and_saveexec_b64 s[2:3], s[12:13]
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:  .LBB27_4: ; %END
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[0:1]
-; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -1395,28 +1425,29 @@ define amdgpu_ps float @test_control_flow_0(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_mov_b32 s12, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB27_2
 ; GFX10-W32-NEXT:  .LBB27_1: ; %IF
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    image_sample v2, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:  .LBB27_2:
-; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s13
 ; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB27_4
 ; GFX10-W32-NEXT:  .LBB27_3: ; %ELSE
-; GFX10-W32-NEXT:    s_and_saveexec_b32 s1, s12
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:  .LBB27_4: ; %END
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s0
-; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -1449,26 +1480,27 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
 ; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, vcc
 ; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX9-W64-NEXT:  .LBB28_1: ; %ELSE
-; GFX9-W64-NEXT:    s_and_saveexec_b64 s[14:15], s[12:13]
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX9-W64-NEXT:  .LBB28_2:
-; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[16:17]
+; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[14:15]
 ; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_and_b64 s[14:15], s[14:15], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX9-W64-NEXT:  .LBB28_3: ; %IF
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    image_sample v2, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:  .LBB28_4: ; %END
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[14:15]
-; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -1479,26 +1511,27 @@ define amdgpu_ps float @test_control_flow_1(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
 ; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB28_2
 ; GFX10-W32-NEXT:  .LBB28_1: ; %ELSE
-; GFX10-W32-NEXT:    s_and_saveexec_b32 s13, s12
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
 ; GFX10-W32-NEXT:  .LBB28_2:
-; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s14
+; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s13
 ; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_and_b32 s13, s13, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB28_4
 ; GFX10-W32-NEXT:  .LBB28_3: ; %IF
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    image_sample v2, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:  .LBB28_4: ; %END
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s13
-; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -1536,23 +1569,26 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX9-W64-NEXT:  .LBB29_1: ; %IF
 ; GFX9-W64-NEXT:    v_lshl_add_u32 v0, v5, 1, v5
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:  .LBB29_2:
-; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[14:15]
 ; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, vcc
+; GFX9-W64-NEXT:    s_and_b64 s[14:15], s[14:15], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX9-W64-NEXT:  .LBB29_3: ; %ELSE
 ; GFX9-W64-NEXT:    v_lshlrev_b32_e32 v0, 2, v5
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:  .LBB29_4: ; %END
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[14:15]
-; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
 ; GFX9-W64-NEXT:    image_sample v[0:3], v0, s[0:7], s[8:11] dmask:0xf
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -1568,23 +1604,26 @@ define amdgpu_ps <4 x float> @test_control_flow_2(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    buffer_store_dword v4, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB29_2
 ; GFX10-W32-NEXT:  .LBB29_1: ; %IF
 ; GFX10-W32-NEXT:    v_lshl_add_u32 v0, v5, 1, v5
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:  .LBB29_2:
-; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s13
 ; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_and_b32 s13, s13, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB29_4
 ; GFX10-W32-NEXT:  .LBB29_3: ; %ELSE
 ; GFX10-W32-NEXT:    v_lshlrev_b32_e32 v0, 2, v5
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:  .LBB29_4: ; %END
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s13
-; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
 ; GFX10-W32-NEXT:    image_sample v[0:3], v0, s[0:7], s[8:11] dmask:0xf dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -1633,15 +1672,17 @@ define amdgpu_ps float @test_control_flow_3(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_cmp_nlt_f32_e32 vcc, 0, v1
 ; GFX9-W64-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
-; GFX9-W64-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB30_2
 ; GFX9-W64-NEXT:  .LBB30_1: ; %IF
 ; GFX9-W64-NEXT:    v_mul_f32_e32 v0, 0x40400000, v1
 ; GFX9-W64-NEXT:  .LBB30_2:
-; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
+; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, vcc
+; GFX9-W64-NEXT:    s_and_b64 s[0:1], s[0:1], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB30_4
@@ -1663,15 +1704,17 @@ define amdgpu_ps float @test_control_flow_3(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_cmp_nlt_f32_e32 vcc_lo, 0, v1
 ; GFX10-W32-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
+; GFX10-W32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB30_2
 ; GFX10-W32-NEXT:  .LBB30_1: ; %IF
 ; GFX10-W32-NEXT:    v_mul_f32_e32 v0, 0x40400000, v1
 ; GFX10-W32-NEXT:  .LBB30_2:
-; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB30_4
@@ -1710,12 +1753,13 @@ define amdgpu_ps <4 x float> @test_control_flow_4(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX9-W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB31_2
 ; GFX9-W64-NEXT:  .LBB31_1: ; %IF
-; GFX9-W64-NEXT:    s_and_saveexec_b64 s[14:15], s[12:13]
+; GFX9-W64-NEXT:    s_and_saveexec_b64 s[16:17], s[12:13]
 ; GFX9-W64-NEXT:    buffer_load_dword v1, off, s[0:3], 0
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v2, 1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -1735,12 +1779,13 @@ define amdgpu_ps <4 x float> @test_control_flow_4(<8 x i32> inreg %rsrc, <4 x i3
 ; GFX10-W32-NEXT:    s_mov_b32 s12, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB31_2
 ; GFX10-W32-NEXT:  .LBB31_1: ; %IF
-; GFX10-W32-NEXT:    s_and_saveexec_b32 s13, s12
+; GFX10-W32-NEXT:    s_and_saveexec_b32 s14, s12
 ; GFX10-W32-NEXT:    buffer_load_dword v1, off, s[0:3], 0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v2, 1
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -1938,6 +1983,9 @@ define amdgpu_ps <4 x float> @test_loop_vcc(<4 x float> %in) nounwind {
 ; GFX9-W64-LABEL: test_loop_vcc:
 ; GFX9-W64:       ; %bb.0: ; %entry
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
+; GFX9-W64-NEXT:    image_store v[0:3], v0, s[0:7] dmask:0xf unorm
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; GFX9-W64-NEXT:    image_store v[0:3], v0, s[0:7] dmask:0xf unorm
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v4, 0
@@ -2164,13 +2212,14 @@ define amdgpu_ps <4 x float> @test_scc(i32 inreg %sel, i32 %idx) #1 {
 ; GFX9-W64-NEXT:    s_cmp_lt_i32 s0, 1
 ; GFX9-W64-NEXT:    s_cbranch_scc1 .LBB39_2
 ; GFX9-W64-NEXT:  ; %bb.1: ; %if
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    image_sample v[0:3], v0, s[0:7], s[0:3] dmask:0xf
 ; GFX9-W64-NEXT:    s_branch .LBB39_3
 ; GFX9-W64-NEXT:  .LBB39_2: ; %else
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, 1
+; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    image_sample v[0:3], v[0:1], s[0:7], s[0:3] dmask:0xf
 ; GFX9-W64-NEXT:  .LBB39_3: ; %end
-; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v5, 1.0
 ; GFX9-W64-NEXT:    buffer_store_dword v5, v4, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -2185,14 +2234,15 @@ define amdgpu_ps <4 x float> @test_scc(i32 inreg %sel, i32 %idx) #1 {
 ; GFX10-W32-NEXT:    s_cbranch_scc1 .LBB39_2
 ; GFX10-W32-NEXT:  ; %bb.1: ; %if
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s1
 ; GFX10-W32-NEXT:    image_sample v[0:3], v0, s[0:7], s[0:3] dmask:0xf dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_branch .LBB39_3
 ; GFX10-W32-NEXT:  .LBB39_2: ; %else
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, 1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
+; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s1
 ; GFX10-W32-NEXT:    image_sample v[0:3], v[0:1], s[0:7], s[0:3] dmask:0xf dim:SQ_RSRC_IMG_2D
 ; GFX10-W32-NEXT:  .LBB39_3: ; %end
-; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v5, 1.0
 ; GFX10-W32-NEXT:    buffer_store_dword v5, v4, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -2223,9 +2273,10 @@ define amdgpu_ps float @test_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, 0
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB40_2
 ; GFX9-W64-NEXT:  .LBB40_1: ; %IF
@@ -2235,12 +2286,12 @@ define amdgpu_ps float @test_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s[0:1]
-; GFX9-W64-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX9-W64-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s[0:1]
+; GFX9-W64-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX9-W64-NEXT:  .LBB40_2: ; %ENDIF
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
@@ -2253,8 +2304,9 @@ define amdgpu_ps float @test_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB40_2
 ; GFX10-W32-NEXT:  .LBB40_1: ; %IF
@@ -2264,12 +2316,12 @@ define amdgpu_ps float @test_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s0
-; GFX10-W32-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX10-W32-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s0
+; GFX10-W32-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX10-W32-NEXT:  .LBB40_2: ; %ENDIF
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
@@ -2302,13 +2354,13 @@ define amdgpu_ps float @test_strict_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64-LABEL: test_strict_wwm1:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -2316,13 +2368,13 @@ define amdgpu_ps float @test_strict_wwm1(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32-LABEL: test_strict_wwm1:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -2339,13 +2391,13 @@ define amdgpu_ps float @test_strict_wwm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64-LABEL: test_strict_wwm2:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_nop 0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_u32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_u32_e32 v1, v0, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -2353,13 +2405,13 @@ define amdgpu_ps float @test_strict_wwm2(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32-LABEL: test_strict_wwm2:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX10-W32-NEXT:    s_clause 0x1
+; GFX10-W32-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v0, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -2385,19 +2437,21 @@ define amdgpu_ps float @test_strict_wwm3(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX9-W64-NEXT:  .LBB43_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX9-W64-NEXT:  .LBB43_2: ; %endif
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -2408,18 +2462,20 @@ define amdgpu_ps float @test_strict_wwm3(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX10-W32-NEXT:  .LBB43_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX10-W32-NEXT:  .LBB43_2: ; %endif
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -2452,16 +2508,18 @@ define amdgpu_ps float @test_strict_wwm4(i32 inreg %idx) {
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[4:5], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB44_2
 ; GFX9-W64-NEXT:  .LBB44_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB44_2: ; %endif
@@ -2474,15 +2532,17 @@ define amdgpu_ps float @test_strict_wwm4(i32 inreg %idx) {
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s2, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s2
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s2
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB44_2
 ; GFX10-W32-NEXT:  .LBB44_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s2, -1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB44_2: ; %endif
@@ -2512,18 +2572,18 @@ define amdgpu_ps float @test_strict_wwm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[4:5], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s1
-; GFX9-W64-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
+; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX9-W64-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    ; return to shader part epilog
@@ -2532,20 +2592,20 @@ define amdgpu_ps float @test_strict_wwm5(i32 inreg %idx0, i32 inreg %idx1) {
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX10-W32-NEXT:    s_mov_b32 s2, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    buffer_load_dword v1, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v2, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v1
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v1, v1
 ; GFX10-W32-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s2
 ; GFX10-W32-NEXT:    ; return to shader part epilog
@@ -2570,21 +2630,23 @@ define amdgpu_ps float @test_strict_wwm6_then() {
 ; GFX9-W64-LABEL: test_strict_wwm6_then:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-W64-NEXT:    s_xor_b64 exec, vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[0:1], exec, s[2:3]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB46_2
 ; GFX9-W64-NEXT:  .LBB46_1: ; %if
-; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
+; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
 ; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:  .LBB46_2: ; %endif
@@ -2594,21 +2656,23 @@ define amdgpu_ps float @test_strict_wwm6_then() {
 ; GFX10-W32-LABEL: test_strict_wwm6_then:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
-; GFX10-W32-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s0, exec_lo, s1
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB46_2
 ; GFX10-W32-NEXT:  .LBB46_1: ; %if
-; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
+; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
 ; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v1, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:  .LBB46_2: ; %endif
@@ -2639,21 +2703,22 @@ define amdgpu_ps float @test_strict_wwm6_loop() {
 ; GFX9-W64-LABEL: test_strict_wwm6_loop:
 ; GFX9-W64:       ; %bb.0: ; %main_body
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    global_load_dword v1, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v1, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX9-W64-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX9-W64-NEXT:  .LBB47_1: ; %loop
 ; GFX9-W64-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    global_load_dword v2, v[3:4], off glc
+; GFX9-W64-NEXT:    global_load_dword v0, v[0:1], off glc
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_add_u32_e32 v3, -1, v3
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v3
 ; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, vcc
@@ -2669,21 +2734,22 @@ define amdgpu_ps float @test_strict_wwm6_loop() {
 ; GFX10-W32-LABEL: test_strict_wwm6_loop:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    global_load_dword v1, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v1, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
+; GFX10-W32-NEXT:    s_mov_b32 s0, -1
 ; GFX10-W32-NEXT:    s_mov_b32 s0, 0
-; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v3, -1, v0
+; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v2, -1, v0
 ; GFX10-W32-NEXT:  .LBB47_1: ; %loop
 ; GFX10-W32-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
-; GFX10-W32-NEXT:    global_load_dword v2, v[3:4], off glc dlc
+; GFX10-W32-NEXT:    global_load_dword v0, v[0:1], off glc dlc
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v3, -1, v3
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v2, -1, v2
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v1, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v3, v1, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v3
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
@@ -2719,28 +2785,28 @@ endloop:
 define amdgpu_ps void @test_strict_wwm_set_inactive1(i32 inreg %idx) {
 ; GFX9-W64-LABEL: test_strict_wwm_set_inactive1:
 ; GFX9-W64:       ; %bb.0: ; %main_body
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, s0
-; GFX9-W64-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s0
+; GFX9-W64-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s[0:1]
-; GFX9-W64-NEXT:    v_add_u32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_cndmask_b32_e64 v1, 0, v1, s[0:1]
+; GFX9-W64-NEXT:    v_add_u32_e32 v1, v1, v1
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-W64-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
 ; GFX9-W64-NEXT:    s_endpgm
 ;
 ; GFX10-W32-LABEL: test_strict_wwm_set_inactive1:
 ; GFX10-W32:       ; %bb.0: ; %main_body
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
-; GFX10-W32-NEXT:    buffer_load_dword v2, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, s0
+; GFX10-W32-NEXT:    buffer_load_dword v1, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_cndmask_b32_e64 v0, 0, v2, s0
-; GFX10-W32-NEXT:    v_add_nc_u32_e32 v0, v0, v0
+; GFX10-W32-NEXT:    v_cndmask_b32_e64 v1, 0, v1, s0
+; GFX10-W32-NEXT:    v_add_nc_u32_e32 v1, v1, v1
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-W32-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    buffer_store_dword v2, v0, s[0:3], 0 idxen
 ; GFX10-W32-NEXT:    s_endpgm
 main_body:
   %src = call float @llvm.amdgcn.struct.ptr.buffer.load.f32(ptr addrspace(8) poison, i32 %idx, i32 0, i32 0, i32 0)
@@ -2761,9 +2827,10 @@ define amdgpu_ps float @test_strict_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX9-W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v1, 0
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB49_2
 ; GFX9-W64-NEXT:  .LBB49_1: ; %IF
@@ -2773,12 +2840,12 @@ define amdgpu_ps float @test_strict_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s[0:1]
-; GFX9-W64-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX9-W64-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s[0:1]
+; GFX9-W64-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX9-W64-NEXT:  .LBB49_2: ; %ENDIF
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
@@ -2791,8 +2858,9 @@ define amdgpu_ps float @test_strict_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB49_2
 ; GFX10-W32-NEXT:  .LBB49_1: ; %IF
@@ -2802,12 +2870,12 @@ define amdgpu_ps float @test_strict_wwm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_cvt_i32_f32_e32 v0, v0
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    v_cndmask_b32_e64 v2, 0, v0, s0
-; GFX10-W32-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX10-W32-NEXT:    v_cndmask_b32_e64 v0, 0, v0, s0
+; GFX10-W32-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX10-W32-NEXT:  .LBB49_2: ; %ENDIF
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
@@ -2842,28 +2910,33 @@ define amdgpu_ps float @test_strict_wqm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX9-W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v0
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, 0
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB50_2
 ; GFX9-W64-NEXT:  .LBB50_1: ; %IF
-; GFX9-W64-NEXT:    s_mov_b64 s[14:15], exec
+; GFX9-W64-NEXT:    s_mov_b64 s[16:17], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    image_sample v2, v2, s[0:7], s[8:11] dmask:0x1
+; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    image_sample v2, v2, s[0:7], s[8:11] dmask:0x1
+; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_cvt_i32_f32_e32 v2, v2
-; GFX9-W64-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX9-W64-NEXT:    v_cvt_i32_f32_e32 v0, v0
+; GFX9-W64-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
 ; GFX9-W64-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX9-W64-NEXT:  .LBB50_2: ; %ENDIF
 ; GFX9-W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[12:13]
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX9-W64-NEXT:    ; return to shader part epilog
 ;
 ; GFX10-W32-LABEL: test_strict_wqm_within_wqm:
@@ -2871,28 +2944,33 @@ define amdgpu_ps float @test_strict_wqm_within_wqm(<8 x i32> inreg %rsrc, <4 x i
 ; GFX10-W32-NEXT:    s_mov_b32 s12, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v0
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, 0
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB50_2
 ; GFX10-W32-NEXT:  .LBB50_1: ; %IF
-; GFX10-W32-NEXT:    s_mov_b32 s13, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s14, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    image_sample v2, v2, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
+; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    image_sample v2, v2, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
+; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_cvt_i32_f32_e32 v2, v2
-; GFX10-W32-NEXT:    ds_swizzle_b32 v2, v2 offset:swizzle(SWAP,2)
+; GFX10-W32-NEXT:    v_cvt_i32_f32_e32 v0, v0
+; GFX10-W32-NEXT:    ds_swizzle_b32 v0, v0 offset:swizzle(SWAP,2)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
 ; GFX10-W32-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
-; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v0, v0
+; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v0
+; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v1
 ; GFX10-W32-NEXT:  .LBB50_2: ; %ENDIF
 ; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s12
+; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v1
 ; GFX10-W32-NEXT:    ; return to shader part epilog
 main_body:
   %cmp = icmp eq i32 %z, 0
@@ -2923,7 +3001,6 @@ define amdgpu_ps float @test_strict_wqm_within_wqm_with_kill(<8 x i32> inreg %rs
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1
 ; GFX9-W64-NEXT:    s_andn2_b64 s[0:1], exec, vcc
@@ -2933,11 +3010,11 @@ define amdgpu_ps float @test_strict_wqm_within_wqm_with_kill(<8 x i32> inreg %rs
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, vcc
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    ds_swizzle_b32 v3, v3 offset:swizzle(SWAP,2)
+; GFX9-W64-NEXT:    ds_swizzle_b32 v1, v2 offset:swizzle(SWAP,2)
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v1, v3
-; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v1
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v1
+; GFX9-W64-NEXT:    v_cvt_f32_i32_e32 v1, v2
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v1
 ; GFX9-W64-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
@@ -2955,7 +3032,6 @@ define amdgpu_ps float @test_strict_wqm_within_wqm_with_kill(<8 x i32> inreg %rs
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[0:7], s[8:11] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_andn2_b32 s0, exec_lo, vcc_lo
@@ -2965,11 +3041,11 @@ define amdgpu_ps float @test_strict_wqm_within_wqm_with_kill(<8 x i32> inreg %rs
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    ds_swizzle_b32 v3, v3 offset:swizzle(SWAP,2)
+; GFX10-W32-NEXT:    ds_swizzle_b32 v1, v2 offset:swizzle(SWAP,2)
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v1, v3
-; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, v1
+; GFX10-W32-NEXT:    v_cvt_f32_i32_e32 v1, v2
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v1
 ; GFX10-W32-NEXT:    ; kill: def $vgpr0 killed $vgpr0 killed $exec
@@ -3026,23 +3102,23 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    buffer_store_dword v0, v1, s[20:23], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    buffer_load_dword v2, v1, s[20:23], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v0, v1, s[20:23], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v3, s0
-; GFX9-W64-NEXT:    buffer_load_dword v3, v3, s[24:27], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s0
+; GFX9-W64-NEXT:    buffer_load_dword v2, v2, s[24:27], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v2, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v3, v0
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v3, v3
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v4, v3
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v4
+; GFX9-W64-NEXT:    v_mov_b32_e32 v3, v2
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v3
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[28:29]
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[12:19], s[20:23] dmask:0x1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -3054,9 +3130,9 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-LABEL: test_strict_wqm_strict_wwm_wqm:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s28, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 s19, s17
 ; GFX10-W32-NEXT:    s_mov_b32 s29, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s19, s17
 ; GFX10-W32-NEXT:    s_mov_b32 s23, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s22, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s21, s3
@@ -3077,23 +3153,23 @@ define amdgpu_ps float @test_strict_wqm_strict_wwm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-NEXT:    buffer_store_dword v0, v1, s[20:23], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 s1, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v2, v1, s[20:23], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v1, s[20:23], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s1, -1
-; GFX10-W32-NEXT:    v_mov_b32_e32 v3, s0
-; GFX10-W32-NEXT:    buffer_load_dword v3, v3, s[24:27], 0 idxen
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s0
+; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[24:27], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s1
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v2, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
+; GFX10-W32-NEXT:    v_mov_b32_e32 v3, v0
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v3, v3
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v4
+; GFX10-W32-NEXT:    v_mov_b32_e32 v3, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v3
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s28
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[12:19], s[20:23] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -3140,24 +3216,24 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    buffer_store_dword v0, v1, s[16:19], 0 idxen
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[2:3], -1
-; GFX9-W64-NEXT:    v_mov_b32_e32 v2, s1
-; GFX9-W64-NEXT:    buffer_load_dword v3, v2, s[16:19], 0 idxen
+; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
+; GFX9-W64-NEXT:    buffer_load_dword v2, v0, s[16:19], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[2:3]
 ; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    buffer_load_dword v4, v1, s[16:19], 0 idxen
+; GFX9-W64-NEXT:    buffer_load_dword v3, v1, s[16:19], 0 idxen
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_or_saveexec_b64 s[0:1], -1
-; GFX9-W64-NEXT:    ; kill: killed $vgpr2
+; GFX9-W64-NEXT:    ; kill: killed $vgpr0
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(1)
-; GFX9-W64-NEXT:    v_add_f32_e32 v2, v3, v3
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v2, v2
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
-; GFX9-W64-NEXT:    v_mov_b32_e32 v0, v2
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v0
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v2, v2
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-W64-NEXT:    v_mov_b32_e32 v5, v4
-; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v5
+; GFX9-W64-NEXT:    v_mov_b32_e32 v2, v3
+; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v2
 ; GFX9-W64-NEXT:    s_and_b64 exec, exec, s[20:21]
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[8:15], s[16:19] dmask:0x1
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(0)
@@ -3169,9 +3245,9 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-LABEL: test_strict_wwm_strict_wqm_wqm:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s20, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 s15, s13
 ; GFX10-W32-NEXT:    s_mov_b32 s21, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s15, s13
 ; GFX10-W32-NEXT:    s_mov_b32 s19, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s18, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s17, s3
@@ -3190,22 +3266,22 @@ define amdgpu_ps float @test_strict_wwm_strict_wqm_wqm(i32 inreg %idx0, i32 inre
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    buffer_store_dword v0, v1, s[16:19], 0 idxen
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
-; GFX10-W32-NEXT:    buffer_load_dword v2, v2, s[16:19], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v2, s[16:19], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    buffer_load_dword v3, v1, s[16:19], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v2, v1, s[16:19], 0 idxen
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_or_saveexec_b32 s0, -1
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(1)
-; GFX10-W32-NEXT:    v_add_f32_e32 v2, v2, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v0, v2
+; GFX10-W32-NEXT:    v_mov_b32_e32 v3, v0
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v3, v3
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
-; GFX10-W32-NEXT:    v_mov_b32_e32 v4, v3
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
-; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v4
+; GFX10-W32-NEXT:    v_mov_b32_e32 v3, v2
+; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v3
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s20
 ; GFX10-W32-NEXT:    image_sample v0, v0, s[8:15], s[16:19] dmask:0x1 dim:SQ_RSRC_IMG_1D
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -3255,8 +3331,10 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    v_mov_b32_e32 v0, s1
 ; GFX9-W64-NEXT:    buffer_load_dword v0, v0, s[16:19], 0 idxen
-; GFX9-W64-NEXT:    s_nop 0
+; GFX9-W64-NEXT:    s_mov_b64 s[0:1], exec
+; GFX9-W64-NEXT:    s_wqm_b64 exec, exec
 ; GFX9-W64-NEXT:    buffer_load_dword v2, v1, s[16:19], 0 idxen
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    s_waitcnt vmcnt(1)
 ; GFX9-W64-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX9-W64-NEXT:    image_sample v0, v0, s[8:15], s[16:19] dmask:0x1
@@ -3276,9 +3354,9 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX10-W32-LABEL: test_wqm_strict_wqm_wqm:
 ; GFX10-W32:       ; %bb.0: ; %main_body
 ; GFX10-W32-NEXT:    s_mov_b32 s20, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 s15, s13
 ; GFX10-W32-NEXT:    s_mov_b32 s21, exec_lo
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
+; GFX10-W32-NEXT:    s_mov_b32 s15, s13
 ; GFX10-W32-NEXT:    s_mov_b32 s19, s5
 ; GFX10-W32-NEXT:    s_mov_b32 s18, s4
 ; GFX10-W32-NEXT:    s_mov_b32 s17, s3
@@ -3293,13 +3371,15 @@ define amdgpu_ps float @test_wqm_strict_wqm_wqm(i32 inreg %idx0, i32 inreg %idx1
 ; GFX10-W32-NEXT:    v_mov_b32_e32 v1, s0
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s21
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    v_mov_b32_e32 v3, s1
+; GFX10-W32-NEXT:    v_mov_b32_e32 v2, s1
 ; GFX10-W32-NEXT:    s_and_b32 exec_lo, exec_lo, s20
 ; GFX10-W32-NEXT:    buffer_store_dword v0, v1, s[16:19], 0 idxen
 ; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
-; GFX10-W32-NEXT:    s_clause 0x1
-; GFX10-W32-NEXT:    buffer_load_dword v0, v3, s[16:19], 0 idxen
+; GFX10-W32-NEXT:    buffer_load_dword v0, v2, s[16:19], 0 idxen
+; GFX10-W32-NEXT:    s_mov_b32 s0, exec_lo
+; GFX10-W32-NEXT:    s_wqm_b32 exec_lo, exec_lo
 ; GFX10-W32-NEXT:    buffer_load_dword v2, v1, s[16:19], 0 idxen
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(1)
 ; GFX10-W32-NEXT:    v_add_f32_e32 v0, v0, v0
 ; GFX10-W32-NEXT:    s_waitcnt vmcnt(0)
@@ -3427,10 +3507,13 @@ define amdgpu_gs void @wqm_init_exec_switch(i32 %arg) {
 ; GFX9-W64-NEXT:    s_mov_b64 exec, 0
 ; GFX9-W64-NEXT:    v_cmp_gt_i32_e32 vcc, 1, v0
 ; GFX9-W64-NEXT:    s_xor_b64 s[0:1], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, vcc
+; GFX9-W64-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, vcc
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
-; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[0:1]
+; GFX9-W64-NEXT:    s_or_b64 exec, exec, s[2:3]
 ; GFX9-W64-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
+; GFX9-W64-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX9-W64-NEXT:    s_mov_b64 exec, s[0:1]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_endpgm
@@ -3440,10 +3523,13 @@ define amdgpu_gs void @wqm_init_exec_switch(i32 %arg) {
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, 0
 ; GFX10-W32-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 1, v0
 ; GFX10-W32-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, vcc_lo
+; GFX10-W32-NEXT:    s_and_b32 s1, s1, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
-; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX10-W32-NEXT:    s_or_b32 exec_lo, exec_lo, s1
 ; GFX10-W32-NEXT:    s_xor_b32 s1, exec_lo, s0
+; GFX10-W32-NEXT:    s_and_b32 s1, s1, exec_lo
 ; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_endpgm
@@ -3507,8 +3593,9 @@ define amdgpu_ps float @short_exact_regions(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX9-W64-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX9-W64-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX9-W64-NEXT:    v_cmp_lt_u32_e32 vcc, 15, v0
-; GFX9-W64-NEXT:    s_xor_b64 s[14:15], vcc, exec
-; GFX9-W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9-W64-NEXT:    s_xor_b64 s[16:17], vcc, exec
+; GFX9-W64-NEXT:    s_xor_b64 s[14:15], exec, s[16:17]
+; GFX9-W64-NEXT:    s_mov_b64 exec, s[16:17]
 ; GFX9-W64-NEXT:    ; divergent control-flow edge
 ; GFX9-W64-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX9-W64-NEXT:  .LBB59_1: ; %if
@@ -3539,8 +3626,9 @@ define amdgpu_ps float @short_exact_regions(<8 x i32> inreg %rsrc, <4 x i32> inr
 ; GFX10-W32-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; GFX10-W32-NEXT:    v_mbcnt_hi_u32_b32 v0, -1, v0
 ; GFX10-W32-NEXT:    v_cmp_lt_u32_e32 vcc_lo, 15, v0
-; GFX10-W32-NEXT:    s_xor_b32 s13, vcc_lo, exec_lo
-; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s13
+; GFX10-W32-NEXT:    s_xor_b32 s14, vcc_lo, exec_lo
+; GFX10-W32-NEXT:    s_xor_b32 s13, exec_lo, s14
+; GFX10-W32-NEXT:    s_mov_b32 exec_lo, s14
 ; GFX10-W32-NEXT:    ; divergent control-flow edge
 ; GFX10-W32-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX10-W32-NEXT:  .LBB59_1: ; %if
