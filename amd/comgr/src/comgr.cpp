@@ -248,6 +248,14 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
   Ident.Features.erase(Ident.Features.begin());
 
 
+  if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
+    IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
+    // Features not supported for SPIR-V
+    if (!Ident.Features.empty())
+      return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+    return AMD_COMGR_STATUS_SUCCESS;
+  }
+
   size_t IsaIndex;
   amd_comgr_status_t Status = metadata::getIsaIndex(IdentStr, IsaIndex);
   if (Status != AMD_COMGR_STATUS_SUCCESS) {
@@ -932,7 +940,7 @@ amd_comgr_status_t AMD_COMGR_API
   }
 
   if (StringRef(IsaName) == "spir64-amd-amdhsa--amdgcnspirv" ||
-      StringRef(IsaName )== "spir64-amd-amdhsa-unknown-amdgcnspirv") {
+      StringRef(IsaName) == "spir64-amd-amdhsa-unknown-amdgcnspirv") {
     return ActionP->setIsaName(IsaName);
   }
 

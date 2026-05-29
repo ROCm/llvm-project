@@ -26,5 +26,6 @@ int main(int argc, char *argv[]) {
   }
   else
     printf("OK\n");
+  amd_comgr_(destroy_action_info(DataAction));
   return 0;
 }
