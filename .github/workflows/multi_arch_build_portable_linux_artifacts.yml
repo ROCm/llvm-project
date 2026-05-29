@@ -236,6 +236,16 @@ jobs:
           overwrite: true
           retention-days: 1
 
+      - name: Temp fix for hiprtc/hipcc test (Nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
+        run: |
+             cd compiler/amd-llvm
+             git fetch origin pull/2719/head:pr-2719
+             git cherry-pick pr-2719
+             cd ../..
+             git add compiler/amd-llvm
+             git commit -m "Update amd-llvm submodule with PR 2719"
+       
       - name: TheRock and llvm SHA
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
