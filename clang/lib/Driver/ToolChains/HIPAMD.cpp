@@ -174,7 +174,7 @@ void AMDGCN::Linker::constructLinkAndEmitSpirvCommand(
 
   bool UseSPIRVBackend =
       Args.hasFlag(options::OPT_use_spirv_backend,
-                   options::OPT_no_use_spirv_backend, /*Default=*/false);
+                   options::OPT_no_use_spirv_backend, /*Default=*/true);
 
   constructLLVMLinkCommand(C, JA, Inputs, LinkedBCFile, Args);
 
