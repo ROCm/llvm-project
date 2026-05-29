@@ -52,8 +52,9 @@ static std::string normalizeForBundler(const llvm::Triple &T,
 class HIPUndefinedFatBinSymbols {
 public:
   HIPUndefinedFatBinSymbols(const Compilation &C,
-                            const llvm::opt::ArgList &Args_)
-      : C(C), Args(Args_),
+                            const llvm::opt::ArgList &Args_,
+                            const llvm::Triple &HostTriple)
+      : C(C), Args(Args_), HostTriple(HostTriple),
         DiagID(C.getDriver().getDiags().getCustomDiagID(
             DiagnosticsEngine::Error,
             "Error collecting HIP undefined fatbin symbols: %0")),
@@ -142,6 +143,7 @@ public:
 private:
   const Compilation &C;
   const llvm::opt::ArgList &Args;
+  llvm::Triple HostTriple;
   unsigned DiagID;
   bool Quiet;
   bool Verbose;
@@ -151,6 +153,25 @@ private:
   std::set<std::string, std::less<>> DefinedGPUBinHandleSymbols;
   const std::string FatBinPrefix = "__hip_fatbin";
   const std::string GPUBinHandlePrefix = "__hip_gpubin_handle";
+
+  std::string getAssemblerName(const Twine &Name) const {
+    std::string Result = Name.str();
+    if (HostTriple.isOSBinFormatMachO())
+      Result.insert(Result.begin(), '_');
+    return Result;
+  }
+
+  bool isHIPFatBinSymbol(llvm::StringRef Name) const {
+    return Name.starts_with(FatBinPrefix) ||
+           (HostTriple.isOSBinFormatMachO() &&
+            Name.starts_with(Twine("_" + FatBinPrefix).str()));
+  }
+
+  bool isHIPGPUBinHandleSymbol(llvm::StringRef Name) const {
+    return Name.starts_with(GPUBinHandlePrefix) ||
+           (HostTriple.isOSBinFormatMachO() &&
+            Name.starts_with(Twine("_" + GPUBinHandlePrefix).str()));
+  }
 
   void populateSymbols() {
     std::deque<const Action *> WorkList;
@@ -170,9 +191,9 @@ private:
         std::string ID = IA->getId().str();
         if (!ID.empty()) {
           ID = llvm::utohexstr(llvm::MD5Hash(ID), /*LowerCase=*/true);
-          FatBinSymbols.insert((FatBinPrefix + Twine('_') + ID).str());
+          FatBinSymbols.insert(getAssemblerName(FatBinPrefix + Twine('_') + ID));
           GPUBinHandleSymbols.insert(
-              (GPUBinHandlePrefix + Twine('_') + ID).str());
+              getAssemblerName(GPUBinHandlePrefix + Twine('_') + ID));
           continue;
         }
         if (IA->getInputArg().getNumValues() == 0)
@@ -242,8 +263,8 @@ private:
       bool isUndefined =
           FlagOrErr.get() & llvm::object::SymbolRef::SF_Undefined;
       bool isHidden = FlagOrErr.get() & llvm::object::SymbolRef::SF_Hidden;
-      bool isFatBinSymbol = Name.starts_with(FatBinPrefix);
-      bool isGPUBinHandleSymbol = Name.starts_with(GPUBinHandlePrefix);
+      bool isFatBinSymbol = isHIPFatBinSymbol(Name);
+      bool isGPUBinHandleSymbol = isHIPGPUBinHandleSymbol(Name);
 
       // Add undefined symbols if they are not in the defined sets
       if (isUndefined) {
@@ -373,7 +394,7 @@ void HIP::constructGenerateObjFileFromHIPFatBinary(
   auto HostTriple =
       C.getSingleOffloadToolChain<Action::OFK_Host>()->getTriple();
 
-  HIPUndefinedFatBinSymbols Symbols(C, Args);
+  HIPUndefinedFatBinSymbols Symbols(C, Args, HostTriple);
 
   std::string PrimaryHipFatbinSymbol;
   std::string PrimaryGpuBinHandleSymbol;

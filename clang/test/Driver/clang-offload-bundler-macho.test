@@ -1,0 +1,55 @@
+# RUN: yaml2obj %s -o %t.host.o
+# RUN: echo 'device payload' > %t.device
+
+# RUN: clang-offload-bundler -type=o -targets=host-x86_64-apple-macosx-unknown,hip-amdgcn-amd-amdhsa--gfx906 -input=%t.host.o -input=%t.device -output=%t.bundle.o
+# RUN: llvm-readobj --sections %t.bundle.o | FileCheck %s --check-prefix=BUNDLE
+# RUN: clang-offload-bundler -type=o -input=%t.bundle.o -list | FileCheck %s --check-prefix=LIST
+# RUN: clang-offload-bundler -type=o -targets=host-x86_64-apple-macosx-unknown,hip-amdgcn-amd-amdhsa--gfx906 -output=%t.host.out.o -output=%t.device.out -input=%t.bundle.o -unbundle
+# RUN: cmp %t.device %t.device.out
+# RUN: llvm-readobj --sections %t.host.out.o | FileCheck %s --check-prefix=HOST
+
+# BUNDLE: Name: __offload
+# BUNDLE: Segment: __CLANG
+
+# LIST-DAG: host-x86_64-apple-macosx-unknown-
+# LIST-DAG: hip-amdgcn-amd-amdhsa--gfx906
+
+# HOST: Name: __text
+# HOST-NOT: Name: __offload
+
+--- !mach-o
+FileHeader:
+  magic:           0xFEEDFACF
+  cputype:         0x01000007
+  cpusubtype:      0x00000003
+  filetype:        0x00000001
+  ncmds:           1
+  sizeofcmds:      152
+  flags:           0x00002000
+  reserved:        0x00000000
+LoadCommands:
+  - cmd:             LC_SEGMENT_64
+    cmdsize:         152
+    segname:         __TEXT
+    vmaddr:          0
+    vmsize:          4
+    fileoff:         184
+    filesize:        4
+    maxprot:         7
+    initprot:        7
+    nsects:          1
+    flags:           0
+    Sections:
+      - sectname:        __text
+        segname:         __TEXT
+        addr:            0x0000000000000000
+        content:         'AABBCCDD'
+        size:            4
+        offset:          184
+        align:           0
+        reloff:          0x00000000
+        nreloc:          0
+        flags:           0x80000400
+        reserved1:       0x00000000
+        reserved2:       0x00000000
+        reserved3:       0x00000000

@@ -27,6 +27,7 @@
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ArchiveWriter.h"
 #include "llvm/Object/Binary.h"
+#include "llvm/Object/MachO.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
@@ -79,6 +80,12 @@ static llvm::ManagedStatic<llvm::TimerGroup,
 
 /// Magic string that marks the existence of offloading data.
 #define OFFLOAD_BUNDLER_MAGIC_STR "__CLANG_OFFLOAD_BUNDLE__"
+
+/// Mach-O section used to store an embedded binary offload bundle. The normal
+/// bundle IDs do not fit in Mach-O's 16-byte segment/section name fields.
+#define MACHO_OFFLOAD_SEGMENT_NAME "__CLANG"
+#define MACHO_OFFLOAD_SECTION_NAME "__offload"
+#define MACHO_OFFLOAD_SECTION_NAME_FULL "__CLANG,__offload"
 
 OffloadTargetInfo::OffloadTargetInfo(const StringRef Target,
                                      const OffloadBundlerConfig &BC)
@@ -566,6 +573,11 @@ class ObjectFileHandler final : public FileHandler {
   section_iterator CurrentSection;
   section_iterator NextSection;
 
+  /// Binary offload bundle embedded in a Mach-O section.
+  std::unique_ptr<MemoryBuffer> EmbeddedBundle;
+  std::unique_ptr<BinaryFileHandler> EmbeddedBundleHandler;
+  bool CurrentBundleFromEmbeddedBundle = false;
+
   /// Configuration options and arrays for this bundler job
   const OffloadBundlerConfig &BundlerConfig;
 
@@ -582,7 +594,25 @@ public:
 
   Expected<std::optional<StringRef>>
   ReadBundleStart(MemoryBuffer &Input) final {
-    while (NextSection != Obj->section_end()) {
+    while (true) {
+      if (EmbeddedBundleHandler) {
+        Expected<std::optional<StringRef>> TripleOrErr =
+            EmbeddedBundleHandler->ReadBundleStart(*EmbeddedBundle);
+        if (!TripleOrErr)
+          return TripleOrErr.takeError();
+        if (*TripleOrErr) {
+          CurrentBundleFromEmbeddedBundle = true;
+          return **TripleOrErr;
+        }
+
+        EmbeddedBundleHandler.reset();
+        EmbeddedBundle.reset();
+        CurrentBundleFromEmbeddedBundle = false;
+      }
+
+      if (NextSection == Obj->section_end())
+        return std::nullopt;
+
       CurrentSection = NextSection;
       ++NextSection;
 
@@ -592,19 +622,43 @@ public:
           IsOffloadSection(*CurrentSection);
       if (!TripleOrErr)
         return TripleOrErr.takeError();
-      if (*TripleOrErr)
+      if (*TripleOrErr) {
+        CurrentBundleFromEmbeddedBundle = false;
         return **TripleOrErr;
+      }
+
+      Expected<bool> StartedEmbeddedBundleOrErr =
+          startEmbeddedMachOOffloadBundle(*CurrentSection);
+      if (!StartedEmbeddedBundleOrErr)
+        return StartedEmbeddedBundleOrErr.takeError();
+      if (*StartedEmbeddedBundleOrErr)
+        continue;
     }
-    return std::nullopt;
   }
 
-  Error ReadBundleEnd(MemoryBuffer &Input) final { return Error::success(); }
+  Error ReadBundleEnd(MemoryBuffer &Input) final {
+    if (CurrentBundleFromEmbeddedBundle) {
+      CurrentBundleFromEmbeddedBundle = false;
+      return EmbeddedBundleHandler->ReadBundleEnd(*EmbeddedBundle);
+    }
+    return Error::success();
+  }
 
   Error ReadBundle(raw_ostream &OS, MemoryBuffer &Input) final {
-    Expected<StringRef> ContentOrErr = CurrentSection->getContents();
-    if (!ContentOrErr)
-      return ContentOrErr.takeError();
-    StringRef Content = *ContentOrErr;
+    SmallVector<char, 0> EmbeddedContent;
+    StringRef Content;
+    if (CurrentBundleFromEmbeddedBundle) {
+      raw_svector_ostream EmbeddedOS(EmbeddedContent);
+      if (Error Err =
+              EmbeddedBundleHandler->ReadBundle(EmbeddedOS, *EmbeddedBundle))
+        return Err;
+      Content = StringRef(EmbeddedContent.data(), EmbeddedContent.size());
+    } else {
+      Expected<StringRef> ContentOrErr = CurrentSection->getContents();
+      if (!ContentOrErr)
+        return ContentOrErr.takeError();
+      Content = *ContentOrErr;
+    }
 
     // Copy fat object contents to the output when extracting host bundle.
     std::string ModifiedContent;
@@ -668,25 +722,36 @@ public:
     StringSaver SS{Alloc};
     SmallVector<StringRef, 8u> ObjcopyArgs{"llvm-objcopy"};
 
-    for (unsigned I = 0; I < NumberOfInputs; ++I) {
-      StringRef InputFile = BundlerConfig.InputFileNames[I];
-      if (I == BundlerConfig.HostInputIndex) {
-        // Special handling for the host bundle. We do not need to add a
-        // standard bundle for the host object since we are going to use fat
-        // object as a host object. Therefore use dummy contents (one zero byte)
-        // when creating section for the host bundle.
-        Expected<StringRef> TempFileOrErr = TempFiles.Create(ArrayRef<char>(0));
-        if (!TempFileOrErr)
-          return TempFileOrErr.takeError();
-        InputFile = *TempFileOrErr;
-      }
+    if (Obj->isMachO()) {
+      Expected<StringRef> BundleFileOrErr =
+          createMachOEmbeddedOffloadBundle(TempFiles);
+      if (!BundleFileOrErr)
+        return BundleFileOrErr.takeError();
+      ObjcopyArgs.push_back(
+          SS.save(Twine("--add-section=") + MACHO_OFFLOAD_SECTION_NAME_FULL +
+                  "=" + *BundleFileOrErr));
+    } else {
+      for (unsigned I = 0; I < NumberOfInputs; ++I) {
+        StringRef InputFile = BundlerConfig.InputFileNames[I];
+        if (I == BundlerConfig.HostInputIndex) {
+          // Special handling for the host bundle. We do not need to add a
+          // standard bundle for the host object since we are going to use fat
+          // object as a host object. Therefore use dummy contents (one zero
+          // byte) when creating section for the host bundle.
+          Expected<StringRef> TempFileOrErr =
+              TempFiles.Create(ArrayRef<char>(0));
+          if (!TempFileOrErr)
+            return TempFileOrErr.takeError();
+          InputFile = *TempFileOrErr;
+        }
 
-      ObjcopyArgs.push_back(
-          SS.save(Twine("--add-section=") + OFFLOAD_BUNDLER_MAGIC_STR +
-                  BundlerConfig.TargetNames[I] + "=" + InputFile));
-      ObjcopyArgs.push_back(
-          SS.save(Twine("--set-section-flags=") + OFFLOAD_BUNDLER_MAGIC_STR +
-                  BundlerConfig.TargetNames[I] + "=readonly,exclude"));
+        ObjcopyArgs.push_back(
+            SS.save(Twine("--add-section=") + OFFLOAD_BUNDLER_MAGIC_STR +
+                    BundlerConfig.TargetNames[I] + "=" + InputFile));
+        ObjcopyArgs.push_back(
+            SS.save(Twine("--set-section-flags=") + OFFLOAD_BUNDLER_MAGIC_STR +
+                    BundlerConfig.TargetNames[I] + "=readonly,exclude"));
+      }
     }
     ObjcopyArgs.push_back("--");
     ObjcopyArgs.push_back(
@@ -704,6 +769,82 @@ public:
   }
 
 private:
+  Expected<bool> startEmbeddedMachOOffloadBundle(SectionRef Section) {
+    if (!Obj->isMachO())
+      return false;
+
+    auto *MachOObj = dyn_cast<MachOObjectFile>(Obj.get());
+    if (!MachOObj)
+      return false;
+
+    Expected<StringRef> SectionNameOrErr = Section.getName();
+    if (!SectionNameOrErr)
+      return SectionNameOrErr.takeError();
+    if (*SectionNameOrErr != MACHO_OFFLOAD_SECTION_NAME)
+      return false;
+
+    StringRef SegmentName =
+        MachOObj->getSectionFinalSegmentName(Section.getRawDataRefImpl());
+    if (SegmentName != MACHO_OFFLOAD_SEGMENT_NAME)
+      return false;
+
+    Expected<StringRef> ContentOrErr = Section.getContents();
+    if (!ContentOrErr)
+      return ContentOrErr.takeError();
+    if (llvm::identify_magic(*ContentOrErr) !=
+        llvm::file_magic::offload_bundle)
+      return createStringError(errc::invalid_argument,
+                               "malformed Mach-O offload bundle section");
+
+    EmbeddedBundle = MemoryBuffer::getMemBufferCopy(
+        *ContentOrErr, "Mach-O embedded offload bundle");
+    EmbeddedBundleHandler = std::make_unique<BinaryFileHandler>(BundlerConfig);
+    if (Error Err = EmbeddedBundleHandler->ReadHeader(*EmbeddedBundle))
+      return std::move(Err);
+
+    return true;
+  }
+
+  Expected<StringRef>
+  createMachOEmbeddedOffloadBundle(TempFileHandlerRAII &TempFiles) {
+    SmallVector<std::unique_ptr<MemoryBuffer>, 8u> InputBuffers;
+    InputBuffers.reserve(NumberOfInputs);
+
+    const char HostBundleContents = 0;
+    for (unsigned I = 0; I < NumberOfInputs; ++I) {
+      if (I == BundlerConfig.HostInputIndex) {
+        InputBuffers.push_back(MemoryBuffer::getMemBufferCopy(
+            StringRef(&HostBundleContents, 1), "host bundle"));
+        continue;
+      }
+
+      ErrorOr<std::unique_ptr<MemoryBuffer>> CodeOrErr =
+          MemoryBuffer::getFileOrSTDIN(BundlerConfig.InputFileNames[I],
+                                       /*IsText=*/true);
+      if (std::error_code EC = CodeOrErr.getError())
+        return createFileError(BundlerConfig.InputFileNames[I], EC);
+      InputBuffers.emplace_back(std::move(*CodeOrErr));
+    }
+
+    SmallVector<char, 0> Bundle;
+    raw_svector_ostream BundleOS(Bundle);
+    BinaryFileHandler Handler(BundlerConfig);
+    if (Error Err = Handler.WriteHeader(BundleOS, InputBuffers))
+      return std::move(Err);
+
+    for (unsigned I = 0; I < NumberOfInputs; ++I) {
+      StringRef Target = BundlerConfig.TargetNames[I];
+      if (Error Err = Handler.WriteBundleStart(BundleOS, Target))
+        return std::move(Err);
+      if (Error Err = Handler.WriteBundle(BundleOS, *InputBuffers[I]))
+        return std::move(Err);
+      if (Error Err = Handler.WriteBundleEnd(BundleOS, Target))
+        return std::move(Err);
+    }
+
+    return TempFiles.Create(ArrayRef<char>(Bundle.data(), Bundle.size()));
+  }
+
   Error executeObjcopy(StringRef Objcopy, ArrayRef<StringRef> Args) {
     // If the user asked for the commands to be printed out, we do that
     // instead of executing it.
@@ -732,8 +873,13 @@ private:
     StringSaver SS{Alloc};
     SmallVector<StringRef, 16> ObjcopyArgs{"llvm-objcopy"};
 
-    ObjcopyArgs.push_back("--regex");
-    ObjcopyArgs.push_back("--remove-section=__CLANG_OFFLOAD_BUNDLE__.*");
+    if (Obj->isMachO()) {
+      ObjcopyArgs.push_back(SS.save(Twine("--remove-section=") +
+                                    MACHO_OFFLOAD_SECTION_NAME_FULL));
+    } else {
+      ObjcopyArgs.push_back("--regex");
+      ObjcopyArgs.push_back("--remove-section=__CLANG_OFFLOAD_BUNDLE__.*");
+    }
     ObjcopyArgs.push_back("--");
 
     StringRef ObjcopyInputFileName;
