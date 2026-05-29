@@ -1,5 +1,4 @@
 set(ALPHA alpha)
-set(AMDGPU amdgcn)
 set(ARM64 aarch64)
 set(ARM32 arm armhf)
 set(HEXAGON hexagon)
