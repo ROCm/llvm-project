@@ -22,6 +22,7 @@ namespace llvm {
 class LLVMContext;
 class VPValue;
 class VPBlendRecipe;
+class VPWidenRecipe;
 class VPRecipeBase;
 class VPlan;
 class Value;
@@ -45,6 +46,7 @@ class VPTypeAnalysis {
   const DataLayout &DL;
 
   Type *inferScalarTypeForRecipe(const VPBlendRecipe *R);
+  Type *inferScalarTypeForRecipe(const VPWidenRecipe *R);
 
 public:
   VPTypeAnalysis(const VPlan &Plan)

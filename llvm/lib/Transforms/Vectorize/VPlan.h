@@ -1804,16 +1804,15 @@ public:
   VPWidenRecipe(Instruction &I, ArrayRef<VPValue *> Operands,
                 const VPIRFlags &Flags = {}, const VPIRMetadata &Metadata = {},
                 DebugLoc DL = {})
-      : VPWidenRecipe(I.getOpcode(), Operands, Flags, Metadata, DL) {
+      : VPRecipeWithIRFlags(VPRecipeBase::VPWidenSC, Operands, Flags, DL),
+        VPIRMetadata(Metadata), Opcode(I.getOpcode()) {
     setUnderlyingValue(&I);
   }
 
   VPWidenRecipe(unsigned Opcode, ArrayRef<VPValue *> Operands,
                 const VPIRFlags &Flags = {}, const VPIRMetadata &Metadata = {},
                 DebugLoc DL = {})
-      : VPRecipeWithIRFlags(VPRecipeBase::VPWidenSC, Operands,
-                            computeScalarTypeForInstruction(Opcode, Operands),
-                            Flags, DL),
+      : VPRecipeWithIRFlags(VPRecipeBase::VPWidenSC, Operands, Flags, DL),
         VPIRMetadata(Metadata), Opcode(Opcode) {}
 
   ~VPWidenRecipe() override = default;
@@ -1856,8 +1855,6 @@ protected:
 };
 
 /// VPWidenCastRecipe is a recipe to create vector cast instructions.
-/// TODO: Merge with VPWidenRecipe now that type is associated to every
-/// VPRecipeValue.
 class VPWidenCastRecipe : public VPRecipeWithIRFlags, public VPIRMetadata {
   /// Cast instruction opcode.
   Instruction::CastOps Opcode;

@@ -296,11 +296,7 @@ bool VPlanVerifier::verifyRecipeTypes(const VPRecipeBase &R) const {
     return CheckScalarType(
         VPReplicateRecipe::computeScalarType(RepR->getUnderlyingInstr(), Ops));
   }
-  case VPRecipeBase::VPWidenSC: {
-    SmallVector<VPValue *, 4> Ops(R.operands());
-    return CheckScalarType(computeScalarTypeForInstruction(
-        cast<VPWidenRecipe>(&R)->getOpcode(), Ops));
-  }
+
   default:
     return true;
   }
