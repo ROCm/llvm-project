@@ -1042,6 +1042,25 @@ InstructionCost GCNTTIImpl::getVectorInstrCost(
                                        VIC);
     }
 
+    // Building a packed <2 x float> for a v_pk_*_f32 source is not free: the
+    // two lanes must occupy an aligned VGPR pair, so a statically-indexed
+    // insert that synthesizes such a pair costs ~1 v_mov_b32 to align the lane.
+    // Charging it keeps the SLP vectorizer honest about manufacturing pairs
+    // from non-adjacent scalars; without it SLP over-vectorizes and inflates
+    // register pressure.
+    //
+    // Restricted to f32: at 32-bit width the only packed VOP3P ALU ops are
+    // v_pk_{add,mul,fma}_f32 - there is no packed 32-bit integer op - so a
+    // <2 x i32> has no pair-alignment consumer and must not be taxed. Scoped to
+    // the gfx9 generation (gfx90a/gfx94x/gfx950); newer packed-FP32 targets
+    // (gfx12) are left unchanged pending separate evaluation.
+    if (Opcode == Instruction::InsertElement && EltSize == 32 &&
+        ST->hasPackedFP32Ops() &&
+        ST->getGeneration() == AMDGPUSubtarget::GFX9)
+      if (auto *VecTy = dyn_cast<FixedVectorType>(ValTy))
+        if (VecTy->getNumElements() == 2 && VecTy->getElementType()->isFloatTy())
+          return 1;
+
     // Extracts are just reads of a subregister, so are free. Inserts are
     // considered free because we don't want to have any cost for scalarizing
     // operations, and we don't have to copy into a different register class.
@@ -1344,6 +1363,56 @@ InstructionCost GCNTTIImpl::getShuffleCost(TTI::ShuffleKind Kind,
   Kind = improveShuffleKindFromMask(Kind, Mask, SrcTy, Index, SubTp);
 
   unsigned ScalarSize = DL.getTypeSizeInBits(SrcTy->getElementType());
+
+  // Packed FP32 (gfx9, gfx90a+): two FP32 elements form a v_pk_*_f32 source
+  // that must live in an aligned VGPR pair, so each non-identity element in the
+  // result costs ~1 v_mov_b32 to align into its pair slot. The 16/8-bit branch
+  // below relies on subword packing (multiple elements per VGPR) and does not
+  // apply to FP32, so FP32 is handled separately here. The intent is to make
+  // the SLP vectorizer cost-honest about synthesizing pairs from non-adjacent
+  // scalars.
+  //
+  // f32-only and gfx9-only for the same reasons as in getVectorInstrCost: there
+  // is no packed 32-bit integer op (so <2 x i32> shuffles are not taxed), and
+  // newer packed-FP32 targets (gfx12) are left unchanged pending evaluation.
+  if (ScalarSize == 32 && SrcTy->getElementType()->isFloatTy() &&
+      ST->hasPackedFP32Ops() &&
+      ST->getGeneration() == AMDGPUSubtarget::GFX9) {
+    auto *DstVecTy = dyn_cast<FixedVectorType>(DstTy);
+    auto *SrcVecTy = dyn_cast<FixedVectorType>(SrcTy);
+    if (DstVecTy && SrcVecTy && DstVecTy->getNumElements() >= 2) {
+      unsigned NumDstElts = DstVecTy->getNumElements();
+      unsigned NumSrcElts = SrcVecTy->getNumElements();
+      InstructionCost PerMove = 1;
+      switch (Kind) {
+      case TTI::SK_Broadcast:
+        // Splat scalar to N FP32 lanes: 1 v_mov per non-source lane.
+        return PerMove * (NumDstElts - 1);
+      case TTI::SK_Reverse:
+      case TTI::SK_PermuteSingleSrc:
+      case TTI::SK_PermuteTwoSrc: {
+        if (Mask.empty())
+          return PerMove * NumDstElts;
+        unsigned NumMoves = 0;
+        for (unsigned I = 0; I < Mask.size(); ++I) {
+          int SrcIdx = Mask[I];
+          if (SrcIdx == -1)
+            continue;
+          unsigned EffectiveSrc = SrcIdx < (int)NumSrcElts
+                                      ? unsigned(SrcIdx)
+                                      : unsigned(SrcIdx) - NumSrcElts;
+          if (EffectiveSrc == I)
+            continue;
+          ++NumMoves;
+        }
+        return PerMove * NumMoves;
+      }
+      default:
+        break;
+      }
+    }
+  }
+
   if (ST->getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS &&
       (ScalarSize == 16 || ScalarSize == 8)) {
     // Larger vector widths may require additional instructions, but are
