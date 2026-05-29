@@ -550,7 +550,8 @@ private:
     if (alloc.hasCoarraySpec()) {
       stat = Fortran::lower::genAllocateCoarray(
           converter, loc, alloc.getSymbol(), box.getAddr(),
-          alloc.getCoarraySpec(), errorManager.errMsgAddr);
+          alloc.getCoarraySpec(), errorManager.errMsgAddr,
+          errorManager.hasStatSpec());
     } else if (!isCudaAllocate) {
       if (isOpenMPAllocatorEnabled)
         genOpenMPRuntimeDescriptorSetAllocIdx(builder, loc, box, 1);
@@ -702,7 +703,8 @@ private:
     if (alloc.hasCoarraySpec()) {
       stat = Fortran::lower::genAllocateCoarray(
           converter, loc, alloc.getSymbol(), box.getAddr(),
-          alloc.getCoarraySpec(), errorManager.errMsgAddr);
+          alloc.getCoarraySpec(), errorManager.errMsgAddr,
+          errorManager.hasStatSpec());
     } else if (Fortran::semantics::HasCUDAAttr(alloc.getSymbol()) ||
                sourceIsDevice) {
       stat =

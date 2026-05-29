@@ -1301,7 +1301,7 @@ void Flang::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   renderGlobalISelOptions(D, Args, CmdArgs, Triple);
-  renderCommonIntegerOverflowOptions(Args, CmdArgs);
+  renderCommonIntegerOverflowOptions(Args, CmdArgs, false);
 
   assert((Output.isFilename() || Output.isNothing()) && "Invalid output.");
   if (Output.isFilename()) {

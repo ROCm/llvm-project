@@ -3868,7 +3868,7 @@ bool OmpStructureChecker::CheckReductionOperator(
       std::string mangled{MangleDefinedOperator(definedOp->v.symbol->name())};
       const Scope &scope{definedOp->v.symbol->owner()};
       if (const Symbol *symbol{scope.FindSymbol(mangled)}) {
-        if (symbol->detailsIf<UserReductionDetails>()) {
+        if (symbol->GetUltimate().detailsIf<UserReductionDetails>()) {
           return true;
         }
       }
@@ -3886,7 +3886,7 @@ bool OmpStructureChecker::CheckReductionOperator(
       valid =
           llvm::is_contained({"max", "min", "iand", "ior", "ieor"}, realName);
       if (!valid) {
-        valid = name->symbol->detailsIf<UserReductionDetails>();
+        valid = name->symbol->GetUltimate().detailsIf<UserReductionDetails>();
       }
     }
     if (!valid) {
@@ -3969,8 +3969,9 @@ void OmpStructureChecker::CheckReductionObjects(
 static bool CheckSymbolSupportsType(const Scope &scope,
     const parser::CharBlock &name, const DeclTypeSpec &type) {
   if (const auto *symbol{scope.FindSymbol(name)}) {
+    const auto &ultimate{symbol->GetUltimate()};
     if (const auto *reductionDetails{
-            symbol->detailsIf<UserReductionDetails>()}) {
+            ultimate.detailsIf<UserReductionDetails>()}) {
       return reductionDetails->SupportsType(type);
     }
   }
@@ -4084,7 +4085,7 @@ static bool IsReductionAllowedForType(
       // if the symbol has UserReductionDetails, and if so, the type is
       // supported.
       if (const auto *reductionDetails{
-              name->symbol->detailsIf<UserReductionDetails>()}) {
+              name->symbol->GetUltimate().detailsIf<UserReductionDetails>()}) {
         return reductionDetails->SupportsType(type);
       }
 
