@@ -186,3 +186,57 @@ if config.have_curl:
 
 if config.target_os in ("AIX", "Darwin", "Linux"):
     config.available_features.add("continuous-mode")
+
+# The device-profile drain (.hip) tests need:
+#   - an AMD GPU exposed via the KFD kernel driver,
+#   - a usable HIP install (so `clang -x hip` can build the test), and
+#   - the amdgcn device profile runtime in the compiler-rt resource directory.
+#
+# Gate on all three.  Either probe failing leaves the `amdgpu` (and `hip`)
+# features unset and the .hip tests UNSUPPORTED -- this avoids spurious
+# failures on hosts with /dev/kfd but no ROCm install, or compiler-rt builds
+# that disabled the GPU profile runtime.
+#
+# Also export %hip_lib_path and %amdgpu_arch substitutions so .hip tests can
+# stay portable (the existing GPU/instrprof-hip-* tests in amd-staging use
+# the same names).
+if os.path.exists("/dev/kfd"):
+    rocm_path = os.environ.get("ROCM_PATH") or "/opt/rocm"
+    hip_runtime_h = os.path.join(rocm_path, "include", "hip", "hip_runtime.h")
+    hip_lib_path = os.path.join(rocm_path, "lib")
+    has_hip_install = os.path.isfile(hip_runtime_h) and any(
+        os.path.exists(os.path.join(hip_lib_path, n))
+        for n in (
+            "libamdhip64.so",
+            "libamdhip64.so.7",
+            "libamdhip64.so.6",
+            "libamdhip64.so.5",
+        )
+    )
+    if has_hip_install:
+        config.available_features.add("hip")
+        config.substitutions.append(("%hip_lib_path", hip_lib_path))
+        # `native` lets clang derive the arch from the visible KFD agents,
+        # which matches how the existing GPU/ tests operate when not pinned
+        # to a specific gfx target.
+        config.substitutions.append(("%amdgpu_arch", "native"))
+        # Probe for the amdgcn device profile runtime in the resource dir.
+        # `config.compiler_rt_libdir` is set by AddCompilerRT.cmake; fall back
+        # to deriving it from the clang binary if that attribute is absent
+        # (older compiler-rt setups).
+        rt_libdir = getattr(config, "compiler_rt_libdir", None)
+        if rt_libdir is None and getattr(config, "clang", None):
+            clang_dir = os.path.dirname(os.path.realpath(config.clang))
+            rt_libdir = os.path.join(
+                os.path.dirname(clang_dir), "lib", "clang"
+            )
+        profile_rt = None
+        if rt_libdir and os.path.isdir(rt_libdir):
+            for root, _, files in os.walk(rt_libdir):
+                if "libclang_rt.profile-amdgcn.a" in files:
+                    profile_rt = os.path.join(
+                        root, "libclang_rt.profile-amdgcn.a"
+                    )
+                    break
+        if profile_rt is not None:
+            config.available_features.add("amdgpu")

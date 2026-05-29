@@ -20,6 +20,8 @@ set(SPIRV64 spirv64)
 set(WASM32 wasm32)
 set(WASM64 wasm64)
 set(VE ve)
+set(AMDGPU amdgcn)
+set(NVPTX nvptx64)
 
 if (COMPILER_RT_PROFILE_BAREMETAL)
   set(ARM32
