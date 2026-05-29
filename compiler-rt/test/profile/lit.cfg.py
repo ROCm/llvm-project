@@ -39,8 +39,9 @@ elif target_is_msvc:
 else:
     extra_link_flags = []
 
-# Test suffixes.
-config.suffixes = [".c", ".cpp", ".m", ".mm", ".ll", ".test"]
+# Test suffixes. ".hip" is for the AMDGPU/NVPTX device-profile drain tests,
+# which are gated on the "amdgpu" feature below.
+config.suffixes = [".c", ".cpp", ".m", ".mm", ".ll", ".test", ".hip"]
 
 # What to exclude.
 config.excludes = ["Inputs"]
@@ -186,3 +187,9 @@ if config.have_curl:
 
 if config.target_os in ("AIX", "Darwin", "Linux"):
     config.available_features.add("continuous-mode")
+
+# The device-profile drain (.hip) tests need an AMD GPU plus the amdgcn device
+# profile runtime in the resource directory. Gate them on the kernel-fusion
+# device node so they are skipped on hosts without a usable GPU.
+if os.path.exists("/dev/kfd"):
+    config.available_features.add("amdgpu")
