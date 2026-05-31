@@ -110,6 +110,7 @@ jobs:
           docker container prune -f || true
           # Remove dangling networks
           docker network prune -f || true
+          sudo find / -name libpython3*
           sudo apt-get update
           sudo apt install -y build-essential pciutils libquadmath0
 
