@@ -30,45 +30,25 @@ public:
 
 private:
   DenseSet<Register> ConstrainRegs;
-  // This function matches the narrow SCC-lowering pattern that must stay in
-  // lane-mask form instead of widening to VGPR_32.
-  //
-  // Example:
-  //   %0:vreg_1 = COPY <lane-mask>
-  //   $scc = COPY %0
-  // `SIFixSGPRCopies` immediately lowers that to:
-  //   %0:vreg_1 = COPY <lane-mask>
-  //   S_AND_* %0, $exec
-  // so `%0` is still semantically a lane mask.
-  bool isLaneMaskToImmediateSAndUse(
-      const MachineInstr &MI, const AMDGPU::LaneMaskConstants &LMC) const {
+
+  // A vreg_1 defined by a COPY from a lane-mask that never leaves its
+  // defining MBB is semantically a lane mask throughout its live range.
+  // Widening it to VGPR_32 (V_CNDMASK/V_CMP round-trip) is unnecessary;
+  // simply reclassify it to the lane-mask register class.
+  bool canTreatAsLocalLaneMask(const MachineInstr &MI) const {
     if (MI.getOpcode() != AMDGPU::COPY)
       return false;
 
     if (!isLaneMaskReg(MI.getOperand(1).getReg()))
       return false;
 
-    Register CurReg = MI.getOperand(0).getReg();
+    Register DstReg = MI.getOperand(0).getReg();
+    const MachineBasicBlock *DefMBB = MI.getParent();
+    for (const MachineInstr &UseMI : MRI->use_nodbg_instructions(DstReg))
+      if (UseMI.getParent() != DefMBB)
+        return false;
 
-    if (!CurReg.isVirtual() || !MRI->hasOneUse(CurReg))
-      return false;
-
-    auto NextIt = std::next(MachineBasicBlock::const_iterator(MI));
-    if (NextIt == MI.getParent()->end())
-      return false;
-
-    const MachineInstr &UseMI = *MRI->use_instr_begin(CurReg);
-    if (&UseMI != &*NextIt)
-      return false;
-
-    if (UseMI.getOpcode() == LMC.AndOpc) {
-      Register Src0 = UseMI.getOperand(1).getReg();
-      Register Src1 = UseMI.getOperand(2).getReg();
-      return (Src0 == CurReg && Src1 == LMC.ExecReg) ||
-              (Src1 == CurReg && Src0 == LMC.ExecReg);
-    }
-
-    return false;
+    return true;
   }
 
 public:
@@ -304,7 +284,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
 
       assert(!MI.getOperand(0).getSubReg());
 
-      if (isLaneMaskToImmediateSAndUse(MI, *LMC)) {
+      if (canTreatAsLocalLaneMask(MI)) {
         markAsLaneMask(DstReg);
         continue;
       }

@@ -28,10 +28,9 @@ define void @divergent_i1_phi_used_outside_loop(float %val, float %pre.cond.val,
   ; CHECK-NEXT:   successors: %bb.2(0x04000000), %bb.1(0x7c000000)
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT:   [[PHI:%[0-9]+]]:sreg_32 = PHI [[S_MOV_B32_]], %bb.0, %4, %bb.1
-  ; CHECK-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.0, %39, %bb.1
+  ; CHECK-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.0, %24, %bb.1
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 0, [[PHI1]], implicit $exec
-  ; CHECK-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32_xm0_xexec = S_XOR_B32 killed [[V_CMP_NE_U32_e64_]], -1, implicit-def dead $scc
-  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed [[S_XOR_B32_]], implicit $exec
+  ; CHECK-NEXT:   [[S_XOR_B32_:%[0-9]+]]:sreg_32 = S_XOR_B32 killed [[V_CMP_NE_U32_e64_]], -1, implicit-def dead $scc
   ; CHECK-NEXT:   [[S_CVT_F32_U32_:%[0-9]+]]:sgpr_32 = S_CVT_F32_U32 [[PHI]], implicit $mode
   ; CHECK-NEXT:   [[V_CMP_NGT_F32_e64_:%[0-9]+]]:sreg_32 = nofpexcept V_CMP_NGT_F32_e64 0, killed [[S_CVT_F32_U32_]], 0, [[COPY3]], 0, implicit $mode, implicit $exec
   ; CHECK-NEXT:   [[S_ADD_I32_:%[0-9]+]]:sreg_32 = S_ADD_I32 killed [[PHI]], 1, implicit-def dead $scc
@@ -40,8 +39,8 @@ define void @divergent_i1_phi_used_outside_loop(float %val, float %pre.cond.val,
   ; CHECK-NEXT: {{  $}}
   ; CHECK-NEXT: bb.2.exit:
   ; CHECK-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 0, killed [[PHI1]], implicit $exec
-  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_2:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1065353216, killed [[V_CMP_NE_U32_e64_1]], implicit $exec
-  ; CHECK-NEXT:   FLAT_STORE_DWORD killed [[REG_SEQUENCE]], killed [[V_CNDMASK_B32_e64_2]], 0, 0, implicit $exec, implicit $flat_scr :: (store (s32) into %ir.addr)
+  ; CHECK-NEXT:   [[V_CNDMASK_B32_e64_1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1065353216, killed [[V_CMP_NE_U32_e64_1]], implicit $exec
+  ; CHECK-NEXT:   FLAT_STORE_DWORD killed [[REG_SEQUENCE]], killed [[V_CNDMASK_B32_e64_1]], 0, 0, implicit $exec, implicit $flat_scr :: (store (s32) into %ir.addr)
   ; CHECK-NEXT:   SI_RETURN
 entry:
   %pre.cond = fcmp ogt float %pre.cond.val, 1.0
