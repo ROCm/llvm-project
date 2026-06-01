@@ -35,7 +35,7 @@ private:
   // defining MBB is semantically a lane mask throughout its live range.
   // Widening it to VGPR_32 (V_CNDMASK/V_CMP round-trip) is unnecessary;
   // simply reclassify it to the lane-mask register class.
-  bool isAllUsesOfVreg1SameMBB(const MachineInstr &MI) const {
+  bool canTreatAsLocalLaneMask(const MachineInstr &MI) const {
     if (MI.getOpcode() != AMDGPU::COPY)
       return false;
 
@@ -284,7 +284,7 @@ bool Vreg1WideningHelper::widenVreg1s() {
 
       assert(!MI.getOperand(0).getSubReg());
 
-      if (isAllUsesOfVreg1SameMBB(MI)) {
+      if (canTreatAsLocalLaneMask(MI)) {
         markAsLaneMask(DstReg);
         continue;
       }
