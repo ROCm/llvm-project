@@ -26,6 +26,8 @@
 #endif
 #include <errno.h>
 #include <fcntl.h>
+#define MAX_ISA_NAME_SIZE 1024
+
 
 #define amd_comgr_(call)                                                       \
   do {                                                                         \

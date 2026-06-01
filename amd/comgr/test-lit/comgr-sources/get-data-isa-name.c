@@ -9,8 +9,6 @@
 #include "amd_comgr.h"
 #include "common.h"
 
-#define MAX_ISA_NAME_SIZE 1024
-
 int main(int argc, char *argv[]) {
   char *Buf;
   size_t Size;
@@ -22,11 +20,10 @@ int main(int argc, char *argv[]) {
   
   Size = setBuf(argv[1], &Buf);
 
-
-  amd_comgr_(create_data(AMD_COMGR_DATA_KIND_EXECUTABLE, &Data));
+  amd_comgr_(create_data(AMD_COMGR_DATA_KIND_RELOCATABLE, &Data));
   amd_comgr_(set_data(Data, Size, Buf));
   amd_comgr_(get_data_isa_name(Data, &Size, IsaName));
-  if (strncmp(IsaName, argv[2], Size))
+  if (strcmp(IsaName, argv[2]))
     fail("incorrect isa name: expected %s, saw %s", argv[2], IsaName);
   amd_comgr_(release_data(Data));
   free(Buf);
