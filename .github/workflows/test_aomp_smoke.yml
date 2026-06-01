@@ -83,6 +83,12 @@ jobs:
       AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
       ARTIFACT_GROUP: ${{ inputs.artifact_group }}
     steps:
+      - name: Fix library path
+        run: |
+             PYLIB_DIR=$(find / -name "libpython3.12.so.1.0" -printf '%h\n' 2>/dev/null | head -1)
+             echo "Found at: $PYLIB_DIR"
+             echo "LD_LIBRARY_PATH=$PYLIB_DIR:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
       - name: "Fetch 'build_tools' from repository"
         if: ${{ runner.os == 'Windows' }}
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
