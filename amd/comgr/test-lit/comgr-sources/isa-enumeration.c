@@ -14,13 +14,14 @@
 int main(int argc, char *argv[]) {
   size_t IsaCount;
   amd_comgr_(get_isa_count(&IsaCount));
-  if (IsaCount <= 0)
-    fail("ISA Count: %d\n", IsaCount);
-  for (int i = 0; i < IsaCount; i++) {
+  if (IsaCount == 0)
+    fail("ISA Count: %zu", IsaCount);
+  for (size_t i = 0; i < IsaCount; i++) {
     const char *Name;
     char IsaName[MAX_ISA_NAME_SIZE];
     amd_comgr_(get_isa_name(i, &Name));
     strncpy(IsaName, Name, MAX_ISA_NAME_SIZE);
     printf("%s\n", IsaName);
   }
+  return 0;
 }
