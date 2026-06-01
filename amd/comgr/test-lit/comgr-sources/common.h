@@ -28,7 +28,6 @@
 #include <fcntl.h>
 #define MAX_ISA_NAME_SIZE 1024
 
-
 #define amd_comgr_(call)                                                       \
   do {                                                                         \
     amd_comgr_status_t status = amd_comgr_##call;                              \
