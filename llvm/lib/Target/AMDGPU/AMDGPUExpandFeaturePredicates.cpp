@@ -54,8 +54,7 @@ inline void setPredicate(const GCNSubtarget &ST, GlobalVariable *P) {
       IsFeature ? sizeof("llvm.amdgcn.has") : sizeof("llvm.amdgcn.is");
 
   std::string PV = P->getName().substr(Offset).str();
-  const bool HasFeatureList = IsFeature && !PV.empty();
-  if (HasFeatureList) {
+  if (IsFeature) {
     size_t Dx = PV.find(',');
     while (Dx != std::string::npos) {
       PV.insert(++Dx, {'+'});
@@ -70,8 +69,7 @@ inline void setPredicate(const GCNSubtarget &ST, GlobalVariable *P) {
   P->setExternallyInitialized(false);
 
   if (IsFeature)
-    P->setInitializer(
-        ConstantInt::getBool(PTy, !HasFeatureList || ST.checkFeatures(PV)));
+    P->setInitializer(ConstantInt::getBool(PTy, ST.checkFeatures(PV)));
   else
     P->setInitializer(ConstantInt::getBool(PTy, PV == ST.getCPU()));
 }
