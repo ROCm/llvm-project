@@ -1,13 +1,15 @@
 // COM: Test FP8 E5M3 patches with no NOP sled (tight instruction packing).
 // COM:
-// COM: Companion files with NOP-sled (base) variants:
-// COM:   hotswap-cvt-pk-fp8.s, hotswap-cvt-sr-fp8.s, hotswap-cvt-f32-fp8.s
-// COM:
 // COM: Each kernel packs a CLAMP=1 FP8 conversion instruction immediately
 // COM: followed by a non-NOP filler (v_mov_b32) and s_endpgm, with no NOP
 // COM: padding available.  The hotswap rewriter replaces the original
 // COM: instruction with s_branch to a trampoline appended after the .text
 // COM: section.
+// COM:
+// COM: Companion tests:
+// COM:   hotswap-cvt-pk-fp8.s   — v_cvt_pk_fp8_f32  base (NOP sled path)
+// COM:   hotswap-cvt-sr-fp8.s   — v_cvt_sr_fp8_f32  base (NOP sled path)
+// COM:   hotswap-cvt-f32-fp8.s  — v_cvt_f32_fp8     base (NOP sled path)
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -18,10 +20,15 @@
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
-// COM: -----------------------------------------------------------------------
-// COM: Kernel 1: v_cvt_pk_fp8_f32 CLAMP=1, no NOP sled
-// COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=PK %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=UNPACK %s
+
+// ---- Kernel 1: v_cvt_pk_fp8_f32 CLAMP=1, no NOP sled -------------------------
+//
+// COM: No NOP padding available — trampoline is appended after .text.
+// COM: Filler instruction (v_mov_b32 0x42) must be preserved between the
+// COM: s_branch and s_endpgm. Branch-back lands after the original site.
 
 // PK-LABEL: <test_nosled_pk>:
 // COM: --- Original site: branch replaces v_cvt_pk_fp8_f32 ---
@@ -44,10 +51,22 @@
 // PK-NEXT:  s_mov_b32
 // PK-NEXT:  s_branch
 
-// COM: -----------------------------------------------------------------------
-// COM: Kernel 2: v_cvt_sr_fp8_f32 CLAMP=1, no NOP sled
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR %s
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+.globl test_nosled_pk
+.p2align 8
+.type test_nosled_pk,@function
+test_nosled_pk:
+  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
+  v_mov_b32 v3, 0x42
+  s_endpgm
+.Ltest_nosled_pk_end:
+.size test_nosled_pk, .Ltest_nosled_pk_end-test_nosled_pk
+
+// ---- Kernel 2: v_cvt_sr_fp8_f32 CLAMP=1, no NOP sled -------------------------
+//
+// COM: Stochastic-round patch in trampoline fallback mode. Noise injection
+// COM: via v_lshrrev_b32 12 is the anchor for the SR conversion path.
 
 // SR-LABEL: <test_nosled_sr>:
 // COM: --- Original site: branch replaces v_cvt_sr_fp8_f32 ---
@@ -68,10 +87,21 @@
 // SR-NEXT:  s_mov_b32
 // SR-NEXT:  s_branch
 
-// COM: -----------------------------------------------------------------------
-// COM: Kernel 3: v_cvt_f32_fp8 CLAMP=1, no NOP sled
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=UNPACK %s
+.globl test_nosled_sr
+.p2align 8
+.type test_nosled_sr,@function
+test_nosled_sr:
+  v_cvt_sr_fp8_f32 v4, v5, v6 clamp
+  v_mov_b32 v7, 0x43
+  s_endpgm
+.Ltest_nosled_sr_end:
+.size test_nosled_sr, .Ltest_nosled_sr_end-test_nosled_sr
+
+// ---- Kernel 3: v_cvt_f32_fp8 CLAMP=1, no NOP sled ----------------------------
+//
+// COM: Unpack patch in trampoline fallback mode. Byte extraction via
+// COM: v_and_b32 0xff, exp-31 F32 construction, F16 base path, and NaN
+// COM: override with 0x7fa3d000.
 
 // UNPACK-LABEL: <test_nosled_unpack>:
 // COM: --- Original site: branch replaces v_cvt_f32_fp8 ---
@@ -92,32 +122,6 @@
 // UNPACK-NEXT:  s_mov_b32
 // UNPACK-NEXT:  s_branch
 
-.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
-.text
-
-// --- Kernel 1: v_cvt_pk_fp8_f32 CLAMP=1, no NOP sled ---
-.globl test_nosled_pk
-.p2align 8
-.type test_nosled_pk,@function
-test_nosled_pk:
-  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
-  v_mov_b32 v3, 0x42
-  s_endpgm
-.Ltest_nosled_pk_end:
-.size test_nosled_pk, .Ltest_nosled_pk_end-test_nosled_pk
-
-// --- Kernel 2: v_cvt_sr_fp8_f32 CLAMP=1, no NOP sled ---
-.globl test_nosled_sr
-.p2align 8
-.type test_nosled_sr,@function
-test_nosled_sr:
-  v_cvt_sr_fp8_f32 v4, v5, v6 clamp
-  v_mov_b32 v7, 0x43
-  s_endpgm
-.Ltest_nosled_sr_end:
-.size test_nosled_sr, .Ltest_nosled_sr_end-test_nosled_sr
-
-// --- Kernel 3: v_cvt_f32_fp8 CLAMP=1, no NOP sled ---
 .globl test_nosled_unpack
 .p2align 8
 .type test_nosled_unpack,@function

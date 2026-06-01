@@ -10,8 +10,9 @@
 // COM:   ABS[0] (src0) = dword0 bit 8     NEG[0] (src0) = dword1 bit 29
 // COM:   ABS[1] (src1) = dword0 bit 9     NEG[1] (src1) = dword1 bit 30
 // COM:
-// COM: Verifies the hotswap patch still applies when source modifiers are
-// COM: present and that idempotent re-application succeeds.
+// COM: Companion tests:
+// COM:   hotswap-cvt-pk-fp8.s  — base pack conversion (no modifiers)
+// COM:   hotswap-cvt-sr-fp8.s  — base SR conversion (no modifiers)
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -22,10 +23,16 @@
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
-// COM: =======================================================================
-// COM:  v_cvt_pk_fp8_f32 — NEG on src0 only
-// COM: =======================================================================
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NEG0 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=ABS1 %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NEGABS %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR_NEG %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR_ABS %s
+
+// ---- Kernel 1: v_cvt_pk_fp8_f32, NEG on src0 only ----------------------------
+//
+// COM: NEG[0]=1 on src0 (v1). The patch must forward the neg modifier to
+// COM: v_max_num_f32 VOP3. NaN detection uses bare v1 (modifier-agnostic).
 
 // NEG0-LABEL: <test_cvt_pk_fp8_neg_src0>:
 // NEG0:       s_branch
@@ -47,10 +54,25 @@
 // COM: --- VCC restore ---
 // NEG0-NEXT:  s_mov_b32
 
-// COM: =======================================================================
-// COM:  v_cvt_pk_fp8_f32 — ABS on src1 only
-// COM: =======================================================================
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=ABS1 %s
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+.globl test_cvt_pk_fp8_neg_src0
+.p2align 8
+.type test_cvt_pk_fp8_neg_src0,@function
+test_cvt_pk_fp8_neg_src0:
+  // v_cvt_pk_fp8_f32 v0, -v1, v2 clamp
+  // dword0 = 0xD7698000 (CLAMP=1 bit15, vdst=v0)
+  // dword1 = 0x22020501 (NEG[0]=1 bit29, src0=v1, src1=v2, src2=0x80)
+  .long 0xD7698000
+  .long 0x22020501
+  s_endpgm
+.Ltest_cvt_pk_fp8_neg_src0_end:
+.size test_cvt_pk_fp8_neg_src0, .Ltest_cvt_pk_fp8_neg_src0_end-test_cvt_pk_fp8_neg_src0
+
+// ---- Kernel 2: v_cvt_pk_fp8_f32, ABS on src1 only ----------------------------
+//
+// COM: ABS[1]=1 on src1 (v5). The patch must forward the abs modifier to the
+// COM: src1 conversion path.
 
 // ABS1-LABEL: <test_cvt_pk_fp8_abs_src1>:
 // ABS1:       s_branch
@@ -70,10 +92,23 @@
 // COM: --- VCC restore ---
 // ABS1-NEXT:  s_mov_b32
 
-// COM: =======================================================================
-// COM:  v_cvt_pk_fp8_f32 — NEG+ABS on src0, NEG on src1
-// COM: =======================================================================
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=NEGABS %s
+.globl test_cvt_pk_fp8_abs_src1
+.p2align 8
+.type test_cvt_pk_fp8_abs_src1,@function
+test_cvt_pk_fp8_abs_src1:
+  // v_cvt_pk_fp8_f32 v3, v4, |v5| clamp
+  // dword0 = 0xD7698203 (ABS[1]=1 bit9, CLAMP=1 bit15, vdst=v3)
+  // dword1 = 0x02020B04 (src0=v4, src1=v5, src2=0x80, no NEG)
+  .long 0xD7698203
+  .long 0x02020B04
+  s_endpgm
+.Ltest_cvt_pk_fp8_abs_src1_end:
+.size test_cvt_pk_fp8_abs_src1, .Ltest_cvt_pk_fp8_abs_src1_end-test_cvt_pk_fp8_abs_src1
+
+// ---- Kernel 3: v_cvt_pk_fp8_f32, NEG+ABS on src0, NEG on src1 ----------------
+//
+// COM: Both sources have modifiers: -|v7| on src0 (NEG[0]+ABS[0]),
+// COM: -v8 on src1 (NEG[1]). Tests simultaneous modifier forwarding.
 
 // NEGABS-LABEL: <test_cvt_pk_fp8_negabs_both>:
 // NEGABS:       s_branch
@@ -93,10 +128,24 @@
 // COM: --- VCC restore ---
 // NEGABS-NEXT:  s_mov_b32
 
-// COM: =======================================================================
-// COM:  v_cvt_sr_fp8_f32 — NEG on src0
-// COM: =======================================================================
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR_NEG %s
+.globl test_cvt_pk_fp8_negabs_both
+.p2align 8
+.type test_cvt_pk_fp8_negabs_both,@function
+test_cvt_pk_fp8_negabs_both:
+  // v_cvt_pk_fp8_f32 v6, -|v7|, -v8 clamp
+  // dword0 = 0xD7698106 (ABS[0]=1 bit8, CLAMP=1 bit15, vdst=v6)
+  // dword1 = 0x62021107 (NEG[1]=1 bit30, NEG[0]=1 bit29, src0=v7, src1=v8, src2=0x80)
+  .long 0xD7698106
+  .long 0x62021107
+  s_endpgm
+.Ltest_cvt_pk_fp8_negabs_both_end:
+.size test_cvt_pk_fp8_negabs_both, .Ltest_cvt_pk_fp8_negabs_both_end-test_cvt_pk_fp8_negabs_both
+
+// ---- Kernel 4: v_cvt_sr_fp8_f32, NEG on src0 ---------------------------------
+//
+// COM: NEG[0]=1 on src0 (v11). Only src0 supports modifiers (src1 is U32).
+// COM: The patch must forward neg to v_max_num_f32. Noise injection uses
+// COM: v12 as the stochastic seed.
 
 // SR_NEG-LABEL: <test_cvt_sr_fp8_neg_src0>:
 // SR_NEG:       s_branch
@@ -115,10 +164,22 @@
 // COM: --- VCC restore ---
 // SR_NEG-NEXT:  s_mov_b32
 
-// COM: =======================================================================
-// COM:  v_cvt_sr_fp8_f32 — ABS on src0
-// COM: =======================================================================
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SR_ABS %s
+.globl test_cvt_sr_fp8_neg_src0
+.p2align 8
+.type test_cvt_sr_fp8_neg_src0,@function
+test_cvt_sr_fp8_neg_src0:
+  // v_cvt_sr_fp8_f32 v10, -v11, v12 clamp
+  // dword0 = 0xD76B800A (CLAMP=1 bit15, vdst=v10)
+  // dword1 = 0x2202190B (NEG[0]=1 bit29, src0=v11, src1=v12, src2=0x80)
+  .long 0xD76B800A
+  .long 0x2202190B
+  s_endpgm
+.Ltest_cvt_sr_fp8_neg_src0_end:
+.size test_cvt_sr_fp8_neg_src0, .Ltest_cvt_sr_fp8_neg_src0_end-test_cvt_sr_fp8_neg_src0
+
+// ---- Kernel 5: v_cvt_sr_fp8_f32, ABS on src0 ---------------------------------
+//
+// COM: ABS[0]=1 on src0 (v14). Tests abs modifier forwarding for the SR path.
 
 // SR_ABS-LABEL: <test_cvt_sr_fp8_abs_src0>:
 // SR_ABS:       s_branch
@@ -136,66 +197,6 @@
 // COM: --- VCC restore ---
 // SR_ABS-NEXT:  s_mov_b32
 
-.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
-.text
-
-// --- Kernel 1: v_cvt_pk_fp8_f32, NEG on src0 ---
-.globl test_cvt_pk_fp8_neg_src0
-.p2align 8
-.type test_cvt_pk_fp8_neg_src0,@function
-test_cvt_pk_fp8_neg_src0:
-  // v_cvt_pk_fp8_f32 v0, -v1, v2 clamp
-  // dword0 = 0xD7698000 (CLAMP=1 bit15, vdst=v0)
-  // dword1 = 0x22020501 (NEG[0]=1 bit29, src0=v1, src1=v2, src2=0x80)
-  .long 0xD7698000
-  .long 0x22020501
-  s_endpgm
-.Ltest_cvt_pk_fp8_neg_src0_end:
-.size test_cvt_pk_fp8_neg_src0, .Ltest_cvt_pk_fp8_neg_src0_end-test_cvt_pk_fp8_neg_src0
-
-// --- Kernel 2: v_cvt_pk_fp8_f32, ABS on src1 ---
-.globl test_cvt_pk_fp8_abs_src1
-.p2align 8
-.type test_cvt_pk_fp8_abs_src1,@function
-test_cvt_pk_fp8_abs_src1:
-  // v_cvt_pk_fp8_f32 v3, v4, |v5| clamp
-  // dword0 = 0xD7698203 (ABS[1]=1 bit9, CLAMP=1 bit15, vdst=v3)
-  // dword1 = 0x02020B04 (src0=v4, src1=v5, src2=0x80, no NEG)
-  .long 0xD7698203
-  .long 0x02020B04
-  s_endpgm
-.Ltest_cvt_pk_fp8_abs_src1_end:
-.size test_cvt_pk_fp8_abs_src1, .Ltest_cvt_pk_fp8_abs_src1_end-test_cvt_pk_fp8_abs_src1
-
-// --- Kernel 3: v_cvt_pk_fp8_f32, NEG+ABS on src0, NEG on src1 ---
-.globl test_cvt_pk_fp8_negabs_both
-.p2align 8
-.type test_cvt_pk_fp8_negabs_both,@function
-test_cvt_pk_fp8_negabs_both:
-  // v_cvt_pk_fp8_f32 v6, -|v7|, -v8 clamp
-  // dword0 = 0xD7698106 (ABS[0]=1 bit8, CLAMP=1 bit15, vdst=v6)
-  // dword1 = 0x62021107 (NEG[1]=1 bit30, NEG[0]=1 bit29, src0=v7, src1=v8, src2=0x80)
-  .long 0xD7698106
-  .long 0x62021107
-  s_endpgm
-.Ltest_cvt_pk_fp8_negabs_both_end:
-.size test_cvt_pk_fp8_negabs_both, .Ltest_cvt_pk_fp8_negabs_both_end-test_cvt_pk_fp8_negabs_both
-
-// --- Kernel 4: v_cvt_sr_fp8_f32, NEG on src0 ---
-.globl test_cvt_sr_fp8_neg_src0
-.p2align 8
-.type test_cvt_sr_fp8_neg_src0,@function
-test_cvt_sr_fp8_neg_src0:
-  // v_cvt_sr_fp8_f32 v10, -v11, v12 clamp
-  // dword0 = 0xD76B800A (CLAMP=1 bit15, vdst=v10)
-  // dword1 = 0x2202190B (NEG[0]=1 bit29, src0=v11, src1=v12, src2=0x80)
-  .long 0xD76B800A
-  .long 0x2202190B
-  s_endpgm
-.Ltest_cvt_sr_fp8_neg_src0_end:
-.size test_cvt_sr_fp8_neg_src0, .Ltest_cvt_sr_fp8_neg_src0_end-test_cvt_sr_fp8_neg_src0
-
-// --- Kernel 5: v_cvt_sr_fp8_f32, ABS on src0 ---
 .globl test_cvt_sr_fp8_abs_src0
 .p2align 8
 .type test_cvt_sr_fp8_abs_src0,@function

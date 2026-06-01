@@ -3,10 +3,10 @@
 // COM: Exercises: stacking of multiple trampolines, cross-instruction-type
 // COM: coexistence, overlapping src/dst registers.
 // COM:
-// COM: Companion tests for individual instruction types:
-// COM:   hotswap-cvt-pk-fp8.s   — v_cvt_pk_fp8_f32  (pack F32→E5M3)
-// COM:   hotswap-cvt-sr-fp8.s   — v_cvt_sr_fp8_f32  (stochastic round F32→E5M3)
-// COM:   hotswap-cvt-f32-fp8.s  — v_cvt_f32_fp8     (unpack E5M3→F32)
+// COM: Companion tests:
+// COM:   hotswap-cvt-pk-fp8.s   — v_cvt_pk_fp8_f32  (pack F32->E5M3)
+// COM:   hotswap-cvt-sr-fp8.s   — v_cvt_sr_fp8_f32  (stochastic round F32->E5M3)
+// COM:   hotswap-cvt-f32-fp8.s  — v_cvt_f32_fp8     (unpack E5M3->F32)
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -17,11 +17,15 @@
 // API: REWRITE: SUCCESS
 // API: IDEMPOTENT: YES
 
-// COM: -----------------------------------------------------------------------
-// COM: SAME: Two v_cvt_pk_fp8_f32 clamp sites in one kernel.
-// COM: Both must be replaced by s_branch, and both trampolines must appear.
-// COM: -----------------------------------------------------------------------
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=SAME %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=MIXED %s
+// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=OVERLAP %s
+
+// ---- Kernel 1: two v_cvt_pk_fp8_f32 clamp sites (same type) ------------------
+//
+// COM: Both pk instructions must be replaced by s_branch, and both trampolines
+// COM: must appear in the output. Tests trampoline stacking for identical
+// COM: instruction types.
 
 // SAME-LABEL: <test_multi_fp8_same>:
 // SAME-NOT:   v_cvt_pk_fp8_f32
@@ -38,11 +42,24 @@
 // SAME:       v_lshl_or_b32
 // SAME-NEXT:  v_bfi_b32 v4,
 
-// COM: -----------------------------------------------------------------------
-// COM: MIXED: All three FP8 instruction types in one kernel.
-// COM: Each gets its own s_branch + trampoline with a distinct signature.
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=MIXED %s
+.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
+.text
+.globl test_multi_fp8_same
+.p2align 8
+.type test_multi_fp8_same,@function
+test_multi_fp8_same:
+  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
+  v_mov_b32 v3, 0
+  v_cvt_pk_fp8_f32 v4, v5, v6 clamp
+  s_endpgm
+.Ltest_multi_fp8_same_end:
+.size test_multi_fp8_same, .Ltest_multi_fp8_same_end-test_multi_fp8_same
+
+// ---- Kernel 2: all three FP8 types in one kernel (mixed) ---------------------
+//
+// COM: Each instruction type gets its own s_branch + trampoline with a distinct
+// COM: signature: pk uses v_lshl_or_b32, sr uses v_lshrrev_b32 12 for noise
+// COM: injection, unpack uses v_or_b32 0x47800000 for exp-31 construction.
 
 // MIXED-LABEL: <test_multi_fp8_mixed>:
 // MIXED-NOT:  v_cvt_pk_fp8_f32
@@ -64,35 +81,6 @@
 // MIXED:      v_or_b32{{.*}}0x47800000
 // MIXED:      v_cvt_f32_f16
 
-// COM: -----------------------------------------------------------------------
-// COM: OVERLAP: v_cvt_pk_fp8_f32 where vdst==src0 (v0, v0, v1).
-// COM: Verifies the patch is not skipped due to overlapping registers.
-// COM: -----------------------------------------------------------------------
-// RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=OVERLAP %s
-
-// OVERLAP-LABEL: <test_multi_fp8_overlap>:
-// OVERLAP-NOT:   v_cvt_pk_fp8_f32
-// OVERLAP:       s_branch
-// COM: Trampoline applied despite vdst==src0 overlap
-// OVERLAP:       v_and_b32{{.*}}0x7fffffff, v0
-// OVERLAP:       v_bfi_b32 v0,
-
-.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
-.text
-
-// --- Kernel 1: two v_cvt_pk_fp8_f32 clamp sites (SAME type) ---
-.globl test_multi_fp8_same
-.p2align 8
-.type test_multi_fp8_same,@function
-test_multi_fp8_same:
-  v_cvt_pk_fp8_f32 v0, v1, v2 clamp
-  v_mov_b32 v3, 0
-  v_cvt_pk_fp8_f32 v4, v5, v6 clamp
-  s_endpgm
-.Ltest_multi_fp8_same_end:
-.size test_multi_fp8_same, .Ltest_multi_fp8_same_end-test_multi_fp8_same
-
-// --- Kernel 2: all three FP8 types (MIXED) ---
 .globl test_multi_fp8_mixed
 .p2align 8
 .type test_multi_fp8_mixed,@function
@@ -106,7 +94,18 @@ test_multi_fp8_mixed:
 .Ltest_multi_fp8_mixed_end:
 .size test_multi_fp8_mixed, .Ltest_multi_fp8_mixed_end-test_multi_fp8_mixed
 
-// --- Kernel 3: overlapping src/dst (OVERLAP) ---
+// ---- Kernel 3: overlapping src/dst registers (vdst==src0) --------------------
+//
+// COM: v_cvt_pk_fp8_f32 v0, v0, v1 — vdst overlaps src0. Verifies the patch
+// COM: is not skipped due to register overlap.
+
+// OVERLAP-LABEL: <test_multi_fp8_overlap>:
+// OVERLAP-NOT:   v_cvt_pk_fp8_f32
+// OVERLAP:       s_branch
+// COM: --- Trampoline applied despite vdst==src0 overlap ---
+// OVERLAP:       v_and_b32{{.*}}0x7fffffff, v0
+// OVERLAP:       v_bfi_b32 v0,
+
 .globl test_multi_fp8_overlap
 .p2align 8
 .type test_multi_fp8_overlap,@function
