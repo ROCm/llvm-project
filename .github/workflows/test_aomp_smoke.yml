@@ -85,8 +85,16 @@ jobs:
     steps:
       - name: Fix Python shared library
         run: |
-           echo "=== Finding libpython ==="
-           find / -name "libpython3*" 2>/dev/null
+           echo "=== Search for .so files ==="
+           find / -name "libpython3.12*.so*" 2>/dev/null || echo "no .so files"
+           find / -name "libpython3*.so*" 2>/dev/null || echo "no libpython3 .so"
+    
+           echo "=== Check static lib ==="
+           find / -name "libpython3.12*.a" 2>/dev/null || echo "no static lib"
+    
+           echo "=== Check python3 binary ==="
+           file $(which python3) 2>/dev/null
+           readelf -d $(which python3) 2>/dev/null | grep NEEDED || echo "readelf failed"
 
            echo "=== Finding python3 ==="
            find / -name "python3*" -type f 2>/dev/null | head -20
