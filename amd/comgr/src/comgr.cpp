@@ -249,7 +249,7 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
 
 
   if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
-    IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
+      IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
     // Features not supported for SPIR-V
     if (!Ident.Features.empty())
       return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
