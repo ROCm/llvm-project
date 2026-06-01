@@ -85,33 +85,9 @@ jobs:
     steps:
       - name: Fix Python shared library
         run: |
-           echo "=== Search for .so files ==="
-           find / -name "libpython3.12*.so*" 2>/dev/null || echo "no .so files"
-           find / -name "libpython3*.so*" 2>/dev/null || echo "no libpython3 .so"
-    
-           echo "=== Check static lib ==="
-           find / -name "libpython3.12*.a" 2>/dev/null || echo "no static lib"
-    
-           echo "=== Check python3 binary ==="
-           file $(which python3) 2>/dev/null
-           readelf -d $(which python3) 2>/dev/null | grep NEEDED || echo "readelf failed"
-
-           echo "=== Finding python3 ==="
-           find / -name "python3*" -type f 2>/dev/null | head -20
-
-           echo "=== Checking common locations ==="
-           ls -la /usr/lib/x86_64-linux-gnu/libpython* 2>/dev/null || echo "not in /usr/lib/x86_64-linux-gnu"
-           ls -la /usr/local/lib/libpython* 2>/dev/null || echo "not in /usr/local/lib"
-           ls -la /usr/lib/python3*/config-*/libpython* 2>/dev/null || echo "not in config dir"
-
-           echo "=== ldd on python3 ==="
-           ldd $(which python3) 2>&1 || echo "ldd failed"
-
-           echo "=== dpkg python packages ==="
-           dpkg -l 2>/dev/null | grep -i python || echo "dpkg failed"
-
-           echo "=== Current LD_LIBRARY_PATH ==="
-           echo $LD_LIBRARY_PATH
+           echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+           export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+           python3 --version
 
       - name: "Fetch 'build_tools' from repository"
         if: ${{ runner.os == 'Windows' }}
