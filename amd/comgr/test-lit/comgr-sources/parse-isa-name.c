@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
   const char *reason = "";
 
   if (argc != 3) {
-    fail(stderr, "Usage: parse-isa-name <isa-name> <expected-status>");
+    fail("Usage: parse-isa-name <isa-name> <expected-status>");
   }
   amd_comgr_(create_action_info(&DataAction));
   Status = amd_comgr_action_info_set_isa_name(DataAction, argv[1]);
