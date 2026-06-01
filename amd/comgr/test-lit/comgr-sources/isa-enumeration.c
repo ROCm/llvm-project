@@ -9,8 +9,6 @@
 #include "amd_comgr.h"
 #include "common.h"
 
-#define MAX_ISA_NAME_SIZE 1024
-
 int main(int argc, char *argv[]) {
   size_t IsaCount;
   amd_comgr_(get_isa_count(&IsaCount));
@@ -18,10 +16,11 @@ int main(int argc, char *argv[]) {
     fail("ISA Count: %zu", IsaCount);
   for (size_t i = 0; i < IsaCount; i++) {
     const char *Name;
-    char IsaName[MAX_ISA_NAME_SIZE];
+    //char IsaName[MAX_ISA_NAME_SIZE];
     amd_comgr_(get_isa_name(i, &Name));
-    strncpy(IsaName, Name, MAX_ISA_NAME_SIZE);
-    printf("%s\n", IsaName);
+    //strncpy(IsaName, Name, MAX_ISA_NAME_SIZE);
+    //printf("%s\n", IsaName);
+    printf("%s\n", Name);
   }
   return 0;
 }
