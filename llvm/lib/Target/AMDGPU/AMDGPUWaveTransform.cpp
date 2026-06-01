@@ -2374,6 +2374,96 @@ static void fixMissingDominatingDefs(MachineFunction &MF,
   }
 }
 
+// Fix physical-register liveness after structurization routes a live-out value
+// through a block whose regmask clobbers it without redefining it.
+//
+// Scan blocks affected by changed live-ins and add IMPLICIT_DEFs for registers
+// that are still demanded by successors but would be dropped by the regmask
+// clobber during live-in recomputation.
+static bool fixRegMaskClobberedPhysRegLiveness(
+    MachineFunction &MF, const TargetInstrInfo &TII,
+    const SmallPtrSetImpl<MachineBasicBlock *> &ChangedLiveIns) {
+  if (ChangedLiveIns.empty())
+    return false;
+
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+  bool Changed = false;
+
+  // Only blocks on the changed live-in boundary can expose a new clobber.
+  SmallPtrSet<MachineBasicBlock *, 16> Candidates;
+  for (MachineBasicBlock *MBB : ChangedLiveIns) {
+    Candidates.insert(MBB);
+    for (MachineBasicBlock *Pred : MBB->predecessors())
+      Candidates.insert(Pred);
+  }
+
+  SmallDenseSet<MCPhysReg, 8> RegsWithLivenessGap;
+  SmallVector<MCPhysReg, 8> SortedRegs;
+  for (MachineBasicBlock *MBB : Candidates) {
+    // Stop the backward walk at the first regmask; blocks without one cannot
+    // clobber live-out physical registers this way.
+    MachineInstr *FirstRegMaskMO = nullptr;
+    for (MachineInstr &MI : *MBB) {
+      if (any_of(MI.operands(),
+                 [](const MachineOperand &MO) { return MO.isRegMask(); })) {
+        FirstRegMaskMO = &MI;
+        break;
+      }
+    }
+    if (!FirstRegMaskMO)
+      continue;
+
+    LivePhysRegs LiveRegs(TRI);
+    LiveRegs.addLiveOutsNoPristines(*MBB);
+    if (LiveRegs.empty())
+      continue;
+
+    RegsWithLivenessGap.clear();
+    for (MachineInstr &MI : reverse(*MBB)) {
+      for (const MachineOperand &MO : MI.operands()) {
+        if (!MO.isRegMask())
+          continue;
+        // A clobbered live-out register needs a covering def below the regmask.
+        // Skip reserved registers.
+        for (MCPhysReg Reg : LiveRegs) {
+          if (MRI.isReserved(Reg))
+            continue;
+          if (MO.clobbersPhysReg(Reg) && !MI.definesRegister(Reg, &TRI))
+            RegsWithLivenessGap.insert(Reg);
+        }
+      }
+      // Instructions above the first regmask cannot expose this clobber.
+      if (&MI == FirstRegMaskMO)
+        break;
+      LiveRegs.stepBackward(MI);
+    }
+
+    if (RegsWithLivenessGap.empty())
+      continue;
+
+    // Remove any sub-regs already covered by a super-register in the gap.
+    for (MCPhysReg Reg : RegsWithLivenessGap) {
+      if (any_of(TRI.superregs(Reg),
+                 [&](MCPhysReg Super) { return RegsWithLivenessGap.contains(Super); }))
+        RegsWithLivenessGap.erase(Reg);
+    }
+
+    // Insert in a deterministic (register-number) order for stable output.
+    SortedRegs.assign(RegsWithLivenessGap.begin(), RegsWithLivenessGap.end());
+    llvm::sort(SortedRegs);
+
+    MachineBasicBlock::iterator InsertPt = MBB->getFirstTerminator();
+    DebugLoc DL = MBB->findDebugLoc(InsertPt);
+    for (MCPhysReg Reg : SortedRegs) {
+      BuildMI(*MBB, InsertPt, DL, TII.get(TargetOpcode::IMPLICIT_DEF), Reg);
+      Changed = true;
+    }
+  }
+
+  return Changed;
+}
+
 namespace {
 
 // Abstract value tracked per register: either a known-zero constant
@@ -2773,12 +2863,26 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   // ConvergenceInfo.clear();
   DomTree = nullptr;
 
-  // Recompute LiveIns for all blocks.
+  // Recompute LiveIns and record blocks whose live-ins are affected by structuralization.
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   SmallVector<MachineBasicBlock *, 16> PostOrder;
   for (auto MBB : reverse(RPOT))
     PostOrder.push_back(MBB);
-  fullyRecomputeLiveIns(PostOrder);
+
+  SmallPtrSet<MachineBasicBlock *, 16> ChangedLiveIns;
+  bool LiveInChanged;
+  do {
+    LiveInChanged = false;
+    for (MachineBasicBlock *MBB : PostOrder) {
+      if (recomputeLiveIns(*MBB)) {
+        ChangedLiveIns.insert(MBB);
+        LiveInChanged = true;
+      }
+    }
+  } while (LiveInChanged);
+
+  // Repair live-out physical registers clobbered by regmasks on rewired paths.
+  fixRegMaskClobberedPhysRegLiveness(MF, *TII, ChangedLiveIns);
 
   MFI->setWaveCFG(true);
 
