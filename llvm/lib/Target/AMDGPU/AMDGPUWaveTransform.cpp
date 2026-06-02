@@ -2401,8 +2401,9 @@ static bool fixRegMaskClobberedPhysRegLiveness(
   SmallDenseSet<MCPhysReg, 8> RegsWithLivenessGap;
   SmallVector<MCPhysReg, 8> SortedRegs;
   for (MachineBasicBlock *MBB : Candidates) {
-    // Stop the backward walk at the first regmask; blocks without one cannot
-    // clobber live-out physical registers this way.
+    // Locate the first MI with a regmask operand in MBB via forward walk.
+    // So, later during backward traversl during liveness computation, it can
+    // stop once it reaches this MI.
     MachineInstr *FirstRegMaskMO = nullptr;
     for (MachineInstr &MI : *MBB) {
       if (any_of(MI.operands(),
@@ -2455,8 +2456,9 @@ static bool fixRegMaskClobberedPhysRegLiveness(
 
     MachineBasicBlock::iterator InsertPt = MBB->getFirstTerminator();
     DebugLoc DL = MBB->findDebugLoc(InsertPt);
+    const MCInstrDesc &ImplDefInstr = TII.get(TargetOpcode::IMPLICIT_DEF);
     for (MCPhysReg Reg : SortedRegs) {
-      BuildMI(*MBB, InsertPt, DL, TII.get(TargetOpcode::IMPLICIT_DEF), Reg);
+      BuildMI(*MBB, InsertPt, DL, ImplDefInstr, Reg);
       Changed = true;
     }
   }
@@ -2863,7 +2865,8 @@ bool AMDGPUWaveTransform::runOnMachineFunction(MachineFunction &MF) {
   // ConvergenceInfo.clear();
   DomTree = nullptr;
 
-  // Recompute LiveIns and record blocks whose live-ins are affected by structuralization.
+  // Recompute LiveIns and record blocks whose live-ins are affected by CFG
+  // rewiring.
   ReversePostOrderTraversal<MachineFunction *> RPOT(&MF);
   SmallVector<MachineBasicBlock *, 16> PostOrder;
   for (auto MBB : reverse(RPOT))
