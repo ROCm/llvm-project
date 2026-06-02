@@ -426,6 +426,102 @@ To specify an alternate directory for raw profiles, use
 ``-DLLVM_PROFILE_DATA_DIR``. To change the size of the profile merge pool, use
 ``-DLLVM_PROFILE_MERGE_POOL_SIZE``.
 
+HIP / AMDGPU device code coverage
+=================================
+
+Source-based coverage works for HIP device code (GPU kernels) in addition to
+host code. Device counters live in GPU memory inside separately-compiled code
+objects, so an extra device-side profile runtime
+(``libclang_rt.profile-amdgcn.a``) is required, and the device counters are
+written out as their own ``.profraw`` files at process exit.
+
+Building the device profile runtime
+------------------------------------
+
+The device runtime is a ``compiler-rt`` build cross-compiled to
+``amdgcn-amd-amdhsa`` **using the just-built host clang** (the device runtime
+and the instrumentation the compiler emits share a versioned ABI, so they must
+come from the same toolchain). Configure ``compiler-rt`` standalone with the
+profile library enabled for the ROCm/AMDGPU target:
+
+.. code-block:: console
+
+    # $STAGE1 is the bin/ dir of a clang+lld build you have already produced
+    % cmake -G Ninja -S compiler-rt -B build-amdgcn-rt \
+        -DCMAKE_C_COMPILER="$STAGE1/clang" \
+        -DCMAKE_CXX_COMPILER="$STAGE1/clang++" \
+        -DCMAKE_C_COMPILER_TARGET=amdgcn-amd-amdhsa \
+        -DCMAKE_CXX_COMPILER_TARGET=amdgcn-amd-amdhsa \
+        -DLLVM_CONFIG_PATH="$STAGE1/llvm-config" \
+        -DCOMPILER_RT_DEFAULT_TARGET_ARCH=amdgcn \
+        -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+        -DCOMPILER_RT_BUILD_PROFILE=ON \
+        -DCOMPILER_RT_BUILD_PROFILE_ROCM=ON \
+        -DCOMPILER_RT_BUILD_BUILTINS=OFF \
+        -DCOMPILER_RT_BUILD_SANITIZERS=OFF
+    % ninja -C build-amdgcn-rt
+
+Then install the resulting archive into the host clang's resource directory so
+the driver can find it automatically:
+
+.. code-block:: console
+
+    % cp build-amdgcn-rt/lib/linux/libclang_rt.profile-amdgcn.a \
+         "$($STAGE1/clang -print-resource-dir)/lib/linux/"
+
+Compiling, running, and reporting
+---------------------------------
+
+Compile HIP code with the usual coverage flags. For a HIP translation unit the
+driver links both the host and device profile runtimes automatically:
+
+.. code-block:: console
+
+    % clang -x hip --offload-arch=gfx90a -fno-gpu-rdc \
+        -fprofile-instr-generate -fcoverage-mapping \
+        -o myapp my_kernel.hip -lamdhip64
+
+At process exit a library constructor in the host profile runtime installs an
+``atexit`` handler that walks every loaded HSA code object on every GPU agent,
+copies the device counters back to the host, and writes them out. A run
+produces:
+
+* ``<name>.<pid>.profraw`` — host counters (from ``LLVM_PROFILE_FILE``).
+* ``gfx<arch>.<name>.<pid>.profraw`` — device counters, arch-prefixed, one per
+  loaded code object.
+
+Merge and report as usual, but note that the **device** report must be rendered
+against the device ELF (which carries the device coverage map), not the host
+executable:
+
+.. code-block:: console
+
+    % llvm-profdata merge gfx*.profraw -o device.profdata
+    % llvm-cov report ./my_kernel.amdgcn.elf -instr-profile=device.profdata
+
+Hosts that are not compiled as HIP
+----------------------------------
+
+The driver only force-links the device drain for HIP host links (``-x hip``, or
+a ``.hip`` / ``.cu`` input). A plain C++ host that loads device code at runtime
+(``hipModuleLoad`` / ``hsa_executable_*``) must force-link the drain object out
+of the static archive manually:
+
+.. code-block:: console
+
+    % clang -fprofile-instr-generate -fcoverage-mapping \
+        -Wl,-u,__llvm_profile_hip_collect_device_data \
+        -o host_app host.cc -lamdhip64
+
+Device-side limitations
+-----------------------
+
+* The device drain runs only at ``atexit``; device counters are lost if the
+  process is terminated by a fatal signal (e.g. ``abort()``) or if a code
+  object is unloaded mid-run.
+* Coverage is collected per loaded code object across all GPU agents; an
+  uninstrumented host is fine, but counters are only flushed at a clean exit.
+
 Drawbacks and limitations
 =========================
 
