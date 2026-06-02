@@ -6668,8 +6668,21 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
         C.getArgs()
             .getLastArg(options::OPT__SLASH_Fo, options::OPT__SLASH_o)
             ->getValue();
-    NamedOutput =
-        MakeCLOutputFilename(C.getArgs(), Val, BaseName, JA.getType());
+    SmallString<128> Filename(
+        MakeCLOutputFilename(C.getArgs(), Val, BaseName, JA.getType()));
+    // When compiling for multiple GPU architectures, each arch produces a
+    // separate object. Append the arch suffix to avoid all arches writing to
+    // the same filename and overwriting each other.
+    // HIP offload uses getOffloadingArch(); CUDA/other uses BoundArch.
+    const char *OffloadArch = JA.getOffloadingArch();
+    StringRef ArchSuffix = OffloadArch ? StringRef(OffloadArch) : BoundArch;
+    if (MultipleArchs && !ArchSuffix.empty()) {
+      llvm::sys::path::replace_extension(Filename, "");
+      Filename += "-";
+      Filename += ArchSuffix;
+      Filename += ".obj";
+    }
+    NamedOutput = C.getArgs().MakeArgString(Filename);
   } else if (JA.getType() == types::TY_Image &&
              C.getArgs().hasArg(options::OPT__SLASH_Fe,
                                 options::OPT__SLASH_o)) {
