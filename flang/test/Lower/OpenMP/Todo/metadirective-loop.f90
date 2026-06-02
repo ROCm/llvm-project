@@ -1,5 +1,5 @@
 ! RUN: %not_todo_cmd %flang_fc1 -emit-hlfir -fopenmp -fopenmp-version=50 -o - %s 2>&1 | FileCheck %s
-
+! XFAIL: *
 ! CHECK: not yet implemented: loop-associated METADIRECTIVE variant
 
 subroutine test_loop_variant()

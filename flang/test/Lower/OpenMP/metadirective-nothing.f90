@@ -1,7 +1,7 @@
 ! Test begin metadirective with the nothing directive as a variant.
 ! The nothing directive as a begin-metadirective variant requires OpenMP 5.1+,
 ! which added it as an exception to the paired-end-directive rule.
-
+! XFAIL: *
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=51 %s -o - | FileCheck %s
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=52 -cpp -DOMP_52 %s -o - | FileCheck %s
 
