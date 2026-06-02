@@ -276,6 +276,10 @@ void Flang::addCodegenOptions(const ArgList &Args,
        options::OPT_ftime_report, options::OPT_ftime_report_EQ,
        options::OPT_funroll_loops, options::OPT_fno_unroll_loops,
        options::OPT_fdefer_desc_map, options::OPT_fno_defer_desc_map});
+
+  const llvm::Triple &Triple = getToolChain().getEffectiveTriple();
+  addSeparateSectionFlags(Triple, Args, CmdArgs);
+
   if (Args.hasArg(options::OPT_fcoarray))
     CmdArgs.push_back("-fcoarray");
 }
