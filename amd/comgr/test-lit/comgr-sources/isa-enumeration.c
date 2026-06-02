@@ -21,6 +21,7 @@ int main(int argc, char *argv[]) {
     amd_comgr_(get_isa_name(i, &Name));
     amd_comgr_(get_isa_metadata(Name, &Root));
     amd_comgr_(metadata_lookup(Root, "Features", &Features));
+
     if (amd_comgr_metadata_lookup(Features, "sramecc", &Val) ==
       AMD_COMGR_STATUS_SUCCESS) {
       sramecc = true;
@@ -29,7 +30,6 @@ int main(int argc, char *argv[]) {
       AMD_COMGR_STATUS_SUCCESS) {
       xnack = true;
     }
-
 
     printf("%s\n", Name);
 
@@ -46,7 +46,6 @@ int main(int argc, char *argv[]) {
       printf("%s:sramecc+:xnack-\n", Name);
       printf("%s:sramecc-:xnack+\n", Name);
       printf("%s:sramecc-:xnack-\n", Name);
-      
     }
   }
   return 0;
