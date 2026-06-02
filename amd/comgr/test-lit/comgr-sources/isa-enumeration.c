@@ -47,6 +47,9 @@ int main(int argc, char *argv[]) {
       printf("%s:sramecc-:xnack+\n", Name);
       printf("%s:sramecc-:xnack-\n", Name);
     }
+    amd_comgr_(destroy_metadata(Root);
+    amd_comgr_(destroy_metadata(Features);
+    amd_comgr_(destroy_metadata(Val);
   }
   return 0;
 }
