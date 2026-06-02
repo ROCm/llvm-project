@@ -10,22 +10,30 @@
 #include "common.h"
 
 int main(int argc, char *argv[]) {
-  char *Buf;
+  char *BufReloc, *BufExec;
   size_t Size;
   char IsaName[MAX_ISA_NAME_SIZE];
-  amd_comgr_data_t Data;
+  amd_comgr_data_t DataReloc, DataExec;
 
-  if (argc != 3)
-    fail("Usage: get-data-isa-name <code-object-path> <expected-isa-name>");
+  if (argc != 4)
+    fail("Usage: get-data-isa-name <code-object-path> <code-shared-object-path> <expected-isa-name>");
   
-  Size = setBuf(argv[1], &Buf);
+  Size = setBuf(argv[1], &BufReloc);
+  Size = setBuf(argv[2], &BufExec);
 
-  amd_comgr_(create_data(AMD_COMGR_DATA_KIND_RELOCATABLE, &Data));
-  amd_comgr_(set_data(Data, Size, Buf));
-  amd_comgr_(get_data_isa_name(Data, &Size, IsaName));
-  if (strcmp(IsaName, argv[2]))
+  amd_comgr_(create_data(AMD_COMGR_DATA_KIND_RELOCATABLE, &DataReloc));
+  amd_comgr_(create_data(AMD_COMGR_DATA_KIND_EXECUTABLE, &DataExec));
+  amd_comgr_(set_data(DataReloc, Size, BufReloc));
+  amd_comgr_(set_data(DataExec, Size, BufExec));
+  amd_comgr_(get_data_isa_name(DataReloc, &Size, IsaName));
+  if (strcmp(IsaName, argv[3]))
     fail("incorrect isa name: expected %s, saw %s", argv[2], IsaName);
-  amd_comgr_(release_data(Data));
-  free(Buf);
+  amd_comgr_(get_data_isa_name(DataExec, &Size, IsaName));
+  if (strcmp(IsaName, argv[3]))
+    fail("incorrect isa name: expected %s, saw %s", argv[2], IsaName);
+  amd_comgr_(release_data(DataReloc));
+  amd_comgr_(release_data(DataExec));
+  free(BufReloc);
+  free(BufExec);
   return 0;
 }
