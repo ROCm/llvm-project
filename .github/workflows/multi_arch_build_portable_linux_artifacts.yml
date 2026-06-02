@@ -239,6 +239,8 @@ jobs:
       - name: Temp fix for hiprtc/hipcc test (Nightly)
         if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
         run: |
+             git config --global user.email "z1-cciauto@amd.com"
+             git config --global user.name "Z1 cciauto"
              cd compiler/amd-llvm
              git fetch origin pull/2719/head:pr-2719
              git cherry-pick pr-2719
