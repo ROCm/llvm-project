@@ -479,10 +479,7 @@ TEST(HotswapPatchVTable, InstallBindsRegisteredAndLeavesUnregisteredNull) {
   EXPECT_NE(VT.applyWmmaHazardPatch, nullptr);
   EXPECT_NE(VT.applyVop3px2Src2Fix, nullptr);
   EXPECT_NE(VT.applyWmmaSplitPatches, nullptr);
-
-  // Slots without a .def entry stay null; the dispatcher relies on
-  // this to treat unimplemented pass families (scratch today) as no-op.
-  EXPECT_EQ(VT.applyScratchPatches, nullptr);
+  EXPECT_NE(VT.applyScratchPatches, nullptr);
 }
 
 TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
@@ -500,7 +497,7 @@ TEST(HotswapPatchVTable, ProcessSingletonIdentityAndEagerInstall) {
   EXPECT_NE(VT1.applyWmmaHazardPatch, nullptr);
   EXPECT_NE(VT1.applyVop3px2Src2Fix, nullptr);
   EXPECT_NE(VT1.applyWmmaSplitPatches, nullptr);
-  EXPECT_EQ(VT1.applyScratchPatches, nullptr);
+  EXPECT_NE(VT1.applyScratchPatches, nullptr);
 }
 
 // -- DS ADDTID trampoline support ---------------------------------------------
