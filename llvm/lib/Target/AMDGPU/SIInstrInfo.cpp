@@ -1649,11 +1649,14 @@ static unsigned getVGPRSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
 static unsigned getAVSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
   switch (Size) {
   case 4:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV32_CFI_SAVE : AMDGPU::SI_SPILL_AV32_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV32_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV32_SAVE;
   case 8:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV64_CFI_SAVE : AMDGPU::SI_SPILL_AV64_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV64_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV64_SAVE;
   case 12:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV96_CFI_SAVE : AMDGPU::SI_SPILL_AV96_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV96_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV96_SAVE;
   case 16:
     return NeedsCFI ? AMDGPU::SI_SPILL_AV128_CFI_SAVE
                     : AMDGPU::SI_SPILL_AV128_SAVE;
@@ -1777,8 +1780,8 @@ void SIInstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
     bool isKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
     MachineInstr::MIFlag Flags) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, VReg,
-                         Flags, false);
+  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, VReg, Flags,
+                          false);
 }
 
 void SIInstrInfo::storeRegToStackSlotCFI(MachineBasicBlock &MBB,
@@ -1786,8 +1789,8 @@ void SIInstrInfo::storeRegToStackSlotCFI(MachineBasicBlock &MBB,
                                          Register SrcReg, bool isKill,
                                          int FrameIndex,
                                          const TargetRegisterClass *RC) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC,
-                          Register(), MachineInstr::NoFlags, true);
+  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, Register(),
+                          MachineInstr::NoFlags, true);
 }
 
 static unsigned getSGPRSpillRestoreOpcode(unsigned Size) {
@@ -3530,6 +3533,35 @@ void SIInstrInfo::insertSelect(MachineBasicBlock &MBB,
 
     MIB.addReg(DstElt)
        .addImm(SubIdx);
+  }
+}
+
+bool SIInstrInfo::isXcntDrain(const MachineInstr &MI) {
+
+  if (MI.isBranch() || MI.isCall() || MI.isReturn() || MI.isIndirectBranch())
+    return true;
+
+  switch (MI.getOpcode()) {
+  case AMDGPU::S_ENDPGM:
+  case AMDGPU::S_ENDPGM_SAVED:
+  case AMDGPU::S_TRAP:
+  case AMDGPU::S_GETREG_B32:
+  case AMDGPU::S_SETREG_B32:
+  case AMDGPU::S_SETREG_B32_mode:
+  case AMDGPU::S_SETREG_IMM32_B32:
+  case AMDGPU::S_SETREG_IMM32_B32_mode:
+  case AMDGPU::S_SENDMSG:
+  case AMDGPU::S_SENDMSGHALT:
+  case AMDGPU::S_SENDMSG_RTN_B32:
+  case AMDGPU::S_SENDMSG_RTN_B64:
+  case AMDGPU::S_BARRIER_WAIT:
+  case AMDGPU::S_BARRIER_SIGNAL_M0:
+  case AMDGPU::S_BARRIER_SIGNAL_IMM:
+  case AMDGPU::S_BARRIER_SIGNAL_ISFIRST_M0:
+  case AMDGPU::S_BARRIER_SIGNAL_ISFIRST_IMM:
+    return true;
+  default:
+    return false;
   }
 }
 

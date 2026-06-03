@@ -940,8 +940,8 @@ amd_comgr_status_t AMD_COMGR_API
     return AMD_COMGR_STATUS_SUCCESS;
   }
 
-  if (StringRef(IsaName) == "spir64-amd-amdhsa--amdgcnspirv" ||
-      StringRef(IsaName )== "spir64-amd-amdhsa-unknown-amdgcnspirv") {
+  if (StringRef(IsaName) == "spirv64-amd-amdhsa--amdgcnspirv" ||
+      StringRef(IsaName) == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
     return ActionP->setIsaName(IsaName);
   }
 

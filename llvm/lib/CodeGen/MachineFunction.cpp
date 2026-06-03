@@ -357,8 +357,8 @@ MachineFunction::addFrameInst(const MCCFIInstruction &Inst) {
   return FrameInstructions.size() - 1;
 }
 
-void MachineFunction::replaceFrameInstRegister(Register FromReg,
-                                               Register ToReg) {
+void MachineFunction::replaceFrameInstRegister(MCRegister FromReg,
+                                               MCRegister ToReg) {
   const MCRegisterInfo *MCRI = Ctx.getRegisterInfo();
   unsigned DwarfFromReg = MCRI->getDwarfRegNum(FromReg, false);
   unsigned DwarfToReg = MCRI->getDwarfRegNum(ToReg, false);

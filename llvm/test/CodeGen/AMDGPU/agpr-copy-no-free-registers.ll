@@ -1140,9 +1140,9 @@ define void @no_free_vgprs_at_sgpr_to_agpr_copy(float %v0, float %v1) #0 {
 declare <16 x float> @llvm.amdgcn.mfma.f32.16x16x1f32(float, float, <16 x float>, i32 immarg, i32 immarg, i32 immarg) #1
 declare i32 @llvm.amdgcn.workitem.id.x() #2
 
-attributes #0 = { "amdgpu-waves-per-eu"="6,6" }
+attributes #0 = { "amdgpu-waves-per-eu"="6,6" nounwind }
 attributes #1 = { convergent nounwind readnone willreturn }
 attributes #2 = { nounwind readnone willreturn }
-attributes #3 = { "amdgpu-waves-per-eu"="7,7" "amdgpu-agpr-alloc"="0" }
-attributes #4 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-flat-work-group-size"="1024,1024" }
-attributes #5 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-agpr-alloc"="0" }
+attributes #3 = { "amdgpu-waves-per-eu"="7,7" "amdgpu-agpr-alloc"="0" nounwind }
+attributes #4 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-flat-work-group-size"="1024,1024" nounwind }
+attributes #5 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-agpr-alloc"="0" nounwind }

@@ -2,7 +2,7 @@
 ; RUN: llc -global-isel=1 -new-reg-bank-select -mtriple=amdgcn--amdpal -mcpu=gfx1200 -mattr=+block-vgpr-csr < %s | FileCheck -check-prefixes=CHECK,GISEL %s
 ; RUN: llc -global-isel=0 -mtriple=amdgcn--amdpal -mcpu=gfx1200 -mattr=+block-vgpr-csr < %s | FileCheck -check-prefixes=CHECK,DAGISEL %s
 
-define i32 @non_entry_func(i32 %x) {
+define i32 @non_entry_func(i32 %x) #0 {
 ; CHECK-LABEL: non_entry_func:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_wait_loadcnt_dscnt 0x0
@@ -47,7 +47,7 @@ define i32 @non_entry_func(i32 %x) {
   ret i32 %x
 }
 
-define amdgpu_kernel void @entry_func(i32 %x) {
+define amdgpu_kernel void @entry_func(i32 %x) #0 {
 ; GISEL-LABEL: entry_func:
 ; GISEL:       ; %bb.0:
 ; GISEL-NEXT:    s_mov_b64 s[10:11], s[6:7]
@@ -93,3 +93,5 @@ define amdgpu_kernel void @entry_func(i32 %x) {
   %res = call i32 @non_entry_func(i32 %x)
   ret void
 }
+
+attributes #0 = { nounwind }

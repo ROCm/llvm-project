@@ -1412,13 +1412,19 @@ static void addBypassBranch(VPlan &Plan, VPBasicBlock *CheckBlockVPBB,
   }
 }
 
+void VPlanTransforms::attachVPCheckBlock(VPlan &Plan, VPValue *Cond,
+                                         VPBasicBlock *CheckBlock,
+                                         bool AddBranchWeights) {
+  insertCheckBlockBeforeVectorLoop(Plan, CheckBlock);
+  addBypassBranch(Plan, CheckBlock, Cond, AddBranchWeights);
+}
+
 void VPlanTransforms::attachCheckBlock(VPlan &Plan, Value *Cond,
                                        BasicBlock *CheckBlock,
                                        bool AddBranchWeights) {
   VPValue *CondVPV = Plan.getOrAddLiveIn(Cond);
   VPBasicBlock *CheckBlockVPBB = Plan.createVPIRBasicBlock(CheckBlock);
-  insertCheckBlockBeforeVectorLoop(Plan, CheckBlockVPBB);
-  addBypassBranch(Plan, CheckBlockVPBB, CondVPV, AddBranchWeights);
+  attachVPCheckBlock(Plan, CondVPV, CheckBlockVPBB, AddBranchWeights);
 }
 
 void VPlanTransforms::addMinimumIterationCheck(
@@ -1472,7 +1478,8 @@ void VPlanTransforms::addMinimumIterationCheck(
       // check is known to be true, or known to be false.
       // Try to expand Step into VPInstructions in CheckBlock; otherwise fall
       // back to a VPExpandSCEV recipe in the plan's entry block.
-      VPValue *MinTripCountVPV = Builder.expandSCEV(Step, DL);
+      VPValue *MinTripCountVPV =
+          VPSCEVExpander(Builder, *PSE.getSE(), DL).tryToExpand(Step);
       if (!MinTripCountVPV)
         MinTripCountVPV = VPBuilder(Plan.getEntry()).createExpandSCEV(Step);
       TripCountCheck = Builder.createICmp(

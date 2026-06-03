@@ -2,7 +2,7 @@
 ; RUN: llc -O0 -mtriple=amdgcn- -mcpu=gfx900 -amdgpu-dpp-combine=false < %s | FileCheck -check-prefix=GFX9-O0 %s
 ; RUN: llc -mtriple=amdgcn- -mcpu=gfx900 -amdgpu-dpp-combine=false < %s | FileCheck -check-prefix=GFX9-O3 %s
 
-define amdgpu_gfx void @strict_wwm_no_cfg(ptr addrspace(8) inreg %tmp14) {
+define amdgpu_gfx void @strict_wwm_no_cfg(ptr addrspace(8) inreg %tmp14) #1 {
 ; GFX9-O0-LABEL: strict_wwm_no_cfg:
 ; GFX9-O0:       ; %bb.0:
 ; GFX9-O0-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -129,7 +129,7 @@ define amdgpu_gfx void @strict_wwm_no_cfg(ptr addrspace(8) inreg %tmp14) {
   ret void
 }
 
-define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) {
+define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) #1 {
 ; GFX9-O0-LABEL: strict_wwm_cfg:
 ; GFX9-O0:       ; %bb.0: ; %entry
 ; GFX9-O0-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -339,7 +339,7 @@ define hidden amdgpu_gfx i32 @strict_wwm_called(i32 %a) noinline {
   ret i32 %sub
 }
 
-define amdgpu_gfx void @strict_wwm_call(ptr addrspace(8) inreg %tmp14, i32 inreg %arg) {
+define amdgpu_gfx void @strict_wwm_call(ptr addrspace(8) inreg %tmp14, i32 inreg %arg) #1 {
 ; GFX9-O0-LABEL: strict_wwm_call:
 ; GFX9-O0:       ; %bb.0:
 ; GFX9-O0-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -521,7 +521,7 @@ define amdgpu_gfx i64 @strict_wwm_called_i64(i64 %a) noinline {
   ret i64 %sub
 }
 
-define amdgpu_gfx void @strict_wwm_call_i64(ptr addrspace(8) inreg %tmp14, i64 inreg %arg) {
+define amdgpu_gfx void @strict_wwm_call_i64(ptr addrspace(8) inreg %tmp14, i64 inreg %arg) #1 {
 ; GFX9-O0-LABEL: strict_wwm_call_i64:
 ; GFX9-O0:       ; %bb.0:
 ; GFX9-O0-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -707,7 +707,7 @@ define amdgpu_gfx void @strict_wwm_call_i64(ptr addrspace(8) inreg %tmp14, i64 i
   ret void
 }
 
-define amdgpu_gfx void @strict_wwm_amdgpu_cs_main(<4 x i32> inreg %desc, i32 %index) {
+define amdgpu_gfx void @strict_wwm_amdgpu_cs_main(<4 x i32> inreg %desc, i32 %index) #1 {
 ; GFX9-O0-LABEL: strict_wwm_amdgpu_cs_main:
 ; GFX9-O0:       ; %bb.0:
 ; GFX9-O0-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1244,3 +1244,4 @@ declare <2 x i32> @llvm.amdgcn.s.buffer.load.v2i32(<4 x i32>, i32, i32)
 declare <4 x i32> @llvm.amdgcn.s.buffer.load.v4i32(<4 x i32>, i32, i32)
 
 attributes #0 = { "amdgpu-waves-per-eu"="5,5" }
+attributes #1 = { nounwind }

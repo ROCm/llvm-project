@@ -8,7 +8,7 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare ptr @__kmpc_alloc_shared()
 
-define weak_odr void @test(i32 %0) !dbg !34 {
+define weak_odr void @test(i32 %0) #1 !dbg !34 {
 ; CHECK-LABEL: test:
 ; CHECK:       .Lfunc_begin0:
 ; CHECK-NEXT:    .loc 1 288 0 ; dummy:288:0
@@ -592,6 +592,7 @@ define weak_odr void @test(i32 %0) !dbg !34 {
 }
 
 attributes #0 = { nocallback nofree nosync nounwind readnone speculatable willreturn }
+attributes #1 = { nounwind }
 
 !llvm.dbg.cu = !{!0, !25, !26}
 !llvm.module.flags = !{!27, !28, !29, !30, !31, !32, !44}

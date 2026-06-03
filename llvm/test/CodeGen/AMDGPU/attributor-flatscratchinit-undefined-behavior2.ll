@@ -868,4 +868,4 @@ define amdgpu_kernel void @call_calls_intrin_ascast_cc_kernel(ptr addrspace(3) %
   ret void
 }
 
-attributes #0 = { "amdgpu-no-flat-scratch-init" }
+attributes #0 = { "amdgpu-no-flat-scratch-init" nounwind }

@@ -4509,11 +4509,19 @@ LogicalResult AtomicReadOp::verify() {
   if (verifyCommon().failed())
     return mlir::failure();
 
+  int64_t version = 50;
+  if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
+    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+      version = llvm::cast<VersionAttr>(verAttr).getVersion();
+
   if (auto mo = getMemoryOrder()) {
-    if (*mo == ClauseMemoryOrderKind::Acq_rel ||
-        *mo == ClauseMemoryOrderKind::Release) {
-      return emitError(
-          "memory-order must not be acq_rel or release for atomic reads");
+    if (*mo == ClauseMemoryOrderKind::Release) {
+      return emitError("memory-order must not be release for atomic reads");
+    }
+    if (*mo == ClauseMemoryOrderKind::Acq_rel) {
+      // acq_rel is prohibited on read only in OpenMP 5.0; allowed in 5.1+.
+      if (version < 51)
+        return emitError("memory-order must not be acq_rel for atomic reads");
     }
   }
   return verifySynchronizationHint(*this, getHint());
@@ -4527,11 +4535,19 @@ LogicalResult AtomicWriteOp::verify() {
   if (verifyCommon().failed())
     return mlir::failure();
 
+  int64_t version = 50;
+  if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
+    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+      version = llvm::cast<VersionAttr>(verAttr).getVersion();
+
   if (auto mo = getMemoryOrder()) {
-    if (*mo == ClauseMemoryOrderKind::Acq_rel ||
-        *mo == ClauseMemoryOrderKind::Acquire) {
-      return emitError(
-          "memory-order must not be acq_rel or acquire for atomic writes");
+    if (*mo == ClauseMemoryOrderKind::Acquire) {
+      return emitError("memory-order must not be acquire for atomic writes");
+    }
+    if (*mo == ClauseMemoryOrderKind::Acq_rel) {
+      // acq_rel is prohibited on write only in OpenMP 5.0; allowed in 5.1+.
+      if (version < 51)
+        return emitError("memory-order must not be acq_rel for atomic writes");
     }
   }
   return verifySynchronizationHint(*this, getHint());
@@ -4559,11 +4575,18 @@ LogicalResult AtomicUpdateOp::verify() {
   if (verifyCommon().failed())
     return mlir::failure();
 
+  int64_t version = 50;
+  if (auto moduleOp = getOperation()->getParentOfType<ModuleOp>())
+    if (Attribute verAttr = moduleOp->getAttr("omp.version"))
+      version = llvm::cast<VersionAttr>(verAttr).getVersion();
+
   if (auto mo = getMemoryOrder()) {
     if (*mo == ClauseMemoryOrderKind::Acq_rel ||
         *mo == ClauseMemoryOrderKind::Acquire) {
-      return emitError(
-          "memory-order must not be acq_rel or acquire for atomic updates");
+      // This restriction applies only to OpenMP 5.0; removed in 5.1.
+      if (version < 51)
+        return emitError(
+            "memory-order must not be acq_rel or acquire for atomic updates");
     }
   }
 

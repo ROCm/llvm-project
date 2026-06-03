@@ -9,7 +9,7 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-TRUE16 %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GFX12,GFX12-FAKE16 %s
 
-define bfloat @v_maximumnum_bf16(bfloat %x, bfloat %y) {
+define bfloat @v_maximumnum_bf16(bfloat %x, bfloat %y) #1 {
 ; GFX7-LABEL: v_maximumnum_bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -228,7 +228,7 @@ define bfloat @v_maximumnum_bf16(bfloat %x, bfloat %y) {
   ret bfloat %result
 }
 
-define bfloat @v_maximumnum_bf16_nnan(bfloat %x, bfloat %y) {
+define bfloat @v_maximumnum_bf16_nnan(bfloat %x, bfloat %y) #1 {
 ; GFX7-LABEL: v_maximumnum_bf16_nnan:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -377,7 +377,7 @@ define bfloat @v_maximumnum_bf16_nnan(bfloat %x, bfloat %y) {
   ret bfloat %result
 }
 
-define <2 x bfloat> @v_maximumnum_v2bf16(<2 x bfloat> %x, <2 x bfloat> %y) {
+define <2 x bfloat> @v_maximumnum_v2bf16(<2 x bfloat> %x, <2 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v2bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -762,7 +762,7 @@ define <2 x bfloat> @v_maximumnum_v2bf16(<2 x bfloat> %x, <2 x bfloat> %y) {
   ret <2 x bfloat> %result
 }
 
-define <2 x bfloat> @v_maximumnum_v2bf16_nnan(<2 x bfloat> %x, <2 x bfloat> %y) {
+define <2 x bfloat> @v_maximumnum_v2bf16_nnan(<2 x bfloat> %x, <2 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v2bf16_nnan:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1013,7 +1013,7 @@ define <2 x bfloat> @v_maximumnum_v2bf16_nnan(<2 x bfloat> %x, <2 x bfloat> %y) 
   ret <2 x bfloat> %result
 }
 
-define <3 x bfloat> @v_maximumnum_v3bf16(<3 x bfloat> %x, <3 x bfloat> %y) {
+define <3 x bfloat> @v_maximumnum_v3bf16(<3 x bfloat> %x, <3 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v3bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1530,7 +1530,7 @@ define <3 x bfloat> @v_maximumnum_v3bf16(<3 x bfloat> %x, <3 x bfloat> %y) {
   ret <3 x bfloat> %result
 }
 
-define <3 x bfloat> @v_maximumnum_v3bf16_nnan(<3 x bfloat> %x, <3 x bfloat> %y) {
+define <3 x bfloat> @v_maximumnum_v3bf16_nnan(<3 x bfloat> %x, <3 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v3bf16_nnan:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1868,7 +1868,7 @@ define <3 x bfloat> @v_maximumnum_v3bf16_nnan(<3 x bfloat> %x, <3 x bfloat> %y) 
   ret <3 x bfloat> %result
 }
 
-define <4 x bfloat> @v_maximumnum_v4bf16(<4 x bfloat> %x, <4 x bfloat> %y) {
+define <4 x bfloat> @v_maximumnum_v4bf16(<4 x bfloat> %x, <4 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v4bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2539,7 +2539,7 @@ define <4 x bfloat> @v_maximumnum_v4bf16(<4 x bfloat> %x, <4 x bfloat> %y) {
   ret <4 x bfloat> %result
 }
 
-define <4 x bfloat> @v_maximumnum_v4bf16_nnan(<4 x bfloat> %x, <4 x bfloat> %y) {
+define <4 x bfloat> @v_maximumnum_v4bf16_nnan(<4 x bfloat> %x, <4 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v4bf16_nnan:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -2972,7 +2972,7 @@ define <4 x bfloat> @v_maximumnum_v4bf16_nnan(<4 x bfloat> %x, <4 x bfloat> %y) 
   ret <4 x bfloat> %result
 }
 
-define <6 x bfloat> @v_maximumnum_v6bf16(<6 x bfloat> %x, <6 x bfloat> %y) {
+define <6 x bfloat> @v_maximumnum_v6bf16(<6 x bfloat> %x, <6 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v6bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -3954,7 +3954,7 @@ define <6 x bfloat> @v_maximumnum_v6bf16(<6 x bfloat> %x, <6 x bfloat> %y) {
   ret <6 x bfloat> %result
 }
 
-define <8 x bfloat> @v_maximumnum_v8bf16(<8 x bfloat> %x, <8 x bfloat> %y) {
+define <8 x bfloat> @v_maximumnum_v8bf16(<8 x bfloat> %x, <8 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v8bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -5248,7 +5248,7 @@ define <8 x bfloat> @v_maximumnum_v8bf16(<8 x bfloat> %x, <8 x bfloat> %y) {
   ret <8 x bfloat> %result
 }
 
-define <16 x bfloat> @v_maximumnum_v16bf16(<16 x bfloat> %x, <16 x bfloat> %y) {
+define <16 x bfloat> @v_maximumnum_v16bf16(<16 x bfloat> %x, <16 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v16bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -7822,7 +7822,7 @@ define <16 x bfloat> @v_maximumnum_v16bf16(<16 x bfloat> %x, <16 x bfloat> %y) {
   ret <16 x bfloat> %result
 }
 
-define <32 x bfloat> @v_maximumnum_v32bf16(<32 x bfloat> %x, <32 x bfloat> %y) {
+define <32 x bfloat> @v_maximumnum_v32bf16(<32 x bfloat> %x, <32 x bfloat> %y) #1 {
 ; GFX7-LABEL: v_maximumnum_v32bf16:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -14544,6 +14544,8 @@ define <4 x bfloat> @v_maximumnum_v4bf16_no_ieee(<4 x bfloat> %x, <4 x bfloat> %
 }
 
 attributes #0 = { "amdgpu-ieee"="false" }
+attributes #1 = { nounwind }
+
 ;; NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
 ; GFX11: {{.*}}
 ; GFX12: {{.*}}

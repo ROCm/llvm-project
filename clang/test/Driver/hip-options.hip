@@ -261,10 +261,28 @@
 // RUN:   FileCheck -check-prefix=JOBSV %s
 // JOBSV: clang-linker-wrapper{{.*}} "--wrapper-jobs=jobserver"
 
-// Check -parallel-jobs= emits deprecation warning and forwards to --wrapper-jobs.
-// RUN: %clang -### --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
-// RUN:   --offload-arch=gfx1100 --offload-new-driver -parallel-jobs=4 %s 2>&1 | \
-// RUN:   FileCheck -check-prefix=PJOBS %s
-// PJOBS: warning: argument '-parallel-jobs=4' is deprecated, use '--offload-jobs=<N>' instead
-// PJOBS: clang-linker-wrapper{{.*}} "--wrapper-jobs=4"
+// Check that -fcoverage-mapping and related flags are forwarded to the device compiler.
+
+// RUN: %clang -### -Werror --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
+// RUN:   -resource-dir=%S/Inputs/resource_dir_with_per_target_subdir \
+// RUN:   --offload-arch=gfx1100 --offload-new-driver \
+// RUN:   -fprofile-instr-generate -fcoverage-mapping %s 2>&1 | \
+// RUN:   FileCheck -check-prefix=COV %s
+// COV: clang-linker-wrapper{{.*}} "--device-compiler=amdgcn-amd-amdhsa=-fprofile-instr-generate" "--device-compiler=amdgcn-amd-amdhsa=-fcoverage-mapping"
+
+// RUN: %clang -### -Werror --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
+// RUN:   -resource-dir=%S/Inputs/resource_dir_with_per_target_subdir \
+// RUN:   --offload-arch=gfx1100 --offload-new-driver \
+// RUN:   -fprofile-instr-generate -fcoverage-mapping \
+// RUN:   -fcoverage-compilation-dir=/src %s 2>&1 | \
+// RUN:   FileCheck -check-prefix=COV-DIR %s
+// COV-DIR: clang-linker-wrapper{{.*}} "--device-compiler=amdgcn-amd-amdhsa=-fcoverage-compilation-dir=/src"
+
+// RUN: %clang -### -Werror --target=x86_64-unknown-linux-gnu -nogpuinc -nogpulib \
+// RUN:   -resource-dir=%S/Inputs/resource_dir \
+// RUN:   --offload-arch=gfx1100 --offload-new-driver \
+// RUN:   -fprofile-instr-generate -fcoverage-mapping %s 2>&1 | \
+// RUN:   FileCheck -check-prefix=NO-COV %s
+// NO-COV-NOT: --device-compiler=amdgcn-amd-amdhsa=-fprofile-instr-generate
+// NO-COV-NOT: --device-compiler=amdgcn-amd-amdhsa=-fcoverage-mapping
 

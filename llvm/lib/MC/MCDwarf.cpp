@@ -1320,7 +1320,7 @@ void MCCFIInstruction::replaceRegister(unsigned FromReg, unsigned ToReg) {
       },
       [=](VectorRegistersFields &F) {
         ReplaceReg(F.Register);
-        for (auto &VRL : F.VectorRegisters)
+        for (VectorRegisterWithLane &VRL : F.VectorRegisters)
           ReplaceReg(VRL.Register);
       },
       [=](VectorOffsetFields &F) {

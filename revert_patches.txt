@@ -14,6 +14,9 @@ breaks windows build
 breaks comgr test
 clang: Refactor handling of offload sanitizer arguments (#196737)
 ---
-Breaks rocprim shard 1/1
-[clang] remove lots of "innocuous" addrspacecasts (llvm#
+breaks hipcub build
+[InstCombine] Fold zext into de-interleaving (factor=2) instructions (#195330)
+---
+nees more integration
+[offload][OpenMP] Add strict flag for blocks and 
 ---

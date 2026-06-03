@@ -3732,8 +3732,6 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       assert(NumIRArgs == 0);
       // Initialize the local variable appropriately.
       if (!hasScalarEvaluationKind(Ty)) {
-        RawAddress DebugAddr = Address::invalid();
-        RawAddress Alloca = CreateMemTemp(Ty, "tmp", &DebugAddr);
         ArgVals.push_back(ParamValue::forIndirect(CreateMemTemp(Ty)));
       } else {
         llvm::Value *U = llvm::UndefValue::get(ConvertType(Arg->getType()));

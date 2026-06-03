@@ -5,7 +5,7 @@
 @gv.fptr0 = external hidden unnamed_addr addrspace(4) constant ptr, align 4
 @gv.fptr1 = external hidden unnamed_addr addrspace(4) constant ptr, align 4
 
-define amdgpu_kernel void @test_indirect_call_sgpr_ptr(i8) {
+define amdgpu_kernel void @test_indirect_call_sgpr_ptr(i8) #0 {
 ; GCN-LABEL: test_indirect_call_sgpr_ptr:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_mov_b32 s32, 0
@@ -60,7 +60,7 @@ define amdgpu_kernel void @test_indirect_call_sgpr_ptr(i8) {
   ret void
 }
 
-define amdgpu_kernel void @test_indirect_call_sgpr_ptr_arg(i8) {
+define amdgpu_kernel void @test_indirect_call_sgpr_ptr_arg(i8) #0 {
 ; GCN-LABEL: test_indirect_call_sgpr_ptr_arg:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_mov_b32 s32, 0
@@ -117,7 +117,7 @@ define amdgpu_kernel void @test_indirect_call_sgpr_ptr_arg(i8) {
   ret void
 }
 
-define void @test_indirect_call_vgpr_ptr(ptr %fptr) {
+define void @test_indirect_call_vgpr_ptr(ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -289,7 +289,7 @@ define void @test_indirect_call_vgpr_ptr(ptr %fptr) {
   ret void
 }
 
-define void @test_indirect_call_vgpr_ptr_arg(ptr %fptr) {
+define void @test_indirect_call_vgpr_ptr_arg(ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_arg:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -465,7 +465,7 @@ define void @test_indirect_call_vgpr_ptr_arg(ptr %fptr) {
   ret void
 }
 
-define i32 @test_indirect_call_vgpr_ptr_ret(ptr %fptr) {
+define i32 @test_indirect_call_vgpr_ptr_ret(ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_ret:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -642,7 +642,7 @@ define i32 @test_indirect_call_vgpr_ptr_ret(ptr %fptr) {
   ret i32 %b
 }
 
-define void @test_indirect_call_vgpr_ptr_in_branch(ptr %fptr, i1 %cond) {
+define void @test_indirect_call_vgpr_ptr_in_branch(ptr %fptr, i1 %cond) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_in_branch:
 ; GCN:       ; %bb.0: ; %bb0
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -843,7 +843,7 @@ bb2:
   ret void
 }
 
-define void @test_indirect_call_vgpr_ptr_inreg_arg(ptr %fptr) {
+define void @test_indirect_call_vgpr_ptr_inreg_arg(ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_inreg_arg:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -973,7 +973,7 @@ define void @test_indirect_call_vgpr_ptr_inreg_arg(ptr %fptr) {
   ret void
 }
 
-define i32 @test_indirect_call_vgpr_ptr_arg_and_reuse(i32 %i, ptr %fptr) {
+define i32 @test_indirect_call_vgpr_ptr_arg_and_reuse(i32 %i, ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_arg_and_reuse:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1113,7 +1113,7 @@ define i32 @test_indirect_call_vgpr_ptr_arg_and_reuse(i32 %i, ptr %fptr) {
 ; TODO The argument and return variable could be in the same physical register, but the register
 ; allocator is not able to do that because the return value clashes with the liverange of an
 ; IMPLICIT_DEF of the argument.
-define i32 @test_indirect_call_vgpr_ptr_arg_and_return(i32 %i, ptr %fptr) {
+define i32 @test_indirect_call_vgpr_ptr_arg_and_return(i32 %i, ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_call_vgpr_ptr_arg_and_return:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1246,7 +1246,7 @@ define i32 @test_indirect_call_vgpr_ptr_arg_and_return(i32 %i, ptr %fptr) {
 }
 
 ; Calling a vgpr can never be a tail call.
-define void @test_indirect_tail_call_vgpr_ptr(ptr %fptr) {
+define void @test_indirect_tail_call_vgpr_ptr(ptr %fptr) #0 {
 ; GCN-LABEL: test_indirect_tail_call_vgpr_ptr:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -1371,6 +1371,8 @@ define void @test_indirect_tail_call_vgpr_ptr(ptr %fptr) {
   tail call amdgpu_gfx void %fptr()
   ret void
 }
+
+attributes #0 = { nounwind }
 
 !llvm.module.flags = !{!0}
 !0 = !{i32 1, !"amdhsa_code_object_version", i32 400}

@@ -1266,7 +1266,7 @@ public:
 
   /// Replace all references to register \param From with register \param To in
   /// frame instructions. Note that .cfi_escape instructions will be left as-is.
-  void replaceFrameInstRegister(Register From, Register To);
+  void replaceFrameInstRegister(MCRegister From, MCRegister To);
 
   /// Returns a reference to a list of symbols immediately following calls to
   /// _setjmp in the function. Used to construct the longjmp target table used

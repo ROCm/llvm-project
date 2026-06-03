@@ -268,7 +268,7 @@ entry:
 ; Function Attrs: convergent nounwind
 declare void @_ZL13sleep_foreverv() #0
 
-attributes #0 = { "frame-pointer"="all" }
+attributes #0 = { "frame-pointer"="all" nounwind }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!1638, !1639, !1640, !1641}
