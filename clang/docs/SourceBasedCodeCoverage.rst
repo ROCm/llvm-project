@@ -474,6 +474,18 @@ toolchain when forwarding the profile runtime to the offload device link:
     % cp build-amdgcn-rt/lib/linux/libclang_rt.profile-amdgcn.a \
          "$RESDIR/lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"
 
+.. note::
+
+    The standalone cross-build and manual copy above are only needed when you
+    assemble the toolchain by hand. A toolchain that builds the runtimes with
+    ``LLVM_RUNTIME_TARGETS="...;amdgcn-amd-amdhsa"`` and
+    ``RUNTIMES_amdgcn-amd-amdhsa_LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON`` (with
+    ``COMPILER_RT_BUILD_PROFILE`` enabled for that target) builds and installs
+    ``libclang_rt.profile.a`` directly into
+    ``lib/clang/<v>/lib/amdgcn-amd-amdhsa/`` as part of the normal build, so no
+    separate step is required. This is how the runtime ships in a packaged ROCm
+    toolchain.
+
 Compiling, running, and reporting
 ---------------------------------
 

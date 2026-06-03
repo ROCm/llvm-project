@@ -9,7 +9,17 @@ set(COMPILER_RT_BUILD_SANITIZERS ON CACHE BOOL "")
 set(COMPILER_RT_SANITIZERS_TO_BUILD "ubsan_minimal" CACHE STRING "")
 set(COMPILER_RT_BUILD_XRAY OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
-set(COMPILER_RT_BUILD_PROFILE OFF CACHE BOOL "")
+# Build the device profile runtime (libclang_rt.profile.a) for the GPU target.
+# With LLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON (set by the amdgcn-amd-amdhsa
+# runtimes target), this installs to lib/clang/<v>/lib/amdgcn-amd-amdhsa/ where
+# the HIP/AMDGPU device toolchain resolves it on a -fprofile-instr-generate /
+# -fcoverage-mapping device link. Without it, the device link fails with
+# "undefined symbol: __llvm_profile_instrument_gpu".
+set(COMPILER_RT_BUILD_PROFILE ON CACHE BOOL "")
+# The host-side HIP drain (InstrProfilingPlatformROCm.cpp) dlopen's HSA/HIP and
+# is host-only; it must never be compiled for the amdgcn device target. The
+# device archive only needs the instrumentation runtime (InstrProfilingPlatformGPU.c).
+set(COMPILER_RT_BUILD_PROFILE_ROCM OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_XRAY_NO_PREINIT OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_ORC OFF CACHE BOOL "")
