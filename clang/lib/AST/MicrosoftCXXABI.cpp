@@ -80,18 +80,13 @@ struct DenseMapInfo<DecompositionDeclName> {
   static DecompositionDeclName getEmptyKey() {
     return {ArrayInfo::getEmptyKey()};
   }
-  static DecompositionDeclName getTombstoneKey() {
-    return {ArrayInfo::getTombstoneKey()};
-  }
   static unsigned getHashValue(DecompositionDeclName Key) {
-    assert(!isEqual(Key, getEmptyKey()) && !isEqual(Key, getTombstoneKey()));
+    assert(!isEqual(Key, getEmptyKey()));
     return llvm::hash_combine_range(Key.begin(), Key.end());
   }
   static bool isEqual(DecompositionDeclName LHS, DecompositionDeclName RHS) {
     if (ArrayInfo::isEqual(LHS.Bindings, ArrayInfo::getEmptyKey()))
       return ArrayInfo::isEqual(RHS.Bindings, ArrayInfo::getEmptyKey());
-    if (ArrayInfo::isEqual(LHS.Bindings, ArrayInfo::getTombstoneKey()))
-      return ArrayInfo::isEqual(RHS.Bindings, ArrayInfo::getTombstoneKey());
     return LHS.Bindings.size() == RHS.Bindings.size() &&
            std::equal(LHS.begin(), LHS.end(), RHS.begin());
   }
