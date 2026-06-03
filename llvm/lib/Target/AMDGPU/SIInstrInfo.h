@@ -655,6 +655,11 @@ public:
            (get(Opcode).TSFlags & SIInstrFlags::TENSOR_CNT);
   }
 
+  /// True if MI is an LDS-DMA write that targets the async vmem counter,
+  /// either via the ASYNC_CNT TSFlag or the legacy IsAsync operand on
+  /// MUBUF/FLAT load-to-LDS instructions.
+  bool isAsyncLDSDMA(const MachineInstr &MI) const;
+
   static bool isGWS(const MachineInstr &MI) {
     return MI.getDesc().TSFlags & SIInstrFlags::GWS;
   }

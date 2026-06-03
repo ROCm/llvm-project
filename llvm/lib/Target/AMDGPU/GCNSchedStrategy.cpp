@@ -24,6 +24,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "GCNSchedStrategy.h"
+#include "AMDGPUAsyncMarkScheduling.h"
 #include "AMDGPUIGroupLP.h"
 #include "GCNHazardRecognizer.h"
 #include "GCNRegPressure.h"
@@ -1387,6 +1388,7 @@ bool UnclusteredHighRPStage::initGCNSchedStage() {
   SavedMutations.swap(DAG.Mutations);
   DAG.addMutation(
       createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PreRAReentry));
+  DAG.addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
 
   InitialOccupancy = DAG.MinOccupancy;
   // Aggressively try to reduce register pressure in the unclustered high RP
@@ -1784,6 +1786,7 @@ bool GCNSchedStage::initGCNRegion() {
     DAG.addMutation(createIGroupLPDAGMutation(
         IsInitialStage ? AMDGPU::SchedulingPhase::Initial
                        : AMDGPU::SchedulingPhase::PreRAReentry));
+    DAG.addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   }
 
   return true;
@@ -3161,6 +3164,7 @@ void GCNPostScheduleDAGMILive::schedule() {
     SavedMutations.clear();
     SavedMutations.swap(Mutations);
     addMutation(createIGroupLPDAGMutation(AMDGPU::SchedulingPhase::PostRA));
+    addMutation(createAMDGPUAsyncMarkSchedDAGMutation());
   }
 
   ScheduleDAGMI::schedule();

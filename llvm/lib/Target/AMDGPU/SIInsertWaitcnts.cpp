@@ -656,13 +656,7 @@ public:
   getExpertSchedulingEventType(const MachineInstr &Inst) const;
 
   bool isAsync(const MachineInstr &MI) const {
-    if (!SIInstrInfo::isLDSDMA(MI))
-      return false;
-    if (SIInstrInfo::usesASYNC_CNT(MI))
-      return true;
-    const MachineOperand *Async =
-        TII.getNamedOperand(MI, AMDGPU::OpName::IsAsync);
-    return Async && (Async->getImm());
+    return TII.isAsyncLDSDMA(MI);
   }
 
   bool isNonAsyncLdsDmaWrite(const MachineInstr &MI) const {

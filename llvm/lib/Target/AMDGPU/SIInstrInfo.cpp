@@ -11549,7 +11549,24 @@ void SIInstrInfo::enforceOperandRCAlignment(MachineInstr &MI,
   MI.addOperand(MachineOperand::CreateReg(NewVR, false, true));
 }
 
+bool SIInstrInfo::isAsyncLDSDMA(const MachineInstr &MI) const {
+  if (!isLDSDMA(MI))
+    return false;
+  if (usesASYNC_CNT(MI))
+    return true;
+  const MachineOperand *Async = getNamedOperand(MI, AMDGPU::OpName::IsAsync);
+  return Async && Async->getImm();
+}
+
 bool SIInstrInfo::isGlobalMemoryObject(const MachineInstr *MI) const {
+  // ASYNCMARK is a meta marker placed in the async-request stream. It must
+  // retain hasSideEffects = 1 so it is not DCE'd, but it is not a memory
+  // operation and should not act as a barrier in the scheduler. The required
+  // ordering against async loads/stores and WAIT_ASYNCMARK is supplied
+  // explicitly by the AsyncMark scheduling DAG mutation.
+  if (MI->getOpcode() == AMDGPU::ASYNCMARK)
+    return false;
+
   if (isIGLP(*MI))
     return false;
 
