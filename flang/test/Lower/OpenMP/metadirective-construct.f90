@@ -1,5 +1,5 @@
 ! Test lowering of OpenMP metadirective with construct selectors.
-! XFAIL: *
+
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=50 %s -o - | FileCheck %s
 
 ! CHECK-LABEL: func.func @_QPtest_construct_parallel()
@@ -88,7 +88,7 @@ end subroutine
 subroutine test_begin_construct_selected_parent()
   !$omp target
     !$omp begin metadirective &
-    !$omp & when(implementation={vendor(llvm)}: parallel)
+    !$omp & when(implementation={vendor(amd)}: parallel)
       !$omp metadirective &
       !$omp & when(construct={target, parallel}: barrier) &
       !$omp & default(taskyield)

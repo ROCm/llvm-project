@@ -1,7 +1,7 @@
 ! Test begin metadirective with the nothing directive as a variant.
 ! The nothing directive as a begin-metadirective variant requires OpenMP 5.1+,
 ! which added it as an exception to the paired-end-directive rule.
-! XFAIL: *
+
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=51 %s -o - | FileCheck %s
 ! RUN: %flang_fc1 -fopenmp -emit-hlfir -fopenmp-version=52 -cpp -DOMP_52 %s -o - | FileCheck %s
 
@@ -13,10 +13,10 @@ subroutine test_begin_nothing_variant()
   x = 0
   !$omp begin metadirective &
 #ifdef OMP_52
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
   !$omp & otherwise(parallel)
 #else
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
   !$omp & default(parallel)
 #endif
   x = 1
@@ -49,7 +49,7 @@ subroutine test_begin_nothing_first_match()
   integer :: x
   x = 0
   !$omp begin metadirective &
-  !$omp & when(implementation={vendor(llvm)}: nothing) &
+  !$omp & when(implementation={vendor(amd)}: nothing) &
 #ifdef OMP_52
   !$omp & when(user={condition(.false.)}: task) &
   !$omp & otherwise(parallel)
