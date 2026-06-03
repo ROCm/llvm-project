@@ -30,9 +30,11 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Format.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
+#include <vector>
 
 using namespace llvm;
 
@@ -45,6 +47,18 @@ STATISTIC(NumNewQueued, "Number of new live ranges queued");
 static cl::opt<bool, true>
     VerifyRegAlloc("verify-regalloc", cl::location(RegAllocBase::VerifyEnabled),
                    cl::Hidden, cl::desc("Verify during register allocation"));
+
+static cl::opt<bool> EnableVGPRFragAnalysis(
+    "regalloc-frag", cl::Hidden,
+    cl::desc("Emit VGPR fragmentation metrics at each selectOrSplit"));
+
+// Debug flag for tracing foreachUnit behavior during fragmentation analysis.
+bool DebugFragTrace = false;
+
+static cl::opt<unsigned>
+    FragTraceSeq("regalloc-frag-trace-seq", cl::Hidden,
+                 cl::desc("Trace foreachUnit for this seq number (0=disabled)"),
+                 cl::init(0));
 
 const char RegAllocBase::TimerGroupName[] = "regalloc";
 const char RegAllocBase::TimerGroupDescription[] = "Register Allocation";
@@ -83,10 +97,156 @@ void RegAllocBase::seedLiveRegs() {
   }
 }
 
+/// Find the VGPR_32 base register class by name. Returns nullptr if not found
+/// (non-AMDGPU targets).
+static const TargetRegisterClass *
+findVGPR32Class(const TargetRegisterInfo *TRI) {
+  for (const TargetRegisterClass *RC : TRI->regclasses()) {
+    if (RC->isBaseClass() && RC->isAllocatable() &&
+        TRI->getRegSizeInBits(*RC) == 32 &&
+        StringRef(TRI->getRegClassName(RC)) == "VGPR_32")
+      return RC;
+  }
+  return nullptr;
+}
+
+/// Compute and emit VGPR fragmentation metrics for the current VirtReg.
+/// The bitmap represents effective interference: a VGPR is "occupied" if any
+/// assigned vreg on it overlaps in time with VirtReg's live range.
+static void computeVGPRFragmentation(unsigned SeqNum,
+                                     const LiveInterval &VirtReg,
+                                     LiveRegMatrix *Matrix,
+                                     const TargetRegisterInfo *TRI,
+                                     const MachineRegisterInfo *MRI,
+                                     const RegisterClassInfo &RegClassInfo,
+                                     const TargetRegisterClass *VGPR32RC) {
+  ArrayRef<MCPhysReg> VGPROrder = RegClassInfo.getOrder(VGPR32RC);
+  unsigned NumVGPRs = VGPROrder.size();
+  if (NumVGPRs == 0)
+    return;
+
+  // Build occupancy bitmap: occupied[i] = true if VGPROrder[i] interferes
+  // with VirtReg's live range.
+  std::vector<bool> Occupied(NumVGPRs, false);
+  unsigned NumOccupied = 0;
+  bool tracing = (FragTraceSeq > 0 &&
+                  (SeqNum == FragTraceSeq || SeqNum == FragTraceSeq + 1));
+  for (unsigned I = 0; I < NumVGPRs; ++I) {
+    if (tracing)
+      DebugFragTrace = true;
+    auto IK = Matrix->checkInterference(VirtReg, VGPROrder[I]);
+    if (tracing)
+      DebugFragTrace = false;
+    if (IK != LiveRegMatrix::IK_Free) {
+      Occupied[I] = true;
+      ++NumOccupied;
+    }
+    if (tracing) {
+      dbgs() << "  FRAG_DBG: seq=" << SeqNum << " I=" << I
+             << " phys=" << printReg(VGPROrder[I], TRI)
+             << " IK=" << (unsigned)IK << "\n";
+    }
+  }
+
+  unsigned NumFree = NumVGPRs - NumOccupied;
+
+  // Compute max contiguous free block.
+  unsigned MaxBlock = 0;
+  unsigned CurBlock = 0;
+  for (unsigned I = 0; I < NumVGPRs; ++I) {
+    if (!Occupied[I]) {
+      ++CurBlock;
+      MaxBlock = std::max(MaxBlock, CurBlock);
+    } else {
+      CurBlock = 0;
+    }
+  }
+
+  // Count available slots per register class width (all with align-2).
+  // avail_256: even-aligned start, 8 consecutive free
+  // avail_128: even-aligned start, 4 consecutive free
+  // avail_64:  even-aligned start, 2 consecutive free
+  // avail_32:  any single free (= NumFree)
+  unsigned Avail256 = 0, Avail128 = 0, Avail64 = 0;
+
+  for (unsigned I = 0; I + 8 <= NumVGPRs; I += 2) {
+    bool AllFree = true;
+    for (unsigned J = I; J < I + 8; ++J) {
+      if (Occupied[J]) {
+        AllFree = false;
+        break;
+      }
+    }
+    if (AllFree)
+      ++Avail256;
+  }
+
+  for (unsigned I = 0; I + 4 <= NumVGPRs; I += 2) {
+    bool AllFree = true;
+    for (unsigned J = I; J < I + 4; ++J) {
+      if (Occupied[J]) {
+        AllFree = false;
+        break;
+      }
+    }
+    if (AllFree)
+      ++Avail128;
+  }
+
+  for (unsigned I = 0; I + 2 <= NumVGPRs; I += 2) {
+    if (!Occupied[I] && !Occupied[I + 1])
+      ++Avail64;
+  }
+
+  // Fragmentation ratio: fraction of free VGPRs that do NOT belong to any
+  // valid 8-wide align-2 free window.
+  // A free VGPR "belongs to" a valid VReg_256 window if there exists an
+  // even-aligned 8-wide block containing it where all 8 are free.
+  unsigned CoveredBy256 = 0;
+  std::vector<bool> InValid256(NumVGPRs, false);
+  for (unsigned I = 0; I + 8 <= NumVGPRs; I += 2) {
+    bool AllFree = true;
+    for (unsigned J = I; J < I + 8; ++J) {
+      if (Occupied[J]) {
+        AllFree = false;
+        break;
+      }
+    }
+    if (AllFree) {
+      for (unsigned J = I; J < I + 8; ++J)
+        InValid256[J] = true;
+    }
+  }
+  for (unsigned I = 0; I < NumVGPRs; ++I) {
+    if (!Occupied[I] && InValid256[I])
+      ++CoveredBy256;
+  }
+
+  double FragRatio = 0.0;
+  if (NumFree > 0)
+    FragRatio = 1.0 - (double)CoveredBy256 / (double)NumFree;
+
+  const TargetRegisterClass *RC = MRI->getRegClass(VirtReg.reg());
+  dbgs() << "VGPR_FRAG:"
+         << " seq=" << SeqNum << " rc=" << TRI->getRegClassName(RC)
+         << " vreg=" << printReg(VirtReg.reg(), TRI) << " range=" << VirtReg
+         << " total=" << NumVGPRs << " occupied=" << NumOccupied
+         << " free=" << NumFree << " max_block=" << MaxBlock
+         << " avail_256=" << Avail256 << " avail_128=" << Avail128
+         << " avail_64=" << Avail64 << " avail_32=" << NumFree
+         << " frag_ratio=" << format("%.4f", FragRatio) << '\n';
+}
+
 // Top-level driver to manage the queue of unassigned VirtRegs and call the
 // selectOrSplit implementation.
 void RegAllocBase::allocatePhysRegs() {
   seedLiveRegs();
+
+  // Look up the VGPR_32 base class for fragmentation analysis (AMDGPU only).
+  const TargetRegisterClass *VGPR32RC = nullptr;
+  unsigned FragSeqNum = 0;
+  if (EnableVGPRFragAnalysis)
+    VGPR32RC = findVGPR32Class(TRI);
 
   // Continue assigning vregs one at a time to available physical registers.
   while (const LiveInterval *VirtReg = dequeue()) {
@@ -102,6 +262,13 @@ void RegAllocBase::allocatePhysRegs() {
 
     // Invalidate all interference queries, live ranges could have changed.
     Matrix->invalidateVirtRegs();
+
+    // Emit VGPR fragmentation metrics before the allocation decision.
+    if (VGPR32RC) {
+      ++FragSeqNum;
+      computeVGPRFragmentation(FragSeqNum, *VirtReg, Matrix, TRI, MRI,
+                               RegClassInfo, VGPR32RC);
+    }
 
     // selectOrSplit requests the allocator to return an available physical
     // register if possible and populate a list of new live intervals that

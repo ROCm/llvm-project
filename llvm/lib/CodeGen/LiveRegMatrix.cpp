@@ -85,25 +85,52 @@ void LiveRegMatrix::releaseMemory() {
   }
 }
 
+// Defined in RegAllocBase.cpp; enables per-call tracing of foreachUnit.
+extern bool DebugFragTrace;
+
 template <typename Callable>
 static bool foreachUnit(const TargetRegisterInfo *TRI,
                         const LiveInterval &VRegInterval, MCRegister PhysReg,
                         Callable Func) {
   if (VRegInterval.hasSubRanges()) {
+    if (DebugFragTrace)
+      dbgs() << "    foreachUnit: hasSubRanges=true phys="
+             << printReg(PhysReg, TRI) << "\n";
     for (MCRegUnitMaskIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
       MCRegUnit Unit = (*Units).first;
       LaneBitmask Mask = (*Units).second;
+      bool matched_1 = false;
       for (const LiveInterval::SubRange &S : VRegInterval.subranges()) {
         if ((S.LaneMask & Mask).any()) {
-          if (Func(Unit, S))
+          matched_1 = true;
+          if (DebugFragTrace)
+            dbgs() << "      matched_1=true unit=" << printRegUnit(Unit, TRI)
+                   << " UnitMask=" << PrintLaneMask(Mask)
+                   << " SR.LaneMask=" << PrintLaneMask(S.LaneMask)
+                   << " SR=" << S << "\n";
+          bool matched_2 = Func(Unit, S);
+          if (DebugFragTrace)
+            dbgs() << "      matched_2=" << matched_2 << "\n";
+          if (matched_2)
             return true;
           break;
         }
       }
+      if (DebugFragTrace && !matched_1)
+        dbgs() << "      matched_1=false unit=" << printRegUnit(Unit, TRI)
+               << " UnitMask=" << PrintLaneMask(Mask)
+               << " (no sub-range lane mask matched)\n";
     }
   } else {
+    if (DebugFragTrace)
+      dbgs() << "    foreachUnit: hasSubRanges=false phys="
+             << printReg(PhysReg, TRI) << "\n";
     for (MCRegUnit Unit : TRI->regunits(PhysReg)) {
-      if (Func(Unit, VRegInterval))
+      bool matched_2 = Func(Unit, VRegInterval);
+      if (DebugFragTrace)
+        dbgs() << "      unit=" << printRegUnit(Unit, TRI)
+               << " matched_2=" << matched_2 << "\n";
+      if (matched_2)
         return true;
     }
   }
