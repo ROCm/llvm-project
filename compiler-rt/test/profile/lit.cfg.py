@@ -192,10 +192,12 @@ if config.target_os in ("AIX", "Darwin", "Linux"):
 #   - a usable HIP install (so `clang -x hip` can build the test), and
 #   - the amdgcn device profile runtime in the compiler-rt resource directory.
 #
-# Gate on all three.  Either probe failing leaves the `amdgpu` (and `hip`)
-# features unset and the .hip tests UNSUPPORTED -- this avoids spurious
-# failures on hosts with /dev/kfd but no ROCm install, or compiler-rt builds
-# that disabled the GPU profile runtime.
+# `hip` is enabled as soon as a usable HIP install is found; `amdgpu` is
+# enabled only when the device profile runtime is *also* present in the
+# resource dir. The .hip drain tests gate on `amdgpu`, so a missing runtime
+# (or a compiler-rt build that disabled the GPU profile runtime) leaves them
+# UNSUPPORTED rather than failing -- as does a host with /dev/kfd but no ROCm
+# install.
 #
 # Also export %hip_lib_path and %amdgpu_arch substitutions so .hip tests can
 # stay portable (the existing GPU/instrprof-hip-* tests in amd-staging use
@@ -230,6 +232,12 @@ if os.path.exists("/dev/kfd"):
             rt_libdir = os.path.join(
                 os.path.dirname(clang_dir), "lib", "clang"
             )
+        # The device profile runtime may be installed either under the
+        # arch-suffixed name (libclang_rt.profile-amdgcn.a) or, in the newer
+        # per-target resource-dir layout, the arch-less name
+        # (libclang_rt.profile.a under lib/amdgcn-amd-amdhsa/). Accept either,
+        # but only treat the arch-less name as the *device* runtime when it
+        # lives under an amdgcn target dir so we don't match the host runtime.
         profile_rt = None
         if rt_libdir and os.path.isdir(rt_libdir):
             for root, _, files in os.walk(rt_libdir):
@@ -237,6 +245,9 @@ if os.path.exists("/dev/kfd"):
                     profile_rt = os.path.join(
                         root, "libclang_rt.profile-amdgcn.a"
                     )
+                    break
+                if "libclang_rt.profile.a" in files and "amdgcn" in root:
+                    profile_rt = os.path.join(root, "libclang_rt.profile.a")
                     break
         if profile_rt is not None:
             config.available_features.add("amdgpu")

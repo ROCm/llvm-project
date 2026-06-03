@@ -6,6 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
+// This is the Linux/Unix device profile drain, which decouples device counter
+// collection from the host by walking HSA code objects (no host-side per-TU
+// shadow). Windows has no HSA runtime, so it keeps the legacy HIP host-shadow
+// mechanism in InstrProfilingPlatformROCmWindows.cpp; the CMake selects exactly
+// one of the two by platform. Decoupled (host-uninstrumented) collection is
+// only supported here, on Linux.
+//
 // Device-side profile data drain for AMDGPU via HSA introspection.
 //
 // At process exit this walks every loaded HSA code object on every GPU agent,
@@ -28,8 +35,10 @@
 // Host-only: this drains device counters from the host process. The device
 // side (the __llvm_profile_sections bounds table) is emitted by
 // InstrProfilingPlatformGPU.c. When this file is compiled for a GPU target as
-// part of the device profile runtime build it reduces to an empty TU.
-#if !defined(__NVPTX__) && !defined(__AMDGPU__)
+// part of the device profile runtime build it reduces to an empty TU. It also
+// reduces to an empty TU on Windows, which uses
+// InstrProfilingPlatformROCmWindows.cpp instead.
+#if !defined(__NVPTX__) && !defined(__AMDGPU__) && !defined(_WIN32)
 
 extern "C" {
 #include "InstrProfiling.h"
@@ -141,7 +150,10 @@ static hsa_executable_symbol_get_info_ty pHsaSymGetInfo = nullptr;
 static hsa_loader_query_segment_descriptors_ty pQuerySegDescs = nullptr;
 static hipMemcpy_ty pHipMemcpy = nullptr;
 
-/* 0 = not yet attempted, 1 = ready, -1 = unavailable. */
+/* 0 = not yet attempted, 1 = ready, -1 = unavailable.
+ * Accessed with acquire/release atomics: a thread that observes RuntimeState==1
+ * (acquire) is guaranteed to also see the fully-written p* function pointers
+ * (which are published before the release store of RuntimeState=1 below). */
 static int RuntimeState = 0;
 
 static int isVerboseMode(void) {
@@ -155,16 +167,23 @@ static int isVerboseMode(void) {
 /*  One-time runtime resolution                                               */
 /* -------------------------------------------------------------------------- */
 
+/* Publish the terminal RuntimeState (release) and map it to the 0/-1 return
+ * convention used by loadRuntimePointers(). */
+static int setRuntimeState(int S) {
+  __atomic_store_n(&RuntimeState, S, __ATOMIC_RELEASE);
+  return S > 0 ? 0 : -1;
+}
+
 static int loadRuntimePointers(void) {
-  if (RuntimeState)
-    return RuntimeState > 0 ? 0 : -1;
+  int State = __atomic_load_n(&RuntimeState, __ATOMIC_ACQUIRE);
+  if (State)
+    return State > 0 ? 0 : -1;
 
   if (!__interception::DynamicLoaderAvailable()) {
     if (isVerboseMode())
       PROF_NOTE("%s", "Dynamic library loading not available - "
                       "device profiling disabled\n");
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
 
   void *Hsa = __interception::OpenLibrary("libhsa-runtime64.so");
@@ -174,8 +193,7 @@ static int loadRuntimePointers(void) {
     if (isVerboseMode())
       PROF_NOTE("%s", "libhsa-runtime64.so not loadable - "
                       "device profiling disabled\n");
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
 
   hsa_init_ty pHsaInit =
@@ -197,8 +215,7 @@ static int loadRuntimePointers(void) {
   if (!pHsaInit || !pGetExtTable || !pHsaIterateAgents || !pHsaAgentGetInfo ||
       !pHsaExecIterAgentSyms || !pHsaSymGetInfo) {
     PROF_WARN("%s", "required HSA symbols missing - device profiling disabled\n");
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
 
   /* Bring HSA up now (idempotent, refcounted). Doing this in the library
@@ -209,8 +226,7 @@ static int loadRuntimePointers(void) {
   if (St != PROF_HSA_STATUS_SUCCESS && St != PROF_HSA_STATUS_INFO_BREAK) {
     if (isVerboseMode())
       PROF_NOTE("hsa_init failed (0x%x) - device profiling disabled\n", St);
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
 
   prof_hsa_loader_pfn_t LoaderApi;
@@ -221,8 +237,7 @@ static int loadRuntimePointers(void) {
     PROF_WARN("AMD loader extension unavailable (0x%x) - "
               "device profiling disabled\n",
               St);
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
   pQuerySegDescs = LoaderApi.query_segment_descriptors;
 
@@ -267,14 +282,12 @@ static int loadRuntimePointers(void) {
   }
   if (!pHipMemcpy) {
     PROF_WARN("%s", "hipMemcpy unavailable - device profiling disabled\n");
-    RuntimeState = -1;
-    return -1;
+    return setRuntimeState(-1);
   }
 
   if (isVerboseMode())
     PROF_NOTE("%s", "HSA + HIP runtime resolved for device profiling\n");
-  RuntimeState = 1;
-  return 0;
+  return setRuntimeState(1);
 }
 
 static int memcpyDeviceToHost(void *Dst, const void *Src, size_t Size) {
@@ -335,6 +348,9 @@ static int computeRangeSize(const char *Label, const void *Begin,
   return 0;
 }
 
+/* Returns 1 if a device .profraw was written, 0 if there was nothing to write
+ * (empty counters/data sections), and -1 on error. The caller distinguishes
+ * these so an empty section is never miscounted as a successful drain. */
 static int processDeviceSections(void *DeviceSectionsAddr, const char *Target) {
   __llvm_profile_gpu_sections HostSections;
   if (memcpyDeviceToHost(&HostSections, DeviceSectionsAddr,
@@ -461,11 +477,12 @@ static int processDeviceSections(void *DeviceSectionsAddr, const char *Target) {
                     "[%p,%p]; zeroing CounterPtr\n",
                     (unsigned long long)i, (void *)DeviceCountersAddr,
                     DevCntsBegin, DevCntsEnd);
-        uint64_t Zero = 0;
-        __builtin_memcpy((char *)RelocatedData +
+        // CounterPtr is IntPtrT (pointer-sized): zero exactly that field so we
+        // never clobber adjacent record fields on a 32-bit host.
+        __builtin_memset((char *)RelocatedData +
                              i * sizeof(__llvm_profile_data) +
                              offsetof(__llvm_profile_data, CounterPtr),
-                         &Zero, sizeof(Zero));
+                         0, sizeof(RelocatedData[i].CounterPtr));
       } else {
         ptrdiff_t OffsetIntoCountersSection =
             (ptrdiff_t)(DeviceCountersAddr - CntsB);
@@ -499,10 +516,11 @@ static int processDeviceSections(void *DeviceSectionsAddr, const char *Target) {
 
   if (Ret != 0) {
     PROF_ERR("%s\n", "failed to write device profile");
-  } else if (isVerboseMode()) {
-    PROF_NOTE("Wrote device profile (target=%s)\n", Target);
+    return -1;
   }
-  return Ret;
+  if (isVerboseMode())
+    PROF_NOTE("Wrote device profile (target=%s)\n", Target);
+  return 1;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -625,7 +643,9 @@ static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
   else
     snprintf(Target, sizeof(Target), "%s.%d", S->arch, DrainIndex);
 
-  if (processDeviceSections((void *)(uintptr_t)Addr, Target) == 0) {
+  // Only a >0 result means a .profraw was actually written; an empty section
+  // (0) or an error (<0) must not be counted as a drain or advance DrainIndex.
+  if (processDeviceSections((void *)(uintptr_t)Addr, Target) > 0) {
     S->drained++;
     DrainIndex++;
   }
@@ -666,22 +686,35 @@ static prof_hsa_status_t collectAgent(prof_hsa_agent_t Agent, void *Data) {
  * .profraw files, but transient no-op outcomes ("runtime not yet loadable",
  * "no GPU agents", "no loaded segments", "no instrumented sections found")
  * stay retryable so the final atexit drain can still pick up code objects
- * that loaded later. The InProgress flag prevents a re-entrant call (e.g. a
- * library destructor that triggers another drain) from running concurrently
- * and double-freeing the global SeenBounds table. */
+ * that loaded later. The InProgress flag prevents a concurrent call from
+ * another thread (or a re-entrant call on the same thread, e.g. a library
+ * destructor that triggers another drain) from running the walk concurrently
+ * and corrupting the global SeenBounds table. Both flags are accessed with
+ * acquire/release atomics so the guard holds across threads. */
 static int DrainInProgress = 0;
 static int DrainCompleted = 0;
 
 static int drainDevices(void) {
-  if (DrainCompleted)
+  if (__atomic_load_n(&DrainCompleted, __ATOMIC_ACQUIRE))
     return 0;
-  if (DrainInProgress)
+
+  /* Claim the drain with an atomic CAS. A failed CAS means either another
+   * thread is already draining, or this is a reentrant call on the same
+   * thread (e.g. a library destructor that triggers another drain); both
+   * must bail without touching the global SeenBounds table. The acquire/
+   * release ordering also publishes the worker thread's writes to threads
+   * that observe DrainCompleted later. */
+  int Expected = 0;
+  if (!__atomic_compare_exchange_n(&DrainInProgress, &Expected, 1,
+                                   /*weak=*/0, __ATOMIC_ACQ_REL,
+                                   __ATOMIC_ACQUIRE))
     return 0;
-  DrainInProgress = 1;
 
   /* Mirror the early-exit paths so we always release the in-progress flag. */
   struct InProgressGuard {
-    ~InProgressGuard() { DrainInProgress = 0; }
+    ~InProgressGuard() {
+      __atomic_store_n(&DrainInProgress, 0, __ATOMIC_RELEASE);
+    }
   } _Guard;
 
   if (loadRuntimePointers() != 0) {
@@ -808,7 +841,7 @@ static int drainDevices(void) {
    * but harmless to repeat if anyone calls back in (and the host-write
    * forwarder may run before atexit). */
   if (W.total_drained > 0)
-    DrainCompleted = 1;
+    __atomic_store_n(&DrainCompleted, 1, __ATOMIC_RELEASE);
   return (IterFailures > 0) ? -1 : 0;
 }
 
@@ -846,4 +879,4 @@ __attribute__((constructor)) static void profROCmInit(void) {
   atexit(atexitDrain);
 }
 
-#endif // !defined(__NVPTX__) && !defined(__AMDGPU__)
+#endif // !defined(__NVPTX__) && !defined(__AMDGPU__) && !defined(_WIN32)
