@@ -57,6 +57,65 @@ static cl::opt<bool>
                             cl::desc("Generate code for B0 flavor of gfx1250"),
                             cl::init(true));
 
+template <typename PredicateT>
+static bool hasBundledMI(const MachineInstr &MI, PredicateT Pred) {
+  if (Pred(MI))
+    return true;
+
+  if (MI.getOpcode() != TargetOpcode::BUNDLE)
+    return false;
+
+  MachineBasicBlock::const_instr_iterator It = MI.getIterator();
+  for (++It; It != MI.getParent()->instr_end() && It->isBundledWithPred();
+       ++It) {
+    if (Pred(*It))
+      return true;
+  }
+
+  return false;
+}
+
+static bool isLDSReadForMFMA(const MachineInstr &MI) {
+  return hasBundledMI(MI, [](const MachineInstr &BundledMI) {
+    return SIInstrInfo::isDS(BundledMI) && BundledMI.mayLoad() &&
+           !BundledMI.mayStore();
+  });
+}
+
+static bool isMFMAOrBundle(const MachineInstr &MI) {
+  return hasBundledMI(MI, [](const MachineInstr &BundledMI) {
+    return SIInstrInfo::isMFMA(BundledMI);
+  });
+}
+
+static bool hasMFMADataSucc(const SUnit &SU) {
+  for (const SDep &Succ : SU.Succs) {
+    if (Succ.getKind() != SDep::Data)
+      continue;
+
+    const SUnit *SuccSU = Succ.getSUnit();
+    const MachineInstr *SuccMI = SuccSU ? SuccSU->getInstr() : nullptr;
+    if (SuccMI && isMFMAOrBundle(*SuccMI))
+      return true;
+  }
+
+  return false;
+}
+
+static bool hasLDSReadDataPred(const SUnit &SU) {
+  for (const SDep &Pred : SU.Preds) {
+    if (Pred.getKind() != SDep::Data)
+      continue;
+
+    const SUnit *PredSU = Pred.getSUnit();
+    const MachineInstr *PredMI = PredSU ? PredSU->getInstr() : nullptr;
+    if (PredMI && isLDSReadForMFMA(*PredMI))
+      return true;
+  }
+
+  return false;
+}
+
 GCNSubtarget::~GCNSubtarget() = default;
 
 GCNSubtarget &GCNSubtarget::initializeSubtargetDependencies(const Triple &TT,
@@ -411,6 +470,24 @@ void GCNSubtarget::overridePostRASchedPolicy(MachineSchedPolicy &Policy,
     dbgs() << "Post-MI-sched direction (" << F.getName() << "): " << DirStr
            << '\n';
   });
+}
+
+bool GCNSubtarget::shouldPreservePostRASchedOrder(const SUnit &SU) const {
+  const MachineInstr *MI = SU.getInstr();
+  if (!MI)
+    return false;
+
+  const auto *MFI = MI->getMF()->getInfo<SIMachineFunctionInfo>();
+  if (!MFI->isMemoryBound())
+    return false;
+
+  if (isLDSReadForMFMA(*MI))
+    return hasMFMADataSucc(SU);
+
+  if (isMFMAOrBundle(*MI))
+    return hasLDSReadDataPred(SU);
+
+  return false;
 }
 
 void GCNSubtarget::mirFileLoaded(MachineFunction &MF) const {

@@ -493,6 +493,8 @@ public:
   void overridePostRASchedPolicy(MachineSchedPolicy &Policy,
                                  const SchedRegion &Region) const override;
 
+  bool shouldPreservePostRASchedOrder(const SUnit &SU) const override;
+
   void mirFileLoaded(MachineFunction &MF) const override;
 
   unsigned getMaxNumUserSGPRs() const {
