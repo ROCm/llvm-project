@@ -137,9 +137,10 @@ public:
   static bool isWave64(const llvm::opt::ArgList &DriverArgs,
                        llvm::AMDGPU::GPUKind Kind);
   /// Needed for using lto.
-  bool HasNativeLLVMSupport() const override {
-    return true;
-  }
+  bool HasNativeLLVMSupport() const override { return true; }
+
+  /// AMDGPU uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override;
 
   /// Needed for translating LTO options.
   const char *getDefaultLinker() const override { return "ld.lld"; }

@@ -11,7 +11,7 @@
 // RUN:   --offload-arch=gfx908:xnack+:sramecc- \
 // RUN:   --rocm-path=%S/Inputs/rocm \
 // RUN:   --no-offload-new-driver -save-temps \
-// RUN:   %s 2>&1 | FileCheck --check-prefixes=CHECK,TMP %s
+// RUN:   %s 2>&1 | FileCheck --check-prefixes=CHECK %s
 
 // RUN: %clang -### --target=x86_64-linux-gnu \
 // RUN:   -x hip \

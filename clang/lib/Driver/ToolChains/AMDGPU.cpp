@@ -11,6 +11,7 @@
 #include "clang/Config/config.h"
 #include "clang/Driver/CommonArgs.h"
 #include "clang/Driver/Compilation.h"
+#include "clang/Driver/Driver.h"
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/SanitizerArgs.h"
 #include "clang/Options/Options.h"
@@ -755,6 +756,8 @@ AMDGPUToolChain::AMDGPUToolChain(const Driver &D, const llvm::Triple &Triple,
 Tool *AMDGPUToolChain::buildLinker() const {
   return new tools::amdgpu::Linker(*this);
 }
+
+LTOKind AMDGPUToolChain::getDefaultLTOMode() const { return LTOK_Full; }
 
 DerivedArgList *
 AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
