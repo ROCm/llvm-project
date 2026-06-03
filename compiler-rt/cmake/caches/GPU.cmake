@@ -16,6 +16,14 @@ set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
 # -fcoverage-mapping device link. Without it, the device link fails with
 # "undefined symbol: __llvm_profile_instrument_gpu".
 set(COMPILER_RT_BUILD_PROFILE ON CACHE BOOL "")
+# This is a freestanding device build (-nostdlibinc, no host libc headers), so
+# the profile runtime must use its baremetal subset: it drops the filesystem /
+# value-profiling sources (InstrProfilingFile/Util/GCDA/Runtime/Value) and makes
+# InstrProfilingPort.h skip <unistd.h>. The device-side instrumentation
+# (InstrProfilingPlatformGPU.c: __llvm_profile_instrument_gpu + the
+# __llvm_profile_sections bounds table) is kept. Without this the build fails
+# with "'unistd.h'/'fcntl.h'/'sys/file.h' file not found".
+set(COMPILER_RT_PROFILE_BAREMETAL ON CACHE BOOL "")
 # The host-side HIP drain (InstrProfilingPlatformROCm.cpp) dlopen's HSA/HIP and
 # is host-only; it must never be compiled for the amdgcn device target. The
 # device archive only needs the instrumentation runtime (InstrProfilingPlatformGPU.c).
