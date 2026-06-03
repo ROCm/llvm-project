@@ -1,12 +1,12 @@
 // Standard
 // clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib -nogpuinc \
-//  -c gtgra.cl -o gtgra.o
+//  -c testfn.cl -o testfn.o
 // clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib -nogpuinc \
-//  -shared gtgra.cl -o gtgra.so
+//  -shared testfn.cl -o testfn.so
 
 __attribute__((visibility("default"))) constant int foo = 0;
 
-void kernel bazzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz(
+void kernel testfn(
     global int *a, const global int *b) {
   *a = *b;
 }

@@ -25,14 +25,17 @@ int main(int argc, char *argv[]) {
     if (amd_comgr_metadata_lookup(Features, "sramecc", &Val) ==
       AMD_COMGR_STATUS_SUCCESS) {
       sramecc = true;
+      amd_comgr_(destroy_metadata(Val));
     }
     if (amd_comgr_metadata_lookup(Features, "xnack", &Val) ==
       AMD_COMGR_STATUS_SUCCESS) {
       xnack = true;
+      amd_comgr_(destroy_metadata(Val));
     }
 
     printf("%s\n", Name);
 
+    /*
     if (sramecc) {
       printf("%s:sramecc+\n", Name);
       printf("%s:sramecc-\n", Name);
@@ -47,9 +50,9 @@ int main(int argc, char *argv[]) {
       printf("%s:sramecc-:xnack+\n", Name);
       printf("%s:sramecc-:xnack-\n", Name);
     }
-    amd_comgr_(destroy_metadata(Root);
-    amd_comgr_(destroy_metadata(Features);
-    amd_comgr_(destroy_metadata(Val);
+    */
+    amd_comgr_(destroy_metadata(Root));
+    amd_comgr_(destroy_metadata(Features));
   }
   return 0;
 }
