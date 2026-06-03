@@ -161,11 +161,29 @@ target_include_directories(RaiserScaffoldingTests PRIVATE
 
 comgr_configure_test_target(RaiserScaffoldingTests)
 
+# -- DemangleTests ---------------------------------------------------
+#
+
+add_executable(DemangleTests
+  DemangleTest.cpp)
+
+target_link_libraries(DemangleTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr)
+
+target_include_directories(DemangleTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(DemangleTests)
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>)
+  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
+  COMMAND $<TARGET_FILE:DemangleTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests
-  RaiserScaffoldingTests)
+  RaiserScaffoldingTests DemangleTests)
 add_dependencies(check-comgr test-unit)
