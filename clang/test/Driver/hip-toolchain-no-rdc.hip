@@ -115,6 +115,7 @@
 
 // NEW: [[WRAPPER:".*clang-linker-wrapper]]"
 // NEW-SAME: "--device-compiler=amdgcn-amd-amdhsa=-flto=full"
+// NEW-SAME: "--no-lto"
 // NEW-SAME: "--host-triple=x86_64-unknown-linux-gnu"
 // NEW-SAME: "--emit-fatbin-only"
 // NEW-SAME: "-o" "[[HIPFB_A:.*.hipfb]]" "[[PACKAGE_A]]"
@@ -189,6 +190,7 @@
 
 // NEW: [[WRAPPER:".*clang-linker-wrapper]]"
 // NEW-SAME: "--device-compiler=amdgcn-amd-amdhsa=-flto=full"
+// NEW-SAME: "--no-lto"
 // NEW-SAME: "--emit-fatbin-only"
 // NEW-SAME: "-o" "[[HIPFB_B:.*.hipfb]]" "[[PACKAGE_B]]"
 
