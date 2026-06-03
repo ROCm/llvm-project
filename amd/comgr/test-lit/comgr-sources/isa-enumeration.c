@@ -35,7 +35,6 @@ int main(int argc, char *argv[]) {
 
     printf("%s\n", Name);
 
-    /*
     if (sramecc) {
       printf("%s:sramecc+\n", Name);
       printf("%s:sramecc-\n", Name);
@@ -50,7 +49,6 @@ int main(int argc, char *argv[]) {
       printf("%s:sramecc-:xnack+\n", Name);
       printf("%s:sramecc-:xnack-\n", Name);
     }
-    */
     amd_comgr_(destroy_metadata(Root));
     amd_comgr_(destroy_metadata(Features));
   }
