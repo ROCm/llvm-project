@@ -94,7 +94,16 @@ if (NOT COMPILER_RT_PROFILE_BAREMETAL)
     InstrProfilingValue.c
     )
   if(COMPILER_RT_BUILD_PROFILE_ROCM)
-    list(APPEND PROFILE_SOURCES InstrProfilingPlatformROCm.cpp)
+    # Windows has no HSA runtime: it uses the legacy host-shadow drain in
+    # InstrProfilingPlatformROCmWindows.cpp; every other host uses the HSA
+    # introspection drain in InstrProfilingPlatformROCm.cpp. Compile exactly
+    # one of the two so their shared extern "C" entry points never collide.
+    if(WIN32)
+      set(PROFILE_ROCM_SOURCE InstrProfilingPlatformROCmWindows.cpp)
+    else()
+      set(PROFILE_ROCM_SOURCE InstrProfilingPlatformROCm.cpp)
+    endif()
+    list(APPEND PROFILE_SOURCES ${PROFILE_ROCM_SOURCE})
   endif()
 endif()
 
@@ -180,8 +189,8 @@ if(COMPILER_RT_HAS_INTERCEPTION AND NOT COMPILER_RT_PROFILE_BAREMETAL
   set(PROFILE_HAS_HIP_INTERCEPTOR TRUE)
 endif()
 
-if(NOT PROFILE_HAS_HIP_INTERCEPTOR)
-  list(REMOVE_ITEM PROFILE_SOURCES InstrProfilingPlatformROCm.cpp)
+if(NOT PROFILE_HAS_HIP_INTERCEPTOR AND DEFINED PROFILE_ROCM_SOURCE)
+  list(REMOVE_ITEM PROFILE_SOURCES ${PROFILE_ROCM_SOURCE})
 endif()
 
 # Only advertise the ROCm interceptor to InstrProfilingFile.c when its
