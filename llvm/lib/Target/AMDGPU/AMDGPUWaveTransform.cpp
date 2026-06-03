@@ -2220,8 +2220,8 @@ void ControlFlowRewriter::rewrite() {
             auto FlipCondReg =
                 BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm,
                         {}, TII.get(LMC.XorOpc), CondReg)
-                    .addReg(LaneOrigin.CondReg);
-            if (LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
+                    .addReg(Prev);
+            if (LMA.isSubsetOfExec(Prev, *LaneOrigin.Node->Block,
                                    MBBILaneOriginNodeFirstTerm))
               FlipCondReg.addReg(LMC.ExecReg);
             else
