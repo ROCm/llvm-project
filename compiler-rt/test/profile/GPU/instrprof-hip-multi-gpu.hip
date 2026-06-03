@@ -1,6 +1,8 @@
-// Test that HIP PGO doesn't crash on multi-GPU systems.
-// The profile runtime should only collect from the active device at exit,
-// not iterate all devices (which can trigger comgr lazy-load crashes).
+// Test that HIP PGO works on multi-GPU systems. The HSA-introspection drain
+// walks every GPU agent at exit and collects device counters from each loaded
+// code object; it must do so without crashing (the previous host-shadow design
+// relied on hipGetSymbolAddress and could hit a comgr lazy-load null deref when
+// more than one device was present).
 //
 // REQUIRES: hip, amdgpu
 // RUN: %clang -x hip -fprofile-instr-generate -fcoverage-mapping \
@@ -9,9 +11,10 @@
 // RUN:   LD_LIBRARY_PATH=%hip_lib_path:$LD_LIBRARY_PATH \
 // RUN:   LLVM_PROFILE_VERBOSE=1 %run %t 2>&1 | FileCheck %s
 //
-// Verify device 0 data was collected and program didn't crash.
-// CHECK: Collecting static profile data from device 0
-// CHECK: Successfully wrote device profile using shared API
+// Verify the drain walked the GPU agents, copied device counters, and the
+// program didn't crash on a multi-GPU system.
+// CHECK: Copied device sections:
+// CHECK: walk complete: agents={{[0-9]+}} pairs={{[0-9]+}} found={{[0-9]+}} drained={{[1-9][0-9]*}}
 // CHECK: PASS
 
 #include <hip/hip_runtime.h>

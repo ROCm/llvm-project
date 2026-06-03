@@ -462,12 +462,17 @@ profile library enabled for the ROCm/AMDGPU target:
     % ninja -C build-amdgcn-rt
 
 Then install the resulting archive into the host clang's resource directory so
-the driver can find it automatically:
+the driver can find it automatically. It must go in the per-target runtime
+directory (``lib/<device-triple>/libclang_rt.profile.a``, without the
+``-amdgcn`` suffix) -- that is the path the driver resolves for the device
+toolchain when forwarding the profile runtime to the offload device link:
 
 .. code-block:: console
 
+    % RESDIR=$($STAGE1/clang -print-resource-dir)
+    % mkdir -p "$RESDIR/lib/amdgcn-amd-amdhsa"
     % cp build-amdgcn-rt/lib/linux/libclang_rt.profile-amdgcn.a \
-         "$($STAGE1/clang -print-resource-dir)/lib/linux/"
+         "$RESDIR/lib/amdgcn-amd-amdhsa/libclang_rt.profile.a"
 
 Compiling, running, and reporting
 ---------------------------------
