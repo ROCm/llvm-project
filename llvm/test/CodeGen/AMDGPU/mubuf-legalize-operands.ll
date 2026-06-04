@@ -1164,9 +1164,8 @@ define void @mubuf_vgpr_outside_entry(ptr addrspace(8) %i, ptr addrspace(8) %j, 
 ; W64-O0-NEXT:    s_mov_b64 s[10:11], -1
 ; W64-O0-NEXT:    s_xor_b64 s[8:9], s[8:9], s[10:11]
 ; W64-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:68 ; 4-byte Folded Spill
-; W64-O0-NEXT:    s_and_b64 s[10:11], exec, s[8:9]
-; W64-O0-NEXT:    s_xor_b64 s[8:9], s[8:9], -1
-; W64-O0-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; W64-O0-NEXT:    s_and_b64 s[8:9], exec, s[8:9]
+; W64-O0-NEXT:    s_xor_b64 s[8:9], s[8:9], exec
 ; W64-O0-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; W64-O0-NEXT:    v_writelane_b32 v13, s4, 4
 ; W64-O0-NEXT:    v_writelane_b32 v13, s5, 5
