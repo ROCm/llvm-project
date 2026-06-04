@@ -10,8 +10,8 @@
 Introduction
 ============
 
-Asynchronous operations are memory transfers (usually between the global memory
-and LDS) that are completed independently at an unspecified scope. A thread that
+Asynchronous operations are operations whose completion is not tracked
+internally by the compiler. Instead a thread that
 requests one or more asynchronous transfers can use *asyncmarks* to track
 their completion. The thread waits for each asyncmark to be *completed*, which
 indicates that requests initiated in *program-order* before this asyncmark have also
@@ -20,35 +20,10 @@ completed.
 Operations
 ==========
 
-Memory Accesses
----------------
+Async Operations
+----------------
 
-The following instructions request asynchronous transfer of data between global
-memory and LDS memory.
-
-.. note::
-
-   These listings are *merely representative*. The actual function signatures
-   and supported architectures are documented in the :ref:`amdgpu-usage-guide`.
-
-**GFX9 Async Instructions (LDS DMA)**
-
-.. code-block:: llvm
-
-  void @llvm.amdgcn.load.async.to.lds(ptr %src, ptr %dst)
-  void @llvm.amdgcn.global.load.async.lds(ptr %src, ptr %dst)
-  void @llvm.amdgcn.raw.buffer.load.async.lds(ptr %src, ptr %dst)
-  void @llvm.amdgcn.raw.ptr.buffer.load.async.lds(ptr %src, ptr %dst)
-  void @llvm.amdgcn.struct.buffer.load.async.lds(ptr %src, ptr %dst)
-  void @llvm.amdgcn.struct.ptr.buffer.load.async.lds(ptr %src, ptr %dst)
-
-**GFX12 Async Instructions**
-
-.. code-block:: llvm
-
-  void @llvm.amdgcn.global.load.async.to.lds.type(ptr %dst, ptr %src)
-  void @llvm.amdgcn.global.store.async.from.lds.type(ptr %dst, ptr %src)
-  void @llvm.amdgcn.cluster.load.async.to.lds.type(ptr %dst, ptr %src)
+Most :ref:`DMA operations<amdgpu-dma-operations>` are async operations.
 
 Asyncmark Operations
 ---------------------
@@ -79,26 +54,6 @@ currently executing function body.
 
 Waits until there are at most N outstanding asyncmarks in the sequence associated
 with the currently executing function body.
-
-Memory Consistency Model
-========================
-
-Each asynchronous operation consists of a non-atomic read on the source and a
-non-atomic write on the destination. Async "LDS DMA" intrinsics result in async
-accesses that guarantee visibility relative to other memory operations as
-follows:
-
-  An asynchronous operation `A` program ordered before an overlapping memory
-  operation `X` happens-before `X` only if `A` is completed before `X`.
-
-  A memory operation `X` program ordered before an overlapping asynchronous
-  operation `A` happens-before `A`.
-
-.. note::
-
-   The *only if* in the above wording implies that unlike the default LLVM
-   memory model, certain program order edges are not automatically included in
-   ``happens-before``.
 
 Examples
 ========

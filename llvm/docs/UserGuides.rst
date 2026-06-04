@@ -64,6 +64,7 @@ intermediate LLVM representation.
    NVPTXUsage
    AMDGPUUsage
    AMDGPUAsyncOperations
+   AMDGPUDMAOperations
    AMDGPUDwarfExtensionsForHeterogeneousDebugging
    AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack/AMDGPUDwarfExtensionAllowLocationDescriptionOnTheDwarfExpressionStack
    AMDGPUExecutionSynchronization
@@ -299,7 +300,10 @@ Additional Topics
    This document describes using the AMDGPU backend to compile GPU kernels.
 
 :doc:`AMDGPUAsyncOperations`
-   Builtins for invoking asynchronous data transfer operations in AMD GPUs.
+   Builtins for tracking completion of asynchronous  operations on AMD GPUs.
+
+:doc:`AMDGPUAsyncOperations`
+   Builtins for invoking DMA operations on AMD GPUs.
 
 :doc:`AMDGPUMemoryModel`
    This document describes *AMDGPU Memory Model* which overrides the :ref:`LLVM
