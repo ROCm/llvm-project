@@ -757,8 +757,6 @@ Tool *AMDGPUToolChain::buildLinker() const {
   return new tools::amdgpu::Linker(*this);
 }
 
-LTOKind AMDGPUToolChain::getDefaultLTOMode() const { return LTOK_Full; }
-
 DerivedArgList *
 AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
                                Action::OffloadKind DeviceOffloadKind) const {
