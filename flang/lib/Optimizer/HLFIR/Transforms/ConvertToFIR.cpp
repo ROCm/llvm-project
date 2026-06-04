@@ -146,15 +146,13 @@ public:
           // type after the assignment.
           fir::runtime::genAssignPolymorphic(builder, loc, to, from);
         } else {
-          // Phase 2.1: Use simple path for allocatable scalars with trivial
-          // types Keep arrays using the existing path for safety (Phase 2.2
-          // will handle arrays)
-          if (fir::isa_trivial(lhs.getFortranElementType()) && !lhs.isArray()) {
-            // Simple intrinsic type allocatable SCALAR only
+          // Phase 2.2: Use simple path for allocatable with trivial types (scalars and arrays)
+          if (fir::isa_trivial(lhs.getFortranElementType())) {
+            // Simple intrinsic type allocatable (scalar or array)
             fir::runtime::genAssignSimple(builder, loc, to, from);
           } else {
-            // Keep arrays and complex types using existing path
-            fir::runtime::genAssign(builder, loc, to, from);
+            // Complex: derived types, polymorphic, etc.
+            fir::runtime::genAssignComplex(builder, loc, to, from);
           }
         }
       }
@@ -181,8 +179,16 @@ public:
       fir::StoreOp::create(builder, loc, to, toMutableBox);
       if (assignOp.isTemporaryLHS())
         fir::runtime::genAssignTemporary(builder, loc, toMutableBox, from);
-      else
-        fir::runtime::genAssign(builder, loc, toMutableBox, from);
+      else {
+        // Phase 2.2: Use simple path for non-allocatable arrays with trivial types
+        if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType())) {
+          // Simple intrinsic type array
+          fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
+        } else {
+          // Complex: polymorphic or derived type
+          fir::runtime::genAssignComplex(builder, loc, toMutableBox, from);
+        }
+      }
     } else {
       // TODO: use the type specification to see if IsFinalizable is set,
       // or propagate IsFinalizable attribute from lowering.
