@@ -436,7 +436,7 @@ Error GenericKernelTy::launch(GenericDeviceTy &GenericDevice, void **ArgPtrs,
         KernelRecord->getLaunchParamsForKernel(*this, GenericDevice);
     EffectiveNumBlocks[0] = Teams;
     EffectiveNumThreads[0] = Threads;
-  } else if (!KernelArgs.Flags.StrictBlocksAndThreads) {
+  } else if (!KernelArgs.Flags.StrictBlocksAndThreads && !isBareMode()) {
     EffectiveNumThreads[0] =
         getEffectiveNumThreads(GenericDevice, EffectiveNumThreads[0]);
 
