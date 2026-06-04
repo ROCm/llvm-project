@@ -2206,26 +2206,18 @@ void ControlFlowRewriter::rewrite() {
         // Skip XOR inversion if the condition register use was undef.
         // Inverting undef (undef ^ -1) is still undef.
         if (LaneOrigin.InvertCondition) {
-          // CondReg = EXEC ^ origCond;
-          //
-          // Ideally we would XOR with EXEC instead of -1 to avoid redundant
-          // AND with EXEC later, but LICM can move the condition in ways which
-          // violate such an optimisation.  Discard and demote operations
-          // can also modify the value of EXEC requiring an AND.
-          // TODO: We rely on later passes to clean up,
-          // e.g. folding the XOR into the original V_CMP.
           Register Prev = CondReg;
           if (!LaneOrigin.CondIsUndef) {
             CondReg = LMU.createLaneMaskReg();
-            auto FlipCondReg =
-                BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm,
-                        {}, TII.get(LMC.XorOpc), CondReg)
-                    .addReg(LaneOrigin.CondReg);
-            if (LMA.isSubsetOfExec(LaneOrigin.CondReg, *LaneOrigin.Node->Block,
-                                   MBBILaneOriginNodeFirstTerm))
-              FlipCondReg.addReg(LMC.ExecReg);
-            else
-              FlipCondReg.addImm(-1);
+            // Prev is guaranteed to be a subset of EXEC here: either the
+            // original CondReg was already a subset, or we masked it with
+            // AND(EXEC, CondReg) above. XOR with EXEC flips only within
+            // active lanes, so the result is also a subset of EXEC and
+            // no further AND with EXEC is needed downstream.
+            BuildMI(*LaneOrigin.Node->Block, MBBILaneOriginNodeFirstTerm,
+                    {}, TII.get(LMC.XorOpc), CondReg)
+                .addReg(Prev)
+                .addReg(LMC.ExecReg);
           }
 
           RegMap[std::make_pair(LaneOrigin.Node->Block, LaneOrigin.CondReg)]

@@ -146,10 +146,9 @@ define amdgpu_cs void @inverse_ballot_branch(i32 inreg %s0_1, i32 inreg %s2, ptr
 ;
 ; SDAG-LABEL: inverse_ballot_branch:
 ; SDAG:       ; %bb.0: ; %entry
-; SDAG-NEXT:    s_and_b32 s2, exec_lo, s1
-; SDAG-NEXT:    s_xor_b32 s1, s1, -1
+; SDAG-NEXT:    s_and_b32 s1, exec_lo, s1
 ; SDAG-NEXT:    v_mov_b32_e32 v2, s0
-; SDAG-NEXT:    s_and_b32 s2, s1, exec_lo
+; SDAG-NEXT:    s_xor_b32 s2, s1, exec_lo
 ; SDAG-NEXT:    s_xor_b32 s1, exec_lo, s2
 ; SDAG-NEXT:    s_mov_b32 exec_lo, s2
 ; SDAG-NEXT:    ; divergent control-flow edge
