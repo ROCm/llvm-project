@@ -2883,9 +2883,9 @@ define amdgpu_gfx void @call_72xi32() #1 {
 ; GFX9-NEXT:    buffer_store_dword v45, off, s[0:3], s32 offset:92
 ; GFX9-NEXT:    buffer_store_dword v46, off, s[0:3], s32 offset:96
 ; GFX9-NEXT:    buffer_store_dword v47, off, s[0:3], s32 offset:100
-; GFX9-NEXT:    buffer_store_dword v56, off, s[0:3], s32 offset:104
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 24
 ; GFX9-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:108
+; GFX9-NEXT:    buffer_store_dword v56, off, s[0:3], s32 offset:104
 ; GFX9-NEXT:    buffer_store_dword v57, off, s[0:3], s32 offset:112
 ; GFX9-NEXT:    buffer_store_dword v58, off, s[0:3], s32 offset:116
 ; GFX9-NEXT:    buffer_store_dword v59, off, s[0:3], s32 offset:120

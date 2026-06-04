@@ -1494,8 +1494,8 @@ define amdgpu_kernel void @fma_v4f16(
 ; SI-NEXT:    s_and_b32 s4, s3, 0x1ff
 ; SI-NEXT:    v_or_b32_e32 v0, s4, v0
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
 ; SI-NEXT:    s_lshr_b32 s4, s3, 8
+; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
 ; SI-NEXT:    s_bfe_u32 s6, s3, 0xb0014
 ; SI-NEXT:    s_and_b32 s4, s4, 0xffe
 ; SI-NEXT:    v_readfirstlane_b32 s5, v0

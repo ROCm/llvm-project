@@ -241,11 +241,11 @@ define amdgpu_kernel void @sel_constants_sub_constant_sel_constants_i16_neg(ptr 
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GCN-NEXT:    s_mov_b32 s3, 0xfffd
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_bitcmp1_b32 s2, 0
-; GCN-NEXT:    s_mov_b32 s2, 0xfffd
-; GCN-NEXT:    s_cselect_b32 s2, s2, 0xf449
+; GCN-NEXT:    s_cselect_b32 s2, s3, 0xf449
 ; GCN-NEXT:    v_mov_b32_e32 v1, s2
 ; GCN-NEXT:    global_store_short v0, v1, s[0:1]
 ; GCN-NEXT:    s_endpgm
@@ -260,11 +260,11 @@ define amdgpu_kernel void @sel_constants_sub_constant_sel_constants_v2i16(ptr ad
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GCN-NEXT:    s_mov_b32 s3, 0x50009
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    s_bitcmp1_b32 s2, 0
-; GCN-NEXT:    s_mov_b32 s2, 0x50009
-; GCN-NEXT:    s_cselect_b32 s2, s2, 0x60002
+; GCN-NEXT:    s_cselect_b32 s2, s3, 0x60002
 ; GCN-NEXT:    v_mov_b32_e32 v1, s2
 ; GCN-NEXT:    global_store_dword v0, v1, s[0:1]
 ; GCN-NEXT:    s_endpgm
@@ -586,18 +586,18 @@ define amdgpu_kernel void @frem_constant_sel_constants(ptr addrspace(1) %p, i1 %
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_load_dword s0, s[4:5], 0x2c
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0x40400000
+; GFX9-NEXT:    s_mov_b32 s2, 0x40a00000
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_bitcmp1_b32 s0, 0
 ; GFX9-NEXT:    s_cselect_b64 s[0:1], -1, 0
 ; GFX9-NEXT:    v_cndmask_b32_e64 v1, v0, -4.0, s[0:1]
-; GFX9-NEXT:    s_mov_b32 s0, 0x40a00000
-; GFX9-NEXT:    v_cmp_ge_f32_e64 s[2:3], |v1|, s0
-; GFX9-NEXT:    s_and_b64 vcc, exec, s[2:3]
+; GFX9-NEXT:    v_cmp_ge_f32_e64 s[0:1], |v1|, s2
+; GFX9-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX9-NEXT:    s_cbranch_vccz .LBB26_2
 ; GFX9-NEXT:  ; %bb.1: ; %frem.else
 ; GFX9-NEXT:    v_mov_b32_e32 v0, 0x40a00000
-; GFX9-NEXT:    v_cmp_eq_f32_e64 s[0:1], |v1|, s0
-; GFX9-NEXT:    v_cndmask_b32_e64 v0, v0, 0, s[0:1]
+; GFX9-NEXT:    v_cmp_eq_f32_e64 s[2:3], |v1|, s2
+; GFX9-NEXT:    v_cndmask_b32_e64 v0, v0, 0, s[2:3]
 ; GFX9-NEXT:    s_cbranch_execz .LBB26_3
 ; GFX9-NEXT:    s_branch .LBB26_7
 ; GFX9-NEXT:  .LBB26_2:
@@ -631,10 +631,10 @@ define amdgpu_kernel void @frem_constant_sel_constants(ptr addrspace(1) %p, i1 %
 ; GFX9-NEXT:    v_rndne_f32_e32 v5, v5
 ; GFX9-NEXT:    v_fma_f32 v5, -v5, v0, v4
 ; GFX9-NEXT:    v_add_f32_e32 v6, v5, v0
-; GFX9-NEXT:    v_cmp_gt_f32_e32 vcc, 0, v5
 ; GFX9-NEXT:    v_add_u32_e32 v1, -12, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v5, v5, v6, vcc
+; GFX9-NEXT:    v_cmp_gt_f32_e64 s[0:1], 0, v5
 ; GFX9-NEXT:    v_cmp_lt_i32_e32 vcc, 12, v1
+; GFX9-NEXT:    v_cndmask_b32_e64 v5, v5, v6, s[0:1]
 ; GFX9-NEXT:    v_ldexp_f32 v5, v5, 12
 ; GFX9-NEXT:    s_cbranch_vccnz .LBB26_5
 ; GFX9-NEXT:  .LBB26_6: ; %Flow12
@@ -660,19 +660,19 @@ define amdgpu_kernel void @frem_constant_sel_constants(ptr addrspace(1) %p, i1 %
 ; GFX942:       ; %bb.0:
 ; GFX942-NEXT:    s_load_dword s0, s[4:5], 0x2c
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0x40400000
+; GFX942-NEXT:    s_mov_b32 s2, 0x40a00000
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    s_bitcmp1_b32 s0, 0
 ; GFX942-NEXT:    s_cselect_b64 s[0:1], -1, 0
 ; GFX942-NEXT:    v_cndmask_b32_e64 v1, v0, -4.0, s[0:1]
-; GFX942-NEXT:    s_mov_b32 s0, 0x40a00000
-; GFX942-NEXT:    v_cmp_ge_f32_e64 s[2:3], |v1|, s0
-; GFX942-NEXT:    s_and_b64 vcc, exec, s[2:3]
+; GFX942-NEXT:    v_cmp_ge_f32_e64 s[0:1], |v1|, s2
+; GFX942-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX942-NEXT:    s_cbranch_vccz .LBB26_2
 ; GFX942-NEXT:  ; %bb.1: ; %frem.else
 ; GFX942-NEXT:    v_mov_b32_e32 v0, 0x40a00000
-; GFX942-NEXT:    v_cmp_eq_f32_e64 s[0:1], |v1|, s0
+; GFX942-NEXT:    v_cmp_eq_f32_e64 s[2:3], |v1|, s2
 ; GFX942-NEXT:    s_nop 1
-; GFX942-NEXT:    v_cndmask_b32_e64 v0, v0, 0, s[0:1]
+; GFX942-NEXT:    v_cndmask_b32_e64 v0, v0, 0, s[2:3]
 ; GFX942-NEXT:    s_cbranch_execz .LBB26_3
 ; GFX942-NEXT:    s_branch .LBB26_7
 ; GFX942-NEXT:  .LBB26_2:
@@ -706,11 +706,11 @@ define amdgpu_kernel void @frem_constant_sel_constants(ptr addrspace(1) %p, i1 %
 ; GFX942-NEXT:    v_rndne_f32_e32 v5, v5
 ; GFX942-NEXT:    v_fma_f32 v5, -v5, v0, v4
 ; GFX942-NEXT:    v_add_f32_e32 v6, v5, v0
-; GFX942-NEXT:    v_cmp_gt_f32_e32 vcc, 0, v5
 ; GFX942-NEXT:    v_add_u32_e32 v1, -12, v1
-; GFX942-NEXT:    s_nop 0
-; GFX942-NEXT:    v_cndmask_b32_e32 v5, v5, v6, vcc
+; GFX942-NEXT:    v_cmp_gt_f32_e64 s[0:1], 0, v5
 ; GFX942-NEXT:    v_cmp_lt_i32_e32 vcc, 12, v1
+; GFX942-NEXT:    s_nop 0
+; GFX942-NEXT:    v_cndmask_b32_e64 v5, v5, v6, s[0:1]
 ; GFX942-NEXT:    v_ldexp_f32 v5, v5, 12
 ; GFX942-NEXT:    s_cbranch_vccnz .LBB26_5
 ; GFX942-NEXT:  .LBB26_6: ; %Flow12

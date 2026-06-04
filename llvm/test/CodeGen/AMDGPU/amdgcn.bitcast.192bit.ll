@@ -5193,12 +5193,12 @@ define <12 x i16> @bitcast_v3i64_to_v12i16(<3 x i64> %a, i32 %b) #0 {
 ; SI-NEXT:    s_andn2_saveexec_b64 s[4:5], s[4:5]
 ; SI-NEXT:    s_cbranch_execz .LBB40_4
 ; SI-NEXT:  ; %bb.3: ; %cmp.true
-; SI-NEXT:    v_add_i32_e32 v0, vcc, 3, v0
-; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; SI-NEXT:    v_add_i32_e32 v2, vcc, 3, v2
-; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, 3, v4
 ; SI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
+; SI-NEXT:    v_add_i32_e32 v2, vcc, 3, v2
+; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
+; SI-NEXT:    v_add_i32_e32 v0, vcc, 3, v0
+; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; SI-NEXT:    v_alignbit_b32 v6, v5, v4, 16
 ; SI-NEXT:    v_alignbit_b32 v7, v3, v2, 16
 ; SI-NEXT:    v_alignbit_b32 v9, v1, v0, 16
@@ -5844,12 +5844,12 @@ define <12 x half> @bitcast_v3i64_to_v12f16(<3 x i64> %a, i32 %b) #0 {
 ; SI-NEXT:    s_andn2_saveexec_b64 s[4:5], s[4:5]
 ; SI-NEXT:    s_cbranch_execz .LBB44_4
 ; SI-NEXT:  ; %bb.3: ; %cmp.true
-; SI-NEXT:    v_add_i32_e32 v0, vcc, 3, v0
-; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; SI-NEXT:    v_add_i32_e32 v2, vcc, 3, v2
-; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, 3, v4
 ; SI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
+; SI-NEXT:    v_add_i32_e32 v2, vcc, 3, v2
+; SI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
+; SI-NEXT:    v_add_i32_e32 v0, vcc, 3, v0
+; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; SI-NEXT:    v_alignbit_b32 v6, v5, v4, 16
 ; SI-NEXT:    v_alignbit_b32 v7, v3, v2, 16
 ; SI-NEXT:    v_alignbit_b32 v9, v1, v0, 16

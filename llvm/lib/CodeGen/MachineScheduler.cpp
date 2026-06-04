@@ -125,6 +125,9 @@ STATISTIC(
 STATISTIC(
     NumBotPathReducePreRA,
     "Number of scheduling units chosen for BotPathReduce heuristic pre-RA");
+STATISTIC(
+    NumReadyReleasePreRA,
+    "Number of scheduling units chosen for ReadyRelease heuristic pre-RA");
 STATISTIC(NumNodeOrderPreRA,
           "Number of scheduling units chosen for NodeOrder heuristic pre-RA");
 STATISTIC(NumFirstValidPreRA,
@@ -171,6 +174,9 @@ STATISTIC(
 STATISTIC(
     NumBotPathReducePostRA,
     "Number of scheduling units chosen for BotPathReduce heuristic post-RA");
+STATISTIC(
+    NumReadyReleasePostRA,
+    "Number of scheduling units chosen for ReadyRelease heuristic post-RA");
 STATISTIC(NumNodeOrderPostRA,
           "Number of scheduling units chosen for NodeOrder heuristic post-RA");
 STATISTIC(NumFirstValidPostRA,
@@ -3352,6 +3358,7 @@ const char *GenericSchedulerBase::getReasonStr(
   case TopPathReduce:  return "TOP-PATH  ";
   case BotHeightReduce:return "BOT-HEIGHT";
   case BotPathReduce:  return "BOT-PATH  ";
+  case ReadyRelease:   return "RELEASE   ";
   case NodeOrder:      return "ORDER     ";
   case FirstValid:     return "FIRST     ";
   };
@@ -3563,6 +3570,9 @@ static void tracePick(GenericSchedulerBase::CandReason Reason, bool IsTop,
     case GenericScheduler::BotPathReduce:
       NumBotPathReducePostRA++;
       return;
+    case GenericScheduler::ReadyRelease:
+      NumReadyReleasePostRA++;
+      return;
     case GenericScheduler::NodeOrder:
       NumNodeOrderPostRA++;
       return;
@@ -3621,6 +3631,9 @@ static void tracePick(GenericSchedulerBase::CandReason Reason, bool IsTop,
       return;
     case GenericScheduler::BotPathReduce:
       NumBotPathReducePreRA++;
+      return;
+    case GenericScheduler::ReadyRelease:
+      NumReadyReleasePreRA++;
       return;
     case GenericScheduler::NodeOrder:
       NumNodeOrderPreRA++;

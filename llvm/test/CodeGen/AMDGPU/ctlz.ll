@@ -806,8 +806,8 @@ define amdgpu_kernel void @v_ctlz_i64(ptr addrspace(1) noalias %out, ptr addrspa
 ; VI-NEXT:    v_addc_u32_e32 v4, vcc, 0, v4, vcc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_ffbh_u32_e32 v0, v0
-; VI-NEXT:    v_add_u32_e64 v0, s[0:1], v0, 32 clamp
 ; VI-NEXT:    v_ffbh_u32_e32 v1, v1
+; VI-NEXT:    v_add_u32_e64 v0, s[2:3], v0, 32 clamp
 ; VI-NEXT:    v_min3_u32 v1, v0, v1, 64
 ; VI-NEXT:    flat_store_dwordx2 v[3:4], v[1:2]
 ; VI-NEXT:    s_endpgm
@@ -927,15 +927,15 @@ define amdgpu_kernel void @v_ctlz_i64_trunc(ptr addrspace(1) noalias %out, ptr a
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, s2, v1
 ; VI-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
 ; VI-NEXT:    flat_load_dwordx2 v[1:2], v[1:2]
-; VI-NEXT:    v_add_u32_e32 v3, vcc, s0, v0
-; VI-NEXT:    v_mov_b32_e32 v4, s1
-; VI-NEXT:    v_addc_u32_e32 v4, vcc, 0, v4, vcc
+; VI-NEXT:    v_mov_b32_e32 v3, s1
+; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_ffbh_u32_e32 v0, v1
-; VI-NEXT:    v_add_u32_e64 v0, s[0:1], v0, 32 clamp
-; VI-NEXT:    v_ffbh_u32_e32 v1, v2
-; VI-NEXT:    v_min3_u32 v0, v0, v1, 64
-; VI-NEXT:    flat_store_dword v[3:4], v0
+; VI-NEXT:    v_ffbh_u32_e32 v1, v1
+; VI-NEXT:    v_ffbh_u32_e32 v2, v2
+; VI-NEXT:    v_add_u32_e64 v1, s[2:3], v1, 32 clamp
+; VI-NEXT:    v_min3_u32 v2, v1, v2, 64
+; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; VI-NEXT:    flat_store_dword v[0:1], v2
 ; VI-NEXT:    s_endpgm
 ;
 ; EG-LABEL: v_ctlz_i64_trunc:
@@ -1096,6 +1096,7 @@ define amdgpu_kernel void @v_ctlz_i32_sel_eq_neg1(ptr addrspace(1) noalias %out,
 ; GFX10-GISEL:       ; %bb.0:
 ; GFX10-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; GFX10-GISEL-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
@@ -1103,8 +1104,7 @@ define amdgpu_kernel void @v_ctlz_i32_sel_eq_neg1(ptr addrspace(1) noalias %out,
 ; GFX10-GISEL-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
 ; GFX10-GISEL-NEXT:    v_min_u32_e32 v1, 32, v1
 ; GFX10-GISEL-NEXT:    v_cndmask_b32_e64 v0, v1, -1, vcc_lo
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-GISEL-NEXT:    global_store_dword v1, v0, s[0:1]
+; GFX10-GISEL-NEXT:    global_store_dword v2, v0, s[0:1]
 ; GFX10-GISEL-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: v_ctlz_i32_sel_eq_neg1:
@@ -1203,6 +1203,7 @@ define amdgpu_kernel void @v_ctlz_i32_sel_ne_neg1(ptr addrspace(1) noalias %out,
 ; GFX10-GISEL:       ; %bb.0:
 ; GFX10-GISEL-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; GFX10-GISEL-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX10-GISEL-NEXT:    global_load_dword v0, v0, s[2:3]
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
@@ -1210,8 +1211,7 @@ define amdgpu_kernel void @v_ctlz_i32_sel_ne_neg1(ptr addrspace(1) noalias %out,
 ; GFX10-GISEL-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; GFX10-GISEL-NEXT:    v_min_u32_e32 v1, 32, v1
 ; GFX10-GISEL-NEXT:    v_cndmask_b32_e32 v0, -1, v1, vcc_lo
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-GISEL-NEXT:    global_store_dword v1, v0, s[0:1]
+; GFX10-GISEL-NEXT:    global_store_dword v2, v0, s[0:1]
 ; GFX10-GISEL-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: v_ctlz_i32_sel_ne_neg1:
@@ -2054,6 +2054,7 @@ define amdgpu_kernel void @v_ctlz_i8_sel_eq_neg1(ptr addrspace(1) noalias %out, 
 ; GFX10-GISEL-NEXT:    v_mov_b32_e32 v2, s3
 ; GFX10-GISEL-NEXT:    v_add_co_u32 v0, vcc_lo, v1, v0
 ; GFX10-GISEL-NEXT:    v_add_co_ci_u32_e32 v1, vcc_lo, v2, v3, vcc_lo
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX10-GISEL-NEXT:    global_load_ubyte v0, v[0:1], off
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    v_ffbh_u32_e32 v1, v0
@@ -2061,8 +2062,7 @@ define amdgpu_kernel void @v_ctlz_i8_sel_eq_neg1(ptr addrspace(1) noalias %out, 
 ; GFX10-GISEL-NEXT:    v_min_u32_e32 v1, 32, v1
 ; GFX10-GISEL-NEXT:    v_add_nc_u16 v1, 0xffe8, v1
 ; GFX10-GISEL-NEXT:    v_cndmask_b32_e64 v0, v1, 0xffff, vcc_lo
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, 0
-; GFX10-GISEL-NEXT:    global_store_byte v1, v0, s[0:1]
+; GFX10-GISEL-NEXT:    global_store_byte v2, v0, s[0:1]
 ; GFX10-GISEL-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: v_ctlz_i8_sel_eq_neg1:

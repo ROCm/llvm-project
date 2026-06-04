@@ -103,6 +103,13 @@ static cl::opt<bool> DisableRewriteMFMAFormSchedStage(
     "amdgpu-disable-rewrite-mfma-form-sched-stage", cl::Hidden,
     cl::desc("Disable rewrite mfma rewrite scheduling stage"), cl::init(true));
 
+static cl::opt<bool> ReleaseCreditClusters(
+    "amdgpu-release-credit-clusters", cl::Hidden,
+    cl::desc("When scoring the set of instructions released by a scheduling "
+             "candidate, credit every ready member of a released cluster so "
+             "that picks completing a full cluster are preferred"),
+    cl::init(true));
+
 const unsigned ScheduleMetrics::ScaleFactor = 100;
 
 GCNSchedStrategy::GCNSchedStrategy(const MachineSchedContext *C)
@@ -520,55 +527,27 @@ SUnit *GCNSchedStrategy::pickNodeBidirectional(bool &IsTopNode,
   CandPolicy TopPolicy;
   setPolicy(TopPolicy, /*IsPostRA=*/false, Top, &Bot);
 
+  // Unlike GenericScheduler, we do not reuse a previously cached candidate from
+  // the opposite zone. The RELEASE tie-break in tryCandidate() scores a node by
+  // how much ready work scheduling it would expose, which depends on the global
+  // set of already-scheduled nodes. Because scheduling a node in one zone can
+  // change the readiness of candidates in the other zone, a cached candidate
+  // can become stale: re-picking it from a fresh queue may yield a different
+  // node (which is exactly what the VerifyScheduling re-pick check asserts).
+  // Always recompute both candidates so the pick reflects the current state.
   bool BotPending = false;
-  // See if BotCand is still valid (because we previously scheduled from Top).
   LLVM_DEBUG(dbgs() << "Picking from Bot:\n");
-  if (!BotCand.isValid() || BotCand.SU->isScheduled ||
-      BotCand.Policy != BotPolicy) {
-    BotCand.reset(CandPolicy());
-    pickNodeFromQueue(Bot, BotPolicy, DAG->getBotRPTracker(), BotCand,
-                      BotPending,
-                      /*IsBottomUp=*/true);
-    assert(BotCand.Reason != NoCand && "failed to find the first candidate");
-  } else {
-    LLVM_DEBUG(traceCandidate(BotCand));
-#ifndef NDEBUG
-    if (VerifyScheduling) {
-      SchedCandidate TCand;
-      TCand.reset(CandPolicy());
-      pickNodeFromQueue(Bot, BotPolicy, DAG->getBotRPTracker(), TCand,
-                        BotPending,
-                        /*IsBottomUp=*/true);
-      assert(TCand.SU == BotCand.SU &&
-             "Last pick result should correspond to re-picking right now");
-    }
-#endif
-  }
+  BotCand.reset(CandPolicy());
+  pickNodeFromQueue(Bot, BotPolicy, DAG->getBotRPTracker(), BotCand, BotPending,
+                    /*IsBottomUp=*/true);
+  assert(BotCand.Reason != NoCand && "failed to find the first candidate");
 
   bool TopPending = false;
-  // Check if the top Q has a better candidate.
   LLVM_DEBUG(dbgs() << "Picking from Top:\n");
-  if (!TopCand.isValid() || TopCand.SU->isScheduled ||
-      TopCand.Policy != TopPolicy) {
-    TopCand.reset(CandPolicy());
-    pickNodeFromQueue(Top, TopPolicy, DAG->getTopRPTracker(), TopCand,
-                      TopPending,
-                      /*IsBottomUp=*/false);
-    assert(TopCand.Reason != NoCand && "failed to find the first candidate");
-  } else {
-    LLVM_DEBUG(traceCandidate(TopCand));
-#ifndef NDEBUG
-    if (VerifyScheduling) {
-      SchedCandidate TCand;
-      TCand.reset(CandPolicy());
-      pickNodeFromQueue(Top, TopPolicy, DAG->getTopRPTracker(), TCand,
-                        TopPending,
-                        /*IsBottomUp=*/false);
-      assert(TCand.SU == TopCand.SU &&
-             "Last pick result should correspond to re-picking right now");
-    }
-#endif
-  }
+  TopCand.reset(CandPolicy());
+  pickNodeFromQueue(Top, TopPolicy, DAG->getTopRPTracker(), TopCand, TopPending,
+                    /*IsBottomUp=*/false);
+  assert(TopCand.Reason != NoCand && "failed to find the first candidate");
 
   // Pick best from BotCand and TopCand.
   LLVM_DEBUG(dbgs() << "Top Cand: "; traceCandidate(TopCand);
@@ -748,6 +727,162 @@ GCNMaxOccupancySchedStrategy::GCNMaxOccupancySchedStrategy(
   SchedStages.push_back(GCNSchedStageID::PreRARematerialize);
   if (IsLegacyScheduler)
     GCNTrackersOverride = std::nullopt;
+}
+
+// A neighbor in the scheduling direction becomes ready once every one of its
+// data dependences on the opposite side (other than \p Pick itself) has been
+// scheduled. Bottom-up scheduling releases predecessors; top-down releases
+// successors. Only data edges gate issue readiness here; ordering, weak, and
+// artificial edges are intentionally ignored.
+static bool becomesReadyAfter(const SUnit *N, const SUnit *Pick, bool AtTop) {
+  for (const SDep &Dep : (AtTop ? N->Preds : N->Succs)) {
+    if (Dep.getKind() != SDep::Data)
+      continue;
+    const SUnit *Other = Dep.getSUnit();
+    if (Other != Pick && !Other->isScheduled)
+      return false;
+  }
+  return true;
+}
+
+unsigned
+GCNMaxOccupancySchedStrategy::getReleasedClusterCount(const SUnit *Pick,
+                                                      bool AtTop) const {
+  if (!ReleaseCreditClusters)
+    return 0;
+
+  unsigned CompletedClusters = 0;
+  SmallSet<unsigned, 4> Seen;
+  for (const SDep &Dep : (AtTop ? Pick->Succs : Pick->Preds)) {
+    if (Dep.getKind() != SDep::Data)
+      continue;
+    const SUnit *N = Dep.getSUnit();
+    if (!N || !N->isClustered() || N->isScheduled ||
+        !becomesReadyAfter(N, Pick, AtTop))
+      continue;
+    // Only consider each cluster once.
+    if (!Seen.insert(N->ParentClusterIdx).second)
+      continue;
+    ClusterInfo *CI = DAG->getCluster(N->ParentClusterIdx);
+    if (!CI)
+      continue;
+    // The cluster is released only if every member will be ready to issue as a
+    // pack: already scheduled, or itself made ready by this pick.
+    bool WholeClusterReady = all_of(*CI, [&](const SUnit *Member) {
+      return Member->isScheduled || becomesReadyAfter(Member, Pick, AtTop);
+    });
+    if (WholeClusterReady)
+      ++CompletedClusters;
+  }
+
+  return CompletedClusters;
+}
+
+bool GCNMaxOccupancySchedStrategy::tryCandidate(SchedCandidate &Cand,
+                                                SchedCandidate &TryCand,
+                                                SchedBoundary *Zone) const {
+  // Initialize the candidate if needed.
+  if (!Cand.isValid()) {
+    TryCand.Reason = FirstValid;
+    return true;
+  }
+
+  // Bias PhysReg Defs and copies to their uses and defined respectively.
+  if (tryBiasPhysRegs(TryCand, Cand, Zone, RegionPolicy.BiasPRegsExtra))
+    return TryCand.Reason != NoCand;
+
+  // Avoid exceeding the target's limit.
+  if (DAG->isTrackingPressure() &&
+      tryPressure(TryCand.RPDelta.Excess, Cand.RPDelta.Excess, TryCand, Cand,
+                  RegExcess, TRI, DAG->MF))
+    return TryCand.Reason != NoCand;
+
+  // Avoid increasing the max critical pressure in the scheduled region.
+  if (DAG->isTrackingPressure() &&
+      tryPressure(TryCand.RPDelta.CriticalMax, Cand.RPDelta.CriticalMax,
+                  TryCand, Cand, RegCritical, TRI, DAG->MF))
+    return TryCand.Reason != NoCand;
+
+  bool SameBoundary = Zone != nullptr;
+  if (SameBoundary) {
+    // For loops that are acyclic path limited, aggressively schedule for
+    // latency. Within an single cycle, whenever CurrMOps > 0, allow normal
+    // heuristics to take precedence.
+    if (Rem.IsAcyclicLatencyLimited && !Zone->getCurrMOps() &&
+        tryLatency(TryCand, Cand, *Zone))
+      return TryCand.Reason != NoCand;
+
+    // Prioritize instructions that read unbuffered resources by stall cycles.
+    if (tryLess(Zone->getLatencyStallCycles(TryCand.SU),
+                Zone->getLatencyStallCycles(Cand.SU), TryCand, Cand, Stall))
+      return TryCand.Reason != NoCand;
+  }
+
+  // Keep clustered nodes together to encourage downstream peephole
+  // optimizations which may reduce resource requirements.
+  unsigned CandZoneCluster = Cand.AtTop ? TopClusterID : BotClusterID;
+  unsigned TryCandZoneCluster = TryCand.AtTop ? TopClusterID : BotClusterID;
+  bool CandIsClusterSucc =
+      isTheSameCluster(CandZoneCluster, Cand.SU->ParentClusterIdx);
+  bool TryCandIsClusterSucc =
+      isTheSameCluster(TryCandZoneCluster, TryCand.SU->ParentClusterIdx);
+  if (tryGreater(TryCandIsClusterSucc, CandIsClusterSucc, TryCand, Cand,
+                 Cluster))
+    return TryCand.Reason != NoCand;
+
+  if (SameBoundary) {
+    // Weak edges are for clustering and other constraints.
+    if (tryLess(getWeakLeft(TryCand.SU, TryCand.AtTop),
+                getWeakLeft(Cand.SU, Cand.AtTop), TryCand, Cand, Weak))
+      return TryCand.Reason != NoCand;
+  }
+
+  // Avoid increasing the max pressure of the entire region.
+  if (DAG->isTrackingPressure() &&
+      tryPressure(TryCand.RPDelta.CurrentMax, Cand.RPDelta.CurrentMax, TryCand,
+                  Cand, RegMax, TRI, DAG->MF))
+    return TryCand.Reason != NoCand;
+
+  if (SameBoundary) {
+    // Avoid critical resource consumption and balance the schedule.
+    TryCand.initResourceDelta(DAG, SchedModel);
+    if (tryLess(TryCand.ResDelta.CritResources, Cand.ResDelta.CritResources,
+                TryCand, Cand, ResourceReduce))
+      return TryCand.Reason != NoCand;
+    if (tryGreater(TryCand.ResDelta.DemandedResources,
+                   Cand.ResDelta.DemandedResources, TryCand, Cand,
+                   ResourceDemand))
+      return TryCand.Reason != NoCand;
+
+    // Avoid serializing long latency dependence chains.
+    // For acyclic path limited loops, latency was already checked above.
+    if (!RegionPolicy.DisableLatencyHeuristic && TryCand.Policy.ReduceLatency &&
+        !Rem.IsAcyclicLatencyLimited && tryLatency(TryCand, Cand, *Zone))
+      return TryCand.Reason != NoCand;
+
+    // When the heuristics above cannot separate two candidates, prefer the one
+    // whose scheduling resolves more data hazards, i.e. exposes the most ready
+    // work that can hide under the latency/resource window this pick opens.
+    //
+    // First prefer a pick that completes a whole cluster. A cluster is forced
+    // to issue as a single pack, so freeing its final outstanding member
+    // resolves more hazards than freeing the same number of unrelated
+    // instructions or only part of a cluster. This lets the strategy prefer,
+    // e.g., an MFMA whose source load is the last outstanding member of a
+    // DS_READ cluster over one that only frees isolated work.
+    if (tryGreater(getReleasedClusterCount(TryCand.SU, TryCand.AtTop),
+                   getReleasedClusterCount(Cand.SU, Cand.AtTop), TryCand, Cand,
+                   ReadyRelease))
+      return TryCand.Reason != NoCand;
+
+    // Fall through to original instruction order.
+    if ((Zone->isTop() && TryCand.SU->NodeNum < Cand.SU->NodeNum) ||
+        (!Zone->isTop() && TryCand.SU->NodeNum > Cand.SU->NodeNum)) {
+      TryCand.Reason = NodeOrder;
+      return true;
+    }
+  }
+  return false;
 }
 
 GCNMaxILPSchedStrategy::GCNMaxILPSchedStrategy(const MachineSchedContext *C)

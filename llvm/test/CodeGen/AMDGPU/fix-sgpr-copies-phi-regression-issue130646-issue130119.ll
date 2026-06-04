@@ -89,24 +89,24 @@ define amdgpu_cs void @issue130119(i1 %arg) {
 ; CHECK-NEXT:    s_cmp_eq_u32 s6, 0
 ; CHECK-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; CHECK-NEXT:    s_cmp_eq_u32 s6, 1
-; CHECK-NEXT:    s_cselect_b64 s[8:9], -1, 0
-; CHECK-NEXT:    s_mov_b64 s[10:11], 0
+; CHECK-NEXT:    s_mov_b64 s[8:9], 0
+; CHECK-NEXT:    s_cselect_b64 s[10:11], -1, 0
 ; CHECK-NEXT:    ; implicit-def: $sgpr6_sgpr7
 ; CHECK-NEXT:    s_branch .LBB1_4
 ; CHECK-NEXT:  .LBB1_3: ; %Flow1
 ; CHECK-NEXT:    ; in Loop: Header=BB1_4 Depth=2
 ; CHECK-NEXT:    s_xor_b64 s[14:15], s[14:15], -1
 ; CHECK-NEXT:    s_and_b64 s[12:13], exec, s[12:13]
-; CHECK-NEXT:    s_or_b64 s[10:11], s[12:13], s[10:11]
+; CHECK-NEXT:    s_or_b64 s[8:9], s[12:13], s[8:9]
 ; CHECK-NEXT:    s_andn2_b64 s[6:7], s[6:7], exec
 ; CHECK-NEXT:    s_and_b64 s[12:13], s[14:15], exec
 ; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[12:13]
-; CHECK-NEXT:    s_andn2_b64 exec, exec, s[10:11]
+; CHECK-NEXT:    s_andn2_b64 exec, exec, s[8:9]
 ; CHECK-NEXT:    s_cbranch_execz .LBB1_8
 ; CHECK-NEXT:  .LBB1_4: ; %bb3
 ; CHECK-NEXT:    ; Parent Loop BB1_2 Depth=1
 ; CHECK-NEXT:    ; => This Inner Loop Header: Depth=2
-; CHECK-NEXT:    s_andn2_b64 vcc, exec, s[8:9]
+; CHECK-NEXT:    s_andn2_b64 vcc, exec, s[10:11]
 ; CHECK-NEXT:    s_mov_b64 s[14:15], s[4:5]
 ; CHECK-NEXT:    s_cbranch_vccnz .LBB1_6
 ; CHECK-NEXT:  ; %bb.5: ; %bb7
@@ -125,7 +125,7 @@ define amdgpu_cs void @issue130119(i1 %arg) {
 ; CHECK-NEXT:    s_branch .LBB1_3
 ; CHECK-NEXT:  .LBB1_8: ; %loop.exit.guard
 ; CHECK-NEXT:    ; in Loop: Header=BB1_2 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    s_and_saveexec_b64 s[8:9], s[6:7]
 ; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]

@@ -107,13 +107,14 @@ define i32 @select_load_i32_p1_offset(i1 %cond, ptr addrspace(1) %a, ptr addrspa
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_add_co_u32_e32 v3, vcc, 0x100, v1
-; CHECK-NEXT:    v_addc_co_u32_e32 v4, vcc, 0, v2, vcc
-; CHECK-NEXT:    v_add_co_u32_e32 v5, vcc, 0x200, v1
+; CHECK-NEXT:    s_mov_b64 s[4:5], vcc
+; CHECK-NEXT:    v_add_co_u32_e32 v4, vcc, 0x200, v1
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
-; CHECK-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v2, vcc
+; CHECK-NEXT:    v_addc_co_u32_e64 v1, s[4:5], 0, v2, s[4:5]
+; CHECK-NEXT:    v_addc_co_u32_e32 v2, vcc, 0, v2, vcc
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v4, vcc
-; CHECK-NEXT:    v_cndmask_b32_e32 v0, v5, v3, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v1, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v0, v4, v3, vcc
 ; CHECK-NEXT:    global_load_dword v0, v[0:1], off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]

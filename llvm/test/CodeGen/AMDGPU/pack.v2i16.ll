@@ -184,14 +184,14 @@ define amdgpu_kernel void @v_pack_v2i16(ptr addrspace(1) %in0, ptr addrspace(1) 
 ; GFX803-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; GFX803-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX803-NEXT:    v_mov_b32_e32 v3, s3
-; GFX803-NEXT:    v_add_u32_e32 v2, vcc, s2, v2
-; GFX803-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
+; GFX803-NEXT:    flat_load_dword v4, v[0:1] glc
+; GFX803-NEXT:    s_waitcnt vmcnt(0)
+; GFX803-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
+; GFX803-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
 ; GFX803-NEXT:    flat_load_dword v0, v[0:1] glc
 ; GFX803-NEXT:    s_waitcnt vmcnt(0)
-; GFX803-NEXT:    flat_load_dword v1, v[2:3] glc
-; GFX803-NEXT:    s_waitcnt vmcnt(0)
 ; GFX803-NEXT:    s_mov_b32 s0, 0x1000504
-; GFX803-NEXT:    v_perm_b32 v0, v0, v1, s0
+; GFX803-NEXT:    v_perm_b32 v0, v4, v0, s0
 ; GFX803-NEXT:    ;;#ASMSTART
 ; GFX803-NEXT:    ; use v0
 ; GFX803-NEXT:    ;;#ASMEND
@@ -265,16 +265,16 @@ define amdgpu_kernel void @v_pack_v2i16_user(ptr addrspace(1) %in0, ptr addrspac
 ; GFX803-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; GFX803-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX803-NEXT:    v_mov_b32_e32 v3, s3
-; GFX803-NEXT:    v_add_u32_e32 v2, vcc, s2, v2
-; GFX803-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
-; GFX803-NEXT:    flat_load_dword v0, v[0:1] glc
+; GFX803-NEXT:    flat_load_dword v4, v[0:1] glc
 ; GFX803-NEXT:    s_waitcnt vmcnt(0)
-; GFX803-NEXT:    flat_load_dword v1, v[2:3] glc
+; GFX803-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
+; GFX803-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; GFX803-NEXT:    flat_load_dword v0, v[0:1] glc
 ; GFX803-NEXT:    s_waitcnt vmcnt(0)
 ; GFX803-NEXT:    s_mov_b32 s0, 0x1000504
 ; GFX803-NEXT:    s_mov_b32 s3, 0x1100f000
 ; GFX803-NEXT:    s_mov_b32 s2, -1
-; GFX803-NEXT:    v_perm_b32 v0, v0, v1, s0
+; GFX803-NEXT:    v_perm_b32 v0, v4, v0, s0
 ; GFX803-NEXT:    v_add_u32_e32 v0, vcc, 9, v0
 ; GFX803-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX803-NEXT:    s_waitcnt vmcnt(0)

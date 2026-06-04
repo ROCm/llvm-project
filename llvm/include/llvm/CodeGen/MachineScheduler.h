@@ -1114,6 +1114,7 @@ public:
     BotPathReduce,
     TopDepthReduce,
     TopPathReduce,
+    ReadyRelease,
     NodeOrder,
     FirstValid
   };

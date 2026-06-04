@@ -486,8 +486,8 @@ define amdgpu_kernel void @s_multiple_frame_indexes_imm_offsets(i32 inreg %arg0)
 ; GCN: v_mov_b32_e32 [[ALLOCA1:v[0-9]+]], 0x48
 ; GCN: v_mov_b32_e32 [[ALLOCA2:v[0-9]+]], 0x44
 ; GCN: v_cmp_eq_u32_e32 vcc, 0, v0
+; GCN-DAG: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: v_cndmask_b32_e32 [[SELECT:v[0-9]+]], [[ALLOCA1]], [[ALLOCA2]], vcc
-; GCN: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: ; use [[SELECT]], [[ALLOCA0]]
 define amdgpu_kernel void @v_multiple_frame_indexes_literal_offsets() #0 {
   %vgpr = call i32 @llvm.amdgcn.workitem.id.x()
@@ -504,8 +504,8 @@ define amdgpu_kernel void @v_multiple_frame_indexes_literal_offsets() #0 {
 ; GCN: v_mov_b32_e32 [[ALLOCA1:v[0-9]+]], 0x44
 ; GCN: v_mov_b32_e32 [[ALLOCA2:v[0-9]+]], 64
 ; GCN: v_cmp_eq_u32_e32 vcc, 0, v0
+; GCN-DAG: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: v_cndmask_b32_e32 [[SELECT:v[0-9]+]], [[ALLOCA1]], [[ALLOCA2]], vcc
-; GCN: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: ; use [[SELECT]], [[ALLOCA0]]
 define amdgpu_kernel void @v_multiple_frame_indexes_one_imm_one_literal_offset() #0 {
   %vgpr = call i32 @llvm.amdgcn.workitem.id.x()
@@ -522,8 +522,8 @@ define amdgpu_kernel void @v_multiple_frame_indexes_one_imm_one_literal_offset()
 ; GCN: v_mov_b32_e32 [[ALLOCA1:v[0-9]+]], 12
 ; GCN: v_mov_b32_e32 [[ALLOCA2:v[0-9]+]], 8
 ; GCN: v_cmp_eq_u32_e32 vcc, 0, v0
+; GCN-DAG: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: v_cndmask_b32_e32 [[SELECT:v[0-9]+]], [[ALLOCA1]], [[ALLOCA2]], vcc
-; GCN: v_mov_b32_e32 [[ALLOCA0:v[0-9]+]], 0{{$}}
 ; GCN: ; use [[SELECT]], [[ALLOCA0]]
 define amdgpu_kernel void @v_multiple_frame_indexes_imm_offsets() #0 {
   %vgpr = call i32 @llvm.amdgcn.workitem.id.x()

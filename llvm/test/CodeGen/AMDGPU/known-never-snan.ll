@@ -458,9 +458,9 @@ define float @v_test_known_not_snan_round_input_fmed3_r_i_i_f32(float %a) #0 {
 ; GCN-NEXT:    v_trunc_f32_e32 v1, v0
 ; GCN-NEXT:    v_sub_f32_e32 v2, v0, v1
 ; GCN-NEXT:    v_cmp_ge_f32_e64 s[4:5], |v2|, 0.5
+; GCN-NEXT:    s_brev_b32 s6, -2
 ; GCN-NEXT:    v_cndmask_b32_e64 v2, 0, 1.0, s[4:5]
-; GCN-NEXT:    s_brev_b32 s4, -2
-; GCN-NEXT:    v_bfi_b32 v0, s4, v2, v0
+; GCN-NEXT:    v_bfi_b32 v0, s6, v2, v0
 ; GCN-NEXT:    v_add_f32_e32 v0, v1, v0
 ; GCN-NEXT:    v_med3_f32 v0, v0, 2.0, 4.0
 ; GCN-NEXT:    s_setpc_b64 s[30:31]

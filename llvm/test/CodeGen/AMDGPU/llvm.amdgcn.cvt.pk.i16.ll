@@ -83,12 +83,12 @@ define amdgpu_kernel void @s_cvt_pk_i16_samereg_i32(ptr addrspace(1) %out, i32 %
 ;
 ; SI-GISEL-LABEL: s_cvt_pk_i16_samereg_i32:
 ; SI-GISEL:       ; %bb.0:
-; SI-GISEL-NEXT:    s_load_dword s3, s[4:5], 0xb
+; SI-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; SI-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-GISEL-NEXT:    s_mov_b32 s2, -1
-; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-GISEL-NEXT:    v_cvt_pk_i16_i32_e64 v0, s3, s3
 ; SI-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-GISEL-NEXT:    v_cvt_pk_i16_i32_e64 v0, s6, s6
 ; SI-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-GISEL-NEXT:    s_endpgm
 ;
@@ -103,25 +103,15 @@ define amdgpu_kernel void @s_cvt_pk_i16_samereg_i32(ptr addrspace(1) %out, i32 %
 ; VI-NEXT:    flat_store_dword v[0:1], v2
 ; VI-NEXT:    s_endpgm
 ;
-; GFX9-SDAG-LABEL: s_cvt_pk_i16_samereg_i32:
-; GFX9-SDAG:       ; %bb.0:
-; GFX9-SDAG-NEXT:    s_load_dword s2, s[4:5], 0x2c
-; GFX9-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, 0
-; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-SDAG-NEXT:    v_cvt_pk_i16_i32 v1, s2, s2
-; GFX9-SDAG-NEXT:    global_store_dword v0, v1, s[0:1]
-; GFX9-SDAG-NEXT:    s_endpgm
-;
-; GFX9-GISEL-LABEL: s_cvt_pk_i16_samereg_i32:
-; GFX9-GISEL:       ; %bb.0:
-; GFX9-GISEL-NEXT:    s_load_dword s2, s[4:5], 0x2c
-; GFX9-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX9-GISEL-NEXT:    v_mov_b32_e32 v1, 0
-; GFX9-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX9-GISEL-NEXT:    v_cvt_pk_i16_i32 v0, s2, s2
-; GFX9-GISEL-NEXT:    global_store_dword v1, v0, s[0:1]
-; GFX9-GISEL-NEXT:    s_endpgm
+; GFX9-LABEL: s_cvt_pk_i16_samereg_i32:
+; GFX9:       ; %bb.0:
+; GFX9-NEXT:    s_load_dword s2, s[4:5], 0x2c
+; GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GFX9-NEXT:    v_mov_b32_e32 v0, 0
+; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX9-NEXT:    v_cvt_pk_i16_i32 v1, s2, s2
+; GFX9-NEXT:    global_store_dword v0, v1, s[0:1]
+; GFX9-NEXT:    s_endpgm
   %result = call <2 x i16> @llvm.amdgcn.cvt.pk.i16(i32 %x, i32 %x)
   %r = bitcast <2 x i16> %result to i32
   store i32 %r, ptr addrspace(1) %out
@@ -132,19 +122,19 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32(ptr addrspace(1) %out, ptr addrspace
 ; SI-SDAG-LABEL: v_cvt_pk_i16_i32:
 ; SI-SDAG:       ; %bb.0:
 ; SI-SDAG-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
-; SI-SDAG-NEXT:    s_load_dwordx2 s[8:9], s[4:5], 0xd
-; SI-SDAG-NEXT:    s_mov_b32 s7, 0xf000
-; SI-SDAG-NEXT:    s_mov_b32 s6, 0
+; SI-SDAG-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0xd
+; SI-SDAG-NEXT:    s_mov_b32 s11, 0xf000
+; SI-SDAG-NEXT:    s_mov_b32 s10, 0
 ; SI-SDAG-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
-; SI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b64 s[4:5], s[2:3]
 ; SI-SDAG-NEXT:    v_mov_b32_e32 v1, 0
-; SI-SDAG-NEXT:    s_mov_b64 s[10:11], s[6:7]
-; SI-SDAG-NEXT:    buffer_load_dword v2, v[0:1], s[4:7], 0 addr64 glc
+; SI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-SDAG-NEXT:    s_mov_b64 s[8:9], s[2:3]
+; SI-SDAG-NEXT:    s_mov_b64 s[6:7], s[10:11]
+; SI-SDAG-NEXT:    buffer_load_dword v2, v[0:1], s[8:11], 0 addr64 glc
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; SI-SDAG-NEXT:    buffer_load_dword v3, v[0:1], s[8:11], 0 addr64 glc
+; SI-SDAG-NEXT:    buffer_load_dword v3, v[0:1], s[4:7], 0 addr64 glc
 ; SI-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; SI-SDAG-NEXT:    s_mov_b64 s[2:3], s[6:7]
+; SI-SDAG-NEXT:    s_mov_b64 s[2:3], s[10:11]
 ; SI-SDAG-NEXT:    v_cvt_pk_i16_i32_e32 v2, v2, v3
 ; SI-SDAG-NEXT:    buffer_store_dword v2, v[0:1], s[0:3], 0 addr64
 ; SI-SDAG-NEXT:    s_endpgm
@@ -173,23 +163,23 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32(ptr addrspace(1) %out, ptr addrspace
 ; VI-SDAG:       ; %bb.0:
 ; VI-SDAG-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
 ; VI-SDAG-NEXT:    s_load_dwordx2 s[4:5], s[4:5], 0x34
-; VI-SDAG-NEXT:    v_lshlrev_b32_e32 v4, 2, v0
+; VI-SDAG-NEXT:    v_lshlrev_b32_e32 v2, 2, v0
 ; VI-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s3
-; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
+; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v3, s5
-; VI-SDAG-NEXT:    v_add_u32_e32 v2, vcc, s4, v4
-; VI-SDAG-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
-; VI-SDAG-NEXT:    flat_load_dword v5, v[0:1] glc
+; VI-SDAG-NEXT:    flat_load_dword v4, v[0:1] glc
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; VI-SDAG-NEXT:    flat_load_dword v2, v[2:3] glc
+; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s4, v2
+; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; VI-SDAG-NEXT:    flat_load_dword v0, v[0:1] glc
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s1
-; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
+; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v3, v4, v0
+; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v2, v5, v2
-; VI-SDAG-NEXT:    flat_store_dword v[0:1], v2
+; VI-SDAG-NEXT:    flat_store_dword v[0:1], v3
 ; VI-SDAG-NEXT:    s_endpgm
 ;
 ; VI-GISEL-LABEL: v_cvt_pk_i16_i32:
@@ -201,14 +191,14 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32(ptr addrspace(1) %out, ptr addrspace
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v0, s2
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-GISEL-NEXT:    v_add_u32_e32 v0, vcc, v0, v4
-; VI-GISEL-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v2, s4
+; VI-GISEL-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v3, s5
-; VI-GISEL-NEXT:    v_add_u32_e32 v2, vcc, v2, v4
-; VI-GISEL-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
 ; VI-GISEL-NEXT:    flat_load_dword v5, v[0:1] glc
 ; VI-GISEL-NEXT:    s_waitcnt vmcnt(0)
-; VI-GISEL-NEXT:    flat_load_dword v2, v[2:3] glc
+; VI-GISEL-NEXT:    v_add_u32_e32 v0, vcc, v2, v4
+; VI-GISEL-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; VI-GISEL-NEXT:    flat_load_dword v2, v[0:1] glc
 ; VI-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v0, s0
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v1, s1
@@ -285,13 +275,13 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32_reg_imm(ptr addrspace(1) %out, ptr a
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-SDAG-NEXT:    flat_load_dword v3, v[0:1] glc
+; VI-SDAG-NEXT:    flat_load_dword v0, v[0:1] glc
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s1
+; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v3, v0, 1
 ; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v2, v3, 1
-; VI-SDAG-NEXT:    flat_store_dword v[0:1], v2
+; VI-SDAG-NEXT:    flat_store_dword v[0:1], v3
 ; VI-SDAG-NEXT:    s_endpgm
 ;
 ; VI-GISEL-LABEL: v_cvt_pk_i16_i32_reg_imm:
@@ -309,8 +299,8 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32_reg_imm(ptr addrspace(1) %out, ptr a
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-GISEL-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; VI-GISEL-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-GISEL-NEXT:    v_cvt_pk_i16_i32 v2, v3, 1
-; VI-GISEL-NEXT:    flat_store_dword v[0:1], v2
+; VI-GISEL-NEXT:    v_cvt_pk_i16_i32 v3, v3, 1
+; VI-GISEL-NEXT:    flat_store_dword v[0:1], v3
 ; VI-GISEL-NEXT:    s_endpgm
 ;
 ; GFX9-LABEL: v_cvt_pk_i16_i32_reg_imm:
@@ -375,13 +365,13 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32_imm_reg(ptr addrspace(1) %out, ptr a
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-SDAG-NEXT:    flat_load_dword v3, v[0:1] glc
+; VI-SDAG-NEXT:    flat_load_dword v0, v[0:1] glc
 ; VI-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; VI-SDAG-NEXT:    v_mov_b32_e32 v1, s1
+; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v3, 1, v0
 ; VI-SDAG-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; VI-SDAG-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-SDAG-NEXT:    v_cvt_pk_i16_i32 v2, 1, v3
-; VI-SDAG-NEXT:    flat_store_dword v[0:1], v2
+; VI-SDAG-NEXT:    flat_store_dword v[0:1], v3
 ; VI-SDAG-NEXT:    s_endpgm
 ;
 ; VI-GISEL-LABEL: v_cvt_pk_i16_i32_imm_reg:
@@ -399,8 +389,8 @@ define amdgpu_kernel void @v_cvt_pk_i16_i32_imm_reg(ptr addrspace(1) %out, ptr a
 ; VI-GISEL-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-GISEL-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; VI-GISEL-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-GISEL-NEXT:    v_cvt_pk_i16_i32 v2, 1, v3
-; VI-GISEL-NEXT:    flat_store_dword v[0:1], v2
+; VI-GISEL-NEXT:    v_cvt_pk_i16_i32 v3, 1, v3
+; VI-GISEL-NEXT:    flat_store_dword v[0:1], v3
 ; VI-GISEL-NEXT:    s_endpgm
 ;
 ; GFX9-LABEL: v_cvt_pk_i16_i32_imm_reg:

@@ -14,9 +14,9 @@ define weak_odr amdgpu_kernel void @test_mul24_knownbits_kernel(ptr addrspace(1)
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mov_b32_e32 v2, s1
 ; GCN-NEXT:    v_add_co_u32_e32 v0, vcc, s0, v0
+; GCN-NEXT:    v_mov_b32_e32 v3, 0
 ; GCN-NEXT:    v_addc_co_u32_e32 v1, vcc, v2, v1, vcc
-; GCN-NEXT:    v_mov_b32_e32 v2, 0
-; GCN-NEXT:    global_store_dword v[0:1], v2, off
+; GCN-NEXT:    global_store_dword v[0:1], v3, off
 ; GCN-NEXT:    s_endpgm
 entry:
   %0 = tail call i32 @llvm.amdgcn.workitem.id.x() #28, !range !4

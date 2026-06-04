@@ -1912,14 +1912,14 @@ define amdgpu_kernel void @v5i32_arg(ptr addrspace(1) nocapture %out, <5 x i32> 
 ;
 ; VI-LABEL: v5i32_arg:
 ; VI:       ; %bb.0: ; %entry
-; VI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; VI-NEXT:    s_load_dword s8, s[4:5], 0x54
+; VI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; VI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x44
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    s_add_u32 s4, s6, 16
 ; VI-NEXT:    s_addc_u32 s5, s7, 0
 ; VI-NEXT:    v_mov_b32_e32 v0, s4
-; VI-NEXT:    v_mov_b32_e32 v2, s8
 ; VI-NEXT:    v_mov_b32_e32 v1, s5
 ; VI-NEXT:    v_mov_b32_e32 v4, s6
 ; VI-NEXT:    flat_store_dword v[0:1], v2
@@ -2006,14 +2006,14 @@ define amdgpu_kernel void @v5f32_arg(ptr addrspace(1) nocapture %out, <5 x float
 ;
 ; VI-LABEL: v5f32_arg:
 ; VI:       ; %bb.0: ; %entry
-; VI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; VI-NEXT:    s_load_dword s8, s[4:5], 0x54
+; VI-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x24
 ; VI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x44
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
+; VI-NEXT:    v_mov_b32_e32 v3, s8
 ; VI-NEXT:    s_add_u32 s4, s6, 16
 ; VI-NEXT:    s_addc_u32 s5, s7, 0
 ; VI-NEXT:    v_mov_b32_e32 v1, s4
-; VI-NEXT:    v_mov_b32_e32 v3, s8
 ; VI-NEXT:    v_mov_b32_e32 v2, s5
 ; VI-NEXT:    v_mov_b32_e32 v4, s6
 ; VI-NEXT:    v_mov_b32_e32 v0, s0

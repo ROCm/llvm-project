@@ -24,12 +24,12 @@ define amdgpu_kernel void @s_test_frexp_exp_f32(ptr addrspace(1) %out, float %sr
 ;
 ; GFX6-GISEL-LABEL: s_test_frexp_exp_f32:
 ; GFX6-GISEL:       ; %bb.0:
-; GFX6-GISEL-NEXT:    s_load_dword s3, s[4:5], 0xb
+; GFX6-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; GFX6-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GFX6-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e32 v0, s3
 ; GFX6-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e32 v0, s6
 ; GFX6-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX6-GISEL-NEXT:    s_endpgm
 ;
@@ -46,12 +46,12 @@ define amdgpu_kernel void @s_test_frexp_exp_f32(ptr addrspace(1) %out, float %sr
 ;
 ; GFX8-GISEL-LABEL: s_test_frexp_exp_f32:
 ; GFX8-GISEL:       ; %bb.0:
-; GFX8-GISEL-NEXT:    s_load_dword s3, s[4:5], 0x2c
+; GFX8-GISEL-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GFX8-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX8-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e32 v0, s3
 ; GFX8-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e32 v0, s6
 ; GFX8-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX8-GISEL-NEXT:    s_endpgm
   %frexp.exp = call i32 @llvm.amdgcn.frexp.exp.i32.f32(float %src)
@@ -73,12 +73,12 @@ define amdgpu_kernel void @s_test_fabs_frexp_exp_f32(ptr addrspace(1) %out, floa
 ;
 ; GFX6-GISEL-LABEL: s_test_fabs_frexp_exp_f32:
 ; GFX6-GISEL:       ; %bb.0:
-; GFX6-GISEL-NEXT:    s_load_dword s3, s[4:5], 0xb
+; GFX6-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; GFX6-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GFX6-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, |s3|
 ; GFX6-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, |s6|
 ; GFX6-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX6-GISEL-NEXT:    s_endpgm
 ;
@@ -95,12 +95,12 @@ define amdgpu_kernel void @s_test_fabs_frexp_exp_f32(ptr addrspace(1) %out, floa
 ;
 ; GFX8-GISEL-LABEL: s_test_fabs_frexp_exp_f32:
 ; GFX8-GISEL:       ; %bb.0:
-; GFX8-GISEL-NEXT:    s_load_dword s3, s[4:5], 0x2c
+; GFX8-GISEL-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GFX8-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX8-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, |s3|
 ; GFX8-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, |s6|
 ; GFX8-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX8-GISEL-NEXT:    s_endpgm
   %fabs.src = call float @llvm.fabs.f32(float %src)
@@ -123,12 +123,12 @@ define amdgpu_kernel void @s_test_fneg_fabs_frexp_exp_f32(ptr addrspace(1) %out,
 ;
 ; GFX6-GISEL-LABEL: s_test_fneg_fabs_frexp_exp_f32:
 ; GFX6-GISEL:       ; %bb.0:
-; GFX6-GISEL-NEXT:    s_load_dword s3, s[4:5], 0xb
+; GFX6-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; GFX6-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GFX6-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, -|s3|
 ; GFX6-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX6-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX6-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, -|s6|
 ; GFX6-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX6-GISEL-NEXT:    s_endpgm
 ;
@@ -145,12 +145,12 @@ define amdgpu_kernel void @s_test_fneg_fabs_frexp_exp_f32(ptr addrspace(1) %out,
 ;
 ; GFX8-GISEL-LABEL: s_test_fneg_fabs_frexp_exp_f32:
 ; GFX8-GISEL:       ; %bb.0:
-; GFX8-GISEL-NEXT:    s_load_dword s3, s[4:5], 0x2c
+; GFX8-GISEL-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GFX8-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX8-GISEL-NEXT:    s_mov_b32 s2, -1
-; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, -|s3|
 ; GFX8-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; GFX8-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX8-GISEL-NEXT:    v_frexp_exp_i32_f32_e64 v0, -|s6|
 ; GFX8-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX8-GISEL-NEXT:    s_endpgm
   %fabs.src = call float @llvm.fabs.f32(float %src)

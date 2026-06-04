@@ -7503,27 +7503,27 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GPRIDX-NEXT:    v_mov_b32_e32 v5, s2
 ; GPRIDX-NEXT:    v_mov_b32_e32 v4, s1
 ; GPRIDX-NEXT:    v_mov_b32_e32 v3, s0
-; GPRIDX-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[0:1], 2, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[2:3], 3, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[4:5], 4, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[6:7], 5, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[8:9], 6, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e32 vcc, 2, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[0:1], 3, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[2:3], 4, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[4:5], 5, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[6:7], 6, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[8:9], 0, v2
 ; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[10:11], 1, v2
-; GPRIDX-NEXT:    v_cndmask_b32_e32 v3, v3, v0, vcc
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v3, v3, v0, s[8:9]
 ; GPRIDX-NEXT:    v_cndmask_b32_e64 v2, v5, v0, s[10:11]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v5, v7, v0, s[0:1]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v7, v9, v0, s[2:3]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v9, v11, v0, s[4:5]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v11, v13, v0, s[6:7]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v0, v15, v0, s[8:9]
-; GPRIDX-NEXT:    v_cndmask_b32_e32 v4, v4, v1, vcc
+; GPRIDX-NEXT:    v_cndmask_b32_e32 v5, v7, v0, vcc
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v7, v9, v0, s[0:1]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v9, v11, v0, s[2:3]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v11, v13, v0, s[4:5]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v0, v15, v0, s[6:7]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v4, v4, v1, s[8:9]
 ; GPRIDX-NEXT:    v_cndmask_b32_e64 v6, v6, v1, s[10:11]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v8, v8, v1, s[0:1]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s[2:3]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v12, v12, v1, s[4:5]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s[6:7]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v1, v16, v1, s[8:9]
+; GPRIDX-NEXT:    v_cndmask_b32_e32 v8, v8, v1, vcc
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s[0:1]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v12, v12, v1, s[2:3]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s[4:5]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v1, v16, v1, s[6:7]
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s0, v3
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s1, v4
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s2, v2
@@ -7588,8 +7588,8 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GFX10-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s0
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s0, 5, v2
 ; GFX10-NEXT:    v_readfirstlane_b32 s2, v5
-; GFX10-NEXT:    v_cndmask_b32_e32 v11, v11, v0, vcc_lo
-; GFX10-NEXT:    v_cndmask_b32_e32 v2, v12, v1, vcc_lo
+; GFX10-NEXT:    v_cndmask_b32_e32 v2, v11, v0, vcc_lo
+; GFX10-NEXT:    v_cndmask_b32_e32 v11, v12, v1, vcc_lo
 ; GFX10-NEXT:    v_readfirstlane_b32 s3, v6
 ; GFX10-NEXT:    v_cndmask_b32_e64 v12, v13, v0, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s0
@@ -7601,8 +7601,8 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GFX10-NEXT:    v_readfirstlane_b32 s5, v8
 ; GFX10-NEXT:    v_readfirstlane_b32 s6, v9
 ; GFX10-NEXT:    v_readfirstlane_b32 s7, v10
-; GFX10-NEXT:    v_readfirstlane_b32 s8, v11
-; GFX10-NEXT:    v_readfirstlane_b32 s9, v2
+; GFX10-NEXT:    v_readfirstlane_b32 s8, v2
+; GFX10-NEXT:    v_readfirstlane_b32 s9, v11
 ; GFX10-NEXT:    v_readfirstlane_b32 s10, v12
 ; GFX10-NEXT:    v_readfirstlane_b32 s11, v13
 ; GFX10-NEXT:    v_readfirstlane_b32 s12, v0
@@ -7647,7 +7647,7 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GFX11-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s0
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, 5, v2
 ; GFX11-NEXT:    v_readfirstlane_b32 s2, v5
-; GFX11-NEXT:    v_dual_cndmask_b32 v11, v11, v0 :: v_dual_cndmask_b32 v2, v12, v1
+; GFX11-NEXT:    v_dual_cndmask_b32 v2, v11, v0 :: v_dual_cndmask_b32 v11, v12, v1
 ; GFX11-NEXT:    v_readfirstlane_b32 s3, v6
 ; GFX11-NEXT:    v_cndmask_b32_e64 v12, v13, v0, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s0
@@ -7659,8 +7659,8 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GFX11-NEXT:    v_readfirstlane_b32 s5, v8
 ; GFX11-NEXT:    v_readfirstlane_b32 s6, v9
 ; GFX11-NEXT:    v_readfirstlane_b32 s7, v10
-; GFX11-NEXT:    v_readfirstlane_b32 s8, v11
-; GFX11-NEXT:    v_readfirstlane_b32 s9, v2
+; GFX11-NEXT:    v_readfirstlane_b32 s8, v2
+; GFX11-NEXT:    v_readfirstlane_b32 s9, v11
 ; GFX11-NEXT:    v_readfirstlane_b32 s10, v12
 ; GFX11-NEXT:    v_readfirstlane_b32 s11, v13
 ; GFX11-NEXT:    v_readfirstlane_b32 s12, v0
@@ -7699,27 +7699,27 @@ define amdgpu_ps <7 x double> @dyn_insertelement_v7f64_s_v_v(<7 x double> inreg 
 ; GFX8-NEXT:    v_mov_b32_e32 v5, s2
 ; GFX8-NEXT:    v_mov_b32_e32 v4, s1
 ; GFX8-NEXT:    v_mov_b32_e32 v3, s0
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[0:1], 2, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[2:3], 3, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], 4, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[6:7], 5, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[8:9], 6, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 2, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[0:1], 3, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[2:3], 4, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[4:5], 5, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[6:7], 6, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[8:9], 0, v2
 ; GFX8-NEXT:    v_cmp_eq_u32_e64 s[10:11], 1, v2
-; GFX8-NEXT:    v_cndmask_b32_e32 v3, v3, v0, vcc
+; GFX8-NEXT:    v_cndmask_b32_e64 v3, v3, v0, s[8:9]
 ; GFX8-NEXT:    v_cndmask_b32_e64 v2, v5, v0, s[10:11]
-; GFX8-NEXT:    v_cndmask_b32_e64 v5, v7, v0, s[0:1]
-; GFX8-NEXT:    v_cndmask_b32_e64 v7, v9, v0, s[2:3]
-; GFX8-NEXT:    v_cndmask_b32_e64 v9, v11, v0, s[4:5]
-; GFX8-NEXT:    v_cndmask_b32_e64 v11, v13, v0, s[6:7]
-; GFX8-NEXT:    v_cndmask_b32_e64 v0, v15, v0, s[8:9]
-; GFX8-NEXT:    v_cndmask_b32_e32 v4, v4, v1, vcc
+; GFX8-NEXT:    v_cndmask_b32_e32 v5, v7, v0, vcc
+; GFX8-NEXT:    v_cndmask_b32_e64 v7, v9, v0, s[0:1]
+; GFX8-NEXT:    v_cndmask_b32_e64 v9, v11, v0, s[2:3]
+; GFX8-NEXT:    v_cndmask_b32_e64 v11, v13, v0, s[4:5]
+; GFX8-NEXT:    v_cndmask_b32_e64 v0, v15, v0, s[6:7]
+; GFX8-NEXT:    v_cndmask_b32_e64 v4, v4, v1, s[8:9]
 ; GFX8-NEXT:    v_cndmask_b32_e64 v6, v6, v1, s[10:11]
-; GFX8-NEXT:    v_cndmask_b32_e64 v8, v8, v1, s[0:1]
-; GFX8-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s[2:3]
-; GFX8-NEXT:    v_cndmask_b32_e64 v12, v12, v1, s[4:5]
-; GFX8-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s[6:7]
-; GFX8-NEXT:    v_cndmask_b32_e64 v1, v16, v1, s[8:9]
+; GFX8-NEXT:    v_cndmask_b32_e32 v8, v8, v1, vcc
+; GFX8-NEXT:    v_cndmask_b32_e64 v10, v10, v1, s[0:1]
+; GFX8-NEXT:    v_cndmask_b32_e64 v12, v12, v1, s[2:3]
+; GFX8-NEXT:    v_cndmask_b32_e64 v13, v14, v1, s[4:5]
+; GFX8-NEXT:    v_cndmask_b32_e64 v1, v16, v1, s[6:7]
 ; GFX8-NEXT:    v_readfirstlane_b32 s0, v3
 ; GFX8-NEXT:    v_readfirstlane_b32 s1, v4
 ; GFX8-NEXT:    v_readfirstlane_b32 s2, v2
@@ -8200,20 +8200,20 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GPRIDX-NEXT:    v_mov_b32_e32 v9, s6
 ; GPRIDX-NEXT:    v_cndmask_b32_e32 v7, v7, v0, vcc
 ; GPRIDX-NEXT:    v_cndmask_b32_e32 v8, v8, v1, vcc
-; GPRIDX-NEXT:    v_cmp_eq_u32_e32 vcc, 3, v2
-; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[0:1], 4, v2
-; GPRIDX-NEXT:    v_cndmask_b32_e32 v9, v9, v0, vcc
-; GPRIDX-NEXT:    v_cndmask_b32_e32 v2, v10, v1, vcc
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v0, v11, v0, s[0:1]
-; GPRIDX-NEXT:    v_cndmask_b32_e64 v1, v12, v1, s[0:1]
+; GPRIDX-NEXT:    v_cmp_eq_u32_e32 vcc, 4, v2
+; GPRIDX-NEXT:    v_cmp_eq_u32_e64 s[0:1], 3, v2
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v2, v9, v0, s[0:1]
+; GPRIDX-NEXT:    v_cndmask_b32_e64 v9, v10, v1, s[0:1]
+; GPRIDX-NEXT:    v_cndmask_b32_e32 v0, v11, v0, vcc
+; GPRIDX-NEXT:    v_cndmask_b32_e32 v1, v12, v1, vcc
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s0, v3
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s1, v4
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s2, v5
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s3, v6
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s4, v7
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s5, v8
-; GPRIDX-NEXT:    v_readfirstlane_b32 s6, v9
-; GPRIDX-NEXT:    v_readfirstlane_b32 s7, v2
+; GPRIDX-NEXT:    v_readfirstlane_b32 s6, v2
+; GPRIDX-NEXT:    v_readfirstlane_b32 s7, v9
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s8, v0
 ; GPRIDX-NEXT:    v_readfirstlane_b32 s9, v1
 ; GPRIDX-NEXT:    ; return to shader part epilog
@@ -8245,13 +8245,13 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s1, 4, v2
 ; GFX10-NEXT:    v_cndmask_b32_e32 v3, v3, v0, vcc_lo
 ; GFX10-NEXT:    v_cndmask_b32_e32 v4, v4, v1, vcc_lo
-; GFX10-NEXT:    v_cndmask_b32_e64 v5, v5, v0, s0
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 2, v2
+; GFX10-NEXT:    v_cndmask_b32_e64 v5, v5, v0, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v6, v6, v1, s0
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s0, 3, v2
+; GFX10-NEXT:    v_cndmask_b32_e32 v2, v7, v0, vcc_lo
+; GFX10-NEXT:    v_cndmask_b32_e32 v7, v8, v1, vcc_lo
 ; GFX10-NEXT:    v_readfirstlane_b32 s2, v5
-; GFX10-NEXT:    v_cndmask_b32_e32 v7, v7, v0, vcc_lo
-; GFX10-NEXT:    v_cndmask_b32_e32 v2, v8, v1, vcc_lo
 ; GFX10-NEXT:    v_cndmask_b32_e64 v8, v9, v0, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v9, v10, v1, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v0, v11, v0, s1
@@ -8259,8 +8259,8 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GFX10-NEXT:    v_readfirstlane_b32 s0, v3
 ; GFX10-NEXT:    v_readfirstlane_b32 s1, v4
 ; GFX10-NEXT:    v_readfirstlane_b32 s3, v6
-; GFX10-NEXT:    v_readfirstlane_b32 s4, v7
-; GFX10-NEXT:    v_readfirstlane_b32 s5, v2
+; GFX10-NEXT:    v_readfirstlane_b32 s4, v2
+; GFX10-NEXT:    v_readfirstlane_b32 s5, v7
 ; GFX10-NEXT:    v_readfirstlane_b32 s6, v8
 ; GFX10-NEXT:    v_readfirstlane_b32 s7, v9
 ; GFX10-NEXT:    v_readfirstlane_b32 s8, v0
@@ -8288,12 +8288,12 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, 1, v2
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s1, 4, v2
 ; GFX11-NEXT:    v_dual_cndmask_b32 v3, v3, v0 :: v_dual_cndmask_b32 v4, v4, v1
-; GFX11-NEXT:    v_cndmask_b32_e64 v5, v5, v0, s0
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 2, v2
+; GFX11-NEXT:    v_cndmask_b32_e64 v5, v5, v0, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v6, v6, v1, s0
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, 3, v2
+; GFX11-NEXT:    v_dual_cndmask_b32 v2, v7, v0 :: v_dual_cndmask_b32 v7, v8, v1
 ; GFX11-NEXT:    v_readfirstlane_b32 s2, v5
-; GFX11-NEXT:    v_dual_cndmask_b32 v7, v7, v0 :: v_dual_cndmask_b32 v2, v8, v1
 ; GFX11-NEXT:    v_cndmask_b32_e64 v8, v9, v0, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v9, v10, v1, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v0, v11, v0, s1
@@ -8301,8 +8301,8 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GFX11-NEXT:    v_readfirstlane_b32 s0, v3
 ; GFX11-NEXT:    v_readfirstlane_b32 s1, v4
 ; GFX11-NEXT:    v_readfirstlane_b32 s3, v6
-; GFX11-NEXT:    v_readfirstlane_b32 s4, v7
-; GFX11-NEXT:    v_readfirstlane_b32 s5, v2
+; GFX11-NEXT:    v_readfirstlane_b32 s4, v2
+; GFX11-NEXT:    v_readfirstlane_b32 s5, v7
 ; GFX11-NEXT:    v_readfirstlane_b32 s6, v8
 ; GFX11-NEXT:    v_readfirstlane_b32 s7, v9
 ; GFX11-NEXT:    v_readfirstlane_b32 s8, v0
@@ -8340,20 +8340,20 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_s_v_v(<5 x double> inreg 
 ; GFX8-NEXT:    v_mov_b32_e32 v9, s6
 ; GFX8-NEXT:    v_cndmask_b32_e32 v7, v7, v0, vcc
 ; GFX8-NEXT:    v_cndmask_b32_e32 v8, v8, v1, vcc
-; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 3, v2
-; GFX8-NEXT:    v_cmp_eq_u32_e64 s[0:1], 4, v2
-; GFX8-NEXT:    v_cndmask_b32_e32 v9, v9, v0, vcc
-; GFX8-NEXT:    v_cndmask_b32_e32 v2, v10, v1, vcc
-; GFX8-NEXT:    v_cndmask_b32_e64 v0, v11, v0, s[0:1]
-; GFX8-NEXT:    v_cndmask_b32_e64 v1, v12, v1, s[0:1]
+; GFX8-NEXT:    v_cmp_eq_u32_e32 vcc, 4, v2
+; GFX8-NEXT:    v_cmp_eq_u32_e64 s[0:1], 3, v2
+; GFX8-NEXT:    v_cndmask_b32_e64 v2, v9, v0, s[0:1]
+; GFX8-NEXT:    v_cndmask_b32_e64 v9, v10, v1, s[0:1]
+; GFX8-NEXT:    v_cndmask_b32_e32 v0, v11, v0, vcc
+; GFX8-NEXT:    v_cndmask_b32_e32 v1, v12, v1, vcc
 ; GFX8-NEXT:    v_readfirstlane_b32 s0, v3
 ; GFX8-NEXT:    v_readfirstlane_b32 s1, v4
 ; GFX8-NEXT:    v_readfirstlane_b32 s2, v5
 ; GFX8-NEXT:    v_readfirstlane_b32 s3, v6
 ; GFX8-NEXT:    v_readfirstlane_b32 s4, v7
 ; GFX8-NEXT:    v_readfirstlane_b32 s5, v8
-; GFX8-NEXT:    v_readfirstlane_b32 s6, v9
-; GFX8-NEXT:    v_readfirstlane_b32 s7, v2
+; GFX8-NEXT:    v_readfirstlane_b32 s6, v2
+; GFX8-NEXT:    v_readfirstlane_b32 s7, v9
 ; GFX8-NEXT:    v_readfirstlane_b32 s8, v0
 ; GFX8-NEXT:    v_readfirstlane_b32 s9, v1
 ; GFX8-NEXT:    ; return to shader part epilog
@@ -8457,14 +8457,14 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_v_v_v(<5 x double> %vec, 
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s1, 4, v12
 ; GFX10-NEXT:    v_cndmask_b32_e32 v0, v0, v10, vcc_lo
 ; GFX10-NEXT:    v_cndmask_b32_e32 v1, v1, v11, vcc_lo
-; GFX10-NEXT:    v_cndmask_b32_e64 v2, v2, v10, s0
 ; GFX10-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 2, v12
+; GFX10-NEXT:    v_cndmask_b32_e64 v2, v2, v10, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v3, v3, v11, s0
 ; GFX10-NEXT:    v_cmp_eq_u32_e64 s0, 3, v12
 ; GFX10-NEXT:    v_cndmask_b32_e64 v8, v8, v10, s1
-; GFX10-NEXT:    v_cndmask_b32_e64 v9, v9, v11, s1
 ; GFX10-NEXT:    v_cndmask_b32_e32 v4, v4, v10, vcc_lo
 ; GFX10-NEXT:    v_cndmask_b32_e32 v5, v5, v11, vcc_lo
+; GFX10-NEXT:    v_cndmask_b32_e64 v9, v9, v11, s1
 ; GFX10-NEXT:    v_cndmask_b32_e64 v6, v6, v10, s0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v7, v7, v11, s0
 ; GFX10-NEXT:    v_readfirstlane_b32 s0, v0
@@ -8485,13 +8485,13 @@ define amdgpu_ps <5 x double> @dyn_insertelement_v5f64_v_v_v(<5 x double> %vec, 
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, 1, v12
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s1, 4, v12
 ; GFX11-NEXT:    v_dual_cndmask_b32 v0, v0, v10 :: v_dual_cndmask_b32 v1, v1, v11
-; GFX11-NEXT:    v_cndmask_b32_e64 v2, v2, v10, s0
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 2, v12
+; GFX11-NEXT:    v_cndmask_b32_e64 v2, v2, v10, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v3, v3, v11, s0
 ; GFX11-NEXT:    v_cmp_eq_u32_e64 s0, 3, v12
 ; GFX11-NEXT:    v_cndmask_b32_e64 v8, v8, v10, s1
-; GFX11-NEXT:    v_cndmask_b32_e64 v9, v9, v11, s1
 ; GFX11-NEXT:    v_dual_cndmask_b32 v4, v4, v10 :: v_dual_cndmask_b32 v5, v5, v11
+; GFX11-NEXT:    v_cndmask_b32_e64 v9, v9, v11, s1
 ; GFX11-NEXT:    v_cndmask_b32_e64 v6, v6, v10, s0
 ; GFX11-NEXT:    v_cndmask_b32_e64 v7, v7, v11, s0
 ; GFX11-NEXT:    v_readfirstlane_b32 s0, v0

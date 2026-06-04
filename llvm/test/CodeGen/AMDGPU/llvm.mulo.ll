@@ -37,9 +37,9 @@ define { i64, i1 } @umulo_i64_v_v(i64 %x, i64 %y) {
 ; GFX9-NEXT:    v_mad_u64_u32 v[0:1], s[4:5], v0, v2, 0
 ; GFX9-NEXT:    v_mad_u64_u32 v[7:8], s[4:5], v4, v2, 0
 ; GFX9-NEXT:    v_mad_u64_u32 v[2:3], s[4:5], v4, v3, 0
-; GFX9-NEXT:    v_add_co_u32_e32 v9, vcc, v1, v5
+; GFX9-NEXT:    v_add_co_u32_e32 v4, vcc, v1, v5
 ; GFX9-NEXT:    v_addc_co_u32_e32 v6, vcc, 0, v6, vcc
-; GFX9-NEXT:    v_add_co_u32_e32 v4, vcc, v9, v7
+; GFX9-NEXT:    v_add_co_u32_e32 v4, vcc, v4, v7
 ; GFX9-NEXT:    v_addc_co_u32_e32 v4, vcc, v6, v8, vcc
 ; GFX9-NEXT:    v_addc_co_u32_e32 v3, vcc, 0, v3, vcc
 ; GFX9-NEXT:    v_add_co_u32_e32 v2, vcc, v4, v2
@@ -352,12 +352,12 @@ define amdgpu_kernel void @umulo_i64_s(i64 %x, i64 %y) {
 ; SI-NEXT:    v_add_i32_e32 v4, vcc, s4, v4
 ; SI-NEXT:    v_addc_u32_e32 v1, vcc, v3, v1, vcc
 ; SI-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
-; SI-NEXT:    v_add_i32_e32 v3, vcc, s5, v0
+; SI-NEXT:    v_add_i32_e32 v0, vcc, s5, v0
+; SI-NEXT:    v_add_i32_e32 v3, vcc, s4, v0
 ; SI-NEXT:    v_add_i32_e32 v0, vcc, s1, v1
 ; SI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v2, vcc
-; SI-NEXT:    v_add_i32_e32 v2, vcc, s4, v3
 ; SI-NEXT:    v_cmp_ne_u64_e32 vcc, 0, v[0:1]
-; SI-NEXT:    v_cndmask_b32_e64 v1, v2, 0, vcc
+; SI-NEXT:    v_cndmask_b32_e64 v1, v3, 0, vcc
 ; SI-NEXT:    s_and_b64 s[0:1], vcc, exec
 ; SI-NEXT:    s_cselect_b32 s0, 0, s2
 ; SI-NEXT:    s_mov_b32 s6, -1

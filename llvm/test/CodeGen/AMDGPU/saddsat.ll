@@ -244,25 +244,25 @@ define <3 x i16> @v_saddsat_v3i16(<3 x i16> %lhs, <3 x i16> %rhs) {
 ; GFX8-NEXT:    v_cmp_lt_i16_e32 vcc, v6, v5
 ; GFX8-NEXT:    v_cmp_gt_i16_e64 s[4:5], 0, v4
 ; GFX8-NEXT:    v_ashrrev_i16_e32 v4, 15, v6
-; GFX8-NEXT:    v_xor_b32_e32 v4, 0xffff8000, v4
-; GFX8-NEXT:    s_xor_b64 vcc, s[4:5], vcc
-; GFX8-NEXT:    v_cndmask_b32_e32 v4, v6, v4, vcc
-; GFX8-NEXT:    v_cmp_gt_i16_e32 vcc, 0, v3
-; GFX8-NEXT:    v_add_u16_e32 v3, v1, v3
-; GFX8-NEXT:    v_cmp_lt_i16_e64 s[4:5], v3, v1
-; GFX8-NEXT:    v_ashrrev_i16_e32 v1, 15, v3
-; GFX8-NEXT:    v_xor_b32_e32 v1, 0xffff8000, v1
-; GFX8-NEXT:    s_xor_b64 vcc, vcc, s[4:5]
-; GFX8-NEXT:    v_cndmask_b32_e32 v1, v3, v1, vcc
-; GFX8-NEXT:    v_cmp_gt_i16_e32 vcc, 0, v2
+; GFX8-NEXT:    v_cmp_gt_i16_e64 s[10:11], 0, v2
 ; GFX8-NEXT:    v_add_u16_e32 v2, v0, v2
-; GFX8-NEXT:    v_cmp_lt_i16_e64 s[4:5], v2, v0
+; GFX8-NEXT:    v_xor_b32_e32 v4, 0xffff8000, v4
+; GFX8-NEXT:    v_cmp_gt_i16_e64 s[6:7], 0, v3
+; GFX8-NEXT:    v_add_u16_e32 v3, v1, v3
+; GFX8-NEXT:    v_cmp_lt_i16_e64 s[12:13], v2, v0
 ; GFX8-NEXT:    v_ashrrev_i16_e32 v0, 15, v2
+; GFX8-NEXT:    s_xor_b64 vcc, s[4:5], vcc
+; GFX8-NEXT:    v_cmp_lt_i16_e64 s[8:9], v3, v1
+; GFX8-NEXT:    v_ashrrev_i16_e32 v1, 15, v3
 ; GFX8-NEXT:    v_xor_b32_e32 v0, 0xffff8000, v0
-; GFX8-NEXT:    s_xor_b64 vcc, vcc, s[4:5]
+; GFX8-NEXT:    v_cndmask_b32_e32 v4, v6, v4, vcc
+; GFX8-NEXT:    s_xor_b64 vcc, s[10:11], s[12:13]
+; GFX8-NEXT:    v_xor_b32_e32 v1, 0xffff8000, v1
+; GFX8-NEXT:    v_lshlrev_b32_e32 v4, 16, v4
 ; GFX8-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
-; GFX8-NEXT:    v_lshlrev_b32_e32 v2, 16, v4
-; GFX8-NEXT:    v_or_b32_sdwa v0, v0, v2 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:WORD_0 src1_sel:DWORD
+; GFX8-NEXT:    s_xor_b64 vcc, s[6:7], s[8:9]
+; GFX8-NEXT:    v_or_b32_sdwa v0, v0, v4 dst_sel:DWORD dst_unused:UNUSED_PAD src0_sel:WORD_0 src1_sel:DWORD
+; GFX8-NEXT:    v_cndmask_b32_e32 v1, v3, v1, vcc
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: v_saddsat_v3i16:
@@ -378,15 +378,15 @@ define <2 x i32> @v_saddsat_v2i32(<2 x i32> %lhs, <2 x i32> %rhs) {
 ; GFX6-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v2
 ; GFX6-NEXT:    v_add_i32_e64 v2, s[4:5], v0, v2
 ; GFX6-NEXT:    v_cmp_lt_i32_e64 s[4:5], v2, v0
+; GFX6-NEXT:    v_cmp_gt_i32_e64 s[6:7], 0, v3
+; GFX6-NEXT:    v_add_i32_e64 v3, s[8:9], v1, v3
 ; GFX6-NEXT:    v_ashrrev_i32_e32 v0, 31, v2
+; GFX6-NEXT:    v_cmp_lt_i32_e64 s[8:9], v3, v1
 ; GFX6-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
+; GFX6-NEXT:    v_ashrrev_i32_e32 v1, 31, v3
 ; GFX6-NEXT:    v_cndmask_b32_e64 v0, v2, -v0, s[4:5]
-; GFX6-NEXT:    v_add_i32_e64 v2, s[4:5], v1, v3
-; GFX6-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v3
-; GFX6-NEXT:    v_cmp_lt_i32_e64 s[4:5], v2, v1
-; GFX6-NEXT:    v_ashrrev_i32_e32 v1, 31, v2
-; GFX6-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX6-NEXT:    v_cndmask_b32_e64 v1, v2, -v1, s[4:5]
+; GFX6-NEXT:    s_xor_b64 s[4:5], s[6:7], s[8:9]
+; GFX6-NEXT:    v_cndmask_b32_e64 v1, v3, -v1, s[4:5]
 ; GFX6-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_saddsat_v2i32:
@@ -395,15 +395,15 @@ define <2 x i32> @v_saddsat_v2i32(<2 x i32> %lhs, <2 x i32> %rhs) {
 ; GFX8-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v2
 ; GFX8-NEXT:    v_add_u32_e64 v2, s[4:5], v0, v2
 ; GFX8-NEXT:    v_cmp_lt_i32_e64 s[4:5], v2, v0
+; GFX8-NEXT:    v_cmp_gt_i32_e64 s[6:7], 0, v3
+; GFX8-NEXT:    v_add_u32_e64 v3, s[8:9], v1, v3
 ; GFX8-NEXT:    v_ashrrev_i32_e32 v0, 31, v2
+; GFX8-NEXT:    v_cmp_lt_i32_e64 s[8:9], v3, v1
 ; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
+; GFX8-NEXT:    v_ashrrev_i32_e32 v1, 31, v3
 ; GFX8-NEXT:    v_cndmask_b32_e64 v0, v2, -v0, s[4:5]
-; GFX8-NEXT:    v_add_u32_e64 v2, s[4:5], v1, v3
-; GFX8-NEXT:    v_cmp_gt_i32_e32 vcc, 0, v3
-; GFX8-NEXT:    v_cmp_lt_i32_e64 s[4:5], v2, v1
-; GFX8-NEXT:    v_ashrrev_i32_e32 v1, 31, v2
-; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX8-NEXT:    v_cndmask_b32_e64 v1, v2, -v1, s[4:5]
+; GFX8-NEXT:    s_xor_b64 s[4:5], s[6:7], s[8:9]
+; GFX8-NEXT:    v_cndmask_b32_e64 v1, v3, -v1, s[4:5]
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: v_saddsat_v2i32:

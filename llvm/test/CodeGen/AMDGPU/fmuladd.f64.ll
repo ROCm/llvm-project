@@ -321,13 +321,13 @@ define amdgpu_kernel void @fadd_a_a_b_f64(ptr addrspace(1) %out, ptr addrspace(1
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[4:5], 2.0, v[2:3]
+; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[2:3], 2.0, v[4:5]
 ; VI-CONTRACT-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; VI-CONTRACT-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
@@ -405,13 +405,13 @@ define amdgpu_kernel void @fadd_b_a_a_f64(ptr addrspace(1) %out, ptr addrspace(1
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[4:5], 2.0, v[2:3]
+; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[2:3], 2.0, v[4:5]
 ; VI-CONTRACT-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; VI-CONTRACT-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
@@ -478,17 +478,17 @@ define amdgpu_kernel void @mad_sub_f64(ptr addrspace(1) noalias nocapture %out, 
 ; VI-STRICT-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-STRICT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
 ; VI-STRICT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-STRICT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-STRICT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-STRICT-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-STRICT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-STRICT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-STRICT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-STRICT-NEXT:    s_waitcnt vmcnt(0)
-; VI-STRICT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-STRICT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-STRICT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-STRICT-NEXT:    v_add_u32_e32 v0, vcc, 16, v0
 ; VI-STRICT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-STRICT-NEXT:    flat_load_dwordx2 v[0:1], v[0:1] glc
 ; VI-STRICT-NEXT:    s_waitcnt vmcnt(0)
-; VI-STRICT-NEXT:    v_mul_f64 v[2:3], v[4:5], v[2:3]
+; VI-STRICT-NEXT:    v_mul_f64 v[2:3], v[2:3], v[4:5]
 ; VI-STRICT-NEXT:    v_add_f64 v[0:1], v[2:3], -v[0:1]
 ; VI-STRICT-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-STRICT-NEXT:    v_add_u32_e32 v2, vcc, s0, v6
@@ -504,17 +504,17 @@ define amdgpu_kernel void @mad_sub_f64(ptr addrspace(1) noalias nocapture %out, 
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 16, v0
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[0:1], v[0:1] glc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
-; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 16, v0
+; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    v_fma_f64 v[0:1], v[0:1], v[2:3], -v[4:5]
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[0:1], v[0:1] glc
+; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-CONTRACT-NEXT:    v_fma_f64 v[0:1], v[2:3], v[4:5], -v[0:1]
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v3, s1
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, s0, v6
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
@@ -598,13 +598,13 @@ define amdgpu_kernel void @fadd_a_a_b_f64_fast_add0(ptr addrspace(1) %out, ptr a
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[4:5], 2.0, v[2:3]
+; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[2:3], 2.0, v[4:5]
 ; VI-CONTRACT-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; VI-CONTRACT-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
@@ -682,13 +682,13 @@ define amdgpu_kernel void @fadd_a_a_b_f64_fast_add1(ptr addrspace(1) %out, ptr a
 ; VI-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-CONTRACT-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[4:5], 2.0, v[2:3]
+; VI-CONTRACT-NEXT:    v_fma_f64 v[2:3], v[2:3], 2.0, v[4:5]
 ; VI-CONTRACT-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; VI-CONTRACT-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() nounwind readnone
@@ -730,13 +730,13 @@ define amdgpu_kernel void @fadd_a_a_b_f64_fast(ptr addrspace(1) %out, ptr addrsp
 ; VI-NEXT:    v_mov_b32_e32 v1, s1
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v0
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-NEXT:    v_add_u32_e32 v2, vcc, 8, v0
-; VI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-NEXT:    flat_load_dwordx2 v[4:5], v[0:1] glc
+; VI-NEXT:    v_add_u32_e32 v4, vcc, 8, v0
+; VI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
+; VI-NEXT:    flat_load_dwordx2 v[2:3], v[0:1] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    flat_load_dwordx2 v[2:3], v[2:3] glc
+; VI-NEXT:    flat_load_dwordx2 v[4:5], v[4:5] glc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_fma_f64 v[2:3], v[4:5], 2.0, v[2:3]
+; VI-NEXT:    v_fma_f64 v[2:3], v[2:3], 2.0, v[4:5]
 ; VI-NEXT:    flat_store_dwordx2 v[0:1], v[2:3]
 ; VI-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() nounwind readnone

@@ -173,6 +173,31 @@ public:
 /// The goal of this scheduling strategy is to maximize kernel occupancy (i.e.
 /// maximum number of waves per simd).
 class GCNMaxOccupancySchedStrategy final : public GCNSchedStrategy {
+protected:
+  bool tryCandidate(SchedCandidate &Cand, SchedCandidate &TryCand,
+                    SchedBoundary *Zone) const override;
+
+  /// Generic data-hazard resolution metric used as a tie-breaker.
+  ///
+  /// Returns the number of currently-unscheduled instructions that would
+  /// become ready to issue (i.e. have all of their data dependences in the
+  /// scheduling direction satisfied) as a direct result of scheduling \p Pick.
+  /// Larger is better: it lets independent work fill the latency/resource
+  /// window opened by \p Pick.
+  unsigned getReleasedReadyCount(const SUnit *Pick, bool AtTop) const;
+
+  /// Cluster-aware refinement of getReleasedReadyCount().
+  ///
+  /// Returns the number of distinct clusters that become fully ready to issue
+  /// as a direct result of scheduling \p Pick, i.e. clusters for which \p Pick
+  /// releases a member and every other member is already scheduled or itself
+  /// becomes ready. Because a cluster is forced to issue as a single pack,
+  /// completing a whole cluster resolves more hazards than freeing the same
+  /// number of unrelated instructions or only part of a cluster. This lets the
+  /// strategy prefer, e.g., an MFMA whose source load is the last outstanding
+  /// member of a DS_READ cluster over one that only frees isolated work.
+  unsigned getReleasedClusterCount(const SUnit *Pick, bool AtTop) const;
+
 public:
   GCNMaxOccupancySchedStrategy(const MachineSchedContext *C,
                                bool IsLegacyScheduler = false);

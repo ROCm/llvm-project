@@ -25,9 +25,9 @@ define i32 @v4i1(<4 x i1> %x) {
 ; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], 1, v0
 ; CHECK-NEXT:    s_xor_b64 s[6:7], vcc, -1
 ; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[6:7]
+; CHECK-NEXT:    v_cndmask_b32_e32 v0, 1, v0, vcc
 ; CHECK-NEXT:    s_xor_b64 s[6:7], s[4:5], -1
 ; CHECK-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[6:7]
-; CHECK-NEXT:    v_cndmask_b32_e32 v0, 1, v0, vcc
 ; CHECK-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
 ; CHECK-NEXT:    v_or_b32_e32 v0, 2, v0
 ; CHECK-NEXT:    v_cmp_ne_u32_e32 vcc, 2, v1

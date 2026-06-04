@@ -238,39 +238,39 @@ define amdgpu_kernel void @tbuffer_store_d16_xyzw(<4 x i32> %rsrc, <4 x half> %d
 ;
 ; PREGFX10-PACKED-LABEL: tbuffer_store_d16_xyzw:
 ; PREGFX10-PACKED:       ; %bb.0: ; %main_body
-; PREGFX10-PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; PREGFX10-PACKED-NEXT:    s_load_dword s6, s[8:9], 0x18
+; PREGFX10-PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; PREGFX10-PACKED-NEXT:    s_load_dwordx4 s[0:3], s[8:9], 0x0
 ; PREGFX10-PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s4
 ; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v1, s5
-; PREGFX10-PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; PREGFX10-PACKED-NEXT:    tbuffer_store_format_d16_xyzw v[0:1], v2, s[0:3], 0 format:[BUF_NUM_FORMAT_USCALED] idxen
 ; PREGFX10-PACKED-NEXT:    s_endpgm
 ;
 ; GFX10-PACKED-LABEL: tbuffer_store_d16_xyzw:
 ; GFX10-PACKED:       ; %bb.0: ; %main_body
 ; GFX10-PACKED-NEXT:    s_clause 0x2
-; GFX10-PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; GFX10-PACKED-NEXT:    s_load_dword s6, s[8:9], 0x18
+; GFX10-PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; GFX10-PACKED-NEXT:    s_load_dwordx4 s[0:3], s[8:9], 0x0
 ; GFX10-PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX10-PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX10-PACKED-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX10-PACKED-NEXT:    v_mov_b32_e32 v1, s5
-; GFX10-PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX10-PACKED-NEXT:    tbuffer_store_format_d16_xyzw v[0:1], v2, s[0:3], 0 format:[BUF_FMT_10_11_11_SSCALED] idxen
 ; GFX10-PACKED-NEXT:    s_endpgm
 ;
 ; GFX11-PACKED-LABEL: tbuffer_store_d16_xyzw:
 ; GFX11-PACKED:       ; %bb.0: ; %main_body
 ; GFX11-PACKED-NEXT:    s_clause 0x2
-; GFX11-PACKED-NEXT:    s_load_b64 s[6:7], s[4:5], 0x10
 ; GFX11-PACKED-NEXT:    s_load_b32 s8, s[4:5], 0x18
+; GFX11-PACKED-NEXT:    s_load_b64 s[6:7], s[4:5], 0x10
 ; GFX11-PACKED-NEXT:    s_load_b128 s[0:3], s[4:5], 0x0
 ; GFX11-PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX11-PACKED-NEXT:    v_mov_b32_e32 v2, s8
 ; GFX11-PACKED-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX11-PACKED-NEXT:    v_mov_b32_e32 v1, s7
-; GFX11-PACKED-NEXT:    v_mov_b32_e32 v2, s8
 ; GFX11-PACKED-NEXT:    tbuffer_store_d16_format_xyzw v[0:1], v2, s[0:3], 0 format:[BUF_FMT_10_10_10_2_SNORM] idxen
 ; GFX11-PACKED-NEXT:    s_endpgm
 ;

@@ -1966,50 +1966,50 @@ define amdgpu_kernel void @mad_sub_f16(ptr addrspace(1) noalias nocapture %out, 
 ; VI-FLUSH-LABEL: mad_sub_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_mad_f16 v2, v5, v2, -v0
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mad_f16 v2, v7, v2, -v3
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v2
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: mad_sub_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v5, v2, -v0
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v7, v2, -v3
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;
@@ -2190,50 +2190,50 @@ define amdgpu_kernel void @mad_sub_inv_f16(ptr addrspace(1) noalias nocapture %o
 ; VI-FLUSH-LABEL: mad_sub_inv_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_mad_f16 v2, -v5, v2, v0
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mad_f16 v2, -v7, v2, v3
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v2
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: mad_sub_inv_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, -v5, v2, v0
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, -v7, v2, v3
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;
@@ -2414,50 +2414,50 @@ define amdgpu_kernel void @mad_sub_fabs_f16(ptr addrspace(1) noalias nocapture %
 ; VI-FLUSH-LABEL: mad_sub_fabs_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_mad_f16 v2, v5, v2, -|v0|
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mad_f16 v2, v7, v2, -|v3|
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v2
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: mad_sub_fabs_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v5, v2, -|v0|
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v7, v2, -|v3|
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;
@@ -2639,50 +2639,50 @@ define amdgpu_kernel void @mad_sub_fabs_inv_f16(ptr addrspace(1) noalias nocaptu
 ; VI-FLUSH-LABEL: mad_sub_fabs_inv_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_mad_f16 v2, -v5, v2, |v0|
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mad_f16 v2, -v7, v2, |v3|
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v2
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: mad_sub_fabs_inv_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, -v5, v2, |v0|
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, -v7, v2, |v3|
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;
@@ -2864,50 +2864,50 @@ define amdgpu_kernel void @neg_neg_mad_f16(ptr addrspace(1) noalias nocapture %o
 ; VI-FLUSH-LABEL: neg_neg_mad_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v3, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mac_f16_e32 v3, v7, v2
+; VI-FLUSH-NEXT:    v_mac_f16_e32 v3, v5, v2
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v3
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: neg_neg_mad_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v5, v2, v0
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v7, v2, v3
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;
@@ -3090,50 +3090,50 @@ define amdgpu_kernel void @mad_fabs_sub_f16(ptr addrspace(1) noalias nocapture %
 ; VI-FLUSH-LABEL: mad_fabs_sub_f16:
 ; VI-FLUSH:       ; %bb.0:
 ; VI-FLUSH-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-FLUSH-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-FLUSH-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s3
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-FLUSH-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-FLUSH-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
-; VI-FLUSH-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-FLUSH-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-FLUSH-NEXT:    s_waitcnt vmcnt(0)
 ; VI-FLUSH-NEXT:    v_mov_b32_e32 v1, s1
-; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-FLUSH-NEXT:    v_mad_f16 v2, v5, |v2|, -v0
+; VI-FLUSH-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-FLUSH-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-FLUSH-NEXT:    v_mad_f16 v2, v7, |v2|, -v3
 ; VI-FLUSH-NEXT:    flat_store_short v[0:1], v2
 ; VI-FLUSH-NEXT:    s_endpgm
 ;
 ; VI-DENORM-CONTRACT-LABEL: mad_fabs_sub_f16:
 ; VI-DENORM-CONTRACT:       ; %bb.0:
 ; VI-DENORM-CONTRACT-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v6, 1, v0
+; VI-DENORM-CONTRACT-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s3
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v6
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v2, vcc, 2, v0
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v3, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v4, vcc, 4, v0
-; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v5, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v7, v[0:1] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, 4, v0
+; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v2, v[2:3] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
-; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v3, v[4:5] glc
+; VI-DENORM-CONTRACT-NEXT:    flat_load_ushort v0, v[0:1] glc
 ; VI-DENORM-CONTRACT-NEXT:    s_waitcnt vmcnt(0)
 ; VI-DENORM-CONTRACT-NEXT:    v_mov_b32_e32 v1, s1
-; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v6
+; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v5, |v2|, -v0
+; VI-DENORM-CONTRACT-NEXT:    v_add_u32_e32 v0, vcc, s0, v4
 ; VI-DENORM-CONTRACT-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-DENORM-CONTRACT-NEXT:    v_fma_f16 v2, v7, |v2|, -v3
 ; VI-DENORM-CONTRACT-NEXT:    flat_store_short v[0:1], v2
 ; VI-DENORM-CONTRACT-NEXT:    s_endpgm
 ;

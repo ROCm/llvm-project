@@ -21,8 +21,8 @@ define amdgpu_kernel void @test_s_i32(ptr addrspace(1) %out, i32 %src0) {
 ; GFX11-GISEL-NEXT:    s_load_b32 s2, s[4:5], 0x2c
 ; GFX11-GISEL-NEXT:    s_load_b64 s[0:1], s[4:5], 0x24
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-GISEL-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
-; GFX11-GISEL-NEXT:    global_store_b32 v1, v0, s[0:1]
+; GFX11-GISEL-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
+; GFX11-GISEL-NEXT:    global_store_b32 v0, v1, s[0:1]
 ; GFX11-GISEL-NEXT:    s_endpgm
   %v = call i32 @llvm.amdgcn.permlane64.i32(i32 %src0)
   store i32 %v, ptr addrspace(1) %out

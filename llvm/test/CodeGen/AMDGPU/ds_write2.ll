@@ -675,9 +675,9 @@ define amdgpu_kernel void @write2_ptr_subreg_arg_two_val_f32(ptr addrspace(1) %C
 ; CI-NEXT:    s_mov_b32 s7, 0xf000
 ; CI-NEXT:    s_mov_b32 s6, 0
 ; CI-NEXT:    v_lshlrev_b32_e32 v0, 2, v0
+; CI-NEXT:    v_mov_b32_e32 v1, 0
 ; CI-NEXT:    s_waitcnt lgkmcnt(0)
 ; CI-NEXT:    s_mov_b64 s[4:5], s[0:1]
-; CI-NEXT:    v_mov_b32_e32 v1, 0
 ; CI-NEXT:    s_mov_b64 s[0:1], s[2:3]
 ; CI-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; CI-NEXT:    buffer_load_dword v2, v[0:1], s[4:7], 0 addr64

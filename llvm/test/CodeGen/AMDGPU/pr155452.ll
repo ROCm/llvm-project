@@ -45,9 +45,9 @@ define amdgpu_kernel void @my_kernel(i64 %foo, i32 %bar) {
 ; CHECK-NEXT:    s_sub_i32 s8, s8, s9
 ; CHECK-NEXT:    s_sub_i32 s9, s8, s7
 ; CHECK-NEXT:    s_cmp_ge_u32 s8, s7
+; CHECK-NEXT:    s_cselect_b32 s8, s9, s8
 ; CHECK-NEXT:    s_cselect_b64 vcc, -1, 0
 ; CHECK-NEXT:    v_cndmask_b32_e32 v3, v3, v5, vcc
-; CHECK-NEXT:    s_cselect_b32 s8, s9, s8
 ; CHECK-NEXT:    v_add_i32_e32 v5, vcc, 1, v3
 ; CHECK-NEXT:    s_cmp_ge_u32 s8, s7
 ; CHECK-NEXT:    s_cselect_b64 vcc, -1, 0

@@ -58,8 +58,8 @@ define amdgpu_kernel void @barrier_vscnt_global(ptr addrspace(1) %arg) {
 ; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    flat_store_dword v[0:1], v2
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 4, v3
-; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    v_mov_b32_e32 v2, 1
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_barrier
 ; GFX8-NEXT:    flat_store_dword v[0:1], v2
@@ -203,8 +203,8 @@ define amdgpu_kernel void @barrier_vscnt_flat(ptr %arg) {
 ; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    flat_store_dword v[0:1], v2
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, 4, v3
-; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    v_mov_b32_e32 v2, 1
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    s_barrier
 ; GFX8-NEXT:    flat_store_dword v[0:1], v2

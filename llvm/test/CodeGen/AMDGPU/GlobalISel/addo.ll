@@ -164,10 +164,10 @@ define <2 x i32> @v_uaddo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_add_i32_e32 v0, vcc, v0, v2
 ; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
-; GFX7-NEXT:    v_add_i32_e32 v1, vcc, v1, v3
-; GFX7-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX7-NEXT:    v_add_i32_e32 v0, vcc, v0, v2
 ; GFX7-NEXT:    v_add_i32_e32 v1, vcc, v1, v3
+; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX7-NEXT:    v_add_i32_e32 v1, vcc, v1, v2
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_uaddo_v2i32:
@@ -175,10 +175,10 @@ define <2 x i32> @v_uaddo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; GFX8-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
-; GFX8-NEXT:    v_add_u32_e32 v1, vcc, v1, v3
-; GFX8-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX8-NEXT:    v_add_u32_e32 v0, vcc, v0, v2
 ; GFX8-NEXT:    v_add_u32_e32 v1, vcc, v1, v3
+; GFX8-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX8-NEXT:    v_add_u32_e32 v1, vcc, v1, v2
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: v_uaddo_v2i32:
@@ -187,9 +187,9 @@ define <2 x i32> @v_uaddo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX9-NEXT:    v_add_co_u32_e32 v0, vcc, v0, v2
 ; GFX9-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
 ; GFX9-NEXT:    v_add_co_u32_e32 v1, vcc, v1, v3
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX9-NEXT:    v_add_u32_e32 v0, v0, v2
-; GFX9-NEXT:    v_add_u32_e32 v1, v1, v3
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX9-NEXT:    v_add_u32_e32 v1, v1, v2
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %uaddo = call {<2 x i32>, <2 x i1>} @llvm.uadd.with.overflow.v2i32(<2 x i32> %a, <2 x i32> %b)
   %add = extractvalue {<2 x i32>, <2 x i1>} %uaddo, 0

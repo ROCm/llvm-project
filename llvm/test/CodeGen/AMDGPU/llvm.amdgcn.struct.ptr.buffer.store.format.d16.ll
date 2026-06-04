@@ -103,13 +103,13 @@ define amdgpu_kernel void @buffer_store_format_d16_xyzw(ptr addrspace(8) %rsrc, 
 ;
 ; PACKED-LABEL: buffer_store_format_d16_xyzw:
 ; PACKED:       ; %bb.0: ; %main_body
-; PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; PACKED-NEXT:    s_load_dword s6, s[8:9], 0x18
+; PACKED-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x10
 ; PACKED-NEXT:    s_load_dwordx4 s[0:3], s[8:9], 0x0
 ; PACKED-NEXT:    s_waitcnt lgkmcnt(0)
+; PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; PACKED-NEXT:    v_mov_b32_e32 v0, s4
 ; PACKED-NEXT:    v_mov_b32_e32 v1, s5
-; PACKED-NEXT:    v_mov_b32_e32 v2, s6
 ; PACKED-NEXT:    buffer_store_format_d16_xyzw v[0:1], v2, s[0:3], 0 idxen
 ; PACKED-NEXT:    s_endpgm
 main_body:

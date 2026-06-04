@@ -480,16 +480,16 @@ define amdgpu_kernel void @byref_constant_i32_arg(ptr addrspace(1) nocapture %ou
 define amdgpu_kernel void @byref_constant_v4i32_arg(ptr addrspace(1) nocapture %out, ptr addrspace(4) byref(<4 x i32>) %in.byref, i32 %after.offset) #0 {
 ; GCN-LABEL: byref_constant_v4i32_arg:
 ; GCN:       ; %bb.0:
-; GCN-NEXT:    s_load_dwordx4 s[0:3], s[8:9], 0x10
 ; GCN-NEXT:    s_load_dword s6, s[8:9], 0x20
+; GCN-NEXT:    s_load_dwordx4 s[0:3], s[8:9], 0x10
 ; GCN-NEXT:    s_load_dwordx2 s[4:5], s[8:9], 0x0
 ; GCN-NEXT:    v_mov_b32_e32 v4, 0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    v_mov_b32_e32 v5, s6
 ; GCN-NEXT:    v_mov_b32_e32 v0, s0
 ; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    v_mov_b32_e32 v2, s2
 ; GCN-NEXT:    v_mov_b32_e32 v3, s3
-; GCN-NEXT:    v_mov_b32_e32 v5, s6
 ; GCN-NEXT:    global_store_dwordx4 v4, v[0:3], s[4:5]
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    global_store_dword v4, v5, s[4:5]

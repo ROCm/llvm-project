@@ -5592,13 +5592,13 @@ define amdgpu_kernel void @atomic_cmpxchg_i32_ret_addr64_offset(ptr addrspace(1)
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_clause 0x3
 ; GFX11-NEXT:    s_load_b64 s[6:7], s[4:5], 0x3c
-; GFX11-NEXT:    s_load_b32 s8, s[4:5], 0x34
-; GFX11-NEXT:    s_load_b32 s9, s[4:5], 0x44
+; GFX11-NEXT:    s_load_b32 s8, s[4:5], 0x44
+; GFX11-NEXT:    s_load_b32 s9, s[4:5], 0x34
 ; GFX11-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX11-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_lshl_b64 s[4:5], s[6:7], 2
-; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v1, s9
+; GFX11-NEXT:    v_dual_mov_b32 v1, s8 :: v_dual_mov_b32 v0, s9
 ; GFX11-NEXT:    s_add_u32 s0, s0, s4
 ; GFX11-NEXT:    s_addc_u32 s1, s1, s5
 ; GFX11-NEXT:    global_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] offset:16 glc
@@ -5902,13 +5902,13 @@ define amdgpu_kernel void @atomic_cmpxchg_i32_ret_addr64(ptr addrspace(1) %out, 
 ; GFX11:       ; %bb.0: ; %entry
 ; GFX11-NEXT:    s_clause 0x3
 ; GFX11-NEXT:    s_load_b64 s[6:7], s[4:5], 0x3c
-; GFX11-NEXT:    s_load_b32 s8, s[4:5], 0x34
-; GFX11-NEXT:    s_load_b32 s9, s[4:5], 0x44
+; GFX11-NEXT:    s_load_b32 s8, s[4:5], 0x44
+; GFX11-NEXT:    s_load_b32 s9, s[4:5], 0x34
 ; GFX11-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX11-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_lshl_b64 s[4:5], s[6:7], 2
-; GFX11-NEXT:    v_dual_mov_b32 v0, s8 :: v_dual_mov_b32 v1, s9
+; GFX11-NEXT:    v_dual_mov_b32 v1, s8 :: v_dual_mov_b32 v0, s9
 ; GFX11-NEXT:    s_add_u32 s0, s0, s4
 ; GFX11-NEXT:    s_addc_u32 s1, s1, s5
 ; GFX11-NEXT:    global_atomic_cmpswap_b32 v0, v2, v[0:1], s[0:1] glc

@@ -217,12 +217,12 @@ define float @v_fdiv_recip_sqrt_f32(float %x) {
 ; CODEGEN-IEEE-SDAG-NEXT:    v_sqrt_f32_e32 v1, v0
 ; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; CODEGEN-IEEE-SDAG-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; CODEGEN-IEEE-SDAG-NEXT:    v_mov_b32_e32 v2, 0x260
@@ -285,12 +285,12 @@ define float @v_fdiv_recip_sqrt_f32(float %x) {
 ; IR-IEEE-SDAG-NEXT:    v_sqrt_f32_e32 v1, v0
 ; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; IR-IEEE-SDAG-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; IR-IEEE-SDAG-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; IR-IEEE-SDAG-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; IR-IEEE-SDAG-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; IR-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; IR-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; IR-IEEE-SDAG-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; IR-IEEE-SDAG-NEXT:    v_mov_b32_e32 v2, 0x260
@@ -901,12 +901,12 @@ define float @v_fdiv_recip_sqrt_f32_afn_fdiv_only(float %x) {
 ; CODEGEN-IEEE-SDAG-NEXT:    v_sqrt_f32_e32 v1, v0
 ; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; CODEGEN-IEEE-SDAG-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; CODEGEN-IEEE-SDAG-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; CODEGEN-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; CODEGEN-IEEE-SDAG-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; CODEGEN-IEEE-SDAG-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; CODEGEN-IEEE-SDAG-NEXT:    v_mov_b32_e32 v2, 0x260
@@ -949,12 +949,12 @@ define float @v_fdiv_recip_sqrt_f32_afn_fdiv_only(float %x) {
 ; IR-IEEE-SDAG-NEXT:    v_sqrt_f32_e32 v1, v0
 ; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; IR-IEEE-SDAG-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; IR-IEEE-SDAG-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; IR-IEEE-SDAG-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; IR-IEEE-SDAG-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; IR-IEEE-SDAG-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; IR-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; IR-IEEE-SDAG-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; IR-IEEE-SDAG-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; IR-IEEE-SDAG-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; IR-IEEE-SDAG-NEXT:    v_mov_b32_e32 v2, 0x260

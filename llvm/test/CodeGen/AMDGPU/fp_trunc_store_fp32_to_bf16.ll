@@ -30,14 +30,14 @@ define void @v2(<2 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v4, v4, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v6, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v6, v6, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v7, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v4, v5, vcc
-; CHECK-NEXT:    v_bfe_u32 v4, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v4, v4, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v4, v5, vcc
 ; CHECK-NEXT:    s_mov_b32 s4, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v6, v7, vcc
 ; CHECK-NEXT:    v_perm_b32 v0, v1, v0, s4
 ; CHECK-NEXT:    global_store_dword v[2:3], v0, off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -58,14 +58,14 @@ define void @v3(<3 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v3, v3, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v6, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v7, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v7, v7, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v8, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v3, v6, vcc
-; CHECK-NEXT:    v_bfe_u32 v3, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v3, v3, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v6, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v3, v6, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v7, v8, vcc
 ; CHECK-NEXT:    v_perm_b32 v0, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v1, v2, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v1, v1, v2, s4
@@ -90,25 +90,25 @@ define void @v4(<4 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v6, v6, v2, s4
 ; CHECK-NEXT:    v_or_b32_e32 v7, 0x400000, v2
+; CHECK-NEXT:    v_bfe_u32 v8, v3, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
+; CHECK-NEXT:    v_add3_u32 v8, v8, v3, s4
+; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v6, v7, vcc
-; CHECK-NEXT:    v_bfe_u32 v6, v3, 16, 1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v3, s4
-; CHECK-NEXT:    v_or_b32_e32 v7, 0x400000, v3
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v3, v3
-; CHECK-NEXT:    v_cndmask_b32_e32 v3, v6, v7, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v3, v8, v9, vcc
 ; CHECK-NEXT:    v_perm_b32 v3, v3, v2, s5
 ; CHECK-NEXT:    v_bfe_u32 v2, v0, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v2, v2, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v6, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v7, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v7, v7, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v8, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v2, v6, vcc
-; CHECK-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v2, v2, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v6, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v6, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v7, v8, vcc
 ; CHECK-NEXT:    v_perm_b32 v2, v1, v0, s5
 ; CHECK-NEXT:    global_store_dwordx2 v[4:5], v[2:3], off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -127,36 +127,36 @@ define void @v6(<6 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v8, v8, v4, s4
 ; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v4
+; CHECK-NEXT:    v_bfe_u32 v10, v5, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v4, v4
+; CHECK-NEXT:    v_add3_u32 v10, v10, v5, s4
+; CHECK-NEXT:    v_or_b32_e32 v11, 0x400000, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v4, v8, v9, vcc
-; CHECK-NEXT:    v_bfe_u32 v8, v5, 16, 1
-; CHECK-NEXT:    v_add3_u32 v8, v8, v5, s4
-; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v5
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v5, v5
-; CHECK-NEXT:    v_cndmask_b32_e32 v5, v8, v9, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v5, v10, v11, vcc
 ; CHECK-NEXT:    v_perm_b32 v4, v5, v4, s5
 ; CHECK-NEXT:    v_bfe_u32 v5, v2, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v5, v5, v2, s4
 ; CHECK-NEXT:    v_or_b32_e32 v8, 0x400000, v2
+; CHECK-NEXT:    v_bfe_u32 v9, v3, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
+; CHECK-NEXT:    v_add3_u32 v9, v9, v3, s4
+; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v5, v8, vcc
-; CHECK-NEXT:    v_bfe_u32 v5, v3, 16, 1
-; CHECK-NEXT:    v_add3_u32 v5, v5, v3, s4
-; CHECK-NEXT:    v_or_b32_e32 v8, 0x400000, v3
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v3, v3
-; CHECK-NEXT:    v_cndmask_b32_e32 v3, v5, v8, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v3, v9, v10, vcc
 ; CHECK-NEXT:    v_perm_b32 v3, v3, v2, s5
 ; CHECK-NEXT:    v_bfe_u32 v2, v0, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v2, v2, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v8, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v8, v8, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v2, v5, vcc
-; CHECK-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v2, v2, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v5, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v8, v9, vcc
 ; CHECK-NEXT:    v_perm_b32 v2, v1, v0, s5
 ; CHECK-NEXT:    global_store_dwordx3 v[6:7], v[2:4], off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -175,47 +175,47 @@ define void @v8(<8 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v10, v10, v6, s4
 ; CHECK-NEXT:    v_or_b32_e32 v11, 0x400000, v6
+; CHECK-NEXT:    v_bfe_u32 v12, v7, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v6, v6
+; CHECK-NEXT:    v_add3_u32 v12, v12, v7, s4
+; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v7
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, v10, v11, vcc
-; CHECK-NEXT:    v_bfe_u32 v10, v7, 16, 1
-; CHECK-NEXT:    v_add3_u32 v10, v10, v7, s4
-; CHECK-NEXT:    v_or_b32_e32 v11, 0x400000, v7
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v7, v7
-; CHECK-NEXT:    v_cndmask_b32_e32 v7, v10, v11, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v7, v12, v13, vcc
 ; CHECK-NEXT:    v_perm_b32 v7, v7, v6, s5
 ; CHECK-NEXT:    v_bfe_u32 v6, v4, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v6, v6, v4, s4
 ; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v4
+; CHECK-NEXT:    v_bfe_u32 v11, v5, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v4, v4
+; CHECK-NEXT:    v_add3_u32 v11, v11, v5, s4
+; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v4, v6, v10, vcc
-; CHECK-NEXT:    v_bfe_u32 v6, v5, 16, 1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v5, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v5
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v5, v5
-; CHECK-NEXT:    v_cndmask_b32_e32 v5, v6, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v5, v11, v12, vcc
 ; CHECK-NEXT:    v_perm_b32 v6, v5, v4, s5
 ; CHECK-NEXT:    v_bfe_u32 v4, v2, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v4, v4, v2, s4
 ; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v2
+; CHECK-NEXT:    v_bfe_u32 v10, v3, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
+; CHECK-NEXT:    v_add3_u32 v10, v10, v3, s4
+; CHECK-NEXT:    v_or_b32_e32 v11, 0x400000, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v4, v5, vcc
-; CHECK-NEXT:    v_bfe_u32 v4, v3, 16, 1
-; CHECK-NEXT:    v_add3_u32 v4, v4, v3, s4
-; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v3
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v3, v3
-; CHECK-NEXT:    v_cndmask_b32_e32 v3, v4, v5, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v3, v10, v11, vcc
 ; CHECK-NEXT:    v_perm_b32 v5, v3, v2, s5
 ; CHECK-NEXT:    v_bfe_u32 v2, v0, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v2, v2, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v4, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v4, v4, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v2, v3, vcc
-; CHECK-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v2, v2, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v4, v10, vcc
 ; CHECK-NEXT:    v_perm_b32 v4, v1, v0, s5
 ; CHECK-NEXT:    global_store_dwordx4 v[8:9], v[4:7], off
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
@@ -234,91 +234,91 @@ define void @v16(<16 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v18, v18, v6, s4
 ; CHECK-NEXT:    v_or_b32_e32 v19, 0x400000, v6
+; CHECK-NEXT:    v_bfe_u32 v20, v7, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v6, v6
+; CHECK-NEXT:    v_add3_u32 v20, v20, v7, s4
+; CHECK-NEXT:    v_or_b32_e32 v21, 0x400000, v7
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, v18, v19, vcc
-; CHECK-NEXT:    v_bfe_u32 v18, v7, 16, 1
-; CHECK-NEXT:    v_add3_u32 v18, v18, v7, s4
-; CHECK-NEXT:    v_or_b32_e32 v19, 0x400000, v7
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v7, v7
-; CHECK-NEXT:    v_cndmask_b32_e32 v7, v18, v19, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v7, v20, v21, vcc
 ; CHECK-NEXT:    v_perm_b32 v7, v7, v6, s5
 ; CHECK-NEXT:    v_bfe_u32 v6, v4, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v6, v6, v4, s4
 ; CHECK-NEXT:    v_or_b32_e32 v18, 0x400000, v4
+; CHECK-NEXT:    v_bfe_u32 v19, v5, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v4, v4
+; CHECK-NEXT:    v_add3_u32 v19, v19, v5, s4
+; CHECK-NEXT:    v_or_b32_e32 v20, 0x400000, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v4, v6, v18, vcc
-; CHECK-NEXT:    v_bfe_u32 v6, v5, 16, 1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v5, s4
-; CHECK-NEXT:    v_or_b32_e32 v18, 0x400000, v5
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v5, v5
-; CHECK-NEXT:    v_cndmask_b32_e32 v5, v6, v18, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v5, v19, v20, vcc
 ; CHECK-NEXT:    v_perm_b32 v6, v5, v4, s5
 ; CHECK-NEXT:    v_bfe_u32 v4, v2, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v4, v4, v2, s4
 ; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v2
+; CHECK-NEXT:    v_bfe_u32 v18, v3, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
+; CHECK-NEXT:    v_add3_u32 v18, v18, v3, s4
+; CHECK-NEXT:    v_or_b32_e32 v19, 0x400000, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v4, v5, vcc
-; CHECK-NEXT:    v_bfe_u32 v4, v3, 16, 1
-; CHECK-NEXT:    v_add3_u32 v4, v4, v3, s4
-; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v3
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v3, v3
-; CHECK-NEXT:    v_cndmask_b32_e32 v3, v4, v5, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v3, v18, v19, vcc
 ; CHECK-NEXT:    v_perm_b32 v5, v3, v2, s5
 ; CHECK-NEXT:    v_bfe_u32 v2, v0, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v2, v2, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v4, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v4, v4, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v18, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v2, v3, vcc
-; CHECK-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v2, v2, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v4, v18, vcc
 ; CHECK-NEXT:    v_perm_b32 v4, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v14, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v14, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v14
+; CHECK-NEXT:    v_bfe_u32 v2, v15, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v14, v14
+; CHECK-NEXT:    v_add3_u32 v2, v2, v15, s4
+; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v15
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v15, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v15, s4
-; CHECK-NEXT:    v_or_b32_e32 v2, 0x400000, v15
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v15, v15
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
 ; CHECK-NEXT:    v_perm_b32 v3, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v12, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v12, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v12
+; CHECK-NEXT:    v_bfe_u32 v2, v13, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v12, v12
+; CHECK-NEXT:    v_add3_u32 v2, v2, v13, s4
+; CHECK-NEXT:    v_or_b32_e32 v14, 0x400000, v13
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v13, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v13, s4
-; CHECK-NEXT:    v_or_b32_e32 v2, 0x400000, v13
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v13, v13
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v14, vcc
 ; CHECK-NEXT:    v_perm_b32 v2, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v10, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v10, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v10
+; CHECK-NEXT:    v_bfe_u32 v12, v11, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v10, v10
+; CHECK-NEXT:    v_add3_u32 v12, v12, v11, s4
+; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v11
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v11, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v11, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v11
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v11, v11
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v12, v13, vcc
 ; CHECK-NEXT:    v_perm_b32 v1, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v8, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v8, s4
 ; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v8
+; CHECK-NEXT:    v_bfe_u32 v11, v9, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v8, v8
-; CHECK-NEXT:    v_bfe_u32 v8, v9, 16, 1
+; CHECK-NEXT:    v_add3_u32 v11, v11, v9, s4
+; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v9
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v10, vcc
-; CHECK-NEXT:    v_add3_u32 v8, v8, v9, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v9
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v9, v9
-; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v8, v11, v12, vcc
 ; CHECK-NEXT:    v_perm_b32 v0, v8, v0, s5
 ; CHECK-NEXT:    global_store_dwordx4 v[16:17], v[0:3], off offset:16
 ; CHECK-NEXT:    global_store_dwordx4 v[16:17], v[4:7], off
@@ -341,180 +341,180 @@ define void @v32(<32 x float> %num, ptr addrspace(1) %p) {
 ; CHECK-NEXT:    s_movk_i32 s4, 0x7fff
 ; CHECK-NEXT:    v_add3_u32 v34, v34, v6, s4
 ; CHECK-NEXT:    v_or_b32_e32 v35, 0x400000, v6
+; CHECK-NEXT:    v_bfe_u32 v36, v7, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v6, v6
+; CHECK-NEXT:    v_add3_u32 v36, v36, v7, s4
+; CHECK-NEXT:    v_or_b32_e32 v37, 0x400000, v7
 ; CHECK-NEXT:    v_cndmask_b32_e32 v6, v34, v35, vcc
-; CHECK-NEXT:    v_bfe_u32 v34, v7, 16, 1
-; CHECK-NEXT:    v_add3_u32 v34, v34, v7, s4
-; CHECK-NEXT:    v_or_b32_e32 v35, 0x400000, v7
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v7, v7
-; CHECK-NEXT:    v_cndmask_b32_e32 v7, v34, v35, vcc
 ; CHECK-NEXT:    s_mov_b32 s5, 0x7060302
+; CHECK-NEXT:    v_cndmask_b32_e32 v7, v36, v37, vcc
 ; CHECK-NEXT:    v_perm_b32 v7, v7, v6, s5
 ; CHECK-NEXT:    v_bfe_u32 v6, v4, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v6, v6, v4, s4
 ; CHECK-NEXT:    v_or_b32_e32 v34, 0x400000, v4
+; CHECK-NEXT:    v_bfe_u32 v35, v5, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v4, v4
+; CHECK-NEXT:    v_add3_u32 v35, v35, v5, s4
+; CHECK-NEXT:    v_or_b32_e32 v36, 0x400000, v5
 ; CHECK-NEXT:    v_cndmask_b32_e32 v4, v6, v34, vcc
-; CHECK-NEXT:    v_bfe_u32 v6, v5, 16, 1
-; CHECK-NEXT:    v_add3_u32 v6, v6, v5, s4
-; CHECK-NEXT:    v_or_b32_e32 v34, 0x400000, v5
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v5, v5
-; CHECK-NEXT:    v_cndmask_b32_e32 v5, v6, v34, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v5, v35, v36, vcc
 ; CHECK-NEXT:    v_perm_b32 v6, v5, v4, s5
 ; CHECK-NEXT:    v_bfe_u32 v4, v2, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v4, v4, v2, s4
 ; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v2
+; CHECK-NEXT:    v_bfe_u32 v34, v3, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
+; CHECK-NEXT:    v_add3_u32 v34, v34, v3, s4
+; CHECK-NEXT:    v_or_b32_e32 v35, 0x400000, v3
 ; CHECK-NEXT:    v_cndmask_b32_e32 v2, v4, v5, vcc
-; CHECK-NEXT:    v_bfe_u32 v4, v3, 16, 1
-; CHECK-NEXT:    v_add3_u32 v4, v4, v3, s4
-; CHECK-NEXT:    v_or_b32_e32 v5, 0x400000, v3
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v3, v3
-; CHECK-NEXT:    v_cndmask_b32_e32 v3, v4, v5, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v3, v34, v35, vcc
 ; CHECK-NEXT:    v_perm_b32 v5, v3, v2, s5
 ; CHECK-NEXT:    v_bfe_u32 v2, v0, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v2, v2, v0, s4
 ; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v0
+; CHECK-NEXT:    v_bfe_u32 v4, v1, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
+; CHECK-NEXT:    v_add3_u32 v4, v4, v1, s4
+; CHECK-NEXT:    v_or_b32_e32 v34, 0x400000, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v2, v3, vcc
-; CHECK-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; CHECK-NEXT:    v_add3_u32 v2, v2, v1, s4
-; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v4, v34, vcc
 ; CHECK-NEXT:    v_perm_b32 v4, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v14, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v14, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v14
+; CHECK-NEXT:    v_bfe_u32 v2, v15, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v14, v14
+; CHECK-NEXT:    v_add3_u32 v2, v2, v15, s4
+; CHECK-NEXT:    v_or_b32_e32 v3, 0x400000, v15
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v15, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v15, s4
-; CHECK-NEXT:    v_or_b32_e32 v2, 0x400000, v15
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v15, v15
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
 ; CHECK-NEXT:    v_perm_b32 v3, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v12, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v12, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v12
+; CHECK-NEXT:    v_bfe_u32 v2, v13, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v12, v12
+; CHECK-NEXT:    v_add3_u32 v2, v2, v13, s4
+; CHECK-NEXT:    v_or_b32_e32 v14, 0x400000, v13
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v13, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v13, s4
-; CHECK-NEXT:    v_or_b32_e32 v2, 0x400000, v13
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v13, v13
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v14, vcc
 ; CHECK-NEXT:    v_perm_b32 v2, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v10, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v10, s4
 ; CHECK-NEXT:    v_or_b32_e32 v1, 0x400000, v10
+; CHECK-NEXT:    v_bfe_u32 v12, v11, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v10, v10
+; CHECK-NEXT:    v_add3_u32 v12, v12, v11, s4
+; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v11
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CHECK-NEXT:    v_bfe_u32 v1, v11, 16, 1
-; CHECK-NEXT:    v_add3_u32 v1, v1, v11, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v11
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v11, v11
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v1, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v12, v13, vcc
 ; CHECK-NEXT:    v_perm_b32 v1, v1, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v0, v8, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v0, v0, v8, s4
 ; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v8
+; CHECK-NEXT:    v_bfe_u32 v11, v9, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v8, v8
-; CHECK-NEXT:    v_bfe_u32 v8, v9, 16, 1
+; CHECK-NEXT:    v_add3_u32 v11, v11, v9, s4
+; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v9
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v0, v10, vcc
-; CHECK-NEXT:    v_add3_u32 v8, v8, v9, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v9
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v9, v9
-; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v8, v11, v12, vcc
 ; CHECK-NEXT:    v_perm_b32 v0, v8, v0, s5
 ; CHECK-NEXT:    v_bfe_u32 v8, v22, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v8, v8, v22, s4
 ; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v22
+; CHECK-NEXT:    v_bfe_u32 v10, v23, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v22, v22
+; CHECK-NEXT:    v_add3_u32 v10, v10, v23, s4
+; CHECK-NEXT:    v_or_b32_e32 v11, 0x400000, v23
 ; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v9, vcc
-; CHECK-NEXT:    v_bfe_u32 v9, v23, 16, 1
-; CHECK-NEXT:    v_add3_u32 v9, v9, v23, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v23
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v23, v23
-; CHECK-NEXT:    v_cndmask_b32_e32 v9, v9, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v9, v10, v11, vcc
 ; CHECK-NEXT:    v_perm_b32 v11, v9, v8, s5
 ; CHECK-NEXT:    v_bfe_u32 v8, v20, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v8, v8, v20, s4
 ; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v20
+; CHECK-NEXT:    v_bfe_u32 v10, v21, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v20, v20
+; CHECK-NEXT:    v_add3_u32 v10, v10, v21, s4
+; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v21
 ; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v9, vcc
-; CHECK-NEXT:    v_bfe_u32 v9, v21, 16, 1
-; CHECK-NEXT:    v_add3_u32 v9, v9, v21, s4
-; CHECK-NEXT:    v_or_b32_e32 v10, 0x400000, v21
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v21, v21
-; CHECK-NEXT:    v_cndmask_b32_e32 v9, v9, v10, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v9, v10, v12, vcc
 ; CHECK-NEXT:    v_perm_b32 v10, v9, v8, s5
 ; CHECK-NEXT:    v_bfe_u32 v8, v18, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v8, v8, v18, s4
 ; CHECK-NEXT:    v_or_b32_e32 v9, 0x400000, v18
+; CHECK-NEXT:    v_bfe_u32 v12, v19, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v18, v18
+; CHECK-NEXT:    v_add3_u32 v12, v12, v19, s4
+; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v19
 ; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v9, vcc
-; CHECK-NEXT:    v_bfe_u32 v9, v19, 16, 1
-; CHECK-NEXT:    v_add3_u32 v9, v9, v19, s4
-; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v19
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v19, v19
-; CHECK-NEXT:    v_cndmask_b32_e32 v9, v9, v12, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v9, v12, v13, vcc
 ; CHECK-NEXT:    v_perm_b32 v9, v9, v8, s5
 ; CHECK-NEXT:    v_bfe_u32 v8, v16, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v8, v8, v16, s4
 ; CHECK-NEXT:    v_or_b32_e32 v12, 0x400000, v16
+; CHECK-NEXT:    v_bfe_u32 v13, v17, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v16, v16
+; CHECK-NEXT:    v_add3_u32 v13, v13, v17, s4
+; CHECK-NEXT:    v_or_b32_e32 v14, 0x400000, v17
 ; CHECK-NEXT:    v_cndmask_b32_e32 v8, v8, v12, vcc
-; CHECK-NEXT:    v_bfe_u32 v12, v17, 16, 1
-; CHECK-NEXT:    v_add3_u32 v12, v12, v17, s4
-; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v17
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v17, v17
-; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v13, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v12, v13, v14, vcc
 ; CHECK-NEXT:    v_perm_b32 v8, v12, v8, s5
 ; CHECK-NEXT:    v_bfe_u32 v12, v30, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v12, v12, v30, s4
 ; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v30
-; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v30, v30
-; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v13, vcc
 ; CHECK-NEXT:    s_waitcnt vmcnt(0)
-; CHECK-NEXT:    v_bfe_u32 v13, v31, 16, 1
-; CHECK-NEXT:    v_add3_u32 v13, v13, v31, s4
-; CHECK-NEXT:    v_or_b32_e32 v14, 0x400000, v31
+; CHECK-NEXT:    v_bfe_u32 v14, v31, 16, 1
+; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v30, v30
+; CHECK-NEXT:    v_add3_u32 v14, v14, v31, s4
+; CHECK-NEXT:    v_or_b32_e32 v15, 0x400000, v31
+; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v13, vcc
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v31, v31
-; CHECK-NEXT:    v_cndmask_b32_e32 v13, v13, v14, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v13, v14, v15, vcc
 ; CHECK-NEXT:    v_perm_b32 v15, v13, v12, s5
 ; CHECK-NEXT:    v_bfe_u32 v12, v28, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v12, v12, v28, s4
 ; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v28
+; CHECK-NEXT:    v_bfe_u32 v14, v29, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v28, v28
+; CHECK-NEXT:    v_add3_u32 v14, v14, v29, s4
+; CHECK-NEXT:    v_or_b32_e32 v16, 0x400000, v29
 ; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v13, vcc
-; CHECK-NEXT:    v_bfe_u32 v13, v29, 16, 1
-; CHECK-NEXT:    v_add3_u32 v13, v13, v29, s4
-; CHECK-NEXT:    v_or_b32_e32 v14, 0x400000, v29
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v29, v29
-; CHECK-NEXT:    v_cndmask_b32_e32 v13, v13, v14, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v13, v14, v16, vcc
 ; CHECK-NEXT:    v_perm_b32 v14, v13, v12, s5
 ; CHECK-NEXT:    v_bfe_u32 v12, v26, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v12, v12, v26, s4
 ; CHECK-NEXT:    v_or_b32_e32 v13, 0x400000, v26
+; CHECK-NEXT:    v_bfe_u32 v16, v27, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v26, v26
+; CHECK-NEXT:    v_add3_u32 v16, v16, v27, s4
+; CHECK-NEXT:    v_or_b32_e32 v17, 0x400000, v27
 ; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v13, vcc
-; CHECK-NEXT:    v_bfe_u32 v13, v27, 16, 1
-; CHECK-NEXT:    v_add3_u32 v13, v13, v27, s4
-; CHECK-NEXT:    v_or_b32_e32 v16, 0x400000, v27
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v27, v27
-; CHECK-NEXT:    v_cndmask_b32_e32 v13, v13, v16, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v13, v16, v17, vcc
 ; CHECK-NEXT:    v_perm_b32 v13, v13, v12, s5
 ; CHECK-NEXT:    v_bfe_u32 v12, v24, 16, 1
 ; CHECK-NEXT:    v_add3_u32 v12, v12, v24, s4
 ; CHECK-NEXT:    v_or_b32_e32 v16, 0x400000, v24
+; CHECK-NEXT:    v_bfe_u32 v17, v25, 16, 1
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v24, v24
+; CHECK-NEXT:    v_add3_u32 v17, v17, v25, s4
+; CHECK-NEXT:    v_or_b32_e32 v18, 0x400000, v25
 ; CHECK-NEXT:    v_cndmask_b32_e32 v12, v12, v16, vcc
-; CHECK-NEXT:    v_bfe_u32 v16, v25, 16, 1
-; CHECK-NEXT:    v_add3_u32 v16, v16, v25, s4
-; CHECK-NEXT:    v_or_b32_e32 v17, 0x400000, v25
 ; CHECK-NEXT:    v_cmp_u_f32_e32 vcc, v25, v25
-; CHECK-NEXT:    v_cndmask_b32_e32 v16, v16, v17, vcc
+; CHECK-NEXT:    v_cndmask_b32_e32 v16, v17, v18, vcc
 ; CHECK-NEXT:    v_perm_b32 v12, v16, v12, s5
 ; CHECK-NEXT:    global_store_dwordx4 v[32:33], v[12:15], off offset:48
 ; CHECK-NEXT:    global_store_dwordx4 v[32:33], v[8:11], off offset:32

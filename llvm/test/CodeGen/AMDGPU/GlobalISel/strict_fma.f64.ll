@@ -530,10 +530,10 @@ define void @v_constained_fma_v4f64_fpexcept_strict_uni(<4 x double> inreg %x, <
 ; GFX8-NEXT:    flat_store_dwordx4 v[10:11], v[0:3]
 ; GFX8-NEXT:    v_add_u32_e32 v4, vcc, 16, v10
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s8
-; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v11, vcc
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s9
 ; GFX8-NEXT:    v_mov_b32_e32 v2, s10
 ; GFX8-NEXT:    v_mov_b32_e32 v3, s11
+; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v11, vcc
 ; GFX8-NEXT:    flat_store_dwordx4 v[4:5], v[0:3]
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
