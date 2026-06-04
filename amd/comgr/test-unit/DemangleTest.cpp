@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "comgr-hotswap-internal.h"
 #include "common.h"
 #include "gtest/gtest.h"
 
@@ -19,9 +18,8 @@ class DemangleTest
 
 TEST_P(DemangleTest, DemangleMatch) {
   auto [MangledName, ExpectedString] = GetParam();
-  
+
   amd_comgr_data_t MangledData, DemangledData;
-  amd_comgr_status_t Status;
 
   ASSERT_COMGR(create_data(AMD_COMGR_DATA_KIND_BYTES, &MangledData));
 
