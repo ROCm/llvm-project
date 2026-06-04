@@ -8,7 +8,7 @@
 ///
 /// \file
 /// This file implements Comgr's built-in profiler, which can be enabled with
-/// the AMD_COMGR_TIME_STATISTICS enviornment variable.
+/// the AMD_COMGR_TIME_STATISTICS environment variable.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -124,8 +124,8 @@ public:
     }
     // QueryPerformanceFrequency returns counts per second
     // If we need milliseconds we divide by 10^3
-    // TODO: granularity as env var
-    PCFreq = li.QuadPart / 1e3;
+    GranularityPerSecond = env::getGranularityUnitsPerSecond();
+    PCFreq = li.QuadPart / GranularityPerSecond;
     return true;
   }
 
@@ -159,8 +159,8 @@ public:
     }
     // clock_getres returns counts per nanosecond
     // If we need milliseconds we multiply by 10^6
-    // TODO: granularity as env var
-    PCFreq = (Res.tv_sec * 1e9 + Res.tv_nsec) * 1e6;
+    GranularityPerSecond = env::getGranularityUnitsPerSecond();
+    PCFreq = (Res.tv_sec * 1e9 + Res.tv_nsec) * (1e9 / GranularityPerSecond);
     return true;
   }
 

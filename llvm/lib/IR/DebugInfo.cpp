@@ -2009,7 +2009,7 @@ LLVMMetadataRef LLVMInstructionGetDebugLoc(LLVMValueRef Inst) {
 
 void LLVMInstructionSetDebugLoc(LLVMValueRef Inst, LLVMMetadataRef Loc) {
   if (Loc)
-    unwrap<Instruction>(Inst)->setDebugLoc(DebugLoc(unwrap<MDNode>(Loc)));
+    unwrap<Instruction>(Inst)->setDebugLoc(DebugLoc(unwrap<DILocation>(Loc)));
   else
     unwrap<Instruction>(Inst)->setDebugLoc(DebugLoc());
 }

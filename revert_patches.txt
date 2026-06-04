@@ -17,6 +17,9 @@ clang: Refactor handling of offload sanitizer arguments (#196737)
 breaks hipcub build
 [InstCombine] Fold zext into de-interleaving (factor=2) instructions (#195330)
 ---
-nees more integration
-[offload][OpenMP] Add strict flag for blocks and 
+needs merge work: Kruse
+aa8e38f4f871 [OpenMP] FIx omp_lib.mod compilation for the GPU 
+9e01e0970c4c [Flang-RT] Disable tests by default without mod
+911eddeed7ba [Flang] Fix omp_lib.h location and search path
+bafde6fbb [Flang] Move builtin .mod generation into runtimes
 ---

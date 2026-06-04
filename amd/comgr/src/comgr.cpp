@@ -248,7 +248,6 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
   Ident.Features.erase(Ident.Features.begin());
 
 
-  // TODO: Add a LIT test for this
   if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
       IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
     // Features not supported for SPIR-V

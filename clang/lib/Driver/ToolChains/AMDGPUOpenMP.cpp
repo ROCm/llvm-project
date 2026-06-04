@@ -426,7 +426,7 @@ void AMDGPUOpenMPToolChain::addClangTargetOptions(
     LibraryPaths.push_back(DriverArgs.MakeArgString(Path));
 
   // Link the bitcode library late if we're using device LTO.
-  if (getDriver().isUsingOffloadLTO())
+  if (isUsingLTO(DriverArgs, DeviceOffloadingKind))
     return;
 
   std::string BitcodeSuffix;
