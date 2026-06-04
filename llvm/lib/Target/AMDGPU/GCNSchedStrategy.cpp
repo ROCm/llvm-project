@@ -1513,6 +1513,10 @@ bool PreRARematStage::initGCNSchedStage() {
     // marked rematerializable, and no register operand of the defining MI can
     // be marked rematerializable.
     MachineInstr *UseMI = *CandReg.Uses.begin()->getSecond().begin();
+    // Cannot insert instructions before PHIs.
+    if (UseMI->isPHI())
+      continue;
+    
     const MachineOperand &UseMO = UseMI->getOperand(0);
     if (UseMO.isReg() && MarkedRegs.contains(UseMO.getReg()))
       continue;
