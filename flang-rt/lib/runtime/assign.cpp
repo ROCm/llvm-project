@@ -855,17 +855,41 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     const char *sourceFile, int sourceLine) {
   Terminator terminator{sourceFile, sourceLine};
   // Fast path: Direct memmove for simple intrinsic types
-  // Assumes caller verified: intrinsic type, same rank, contiguous, same
-  // element bytes
+  // Handles allocation if needed, but assumes intrinsic types, same rank, contiguous
 
   // Runtime assertions to catch misuse during development/testing
   // TODO: Remove these assertions after thorough validation (check with user
   // first)
   RUNTIME_CHECK(terminator, to.rank() == from.rank());
-  RUNTIME_CHECK(terminator, to.IsContiguous());
   RUNTIME_CHECK(terminator, from.IsContiguous());
   RUNTIME_CHECK(terminator, to.ElementBytes() == from.ElementBytes());
   RUNTIME_CHECK(terminator, !to.type().IsDerived());
+
+  // Handle allocation if needed (for allocatable LHS)
+  if (to.IsAllocatable()) {
+    if (!to.IsAllocated() || to.Elements() != from.Elements()) {
+      // Need to allocate or reallocate
+      if (to.IsAllocated()) {
+        to.Destroy(/*finalize=*/false, /*destroyPointers=*/false, &terminator);
+      }
+      // Allocate with same shape as from
+      std::size_t elementBytes{to.ElementBytes()};
+      to.raw().elem_len = elementBytes;
+      int rank{to.rank()};
+      for (int j{0}; j < rank; ++j) {
+        const auto &fromDim{from.GetDimension(j)};
+        auto &toDim{to.GetDimension(j)};
+        toDim.SetBounds(fromDim.LowerBound(), fromDim.UpperBound());
+      }
+      int stat{to.Allocate(kNoAsyncObject)};
+      if (stat != StatOk) {
+        terminator.Crash("AssignSimple: allocation failed (stat=%d)", stat);
+      }
+    }
+  }
+
+  // Now both descriptors should be allocated and contiguous
+  RUNTIME_CHECK(terminator, to.IsContiguous());
 
   std::memmove(to.OffsetElement(), from.OffsetElement(),
       to.Elements() * to.ElementBytes());
