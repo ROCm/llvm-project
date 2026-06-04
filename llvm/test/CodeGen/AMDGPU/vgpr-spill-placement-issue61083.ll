@@ -24,9 +24,8 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    ds_write_b8 v0, v1
 ; CHECK-NEXT:    s_mov_b64 s[6:7], -1
 ; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_and_b64 s[6:7], exec, s[4:5]
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], -1
-; CHECK-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; CHECK-NEXT:    s_and_b64 s[4:5], exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; CHECK-NEXT:    ; implicit-def: $vgpr3 : SGPR spill to VGPR lane
 ; CHECK-NEXT:    v_writelane_b32 v3, s6, 0
