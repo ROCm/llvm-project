@@ -5,9 +5,14 @@
 // and run without effect. Referencing them force-links the host drain object,
 // whose constructor dlopens HSA/HIP (absent here) and degrades gracefully.
 
-// REQUIRES: linux
+// The no-op forwarders live in libclang_rt.profile on Linux
+// (InstrProfilingPlatformROCm.cpp) and Windows
+// (InstrProfilingPlatformROCmWindows.cpp); other hosts do not build a ROCm
+// drain, so restrict to those two OSes. lit.cfg.py supplies the per-OS link
+// flags (e.g. -ldl on Linux) via %clang_profgen, so none are hardcoded here.
+// REQUIRES: linux || windows
 
-// RUN: %clang_profgen -o %t %s -ldl -lpthread
+// RUN: %clang_profgen -o %t %s
 // RUN: env LLVM_PROFILE_FILE=%t.profraw %run %t
 
 void __llvm_profile_offload_register_shadow_variable(void *);

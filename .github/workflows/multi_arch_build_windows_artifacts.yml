@@ -350,6 +350,13 @@ jobs:
             Write-Host "Patched: $file"
           }
           
+      - name: Fix LLVM test variable mismatch
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          cd L:
+          sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
+            cmake/therock_subproject.cmake compiler/CMakeLists.txt
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -368,7 +375,7 @@ jobs:
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
             ${{ env.extra_cmake_options }} \
-            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
@@ -389,13 +396,26 @@ jobs:
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Build stage
         run: |
           cd L:
           python build_tools/memory_monitor.py --phase Build -- \
             cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      - name: Profile Runtime Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: true
+        run: |
+          # Run the canonical compiler-rt `check-profile` suite. This target
+          # only exists in the runtimes-bins sub-build (not the top-level
+          # build) and resolves the arch-suffixed lit config (Profile-<arch>)
+          # automatically, so it is arch-independent -- pointing llvm-lit at the
+          # parent `profile` dir discovers zero tests. GPU .hip tests gate on a
+          # real device and go UNSUPPORTED on the (GPU-less) build runner; the
+          # host/non-GPU tests all run here.
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build/runtimes/runtimes-bins check-profile
 
       - name: COMGR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}

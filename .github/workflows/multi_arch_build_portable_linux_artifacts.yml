@@ -356,6 +356,18 @@ jobs:
         run: |
           ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
 
+      - name: Profile Runtime Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          # Run the canonical compiler-rt `check-profile` suite. This target
+          # only exists in the runtimes-bins sub-build (not the top-level
+          # build) and resolves the arch-suffixed lit config (Profile-<arch>)
+          # automatically, so it is arch-independent -- pointing llvm-lit at the
+          # parent `profile` dir discovers zero tests. GPU .hip tests gate on a
+          # real device and go UNSUPPORTED on the (GPU-less) build runner; the
+          # host/non-GPU tests all run here.
+          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build/runtimes/runtimes-bins check-profile
+
       - name: COMGR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
