@@ -105,18 +105,18 @@ termed as the *common scope* of ``X`` and ``Y``.
 
 .. _amdgpu-local-scope:
 
-The "local" Scope
------------------
+The "lds-dma" Scope
+-------------------
 
-AMDGPU also defines a "local" scope, which does not fit directly in the
+AMDGPU also defines an "lds-dma" scope, which does not fit directly in the
 hierarchy of scopes described above. Each "workgroup" scope instance has a
-corresponding "local" scope instance, consisting of asynchronous memory
-transfers that are initiated by operations in that "workgroup" scope instance.
+corresponding "lds-dma" scope instance, consisting of LDS DMA operations that
+are initiated by threads in that "workgroup" scope instance.
 
-Each "local" scope instance is a subset of the "local" scope instance that
+Each "lds-dma" scope instance is a subset of the "cluster" scope instance that
 includes the corresponding "workgroup" scope instance.
 
-The "local" scope is not allowed as a ``syncscope`` argument in synchronizing
+The "lds-dma" scope is not allowed as a ``syncscope`` argument in synchronizing
 operations.
 
 Availability and Visibility
