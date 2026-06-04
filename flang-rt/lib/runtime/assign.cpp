@@ -851,6 +851,32 @@ void RTDEF(AssignExplicitLengthCharacter)(Descriptor &to,
           ExplicitLengthCharacterLHS);
 }
 
+void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
+    const char *sourceFile, int sourceLine) {
+  Terminator terminator{sourceFile, sourceLine};
+  // Fast path: Direct memmove for simple intrinsic types
+  // Assumes caller verified: intrinsic type, same rank, contiguous, same element bytes
+
+  // Runtime assertions to catch misuse during development/testing
+  // TODO: Remove these assertions after thorough validation (check with user first)
+  RUNTIME_CHECK(terminator, to.rank() == from.rank());
+  RUNTIME_CHECK(terminator, to.IsContiguous());
+  RUNTIME_CHECK(terminator, from.IsContiguous());
+  RUNTIME_CHECK(terminator, to.ElementBytes() == from.ElementBytes());
+  RUNTIME_CHECK(terminator, !to.type().IsDerived());
+
+  std::memmove(to.OffsetElement(), from.OffsetElement(),
+      to.Elements() * to.ElementBytes());
+}
+
+void RTDEF(AssignComplex)(Descriptor &to, const Descriptor &from,
+    const char *sourceFile, int sourceLine) {
+  Terminator terminator{sourceFile, sourceLine};
+  // Complex path: same as current Assign - handles all corner cases
+  Assign(to, from, terminator,
+      MaybeReallocate | NeedFinalization | ComponentCanBeDefinedAssignment);
+}
+
 void RTDEF(AssignPolymorphic)(Descriptor &to, const Descriptor &from,
     const char *sourceFile, int sourceLine) {
   Terminator terminator{sourceFile, sourceLine};

@@ -63,5 +63,17 @@ void genCopyInAssign(fir::FirOpBuilder &builder, mlir::Location loc,
 void genCopyOutAssign(fir::FirOpBuilder &builder, mlir::Location loc,
                       mlir::Value varBoxAddr, mlir::Value tempBoxAddr);
 
+/// Generate runtime call to AssignSimple (fast path for intrinsic types).
+/// \p destBox must be a fir.ref<fir.box<T>> and \p sourceBox a fir.box<T>.
+/// Assumes: intrinsic type, same rank, contiguous, same element size.
+void genAssignSimple(fir::FirOpBuilder &builder, mlir::Location loc,
+                     mlir::Value destBox, mlir::Value sourceBox);
+
+/// Generate runtime call to AssignComplex (complex path for all cases).
+/// \p destBox must be a fir.ref<fir.box<T>> and \p sourceBox a fir.box<T>.
+/// Same as genAssign but uses explicit ComplexAssign entry point.
+void genAssignComplex(fir::FirOpBuilder &builder, mlir::Location loc,
+                      mlir::Value destBox, mlir::Value sourceBox);
+
 } // namespace fir::runtime
 #endif // FORTRAN_OPTIMIZER_BUILDER_RUNTIME_ASSIGN_H
