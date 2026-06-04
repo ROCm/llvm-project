@@ -180,9 +180,8 @@ define amdgpu_gfx void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) 
 ; GFX9-O0-NEXT:    s_mov_b64 s[36:37], -1
 ; GFX9-O0-NEXT:    s_xor_b64 s[34:35], s[34:35], s[36:37]
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_and_b64 s[36:37], exec, s[34:35]
-; GFX9-O0-NEXT:    s_xor_b64 s[34:35], s[34:35], -1
-; GFX9-O0-NEXT:    s_and_b64 s[34:35], s[34:35], exec
+; GFX9-O0-NEXT:    s_and_b64 s[34:35], exec, s[34:35]
+; GFX9-O0-NEXT:    s_xor_b64 s[34:35], s[34:35], exec
 ; GFX9-O0-NEXT:    s_xor_b64 s[36:37], exec, s[34:35]
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s36, 4
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s37, 5

@@ -157,9 +157,8 @@ define amdgpu_cs void @cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) {
 ; GFX9-O0-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[16:19], 0 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_and_b64 s[2:3], exec, s[0:1]
-; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
-; GFX9-O0-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; GFX9-O0-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
+; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; GFX9-O0-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s2, 5
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s3, 6
@@ -1024,9 +1023,8 @@ define amdgpu_cs void @strict_wwm_cfg(ptr addrspace(8) inreg %tmp14, i32 %arg) {
 ; GFX9-O0-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], s[2:3]
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[16:19], 0 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_and_b64 s[2:3], exec, s[0:1]
-; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
-; GFX9-O0-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; GFX9-O0-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
+; GFX9-O0-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; GFX9-O0-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s2, 5
 ; GFX9-O0-NEXT:    v_writelane_b32 v5, s3, 6

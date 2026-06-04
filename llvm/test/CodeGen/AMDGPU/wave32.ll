@@ -2483,9 +2483,8 @@ define amdgpu_kernel void @icmp64(i32 %n, i32 %s) #1 {
 ; GFX1032-NEXT:    s_cmp_lt_u32 s0, 10
 ; GFX1032-NEXT:    s_cselect_b32 s0, -1, 0
 ; GFX1032-NEXT:    s_or_b32 s0, vcc_lo, s0
-; GFX1032-NEXT:    s_and_b32 s1, exec_lo, s0
-; GFX1032-NEXT:    s_xor_b32 s0, s0, -1
-; GFX1032-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX1032-NEXT:    s_and_b32 s0, exec_lo, s0
+; GFX1032-NEXT:    s_xor_b32 s0, s0, exec_lo
 ; GFX1032-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX1032-NEXT:    s_and_b32 s1, s1, exec_lo
 ; GFX1032-NEXT:    s_mov_b32 exec_lo, s0
@@ -2525,9 +2524,8 @@ define amdgpu_kernel void @icmp64(i32 %n, i32 %s) #1 {
 ; GFX1064-NEXT:    s_cmp_lt_u32 s0, 10
 ; GFX1064-NEXT:    s_cselect_b64 s[0:1], -1, 0
 ; GFX1064-NEXT:    s_or_b64 s[0:1], vcc, s[0:1]
-; GFX1064-NEXT:    s_and_b64 s[2:3], exec, s[0:1]
-; GFX1064-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
-; GFX1064-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; GFX1064-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
+; GFX1064-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; GFX1064-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
 ; GFX1064-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX1064-NEXT:    s_mov_b64 exec, s[0:1]
@@ -2665,9 +2663,8 @@ define amdgpu_kernel void @fcmp64(float %n, float %s) #1 {
 ; GFX1032-NEXT:    s_cmp_lt_u32 s2, 10
 ; GFX1032-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1032-NEXT:    s_or_b32 s2, vcc_lo, s2
-; GFX1032-NEXT:    s_and_b32 s3, exec_lo, s2
-; GFX1032-NEXT:    s_xor_b32 s2, s2, -1
-; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX1032-NEXT:    s_and_b32 s2, exec_lo, s2
+; GFX1032-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1032-NEXT:    s_or_b32 s0, s0, s2
 ; GFX1032-NEXT:    s_xor_b32 s2, exec_lo, s0
 ; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
@@ -2780,9 +2777,8 @@ define amdgpu_kernel void @fcmp64(float %n, float %s) #1 {
 ; GFX1064-NEXT:    s_cmp_lt_u32 s4, 10
 ; GFX1064-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; GFX1064-NEXT:    s_or_b64 s[4:5], vcc, s[4:5]
-; GFX1064-NEXT:    s_and_b64 s[6:7], exec, s[4:5]
-; GFX1064-NEXT:    s_xor_b64 s[4:5], s[4:5], -1
-; GFX1064-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX1064-NEXT:    s_and_b64 s[4:5], exec, s[4:5]
+; GFX1064-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; GFX1064-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GFX1064-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
 ; GFX1064-NEXT:    s_and_b64 s[4:5], s[4:5], exec
@@ -2852,9 +2848,8 @@ define amdgpu_kernel void @icmp32(i32 %n, i32 %s) #1 {
 ; GFX1032-NEXT:    s_cmp_lt_u32 s0, 10
 ; GFX1032-NEXT:    s_cselect_b32 s0, -1, 0
 ; GFX1032-NEXT:    s_or_b32 s0, vcc_lo, s0
-; GFX1032-NEXT:    s_and_b32 s1, exec_lo, s0
-; GFX1032-NEXT:    s_xor_b32 s0, s0, -1
-; GFX1032-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX1032-NEXT:    s_and_b32 s0, exec_lo, s0
+; GFX1032-NEXT:    s_xor_b32 s0, s0, exec_lo
 ; GFX1032-NEXT:    s_xor_b32 s1, exec_lo, s0
 ; GFX1032-NEXT:    s_and_b32 s1, s1, exec_lo
 ; GFX1032-NEXT:    s_mov_b32 exec_lo, s0
@@ -2894,9 +2889,8 @@ define amdgpu_kernel void @icmp32(i32 %n, i32 %s) #1 {
 ; GFX1064-NEXT:    s_cmp_lt_u32 s0, 10
 ; GFX1064-NEXT:    s_cselect_b64 s[0:1], -1, 0
 ; GFX1064-NEXT:    s_or_b64 s[0:1], vcc, s[0:1]
-; GFX1064-NEXT:    s_and_b64 s[2:3], exec, s[0:1]
-; GFX1064-NEXT:    s_xor_b64 s[0:1], s[0:1], -1
-; GFX1064-NEXT:    s_and_b64 s[0:1], s[0:1], exec
+; GFX1064-NEXT:    s_and_b64 s[0:1], exec, s[0:1]
+; GFX1064-NEXT:    s_xor_b64 s[0:1], s[0:1], exec
 ; GFX1064-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
 ; GFX1064-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; GFX1064-NEXT:    s_mov_b64 exec, s[0:1]
@@ -3033,9 +3027,8 @@ define amdgpu_kernel void @fcmp32(float %n, float %s) #1 {
 ; GFX1032-NEXT:    s_cmp_lt_u32 s2, 10
 ; GFX1032-NEXT:    s_cselect_b32 s2, -1, 0
 ; GFX1032-NEXT:    s_or_b32 s2, vcc_lo, s2
-; GFX1032-NEXT:    s_and_b32 s3, exec_lo, s2
-; GFX1032-NEXT:    s_xor_b32 s2, s2, -1
-; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
+; GFX1032-NEXT:    s_and_b32 s2, exec_lo, s2
+; GFX1032-NEXT:    s_xor_b32 s2, s2, exec_lo
 ; GFX1032-NEXT:    s_or_b32 s0, s0, s2
 ; GFX1032-NEXT:    s_xor_b32 s2, exec_lo, s0
 ; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
@@ -3148,9 +3141,8 @@ define amdgpu_kernel void @fcmp32(float %n, float %s) #1 {
 ; GFX1064-NEXT:    s_cmp_lt_u32 s4, 10
 ; GFX1064-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; GFX1064-NEXT:    s_or_b64 s[4:5], vcc, s[4:5]
-; GFX1064-NEXT:    s_and_b64 s[6:7], exec, s[4:5]
-; GFX1064-NEXT:    s_xor_b64 s[4:5], s[4:5], -1
-; GFX1064-NEXT:    s_and_b64 s[4:5], s[4:5], exec
+; GFX1064-NEXT:    s_and_b64 s[4:5], exec, s[4:5]
+; GFX1064-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; GFX1064-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GFX1064-NEXT:    s_xor_b64 s[4:5], exec, s[0:1]
 ; GFX1064-NEXT:    s_and_b64 s[4:5], s[4:5], exec
