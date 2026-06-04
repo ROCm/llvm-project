@@ -114,6 +114,7 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_mov_b32 s14, s3
 ; GFX11-NEXT:    s_and_b32 s22, s20, exec_lo
+; GFX11-NEXT:    ; implicit-def: $vgpr0
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_6: ; %bb18.preheader
 ; GFX11-NEXT:    s_load_b128 s[28:31], s[16:17], 0x44
