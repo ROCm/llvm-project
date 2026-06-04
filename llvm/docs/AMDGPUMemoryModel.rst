@@ -71,6 +71,8 @@ The LLVM Language Reference defines the following :ref:`scopes<syncscope>`:
   Each thread corresponds to a "singlethread" scope instance that contains the
   memory accesses and synchronization operations performed by that thread.
 
+.. _amdgpu-specific-scopes:
+
 AMDGPU scopes
 -------------
 
@@ -100,6 +102,22 @@ scopes* if the scope instance of each operation contains the other operation. In
 that case, the *common scope instance* ``S'`` of ``X`` and ``Y`` is the
 intersection of their scope instances. The scope corresponding to ``S'`` is also
 termed as the *common scope* of ``X`` and ``Y``.
+
+.. _amdgpu-local-scope:
+
+The "lds-dma" Scope
+-------------------
+
+AMDGPU also defines an "lds-dma" scope, which does not fit directly in the
+hierarchy of scopes described above. Each "workgroup" scope instance has a
+corresponding "lds-dma" scope instance, consisting of LDS DMA operations that
+are initiated by threads in that "workgroup" scope instance.
+
+Each "lds-dma" scope instance is a subset of the "cluster" scope instance that
+includes the corresponding "workgroup" scope instance.
+
+The "lds-dma" scope is not allowed as a ``syncscope`` argument in synchronizing
+operations.
 
 Availability and Visibility
 ===========================
@@ -185,7 +203,10 @@ operation with scope ``syncscope``.
    cache will fail to observe this store.
 
 MakeAvailable and MakeVisible
------------------------------
+=============================
+
+Atomics
+-------
 
 .. code-block:: llvm
 
@@ -226,6 +247,33 @@ the ordering of other memory accesses.
    ; - A store-available operation at "agent" scope on `ptr`.
    ; Noteably, it does not include a `MakeAvailable` operation on other memory accesses.
    store atomic syncscope("agent") release ptr, !mmra !{!"amdgcn-av", !"none"}
+
+   
+``@llvm.amdgcn.make.available``
+-------------------------------
+
+.. code-block:: llvm
+
+  void @llvm.amdgcn.make.available(scope)
+  void @llvm.amdgcn.make.available(scope, ptr addrspace(1) %loc)
+
+Performs a ``MakeAvailable`` operation with scope ``scope``.
+
+The optional argument ``%loc`` is a pointer that limits this effect to prior
+side-effects on the corresponding memory location.
+
+``@llvm.amdgcn.make.visible``
+-----------------------------
+
+.. code-block:: llvm
+
+  void @llvm.amdgcn.make.visible(scope)
+  void @llvm.amdgcn.make.visible(scope, ptr %loc)
+
+Performs a ``MakeVisible`` operation with scope ``scope``.
+
+The optional argument ``%loc`` is a pointer that limits this effect to prior
+side-effects on the corresponding memory location.
 
 Ordering
 ========
