@@ -357,6 +357,20 @@ jobs:
           sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
             cmake/therock_subproject.cmake compiler/CMakeLists.txt
 
+      - name: Apply TheRock patches (clang-linker-wrapper on Windows)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          cd L:
+          # check-clang hard-requires clang-linker-wrapper to be built, but
+          # TheRock force-disables it on Windows (compiler/CMakeLists.txt). This
+          # patch -- carried in the LLVM PR (compiler/amd-llvm submodule) --
+          # re-enables it via the amd-llvm pre-hook (CMAKE_PROJECT_TOP_LEVEL_INCLUDES
+          # runs after the -D flags, so its FORCE wins). Applying it to the
+          # ephemeral TheRock checkout lets this LLVM PR's CI validate the Windows
+          # clang/profile lit suite without a separate TheRock PR. Fail loud on
+          # any drift so the override never silently stops taking effect.
+          git apply --verbose compiler/amd-llvm/.github/therock-patches/clang-linker-wrapper-windows.patch
+
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
@@ -406,7 +420,7 @@ jobs:
 
       - name: Profile Runtime Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        continue-on-error: true
+        continue-on-error: false
         run: |
           # Run the canonical compiler-rt `check-profile` suite. This target
           # only exists in the runtimes-bins sub-build (not the top-level

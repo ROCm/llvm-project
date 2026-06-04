@@ -1,0 +1,22 @@
+diff --git a/compiler/pre_hook_amd-llvm.cmake b/compiler/pre_hook_amd-llvm.cmake
+index b148736..6b093e9 100644
+--- a/compiler/pre_hook_amd-llvm.cmake
++++ b/compiler/pre_hook_amd-llvm.cmake
+@@ -194,3 +194,17 @@ if(NOT THEROCK_BUILD_LLVM_TESTS AND NOT THEROCK_BUILD_LLVM_TOOLS)
+     therock_set_implicit_llvm_options(CLANG "${CMAKE_CURRENT_SOURCE_DIR}/../clang/tools" "${_clang_required_tools}")
+   endblock()
+ endif()
++
++# Counterpart to the THEROCK_BUILD_LLVM_TESTS-gated allowlist above: when LLVM
++# tests are enabled we skip the implicit tool curation and rely on LLVM's
++# default-ON tool options. But compiler/CMakeLists.txt force-disables
++# clang-linker-wrapper on Windows via -D (it is grouped with the offload device
++# runtime, which Windows does not build). check-clang hard-requires that binary
++# on every host -- clang/test/Driver/ exercises the offload-driver delegation
++# and clang/test/lit.cfg.py registers it as a required tool substitution -- so
++# re-enable it for test-enabled Windows builds. This pre-hook is injected via
++# CMAKE_PROJECT_TOP_LEVEL_INCLUDES and runs after the -D flags, so this FORCE
++# wins over compiler/CMakeLists.txt without editing that file.
++if(WIN32 AND THEROCK_BUILD_LLVM_TESTS)
++  set(CLANG_TOOL_CLANG_LINKER_WRAPPER_BUILD ON CACHE BOOL "Required by check-clang" FORCE)
++endif()
