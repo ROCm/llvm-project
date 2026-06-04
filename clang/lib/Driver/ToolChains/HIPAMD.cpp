@@ -152,6 +152,22 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
 
   LldArgs.push_back("--no-whole-archive");
 
+  // With PGO/coverage instrumentation, instrumented device code references the
+  // device profile runtime (__llvm_profile_instrument_gpu and the
+  // __llvm_profile_sections bounds table emitted by InstrProfilingPlatformGPU).
+  // The new-offload-driver path injects this in LinkerWrapper::ConstructJob, but
+  // HIP using the traditional offload path (e.g. on Windows, which does not
+  // route device linking through clang-linker-wrapper) reaches the device link
+  // here instead. Forward the static device profile runtime to this lld device
+  // link so the runtime is pulled in regardless of offload-driver/host OS. The
+  // archive is arch-suffixed, so pass its full path rather than a -l name.
+  if (ToolChain::needsProfileRT(Args)) {
+    std::string ProfileRT =
+        TC.getCompilerRT(Args, "profile", ToolChain::FT_Static);
+    if (llvm::sys::fs::exists(ProfileRT))
+      LldArgs.push_back(Args.MakeArgString(ProfileRT));
+  }
+
   const char *Lld = Args.MakeArgStringRef(getToolChain().GetProgramPath("lld"));
   C.addCommand(std::make_unique<Command>(JA, *this, ResponseFileSupport::None(),
                                          Lld, LldArgs, Inputs, Output));
