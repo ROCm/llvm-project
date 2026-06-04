@@ -167,38 +167,58 @@ if(COMPILER_RT_PROFILE_BAREMETAL)
      -DCOMPILER_RT_PROFILE_BAREMETAL=1)
 endif()
 
-# The HIP host interceptor in InstrProfilingPlatformROCm.cpp pulls in
-# RTInterception + sanitizer_common object libs. Those targets are only created
-# when COMPILER_RT_BUILD_SANITIZERS / _MEMPROF / _XRAY / _CTX_PROFILE is enabled
-# (see lib/CMakeLists.txt). In a profile-only build the targets do not exist;
-# skip both the object-lib merge and the ROCm source file so the static archive
+# The Linux/Unix HSA drain (InstrProfilingPlatformROCm.cpp) resolves HIP/HSA
+# via the sanitizer interception framework, which pulls in RTInterception +
+# sanitizer_common object libs. Those targets are only created when
+# COMPILER_RT_BUILD_SANITIZERS / _MEMPROF / _XRAY / _CTX_PROFILE is enabled (see
+# lib/CMakeLists.txt). In a profile-only build the targets do not exist; skip
+# both the object-lib merge and the ROCm source file so the static archive
 # remains self-contained.
+#
+# The Windows drain (InstrProfilingPlatformROCmWindows.cpp) resolves HIP with
+# direct Win32 LoadLibrary/GetProcAddress and intercepts nothing, so it needs
+# none of those object libs and is built whenever the ROCm runtime is requested.
 set(PROFILE_OBJECT_LIBS)
 set(PROFILE_HAS_HIP_INTERCEPTOR FALSE)
 if(COMPILER_RT_HAS_INTERCEPTION AND NOT COMPILER_RT_PROFILE_BAREMETAL
    AND TARGET RTInterception.${COMPILER_RT_DEFAULT_TARGET_ARCH}
    AND TARGET RTSanitizerCommon.${COMPILER_RT_DEFAULT_TARGET_ARCH}
    AND TARGET RTSanitizerCommonLibc.${COMPILER_RT_DEFAULT_TARGET_ARCH})
-  # RTInterception references __sanitizer_internal_{memcpy,memset,memmove} and other
-  # sanitizer_common symbols; merge the same object libs as clang_rt.cfi (without
-  # coverage/symbolizer) so -fprofile-instr-generate links stay self-contained.
-  list(APPEND PROFILE_OBJECT_LIBS
-    RTInterception
-    RTSanitizerCommon
-    RTSanitizerCommonLibc)
   set(PROFILE_HAS_HIP_INTERCEPTOR TRUE)
 endif()
 
-if(NOT PROFILE_HAS_HIP_INTERCEPTOR AND DEFINED PROFILE_ROCM_SOURCE)
-  list(REMOVE_ITEM PROFILE_SOURCES ${PROFILE_ROCM_SOURCE})
+# Decide whether the ROCm drain source actually ends up in the archive:
+#   - Windows: always (self-contained, no interception dependency);
+#   - other hosts: only when the interception object libs are available.
+set(PROFILE_ROCM_BUILT FALSE)
+if(DEFINED PROFILE_ROCM_SOURCE)
+  if(WIN32)
+    set(PROFILE_ROCM_BUILT TRUE)
+  elseif(PROFILE_HAS_HIP_INTERCEPTOR)
+    # RTInterception references __sanitizer_internal_{memcpy,memset,memmove}
+    # and other sanitizer_common symbols; merge the same object libs as
+    # clang_rt.cfi (without coverage/symbolizer) so -fprofile-instr-generate
+    # links stay self-contained.
+    list(APPEND PROFILE_OBJECT_LIBS
+      RTInterception
+      RTSanitizerCommon
+      RTSanitizerCommonLibc)
+    set(PROFILE_ROCM_BUILT TRUE)
+  endif()
 endif()
 
-# Only advertise the ROCm interceptor to InstrProfilingFile.c when its
-# definition (InstrProfilingPlatformROCm.cpp) is actually compiled into the
-# archive. Otherwise InstrProfilingFile.c references
-# __llvm_profile_hip_collect_device_data with no definition; on COFF/Windows
-# there is no weak-undefined fallback, so the link fails (see PR #200111).
-if(COMPILER_RT_BUILD_PROFILE_ROCM AND PROFILE_HAS_HIP_INTERCEPTOR)
+if(DEFINED PROFILE_ROCM_SOURCE AND NOT PROFILE_ROCM_BUILT)
+  list(REMOVE_ITEM PROFILE_SOURCES ${PROFILE_ROCM_SOURCE})
+  message(STATUS "compiler-rt profile: ROCm device drain (${PROFILE_ROCM_SOURCE}) "
+                 "disabled - interception object libs unavailable")
+endif()
+
+# Only advertise the ROCm drain to InstrProfilingFile.c when its definition
+# (__llvm_profile_hip_collect_device_data) is actually compiled into the
+# archive. Otherwise InstrProfilingFile.c references it with no definition; on
+# COFF/Windows there is no weak-undefined fallback, so the link fails
+# (see PR #200111).
+if(COMPILER_RT_BUILD_PROFILE_ROCM AND PROFILE_ROCM_BUILT)
   set(EXTRA_FLAGS
       ${EXTRA_FLAGS}
       -DCOMPILER_RT_BUILD_PROFILE_ROCM=1)
@@ -222,7 +242,9 @@ if(MSVC)
   # built with MultiThreadedDLL (/MD) — see interception/CMakeLists.txt and
   # sanitizer_common/CMakeLists.txt. Mixing /MD objects into a /MT libclang_rt.profile
   # yields LNK2019 (__imp__stricmp from interception_win.cpp) and LNK4098 in Profile-*.
-  if(PROFILE_HAS_HIP_INTERCEPTOR)
+  # Key off whether those object libs are actually merged: the Windows ROCm drain
+  # is self-contained and merges none, so it keeps the historical /MT.
+  if(PROFILE_OBJECT_LIBS)
     set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
   else()
     set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)

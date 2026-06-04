@@ -37,7 +37,6 @@ extern "C" {
 #include "InstrProfilingPort.h"
 }
 
-#include "interception/interception.h"
 // C library headers (not <cstdio> etc.): clang_rt.profile is built with
 // -nostdinc++ and avoids the C++ standard library (see profile/CMakeLists.txt).
 #include <stddef.h>
@@ -45,17 +44,27 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#else
-#include <dlfcn.h>
-#include <pthread.h>
-#endif
 
-/* Serialize one-time HIP loader resolution and DynamicModules mutations.
- * Inline to avoid a sanitizer_common dependency. */
-#ifdef _WIN32
+// Direct Win32 dynamic loader. The Windows drain only resolves HIP entry
+// points by name; it intercepts nothing, so it deliberately avoids the
+// sanitizer interception framework and the RTInterception/sanitizer_common
+// dependency it would drag in. This is what lets the Windows runtime be built
+// even in a profile-only compiler-rt (no sanitizers).
+namespace {
+static bool dynamicLoaderAvailable() { return true; }
+static void *openLibrary(const char *Name) {
+  return reinterpret_cast<void *>(LoadLibraryA(Name));
+}
+static void *lookupSymbol(void *Handle, const char *Symbol) {
+  return reinterpret_cast<void *>(
+      GetProcAddress(reinterpret_cast<HMODULE>(Handle), Symbol));
+}
+} // namespace
+
+/* Serialize one-time HIP loader resolution and DynamicModules mutations with
+ * Win32 primitives. Inline to avoid a sanitizer_common dependency. */
 static INIT_ONCE HipLoadedOnce = INIT_ONCE_STATIC_INIT;
 static CRITICAL_SECTION DynamicModulesLock;
 static INIT_ONCE DynamicModulesLockInit = INIT_ONCE_STATIC_INIT;
@@ -71,16 +80,6 @@ static void lockDynamicModules(void) {
 static void unlockDynamicModules(void) {
   LeaveCriticalSection(&DynamicModulesLock);
 }
-#else
-static pthread_once_t HipLoadedOnce = PTHREAD_ONCE_INIT;
-static pthread_mutex_t DynamicModulesLock = PTHREAD_MUTEX_INITIALIZER;
-static void lockDynamicModules(void) {
-  pthread_mutex_lock(&DynamicModulesLock);
-}
-static void unlockDynamicModules(void) {
-  pthread_mutex_unlock(&DynamicModulesLock);
-}
-#endif
 
 static int processDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
                                    const char *Target);
@@ -130,41 +129,35 @@ static char (*DeviceArchNames)[256] = nullptr;
 /* -------------------------------------------------------------------------- */
 
 static void doEnsureHipLoaded(void) {
-  if (!__interception::DynamicLoaderAvailable()) {
+  if (!dynamicLoaderAvailable()) {
     if (isVerboseMode())
       PROF_NOTE("%s", "Dynamic library loading not available - "
                       "HIP profiling disabled\n");
     return;
   }
 
-#ifdef _WIN32
   static const char HipLibName[] = "amdhip64.dll";
-#else
-  static const char HipLibName[] = "libamdhip64.so";
-#endif
 
-  void *Handle = __interception::OpenLibrary(HipLibName);
+  void *Handle = openLibrary(HipLibName);
   if (!Handle)
     return;
 
-  pHipGetSymbolAddress = (hipGetSymbolAddressTy)__interception::LookupSymbol(
-      Handle, "hipGetSymbolAddress");
-  pHipMemcpy = (hipMemcpyTy)__interception::LookupSymbol(Handle, "hipMemcpy");
-  pHipModuleGetGlobal = (hipModuleGetGlobalTy)__interception::LookupSymbol(
-      Handle, "hipModuleGetGlobal");
-  pHipGetDeviceCount = (hipGetDeviceCountTy)__interception::LookupSymbol(
-      Handle, "hipGetDeviceCount");
-  pHipGetDevice =
-      (hipGetDeviceTy)__interception::LookupSymbol(Handle, "hipGetDevice");
-  pHipSetDevice =
-      (hipSetDeviceTy)__interception::LookupSymbol(Handle, "hipSetDevice");
+  pHipGetSymbolAddress =
+      (hipGetSymbolAddressTy)lookupSymbol(Handle, "hipGetSymbolAddress");
+  pHipMemcpy = (hipMemcpyTy)lookupSymbol(Handle, "hipMemcpy");
+  pHipModuleGetGlobal =
+      (hipModuleGetGlobalTy)lookupSymbol(Handle, "hipModuleGetGlobal");
+  pHipGetDeviceCount =
+      (hipGetDeviceCountTy)lookupSymbol(Handle, "hipGetDeviceCount");
+  pHipGetDevice = (hipGetDeviceTy)lookupSymbol(Handle, "hipGetDevice");
+  pHipSetDevice = (hipSetDeviceTy)lookupSymbol(Handle, "hipSetDevice");
   pHipGetDeviceProperties =
-      (hipGetDevicePropertiesTy)__interception::LookupSymbol(
-          Handle, "hipGetDevicePropertiesR0600");
+      (hipGetDevicePropertiesTy)lookupSymbol(Handle,
+                                             "hipGetDevicePropertiesR0600");
   if (!pHipGetDeviceProperties)
     pHipGetDeviceProperties =
-        (hipGetDevicePropertiesTy)__interception::LookupSymbol(
-            Handle, "hipGetDeviceProperties");
+        (hipGetDevicePropertiesTy)lookupSymbol(Handle,
+                                               "hipGetDeviceProperties");
 
   if (pHipGetDeviceCount && pHipGetDeviceProperties) {
     int Count = 0;
@@ -190,19 +183,13 @@ static void doEnsureHipLoaded(void) {
   }
 }
 
-#ifdef _WIN32
 static BOOL CALLBACK ensureHipLoadedCb(PINIT_ONCE, PVOID, PVOID *) {
   doEnsureHipLoaded();
   return TRUE;
 }
-#endif
 
 static void ensureHipLoaded(void) {
-#ifdef _WIN32
   InitOnceExecuteOnce(&HipLoadedOnce, ensureHipLoadedCb, NULL, NULL);
-#else
-  pthread_once(&HipLoadedOnce, doEnsureHipLoaded);
-#endif
 }
 
 /* -------------------------------------------------------------------------- */
@@ -866,55 +853,10 @@ extern "C" int __llvm_profile_hip_collect_device_data(void) {
   return Ret;
 }
 
-/* Interceptors for hipModuleLoad* / hipModuleUnload. Linux only. */
-
-#if defined(__linux__) && !defined(_WIN32)
-
-INTERCEPTOR(int, hipModuleLoad, void **module, const char *fname) {
-  int rc = REAL(hipModuleLoad)(module, fname);
-  /* Pass NULL image: no in-memory ELF is available for filename loads,
-   * so the register hook skips symbol enumeration. */
-  __llvm_profile_offload_register_dynamic_module(rc, module, nullptr);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleLoadData, void **module, const void *image) {
-  int rc = REAL(hipModuleLoadData)(module, image);
-  __llvm_profile_offload_register_dynamic_module(rc, module, image);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleLoadDataEx, void **module, const void *image,
-            unsigned numOptions, void **options, void **optionValues) {
-  int rc = REAL(hipModuleLoadDataEx)(module, image, numOptions, options,
-                                     optionValues);
-  __llvm_profile_offload_register_dynamic_module(rc, module, image);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleUnload, void *module) {
-  /* Drain counters before the module is destroyed; device addresses
-   * captured at register time are invalid after unload. */
-  __llvm_profile_offload_unregister_dynamic_module(module);
-  return REAL(hipModuleUnload)(module);
-}
-
-__attribute__((constructor)) static void installHipModuleInterceptors() {
-  /* Skip when the HIP runtime is not loaded. INTERCEPT_FUNCTION uses the
-   * sanitizer interception framework, which can perturb dlsym/PLT state for
-   * the rest of the process even when the target symbol is absent; non-HIP
-   * programs linked with libclang_rt.profile.a must see zero side effects. */
-  if (!dlsym(RTLD_DEFAULT, "hipModuleLoad"))
-    return;
-  if (!INTERCEPT_FUNCTION(hipModuleLoad))
-    return;
-  if (isVerboseMode())
-    PROF_NOTE("%s", "Installing hipModuleLoad*/hipModuleUnload interceptors\n");
-  INTERCEPT_FUNCTION(hipModuleLoadData);
-  INTERCEPT_FUNCTION(hipModuleLoadDataEx);
-  INTERCEPT_FUNCTION(hipModuleUnload);
-}
-
-#endif /* __linux__ */
+// NOTE: This Windows path has no hipModuleLoad*/hipModuleUnload interceptors.
+// Dynamic-module (e.g. hipModuleLoadData) device PGO is a Linux-only feature;
+// on Windows, device counters are drained via the host shadow variables
+// registered by CGCUDANV (__hipRegisterVar + the runtime's
+// __llvm_profile_offload_register_shadow_variable), which need no interception.
 
 #endif /* defined(_WIN32) */
