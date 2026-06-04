@@ -123,9 +123,7 @@ function (add_flangrt_library name)
   endif ()
 
   # Include the RPC utilities from the `libc` project.
-  if (TARGET llvm-libc-common-utilities)
-    set(extra_deps llvm-libc-common-utilities)
-  endif()
+  set(extra_deps llvm-libc-common-utilities)
 
   # Also add header files to IDEs to list as part of the library.
   set_source_files_properties(${ARG_ADDITIONAL_HEADERS} PROPERTIES HEADER_FILE_ONLY ON)
@@ -269,10 +267,12 @@ function (add_flangrt_library name)
     if ("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^amdgcn")
       target_compile_options(${tgtname} PRIVATE
           $<$<COMPILE_LANGUAGE:CXX>:-nogpulib -flto -fvisibility=hidden>
+          $<$<COMPILE_LANGUAGE:Fortran>:-nogpulib -flto>
         )
     elseif ("${LLVM_DEFAULT_TARGET_TRIPLE}" MATCHES "^nvptx")
       target_compile_options(${tgtname} PRIVATE
           $<$<COMPILE_LANGUAGE:CXX>:-nogpulib -flto -fvisibility=hidden -Wno-unknown-cuda-version --cuda-feature=+ptx63>
+          $<$<COMPILE_LANGUAGE:Fortran>:-nogpulib -flto>
         )
     elseif (APPLE)
       # Clang on Darwin enables non-POSIX extensions by default.

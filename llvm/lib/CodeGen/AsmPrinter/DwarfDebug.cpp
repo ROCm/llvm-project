@@ -1183,6 +1183,9 @@ void DwarfDebug::finishUnitAttributes(const DICompileUnit *DIUnit,
   }
 
   NewCU.addString(Die, dwarf::DW_AT_name, FN);
+
+  finishTargetUnitAttributes(*DIUnit, NewCU);
+
   StringRef SysRoot = DIUnit->getSysRoot();
   if (!SysRoot.empty())
     NewCU.addString(Die, dwarf::DW_AT_LLVM_sysroot, SysRoot);

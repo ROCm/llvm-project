@@ -4,7 +4,7 @@
 # Reusable Workflow: Build Stage Artifacts
 #
 # This workflow builds TheRock stage artifacts for all stages.
-# Handles both generic stages (foundation, compiler-runtime, etc.) and
+# Handles both generic stages (compiler-runtime, etc.) and
 # per-arch stages (math-libs) using conditional logic.
 #
 # Artifacts flow between stages via S3 using the artifact_manager.py tool.
@@ -22,7 +22,7 @@ on:
       stage_name:
         type: string
         required: true
-        description: "Stage name (e.g., foundation, math-libs, compiler-runtime)"
+        description: "Stage name (e.g., compiler-runtime, math-libs)"
       stage_display_name:
         type: string
         required: true
@@ -243,6 +243,42 @@ jobs:
           rm -fv patches/amd-mainline/llvm-project/0009-Add-gcc-toolset-13-prefix-detection.patch
           rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
 
+      - name: Fix LLVM test variable mismatch
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
+            cmake/therock_subproject.cmake compiler/CMakeLists.txt
+
+      - name: Auto-forward THEROCK_BUILD_COMGR_TESTS to subprojects
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/^  THEROCK_BUILD_TESTING$/a\  THEROCK_BUILD_COMGR_TESTS' \
+            cmake/therock_subproject.cmake
+
+      - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
+            compiler/pre_hook_amd-comgr.cmake
+
+      - name: Remove llvm-lit install/wrapper code (fails on Windows)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/Install llvm-lit script/,/^  ")/d' \
+            compiler/pre_hook_amd-llvm.cmake
+
+      - name: Skip hip-tests on Windows (ROCm root not available)
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i '/^if(THEROCK_BUILD_TESTING)/,/^endif(THEROCK_BUILD_TESTING)/d' \
+            core/CMakeLists.txt
+
+      - name: Re-enable selective tool disable when only COMGR tests are on
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          sed -i 's/ AND NOT THEROCK_BUILD_COMGR_TESTS//' \
+            compiler/pre_hook_amd-llvm.cmake
+
       #- name: Setup ccache
       #  run: |
       #    ./build_tools/setup_ccache.py \
@@ -331,7 +367,8 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ env.extra_cmake_options }}
+            ${{ env.extra_cmake_options }} \
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Configure All Projects
         if: ${{ github.event_name != 'pull_request' && inputs.test_type == 'full' }}
@@ -339,7 +376,7 @@ jobs:
           cmake_preset: ${{ inputs.build_variant_cmake_preset }}
           amdgpu_families: ${{ inputs.amdgpu_families }}
           package_version: ${{ inputs.package_version }}
-          extra_cmake_options: ${{ inputs.extra_cmake_options }}
+          extra_cmake_options: "${{ inputs.extra_cmake_options }}"
         run: |
           # clear cache before build and after download
           cd L:
@@ -351,13 +388,26 @@ jobs:
             -DTHEROCK_AMDGPU_FAMILIES=gfx1151 \
             -DTHEROCK_BACKGROUND_BUILD_JOBS=4 \
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
-            ${{ steps.stage_config.outputs.cmake_args }}
+            ${{ steps.stage_config.outputs.cmake_args }} \
+            ${{ inputs.stage_name == 'compiler-runtime' && '-DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON' || '-DTHEROCK_BUILD_TESTING=OFF' }}
 
       - name: Build stage
         run: |
           cd L:
           python build_tools/memory_monitor.py --phase Build -- \
             cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+
+      - name: COMGR Lit Tests
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        continue-on-error: true
+        run: |
+          python "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit.py \
+            "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
+
+      - name: COMGR CTest
+        if: ${{ inputs.stage_name == 'compiler-runtime' }}
+        run: |
+          ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
 
       - name: Report
         if: ${{ !cancelled() }}

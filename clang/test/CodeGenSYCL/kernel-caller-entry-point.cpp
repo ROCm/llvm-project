@@ -159,8 +159,8 @@ int main() {
 //
 // CHECK-HOST-LINUX:      define dso_local void @_Z26single_purpose_kernel_task21single_purpose_kernel() #{{[0-9]+}} {
 // CHECK-HOST-LINUX-NEXT: entry:
-// CHECK-HOST-LINUX-NEXT:   %tmp = alloca %struct.single_purpose_kernel, align 1
-// CHECK-HOST-LINUX:   %agg.tmp = alloca %struct.single_purpose_kernel, align 1
+// CHECK-HOST-LINUX-NEXT:   %kernelFunc = alloca %struct.single_purpose_kernel, align 1
+// CHECK-HOST-LINUX-NEXT:   %agg.tmp = alloca %struct.single_purpose_kernel, align 1
 // CHECK-HOST-LINUX-NEXT:   call void @_Z18sycl_kernel_launchI26single_purpose_kernel_nameJ21single_purpose_kernelEEvPKcDpT0_(ptr noundef @.str)
 // CHECK-HOST-LINUX-NEXT:   ret void
 // CHECK-HOST-LINUX-NEXT: }
@@ -180,8 +180,8 @@ int main() {
 //
 // CHECK-HOST-LINUX:      define internal void @"_Z18kernel_single_taskI6\CE\B4\CF\84\CF\87Z4mainEUliE_EvT0_"() #{{[0-9]+}} {
 // CHECK-HOST-LINUX-NEXT: entry:
-// CHECK-HOST-LINUX-NEXT:   %tmp = alloca %class.anon.0, align 1
-// CHECK-HOST-LINUX:   %agg.tmp = alloca %class.anon.0, align 1
+// CHECK-HOST-LINUX-NEXT:   %kernelFunc = alloca %class.anon.0, align 1
+// CHECK-HOST-LINUX-NEXT:   %agg.tmp = alloca %class.anon.0, align 1
 // CHECK-HOST-LINUX-NEXT:   call void @"_Z18sycl_kernel_launchI6\CE\B4\CF\84\CF\87JZ4mainEUliE_EEvPKcDpT0_"(ptr noundef @.str.2)
 // CHECK-HOST-LINUX-NEXT:   ret void
 // CHECK-HOST-LINUX-NEXT: }

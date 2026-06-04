@@ -105,6 +105,12 @@ if ("openmp" IN_LIST LLVM_ENABLE_RUNTIMES AND NOT FLANG_STANDALONE_BUILD)
   list(APPEND FLANG_TEST_DEPENDS "libomp-mod")
 endif ()
 
+if ("flang-rt" IN_LIST LLVM_ENABLE_RUNTIMES AND NOT FLANG_STANDALONE_BUILD)
+  # Flang tests need runtimes module files (flang-rt-mod, libomp-mod, etc.).
+  add_custom_target(flang-rt-test-deps)
+  list(APPEND FLANG_TEST_DEPENDS flang-rt-test-deps)
+endif ()
+
 add_custom_target(flang-test-depends DEPENDS ${FLANG_TEST_DEPENDS})
 set_target_properties(flang-test-depends PROPERTIES FOLDER "Flang/Meta")
 

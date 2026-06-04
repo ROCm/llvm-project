@@ -4,6 +4,7 @@
 ; Verify that the debug locations in this function are correct, in particular
 ; that the location for %cast doesn't appear in the block of %lab.
 
+
 define void @_Z12lane_pc_testj() #0 !dbg !9 {
 ; GCN-LABEL: _Z12lane_pc_testj:
 ; GCN:       .Lfunc_begin0:
@@ -56,7 +57,7 @@ lab:
   ret void
 }
 
-attributes #0 = { noinline optnone }
+attributes #0 = { nounwind noinline optnone }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3, !4, !5, !6, !7, !8}

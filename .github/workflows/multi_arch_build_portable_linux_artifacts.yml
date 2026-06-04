@@ -4,7 +4,7 @@
 # Reusable Workflow: Build Stage Artifacts
 #
 # This workflow builds TheRock stage artifacts for all stages.
-# Handles both generic stages (foundation, compiler-runtime, etc.) and
+# Handles both generic stages (compiler-runtime, profiler-apps, etc.) and
 # per-arch stages (math-libs, comm-libs) using conditional logic.
 #
 # Artifacts flow between stages via S3 using the artifact_manager.py tool.
@@ -22,7 +22,7 @@ on:
       stage_name:
         type: string
         required: true
-        description: "Stage name (e.g., foundation, math-libs, compiler-runtime)"
+        description: "Stage name (e.g., compiler-runtime, math-libs)"
       stage_display_name:
         type: string
         required: true
@@ -222,10 +222,11 @@ jobs:
       - name: Fetch sources
         timeout-minutes: 30
         run: |
-             commit_log=$(./build_tools/fetch_sources.py --stage ${STAGE_NAME} --jobs 12 --depth 1)
-             echo "$commit_log" | grep "^Submodule path" | \
-             grep "checked out" | sed "s/Submodule path '\([^']*\)': checked out '\([^']*\)'/\1 \2/" \
-             > submodule-commit-${{ inputs.stage_name }}.txt
+             commit_log=$(./build_tools/fetch_sources.py --stage "${STAGE_NAME}" --jobs 12 --depth 1)
+             echo "$commit_log" | awk -F"'" '/Submodule path/ {
+               n = split($2, a, "/")
+               print a[n], $4
+             }' > submodule-commit-${STAGE_NAME}.txt
 
       - name: Upload submodule commit file
         uses: actions/upload-artifact@v4
@@ -235,6 +236,18 @@ jobs:
           overwrite: true
           retention-days: 1
 
+      - name: Temp fix for hiprtc/hipcc test (Nightly)
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
+        run: |
+             git config --global user.email "z1-cciauto@amd.com"
+             git config --global user.name "Z1 cciauto"
+             cd compiler/amd-llvm
+             git fetch origin pull/2719/head:pr-2719
+             git cherry-pick pr-2719
+             cd ../..
+             git add compiler/amd-llvm
+             git commit -m "Update amd-llvm submodule with PR 2719"
+       
       - name: TheRock and llvm SHA
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |

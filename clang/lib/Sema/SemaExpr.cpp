@@ -3737,6 +3737,20 @@ ExprResult Sema::ActOnIntegerConstant(SourceLocation Loc, int64_t Val) {
                                 Context.IntTy, Loc);
 }
 
+ExprResult Sema::BuildBoolLiteral(SourceLocation Loc, bool Value) {
+  ExprResult Inner;
+  if (getLangOpts().CPlusPlus) {
+    Inner = ActOnCXXBoolLiteral(Loc, Value ? tok::kw_true : tok::kw_false);
+  } else {
+    // C doesn't actually have a way to represent literal values of type
+    // _Bool. So, we'll use 0/1 and implicit cast to _Bool.
+    Inner = ActOnIntegerConstant(Loc, Value ? 1 : 0);
+    Inner =
+        ImpCastExprToType(Inner.get(), Context.BoolTy, CK_IntegralToBoolean);
+  }
+  return Inner;
+}
+
 static Expr *BuildFloatingLiteral(Sema &S, NumericLiteralParser &Literal,
                                   QualType Ty, SourceLocation Loc) {
   const llvm::fltSemantics &Format = S.Context.getFloatTypeSemantics(Ty);
@@ -13860,20 +13874,6 @@ inline QualType Sema::CheckBitwiseOperands(ExprResult &LHS, ExprResult &RHS,
   return ResultTy;
 }
 
-static inline bool IsAMDGPUPredicateBI(Expr *E) {
-  if (!E->getType()->isVoidType())
-    return false;
-
-  if (auto *CE = dyn_cast<CallExpr>(E)) {
-    if (auto *BI = CE->getDirectCallee())
-      if (BI->getName() == "__builtin_amdgcn_processor_is" ||
-          BI->getName() == "__builtin_amdgcn_is_invocable")
-        return true;
-  }
-
-  return false;
-}
-
 // C99 6.5.[13,14]
 inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
                                            SourceLocation Loc,
@@ -13977,9 +13977,6 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
 
   // The following is safe because we only use this method for
   // non-overloadable operands.
-
-  if (IsAMDGPUPredicateBI(LHS.get()) && IsAMDGPUPredicateBI(RHS.get()))
-    return Context.VoidTy;
 
   // C++ [expr.log.and]p1
   // C++ [expr.log.or]p1
@@ -18496,6 +18493,11 @@ static void RemoveNestedImmediateInvocation(
       // Lambdas have already been processed inside their eval contexts.
       return E;
     }
+
+    // We do not have enough information to transform opaque expressions and
+    // assume they do not contain immediate subexpressions.
+    ExprResult TransformOpaqueValueExpr(OpaqueValueExpr *E) { return E; }
+
     bool AlwaysRebuild() { return false; }
     bool ReplacingOriginal() { return true; }
     bool AllowSkippingCXXConstructExpr() {

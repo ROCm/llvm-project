@@ -8,15 +8,25 @@
 /// \file
 /// Strong-symbol override for applyTrampolinePatches. Handles B0 errata
 /// whose fix is larger than the original instruction:
-///   - ds_*_2addr_stride64_*  : one 8B DS instruction -> two single-address
-///     DS instructions
+///   - ds_*_2addr_*           : one 8B DS instruction -> two single-address
+///     DS instructions. Covers both the stride64 and non-stride64 encodings:
+///     A0 requires DS2 addresses to be aligned to the payload size, while
+///     B0 dropped that restriction, so a B0-compiled binary may emit a
+///     2-address DS instruction with unaligned offsets that silently
+///     corrupts LDS on A0. The expansion uses two single-address ops with
+///     byte offsets scaled appropriately for each encoding.
 ///   - tensor_load_to_lds     : prepend s_pack_hh_b32_b16 to clear multicast
 ///     routing bits in the group descriptor's base SGPR
+///   - ds_*_addtid_b32        : compute the LDS address through the ALU and
+///     issue a regular ds_*_b32, bypassing the A0 16-bit M0 truncation
+///     (DEGFXMI400-12025). On B0 the DS unit reads 20 bits of M0; on A0 it
+///     reads only 16, silently dropping bits [19:16].
 ///
 //===----------------------------------------------------------------------===//
 
 #include "comgr-hotswap-internal.h"
 
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -34,16 +44,27 @@ namespace COMGR {
 namespace hotswap {
 namespace {
 
-// -- DS stride64 swap table (StringSwitch) ----------------------------------
+// -- DS 2-address swap table (StringSwitch) ---------------------------------
 //
-// Maps each 2-address DS mnemonic to its single-address replacement.
+// Maps each 2-address DS mnemonic to its single-address replacement. Covers
+// both encodings -- the stride64 variants pack the index*64*ElemBytes
+// stride into each per-operand offset field, while the non-stride64
+// variants encode raw index*ElemBytes byte offsets. The single-address
+// replacement is the same regardless of encoding; only the offset scale
+// differs (see extractDsOperands).
 
 StringRef getDs2AddrReplacement(StringRef Mnemonic) {
   return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_2addr_b32", "ds_load_b32")
+      .Case("ds_load_2addr_b64", "ds_load_b64")
       .Case("ds_load_2addr_stride64_b32", "ds_load_b32")
       .Case("ds_load_2addr_stride64_b64", "ds_load_b64")
+      .Case("ds_store_2addr_b32", "ds_store_b32")
+      .Case("ds_store_2addr_b64", "ds_store_b64")
       .Case("ds_store_2addr_stride64_b32", "ds_store_b32")
       .Case("ds_store_2addr_stride64_b64", "ds_store_b64")
+      .Case("ds_storexchg_2addr_rtn_b32", "ds_storexchg_rtn_b32")
+      .Case("ds_storexchg_2addr_rtn_b64", "ds_storexchg_rtn_b64")
       .Case("ds_storexchg_2addr_stride64_rtn_b32", "ds_storexchg_rtn_b32")
       .Case("ds_storexchg_2addr_stride64_rtn_b64", "ds_storexchg_rtn_b64")
       .Default("");
@@ -115,26 +136,46 @@ std::string fmtOffset(uint32_t Offset) {
 // -- DS expansion -----------------------------------------------------------
 //
 // Expands one DS 2-address instruction into two single-address assembly
-// strings. The three operation types have different operand layouts:
-//   Load:  ds_load_2addr_stride64  vdst_pair, addr, off0, off1
-//   Store: ds_store_2addr_stride64 addr, data0, data1, off0, off1
-//   Xchg:  ds_storexchg_2addr_stride64_rtn vdst_pair, addr, data0, data1, ...
+// strings. The three operation types have different operand layouts (the
+// stride64 and non-stride64 encodings share identical operand layouts;
+// only the offset scale differs):
+//   Load:  ds_load_2addr[_stride64]  vdst_pair, addr, off0, off1
+//   Store: ds_store_2addr[_stride64] addr, data0, data1, off0, off1
+//   Xchg:  ds_storexchg_2addr[_stride64]_rtn vdst_pair, addr, data0, data1, ...
 //
 // For b32 operations, destinations are split into individual VGPRs.
 // For b64 operations, destinations are split into VGPR pairs (v[X:Y]).
 
+// Maximum byte offset encodable in a single-address DS instruction's
+// 16-bit immediate offset field on gfx1250. The replacement we emit uses
+// this field directly, so any scaled byte offset that exceeds it cannot
+// be represented and the patch must be skipped.
+constexpr uint32_t Ds1AddrOffsetMax = 0xFFFF;
+
 struct DsOperands {
   SmallVector<MCRegister, 4> Regs;
-  uint32_t Off0;
-  uint32_t Off1;
-  bool IsB64;
-  const MCRegisterInfo *MRI;
+  uint32_t Off0 = 0;
+  uint32_t Off1 = 0;
+  bool IsB64 = false;
+  const MCRegisterInfo *MRI = nullptr;
 };
 
 // Extract register operands and scaled offsets from a DS 2-address MCInst.
-// Offsets are scaled by 64 * element_size (stride64 encoding).
-DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
-                             const LLVMState &LS) {
+// The per-operand immediate fields hold dword indices that the hardware
+// scales differently for the two encodings: the non-stride64 forms encode
+// (index * ElemBytes) byte offsets, while the stride64 forms encode
+// (index * 64 * ElemBytes) byte offsets. The replacement single-address
+// instructions take byte offsets directly, so we materialise the scaled
+// value here once and let the layout-specific helpers consume it.
+//
+// Range check: the stride64 b64 encoding can scale a raw 8-bit index up to
+// 255 * 64 * 8 = 130560 bytes, which overflows the single-address 16-bit
+// offset field (max 0xFFFF = 65535). When that happens the patch is not
+// representable in this expansion shape; std::nullopt signals the failure
+// to the caller, which leaves the original (broken-on-A0) instruction in
+// place rather than emitting a silently-truncated replacement.
+std::optional<DsOperands>
+extractDsOperands(const MCInst &Inst, StringRef FromMnem, const LLVMState &LS) {
   DsOperands Ops;
   Ops.MRI = LS.MRI.get();
 
@@ -154,9 +195,23 @@ DsOperands extractDsOperands(const MCInst &Inst, StringRef FromMnem,
   }
 
   uint32_t ElemBytes = FromMnem.contains("_b64") ? 8 : 4;
-  uint32_t Scale = 64 * ElemBytes;
-  Ops.Off0 = static_cast<uint32_t>(RawOff0) * Scale;
-  Ops.Off1 = static_cast<uint32_t>(RawOff1) * Scale;
+  uint32_t Scale = FromMnem.contains("_stride64_") ? 64 * ElemBytes : ElemBytes;
+  // Compute scaled offsets in 64-bit so an oversize stride64_b64 index
+  // does not silently wrap when assigned to Off*.
+  uint64_t Scaled0 = static_cast<uint64_t>(RawOff0) * Scale;
+  uint64_t Scaled1 = static_cast<uint64_t>(RawOff1) * Scale;
+  if (Scaled0 > Ds1AddrOffsetMax || Scaled1 > Ds1AddrOffsetMax) {
+    log() << "hotswap: error: " << FromMnem
+          << " scaled offsets exceed the single-address DS 16-bit field "
+             "(off0=raw "
+          << RawOff0 << " * scale " << Scale << " = " << Scaled0
+          << ", off1=raw " << RawOff1 << " * scale " << Scale << " = "
+          << Scaled1 << ", max " << Ds1AddrOffsetMax
+          << "); leaving original instruction in place\n";
+    return std::nullopt;
+  }
+  Ops.Off0 = static_cast<uint32_t>(Scaled0);
+  Ops.Off1 = static_cast<uint32_t>(Scaled1);
   Ops.IsB64 = (ElemBytes == 8);
   return Ops;
 }
@@ -241,14 +296,19 @@ std::vector<std::string> expandDs2AddrXchg(const DsOperands &Ops,
 
 std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
                                        StringRef ToMnem, const LLVMState &LS) {
-  DsOperands Ops = extractDsOperands(Inst, FromMnem, LS);
+  std::optional<DsOperands> Ops = extractDsOperands(Inst, FromMnem, LS);
+  if (!Ops)
+    return {};
 
-  if (FromMnem.starts_with("ds_load"))
-    return expandDs2AddrLoad(Ops, ToMnem);
-  if (FromMnem.starts_with("ds_storexchg"))
-    return expandDs2AddrXchg(Ops, ToMnem);
-  if (FromMnem.starts_with("ds_store"))
-    return expandDs2AddrStore(Ops, ToMnem);
+  // Use the trailing underscore so the three prefixes are disjoint
+  // ("ds_load_", "ds_store_", "ds_storexchg_"); without it "ds_store" is a
+  // prefix of "ds_storexchg" and the dispatch order would matter.
+  if (FromMnem.starts_with("ds_load_"))
+    return expandDs2AddrLoad(*Ops, ToMnem);
+  if (FromMnem.starts_with("ds_storexchg_"))
+    return expandDs2AddrXchg(*Ops, ToMnem);
+  if (FromMnem.starts_with("ds_store_"))
+    return expandDs2AddrStore(*Ops, ToMnem);
 
   log() << "hotswap: error: unrecognized DS mnemonic: " << FromMnem << "\n";
   return {};
@@ -325,13 +385,17 @@ bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
   return false;
 }
 
-// -- patchDs2AddrStride64 ---------------------------------------------------
+// -- patchDs2Addr -----------------------------------------------------------
 //
-// Expand one ds_*_2addr_stride64_* instruction into two single-address DS
-// instructions. The split doubles the outstanding DS operation count, so
-// bumpNextWaitDscnt adjusts the next s_wait_dscnt accordingly.
+// Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
+// single-address DS instructions. Each split adds one outstanding DS op, so
+// bumpNextWaitDscnt increments the next non-drain s_wait_dscnt by +1 per
+// split and preserves drains verbatim. Because that helper writes the bumped
+// immediate back into Ctx.Decoded[I].Inst, adjacent DS2 sites that target
+// the same non-drain wait accumulate (the second call observes the first
+// call's update, so N splits before one wait produce a K -> K+N update).
 
-bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
+bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   StringRef ToMnem = getDs2AddrReplacement(DI.Mnemonic);
   if (ToMnem.empty())
@@ -339,8 +403,8 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   std::vector<std::string> Expanded =
       expandDs2Addr(DI.Inst, DI.Mnemonic, ToMnem, Ctx.LS);
   if (Expanded.empty()) {
-    log() << "hotswap: error: ds_2addr_stride64 expansion failed for: "
-          << DI.Mnemonic << "\n";
+    log() << "hotswap: error: ds_2addr expansion failed for: " << DI.Mnemonic
+          << "\n";
     return false;
   }
 
@@ -349,8 +413,7 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
     Combined += Line + "\n";
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
-    log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
-          << "\n";
+    log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
     return false;
   }
 
@@ -358,7 +421,10 @@ bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return false;
 
-  bumpNextWaitDscnt(Ctx, Idx);
+  // Return value intentionally discarded: false is a normal outcome when the
+  // wait is a drain (preserved), absent before s_endpgm/branch, or carries a
+  // non-immediate operand -- none of which are errors at this site.
+  (void)bumpNextWaitDscnt(Ctx, Idx);
   DI.Mnemonic = "<replaced>";
   return true;
 }
@@ -430,8 +496,22 @@ bool isSgprLiveAfter(const PatchContext &Ctx, size_t Idx,
   return true;
 }
 
-// -- allocScratchVgpr -------------------------------------------------------
-std::optional<unsigned> allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
+// -- scratch-VGPR allocation ------------------------------------------------
+//
+// Allocation is split into a pure try-step and a commit-step so callers can
+// decide a scratch VGPR before assembling/emitting the patch and then only
+// charge the kernel descriptor for the extra VGPRs once the patch is known
+// to have landed. Bumping KernelPatchStats inside the try-step would leave
+// orphan VGPR reservations in the kernel descriptor whenever assembly or
+// emission failed downstream.
+
+struct ScratchAlloc {
+  unsigned Vgpr = 0;
+  std::string KernelName;
+  unsigned ExtraVgprsNeeded = 0;
+};
+
+std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
   std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
   unsigned KdVgprs = 0;
@@ -445,13 +525,21 @@ std::optional<unsigned> allocScratchVgpr(PatchContext &Ctx, size_t Idx) {
   if (!ScratchOpt)
     return std::nullopt;
 
-  if (Alloc.extraVgprsNeeded() > 0 && !KernelName.empty()) {
-    KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
-    Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.extraVgprsNeeded());
-    Stats.ScratchAboveKd += Alloc.extraVgprsNeeded();
-  }
+  ScratchAlloc Out;
+  Out.Vgpr = *ScratchOpt;
+  Out.KernelName = std::move(KernelName);
+  Out.ExtraVgprsNeeded = Alloc.extraVgprsNeeded();
+  return Out;
+}
 
-  return *ScratchOpt;
+// Apply the kernel-descriptor accounting for a scratch VGPR. Must be called
+// only after the corresponding patch has been emitted successfully.
+void commitScratchVgpr(PatchContext &Ctx, const ScratchAlloc &Alloc) {
+  if (Alloc.ExtraVgprsNeeded == 0 || Alloc.KernelName.empty())
+    return;
+  KernelPatchStats &Stats = Ctx.KernelStats[Alloc.KernelName];
+  Stats.ExtraVgprs = std::max(Stats.ExtraVgprs, Alloc.ExtraVgprsNeeded);
+  Stats.ScratchAboveKd += Alloc.ExtraVgprsNeeded;
 }
 
 // -- patchTensorLoadToLds ---------------------------------------------------
@@ -506,20 +594,14 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
   const uint8_t *OrigInst = Ctx.Text + DI.Offset;
 
   if (SgprLive) {
-    std::optional<unsigned> ScratchVgpr = allocScratchVgpr(Ctx, Idx);
+    std::optional<ScratchAlloc> ScratchVgpr = tryAllocScratchVgpr(Ctx, Idx);
     if (!ScratchVgpr) {
       log() << "hotswap: error: tensor_load_to_lds: no scratch VGPR "
                "available\n";
       return false;
     }
 
-    ScratchPatchInfo SPI;
-    SPI.Offset = DI.Offset;
-    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
-    SPI.ScratchRegs.set(*ScratchVgpr);
-    Ctx.OutScratchPatches.push_back(std::move(SPI));
-
-    std::string V = "v" + std::to_string(*ScratchVgpr);
+    std::string V = "v" + std::to_string(ScratchVgpr->Vgpr);
     std::string SaveAsm = "v_writelane_b32 " + V + ", " + BaseSreg + ", 0";
     std::string RestoreAsm = "v_readlane_b32 " + BaseSreg + ", " + V + ", 0";
     SmallVector<uint8_t> Save = assembleSingleInst(SaveAsm, Ctx.LS);
@@ -537,6 +619,17 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 
     if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
       return false;
+
+    // Record the scratch reservation only after the patch is committed:
+    // any earlier failure (assembly, emission) leaves nothing at DI.Offset
+    // to back the reservation, and bumping the kernel descriptor would
+    // reserve VGPRs the code object never uses.
+    ScratchPatchInfo SPI;
+    SPI.Offset = DI.Offset;
+    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
+    SPI.ScratchRegs.set(ScratchVgpr->Vgpr);
+    Ctx.OutScratchPatches.push_back(std::move(SPI));
+    commitScratchVgpr(Ctx, *ScratchVgpr);
 
     log() << "hotswap: tensor_load_to_lds: " << BaseSreg
           << " live, save/restore via " << V << "\n";
@@ -556,6 +649,251 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
   return true;
 }
 
+// -- ADDTID swap table (StringSwitch) ---------------------------------------
+//
+// Maps each ADDTID DS mnemonic to its plain DS replacement. The lane-id
+// expression that ADDTID encodes implicitly is materialised in the ALU by
+// the trampoline body, then a regular DS op consumes the computed address.
+
+StringRef getAddtidReplacement(StringRef Mnemonic) {
+  return StringSwitch<StringRef>(Mnemonic)
+      .Case("ds_load_addtid_b32", "ds_load_b32")
+      .Case("ds_store_addtid_b32", "ds_store_b32")
+      .Default("");
+}
+
+// Predicate that pins the load/store dispatch alongside getAddtidReplacement
+// so the two stay in sync if the table grows. Avoids a string compare in
+// patchDsAddtid that would silently diverge from the StringSwitch above.
+bool isAddtidLoad(StringRef Mnemonic) {
+  return Mnemonic == "ds_load_addtid_b32";
+}
+
+// LDS allocations strictly above this threshold are unreachable through
+// ADDTID once hotswapped to A0, because A0 truncates M0 to 16 bits. The
+// patch itself is still applied (the lane-id math runs through the ALU);
+// this constant only gates a diagnostic so users with oversized LDS
+// allocations are warned that values may still be silently wrong.
+// Derived from the M0 bit-width on A0 so the magic number stays out of
+// the source: 1 << 16 = 65536 bytes addressable per ADDTID encoding.
+constexpr uint32_t AddtidLdsLimitA0 = 1u << 16;
+
+// ADDTID MCInst operand layout (AddtidOpReg / AddtidOpOffset / AddtidOpGds)
+// lives in comgr-hotswap-internal.h so the layout pin is shared with the unit
+// tests in HotswapMCTest.cpp.
+
+// GDS=1 ADDTID is not reachable through the gfx12 assembler -- the asm
+// parser rejects the `gds` modifier on this subtarget, so any MCInst
+// produced by clang/llvm-mc has GDS=0. This predicate stays as
+// defense-in-depth for hand-crafted byte input or future subtargets that
+// re-enable the encoding through the same MCInst slot. Because the path
+// is unreachable on gfx12 it is not exercised by lit; coverage exists via
+// AddTid.{Load,Store}AddTidDecodesWithExpectedLayout pinning the operand
+// shape that this predicate consumes.
+bool isAddtidGds(const MCInst &Inst) {
+  if (Inst.getNumOperands() <= AddtidOpGds)
+    return false;
+  const MCOperand &Op = Inst.getOperand(AddtidOpGds);
+  return Op.isImm() && Op.getImm() != 0;
+}
+
+// The DS offset field is a 16-bit immediate per the gfx12 ISA encoding;
+// returning uint16_t keeps the field width visible at the type level and
+// lets callers widen explicitly when needed.
+std::optional<uint16_t> getAddtidOffset(const MCInst &Inst) {
+  if (Inst.getNumOperands() <= AddtidOpOffset)
+    return std::nullopt;
+  const MCOperand &Op = Inst.getOperand(AddtidOpOffset);
+  if (!Op.isImm())
+    return std::nullopt;
+  return static_cast<uint16_t>(Op.getImm());
+}
+
+// Build the trampoline asm for a ds_load_addtid_b32 site. The destination
+// VGPR is reused as the address-compute scratch because the load overwrites
+// it, so no extra VGPR allocation is needed for the load path. Reusing the
+// destination as both source operands of ds_load_b32 (`ds_load_b32 vN, vN`)
+// is well-defined on gfx12: the DS unit reads vaddr from the operand file
+// before vdst is written, so the same VGPR can serve both roles.
+//
+// The replacement reproduces the ADDTID address computation in the ALU:
+//   lane_id = mbcnt_lo(-1, 0)    ; lanes 0-31 contribute via exec_lo
+//             mbcnt_hi(-1, V)    ;   lanes 32-63 (wave64) extend through
+//                                ;   exec_hi; in wave32 exec_hi is zero so
+//                                ;   the hi step is a no-op (the sequence
+//                                ;   is identical for both wave sizes)
+//   addr    = m0 + lane_id * 4   ; + offset (folded into the DS encoding by
+//                                ;   the assembler when ToMnem is emitted)
+//
+// Address mask: B0 hardware reads only 20 bits of M0 at the DS unit, so any
+// junk in M0[31:20] (e.g. left over from s_sendmsg or other M0 producers) is
+// ignored. v_add_nc_u32 reads M0 as a full 32-bit scalar source, so we mask
+// the post-add result to the same 20 bits to stay bit-exact with B0 across
+// the entire reachable LDS range (gfx1250 LDS <= 320 KiB and lane_id*4 <=
+// 0xFC, so the sum fits comfortably below 1 MiB and the mask is a no-op for
+// any conforming M0 -- the mask only fires defensively when M0[31:20] is
+// non-zero on entry).
+SmallVector<std::string> buildAddtidLoadAsm(StringRef VName, uint16_t Offset,
+                                            StringRef ToMnem) {
+  std::string V(VName);
+  SmallVector<std::string> Lines;
+  Lines.push_back("v_mbcnt_lo_u32_b32 " + V + ", -1, 0");
+  Lines.push_back("v_mbcnt_hi_u32_b32 " + V + ", -1, " + V);
+  Lines.push_back("v_lshlrev_b32 " + V + ", 2, " + V);
+  Lines.push_back("v_add_nc_u32 " + V + ", m0, " + V);
+  Lines.push_back("v_and_b32 " + V + ", 0xfffff, " + V);
+  Lines.push_back(ToMnem.str() + " " + V + ", " + V + fmtOffset(Offset));
+  return Lines;
+}
+
+// Build the trampoline asm for a ds_store_addtid_b32 site. \p VTmpName is a
+// scratch VGPR holding the computed address; \p VDataName is the original
+// data VGPR. Operand order for ds_store_b32 is (addr, data).
+//
+// Same mbcnt_lo/mbcnt_hi pair and 20-bit M0 mask as the load path; see
+// buildAddtidLoadAsm above for the full rationale.
+SmallVector<std::string> buildAddtidStoreAsm(StringRef VTmpName,
+                                             StringRef VDataName,
+                                             uint16_t Offset,
+                                             StringRef ToMnem) {
+  std::string VTmp(VTmpName);
+  std::string VData(VDataName);
+  SmallVector<std::string> Lines;
+  Lines.push_back("v_mbcnt_lo_u32_b32 " + VTmp + ", -1, 0");
+  Lines.push_back("v_mbcnt_hi_u32_b32 " + VTmp + ", -1, " + VTmp);
+  Lines.push_back("v_lshlrev_b32 " + VTmp + ", 2, " + VTmp);
+  Lines.push_back("v_add_nc_u32 " + VTmp + ", m0, " + VTmp);
+  Lines.push_back("v_and_b32 " + VTmp + ", 0xfffff, " + VTmp);
+  Lines.push_back(ToMnem.str() + " " + VTmp + ", " + VData + fmtOffset(Offset));
+  return Lines;
+}
+
+// -- patchDsAddtid ----------------------------------------------------------
+//
+// Trampoline expansion for ds_load_addtid_b32 / ds_store_addtid_b32 on
+// A0. The replacement materialises the ADDTID address through the ALU
+// (so the full 32-bit M0 is used) and issues a regular ds_*_b32. GDS=1
+// is rejected: the rewrite stays a no-op so the original (broken on A0)
+// instruction is preserved and the failure is loud in the verbose log.
+
+bool patchDsAddtid(PatchContext &Ctx, size_t Idx) {
+  InternalDecodedInst &DI = Ctx.Decoded[Idx];
+  // The dispatcher in applyTrampolinePatchesImpl already gates on
+  // !getAddtidReplacement(Mnem).empty(), so by contract we only see
+  // ds_load_addtid_b32 / ds_store_addtid_b32 here.
+  StringRef ToMnem = getAddtidReplacement(DI.Mnemonic);
+  assert(!ToMnem.empty() &&
+         "patchDsAddtid called for non-ADDTID mnemonic; caller must filter");
+
+  if (isAddtidGds(DI.Inst)) {
+    log() << "hotswap: error: " << DI.Mnemonic << " with GDS=1 at 0x"
+          << utohexstr(DI.Offset)
+          << " is not supported; leaving original instruction in place\n";
+    return false;
+  }
+
+  std::optional<uint16_t> OffsetOpt = getAddtidOffset(DI.Inst);
+  if (!OffsetOpt) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": missing/non-immediate offset\n";
+    return false;
+  }
+  uint16_t Offset = *OffsetOpt;
+
+  if (DI.Inst.getNumOperands() <= AddtidOpReg ||
+      !DI.Inst.getOperand(AddtidOpReg).isReg() ||
+      !DI.Inst.getOperand(AddtidOpReg).getReg()) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": missing register operand\n";
+    return false;
+  }
+
+  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
+  MCRegister Reg = MCRegister(DI.Inst.getOperand(AddtidOpReg).getReg());
+  std::string RegName = toAsmRegName(MRI, Reg);
+  if (RegName.empty()) {
+    log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+          << utohexstr(DI.Offset) << ": cannot resolve register name\n";
+    return false;
+  }
+
+  bool IsLoad = isAddtidLoad(DI.Mnemonic);
+  SmallVector<std::string> AsmLines;
+  std::optional<ScratchAlloc> StoreScratch;
+
+  if (IsLoad) {
+    AsmLines = buildAddtidLoadAsm(RegName, Offset, ToMnem);
+  } else {
+    // Store path needs a scratch VGPR for the address-compute temporary
+    // because the original data VGPR must be preserved as the store source.
+    StoreScratch = tryAllocScratchVgpr(Ctx, Idx);
+    if (!StoreScratch) {
+      std::string KernelName = Ctx.Elf.findKernelAtOffset(DI.Offset);
+      StringRef KernelDisplay =
+          KernelName.empty() ? StringRef("<unknown>") : StringRef(KernelName);
+      std::optional<uint32_t> LdsSize =
+          Ctx.Elf.getKernelStaticLdsSize(KernelName);
+      // Trampoline could not be applied: the original ds_*_addtid_b32 stays
+      // in the code object and will silently truncate M0 to 16 bits on A0
+      // (DEGFXMI400-12025) whenever the runtime LDS layout exceeds 64 KiB.
+      // Static LDS is visible in the kernel descriptor; dynamic LDS added
+      // by the host at dispatch (hidden_dynamic_lds_size kernarg or a
+      // dynamic_shared_pointer user arg) is not. The warning therefore
+      // fires unconditionally rather than gating on the visible lower
+      // bound -- a follow-up will use ElfView::kernelUsesDynamicLds to
+      // tighten the condition to (static>64KiB || dynamicUsed).
+      log() << "hotswap: warning: kernel '" << KernelDisplay << "' uses "
+            << DI.Mnemonic
+            << "; trampoline could not be applied, so A0 16-bit M0"
+               " truncation may produce silently wrong results when runtime"
+               " LDS (static + dynamic) exceeds "
+            << AddtidLdsLimitA0 << " bytes";
+      if (LdsSize)
+        log() << " (static LDS = " << *LdsSize << " bytes)";
+      log() << " at 0x" << utohexstr(DI.Offset) << "\n";
+      log() << "hotswap: error: " << DI.Mnemonic << " at 0x"
+            << utohexstr(DI.Offset) << ": no scratch VGPR available\n";
+      return false;
+    }
+
+    std::string TmpName = ("v" + Twine(StoreScratch->Vgpr)).str();
+    AsmLines = buildAddtidStoreAsm(TmpName, RegName, Offset, ToMnem);
+  }
+
+  std::string Combined;
+  for (const std::string &Line : AsmLines)
+    Combined += Line + "\n";
+  SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
+  if (Bytes.empty()) {
+    log() << "hotswap: error: " << DI.Mnemonic
+          << " trampoline assembly failed at 0x" << utohexstr(DI.Offset)
+          << "\n";
+    return false;
+  }
+
+  if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Bytes))
+    return false;
+
+  // Commit the scratch-VGPR reservation only after the patch is in place:
+  // any earlier failure (assembly, sled/trampoline emission) leaves no
+  // bytes at DI.Offset to back the reservation, so neither the descriptor
+  // accounting nor OutScratchPatches must advertise a slot for it.
+  if (StoreScratch) {
+    ScratchPatchInfo SPI;
+    SPI.Offset = DI.Offset;
+    SPI.ScratchRegs.resize(Ctx.Config.MaxVgprs);
+    SPI.ScratchRegs.set(StoreScratch->Vgpr);
+    Ctx.OutScratchPatches.push_back(std::move(SPI));
+    commitScratchVgpr(Ctx, *StoreScratch);
+  }
+
+  log() << "hotswap: trampoline: " << DI.Mnemonic << " -> " << ToMnem
+        << " at 0x" << utohexstr(DI.Offset) << " (offset=" << Offset << ", "
+        << RegName << ")\n";
+  DI.Mnemonic = "<replaced>";
+  return true;
+}
+
 } // anonymous namespace
 
 // -- applyTrampolinePatches -------------------------------------------------
@@ -563,17 +901,22 @@ bool patchTensorLoadToLds(PatchContext &Ctx, size_t Idx) {
 // Strong-symbol override. Handles B0 errata that produce replacement code
 // larger than the original instruction slot:
 //
-//   ds_*_2addr_stride64_*  -> split into two single-address DS ops
+//   ds_*_2addr_*           -> split into two single-address DS ops
+//     (covers both the stride64 and non-stride64 encodings)
 //   tensor_load_to_lds     -> prepend s_pack_hh_b32_b16 (+ save/restore)
+//   ds_*_addtid_b32        -> materialise lane-id math in ALU, then ds_*_b32
 
 static uint32_t applyTrampolinePatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
 
   if (!getDs2AddrReplacement(Mnem).empty())
-    return patchDs2AddrStride64(Ctx, Idx) ? 1 : 0;
+    return patchDs2Addr(Ctx, Idx) ? 1 : 0;
 
   if (Mnem == "tensor_load_to_lds")
     return patchTensorLoadToLds(Ctx, Idx) ? 1 : 0;
+
+  if (!getAddtidReplacement(Mnem).empty())
+    return patchDsAddtid(Ctx, Idx) ? 1 : 0;
 
   return 0;
 }

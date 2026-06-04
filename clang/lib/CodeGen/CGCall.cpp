@@ -3164,7 +3164,8 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     }
 
     if (FI.getExtParameterInfo(ArgNo).isNoEscape())
-      Attrs.addCapturesAttr(llvm::CaptureInfo::none());
+      Attrs.addCapturesAttr(
+          llvm::CaptureInfo(llvm::CaptureComponents::Address));
 
     if (Attrs.hasAttributes()) {
       unsigned FirstIRArg, NumIRArgs;
@@ -3559,7 +3560,6 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
 
       llvm::StructType *STy =
           dyn_cast<llvm::StructType>(ArgI.getCoerceToType());
-
       RawAddress DebugAddr = Address::invalid();
       Address Alloca = CreateMemTempWithoutCast(
           Ty, getContext().getDeclAlign(Arg), Arg->getName());
@@ -3733,8 +3733,6 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       assert(NumIRArgs == 0);
       // Initialize the local variable appropriately.
       if (!hasScalarEvaluationKind(Ty)) {
-        RawAddress DebugAddr = Address::invalid();
-        RawAddress Alloca = CreateMemTemp(Ty, "tmp", &DebugAddr);
         ArgVals.push_back(
             ParamValue::forIndirect(CreateMemTempWithoutCast(Ty)));
       } else {

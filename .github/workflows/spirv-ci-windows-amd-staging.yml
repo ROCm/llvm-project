@@ -1,0 +1,395 @@
+# Windows variant of the SPIRV CI: builds LLVM/Clang/translator/Comgr in
+# one job and runs SPIRV-relevant test suites in parallel test jobs that
+# consume a GHA artifact uploaded by the build job. Mirrors spirv-ci-linux-amd-staging.yml
+# in shape; differs in runner, MSVC env setup, no container, no strip.
+
+name: SPIRV Compiler CI - Windows - amd-staging
+
+on:
+  workflow_call:
+
+jobs:
+  # =====================================================================
+  # Build LLVM + Clang + amd-llvm-spirv + device-libs + Comgr.
+  # =====================================================================
+  build:
+    name: Build
+    runs-on: azure-windows-scale-rocm
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Long path support for the deep llvm-project tree under runner workspace.
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      # Pinned ninja 1.12.1 — TheRock pins this version because 1.13.0 has a bug.
+      - name: Install ninja
+        run: choco install -y ninja --version 1.12.1
+
+      # MSVC environment so cmake -GNinja can find cl.exe + link.exe.
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      # zstd dev libs for clang-offload-bundler compression support. Two
+      # vcpkg installs exist on this runner: C:\vcpkg (classic mode, what
+      # `vcpkg` in PATH resolves to) and the MSVC-bundled one at $VCPKG_ROOT
+      # (manifest-mode only — no `vcpkg install <pkg>` support). We use
+      # C:\vcpkg for both install and toolchain lookup so they match.
+      - name: Install zstd via vcpkg
+        run: vcpkg install zstd:x64-windows
+
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
+          path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
+          fetch-depth: 1
+          persist-credentials: false
+
+      # CMAKE_TOOLCHAIN_FILE points cmake at the C:\vcpkg find_package
+      # shims so LLVM_ENABLE_ZSTD=FORCE_ON locates the vcpkg-installed
+      # zstd. FORCE_ON makes the configure fail loudly if zstd is missing
+      # rather than silently building clang-offload-bundler without
+      # compression.
+      - name: Configure LLVM
+        run: |
+          cmake -G Ninja -S llvm-project/llvm -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD="AMDGPU;X86;SPIRV" \
+            -DLLVM_ENABLE_ZSTD=FORCE_ON \
+            -DLLVM_INCLUDE_TESTS=ON \
+            -DLLVM_INSTALL_GTEST=ON \
+            -DLLVM_LIT_ARGS="-sv --no-progress-bar"
+
+      - name: Build LLVM + Clang + amd-llvm-spirv + test deps
+        run: ninja -C build llvm-test-depends clang-test-depends amd-llvm-spirv
+
+      # Use $(pwd -W) for cmake -D paths: in MSYS bash $PWD is Unix-style
+      # (/c/...) which cmake's find_package can't traverse on Windows.
+      # pwd -W returns Windows-style with forward slashes (C:/...).
+      # Pass CMAKE_TOOLCHAIN_FILE here too: LLVM exports LLVMSupport
+      # linking against zstd::libzstd_shared, and consumers like
+      # find_package(LLVM) in device-libs/Comgr need the vcpkg toolchain
+      # loaded so that imported zstd target is defined.
+      - name: Configure device-libs
+        run: |
+          PWD_WIN=$(pwd -W)
+          cmake -G Ninja -S llvm-project/amd/device-libs -B build-device-libs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH=$PWD_WIN/build \
+            -DLLVM_DIR=$PWD_WIN/build/lib/cmake/llvm
+
+      - name: Build device-libs
+        run: ninja -C build-device-libs
+
+      - name: Configure Comgr
+        run: |
+          PWD_WIN=$(pwd -W)
+          cmake -G Ninja -S llvm-project/amd/comgr -B build-comgr \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="$PWD_WIN/build;$PWD_WIN/build-device-libs" \
+            -DLLVM_DIR=$PWD_WIN/build/lib/cmake/llvm \
+            -DAMDDeviceLibs_DIR=$PWD_WIN/build-device-libs/lib/cmake/AMDDeviceLibs \
+            -DLLVM_EXTERNAL_SPIRV_LLVM_TRANSLATOR_SOURCE_DIR=$PWD_WIN/llvm-project/llvm/projects/SPIRV-LLVM-Translator \
+            -DBUILD_TESTING=ON
+
+      - name: Build Comgr
+        run: ninja -C build-comgr amd_comgr
+
+      # No strip on Windows: PE/COFF debug info lives in separate .pdb files
+      # rather than embedded in the .exe/.dll, so the binaries themselves are
+      # already stripped. Tar directly.
+      - name: Tar build trees
+        run: tar -cf windows-build-tree.tar build build-comgr build-device-libs
+
+      - name: Upload build tree artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-tree
+          path: windows-build-tree.tar
+          retention-days: 1
+          compression-level: 6
+          if-no-files-found: error
+
+  # =====================================================================
+  # Test - SPIRV translator lit (with PR-head vs amd-staging baseline diff)
+  # =====================================================================
+  test_translator_lit:
+    name: Test SPIRV translator lit
+    needs: build
+    runs-on: azure-windows-scale-rocm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Install ninja
+        run: choco install -y ninja --version 1.12.1
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      # zstd must be present at the same C:\vcpkg path the build job used,
+      # because build.ninja embeds C:/vcpkg/installed/.../zstd.lib as a
+      # build-edge input that ninja validates at planning time.
+      - name: Install zstd via vcpkg
+        run: vcpkg install zstd:x64-windows
+
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
+          path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-tree
+
+      # touch build.ninja so it's newer than CMakeCache.txt — without it
+      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
+      - name: Untar build trees
+        run: |
+          tar -xmf windows-build-tree.tar
+          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
+
+      - name: Test - SPIRV Translator (check-amd-llvm-spirv) [PR head]
+        id: check_spirv_xlator
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ninja -C build check-amd-llvm-spirv 2>&1 | tee build/check-amd-llvm-spirv.log
+
+      - name: Capture PR head translator failures
+        if: always()
+        run: |
+          grep -oE '^FAIL: LLVM_SPIRV :: \S+' build/check-amd-llvm-spirv.log \
+            | sort -u > build/spirv-fails-pr.txt || true
+          echo "PR head failures:"; cat build/spirv-fails-pr.txt
+
+      - name: Switch llvm-project to amd-staging tip for baseline
+        # PRs on llvm-project change llvm/clang/lld, not the translator, so the
+        # baseline-diff swap target is llvm-project. Use explicit upstream URL
+        # because `origin` may be a fork on PR runs.
+        if: always()
+        run: |
+          cd llvm-project
+          git fetch --depth=1 https://github.com/ROCm/llvm-project.git amd-staging
+          git checkout FETCH_HEAD
+
+      - name: Test - SPIRV Translator [baseline amd-staging]
+        if: always()
+        id: check_spirv_baseline
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cmake -G Ninja -S llvm-project/llvm -B build
+          ninja -C build check-amd-llvm-spirv 2>&1 \
+            | tee build/check-amd-llvm-spirv-baseline.log
+
+      - name: Capture baseline translator failures
+        if: always()
+        run: |
+          grep -oE '^FAIL: LLVM_SPIRV :: \S+' build/check-amd-llvm-spirv-baseline.log \
+            | sort -u > build/spirv-fails-baseline.txt || true
+          echo "Baseline failures:"; cat build/spirv-fails-baseline.txt
+
+      - name: Gate - new translator lit failures
+        if: always()
+        run: |
+          if [ ! -f build/spirv-fails-pr.txt ] || [ ! -f build/spirv-fails-baseline.txt ]; then
+            echo "::warning::Could not compute new-failure delta (missing pr.txt or baseline.txt); not gating."
+            exit 0
+          fi
+          new=$(comm -23 build/spirv-fails-pr.txt build/spirv-fails-baseline.txt)
+          if [ -n "$new" ]; then
+            count=$(printf '%s\n' "$new" | wc -l)
+            echo "::error::$count new translator lit failure(s) introduced by this PR (Windows):"
+            printf '%s\n' "$new" | sed 's/^/::error::  /'
+            exit 1
+          fi
+          echo "No new translator lit failures vs amd-staging baseline."
+
+  # =====================================================================
+  # Test - LLVM SPIRV codegen lit suite
+  # =====================================================================
+  test_codegen:
+    name: Test LLVM SPIRV codegen
+    needs: build
+    runs-on: azure-windows-scale-rocm
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Install ninja
+        run: choco install -y ninja --version 1.12.1
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      # zstd must be present at the same C:\vcpkg path the build job used,
+      # because build.ninja embeds C:/vcpkg/installed/.../zstd.lib as a
+      # build-edge input that ninja validates at planning time.
+      - name: Install zstd via vcpkg
+        run: vcpkg install zstd:x64-windows
+
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
+          path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-tree
+
+      # touch build.ninja so it's newer than CMakeCache.txt — without it
+      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
+      - name: Untar build trees
+        run: |
+          tar -xmf windows-build-tree.tar
+          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
+
+      - name: Test - LLVM SPIRV backend (check-llvm-codegen-spirv)
+        run: ninja -C build check-llvm-codegen-spirv
+
+  # =====================================================================
+  # Test - Comgr (lit + gtest + ctest)
+  # =====================================================================
+  test_comgr:
+    name: Test Comgr
+    needs: build
+    runs-on: azure-windows-scale-rocm
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Install ninja
+        run: choco install -y ninja --version 1.12.1
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+      # zstd must be present at the same C:\vcpkg path the build job used,
+      # because build.ninja embeds C:/vcpkg/installed/.../zstd.lib as a
+      # build-edge input that ninja validates at planning time.
+      - name: Install zstd via vcpkg
+        run: vcpkg install zstd:x64-windows
+
+      - name: Checkout llvm-project (PR head)
+        # On pull_request events: PR head from the (possibly fork) head repo.
+        # On workflow_dispatch: the branch the dispatch was on.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: llvm-project
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout SPIRV-LLVM-Translator (amd-staging)
+        # Pinned to amd-staging because llvm-project PRs don't change
+        # the translator. Without an explicit repository/ref, checkout
+        # defaults to the workflow's own repo (llvm-project) and clobbers
+        # the translator path with llvm-project content.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/SPIRV-LLVM-Translator
+          ref: amd-staging
+          path: llvm-project/llvm/projects/SPIRV-LLVM-Translator
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build-tree
+
+      # touch build.ninja so it's newer than CMakeCache.txt — without it
+      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
+      - name: Untar build trees
+        run: |
+          tar -xmf windows-build-tree.tar
+          touch build/build.ninja build-comgr/build.ninja build-device-libs/build.ninja
+
+      - name: Test - Comgr (check-comgr)
+        id: check_comgr
+        env:
+          AMD_COMGR_REDIRECT_LOGS: stderr
+        run: ninja -C build-comgr check-comgr

@@ -412,7 +412,8 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
   SanitizerMask IgnoreForUbsanFeature; // Accumulated set of values passed to
                                        // `-fsanitize-ignore-for-ubsan-feature`.
   SanitizerMask Kinds;
-  const SanitizerMask Supported = setGroupBits(TC.getSupportedSanitizers());
+  const SanitizerMask Supported =
+      setGroupBits(TC.getSupportedSanitizers("", Action::OFK_None));
 
   CfiCrossDso = Args.hasFlag(options::OPT_fsanitize_cfi_cross_dso,
                              options::OPT_fno_sanitize_cfi_cross_dso, false);
@@ -696,7 +697,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
   }
 
   // Check that LTO is enabled if we need it.
-  if ((Kinds & NeedsLTO) && !D.isUsingLTO() && DiagnoseErrors) {
+  if ((Kinds & NeedsLTO) && !TC.isUsingLTO(Args) && DiagnoseErrors) {
     D.Diag(diag::err_drv_argument_only_allowed_with)
         << lastArgumentForMask(D, Args, Kinds & NeedsLTO) << "-flto";
   }
