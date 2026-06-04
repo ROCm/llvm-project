@@ -74,7 +74,7 @@ jobs:
       windows_build_config: >-
         {
           "per_family_info": [
-            {"amdgpu_family": "gfx1151", "amdgpu_targets": "gfx1151", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm", "bypass_tests_for_releases": true}
+            {"amdgpu_family": "gfx1151", "amdgpu_targets": "gfx1151", "test-runs-on": "windows-gfx1151-gpu-rocm", "benchmark-runs-on": "windows-gfx1151-gpu-rocm", "sanity_check_only_for_family": true}
           ],
           "dist_amdgpu_families": "gfx1151",
           "artifact_group": "multi-arch-release",
