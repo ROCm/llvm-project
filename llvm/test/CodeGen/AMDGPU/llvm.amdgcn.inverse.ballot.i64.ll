@@ -310,11 +310,10 @@ define amdgpu_cs void @inverse_ballot_branch(i64 inreg %s0_1, i64 inreg %s2, ptr
 ;
 ; SDAG_W64-LABEL: inverse_ballot_branch:
 ; SDAG_W64:       ; %bb.0: ; %entry
-; SDAG_W64-NEXT:    s_and_b64 s[4:5], exec, s[2:3]
 ; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s1
-; SDAG_W64-NEXT:    s_xor_b64 s[2:3], s[2:3], -1
+; SDAG_W64-NEXT:    s_and_b64 s[2:3], exec, s[2:3]
 ; SDAG_W64-NEXT:    v_mov_b32_e32 v2, s0
-; SDAG_W64-NEXT:    s_and_b64 s[4:5], s[2:3], exec
+; SDAG_W64-NEXT:    s_xor_b64 s[4:5], s[2:3], exec
 ; SDAG_W64-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
 ; SDAG_W64-NEXT:    s_mov_b64 exec, s[4:5]
 ; SDAG_W64-NEXT:    ; divergent control-flow edge
@@ -346,10 +345,9 @@ define amdgpu_cs void @inverse_ballot_branch(i64 inreg %s0_1, i64 inreg %s2, ptr
 ;
 ; SDAG_W32-LABEL: inverse_ballot_branch:
 ; SDAG_W32:       ; %bb.0: ; %entry
-; SDAG_W32-NEXT:    s_and_b32 s3, exec_lo, s2
-; SDAG_W32-NEXT:    s_xor_b32 s2, s2, -1
+; SDAG_W32-NEXT:    s_and_b32 s2, exec_lo, s2
 ; SDAG_W32-NEXT:    v_dual_mov_b32 v3, s1 :: v_dual_mov_b32 v2, s0
-; SDAG_W32-NEXT:    s_and_b32 s3, s2, exec_lo
+; SDAG_W32-NEXT:    s_xor_b32 s3, s2, exec_lo
 ; SDAG_W32-NEXT:    s_xor_b32 s2, exec_lo, s3
 ; SDAG_W32-NEXT:    s_mov_b32 exec_lo, s3
 ; SDAG_W32-NEXT:    ; divergent control-flow edge
