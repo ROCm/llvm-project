@@ -357,19 +357,33 @@ jobs:
           sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
             cmake/therock_subproject.cmake compiler/CMakeLists.txt
 
-      - name: Apply TheRock patches (clang-linker-wrapper on Windows)
+      - name: Re-enable clang-linker-wrapper on Windows (required by check-clang)
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
           cd L:
           # check-clang hard-requires clang-linker-wrapper to be built, but
-          # TheRock force-disables it on Windows (compiler/CMakeLists.txt). This
-          # patch -- carried in the LLVM PR (compiler/amd-llvm submodule) --
-          # re-enables it via the amd-llvm pre-hook (CMAKE_PROJECT_TOP_LEVEL_INCLUDES
-          # runs after the -D flags, so its FORCE wins). Applying it to the
-          # ephemeral TheRock checkout lets this LLVM PR's CI validate the Windows
-          # clang/profile lit suite without a separate TheRock PR. Fail loud on
-          # any drift so the override never silently stops taking effect.
-          git apply --verbose compiler/amd-llvm/.github/therock-patches/clang-linker-wrapper-windows.patch
+          # TheRock force-disables it on Windows (compiler/CMakeLists.txt) since it
+          # is grouped with the offload device runtime. Re-enable it via the
+          # amd-llvm pre-hook: CMAKE_PROJECT_TOP_LEVEL_INCLUDES runs after the -D
+          # flags, so a FORCE cache set here wins over compiler/CMakeLists.txt
+          # without editing that file -- letting this LLVM PR's CI validate the
+          # Windows clang/profile lit suite without a separate TheRock PR.
+          #
+          # Appended in place (rather than `git apply` of the carried .patch)
+          # because the Windows checkout uses CRLF and earlier steps sed-edit this
+          # same file, both of which break strict patch-context matching. The
+          # guard is an independent top-level block, so its position is irrelevant.
+          hook=compiler/pre_hook_amd-llvm.cmake
+          if grep -q CLANG_TOOL_CLANG_LINKER_WRAPPER_BUILD "${hook}"; then
+            echo "clang-linker-wrapper override already present in ${hook}" >&2
+            exit 1
+          fi
+          cat >> "${hook}" <<'EOF'
+
+          if(WIN32 AND THEROCK_BUILD_LLVM_TESTS)
+            set(CLANG_TOOL_CLANG_LINKER_WRAPPER_BUILD ON CACHE BOOL "Required by check-clang" FORCE)
+          endif()
+          EOF
 
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
