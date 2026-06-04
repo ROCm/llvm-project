@@ -1526,7 +1526,8 @@ unsigned getNumWavesPerEUWithNumVGPRs(unsigned NumVGPRs, unsigned Granule,
 unsigned getOccupancyWithNumSGPRs(unsigned SGPRs, unsigned MaxWaves,
                                   unsigned TotalNumSGPRs, unsigned Granule,
                                   unsigned TrapReserve) {
-  // Closed-form inverse of getMaxNumSGPRs(): the budget condition
+  // Closed-form inverse of the per-wave budget getSGPRBudgetPerWave() computes
+  // for getMaxNumSGPRs()/getMinNumSGPRs() (same model, no helper call):
   //   SGPRs <= alignDown(TotalNumSGPRs / W - TrapReserve, Granule)
   // solves to W <= TotalNumSGPRs / (alignTo(SGPRs, Granule) + TrapReserve).
   unsigned PerWave = alignTo(SGPRs, Granule) + TrapReserve;
