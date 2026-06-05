@@ -1,5 +1,5 @@
 // REQUIRES: amdgpu-registered-target
-// RUN: %clang -g -target amdgcn-amd-amdhsa -march=gfx900 -O0 -nogpulib %s -c -o - | llvm-dwarfdump -v -debug-info - | FileCheck "%s"
+// RUN: %clang -g -target amdgcn-amd-amdhsa -march=gfx900 -O0 -fno-lto -nogpulib %s -c -o - | llvm-dwarfdump -v -debug-info - | FileCheck "%s"
 // CHECK: DW_TAG_subprogram
 // CHECK: DW_AT_name [DW_FORM_strx1]
 // CHECK-SAME: (indexed ({{[0-9a-f]+}}) string = "foo")
