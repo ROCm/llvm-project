@@ -9,42 +9,30 @@
 #include "common.h"
 #include "gtest/gtest.h"
 
-#include "comgr-hotswap-internal.h"
-#include "common.h"
-#include "gtest/gtest.h"
-
 class DemangleTest
     : public ::testing::TestWithParam<std::tuple<const char *, const char *>> {};
 
 TEST_P(DemangleTest, DemangleMatch) {
   auto [MangledName, ExpectedString] = GetParam();
-
   amd_comgr_data_t MangledData, DemangledData;
 
   ASSERT_COMGR(create_data(AMD_COMGR_DATA_KIND_BYTES, &MangledData));
 
   size_t Size = strlen(MangledName);
   ASSERT_COMGR(set_data(MangledData, Size, MangledName));
-
   ASSERT_COMGR(demangle_symbol_name(MangledData, &DemangledData));
 
   size_t DemangledSize = 0;
   ASSERT_COMGR(get_data(DemangledData, &DemangledSize, NULL));
-
   ASSERT_EQ(DemangledSize, strlen(ExpectedString));
 
   char *DemangledName = (char *)calloc(DemangledSize, sizeof(char));
-
   ASSERT_NE(DemangledName, nullptr);
-
   ASSERT_COMGR(get_data(DemangledData, &DemangledSize, DemangledName));
-
   ASSERT_TRUE(strncmp(DemangledName, ExpectedString, DemangledSize) == 0);
 
   free(DemangledName);
-
   ASSERT_COMGR(release_data(MangledData));
-
   ASSERT_COMGR(release_data(DemangledData));
 }
 

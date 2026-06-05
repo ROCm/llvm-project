@@ -12,9 +12,9 @@
 #include "amd_comgr.h"
 #define MAX_ISA_NAME_SIZE 1024
 
-#define ASSERT_COMGR(call)                                                      \
-  do {                                                                         \
-    amd_comgr_status_t status = amd_comgr_##call;                              \
-    ASSERT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                              \
+#define ASSERT_COMGR(call)                                                    \
+  do {                                                                      \
+    amd_comgr_status_t status = amd_comgr_##call;                           \
+    ASSERT_EQ(AMD_COMGR_STATUS_SUCCESS, status);                          \
   } while (false)
 #endif // COMGR_TEST_COMMON_H

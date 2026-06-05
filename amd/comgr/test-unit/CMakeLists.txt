@@ -162,14 +162,14 @@ target_include_directories(RaiserScaffoldingTests PRIVATE
 comgr_configure_test_target(RaiserScaffoldingTests)
 
 # -- DemangleTests ---------------------------------------------------
-#
 
 add_executable(DemangleTests
   DemangleTest.cpp)
 
 target_link_libraries(DemangleTests PRIVATE
   ${COMGR_GTEST_LIBS}
-  amd_comgr)
+  amd_comgr
+  ${LLVM_PTHREAD_LIB})
 
 target_include_directories(DemangleTests PRIVATE
   ${LLVM_INCLUDE_DIRS}
