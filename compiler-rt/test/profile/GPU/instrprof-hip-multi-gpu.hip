@@ -5,6 +5,9 @@
 // more than one device was present).
 //
 // REQUIRES: hip, amdgpu
+// The HSA agent-walk drain is Linux-only; the Windows host-shadow drain
+// collects only the current device and emits no "walk complete" line.
+// UNSUPPORTED: windows
 // RUN: %clang -x hip -fprofile-instr-generate -fcoverage-mapping \
 // RUN:   --offload-arch=%amdgpu_arch %s -o %t -L%hip_lib_path -lamdhip64
 // RUN: env LLVM_PROFILE_FILE=%t.profraw \

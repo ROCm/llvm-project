@@ -8,6 +8,9 @@
 // drained. Either outcome is correct.
 //
 // REQUIRES: hip, amdgpu
+// The terminal conditions checked below ("no GPU agents", "no loaded
+// segments", "drained=0") are Linux HSA-drain strings with no Windows analog.
+// UNSUPPORTED: windows
 
 // RUN: rm -rf %t.dir && mkdir -p %t.dir
 // RUN: %clang -x hip --offload-arch=%amdgpu_arch \

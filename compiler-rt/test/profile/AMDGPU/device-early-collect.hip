@@ -5,6 +5,9 @@
 // pass produces no device .profraw and we silently lose device counters.
 //
 // REQUIRES: hip, amdgpu
+// Guards the Linux introspection drain's DrainCompleted latch; the Windows
+// host-shadow drain has no such latch (it tracks per-TU Processed flags).
+// UNSUPPORTED: windows
 
 // RUN: rm -rf %t.dir && mkdir -p %t.dir
 // RUN: %clang -x hip --offload-arch=%amdgpu_arch -fno-gpu-rdc \
