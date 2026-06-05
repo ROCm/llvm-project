@@ -151,7 +151,7 @@ public:
             fir::runtime::genAssignSimple(builder, loc, to, from);
           } else {
             // Complex: derived types, polymorphic, etc.
-            fir::runtime::genAssignComplex(builder, loc, to, from);
+            fir::runtime::genAssign(builder, loc, to, from);
           }
         }
       }
@@ -185,7 +185,7 @@ public:
           fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
         } else {
           // Complex: polymorphic or derived type
-          fir::runtime::genAssignComplex(builder, loc, toMutableBox, from);
+          fir::runtime::genAssign(builder, loc, toMutableBox, from);
         }
       }
     } else {
