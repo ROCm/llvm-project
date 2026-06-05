@@ -154,6 +154,38 @@ jobs:
       test_runs_on: ${{ inputs.test_runs_on }}
       platform: 'linux'
       release_type: ${{ inputs.release_type }}
+
+  # Linux GPU arm: gated to the proven MI-class dc-gpu presubmit runner.
+  profile_gpu_test_linux:
+    name: 'Profile GPU device tests (Linux)'
+    needs: [test_sanity_check, configure_test_matrix]
+    if: ${{ needs.configure_test_matrix.outputs.platform == 'linux' && inputs.amdgpu_families == 'gfx94X-dcgpu' }}
+    uses: './.github/workflows/test_profile_gpu.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'linux'
+      release_type: ${{ inputs.release_type }}
+
+  # Windows GPU arm: runs on any Windows GPU test runner (e.g.
+  # windows-gfx110X-gpu-rocm). The device tests still depend on the Windows
+  # HIPAMD device-link injection landing and OS-specific CHECK lines.
+  profile_gpu_test_windows:
+    name: 'Profile GPU device tests (Windows)'
+    needs: [test_sanity_check, configure_test_matrix]
+    if: ${{ needs.configure_test_matrix.outputs.platform == 'windows' && contains(inputs.test_runs_on, 'gpu') }}
+    uses: './.github/workflows/test_profile_gpu.yml'
+    with:
+      artifact_group: ${{ inputs.artifact_group }}
+      artifact_run_id: ${{ inputs.artifact_run_id }}
+      amdgpu_families: ${{ inputs.amdgpu_families }}
+      amdgpu_targets: ${{ inputs.amdgpu_targets }}
+      test_runs_on: ${{ inputs.test_runs_on }}
+      platform: 'windows'
+      release_type: ${{ inputs.release_type }}
  
   test_components:
     name: 'Test ${{ matrix.components.job_name }}'

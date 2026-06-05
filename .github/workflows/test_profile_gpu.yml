@@ -1,0 +1,193 @@
+name: Profile GPU device tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_group:
+        type: string
+      artifact_run_id:
+        type: string
+        default: ""
+      amdgpu_families:
+        type: string
+        default: ""
+      amdgpu_targets:
+        type: string
+        default: ""
+      test_runs_on:
+        type: string
+      platform:
+        type: string
+      release_type:
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      artifact_group:
+        type: string
+      artifact_run_id:
+        type: string
+        default: ""
+      amdgpu_families:
+        type: string
+        default: ""
+      amdgpu_targets:
+        type: string
+        default: ""
+      test_runs_on:
+        type: string
+      platform:
+        type: string
+      release_type:
+        type: string
+        default: ""
+  push:
+    branches:
+      - ADHOCBUILD
+
+permissions:
+  contents: read
+
+jobs:
+  profile_gpu_test:
+    name: "profile gpu device tests"
+    runs-on: ${{ inputs.test_runs_on }}
+    container:
+      image: ${{ inputs.platform == 'linux' && 'ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98' || null }}
+      # --ulimit memlock=-1:-1 - Prevents memory allocation issues with ROCm inside container
+      # --security-opt seccomp=unconfined - enables memory mapping, and is recommended for containers running in HPC environments
+      # --env-file /etc/podinfo/gha-gpu-isolation-settings - Required for GPU isolation on OSSCI MIXXX runners
+      # --user 0:0 - Running as root, by recommendation of GitHub: https://docs.github.com/en/actions/reference/workflows-and-actions/dockerfile-support#user
+      options: --ipc host
+        --group-add video
+        --group-add render
+        --device /dev/kfd
+        --device /dev/dri
+        --group-add 993
+        --group-add 992
+        --group-add 110
+        --ulimit memlock=-1:-1
+        --security-opt seccomp=unconfined
+        --env-file /etc/podinfo/gha-gpu-isolation-settings
+        --user 0:0
+    defaults:
+      run:
+        shell: bash
+    env:
+      VENV_DIR: ${{ github.workspace }}/.venv
+      ARTIFACT_RUN_ID: "${{ inputs.artifact_run_id != '' && inputs.artifact_run_id || github.run_id }}"
+      OUTPUT_ARTIFACTS_DIR: ${{ github.workspace }}/build
+      THEROCK_BIN_DIR: ${{ github.workspace }}/build/bin
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+      AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
+      ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+    steps:
+      - name: Fix Python shared library
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+          python3 --version
+
+      - name: "Fetch 'build_tools' from repository (Windows pre-cleanup)"
+        if: ${{ runner.os == 'Windows' }}
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
+          sparse-checkout: build_tools
+          path: prejob
+
+      - name: Pre-job cleanup processes on Windows
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: . '${{ github.workspace }}\prejob\build_tools\github_actions\cleanup_processes.ps1'
+
+      - name: Checkout TheRock (for setup_test_environment)
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
+          fetch-depth: 1
+
+      - name: Checkout this PR (test sources + runner)
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          path: llvm-src
+          fetch-depth: 1
+
+      - name: Pre-job cleanup Docker containers on Linux
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          docker container prune -f || true
+          docker network prune -f || true
+          sudo apt-get update
+          sudo apt install -y build-essential pciutils libquadmath0
+
+      - name: Run setup test environment workflow
+        uses: './.github/actions/setup_test_environment'
+        with:
+          ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+          AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
+          ARTIFACT_RUN_ID: ${{ env.ARTIFACT_RUN_ID }}
+          OUTPUT_ARTIFACTS_DIR: ${{ env.OUTPUT_ARTIFACTS_DIR }}
+          VENV_DIR: ${{ env.VENV_DIR }}
+          IS_PR_FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
+
+      - name: Install FileCheck fallback (python filecheck)
+        run: |
+          python -m pip install --no-input filecheck || pip install filecheck || true
+
+      - name: Run profile GPU device tests
+        timeout-minutes: 50
+        env:
+          AMD_LOG_LEVEL: 4
+        run: |
+          set -x
+          PY=python3; command -v "$PY" >/dev/null 2>&1 || PY=python
+          ART="${OUTPUT_ARTIFACTS_DIR}"
+          if [ "${RUNNER_OS}" = "Windows" ]; then EXE=".exe"; else EXE=""; fi
+
+          # Artifact layout varies (compiler-only vs installed ROCm prefix); probe.
+          TOOLCHAIN_BIN=""
+          for c in "$ART/lib/llvm/bin" "$ART/llvm/bin" "$ART/bin"; do
+            if [ -f "$c/clang$EXE" ]; then TOOLCHAIN_BIN="$c"; break; fi
+          done
+          if [ -z "${TOOLCHAIN_BIN}" ]; then
+            echo "::error::could not locate clang$EXE under $ART"; exit 1
+          fi
+
+          HIP_LIB_PATH=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            for d in "$ART/lib" "$ART/bin"; do
+              if ls "$d"/amdhip64.lib >/dev/null 2>&1; then HIP_LIB_PATH="$d"; break; fi
+            done
+            # The HIP runtime DLL and toolchain must be on PATH at run time.
+            export PATH="$ART/bin:$TOOLCHAIN_BIN:$PATH"
+          else
+            for d in "$ART/lib" "$ART/llvm/lib"; do
+              if ls "$d"/libamdhip64.so* >/dev/null 2>&1; then HIP_LIB_PATH="$d"; break; fi
+            done
+          fi
+          if [ -z "${HIP_LIB_PATH}" ]; then
+            echo "::error::could not locate the HIP runtime import lib under $ART"; exit 1
+          fi
+
+          # Help clang's ROCm detection and the HIP runtime.
+          export ROCM_PATH="$ART"
+          export HIP_PATH="$ART"
+          echo "RUNNER_OS=${RUNNER_OS} TOOLCHAIN_BIN=${TOOLCHAIN_BIN} HIP_LIB_PATH=${HIP_LIB_PATH}"
+
+          "$PY" llvm-src/compiler-rt/test/profile/run_gpu_tests.py \
+            --toolchain-bin "${TOOLCHAIN_BIN}" \
+            --clang "${TOOLCHAIN_BIN}/clang$EXE" \
+            --clangxx "${TOOLCHAIN_BIN}/clang++$EXE" \
+            --hip-lib-path "${HIP_LIB_PATH}" \
+            --amdgpu-arch native \
+            llvm-src/compiler-rt/test/profile/GPU \
+            llvm-src/compiler-rt/test/profile/AMDGPU
+
+      - name: Post-job cleanup processes on Windows
+        if: ${{ always() && runner.os == 'Windows' }}
+        shell: powershell
+        run: . '${{ github.workspace }}\build_tools\github_actions\cleanup_processes.ps1'

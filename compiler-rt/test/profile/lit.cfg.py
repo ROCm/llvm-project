@@ -251,3 +251,25 @@ if os.path.exists("/dev/kfd"):
                     break
         if profile_rt is not None:
             config.available_features.add("amdgpu")
+            # `multi-device` gates tests that need more than one GPU agent
+            # (e.g. per-device profile drain on a non-default device). Count
+            # GPU agents from the KFD topology: CPU nodes report simd_count 0,
+            # GPU agents report a nonzero simd_count.
+            gpu_agents = 0
+            topo = "/sys/class/kfd/kfd/topology/nodes"
+            try:
+                for node in os.listdir(topo):
+                    props = os.path.join(topo, node, "properties")
+                    try:
+                        with open(props) as fh:
+                            for line in fh:
+                                if line.startswith("simd_count "):
+                                    if int(line.split()[1]) > 0:
+                                        gpu_agents += 1
+                                    break
+                    except OSError:
+                        continue
+            except OSError:
+                gpu_agents = 0
+            if gpu_agents >= 2:
+                config.available_features.add("multi-device")
