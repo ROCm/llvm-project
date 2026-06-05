@@ -152,22 +152,11 @@ static void computeVGPRFragmentation(
   // with VirtReg's live range.
   std::vector<bool> Occupied(NumVGPRs, false);
   unsigned NumOccupied = 0;
-  bool tracing = (FragTraceSeq > 0 &&
-                  (SeqNum == FragTraceSeq || SeqNum == FragTraceSeq + 1));
   for (unsigned I = 0; I < NumVGPRs; ++I) {
-    if (tracing)
-      DebugFragTrace = true;
     auto IK = Matrix->checkInterference(VirtReg, VGPROrder[I]);
-    if (tracing)
-      DebugFragTrace = false;
     if (IK != LiveRegMatrix::IK_Free) {
       Occupied[I] = true;
       ++NumOccupied;
-    }
-    if (tracing) {
-      dbgs() << "  FRAG_DBG: seq=" << SeqNum << " I=" << I
-             << " phys=" << printReg(VGPROrder[I], TRI)
-             << " IK=" << (unsigned)IK << "\n";
     }
   }
 
