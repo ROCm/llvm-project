@@ -105,11 +105,18 @@ jobs:
     needs: [copy_prebuilt_stages, build_multi_arch_stages]
     name: Test ${{ matrix.family_info.amdgpu_family }}
     # If we are expecting a build failure, do not run tests to save machine capacity.
+    # NOTE: the build_multi_arch_stages reusable-workflow caller reports an
+    # aggregate result of 'skipped' (not 'success') in this pipeline even when
+    # all of its individual build stages go green, which previously suppressed
+    # the entire Windows test lane. Tolerate 'skipped' here (still blocking on a
+    # genuine build failure), matching the looser !failure() gate the Linux lane
+    # uses in multi_arch_ci_linux.yml.
     if: >-
       ${{ !cancelled() && fromJSON(inputs.build_config).expect_failure == false &&
       (needs.copy_prebuilt_stages.result == 'success' ||
       needs.copy_prebuilt_stages.result == 'skipped') &&
-      needs.build_multi_arch_stages.result == 'success' }}
+      (needs.build_multi_arch_stages.result == 'success' ||
+      needs.build_multi_arch_stages.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
