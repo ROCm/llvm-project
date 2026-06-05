@@ -1,5 +1,5 @@
 // COM: Test Comgr get_data_isa_name() API
-// COM: RUN: %run_all_isas
+// RUN: %run_all_isas
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib -nogpuinc -mcode-object-version=4 \
 // RUN:   -c %S/get-data-isa-name.cl -o %t.o
