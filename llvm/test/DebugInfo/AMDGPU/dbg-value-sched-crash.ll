@@ -1,5 +1,4 @@
-; XFAIL: *
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=fiji < %s | FileCheck %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=fiji < %s | FileCheck %s
 
 ; Make sure we do not crash during scheduling when DBG_VALUE is the first
 ; instruction in the basic block.
