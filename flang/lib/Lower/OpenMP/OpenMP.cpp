@@ -3090,23 +3090,29 @@ genTargetOp(lower::AbstractConverter &converter, lower::SymMap &symTable,
 
           if (!mapperIdName.empty()) {
             bool isPointer = semantics::IsPointer(sym);
-            bool isAllocatable = semantics::IsAllocatable(sym);
             bool hasDefaultMapper =
                 converter.getModuleOp().lookupSymbol(mapperIdName);
             // Avoid attaching implicit default mappers to pointer captures.
             // For large pointer-based derived aggregates this can over-map
             // nested payloads and conflict with explicit enter/exit maps.
-            if (!isPointer && (hasDefaultMapper || isAllocatable)) {
+            //
+            // It's also against the OpenMP specification to do so,
+            // deep-copies are reserved for allocatable, and normal
+            // types.
+            if (!isPointer) {
               if (!hasDefaultMapper) {
-                if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
-                        converter.genType(*typeSpec)))
-                  mapperId = getOrGenImplicitDefaultDeclareMapper(
-                      converter.getFirOpBuilder(), loc, recordType,
-                      mapperIdName,
-                      [&](std::string &mapperIdName,
-                          llvm::StringRef memberName) {
-                        defaultMangler(converter, mapperIdName, memberName);
-                      });
+                if (converter.getLoweringOptions()
+                        .getOpenMPImplicitAllocatableComponentMap()) {
+                  if (auto recordType = mlir::dyn_cast_or_null<fir::RecordType>(
+                          converter.genType(*typeSpec)))
+                    mapperId = getOrGenImplicitDefaultDeclareMapper(
+                        converter.getFirOpBuilder(), loc, recordType,
+                        mapperIdName,
+                        [&](std::string &mapperIdName,
+                            llvm::StringRef memberName) {
+                          defaultMangler(converter, mapperIdName, memberName);
+                        });
+                }
               } else {
                 mapperId = mlir::FlatSymbolRefAttr::get(
                     &converter.getMLIRContext(), mapperIdName);

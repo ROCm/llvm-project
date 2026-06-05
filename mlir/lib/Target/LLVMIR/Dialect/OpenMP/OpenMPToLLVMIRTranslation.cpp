@@ -6390,8 +6390,9 @@ static void mapParentWithMembers(
     baseFlag |= (parentFlags & preserve);
   } else {
     MapFlags parentFlags = mapData.Types[mapDataIndex];
-    MapFlags preserve =
-        MapFlags::OMP_MAP_PRESENT | MapFlags::OMP_MAP_RETURN_PARAM;
+    MapFlags preserve = MapFlags::OMP_MAP_PRESENT |
+                        MapFlags::OMP_MAP_RETURN_PARAM |
+                        MapFlags::OMP_MAP_IMPLICIT;
     baseFlag |= (parentFlags & preserve);
   }
 
@@ -6406,6 +6407,7 @@ static void mapParentWithMembers(
   combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
       mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
   combinedInfo.BasePointers.emplace_back(mapData.BasePointers[mapDataIndex]);
+  combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
 
   // Calculate size of the parent object being mapped based on the
   // addresses at runtime, highAddr - lowAddr = size. This of course
@@ -6414,23 +6416,12 @@ static void mapParentWithMembers(
   // Fortran pointers and allocatables, the mapping of the pointed to
   // data by the descriptor (which itself, is a structure containing
   // runtime information on the dynamically allocated data).
-  llvm::Value *lowAddr, *highAddr;
-  if (!parentClause.getPartialMap()) {
-    lowAddr = builder.CreatePointerCast(mapData.Pointers[mapDataIndex],
-                                        builder.getPtrTy());
-    highAddr = builder.CreatePointerCast(
-        builder.CreateConstGEP1_32(mapData.BaseType[mapDataIndex],
-                                   mapData.Pointers[mapDataIndex], 1),
-        builder.getPtrTy());
-    combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
-  } else {
-    auto lowAndHigh = getLowAndHighAddr(parentClause);
-    highAddr = std::get<0>(std::get<1>(lowAndHigh));
-    lowAddr = std::get<0>(std::get<0>(lowAndHigh));
-    combinedInfo.Pointers.emplace_back(
-        mapData.BasePointers[std::get<1>(std::get<0>(lowAndHigh))]);
-  }
-
+  llvm::Value *lowAddr = builder.CreatePointerCast(
+      mapData.Pointers[mapDataIndex], builder.getPtrTy());
+  llvm::Value *highAddr = builder.CreatePointerCast(
+      builder.CreateConstGEP1_32(mapData.BaseType[mapDataIndex],
+                                 mapData.Pointers[mapDataIndex], 1),
+      builder.getPtrTy());
   llvm::Value *size = builder.CreateIntCast(
       builder.CreatePtrDiff(builder.getInt8Ty(), highAddr, lowAddr),
       builder.getInt64Ty(),

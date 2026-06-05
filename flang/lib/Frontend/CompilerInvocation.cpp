@@ -1317,6 +1317,16 @@ static bool parseOpenMPArgs(CompilerInvocation &res, llvm::opt::ArgList &args,
   if (args.hasArg(clang::options::OPT_fopenmp_force_usm)) {
     res.getLangOpts().OpenMPForceUSM = 1;
   }
+
+  // The lowering option defaults to true, so really only need to check for the
+  // false case at the moment.
+  if (const llvm::opt::Arg *a = args.getLastArg(
+          clang::options::OPT_fopenmp_implicit_allocatable_comp_map_EQ)) {
+    llvm::StringRef s = a->getValue();
+    res.getLoweringOpts().setOpenMPImplicitAllocatableComponentMap(
+        s == "disable" ? false : true);
+  }
+
   if (args.hasArg(clang::options::OPT_fopenmp_is_target_device)) {
     res.getLangOpts().OpenMPIsTargetDevice = 1;
 
