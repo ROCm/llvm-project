@@ -178,6 +178,16 @@ target_include_directories(DemangleTests PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 
 comgr_configure_test_target(DemangleTests)
+comgr_configure_test_target(DemangleTests)
+
+# amd_comgr is a shared lib; the test-unit target runs the exe directly
+# without the PATH setup the lit suite uses, so place the DLL next to it.
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET DemangleTests POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:DemangleTests>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
