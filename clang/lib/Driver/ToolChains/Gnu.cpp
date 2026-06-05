@@ -436,10 +436,12 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
 
   // Make sure openmp finds it libomp.so before all others.
-  if (Args.hasArg(options::OPT_fopenmp) ||
-      JA.isHostOffloading(Action::OFK_OpenMP)) {
-    addDirectoryList(Args, CmdArgs, "-L", "LIBRARY_PATH");
-    CmdArgs.push_back(Args.MakeArgString("-L" + D.Dir + "/../lib"));
+  if (!Args.hasArg(options::OPT_fsanitize_EQ)) {
+    if (Args.hasArg(options::OPT_fopenmp) ||
+        JA.isHostOffloading(Action::OFK_OpenMP)) {
+      addDirectoryList(Args, CmdArgs, "-L", "LIBRARY_PATH");
+      CmdArgs.push_back(Args.MakeArgString("-L" + D.Dir + "/../lib"));
+    }
   }
 
   Args.addAllArgs(CmdArgs, {options::OPT_L});

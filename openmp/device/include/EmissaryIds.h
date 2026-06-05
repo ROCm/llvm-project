@@ -27,7 +27,6 @@ typedef enum {
   _print_INVALID,
   _printf_idx,
   _fprintf_idx,
-  _ockl_asan_report_idx,
 } offload_emis_print_t;
 
 /// The vargs function used by emissary API device stubs

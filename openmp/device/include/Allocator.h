@@ -27,6 +27,15 @@ alloc(uint64_t Size);
 /// Free the allocation pointed to by \p Ptr.
 void free(void *Ptr);
 
+#if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
+/// Allocate \p Size bytes with caller PC for ASAN.
+[[gnu::alloc_size(1), gnu::assume_aligned(ALIGNMENT), gnu::malloc]] void *
+alloc(uint64_t Size, uint64_t PC);
+
+/// Free the allocation pointed to by \p Ptr with caller PC for ASAN.
+void free(void *Ptr, uint64_t PC);
+#endif
+
 } // namespace allocator
 
 } // namespace ompx

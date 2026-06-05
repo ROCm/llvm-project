@@ -14,6 +14,7 @@
 #include "DeviceTypes.h"
 #include "Shared/RPCOpcodes.h"
 #include "shared/rpc.h"
+#include "Platform.h"
 
 #include "Debug.h"
 
@@ -133,6 +134,29 @@ unsigned long long __llvm_omp_host_call(void *fn, void *data, size_t size) {
   });
   return Ret;
 }
+
+#if SANITIZER_AMDGPU
+[[gnu::noinline]] void
+__ockl_sanitizer_report(uint64_t addr, uint64_t pc, uint64_t wgidx,
+                        uint64_t wgidy, uint64_t wgidz, uint64_t wave_id,
+                        uint64_t is_read, uint64_t access_size) {
+
+  rpc::Client::Port Port = ompx::impl::Client.open<OFFLOAD_SANITIZER_REPORT>();
+
+  // Send sanitizer data directly via RPC buffer
+  Port.send([=](rpc::Buffer *buffer, uint32_t) {
+    buffer->data[0] = addr;
+    buffer->data[1] = pc;
+    buffer->data[2] = wgidx;
+    buffer->data[3] = wgidy;
+    buffer->data[4] = wgidz;
+    buffer->data[5] = wave_id;
+    buffer->data[6] = is_read;
+    buffer->data[7] = access_size;
+  });
+  return;
+}
+#endif
 
 // Calls to __alt_libc_malloc and __alt_libc_free are
 // made by _ockl_devmem_request

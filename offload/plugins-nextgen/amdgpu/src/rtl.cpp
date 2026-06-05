@@ -5033,6 +5033,9 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
 
   bool useStrictSanityChecks() const { return OMPX_StrictSanityChecks; }
 
+  /// Get the device memory heap pointer for ASan.
+  void *getDMHeapPtr() const { return DMHeapPtr; }
+
 private:
   using AMDGPUEventRef = AMDGPUResourceRef<AMDGPUEventTy>;
   using AMDGPUEventManagerTy = GenericDeviceResourceManagerTy<AMDGPUEventRef>;
@@ -6268,6 +6271,10 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
 
     hsa_utils::initImplArg(ImplArgs, &ImplArgsTy::DynamicLdsSize, ImplArgsSize,
                            KernelArgs.DynCGroupMem);
+
+    hsa_utils::initImplArg(
+        ImplArgs, &ImplArgsTy::HeapV1Ptr, ImplArgsSize,
+        reinterpret_cast<uint64_t>(AMDGPUDevice.getDMHeapPtr()));
   }
 
   // Get required OMPT-related data

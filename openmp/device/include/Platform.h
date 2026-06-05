@@ -16,6 +16,8 @@ namespace platform {
 // We cannot use an OpenMP variant because we require "C" linkage.
 #ifdef __AMDGPU__
 
+#define USED __attribute__((used))
+
 // The ROCm device library uses control globals to alter codegen for the
 // different targets. To avoid needing to link them in manually we simply
 // define them here.

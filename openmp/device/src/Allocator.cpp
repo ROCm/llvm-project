@@ -25,12 +25,12 @@ using namespace allocator;
 // without 'libc' support.
 extern "C" {
 
+#ifdef __AMDGPU__
 [[gnu::noinline]] uint64_t __asan_malloc_impl(uint64_t bufsz, uint64_t pc);
 [[gnu::noinline]] void __asan_free_impl(uint64_t ptr, uint64_t pc);
 [[gnu::noinline]] uint64_t __ockl_dm_alloc(uint64_t bufsz);
 [[gnu::noinline]] void __ockl_dm_dealloc(uint64_t ptr);
 
-#ifdef __AMDGPU__
 [[gnu::noinline]] void *__alt_libc_malloc(size_t sz);
 [[gnu::noinline]] void __alt_libc_free(void *ptr);
 
@@ -46,8 +46,18 @@ extern "C" {
 
 //#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
 #if (defined(__AMDGPU__) || defined(__SPIRV__)) && !defined(OMPTARGET_HAS_LIBC)
+#if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
+// For ASAN: capture PC here at malloc/free level and pass to allocator
+[[gnu::weak, gnu::noinline]] void *malloc(size_t Size) {
+  return allocator::alloc(Size, uint64_t(__builtin_return_address(0)));
+}
+[[gnu::weak, gnu::noinline]] void free(void *Ptr) {
+  allocator::free(Ptr, uint64_t(__builtin_return_address(0)));
+}
+#else
 [[gnu::weak]] void *malloc(size_t Size) { return allocator::alloc(Size); }
 [[gnu::weak]] void free(void *Ptr) { allocator::free(Ptr); }
+#endif
 #else
 [[gnu::leaf]] void *malloc(size_t Size);
 [[gnu::leaf]] void free(void *Ptr);
@@ -81,22 +91,28 @@ BumpAllocatorTy BumpAllocator;
 ///
 ///{
 
-void *allocator::alloc(uint64_t Size) {
 #if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
-  return reinterpret_cast<void *>(
-      __asan_malloc_impl(Size, uint64_t(__builtin_return_address(0))));
-#elif defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
+// ASAN version: PC is passed as parameter from malloc/free
+[[gnu::noinline]] void *allocator::alloc(uint64_t Size, uint64_t PC) {
+  return reinterpret_cast<void *>(__asan_malloc_impl(Size, PC));
+}
+
+[[gnu::noinline]] void allocator::free(void *Ptr, uint64_t PC) {
+  __asan_free_impl(reinterpret_cast<uint64_t>(Ptr), PC);
+}
+#endif
+
+// Non-ASAN version (fallback for non-ASAN builds or direct calls)
+[[gnu::noinline]] void *allocator::alloc(uint64_t Size) {
+#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
   return reinterpret_cast<void *>(__ockl_dm_alloc(Size));
 #else
   return ::malloc(Size);
 #endif
 }
 
-void allocator::free(void *Ptr) {
-#if defined(__AMDGPU__) && defined(SANITIZER_AMDGPU)
-  __asan_free_impl(reinterpret_cast<uint64_t>(Ptr),
-                   uint64_t(__builtin_return_address(0)));
-#elif defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
+[[gnu::noinline]] void allocator::free(void *Ptr) {
+#if defined(__AMDGPU__) && !defined(OMPTARGET_HAS_LIBC)
   __ockl_dm_dealloc(reinterpret_cast<uint64_t>(Ptr));
 #else
   ::free(Ptr);

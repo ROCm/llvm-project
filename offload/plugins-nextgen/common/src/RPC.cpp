@@ -25,6 +25,10 @@ using namespace target;
 #include "Emissary.h"
 #endif
 
+#if SANITIZER_AMDGPU
+#include "Sanitizer.h"
+#endif
+
 template <uint32_t NumLanes>
 rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
                                     rpc::Server::Port &Port) {
@@ -67,6 +71,27 @@ rpc::RPCStatus handleOffloadOpcodes(plugin::GenericDeviceTy &Device,
     });
     break;
   }
+#if SANITIZER_AMDGPU
+  case OFFLOAD_SANITIZER_REPORT: {
+    SanitizerData LaneData[NumLanes];
+    uint64_t ActiveMask = 0;
+    // Collect data from all active lanes
+    Port.recv([&](rpc::Buffer *buffer, uint32_t ID) {
+      LaneData[ID].addr = buffer->data[0];
+      LaneData[ID].pc = buffer->data[1];
+      LaneData[ID].wgidx = buffer->data[2];
+      LaneData[ID].wgidy = buffer->data[3];
+      LaneData[ID].wgidz = buffer->data[4];
+      LaneData[ID].wave_id = buffer->data[5];
+      LaneData[ID].is_read = buffer->data[6];
+      LaneData[ID].access_size = buffer->data[7];
+      ActiveMask |= (1ULL << ID);
+    });
+    // Now process all lanes together
+    HandleSanitizerReport(NumLanes, LaneData, ActiveMask, Device.getDeviceId());
+    break;
+  }
+#endif
 #ifdef OFFLOAD_ENABLE_EMISSARY_APIS
   case ALT_LIBC_MALLOC: {
     Port.recv_and_send([&](rpc::Buffer *Buffer, uint32_t) {
