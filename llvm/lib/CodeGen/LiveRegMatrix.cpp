@@ -241,6 +241,8 @@ LiveRegMatrix::checkInterference(const LiveInterval &VirtReg,
     return IK_RegUnit;
 
   // Check the matrix for virtual register interference.
+  if (DebugFragTrace)
+    dbgs() << "checkInterference: checking for virtual register interference\n";
   bool Interference = foreachUnit(TRI, VirtReg, PhysReg,
                                   [&](MCRegUnit Unit, const LiveRange &LR) {
                                     return query(LR, Unit).checkInterference();
