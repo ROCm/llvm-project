@@ -867,19 +867,23 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
 
   // Handle allocation if needed (for allocatable LHS)
   if (to.IsAllocatable()) {
-    if (!to.IsAllocated() || to.Elements() != from.Elements()) {
-      // Need to allocate or reallocate
-      if (to.IsAllocated()) {
-        to.Destroy(/*finalize=*/false, /*destroyPointers=*/false, &terminator);
-      }
+    if (!to.IsAllocated()) {
+      // Need to allocate - match _FortranAAssign logic
+      // Do NOT reallocate if already allocated (e.g., by OpenMP runtime for device firstprivate)
       // Allocate with same shape as from
       std::size_t elementBytes{to.ElementBytes()};
       to.raw().elem_len = elementBytes;
       int rank{to.rank()};
+      // Initialize stride for contiguous layout (Fortran column-major)
+      auto stride{static_cast<SubscriptValue>(elementBytes)};
       for (int j{0}; j < rank; ++j) {
         const auto &fromDim{from.GetDimension(j)};
         auto &toDim{to.GetDimension(j)};
         toDim.SetBounds(fromDim.LowerBound(), fromDim.UpperBound());
+        // Set byte stride for this dimension
+        toDim.SetByteStride(stride);
+        // Accumulate stride for next dimension
+        stride *= toDim.Extent();
       }
       int stat{to.Allocate(kNoAsyncObject)};
       if (stat != StatOk) {
@@ -893,14 +897,6 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
 
   std::memmove(to.OffsetElement(), from.OffsetElement(),
       to.Elements() * to.ElementBytes());
-}
-
-void RTDEF(AssignComplex)(Descriptor &to, const Descriptor &from,
-    const char *sourceFile, int sourceLine) {
-  Terminator terminator{sourceFile, sourceLine};
-  // Complex path: same as current Assign - handles all corner cases
-  Assign(to, from, terminator,
-      MaybeReallocate | NeedFinalization | ComponentCanBeDefinedAssignment);
 }
 
 void RTDEF(AssignPolymorphic)(Descriptor &to, const Descriptor &from,
