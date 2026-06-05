@@ -32,12 +32,40 @@ from pathlib import Path
 # --- feature detection ------------------------------------------------------
 
 
-def detect_features(force=None):
+def _count_visible_gpus(toolchain_bin):
+    """Number of GPUs actually visible to the runtime, or 0 if unknown.
+
+    Uses the toolchain's ``amdgpu-arch`` (one line per visible device). Unlike
+    the KFD topology under ``/sys/class/kfd`` this reflects what HIP/ROCr really
+    exposes -- it honours ``ROCR_VISIBLE_DEVICES`` / ``HIP_VISIBLE_DEVICES`` and
+    container device limits, so it matches what a test's ``hipGetDeviceCount``
+    will see. It is also portable: Windows has no ``/dev/kfd``, but does ship
+    ``amdgpu-arch``.
+    """
+    if not toolchain_bin:
+        return 0
+    tb = Path(toolchain_bin)
+    exe = next(
+        (str(tb / c) for c in ("amdgpu-arch", "amdgpu-arch.exe") if (tb / c).exists()),
+        None,
+    )
+    if exe is None:
+        return 0
+    try:
+        proc = subprocess.run(exe, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    if proc.returncode != 0:
+        return 0
+    return sum(1 for line in proc.stdout.splitlines() if line.strip())
+
+
+def detect_features(toolchain_bin=None, force=None):
     """Return the set of lit features available on this runner.
 
     hip/amdgpu are assumed present (this runner only ever drives GPU tests on a
     runner that has the toolchain + HIP). ``multi-device`` is derived from the
-    KFD topology (>= 2 GPU agents), mirroring profile/lit.cfg.py.
+    number of GPUs the runtime actually exposes (>= 2), via ``amdgpu-arch``.
     """
     features = {"hip", "amdgpu"}
     if sys.platform.startswith("linux"):
@@ -45,23 +73,7 @@ def detect_features(force=None):
     elif sys.platform.startswith("win"):
         features.add("windows")
 
-    gpu_agents = 0
-    topo = "/sys/class/kfd/kfd/topology/nodes"
-    try:
-        for node in os.listdir(topo):
-            props = os.path.join(topo, node, "properties")
-            try:
-                with open(props) as fh:
-                    for line in fh:
-                        if line.startswith("simd_count "):
-                            if int(line.split()[1]) > 0:
-                                gpu_agents += 1
-                            break
-            except OSError:
-                continue
-    except OSError:
-        gpu_agents = 0
-    if gpu_agents >= 2:
+    if _count_visible_gpus(toolchain_bin) >= 2:
         features.add("multi-device")
 
     if force:
@@ -307,7 +319,7 @@ def main():
         args.clang = args.clang or "clang"
         args.clangxx = args.clangxx or "clang++"
 
-    features = detect_features(args.feature)
+    features = detect_features(args.toolchain_bin, args.feature)
     print("# features: %s" % ", ".join(sorted(features)))
 
     base_env = dict(os.environ)
