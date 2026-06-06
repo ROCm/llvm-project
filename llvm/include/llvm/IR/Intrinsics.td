@@ -1874,7 +1874,7 @@ def int_experimental_gc_get_pointer_offset : DefaultAttrsIntrinsic<
     [IntrNoMem, ReadNone<ArgIndex<0>>, NoCapture<ArgIndex<0>>]>;
 
 //===------------------------ Coroutine Intrinsics ---------------===//
-// These are documented in docs/Coroutines.rst
+// These are documented in docs/Coroutines.md
 
 // Coroutine Structure Intrinsics.
 
