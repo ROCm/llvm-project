@@ -23,3 +23,6 @@ bafde6fbb [Flang] Move builtin .mod generation into runtimes
 breaks nekbone
 [OpenMP] Use ext linkage for kernels handles and globals handles keep… (#200964)
 ---
+breaks clr
+clang/HIP: Remove __ockl_fdot2 declaration (#201878)
+---
