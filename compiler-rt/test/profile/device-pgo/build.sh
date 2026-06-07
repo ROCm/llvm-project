@@ -26,9 +26,18 @@ cmake -G Ninja \
   -B "${BUILD_DIR}" \
   -C "${SCRIPT_DIR}/toolchain-cache.cmake"
 
-# 'runtimes' builds both the host (default) and amdgcn device runtime targets.
+# The 'clang' target also produces the clang++ symlink. The offload toolchain
+# tools (clang-offload-bundler, clang-linker-wrapper, llvm-link,
+# llvm-offload-binary) and offload-arch (also installed as amdgpu-arch) are
+# needed to compile/link a HIP program and to resolve --offload-arch=native /
+# the multi-device test feature. 'runtimes' builds both the host (default) and
+# amdgcn device runtime targets.
 ninja -C "${BUILD_DIR}" -j "${JOBS}" \
-  clang clang++ lld llvm-profdata llvm-cov FileCheck not runtimes
+  clang lld \
+  clang-offload-bundler clang-linker-wrapper llvm-link llvm-offload-binary \
+  offload-arch \
+  llvm-profdata llvm-cov FileCheck not \
+  runtimes
 
 cat <<EOF
 
@@ -39,8 +48,9 @@ Run the GPU tests with, e.g.:
 
   python3 ${SCRIPT_DIR}/../run_gpu_tests.py \\
       --toolchain-bin ${BUILD_DIR}/bin \\
-      --hip-path \$ROCM_PATH \\
+      --hip-lib-path \${ROCM_PATH:-/opt/rocm}/lib \\
       ${SCRIPT_DIR}/../GPU ${SCRIPT_DIR}/../AMDGPU
 
-(See README.md for the exact runner flags on your system.)
+(--toolchain-bin must be an absolute path; the runner executes RUN lines from a
+temp dir. See README.md for more.)
 EOF

@@ -62,10 +62,17 @@ two visible GPUs are skipped on single-GPU hosts.
 
 ```bash
 python3 ../run_gpu_tests.py \
-    --toolchain-bin <builddir>/bin \
-    --hip-path "$ROCM_PATH" \
+    --toolchain-bin "$PWD/<builddir>/bin" \
+    --hip-lib-path "$ROCM_PATH/lib" \
     ../GPU ../AMDGPU
 ```
+
+`--toolchain-bin` must be an **absolute** path (the runner executes each RUN
+line from a temp directory). With the toolchain's `amdgpu-arch`/`offload-arch`
+on hand, `--offload-arch=native` resolves automatically and the `multi-device`
+feature is enabled when 2+ GPUs are visible (so multi-GPU tests run on a
+multi-GPU host and are skipped otherwise). On a multi-gfx90a host this suite is
+11 passed, 0 failed.
 
 ## Manual workflow (for reference)
 
@@ -89,9 +96,9 @@ LLVM_PROFILE_FILE='app-%p.profraw' ./app
 ## Notes / environment-specific knobs
 
 - `--offload-arch` must match your GPU; the amdgcn device runtime is target
-  generic but the app's device code is per-arch.
-- If `amdgpu-arch` is not on `PATH`, pass `--amdgpu-arch <path>` to the runner
-  (it lives in `<builddir>/bin` after the build).
+  generic but the app's device code is per-arch. The build installs
+  `offload-arch` (and the `amdgpu-arch` alias) into `<builddir>/bin`, so
+  `--offload-arch=native` works without a system ROCm `amdgpu-arch`.
 - The amdgcn runtime target requires LLVM libc for amdgcn; if your environment
   cannot build it, drop `libc` from
   `RUNTIMES_amdgcn-amd-amdhsa_LLVM_ENABLE_RUNTIMES` only if your headers are

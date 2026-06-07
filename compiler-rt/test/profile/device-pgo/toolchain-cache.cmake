@@ -17,8 +17,9 @@
 # Usage (see ./build.sh for a wrapper):
 #   cmake -G Ninja -S llvm -B build/device-pgo \
 #         -C compiler-rt/test/profile/device-pgo/toolchain-cache.cmake
-#   ninja -C build/device-pgo clang clang++ lld llvm-profdata llvm-cov \
-#         FileCheck not runtimes
+#   ninja -C build/device-pgo clang lld clang-offload-bundler \
+#         clang-linker-wrapper llvm-link llvm-offload-binary offload-arch \
+#         llvm-profdata llvm-cov FileCheck not runtimes
 #
 # Outputs (under build/device-pgo):
 #   bin/{clang,clang++,lld,llvm-profdata,llvm-cov,FileCheck,not}
