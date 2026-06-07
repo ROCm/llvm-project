@@ -156,13 +156,10 @@ jobs:
               LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
               echo "ROCm LLVM head SHA: LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
-              TRUNK_LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-              echo "Upstream LLVM head SHA: $TRUNK_LLVM_SHA"
-              git submodule update --init --jobs 1 compiler/amd-llvm
-              git -C compiler/amd-llvm submodule update --init --jobs 1 llvm
-              git -C compiler/amd-llvm update-index --cacheinfo 160000,"$TRUNK_LLVM_SHA","llvm"
-              LLVM_SHA="$(git -C compiler/amd-llvm rev-parse HEAD)"
-              echo "Updated trunk compiler/amd-llvm SHA: $LLVM_SHA"
+              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
+              echo "Upstream LLVM head SHA: $LLVM_SHA"
+              git config -f .gitmodules submodule.llvm-project.url https://github.com/llvm/llvm-project.git
+              git submodule sync --recursive compiler/amd-llvm
           fi
 
           if [[ -n "$LLVM_SHA" ]]; then
