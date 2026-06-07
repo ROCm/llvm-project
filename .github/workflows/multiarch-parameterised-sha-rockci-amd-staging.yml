@@ -18,22 +18,22 @@ on:
   workflow_dispatch:
     inputs:
       LLVM_PR_URL:
-        description: "pass the LLVM upstraem PR url. ex: https://github.com/llvm/llvm-project/pull/1"
+        description: "LLVM upstraem PR url(supports multi PR separated by ,). ex: https://github.com/llvm/llvm-project/pull/1"
         required: false
         type: string
         default: ""
       LLVM_ROCm_PR_URL:
-        description: "pass the LLVM ROCm PR url. ex: https://github.com/ROCm/llvm-project/pull/1"
+        description: "LLVM ROCm PR url. ex: https://github.com/ROCm/llvm-project/pull/1"
         required: false
         type: string
         default: ""
       SPIRV_PR_URL:
-        description: "pass the SPIRV PR url. ex: https://github.com/ROCm/SPIRV-LLVM-Translator/pull/1"
+        description: "SPIRV PR url. ex: https://github.com/ROCm/SPIRV-LLVM-Translator/pull/1"
         required: false
         type: string
         default: ""
       HIPIFY_PR_URL:
-        description: "pass the HIPIFY PR url. ex: https://github.com/ROCm/HIPIFY/pull/1 "
+        description: "HIPIFY PR url. ex: https://github.com/ROCm/HIPIFY/pull/1 "
         required: false
         type: string
         default: ""

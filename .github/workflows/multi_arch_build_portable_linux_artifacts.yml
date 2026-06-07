@@ -142,6 +142,27 @@ jobs:
              git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
           }
 
+          merge_upstream_prs() {
+             local pr_urls_csv="$1"
+             local url repo num ref
+             git submodule update --init --jobs 1 compiler/amd-llvm
+             IFS=',' read -ra PR_URLS <<< "$pr_urls_csv"
+             for url in "${PR_URLS[@]}"; do
+               url="$(echo "$url" | xargs)"
+               [[ -z "$url" ]] && continue
+               repo="$(echo "$url" | sed 's|/pull/.*||')"
+               num="$(echo "$url" | sed 's|.*/pull/||')"
+               ref="upstream-pr-${num}"
+               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project"
+               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+               git -C compiler/amd-llvm merge --no-edit "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first."
+                 exit 1
+               }
+             done
+             git -C compiler/amd-llvm rev-parse HEAD
+          }
+
           LLVM_SHA=""
 
           # LLVM PR based on if its ROCm or Trunk
@@ -149,17 +170,7 @@ jobs:
               LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
               echo "ROCm LLVM head SHA: LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
-              repo="$(echo "$LLVM_PR_URL" | sed 's|/pull/.*||')"
-              num="$(echo "$LLVM_PR_URL" | sed 's|.*/pull/||')"
-              ref="upstream-pr-${num}"
-              git submodule update --init --jobs 1 compiler/amd-llvm
-              echo "Merging upstream PR #${num} from ${LLVM_PR_URL} into ROCm/llvm-project"
-              git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-              git -C compiler/amd-llvm merge --no-edit "$ref" || {
-                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first."
-                 exit 1
-              }
-              LLVM_SHA="$(git -C compiler/amd-llvm rev-parse HEAD)"
+              LLVM_SHA="$(merge_upstream_prs "$LLVM_PR_URL")"
               echo "Final upstream LLVM SHA: $LLVM_SHA"
           fi
 
