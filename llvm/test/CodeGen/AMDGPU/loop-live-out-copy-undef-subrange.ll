@@ -9,38 +9,37 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-LABEL: liveout_undef_subrange:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    s_mov_b64 s[6:7], -1
+; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    v_add_f32_e32 v3, v2, v2
-; CHECK-NEXT:    s_and_b64 s[4:5], exec, -1
-; CHECK-NEXT:    s_mov_b64 s[6:7], 0
+; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    ; kill: killed $vgpr1
 ; CHECK-NEXT:    v_add_f32_e32 v0, v0, v0
 ; CHECK-NEXT:  .LBB0_1: ; %bb1
 ; CHECK-NEXT:    ; =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    v_cmp_eq_f32_e64 s[8:9], 0, v2
-; CHECK-NEXT:    s_xor_b64 s[12:13], s[8:9], exec
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[12:13]
-; CHECK-NEXT:    s_and_b64 s[10:11], s[10:11], exec
-; CHECK-NEXT:    s_mov_b64 exec, s[12:13]
+; CHECK-NEXT:    v_cmp_eq_f32_e64 s[6:7], 0, v2
+; CHECK-NEXT:    s_xor_b64 s[10:11], s[6:7], exec
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
+; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; CHECK-NEXT:    s_mov_b64 exec, s[10:11]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_3
 ; CHECK-NEXT:  .LBB0_2: ; %bb2
 ; CHECK-NEXT:    ; in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    s_mov_b64 vcc, s[4:5]
+; CHECK-NEXT:    s_and_b64 vcc, exec, -1
 ; CHECK-NEXT:    s_and_b64 vcc, vcc, vcc
-; CHECK-NEXT:    s_cselect_b64 s[12:13], exec, 0
+; CHECK-NEXT:    s_cselect_b64 s[10:11], exec, 0
 ; CHECK-NEXT:    v_mul_f32_e32 v2, v3, v2
-; CHECK-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
-; CHECK-NEXT:  .LBB0_3: ; in Loop: Header=BB0_1 Depth=1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[10:11]
-; CHECK-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; CHECK-NEXT:    s_and_b64 s[10:11], s[10:11], exec
 ; CHECK-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
-; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
+; CHECK-NEXT:  .LBB0_3: ; in Loop: Header=BB0_1 Depth=1
+; CHECK-NEXT:    s_or_b64 exec, exec, s[8:9]
+; CHECK-NEXT:    s_xor_b64 s[8:9], exec, s[6:7]
+; CHECK-NEXT:    s_and_b64 s[8:9], s[8:9], exec
+; CHECK-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
+; CHECK-NEXT:    s_mov_b64 exec, s[6:7]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execnz .LBB0_1
 ; CHECK-NEXT:  .LBB0_4: ; %DummyReturnBlock
-; CHECK-NEXT:    s_or_b64 exec, exec, s[6:7]
+; CHECK-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
 bb:
   br label %bb1
