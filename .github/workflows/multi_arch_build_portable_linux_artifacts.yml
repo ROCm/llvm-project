@@ -124,6 +124,7 @@ jobs:
           source ./${{ github.run_id }}_PR_params.env
           set +a
           echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+          echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
           echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
           echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
@@ -139,9 +140,14 @@ jobs:
              git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
           }
 
-          # LLVM PR
-          LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-          echo "LLVM head SHA: $LLVM_SHA"
+          # LLVM PR based on if its ROCm or Trunk
+          if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
+              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
+              echo "ROCm LLVM head SHA: $LLVM_SHA"
+          elif [[ -n "$LLVM_PR_URL" ]]; then
+              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
+              echo "Upstream LLVM head SHA: $LLVM_SHA"
+          fi
           git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
 
           # SPIRV PR
