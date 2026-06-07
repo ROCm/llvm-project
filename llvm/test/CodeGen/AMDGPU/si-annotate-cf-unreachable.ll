@@ -9,7 +9,7 @@
 
 
 ; GCN-LABEL: {{^}}annotate_unreachable:
-; GCN: s_and_b64
+; GCN: s_xor_b64 exec
 ; GCN-NOT: s_endpgm
 ; GCN: .Lfunc_end0
 define amdgpu_kernel void @annotate_unreachable(ptr addrspace(1) noalias nocapture readonly %arg, i1 %c0) #0 {

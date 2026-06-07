@@ -157,8 +157,7 @@ define void @void_func_byval_struct_i8_i32_ptr_value(ptr addrspace(5) byval({ i8
 
 ; GCN-LABEL: {{^}}void_func_byval_struct_i8_i32_ptr_nonentry_block:
 
-; GCN: s_xor_b64 
-; GCN: s_mov_b64 exec
+; GCN: s_xor_b64 exec
 ; GCN: s_cbranch_exec{{n?z}}
 
 ; CI: buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4 glc{{$}}
@@ -245,8 +244,7 @@ declare void @func(ptr addrspace(5) nocapture) #0
 ; stores in the middle block.
 
 ; GCN-LABEL: {{^}}undefined_stack_store_reg:
-; GCN: s_xor_b64 
-; GCN: s_mov_b64 exec
+; GCN: s_xor_b64 exec
 ; GCN: s_cbranch_exec{{n?z}}
 ; MUBUF: buffer_store_dword v{{[0-9]+}}, off, s[0:3], s33 offset:
 ; MUBUF: buffer_store_dword v{{[0-9]+}}, off, s[0:3], s33 offset:
@@ -275,8 +273,7 @@ bb5:
 }
 
 ; GCN-LABEL: {{^}}alloca_ptr_nonentry_block:
-; GCN: s_xor_b64 
-; GCN: s_mov_b64 exec
+; GCN: s_xor_b64 exec
 ; GCN: s_cbranch_exec{{n?z}}
 ; MUBUF:   buffer_load_dword v{{[0-9]+}}, off, s[0:3], s32 offset:4
 ; FLATSCR: scratch_load_dword v{{[0-9]+}}, off, s32 offset:4
