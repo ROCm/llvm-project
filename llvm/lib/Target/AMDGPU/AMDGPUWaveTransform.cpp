@@ -247,6 +247,8 @@ public:
 
   void run();
 
+  MachineDominatorTree &getDomTree() { return DomTree; }
+
   WaveNode *rerouteViaNewNode(ArrayRef<WaveNode *> FromList, WaveNode *ToNode);
 
   WaveNode *nodeForBlock(MachineBasicBlock *Block) {
@@ -2076,14 +2078,24 @@ void ControlFlowRewriter::rewrite() {
       continue;
     }
 
+    // When there is only a single lane mask origin, the condition register
+    // can be used directly as the primary successor EXEC value. The
+    // accumulator machinery is only needed when multiple origins contribute
+    // lane masks that must be merged.
+    bool HasSingleOrigin = (LaneTargetInfo.origins.size() == 1);
+    Register DirectCondReg;
+
     // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
-    // Updater.
-    // FIXME: we are creating a register here only to initialize the updater
-    Updater.init();
-    Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
-    for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
-      Updater.addReset(*NodeDivergentPair.getPointer()->Block,
-                       GCNLaneMaskUpdater::ResetAtEnd);
+    // Updater. Initialize the accumulator only when multiple origins
+    // require merging.
+    if (!HasSingleOrigin) {
+      // FIXME: we are creating a register here only to initialize the updater
+      Updater.init();
+      Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
+      for (const auto &NodeDivergentPair : LaneTargetInfo.OriginBranch) {
+        Updater.addReset(*NodeDivergentPair.getPointer()->Block,
+                         GCNLaneMaskUpdater::ResetAtEnd);
+      }
     }
 
     for (const LaneOriginInfo &LaneOrigin : LaneTargetInfo.origins) {
@@ -2227,7 +2239,10 @@ void ControlFlowRewriter::rewrite() {
         }
       }
 
-      Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
+      if (HasSingleOrigin)
+        DirectCondReg = CondReg;
+      else
+        Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
     }
 
     // Step 2.2: Synthesize EXEC updates and branch instructions.
@@ -2238,7 +2253,8 @@ void ControlFlowRewriter::rewrite() {
       WaveNode *OriginNode = NodeDivergentPair.getPointer();
       CFGNodeInfo &OriginCFGNodeInfo = NodeInfo.find(OriginNode)->second;
       OriginCFGNodeInfo.PrimarySuccessorExec =
-          Updater.getValueAfterMerge(*OriginNode->Block);
+          HasSingleOrigin ? DirectCondReg
+                          : Updater.getValueAfterMerge(*OriginNode->Block);
 
       MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
 
@@ -2267,10 +2283,34 @@ void ControlFlowRewriter::rewrite() {
     if (!Secondary->IsSecondary)
       continue;
 
-    // FIXME: we are creating a register here only to initialize the updater
-    Updater.init();
-    Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetAtEnd);
+    // Count divergent predecessors with multiple successors. When there
+    // is exactly one such predecessor that is acyclic and dominates the
+    // secondary, the rejoin register can be used directly without the
+    // accumulator machinery.
+    unsigned NumDivergentPreds = 0;
+    WaveNode *SingleDivPred = nullptr;
+    for (WaveNode *Pred : Secondary->Predecessors) {
+      if (!Pred->IsDivergent || Pred->Successors.size() == 1)
+        continue;
+      NumDivergentPreds++;
+      SingleDivPred = Pred;
+    }
 
+    // The accumulator is only needed when multiple divergent predecessors
+    // contribute rejoin masks, or when cycle membership or non-dominance
+    // requires temporal merging across iterations.
+    bool HasSingleDivergentPred =
+        (NumDivergentPreds == 1) && !SingleDivPred->Cycle &&
+        ReconvergeCfg.getDomTree().dominates(SingleDivPred->Block,
+                                             Secondary->Block);
+
+    if (!HasSingleDivergentPred) {
+      // FIXME: we are creating a register here only to initialize the updater
+      Updater.init();
+      Updater.addReset(*Secondary->Block, GCNLaneMaskUpdater::ResetAtEnd);
+    }
+
+    Register DirectRejoin;
     for (WaveNode *Pred : Secondary->Predecessors) {
       if (!Pred->IsDivergent || Pred->Successors.size() == 1)
         continue;
@@ -2298,20 +2338,24 @@ void ControlFlowRewriter::rewrite() {
             .addReg(PrimaryExec);
       }
 
-      Updater.addAvailable(*Pred->Block, Rejoin);
+      if (HasSingleDivergentPred)
+        DirectRejoin = Rejoin;
+      else
+        Updater.addAvailable(*Pred->Block, Rejoin);
     }
 
-    Register Rejoin = Updater.getValueInMiddleOfBlock(*Secondary->Block);
+    Register RejoinMask =
+        HasSingleDivergentPred
+            ? DirectRejoin
+            : Updater.getValueInMiddleOfBlock(*Secondary->Block);
     BuildMI(*Secondary->Block, Secondary->Block->getFirstNonPHI(), {},
             TII.get(LMC.OrOpc), LMC.ExecReg)
         .addReg(LMC.ExecReg)
-        .addReg(Rejoin);
-
+        .addReg(RejoinMask);
   }
   Updater.insertAccumulatorResets();
   AccumulatorRegs = std::move(Updater.getAllAccumulators());
   Updater.cleanup();
-
 }
 
 /// This function fixes virtual register uses that have no dominating definition
