@@ -1,17 +1,22 @@
-// Test PGO when the kernel runs on a non-default device.
-// The profile runtime should collect data from whichever device is active
-// at exit time, which should be the device the user set.
+// Test PGO when the kernel runs on a non-default device. The HSA-introspection
+// drain walks every GPU agent at exit and collects device counters from each
+// loaded code object, so it must still drain the device profile when the active
+// device at exit is not device 0 (here the program selects device 1).
 //
 // REQUIRES: hip, amdgpu, multi-device
+// Relies on the HSA agent-walk draining a device that is not current at exit;
+// the Windows host-shadow drain only collects the current device.
+// UNSUPPORTED: windows
 // RUN: %clang -x hip -fprofile-instr-generate -fcoverage-mapping \
 // RUN:   --offload-arch=%amdgpu_arch %s -o %t -L%hip_lib_path -lamdhip64
 // RUN: env LLVM_PROFILE_FILE=%t.profraw \
 // RUN:   LD_LIBRARY_PATH=%hip_lib_path:$LD_LIBRARY_PATH \
 // RUN:   LLVM_PROFILE_VERBOSE=1 %run %t 2>&1 | FileCheck %s
 //
-// The runtime should collect from the device that was set (device 1).
-// CHECK: Collecting static profile data from device 1
-// CHECK: Successfully wrote device profile using shared API
+// The drain must walk the agents and copy device counters even though the
+// kernel ran on the non-default device.
+// CHECK: Copied device sections:
+// CHECK: walk complete: agents={{[0-9]+}} pairs={{[0-9]+}} found={{[0-9]+}} drained={{[1-9][0-9]*}}
 // CHECK: PASS
 
 #include <hip/hip_runtime.h>

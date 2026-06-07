@@ -5,6 +5,40 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This is the Linux/Unix device profile drain, which decouples device counter
+// collection from the host by walking HSA code objects (no host-side per-TU
+// shadow). Windows has no HSA runtime, so it keeps the legacy HIP host-shadow
+// mechanism in InstrProfilingPlatformROCmWindows.cpp; the CMake selects exactly
+// one of the two by platform. Decoupled (host-uninstrumented) collection is
+// only supported here, on Linux.
+//
+// Device-side profile data drain for AMDGPU via HSA introspection.
+//
+// At process exit this walks every loaded HSA code object on every GPU agent,
+// finds the device-side __llvm_profile_sections bounds table (emitted by
+// InstrProfilingPlatformGPU.c), copies its counters/data/names regions back to
+// the host, and writes a target-prefixed .profraw via __llvm_write_custom_profile.
+//
+// The drain is decoupled from the host-side profile write: it runs from an
+// atexit handler registered in a constructor, so device counters are collected
+// whether or not the host translation units were instrumented, and without any
+// host-side per-TU shadow variable, CUID matching, or hipModuleLoad
+// interception.
+//
+// All HSA and HIP entry points are resolved with dlopen/dlsym (via the
+// interception helpers) so libclang_rt.profile still links and runs on hosts
+// without ROCm installed.
+//
+//===----------------------------------------------------------------------===//
+
+// Host-only: this drains device counters from the host process. The device
+// side (the __llvm_profile_sections bounds table) is emitted by
+// InstrProfilingPlatformGPU.c. When this file is compiled for a GPU target as
+// part of the device profile runtime build it reduces to an empty TU. It also
+// reduces to an empty TU on Windows, which uses
+// InstrProfilingPlatformROCmWindows.cpp instead.
+#if !defined(__NVPTX__) && !defined(__AMDGPU__) && !defined(_WIN32)
 
 extern "C" {
 #include "InstrProfiling.h"
@@ -13,54 +47,116 @@ extern "C" {
 }
 
 #include "interception/interception.h"
-// C library headers (not <cstdio> etc.): clang_rt.profile is built with
+// C library headers only (not <cstdio> etc.): clang_rt.profile is built with
 // -nostdinc++ and avoids the C++ standard library (see profile/CMakeLists.txt).
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#include <pthread.h>
-#endif
+/* -------------------------------------------------------------------------- */
+/*  Minimal HSA type/enum stubs                                               */
+/*                                                                            */
+/*  compiler-rt cannot depend on ROCm headers at build time, so mirror just   */
+/*  the handful of HSA declarations the drain needs. Values match             */
+/*  hsa/hsa.h and hsa/hsa_ven_amd_loader.h.                                   */
+/* -------------------------------------------------------------------------- */
 
-/* Serialize one-time HIP loader resolution and DynamicModules mutations.
- * Inline to avoid a sanitizer_common dependency. */
-#ifdef _WIN32
-static INIT_ONCE HipLoadedOnce = INIT_ONCE_STATIC_INIT;
-static CRITICAL_SECTION DynamicModulesLock;
-static INIT_ONCE DynamicModulesLockInit = INIT_ONCE_STATIC_INIT;
-static BOOL CALLBACK initDynamicModulesLockCb(PINIT_ONCE, PVOID, PVOID *) {
-  InitializeCriticalSection(&DynamicModulesLock);
-  return TRUE;
-}
-static void lockDynamicModules(void) {
-  InitOnceExecuteOnce(&DynamicModulesLockInit, initDynamicModulesLockCb, NULL,
-                      NULL);
-  EnterCriticalSection(&DynamicModulesLock);
-}
-static void unlockDynamicModules(void) {
-  LeaveCriticalSection(&DynamicModulesLock);
-}
-#else
-static pthread_once_t HipLoadedOnce = PTHREAD_ONCE_INIT;
-static pthread_mutex_t DynamicModulesLock = PTHREAD_MUTEX_INITIALIZER;
-static void lockDynamicModules(void) {
-  pthread_mutex_lock(&DynamicModulesLock);
-}
-static void unlockDynamicModules(void) {
-  pthread_mutex_unlock(&DynamicModulesLock);
-}
-#endif
+typedef uint32_t prof_hsa_status_t;
+#define PROF_HSA_STATUS_SUCCESS ((prof_hsa_status_t)0x0)
+#define PROF_HSA_STATUS_INFO_BREAK ((prof_hsa_status_t)0x1)
 
-static int processDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
-                                   const char *Target);
+typedef struct {
+  uint64_t handle;
+} prof_hsa_agent_t;
+typedef struct {
+  uint64_t handle;
+} prof_hsa_executable_t;
+typedef struct {
+  uint64_t handle;
+} prof_hsa_executable_symbol_t;
 
-static int isVerboseMode() {
+typedef uint32_t prof_hsa_agent_info_t;
+#define PROF_HSA_AGENT_INFO_NAME ((prof_hsa_agent_info_t)0)
+#define PROF_HSA_AGENT_INFO_DEVICE ((prof_hsa_agent_info_t)17)
+
+typedef uint32_t prof_hsa_device_type_t;
+#define PROF_HSA_DEVICE_TYPE_GPU ((prof_hsa_device_type_t)1)
+
+typedef uint32_t prof_hsa_symbol_kind_t;
+#define PROF_HSA_SYMBOL_KIND_VARIABLE ((prof_hsa_symbol_kind_t)0)
+
+typedef uint32_t prof_hsa_executable_symbol_info_t;
+#define PROF_HSA_EXECUTABLE_SYMBOL_INFO_TYPE                                    \
+  ((prof_hsa_executable_symbol_info_t)0)
+#define PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH                             \
+  ((prof_hsa_executable_symbol_info_t)1)
+#define PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME                                    \
+  ((prof_hsa_executable_symbol_info_t)2)
+#define PROF_HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS                        \
+  ((prof_hsa_executable_symbol_info_t)21)
+
+#define PROF_HSA_EXTENSION_AMD_LOADER ((uint16_t)0x201)
+
+typedef uint32_t prof_hsa_loader_storage_type_t;
+
+typedef struct {
+  prof_hsa_agent_t agent;
+  prof_hsa_executable_t executable;
+  prof_hsa_loader_storage_type_t code_object_storage_type;
+  const void *code_object_storage_base;
+  size_t code_object_storage_size;
+  size_t code_object_storage_offset;
+  const void *segment_base;
+  size_t segment_size;
+} prof_hsa_loader_segment_descriptor_t;
+
+typedef prof_hsa_status_t (*hsa_init_ty)(void);
+typedef prof_hsa_status_t (*hsa_iterate_agents_ty)(
+    prof_hsa_status_t (*)(prof_hsa_agent_t, void *), void *);
+typedef prof_hsa_status_t (*hsa_agent_get_info_ty)(prof_hsa_agent_t,
+                                                   prof_hsa_agent_info_t,
+                                                   void *);
+typedef prof_hsa_status_t (*hsa_executable_iterate_agent_symbols_ty)(
+    prof_hsa_executable_t, prof_hsa_agent_t,
+    prof_hsa_status_t (*)(prof_hsa_executable_t, prof_hsa_agent_t,
+                          prof_hsa_executable_symbol_t, void *),
+    void *);
+typedef prof_hsa_status_t (*hsa_executable_symbol_get_info_ty)(
+    prof_hsa_executable_symbol_t, prof_hsa_executable_symbol_info_t, void *);
+typedef prof_hsa_status_t (*hsa_system_get_major_extension_table_ty)(
+    uint16_t, uint16_t, size_t, void *);
+typedef prof_hsa_status_t (*hsa_loader_query_segment_descriptors_ty)(
+    prof_hsa_loader_segment_descriptor_t *, size_t *);
+
+/* First two members of hsa_ven_amd_loader_1_00_pfn_t. Only
+ * query_segment_descriptors is used; query_host_address keeps the offset. */
+typedef struct {
+  void *query_host_address;
+  hsa_loader_query_segment_descriptors_ty query_segment_descriptors;
+} prof_hsa_loader_pfn_t;
+
+/* HIP: only hipMemcpy is needed, for device-to-host copies. */
+typedef int (*hipMemcpy_ty)(void *, const void *, size_t, int);
+
+/* -------------------------------------------------------------------------- */
+/*  Resolved runtime entry points                                             */
+/* -------------------------------------------------------------------------- */
+
+static hsa_iterate_agents_ty pHsaIterateAgents = nullptr;
+static hsa_agent_get_info_ty pHsaAgentGetInfo = nullptr;
+static hsa_executable_iterate_agent_symbols_ty pHsaExecIterAgentSyms = nullptr;
+static hsa_executable_symbol_get_info_ty pHsaSymGetInfo = nullptr;
+static hsa_loader_query_segment_descriptors_ty pQuerySegDescs = nullptr;
+static hipMemcpy_ty pHipMemcpy = nullptr;
+
+/* 0 = not yet attempted, 1 = ready, -1 = unavailable.
+ * Accessed with acquire/release atomics: a thread that observes RuntimeState==1
+ * (acquire) is guaranteed to also see the fully-written p* function pointers
+ * (which are published before the release store of RuntimeState=1 below). */
+static int RuntimeState = 0;
+
+static int isVerboseMode(void) {
   static int IsVerbose = -1;
   if (IsVerbose == -1)
     IsVerbose = getenv("LLVM_PROFILE_VERBOSE") != nullptr;
@@ -68,465 +164,142 @@ static int isVerboseMode() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Dynamic loading of HIP runtime symbols                                   */
+/*  One-time runtime resolution                                               */
 /* -------------------------------------------------------------------------- */
 
-typedef int (*hipGetSymbolAddressTy)(void **, const void *);
-typedef int (*hipMemcpyTy)(void *, const void *, size_t, int);
-typedef int (*hipModuleGetGlobalTy)(void **, size_t *, void *, const char *);
-typedef int (*hipGetDeviceCountTy)(int *);
-typedef int (*hipGetDeviceTy)(int *);
-typedef int (*hipSetDeviceTy)(int);
+/* Publish the terminal RuntimeState (release) and map it to the 0/-1 return
+ * convention used by loadRuntimePointers(). */
+static int setRuntimeState(int S) {
+  __atomic_store_n(&RuntimeState, S, __ATOMIC_RELEASE);
+  return S > 0 ? 0 : -1;
+}
 
-/* Minimal hipDeviceProp_t (HIP 6.x R0600): only gcnArchName at offset 1160
- * is read. Padded to 4096 to tolerate ABI growth. */
-typedef struct {
-  char padding[1160];
-  char gcnArchName[256];
-  char tail_padding[2680];
-} HipDevicePropMinimal;
-typedef int (*hipGetDevicePropertiesTy)(HipDevicePropMinimal *, int);
+static int loadRuntimePointers(void) {
+  int State = __atomic_load_n(&RuntimeState, __ATOMIC_ACQUIRE);
+  if (State)
+    return State > 0 ? 0 : -1;
 
-static hipGetSymbolAddressTy pHipGetSymbolAddress = nullptr;
-static hipMemcpyTy pHipMemcpy = nullptr;
-static hipModuleGetGlobalTy pHipModuleGetGlobal = nullptr;
-static hipGetDeviceCountTy pHipGetDeviceCount = nullptr;
-static hipGetDeviceTy pHipGetDevice = nullptr;
-static hipSetDeviceTy pHipSetDevice = nullptr;
-static hipGetDevicePropertiesTy pHipGetDeviceProperties = nullptr;
-
-static int NumDevices = 0;
-/* 256 matches hipDeviceProp_t::gcnArchName, the source field width. */
-static char (*DeviceArchNames)[256] = nullptr;
-
-/* -------------------------------------------------------------------------- */
-/*  Device-to-host copies                                                     */
-/*  Keep HIP-only to avoid an HSA dependency.                                 */
-/* -------------------------------------------------------------------------- */
-
-static void doEnsureHipLoaded(void) {
   if (!__interception::DynamicLoaderAvailable()) {
     if (isVerboseMode())
       PROF_NOTE("%s", "Dynamic library loading not available - "
-                      "HIP profiling disabled\n");
-    return;
+                      "device profiling disabled\n");
+    return setRuntimeState(-1);
   }
 
-#ifdef _WIN32
-  static const char HipLibName[] = "amdhip64.dll";
-#else
-  static const char HipLibName[] = "libamdhip64.so";
-#endif
-
-  void *Handle = __interception::OpenLibrary(HipLibName);
-  if (!Handle)
-    return;
-
-  pHipGetSymbolAddress = (hipGetSymbolAddressTy)__interception::LookupSymbol(
-      Handle, "hipGetSymbolAddress");
-  pHipMemcpy = (hipMemcpyTy)__interception::LookupSymbol(Handle, "hipMemcpy");
-  pHipModuleGetGlobal = (hipModuleGetGlobalTy)__interception::LookupSymbol(
-      Handle, "hipModuleGetGlobal");
-  pHipGetDeviceCount = (hipGetDeviceCountTy)__interception::LookupSymbol(
-      Handle, "hipGetDeviceCount");
-  pHipGetDevice =
-      (hipGetDeviceTy)__interception::LookupSymbol(Handle, "hipGetDevice");
-  pHipSetDevice =
-      (hipSetDeviceTy)__interception::LookupSymbol(Handle, "hipSetDevice");
-  pHipGetDeviceProperties =
-      (hipGetDevicePropertiesTy)__interception::LookupSymbol(
-          Handle, "hipGetDevicePropertiesR0600");
-  if (!pHipGetDeviceProperties)
-    pHipGetDeviceProperties =
-        (hipGetDevicePropertiesTy)__interception::LookupSymbol(
-            Handle, "hipGetDeviceProperties");
-
-  if (pHipGetDeviceCount && pHipGetDeviceProperties) {
-    int Count = 0;
-    if (pHipGetDeviceCount(&Count) == 0 && Count > 0) {
-      DeviceArchNames = (char (*)[256])calloc(Count, sizeof(*DeviceArchNames));
-      if (!DeviceArchNames) {
-        PROF_ERR("%s\n", "failed to allocate device arch name table");
-        return;
-      }
-      HipDevicePropMinimal Prop;
-      for (int i = 0; i < Count; ++i) {
-        __builtin_memset(&Prop, 0, sizeof(Prop));
-        if (pHipGetDeviceProperties(&Prop, i) == 0) {
-          strncpy(DeviceArchNames[i], Prop.gcnArchName,
-                  sizeof(DeviceArchNames[i]) - 1);
-          DeviceArchNames[i][sizeof(DeviceArchNames[i]) - 1] = '\0';
-          if (isVerboseMode())
-            PROF_NOTE("Device %d arch: %s\n", i, DeviceArchNames[i]);
-        }
-      }
-      NumDevices = Count;
-    }
-  }
-}
-
-#ifdef _WIN32
-static BOOL CALLBACK ensureHipLoadedCb(PINIT_ONCE, PVOID, PVOID *) {
-  doEnsureHipLoaded();
-  return TRUE;
-}
-#endif
-
-static void ensureHipLoaded(void) {
-#ifdef _WIN32
-  InitOnceExecuteOnce(&HipLoadedOnce, ensureHipLoadedCb, NULL, NULL);
-#else
-  pthread_once(&HipLoadedOnce, doEnsureHipLoaded);
-#endif
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Public wrappers that forward to the loaded HIP symbols                   */
-/* -------------------------------------------------------------------------- */
-
-static int hipGetSymbolAddress(void **devPtr, const void *symbol) {
-  ensureHipLoaded();
-  return pHipGetSymbolAddress ? pHipGetSymbolAddress(devPtr, symbol) : -1;
-}
-
-static int hipMemcpy(void *dest, const void *src, size_t len,
-                     int kind /*2=DToH*/) {
-  ensureHipLoaded();
-  return pHipMemcpy ? pHipMemcpy(dest, src, len, kind) : -1;
-}
-
-/* Device section symbols must be registered with CLR first; otherwise
- * hipMemcpy may take a CPU path and crash. */
-static int memcpyDeviceToHost(void *Dst, const void *Src, size_t Size) {
-  return hipMemcpy(Dst, Src, Size, 2 /* DToH */);
-}
-
-static int hipModuleGetGlobal(void **DevPtr, size_t *Bytes, void *Module,
-                              const char *Name) {
-  ensureHipLoaded();
-  return pHipModuleGetGlobal ? pHipModuleGetGlobal(DevPtr, Bytes, Module, Name)
-                             : -1;
-}
-
-static int hipGetDevice(int *DeviceId) {
-  ensureHipLoaded();
-  return pHipGetDevice ? pHipGetDevice(DeviceId) : -1;
-}
-
-static int hipSetDevice(int DeviceId) {
-  ensureHipLoaded();
-  return pHipSetDevice ? pHipSetDevice(DeviceId) : -1;
-}
-
-static const char *getDeviceArchName(int DeviceId) {
-  if (DeviceId < 0 || DeviceId >= NumDevices || !DeviceArchNames[DeviceId][0])
-    return "amdgpu";
-  return DeviceArchNames[DeviceId];
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Dynamic module tracking                                                   */
-/* -------------------------------------------------------------------------- */
-
-/* Per-TU profile entry inside a dynamic module.
- * A single dynamic module may contain multiple TUs (e.g. -fgpu-rdc). */
-typedef struct {
-  void *DeviceVar; /* device address of __llvm_profile_sections_<CUID> */
-  int Processed;   /* 0 = not yet collected, 1 = data already copied   */
-} OffloadDynamicTUInfo;
-
-/* One entry per hipModuleLoad call. */
-typedef struct {
-  void *ModulePtr;           /* hipModule_t handle                        */
-  OffloadDynamicTUInfo *TUs; /* array of per-TU entries                 */
-  int NumTUs;
-  int CapTUs;
-} OffloadDynamicModuleInfo;
-
-static OffloadDynamicModuleInfo *DynamicModules = nullptr;
-static int NumDynamicModules = 0;
-static int CapDynamicModules = 0;
-
-/* -------------------------------------------------------------------------- */
-/*  ELF symbol enumeration (manual parse: compiler-rt cannot link LLVM Support)
- */
-/* -------------------------------------------------------------------------- */
-
-#if __has_include(<elf.h>)
-#include <elf.h>
-
-/* Callback invoked for every matching symbol name found in the ELF image.
- * Return 0 to continue iteration, non-zero to stop. */
-typedef int (*SymbolCallback)(const char *Name, void *UserData);
-
-/* If Image is a clang offload bundle, return a pointer to the first embedded
- * ELF. Returns Image if not a bundle, nullptr if a bundle holds no ELF. */
-static const void *unwrapOffloadBundle(const void *Image) {
-  static const char BundleMagic[] = "__CLANG_OFFLOAD_BUNDLE__";
-  if (memcmp(Image, BundleMagic, sizeof(BundleMagic) - 1) != 0)
-    return Image; /* Not a bundle, return as-is. */
-
-  const char *Buf = (const char *)Image;
-  uint64_t NumEntries;
-  __builtin_memcpy(&NumEntries, Buf + sizeof(BundleMagic) - 1,
-                   sizeof(uint64_t));
-
-  /* Walk the entry table (starts at offset 32). */
-  const char *Cursor = Buf + 32;
-  for (uint64_t I = 0; I < NumEntries; ++I) {
-    uint64_t EntryOffset, EntrySize, IDSize;
-    __builtin_memcpy(&EntryOffset, Cursor, sizeof(EntryOffset));
-    Cursor += sizeof(EntryOffset);
-    __builtin_memcpy(&EntrySize, Cursor, sizeof(EntrySize));
-    Cursor += sizeof(EntrySize);
-    __builtin_memcpy(&IDSize, Cursor, sizeof(IDSize));
-    Cursor += sizeof(IDSize);
-    Cursor += IDSize; /* skip entry ID */
-
-    if (EntrySize >= sizeof(Elf64_Ehdr)) {
-      const Elf64_Ehdr *E = (const Elf64_Ehdr *)(Buf + EntryOffset);
-      if (E->e_ident[EI_MAG0] == ELFMAG0 && E->e_ident[EI_MAG1] == ELFMAG1 &&
-          E->e_ident[EI_MAG2] == ELFMAG2 && E->e_ident[EI_MAG3] == ELFMAG3) {
-        return (const void *)(Buf + EntryOffset);
-      }
-    }
-  }
-
-  PROF_WARN("%s", "offload bundle contains no valid ELF entries\n");
-  return nullptr;
-}
-
-/* Invoke CB for every global symbol in Image (an AMDGPU ELF or offload bundle)
- * whose name starts with PREFIX. Image may be null. */
-static void enumerateElfSymbols(const void *Image, const char *Prefix,
-                                SymbolCallback CB, void *UserData) {
-  if (!Image)
-    return;
-
-  Image = unwrapOffloadBundle(Image);
-  if (!Image)
-    return;
-
-  const Elf64_Ehdr *Ehdr = (const Elf64_Ehdr *)Image;
-  if (Ehdr->e_ident[EI_MAG0] != ELFMAG0 || Ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
-      Ehdr->e_ident[EI_MAG2] != ELFMAG2 || Ehdr->e_ident[EI_MAG3] != ELFMAG3) {
+  void *Hsa = __interception::OpenLibrary("libhsa-runtime64.so");
+  if (!Hsa)
+    Hsa = __interception::OpenLibrary("libhsa-runtime64.so.1");
+  if (!Hsa) {
     if (isVerboseMode())
-      PROF_NOTE("%s", "Image is not a valid ELF, skipping enumeration\n");
-    return;
+      PROF_NOTE("%s", "libhsa-runtime64.so not loadable - "
+                      "device profiling disabled\n");
+    return setRuntimeState(-1);
   }
 
-  size_t PrefixLen = strlen(Prefix);
-  const char *Base = (const char *)Image;
-  const Elf64_Shdr *Shdrs = (const Elf64_Shdr *)(Base + Ehdr->e_shoff);
+  hsa_init_ty pHsaInit =
+      (hsa_init_ty)__interception::LookupSymbol(Hsa, "hsa_init");
+  hsa_system_get_major_extension_table_ty pGetExtTable =
+      (hsa_system_get_major_extension_table_ty)__interception::LookupSymbol(
+          Hsa, "hsa_system_get_major_extension_table");
+  pHsaIterateAgents = (hsa_iterate_agents_ty)__interception::LookupSymbol(
+      Hsa, "hsa_iterate_agents");
+  pHsaAgentGetInfo = (hsa_agent_get_info_ty)__interception::LookupSymbol(
+      Hsa, "hsa_agent_get_info");
+  pHsaExecIterAgentSyms =
+      (hsa_executable_iterate_agent_symbols_ty)__interception::LookupSymbol(
+          Hsa, "hsa_executable_iterate_agent_symbols");
+  pHsaSymGetInfo =
+      (hsa_executable_symbol_get_info_ty)__interception::LookupSymbol(
+          Hsa, "hsa_executable_symbol_get_info");
 
-  for (int i = 0; i < Ehdr->e_shnum; ++i) {
-    if (Shdrs[i].sh_type != SHT_SYMTAB)
-      continue;
+  if (!pHsaInit || !pGetExtTable || !pHsaIterateAgents || !pHsaAgentGetInfo ||
+      !pHsaExecIterAgentSyms || !pHsaSymGetInfo) {
+    PROF_WARN("%s", "required HSA symbols missing - device profiling disabled\n");
+    return setRuntimeState(-1);
+  }
 
-    const Elf64_Sym *Syms = (const Elf64_Sym *)(Base + Shdrs[i].sh_offset);
-    int NumSyms = Shdrs[i].sh_size / sizeof(Elf64_Sym);
-    /* String table is the section referenced by sh_link. */
-    const char *StrTab = Base + Shdrs[Shdrs[i].sh_link].sh_offset;
+  /* Bring HSA up now (idempotent, refcounted). Doing this in the library
+   * constructor guarantees HSA registers its own atexit(hsa_shut_down)
+   * before we register atexit(drainDevices); atexit is LIFO, so our drain
+   * runs while HSA is still alive. */
+  prof_hsa_status_t St = pHsaInit();
+  if (St != PROF_HSA_STATUS_SUCCESS && St != PROF_HSA_STATUS_INFO_BREAK) {
+    if (isVerboseMode())
+      PROF_NOTE("hsa_init failed (0x%x) - device profiling disabled\n", St);
+    return setRuntimeState(-1);
+  }
 
-    for (int j = 0; j < NumSyms; ++j) {
-      if (Syms[j].st_name == 0)
+  prof_hsa_loader_pfn_t LoaderApi;
+  __builtin_memset(&LoaderApi, 0, sizeof(LoaderApi));
+  St = pGetExtTable(PROF_HSA_EXTENSION_AMD_LOADER, 1, sizeof(LoaderApi),
+                    &LoaderApi);
+  if (St != PROF_HSA_STATUS_SUCCESS || !LoaderApi.query_segment_descriptors) {
+    PROF_WARN("AMD loader extension unavailable (0x%x) - "
+              "device profiling disabled\n",
+              St);
+    return setRuntimeState(-1);
+  }
+  pQuerySegDescs = LoaderApi.query_segment_descriptors;
+
+  /* HIP lookup is best-effort across deployment shapes:
+   *   1. The vast majority of HIP-using programs already have libamdhip64
+   *      loaded (the application or one of its libraries linked it directly).
+   *      Resolving via the process namespace catches that case without us
+   *      having to know the SONAME, and works even when there is no
+   *      development "libamdhip64.so" symlink (runtime-only ROCm installs).
+   *   2. If hipMemcpy is not in the namespace, fall back to dlopen, trying
+   *      versioned SONAMEs first (which is what the dynamic linker actually
+   *      loads at program start) before the unversioned dev symlink.
+   *   3. On Windows just dlopen the DLL by name. */
+  pHipMemcpy =
+      (hipMemcpy_ty)__interception::LookupSymbolDefault("hipMemcpy");
+  if (!pHipMemcpy) {
+#ifdef _WIN32
+    static const char *const HipLibNames[] = {"amdhip64.dll", nullptr};
+#else
+    /* Order: most recent ROCm major first, then older majors, then the
+     * unversioned development symlink as a last resort. Update this list
+     * when ROCm bumps libamdhip64 SONAME. */
+    static const char *const HipLibNames[] = {
+        "libamdhip64.so.7", "libamdhip64.so.6", "libamdhip64.so.5",
+        "libamdhip64.so.4", "libamdhip64.so",   nullptr};
+#endif
+    for (int i = 0; HipLibNames[i] != nullptr; ++i) {
+      void *Hip = __interception::OpenLibrary(HipLibNames[i]);
+      if (!Hip)
         continue;
-      const char *Name = StrTab + Syms[j].st_name;
-      if (strncmp(Name, Prefix, PrefixLen) == 0) {
-        if (CB(Name, UserData))
-          return;
-      }
-    }
-  }
-}
-
-/* State passed through the enumeration callback. */
-typedef struct {
-  void *Module; /* hipModule_t */
-  OffloadDynamicModuleInfo *ModInfo;
-} EnumState;
-
-/* Register one __llvm_profile_sections_<CUID> symbol on the module entry.
- * hipModuleGetGlobal also registers the device address with CLR so hipMemcpy
- * can copy from it later. */
-static int registerPrfSymbol(const char *Name, void *UserData) {
-  EnumState *S = (EnumState *)UserData;
-  OffloadDynamicModuleInfo *MI = S->ModInfo;
-
-  /* The symbol is the per-TU sections struct itself, not a pointer
-   * indirection, so this address is the hipMemcpy source. */
-  void *DeviceVar = nullptr;
-  size_t Bytes = 0;
-  if (hipModuleGetGlobal(&DeviceVar, &Bytes, S->Module, Name) != 0) {
-    PROF_WARN("failed to get symbol %s for module %p\n", Name, S->Module);
-    return 0; /* continue */
-  }
-
-  if (MI->NumTUs >= MI->CapTUs) {
-    int NewCap = MI->CapTUs ? MI->CapTUs * 2 : 4;
-    OffloadDynamicTUInfo *New = (OffloadDynamicTUInfo *)realloc(
-        MI->TUs, NewCap * sizeof(OffloadDynamicTUInfo));
-    if (!New) {
-      PROF_ERR("%s\n", "failed to grow TU array");
-      return 0;
-    }
-    MI->TUs = New;
-    MI->CapTUs = NewCap;
-  }
-  OffloadDynamicTUInfo *TU = &MI->TUs[MI->NumTUs++];
-  TU->DeviceVar = DeviceVar;
-  TU->Processed = 0;
-
-  (void)Name;
-  return 0; /* continue enumeration */
-}
-
-#endif /* __has_include(<elf.h>) */
-
-/* -------------------------------------------------------------------------- */
-/*  Registration / un-registration helpers                                   */
-/* -------------------------------------------------------------------------- */
-
-extern "C" void
-__llvm_profile_offload_register_dynamic_module(int ModuleLoadRc, void **Ptr,
-                                               const void *Image) {
-  if (ModuleLoadRc)
-    return;
-
-  lockDynamicModules();
-
-  if (isVerboseMode())
-    PROF_NOTE("Registering loaded module %d: rc=%d, module=%p, image=%p\n",
-              NumDynamicModules, ModuleLoadRc, *Ptr, Image);
-
-  if (NumDynamicModules >= CapDynamicModules) {
-    int NewCap = CapDynamicModules ? CapDynamicModules * 2 : 64;
-    OffloadDynamicModuleInfo *New = (OffloadDynamicModuleInfo *)realloc(
-        DynamicModules, NewCap * sizeof(OffloadDynamicModuleInfo));
-    if (!New) {
-      unlockDynamicModules();
-      return;
-    }
-    DynamicModules = New;
-    CapDynamicModules = NewCap;
-  }
-
-  OffloadDynamicModuleInfo *MI = &DynamicModules[NumDynamicModules++];
-  MI->ModulePtr = *Ptr;
-  MI->TUs = nullptr;
-  MI->NumTUs = 0;
-  MI->CapTUs = 0;
-
-  /* Dynamic-module profiling needs ELF parsing for symbol enumeration. */
-#if __has_include(<elf.h>)
-  EnumState State = {*Ptr, MI};
-  enumerateElfSymbols(Image, "__llvm_profile_sections_", registerPrfSymbol,
-                      &State);
-#else
-  (void)Image;
-  if (isVerboseMode())
-    PROF_NOTE("%s",
-              "Dynamic module profiling not supported on this platform\n");
-#endif
-
-  if (MI->NumTUs == 0) {
-    PROF_WARN("no __llvm_profile_sections_* symbols found in module %p\n",
-              *Ptr);
-  } else if (isVerboseMode()) {
-    PROF_NOTE("Module %p: registered %d TU(s)\n", *Ptr, MI->NumTUs);
-  }
-
-  unlockDynamicModules();
-}
-
-extern "C" void __llvm_profile_offload_unregister_dynamic_module(void *Ptr) {
-  lockDynamicModules();
-  for (int i = 0; i < NumDynamicModules; ++i) {
-    OffloadDynamicModuleInfo *MI = &DynamicModules[i];
-
-    /* HIP recycles hipModule_t addresses; drained slots are cleared so a
-     * recycled handle finds the new slot, not the dead one. */
-    if (MI->ModulePtr != Ptr)
-      continue;
-
-    if (isVerboseMode())
-      PROF_NOTE("Unregistering module %p (%d TUs)\n", MI->ModulePtr,
-                MI->NumTUs);
-
-    static int NextTUIndex = 0;
-    for (int t = 0; t < MI->NumTUs; ++t) {
-      OffloadDynamicTUInfo *TU = &MI->TUs[t];
-      if (TU->Processed) {
+      pHipMemcpy =
+          (hipMemcpy_ty)__interception::LookupSymbol(Hip, "hipMemcpy");
+      if (pHipMemcpy) {
         if (isVerboseMode())
-          PROF_NOTE("Module %p TU %d already processed, skipping\n", Ptr, t);
-        continue;
-      }
-      int TUIndex = __atomic_fetch_add(&NextTUIndex, 1, __ATOMIC_RELAXED);
-      if (TU->DeviceVar) {
-        int CurDev = 0;
-        hipGetDevice(&CurDev);
-        const char *ArchName = getDeviceArchName(CurDev);
-        /* Encode TUIndex in Target so each drain writes a distinct profraw;
-         * otherwise back-to-back drains overwrite the same file. */
-        char TargetWithTU[64];
-        snprintf(TargetWithTU, sizeof(TargetWithTU), "%s.%d", ArchName,
-                 TUIndex);
-        if (processDeviceOffloadPrf(TU->DeviceVar, TUIndex, TargetWithTU) == 0)
-          TU->Processed = 1;
-        else
-          PROF_WARN("failed to process profile data for module %p TU %d\n", Ptr,
-                    t);
+          PROF_NOTE("HIP resolved via dlopen(%s)\n", HipLibNames[i]);
+        break;
       }
     }
-    MI->ModulePtr = nullptr;
-    unlockDynamicModules();
-    return;
+  } else if (isVerboseMode()) {
+    PROF_NOTE("%s",
+              "HIP resolved via existing process namespace (RTLD_DEFAULT)\n");
+  }
+  if (!pHipMemcpy) {
+    PROF_WARN("%s", "hipMemcpy unavailable - device profiling disabled\n");
+    return setRuntimeState(-1);
   }
 
   if (isVerboseMode())
-    PROF_WARN("unregister called for unknown module %p\n", Ptr);
-  unlockDynamicModules();
+    PROF_NOTE("%s", "HSA + HIP runtime resolved for device profiling\n");
+  return setRuntimeState(1);
 }
 
-/* Grow a void* array, doubling capacity (or starting at InitCap). */
-static int growPtrArray(void ***Arr, int *Num, int *Cap, int InitCap) {
-  if (*Num < *Cap)
-    return 0;
-  int NewCap = *Cap ? *Cap * 2 : InitCap;
-  void **New = (void **)realloc(*Arr, NewCap * sizeof(void *));
-  if (!New)
-    return -1;
-  *Arr = New;
-  *Cap = NewCap;
-  return 0;
+static int memcpyDeviceToHost(void *Dst, const void *Src, size_t Size) {
+  return pHipMemcpy ? pHipMemcpy(Dst, Src, Size, 2 /* hipMemcpyDeviceToHost */)
+                    : -1;
 }
 
-static void **OffloadShadowVariables = nullptr;
-static int NumShadowVariables = 0;
-static int CapShadowVariables = 0;
-
-extern "C" void __llvm_profile_offload_register_shadow_variable(void *ptr) {
-  if (growPtrArray(&OffloadShadowVariables, &NumShadowVariables,
-                   &CapShadowVariables, 64))
-    return;
-  OffloadShadowVariables[NumShadowVariables++] = ptr;
-}
-
-static void **OffloadSectionShadowVariables = nullptr;
-static int NumSectionShadowVariables = 0;
-static int CapSectionShadowVariables = 0;
-
-extern "C" void
-__llvm_profile_offload_register_section_shadow_variable(void *ptr) {
-  if (growPtrArray(&OffloadSectionShadowVariables, &NumSectionShadowVariables,
-                   &CapSectionShadowVariables, 64))
-    return;
-  OffloadSectionShadowVariables[NumSectionShadowVariables++] = ptr;
-}
+/* -------------------------------------------------------------------------- */
+/*  free()-based scope guard                                                  */
+/* -------------------------------------------------------------------------- */
 
 namespace {
-
-// free()-based scope guard. Use .release() to transfer ownership.
 struct UniqueFree {
   void *Ptr;
   explicit UniqueFree(void *P = nullptr) : Ptr(P) {}
@@ -538,35 +311,78 @@ struct UniqueFree {
     free(Ptr);
     Ptr = P;
   }
-  void *release() {
-    void *P = Ptr;
-    Ptr = nullptr;
-    return P;
-  }
 };
-
 } // namespace
 
-static int processDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
-                                   const char *Target) {
-  __llvm_profile_gpu_sections HostSections;
+/* -------------------------------------------------------------------------- */
+/*  Copy one device bounds table to the host and emit a .profraw              */
+/* -------------------------------------------------------------------------- */
 
-  if (hipMemcpy(&HostSections, DeviceOffloadPrf, sizeof(HostSections),
-                2 /*DToH*/) != 0) {
-    PROF_ERR("%s\n", "failed to copy offload prf structure from device");
+/* Plausibility cap for any single device-side profile section. Device
+ * profile data for a single linked code object is typically <10 MiB; a few
+ * hundred MiB would already be unprecedented. Setting this to 256 MiB
+ * catches a corrupted/uninitialized bounds table early (where End-Begin
+ * can compute to multi-GiB) before we try to malloc/memcpy bogus memory. */
+#define PROF_MAX_SECTION_BYTES ((size_t)256 * 1024 * 1024)
+
+/* uintptr_t-based size of a [Begin, End] device range, with validation.
+ * Returns -1 if End < Begin (would wrap to a huge size_t) or if the span
+ * exceeds the per-section cap. On success, *OutSize is the byte count. */
+static int computeRangeSize(const char *Label, const void *Begin,
+                            const void *End, size_t *OutSize) {
+  uintptr_t B = (uintptr_t)Begin;
+  uintptr_t E = (uintptr_t)End;
+  if (E < B) {
+    PROF_WARN("device %s range invalid: end %p < begin %p\n", Label, End,
+              Begin);
+    return -1;
+  }
+  size_t Sz = (size_t)(E - B);
+  if (Sz > PROF_MAX_SECTION_BYTES) {
+    PROF_WARN("device %s range %zu bytes exceeds %zu-byte cap; refusing "
+              "to copy (likely corrupted bounds table)\n",
+              Label, Sz, (size_t)PROF_MAX_SECTION_BYTES);
+    return -1;
+  }
+  *OutSize = Sz;
+  return 0;
+}
+
+/* Returns 1 if a device .profraw was written, 0 if there was nothing to write
+ * (empty counters/data sections), and -1 on error. The caller distinguishes
+ * these so an empty section is never miscounted as a successful drain. */
+static int processDeviceSections(void *DeviceSectionsAddr, const char *Target) {
+  __llvm_profile_gpu_sections HostSections;
+  if (memcpyDeviceToHost(&HostSections, DeviceSectionsAddr,
+                         sizeof(HostSections)) != 0) {
+    PROF_ERR("%s\n", "failed to copy device bounds table from device");
     return -1;
   }
 
   const void *DevCntsBegin = HostSections.CountersStart;
-  const void *DevDataBegin = HostSections.DataStart;
-  const void *DevNamesBegin = HostSections.NamesStart;
   const void *DevCntsEnd = HostSections.CountersStop;
+  const void *DevDataBegin = HostSections.DataStart;
   const void *DevDataEnd = HostSections.DataStop;
+  const void *DevNamesBegin = HostSections.NamesStart;
   const void *DevNamesEnd = HostSections.NamesStop;
 
-  size_t CountersSize = (const char *)DevCntsEnd - (const char *)DevCntsBegin;
-  size_t DataSize = (const char *)DevDataEnd - (const char *)DevDataBegin;
-  size_t NamesSize = (const char *)DevNamesEnd - (const char *)DevNamesBegin;
+  size_t CountersSize, DataSize, NamesSize;
+  if (computeRangeSize("counters", DevCntsBegin, DevCntsEnd, &CountersSize) !=
+          0 ||
+      computeRangeSize("data", DevDataBegin, DevDataEnd, &DataSize) != 0 ||
+      computeRangeSize("names", DevNamesBegin, DevNamesEnd, &NamesSize) != 0)
+    return -1;
+
+  /* DataSize must be an integral number of __llvm_profile_data records;
+   * otherwise either the table layout has changed under us or the bounds
+   * point at the wrong section. Refuse to relocate it - the per-record
+   * loop below would walk off the end. */
+  if (DataSize % sizeof(__llvm_profile_data) != 0) {
+    PROF_WARN("device data section size %zu is not a multiple of "
+              "sizeof(__llvm_profile_data)=%zu\n",
+              DataSize, sizeof(__llvm_profile_data));
+    return -1;
+  }
 
   if (isVerboseMode())
     PROF_NOTE("Section pointers: Cnts=[%p,%p]=%zu Data=[%p,%p]=%zu "
@@ -577,164 +393,110 @@ static int processDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
   if (CountersSize == 0 || DataSize == 0)
     return 0;
 
-  int ret = -1;
-  int NamesReused = 0, CntsReused = 0, DataReused = 0;
-
-  char *HostDataBegin = nullptr;
-  char *HostCountersBegin = nullptr;
-  char *HostNamesBegin = nullptr;
-
-  /* Sections using linker-defined __start_/__stop_ bounds are shared across
-     TU structs in RDC mode. Deduplicate by caching the last copied range. */
-  static const void *CachedDevNamesBegin = nullptr;
-  static char *CachedHostNames = nullptr;
-  static size_t CachedNamesSize = 0;
-
-  static const void *CachedDevCntsBegin = nullptr;
-  static char *CachedHostCnts = nullptr;
-  static size_t CachedCntsSize = 0;
-
-  static const void *CachedDevDataBegin = nullptr;
-  static char *CachedHostData = nullptr;
-  static size_t CachedDataSize = 0;
-
-  // Owns freshly malloc'd buffers; release() transfers ownership to the cache.
   UniqueFree CntsOwner, DataOwner, NamesOwner;
+  char *HostCounters = (char *)malloc(CountersSize);
+  CntsOwner.reset(HostCounters);
+  char *HostData = (char *)malloc(DataSize);
+  DataOwner.reset(HostData);
+  char *HostNames = NamesSize ? (char *)malloc(NamesSize) : nullptr;
+  if (NamesSize)
+    NamesOwner.reset(HostNames);
 
-  if (CountersSize > 0 && DevCntsBegin == CachedDevCntsBegin &&
-      CountersSize == CachedCntsSize) {
-    HostCountersBegin = CachedHostCnts;
-    CntsReused = 1;
-    if (isVerboseMode())
-      PROF_NOTE("Reusing cached counters section (%zu bytes)\n", CountersSize);
-  } else if (CountersSize > 0) {
-    HostCountersBegin = (char *)malloc(CountersSize);
-    CntsOwner.reset(HostCountersBegin);
-  }
-
-  if (DataSize > 0 && DevDataBegin == CachedDevDataBegin &&
-      DataSize == CachedDataSize) {
-    HostDataBegin = CachedHostData;
-    DataReused = 1;
-    if (isVerboseMode())
-      PROF_NOTE("Reusing cached data section (%zu bytes)\n", DataSize);
-  } else if (DataSize > 0) {
-    HostDataBegin = (char *)malloc(DataSize);
-    DataOwner.reset(HostDataBegin);
-  }
-
-  if (NamesSize > 0 && DevNamesBegin == CachedDevNamesBegin &&
-      NamesSize == CachedNamesSize) {
-    HostNamesBegin = CachedHostNames;
-    NamesReused = 1;
-    if (isVerboseMode())
-      PROF_NOTE("Reusing cached names section (%zu bytes)\n", NamesSize);
-  } else if (NamesSize > 0) {
-    HostNamesBegin = (char *)malloc(NamesSize);
-    NamesOwner.reset(HostNamesBegin);
-  }
-
-  if ((DataSize > 0 && !HostDataBegin) ||
-      (CountersSize > 0 && !HostCountersBegin) ||
-      (NamesSize > 0 && !HostNamesBegin)) {
+  if (!HostCounters || !HostData || (NamesSize && !HostNames)) {
     PROF_ERR("%s\n", "failed to allocate host memory for device sections");
     return -1;
   }
 
-  if ((DataSize > 0 && !DataReused &&
-       memcpyDeviceToHost(HostDataBegin, DevDataBegin, DataSize) != 0) ||
-      (CountersSize > 0 && !CntsReused &&
-       memcpyDeviceToHost(HostCountersBegin, DevCntsBegin, CountersSize) !=
-           0) ||
-      (NamesSize > 0 && !NamesReused &&
-       memcpyDeviceToHost(HostNamesBegin, DevNamesBegin, NamesSize) != 0)) {
+  if (memcpyDeviceToHost(HostData, DevDataBegin, DataSize) != 0 ||
+      memcpyDeviceToHost(HostCounters, DevCntsBegin, CountersSize) != 0 ||
+      (NamesSize &&
+       memcpyDeviceToHost(HostNames, DevNamesBegin, NamesSize) != 0)) {
     PROF_ERR("%s\n", "failed to copy profile sections from device");
     return -1;
-  }
-
-  /* Cache buffers so RDC-mode multi-shadow drains can reuse them.
-   * release() prevents the scope guards from freeing what the cache owns. */
-  if (!CntsReused && CountersSize > 0) {
-    CachedDevCntsBegin = DevCntsBegin;
-    CachedHostCnts = HostCountersBegin;
-    CachedCntsSize = CountersSize;
-    CntsOwner.release();
-  }
-  if (!DataReused && DataSize > 0) {
-    CachedDevDataBegin = DevDataBegin;
-    CachedHostData = HostDataBegin;
-    CachedDataSize = DataSize;
-    DataOwner.release();
-  }
-  if (!NamesReused && NamesSize > 0) {
-    CachedDevNamesBegin = DevNamesBegin;
-    CachedHostNames = HostNamesBegin;
-    CachedNamesSize = NamesSize;
-    NamesOwner.release();
   }
 
   if (isVerboseMode())
     PROF_NOTE("Copied device sections: Counters=%zu, Data=%zu, Names=%zu\n",
               CountersSize, DataSize, NamesSize);
 
-  // Arrange buffer as [Data][Padding][Counters][Names] to match the layout
-  // expected by lprofWriteDataImpl (CountersDelta = CountersBegin - DataBegin).
+  // Lay the buffer out as [Data][PaddingBeforeCounters][Counters][Names] to
+  // match what lprofWriteDataImpl expects (CountersDelta = Counters - Data).
   const uint64_t NumData = DataSize / sizeof(__llvm_profile_data);
-  const uint64_t NumBitmapBytes = 0;
-  const uint64_t VTableSectionSize = 0;
-  const uint64_t VNamesSize = 0;
-  uint64_t PaddingBytesBeforeCounters, PaddingBytesAfterCounters,
-      PaddingBytesAfterBitmapBytes, PaddingBytesAfterNames,
-      PaddingBytesAfterVTable, PaddingBytesAfterVNames;
-
+  uint64_t PadBeforeCounters, PadAfterCounters, PadAfterBitmap, PadAfterNames,
+      PadAfterVTable, PadAfterVNames;
   if (__llvm_profile_get_padding_sizes_for_counters(
-          DataSize, CountersSize, NumBitmapBytes, NamesSize, VTableSectionSize,
-          VNamesSize, &PaddingBytesBeforeCounters, &PaddingBytesAfterCounters,
-          &PaddingBytesAfterBitmapBytes, &PaddingBytesAfterNames,
-          &PaddingBytesAfterVTable, &PaddingBytesAfterVNames) != 0) {
+          DataSize, CountersSize, /*NumBitmapBytes=*/0, NamesSize,
+          /*VTableSize=*/0, /*VNameSize=*/0, &PadBeforeCounters,
+          &PadAfterCounters, &PadAfterBitmap, &PadAfterNames, &PadAfterVTable,
+          &PadAfterVNames) != 0) {
     PROF_ERR("%s\n", "failed to get padding sizes");
     return -1;
   }
 
-  size_t ContiguousBufferSize =
-      DataSize + PaddingBytesBeforeCounters + CountersSize + NamesSize;
-  UniqueFree ContiguousBuf(malloc(ContiguousBufferSize));
-  if (!ContiguousBuf.get()) {
+  size_t BufSize = DataSize + PadBeforeCounters + CountersSize + NamesSize;
+  UniqueFree BufOwner(malloc(BufSize));
+  char *Buf = BufOwner.get();
+  if (!Buf) {
     PROF_ERR("%s\n", "failed to allocate contiguous buffer");
     return -1;
   }
-  char *ContiguousBuffer = ContiguousBuf.get();
-  __builtin_memset(ContiguousBuffer, 0, ContiguousBufferSize);
+  __builtin_memset(Buf, 0, BufSize);
 
-  char *BufDataBegin = ContiguousBuffer;
-  char *BufCountersBegin =
-      ContiguousBuffer + DataSize + PaddingBytesBeforeCounters;
-  char *BufNamesBegin = BufCountersBegin + CountersSize;
+  char *BufData = Buf;
+  char *BufCounters = Buf + DataSize + PadBeforeCounters;
+  char *BufNames = BufCounters + CountersSize;
 
-  __builtin_memcpy(BufDataBegin, HostDataBegin, DataSize);
-  __builtin_memcpy(BufCountersBegin, HostCountersBegin, CountersSize);
-  __builtin_memcpy(BufNamesBegin, HostNamesBegin, NamesSize);
+  __builtin_memcpy(BufData, HostData, DataSize);
+  __builtin_memcpy(BufCounters, HostCounters, CountersSize);
+  if (NamesSize)
+    __builtin_memcpy(BufNames, HostNames, NamesSize);
 
-  // CounterPtr is a device-relative offset; relocate it for the file layout
-  // where the Data section precedes Counters.
-  __llvm_profile_data *RelocatedData = (__llvm_profile_data *)BufDataBegin;
+  // Relocate each record's CounterPtr from the device-relative offset to the
+  // file-layout-relative offset (Data section precedes Counters in the file).
+  // Validate every resolved device counter address lies within the copied
+  // counters region; out-of-range entries indicate a stale/mismatched bounds
+  // table and would otherwise produce a .profraw with counters pointing at
+  // unrelated memory.
+  __llvm_profile_data *RelocatedData = (__llvm_profile_data *)BufData;
+  int BadRecords = 0;
   for (uint64_t i = 0; i < NumData; ++i) {
     if (RelocatedData[i].CounterPtr) {
       ptrdiff_t DeviceCounterPtrOffset = (ptrdiff_t)RelocatedData[i].CounterPtr;
-      const char *DeviceDataStructAddr =
-          (const char *)DevDataBegin + (i * sizeof(__llvm_profile_data));
-      const char *DeviceCountersAddr =
-          DeviceDataStructAddr + DeviceCounterPtrOffset;
-      ptrdiff_t OffsetIntoCountersSection =
-          DeviceCountersAddr - (const char *)DevCntsBegin;
-
-      ptrdiff_t NewRelativeOffset = DataSize + PaddingBytesBeforeCounters +
-                                    OffsetIntoCountersSection -
-                                    (i * sizeof(__llvm_profile_data));
-      __builtin_memcpy((char *)RelocatedData + i * sizeof(__llvm_profile_data) +
-                           offsetof(__llvm_profile_data, CounterPtr),
-                       &NewRelativeOffset, sizeof(NewRelativeOffset));
+      uintptr_t DeviceDataStructAddr =
+          (uintptr_t)DevDataBegin + (uintptr_t)(i * sizeof(__llvm_profile_data));
+      uintptr_t DeviceCountersAddr =
+          DeviceDataStructAddr + (uintptr_t)DeviceCounterPtrOffset;
+      uintptr_t CntsB = (uintptr_t)DevCntsBegin;
+      uintptr_t CntsE = (uintptr_t)DevCntsEnd;
+      /* Allow CountersAddr == CntsE for a zero-counter record at the very
+       * end of the section. */
+      if (DeviceCountersAddr < CntsB || DeviceCountersAddr > CntsE) {
+        BadRecords++;
+        if (isVerboseMode())
+          PROF_NOTE("record %llu: device counter addr %p outside "
+                    "[%p,%p]; zeroing CounterPtr\n",
+                    (unsigned long long)i, (void *)DeviceCountersAddr,
+                    DevCntsBegin, DevCntsEnd);
+        // CounterPtr is IntPtrT (pointer-sized): zero exactly that field so we
+        // never clobber adjacent record fields on a 32-bit host.
+        __builtin_memset((char *)RelocatedData +
+                             i * sizeof(__llvm_profile_data) +
+                             offsetof(__llvm_profile_data, CounterPtr),
+                         0, sizeof(RelocatedData[i].CounterPtr));
+      } else {
+        ptrdiff_t OffsetIntoCountersSection =
+            (ptrdiff_t)(DeviceCountersAddr - CntsB);
+        ptrdiff_t NewRelativeOffset =
+            (ptrdiff_t)DataSize + (ptrdiff_t)PadBeforeCounters +
+            OffsetIntoCountersSection -
+            (ptrdiff_t)(i * sizeof(__llvm_profile_data));
+        __builtin_memcpy((char *)RelocatedData +
+                             i * sizeof(__llvm_profile_data) +
+                             offsetof(__llvm_profile_data, CounterPtr),
+                         &NewRelativeOffset, sizeof(NewRelativeOffset));
+      }
     }
+    // Zero the fields the writer does not expect to be populated.
     __builtin_memset((char *)RelocatedData + i * sizeof(__llvm_profile_data) +
                          offsetof(__llvm_profile_data, BitmapPtr),
                      0,
@@ -742,156 +504,379 @@ static int processDeviceOffloadPrf(void *DeviceOffloadPrf, int TUIndex,
                          sizeof(RelocatedData[i].FunctionPointer) +
                          sizeof(RelocatedData[i].Values));
   }
+  if (BadRecords > 0)
+    PROF_WARN("%d/%llu device profile record(s) had out-of-range "
+              "counter pointers (zeroed)\n",
+              BadRecords, (unsigned long long)NumData);
 
-  /* Target already encodes TUIndex when needed. */
-  (void)TUIndex;
+  int Ret = __llvm_write_custom_profile(
+      Target, (__llvm_profile_data *)BufData,
+      (__llvm_profile_data *)(BufData + DataSize), BufCounters,
+      BufCounters + CountersSize, BufNames, BufNames + NamesSize, nullptr);
 
-  ret = __llvm_write_custom_profile(
-      Target, (__llvm_profile_data *)BufDataBegin,
-      (__llvm_profile_data *)(BufDataBegin + DataSize), BufCountersBegin,
-      BufCountersBegin + CountersSize, BufNamesBegin, BufNamesBegin + NamesSize,
-      nullptr);
-
-  if (ret != 0) {
-    PROF_ERR("%s\n", "failed to write device profile using shared API");
-  } else if (isVerboseMode()) {
-    PROF_NOTE("%s\n", "Successfully wrote device profile using shared API");
-  }
-
-  return ret;
-}
-
-static int processShadowVariable(void *ShadowVar, int TUIndex,
-                                 const char *Target) {
-  void *DeviceSections = nullptr;
-  if (hipGetSymbolAddress(&DeviceSections, ShadowVar) != 0) {
-    PROF_WARN("failed to get symbol address for shadow variable %p\n",
-              ShadowVar);
+  if (Ret != 0) {
+    PROF_ERR("%s\n", "failed to write device profile");
     return -1;
   }
-  /* DeviceSections points at the per-TU sections struct itself. */
-  return processDeviceOffloadPrf(DeviceSections, TUIndex, Target);
-}
-
-static int isHipAvailable(void) {
-  ensureHipLoaded();
-  return pHipMemcpy != nullptr && pHipGetSymbolAddress != nullptr;
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Collect device-side profile data                                          */
-/* -------------------------------------------------------------------------- */
-
-extern "C" int __llvm_profile_hip_collect_device_data(void) {
-  if (NumShadowVariables == 0 && NumDynamicModules == 0)
-    return 0;
-
-  if (!isHipAvailable())
-    return 0;
-
-  int Ret = 0;
-
-  /* Shadow variables (static-linked kernels): drain from every device. */
-  if (NumShadowVariables > 0) {
-    int OrigDevice = -1;
-    hipGetDevice(&OrigDevice);
-
-    for (int Dev = 0; Dev < NumDevices; ++Dev) {
-      if (hipSetDevice(Dev) != 0) {
-        if (isVerboseMode())
-          PROF_NOTE("Failed to set device %d, skipping\n", Dev);
-        continue;
-      }
-      const char *ArchName = getDeviceArchName(Dev);
-      if (isVerboseMode())
-        PROF_NOTE("Collecting static profile data from device %d (%s)\n", Dev,
-                  ArchName);
-      for (int i = 0; i < NumShadowVariables; ++i) {
-        /* RDC-mode multi-shadow drains need a distinct profraw per TU;
-         * single-TU programs keep the bare arch target. */
-        const char *Target = ArchName;
-        char TargetWithIdx[64];
-        if (NumShadowVariables > 1) {
-          snprintf(TargetWithIdx, sizeof(TargetWithIdx), "%s.%d", ArchName, i);
-          Target = TargetWithIdx;
-        }
-        if (processShadowVariable(OffloadShadowVariables[i], i, Target) != 0)
-          Ret = -1;
-      }
-    }
-
-    if (OrigDevice >= 0)
-      hipSetDevice(OrigDevice);
-  }
-
-  /* Warn about unprocessed TUs; skip cleared slots (already drained). */
-  lockDynamicModules();
-  for (int i = 0; i < NumDynamicModules; ++i) {
-    OffloadDynamicModuleInfo *MI = &DynamicModules[i];
-    if (!MI->ModulePtr)
-      continue;
-    for (int t = 0; t < MI->NumTUs; ++t) {
-      if (!MI->TUs[t].Processed) {
-        PROF_WARN("dynamic module %p TU %d was not processed before exit\n",
-                  MI->ModulePtr, t);
-        Ret = -1;
-      }
-    }
-  }
-  unlockDynamicModules();
-
-  if (Ret != 0)
-    PROF_WARN("%s\n", "failed to collect device profile data");
-  return Ret;
-}
-
-/* Interceptors for hipModuleLoad* / hipModuleUnload. Linux only. */
-
-#if defined(__linux__) && !defined(_WIN32)
-
-INTERCEPTOR(int, hipModuleLoad, void **module, const char *fname) {
-  int rc = REAL(hipModuleLoad)(module, fname);
-  /* Pass NULL image: no in-memory ELF is available for filename loads,
-   * so the register hook skips symbol enumeration. */
-  __llvm_profile_offload_register_dynamic_module(rc, module, nullptr);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleLoadData, void **module, const void *image) {
-  int rc = REAL(hipModuleLoadData)(module, image);
-  __llvm_profile_offload_register_dynamic_module(rc, module, image);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleLoadDataEx, void **module, const void *image,
-            unsigned numOptions, void **options, void **optionValues) {
-  int rc = REAL(hipModuleLoadDataEx)(module, image, numOptions, options,
-                                     optionValues);
-  __llvm_profile_offload_register_dynamic_module(rc, module, image);
-  return rc;
-}
-
-INTERCEPTOR(int, hipModuleUnload, void *module) {
-  /* Drain counters before the module is destroyed; device addresses
-   * captured at register time are invalid after unload. */
-  __llvm_profile_offload_unregister_dynamic_module(module);
-  return REAL(hipModuleUnload)(module);
-}
-
-__attribute__((constructor)) static void installHipModuleInterceptors() {
-  /* Skip when the HIP runtime is not loaded. INTERCEPT_FUNCTION uses the
-   * sanitizer interception framework, which can perturb dlsym/PLT state for
-   * the rest of the process even when the target symbol is absent; non-HIP
-   * programs linked with libclang_rt.profile.a must see zero side effects. */
-  if (!dlsym(RTLD_DEFAULT, "hipModuleLoad"))
-    return;
-  if (!INTERCEPT_FUNCTION(hipModuleLoad))
-    return;
   if (isVerboseMode())
-    PROF_NOTE("%s", "Installing hipModuleLoad*/hipModuleUnload interceptors\n");
-  INTERCEPT_FUNCTION(hipModuleLoadData);
-  INTERCEPT_FUNCTION(hipModuleLoadDataEx);
-  INTERCEPT_FUNCTION(hipModuleUnload);
+    PROF_NOTE("Wrote device profile (target=%s)\n", Target);
+  return 1;
 }
 
-#endif /* __linux__ */
+/* -------------------------------------------------------------------------- */
+/*  HSA walk                                                                  */
+/* -------------------------------------------------------------------------- */
+
+#define PROF_MAX_GPU_AGENTS 64
+
+namespace {
+struct GpuAgent {
+  prof_hsa_agent_t agent;
+  char arch[64];
+};
+
+struct WalkState {
+  GpuAgent agents[PROF_MAX_GPU_AGENTS];
+  int num_agents;
+  int total_found;
+  int total_drained;
+};
+
+/* Per (agent, executable) symbol-iteration state. */
+struct SymbolState {
+  const char *arch;
+  int found;
+  int drained;
+};
+} // namespace
+
+/* The canonical device bounds table symbol from InstrProfilingPlatformGPU.c. */
+static const char ProfileSectionsSymbol[] = "__llvm_profile_sections";
+
+/* Dedup distinct (Data,Counters,Names) tuples: a single linked device code
+ * object exposes one __llvm_profile_sections, but the same bounds may be seen
+ * via multiple agents, so drain each unique counter set only once. Also used
+ * to generate collision-free target names. */
+namespace {
+struct BoundsTuple {
+  const void *data;
+  const void *cnts;
+  const void *names;
+};
+} // namespace
+
+#define PROF_MAX_SEEN_BOUNDS 256
+static BoundsTuple SeenBounds[PROF_MAX_SEEN_BOUNDS];
+static int NumSeenBounds = 0;
+
+static int alreadySeenBounds(const void *D, const void *C, const void *N) {
+  for (int i = 0; i < NumSeenBounds; ++i)
+    if (SeenBounds[i].data == D && SeenBounds[i].cnts == C &&
+        SeenBounds[i].names == N)
+      return 1;
+  if (NumSeenBounds < PROF_MAX_SEEN_BOUNDS) {
+    SeenBounds[NumSeenBounds].data = D;
+    SeenBounds[NumSeenBounds].cnts = C;
+    SeenBounds[NumSeenBounds].names = N;
+    NumSeenBounds++;
+  }
+  return 0;
+}
+
+static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
+                                  prof_hsa_executable_symbol_t Sym,
+                                  void *Data) {
+  SymbolState *S = (SymbolState *)Data;
+
+  prof_hsa_symbol_kind_t Kind;
+  if (pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_TYPE, &Kind) !=
+          PROF_HSA_STATUS_SUCCESS ||
+      Kind != PROF_HSA_SYMBOL_KIND_VARIABLE)
+    return PROF_HSA_STATUS_SUCCESS;
+
+  uint32_t NameLen = 0;
+  if (pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME_LENGTH,
+                     &NameLen) != PROF_HSA_STATUS_SUCCESS ||
+      NameLen != sizeof(ProfileSectionsSymbol) - 1)
+    return PROF_HSA_STATUS_SUCCESS;
+
+  char NameBuf[64];
+  if (NameLen + 1 > sizeof(NameBuf))
+    return PROF_HSA_STATUS_SUCCESS;
+  if (pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_NAME, NameBuf) !=
+      PROF_HSA_STATUS_SUCCESS)
+    return PROF_HSA_STATUS_SUCCESS;
+  NameBuf[NameLen] = '\0';
+
+  if (strcmp(NameBuf, ProfileSectionsSymbol) != 0)
+    return PROF_HSA_STATUS_SUCCESS;
+
+  uint64_t Addr = 0;
+  if (pHsaSymGetInfo(Sym, PROF_HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+                     &Addr) != PROF_HSA_STATUS_SUCCESS ||
+      Addr == 0) {
+    if (isVerboseMode())
+      PROF_NOTE("%s", "failed to read __llvm_profile_sections address\n");
+    return PROF_HSA_STATUS_SUCCESS;
+  }
+
+  S->found++;
+
+  // Read the bounds table first to dedup before the full copy.
+  __llvm_profile_gpu_sections Sec;
+  if (memcpyDeviceToHost(&Sec, (void *)(uintptr_t)Addr, sizeof(Sec)) != 0) {
+    PROF_WARN("%s", "failed to copy device bounds table\n");
+    return PROF_HSA_STATUS_SUCCESS;
+  }
+  if (alreadySeenBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart)) {
+    if (isVerboseMode())
+      PROF_NOTE("%s", "device bounds already drained, skipping\n");
+    return PROF_HSA_STATUS_SUCCESS;
+  }
+
+  // Generate a collision-free target. Multiple distinct device code objects on
+  // the same arch (e.g. non-RDC multi-TU) must not clobber each other's file.
+  static int DrainIndex = 0;
+  char Target[96];
+  if (DrainIndex == 0)
+    snprintf(Target, sizeof(Target), "%s", S->arch);
+  else
+    snprintf(Target, sizeof(Target), "%s.%d", S->arch, DrainIndex);
+
+  // Only a >0 result means a .profraw was actually written; an empty section
+  // (0) or an error (<0) must not be counted as a drain or advance DrainIndex.
+  if (processDeviceSections((void *)(uintptr_t)Addr, Target) > 0) {
+    S->drained++;
+    DrainIndex++;
+  }
+
+  return PROF_HSA_STATUS_SUCCESS;
+}
+
+static prof_hsa_status_t collectAgent(prof_hsa_agent_t Agent, void *Data) {
+  prof_hsa_device_type_t DevType;
+  if (pHsaAgentGetInfo(Agent, PROF_HSA_AGENT_INFO_DEVICE, &DevType) !=
+          PROF_HSA_STATUS_SUCCESS ||
+      DevType != PROF_HSA_DEVICE_TYPE_GPU)
+    return PROF_HSA_STATUS_SUCCESS;
+
+  WalkState *W = (WalkState *)Data;
+  if (W->num_agents >= PROF_MAX_GPU_AGENTS)
+    return PROF_HSA_STATUS_SUCCESS;
+
+  GpuAgent &GA = W->agents[W->num_agents++];
+  GA.agent = Agent;
+  char Name[64];
+  __builtin_memset(Name, 0, sizeof(Name));
+  pHsaAgentGetInfo(Agent, PROF_HSA_AGENT_INFO_NAME, Name);
+  size_t N = strnlen(Name, sizeof(GA.arch) - 1);
+  __builtin_memcpy(GA.arch, Name, N);
+  GA.arch[N] = '\0';
+  if (!GA.arch[0])
+    strncpy(GA.arch, "amdgpu", sizeof(GA.arch) - 1);
+
+  if (isVerboseMode())
+    PROF_NOTE("GPU agent %d: %s\n", W->num_agents - 1, GA.arch);
+  return PROF_HSA_STATUS_SUCCESS;
+}
+
+/* Reentrancy guard and "we drained data at least once" flag. Both the host
+ * write path and the atexit handler call drainDevices(); a successful walk
+ * with non-empty results latches DrainCompleted so we never re-emit duplicate
+ * .profraw files, but transient no-op outcomes ("runtime not yet loadable",
+ * "no GPU agents", "no loaded segments", "no instrumented sections found")
+ * stay retryable so the final atexit drain can still pick up code objects
+ * that loaded later. The InProgress flag prevents a concurrent call from
+ * another thread (or a re-entrant call on the same thread, e.g. a library
+ * destructor that triggers another drain) from running the walk concurrently
+ * and corrupting the global SeenBounds table. Both flags are accessed with
+ * acquire/release atomics so the guard holds across threads. */
+static int DrainInProgress = 0;
+static int DrainCompleted = 0;
+
+static int drainDevices(void) {
+  if (__atomic_load_n(&DrainCompleted, __ATOMIC_ACQUIRE))
+    return 0;
+
+  /* Claim the drain with an atomic CAS. A failed CAS means either another
+   * thread is already draining, or this is a reentrant call on the same
+   * thread (e.g. a library destructor that triggers another drain); both
+   * must bail without touching the global SeenBounds table. The acquire/
+   * release ordering also publishes the worker thread's writes to threads
+   * that observe DrainCompleted later. */
+  int Expected = 0;
+  if (!__atomic_compare_exchange_n(&DrainInProgress, &Expected, 1,
+                                   /*weak=*/0, __ATOMIC_ACQ_REL,
+                                   __ATOMIC_ACQUIRE))
+    return 0;
+
+  /* Mirror the early-exit paths so we always release the in-progress flag. */
+  struct InProgressGuard {
+    ~InProgressGuard() {
+      __atomic_store_n(&DrainInProgress, 0, __ATOMIC_RELEASE);
+    }
+  } _Guard;
+
+  if (loadRuntimePointers() != 0) {
+    /* Runtime unavailable: don't latch DrainCompleted, allow a later call
+     * (e.g. atexit, after the host has dlopen'd HIP) to retry. */
+    return 0;
+  }
+
+  WalkState W;
+  __builtin_memset(&W, 0, sizeof(W));
+  prof_hsa_status_t St = pHsaIterateAgents(collectAgent, &W);
+  if (St != PROF_HSA_STATUS_SUCCESS && St != PROF_HSA_STATUS_INFO_BREAK) {
+    PROF_WARN("hsa_iterate_agents failed (0x%x)\n", St);
+    return -1;
+  }
+  if (W.num_agents == 0) {
+    if (isVerboseMode())
+      PROF_NOTE("%s", "no GPU agents present; nothing to drain (will retry)\n");
+    return 0;
+  }
+
+  /* query_segment_descriptors ships in every loader-extension version and is
+   * more permissive than iterate_executables on ROCm. It yields the loaded
+   * (agent, executable) pairs directly. */
+  size_t NumSegs = 0;
+  St = pQuerySegDescs(nullptr, &NumSegs);
+  if (St != PROF_HSA_STATUS_SUCCESS) {
+    PROF_WARN("query_segment_descriptors(count) failed (0x%x)\n", St);
+    return -1;
+  }
+  if (NumSegs == 0) {
+    if (isVerboseMode())
+      PROF_NOTE("%s",
+                "no loaded segments; nothing to drain (will retry)\n");
+    return 0;
+  }
+
+  prof_hsa_loader_segment_descriptor_t *Segs =
+      (prof_hsa_loader_segment_descriptor_t *)calloc(NumSegs, sizeof(*Segs));
+  if (!Segs) {
+    PROF_ERR("%s\n", "failed to allocate segment descriptor array");
+    return -1;
+  }
+  UniqueFree SegsOwner(Segs);
+
+  St = pQuerySegDescs(Segs, &NumSegs);
+  if (St != PROF_HSA_STATUS_SUCCESS) {
+    PROF_WARN("query_segment_descriptors(fetch) failed (0x%x)\n", St);
+    return -1;
+  }
+
+  if (isVerboseMode())
+    PROF_NOTE("query_segment_descriptors: %zu segments\n", NumSegs);
+
+  /* Walk unique (agent, executable) pairs. */
+  enum { kMaxPairs = 512 };
+  uint64_t SeenAgents[kMaxPairs];
+  uint64_t SeenExecs[kMaxPairs];
+  int NumPairs = 0;
+  int IterFailures = 0;
+
+  for (size_t i = 0; i < NumSegs; ++i) {
+    if (Segs[i].executable.handle == 0 || Segs[i].agent.handle == 0)
+      continue;
+
+    int Seen = 0;
+    for (int j = 0; j < NumPairs; ++j)
+      if (SeenAgents[j] == Segs[i].agent.handle &&
+          SeenExecs[j] == Segs[i].executable.handle) {
+        Seen = 1;
+        break;
+      }
+    if (Seen)
+      continue;
+    if (NumPairs < kMaxPairs) {
+      SeenAgents[NumPairs] = Segs[i].agent.handle;
+      SeenExecs[NumPairs] = Segs[i].executable.handle;
+      NumPairs++;
+    }
+
+    const char *Arch = nullptr;
+    for (int k = 0; k < W.num_agents; ++k)
+      if (W.agents[k].agent.handle == Segs[i].agent.handle) {
+        Arch = W.agents[k].arch;
+        break;
+      }
+    if (!Arch)
+      continue; /* not a GPU agent we collected */
+
+    SymbolState S;
+    __builtin_memset(&S, 0, sizeof(S));
+    S.arch = Arch;
+    if (isVerboseMode())
+      PROF_NOTE("walking executable 0x%llx on %s\n",
+                (unsigned long long)Segs[i].executable.handle, Arch);
+    prof_hsa_status_t IterSt =
+        pHsaExecIterAgentSyms(Segs[i].executable, Segs[i].agent, onSymbol, &S);
+    if (IterSt != PROF_HSA_STATUS_SUCCESS &&
+        IterSt != PROF_HSA_STATUS_INFO_BREAK) {
+      PROF_WARN("hsa_executable_iterate_agent_symbols on executable 0x%llx "
+                "failed (0x%x)\n",
+                (unsigned long long)Segs[i].executable.handle, IterSt);
+      IterFailures++;
+    }
+    W.total_found += S.found;
+    W.total_drained += S.drained;
+  }
+
+  if (isVerboseMode())
+    PROF_NOTE("walk complete: agents=%d pairs=%d found=%d drained=%d "
+              "iter-failures=%d\n",
+              W.num_agents, NumPairs, W.total_found, W.total_drained,
+              IterFailures);
+
+  if (W.total_found > 0 && W.total_drained == 0) {
+    PROF_WARN("found %d device profile symbol(s) but drained 0\n",
+              W.total_found);
+    return -1;
+  }
+  /* Latch only if we actually drained data, or if we successfully walked
+   * everything and confirmed there is no instrumented code object loaded
+   * (no symbols found, no per-executable iteration failures). The "no
+   * instrumented code object" case is genuinely terminal for an exit drain
+   * but harmless to repeat if anyone calls back in (and the host-write
+   * forwarder may run before atexit). */
+  if (W.total_drained > 0)
+    __atomic_store_n(&DrainCompleted, 1, __ATOMIC_RELEASE);
+  return (IterFailures > 0) ? -1 : 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Public entry points                                                       */
+/* -------------------------------------------------------------------------- */
+
+/* Called from the host write path (InstrProfilingFile.c) when the host TUs are
+ * instrumented. Independent of, and idempotent with, the atexit drain. */
+extern "C" int __llvm_profile_hip_collect_device_data(void) {
+  return drainDevices();
+}
+
+/* Legacy registration entry points from the previous host-shadow design, kept
+ * as no-ops so objects compiled against the old runtime still link. */
+extern "C" void __llvm_profile_offload_register_shadow_variable(void *) {}
+extern "C" void
+__llvm_profile_offload_register_section_shadow_variable(void *) {}
+extern "C" void __llvm_profile_offload_register_dynamic_module(int, void **,
+                                                               const void *) {}
+extern "C" void __llvm_profile_offload_unregister_dynamic_module(void *) {}
+
+/* -------------------------------------------------------------------------- */
+/*  Constructor                                                               */
+/* -------------------------------------------------------------------------- */
+
+static void atexitDrain(void) { (void)drainDevices(); }
+
+__attribute__((constructor)) static void profROCmInit(void) {
+  // Resolve and hsa_init now so HSA's atexit(hsa_shut_down) is registered
+  // before our atexit(drainDevices); LIFO then runs our drain while HSA is
+  // still alive. Failure here is non-fatal: a host-only program without ROCm
+  // simply gets no device drain.
+  (void)loadRuntimePointers();
+  atexit(atexitDrain);
+}
+
+#endif // !defined(__NVPTX__) && !defined(__AMDGPU__) && !defined(_WIN32)

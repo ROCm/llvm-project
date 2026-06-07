@@ -94,7 +94,12 @@ if (NOT COMPILER_RT_PROFILE_BAREMETAL)
     InstrProfilingValue.c
     )
   if(COMPILER_RT_BUILD_PROFILE_ROCM)
-    list(APPEND PROFILE_SOURCES InstrProfilingPlatformROCm.cpp)
+    # Linux uses HSA introspection (InstrProfilingPlatformROCm.cpp); Windows
+    # keeps the legacy host-shadow drain (InstrProfilingPlatformROCmWindows.cpp).
+    # Each is platform-guarded internally, so adding both is safe (the other
+    # platform compiles to an empty TU).
+    list(APPEND PROFILE_SOURCES InstrProfilingPlatformROCm.cpp
+         InstrProfilingPlatformROCmWindows.cpp)
   endif()
 endif()
 
@@ -181,7 +186,8 @@ if(COMPILER_RT_HAS_INTERCEPTION AND NOT COMPILER_RT_PROFILE_BAREMETAL
 endif()
 
 if(NOT PROFILE_HAS_HIP_INTERCEPTOR)
-  list(REMOVE_ITEM PROFILE_SOURCES InstrProfilingPlatformROCm.cpp)
+  list(REMOVE_ITEM PROFILE_SOURCES InstrProfilingPlatformROCm.cpp
+       InstrProfilingPlatformROCmWindows.cpp)
 endif()
 
 # Only advertise the ROCm interceptor to InstrProfilingFile.c when its
@@ -281,7 +287,8 @@ if(COMPILER_RT_BUILD_PROFILE_ROCM AND NOT COMPILER_RT_PROFILE_BAREMETAL
    AND TARGET RTSanitizerCommon.${COMPILER_RT_DEFAULT_TARGET_ARCH}
    AND TARGET RTSanitizerCommonLibc.${COMPILER_RT_DEFAULT_TARGET_ARCH})
 
-  set(PROFILE_ROCM_SOURCES ${PROFILE_SOURCES} InstrProfilingPlatformROCm.cpp)
+  set(PROFILE_ROCM_SOURCES ${PROFILE_SOURCES} InstrProfilingPlatformROCm.cpp
+      InstrProfilingPlatformROCmWindows.cpp)
 
   # Enables the device-collection call in InstrProfilingFile.c.
   set(PROFILE_ROCM_FLAGS ${EXTRA_FLAGS} -DCOMPILER_RT_BUILD_PROFILE_ROCM=1)
