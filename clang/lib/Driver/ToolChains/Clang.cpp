@@ -9864,6 +9864,21 @@ void LinkerWrapper::ConstructJob(Compilation &C, const JobAction &JA,
           (TC->getTriple().isAMDGPU() || TC->getTriple().isNVPTX()))
         LinkerArgs.emplace_back("-lompdevice");
 
+      // With PGO/coverage instrumentation, GPU device code references the
+      // device profile runtime (__llvm_profile_instrument_gpu and the
+      // __llvm_profile_sections bounds table emitted by
+      // InstrProfilingPlatformGPU). The offload device link does not otherwise
+      // pull it in, so forward the static device profile runtime to the GPU
+      // device linker. The archive is arch-suffixed, so pass its full path
+      // rather than a -l name.
+      if (ToolChain::needsProfileRT(Args) &&
+          (TC->getTriple().isAMDGPU() || TC->getTriple().isNVPTX())) {
+        std::string ProfileRT =
+            TC->getCompilerRT(Args, "profile", ToolChain::FT_Static);
+        if (TC->getVFS().exists(ProfileRT))
+          LinkerArgs.emplace_back(Args.MakeArgString(ProfileRT));
+      }
+
       // For SPIR-V, pass some extra flags to `spirv-link`, the out-of-tree
       // SPIR-V linker. `spirv-link` isn't called in LTO mode so restrict these
       // flags to normal compilation.
