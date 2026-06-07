@@ -145,14 +145,39 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global user.email "z1-cciauto@amd.com"
           git config --global user.name "Z1 cciauto"
+
+          trim_sha() {
+             printf '%s' "$1" | tr -d '[:space:]'
+          }
           # Function to get SHA with git-ls
           get_pr_sha() {
              local pr_url="$1"
              local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
              local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+             sha=$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')
+             trim_sha "$sha"
           }
 
+          merge_upstream_prs() {
+             local pr_urls="$1"
+             local url repo num ref
+             git submodule update --init --jobs 1 compiler/amd-llvm
+             IFS=',' read -ra PR_URLS <<< "$pr_urls"
+             for url in "${PR_URLS[@]}"; do
+               url="$(echo "$url" | xargs)"
+               [[ -z "$url" ]] && continue
+               repo="$(echo "$url" | sed 's|/pull/.*||')"
+               num="$(echo "$url" | sed 's|.*/pull/||')"
+               ref="upstream-pr-${num}"
+               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
+               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+                 exit 1
+               }
+             done
+             MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
+          }
 
           LLVM_SHA=""
 
@@ -161,24 +186,15 @@ jobs:
               LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
               echo "ROCm LLVM head SHA: LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
-              repo="$(echo "$LLVM_PR_URL" | sed 's|/pull/.*||')"
-              num="$(echo "$LLVM_PR_URL" | sed 's|.*/pull/||')"
-              ref="upstream-pr-${num}"
-              git submodule update --init --jobs 1 compiler/amd-llvm
-              echo "Merging upstream PR #${num} from ${LLVM_PR_URL} into ROCm/llvm-project"
-              git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-              git -C compiler/amd-llvm merge --no-edit "$ref" || {
-                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first."
-                 exit 1
-              }
-              LLVM_SHA="$(git -C compiler/amd-llvm rev-parse HEAD)"
-              echo "Final upstream LLVM SHA: $LLVM_SHA"
+              merge_upstream_prs "$LLVM_PR_URL"
+              LLVM_SHA="$MERGED_LLVM_SHA"
+              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
           fi
 
           if [[ -n "$LLVM_SHA" ]]; then
               git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
           fi
- 
+               
           # SPIRV PR
           if [[ -n "$SPIRV_PR_URL" ]]; then
               SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
