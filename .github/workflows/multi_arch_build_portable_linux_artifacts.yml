@@ -143,20 +143,20 @@ jobs:
           }
 
           merge_upstream_prs() {
-             local pr_urls_csv="$1"
+             local pr_urls="$1"
              local url repo num ref
              git submodule update --init --jobs 1 compiler/amd-llvm
-             IFS=',' read -ra PR_URLS <<< "$pr_urls_csv"
+             IFS=',' read -ra PR_URLS <<< "$pr_urls"
              for url in "${PR_URLS[@]}"; do
                url="$(echo "$url" | xargs)"
                [[ -z "$url" ]] && continue
                repo="$(echo "$url" | sed 's|/pull/.*||')"
                num="$(echo "$url" | sed 's|.*/pull/||')"
                ref="upstream-pr-${num}"
-               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project"
+               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
                git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-               git -C compiler/amd-llvm merge --no-edit "$ref" || {
-                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first."
+               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
                  exit 1
                }
              done
@@ -167,11 +167,11 @@ jobs:
 
           # LLVM PR based on if its ROCm or Trunk
           if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
-              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
+              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")" 
               echo "ROCm LLVM head SHA: LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
-              LLVM_SHA="$(merge_upstream_prs "$LLVM_PR_URL")"
-              echo "Final upstream LLVM SHA: $LLVM_SHA"
+              LLVM_SHA="$(merge_upstream_prs "$LLVM_PR_URL")" 
+              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
           fi
 
           if [[ -n "$LLVM_SHA" ]]; then

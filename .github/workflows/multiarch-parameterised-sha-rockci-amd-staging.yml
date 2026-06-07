@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       LLVM_PR_URL:
-        description: "LLVM upstraem PR url(supports multi PR separated by ,). ex: https://github.com/llvm/llvm-project/pull/1"
+        description: "LLVM upstream PR urls(supports multi PR separated by ,). ex: https://github.com/llvm/llvm-project/pull/1"
         required: false
         type: string
         default: ""
