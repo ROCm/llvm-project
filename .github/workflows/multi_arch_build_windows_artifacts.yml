@@ -151,15 +151,26 @@ jobs:
              git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
           }
 
+
+          LLVM_SHA=""
+
           # LLVM PR based on if its ROCm or Trunk
           if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
               LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
               echo "ROCm LLVM head SHA: LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
-              LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-              echo "Upstream LLVM head SHA: $LLVM_SHA"
-              git config -f .gitmodules submodule.llvm-project.url https://github.com/llvm/llvm-project.git
-              git submodule sync --recursive compiler/amd-llvm
+              repo="$(echo "$LLVM_PR_URL" | sed 's|/pull/.*||')"
+              num="$(echo "$LLVM_PR_URL" | sed 's|.*/pull/||')"
+              ref="upstream-pr-${num}"
+              git submodule update --init --jobs 1 compiler/amd-llvm
+              echo "Merging upstream PR #${num} from ${LLVM_PR_URL} into ROCm/llvm-project"
+              git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+              git -C compiler/amd-llvm merge --no-edit "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first."
+                 exit 1
+              }
+              LLVM_SHA="$(git -C compiler/amd-llvm rev-parse HEAD)"
+              echo "Final upstream LLVM SHA: $LLVM_SHA"
           fi
 
           if [[ -n "$LLVM_SHA" ]]; then
