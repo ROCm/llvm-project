@@ -132,6 +132,8 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
         run: |
           git config --global --add safe.directory "$PWD"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
           # Function to get SHA with git-ls
           get_pr_sha() {
              local pr_url="$1"
@@ -186,8 +188,6 @@ jobs:
               echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
               git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
           fi
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
           git submodule update --init --recursive compiler/amd-llvm          
           git submodule status
