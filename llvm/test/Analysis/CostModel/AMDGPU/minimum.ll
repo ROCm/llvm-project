@@ -155,7 +155,7 @@ define void @minimum_bf16() {
 define void @minimum_f32() {
 ; GFX950-FASTF64-LABEL: 'minimum_f32'
 ; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: %f32 = call float @llvm.minimum.f32(float undef, float undef)
-; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 3 for instruction: %v3f32 = call <3 x float> @llvm.minimum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v4f32 = call <4 x float> @llvm.minimum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX950-FASTF64-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v8f32 = call <8 x float> @llvm.minimum.v8f32(<8 x float> undef, <8 x float> undef)
@@ -164,7 +164,7 @@ define void @minimum_f32() {
 ;
 ; GFX90A-FASTF64-LABEL: 'minimum_f32'
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 10 for instruction: %f32 = call float @llvm.minimum.f32(float undef, float undef)
-; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 22 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 24 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 30 for instruction: %v3f32 = call <3 x float> @llvm.minimum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 40 for instruction: %v4f32 = call <4 x float> @llvm.minimum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 80 for instruction: %v8f32 = call <8 x float> @llvm.minimum.v8f32(<8 x float> undef, <8 x float> undef)
@@ -191,7 +191,7 @@ define void @minimum_f32() {
 ;
 ; GFX950-SIZE-LABEL: 'minimum_f32'
 ; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: %f32 = call float @llvm.minimum.f32(float undef, float undef)
-; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 3 for instruction: %v3f32 = call <3 x float> @llvm.minimum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v4f32 = call <4 x float> @llvm.minimum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX950-SIZE-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v8f32 = call <8 x float> @llvm.minimum.v8f32(<8 x float> undef, <8 x float> undef)
@@ -200,7 +200,7 @@ define void @minimum_f32() {
 ;
 ; GFX90A-SIZE-LABEL: 'minimum_f32'
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 1 for instruction: %f32 = call float @llvm.minimum.f32(float undef, float undef)
-; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v2f32 = call <2 x float> @llvm.minimum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 3 for instruction: %v3f32 = call <3 x float> @llvm.minimum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 4 for instruction: %v4f32 = call <4 x float> @llvm.minimum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v8f32 = call <8 x float> @llvm.minimum.v8f32(<8 x float> undef, <8 x float> undef)

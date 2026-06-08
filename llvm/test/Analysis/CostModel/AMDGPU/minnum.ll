@@ -117,7 +117,7 @@ define void @minnum_bf16() {
 define void @minnum_f32() {
 ; GFX90A-FASTF64-LABEL: 'minnum_f32'
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 2 for instruction: %f32 = call float @llvm.minnum.f32(float undef, float undef)
-; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v2f32 = call <2 x float> @llvm.minnum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v2f32 = call <2 x float> @llvm.minnum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v3f32 = call <3 x float> @llvm.minnum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v4f32 = call <4 x float> @llvm.minnum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX90A-FASTF64-NEXT:  Cost Model: Found an estimated cost of 16 for instruction: %v8f32 = call <8 x float> @llvm.minnum.v8f32(<8 x float> undef, <8 x float> undef)
@@ -144,7 +144,7 @@ define void @minnum_f32() {
 ;
 ; GFX90A-SIZE-LABEL: 'minnum_f32'
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 2 for instruction: %f32 = call float @llvm.minnum.f32(float undef, float undef)
-; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v2f32 = call <2 x float> @llvm.minnum.v2f32(<2 x float> undef, <2 x float> undef)
+; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v2f32 = call <2 x float> @llvm.minnum.v2f32(<2 x float> undef, <2 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 6 for instruction: %v3f32 = call <3 x float> @llvm.minnum.v3f32(<3 x float> undef, <3 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 8 for instruction: %v4f32 = call <4 x float> @llvm.minnum.v4f32(<4 x float> undef, <4 x float> undef)
 ; GFX90A-SIZE-NEXT:  Cost Model: Found an estimated cost of 16 for instruction: %v8f32 = call <8 x float> @llvm.minnum.v8f32(<8 x float> undef, <8 x float> undef)

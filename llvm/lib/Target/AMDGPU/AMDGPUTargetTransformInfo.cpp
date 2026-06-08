@@ -1042,12 +1042,19 @@ InstructionCost GCNTTIImpl::getVectorInstrCost(
                                        VIC);
     }
 
-    // Building a packed <2 x float> for a v_pk_*_f32 source is not free: the
-    // two lanes must occupy an aligned VGPR pair, so a statically-indexed
-    // insert that synthesizes such a pair costs ~1 v_mov_b32 to align the lane.
-    // Charging it keeps the SLP vectorizer honest about manufacturing pairs
-    // from non-adjacent scalars; without it SLP over-vectorizes and inflates
-    // register pressure.
+    // Building a packed <2 x float> for a v_pk_*_f32 source is not always free:
+    // the two lanes must occupy an aligned VGPR pair, and the cost of an insert
+    // depends on where the inserted lane comes from.
+    //   - A lane fed directly by a load is free: the load result can be
+    //     allocated straight into its pair slot, with no alignment move.
+    //   - A lane manufactured from compute is taxed: it needs a v_mov_b32 to
+    //     align it into the pair, and because the partner lane must also be
+    //     marshalled into the aligned pair the effective per-lane setup is
+    //     ~2 v_mov_b32.
+    // Taxing only the manufactured case keeps the SLP vectorizer honest about
+    // assembling pairs from non-adjacent scalars - without it SLP
+    // over-vectorizes and inflates register pressure - while leaving a genuine
+    // load-fed <2 x float> reduction free to pack.
     //
     // Restricted to f32: at 32-bit width the only packed VOP3P ALU ops are
     // v_pk_{add,mul,fma}_f32 - there is no packed 32-bit integer op - so a
@@ -1059,7 +1066,7 @@ InstructionCost GCNTTIImpl::getVectorInstrCost(
         ST->getGeneration() == AMDGPUSubtarget::GFX9)
       if (auto *VecTy = dyn_cast<FixedVectorType>(ValTy))
         if (VecTy->getNumElements() == 2 && VecTy->getElementType()->isFloatTy())
-          return 1;
+          return (Op1 && isa<LoadInst>(Op1)) ? 0 : 2;
 
     // Extracts are just reads of a subregister, so are free. Inserts are
     // considered free because we don't want to have any cost for scalarizing
