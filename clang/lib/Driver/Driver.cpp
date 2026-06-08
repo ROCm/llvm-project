@@ -5171,22 +5171,15 @@ Driver::BuildOffloadingActions(Compilation &C, llvm::opt::DerivedArgList &Args,
           OffloadTriple && OffloadTriple->isSPIRV() &&
           (OffloadTriple->getOS() == llvm::Triple::OSType::AMDHSA ||
            OffloadTriple->getOS() == llvm::Triple::OSType::ChipStar);
-      bool UseSPIRVBackend = Args.hasFlag(options::OPT_use_spirv_backend,
-                                          options::OPT_no_use_spirv_backend,
-                                          /*Default=*/false);
 
-      // Special handling for the HIP SPIR-V toolchains in device-only.
-      // The translator path has a linking step, whereas the SPIR-V backend path
-      // does not to avoid any external dependency such as spirv-link. The
-      // linking step is skipped for the SPIR-V backend path.
-      bool IsAMDGCNSPIRVWithBackend =
-          IsHIPSPV && OffloadTriple->getOS() == llvm::Triple::OSType::AMDHSA &&
-          UseSPIRVBackend;
-
+      // The HIP SPIR-V toolchains require a link step in device-only mode to
+      // produce the final SPIR-V. Both the translator path and the SPIR-V
+      // backend path are handled by AMDGCN::Linker, which lowers the linked
+      // bitcode to SPIR-V in-process (via the in-tree SPIR-V backend or the
+      // amd-llvm-spirv translator) without any external dependency.
       if ((A->getType() != types::TY_Object && !IsHIPSPV &&
            A->getType() != types::TY_LTO_BC) ||
-          HIPRelocatableObj || !HIPNoRDC || !offloadDeviceOnly() ||
-          (IsAMDGCNSPIRVWithBackend && offloadDeviceOnly()))
+          HIPRelocatableObj || !HIPNoRDC || !offloadDeviceOnly())
         continue;
       ActionList LinkerInput = {A};
       A = C.MakeAction<LinkJobAction>(LinkerInput, types::TY_Image);
