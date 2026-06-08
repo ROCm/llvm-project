@@ -148,12 +148,14 @@ public:
         } else {
           // Phase 2.2: Use simple path for allocatable with trivial types (scalars and arrays)
           // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
+          // CRITICAL: Only use Simple path for non-volatile - volatile needs memory ordering
           if (fir::isa_trivial(lhs.getFortranElementType()) &&
-              lhs.getRank() == rhs.getRank()) {
-            // Simple intrinsic type allocatable with matching ranks
+              lhs.getRank() == rhs.getRank() &&
+              !fir::isa_volatile_type(lhs.getType())) {
+            // Simple intrinsic type allocatable with matching ranks, non-volatile
             fir::runtime::genAssignSimple(builder, loc, to, from);
           } else {
-            // Complex: derived types, polymorphic, rank mismatch (scalar-to-array), etc.
+            // Complex: derived types, polymorphic, rank mismatch (scalar-to-array), volatile, etc.
             fir::runtime::genAssign(builder, loc, to, from);
           }
         }
@@ -184,12 +186,14 @@ public:
       else {
         // Phase 2.2: Use simple path for non-allocatable arrays with trivial types
         // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
+        // CRITICAL: Only use Simple path for non-volatile - volatile needs memory ordering
         if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType()) &&
-            lhs.getRank() == rhs.getRank()) {
-          // Simple intrinsic type array with matching ranks
+            lhs.getRank() == rhs.getRank() &&
+            !fir::isa_volatile_type(lhs.getType())) {
+          // Simple intrinsic type array with matching ranks, non-volatile
           fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
         } else {
-          // Complex: polymorphic, derived type, or rank mismatch (scalar-to-array)
+          // Complex: polymorphic, derived type, rank mismatch (scalar-to-array), volatile
           fir::runtime::genAssign(builder, loc, toMutableBox, from);
         }
       }
