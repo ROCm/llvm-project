@@ -47,7 +47,7 @@ body:             |
     renamable $sgpr10 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
     ; Test the path we expect to work (Arg followed immediately by Deref)
-    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, i32), DIOpConstant(i8 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
+    ; CHECK:   DBG_VALUE_LIST <{{.*}}>, !DIExpression(DIOpArg(0, i32), DIOpConstant(i16 0), DIOpByteOffset(i32)), [[DEF]], 0, {{.*}}
     DBG_VALUE_LIST !1, !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref(i32)), %stack.0, 0, debug-location !9
     S_NOP 0
     ; Test that we replace unhandled stack indexes with $noreg

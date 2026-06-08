@@ -42,7 +42,7 @@ body:             |
   ; SGPR_SPILL-LABEL: name: test
   ; SGPR_SPILL: bb.0:
   ; SGPR_SPILL:   [[DEF:%[0-9]+]]:vgpr_32 = SI_SPILL_S32_TO_VGPR killed $sgpr10, 0, [[DEF]]
-  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, {{.+}}, !DIExpression(DIOpArg(0, i32), DIOpConstant(i8 0), DIOpByteOffset(i32)), {{.+}}
+  ; SGPR_SPILL-NEXT:   DBG_VALUE [[DEF]], 0, {{.+}}, !DIExpression(DIOpArg(0, i32), DIOpConstant(i16 0), DIOpByteOffset(i32)), {{.+}}
   bb.0:
     renamable $sgpr10 = IMPLICIT_DEF
     SI_SPILL_S32_SAVE killed $sgpr10, %stack.0, implicit $exec, implicit $sgpr96_sgpr97_sgpr98_sgpr99, implicit $sgpr32
