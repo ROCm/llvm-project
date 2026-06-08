@@ -147,11 +147,13 @@ public:
           fir::runtime::genAssignPolymorphic(builder, loc, to, from);
         } else {
           // Phase 2.2: Use simple path for allocatable with trivial types (scalars and arrays)
-          if (fir::isa_trivial(lhs.getFortranElementType())) {
-            // Simple intrinsic type allocatable (scalar or array)
+          // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
+          if (fir::isa_trivial(lhs.getFortranElementType()) &&
+              lhs.getRank() == rhs.getRank()) {
+            // Simple intrinsic type allocatable with matching ranks
             fir::runtime::genAssignSimple(builder, loc, to, from);
           } else {
-            // Complex: derived types, polymorphic, etc.
+            // Complex: derived types, polymorphic, rank mismatch (scalar-to-array), etc.
             fir::runtime::genAssign(builder, loc, to, from);
           }
         }
@@ -181,11 +183,13 @@ public:
         fir::runtime::genAssignTemporary(builder, loc, toMutableBox, from);
       else {
         // Phase 2.2: Use simple path for non-allocatable arrays with trivial types
-        if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType())) {
-          // Simple intrinsic type array
+        // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
+        if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType()) &&
+            lhs.getRank() == rhs.getRank()) {
+          // Simple intrinsic type array with matching ranks
           fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
         } else {
-          // Complex: polymorphic or derived type
+          // Complex: polymorphic, derived type, or rank mismatch (scalar-to-array)
           fir::runtime::genAssign(builder, loc, toMutableBox, from);
         }
       }
