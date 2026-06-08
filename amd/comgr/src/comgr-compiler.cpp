@@ -633,11 +633,6 @@ amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
 }
 
 // Execute llvm-link in-process using llvm::Linker
-// Args format: -o <output> <input1> <input2> ...
-// Inputs are LLVM bitcode regardless of file extension. The driver may name
-// intermediate device bitcode with a .o suffix (e.g. for amdgcnspirv
-// device-only compiles), so inputs are detected positionally rather than by
-// extension.
 // TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
 amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
                                    raw_ostream &LogS) {
