@@ -37,25 +37,25 @@ config.environment['AMD_COMGR_CACHE'] = "0"
 def _fwd(*parts):
     return os.path.join(*parts).replace("\\", "/")
 
-isa_tool = _fwd(config.my_obj_root, 'isa-enumeration')
-try:
-    out = subprocess.check_output([isa_tool], text=True)
-    config.amd_isas = [line.strip() for line in out.splitlines() if line.strip()]
-except (OSError, subprocess.CalledProcessError):
-    config.amd_isas = []
-
-def _isa_runs(clang, drv):
-    cmds = []
-    for isa in config.amd_isas:
-        gpu = isa.split('--')[-1]
-    cmds.append(
-        f"{clang} -target amdgcn-amd-amdhsa -mcpu={gpu} -nogpulib -nogpuinc "
-        f"-c %S/get-data-isa-name.cl -o %t.o && "
-        f"{clang} -target amdgcn-amd-amdhsa -mcpu={gpu} -nogpulib -nogpuinc "
-        f"-shared %S/get-data-isa-name.cl -o %t.so && "
-        f"{drv} %t.o %t.so {isa}"
-    )
-    return " && ".join(cmds) if cmds else "true"
+#isa_tool = _fwd(config.my_obj_root, 'isa-enumeration')
+#try:
+#    out = subprocess.check_output([isa_tool], text=True)
+#    config.amd_isas = [line.strip() for line in out.splitlines() if line.strip()]
+#except (OSError, subprocess.CalledProcessError):
+#    config.amd_isas = []
+#
+#def _isa_runs(clang, drv):
+#    cmds = []
+#    for isa in config.amd_isas:
+#        gpu = isa.split('--')[-1]
+#    cmds.append(
+#        f"{clang} -target amdgcn-amd-amdhsa -mcpu={gpu} -nogpulib -nogpuinc "
+#        f"-c %S/get-data-isa-name.cl -o %t.o && "
+#        f"{clang} -target amdgcn-amd-amdhsa -mcpu={gpu} -nogpulib -nogpuinc "
+#        f"-shared %S/get-data-isa-name.cl -o %t.so && "
+#        f"{drv} %t.o %t.so {isa}"
+#    )
+#    return " && ".join(cmds) if cmds else "true"
 
 #config.substitutions.append(('%run_all_isas',
 #    _isa_runs(_fwd(config.llvm_tools_dir, 'clang'),
