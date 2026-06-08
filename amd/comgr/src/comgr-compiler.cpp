@@ -633,11 +633,15 @@ amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
 }
 
 // Execute llvm-link in-process using llvm::Linker
-// Args format: -o <output.bc> <input1.bc> <input2.bc> ...
+// Args format: -o <output> <input1> <input2> ...
+// Inputs are LLVM bitcode regardless of file extension. The driver may name
+// intermediate device bitcode with a .o suffix (e.g. for amdgcnspirv
+// device-only compiles), so inputs are detected positionally rather than by
+// extension.
 // TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
 amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
                                    raw_ostream &LogS) {
-  // Parse args: find -o <output> and collect input .bc files
+  // Parse args: find -o <output> and collect non-flag inputs.
   StringRef OutputPath;
   SmallVector<StringRef, 4> InputPaths;
 
@@ -645,7 +649,7 @@ amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
     StringRef Arg(Args[I]);
     if (Arg == "-o" && I + 1 < Args.size()) {
       OutputPath = Args[++I];
-    } else if (Arg.ends_with(".bc")) {
+    } else if (!Arg.starts_with("-")) {
       InputPaths.push_back(Arg);
     }
   }
