@@ -1,5 +1,5 @@
 ! REQUIRES: openmp_runtime
-
+! REQUIRES: stability
 ! Check omp_lib.h works with driver
 ! RUN: %flang -fsyntax-only -cpp %s -v 2>&1 | FileCheck %s --check-prefix=DRIVER
 ! RUN: %flang -fsyntax-only -cpp %s -v -DHASHINCLUDE 2>&1 | FileCheck %s --check-prefix=DRIVER
