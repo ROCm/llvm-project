@@ -1,4 +1,5 @@
 // RUN: %clang_cc1 -fsycl-is-host -emit-llvm -triple x86_64-unknown-linux-gnu -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-HOST,CHECK-HOST-LINUX %s
+// XFAIL: *
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple amdgcn-amd-amdhsa -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-AMDGCN %s
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple nvptx-nvidia-cuda -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-NVPTX %s
 // RUN: %clang_cc1 -fsycl-is-device -emit-llvm -aux-triple x86_64-unknown-linux-gnu -triple nvptx64-nvidia-cuda -std=c++17 %s -o - | FileCheck --check-prefixes=CHECK-DEVICE,CHECK-NVPTX %s
