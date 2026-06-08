@@ -43,7 +43,7 @@ on:
         default: ""
         description: "Workflow run ID to copy prebuilt stage artifacts from; required when prebuilt_stages is set"
   pull_request:
-    branches: [amd-staging]
+    branches: [amd/dev/rlieberm/TriageBase]
     types:
       - labeled
       - opened
