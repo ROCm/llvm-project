@@ -3,7 +3,6 @@
 // RUN: mapfile -t isa_arr < <(./isa-enumeration)
 // RUN: for isa in ${isa_arr[@]}; do \
 // RUN: gpu=${isa##*--}; \
-
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=$gpu -nogpulib -nogpuinc \
 // RUN:   -c %S/get-data-isa-name-linux.cl -o %t.o; \
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=$gpu -nogpulib -nogpuinc \

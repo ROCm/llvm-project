@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_t DataReloc, DataExec;
 
   if (argc != 4)
-    fail("Usage: get-data-isa-name-linux <code-object-path> <code-shared-object-path <expected-isa-name>");
+    fail("Usage: get-data-isa-name-linux <code-object-path> <code-shared-object-path> <expected-isa-name>");
 
   SizeReloc = setBuf(argv[1], &BufReloc);
   SizeExec = setBuf(argv[2], &BufExec);
