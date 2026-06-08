@@ -1,4 +1,4 @@
-//===- get-data-isa-name-linux.c -------------------------------------------------===//
+//===- get-data-isa-name-windows.c -------------------------------------------------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_data_t DataReloc, DataExec;
 
   if (argc != 4)
-    fail("Usage: get-data-isa-name-linux <code-object-path> <code-shared-object-path <expected-isa-name>");
+    fail("Usage: get-data-isa-name-windows <code-object-path> <code-shared-object-path> <expected-isa-name>");
 
   SizeReloc = setBuf(argv[1], &BufReloc);
   SizeExec = setBuf(argv[2], &BufExec);
