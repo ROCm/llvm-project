@@ -5,23 +5,23 @@
 // RUN: gpu=${isa##*--}; \
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=$gpu -nogpulib -nogpuinc \
-// RUN:   -c %S/get-data-isa-name.cl -o %t.o; \
+// RUN:   -c %S/get-data-isa-name-linux.cl -o %t.o; \
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=$gpu -nogpulib -nogpuinc \
-// RUN:   -shared %S/get-data-isa-name.cl -o %t.so; \
-// RUN: get-data-isa-name %t.o %t.so $isa; \
+// RUN:   -shared %S/get-data-isa-name-linux.cl -o %t.so; \
+// RUN: get-data-isa-name-linux %t.o %t.so $isa; \
 // RUN: done
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib -nogpuinc -mcode-object-version=4 \
-// RUN:   -c %S/get-data-isa-name.cl -o %t.o
+// RUN:   -c %S/get-data-isa-name-linux.cl -o %t.o
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx900 -nogpulib -nogpuinc -mcode-object-version=4 \
-// RUN:   -shared %S/get-data-isa-name.cl -o %t.so
-// RUN: get-data-isa-name %t.o %t.so "amdgcn-amd-amdhsa--gfx900"
+// RUN:   -shared %S/get-data-isa-name-linux.cl -o %t.so
+// RUN: get-data-isa-name-linux %t.o %t.so "amdgcn-amd-amdhsa--gfx900"
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx9-generic -nogpulib -nogpuinc -mcode-object-version=6 \
-// RUN:   -c %S/get-data-isa-name.cl -o %t.o
+// RUN:   -c %S/get-data-isa-name-linux.cl -o %t.o
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx9-generic -nogpulib -nogpuinc -mcode-object-version=6 \
-// RUN:   -shared %S/get-data-isa-name.cl -o %t.so
-// RUN: get-data-isa-name %t.o %t.so "amdgcn-amd-amdhsa--gfx9-generic"
+// RUN:   -shared %S/get-data-isa-name-linux.cl -o %t.so
+// RUN: get-data-isa-name-linux %t.o %t.so "amdgcn-amd-amdhsa--gfx9-generic"
 
 __attribute__((visibility("default"))) constant int foo = 0;
 
