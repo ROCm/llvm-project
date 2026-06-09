@@ -184,7 +184,7 @@ jobs:
           # LLVM PR based on if its ROCm or Trunk
           if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
               LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
-              echo "ROCm LLVM head SHA: LLVM_SHA"
+              echo "ROCm LLVM head SHA: $LLVM_SHA"
           elif [[ -n "$LLVM_PR_URL" ]]; then
               merge_upstream_prs "$LLVM_PR_URL"
               LLVM_SHA="$MERGED_LLVM_SHA"
