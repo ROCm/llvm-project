@@ -34,7 +34,7 @@ public:
 };
 
 class UnreachableMachineBlockElimPass
-    : public OptionalPassInfoMixin<UnreachableMachineBlockElimPass> {
+    : public RequiredPassInfoMixin<UnreachableMachineBlockElimPass> {
 public:
   LLVM_ABI PreservedAnalyses run(MachineFunction &F,
                                  MachineFunctionAnalysisManager &AM);
