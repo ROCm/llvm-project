@@ -25,7 +25,7 @@ entry:
 ; Make sure VGPR inline assembly is treated as divergent.
 ; CHECK: v_mov_b32 v{{[0-9]+}}, 0
 ; CHECK: v_cmp_ne_u32
-; CHECK: s_xor_b64 s[{{[0-9]+:[0-9]+}}], vcc, exec
+; CHECK: s_xor_b64 exec, vcc, exec
 define amdgpu_kernel void @branch_on_asm_vgpr(ptr addrspace(1) %out) {
 	%zero = call i32 asm "v_mov_b32 $0, 0", "=v"()
 	%cmp = icmp eq i32 %zero, 0

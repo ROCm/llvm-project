@@ -55,22 +55,20 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_mov_b64 s[16:17], s[4:5]
 ; GFX11-NEXT:    v_and_b32_e32 v1, 0x3ff, v0
 ; GFX11-NEXT:    s_load_b32 s9, s[16:17], 0x24
-; GFX11-NEXT:    s_mov_b64 s[4:5], s[0:1]
 ; GFX11-NEXT:    s_mov_b32 s18, s15
 ; GFX11-NEXT:    s_mov_b32 s12, s13
 ; GFX11-NEXT:    s_mov_b64 s[10:11], s[6:7]
 ; GFX11-NEXT:    s_mov_b64 s[6:7], s[2:3]
-; GFX11-NEXT:    s_mov_b32 s20, -1
-; GFX11-NEXT:    s_mov_b32 s22, 0
-; GFX11-NEXT:    s_mov_b32 s21, 0
-; GFX11-NEXT:    s_mov_b32 s19, 0
+; GFX11-NEXT:    s_mov_b64 s[4:5], s[0:1]
+; GFX11-NEXT:    s_mov_b32 s19, -1
+; GFX11-NEXT:    s_mov_b32 s20, 0
 ; GFX11-NEXT:    s_mov_b32 s32, 0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    v_mul_lo_u32 v1, s9, v1
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    v_cmp_ne_u32_e64 s23, 0, v1
-; GFX11-NEXT:    s_xor_b32 s0, s23, exec_lo
-; GFX11-NEXT:    s_xor_b32 s24, exec_lo, s0
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-NEXT:    v_cmp_ne_u32_e64 s21, 0, v1
+; GFX11-NEXT:    s_xor_b32 s0, s21, exec_lo
+; GFX11-NEXT:    s_mov_b32 s22, s21
 ; GFX11-NEXT:    s_mov_b32 exec_lo, s0
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_8
@@ -96,7 +94,7 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_and_b32 vcc_lo, exec_lo, s3
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_3
 ; GFX11-NEXT:  ; %bb.4:
-; GFX11-NEXT:    s_and_b32 s23, s20, exec_lo
+; GFX11-NEXT:    s_and_b32 s22, s19, exec_lo
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_5: ; %bb15
 ; GFX11-NEXT:    s_add_u32 s8, s16, 0x58
@@ -113,28 +111,28 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; GFX11-NEXT:    s_mov_b32 s14, s3
-; GFX11-NEXT:    s_and_b32 s22, s20, exec_lo
+; GFX11-NEXT:    s_and_b32 s20, s19, exec_lo
 ; GFX11-NEXT:    ; implicit-def: $vgpr0
 ; GFX11-NEXT:    s_branch .LBB2_8
 ; GFX11-NEXT:  .LBB2_6: ; %bb18.preheader
-; GFX11-NEXT:    s_load_b128 s[28:31], s[16:17], 0x44
+; GFX11-NEXT:    s_load_b128 s[24:27], s[16:17], 0x44
 ; GFX11-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-NEXT:    s_mul_i32 s26, s29, s28
-; GFX11-NEXT:    s_mul_hi_u32 s27, s29, s28
+; GFX11-NEXT:    s_mul_i32 s28, s25, s24
+; GFX11-NEXT:    s_mul_hi_u32 s29, s25, s24
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_lshr_b64 s[26:27], s[26:27], 1
-; GFX11-NEXT:    s_or_b32 s1, s26, 1
+; GFX11-NEXT:    s_lshr_b64 s[24:25], s[28:29], 1
+; GFX11-NEXT:    s_or_b32 s1, s24, 1
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_lshr_b32 s1, s1, s30
+; GFX11-NEXT:    s_lshr_b32 s1, s1, s26
 ; GFX11-NEXT:    s_mul_i32 s2, s1, s2
 ; GFX11-NEXT:    s_mov_b32 s1, 0
 ; GFX11-NEXT:    s_mul_i32 s2, s2, s0
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX11-NEXT:    s_or_b32 s0, s9, s2
-; GFX11-NEXT:    s_lshl_b64 s[26:27], s[0:1], 1
+; GFX11-NEXT:    s_lshl_b64 s[24:25], s[0:1], 1
 ; GFX11-NEXT:    s_mov_b32 s0, s1
-; GFX11-NEXT:    global_load_u16 v1, v0, s[26:27]
+; GFX11-NEXT:    global_load_u16 v1, v0, s[24:25]
 ; GFX11-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s13
 ; GFX11-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
@@ -168,13 +166,10 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    s_or_b32 s0, s2, s0
 ; GFX11-NEXT:    s_cbranch_vccnz .LBB2_7
 ; GFX11-NEXT:  .LBB2_8:
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s24
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, s23
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s21
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_or_b32 s21, s21, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s23
+; GFX11-NEXT:    s_xor_b32 s3, exec_lo, s22
+; GFX11-NEXT:    s_mov_b32 exec_lo, s22
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_10
 ; GFX11-NEXT:  .LBB2_9: ; %bb43
@@ -190,17 +185,14 @@ define amdgpu_kernel void @f2(i32 %arg, i32 %arg1, i32 %arg2, i1 %arg3, i32 %arg
 ; GFX11-NEXT:    ; implicit-def: $sgpr15
 ; GFX11-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
-; GFX11-NEXT:    s_and_b32 s0, s20, exec_lo
+; GFX11-NEXT:    s_and_b32 s0, s19, exec_lo
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_or_b32 s22, s22, s0
+; GFX11-NEXT:    s_or_b32 s20, s20, s0
 ; GFX11-NEXT:  .LBB2_10:
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s21
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, s22
-; GFX11-NEXT:    s_and_b32 s0, s0, exec_lo
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s3
 ; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_or_b32 s19, s19, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s22
+; GFX11-NEXT:    s_xor_b32 s0, exec_lo, s20
+; GFX11-NEXT:    s_mov_b32 exec_lo, s20
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB2_12
 ; GFX11-NEXT:  .LBB2_11: ; %UnifiedUnreachableBlock

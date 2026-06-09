@@ -8,18 +8,17 @@ define amdgpu_ps float @kill_true(i1 %.not) {
 ; CHECK-NEXT:    s_wqm_b64 exec, exec
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; CHECK-NEXT:    s_xor_b64 s[2:3], exec, s[4:5]
-; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[2:3], vcc, exec
+; CHECK-NEXT:    s_mov_b64 exec, s[2:3]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
 ; CHECK-NEXT:  .LBB0_1: ; %if1
-; CHECK-NEXT:    s_mov_b32 s4, 0
+; CHECK-NEXT:    s_mov_b32 s2, 0
 ; CHECK-NEXT:    v_pk_mov_b32 v[0:1], 0, 0
-; CHECK-NEXT:    v_mov_b32_e32 v2, s4
+; CHECK-NEXT:    v_mov_b32_e32 v2, s2
 ; CHECK-NEXT:    flat_store_dword v[0:1], v2
 ; CHECK-NEXT:  .LBB0_2: ; %endif1
-; CHECK-NEXT:    s_or_b64 exec, exec, s[2:3]
+; CHECK-NEXT:    s_or_b64 exec, exec, vcc
 ; CHECK-NEXT:    s_and_b64 exec, exec, s[0:1]
 ; CHECK-NEXT:    v_mov_b32_e32 v0, 0
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
