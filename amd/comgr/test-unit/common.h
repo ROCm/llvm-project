@@ -6,11 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef COMGR_TEST_COMMON_H
-#define COMGR_TEST_COMMON_H
+#ifndef COMGR_TEST_UNIT_COMMON_H
+#define COMGR_TEST_UNIT_COMMON_H
 
 #include "amd_comgr.h"
-#define MAX_ISA_NAME_SIZE 1024
 
 #define ASSERT_COMGR(call)                                                \
   do {                                                                    \
