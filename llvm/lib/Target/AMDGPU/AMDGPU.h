@@ -575,6 +575,9 @@ extern char &GCNNSAReassignID;
 void initializeGCNPreRALongBranchRegLegacyPass(PassRegistry &);
 extern char &GCNPreRALongBranchRegID;
 
+void initializeSIPreRAOccupancyClawLegacyPass(PassRegistry &);
+extern char &SIPreRAOccupancyClawID;
+
 void initializeGCNPreRAOptimizationsLegacyPass(PassRegistry &);
 extern char &GCNPreRAOptimizationsID;
 

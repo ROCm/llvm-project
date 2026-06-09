@@ -644,6 +644,11 @@ BitVector SIRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Reserve SGPRs.
   //
   unsigned MaxNumSGPRs = ST.getMaxNumSGPRs(MF);
+  // LCOMPILER-2277 (experimental): consume the SGPR budget chosen by the pre-RA
+  // occupancy-claw pass (SIPreRAOccupancyClaw). Only ever tightens the budget so
+  // the allocator spills surplus SGPRs (into VGPR lanes) to preserve occupancy.
+  if (unsigned ClawNumSGPRs = MFI->getSGPRClawNumSGPRs())
+    MaxNumSGPRs = std::min(MaxNumSGPRs, ClawNumSGPRs);
   unsigned TotalNumSGPRs = AMDGPU::SGPR_32RegClass.getNumRegs();
   for (const TargetRegisterClass *RC : regclasses()) {
     if (RC->isBaseClass() && isSGPRClass(RC)) {

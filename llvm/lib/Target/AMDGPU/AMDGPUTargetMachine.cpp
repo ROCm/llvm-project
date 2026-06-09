@@ -732,6 +732,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAMDGPUTarget() {
   initializeGCNNSAReassignLegacyPass(*PR);
   initializeGCNPreRAOptimizationsLegacyPass(*PR);
   initializeGCNPreRALongBranchRegLegacyPass(*PR);
+  initializeSIPreRAOccupancyClawLegacyPass(*PR);
   initializeGCNRewritePartialRegUsesLegacyPass(*PR);
   initializeGCNRegPressurePrinterPass(*PR);
   initializeAMDGPUPreloadKernArgPrologLegacyPass(*PR);
@@ -1887,6 +1888,11 @@ bool GCNPassConfig::addRegAssignAndRewriteOptimized() {
     reportFatalUsageError(RegAllocOptNotSupportedMessage);
 
   addPass(&GCNPreRALongBranchRegID);
+
+  // Experimental (LCOMPILER-2277): decide whether to claw back occupancy by
+  // spilling surplus SGPRs. Must run before SGPR allocation so getReservedRegs
+  // sees the chosen budget. No-op unless -amdgpu-sgpr-occupancy-claw is set.
+  addPass(&SIPreRAOccupancyClawID);
 
   addPass(createSGPRAllocPass(true));
 

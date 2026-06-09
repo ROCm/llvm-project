@@ -532,6 +532,12 @@ private:
   // Current recorded maximum possible occupancy.
   unsigned Occupancy;
 
+  // LCOMPILER-2277 (experimental): SGPR budget cap chosen by the pre-RA
+  // occupancy-claw pass so the SGPR allocator spills surplus SGPRs (into VGPR
+  // lanes) to preserve occupancy. 0 = unset / no claw. Consumed by
+  // SIRegisterInfo::getReservedRegs.
+  unsigned SGPRClawNumSGPRs = 0;
+
   // Maximum number of dwords that can be clusterred during instruction
   // scheduler stage.
   unsigned MaxMemoryClusterDWords = DefaultMemoryClusterDWordsLimit;
@@ -1196,6 +1202,10 @@ public:
   unsigned getOccupancy() const {
     return Occupancy;
   }
+
+  // LCOMPILER-2277 (experimental): SGPR budget cap for the occupancy claw.
+  unsigned getSGPRClawNumSGPRs() const { return SGPRClawNumSGPRs; }
+  void setSGPRClawNumSGPRs(unsigned N) { SGPRClawNumSGPRs = N; }
 
   unsigned getMinAllowedOccupancy() const {
     if (!isMemoryBound() && !needsWaveLimiter())
