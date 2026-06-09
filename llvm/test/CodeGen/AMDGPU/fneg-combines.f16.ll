@@ -4954,14 +4954,12 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; SI-NEXT:    v_cvt_f32_f16_e32 v2, v2
 ; SI-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; SI-NEXT:    v_lshlrev_b32_e32 v6, 1, v6
-; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
+; SI-NEXT:    v_add_i32_e64 v0, s[4:5], v0, v6
 ; SI-NEXT:    v_mul_f32_e32 v2, v2, v3
 ; SI-NEXT:    v_cvt_f16_f32_e32 v2, v2
-; SI-NEXT:    v_add_i32_e64 v0, s[4:5], v0, v6
+; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
 ; SI-NEXT:    v_addc_u32_e64 v1, s[4:5], 0, v1, s[4:5]
-; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; SI-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; SI-NEXT:    s_mov_b64 exec, s[6:7]
+; SI-NEXT:    s_xor_b64 exec, vcc, exec
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB101_2
 ; SI-NEXT:  .LBB101_1: ; %if
@@ -4972,7 +4970,7 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; SI-NEXT:    flat_store_short v[0:1], v3
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:  .LBB101_2: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, s[4:5]
+; SI-NEXT:    s_or_b64 exec, exec, vcc
 ; SI-NEXT:    flat_store_short v[0:1], v2
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_setpc_b64 s[30:31]
@@ -4985,10 +4983,8 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, v0, v6
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v5
-; VI-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; VI-NEXT:    v_mul_f16_e32 v2, v2, v3
-; VI-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
-; VI-NEXT:    s_mov_b64 exec, s[6:7]
+; VI-NEXT:    s_xor_b64 exec, vcc, exec
 ; VI-NEXT:    ; divergent control-flow edge
 ; VI-NEXT:    s_cbranch_execz .LBB101_2
 ; VI-NEXT:  .LBB101_1: ; %if
@@ -4996,7 +4992,7 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; VI-NEXT:    flat_store_short v[0:1], v3
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:  .LBB101_2: ; %endif
-; VI-NEXT:    s_or_b64 exec, exec, s[4:5]
+; VI-NEXT:    s_or_b64 exec, exec, vcc
 ; VI-NEXT:    flat_store_short v[0:1], v2
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    s_setpc_b64 s[30:31]
@@ -5007,14 +5003,12 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; GFX11-NEXT:    v_and_b32_e32 v6, 0x3ff, v31
 ; GFX11-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v5
 ; GFX11-NEXT:    v_mul_f16_e32 v2, v2, v3
-; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(SKIP_1) | instid1(VALU_DEP_1)
+; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX11-NEXT:    v_lshlrev_b32_e32 v6, 1, v6
-; GFX11-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
 ; GFX11-NEXT:    v_add_co_u32 v0, s0, v0, v6
 ; GFX11-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-NEXT:    v_add_co_ci_u32_e64 v1, null, 0, v1, s0
-; GFX11-NEXT:    s_xor_b32 s0, exec_lo, s1
-; GFX11-NEXT:    s_mov_b32 exec_lo, s1
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB101_2
 ; GFX11-NEXT:  .LBB101_1: ; %if
@@ -5022,7 +5016,7 @@ define void @v_fneg_copytoreg_f16(ptr addrspace(1) %out, half %a, half %b, half 
 ; GFX11-NEXT:    global_store_b16 v[0:1], v3, off dlc
 ; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-NEXT:  .LBB101_2: ; %endif
-; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; GFX11-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX11-NEXT:    global_store_b16 v[0:1], v2, off dlc
 ; GFX11-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX11-NEXT:    s_setpc_b64 s[30:31]
