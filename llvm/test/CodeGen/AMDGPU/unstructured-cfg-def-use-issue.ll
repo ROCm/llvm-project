@@ -42,11 +42,8 @@ define hidden void @widget() #0 {
 ; GCN-NEXT:    s_add_u32 s16, s16, wibble@rel32@lo+4
 ; GCN-NEXT:    s_addc_u32 s17, s17, wibble@rel32@hi+12
 ; GCN-NEXT:    s_swappc_b64 s[30:31], s[16:17]
-; GCN-NEXT:    v_cmp_lt_f32_e32 vcc, 0, v0
-; GCN-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GCN-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GCN-NEXT:    s_and_b64 s[34:35], s[6:7], exec
-; GCN-NEXT:    s_mov_b64 exec, s[4:5]
+; GCN-NEXT:    v_cmp_lt_f32_e64 s[34:35], 0, v0
+; GCN-NEXT:    s_xor_b64 exec, s[34:35], exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_6
 ; GCN-NEXT:  .LBB0_5: ; %bb12

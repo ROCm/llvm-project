@@ -106,36 +106,35 @@ define amdgpu_ps { <4 x float> } @test_return_to_epilog_with_optimized_kill(floa
   ; GCN-NEXT:   frame-setup CFI_INSTRUCTION escape 0x0f, 0x04, 0x30, 0x36, 0xe9, 0x02
   ; GCN-NEXT:   frame-setup CFI_INSTRUCTION undefined $pc_reg
   ; GCN-NEXT:   $vgpr1 = nofpexcept V_RCP_F32_e32 $vgpr0, implicit $mode, implicit $exec
-  ; GCN-NEXT:   $sgpr6_sgpr7 = S_MOV_B64 $exec
+  ; GCN-NEXT:   $sgpr2_sgpr3 = S_MOV_B64 $exec
   ; GCN-NEXT:   renamable $sgpr0_sgpr1 = S_MOV_B64 -1
   ; GCN-NEXT:   nofpexcept V_CMP_GT_F32_e32 0, killed $vgpr1, implicit-def $vcc, implicit $mode, implicit $exec
   ; GCN-NEXT:   renamable $sgpr4_sgpr5 = S_XOR_B64 renamable $vcc, $exec, implicit-def $scc
-  ; GCN-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 $exec, renamable $vcc, implicit-def $scc
-  ; GCN-NEXT:   $exec = S_MOV_B64 killed renamable $vcc
+  ; GCN-NEXT:   $exec = S_MOV_B64 killed $vcc
   ; GCN-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GCN-NEXT:   S_CBRANCH_EXECZ %bb.3, implicit $exec
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.1.kill0:
   ; GCN-NEXT:   successors: %bb.2(0x40000000), %bb.7(0x40000000)
-  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $sgpr6_sgpr7
+  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5
   ; GCN-NEXT: {{  $}}
-  ; GCN-NEXT:   dead renamable $sgpr6_sgpr7 = S_ANDN2_B64 killed renamable $sgpr6_sgpr7, $exec, implicit-def $scc
+  ; GCN-NEXT:   dead renamable $sgpr2_sgpr3 = S_ANDN2_B64 killed renamable $sgpr2_sgpr3, $exec, implicit-def $scc
   ; GCN-NEXT:   S_CBRANCH_SCC0 %bb.7, implicit $scc
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.2.kill0:
   ; GCN-NEXT:   successors: %bb.3(0x80000000)
-  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5, $scc
+  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr4_sgpr5, $scc
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT:   $exec = S_MOV_B64 0
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.3:
   ; GCN-NEXT:   successors: %bb.4(0x40000000), %bb.6(0x40000000)
-  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr2_sgpr3, $sgpr4_sgpr5
+  ; GCN-NEXT:   liveins: $vgpr0, $sgpr0_sgpr1, $sgpr4_sgpr5
   ; GCN-NEXT: {{  $}}
-  ; GCN-NEXT:   $exec = S_OR_B64 $exec, killed renamable $sgpr2_sgpr3, implicit-def $scc
+  ; GCN-NEXT:   $exec = S_OR_B64 $exec, renamable $sgpr4_sgpr5, implicit-def $scc
   ; GCN-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 $exec, renamable $sgpr4_sgpr5, implicit-def $scc
   ; GCN-NEXT:   renamable $sgpr2_sgpr3 = S_AND_B64 killed renamable $sgpr2_sgpr3, $exec, implicit-def $scc
-  ; GCN-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr4_sgpr5
+  ; GCN-NEXT:   $exec = S_MOV_B64 killed $sgpr4_sgpr5
   ; GCN-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GCN-NEXT:   S_CBRANCH_EXECZ %bb.6, implicit $exec
   ; GCN-NEXT: {{  $}}
