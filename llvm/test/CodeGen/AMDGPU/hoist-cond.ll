@@ -9,7 +9,7 @@
 ; CHECK: v_cmp_ne_u32_e32 vcc, 0, v0
 ; CHECK: v_cndmask_b32_e64 {{v[0-9]+}}, 0, 1, vcc
 ; CHECK: v_cmp_ne_u32_e32 vcc, 1, {{v[0-9]+}}
-; CHECK: s_xor_b64 exec, vcc, exec
+; CHECK: s_xor_b64 s[8:9], vcc, exec
 ; CHECK: BB0_2:
 
 define amdgpu_kernel void @hoist_cond(ptr addrspace(1) nocapture %arg, ptr addrspace(1) noalias nocapture readonly %arg1, i32 %arg3, i32 %arg4) {

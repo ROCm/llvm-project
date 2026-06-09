@@ -102,7 +102,10 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v0
 ; SI-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc_lo
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v3
-; SI-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
+; SI-NEXT:    s_xor_b32 s3, vcc_lo, exec_lo
+; SI-NEXT:    s_xor_b32 s2, exec_lo, s3
+; SI-NEXT:    s_and_b32 s2, s2, exec_lo
+; SI-NEXT:    s_mov_b32 exec_lo, s3
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_4
 ; SI-NEXT:  .LBB2_3: ; %if
@@ -110,7 +113,7 @@ define amdgpu_ps float @else3(i32 %z, float %v, i32 inreg %bound, i32 %x0) #0 {
 ; SI-NEXT:    v_mul_f32_e32 v3, s1, v1
 ; SI-NEXT:    v_add_nc_u32_e32 v4, 1, v2
 ; SI-NEXT:  .LBB2_4: ; in Loop: Header=BB2_2 Depth=1
-; SI-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; SI-NEXT:    s_or_b32 exec_lo, exec_lo, s2
 ; SI-NEXT:    s_xor_b32 s2, exec_lo, vcc_lo
 ; SI-NEXT:    s_and_b32 s2, s2, exec_lo
 ; SI-NEXT:    s_mov_b32 exec_lo, vcc_lo

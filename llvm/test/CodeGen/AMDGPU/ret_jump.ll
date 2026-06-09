@@ -10,15 +10,15 @@
 
 ; GCN: ; %else
 
-; GCN: v_cmp_gt_f32_e64 [[COND:s\[[0-9]+:[0-9]+\]]]
-; GCN: s_xor_b64 exec, [[COND]], exec
+; GCN: v_cmp_gt_f32_e64 [[SAVE:s\[[0-9]+:[0-9]+\]]]
+; GCN: s_xor_b64 exec, [[SAVE]], exec
 ; GCN: s_cbranch_execz [[RET_BB]]
 
 ; GCN: .LBB{{[0-9]+}}_{{[0-9]+}}: ; %unreachable.bb
 ; GCN: ; divergent unreachable
 
 ; GCN: [[RET_BB]]: ; %UnifiedReturnBlock
-; GCN: s_or_b64 exec, exec, [[COND]]
+; GCN: s_or_b64 exec, exec, [[SAVE]]
 
 ; GCN: ; return
 ; GCN: .Lfunc_end0
@@ -59,6 +59,7 @@ ret.bb:                                          ; preds = %else, %main_body
 
 ; GCN: v_cmp_gt_f32_e32 vcc
 ; GCN: s_xor_b64 [[SAVE1:s\[[0-9]+:[0-9]+\]]], vcc, exec
+; GCN: s_mov_b64 [[SAVE2:s\[[0-9]+:[0-9]+\]]], [[SAVE1]]
 ; GCN: s_mov_b64 exec, vcc
 ; GCN: s_cbranch_execz
 
@@ -66,7 +67,7 @@ ret.bb:                                          ; preds = %else, %main_body
 ; GCN: v_mov_b32_e32 v0, 11
 ; GCN: {{buffer|flat}}_store_dword
 
-; GCN: s_or_b64 exec, exec, [[SAVE1]]
+; GCN: s_or_b64 exec, exec, [[SAVE2]]
 ; GCN: s_xor_b64 [[SAVE3:s\[[0-9]+:[0-9]+\]]], exec, [[SAVE1]]
 ; GCN: s_mov_b64 exec, [[SAVE1]]
 ; GCN: s_cbranch_execz [[UNIFIED_RET:.LBB[0-9]+_[0-9]+]]

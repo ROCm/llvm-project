@@ -2079,16 +2079,32 @@ void ControlFlowRewriter::rewrite() {
     }
 
     // When there is only a single lane mask origin, the condition register
-    // can be used directly as the primary successor EXEC value. The
-    // accumulator machinery is only needed when multiple origins contribute
-    // lane masks that must be merged.
-    bool HasSingleOrigin = (LaneTargetInfo.origins.size() == 1);
+    // can be used directly as the primary successor EXEC value, bypassing
+    // the accumulator machinery. This optimization requires three conditions:
+    // 1. Exactly one origin exists for this lane target.
+    // 2. The origin is not inside a loop — inside loops, lane masks must be
+    //    accumulated across iterations via the accumulator machinery.
+    // 3. The origin block dominates all divergent OriginBranch blocks where
+    //    PrimarySuccessorExec will be consumed. If any divergent OriginBranch
+    //    block is not dominated, a bypass path may exist and the accumulator
+    //    is needed to ensure the lane mask is properly initialized on all
+    //    paths.
+    bool HasSingleDomOrigin =
+        LaneTargetInfo.origins.size() == 1 &&
+        !LaneTargetInfo.origins[0].Node->Cycle &&
+        !llvm::any_of(LaneTargetInfo.OriginBranch,
+                      [&](const auto &NodeDivergentPair) {
+                        return NodeDivergentPair.getInt() &&
+                               !ReconvergeCfg.getDomTree().dominates(
+                                   LaneTargetInfo.origins[0].Node->Block,
+                                   NodeDivergentPair.getPointer()->Block);
+                      });
     Register DirectCondReg;
 
     // Step 2.1: Add conditions branching to LaneTarget to the Lane mask
     // Updater. Initialize the accumulator only when multiple origins
     // require merging.
-    if (!HasSingleOrigin) {
+    if (!HasSingleDomOrigin) {
       // FIXME: we are creating a register here only to initialize the updater
       Updater.init();
       Updater.addReset(*LaneTarget->Block, GCNLaneMaskUpdater::ResetInMiddle);
@@ -2239,7 +2255,7 @@ void ControlFlowRewriter::rewrite() {
         }
       }
 
-      if (HasSingleOrigin)
+      if (HasSingleDomOrigin)
         DirectCondReg = CondReg;
       else
         Updater.addAvailable(*LaneOrigin.Node->Block, CondReg);
@@ -2253,7 +2269,7 @@ void ControlFlowRewriter::rewrite() {
       WaveNode *OriginNode = NodeDivergentPair.getPointer();
       CFGNodeInfo &OriginCFGNodeInfo = NodeInfo.find(OriginNode)->second;
       OriginCFGNodeInfo.PrimarySuccessorExec =
-          HasSingleOrigin ? DirectCondReg
+          HasSingleDomOrigin ? DirectCondReg
                           : Updater.getValueAfterMerge(*OriginNode->Block);
 
       MachineBasicBlock::iterator MBBIOriginNodeEnd = OriginNode->Block->end();
