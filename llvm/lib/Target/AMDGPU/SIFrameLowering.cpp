@@ -12,8 +12,8 @@
 #include "GCNSubtarget.h"
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIMachineFunctionInfo.h"
-#include "llvm/BinaryFormat/Dwarf.h"
 #include "SISpillUtils.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/LiveRegUnits.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -787,9 +787,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
   DebugLoc DL;
   MachineBasicBlock::iterator I = MBB.begin();
 
-  const bool NeedsFrameMoves = needsFrameMoves(MF);
-
-  if (NeedsFrameMoves) {
+  if (MF.needsFrameMoves()) {
     // On entry the SP/FP are not set up, so we need to define the CFA in terms
     // of a literal location expression.
     static const char CFAEncodedInstUserOpsArr[] = {
@@ -803,11 +801,13 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
     static StringRef CFAEncodedInstUserOps =
         StringRef(CFAEncodedInstUserOpsArr, sizeof(CFAEncodedInstUserOpsArr));
     buildCFI(MBB, I, DL,
-             MCCFIInstruction::createEscape(nullptr, CFAEncodedInstUserOps));
+             MCCFIInstruction::createEscape(nullptr, CFAEncodedInstUserOps,
+                                            SMLoc(),
+                                            "CFA is 0 in private_wave aspace"));
     // Unwinding halts when the return address (PC) is undefined.
     buildCFI(MBB, I, DL,
              MCCFIInstruction::createUndefined(
-                 nullptr, MCRI->getDwarfRegNum(AMDGPU::PC_REG, false)));
+                 nullptr, TRI->getDwarfRegNum(AMDGPU::PC_REG, false)));
   }
 
   Register PreloadedScratchWaveOffsetReg = MFI->getPreloadedReg(
