@@ -2,10 +2,9 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn -mcpu=tonga < %s | FileCheck %s
 
 ; CHECK-LABEL: {{^}}else_no_execfix:
-; CHECK: s_xor_b64 [[DST1:s\[[0-9]+:[0-9]+\]]], vcc, exec
-; CHECK: s_or_b64 exec, exec, [[DST2:s\[[0-9]+:[0-9]+\]]]
-; CHECK-NEXT: s_xor_b64 [[DST3:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; CHECK-NEXT: s_and_b64 [[DST3]], [[DST3]], exec
+; CHECK: s_xor_b64 exec, vcc, exec
+; CHECK: s_or_b64 exec, exec, vcc
+; CHECK-NEXT: s_xor_b64 [[DST:s\[[0-9]+:[0-9]+\]]], exec, vcc
 ; CHECK-NEXT: s_mov_b64 exec, vcc
 define amdgpu_ps float @else_no_execfix(i32 %z, float %v) #0 {
 main_body:
@@ -28,9 +27,8 @@ end:
 ; CHECK-LABEL: {{^}}else_execfix_leave_wqm:
 ; CHECK: ; %bb.0:
 ; CHECK-NEXT: s_mov_b64 [[INIT_EXEC:s\[[0-9]+:[0-9]+\]]], exec
-; CHECK: s_or_b64 exec, exec, {{s\[[0-9]+:[0-9]+\]}}
+; CHECK: s_or_b64 exec, exec, vcc
 ; CHECK-NEXT: s_xor_b64 [[DST:s\[[0-9]+:[0-9]+\]]], exec, vcc
-; CHECK-NEXT: s_and_b64 [[DST]], [[DST]], exec
 ; CHECK-NEXT: s_mov_b64 exec, vcc
 define amdgpu_ps void @else_execfix_leave_wqm(i32 %z, float %v) #0 {
 main_body:
