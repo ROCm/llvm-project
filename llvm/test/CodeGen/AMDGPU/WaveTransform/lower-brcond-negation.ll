@@ -1,7 +1,9 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -mattr=+wavefrontsize64 -verify-machineinstrs -stop-after=finalize-isel < %s | FileCheck -check-prefixes=CHECK %s
 ; RUN: llc -O0 -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx90a -mattr=+wavefrontsize64 -verify-machineinstrs -stop-after=finalize-isel < %s | FileCheck -check-prefixes=OPT-O0 %s
 
-; Test LowerBRCOND behaviour in the wave-transform flow (isWaveCFG == false).
+; Test the thread-CFG BRCOND NOT-fold in the wave-transform flow.
+; The fold lives in SITargetLowering::performBrcondCombine
+; (a DAG combine that runs at every opt level).
 ; CHECK  pipeline:  default optimizations      -- negations appear as SETCC wrappers
 ; OPT-O0 pipeline: -O0 (no DAGCombine/IR opts) -- negations survive as XOR wrappers
 
@@ -11,21 +13,15 @@ attributes #0 = { nounwind readnone }
 define amdgpu_kernel void @setcc_negation_phi_i1(i32 %arg) {
 ; CHECK-LABEL: name: setcc_negation_phi_i1
 ; CHECK:       bb.2.bb3:
-; CHECK:         [[CMP1:%[0-9]+]]:sreg_64_xexec = V_CMP_NE_U32_e64 [[PHI:%[0-9]+]], 0, implicit $exec
-; CHECK-NEXT:    [[CNDMASK:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, [[CMP1]], implicit $exec
-; CHECK-NEXT:    [[ONE:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-; CHECK-NEXT:    [[CMP2:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[CNDMASK]], killed [[ONE]], implicit $exec
-; CHECK-NEXT:    SI_BRCOND %bb.4, killed [[CMP2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; CHECK-NEXT:    S_BRANCH %bb.3
+; CHECK:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI:%[0-9]+]], 0, implicit $exec
+; CHECK-NEXT:    SI_BRCOND %bb.3, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; CHECK-NEXT:    S_BRANCH %bb.4
 ;
-; OPT-O0 -- same function, but negation appears as S_XOR_B64 instead of SETCC.
 ; OPT-O0-LABEL: name: setcc_negation_phi_i1
 ; OPT-O0:       bb.2.bb3:
 ; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI:%[0-9]+]], 0, implicit $exec
-; OPT-O0-NEXT:    [[NEG1:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-; OPT-O0-NEXT:    [[XOR:%[0-9]+]]:sreg_64 = S_XOR_B64 [[CMP]], killed [[NEG1:%[0-9]+]], implicit-def dead $scc
-; OPT-O0-NEXT:    SI_BRCOND %bb.4, killed [[XOR]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; OPT-O0-NEXT:    S_BRANCH %bb.3
+; OPT-O0-NEXT:    SI_BRCOND %bb.3, [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0-NEXT:    S_BRANCH %bb.4
 bb:
   %tidig = call i32 @llvm.amdgcn.workitem.id.x()
   %cmp = trunc i32 %tidig to i1
@@ -47,17 +43,11 @@ bb6:
 }
 
 define amdgpu_kernel void @xor_negation_icmp(i32 %N, ptr addrspace(1) %p) {
-; CHECK-LABEL: name: xor_negation_icmp
-; CHECK:       S_ENDPGM 0
-;
-; OPT-O0 -- the XOR negation survives.
 ; OPT-O0-LABEL: name: xor_negation_icmp
 ; OPT-O0:       bb.0.entry:
 ; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_LT_I32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; OPT-O0-NEXT:    [[NEG1:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-; OPT-O0-NEXT:    [[XOR:%[0-9]+]]:sreg_64 = S_XOR_B64 killed [[CMP]], killed [[NEG1]], implicit-def dead $scc
-; OPT-O0-NEXT:    SI_BRCOND %bb.2, killed [[XOR]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; OPT-O0-NEXT:    S_BRANCH %bb.1
+; OPT-O0-NEXT:    SI_BRCOND %bb.1, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0-NEXT:    S_BRANCH %bb.2
 entry:
   %id.x = tail call i32 @llvm.amdgcn.workitem.id.x()
   %cmp = icmp slt i32 %id.x, 1
@@ -98,14 +88,10 @@ define amdgpu_kernel void @explicit_i1_not(ptr addrspace(1) %out) {
 ; CHECK:         SI_BRCOND %bb.2, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; CHECK-NEXT:    S_BRANCH %bb.1
 ;
-; OPT-O0 -- double S_XOR_B64 (double negation).
 ; OPT-O0-LABEL: name: explicit_i1_not
 ; OPT-O0:       bb.0.entry:
 ; OPT-O0:         [[CMP:%[0-9]+]]:sreg_64 = V_CMP_EQ_U32_e64 killed [[LHS:%[0-9]+]], killed [[RHS:%[0-9]+]], implicit $exec
-; OPT-O0-NEXT:    [[NEG1:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-; OPT-O0-NEXT:    [[XOR1:%[0-9]+]]:sreg_64 = S_XOR_B64 killed [[CMP]], [[NEG1:%[0-9]+]], implicit-def dead $scc
-; OPT-O0-NEXT:    [[XOR2:%[0-9]+]]:sreg_64 = S_XOR_B64 killed [[XOR1]], [[NEG1]], implicit-def dead $scc
-; OPT-O0-NEXT:    SI_BRCOND %bb.2, killed [[XOR2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0-NEXT:    SI_BRCOND %bb.2, killed [[CMP]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
 ; OPT-O0-NEXT:    S_BRANCH %bb.1
 entry:
   %id = call i32 @llvm.amdgcn.workitem.id.x()
@@ -128,12 +114,11 @@ define amdgpu_kernel void @uniform_branch(ptr addrspace(1) %out, i32 inreg %flag
 ; CHECK:         S_CBRANCH_SCC1 %bb.2, implicit $scc
 ; CHECK-NEXT:    S_BRANCH %bb.1
 ;
-; OPT-O0 -- still scalar, no SI_BRCOND.
 ; OPT-O0-LABEL: name: uniform_branch
 ; OPT-O0:       bb.0.entry:
 ; OPT-O0:         S_CMP_EQ_U32 {{%[0-9]+}}, killed [[ZERO:%[0-9]+]], implicit-def $scc
-; OPT-O0:         S_CBRANCH_VCCNZ %bb.2, implicit $vcc
-; OPT-O0-NEXT:    S_BRANCH %bb.1
+; OPT-O0:         S_CBRANCH_SCC1 %bb.1, implicit $scc
+; OPT-O0-NEXT:    S_BRANCH %bb.2
 entry:
   %cmp = icmp eq i32 %flag, 0
   br i1 %cmp, label %if.then, label %if.end
@@ -150,36 +135,26 @@ define amdgpu_kernel void @nested_phi_i1_diamond(ptr addrspace(1) %out) {
 ; CHECK-LABEL: name: nested_phi_i1_diamond
 ;
 ; CHECK:       bb.2.merge1:
-; CHECK:         [[CMP1:%[0-9]+]]:sreg_64_xexec = V_CMP_NE_U32_e64 [[PHI1:%[0-9]+]], 0, implicit $exec
-; CHECK-NEXT:    [[CNDMASK1:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, [[CMP1]], implicit $exec
-; CHECK-NEXT:    [[ONE1:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-; CHECK-NEXT:    [[CMP2:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[CNDMASK1]], killed [[ONE1]], implicit $exec
-; CHECK-NEXT:    SI_BRCOND %bb.4, killed [[CMP2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; CHECK-NEXT:    S_BRANCH %bb.3
+; CHECK:         [[CMP1:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI1:%[0-9]+]], 0, implicit $exec
+; CHECK-NEXT:    SI_BRCOND %bb.3, [[CMP1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; CHECK-NEXT:    S_BRANCH %bb.4
 ;
 ; CHECK:       bb.7.merge3:
-; CHECK:         [[CMP3:%[0-9]+]]:sreg_64_xexec = V_CMP_NE_U32_e64 [[PHI2:%[0-9]+]], 0, implicit $exec
-; CHECK-NEXT:    [[CNDMASK2:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, [[CMP3]], implicit $exec
-; CHECK-NEXT:    [[ONE2:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-; CHECK-NEXT:    [[CMP4:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[CNDMASK2]], killed [[ONE2]], implicit $exec
-; CHECK-NEXT:    SI_BRCOND %bb.9, killed [[CMP4]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; CHECK-NEXT:    S_BRANCH %bb.8
+; CHECK:         [[CMP2:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI2:%[0-9]+]], 0, implicit $exec
+; CHECK-NEXT:    SI_BRCOND %bb.8, [[CMP2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; CHECK-NEXT:    S_BRANCH %bb.9
 ;
-; OPT-O0 -- both merges show S_XOR_B64 instead.
+; OPT-O0 -- both merges fold the negation into swapped branch targets.
 ; OPT-O0-LABEL: name: nested_phi_i1_diamond
 ; OPT-O0:       bb.2.merge1:
 ; OPT-O0:         [[CMP1:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI1:%[0-9]+]], 0, implicit $exec
-; OPT-O0-NEXT:    [[NEG1:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-; OPT-O0-NEXT:    [[XOR1:%[0-9]+]]:sreg_64 = S_XOR_B64 [[CMP1]], killed [[NEG1:%[0-9]+]], implicit-def dead $scc
-; OPT-O0-NEXT:    SI_BRCOND %bb.4, killed [[XOR1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; OPT-O0-NEXT:    S_BRANCH %bb.3
+; OPT-O0-NEXT:    SI_BRCOND %bb.3, [[CMP1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0-NEXT:    S_BRANCH %bb.4
 ;
 ; OPT-O0:       bb.7.merge3:
 ; OPT-O0:         [[CMP2:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI2:%[0-9]+]], 0, implicit $exec
-; OPT-O0-NEXT:    [[NEG2:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-; OPT-O0-NEXT:    [[XOR2:%[0-9]+]]:sreg_64 = S_XOR_B64 [[CMP2]], killed [[NEG2:%[0-9]+]], implicit-def dead $scc
-; OPT-O0-NEXT:    SI_BRCOND %bb.9, killed [[XOR2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-; OPT-O0-NEXT:    S_BRANCH %bb.8
+; OPT-O0-NEXT:    SI_BRCOND %bb.8, [[CMP2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+; OPT-O0-NEXT:    S_BRANCH %bb.9
 entry:
   %id = call i32 @llvm.amdgcn.workitem.id.x()
   %c1 = trunc i32 %id to i1
