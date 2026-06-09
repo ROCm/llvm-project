@@ -569,18 +569,27 @@ struct BoundsTuple {
 static BoundsTuple SeenBounds[PROF_MAX_SEEN_BOUNDS];
 static int NumSeenBounds = 0;
 
-static int alreadySeenBounds(const void *D, const void *C, const void *N) {
+/* Pure check: has this bounds tuple already been processed? Does not mutate
+ * state, so a transient drain failure does not permanently suppress retries. */
+static int seenBounds(const void *D, const void *C, const void *N) {
   for (int i = 0; i < NumSeenBounds; ++i)
     if (SeenBounds[i].data == D && SeenBounds[i].cnts == C &&
         SeenBounds[i].names == N)
       return 1;
+  return 0;
+}
+
+/* Record a bounds tuple as processed. Only called after a successful drain or a
+ * confirmed-empty section, so failed attempts stay retryable. Idempotent. */
+static void recordBounds(const void *D, const void *C, const void *N) {
+  if (seenBounds(D, C, N))
+    return;
   if (NumSeenBounds < PROF_MAX_SEEN_BOUNDS) {
     SeenBounds[NumSeenBounds].data = D;
     SeenBounds[NumSeenBounds].cnts = C;
     SeenBounds[NumSeenBounds].names = N;
     NumSeenBounds++;
   }
-  return 0;
 }
 
 static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
@@ -628,7 +637,7 @@ static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
     PROF_WARN("%s", "failed to copy device bounds table\n");
     return PROF_HSA_STATUS_SUCCESS;
   }
-  if (alreadySeenBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart)) {
+  if (seenBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart)) {
     if (isVerboseMode())
       PROF_NOTE("%s", "device bounds already drained, skipping\n");
     return PROF_HSA_STATUS_SUCCESS;
@@ -645,9 +654,16 @@ static prof_hsa_status_t onSymbol(prof_hsa_executable_t, prof_hsa_agent_t,
 
   // Only a >0 result means a .profraw was actually written; an empty section
   // (0) or an error (<0) must not be counted as a drain or advance DrainIndex.
-  if (processDeviceSections((void *)(uintptr_t)Addr, Target) > 0) {
+  // Record the bounds as processed only on success (>0) or a confirmed-empty
+  // section (0); a transient error (<0) is left unrecorded so a later agent or
+  // a subsequent collect call can retry instead of silently dropping data.
+  int Rc = processDeviceSections((void *)(uintptr_t)Addr, Target);
+  if (Rc > 0) {
     S->drained++;
     DrainIndex++;
+    recordBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart);
+  } else if (Rc == 0) {
+    recordBounds(Sec.DataStart, Sec.CountersStart, Sec.NamesStart);
   }
 
   return PROF_HSA_STATUS_SUCCESS;
@@ -834,12 +850,12 @@ static int drainDevices(void) {
               W.total_found);
     return -1;
   }
-  /* Latch only if we actually drained data, or if we successfully walked
-   * everything and confirmed there is no instrumented code object loaded
-   * (no symbols found, no per-executable iteration failures). The "no
-   * instrumented code object" case is genuinely terminal for an exit drain
-   * but harmless to repeat if anyone calls back in (and the host-write
-   * forwarder may run before atexit). */
+  /* Latch only when we actually drained data. We deliberately do NOT latch the
+   * "walked everything but found no instrumented code object" case: that can
+   * happen on an early collect call (the host-write forwarder may run before any
+   * kernel launch, i.e. before atexit), and latching it would suppress the real
+   * atexit drain once kernels do run. Repeating a no-op walk is cheap and
+   * harmless, so leaving the latch clear here is the safe choice. */
   if (W.total_drained > 0)
     __atomic_store_n(&DrainCompleted, 1, __ATOMIC_RELEASE);
   return (IterFailures > 0) ? -1 : 0;

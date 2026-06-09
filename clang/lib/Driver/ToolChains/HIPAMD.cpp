@@ -19,6 +19,7 @@
 #include "clang/Options/Options.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/TargetParser/TargetParser.h"
 
 using namespace clang::driver;
@@ -164,7 +165,10 @@ void AMDGCN::Linker::constructLldCommand(Compilation &C, const JobAction &JA,
   if (ToolChain::needsProfileRT(Args)) {
     std::string ProfileRT =
         TC.getCompilerRT(Args, "profile", ToolChain::FT_Static);
-    if (llvm::sys::fs::exists(ProfileRT))
+    // Use the ToolChain VFS (matches the new-offload-driver path in
+    // Clang.cpp) so overlay/virtual filesystems used by the driver are
+    // honored; llvm::sys::fs bypasses them and can wrongly skip the runtime.
+    if (TC.getVFS().exists(ProfileRT))
       LldArgs.push_back(Args.MakeArgString(ProfileRT));
   }
 

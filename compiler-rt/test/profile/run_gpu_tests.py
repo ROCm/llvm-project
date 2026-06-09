@@ -260,15 +260,31 @@ def run_one(path, args, features, base_env):
 
     env = dict(base_env)
     env["PATH"] = ensure_tools(Path(args.toolchain_bin), workdir)
+    timeout = args.timeout if args.timeout and args.timeout > 0 else None
     for line in runs:
         cmd = apply_substitutions(line, subs).strip()
-        proc = subprocess.run(
-            ["bash", "-e", "-o", "pipefail", "-c", cmd],
-            cwd=str(workdir),
-            env=env,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            proc = subprocess.run(
+                ["bash", "-e", "-o", "pipefail", "-c", cmd],
+                cwd=str(workdir),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as e:
+            out = e.stdout or ""
+            err = e.stderr or ""
+            if isinstance(out, bytes):
+                out = out.decode("utf-8", "replace")
+            if isinstance(err, bytes):
+                err = err.decode("utf-8", "replace")
+            detail = "RUN timed out after %gs: %s\n%s%s" % (
+                timeout, cmd, out, err,
+            )
+            if not args.keep:
+                shutil.rmtree(workdir, ignore_errors=True)
+            return "FAIL", detail
         if proc.returncode != 0:
             detail = "RUN failed (rc=%d): %s\n%s%s" % (
                 proc.returncode, cmd, proc.stdout, proc.stderr,
@@ -306,6 +322,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="Print resolved RUN lines without executing")
     ap.add_argument("--keep", action="store_true", help="Keep per-test temp dirs")
+    ap.add_argument("--timeout", type=float, default=600,
+                    help="Per-RUN-line timeout in seconds (<=0 disables); "
+                         "guards against a hung GPU/compiler wedging the run")
     args = ap.parse_args()
 
     if not args.dry_run and not args.toolchain_bin:
