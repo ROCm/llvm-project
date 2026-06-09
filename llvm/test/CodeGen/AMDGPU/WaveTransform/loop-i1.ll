@@ -63,9 +63,9 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT: bb.2.do.body:
   ; GFX90A-NEXT:   successors: %bb.2(0x7c000000), %bb.4(0x04000000)
   ; GFX90A-NEXT: {{  $}}
-  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[COPY12]], %bb.1, %67, %bb.2
-  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %72, %bb.2
-  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.1, %68, %bb.2
+  ; GFX90A-NEXT:   [[PHI:%[0-9]+]]:vreg_64_align2 = PHI [[COPY12]], %bb.1, %64, %bb.2
+  ; GFX90A-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %69, %bb.2
+  ; GFX90A-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.1, %65, %bb.2
   ; GFX90A-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[PHI]], 0, 0, implicit $exec :: (load (s32) from %ir.lsr.iv, addrspace 1)
   ; GFX90A-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 7
   ; GFX90A-NEXT:   [[V_CMP_LT_I32_e64_:%[0-9]+]]:sreg_64 = V_CMP_LT_I32_e64 [[GLOBAL_LOAD_DWORD]], killed [[S_MOV_B32_3]], implicit $exec
@@ -107,12 +107,9 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT:   [[PHI3:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_2]], %bb.3, [[V_CNDMASK_B32_e64_1]], %bb.2
   ; GFX90A-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[COPY5]], %bb.3, [[COPY22]], %bb.2
-  ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_64_xexec = V_CMP_NE_U32_e64 [[PHI3]], 0, implicit $exec
-  ; GFX90A-NEXT:   [[V_CNDMASK_B32_e64_3:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, [[V_CMP_NE_U32_e64_1]], implicit $exec
-  ; GFX90A-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-  ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_2:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[V_CNDMASK_B32_e64_3]], killed [[S_MOV_B32_7]], implicit $exec
-  ; GFX90A-NEXT:   SI_BRCOND %bb.6, killed [[V_CMP_NE_U32_e64_2]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
-  ; GFX90A-NEXT:   S_BRANCH %bb.5
+  ; GFX90A-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 [[PHI3]], 0, implicit $exec
+  ; GFX90A-NEXT:   SI_BRCOND %bb.5, [[V_CMP_NE_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; GFX90A-NEXT:   S_BRANCH %bb.6
   ; GFX90A-NEXT: {{  $}}
   ; GFX90A-NEXT: bb.5.if.then11:
   ; GFX90A-NEXT:   successors: %bb.6(0x80000000)
@@ -123,8 +120,8 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX90A-NEXT:   [[V_ASHRREV_I32_e64_:%[0-9]+]]:vgpr_32 = V_ASHRREV_I32_e64 31, [[PHI4]], implicit $exec
   ; GFX90A-NEXT:   [[COPY25:%[0-9]+]]:vgpr_32 = COPY killed [[V_ASHRREV_I32_e64_]]
   ; GFX90A-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64_align2 = REG_SEQUENCE [[PHI4]], %subreg.sub0, killed [[COPY25]], %subreg.sub1
-  ; GFX90A-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_MOV_B32 2
-  ; GFX90A-NEXT:   [[V_LSHLREV_B64_e64_:%[0-9]+]]:vreg_64_align2 = nsw V_LSHLREV_B64_e64 killed [[S_MOV_B32_8]], killed [[REG_SEQUENCE5]], implicit $exec
+  ; GFX90A-NEXT:   [[S_MOV_B32_7:%[0-9]+]]:sreg_32 = S_MOV_B32 2
+  ; GFX90A-NEXT:   [[V_LSHLREV_B64_e64_:%[0-9]+]]:vreg_64_align2 = nsw V_LSHLREV_B64_e64 killed [[S_MOV_B32_7]], killed [[REG_SEQUENCE5]], implicit $exec
   ; GFX90A-NEXT:   [[COPY26:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub0
   ; GFX90A-NEXT:   [[COPY27:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_e64_]].sub0
   ; GFX90A-NEXT:   [[COPY28:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub1
@@ -178,7 +175,7 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX1200-NEXT:   successors: %bb.2(0x7c000000), %bb.4(0x04000000)
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT:   [[PHI:%[0-9]+]]:vreg_64 = PHI [[REG_SEQUENCE2]], %bb.1, %9, %bb.2
-  ; GFX1200-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %58, %bb.2
+  ; GFX1200-NEXT:   [[PHI1:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_]], %bb.1, %55, %bb.2
   ; GFX1200-NEXT:   [[PHI2:%[0-9]+]]:vgpr_32 = PHI [[V_AND_B32_e64_]], %bb.1, %8, %bb.2
   ; GFX1200-NEXT:   [[GLOBAL_LOAD_DWORD:%[0-9]+]]:vgpr_32 = GLOBAL_LOAD_DWORD [[PHI]], 0, 0, implicit $exec :: (load (s32) from %ir.lsr.iv, addrspace 1)
   ; GFX1200-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 7
@@ -215,12 +212,9 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT:   [[PHI3:%[0-9]+]]:vgpr_32 = PHI [[V_CNDMASK_B32_e64_2]], %bb.3, [[V_CNDMASK_B32_e64_1]], %bb.2
   ; GFX1200-NEXT:   [[PHI4:%[0-9]+]]:vgpr_32 = PHI [[V_AND_B32_e64_]], %bb.3, [[V_ADD_U32_e64_]], %bb.2
-  ; GFX1200-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32_xm0_xexec = V_CMP_NE_U32_e64 [[PHI3]], 0, implicit $exec
-  ; GFX1200-NEXT:   [[V_CNDMASK_B32_e64_3:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, 1, [[V_CMP_NE_U32_e64_1]], implicit $exec
-  ; GFX1200-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_MOV_B32 1
-  ; GFX1200-NEXT:   [[V_CMP_NE_U32_e64_2:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 killed [[V_CNDMASK_B32_e64_3]], killed [[S_MOV_B32_8]], implicit $exec
-  ; GFX1200-NEXT:   SI_BRCOND %bb.6, killed [[V_CMP_NE_U32_e64_2]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
-  ; GFX1200-NEXT:   S_BRANCH %bb.5
+  ; GFX1200-NEXT:   [[V_CMP_NE_U32_e64_1:%[0-9]+]]:sreg_32 = V_CMP_NE_U32_e64 [[PHI3]], 0, implicit $exec
+  ; GFX1200-NEXT:   SI_BRCOND %bb.5, [[V_CMP_NE_U32_e64_1]], implicit-def dead $exec, implicit-def dead $vcc_lo, implicit $exec
+  ; GFX1200-NEXT:   S_BRANCH %bb.6
   ; GFX1200-NEXT: {{  $}}
   ; GFX1200-NEXT: bb.5.if.then11:
   ; GFX1200-NEXT:   successors: %bb.6(0x80000000)
@@ -231,8 +225,8 @@ define amdgpu_kernel void @loop_i1(ptr addrspace(1) %filter.coerce, ptr addrspac
   ; GFX1200-NEXT:   [[V_ASHRREV_I32_e64_:%[0-9]+]]:vgpr_32 = V_ASHRREV_I32_e64 31, [[PHI4]], implicit $exec
   ; GFX1200-NEXT:   [[COPY15:%[0-9]+]]:vgpr_32 = COPY killed [[V_ASHRREV_I32_e64_]]
   ; GFX1200-NEXT:   [[REG_SEQUENCE5:%[0-9]+]]:vreg_64 = REG_SEQUENCE [[PHI4]], %subreg.sub0, killed [[COPY15]], %subreg.sub1
-  ; GFX1200-NEXT:   [[S_MOV_B32_9:%[0-9]+]]:sreg_32 = S_MOV_B32 2
-  ; GFX1200-NEXT:   [[V_LSHLREV_B64_pseudo_e64_:%[0-9]+]]:vreg_64 = nsw V_LSHLREV_B64_pseudo_e64 killed [[S_MOV_B32_9]], killed [[REG_SEQUENCE5]], implicit $exec
+  ; GFX1200-NEXT:   [[S_MOV_B32_8:%[0-9]+]]:sreg_32 = S_MOV_B32 2
+  ; GFX1200-NEXT:   [[V_LSHLREV_B64_pseudo_e64_:%[0-9]+]]:vreg_64 = nsw V_LSHLREV_B64_pseudo_e64 killed [[S_MOV_B32_8]], killed [[REG_SEQUENCE5]], implicit $exec
   ; GFX1200-NEXT:   [[COPY16:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub0
   ; GFX1200-NEXT:   [[COPY17:%[0-9]+]]:vgpr_32 = COPY [[V_LSHLREV_B64_pseudo_e64_]].sub0
   ; GFX1200-NEXT:   [[COPY18:%[0-9]+]]:sreg_32_xexec_hi_and_sreg_32_xm0 = COPY [[REG_SEQUENCE4]].sub1

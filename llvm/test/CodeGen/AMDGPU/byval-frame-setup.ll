@@ -8,7 +8,8 @@
 ; GCN-NOT: v_lshrrev_b32
 ; GCN-NOT: s_sub_u32
 
-; GCN: s_xor_b64 exec
+; GCN: s_xor_b64 s[{{[0-9]+:[0-9]+}}], exec, vcc
+; GCN: s_mov_b64 exec, vcc
 ; GCN: s_cbranch_execz [[BB1:.LBB[0-9]+_[0-9]+]]
 
 ; GCN: buffer_load_dword [[LOAD0:v[0-9]+]], off, s[0:3], s32 glc{{$}}

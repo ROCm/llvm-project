@@ -12,10 +12,8 @@ define i32 @divergent_lshr_and_cmp(i32 %x) {
   ; GCN-NEXT:   [[V_AND_B32_e64_:%[0-9]+]]:vgpr_32 = V_AND_B32_e64 [[COPY]], killed [[S_MOV_B32_]], implicit $exec
   ; GCN-NEXT:   [[S_MOV_B32_1:%[0-9]+]]:sreg_32 = S_MOV_B32 0
   ; GCN-NEXT:   [[V_CMP_NE_U32_e64_:%[0-9]+]]:sreg_64 = V_CMP_NE_U32_e64 killed [[V_AND_B32_e64_]], killed [[S_MOV_B32_1]], implicit $exec
-  ; GCN-NEXT:   [[S_MOV_B64_:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-  ; GCN-NEXT:   [[S_XOR_B64_:%[0-9]+]]:sreg_64 = S_XOR_B64 killed [[V_CMP_NE_U32_e64_]], killed [[S_MOV_B64_]], implicit-def dead $scc
-  ; GCN-NEXT:   SI_BRCOND %bb.2, killed [[S_XOR_B64_]]
-  ; GCN-NEXT:   S_BRANCH %bb.1
+  ; GCN-NEXT:   SI_BRCOND %bb.1, killed [[V_CMP_NE_U32_e64_]], implicit-def dead $exec, implicit-def dead $vcc, implicit $exec
+  ; GCN-NEXT:   S_BRANCH %bb.2
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.1.out.true:
   ; GCN-NEXT:   successors: %bb.2(0x80000000)
@@ -59,22 +57,20 @@ define amdgpu_kernel void @uniform_opt_lshr_and_cmp(ptr addrspace(1) %out, i32 %
   ; GCN-NEXT:   S_CMP_LG_U32 killed [[S_AND_B32_]], killed [[S_MOV_B32_1]], implicit-def $scc
   ; GCN-NEXT:   [[COPY2:%[0-9]+]]:sreg_64 = COPY $scc
   ; GCN-NEXT:   [[COPY3:%[0-9]+]]:sreg_64_xexec = COPY [[COPY2]]
-  ; GCN-NEXT:   [[S_MOV_B64_:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-  ; GCN-NEXT:   [[S_XOR_B64_:%[0-9]+]]:sreg_64 = S_XOR_B64 [[COPY2]], killed [[S_MOV_B64_]], implicit-def dead $scc
-  ; GCN-NEXT:   [[S_AND_B64_:%[0-9]+]]:sreg_64 = S_AND_B64 $exec, killed [[S_XOR_B64_]], implicit-def dead $scc
+  ; GCN-NEXT:   [[S_AND_B64_:%[0-9]+]]:sreg_64 = S_AND_B64 $exec, [[COPY2]], implicit-def dead $scc
   ; GCN-NEXT:   $vcc = COPY [[S_AND_B64_]]
-  ; GCN-NEXT:   S_CBRANCH_VCCNZ %bb.2, implicit $vcc
-  ; GCN-NEXT:   S_BRANCH %bb.1
+  ; GCN-NEXT:   S_CBRANCH_VCCNZ %bb.1, implicit $vcc
+  ; GCN-NEXT:   S_BRANCH %bb.2
   ; GCN-NEXT: {{  $}}
   ; GCN-NEXT: bb.1.out.true:
-  ; GCN-NEXT:   [[S_MOV_B64_1:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
-  ; GCN-NEXT:   [[S_XOR_B64_1:%[0-9]+]]:sreg_64_xexec = S_XOR_B64 [[COPY3]], killed [[S_MOV_B64_1]], implicit-def dead $scc
+  ; GCN-NEXT:   [[S_MOV_B64_:%[0-9]+]]:sreg_64 = S_MOV_B64 -1
+  ; GCN-NEXT:   [[S_XOR_B64_:%[0-9]+]]:sreg_64_xexec = S_XOR_B64 [[COPY3]], killed [[S_MOV_B64_]], implicit-def dead $scc
   ; GCN-NEXT:   [[COPY4:%[0-9]+]]:sreg_32 = COPY [[COPY1]].sub1
   ; GCN-NEXT:   [[COPY5:%[0-9]+]]:sreg_32 = COPY [[COPY1]].sub0
   ; GCN-NEXT:   [[S_MOV_B32_2:%[0-9]+]]:sreg_32 = S_MOV_B32 61440
   ; GCN-NEXT:   [[S_MOV_B32_3:%[0-9]+]]:sreg_32 = S_MOV_B32 -1
   ; GCN-NEXT:   [[REG_SEQUENCE:%[0-9]+]]:sgpr_128 = REG_SEQUENCE killed [[COPY5]], %subreg.sub0, killed [[COPY4]], %subreg.sub1, killed [[S_MOV_B32_3]], %subreg.sub2, killed [[S_MOV_B32_2]], %subreg.sub3
-  ; GCN-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed [[S_XOR_B64_1]], implicit $exec
+  ; GCN-NEXT:   [[V_CNDMASK_B32_e64_:%[0-9]+]]:vgpr_32 = V_CNDMASK_B32_e64 0, 0, 0, -1, killed [[S_XOR_B64_]], implicit $exec
   ; GCN-NEXT:   [[S_MOV_B32_4:%[0-9]+]]:sreg_32 = S_MOV_B32 1
   ; GCN-NEXT:   [[COPY6:%[0-9]+]]:sreg_32 = COPY [[V_CNDMASK_B32_e64_]]
   ; GCN-NEXT:   [[S_AND_B32_1:%[0-9]+]]:sreg_32 = S_AND_B32 killed [[COPY6]], killed [[S_MOV_B32_4]], implicit-def dead $scc
