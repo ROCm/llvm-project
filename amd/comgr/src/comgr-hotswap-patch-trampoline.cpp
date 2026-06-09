@@ -519,8 +519,8 @@ std::optional<ScratchAlloc> tryAllocScratchVgpr(PatchContext &Ctx, size_t Idx) {
           Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize))
     KdVgprs = *Opt;
 
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
-                         Ctx.Config.MaxVgprs);
+  VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdVgprs,
+                      Ctx.Config.MaxVgprs);
   std::optional<unsigned> ScratchOpt = Alloc.alloc();
   if (!ScratchOpt)
     return std::nullopt;

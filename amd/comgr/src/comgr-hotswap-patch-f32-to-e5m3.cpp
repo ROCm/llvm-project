@@ -135,26 +135,25 @@ constexpr VOP3Fp8UnpackLayout UnpackFp8Layout = {/*NumOperands=*/4, /*VDst=*/0,
 // -- Scratch allocation helper -----------------------------------------------
 
 struct ScratchAllocation {
-  ScratchAllocator VgprAlloc;
-  ScratchSgprAllocator SgprAlloc;
+  VgprAllocator VgprAlloc;
+  SgprAllocator SgprAlloc;
   std::string KernelName;
 };
 
-std::optional<ScratchAllocation> allocateScratch(PatchContext &Ctx,
-                                                 size_t Idx) {
+ScratchAllocation allocateScratch(PatchContext &Ctx, size_t Idx) {
   const InternalDecodedInst &DI = Ctx.Decoded[Idx];
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
   std::optional<unsigned> KdVgprs =
       Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
   unsigned VgprKdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
-  ScratchAllocator VgprAlloc(Ctx.Liveness.LiveBefore[Idx], VgprKdCount,
-                             Ctx.Config.MaxVgprs);
+  VgprAllocator VgprAlloc(Ctx.Liveness.LiveBefore[Idx], VgprKdCount,
+                          Ctx.Config.MaxVgprs);
 
   std::optional<unsigned> KdSgprs =
       Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
   unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
-  ScratchSgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
+  SgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
 
   return ScratchAllocation{std::move(VgprAlloc), std::move(SgprAlloc),
                            std::move(KernelName)};
@@ -279,10 +278,7 @@ uint32_t patchCvtPkFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
   std::string Src1Str = fmtModifiedSrc(Src1Bare, Src1Mods);
 
-  auto Scratch = allocateScratch(Ctx, Idx);
-  if (!Scratch)
-    return 0;
-  ScratchAllocation &SA = *Scratch;
+  ScratchAllocation SA = allocateScratch(Ctx, Idx);
 
   // 3 scratch VGPRs: T0 (src0 byte), T1 (src1 byte), T2 (shared scratch
   // for NaN detection and RTE rounding intermediates within each source).
@@ -436,10 +432,7 @@ uint32_t patchCvtSrFp8F32(PatchContext &Ctx, size_t Idx) {
   std::string Src1Str = toAsmRegName(MRI, Inst.getOperand(L.Src1).getReg());
   std::string Src0Str = fmtModifiedSrc(Src0Bare, Src0Mods);
 
-  auto Scratch = allocateScratch(Ctx, Idx);
-  if (!Scratch)
-    return 0;
-  ScratchAllocation &SA = *Scratch;
+  ScratchAllocation SA = allocateScratch(Ctx, Idx);
 
   // 2 scratch VGPRs: Out (conversion result + noise intermediate), Tmp (NaN
   // flag save + noise computation).
@@ -606,10 +599,7 @@ uint32_t patchCvtF32Fp8(PatchContext &Ctx, size_t Idx) {
   std::string VdstStr = toAsmRegName(MRI, Inst.getOperand(L.VDst).getReg());
   std::string Src0Str = toAsmRegName(MRI, Inst.getOperand(L.Src0).getReg());
 
-  auto Scratch = allocateScratch(Ctx, Idx);
-  if (!Scratch)
-    return 0;
-  ScratchAllocation &SA = *Scratch;
+  ScratchAllocation SA = allocateScratch(Ctx, Idx);
 
   // 2 scratch VGPRs: Out (byte extraction → F16 path → result),
   // Tmp (exp-31 direct construction + NaN constant).

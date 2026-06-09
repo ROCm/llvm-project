@@ -461,14 +461,14 @@ struct LivenessInfo {
 /// the kernel descriptor's reported VGPR count. Constructed per patch site
 /// with the live-set at that site and the kernel's current / maximum VGPR
 /// counts.
-struct ScratchAllocator {
+struct VgprAllocator {
   llvm::BitVector LiveAtPoint;
   unsigned KdAllocatedVgprs = 0;
   unsigned NextAboveKd = 0;
   unsigned MaxVgprs = 0;
   unsigned ExtraAllocated = 0;
 
-  ScratchAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
+  VgprAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
       : LiveAtPoint(Live), KdAllocatedVgprs(KdVgprs), NextAboveKd(KdVgprs),
         MaxVgprs(Max) {}
 
@@ -497,13 +497,12 @@ struct ScratchAllocator {
 /// dataflow liveness), SGPRs have no liveness analysis — we always allocate
 /// above the kernel descriptor's reported SGPR count. This is conservative
 /// but safe: no SGPR currently in use by the kernel can be clobbered.
-struct ScratchSgprAllocator {
+struct SgprAllocator {
   unsigned KdAllocatedSgprs = 0;
   unsigned NextAboveKd = 0;
   unsigned MaxSgprs = 0;
-  unsigned ExtraAllocated = 0;
 
-  ScratchSgprAllocator(unsigned KdSgprs, unsigned Max)
+  SgprAllocator(unsigned KdSgprs, unsigned Max)
       : KdAllocatedSgprs(KdSgprs), NextAboveKd(KdSgprs), MaxSgprs(Max) {}
 
   /// Allocate one SGPR above the kernel's current count. Returns
@@ -514,9 +513,7 @@ struct ScratchSgprAllocator {
     return NextAboveKd++;
   }
 
-  unsigned extraSgprsNeeded() const {
-    return NextAboveKd > KdAllocatedSgprs ? NextAboveKd - KdAllocatedSgprs : 0;
-  }
+  unsigned extraSgprsNeeded() const { return NextAboveKd - KdAllocatedSgprs; }
 };
 
 /// Bookkeeping for a single patch site's scratch allocation. \c Offset is
