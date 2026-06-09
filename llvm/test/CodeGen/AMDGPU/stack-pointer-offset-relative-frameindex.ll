@@ -32,9 +32,7 @@ define amdgpu_kernel void @kernel_background_evaluate(ptr addrspace(5) %kg, ptr 
 ; MUBUF-NEXT:    s_mov_b64 s[2:3], s[38:39]
 ; MUBUF-NEXT:    s_swappc_b64 s[30:31], s[4:5]
 ; MUBUF-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; MUBUF-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; MUBUF-NEXT:    s_xor_b32 s1, exec_lo, s0
-; MUBUF-NEXT:    s_mov_b32 exec_lo, s0
+; MUBUF-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; MUBUF-NEXT:    ; divergent control-flow edge
 ; MUBUF-NEXT:    s_cbranch_execz .LBB0_2
 ; MUBUF-NEXT:  .LBB0_1: ; %if.then4.i
@@ -70,9 +68,7 @@ define amdgpu_kernel void @kernel_background_evaluate(ptr addrspace(5) %kg, ptr 
 ; FLATSCR-NEXT:    v_mov_b32_e32 v0, s2
 ; FLATSCR-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; FLATSCR-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; FLATSCR-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; FLATSCR-NEXT:    s_xor_b32 s1, exec_lo, s0
-; FLATSCR-NEXT:    s_mov_b32 exec_lo, s0
+; FLATSCR-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; FLATSCR-NEXT:    ; divergent control-flow edge
 ; FLATSCR-NEXT:    s_cbranch_execz .LBB0_2
 ; FLATSCR-NEXT:  .LBB0_1: ; %if.then4.i
@@ -102,9 +98,7 @@ define amdgpu_kernel void @kernel_background_evaluate(ptr addrspace(5) %kg, ptr 
 ; MUBUF11-NEXT:    v_mov_b32_e32 v0, s2
 ; MUBUF11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; MUBUF11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; MUBUF11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; MUBUF11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; MUBUF11-NEXT:    s_mov_b32 exec_lo, s0
+; MUBUF11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; MUBUF11-NEXT:    ; divergent control-flow edge
 ; MUBUF11-NEXT:    s_cbranch_execz .LBB0_2
 ; MUBUF11-NEXT:  .LBB0_1: ; %if.then4.i
@@ -133,9 +127,7 @@ define amdgpu_kernel void @kernel_background_evaluate(ptr addrspace(5) %kg, ptr 
 ; FLATSCR11-NEXT:    v_mov_b32_e32 v0, s2
 ; FLATSCR11-NEXT:    s_swappc_b64 s[30:31], s[0:1]
 ; FLATSCR11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; FLATSCR11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; FLATSCR11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; FLATSCR11-NEXT:    s_mov_b32 exec_lo, s0
+; FLATSCR11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; FLATSCR11-NEXT:    ; divergent control-flow edge
 ; FLATSCR11-NEXT:    s_cbranch_execz .LBB0_2
 ; FLATSCR11-NEXT:  .LBB0_1: ; %if.then4.i
