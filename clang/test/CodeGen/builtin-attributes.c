@@ -57,15 +57,12 @@ long double modfl(long double x, long double*) asm("modfl");
 // CHECK: ret
 int f3(double x) {
   int e;
-  float f;
-  double d;
-  long double ld;
   frexp(x, &e);
   frexpf(x, &e);
   frexpl(x, &e);
-  modf(x, &d);
-  modff(x, &f);
-  modfl(x, &ld);
+  modf(x, &e);
+  modff(x, &e);
+  modfl(x, &e);
   __builtin_remquo(x, x, &e);
   __builtin_remquof(x, x, &e);
   __builtin_remquol(x, x, &e);

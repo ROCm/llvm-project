@@ -40,6 +40,10 @@ Potentially Breaking Changes
 C/C++ Language Potentially Breaking Changes
 -------------------------------------------
 
+- The ``__has_builtin`` function now only considers the currently active target when being used with target offloading.
+
+`-Wincompatible-pointer-types` an error by default (#157364))
+
 C++ Specific Potentially Breaking Changes
 -----------------------------------------
 
