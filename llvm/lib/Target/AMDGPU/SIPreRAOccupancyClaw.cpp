@@ -62,7 +62,7 @@ static cl::opt<bool> EnableSGPROccupancyClaw(
     // ("amdgpu-sgpr-occupancy-claw"); opt's legacy PassNameParser turns the pass
     // arg into a cl flag, so a same-named cl::opt aborts opt with "registered
     // more than once".
-    "amdgpu-enable-sgpr-occupancy-claw", cl::init(false), cl::ReallyHidden,
+    "amdgpu-enable-sgpr-occupancy-claw", cl::init(true), cl::ReallyHidden,
     cl::desc("Experimental: spill surplus SGPRs (into VGPR lanes) to preserve "
              "the occupancy that LDS/WG already allow (gfx90a+)"));
 
