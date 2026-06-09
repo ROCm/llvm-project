@@ -320,11 +320,10 @@ define void @memset_pattern_i128_dynlen(ptr addrspace(1) align 16 %a, i64 %len) 
 ; GFX942-SDAG-LABEL: memset_pattern_i128_dynlen:
 ; GFX942-SDAG:       ; %bb.0:
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[2:3]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[0:1], 0, v[2:3]
+; GFX942-SDAG-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], -1
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB7_3
@@ -336,18 +335,18 @@ define void @memset_pattern_i128_dynlen(ptr addrspace(1) align 16 %a, i64 %len) 
 ; GFX942-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX942-SDAG-NEXT:  .LBB7_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX942-SDAG-NEXT:    s_add_u32 s0, s0, 1
-; GFX942-SDAG-NEXT:    s_addc_u32 s1, s1, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[0:1], v[2:3]
+; GFX942-SDAG-NEXT:    s_add_u32 s2, s2, 1
+; GFX942-SDAG-NEXT:    s_addc_u32 s3, s3, 0
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[2:3], v[2:3]
 ; GFX942-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[0:1], v[4:7], off
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, 16
-; GFX942-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB7_2
 ; GFX942-SDAG-NEXT:  .LBB7_3: ; %memset.pattern-post-expansion
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -391,11 +390,10 @@ define void @memset_pattern_i128_dynlen_lds(ptr addrspace(3) align 16 %a, i64 %l
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v6, v1
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[0:1], 0, v[6:7]
+; GFX942-SDAG-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], -1
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB8_3
@@ -407,18 +405,18 @@ define void @memset_pattern_i128_dynlen_lds(ptr addrspace(3) align 16 %a, i64 %l
 ; GFX942-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX942-SDAG-NEXT:  .LBB8_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX942-SDAG-NEXT:    s_add_u32 s0, s0, 1
-; GFX942-SDAG-NEXT:    s_addc_u32 s1, s1, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[0:1], v[6:7]
+; GFX942-SDAG-NEXT:    s_add_u32 s2, s2, 1
+; GFX942-SDAG-NEXT:    s_addc_u32 s3, s3, 0
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[2:3], v[6:7]
 ; GFX942-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX942-SDAG-NEXT:    ds_write_b128 v0, v[2:5]
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v0, 16, v0
-; GFX942-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB8_2
 ; GFX942-SDAG-NEXT:  .LBB8_3: ; %memset.pattern-post-expansion
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX942-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -463,17 +461,15 @@ define void @memset_pattern_i32_dynlen(ptr addrspace(1) align 16 %a, i64 %len) {
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v10, -4, v2
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v11, v3
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[10:11]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v8, 3, v2
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v9, 0
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[6:7], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[10:11]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB9_3
 ; GFX942-SDAG-NEXT:  .LBB9_1: ; %memset.pattern-expansion-main-body.preheader
@@ -482,27 +478,24 @@ define void @memset_pattern_i32_dynlen(ptr addrspace(1) align 16 %a, i64 %len) {
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v6, v4
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, v4
 ; GFX942-SDAG-NEXT:    v_mov_b64_e32 v[12:13], v[0:1]
-; GFX942-SDAG-NEXT:    s_and_b64 s[10:11], s[2:3], exec
+; GFX942-SDAG-NEXT:    s_and_b64 s[8:9], s[2:3], exec
 ; GFX942-SDAG-NEXT:  .LBB9_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 4
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
 ; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, vcc
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[12:13], v[4:7], off
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[12:13], v[12:13], 0, 64
-; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB9_2
 ; GFX942-SDAG-NEXT:  .LBB9_3: ; %memset.pattern-expansion-residual-cond
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[8:9]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX942-SDAG-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB9_6
@@ -600,17 +593,15 @@ define void @memset_pattern_i32_dynval_dynlen(ptr addrspace(1) align 16 %a, i32 
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v8, v3
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v10, -4, v8
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v11, v9
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], vcc, exec
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[4:5], 0, v[10:11]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v6, 3, v8
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, 0
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[6:7], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], s[4:5], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[2:3], -1
-; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, s[10:11]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[10:11]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB10_3
 ; GFX942-SDAG-NEXT:  .LBB10_1: ; %memset.pattern-expansion-main-body.preheader
@@ -618,27 +609,24 @@ define void @memset_pattern_i32_dynval_dynlen(ptr addrspace(1) align 16 %a, i32 
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v4, v2
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v5, v2
 ; GFX942-SDAG-NEXT:    v_mov_b64_e32 v[12:13], v[0:1]
-; GFX942-SDAG-NEXT:    s_and_b64 s[10:11], s[2:3], exec
+; GFX942-SDAG-NEXT:    s_and_b64 s[8:9], s[2:3], exec
 ; GFX942-SDAG-NEXT:  .LBB10_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s6, s6, 4
 ; GFX942-SDAG-NEXT:    s_addc_u32 s7, s7, 0
 ; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[6:7], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, vcc
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], exec, vcc
 ; GFX942-SDAG-NEXT:    global_store_dwordx4 v[12:13], v[2:5], off
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[12:13], v[12:13], 0, 64
-; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[8:9]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB10_2
 ; GFX942-SDAG-NEXT:  .LBB10_3: ; %memset.pattern-expansion-residual-cond
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX942-SDAG-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[6:7]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[4:5], vcc, exec
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB10_6
@@ -733,11 +721,10 @@ define void @memset_pattern_i96_dynval_dynlen(ptr addrspace(1) align 16 %a, i96 
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, v6
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v6, v5
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX942-SDAG-NEXT:    s_mov_b64 s[0:1], 0
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[0:1], 0, v[6:7]
+; GFX942-SDAG-NEXT:    s_mov_b64 s[2:3], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], -1
-; GFX942-SDAG-NEXT:    s_xor_b64 s[2:3], exec, s[6:7]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[6:7]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB11_3
@@ -745,18 +732,18 @@ define void @memset_pattern_i96_dynval_dynlen(ptr addrspace(1) align 16 %a, i96 
 ; GFX942-SDAG-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX942-SDAG-NEXT:  .LBB11_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
-; GFX942-SDAG-NEXT:    s_add_u32 s0, s0, 1
-; GFX942-SDAG-NEXT:    s_addc_u32 s1, s1, 0
-; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[0:1], v[6:7]
+; GFX942-SDAG-NEXT:    s_add_u32 s2, s2, 1
+; GFX942-SDAG-NEXT:    s_addc_u32 s3, s3, 0
+; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[2:3], v[6:7]
 ; GFX942-SDAG-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX942-SDAG-NEXT:    global_store_dwordx3 v[0:1], v[2:4], off
 ; GFX942-SDAG-NEXT:    v_lshl_add_u64 v[0:1], v[0:1], 0, 16
-; GFX942-SDAG-NEXT:    s_or_b64 s[2:3], s[2:3], s[4:5]
+; GFX942-SDAG-NEXT:    s_or_b64 s[0:1], s[0:1], s[4:5]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB11_2
 ; GFX942-SDAG-NEXT:  .LBB11_3: ; %memset.pattern-post-expansion
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[2:3]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[0:1]
 ; GFX942-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX942-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
@@ -797,17 +784,15 @@ define void @memset_pattern_i64_as7_dynlen(ptr addrspace(7) inreg align 16 %a, i
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v8, v1
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v11, v2
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v10, -2, v8
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[8:9], 0, v[10:11]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v6, 1, v8
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, 0
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[10:11], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], s[8:9], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[6:7], -1
-; GFX942-SDAG-NEXT:    s_mov_b64 s[8:9], 0
-; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], exec, s[14:15]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB12_3
 ; GFX942-SDAG-NEXT:  .LBB12_1: ; %memset.pattern-expansion-main-body.preheader
@@ -816,27 +801,24 @@ define void @memset_pattern_i64_as7_dynlen(ptr addrspace(7) inreg align 16 %a, i
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v1, s16, v0
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v4, v2
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v5, v3
-; GFX942-SDAG-NEXT:    s_and_b64 s[14:15], s[6:7], exec
+; GFX942-SDAG-NEXT:    s_and_b64 s[12:13], s[6:7], exec
 ; GFX942-SDAG-NEXT:  .LBB12_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s10, s10, 2
 ; GFX942-SDAG-NEXT:    s_addc_u32 s11, s11, 0
 ; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[10:11], v[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[14:15], exec, vcc
+; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], exec, vcc
 ; GFX942-SDAG-NEXT:    buffer_store_dwordx4 v[2:5], v1, s[0:3], 0 offen
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v1, 32, v1
-; GFX942-SDAG-NEXT:    s_or_b64 s[12:13], s[12:13], s[14:15]
+; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB12_2
 ; GFX942-SDAG-NEXT:  .LBB12_3: ; %memset.pattern-expansion-residual-cond
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX942-SDAG-NEXT:    s_and_b64 s[10:11], s[10:11], exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB12_6
@@ -937,45 +919,40 @@ define void @memset_pattern_i64_as7_dynlen_dynval(ptr addrspace(7) inreg align 1
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v4, v1
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v7, v2
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v6, -2, v4
-; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[14:15], vcc, exec
+; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e64 s[8:9], 0, v[6:7]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v8, v3
 ; GFX942-SDAG-NEXT:    v_and_b32_e32 v2, 1, v4
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v3, 0
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[10:11], 0
+; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], s[8:9], exec
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[6:7], -1
-; GFX942-SDAG-NEXT:    s_mov_b64 s[8:9], 0
-; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], exec, s[14:15]
 ; GFX942-SDAG-NEXT:    s_mov_b64 s[4:5], 0
-; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB13_3
 ; GFX942-SDAG-NEXT:  .LBB13_1: ; %memset.pattern-expansion-main-body.preheader
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v1, s16, v0
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v10, v8
 ; GFX942-SDAG-NEXT:    v_mov_b32_e32 v11, v9
-; GFX942-SDAG-NEXT:    s_and_b64 s[14:15], s[6:7], exec
+; GFX942-SDAG-NEXT:    s_and_b64 s[12:13], s[6:7], exec
 ; GFX942-SDAG-NEXT:  .LBB13_2: ; %memset.pattern-expansion-main-body
 ; GFX942-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-SDAG-NEXT:    s_add_u32 s10, s10, 2
 ; GFX942-SDAG-NEXT:    s_addc_u32 s11, s11, 0
 ; GFX942-SDAG-NEXT:    v_cmp_lt_u64_e32 vcc, s[10:11], v[6:7]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[14:15], exec, vcc
+; GFX942-SDAG-NEXT:    s_xor_b64 s[12:13], exec, vcc
 ; GFX942-SDAG-NEXT:    buffer_store_dwordx4 v[8:11], v1, s[0:3], 0 offen
 ; GFX942-SDAG-NEXT:    v_add_u32_e32 v1, 32, v1
-; GFX942-SDAG-NEXT:    s_or_b64 s[12:13], s[12:13], s[14:15]
+; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[12:13]
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, vcc
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execnz .LBB13_2
 ; GFX942-SDAG-NEXT:  .LBB13_3: ; %memset.pattern-expansion-residual-cond
-; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[12:13]
+; GFX942-SDAG-NEXT:    s_or_b64 exec, exec, s[8:9]
 ; GFX942-SDAG-NEXT:    v_cmp_eq_u64_e32 vcc, 0, v[2:3]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], vcc, exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
-; GFX942-SDAG-NEXT:    s_xor_b64 s[10:11], exec, s[8:9]
-; GFX942-SDAG-NEXT:    s_and_b64 s[10:11], s[10:11], exec
-; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], s[10:11]
+; GFX942-SDAG-NEXT:    s_xor_b64 s[8:9], vcc, exec
+; GFX942-SDAG-NEXT:    s_or_b64 s[4:5], s[4:5], vcc
 ; GFX942-SDAG-NEXT:    s_mov_b64 exec, s[8:9]
 ; GFX942-SDAG-NEXT:    ; divergent control-flow edge
 ; GFX942-SDAG-NEXT:    s_cbranch_execz .LBB13_6

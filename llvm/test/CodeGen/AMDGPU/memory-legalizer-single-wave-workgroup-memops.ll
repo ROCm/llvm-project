@@ -924,8 +924,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX9-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX9-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX9-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX9-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX9-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX9-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX9-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX9-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX9-NEXT: {{  $}}
@@ -953,8 +952,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX942-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX942-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX942-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX942-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX942-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX942-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX942-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX942-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX942-NEXT: {{  $}}
@@ -981,8 +979,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX10-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX10-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX10-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX10-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX10-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W32-NEXT: {{  $}}
@@ -1010,8 +1007,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX10-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX10-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX10-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX10-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX10-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W64-NEXT: {{  $}}
@@ -1038,8 +1034,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX12-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX12-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX12-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX12-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX12-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W32-NEXT: {{  $}}
@@ -1066,8 +1061,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX12-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX12-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX12-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX12-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX12-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W64-NEXT: {{  $}}
@@ -1095,8 +1089,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single32(ptr addrspace(1) %p) #0 {
   ; GFX1250-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX1250-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX1250-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX1250-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX1250-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX1250-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX1250-NEXT: {{  $}}
@@ -1128,8 +1121,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX9-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX9-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX9-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX9-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX9-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX9-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX9-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX9-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX9-NEXT: {{  $}}
@@ -1157,8 +1149,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX942-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX942-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX942-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX942-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX942-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX942-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX942-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX942-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX942-NEXT: {{  $}}
@@ -1185,8 +1176,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX10-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX10-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX10-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX10-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX10-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W32-NEXT: {{  $}}
@@ -1219,8 +1209,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX10-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX10-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX10-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX10-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX10-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W64-NEXT: {{  $}}
@@ -1247,8 +1236,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX12-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX12-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX12-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX12-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX12-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W32-NEXT: {{  $}}
@@ -1282,8 +1270,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX12-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX12-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX12-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX12-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX12-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W64-NEXT: {{  $}}
@@ -1311,8 +1298,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_single64(ptr addrspace(1) %p) #1 {
   ; GFX1250-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX1250-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX1250-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX1250-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX1250-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX1250-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX1250-NEXT: {{  $}}
@@ -1348,8 +1334,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX9-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX9-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX9-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX9-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX9-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX9-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX9-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX9-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX9-NEXT: {{  $}}
@@ -1379,8 +1364,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX942-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX942-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX942-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX942-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX942-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX942-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX942-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX942-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX942-NEXT: {{  $}}
@@ -1409,8 +1393,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX10-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX10-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX10-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX10-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX10-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W32-NEXT: {{  $}}
@@ -1443,8 +1426,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX10-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX10-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX10-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX10-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX10-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W64-NEXT: {{  $}}
@@ -1476,8 +1458,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX12-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX12-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX12-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX12-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX12-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W32-NEXT: {{  $}}
@@ -1511,8 +1492,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX12-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX12-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX12-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX12-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX12-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W64-NEXT: {{  $}}
@@ -1547,8 +1527,7 @@ define amdgpu_kernel void @wg_rmw_add_seq_cst_multi(ptr addrspace(1) %p) #2 {
   ; GFX1250-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX1250-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX1250-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX1250-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX1250-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX1250-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX1250-NEXT: {{  $}}
@@ -2252,8 +2231,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX9-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX9-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX9-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX9-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX9-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX9-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX9-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX9-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX9-NEXT: {{  $}}
@@ -2281,8 +2259,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX942-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX942-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX942-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX942-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX942-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX942-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX942-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX942-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX942-NEXT: {{  $}}
@@ -2309,8 +2286,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX10-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX10-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX10-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX10-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX10-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX10-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W32-NEXT: {{  $}}
@@ -2344,8 +2320,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX10-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX10-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX10-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX10-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX10-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX10-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX10-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX10-W64-NEXT: {{  $}}
@@ -2372,8 +2347,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX12-W32-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX12-W32-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX12-W32-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX12-W32-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX12-W32-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX12-W32-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W32-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W32-NEXT: {{  $}}
@@ -2407,8 +2381,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX12-W64-NEXT:   $vgpr0 = V_MBCNT_HI_U32_B32_e64 $sgpr1, killed $vgpr0, implicit $exec
   ; GFX12-W64-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc, implicit $exec
   ; GFX12-W64-NEXT:   renamable $sgpr2_sgpr3 = S_XOR_B64 killed renamable $vcc, $exec, implicit-def $scc
-  ; GFX12-W64-NEXT:   dead renamable $sgpr6_sgpr7 = S_XOR_B64 $exec, renamable $sgpr2_sgpr3, implicit-def $scc
-  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed renamable $sgpr2_sgpr3
+  ; GFX12-W64-NEXT:   $exec = S_MOV_B64 killed $sgpr2_sgpr3
   ; GFX12-W64-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX12-W64-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX12-W64-NEXT: {{  $}}
@@ -2436,8 +2409,7 @@ define amdgpu_kernel void @lds_wg_rmw_add_acq_rel_single64(ptr addrspace(3) %p) 
   ; GFX1250-NEXT:   $vgpr0 = V_MBCNT_LO_U32_B32_e64 $sgpr0, 0, implicit $exec
   ; GFX1250-NEXT:   V_CMP_NE_U32_e32 0, killed $vgpr0, implicit-def $vcc_lo, implicit $exec
   ; GFX1250-NEXT:   renamable $sgpr1 = S_XOR_B32 killed renamable $vcc_lo, $exec_lo, implicit-def $scc
-  ; GFX1250-NEXT:   dead renamable $sgpr2 = S_XOR_B32 $exec_lo, renamable $sgpr1, implicit-def $scc
-  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed renamable $sgpr1
+  ; GFX1250-NEXT:   $exec_lo = S_MOV_B32 killed $sgpr1
   ; GFX1250-NEXT:   SI_WAVE_CF_EDGE implicit-def $scc
   ; GFX1250-NEXT:   S_CBRANCH_EXECNZ %bb.1, implicit $exec
   ; GFX1250-NEXT: {{  $}}
