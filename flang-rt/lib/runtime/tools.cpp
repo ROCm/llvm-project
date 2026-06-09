@@ -201,36 +201,37 @@ RT_API_ATTRS void ShallowCopyInner(const Descriptor &to, const Descriptor &from,
   }
 }
 
-// Specialize only for common ranks (1-4) to reduce code size.
-// Higher ranks use the generic fallback which handles any rank at runtime.
-// Most real-world Fortran arrays are rank 1-3; rank 4+ is rare.
-// This trades a small amount of potential optimization for high-rank arrays
-// in exchange for significantly reduced code size (~60% reduction in
-// ShallowCopy template instantiations).
+// Most arrays are much closer to rank-1 than to maxRank.
+// Doing the recursion upwards instead of downwards puts the more common
+// cases earlier in the if-chain and has a tangible impact on performance.
+template <typename P, int RANK> struct ShallowCopyRankSpecialize {
+  static RT_API_ATTRS bool execute(const Descriptor &to, const Descriptor &from,
+      bool toIsContiguous, bool fromIsContiguous) {
+    if (to.rank() == RANK && from.rank() == RANK) {
+      ShallowCopyInner<P, RANK>(to, from, toIsContiguous, fromIsContiguous);
+      return true;
+    }
+    return ShallowCopyRankSpecialize<P, RANK + 1>::execute(
+        to, from, toIsContiguous, fromIsContiguous);
+  }
+};
+
+template <typename P> struct ShallowCopyRankSpecialize<P, maxRank + 1> {
+  static RT_API_ATTRS bool execute(const Descriptor &to, const Descriptor &from,
+      bool toIsContiguous, bool fromIsContiguous) {
+    return false;
+  }
+};
 
 // ShallowCopy helper for specialising the variants based on array rank
 template <typename P>
 RT_API_ATTRS void ShallowCopyRank(const Descriptor &to, const Descriptor &from,
     bool toIsContiguous, bool fromIsContiguous) {
-  // Specialize only common low ranks; use generic fallback for higher ranks
-  switch (to.rank()) {
-  case 1:
-    ShallowCopyInner<P, 1>(to, from, toIsContiguous, fromIsContiguous);
-    return;
-  case 2:
-    ShallowCopyInner<P, 2>(to, from, toIsContiguous, fromIsContiguous);
-    return;
-  case 3:
-    ShallowCopyInner<P, 3>(to, from, toIsContiguous, fromIsContiguous);
-    return;
-  case 4:
-    ShallowCopyInner<P, 4>(to, from, toIsContiguous, fromIsContiguous);
-    return;
-  default:
-    // Generic fallback for rank > 4 (and rank 0, though that's handled
-    // by the contiguous-to-contiguous case in ShallowCopyInner)
+  // Try to call a specialised ShallowCopy variant from rank-1 up to maxRank
+  bool specialized{ShallowCopyRankSpecialize<P, 1>::execute(
+      to, from, toIsContiguous, fromIsContiguous)};
+  if (!specialized) {
     ShallowCopyInner<P>(to, from, toIsContiguous, fromIsContiguous);
-    return;
   }
 }
 
