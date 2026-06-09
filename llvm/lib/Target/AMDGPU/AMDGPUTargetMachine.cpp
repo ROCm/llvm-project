@@ -987,6 +987,7 @@ void AMDGPUTargetMachine::registerPassBuilderCallbacks(PassBuilder &PB) {
           return true;
         }
         return false;
+      });
 
   PB.registerScalarOptimizerLateEPCallback(
       [](FunctionPassManager &FPM, OptimizationLevel Level) {
