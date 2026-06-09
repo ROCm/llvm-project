@@ -34,7 +34,7 @@ static void updateDbgValueInstForSpillFIs(MachineInstr &MI,
     // correct register value. It should be worked out later.
   } else {
     DIExprBuilder Builder(*MI.getDebugExpression());
-    IntegerType *TypeInt8 = IntegerType::get(Builder.getContext(), 8);
+    IntegerType *TypeInt16 = IntegerType::get(Builder.getContext(), 16);
     IntegerType *TypeInt32 = IntegerType::get(Builder.getContext(), 32);
     for (auto &&I = Builder.begin(); I != Builder.end();) {
       if (auto *Arg = std::get_if<DIOp::Arg>(&*I++)) {
@@ -52,7 +52,7 @@ static void updateDbgValueInstForSpillFIs(MachineInstr &MI,
           // with DIOpConstant + DIOpByteOfset.
           Arg->setResultType(TypeInt32);
           ConstantData *C =
-              ConstantInt::get(TypeInt8, VGPRSpill.Lane * 8, true);
+              ConstantInt::get(TypeInt16, VGPRSpill.Lane * 8, true);
           const std::initializer_list<DIOp::Variant> Ops = {
               DIOp::Constant(C), DIOp::ByteOffset(TypeInt32)};
           I = Builder.insert(Builder.erase(I), Ops) + Ops.size();
