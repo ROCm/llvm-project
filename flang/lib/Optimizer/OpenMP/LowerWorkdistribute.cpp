@@ -62,13 +62,11 @@ namespace {
 /// This string is used to identify the Fortran-specific runtime FortranAAssign.
 static constexpr llvm::StringRef FortranAssignStr = "_FortranAAssign";
 static constexpr llvm::StringRef FortranAssignSimpleStr = "_FortranAAssignSimple";
-static constexpr llvm::StringRef FortranAssignComplexStr = "_FortranAAssignComplex";
 
 /// Check if the function name is any variant of Fortran assignment runtime call
 static bool isFortranAssignCall(llvm::StringRef funcName) {
   return funcName == FortranAssignStr ||
-         funcName == FortranAssignSimpleStr ||
-         funcName == FortranAssignComplexStr;
+         funcName == FortranAssignSimpleStr;
 }
 
 /// The isRuntimeCall function is a utility designed to determine
@@ -180,7 +178,7 @@ verifyTargetTeamsWorkdistribute(omp::WorkdistributeOp workdistribute) {
     if (auto callOp = dyn_cast<fir::CallOp>(op)) {
       if (isRuntimeCall(&op)) {
         auto funcName = (*callOp.getCallee()).getRootReference().getValue();
-        // _FortranAAssign and its variants (Simple/Complex) are handled.
+        // _FortranAAssign and _FortranAAssignSimple are handled.
         // Other runtime calls are not supported in omp.workdistribute yet.
         if (isFortranAssignCall(funcName))
           continue;
