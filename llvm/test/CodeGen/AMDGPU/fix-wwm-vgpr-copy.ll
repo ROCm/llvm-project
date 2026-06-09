@@ -20,10 +20,7 @@ define amdgpu_hs void @wwm(i32 inreg %arg, ptr addrspace(8) inreg %buffer) {
 ; GCN-NEXT:    s_mov_b32 s0, 1
 ; GCN-NEXT:  .LBB0_2: ; %bb602
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, s0, v0
-; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GCN-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GCN-NEXT:    s_mov_b64 exec, s[0:1]
+; GCN-NEXT:    s_xor_b64 exec, vcc, exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB0_4
 ; GCN-NEXT:  .LBB0_3: ; %bb49
@@ -77,10 +74,7 @@ define amdgpu_hs void @strict_wwm(i32 inreg %arg, ptr addrspace(8) inreg %buffer
 ; GCN-NEXT:    s_mov_b32 s0, 1
 ; GCN-NEXT:  .LBB1_2: ; %bb602
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, s0, v0
-; GCN-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; GCN-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; GCN-NEXT:    s_and_b64 s[2:3], s[2:3], exec
-; GCN-NEXT:    s_mov_b64 exec, s[0:1]
+; GCN-NEXT:    s_xor_b64 exec, vcc, exec
 ; GCN-NEXT:    ; divergent control-flow edge
 ; GCN-NEXT:    s_cbranch_execz .LBB1_4
 ; GCN-NEXT:  .LBB1_3: ; %bb49

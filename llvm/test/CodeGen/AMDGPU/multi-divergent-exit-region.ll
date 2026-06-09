@@ -75,7 +75,6 @@
 ; Second reconverge
 ; GCN: s_or_b64 exec, exec
 ; GCN: s_xor_b64
-; GCN: s_and_b64
 ; GCN: s_mov_b64 exec
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
@@ -86,7 +85,6 @@
 ; Third reconverge
 ; GCN: s_or_b64 exec, exec
 ; GCN: s_xor_b64
-; GCN: s_and_b64
 ; GCN: s_mov_b64 exec
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz
@@ -97,7 +95,6 @@
 ; Fourth reconverge
 ; GCN: s_or_b64 exec, exec
 ; GCN: s_xor_b64
-; GCN: s_and_b64
 ; GCN: s_mov_b64 exec
 ; GCN: ; divergent control-flow edge
 ; GCN: s_cbranch_execz

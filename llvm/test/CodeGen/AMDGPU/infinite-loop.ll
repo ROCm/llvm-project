@@ -84,9 +84,7 @@ define amdgpu_kernel void @infinite_loop_ret(ptr addrspace(1) %out) {
 ; SI-LABEL: infinite_loop_ret:
 ; SI:       ; %bb.0: ; %entry
 ; SI-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v0
-; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
-; SI-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
-; SI-NEXT:    s_mov_b64 exec, s[0:1]
+; SI-NEXT:    s_xor_b64 exec, vcc, exec
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB2_3
 ; SI-NEXT:  .LBB2_1: ; %loop.preheader
@@ -318,7 +316,6 @@ define amdgpu_kernel void @infinite_loop_nest_ret(ptr addrspace(1) %out) {
 ; SI-NEXT:    s_xor_b64 s[0:1], vcc, exec
 ; SI-NEXT:    s_mov_b64 s[6:7], -1
 ; SI-NEXT:    s_mov_b64 s[8:9], 0
-; SI-NEXT:    s_xor_b64 s[2:3], exec, s[0:1]
 ; SI-NEXT:    s_mov_b64 exec, s[0:1]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB6_7

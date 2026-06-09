@@ -9,8 +9,7 @@ define amdgpu_hs void @_amdgpu_hs_main() #0 {
 
 ; GCN-LABEL: _amdgpu_ps_main:
 ; GCN: v_cmp_ngt_f32_e32 vcc, 0.5, v0
-; GCN: s_xor_b64
-; GCN: s_mov_b64 exec
+; GCN: s_xor_b64 exec
 
 define amdgpu_ps void @_amdgpu_ps_main(i32 %arg) local_unnamed_addr #1 {
 .entry:
