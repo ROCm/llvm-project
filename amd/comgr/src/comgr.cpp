@@ -13,7 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "comgr.h"
+#ifndef COMGR_MINIMAL_METADATA
 #include "comgr-compiler.h"
+#endif
 #include "comgr-device-libs.h"
 #include "comgr-disassembly.h"
 #include "comgr-env.h"
@@ -22,13 +24,16 @@
 #include "comgr-symbol.h"
 #include "comgr-symbolizer.h"
 
+#ifndef COMGR_MINIMAL_METADATA
 #include "clang/Basic/Version.h"
+#endif
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetSelect.h"
 #include <fstream>
 #include <mutex>
@@ -68,6 +73,7 @@ bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
 }
 
 
+#ifndef COMGR_MINIMAL_METADATA
 amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
                                           DataAction *ActionInfo,
                                           DataSet *InputSet, DataSet *ResultSet,
@@ -109,6 +115,7 @@ amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 }
+#endif // COMGR_MINIMAL_METADATA
 
 StringRef getLanguageName(amd_comgr_language_t Language) {
   switch (Language) {
@@ -1355,7 +1362,10 @@ amd_comgr_status_t AMD_COMGR_API
             << '\n'
             << " Comgr Branch-Commit: " << xstringify(AMD_COMGR_GIT_BRANCH)
             << '-' << xstringify(AMD_COMGR_GIT_COMMIT) << '\n'
-            << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n';
+#ifndef COMGR_MINIMAL_METADATA
+            << "\t LLVM Commit: " << clang::getLLVMRevision() << '\n'
+#endif
+          ;
       (*LogP).flush();
     }
 
@@ -1376,8 +1386,12 @@ amd_comgr_status_t AMD_COMGR_API
     case AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE:
     case AMD_COMGR_ACTION_TRANSLATE_SPIRV_TO_BC:
     case AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV:
+#ifndef COMGR_MINIMAL_METADATA
       ActionStatus = dispatchCompilerAction(ActionKind, ActionInfoP, InputSetP,
                                             ResultSetP, *LogP);
+#else
+      ActionStatus = AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
+#endif
       break;
     case AMD_COMGR_ACTION_ADD_PRECOMPILED_HEADERS:
       // Redirect the input to the output.
