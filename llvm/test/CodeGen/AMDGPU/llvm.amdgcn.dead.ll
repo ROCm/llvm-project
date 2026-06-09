@@ -17,19 +17,16 @@ define i32 @dead_i32(i1 %cond, i32 %x, ptr addrspace(1) %ptr1) #0 {
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v0, v1 :: v_dual_and_b32 v1, 1, v4
 ; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; ASM-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; ASM-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB0_2
 ; ASM-SDAG-NEXT:  .LBB0_1: ; %if.then
+; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_2)
 ; ASM-SDAG-NEXT:    v_add_nc_u32_e32 v0, 1, v0
 ; ASM-SDAG-NEXT:    global_store_b32 v[2:3], v0, off
 ; ASM-SDAG-NEXT:    ; implicit-def: $vgpr0
 ; ASM-SDAG-NEXT:  .LBB0_2: ; %if.end
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; ASM-SDAG-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; ASM-GISEL-TRUE16-LABEL: dead_i32:
@@ -105,10 +102,7 @@ define %trivial_types @dead_struct(i1 %cond, %trivial_types %x, ptr addrspace(1)
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v0, v1 :: v_dual_and_b32 v1, 1, v20
 ; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; ASM-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; ASM-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB1_2
 ; ASM-SDAG-NEXT:  .LBB1_1: ; %if.then
@@ -126,8 +120,7 @@ define %trivial_types @dead_struct(i1 %cond, %trivial_types %x, ptr addrspace(1)
 ; ASM-SDAG-NEXT:    global_store_b32 v[17:18], v0, off
 ; ASM-SDAG-NEXT:    ; implicit-def: $vgpr0
 ; ASM-SDAG-NEXT:  .LBB1_2: ; %if.end
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v1, v2 :: v_dual_mov_b32 v2, v3
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v3, v4 :: v_dual_mov_b32 v4, v5
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v5, v6 :: v_dual_mov_b32 v6, v7
@@ -308,10 +301,7 @@ define [32 x i32] @dead_array(i1 %cond, [32 x i32] %x, ptr addrspace(1) %ptr1, i
 ; ASM-SDAG-NEXT:    v_and_b32_e32 v33, 1, v33
 ; ASM-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; ASM-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v33
-; ASM-SDAG-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_xor_b32 s0, exec_lo, s1
-; ASM-SDAG-NEXT:    s_mov_b32 exec_lo, s1
+; ASM-SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; ASM-SDAG-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-NEXT:    s_cbranch_execz .LBB2_2
 ; ASM-SDAG-NEXT:  .LBB2_1: ; %if.then
@@ -350,8 +340,7 @@ define [32 x i32] @dead_array(i1 %cond, [32 x i32] %x, ptr addrspace(1) %ptr1, i
 ; ASM-SDAG-NEXT:    global_store_b32 v[34:35], v0, off
 ; ASM-SDAG-NEXT:    ; implicit-def: $vgpr0
 ; ASM-SDAG-NEXT:  .LBB2_2: ; %if.end
-; ASM-SDAG-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; ASM-SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; ASM-SDAG-NEXT:    s_wait_loadcnt 0x0
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v1, v2 :: v_dual_mov_b32 v2, v3
 ; ASM-SDAG-NEXT:    v_dual_mov_b32 v3, v4 :: v_dual_mov_b32 v4, v5
@@ -656,10 +645,7 @@ define %non_trivial_types @dead_non_trivial(i1 %cond, %non_trivial_types %x, ptr
 ; ASM-SDAG-TRUE16-NEXT:    v_and_b32_e32 v1, 1, v1
 ; ASM-SDAG-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; ASM-SDAG-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; ASM-SDAG-TRUE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; ASM-SDAG-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-TRUE16-NEXT:    s_xor_b32 s0, exec_lo, s1
-; ASM-SDAG-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
+; ASM-SDAG-TRUE16-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; ASM-SDAG-TRUE16-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-TRUE16-NEXT:    s_cbranch_execz .LBB3_2
 ; ASM-SDAG-TRUE16-NEXT:  .LBB3_1: ; %if.then
@@ -707,8 +693,7 @@ define %non_trivial_types @dead_non_trivial(i1 %cond, %non_trivial_types %x, ptr
 ; ASM-SDAG-TRUE16-NEXT:    ; implicit-def: $vgpr33
 ; ASM-SDAG-TRUE16-NEXT:    global_store_b32 v[31:32], v1, off
 ; ASM-SDAG-TRUE16-NEXT:  .LBB3_2: ; %if.end
-; ASM-SDAG-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; ASM-SDAG-TRUE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; ASM-SDAG-TRUE16-NEXT:    s_clause 0x16
 ; ASM-SDAG-TRUE16-NEXT:    scratch_store_b8 v0, v2, off
 ; ASM-SDAG-TRUE16-NEXT:    scratch_store_b16 v0, v3, off offset:2
@@ -790,10 +775,7 @@ define %non_trivial_types @dead_non_trivial(i1 %cond, %non_trivial_types %x, ptr
 ; ASM-SDAG-FAKE16-NEXT:    v_and_b32_e32 v1, 1, v1
 ; ASM-SDAG-FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; ASM-SDAG-FAKE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v1
-; ASM-SDAG-FAKE16-NEXT:    s_xor_b32 s1, vcc_lo, exec_lo
-; ASM-SDAG-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-FAKE16-NEXT:    s_xor_b32 s0, exec_lo, s1
-; ASM-SDAG-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
+; ASM-SDAG-FAKE16-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; ASM-SDAG-FAKE16-NEXT:    ; divergent control-flow edge
 ; ASM-SDAG-FAKE16-NEXT:    s_cbranch_execz .LBB3_2
 ; ASM-SDAG-FAKE16-NEXT:  .LBB3_1: ; %if.then
@@ -841,8 +823,7 @@ define %non_trivial_types @dead_non_trivial(i1 %cond, %non_trivial_types %x, ptr
 ; ASM-SDAG-FAKE16-NEXT:    ; implicit-def: $vgpr33
 ; ASM-SDAG-FAKE16-NEXT:    global_store_b32 v[31:32], v1, off
 ; ASM-SDAG-FAKE16-NEXT:  .LBB3_2: ; %if.end
-; ASM-SDAG-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
-; ASM-SDAG-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, s0
+; ASM-SDAG-FAKE16-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; ASM-SDAG-FAKE16-NEXT:    s_clause 0x16
 ; ASM-SDAG-FAKE16-NEXT:    scratch_store_b8 v0, v2, off
 ; ASM-SDAG-FAKE16-NEXT:    scratch_store_b16 v0, v3, off offset:2
