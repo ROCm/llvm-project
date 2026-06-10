@@ -1,0 +1,207 @@
+# Bisect a PR merge commit to find the culprit commit.
+# For "main to amd-staging" merge: only recompiles amd-llvm (COMPILER) and the
+# failing THEROCK target using minimal cmake flags.
+#
+# Trigger: after a PR build fails, run manually with bad_sha (merge) and
+# failed_therock_feature from the failed run (or from artifact pr-build-failure-info).
+#
+# Uses TheRock at ROCm/TheRock ref compiler/amd-staging; bisects compiler/amd-llvm (llvm-project).
+
+name: Bisect PR merge (TheRock build)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bad_sha:
+        description: "Bad commit (merge commit SHA from the failed PR head)"
+        required: true
+        type: string
+      good_sha:
+        description: "Good commit (e.g. first parent of merge: merge^1). Leave empty to use bad_sha^1"
+        required: false
+        type: string
+      failed_therock_feature:
+        description: "THEROCK_ENABLE_* feature that failed (e.g. COMPILER, BLAS, MATH_LIBS)"
+        required: true
+        type: string
+      amdgpu_families:
+        description: "AMD GPU families (match the failed build)"
+        default: "gfx94X-dcgpu"
+        type: string
+      build_variant_cmake_preset:
+        description: "CMake preset name (match the failed build)"
+        default: ""
+        type: string
+      failed_run_id:
+        description: "Run ID of the failed PR build (to download failure snippet for false-positive detection). Optional."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bisect:
+    name: Bisect merge commit (COMPILER + ${{ inputs.failed_therock_feature }})
+    runs-on: azure-linux-scale-rocm
+    timeout-minutes: 360
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:6e8242d347af7e0c43c82d5031a3ac67b669f24898ea8dc2f1d5b7e4798b66bd
+    env:
+      BAD_SHA: ${{ inputs.bad_sha }}
+      GOOD_SHA: ${{ inputs.good_sha || format('{0}^1', inputs.bad_sha) }}
+      FAILED_FEATURE: ${{ inputs.failed_therock_feature }}
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+      CMAKE_PRESET: ${{ inputs.build_variant_cmake_preset }}
+    steps:
+      - name: Checkout TheRock (with submodules for compiler/amd-llvm)
+        uses: actions/checkout@v4
+        with:
+          repository: ROCm/TheRock
+          ref: compiler/amd-staging
+          path: therock
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install Python deps (TheRock)
+        working-directory: therock
+        run: pip install -r requirements.txt
+
+      - name: TheRock git config
+        working-directory: therock
+        run: git config --global --add safe.directory $PWD && git config fetch.parallel 10
+
+      - name: Fetch sources (TheRock, once)
+        working-directory: therock
+        run: ./build_tools/fetch_sources.py --jobs 12
+        timeout-minutes: 30
+
+      - name: Setup ccache (TheRock)
+        working-directory: therock
+        run: |
+          ./build_tools/setup_ccache.py \
+            --config-preset "github-oss-presubmit" \
+            --dir "$(dirname ${CCACHE_CONFIGPATH:-.ccache/ccache.conf})" \
+            --local-path "${CACHE_DIR:-$GITHUB_WORKSPACE/.container-cache}/ccache" || true
+
+      - name: Download failure snippet from failed run (for false-positive detection)
+        if: ${{ inputs.failed_run_id != '' }}
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.failed_run_id }}
+          name: pr-build-failure-info
+          path: therock
+        continue-on-error: true
+
+      - name: Prepare original_failure_snippet for bisect script
+        run: |
+          if [[ -f therock/failure_snippet.txt ]]; then
+            cp therock/failure_snippet.txt therock/original_failure_snippet.txt
+            echo "Using failure snippet from failed run for false-positive detection ($(wc -l < therock/original_failure_snippet.txt) lines)."
+          else
+            touch therock/original_failure_snippet.txt
+            echo "No failure snippet (run without failed_run_id or artifact missing); commits with different errors will not be skipped."
+          fi
+          if [[ ! -s therock/failed_component_log.txt ]]; then
+            echo "amd-llvm_build.log" > therock/failed_component_log.txt
+          fi
+
+      - name: Prepare bisect run script
+        run: |
+          FEATURE='${{ inputs.failed_therock_feature }}'
+          PRESET='${{ inputs.build_variant_cmake_preset }}'
+          FAMILIES='${{ inputs.amdgpu_families }}'
+          cat > therock/bisect_run.sh << 'BISECT_SCRIPT_END'
+          #!/bin/bash
+          # Run from compiler/amd-llvm (current commit set by git bisect).
+          # On build failure: if error matches original snippet -> bad (exit 1).
+          # If different error (dependent commit / false positive) -> skip (exit 125) and continue bisection.
+          set -e
+          THEROCK_ROOT="$(cd ../.. && pwd)"
+          cd "$THEROCK_ROOT"
+          export cmake_preset="PRESET_VAL"
+          export amdgpu_families="FAMILIES_VAL"
+          export package_version="ADHOCBUILD"
+          export BUILD_DIR="build_bisect"
+          export extra_cmake_options="EXTRA_CMAKE_VAL"
+          rm -rf "$BUILD_DIR"
+          python3 build_tools/github_actions/build_configure.py --manylinux || exit 1
+          set +e
+          cmake --build "$BUILD_DIR" --target therock-archives therock-dist -- -j32 2>&1 | tee "$BUILD_DIR/build.log"
+          BUILD_RC=${PIPESTATUS[0]}
+          if [ "$BUILD_RC" -eq 0 ]; then exit 0; fi
+          # Build failed: same failure (bad) or different error (skip/false positive)?
+          SNIPPET="$THEROCK_ROOT/original_failure_snippet.txt"
+          if [ -s "$SNIPPET" ]; then
+            FAILED_LOG_NAME=$(cat "$THEROCK_ROOT/failed_component_log.txt" 2>/dev/null || echo "amd-llvm_build.log")
+            LOG_TAIL_SRC="$BUILD_DIR/logs/$FAILED_LOG_NAME"
+            [ ! -s "$LOG_TAIL_SRC" ] && LOG_TAIL_SRC="$BUILD_DIR/build.log"
+            tail -n 100 "$LOG_TAIL_SRC" | grep -v -E '^[[:space:]]*(BEGIN|END)[[:space:]]' > /tmp/current_log_tail.txt
+            strip_timestamps() {
+              sed -e 's/\[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9][^]]*\]//g' \
+                  -e 's/\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9][^]]*\]//g' \
+                  -e 's/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9][^ ]*//g' \
+                  -e 's/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9][^ ]* *//g' \
+                  -e 's/^[0-9][0-9]:[0-9][0-9]:[0-9][0-9][^ ]* *//g' \
+                  -e 's/  */ /g' -e 's/^ *//' -e 's/ *$//'
+            }
+            while IFS= read -r line; do strip_timestamps <<< "$line"; done < /tmp/current_log_tail.txt > /tmp/current_log_tail_norm.txt
+            MATCHES=0
+            while IFS= read -r line; do
+              [ -z "$line" ] && continue
+              trim=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              case "$trim" in BEGIN*|END*) continue ;; esac
+              norm=$(echo "$line" | strip_timestamps)
+              [ -z "$norm" ] && continue
+              if grep -q -F "$norm" /tmp/current_log_tail_norm.txt 2>/dev/null; then MATCHES=$((MATCHES+1)); fi
+            done < "$SNIPPET"
+            if [ "$MATCHES" -ge 2 ]; then
+              exit 1
+            else
+              echo "[bisect] False positive: different error at this commit (dependent commit?), skipping (exit 125)"
+              exit 125
+            fi
+          else
+            exit 1
+          fi
+          BISECT_SCRIPT_END
+          sed -e "s|PRESET_VAL|${{ inputs.build_variant_cmake_preset }}|g" \
+              -e "s|FAMILIES_VAL|${{ inputs.amdgpu_families }}|g" \
+              -e "s|EXTRA_CMAKE_VAL|-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPILER=ON -DTHEROCK_ENABLE_${{ inputs.failed_therock_feature }}=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''|g" \
+              therock/bisect_run.sh > therock/bisect_run.sh.tmp && mv therock/bisect_run.sh.tmp therock/bisect_run.sh
+          chmod +x therock/bisect_run.sh
+
+      - name: Run git bisect (compiler/amd-llvm)
+        id: bisect
+        working-directory: therock/compiler/amd-llvm
+        run: |
+          git config --global --add safe.directory $PWD
+          git fetch origin
+          git bisect start
+          git bisect bad "$BAD_SHA"
+          git bisect good "$GOOD_SHA"
+          git bisect run ../../bisect_run.sh || true
+          if git rev-parse BISECT_BAD &>/dev/null; then
+            CULPRIT=$(git rev-parse BISECT_BAD)
+            MSG=$(git log -1 --format=%s "$CULPRIT")
+            echo "sha=$CULPRIT" >> "$GITHUB_OUTPUT"
+            echo "msg=$MSG" >> "$GITHUB_OUTPUT"
+            echo "$CULPRIT $MSG" > ../../bisect_culprit.txt
+            echo "Bisection culprit: $CULPRIT $MSG"
+          fi
+          git bisect reset || true
+
+      - name: Bisection summary
+        if: always()
+        run: |
+          echo "## Bisection (COMPILER + ${{ inputs.failed_therock_feature }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Bad: ${{ inputs.bad_sha }} | Good: ${{ inputs.good_sha || format('{0}^1', inputs.bad_sha) }}" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f therock/bisect_culprit.txt ]]; then
+            line=$(cat therock/bisect_culprit.txt)
+            C="${line%% *}"
+            M="${line#* }"
+            echo "**Culprit:** \`$C\` $M" >> "$GITHUB_STEP_SUMMARY"
+            echo "https://github.com/ROCm/llvm-project/commit/$C" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No single culprit identified (bisect incomplete or skipped)." >> "$GITHUB_STEP_SUMMARY"
+          fi

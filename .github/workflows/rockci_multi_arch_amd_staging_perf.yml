@@ -1,0 +1,57 @@
+# Copyright Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+#
+# Daily gfx90a compiler-perf build: fresh compiler-runtime + math-libs with HCTS.
+
+name: Multi-Arch CI amd-staging Perf (gfx90a)
+
+on:
+  # Temporary: run from feature branch before merge to amd-staging (remove after validation).
+  push:
+    branches:
+      - amd/dev/skganesan008/compiler-time-perf-test
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: >-
+          Reuse compiler-runtime S3 artifacts from this Actions run ID (math-libs only).
+          Leave empty to use the current run. Example: 27244173794
+        required: false
+        type: string
+        default: "27244173794"
+      skip_compiler_runtime:
+        description: >-
+          Skip compiler-runtime build; math-libs bootstraps from artifact_run_id
+          (set artifact_run_id to a prior successful run, e.g. 27244173794)
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-gfx90a
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    uses: ./.github/workflows/setup_multi_arch_perf.yml
+
+  linux_perf_build:
+    name: Linux::perf / gfx90a
+    needs: setup
+    if: needs.setup.outputs.enable_build_jobs == 'true'
+    uses: ./.github/workflows/multi_arch_ci_linux_perf.yml
+    secrets: inherit
+    with:
+      build_config: ${{ needs.setup.outputs.linux_build_config }}
+      rocm_package_version: ${{ needs.setup.outputs.rocm_package_version }}
+      release_type: ${{ needs.setup.outputs.release_type }}
+      artifact_run_id: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_run_id || '27244173794' }}
+      skip_compiler_runtime: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_compiler_runtime || true }}
+    permissions:
+      contents: read
+      id-token: write
