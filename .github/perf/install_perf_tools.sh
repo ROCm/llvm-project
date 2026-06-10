@@ -93,7 +93,8 @@ download_linux_tools_debs() {
           'linux-cloud-tools-${kernel}' \
           linux-tools-common \
           bash \
-          dash; then
+          dash \
+          coreutils; then
         :
       elif try_download 'linux-tools-${kshort}' linux-tools-common; then
         :
@@ -106,9 +107,9 @@ download_linux_tools_debs() {
       # Pre-seed common linux-tools / perf runtime deps (batch; ld-list pass fills gaps).
       apt-get install -y -d --reinstall libc6 libgcc-s1 libstdc++6 \
         liblzma5 libzstd1 libcap2 libssl3 zlib1g libbz2-1.0 \
-        libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 \
+        libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 coreutils \
         || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 libssl3 zlib1g \
-          libbz2-1.0 libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 \
+          libbz2-1.0 libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 coreutils \
         || true
 
       shopt -s nullglob
@@ -172,6 +173,15 @@ download_linux_tools_debs() {
           err=\$(run_rootfs_perf \"\${PERF_BIN}\" stat -e task-clock -- true 2>&1 || true)
           mapfile -t libs < <(grep -oE 'lib[^[:space:]]+: cannot open shared object file' <<<\"\${err}\" | sed 's/: cannot open.*//' | sort -u)
           if (( \${#libs[@]} == 0 )); then
+            if grep -qi 'Workload failed:.*No such file' <<<\"\${err}\"; then
+              echo \"perf dlopen probe: workload missing in chroot, seeding coreutils\" >&2
+              apt-get install -y -d --reinstall coreutils || apt-get download coreutils || true
+              for deb in /var/cache/apt/archives/*.deb; do
+                cp -f \"\${deb}\" /out/debs/ 2>/dev/null || true
+                dpkg-deb -x \"\${deb}\" /out/root
+              done
+              continue
+            fi
             echo \"perf dlopen probe stopped: \${err}\" >&2
             break
           fi
