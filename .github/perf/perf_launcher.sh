@@ -3,20 +3,25 @@
 COMPILER_INVOCATION=("$@")
 DEVICE_ONLY_OPTION="--cuda-device-only"
 
-# Hardware events (default user-only, matching Jenkins). Some CI runners do not expose
-# cycles:u / instructions:u; install_perf_tools.sh sets PERF_USE_SCOPED_HW_EVENTS=0 via
-# GITHUB_ENV to use kernel+user cycles/instructions instead.
-if [[ "${PERF_USE_SCOPED_HW_EVENTS:-1}" == "0" ]]; then
+# perf_launcher event selection (see install_perf_tools.sh probes):
+# - Default: cycles:u,instructions:u (Jenkins-style user PMU).
+# - PERF_USE_SCOPED_HW_EVENTS=0: cycles,instructions (kernel+user).
+# - PERF_MINIMAL_COUNTERS=1: task-clock,duration_time only (no hardware PMU on runner).
+if [[ "${PERF_MINIMAL_COUNTERS:-0}" == "1" ]]; then
+  MEASURE_CYCLES=0
+  MEASURE_INSTRUCTIONS=0
+elif [[ "${PERF_USE_SCOPED_HW_EVENTS:-1}" == "0" ]]; then
+  MEASURE_CYCLES=1
+  MEASURE_INSTRUCTIONS=1
   CYCLES_EVENT="cycles"
   INSTRUCTIONS_EVENT="instructions"
 else
+  MEASURE_CYCLES=1
+  MEASURE_INSTRUCTIONS=1
   CYCLES_EVENT="cycles:u"
   INSTRUCTIONS_EVENT="instructions:u"
 fi
 
-# Hardware events:
-MEASURE_CYCLES=1
-MEASURE_INSTRUCTIONS=1
 # Software events:
 MEASURE_TASK_CLOCK=1
 # Tool events:

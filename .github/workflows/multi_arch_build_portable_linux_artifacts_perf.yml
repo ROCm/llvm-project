@@ -66,8 +66,11 @@ jobs:
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       # perf_launcher needs perf_event access (Jenkins perf pods use --privileged).
-      # Kernel-matched perf: Ubuntu linux-tools debs + chroot (install_perf_tools.sh).
-      options: -v /runner/config:/home/awsconfig/ --privileged
+      # linux-tools are installed inside the container at job start (install_perf_tools.sh):
+      # Ubuntu debs extracted to workspace + perf invoked via chroot (manylinux is el8).
+      options: >-
+        -v /runner/config:/home/awsconfig/
+        --privileged
     env:
       AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
       STAGE_NAME: ${{ inputs.stage_name }}

@@ -79,7 +79,7 @@ download_linux_tools_debs() {
   if ! docker run --rm \
     -v "${docker_perf_root}:/out" \
     ubuntu:22.04 bash -ce "
-      set -eu
+      set -eux
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
       mkdir -p /out/debs /out/root
@@ -93,8 +93,7 @@ download_linux_tools_debs() {
           'linux-cloud-tools-${kernel}' \
           linux-tools-common \
           bash \
-          dash \
-          coreutils; then
+          dash; then
         :
       elif try_download 'linux-tools-${kshort}' linux-tools-common; then
         :
@@ -102,13 +101,10 @@ download_linux_tools_debs() {
         try_download linux-tools-common linux-tools-generic
       fi
 
-      # Pin Ubuntu 22.04 packages for kernel-matched perf in the chroot. If perf fails with
-      # a missing .so, add the owning package here (static list keeps docker/CI logs short).
+      # apt -d skips packages already present in ubuntu:22.04 (notably libc6/ld-linux).
+      # perf is dynamically linked and needs the interpreter inside the chroot rootfs.
       apt-get install -y -d --reinstall libc6 libgcc-s1 libstdc++6 \
-        liblzma5 libzstd1 libcap2 libssl3 zlib1g libbz2-1.0 \
-        libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 coreutils \
-        || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 libssl3 zlib1g \
-          libbz2-1.0 libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 coreutils \
+        || apt-get download libc6 libgcc-s1 libstdc++6 \
         || true
 
       shopt -s nullglob
@@ -116,11 +112,7 @@ download_linux_tools_debs() {
         cp -f \"\${deb}\" /out/debs/
         dpkg-deb -x \"\${deb}\" /out/root
       done
-
-      mkdir -p /out/root/lib64
-      ln -sf ../lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /out/root/lib64/ld-linux-x86-64.so.2 2>/dev/null || true
-
-      echo \"perf chroot debs: \$(ls -1 /out/debs/*.deb 2>/dev/null | wc -l) packages\"
+      ls -la /out/debs/
     "; then
     return 1
   fi
@@ -192,11 +184,6 @@ verify_chroot_runtime() {
   local ld_linux="${chroot_root}/lib64/ld-linux-x86-64.so.2"
   if [[ ! -e "${ld_linux}" ]]; then
     ld_linux="${chroot_root}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
-    if [[ -e "${ld_linux}" ]]; then
-      mkdir -p "${chroot_root}/lib64"
-      ln -sf ../lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "${chroot_root}/lib64/ld-linux-x86-64.so.2"
-      ld_linux="${chroot_root}/lib64/ld-linux-x86-64.so.2"
-    fi
   fi
   if [[ ! -e "${ld_linux}" ]]; then
     echo "ERROR: chroot missing dynamic linker (libc6 not extracted?)" >&2
@@ -210,9 +197,6 @@ install_perf_wrapper() {
   local chroot_perf="$1"
   local relpath="${chroot_perf#"${chroot_root}"}"
   mkdir -p /usr/local/bin
-  # Run perf directly under chroot (same as a normal Ubuntu install). Invoking
-  # ld-linux --library-path as the chroot argv confuses PMU setup: task-clock
-  # works but cycles:u/instructions:u report <not supported>.
   cat >"${perf_wrapper}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -222,18 +206,6 @@ EOF
   export PATH="/usr/local/bin:${PATH}"
   echo "Installed perf wrapper -> chroot ${relpath}"
   echo "Selected chroot perf: ${chroot_perf} ($(file -b "${chroot_perf}" 2>/dev/null || echo unknown))"
-}
-
-configure_perf_event_access() {
-  local paranoid_path=/proc/sys/kernel/perf_event_paranoid
-  if [[ -r "${paranoid_path}" ]]; then
-    echo "perf_event_paranoid before: $(cat "${paranoid_path}")"
-  fi
-  echo -1 > "${paranoid_path}" 2>/dev/null \
-    || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
-  if [[ -r "${paranoid_path}" ]]; then
-    echo "perf_event_paranoid after: $(cat "${paranoid_path}")"
-  fi
 }
 
 chroot_perf_path=""
@@ -256,7 +228,16 @@ fi
 setup_chroot_mounts
 verify_chroot_runtime
 install_perf_wrapper "${chroot_perf_path}"
-configure_perf_event_access
+
+echo 1 > /proc/sys/kernel/perf_event_paranoid 2>/dev/null \
+  || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
+
+# Diagnostics for logs: kernel PMU / hw event visibility (do not fail the job).
+echo "=== perf diagnostics: hardware events (perf list hw) ===" >&2
+perf list hw 2>&1 || true
+echo "=== perf diagnostics: system-wide 1s sample (perf stat -a -- sleep 1) ===" >&2
+perf stat -a -- sleep 1 2>&1 || true
+echo "=== end perf diagnostics ===" >&2
 
 perf_check="$(
   perf stat -x \; -e cycles:u,instructions:u,task-clock,duration_time -- true 2>&1
@@ -267,25 +248,10 @@ perf_check="$(
 }
 
 if grep -q '<not supported>' <<<"${perf_check}"; then
-  echo "WARNING: cycles:u/instructions:u not supported; probing cycles,instructions (kernel+user)..." >&2
-  perf_fb="$(
-    perf stat -x \; -e cycles,instructions,task-clock,duration_time -- true 2>&1
-  )" || true
-  if grep -q '<not supported>' <<<"${perf_fb}"; then
-    echo "ERROR: hardware PMU counters not available (user-scoped and unscoped)" >&2
-    echo "perf: $(command -v perf)  kernel: ${kernel}" >&2
-    echo "--- cycles:u / instructions:u ---" >&2
-    echo "${perf_check}" >&2
-    echo "--- cycles / instructions ---" >&2
-    echo "${perf_fb}" >&2
-    exit 1
-  fi
-  echo "INFO: HCTS will use cycles,instructions (kernel+user); Jenkins-style :u is unavailable on this runner." >&2
-  if [[ -n "${GITHUB_ENV:-}" ]]; then
-    echo "PERF_USE_SCOPED_HW_EVENTS=0" >>"${GITHUB_ENV}"
-  fi
-  export PERF_USE_SCOPED_HW_EVENTS=0
-  echo "${perf_fb}" | head -6
-else
-  echo "${perf_check}" | head -6
+  echo "ERROR: perf hardware counters (cycles:u/instructions:u) not supported" >&2
+  echo "perf: $(command -v perf)  kernel: ${kernel}" >&2
+  echo "${perf_check}" >&2
+  exit 1
 fi
+
+echo "${perf_check}" | head -6
