@@ -383,7 +383,7 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       break;
     default:
       llvm::errs() << "transpiler: Unsupported buffer atomic: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedShape(Di, "MUBUF",
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "MUBUF",
                                                    "unsupported buffer atomic");
       return Hr;
     }

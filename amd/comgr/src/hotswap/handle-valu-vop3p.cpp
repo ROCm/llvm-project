@@ -55,7 +55,7 @@ bool readSourceMods(const DecodedInst &Di, OpResolver &Op, unsigned NumSrcs,
                     HandlerResult &Hr) {
   StringRef InstrName = diagnosticMnemonic(Di);
   if (Op.nSrcs() < NumSrcs) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3P", (InstrName + " requires more source operands").str());
     return false;
   }
@@ -63,14 +63,14 @@ bool readSourceMods(const DecodedInst &Di, OpResolver &Op, unsigned NumSrcs,
   for (unsigned I = 0; I < NumSrcs; ++I) {
     unsigned ModIdx = Di.ModMap[I];
     if (ModIdx == UINT_MAX || !Di.isImm(ModIdx)) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (InstrName + " missing immediate srcN_modifiers operand").str());
       return false;
     }
     Mods[I] = static_cast<unsigned>(Di.getImm(ModIdx));
     if ((Mods[I] & ~AllowedMods) != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (InstrName + " has unsupported srcN_modifiers bits").str());
       return false;
@@ -89,7 +89,7 @@ bool readPackedSrcMods(const DecodedInst &Di, OpResolver &Op, unsigned NumSrcs,
   for (unsigned I = 0; I < NumSrcs; ++I) {
     unsigned SrcIdx = Op.srcIdx(I);
     if (!Di.isReg(SrcIdx) && !Di.isImm(SrcIdx)) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (InstrName + " source is neither a register nor an immediate").str());
       return false;
@@ -202,7 +202,7 @@ Value *readMixF32Src(RaiseContext &Ctx, OpResolver &Op, unsigned I,
 // We handle only inline constant `0` today: it is the only src2 inline
 // the AMDGPU backend actually emits for the WMMA family (Clang folds
 // non-zero accumulator constants through a VGPR mov before the WMMA).
-// Any other immediate surfaces as a structured `unsupportedShape`
+// Any other immediate surfaces as a structured `unsupportedInstructionForm`
 // failure rather than silently miscompiling.
 //
 // On failure the helper populates `Hr.Failure` and returns nullptr; the
@@ -214,7 +214,7 @@ llvm::Value *readWMMAAccumC(RaiseContext &Ctx, const DecodedInst &Di,
     // No src2 operand on the instruction at all (e.g. a hypothetical
     // encoding with C implicitly zero and no disassembler-surfaced
     // slot). Safest to refuse -- the caller expects to have read C.
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3P",
         "WMMA instruction has no src2 (accumulator) operand; "
         "cannot recover C input");
@@ -229,7 +229,7 @@ llvm::Value *readWMMAAccumC(RaiseContext &Ctx, const DecodedInst &Di,
   if (!Di.isImm(SrcIdx2)) {
     // Could be a symbolic constant slot (e.g. SRC_EXEC_LO/HI, SRC_PC).
     // None of those are valid semantics for a WMMA accumulator; refuse.
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3P",
         "WMMA src2 is neither a register nor an immediate; no "
         "accumulator C input path is defined for this encoding");
@@ -238,7 +238,7 @@ llvm::Value *readWMMAAccumC(RaiseContext &Ctx, const DecodedInst &Di,
   int64_t ImmC = Di.getImm(SrcIdx2);
   if (ImmC == 0)
     return llvm::ConstantAggregateZero::get(CdIrTy);
-  Hr.Failure = RaiseFailure::unsupportedShape(
+  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
       Di, "VOP3P",
       "WMMA src2 inline-constant other than 0 is not yet modelled; "
       "extend readWMMAAccumC if a corpus kernel surfaces this");
@@ -273,13 +273,13 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
                                               AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx))) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P", "v_pk_fma_f16 missing immediate clamp operand");
       return Hr;
     }
     int64_t ClampImm = Di.getImm(static_cast<unsigned>(ClampIdx));
     if (ClampImm != 0 && ClampImm != 1) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P", "v_pk_fma_f16 clamp operand is not 0 or 1");
       return Hr;
     }
@@ -331,14 +331,14 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
                                               AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx))) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (diagnosticMnemonic(Di) + " missing immediate clamp operand").str());
       return Hr;
     }
     int64_t ClampImm = Di.getImm(static_cast<unsigned>(ClampIdx));
     if (ClampImm != 0 && ClampImm != 1) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (diagnosticMnemonic(Di) + " clamp operand is not 0 or 1").str());
       return Hr;
@@ -391,14 +391,14 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     int ClampIdx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(),
                                               AMDGPU::OpName::clamp);
     if (ClampIdx < 0 || !Di.isImm(static_cast<unsigned>(ClampIdx))) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (diagnosticMnemonic(Di) + " missing immediate clamp operand").str());
       return Hr;
     }
     int64_t ClampImm = Di.getImm(static_cast<unsigned>(ClampIdx));
     if (ClampImm != 0 && ClampImm != 1) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (diagnosticMnemonic(Di) + " clamp operand is not 0 or 1").str());
       return Hr;
@@ -409,7 +409,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       // behavior is tied to the wave's MODE.FP16_OVFL state, which this
       // raiser does not currently model. Refuse instead of silently lowering
       // it as min(max(x, 0), 1).
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (diagnosticMnemonic(Di) +
            " has a nonzero clamp bit; packed BF16 add/mul/fma clamp and "
@@ -638,7 +638,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     if (ClampIdx >= 0 && Di.isImm(static_cast<unsigned>(ClampIdx)))
       Clamp = Di.getImm(static_cast<unsigned>(ClampIdx)) != 0;
     if (ClampIdx >= 0 && !Di.isImm(static_cast<unsigned>(ClampIdx))) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P", "v_dot4_i32_iu8 clamp operand is not an immediate");
       return Hr;
     }
@@ -784,7 +784,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       // handles both single- and multi-WMMA cases correctly.
       ResultVal = emitWmmAtoMfmaF3216x16x4(Ctx, A, B, C);
     } else {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           "v_wmma_f32_16x16x4_f32 cross-target requires either "
           "hasTensorOps (native gfx1250 intrinsic "
@@ -999,7 +999,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       // so coverage tooling surfaces targets whose WMMA K=32/
       // K=64 support is missing rather than pretending the lift
       // worked.
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           "v_wmma_*_16x16x{32,64}_* has no available lowering on "
           "the target ISA: the target does not provide gfx1250 "
@@ -1065,7 +1065,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     SmallVector<StringRef, 4> Parts;
     Body.split(Parts, '_');
     if (Parts.size() < 2) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           "v_wmma_scale_f32_16x16x128_f8f6f4: cannot parse fA_fB suffix from "
           "MC pseudo name");
@@ -1074,7 +1074,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
     unsigned ADwords = FmtSuffixToDwords(Parts[0]);
     unsigned BDwords = FmtSuffixToDwords(Parts[1]);
     if (ADwords == 0 || BDwords == 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           "v_wmma_scale_f32_16x16x128_f8f6f4: unrecognised mantissa-format "
           "tag in MC pseudo suffix (expected f4/f6/f8)");
@@ -1181,14 +1181,14 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       (void)MatrixAReuse;
       (void)MatrixBReuse;
       if (!ResultVal) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3P",
             "emitWMMAScaleF8F6F4toMFMA refused this fragment width "
             "(ADwords/BDwords outside f8/f6/f4 set)");
         return Hr;
       }
     } else {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           "v_wmma_scale_f32_16x16x128_f8f6f4 requires either hasTensorOps "
           "(gfx1250 native scaled WMMA, "
@@ -1227,7 +1227,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
   case CanonicalOp::V_FMA_MIXHI_BF16: {
     StringRef InstrName = diagnosticMnemonic(Di);
     if (Op.nSrcs() < 3) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
           (InstrName + " requires three explicit source operands").str());
       return Hr;
@@ -1250,7 +1250,7 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
                                                 AMDGPU::OpName::clamp);
     if (ClampIndex >= 0) {
       if (!Di.isImm(static_cast<unsigned>(ClampIndex))) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3P",
             (InstrName + " clamp operand is not an immediate").str());
         return Hr;

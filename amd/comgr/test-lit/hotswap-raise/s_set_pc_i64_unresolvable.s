@@ -10,7 +10,7 @@
 ; recognized PC chain (Pattern A) and is not consumed via a recorded
 ; chain-terminator (Pattern B) as Unresolvable, with a refusal
 ; reason. The handler converts that into a
-; RaiseFailure::unsupportedShape — the user rules forbid silent
+; RaiseFailure::unsupportedInstructionForm — the user rules forbid silent
 ; fallbacks, so a "branch to unreachable" stub would be a regression.
 ;
 ; We assert two things:

@@ -22,13 +22,15 @@
 // instructions were successfully raised before and after all blockers.
 //
 // Kernels that crashed in the child (signal, non-zero exit, incomplete
-// shm) are reported as a FAIL with mnemonic ``__crash__`` and format
-// ``signal_<N>`` so they still land in the kerneldex worklist instead of
-// being silently dropped.
+// shm) are reported as a FAIL with mnemonic `__crash__` and a bracketed
+// format such as `signal_<N>`, `exit_<N>`, or
+// `status_incomplete` so they still land in the kerneldex worklist
+// instead of being silently dropped.
 //
-// Exits 0 iff every kernel succeeded; otherwise 1.  ISA is auto-detected
-// from the filename (look for ``gfx<digits>[a-z]?``) when ``--isa=`` is
-// not passed.
+// In default mode, exits 0 iff every kernel succeeded, 1 if any kernel
+// failed/crashed, and a distinct non-zero infrastructure code when the
+// parent cannot set up or monitor a child. ISA is auto-detected from the
+// filename (look for `gfx<digits>[a-z]?`) when `--isa=` is not passed.
 //
 // --emit-ir mode. Designed for lit tests. Runs raiseToIR in-process (no
 // fork), dumps the raised LLVM IR for a single kernel on stdout, and
@@ -100,6 +102,7 @@
 #include "comgr.h"
 #include "hotswap/code-object-utils.h"
 #include "hotswap/pipeline.h"
+#include "hotswap/raise-failure.h"
 #include "hotswap/raiser.h"
 
 // raiser.hpp forward-declares llvm::LLVMContext and llvm::Module but
@@ -107,11 +110,16 @@
 // main() needs the complete types.
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cerrno>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -120,6 +128,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <utility>
 #include <unistd.h>
 
 namespace {
@@ -129,29 +138,37 @@ namespace cl = llvm::cl;
 // Shared-memory block handed from each per-kernel child back to the parent.
 // Using a fixed-size POD struct keeps the IPC trivially safe across fork().
 
-// Maximum number of unique (mnemonic, format) failure pairs stored per
-// kernel. Kernels that hit more distinct blockers will have the excess counted
-// in numDroppedFailures and surfaced in the ALSO output as a truncation notice.
-// The lifted/total count is always accurate regardless of the cap.
+// Maximum number of unique failure buckets emitted per kernel. Kernels that hit
+// more distinct blockers will have the excess counted in numDroppedFailures and
+// surfaced in the ALSO output as a truncation notice. The lifted/total count is
+// always accurate regardless of the cap.
 static constexpr int kMaxTrackedFailures = 32;
+static constexpr int kMmapFailedExitCode = 3;
+static constexpr int kChildOutputFileFailedExitCode = 4;
+static constexpr int kForkFailedExitCode = 5;
+static constexpr int kChildOutputWriteFailedExitCode = 6;
 
-struct FailureEntry {
-  char mnemonic[128];
-  char format[64];
+// Stable identity for one emitted failure bucket. The detail string is omitted
+// deliberately: it is diagnostic text, not part of corpus bucketing.
+struct FailureBucketKey {
+  COMGR::hotswap::RaiseFailureReason Reason;
+  std::string Mnemonic;
+  std::string Format;
 };
+
+bool operator==(const FailureBucketKey &Lhs, const FailureBucketKey &Rhs) {
+  return Lhs.Reason == Rhs.Reason && Lhs.Mnemonic == Rhs.Mnemonic &&
+         Lhs.Format == Rhs.Format;
+}
 
 struct KernelRaiseStats {
   bool done;
   bool success;
   int lifted;
   int total;
-  // All unique (mnemonic, format) pairs collected during the raise, up to
-  // kMaxTrackedFailures entries.
-  int numAllFailures;
   // Count of unique blockers that exceeded kMaxTrackedFailures and were not
-  // stored.
+  // emitted to the child's output file.
   int numDroppedFailures;
-  FailureEntry allFailures[kMaxTrackedFailures];
 };
 
 std::string autoDetectIsa(llvm::StringRef path) {
@@ -181,8 +198,8 @@ cl::opt<std::string> IsaOpt("isa", cl::value_desc("arch"),
 
 cl::opt<std::string>
     TargetIsaOpt("target-isa", cl::value_desc("arch"),
-                 cl::desc("Target ISA the raiser lowers for "
-                          "(default: same as --isa)."));
+                                  cl::desc("Target ISA the raiser lowers for "
+                                           "(default: same as --isa)."));
 
 cl::opt<std::string>
     EmitIrOpt("emit-ir", cl::ValueOptional, cl::value_desc("kernel"),
@@ -211,7 +228,74 @@ cl::opt<bool> EnableWaveNativeOpt(
              "(default on; later-wins with --disable-wave-native)."));
 cl::opt<bool> DisableWaveNativeOpt(
     "disable-wave-native",
-    cl::desc("Pin ModuloReplicationProjection."));
+                         cl::desc("Pin ModuloReplicationProjection."));
+
+// Batch output de-duplicates failures by the structured fields visible in
+// FAIL / ALSO lines.
+FailureBucketKey failureBucketKey(
+    const COMGR::hotswap::RaiseFailure &Failure) {
+  return {Failure.Reason,
+          Failure.Mnemonic.empty() ? std::string("unknown") : Failure.Mnemonic,
+          Failure.Format.empty() ? std::string("unknown") : Failure.Format};
+}
+
+// Append the structured fields that distinguish otherwise identical
+// mnemonic/format blockers in human diagnostics.
+void printBatchFailureSuffix(llvm::raw_ostream &OS,
+                             const COMGR::hotswap::RaiseFailure &Failure) {
+  OS << " reason=" << COMGR::hotswap::reasonString(Failure.Reason)
+     << " @offset=0x";
+  OS.write_hex(Failure.Offset);
+  if (!Failure.Detail.empty())
+    OS << " :: " << Failure.Detail;
+}
+
+// Print one batch-mode failure record while preserving the historical
+// `FAIL/ALSO <kernel> -> <mnemonic> [<format>]` prefix.
+void printBatchFailureLine(llvm::raw_ostream &OS, llvm::StringRef Prefix,
+                           llvm::StringRef KernelName,
+                           const COMGR::hotswap::RaiseFailure &Failure,
+                           int Lifted = -1, int Total = -1) {
+  OS << Prefix << " " << KernelName << " -> "
+     << (Failure.Mnemonic.empty() ? "unknown" : Failure.Mnemonic) << " ["
+     << (Failure.Format.empty() ? "unknown" : Failure.Format) << "]";
+  if (Lifted >= 0 && Total >= 0)
+    OS << " (" << Lifted << "/" << Total << ")";
+  printBatchFailureSuffix(OS, Failure);
+  OS << "\n";
+}
+
+// Replay the child's buffered stdout after it exits so parent-side OK / FAIL
+// records stay serialized even when a kernel crashes during raise.
+bool replayChildOutput(llvm::StringRef Path) {
+  auto BufferOrErr = llvm::MemoryBuffer::getFile(Path);
+  if (!BufferOrErr) {
+    llvm::errs() << "raise_cli: could not read child output " << Path << ": "
+                 << BufferOrErr.getError().message() << "\n";
+    return false;
+  }
+  llvm::outs() << (*BufferOrErr)->getBuffer();
+  return true;
+}
+
+// Map the child's wait status into the same bracketed crash format the batch
+// output already uses, so non-signal child failures remain diagnosable.
+std::string childCrashFormat(int Status, bool ShmDone) {
+  if (WIFSIGNALED(Status))
+    return "signal_" + std::to_string(WTERMSIG(Status));
+  if (WIFEXITED(Status)) {
+    int ExitCode = WEXITSTATUS(Status);
+    if (ExitCode == 0 && !ShmDone)
+      return "status_incomplete";
+    if (ExitCode == kChildOutputWriteFailedExitCode)
+      return "child_output_write_failed";
+    if (ExitCode != 0)
+      return "exit_" + std::to_string(ExitCode);
+  }
+  if (!ShmDone)
+    return "status_incomplete";
+  return "wait_status_unknown";
+}
 
 // Resolve an --enable-/--disable- toggle pair, later occurrence wins.
 bool resolveToggle(bool Default, const cl::opt<bool> &Enable,
@@ -345,19 +429,13 @@ int main(int argc, char **argv) {
       // so we cannot dump partial IR here. Callers that need stderr
       // diagnostics (abort-gate lit tests, etc.) FileCheck the raiser's
       // stderr — we leave that untouched.
+      COMGR::hotswap::RaiseFailure Failure =
+          raised.Failure.hasFailed()
+              ? raised.Failure
+              : COMGR::hotswap::RaiseFailure::internalFailure(
+                    "raiseToIR returned failure without a structured reason");
       llvm::errs() << "raise_cli: kernel '" << target << "' failed to raise: "
-                   << (raised.Failure.Mnemonic.empty()
-                           ? "unknown"
-                           : raised.Failure.Mnemonic.c_str())
-                   << " ["
-                   << (raised.Failure.Format.empty()
-                           ? "unknown"
-                           : raised.Failure.Format.c_str())
-                   << "] @offset=0x";
-      llvm::errs().write_hex(raised.Failure.Offset);
-      if (!raised.Failure.Detail.empty())
-        llvm::errs() << " :: " << raised.Failure.Detail;
-      llvm::errs() << "\n";
+                   << COMGR::hotswap::formatRaiseFailure(Failure) << "\n";
       return 1;
     }
     llvm::outs().write(raised.IrText.data(), raised.IrText.size());
@@ -398,12 +476,11 @@ int main(int argc, char **argv) {
     pipelineOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
     pipelineOptions.EnableWaveNative = EnableWaveNative;
     auto pipe = COMGR::hotswap::runPipeline(coData, isa, effectiveTargetIsa,
-                                        target, pipelineOptions);
+                                            target, pipelineOptions);
     if (!pipe.Success) {
       llvm::errs() << "raise_cli: pipeline failed for kernel '" << target
-                   << "' (lifted=" << pipe.LiftedCount << "/"
-                   << pipe.TotalCount << ", FailMnemonic='"
-                   << pipe.FailMnemonic << "')\n";
+                   << "' (lifted=" << pipe.LiftedCount << "/" << pipe.TotalCount
+                   << ", failure='" << pipe.FailDetail << "')\n";
       return 1;
     }
     FILE *fp = std::fopen(writeHsacoPath.c_str(), "wb");
@@ -437,8 +514,12 @@ int main(int argc, char **argv) {
              MAP_SHARED | MAP_ANONYMOUS, -1, 0));
     if (shm == MAP_FAILED) {
       llvm::errs() << "raise_cli: mmap failed\n";
-      return 3;
+      return kMmapFailedExitCode;
     }
+    auto UnmapShm = llvm::scope_exit([&] {
+      if (munmap(shm, sizeof(KernelRaiseStats)) != 0)
+        llvm::errs() << "raise_cli: munmap failed: errno=" << errno << "\n";
+    });
     std::memset(shm, 0, sizeof(KernelRaiseStats));
 
     auto kernelOffsetOrErr = COMGR::hotswap::findKernelSymbolOffset(coData, kName);
@@ -450,7 +531,6 @@ int main(int argc, char **argv) {
       llvm::outs() << "FAIL " << kName
                    << " -> __kernel_offset__ "
                       "[KernelSymbolOffsetLookupFailed]\n";
-      munmap(shm, sizeof(KernelRaiseStats));
       continue;
     }
     uint64_t kernelOffset = *kernelOffsetOrErr;
@@ -459,8 +539,23 @@ int main(int argc, char **argv) {
     // would re-emit after fork().
     llvm::outs().flush();
 
+    int ChildOutputFD = -1;
+    llvm::SmallString<128> ChildOutputPath;
+    if (std::error_code EC = llvm::sys::fs::createTemporaryFile(
+            "raise-cli", "out", ChildOutputFD, ChildOutputPath)) {
+      llvm::errs() << "raise_cli: could not create child output file: "
+                   << EC.message() << "\n";
+      return kChildOutputFileFailedExitCode;
+    }
+    auto RemoveChildOutput = llvm::scope_exit([&] {
+      if (std::error_code EC = llvm::sys::fs::remove(ChildOutputPath))
+        llvm::errs() << "raise_cli: could not remove child output file "
+                     << ChildOutputPath << ": " << EC.message() << "\n";
+    });
+
     pid_t pid = fork();
     if (pid == 0) {
+      llvm::raw_fd_ostream ChildOut(ChildOutputFD, /*shouldClose=*/true);
       // Silence the child's stderr: LLVM chatters a lot, and kerneldex
       // only cares about OK/FAIL on stdout plus the last stderr line
       // when the process as a whole crashes.
@@ -484,95 +579,105 @@ int main(int argc, char **argv) {
       shm->success = raised.Success;
       shm->lifted = raised.LiftedCount;
       shm->total = raised.TotalCount;
-      shm->numAllFailures = 0;
       shm->numDroppedFailures = 0;
-      if (!raised.Success) {
-        // Collect all unique (mnemonic, format) pairs from allFailures,
-        // preserving first-seen order and capping at kMaxTrackedFailures.
-        // Use a simple O(n^2) dedup — failure counts per kernel are small.
-        for (const auto &f : raised.AllFailures) {
-          const std::string fmn = f.Mnemonic.empty() ? "unknown" : f.Mnemonic;
-          const std::string ffmt = f.Format.empty() ? "unknown" : f.Format;
-          bool seen = false;
-          for (int k = 0; k < shm->numAllFailures; ++k) {
-            if (std::strncmp(shm->allFailures[k].mnemonic, fmn.c_str(),
-                             sizeof(FailureEntry::mnemonic)) == 0 &&
-                std::strncmp(shm->allFailures[k].format, ffmt.c_str(),
-                             sizeof(FailureEntry::format)) == 0) {
-              seen = true;
-              break;
-            }
+
+      if (raised.Success) {
+        ChildOut << "OK " << kName << " (" << raised.LiftedCount << "/"
+                 << raised.TotalCount << ")\n";
+      } else {
+        llvm::SmallVector<FailureBucketKey> Seen;
+        int NumEmittedFailures = 0;
+        auto EmitFailure = [&](const COMGR::hotswap::RaiseFailure &Failure,
+                               llvm::StringRef Prefix) {
+          FailureBucketKey Key = failureBucketKey(Failure);
+          for (const FailureBucketKey &SeenKey : Seen) {
+            if (SeenKey == Key)
+              return;
           }
-          if (!seen) {
-            if (shm->numAllFailures < kMaxTrackedFailures) {
-              auto &entry = shm->allFailures[shm->numAllFailures++];
-              std::strncpy(entry.mnemonic, fmn.c_str(),
-                           sizeof(entry.mnemonic) - 1);
-              entry.mnemonic[sizeof(entry.mnemonic) - 1] = '\0';
-              std::strncpy(entry.format, ffmt.c_str(),
-                           sizeof(entry.format) - 1);
-              entry.format[sizeof(entry.format) - 1] = '\0';
-            } else {
-              ++shm->numDroppedFailures;
-            }
+          if (NumEmittedFailures >= kMaxTrackedFailures) {
+            ++shm->numDroppedFailures;
+            return;
           }
+          Seen.push_back(std::move(Key));
+          printBatchFailureLine(ChildOut, Prefix, kName, Failure,
+                                Prefix == "FAIL" ? raised.LiftedCount : -1,
+                                Prefix == "FAIL" ? raised.TotalCount : -1);
+          ++NumEmittedFailures;
+        };
+
+        for (const COMGR::hotswap::RaiseFailure &Failure : raised.AllFailures)
+          EmitFailure(Failure, NumEmittedFailures == 0 ? "FAIL" : "ALSO");
+
+        if (NumEmittedFailures == 0) {
+          COMGR::hotswap::RaiseFailure Failure =
+              raised.Failure.hasFailed()
+                  ? raised.Failure
+                  : COMGR::hotswap::RaiseFailure::internalFailure(
+                        "raiseToIR returned failure without a structured reason");
+          EmitFailure(Failure, "FAIL");
         }
-        // Failures that abort before or after Phase 5 set Result.Failure
-        // directly and return without pushing into AllFailures. Fall back to
-        // it so allFailures[0] is always valid when numAllFailures == 0.
-        if (shm->numAllFailures == 0) {
-          const char *mn = raised.Failure.Mnemonic.empty()
-                               ? "unknown"
-                               : raised.Failure.Mnemonic.c_str();
-          const char *fmt = raised.Failure.Format.empty()
-                                ? "unknown"
-                                : raised.Failure.Format.c_str();
-          auto &entry = shm->allFailures[shm->numAllFailures++];
-          std::strncpy(entry.mnemonic, mn, sizeof(entry.mnemonic) - 1);
-          entry.mnemonic[sizeof(entry.mnemonic) - 1] = '\0';
-          std::strncpy(entry.format, fmt, sizeof(entry.format) - 1);
-          entry.format[sizeof(entry.format) - 1] = '\0';
+
+        if (shm->numDroppedFailures > 0) {
+          ChildOut << "ALSO " << kName << " -> __truncated__ [+"
+                   << shm->numDroppedFailures
+                   << " unique blockers not shown]\n";
         }
       }
+
+      ChildOut.flush();
+      if (ChildOut.has_error())
+        _exit(kChildOutputWriteFailedExitCode);
       _exit(0);
     }
 
-    int st = 0;
-    waitpid(pid, &st, 0);
+    if (close(ChildOutputFD) != 0)
+      llvm::errs() << "raise_cli: close child output file failed: errno="
+                   << errno << "\n";
 
-    if (!shm->done || WIFSIGNALED(st) || (WIFEXITED(st) && WEXITSTATUS(st) != 0)) {
+    if (pid < 0) {
+      llvm::errs() << "raise_cli: fork failed\n";
+      return kForkFailedExitCode;
+    }
+
+    int st = 0;
+    bool WaitFailed = false;
+    while (waitpid(pid, &st, 0) < 0) {
+      if (errno == EINTR)
+        continue;
+      llvm::errs() << "raise_cli: waitpid failed: errno=" << errno << "\n";
+      ++crashKernels;
+      llvm::outs() << "FAIL " << kName
+                   << " -> __crash__ [waitpid_failed]\n";
+      WaitFailed = true;
+      break;
+    }
+    if (WaitFailed)
+      continue;
+
+    auto ReplayOrCrash = [&]() {
+      if (!replayChildOutput(ChildOutputPath)) {
+        ++crashKernels;
+        llvm::outs() << "FAIL " << kName << " -> __crash__ [output_missing]\n";
+        return false;
+      }
+      return true;
+    };
+
+    bool ChildExitedCleanly = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+    if (!shm->done || !ChildExitedCleanly) {
       // Child never wrote the shm marker, or died by signal, or exited
       // with a nonzero status: surface this as a FAIL row with a
       // synthetic mnemonic so kerneldex still counts the kernel.
       ++crashKernels;
-      int sig = WIFSIGNALED(st) ? WTERMSIG(st) : 0;
-      llvm::outs() << "FAIL " << kName << " -> __crash__ [signal_" << sig
-                   << "]\n";
+      llvm::outs() << "FAIL " << kName << " -> __crash__ ["
+                   << childCrashFormat(st, shm->done) << "]\n";
     } else if (shm->success) {
-      ++okKernels;
-      llvm::outs() << "OK " << kName << " (" << shm->lifted << "/"
-                   << shm->total << ")\n";
+      if (ReplayOrCrash())
+        ++okKernels;
     } else {
-      ++failKernels;
-      // First (or only) blocker on the FAIL line.
-      llvm::outs() << "FAIL " << kName << " -> "
-                   << shm->allFailures[0].mnemonic << " ["
-                   << shm->allFailures[0].format << "] (" << shm->lifted
-                   << "/" << shm->total << ")\n";
-      // Additional unique blockers on ALSO lines.
-      for (int k = 1; k < shm->numAllFailures; ++k) {
-        llvm::outs() << "ALSO " << kName << " -> "
-                     << shm->allFailures[k].mnemonic << " ["
-                     << shm->allFailures[k].format << "]\n";
-      }
-      if (shm->numDroppedFailures > 0) {
-        llvm::outs() << "ALSO " << kName << " -> __truncated__ [+"
-                     << shm->numDroppedFailures
-                     << " unique blockers not shown]\n";
-      }
+      if (ReplayOrCrash())
+        ++failKernels;
     }
-
-    munmap(shm, sizeof(KernelRaiseStats));
   }
 
   llvm::errs() << "raise_cli: " << totalKernels << " kernels, " << okKernels

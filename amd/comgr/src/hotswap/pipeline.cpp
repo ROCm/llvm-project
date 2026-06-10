@@ -1,5 +1,6 @@
 #include "pipeline.h"
 #include "code-object-utils.h"
+#include "raise-failure.h"
 #include "raiser.h"
 
 #include "llvm/IR/LLVMContext.h"
@@ -293,16 +294,18 @@ static bool raiseAndCompileKernel(const TextSection &text,
   if (!raised.Success) {
     llvm::errs() << "transpiler: Raising '" << kernelName << "' to LLVM IR failed";
     result.FailKernel = kernelName;
-    if (!raised.Failure.Mnemonic.empty()) {
-      llvm::errs() << " (unsupported: " << raised.Failure.Mnemonic << ")";
-      result.FailMnemonic = raised.Failure.Mnemonic;
-    }
-    if (raised.Failure.hasFailed()) {
-      result.FailReason = reasonString(raised.Failure.Reason);
-      result.FailFormat = raised.Failure.Format;
-      result.FailDetail = raised.Failure.Detail;
-      result.FailOffset = raised.Failure.Offset;
-    }
+    RaiseFailure Failure =
+        raised.Failure.hasFailed()
+            ? raised.Failure
+            : RaiseFailure::internalFailure(
+                  "raiseToIR returned failure without a structured reason");
+    std::string RenderedFailure = formatRaiseFailure(Failure);
+    llvm::errs() << " (" << RenderedFailure << ")";
+    result.FailMnemonic = Failure.Mnemonic;
+    result.FailReason = reasonString(Failure.Reason);
+    result.FailFormat = Failure.Format;
+    result.FailDetail = RenderedFailure;
+    result.FailOffset = Failure.Offset;
     llvm::errs() << "\n";
     result.Timings.raiseSeconds += timingElapsed(options.CollectTimings, raiseStart);
     return false;

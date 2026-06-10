@@ -9,7 +9,7 @@
 ; s_swap_pc_i64 site whose call-target SGPR pair was not produced by
 ; a complete intra-block PC chain as Unresolvable, with a refusal
 ; reason. The handler converts that into a
-; RaiseFailure::unsupportedShape — the user rules forbid silent
+; RaiseFailure::unsupportedInstructionForm — the user rules forbid silent
 ; fallbacks, so a "branch to unreachable" stub would be a regression.
 ;
 ; Why this matters more than for s_set_pc_i64: the dominant

@@ -214,13 +214,13 @@ static unsigned extractHwregId(int64_t Simm16) {
 static Value *getSimm16(RaiseContext &Ctx, const DecodedInst &Di,
                         unsigned OperandIdx, HandlerResult &Hr) {
   if (OperandIdx >= Di.Inst.getNumOperands() || !Di.isImm(OperandIdx)) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "SOPK", "expected signed 16-bit immediate operand");
     return nullptr;
   }
   int64_t Raw = Di.getImm(OperandIdx);
   if (Raw < -32768 || Raw > 65535) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "SOPK", "signed 16-bit immediate operand out of range");
     return nullptr;
   }

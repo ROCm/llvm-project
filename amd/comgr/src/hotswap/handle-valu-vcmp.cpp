@@ -60,7 +60,7 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
     errs() << "transpiler: " << Mn
            << ": V_CMP/V_CMPX reached handler without VCmpMeta "
               "(OpcodeMap::build should have populated it)\n";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VALU", "V_CMP/V_CMPX reached handler without VCmpMeta");
     return Hr;
   }
@@ -160,7 +160,7 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
   }
   if (!M->IsClass && (!S0 || !S1)) {
     errs() << "transpiler: " << Mn << ": missing operand\n";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VALU", "V_CMP/V_CMPX missing operand");
     return Hr;
   }

@@ -42,7 +42,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
   // (single contiguous `<N x i32>` load at raw offset0) from ever
   // being reachable again; if a handler ever falls through to here
   // with a DS_READ2* CanonicalOp the dsClassify default returns {-1, 0, …}
-  // and the generic block below surfaces it as `unsupportedShape`
+  // and the generic block below surfaces it as `unsupportedInstructionForm`
   // rather than silently emitting wrong IR.
   auto DsClassify = [](CanonicalOp S) -> std::tuple<int, int, bool> {
     switch (S) {
@@ -487,7 +487,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
           static_cast<unsigned>(Off1Idx) >= Di.Inst.getNumOperands() ||
           !Di.Inst.getOperand(static_cast<unsigned>(Off0Idx)).isImm() ||
           !Di.Inst.getOperand(static_cast<unsigned>(Off1Idx)).isImm()) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "DS",
             "DS_READ2/WRITE2 missing OpName::offset0 or OpName::offset1 "
             "immediate operand -- operand table mismatch");
@@ -596,7 +596,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // vector-load path would otherwise produce a bogus
     // `FixedVectorType::get(i32, (unsigned)-1)` crash.
     if (dwords < 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "single-offset DS generic path reached with an unclassified "
           "CanonicalOp -- add a dsClassify entry or a dedicated handler block");
@@ -901,7 +901,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     // the classifier and still reaches us, so refuse loudly here too
     // for symmetry with the cross-wave path.
     if (!Di.HasDsSwizzleImm) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "ds_swizzle_b32 missing/invalid OpName::offset immediate "
           "operand -- decoder rejected the 16-bit imm");
@@ -924,7 +924,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     if (AddrIdx < 0 ||
         static_cast<unsigned>(AddrIdx) >= Di.Inst.getNumOperands() ||
         !Di.Inst.getOperand(static_cast<unsigned>(AddrIdx)).isReg()) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "DS",
           "ds_swizzle_b32 missing OpName::addr VGPR operand -- operand "
           "table mismatch");

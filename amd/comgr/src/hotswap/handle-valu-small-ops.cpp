@@ -119,7 +119,7 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     unsigned Mods = Op.srcMod(0);
     constexpr unsigned AllowedMods = SISrcMods::OP_SEL_0;
     if ((Mods & ~AllowedMods) != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "v_cvt_u32_u16 has unsupported source modifiers; only src0 "
           "op_sel (half select) is modeled");
@@ -143,7 +143,7 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     if (!requireDefaultOutputModsIfPresent(Di, Hr))
       return Hr;
     if (Di.HasDpp) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "V_CVT_F32_F64 DPP has mixed source/destination widths; inactive "
           "lane preservation must be modeled as old-destination semantics, "
@@ -161,7 +161,7 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     if (!requireDefaultOutputModsIfPresent(Di, Hr))
       return Hr;
     if (Di.HasDpp) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "V_CVT_F64_F32 DPP has mixed source/destination widths; inactive "
           "lane preservation must be modeled as old-destination semantics, "
@@ -638,7 +638,7 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     if (!requireDefaultOutputModsIfPresent(Di, Hr))
       return Hr;
     if (Di.HasDpp) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "V_FREXP_EXP_I32_F64 DPP has mixed source/destination widths "
           "(f64 source, i32 destination); inactive lane preservation must "

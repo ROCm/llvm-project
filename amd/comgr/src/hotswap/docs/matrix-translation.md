@@ -708,7 +708,7 @@ is ready to enable:
    translation failure.
 2. **Drop the refusal gates** in `handle-valu-vop3p.cpp` (both the
    K=4 f32 arm and the K=32/K=64 arm). The `!providesFullWaveExec
-   Invariant()` check and its `RaiseFailure::unsupportedShape`
+   Invariant()` check and its `RaiseFailure::unsupportedInstructionForm`
    branch are the only pieces removed; the rest of the dispatch
    (native `hasTensorOps` path, `hasMFMA` cross-target path, no-
    path-available refusal) stays exactly as-is.

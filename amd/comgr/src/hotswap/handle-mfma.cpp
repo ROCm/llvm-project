@@ -127,7 +127,7 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   const auto &Table = mfmaIntrinsicTable();
   auto It = Table.find(Sop);
   if (It == Table.end()) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "MFMA", "no intrinsic mapping for this MFMA CanonicalOp");
     errs() << "transpiler: Unknown MFMA: " << Di.Mnemonic << "\n";
     return Hr;
@@ -167,7 +167,7 @@ HandlerResult handleMFMA(RaiseContext &Ctx, const DecodedInst &Di,
   // The accumulator (src2) may be tied to the destination in some encodings.
   ParsedReg SrcC = Op.isSrcReg(2) ? Op.srcReg(2) : Dest;
   if (SrcA.RegKind == ParsedReg::OTHER || SrcB.RegKind == ParsedReg::OTHER) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "MFMA", "cannot classify MFMA source registers");
     errs() << "transpiler: MFMA " << Di.Mnemonic
            << ": cannot read source registers\n";

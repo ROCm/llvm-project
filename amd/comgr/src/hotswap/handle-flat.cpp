@@ -135,7 +135,7 @@ AllocaInst *getOrCreateSourcePrivateSegment(RaiseContext &Ctx,
         "refusing rather than inventing scratch backing.");
     errs() << "transpiler: FLAT scratch refused: " << Di.Mnemonic
            << " -- " << Detail << "\n";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT", Detail);
     return nullptr;
   }
@@ -182,7 +182,7 @@ Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
   } else if (Idx < Op.nSrcs() && Op.isSrcReg(Idx) &&
              Op.srcReg(Idx).RegKind != ParsedReg::SGPR &&
              Op.srcReg(Idx).RegKind != ParsedReg::NOREG) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT",
         (Twine(Label) + ": expected VGPR or off/null for VADDR"));
     return nullptr;
@@ -195,7 +195,7 @@ Value *decodeScratchOffset(RaiseContext &Ctx, const DecodedInst &Di,
                              "scratch_soff");
   } else if (Idx < Op.nSrcs() && Op.isSrcReg(Idx) &&
              Op.srcReg(Idx).RegKind != ParsedReg::NOREG) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT",
         (Twine(Label) + ": expected SGPR or off/null for SADDR"));
     return nullptr;
@@ -266,7 +266,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 
     unsigned AccessBytes = ScratchAccessBytes();
     if (AccessBytes == 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           formatScratchAbiDetail(
               Ctx,
@@ -281,7 +281,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         Sop == CanonicalOp::SCRATCH_LOAD_DWORDX3 ||
         Sop == CanonicalOp::SCRATCH_LOAD_DWORDX4) {
       if (Op.nSrcs() < 2) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT", "scratch_load_* expected address/cpol operands");
         return Hr;
       }
@@ -336,7 +336,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         Sop == CanonicalOp::SCRATCH_STORE_DWORDX3 ||
         Sop == CanonicalOp::SCRATCH_STORE_DWORDX4) {
       if (Op.nSrcs() < 3) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "scratch_store_* expected data plus address/cpol operands");
         return Hr;
@@ -349,7 +349,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 
       ParsedReg StData = Op.srcReg(0);
       if (StData.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT", "scratch_store_* expected VGPR data operand");
         return Hr;
       }
@@ -368,7 +368,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
 
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "FLAT",
         formatScratchAbiDetail(
             Ctx,
@@ -648,7 +648,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     if (Op.nSrcs() == 5) {
       IsSaddr = true;
     } else if (Op.nSrcs() != 4) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "global_load_async_to_lds_b*: expected 4 srcs (plain) or "
           "5 srcs (SADDR) per FLAT_Global_Load_LDS_Pseudo<IsAsync=1>");
@@ -657,7 +657,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
 
     ParsedReg VdstPr = Op.srcReg(0);
     if (VdstPr.RegKind != ParsedReg::VGPR) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "global_load_async_to_lds_b*: vdst (LDS-base operand) is "
           "not a VGPR");
@@ -674,7 +674,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg VaddrPr = Op.srcReg(2);
       if (SaddrPr.RegKind != ParsedReg::SGPR ||
           VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "global_load_async_to_lds_b* SADDR: expected "
             "(SGPR_64, VGPR_32) for (saddr, vaddr)");
@@ -743,7 +743,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     } else {
       ParsedReg VaddrPr = Op.srcReg(1);
       if (VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             "global_load_async_to_lds_b* plain: expected VGPR_64 "
             "for vaddr");
@@ -948,7 +948,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           << "VGPR address used here without divergence "
           << "analysis -- refusing to emit a fallback or silently "
           << "drop the hint.\n";
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           "gfx1250-only VMEM prefetch (HasVmemPrefInsts); no "
           "equivalent on non-gfx1250 compilation target. The "
@@ -963,7 +963,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     if (Op.nSrcs() == 4) {
       IsSaddr = true;
     } else if (Op.nSrcs() != 3) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT",
           Twine(Di.Mnemonic)
               + ": expected 3 srcs (plain) or 4 srcs (SADDR) per "
@@ -978,7 +978,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg VaddrPr = Op.srcReg(1);
       if (SaddrPr.RegKind != ParsedReg::SGPR ||
           VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             Twine(Di.Mnemonic)
                 + " SADDR: expected (SGPR_64, VGPR_32) for (saddr, vaddr)");
@@ -992,7 +992,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
     } else {
       ParsedReg VaddrPr = Op.srcReg(0);
       if (VaddrPr.RegKind != ParsedReg::VGPR) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "FLAT",
             Twine(Di.Mnemonic) + " plain: expected VGPR_64 for vaddr");
         return Hr;
@@ -1371,7 +1371,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       Data = Ctx.B.CreateBitCast(Data, Ctx.F32Ty); AtomicTy = Ctx.F32Ty; break;
     default:
       llvm::errs() << "transpiler: Unhandled flat atomic: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedShape(Di, "FLAT",
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "FLAT",
                                                    "unhandled flat atomic");
       return Hr;
     }
@@ -1491,7 +1491,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       AtomicTy = FixedVectorType::get(Type::getHalfTy(Ctx.C), 2); IsFp = true; break;
     default:
       llvm::errs() << "transpiler: Unsupported global atomic variant: " << Mn << "\n";
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "FLAT", "unsupported global atomic variant");
       return Hr;
     }

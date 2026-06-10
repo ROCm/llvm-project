@@ -9,15 +9,25 @@
 #include "raise-failure.h"
 
 #include "decoded-inst.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace COMGR::hotswap {
 
+// Stable diagnostic token for each structured raise-failure category.
 const char *reasonString(RaiseFailureReason R) {
   switch (R) {
-  case RaiseFailureReason::None:                    return "None";
-  case RaiseFailureReason::BadInput:                return "BadInput";
-  case RaiseFailureReason::UnsupportedOpcode:       return "UnsupportedOpcode";
-  case RaiseFailureReason::UnsupportedShape:        return "UnsupportedShape";
+  case RaiseFailureReason::None:
+    return "None";
+  case RaiseFailureReason::BadInput:
+    return "BadInput";
+  case RaiseFailureReason::InternalError:
+    return "internal-raise-failure";
+  case RaiseFailureReason::UnsupportedOpcode:
+    return "UnsupportedOpcode";
+  case RaiseFailureReason::UnsupportedInstructionForm:
+    return "unsupported-instruction-form";
+  case RaiseFailureReason::UnsupportedSourceHiddenArg:
+    return "unsupported-source-hidden-arg";
   case RaiseFailureReason::SPEUnsafeExecWriter:
     return "SPE-unmodeled-EXEC-writer";
   case RaiseFailureReason::TargetMachineCreationFailed:
@@ -48,11 +58,46 @@ const char *reasonString(RaiseFailureReason R) {
   llvm_unreachable("unhandled RaiseFailureReason");
 }
 
-RaiseFailure RaiseFailure::unsupportedShape(const DecodedInst &Di,
-                                             llvm::StringRef Format,
-                                             const llvm::Twine &Detail) {
+// Emit the canonical diagnostic spelling without forcing callers to allocate.
+void printRaiseFailure(llvm::raw_ostream &OS, const RaiseFailure &F) {
+  OS << reasonString(F.Reason);
+  if (!F.Mnemonic.empty()) {
+    OS << ": " << F.Mnemonic;
+    if (!F.Format.empty())
+      OS << " [" << F.Format << "]";
+    OS << " @offset=0x";
+    OS.write_hex(F.Offset);
+  } else if (!F.Format.empty()) {
+    OS << ": [" << F.Format << "]";
+  }
+  if (!F.Detail.empty())
+    OS << " :: " << F.Detail;
+}
+
+// Return the canonical diagnostic spelling for APIs that need an owned string.
+std::string formatRaiseFailure(const RaiseFailure &F) {
+  std::string Result;
+  llvm::raw_string_ostream OS(Result);
+  printRaiseFailure(OS, F);
+  OS.flush();
+  return Result;
+}
+
+RaiseFailure RaiseFailure::unsupportedInstructionForm(
+    const DecodedInst &Di, llvm::StringRef Format, const llvm::Twine &Detail) {
   RaiseFailure F;
-  F.Reason = RaiseFailureReason::UnsupportedShape;
+  F.Reason = RaiseFailureReason::UnsupportedInstructionForm;
+  F.Mnemonic = Di.Mnemonic;
+  F.Format = Format.str();
+  F.Offset = Di.Offset;
+  F.Detail = Detail.str();
+  return F;
+}
+
+RaiseFailure RaiseFailure::unsupportedSourceHiddenArg(
+    const DecodedInst &Di, llvm::StringRef Format, const llvm::Twine &Detail) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::UnsupportedSourceHiddenArg;
   F.Mnemonic = Di.Mnemonic;
   F.Format = Format.str();
   F.Offset = Di.Offset;
@@ -61,7 +106,7 @@ RaiseFailure RaiseFailure::unsupportedShape(const DecodedInst &Di,
 }
 
 RaiseFailure RaiseFailure::unsupportedOpcode(const DecodedInst &Di,
-                                              llvm::StringRef Format) {
+                                             llvm::StringRef Format) {
   RaiseFailure F;
   F.Reason = RaiseFailureReason::UnsupportedOpcode;
   F.Mnemonic = Di.Mnemonic;
@@ -84,6 +129,14 @@ RaiseFailure RaiseFailure::targetMachineCreationFailed() {
   F.Reason = RaiseFailureReason::TargetMachineCreationFailed;
   F.Format = reasonString(RaiseFailureReason::TargetMachineCreationFailed);
   F.Detail = "createTargetMachine returned null";
+  return F;
+}
+
+RaiseFailure RaiseFailure::internalFailure(const llvm::Twine &Detail) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::InternalError;
+  F.Format = reasonString(RaiseFailureReason::InternalError);
+  F.Detail = Detail.str();
   return F;
 }
 
@@ -114,8 +167,8 @@ RaiseFailure RaiseFailure::deviceLibraryLinkFailed(
 namespace {
 
 RaiseFailure makeCrossWaveFailure(RaiseFailureReason Reason,
-                                   const DecodedInst &Di,
-                                   const llvm::Twine &KindDetail) {
+                                  const DecodedInst &Di,
+                                  const llvm::Twine &KindDetail) {
   RaiseFailure F;
   F.Reason = Reason;
   F.Mnemonic = Di.Mnemonic;
@@ -128,9 +181,9 @@ RaiseFailure makeCrossWaveFailure(RaiseFailureReason Reason,
 } // namespace
 
 RaiseFailure RaiseFailure::crossWaveLaneIdLeak(const DecodedInst &Di,
-                                                const llvm::Twine &KindDetail) {
+                                               const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(RaiseFailureReason::CrossWaveLaneIdLeak, Di,
-                               KindDetail);
+                              KindDetail);
 }
 
 RaiseFailure RaiseFailure::crossWaveUnrewritableShuffle(
@@ -146,15 +199,16 @@ RaiseFailure RaiseFailure::crossWaveShuffleRewritePending(
 }
 
 RaiseFailure RaiseFailure::crossWaveReplicaRace(const DecodedInst &Di,
-                                                 const llvm::Twine &KindDetail) {
+                                                const llvm::Twine &KindDetail) {
   return makeCrossWaveFailure(RaiseFailureReason::CrossWaveReplicaRace, Di,
-                               KindDetail);
+                              KindDetail);
 }
 
-RaiseFailure RaiseFailure::crossWaveLanePredicatedExec(
-    const DecodedInst &Di, const llvm::Twine &KindDetail) {
-  return makeCrossWaveFailure(
-      RaiseFailureReason::CrossWaveLanePredicatedExec, Di, KindDetail);
+RaiseFailure
+RaiseFailure::crossWaveLanePredicatedExec(const DecodedInst &Di,
+                                          const llvm::Twine &KindDetail) {
+  return makeCrossWaveFailure(RaiseFailureReason::CrossWaveLanePredicatedExec,
+                              Di, KindDetail);
 }
 
 // see hotswap/docs/modrep-predicate-chain.md §5 (narrow-O1)
@@ -170,8 +224,8 @@ RaiseFailure RaiseFailure::crossWavePredicateChain(
 }
 
 RaiseFailure RaiseFailure::strictUnsafeLowering(const DecodedInst &Di,
-                                                  llvm::StringRef Site,
-                                                  const llvm::Twine &Detail) {
+                                                llvm::StringRef Site,
+                                                const llvm::Twine &Detail) {
   RaiseFailure F;
   F.Reason = RaiseFailureReason::StrictUnsafeLowering;
   F.Mnemonic = Di.Mnemonic;

@@ -899,7 +899,7 @@ llvm::Value *emitWMMAScaleF8F6F4toMFMA(
 
   // Accept only the documented WMMA F8F6F4 widths.  The MC-pseudo decoder
   // in handle-valu-vop3p.cpp already rejects everything else with
-  // unsupportedShape; we re-check here so that any future extension that
+  // unsupportedInstructionForm; we re-check here so that any future extension that
   // changes those values trips loudly rather than silently producing a
   // mismatched lane redistribution.
   if (!(aDwords == 16 || aDwords == 12 || aDwords == 8) ||

@@ -313,7 +313,7 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // already promoted the next linear offset to a leader so subsequent
     // instructions land in their own BBs.
     if (!Ctx.SetpcAnalysis) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_set_pc_i64 reached without a SetPcAnalysis "
           "(raiser pipeline is missing the Phase 1.1 step)");
@@ -321,7 +321,7 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     }
     auto It = Ctx.SetpcAnalysis->SetpcSites.find(Di.Offset);
     if (It == Ctx.SetpcAnalysis->SetpcSites.end()) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_set_pc_i64 site not classified by SetPcAnalysis");
       return Hr;
@@ -355,11 +355,11 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
     case SetPcSiteInfo::Kind::Unresolvable:
-      Hr.Failure = RaiseFailure::unsupportedShape(Di, "SOP1",
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
                                                   Info.RefusalReason);
       return Hr;
     }
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "SOP1", "s_set_pc_i64 SetPcSiteInfo::Kind not handled");
     return Hr;
   }
@@ -397,7 +397,7 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     // Unresolvable is refused loudly with the analysis's diagnostic.
     // See canonical-op.h's S_SWAP_PC_I64 doc for the lowering contract.
     if (!Ctx.SetpcAnalysis) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_swap_pc_i64 reached without a SetPcAnalysis "
           "(raiser pipeline is missing the Phase 1.1 step)");
@@ -405,14 +405,14 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     }
     auto It = Ctx.SetpcAnalysis->SetpcSites.find(Di.Offset);
     if (It == Ctx.SetpcAnalysis->SetpcSites.end()) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_swap_pc_i64 site not classified by SetPcAnalysis");
       return Hr;
     }
     const SetPcSiteInfo &Info = It->second;
     if (Info.SiteKind == SetPcSiteInfo::Kind::Unresolvable) {
-      Hr.Failure = RaiseFailure::unsupportedShape(Di, "SOP1",
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "SOP1",
                                                   Info.RefusalReason);
       return Hr;
     }
@@ -422,7 +422,7 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
       // not a return slot -- IndirectB is the return-side use of
       // such a pair). If it ever does, refuse loudly so the
       // mismatch surfaces rather than silently mis-lowering.
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_swap_pc_i64 classified as IndirectB by setpc_analysis "
           "(unexpected -- IndirectB is the return-side classification "
@@ -468,7 +468,7 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   }
   if (Sop == CanonicalOp::S_ADD_PC_I64) {
     if (!Di.isImm(0)) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
           "s_add_pc_i64 with SGPR-pair source (codegen only emits the "
           "immediate-literal form)");

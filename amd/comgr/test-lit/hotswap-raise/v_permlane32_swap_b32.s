@@ -64,7 +64,7 @@
 ; CHECK: %pls32_new_src0_out{{[0-9]*}} = call i32 @llvm.amdgcn.ds.bpermute(i32 %pls32_addr{{[0-9]*}}, i32 %{{[^)]+}})
 
 ; NEGATIVE: the pre-graduation shape was a loud raise failure
-; (unsupportedShape), not an emulation — no `amdgcn.ds.bpermute`
+; (unsupportedInstructionForm), not an emulation — no `amdgcn.ds.bpermute`
 ; call reached the output at all and the raised IR was empty.
 ; Nothing specific to CHECK-NOT here beyond the positive
 ; assertions above; the positive CHECKs are tight enough that

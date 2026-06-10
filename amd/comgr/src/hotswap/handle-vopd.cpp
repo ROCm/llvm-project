@@ -162,7 +162,7 @@ Value *readVopdSource64(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
     V = Ctx.Regs.loadSGPR64(Ctx.B, Src.BaseIdx);
     break;
   default:
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "VOPD f64 component source is not a 64-bit scalar/vector source");
     return nullptr;
   }
@@ -174,7 +174,7 @@ Value *readVopdCond(RaiseContext &Ctx, const DecodedInst &Di,
                     const DecodedInst::VopdSource &Src, HandlerResult &Hr) {
   if (Src.SrcKind != DecodedInst::VopdSource::Kind::VCC &&
       Src.SrcKind != DecodedInst::VopdSource::Kind::SGPR) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "VOPD cndmask explicit condition is neither VCC nor SGPR");
     return nullptr;
   }
@@ -202,7 +202,7 @@ bool requireVopdSources(const DecodedInst::VopdHalf &Half, unsigned N,
                         const DecodedInst &Di, HandlerResult &Hr) {
   if (Half.NumSrcs >= N)
     return true;
-  Hr.Failure = RaiseFailure::unsupportedShape(
+  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
       Di, "VOPD", "VOPD component has too few decoded sources");
   return false;
 }
@@ -212,7 +212,7 @@ bool requireVopdRegWidth(const DecodedInst &Di, const char *What,
                          HandlerResult &Hr) {
   if (Width >= MinWidth)
     return true;
-  Hr.Failure = RaiseFailure::unsupportedShape(
+  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
       Di, "VOPD", (Twine("VOPD ") + What + " is narrower than " +
                    Twine(MinWidth) + " dwords")
                       .str());
@@ -457,14 +457,14 @@ bool lowerVopdHalf(RaiseContext &Ctx, const DecodedInst &Di,
   }
   case CanonicalOp::V_BITOP3_B32: {
     if (!Half.HasBitOp3) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOPD", "VOPD bitop component missing bitop3 immediate");
       return false;
     }
     return LowerBitOp3();
   }
   default:
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "unhandled structural VOPD component CanonicalOp");
     return false;
   }
@@ -477,7 +477,7 @@ HandlerResult handleVOPD(RaiseContext &Ctx, const DecodedInst &Di,
   HandlerResult Hr;
   (void)Op;
   if (!Di.HasVopd) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOPD", "VOPD instruction reached handler without sidecar");
     return Hr;
   }

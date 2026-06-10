@@ -15,7 +15,7 @@
 ;
 ; Pre-2026-04-24 (see the git-log entry accompanying this fixture
 ; change), the cross-target arm refused the lift loudly with a
-; `RaiseFailure::unsupportedShape` diagnostic that cited the
+; `RaiseFailure::unsupportedInstructionForm` diagnostic that cited the
 ; gfx1250-only asynccnt unit and the gated `amdgcn.global.load.async.
 ; to.lds.b*` intrinsic. That posture was correct in the sense of
 ; avoiding silent miscompile, but it blocked every `matmul_ogs_*`

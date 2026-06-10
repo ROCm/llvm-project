@@ -15,6 +15,10 @@
 #include <cstdint>
 #include <string>
 
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
+
 namespace COMGR::hotswap {
 
 struct DecodedInst;
@@ -32,6 +36,10 @@ enum class RaiseFailureReason : uint16_t {
   // yet supported for subtarget` `report_fatal_error` (process abort).
   // `detail` carries the offending input string.
   BadInput,
+  // Internal contract violation: a caller reached a failure return path without
+  // the structured failure that should explain it. This is a Hotswap bug, not a
+  // property of the source kernel.
+  InternalError,
   // Main loop: no handler matched on TSFlags, or every matching handler
   // returned unhandled without setting a more specific failure. The
   // `mnemonic` / `format` / `offset` triple locates the instruction.
@@ -41,7 +49,12 @@ enum class RaiseFailureReason : uint16_t {
   // specific failure sites (handle_valu, handle_flat, handle_mubuf,
   // handle_mfma, handle_vopd) all use this category. `detail` carries
   // shape-specific context when available.
-  UnsupportedShape,
+  UnsupportedInstructionForm,
+  // A source metadata hidden-argument byte was identified, but Hotswap has no
+  // explicit synthesis for that `.value_kind` yet. This is narrower than
+  // `UnsupportedInstructionForm`: the instruction and SMEM hidden-arg path are
+  // both recognized; only that source hidden argument kind is unsupported.
+  UnsupportedSourceHiddenArg,
   // Phase 1.5 gate: an EXEC-writing instruction whose CanonicalOp does not
   // have `routesExecThroughStoreExec` set in `canonical-op-attrs.cpp`.
   SPEUnsafeExecWriter,
@@ -128,11 +141,18 @@ struct RaiseFailure {
   //
   // Handler layer.
 
-  // Handler recognised the CanonicalOp but refused the specific operand
-  // shape. `di` supplies the mnemonic and source offset.
-  static RaiseFailure unsupportedShape(const DecodedInst &Di,
-                                        llvm::StringRef Format,
-                                        const llvm::Twine &Detail = {});
+  // Handler recognised the CanonicalOp but refused the specific instruction
+  // form, operand profile, or target capability. `di` supplies the mnemonic and
+  // source offset.
+  static RaiseFailure
+  unsupportedInstructionForm(const DecodedInst &Di, llvm::StringRef Format,
+                             const llvm::Twine &Detail = {});
+
+  // Handler identified a source metadata hidden argument, but no explicit
+  // source-side synthesis exists for that .value_kind yet.
+  static RaiseFailure unsupportedSourceHiddenArg(const DecodedInst &Di,
+                                                 llvm::StringRef Format,
+                                                 const llvm::Twine &Detail);
 
   // Raiser main loop / pre-translation gates. These are only built by
   // `raiser.cpp` -- the factories live here so every reason is
@@ -153,6 +173,10 @@ struct RaiseFailure {
 
   // Phase 2: `TargetRegistry::createTargetMachine` returned null.
   static RaiseFailure targetMachineCreationFailed();
+
+  // Internal invariant violation surfaced as a structured failure so callers do
+  // not misclassify it as an unsupported source instruction.
+  static RaiseFailure internalFailure(const llvm::Twine &Detail);
 
   // Phase 7: `verifyModule` rejected the emitted IR.
   // `err` carries the verifier's diagnostic text for the `detail` field.
@@ -233,6 +257,15 @@ struct RaiseFailure {
   static RaiseFailure userSgprLayoutMismatch(llvm::StringRef KernelName,
                                              const llvm::Twine &Detail);
 };
+
+// Write the canonical human-readable rendering of a structured raise failure.
+// Callers that need diagnostics should use this instead of reassembling
+// reason/mnemonic/format/detail fields independently.
+void printRaiseFailure(llvm::raw_ostream &OS, const RaiseFailure &F);
+
+// Return the same canonical rendering as an owned string for APIs that cannot
+// stream directly.
+std::string formatRaiseFailure(const RaiseFailure &F);
 
 } // namespace COMGR::hotswap
 

@@ -168,7 +168,7 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     bool IsDealloc = Simm16 == AMDGPU::SendMsg::ID_DEALLOC_VGPRS_GFX11Plus;
 
     if (!IsInterrupt && !IsDealloc) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOPP",
           Twine("unsupported s_sendmsg SIMM16=0x") + Twine::utohexstr(Simm16) +
               "; only MSG_INTERRUPT (1) and MSG_DEALLOC_VGPRS (3) are lifted");

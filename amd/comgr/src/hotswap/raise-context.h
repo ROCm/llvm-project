@@ -584,7 +584,7 @@ private:
   bool rejectDpp16FetchInactiveIfNeeded() {
     if (!Di.DppFi)
       return false;
-    Ctx.recordReadFailure(RaiseFailure::unsupportedShape(
+    Ctx.recordReadFailure(RaiseFailure::unsupportedInstructionForm(
         Di, "DPP",
         "DPP16 FI fetch-inactive form: llvm.amdgcn.update.dpp has no FI "
         "operand; extending DPP lifting requires modelling Table 57 "

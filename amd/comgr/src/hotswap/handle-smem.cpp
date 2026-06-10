@@ -60,7 +60,7 @@ int getKernargPtrSgpr(RaiseContext &Ctx) {
 } // namespace
 
 HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
-                       OpResolver &Op) {
+                         OpResolver &Op) {
   HandlerResult Hr;
   CanonicalOp Sop = Di.CanonOp;
 
@@ -152,10 +152,10 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         int64_t ImplOffset = ByteOffset - Ctx.Kernargs.ImplicitArgsBase;
         Value *Gep =
             (ImplOffset == 0)
-                ? ImplPtr
-                : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, ImplPtr,
-                                           Ctx.B.getInt64(ImplOffset),
-                                           "impl_gep");
+                         ? ImplPtr
+                         : Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, ImplPtr,
+                                                   Ctx.B.getInt64(ImplOffset),
+                                                   "impl_gep");
         for (int D = 0; D < LoadDwords; D++) {
           Value *Ep = (D == 0) ? Gep
                                : Ctx.B.CreateInBoundsGEP(
@@ -167,20 +167,28 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         return Hr;
       }
       if (!HiddenBase.Value) {
-        Hr.Failure =
-            RaiseFailure::unsupportedShape(Di, "SMEM", HiddenBase.FailureDetail);
+        if (HiddenBase.FailureDetail.empty())
+          report_fatal_error(
+              "matched source hidden argument without value or failure detail");
+        Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
+            Di, "SMEM", HiddenBase.FailureDetail);
         return Hr;
       }
       for (int D = 0; D < LoadDwords; D++) {
         SourceHiddenArgValue Dw =
             D == 0 ? HiddenBase
                    : emitSourceHiddenDword(HiddenCtx, ByteOffset + D * 4);
-        if (!Dw.Matched || !Dw.Value) {
-          Hr.Failure = RaiseFailure::unsupportedShape(
-              Di, "SMEM",
-              Dw.FailureDetail.empty()
-                  ? "source hidden-arg SMEM load spans non-hidden bytes"
-                  : Dw.FailureDetail);
+        if (!Dw.Matched) {
+          Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+              Di, "SMEM", "source hidden-arg SMEM load spans non-hidden bytes");
+          return Hr;
+        }
+        if (!Dw.Value) {
+          if (Dw.FailureDetail.empty())
+            report_fatal_error("matched source hidden argument without value "
+                               "or failure detail");
+          Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
+              Di, "SMEM", Dw.FailureDetail);
           return Hr;
         }
         Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx + D, Dw.Value);
@@ -220,7 +228,7 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         if (Di.HasScaleOffset)
           RegOff = Ctx.B.CreateMul(RegOff,
                                    ConstantInt::get(Ctx.I64Ty, LoadBytes),
-                                   "smem_roff_scaled");
+                              "smem_roff_scaled");
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
       }
       for (int D = 0; D < LoadDwords; D++) {
@@ -292,8 +300,11 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
             HiddenCtx, static_cast<int>(Off), IsHalfWord ? 2 : 1, IsSigned);
         if (Hidden.Matched) {
           if (!Hidden.Value) {
-            Hr.Failure =
-                RaiseFailure::unsupportedShape(Di, "SMEM", Hidden.FailureDetail);
+            if (Hidden.FailureDetail.empty())
+              report_fatal_error("matched source hidden argument without value "
+                                 "or failure detail");
+            Hr.Failure = RaiseFailure::unsupportedSourceHiddenArg(
+                Di, "SMEM", Hidden.FailureDetail);
             return Hr;
           }
           Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Hidden.Value);
@@ -312,7 +323,7 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       if (Di.HasScaleOffset && NarrowBytes != 1)
         RegOff = Ctx.B.CreateMul(RegOff,
                                  ConstantInt::get(Ctx.I64Ty, NarrowBytes),
-                                 "smem_nroff_scaled");
+                            "smem_nroff_scaled");
       Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
     }
 
@@ -320,7 +331,7 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
                                              NarrowLoadName);
     Value *Ext = IsSigned
                      ? Ctx.B.CreateSExt(Narrow, Ctx.I32Ty, ExtName)
-                     : Ctx.B.CreateZExt(Narrow, Ctx.I32Ty, ExtName);
+                          : Ctx.B.CreateZExt(Narrow, Ctx.I32Ty, ExtName);
     Ctx.Regs.storeSGPR32(Ctx.B, Dest.BaseIdx, Ext);
     Hr.Handled = true;
     return Hr;
@@ -332,13 +343,13 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
       Sop == CanonicalOp::S_STORE_B128) {
     int StoreDwords = (Sop == CanonicalOp::S_STORE_B32)  ? 1
                       : (Sop == CanonicalOp::S_STORE_B64) ? 2
-                                                    : 4;
+                                                          : 4;
     ParsedReg Data = Op.srcReg(0);
     ParsedReg Base = Op.srcReg(1);
     if (Data.RegKind != ParsedReg::SGPR || Base.RegKind != ParsedReg::SGPR) {
       llvm::errs() << "transpiler: " << Di.Mnemonic
                    << ": S_STORE expects SGPR data and base\n";
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SMEM", "S_STORE expects SGPR data and base");
       return Hr;
     }
@@ -359,7 +370,7 @@ HandlerResult handleSMEM(RaiseContext &Ctx, const DecodedInst &Di,
         if (Di.HasScaleOffset)
           RegOff = Ctx.B.CreateMul(RegOff,
                                    ConstantInt::get(Ctx.I64Ty, StoreBytes),
-                                   "smem_st_roff_scaled");
+                              "smem_st_roff_scaled");
         Ptr = Ctx.B.CreateInBoundsGEP(Ctx.I8Ty, Ptr, RegOff);
       }
     }

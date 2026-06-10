@@ -31,7 +31,7 @@ bool readRequiredVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
                                 unsigned SrcIndex, StringRef OpName,
                                 unsigned &Mods) {
   if (SrcIndex >= Di.NumSrcs) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) + " missing f16 source operand").str());
     return false;
@@ -39,7 +39,7 @@ bool readRequiredVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
 
   unsigned ModIdx = Di.ModMap[SrcIndex];
   if (ModIdx == UINT_MAX || !Di.isImm(ModIdx)) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) + " missing immediate f16 src" + Twine(SrcIndex) +
          "_modifiers operand; operand table layout does not match the "
@@ -51,7 +51,7 @@ bool readRequiredVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
   int64_t Raw = Di.getImm(ModIdx);
   const unsigned Allowed = SrcIndex == 0 ? 0xFu : 0x7u;
   if (Raw < 0 || (static_cast<unsigned>(Raw) & ~Allowed) != 0) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) + " has unsupported f16 src" + Twine(SrcIndex) +
          "_modifiers bits")
@@ -68,7 +68,7 @@ bool readOptionalVOP3F16SrcMods(const DecodedInst &Di, HandlerResult &Hr,
                                 unsigned &Mods) {
   Mods = 0;
   if (SrcIndex >= Di.NumSrcs) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) + " missing f16 source operand").str());
     return false;

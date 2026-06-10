@@ -23,7 +23,7 @@
 ;     redistribution + intrinsic swap; no software scale-exponent emul).
 ;   - Everything else (gfx942 with `hasMFMA == true` but
 ;     `hasGfx950Insts == false`, gfx900, gfx10/11 base, ...): refuse
-;     loudly via `RaiseFailure::unsupportedShape`.
+;     loudly via `RaiseFailure::unsupportedInstructionForm`.
 ;
 ; A WMMA-scale → multi-MFMA decomposition with software scale-exponent
 ; application is *possible* on gfx942 but not implemented; per the
@@ -41,7 +41,7 @@
 ;      (`v_wmma_scale_f32_16x16x128_f8f6f4`), the encoding format
 ;      (`VOP3P`), and the architectural-mismatch detail. The handler
 ;      routes the failure through
-;      `RaiseFailure::unsupportedShape(di, "VOP3P", detail)`, which
+;      `RaiseFailure::unsupportedInstructionForm(di, "VOP3P", detail)`, which
 ;      raise_cli then formats as `raise_cli: kernel '<name>' failed
 ;      to raise: <mnemonic> [<format>] @offset=0x... :: <detail>`
 ;      (raise_cli.cpp). Both the format bucket and the detail text

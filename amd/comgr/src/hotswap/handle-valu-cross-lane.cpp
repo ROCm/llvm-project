@@ -114,7 +114,7 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
                       "operand-table mismatch (expected the "
                       "VOP_PERMLANE_SWAP profile's second-output "
                       "operand-table slot to be a register)";
-    Hr.Failure = RaiseFailure::unsupportedShape(Di, "VALU", Msg);
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "VALU", Msg);
     return Hr;
   }
   ParsedReg VdstReg = Op.dst();
@@ -372,7 +372,7 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
       Os << "permlane16 / permlanex16 emulation supports only "
             "op_sel:[1,0] (fi=1, bc=0); saw fi="
          << (Fi ? 1 : 0) << ", bc=" << (Bc ? 1 : 0);
-      Hr.Failure = RaiseFailure::unsupportedShape(Di, "VALU", Detail);
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "VALU", Detail);
       return Hr;
     }
     Value *Src0 = Op.src(0);
@@ -560,7 +560,7 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
     // because its partner stays within each 32-lane half
     // regardless of wave size.
     if (Ctx.TargetIsa.isWave32()) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
           "v_permlane32_swap_b32 lift refused: target is wave32, "
           "but the instruction's XOR-32 partner has no wave32 "
@@ -571,7 +571,7 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
     if (Ctx.Isa.isWave32()) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
           "v_permlane32_swap_b32 in a wave32 source kernel -- no "
           "wave32 ISA enables FeaturePermlane32Swap (see "

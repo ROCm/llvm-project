@@ -57,7 +57,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
     int64_t Omod = 0;
     if ((ClampIdx >= 0 && !readNamedImm(Di, AMDGPU::OpName::clamp, Clamp)) ||
         (OmodIdx >= 0 && !readNamedImm(Di, AMDGPU::OpName::omod, Omod))) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " has malformed clamp/omod operands; operand table layout does "
@@ -67,7 +67,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
     }
 
     if (Clamp != 0 || Omod != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " with non-default clamp/omod is not yet lifted; output modifier "
@@ -83,7 +83,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
     std::optional<int64_t> Clamp =
         readNamedImmOperand(Di, AMDGPU::OpName::clamp);
     if (!Clamp) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " missing immediate clamp operand; operand table layout does not "
@@ -92,7 +92,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
       return false;
     }
     if (*Clamp != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " has clamp=1; VOP3 floating-point output clamp is not modeled "
@@ -104,7 +104,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
     std::optional<int64_t> Omod =
         readNamedImmOperand(Di, AMDGPU::OpName::omod);
     if (!Omod) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " missing immediate omod operand; operand table layout does not "
@@ -113,7 +113,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
       return false;
     }
     if (*Omod != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           (Twine(DiagnosticName) +
            " has nonzero omod; VOP3 floating-point output scaling is not "
@@ -134,7 +134,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
               "does not match the gfx12 VOP3 pseudo-scalar profile"
             : " missing immediate clamp/omod operands; operand table layout "
               "does not match the expected VOP3 profile";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3", (Twine(DiagnosticName) + MissingSuffix).str());
     return false;
   }
@@ -148,7 +148,7 @@ bool requireDefaultVOP3OutputMods(const DecodedInst &Di, HandlerResult &Hr,
               "silently dropped"
             : " with non-default clamp/omod is not yet lifted; output "
               "modifier semantics must not be silently dropped";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3", (Twine(DiagnosticName) + RefusalSuffix).str());
     return false;
   }

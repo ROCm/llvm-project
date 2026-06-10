@@ -191,7 +191,7 @@ enum class CanonicalOp : uint16_t {
   // Sites the analysis cannot resolve (incomplete dataflow,
   // unbounded fan-in past kMaxDispatchTargets, or pair killed by an
   // unmodelled write before the use site) refuse loudly via
-  // RaiseFailure::unsupportedShape -- never silently emit a stub.
+  // RaiseFailure::unsupportedInstructionForm -- never silently emit a stub.
   S_SET_PC_I64,
   // SOP1 branch-and-link. gfx1250 asm rename for `S_SWAPPC_B64`
   // (SOPInstructions.td:336 declares `isCall = 1`, line 2311 renames
@@ -235,7 +235,7 @@ enum class CanonicalOp : uint16_t {
   //   Unresolvable -- call target cannot be statically enumerated
   //                  (incomplete dataflow, fan-in past
   //                  kMaxDispatchTargets, or runtime-derived value).
-  //                  Refuse loudly via RaiseFailure::unsupportedShape
+  //                  Refuse loudly via RaiseFailure::unsupportedInstructionForm
   //                  -- never emit a stub branch.
   //
   // The analysis never produces IndirectB for a swap_pc site (a
@@ -398,7 +398,7 @@ enum class CanonicalOp : uint16_t {
   // adding it would only widen this handler, not change its shape).
   // Lowering selects `llvm.amdgcn.cvt.f32.{fp8,bf8}(i32 src, i32
   // byte_sel)` and writeReg32 the result. SDWA / op_sel-bearing
-  // encodings refuse loudly via RaiseFailure::unsupportedShape so a
+  // encodings refuse loudly via RaiseFailure::unsupportedInstructionForm so a
   // future corpus drift surfaces immediately rather than silently
   // collapsing to byte 0.
   V_CVT_F32_FP8, V_CVT_F32_BF8,
@@ -893,7 +893,7 @@ enum class CanonicalOp : uint16_t {
   DS_BPERMUTE_B32,
   // Class 2 DsSwizzle (hotswap/docs/wave-size-translation.md §6).
   // Wave-width-specific cross-lane shuffle. The handler refuses with
-  // `unsupportedShape` until the P6 rewrite (lift through
+  // `unsupportedInstructionForm` until the P6 rewrite (lift through
   // llvm.amdgcn.ds.swizzle -- see wave-size-translation.md §5.3 row
   // P6) lands; the wave-size classifier
   // (wave-size-obstruction.cpp) flags it before the handler is even
@@ -923,7 +923,7 @@ enum class CanonicalOp : uint16_t {
   // BUFFER_ATOMIC_* CanonicalOps must stay inside this range so the range
   // check picks them up; entries the handler does not explicitly
   // case-match are caught by the switch's default branch with a
-  // `RaiseFailure::unsupportedShape("unsupported buffer atomic")`.
+  // `RaiseFailure::unsupportedInstructionForm("unsupported buffer atomic")`.
   BUFFER_ATOMIC_ADD, BUFFER_ATOMIC_SUB,
   BUFFER_ATOMIC_AND, BUFFER_ATOMIC_OR, BUFFER_ATOMIC_XOR,
   // Class 3 non-commutative atomics (NonCommutativeAtomic), see
@@ -994,7 +994,7 @@ enum class CanonicalOp : uint16_t {
   // Cross-target lift to gfx942 would need a new K=4 MFMA
   // decomposition path (gfx942 has `mfma_f32_16x16x4f32`) that no
   // kernel in the current corpus exercises, so we refuse loudly
-  // via `RaiseFailure::unsupportedShape` to surface the gap
+  // via `RaiseFailure::unsupportedInstructionForm` to surface the gap
   // immediately rather than silently degrade.
   V_WMMA_F32_16x16x4_F32,
   // 16x16x64 WMMA with f32 accumulator and 8-bit element types
@@ -1086,7 +1086,7 @@ enum class CanonicalOp : uint16_t {
   // fp8/bf8/iu8 paths exist). Per the user-rules (no silent
   // fallbacks) and consistent with the gfx1250-only refusal contract
   // applied to `V_WMMA_F32_16x16x4_F32` above, we refuse loudly via
-  // `RaiseFailure::unsupportedShape` to surface both the cross-target
+  // `RaiseFailure::unsupportedInstructionForm` to surface both the cross-target
   // capability gap and the missing scaled-WMMA decomposition path.
   V_WMMA_SCALE_F32_16x16x128_F8F6F4,
 
@@ -1108,7 +1108,7 @@ enum class CanonicalOp : uint16_t {
   // 0-init D# operands for `_d2`).
   //
   // gfx942 has no equivalent hardware unit. The handler refuses
-  // loudly via `RaiseFailure::unsupportedShape` with a precise
+  // loudly via `RaiseFailure::unsupportedInstructionForm` with a precise
   // diagnostic explaining the cross-target gap, in line with the
   // user-rules (no silent fallbacks). The matching LLVM intrinsics
   // are `int_amdgcn_tensor_load_to_lds` /
@@ -1298,7 +1298,7 @@ enum class CanonicalOp : uint16_t {
   // without divergence analysis. Per the user-rules (no silent
   // fallbacks) and consistent with the gfx1250-only refusal contract
   // applied to GLOBAL_LOAD_ASYNC_TO_LDS_B* and TENSOR_LOAD_TO_LDS
-  // above, we refuse loudly via `RaiseFailure::unsupportedShape`.
+  // above, we refuse loudly via `RaiseFailure::unsupportedInstructionForm`.
   // Triton's TDM-pipelined GEMM kernels schedule prefetches at
   // specific points in their software pipeline and a silent drop on
   // gfx942 would mask both the cross-target capability gap and any

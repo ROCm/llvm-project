@@ -5,7 +5,7 @@
 ; that do not support prefetch. 
 ;
 ; STDERR-COUNT-3: transpiler: FLAT: flat_prefetch_b8 has no equivalent on the compilation target 
-; STDERR: kernel 'flat_prefetch_b8_kernel' failed to raise: flat_prefetch_b8 [FLAT]
+; STDERR: kernel 'flat_prefetch_b8_kernel' failed to raise: unsupported-instruction-form: flat_prefetch_b8 [FLAT]
 
 ; RUN: %llvm_mc -mcpu=gfx1250 %s -o %t.o && %ld_lld -shared %t.o -o %t.hsaco \
 ; RUN:   && raise_cli %t.hsaco --target-isa=gfx1250 --emit-ir=flat_prefetch_b8_kernel 2>&1 | %FileCheck %s --check-prefix=IR

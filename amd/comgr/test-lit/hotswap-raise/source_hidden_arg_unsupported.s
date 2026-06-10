@@ -7,7 +7,8 @@
 ; implicit-arg layout.  If we cannot synthesize a source hidden arg from the
 ; dispatch packet, refuse the translation.
 
-; CHECK: unsupported source hidden argument kind 'hidden_global_offset_x'
+; CHECK: unsupported-source-hidden-arg: s_load_b64 [SMEM]
+; CHECK-SAME: unsupported source hidden argument kind 'hidden_global_offset_x'
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1200"
 	.amdhsa_code_object_version 6

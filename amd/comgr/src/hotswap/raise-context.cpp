@@ -206,9 +206,9 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // the firmware and have no compile-time-knowable IR encoding, so
   // we cannot lower them principledly. Classify as OTHER so parseReg
   // does not crash; readOp32 / readOp64 will route OTHER through
-  // `recordReadFailure(unsupportedShape)` and the per-instruction
+  // `recordReadFailure(unsupportedInstructionForm)` and the per-instruction
   // dispatch loop in raiser.cpp will surface it as a clean
-  // unsupported-shape failure rather than a SIGABRT.
+  // unsupported-instruction-form failure rather than a SIGABRT.
   case AMDGPU::SRC_SHARED_BASE_LO:
   case AMDGPU::SRC_SHARED_LIMIT_LO:
   case AMDGPU::SRC_PRIVATE_BASE_LO:
@@ -329,12 +329,12 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
     // OTHER is the parser's "I recognised the register but cannot
     // model it" channel, used today for runtime-defined aperture
     // registers (SRC_SHARED_BASE / SRC_FLAT_SCRATCH_BASE_LO etc.,
-    // see parseReg's switch). Surface a clean unsupported-shape
+    // see parseReg's switch). Surface a clean unsupported-instruction-form
     // failure on the dispatch loop and return undef so we don't
     // crash mid-handler -- the next instruction-boundary check in
     // raiser.cpp will abort the kernel raise.
     if (Pr.RegKind == ParsedReg::OTHER) {
-      recordReadFailure(RaiseFailure::unsupportedShape(
+      recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "operand-read",
           (Twine("readOp32 saw unmodeled register '") +
            Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic)
@@ -398,7 +398,7 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
       return B.CreateZExt(B.CreateICmpEQ(Exec, Zero, "execz"), I64Ty);
     }
     if (Pr.RegKind == ParsedReg::OTHER) {
-      recordReadFailure(RaiseFailure::unsupportedShape(
+      recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "operand-read",
           (Twine("readOp64 saw unmodeled register '") +
            Mc.RegInfo->getName(Di.getReg(OpIdx)) + "' in " + Di.Mnemonic)

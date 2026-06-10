@@ -72,7 +72,7 @@ struct SetPcSiteInfo {
     // materialise a `BlockAddress` as an i64).
     DispatchSet,
     // Refused. The handler converts this into
-    // `RaiseFailure::unsupportedShape` with `refusalReason`.
+    // `RaiseFailure::unsupportedInstructionForm` with `refusalReason`.
     Unresolvable,
   };
   Kind SiteKind = Kind::Unresolvable;

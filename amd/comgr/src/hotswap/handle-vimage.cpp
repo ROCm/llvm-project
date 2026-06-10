@@ -163,7 +163,7 @@ bool marshalTDMArgs(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
   // audited -- refuse loudly so the drift surfaces immediately.
   const unsigned Nsrcs = Op.nSrcs();
   if (Nsrcs != 4 && Nsrcs != 6) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VIMAGE",
         Twine("unexpected source operand count ") + Twine(Nsrcs) +
             " for tensor op (expected 4 for _d2 or 6 for _d4)");
@@ -188,7 +188,7 @@ bool marshalTDMArgs(RaiseContext &Ctx, const DecodedInst &Di, OpResolver &Op,
   // 8-bit SGPR pointer field exactly.
   auto RequireSgpr = [&](ParsedReg Pr, const char *Role) -> bool {
     if (Pr.RegKind != ParsedReg::SGPR) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VIMAGE",
           Twine("tensor ") + Role + " must be a contiguous SGPR range "
                 "(got non-SGPR operand kind)");
@@ -274,7 +274,7 @@ HandlerResult handleVIMAGE(RaiseContext &Ctx, const DecodedInst &Di,
                 : "amdgcn.tensor.store.from.lds")
         << " is gated isGFX125xOnly) and the TDM emulation runtime is "
            "unavailable (transpiler was built without hipcc).\n";
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VIMAGE",
         "gfx1250-only TENSOR cnt op; no equivalent on non-gfx1250 "
         "compilation target and TDM emulation runtime unavailable");
@@ -287,7 +287,7 @@ HandlerResult handleVIMAGE(RaiseContext &Ctx, const DecodedInst &Di,
       SourceWaveSize == TargetWaveSize ||
       (SourceWaveSize == 32 && TargetWaveSize == 64);
   if (!SupportedWaveShape) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VIMAGE",
         Twine("TDM emulation supports only source-wave-local same-wave "
               "execution or wave32 source -> wave64 target cross-widening "

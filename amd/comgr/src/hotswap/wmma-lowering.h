@@ -220,7 +220,7 @@ llvm::Value *emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
 ///   correctness)
 ///
 /// Returns nullptr if the helper cannot lower the call (e.g. unsupported
-/// fragment width). Caller produces an unsupportedShape refusal.
+/// fragment width). Caller produces an unsupportedInstructionForm refusal.
 ///
 /// \param a       WMMA A fragment (`<aDwords x i32>` per Wave32 lane;
 ///                aDwords = 16/12/8 for f8/f6/f4)

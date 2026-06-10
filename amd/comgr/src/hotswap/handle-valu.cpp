@@ -51,7 +51,7 @@ std::optional<bool> readVOP3Clamp(const DecodedInst &Di, HandlerResult &Hr,
   std::optional<int64_t> Clamp =
       readNamedImmOperand(Di, AMDGPU::OpName::clamp);
   if (!Clamp) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) +
          " missing immediate clamp operand; operand table layout does not "
@@ -78,7 +78,7 @@ std::optional<True16OpSel> readTrue16OpSel(const DecodedInst &Di,
                                            OpResolver &Op, HandlerResult &Hr,
                                            StringRef OpName) {
   if (Op.nSrcs() < 2) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) +
          " has too few source operands; expected src0/src1")
@@ -93,7 +93,7 @@ std::optional<True16OpSel> readTrue16OpSel(const DecodedInst &Di,
   constexpr unsigned AllowedSrc1Mods = SISrcMods::OP_SEL_0;
   if ((Src0Mods & ~AllowedSrc0Mods) != 0 ||
       (Src1Mods & ~AllowedSrc1Mods) != 0) {
-    Hr.Failure = RaiseFailure::unsupportedShape(
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
         Di, "VOP3",
         (Twine(OpName) +
          " has unsupported source modifiers; only op_sel bits are modeled")
@@ -551,7 +551,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
   // meaningful for a bit-pattern move and are refused loudly.
   if (Sop == CanonicalOp::V_MOV_B16) {
     if (Op.nSrcs() < 1) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1", "v_mov_b16 missing src0 operand");
       return Hr;
     }
@@ -559,7 +559,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     constexpr unsigned AllowedSrc0Mods =
         SISrcMods::OP_SEL_0 | SISrcMods::DST_OP_SEL;
     if ((Src0Mods & ~AllowedSrc0Mods) != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "v_mov_b16 has unsupported src0 modifiers; only op_sel/dst_op_sel "
           "are modeled");
@@ -751,7 +751,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     const bool Clamped = ClampIdx >= 0 && Di.isImm(ClampIdx) &&
                          Di.getImm(ClampIdx) != 0;
     if (Clamped) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           IsSigned
               ? "v_mad_nc_i64_i32 with clamp=1 (signed 64-bit saturating MAD) "
@@ -949,7 +949,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
                                               AMDGPU::OpName::clamp);
     if (ClampIdx >= 0) {
       if (!Di.isImm(static_cast<unsigned>(ClampIdx))) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3", "v_mad_i32_i24 clamp operand is not an immediate");
         return Hr;
       }
@@ -986,7 +986,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
                                               AMDGPU::OpName::clamp);
     if (ClampIdx >= 0) {
       if (!Di.isImm(static_cast<unsigned>(ClampIdx))) {
-        Hr.Failure = RaiseFailure::unsupportedShape(
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3", "v_mad_u32_u24 clamp operand is not an immediate");
         return Hr;
       }
@@ -1521,7 +1521,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
       // emitter.  Refuse loudly rather than guess -- consistent with
       // the "refuse when uncertain" rule in
       // hotswap/docs/wave-size-translation.md.
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           "v_div_scale_f32 operand triple does not match a known "
           "divide-scaling shape: expected (numer, denom, numer) with "
@@ -1548,7 +1548,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     // Refuse loudly rather than guess.
     unsigned Peer = ScaleNumerator ? 2u : 1u;
     if (Op.srcMod(0) != Op.srcMod(Peer)) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           ScaleNumerator
               ? "v_div_scale_f32 scale-numerator shape (src0 == src2) "
@@ -2409,7 +2409,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
       Packed = Ctx.B.CreateInsertElement(Packed, Dw1, (uint64_t)1);
       Result = Packed;
     } else {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           "v_cvt_scalef32_pk8_fp8_f32 requires either HasTensorOps "
           "(gfx1250 native) or HasFP8ConversionInsts "
@@ -2475,7 +2475,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
           int Parsed = 0;
           if (Parts[0].trim().getAsInteger(10, Parsed) ||
               (Parsed != 0 && Parsed != 1)) {
-            Hr.Failure = RaiseFailure::unsupportedShape(
+            Hr.Failure = RaiseFailure::unsupportedInstructionForm(
                 Di, "VOP3",
                 "unparseable or out-of-range op_sel[0] (expected 0 or 1)");
             return Hr;
@@ -2509,7 +2509,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::V_CVT_F32_FP8 || Sop == CanonicalOp::V_CVT_F32_BF8) {
     StringRef Text(Di.FullText);
     if (Text.contains("op_sel:") || Text.contains("_sdwa")) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP1",
           "non-default op_sel/sdwa byte_sel on v_cvt_f32_{fp8,bf8} "
           "(only the byte_sel=0 e64 form is wired today)");
@@ -2579,7 +2579,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     unsigned Opc = Di.Inst.getOpcode();
     int SelIdx = AMDGPU::getNamedOperandIdx(Opc, AMDGPU::OpName::scale_sel);
     if (SelIdx < 0 || !Di.isImm(SelIdx)) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           "v_cvt_scale_pk8_bf16_fp4 missing OpName::scale_sel "
           "immediate operand -- operand table mismatch");
@@ -2596,7 +2596,7 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     // same shape as the refusal-of-non-default-op_sel check on
     // V_CVT_F32_{FP8,BF8} higher in this file.
     if (ScaleSel != 0) {
-      Hr.Failure = RaiseFailure::unsupportedShape(
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3",
           "v_cvt_scale_pk8_bf16_fp4 scale_sel != 0 is outside the "
           "declared support set (AMD ISA spec semantics for the "

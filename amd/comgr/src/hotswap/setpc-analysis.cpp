@@ -116,7 +116,7 @@
 //     pair sets `incomplete` and refuses).
 //   * Loud refusal: unresolvable sites are recorded with a
 //     human-readable reason; the handler turns this into an
-//     unsupportedShape failure rather than a silent stub branch.
+//     unsupportedInstructionForm failure rather than a silent stub branch.
 //
 // IndirectB call-site handling (Phase 5) is unchanged from the original
 // design: a complete getpc+add chain terminating in s_add_co_ci_u32 to

@@ -158,7 +158,7 @@
 ; =======================
 ;
 ; Pre-Session-8 (2026-04-23) `handle_valu_vop3p.cpp`'s K=4 arm
-; refused the MODREP lift with `RaiseFailure::unsupportedShape`
+; refused the MODREP lift with `RaiseFailure::unsupportedInstructionForm`
 ; whenever `kernelHasPermlane16Swap` was true — a conservative
 ; sidecar refusal added during the matmul_fp16 multi-WMMA
 ; investigation.  The root cause turned out to be one layer up
