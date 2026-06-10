@@ -104,7 +104,8 @@ download_linux_tools_debs() {
       # apt -d skips packages already present in ubuntu:22.04 (notably libc6/ld-linux).
       # perf is dynamically linked and needs the interpreter inside the chroot rootfs.
       apt-get install -y -d --reinstall libc6 libgcc-s1 libstdc++6 \
-        || apt-get download libc6 libgcc-s1 libstdc++6 \
+        liblzma5 libzstd1 libcap2 \
+        || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 \
         || true
 
       shopt -s nullglob
@@ -117,16 +118,21 @@ download_linux_tools_debs() {
       ln -sf ../lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /out/root/lib64/ld-linux-x86-64.so.2 2>/dev/null || true
 
       # Pull in any shared libraries perf still needs (e.g. liblzma.so.5).
+      # Use ld-linux --library-path so we only see libs inside /out/root, not the sidecar host.
+      run_rootfs_perf() {
+        /out/root/lib64/ld-linux-x86-64.so.2 \
+          --library-path /out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
+          \"\$@\"
+      }
+
       PERF_BIN=\$(find /out/root/usr/lib -path '*/linux-azure-tools*/perf' -type f 2>/dev/null | head -1)
       if [[ -n \"\${PERF_BIN}\" ]]; then
         for round in 1 2 3 4 5 6 7 8; do
-          if LD_LIBRARY_PATH=/out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
-            \"\${PERF_BIN}\" --version >/dev/null 2>&1; then
+          if run_rootfs_perf \"\${PERF_BIN}\" --version >/dev/null 2>&1; then
             echo \"perf deps resolved after \${round} round(s)\"
             break
           fi
-          err=\$(LD_LIBRARY_PATH=/out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
-            \"\${PERF_BIN}\" --version 2>&1 || true)
+          err=\$(run_rootfs_perf \"\${PERF_BIN}\" --version 2>&1 || true)
           lib=\$(sed -n 's/.*libraries: \\([^:]*\\): cannot open shared object file.*/\\1/p' <<<\"\${err}\")
           if [[ -z \"\${lib}\" ]]; then
             echo \"perf dep resolution stopped: \${err}\" >&2
@@ -245,7 +251,9 @@ install_perf_wrapper() {
   cat >"${perf_wrapper}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec chroot "${chroot_root}" "${relpath}" "\$@"
+exec chroot "${chroot_root}" /lib64/ld-linux-x86-64.so.2 \\
+  --library-path /usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu \\
+  "${relpath}" "\$@"
 EOF
   chmod 755 "${perf_wrapper}"
   export PATH="/usr/local/bin:${PATH}"
