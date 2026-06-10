@@ -1,6 +1,7 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1100 < %s | FileCheck -check-prefixes=GCN,GFX11 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx1100 < %s | FileCheck -check-prefixes=GCN,GFX11 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -mtriple=amdgcn -mcpu=gfx1200 < %s | FileCheck -check-prefixes=GCN,GFX12 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx1200 < %s | FileCheck -check-prefixes=GCN,GFX12 %s
 
 ; GCN-LABEL: {{^}}lds_direct_load:
 ; GCN: s_mov_b32 m0
