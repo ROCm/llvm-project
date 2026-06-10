@@ -27,13 +27,17 @@ incbin_test:
 
 file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/test_incbin.s ${TEST_ASM_SOURCE})
 
+set(HAVE_INCBIN_SUPPORT OFF)
+set(TEST_ASM_OBJECT ${CMAKE_CURRENT_BINARY_DIR}/test_incbin.o)
+file(REMOVE ${TEST_ASM_OBJECT})
+
 if(CMAKE_ASM_COMPILER)
   execute_process(
     COMMAND ${CMAKE_ASM_COMPILER} -c ${CMAKE_CURRENT_BINARY_DIR}/test_incbin.s
-                                  -o ${CMAKE_CURRENT_BINARY_DIR}/test_incbin.o
+                                  -o ${TEST_ASM_OBJECT}
     RESULT_VARIABLE asm_result)
 
-  if(asm_result EQUAL 0)
+  if(asm_result EQUAL 0 AND EXISTS ${TEST_ASM_OBJECT})
     set(HAVE_INCBIN_SUPPORT ON)
   endif()
 endif()
