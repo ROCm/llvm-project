@@ -124,6 +124,7 @@ jobs:
           source ./${{ github.run_id }}_PR_params.env
           set +a
           echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+          echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
           echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
           echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
 
@@ -131,18 +132,56 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true' }}
         run: |
           git config --global --add safe.directory "$PWD"
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          trim_sha() {
+             printf '%s' "$1" | tr -d '[:space:]'
+          }
           # Function to get SHA with git-ls
           get_pr_sha() {
              local pr_url="$1"
              local base_repo_url=$(echo "$pr_url" | sed 's|/pull/.*||')
              local pr_num=$(echo "$pr_url" | sed 's|.*/pull/||')
-             git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}'
+             sha=$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')
+             trim_sha "$sha"
           }
 
-          # LLVM PR
-          LLVM_SHA="$(get_pr_sha "$LLVM_PR_URL")"
-          echo "LLVM head SHA: $LLVM_SHA"
-          git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          merge_upstream_prs() {
+             local pr_urls="$1"
+             local url repo num ref
+             git submodule update --init --jobs 1 compiler/amd-llvm
+             IFS=',' read -ra PR_URLS <<< "$pr_urls"
+             for url in "${PR_URLS[@]}"; do
+               url="$(echo "$url" | xargs)"
+               [[ -z "$url" ]] && continue
+               repo="$(echo "$url" | sed 's|/pull/.*||')"
+               num="$(echo "$url" | sed 's|.*/pull/||')"
+               ref="upstream-pr-${num}"
+               echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
+               git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+               git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
+                 echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+                 exit 1
+               }
+             done
+             MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
+          }
+
+          LLVM_SHA=""
+
+          # LLVM PR based on if its ROCm or Trunk
+          if [[ -n "$LLVM_ROCm_PR_URL" ]]; then
+              LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")" 
+              echo "ROCm LLVM head SHA: $LLVM_SHA"
+          elif [[ -n "$LLVM_PR_URL" ]]; then
+              merge_upstream_prs "$LLVM_PR_URL"
+              LLVM_SHA="$MERGED_LLVM_SHA"
+              echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
+          fi
+
+          if [[ -n "$LLVM_SHA" ]]; then
+              git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+          fi
 
           # SPIRV PR
           if [[ -n "$SPIRV_PR_URL" ]]; then
@@ -165,8 +204,6 @@ jobs:
               echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
               git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
           fi
-          git config --global user.email "z1-cciauto@amd.com"
-          git config --global user.name "Z1 cciauto"
           git commit -m "Update submodule references from PR URLs"
           git submodule update --init --recursive compiler/amd-llvm          
           git submodule status
