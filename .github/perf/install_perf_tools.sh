@@ -297,12 +297,13 @@ install_perf_wrapper() {
   local chroot_perf="$1"
   local relpath="${chroot_perf#"${chroot_root}"}"
   mkdir -p /usr/local/bin
+  # Run perf directly under chroot (same as a normal Ubuntu install). Invoking
+  # ld-linux --library-path as the chroot argv confuses PMU setup: task-clock
+  # works but cycles:u/instructions:u report <not supported>.
   cat >"${perf_wrapper}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-exec chroot "${chroot_root}" /lib64/ld-linux-x86-64.so.2 \\
-  --library-path /usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib:/lib \\
-  "${relpath}" "\$@"
+exec chroot "${chroot_root}" "${relpath}" "\$@"
 EOF
   chmod 755 "${perf_wrapper}"
   export PATH="/usr/local/bin:${PATH}"
