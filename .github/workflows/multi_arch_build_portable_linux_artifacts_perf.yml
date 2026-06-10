@@ -49,6 +49,12 @@ on:
         type: string
         required: false
         default: ""
+      math_libs_subset:
+        type: string
+        required: false
+        default: full
+        description: >-
+          math-libs scope: "full" (default) or "rocprim" (rocPRIM + deps only, for HCTS smoke tests).
 
 jobs:
   build_stage:
@@ -225,6 +231,9 @@ jobs:
         env:
           BUILD_DIR: build
           extra_cmake_options: "-DTHEROCK_ENABLE_ALL=OFF -DTHEROCK_ENABLE_COMPOSABLE_KERNEL=OFF -DTHEROCK_ENABLE_MIOPEN=OFF -DTHEROCK_ENABLE_MIOPENPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPBLASLTPROVIDER=OFF -DTHEROCK_ENABLE_HIPDNN_SAMPLES=OFF -DTHEROCK_BUILD_LLVM_TESTS=OFF -DTHEROCK_BUILD_COMGR_TESTS=OFF -DTHEROCK_BUILD_TESTING=ON -DLLVM_SMREV_REPO='' -DLLVM_SMREV_REVISION=''"
+          math_libs_subset_cmake_options: >-
+            ${{ inputs.stage_name == 'math-libs' && inputs.math_libs_subset == 'rocprim' &&
+              '-DTHEROCK_ENABLE_BLAS=OFF -DTHEROCK_ENABLE_FFT=OFF -DTHEROCK_ENABLE_FFTW3=OFF -DTHEROCK_ENABLE_SPARSE=OFF -DTHEROCK_ENABLE_SOLVER=OFF -DTHEROCK_ENABLE_ROCWMMA=OFF -DTHEROCK_ENABLE_LIBHIPCXX=OFF -DTHEROCK_ENABLE_SUPPORT=OFF -DTHEROCK_ENABLE_HOST_BLAS=OFF -DTHEROCK_ENABLE_HOST_SUITE_SPARSE=OFF -DTHEROCK_ENABLE_OPENMPI=OFF -DTHEROCK_ENABLE_HIPDNN=OFF -DTHEROCK_ENABLE_HIPDNN_INTEGRATION_TESTS=OFF -DTHEROCK_ENABLE_HIPKERNELPROVIDER=OFF -DTHEROCK_BUILD_TESTING=OFF -DTHEROCK_ENABLE_PRIM=ON -DTHEROCK_ENABLE_RAND=ON' || '' }}
         run: |
           perf_launcher_cmake_args=()
           if [[ "${{ inputs.enable_perf_launcher }}" == "true" ]]; then
@@ -243,30 +252,31 @@ jobs:
             ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
             "${perf_launcher_cmake_args[@]}" \
             ${{ steps.stage_config.outputs.cmake_args }} \
-            ${{ env.extra_cmake_options }}
+            ${{ env.extra_cmake_options }} \
+            ${{ env.math_libs_subset_cmake_options }}
+
+      - name: Inject perf_launcher into subproject toolchains
+        if: ${{ inputs.enable_perf_launcher }}
+        run: |
+          perf_launcher_bin="$(pwd)/${BUILD_DIR}/bin/perf_launcher.sh"
+          bash "${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf/ensure_perf_launcher_toolchains.sh" \
+            "${BUILD_DIR}" "${perf_launcher_bin}"
 
       - name: Build stage
         run: |
+          build_targets=(stage-${STAGE_NAME})
+          if [[ "${{ inputs.stage_name }}" != "math-libs" || "${{ inputs.math_libs_subset }}" == "full" ]]; then
+            build_targets+=(therock-artifacts)
+          fi
           python build_tools/memory_monitor.py --phase Build -- \
-            cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+            cmake --build "${BUILD_DIR}" --target "${build_targets[@]}" -- -k 0
 
       - name: Collect HCTS tarball
         if: ${{ inputs.collect_hcts }}
         run: |
-          set -euo pipefail
-          mkdir -p "${BUILD_DIR}/logs"
           family="${AMDGPU_FAMILIES:-generic}"
-          hcts_tar="${BUILD_DIR}/logs/hcts-${STAGE_NAME}-${family}.tar.gz"
-          if find "${BUILD_DIR}" -name '*.hcts' | grep -q .; then
-            find "${BUILD_DIR}" -name '*.hcts' -print0 | tar -czf "$hcts_tar" --null -T -
-            ls -lh "$hcts_tar"
-            find "${BUILD_DIR}" -name '*.hcts' | wc -l
-          else
-            echo "No .hcts files found under ${BUILD_DIR}" >&2
-            echo "Hint: verify Configure passed -DCMAKE_*_COMPILER_LAUNCHER=.../perf_launcher.sh and perf stat works in the job container." >&2
-            find "${BUILD_DIR}" -name '*.device.hcts' 2>/dev/null | head -5 || true
-            exit 1
-          fi
+          bash "${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf/collect_hcts_tarball.sh" \
+            "${BUILD_DIR}" "${STAGE_NAME}" "${family}"
 
       - name: Report
         if: ${{ !cancelled() }}
@@ -276,7 +286,7 @@ jobs:
           ls -lh "${BUILD_DIR}"/logs/hcts-*.tar.gz 2>/dev/null || true
 
       - name: Push stage artifacts
-        if: success()
+        if: success() && (inputs.stage_name != 'math-libs' || inputs.math_libs_subset == 'full')
         run: |
           python build_tools/artifact_manager.py push --run-id ${{ github.run_id }} \
             --stage="${STAGE_NAME}" \

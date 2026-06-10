@@ -25,6 +25,12 @@ on:
         type: boolean
         required: false
         default: true
+      math_libs_subset:
+        type: string
+        required: false
+        default: rocprim
+        description: >-
+          math-libs scope: "rocprim" (smoke test) or "full" (all math libs).
 
 permissions:
   contents: read
@@ -51,7 +57,7 @@ jobs:
       id-token: write
 
   build_math_libs_perf:
-    name: Build math-libs (gfx90a, perf/HCTS)
+    name: Build math-libs (gfx90a, perf/HCTS${{ inputs.math_libs_subset == 'rocprim' && ', rocPRIM only' || '' }})
     needs: build_compiler_runtime
     if: >-
       ${{
@@ -62,7 +68,8 @@ jobs:
     uses: ./.github/workflows/multi_arch_build_portable_linux_artifacts_perf.yml
     with:
       stage_name: math-libs
-      stage_display_name: "Stage - Math Libs (gfx90a, perf)"
+      stage_display_name: >-
+        Stage - Math Libs (gfx90a, perf${{ inputs.math_libs_subset == 'rocprim' && ', rocPRIM only' || '' }})
       timeout_minutes: 480
       amdgpu_family: gfx90a
       dist_amdgpu_families: gfx90a
@@ -73,6 +80,7 @@ jobs:
       enable_perf_launcher: true
       collect_hcts: true
       artifact_run_id: ${{ inputs.artifact_run_id }}
+      math_libs_subset: ${{ inputs.math_libs_subset }}
     permissions:
       contents: read
       id-token: write

@@ -28,6 +28,15 @@ on:
         required: false
         type: boolean
         default: true
+      math_libs_subset:
+        description: >-
+          math-libs build scope: "rocprim" (fast HCTS smoke test) or "full" (all math libs)
+        required: false
+        type: choice
+        options:
+          - rocprim
+          - full
+        default: rocprim
 
 permissions:
   contents: read
@@ -52,6 +61,7 @@ jobs:
       release_type: ${{ needs.setup.outputs.release_type }}
       artifact_run_id: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_run_id || '27244173794' }}
       skip_compiler_runtime: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_compiler_runtime || true }}
+      math_libs_subset: ${{ github.event_name == 'workflow_dispatch' && inputs.math_libs_subset || 'rocprim' }}
     permissions:
       contents: read
       id-token: write
