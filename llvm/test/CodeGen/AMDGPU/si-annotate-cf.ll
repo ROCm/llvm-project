@@ -82,11 +82,10 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; SI-NEXT:    v_mbcnt_lo_u32_b32_e64 v0, -1, 0
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
-; SI-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[0:1]
+; SI-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; SI-NEXT:    s_mov_b64 s[2:3], -1
-; SI-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
-; SI-NEXT:    s_mov_b64 exec, s[8:9]
+; SI-NEXT:    s_mov_b64 exec, s[6:7]
 ; SI-NEXT:    ; divergent control-flow edge
 ; SI-NEXT:    s_cbranch_execz .LBB1_2
 ; SI-NEXT:  .LBB1_1: ; %else
@@ -96,7 +95,7 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; SI-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; SI-NEXT:  .LBB1_2: ; %endif
-; SI-NEXT:    s_or_b64 exec, exec, s[6:7]
+; SI-NEXT:    s_or_b64 exec, exec, vcc
 ; SI-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; SI-NEXT:  .LBB1_3: ; %loop
 ; SI-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -116,11 +115,10 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; FLAT-NEXT:    v_mbcnt_lo_u32_b32 v0, -1, 0
 ; FLAT-NEXT:    v_cmp_eq_u32_e32 vcc, 0, v0
 ; FLAT-NEXT:    s_mov_b64 s[0:1], 0
-; FLAT-NEXT:    s_xor_b64 s[8:9], vcc, exec
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[0:1]
+; FLAT-NEXT:    s_xor_b64 s[6:7], vcc, exec
 ; FLAT-NEXT:    s_mov_b64 s[2:3], -1
-; FLAT-NEXT:    s_xor_b64 s[6:7], exec, s[8:9]
-; FLAT-NEXT:    s_mov_b64 exec, s[8:9]
+; FLAT-NEXT:    s_mov_b64 exec, s[6:7]
 ; FLAT-NEXT:    ; divergent control-flow edge
 ; FLAT-NEXT:    s_cbranch_execz .LBB1_2
 ; FLAT-NEXT:  .LBB1_1: ; %else
@@ -130,7 +128,7 @@ define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 ; FLAT-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, s[4:5]
 ; FLAT-NEXT:  .LBB1_2: ; %endif
-; FLAT-NEXT:    s_or_b64 exec, exec, s[6:7]
+; FLAT-NEXT:    s_or_b64 exec, exec, vcc
 ; FLAT-NEXT:    s_and_b64 s[2:3], s[2:3], exec
 ; FLAT-NEXT:  .LBB1_3: ; %loop
 ; FLAT-NEXT:    ; =>This Inner Loop Header: Depth=1

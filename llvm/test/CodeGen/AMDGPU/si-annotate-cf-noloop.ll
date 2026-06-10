@@ -40,9 +40,6 @@ bb5:                                              ; preds = %bb3, %bb1
 ; GCN: load_dwordx4
 ; GCN: v_cmp_lt_f32
 ; GCN: s_xor_b64
-; GCN: s_xor_b64
-; GCN: s_and_b64
-; GCN: s_mov_b64
 ; GCN: s_endpgm
 ; GCN: .Lfunc_end
 define amdgpu_kernel void @annotate_ret_noloop(ptr addrspace(1) noalias nocapture readonly %arg) #0 {

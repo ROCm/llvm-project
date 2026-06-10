@@ -18,8 +18,6 @@ define void @__omp_offloading_35_36570d3__ZN6openmc31process_advance_particle_ev
 ; GCN-NEXT:    .cfi_undefined 2564
 ; GCN-NEXT:    .cfi_undefined 36
 ; GCN-NEXT:    .cfi_undefined 37
-; GCN-NEXT:    .cfi_undefined 38
-; GCN-NEXT:    .cfi_undefined 39
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_mov_b32_e32 v1, 0
 ; GCN-NEXT:    v_mov_b32_e32 v2, 0
