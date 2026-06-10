@@ -637,6 +637,15 @@ if(BUILD_TESTING)
   if (NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(GLOBAL APPEND PROPERTY LLVM_ADDITIONAL_TEST_TARGETS check-comgr)
   endif()
+  set(_comgr_check_incbin_script
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests/CheckIncbinRejectsMissingObject.cmake")
+  set(_comgr_check_incbin_binary_dir
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake-tests/check-incbin-rejects-missing-object")
+  add_test(NAME comgr_check_incbin_rejects_missing_object
+    COMMAND ${CMAKE_COMMAND}
+      "-DCOMGR_CMAKE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+      "-DCOMGR_TEST_BINARY_DIR=${_comgr_check_incbin_binary_dir}"
+      -P "${_comgr_check_incbin_script}")
   add_subdirectory(test)
   add_subdirectory(test-lit)
   add_subdirectory(test-unit)
