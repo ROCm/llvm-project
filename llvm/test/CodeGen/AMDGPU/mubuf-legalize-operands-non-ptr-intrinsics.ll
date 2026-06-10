@@ -704,9 +704,7 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; GFX9_W64-NEXT:    s_mov_b32 s4, 17
 ; GFX9_W64-NEXT:    ;;#ASMEND
 ; GFX9_W64-NEXT:    v_mov_b32_e32 v8, s4
-; GFX9_W64-NEXT:    s_mov_b64 s[16:17], exec
-; GFX9_W64-NEXT:    s_mov_b64 s[14:15], 0
-; GFX9_W64-NEXT:    s_mov_b64 s[12:13], 0
+; GFX9_W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9_W64-NEXT:  .LBB2_1: ; =>This Inner Loop Header: Depth=1
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s8, v0
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s9, v1
@@ -723,28 +721,23 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; GFX9_W64-NEXT:    s_xor_b64 exec, exec, s[6:7]
 ; GFX9_W64-NEXT:    s_cbranch_execnz .LBB2_1
 ; GFX9_W64-NEXT:  ; %bb.2:
-; GFX9_W64-NEXT:    s_mov_b64 exec, s[16:17]
+; GFX9_W64-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX9_W64-NEXT:    v_and_b32_e32 v0, 0x3ff, v31
 ; GFX9_W64-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
-; GFX9_W64-NEXT:    s_xor_b64 s[6:7], vcc, exec
-; GFX9_W64-NEXT:    s_or_b64 s[14:15], s[14:15], s[6:7]
-; GFX9_W64-NEXT:    s_xor_b64 s[6:7], exec, s[14:15]
-; GFX9_W64-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX9_W64-NEXT:    s_or_b64 s[12:13], s[12:13], s[6:7]
-; GFX9_W64-NEXT:    s_mov_b64 exec, s[14:15]
+; GFX9_W64-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX9_W64-NEXT:    ; divergent control-flow edge
 ; GFX9_W64-NEXT:    s_cbranch_execz .LBB2_6
 ; GFX9_W64-NEXT:  .LBB2_3: ; %bb1
 ; GFX9_W64-NEXT:    v_mov_b32_e32 v0, s4
-; GFX9_W64-NEXT:    s_mov_b64 s[6:7], exec
+; GFX9_W64-NEXT:    s_mov_b64 s[12:13], exec
 ; GFX9_W64-NEXT:  .LBB2_4: ; =>This Inner Loop Header: Depth=1
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s8, v4
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s9, v5
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s10, v6
 ; GFX9_W64-NEXT:    v_readfirstlane_b32 s11, v7
-; GFX9_W64-NEXT:    v_cmp_eq_u64_e32 vcc, s[8:9], v[4:5]
-; GFX9_W64-NEXT:    v_cmp_eq_u64_e64 s[4:5], s[10:11], v[6:7]
-; GFX9_W64-NEXT:    s_and_b64 s[4:5], vcc, s[4:5]
+; GFX9_W64-NEXT:    v_cmp_eq_u64_e64 s[4:5], s[8:9], v[4:5]
+; GFX9_W64-NEXT:    v_cmp_eq_u64_e64 s[6:7], s[10:11], v[6:7]
+; GFX9_W64-NEXT:    s_and_b64 s[4:5], s[4:5], s[6:7]
 ; GFX9_W64-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
 ; GFX9_W64-NEXT:    s_nop 0
 ; GFX9_W64-NEXT:    buffer_load_format_x v9, v0, s[8:11], 0 idxen
@@ -753,9 +746,9 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; GFX9_W64-NEXT:    s_xor_b64 exec, exec, s[4:5]
 ; GFX9_W64-NEXT:    s_cbranch_execnz .LBB2_4
 ; GFX9_W64-NEXT:  ; %bb.5:
-; GFX9_W64-NEXT:    s_mov_b64 exec, s[6:7]
+; GFX9_W64-NEXT:    s_mov_b64 exec, s[12:13]
 ; GFX9_W64-NEXT:  .LBB2_6: ; %bb2
-; GFX9_W64-NEXT:    s_or_b64 exec, exec, s[12:13]
+; GFX9_W64-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX9_W64-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9_W64-NEXT:    global_store_dword v[11:12], v9, off
 ; GFX9_W64-NEXT:    s_waitcnt vmcnt(0)
@@ -1045,12 +1038,6 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    s_mov_b64 s[4:5], exec
 ; W64-O0-NEXT:    v_writelane_b32 v13, s4, 2
 ; W64-O0-NEXT:    v_writelane_b32 v13, s5, 3
-; W64-O0-NEXT:    s_mov_b64 s[4:5], 0
-; W64-O0-NEXT:    v_writelane_b32 v13, s4, 4
-; W64-O0-NEXT:    v_writelane_b32 v13, s5, 5
-; W64-O0-NEXT:    s_mov_b64 s[4:5], 0
-; W64-O0-NEXT:    v_writelane_b32 v13, s4, 6
-; W64-O0-NEXT:    v_writelane_b32 v13, s5, 7
 ; W64-O0-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; W64-O0-NEXT:    buffer_store_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
@@ -1081,13 +1068,13 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    s_mov_b32 s9, s12
 ; W64-O0-NEXT:    s_mov_b32 s10, s7
 ; W64-O0-NEXT:    s_mov_b32 s11, s6
-; W64-O0-NEXT:    v_writelane_b32 v13, s8, 8
-; W64-O0-NEXT:    v_writelane_b32 v13, s9, 9
-; W64-O0-NEXT:    v_writelane_b32 v13, s10, 10
-; W64-O0-NEXT:    v_writelane_b32 v13, s11, 11
+; W64-O0-NEXT:    v_writelane_b32 v13, s8, 4
+; W64-O0-NEXT:    v_writelane_b32 v13, s9, 5
+; W64-O0-NEXT:    v_writelane_b32 v13, s10, 6
+; W64-O0-NEXT:    v_writelane_b32 v13, s11, 7
 ; W64-O0-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
-; W64-O0-NEXT:    v_writelane_b32 v13, s4, 12
-; W64-O0-NEXT:    v_writelane_b32 v13, s5, 13
+; W64-O0-NEXT:    v_writelane_b32 v13, s4, 8
+; W64-O0-NEXT:    v_writelane_b32 v13, s5, 9
 ; W64-O0-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; W64-O0-NEXT:    buffer_store_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
@@ -1096,12 +1083,12 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    buffer_load_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
 ; W64-O0-NEXT:    s_waitcnt vmcnt(0)
-; W64-O0-NEXT:    v_readlane_b32 s4, v13, 12
-; W64-O0-NEXT:    v_readlane_b32 s5, v13, 13
-; W64-O0-NEXT:    v_readlane_b32 s8, v13, 8
-; W64-O0-NEXT:    v_readlane_b32 s9, v13, 9
-; W64-O0-NEXT:    v_readlane_b32 s10, v13, 10
-; W64-O0-NEXT:    v_readlane_b32 s11, v13, 11
+; W64-O0-NEXT:    v_readlane_b32 s4, v13, 8
+; W64-O0-NEXT:    v_readlane_b32 s5, v13, 9
+; W64-O0-NEXT:    v_readlane_b32 s8, v13, 4
+; W64-O0-NEXT:    v_readlane_b32 s9, v13, 5
+; W64-O0-NEXT:    v_readlane_b32 s10, v13, 6
+; W64-O0-NEXT:    v_readlane_b32 s11, v13, 7
 ; W64-O0-NEXT:    v_readlane_b32 s6, v13, 1
 ; W64-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    s_waitcnt vmcnt(0)
@@ -1133,6 +1120,7 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; W64-O0-NEXT:    buffer_store_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
+; W64-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; W64-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; W64-O0-NEXT:    ; divergent control-flow edge
 ; W64-O0-NEXT:    s_cbranch_execz .LBB2_8
@@ -1152,8 +1140,8 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    v_mov_b32_e32 v0, s4
 ; W64-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:68 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 s[4:5], exec
-; W64-O0-NEXT:    v_writelane_b32 v13, s4, 15
-; W64-O0-NEXT:    v_writelane_b32 v13, s5, 16
+; W64-O0-NEXT:    v_writelane_b32 v13, s4, 13
+; W64-O0-NEXT:    v_writelane_b32 v13, s5, 14
 ; W64-O0-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; W64-O0-NEXT:    buffer_store_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
@@ -1184,13 +1172,13 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    s_mov_b32 s9, s12
 ; W64-O0-NEXT:    s_mov_b32 s10, s7
 ; W64-O0-NEXT:    s_mov_b32 s11, s6
-; W64-O0-NEXT:    v_writelane_b32 v13, s8, 17
-; W64-O0-NEXT:    v_writelane_b32 v13, s9, 18
-; W64-O0-NEXT:    v_writelane_b32 v13, s10, 19
-; W64-O0-NEXT:    v_writelane_b32 v13, s11, 20
+; W64-O0-NEXT:    v_writelane_b32 v13, s8, 15
+; W64-O0-NEXT:    v_writelane_b32 v13, s9, 16
+; W64-O0-NEXT:    v_writelane_b32 v13, s10, 17
+; W64-O0-NEXT:    v_writelane_b32 v13, s11, 18
 ; W64-O0-NEXT:    s_and_saveexec_b64 s[4:5], s[4:5]
-; W64-O0-NEXT:    v_writelane_b32 v13, s4, 21
-; W64-O0-NEXT:    v_writelane_b32 v13, s5, 22
+; W64-O0-NEXT:    v_writelane_b32 v13, s4, 19
+; W64-O0-NEXT:    v_writelane_b32 v13, s5, 20
 ; W64-O0-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; W64-O0-NEXT:    buffer_store_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Spill
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
@@ -1219,8 +1207,8 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    buffer_load_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
 ; W64-O0-NEXT:    s_waitcnt vmcnt(0)
-; W64-O0-NEXT:    v_readlane_b32 s4, v13, 15
-; W64-O0-NEXT:    v_readlane_b32 s5, v13, 16
+; W64-O0-NEXT:    v_readlane_b32 s4, v13, 13
+; W64-O0-NEXT:    v_readlane_b32 s5, v13, 14
 ; W64-O0-NEXT:    s_mov_b64 exec, s[4:5]
 ; W64-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:72 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    s_waitcnt vmcnt(0)
@@ -1230,8 +1218,8 @@ define void @mubuf_vgpr_outside_entry(<4 x i32> %i, <4 x i32> %j, i32 %c, ptr ad
 ; W64-O0-NEXT:    buffer_load_dword v13, off, s[0:3], s32 offset:76 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    s_mov_b64 exec, s[16:17]
 ; W64-O0-NEXT:    s_waitcnt vmcnt(0)
-; W64-O0-NEXT:    v_readlane_b32 s4, v13, 6
-; W64-O0-NEXT:    v_readlane_b32 s5, v13, 7
+; W64-O0-NEXT:    v_readlane_b32 s4, v13, 10
+; W64-O0-NEXT:    v_readlane_b32 s5, v13, 11
 ; W64-O0-NEXT:    s_or_b64 exec, exec, s[4:5]
 ; W64-O0-NEXT:    buffer_load_dword v0, off, s[0:3], s32 offset:24 ; 4-byte Folded Reload
 ; W64-O0-NEXT:    buffer_load_dword v1, off, s[0:3], s32 offset:28 ; 4-byte Folded Reload
