@@ -112,6 +112,46 @@ download_linux_tools_debs() {
         cp -f \"\${deb}\" /out/debs/
         dpkg-deb -x \"\${deb}\" /out/root
       done
+
+      mkdir -p /out/root/lib64
+      ln -sf ../lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /out/root/lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+
+      # Pull in any shared libraries perf still needs (e.g. liblzma.so.5).
+      PERF_BIN=\$(find /out/root/usr/lib -path '*/linux-azure-tools*/perf' -type f 2>/dev/null | head -1)
+      if [[ -n \"\${PERF_BIN}\" ]]; then
+        for round in 1 2 3 4 5 6 7 8; do
+          if LD_LIBRARY_PATH=/out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
+            \"\${PERF_BIN}\" --version >/dev/null 2>&1; then
+            echo \"perf deps resolved after \${round} round(s)\"
+            break
+          fi
+          err=\$(LD_LIBRARY_PATH=/out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
+            \"\${PERF_BIN}\" --version 2>&1 || true)
+          lib=\$(sed -n 's/.*libraries: \\([^:]*\\): cannot open shared object file.*/\\1/p' <<<\"\${err}\")
+          if [[ -z \"\${lib}\" ]]; then
+            echo \"perf dep resolution stopped: \${err}\" >&2
+            break
+          fi
+          echo \"Fetching package for missing \${lib} (round \${round})\"
+          mapfile -t pkgs < <(dpkg -S \"\${lib}\" 2>/dev/null | cut -d: -f1 | sort -u)
+          if (( \${#pkgs[@]} == 0 )); then
+            echo \"No package owns \${lib}\" >&2
+            break
+          fi
+          apt-get install -y -d --reinstall \"\${pkgs[@]}\" \
+            || apt-get download \"\${pkgs[@]}\" \
+            || true
+          for deb in /var/cache/apt/archives/*.deb; do
+            cp -f \"\${deb}\" /out/debs/
+            dpkg-deb -x \"\${deb}\" /out/root
+          done
+        done
+      fi
+
+      shopt -s nullglob
+      for deb in /var/cache/apt/archives/*.deb; do
+        cp -f \"\${deb}\" /out/debs/ 2>/dev/null || true
+      done
       ls -la /out/debs/
     "; then
     return 1
@@ -184,6 +224,11 @@ verify_chroot_runtime() {
   local ld_linux="${chroot_root}/lib64/ld-linux-x86-64.so.2"
   if [[ ! -e "${ld_linux}" ]]; then
     ld_linux="${chroot_root}/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    if [[ -e "${ld_linux}" ]]; then
+      mkdir -p "${chroot_root}/lib64"
+      ln -sf ../lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "${chroot_root}/lib64/ld-linux-x86-64.so.2"
+      ld_linux="${chroot_root}/lib64/ld-linux-x86-64.so.2"
+    fi
   fi
   if [[ ! -e "${ld_linux}" ]]; then
     echo "ERROR: chroot missing dynamic linker (libc6 not extracted?)" >&2
