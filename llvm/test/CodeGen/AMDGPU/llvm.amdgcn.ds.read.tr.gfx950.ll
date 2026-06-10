@@ -159,6 +159,66 @@ entry:
   ret void
 }
 
+define amdgpu_ps void @ds_read_b64_tr_b4_s(ptr addrspace(3) inreg %addr, ptr addrspace(1) %use) {
+; GFX950-LABEL: ds_read_b64_tr_b4_s:
+; GFX950:       ; %bb.0: ; %entry
+; GFX950-NEXT:    v_mov_b32_e32 v2, s0
+; GFX950-NEXT:    ds_read_b64_tr_b4 v[2:3], v2 offset:32
+; GFX950-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX950-NEXT:    global_store_dwordx2 v[0:1], v[2:3], off
+; GFX950-NEXT:    s_endpgm
+entry:
+  %gep = getelementptr i64, ptr addrspace(3) %addr, i32 4
+  %val = call <2 x i32> @llvm.amdgcn.ds.read.tr4.b64.v2i32.p3(ptr addrspace(3) %gep)
+  store <2 x i32> %val, ptr addrspace(1) %use
+  ret void
+}
+
+define amdgpu_ps void @ds_read_b96_tr_b6_s(ptr addrspace(3) inreg %addr, ptr addrspace(1) %use) {
+; GFX950-LABEL: ds_read_b96_tr_b6_s:
+; GFX950:       ; %bb.0: ; %entry
+; GFX950-NEXT:    v_mov_b32_e32 v2, s0
+; GFX950-NEXT:    ds_read_b96_tr_b6 v[2:4], v2 offset:32
+; GFX950-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX950-NEXT:    global_store_dwordx3 v[0:1], v[2:4], off
+; GFX950-NEXT:    s_endpgm
+entry:
+  %gep = getelementptr i64, ptr addrspace(3) %addr, i32 4
+  %val = call <3 x i32> @llvm.amdgcn.ds.read.tr6.b96.v3i32.p3(ptr addrspace(3) %gep)
+  store <3 x i32> %val, ptr addrspace(1) %use
+  ret void
+}
+
+define amdgpu_ps void @ds_read_b64_tr_b8_s(ptr addrspace(3) inreg %addr, ptr addrspace(1) %use) {
+; GFX950-LABEL: ds_read_b64_tr_b8_s:
+; GFX950:       ; %bb.0: ; %entry
+; GFX950-NEXT:    v_mov_b32_e32 v2, s0
+; GFX950-NEXT:    ds_read_b64_tr_b8 v[2:3], v2 offset:32
+; GFX950-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX950-NEXT:    global_store_dwordx2 v[0:1], v[2:3], off
+; GFX950-NEXT:    s_endpgm
+entry:
+  %gep = getelementptr i64, ptr addrspace(3) %addr, i32 4
+  %val = call <2 x i32> @llvm.amdgcn.ds.read.tr8.b64.v2i32.p3(ptr addrspace(3) %gep)
+  store <2 x i32> %val, ptr addrspace(1) %use
+  ret void
+}
+
+define amdgpu_ps void @ds_read_b64_tr_b16_s(ptr addrspace(3) inreg %addr, ptr addrspace(1) %use) {
+; GFX950-LABEL: ds_read_b64_tr_b16_s:
+; GFX950:       ; %bb.0: ; %entry
+; GFX950-NEXT:    v_mov_b32_e32 v2, s0
+; GFX950-NEXT:    ds_read_b64_tr_b16 v[2:3], v2 offset:32
+; GFX950-NEXT:    s_waitcnt lgkmcnt(0)
+; GFX950-NEXT:    global_store_dwordx2 v[0:1], v[2:3], off
+; GFX950-NEXT:    s_endpgm
+entry:
+  %gep = getelementptr i64, ptr addrspace(3) %addr, i32 4
+  %val = call <4 x i16> @llvm.amdgcn.ds.read.tr16.b64.v4i16.p3(ptr addrspace(3) %gep)
+  store <4 x i16> %val, ptr addrspace(1) %use
+  ret void
+}
+
 ; This is a special case that does not require aligned VGPRs. Make
 ; sure no copies are required for the unaligned ABI return value.
 define { i32, <3 x i32> } @ds_read_b96_tr_b6_no_align2_requirement(ptr addrspace(3) %ptr) {
