@@ -1,4 +1,4 @@
-//===- DemangleTest.cpp - Unit tests for COMGR Demangle ----------------===//
+//===- DemangleSymbolNameTest.cpp - Unit tests for COMGR Demangle ---------===//
 //
 // Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
 // amd/comgr/LICENSE.TXT in this repository for license information.
@@ -9,10 +9,10 @@
 #include "common.h"
 #include "gtest/gtest.h"
 
-class DemangleTest
+class DemangleSymbolNameTest
     : public ::testing::TestWithParam<std::tuple<const char *, const char *>> {};
 
-TEST_P(DemangleTest, DemangleMatch) {
+TEST_P(DemangleSymbolNameTest, DemangleMatch) {
   auto [MangledName, ExpectedString] = GetParam();
   amd_comgr_data_t MangledData, DemangledData;
 
@@ -36,7 +36,7 @@ TEST_P(DemangleTest, DemangleMatch) {
   ASSERT_COMGR(release_data(DemangledData));
 }
 
-INSTANTIATE_TEST_SUITE_P(DemangleTable, DemangleTest,
+INSTANTIATE_TEST_SUITE_P(DemangleTable, DemangleSymbolNameTest,
   ::testing::Values(
   // Tests from llvm/unittests/Demangle/DemangleTest.cpp
   std::make_tuple("_", "_"),
