@@ -104,8 +104,8 @@ download_linux_tools_debs() {
       # apt -d skips packages already present in ubuntu:22.04 (notably libc6/ld-linux).
       # perf is dynamically linked and needs the interpreter inside the chroot rootfs.
       apt-get install -y -d --reinstall libc6 libgcc-s1 libstdc++6 \
-        liblzma5 libzstd1 libcap2 libssl3 \
-        || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 libssl3 \
+        liblzma5 libzstd1 libcap2 libssl3 zlib1g \
+        || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 libssl3 zlib1g \
         || true
 
       shopt -s nullglob
@@ -127,6 +127,8 @@ download_linux_tools_debs() {
 
       PERF_BIN=\$(find /out/root/usr/lib -path '*/linux-azure-tools*/perf' -type f 2>/dev/null | head -1)
       if [[ -n \"\${PERF_BIN}\" ]]; then
+        # set -x pollutes stderr with ++ lines and breaks missing-lib parsing.
+        set +x
         for round in 1 2 3 4 5 6 7 8; do
           # --version does not load all libs (e.g. libcrypto.so.3); use perf stat.
           if run_rootfs_perf \"\${PERF_BIN}\" stat -e task-clock -- true >/dev/null 2>&1; then
@@ -153,6 +155,7 @@ download_linux_tools_debs() {
             dpkg-deb -x \"\${deb}\" /out/root
           done
         done
+        set -x
       fi
 
       shopt -s nullglob
