@@ -178,10 +178,7 @@ define amdgpu_ps void @test_if_export_f32(i32 %flag, float %x, float %y, float %
 ; GFX11-LABEL: test_if_export_f32:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX11-NEXT:  .LBB9_1: ; %exp
@@ -193,10 +190,7 @@ define amdgpu_ps void @test_if_export_f32(i32 %flag, float %x, float %y, float %
 ; GFX1150:       ; %bb.0:
 ; GFX1150-NEXT:    s_setprio 2
 ; GFX1150-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX1150-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1150-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1150-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1150-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1150-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1150-NEXT:    ; divergent control-flow edge
 ; GFX1150-NEXT:    s_cbranch_execz .LBB9_2
 ; GFX1150-NEXT:  .LBB9_1: ; %exp
@@ -223,10 +217,7 @@ define amdgpu_ps void @test_if_export_vm_f32(i32 %flag, float %x, float %y, floa
 ; GFX11-LABEL: test_if_export_vm_f32:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX11-NEXT:  .LBB10_1: ; %exp
@@ -238,10 +229,7 @@ define amdgpu_ps void @test_if_export_vm_f32(i32 %flag, float %x, float %y, floa
 ; GFX1150:       ; %bb.0:
 ; GFX1150-NEXT:    s_setprio 2
 ; GFX1150-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX1150-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1150-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1150-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1150-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1150-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1150-NEXT:    ; divergent control-flow edge
 ; GFX1150-NEXT:    s_cbranch_execz .LBB10_2
 ; GFX1150-NEXT:  .LBB10_1: ; %exp
@@ -268,10 +256,7 @@ define amdgpu_ps void @test_if_export_done_f32(i32 %flag, float %x, float %y, fl
 ; GFX11-LABEL: test_if_export_done_f32:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB11_2
 ; GFX11-NEXT:  .LBB11_1: ; %exp
@@ -283,10 +268,7 @@ define amdgpu_ps void @test_if_export_done_f32(i32 %flag, float %x, float %y, fl
 ; GFX1150:       ; %bb.0:
 ; GFX1150-NEXT:    s_setprio 2
 ; GFX1150-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX1150-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1150-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1150-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1150-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1150-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1150-NEXT:    ; divergent control-flow edge
 ; GFX1150-NEXT:    s_cbranch_execz .LBB11_2
 ; GFX1150-NEXT:  .LBB11_1: ; %exp
@@ -313,10 +295,7 @@ define amdgpu_ps void @test_if_export_vm_done_f32(i32 %flag, float %x, float %y,
 ; GFX11-LABEL: test_if_export_vm_done_f32:
 ; GFX11:       ; %bb.0:
 ; GFX11-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX11-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX11-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX11-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX11-NEXT:    s_mov_b32 exec_lo, s0
+; GFX11-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX11-NEXT:    ; divergent control-flow edge
 ; GFX11-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX11-NEXT:  .LBB12_1: ; %exp
@@ -328,10 +307,7 @@ define amdgpu_ps void @test_if_export_vm_done_f32(i32 %flag, float %x, float %y,
 ; GFX1150:       ; %bb.0:
 ; GFX1150-NEXT:    s_setprio 2
 ; GFX1150-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 0, v0
-; GFX1150-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1150-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1150-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1150-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1150-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1150-NEXT:    ; divergent control-flow edge
 ; GFX1150-NEXT:    s_cbranch_execz .LBB12_2
 ; GFX1150-NEXT:  .LBB12_1: ; %exp

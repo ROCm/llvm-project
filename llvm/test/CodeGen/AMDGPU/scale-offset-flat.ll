@@ -362,10 +362,7 @@ define amdgpu_ps <2 x float> @flat_atomicrmw_b64_rtn_idxprom(ptr align 8 inreg %
 ; SDAG-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v2
 ; SDAG-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc_lo
 ; SDAG-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v2
-; SDAG-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; SDAG-NEXT:    s_xor_b32 s1, exec_lo, s0
-; SDAG-NEXT:    s_mov_b32 exec_lo, s0
+; SDAG-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB21_2
 ; SDAG-NEXT:  .LBB21_1: ; %atomicrmw.private
@@ -379,10 +376,9 @@ define amdgpu_ps <2 x float> @flat_atomicrmw_b64_rtn_idxprom(ptr align 8 inreg %
 ; SDAG-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; SDAG-NEXT:  .LBB21_2:
 ; SDAG-NEXT:    s_wait_xcnt 0x0
-; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; SDAG-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; SDAG-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; SDAG-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; SDAG-NEXT:    s_and_b32 s0, s0, exec_lo
 ; SDAG-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; SDAG-NEXT:    ; divergent control-flow edge
 ; SDAG-NEXT:    s_cbranch_execz .LBB21_4

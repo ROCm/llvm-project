@@ -139,8 +139,8 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_addc_co_u32_e32 v31, vcc, -1, v5, vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v12, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v13, 0
-; GFX9-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, 0, v0, vcc
+; GFX9-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB0_4
 ; GFX9-NEXT:  .LBB0_2: ; %udiv-preheader
@@ -563,6 +563,8 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_cndmask_b32_e64 v4, v4, v5, s[4:5]
 ; GFX9-O0-NEXT:    v_and_b32_e64 v4, 1, v4
 ; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[4:5], v4, 1
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s4, 2
+; GFX9-O0-NEXT:    v_writelane_b32 v31, s5, 3
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
@@ -571,9 +573,6 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:4 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; GFX9-O0-NEXT:    s_mov_b64 s[6:7], -1
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 2
-; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 3
-; GFX9-O0-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 4
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 5
 ; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
@@ -1095,14 +1094,14 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v6, v1
-; GFX9-O0-NEXT:    v_cmp_lt_u32_e64 s[4:5], v2, s10
+; GFX9-O0-NEXT:    v_cmp_lt_u32_e64 s[6:7], v2, s10
 ; GFX9-O0-NEXT:    v_sub_u32_e64 v3, v2, s10
 ; GFX9-O0-NEXT:    v_lshlrev_b64 v[13:14], v3, v[9:10]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v14
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v3, v3, v6, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v3, v3, v6, s[6:7]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v0, v13
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[6:7]
 ; GFX9-O0-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v1
@@ -1118,10 +1117,10 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_lshlrev_b64 v[2:3], v2, v[9:10]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v9, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s9
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v6, v6, v9, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v6, v6, v9, s[6:7]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v2, s8
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[6:7]
 ; GFX9-O0-NEXT:    ; kill: def $vgpr2 killed $vgpr2 def $vgpr2_vgpr3 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v6
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:248 ; 4-byte Folded Spill
@@ -1138,11 +1137,11 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_or_b32_e64 v4, v4, v5
 ; GFX9-O0-NEXT:    ; kill: def $vgpr4 killed $vgpr4 def $vgpr4_vgpr5 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v5, v6
-; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], s[6:7]
-; GFX9-O0-NEXT:    v_mov_b32_e32 v4, s6
-; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s7
-; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s6
-; GFX9-O0-NEXT:    v_mov_b32_e32 v7, s7
+; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[6:7], v[4:5], s[4:5]
+; GFX9-O0-NEXT:    v_mov_b32_e32 v4, s4
+; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s5
+; GFX9-O0-NEXT:    v_mov_b32_e32 v7, s5
+; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX9-O0-NEXT:    buffer_store_dword v6, off, s[0:3], s32 offset:136 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 offset:140 ; 4-byte Folded Spill
@@ -1155,9 +1154,7 @@ define i128 @v_srem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    buffer_store_dword v0, off, s[0:3], s32 offset:128 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v1, off, s[0:3], s32 offset:132 ; 4-byte Folded Spill
-; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
-; GFX9-O0-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX9-O0-NEXT:    s_and_b64 s[6:7], s[6:7], exec
+; GFX9-O0-NEXT:    s_xor_b64 s[4:5], s[6:7], exec
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s6, 6
 ; GFX9-O0-NEXT:    v_writelane_b32 v31, s7, 7
 ; GFX9-O0-NEXT:    s_or_saveexec_b64 s[20:21], -1
@@ -1578,8 +1575,8 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_mov_b32_e32 v21, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v13, 0
 ; GFX9-NEXT:    v_mov_b32_e32 v14, 0
-; GFX9-NEXT:    s_and_b64 s[6:7], s[6:7], exec
-; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e32 v11, 0, v11, vcc
+; GFX9-NEXT:    s_xor_b64 exec, s[8:9], exec
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execz .LBB1_4
 ; GFX9-NEXT:  .LBB1_2: ; %udiv-preheader
@@ -1645,7 +1642,7 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-NEXT:    v_or3_b32 v8, v8, v12, v14
 ; GFX9-NEXT:    v_and_b32_e32 v12, 1, v30
 ; GFX9-NEXT:    v_mov_b32_e32 v21, v13
-; GFX9-NEXT:    s_or_b64 s[6:7], s[6:7], s[10:11]
+; GFX9-NEXT:    s_or_b64 s[8:9], s[8:9], s[10:11]
 ; GFX9-NEXT:    s_mov_b64 exec, s[4:5]
 ; GFX9-NEXT:    ; divergent control-flow edge
 ; GFX9-NEXT:    s_cbranch_execnz .LBB1_3
@@ -1914,6 +1911,8 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_cndmask_b32_e64 v4, v4, v5, s[4:5]
 ; GFX9-O0-NEXT:    v_and_b32_e64 v4, 1, v4
 ; GFX9-O0-NEXT:    v_cmp_eq_u32_e64 s[4:5], v4, 1
+; GFX9-O0-NEXT:    v_writelane_b32 v30, s4, 2
+; GFX9-O0-NEXT:    v_writelane_b32 v30, s5, 3
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:8 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v3, off, s[0:3], s32 offset:12 ; 4-byte Folded Spill
@@ -2495,14 +2494,14 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v6, v1
-; GFX9-O0-NEXT:    v_cmp_lt_u32_e64 s[4:5], v2, s10
+; GFX9-O0-NEXT:    v_cmp_lt_u32_e64 s[6:7], v2, s10
 ; GFX9-O0-NEXT:    v_sub_u32_e64 v3, v2, s10
 ; GFX9-O0-NEXT:    v_lshlrev_b64 v[13:14], v3, v[9:10]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v14
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v3, v3, v6, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v3, v3, v6, s[6:7]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v0
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v0, v13
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v0, v0, v1, s[6:7]
 ; GFX9-O0-NEXT:    ; kill: def $vgpr0 killed $vgpr0 def $vgpr0_vgpr1 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v1, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v1
@@ -2518,10 +2517,10 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_lshlrev_b64 v[2:3], v2, v[9:10]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v9, v3
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s9
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v6, v6, v9, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v6, v6, v9, s[6:7]
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v2
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v2, s8
-; GFX9-O0-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[4:5]
+; GFX9-O0-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[6:7]
 ; GFX9-O0-NEXT:    ; kill: def $vgpr2 killed $vgpr2 def $vgpr2_vgpr3 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v3, v6
 ; GFX9-O0-NEXT:    buffer_store_dword v2, off, s[0:3], s32 offset:220 ; 4-byte Folded Spill
@@ -2538,11 +2537,11 @@ define i128 @v_urem_i128_vv(i128 %lhs, i128 %rhs) {
 ; GFX9-O0-NEXT:    v_or_b32_e64 v4, v4, v5
 ; GFX9-O0-NEXT:    ; kill: def $vgpr4 killed $vgpr4 def $vgpr4_vgpr5 killed $exec
 ; GFX9-O0-NEXT:    v_mov_b32_e32 v5, v6
-; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[4:5], v[4:5], s[6:7]
-; GFX9-O0-NEXT:    v_mov_b32_e32 v4, s6
-; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s7
-; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s6
-; GFX9-O0-NEXT:    v_mov_b32_e32 v7, s7
+; GFX9-O0-NEXT:    v_cmp_eq_u64_e64 s[6:7], v[4:5], s[4:5]
+; GFX9-O0-NEXT:    v_mov_b32_e32 v4, s4
+; GFX9-O0-NEXT:    v_mov_b32_e32 v5, s5
+; GFX9-O0-NEXT:    v_mov_b32_e32 v7, s5
+; GFX9-O0-NEXT:    v_mov_b32_e32 v6, s4
 ; GFX9-O0-NEXT:    buffer_store_dword v6, off, s[0:3], s32 offset:108 ; 4-byte Folded Spill
 ; GFX9-O0-NEXT:    s_nop 0
 ; GFX9-O0-NEXT:    buffer_store_dword v7, off, s[0:3], s32 offset:112 ; 4-byte Folded Spill
