@@ -267,10 +267,25 @@ perf_check="$(
 }
 
 if grep -q '<not supported>' <<<"${perf_check}"; then
-  echo "ERROR: perf hardware counters (cycles:u/instructions:u) not supported" >&2
-  echo "perf: $(command -v perf)  kernel: ${kernel}" >&2
-  echo "${perf_check}" >&2
-  exit 1
+  echo "WARNING: cycles:u/instructions:u not supported; probing cycles,instructions (kernel+user)..." >&2
+  perf_fb="$(
+    perf stat -x \; -e cycles,instructions,task-clock,duration_time -- true 2>&1
+  )" || true
+  if grep -q '<not supported>' <<<"${perf_fb}"; then
+    echo "ERROR: hardware PMU counters not available (user-scoped and unscoped)" >&2
+    echo "perf: $(command -v perf)  kernel: ${kernel}" >&2
+    echo "--- cycles:u / instructions:u ---" >&2
+    echo "${perf_check}" >&2
+    echo "--- cycles / instructions ---" >&2
+    echo "${perf_fb}" >&2
+    exit 1
+  fi
+  echo "INFO: HCTS will use cycles,instructions (kernel+user); Jenkins-style :u is unavailable on this runner." >&2
+  if [[ -n "${GITHUB_ENV:-}" ]]; then
+    echo "PERF_USE_SCOPED_HW_EVENTS=0" >>"${GITHUB_ENV}"
+  fi
+  export PERF_USE_SCOPED_HW_EVENTS=0
+  echo "${perf_fb}" | head -6
+else
+  echo "${perf_check}" | head -6
 fi
-
-echo "${perf_check}" | head -6
