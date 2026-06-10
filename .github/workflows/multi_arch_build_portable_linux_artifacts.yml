@@ -159,7 +159,7 @@ jobs:
                ref="upstream-pr-${num}"
                echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
                git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
-               git -C compiler/amd-llvm merge --no-edit -X theirs "$ref" || {
+               git -C compiler/amd-llvm merge --no-edit -X ours "$ref" || {
                  echo "::error::Failed to merge upstream PR #${num}" >&2
                  git -C compiler/amd-llvm merge --abort || true
                  exit 1
