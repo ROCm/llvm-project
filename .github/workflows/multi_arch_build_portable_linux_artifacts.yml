@@ -295,6 +295,7 @@ jobs:
              ls -l
              git log --oneline -3
              cd -
+             cat compiler/amd-llvm/llvm/lib/Target/AVR/Disassembler/AVRDisassembler.cpp
           
       - name: Get stage configuration
         id: stage_config
