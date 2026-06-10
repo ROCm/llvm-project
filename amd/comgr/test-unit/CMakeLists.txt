@@ -171,6 +171,12 @@ target_link_libraries(DemangleSymbolNameTest PRIVATE
   amd_comgr
   ${LLVM_PTHREAD_LIB})
 
+# Gtest's LLVM support brings in some printers for LLVM types (StringRef, etc.).
+# When building in-tree, the included headers bring in some code that depend on LLVM's abi-breaking checks.
+# This adds a dependency with LLVM's Support library.
+# We could link against Support, but since we're not using these printers we can just disable them.
+target_compile_definitions(DemangleSymbolNameTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
 target_include_directories(DemangleSymbolNameTest PRIVATE
   ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
