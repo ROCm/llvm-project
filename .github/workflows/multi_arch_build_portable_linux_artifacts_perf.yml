@@ -213,13 +213,21 @@ jobs:
           }
           install_perf_tools
           command -v perf || { echo "ERROR: perf not found after install attempt" >&2; exit 127; }
-          if ! perf stat -e cycles:u -- true >/dev/null 2>&1; then
+          paranoid_path=/proc/sys/kernel/perf_event_paranoid
+          if [[ -r "${paranoid_path}" ]]; then
+            echo "perf_event_paranoid before: $(cat "${paranoid_path}")"
+          fi
+          # Match Jenkins: allow user PMU events (cycles:u, instructions:u) before the sanity check.
+          echo 1 > "${paranoid_path}" 2>/dev/null \
+            || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
+          if [[ -r "${paranoid_path}" ]]; then
+            echo "perf_event_paranoid after: $(cat "${paranoid_path}")"
+          fi
+          if ! perf stat -e cycles:u,instructions:u -- true >/dev/null 2>&1; then
             echo "ERROR: perf stat check failed; HCTS capture requires perf_event access" >&2
-            perf stat -e cycles:u -- true 2>&1 | head -10 || true
+            perf stat -e cycles:u,instructions:u -- true 2>&1 | head -10 || true
             exit 1
           fi
-          echo 1 > /proc/sys/kernel/perf_event_paranoid 2>/dev/null \
-            || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
           perf_dir="${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf"
           perf_launcher_bin="$(pwd)/${BUILD_DIR}/bin/perf_launcher.sh"
           test -x "${perf_dir}/setup_perf_launcher.sh"
