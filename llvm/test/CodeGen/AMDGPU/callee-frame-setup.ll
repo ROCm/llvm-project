@@ -1291,9 +1291,9 @@ define void @callee_need_to_spill_fp_to_memory() #3 {
 ; HAWAII-NEXT:    s_waitcnt vmcnt(0)
 ; HAWAII-NEXT:    v_readfirstlane_b32 s76, v0
 ; HAWAII-NEXT:    buffer_load_dword v0, off, s[0:3], s33 offset:4 ; 4-byte Folded Reload
+; HAWAII-NEXT:    s_mov_b32 s33, s4
 ; HAWAII-NEXT:    s_waitcnt vmcnt(0)
 ; HAWAII-NEXT:    v_readfirstlane_b32 s77, v0
-; HAWAII-NEXT:    s_mov_b32 s33, s4
 ; HAWAII-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: callee_need_to_spill_fp_to_memory:
@@ -1977,8 +1977,8 @@ define void @dont_save_fp_bp_for_noreturn_funcs() #4 {
 ; MUBUF-NEXT:    s_or_saveexec_b64 s[16:17], -1
 ; MUBUF-NEXT:    buffer_store_dword v40, off, s[0:3], s33 offset:4 ; 4-byte Folded Spill
 ; MUBUF-NEXT:    s_mov_b64 exec, s[16:17]
-; MUBUF-NEXT:    s_mov_b32 s34, s32
 ; MUBUF-NEXT:    v_writelane_b32 v40, s30, 0
+; MUBUF-NEXT:    s_mov_b32 s34, s32
 ; MUBUF-NEXT:    s_addk_i32 s32, 0x4000
 ; MUBUF-NEXT:    v_writelane_b32 v40, s31, 1
 ; MUBUF-NEXT:    s_getpc_b64 s[16:17]
@@ -1998,8 +1998,8 @@ define void @dont_save_fp_bp_for_noreturn_funcs() #4 {
 ; FLATSCR-NEXT:    s_or_saveexec_b64 s[0:1], -1
 ; FLATSCR-NEXT:    scratch_store_dword off, v40, s33 offset:4 ; 4-byte Folded Spill
 ; FLATSCR-NEXT:    s_mov_b64 exec, s[0:1]
-; FLATSCR-NEXT:    s_mov_b32 s34, s32
 ; FLATSCR-NEXT:    v_writelane_b32 v40, s30, 0
+; FLATSCR-NEXT:    s_mov_b32 s34, s32
 ; FLATSCR-NEXT:    s_addk_i32 s32, 0x100
 ; FLATSCR-NEXT:    v_writelane_b32 v40, s31, 1
 ; FLATSCR-NEXT:    s_getpc_b64 s[0:1]
