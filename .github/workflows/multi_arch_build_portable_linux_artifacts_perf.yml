@@ -96,6 +96,19 @@ jobs:
           sparse-checkout-cone-mode: true
           path: ci-perf-launcher
 
+      - name: Install perf tools and perf launcher
+        if: ${{ inputs.enable_perf_launcher }}
+        run: |
+          set -euo pipefail
+          perf_dir="${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf"
+          test -x "${perf_dir}/install_perf_tools.sh"
+          bash "${perf_dir}/install_perf_tools.sh"
+          perf_launcher_bin="$(pwd)/${BUILD_DIR}/bin/perf_launcher.sh"
+          test -x "${perf_dir}/setup_perf_launcher.sh"
+          test -x "${perf_dir}/perf_launcher.sh"
+          "${perf_dir}/setup_perf_launcher.sh" "$(pwd)/${BUILD_DIR}/bin"
+          ls -la "${perf_launcher_bin}"
+
       - name: Install python deps
         run: |
           pip install -r requirements.txt
@@ -185,19 +198,6 @@ jobs:
             cmake/therock_subproject.cmake compiler/CMakeLists.txt || true
           sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
             compiler/pre_hook_amd-comgr.cmake || true
-
-      - name: Install perf tools and perf launcher
-        if: ${{ inputs.enable_perf_launcher }}
-        run: |
-          set -euo pipefail
-          perf_dir="${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf"
-          test -x "${perf_dir}/install_perf_tools.sh"
-          bash "${perf_dir}/install_perf_tools.sh"
-          perf_launcher_bin="$(pwd)/${BUILD_DIR}/bin/perf_launcher.sh"
-          test -x "${perf_dir}/setup_perf_launcher.sh"
-          test -x "${perf_dir}/perf_launcher.sh"
-          "${perf_dir}/setup_perf_launcher.sh" "$(pwd)/${BUILD_DIR}/bin"
-          ls -la "${perf_launcher_bin}"
 
       - name: Configure stage
         env:
