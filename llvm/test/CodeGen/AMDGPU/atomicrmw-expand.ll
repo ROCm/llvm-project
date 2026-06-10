@@ -40,9 +40,7 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_2
 ; GFX90A-NEXT:  .LBB0_1: ; %atomicrmw.shared
@@ -51,7 +49,7 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB0_2:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
@@ -62,10 +60,7 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX90A-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB0_5
 ; GFX90A-NEXT:  .LBB0_4: ; %atomicrmw.private
@@ -76,7 +71,7 @@ define float @syncscope_system(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_add_f32_e32 v2, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB0_5:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
@@ -166,9 +161,7 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_2
 ; GFX90A-NEXT:  .LBB1_1: ; %atomicrmw.shared
@@ -177,7 +170,7 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    ds_add_rtn_f32 v0, v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB1_2:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
@@ -188,10 +181,7 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX90A-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB1_5
 ; GFX90A-NEXT:  .LBB1_4: ; %atomicrmw.private
@@ -202,7 +192,7 @@ define float @syncscope_workgroup_rtn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_add_f32_e32 v2, v0, v2
 ; GFX90A-NEXT:    buffer_store_dword v2, v1, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB1_5:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
@@ -256,9 +246,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX908-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX908-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX908-NEXT:  .LBB2_1: ; %atomicrmw.shared
@@ -267,7 +255,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX908-NEXT:    ds_add_f32 v0, v2
 ; GFX908-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX908-NEXT:  .LBB2_2:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[6:7], s[4:5], exec
 ; GFX908-NEXT:    s_mov_b64 exec, vcc
@@ -278,10 +266,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX908-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX908-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX908-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX908-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX908-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX908-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX908-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX908-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX908-NEXT:    ; divergent control-flow edge
 ; GFX908-NEXT:    s_cbranch_execz .LBB2_5
 ; GFX908-NEXT:  .LBB2_4: ; %atomicrmw.private
@@ -292,7 +277,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX908-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX908-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen
 ; GFX908-NEXT:  .LBB2_5:
-; GFX908-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX908-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX908-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX908-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX908-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]
@@ -313,9 +298,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_2
 ; GFX90A-NEXT:  .LBB2_1: ; %atomicrmw.shared
@@ -324,7 +307,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    ds_add_f32 v0, v2
 ; GFX90A-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX90A-NEXT:  .LBB2_2:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[6:7]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[6:7], s[4:5], exec
 ; GFX90A-NEXT:    s_mov_b64 exec, vcc
@@ -335,10 +318,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_cmp_eq_u32_e32 vcc, s5, v1
 ; GFX90A-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX90A-NEXT:    v_cmp_ne_u32_e32 vcc, 1, v3
-; GFX90A-NEXT:    s_xor_b64 s[4:5], vcc, exec
-; GFX90A-NEXT:    s_xor_b64 s[8:9], exec, s[4:5]
-; GFX90A-NEXT:    s_and_b64 s[8:9], s[8:9], exec
-; GFX90A-NEXT:    s_mov_b64 exec, s[4:5]
+; GFX90A-NEXT:    s_xor_b64 exec, vcc, exec
 ; GFX90A-NEXT:    ; divergent control-flow edge
 ; GFX90A-NEXT:    s_cbranch_execz .LBB2_5
 ; GFX90A-NEXT:  .LBB2_4: ; %atomicrmw.private
@@ -349,7 +329,7 @@ define void @syncscope_workgroup_nortn(ptr %addr, float %val) #0 {
 ; GFX90A-NEXT:    v_add_f32_e32 v1, v1, v2
 ; GFX90A-NEXT:    buffer_store_dword v1, v0, s[0:3], 0 offen
 ; GFX90A-NEXT:  .LBB2_5:
-; GFX90A-NEXT:    s_or_b64 exec, exec, s[8:9]
+; GFX90A-NEXT:    s_or_b64 exec, exec, vcc
 ; GFX90A-NEXT:    s_xor_b64 s[4:5], exec, vcc
 ; GFX90A-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GFX90A-NEXT:    s_or_b64 s[6:7], s[6:7], s[4:5]

@@ -744,10 +744,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_2
 ; GFX1250-NEXT:  .LBB34_1: ; %atomicrmw.shared
@@ -756,7 +753,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v0, -1, v0, s0
 ; GFX1250-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX1250-NEXT:  .LBB34_2:
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_and_b32 s1, s0, exec_lo
@@ -770,11 +767,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX1250-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB34_5
 ; GFX1250-NEXT:  .LBB34_4: ; %atomicrmw.private
@@ -788,7 +781,7 @@ define double @flat_system_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB34_5:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
@@ -818,10 +811,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_eq_u32_e32 vcc_lo, s1, v1
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_2
 ; GFX1250-NEXT:  .LBB35_1: ; %atomicrmw.shared
@@ -830,7 +820,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v0, -1, v0, s0
 ; GFX1250-NEXT:    ds_add_rtn_f64 v[0:1], v0, v[2:3]
 ; GFX1250-NEXT:  .LBB35_2:
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_and_b32 s1, s0, exec_lo
@@ -844,11 +834,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s2, exec_lo, s0
-; GFX1250-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB35_5
 ; GFX1250-NEXT:  .LBB35_4: ; %atomicrmw.private
@@ -862,7 +848,7 @@ define double @flat_one_as_atomic_fadd_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB35_5:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s2
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
 ; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
@@ -916,10 +902,7 @@ define double @flat_system_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB38_2
 ; GFX1250-NEXT:  .LBB38_1: ; %atomicrmw.private
@@ -934,10 +917,9 @@ define double @flat_system_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB38_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB38_4
@@ -962,10 +944,7 @@ define double @flat_one_as_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB39_2
 ; GFX1250-NEXT:  .LBB39_1: ; %atomicrmw.private
@@ -980,10 +959,9 @@ define double @flat_one_as_atomic_fmin_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB39_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB39_4
@@ -1032,10 +1010,7 @@ define double @flat_system_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB42_2
 ; GFX1250-NEXT:  .LBB42_1: ; %atomicrmw.private
@@ -1050,10 +1025,9 @@ define double @flat_system_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB42_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB42_4
@@ -1078,10 +1052,7 @@ define double @flat_one_as_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB43_2
 ; GFX1250-NEXT:  .LBB43_1: ; %atomicrmw.private
@@ -1096,10 +1067,9 @@ define double @flat_one_as_atomic_fmax_f64(ptr %ptr, double %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v6, v[2:3], off
 ; GFX1250-NEXT:  .LBB43_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB43_4
@@ -1220,10 +1190,7 @@ define i64 @flat_one_as_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB52_2
 ; GFX1250-NEXT:  .LBB52_1: ; %atomicrmw.private
@@ -1237,10 +1204,9 @@ define i64 @flat_one_as_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB52_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB52_4
@@ -1265,10 +1231,7 @@ define i64 @flat_system_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB53_2
 ; GFX1250-NEXT:  .LBB53_1: ; %atomicrmw.private
@@ -1282,10 +1245,9 @@ define i64 @flat_system_atomic_min_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB53_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB53_4
@@ -1310,10 +1272,7 @@ define i64 @flat_one_as_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB54_2
 ; GFX1250-NEXT:  .LBB54_1: ; %atomicrmw.private
@@ -1327,10 +1286,9 @@ define i64 @flat_one_as_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB54_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB54_4
@@ -1355,10 +1313,7 @@ define i64 @flat_system_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB55_2
 ; GFX1250-NEXT:  .LBB55_1: ; %atomicrmw.private
@@ -1372,10 +1327,9 @@ define i64 @flat_system_atomic_max_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB55_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB55_4
@@ -1400,10 +1354,7 @@ define i64 @flat_one_as_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB56_2
 ; GFX1250-NEXT:  .LBB56_1: ; %atomicrmw.private
@@ -1417,10 +1368,9 @@ define i64 @flat_one_as_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB56_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB56_4
@@ -1445,10 +1395,7 @@ define i64 @flat_system_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB57_2
 ; GFX1250-NEXT:  .LBB57_1: ; %atomicrmw.private
@@ -1462,10 +1409,9 @@ define i64 @flat_system_atomic_umin_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB57_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB57_4
@@ -1490,10 +1436,7 @@ define i64 @flat_one_as_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB58_2
 ; GFX1250-NEXT:  .LBB58_1: ; %atomicrmw.private
@@ -1507,10 +1450,9 @@ define i64 @flat_one_as_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB58_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB58_4
@@ -1535,10 +1477,7 @@ define i64 @flat_system_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    v_cmp_gt_u32_e32 vcc_lo, 0x4000000, v4
 ; GFX1250-NEXT:    v_cndmask_b32_e64 v4, 0, 1, vcc_lo
 ; GFX1250-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 1, v4
-; GFX1250-NEXT:    s_xor_b32 s0, vcc_lo, exec_lo
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
-; GFX1250-NEXT:    s_xor_b32 s1, exec_lo, s0
-; GFX1250-NEXT:    s_mov_b32 exec_lo, s0
+; GFX1250-NEXT:    s_xor_b32 exec_lo, vcc_lo, exec_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB59_2
 ; GFX1250-NEXT:  .LBB59_1: ; %atomicrmw.private
@@ -1552,10 +1491,9 @@ define i64 @flat_system_atomic_umax_i64(ptr %ptr, i64 %val) {
 ; GFX1250-NEXT:    scratch_store_b64 v4, v[2:3], off
 ; GFX1250-NEXT:  .LBB59_2:
 ; GFX1250-NEXT:    s_wait_xcnt 0x0
-; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, s1
-; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1) | instskip(NEXT) | instid1(SALU_CYCLE_1)
+; GFX1250-NEXT:    s_or_b32 exec_lo, exec_lo, vcc_lo
+; GFX1250-NEXT:    s_delay_alu instid0(SALU_CYCLE_1)
 ; GFX1250-NEXT:    s_xor_b32 s0, exec_lo, vcc_lo
-; GFX1250-NEXT:    s_and_b32 s0, s0, exec_lo
 ; GFX1250-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1250-NEXT:    ; divergent control-flow edge
 ; GFX1250-NEXT:    s_cbranch_execz .LBB59_4
