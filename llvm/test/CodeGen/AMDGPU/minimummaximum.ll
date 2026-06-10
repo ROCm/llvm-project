@@ -5,8 +5,8 @@
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx1170 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,FAKE16,GFX1170-GISEL,GFX1170-GISEL-FAKE16 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-SDAG,GFX12-SDAG-TRUE16 %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-SDAG,GFX12-SDAG-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx1200 -mattr=+real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-GISEL,GFX12-GISEL-TRUE16 %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx1200 -mattr=-real-true16 < %s | FileCheck -check-prefixes=GCN,GFX12-GISEL,GFX12-GISEL-FAKE16 %s
 
 define amdgpu_ps float @test_minmax_f32(float %a, float %b, float %c) {
 ; GCN-LABEL: test_minmax_f32:

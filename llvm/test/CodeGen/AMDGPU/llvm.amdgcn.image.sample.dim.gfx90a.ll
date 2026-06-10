@@ -1,6 +1,6 @@
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx90a < %s | FileCheck -check-prefixes=GFX90A,SDAG %s
 ; RUN: llc -mtriple=amdgcn -mcpu=gfx90a -early-live-intervals < %s | FileCheck -check-prefixes=GFX90A,SDAG %s
-; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -mtriple=amdgcn -mcpu=gfx90a < %s | FileCheck -check-prefixes=GFX90A,GISEL %s
+; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn -mcpu=gfx90a < %s | FileCheck -check-prefixes=GFX90A,GISEL %s
 
 ; GFX90A-LABEL: {{^}}sample_1d:
 ; GFX90A-NOT: s_wqm_b64
