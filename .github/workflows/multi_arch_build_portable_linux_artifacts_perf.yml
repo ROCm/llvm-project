@@ -217,8 +217,8 @@ jobs:
           if [[ -r "${paranoid_path}" ]]; then
             echo "perf_event_paranoid before: $(cat "${paranoid_path}")"
           fi
-          # Match Jenkins: allow user PMU events (cycles:u, instructions:u) before the sanity check.
-          echo 1 > "${paranoid_path}" 2>/dev/null \
+          # Allow all perf events (least restrictive) before the sanity check.
+          echo -1 > "${paranoid_path}" 2>/dev/null \
             || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
           if [[ -r "${paranoid_path}" ]]; then
             echo "perf_event_paranoid after: $(cat "${paranoid_path}")"
