@@ -470,11 +470,9 @@ struct ScratchAllocator {
   /// the kernel's existing VGPR pool is saturated and there is no headroom
   /// below MaxVgprs for an additional allocation.
   std::optional<unsigned> alloc() {
-    for (unsigned V = KdAllocatedVgprs; V-- > 0;) {
-      if (!LiveAtPoint.test(V)) {
-        LiveAtPoint.set(V);
-        return V;
-      }
+    if (int V = LiveAtPoint.find_last_unset_in(0, KdAllocatedVgprs); V != -1) {
+      LiveAtPoint.set(V);
+      return V;
     }
     if (NextAboveKd >= MaxVgprs)
       return std::nullopt;
