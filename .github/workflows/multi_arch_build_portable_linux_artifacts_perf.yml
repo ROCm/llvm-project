@@ -66,6 +66,7 @@ jobs:
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
       # perf_launcher needs perf_event access (Jenkins perf pods use --privileged).
+      # Kernel-matched perf: Ubuntu linux-tools debs + chroot (install_perf_tools.sh).
       options: -v /runner/config:/home/awsconfig/ --privileged
     env:
       AWS_SHARED_CREDENTIALS_FILE: /home/awsconfig/credentials.ini
@@ -189,46 +190,9 @@ jobs:
         if: ${{ inputs.enable_perf_launcher }}
         run: |
           set -euo pipefail
-          # therock_build_manylinux is RHEL/Alma-based (no apt-get). Jenkins uses apt on Ubuntu pods.
-          install_perf_tools() {
-            if command -v perf >/dev/null 2>&1; then
-              echo "Using existing perf: $(command -v perf)"
-              return 0
-            fi
-            if command -v microdnf >/dev/null 2>&1; then
-              microdnf install -y perf || microdnf install -y kernel-tools || true
-            elif command -v dnf >/dev/null 2>&1; then
-              dnf install -y perf || dnf install -y kernel-tools || true
-            elif command -v yum >/dev/null 2>&1; then
-              yum install -y perf || yum install -y kernel-tools || true
-            elif command -v apt-get >/dev/null 2>&1; then
-              apt-get update -y
-              apt-get install -y "linux-tools-$(uname -r)" "linux-cloud-tools-$(uname -r)" \
-                || apt-get install -y linux-tools-common linux-tools-generic || true
-              kernel_perf_dir="/usr/lib/linux-tools/$(uname -r)"
-              if [[ -d "${kernel_perf_dir}" ]]; then
-                export PATH="${kernel_perf_dir}:${PATH}"
-              fi
-            fi
-          }
-          install_perf_tools
-          command -v perf || { echo "ERROR: perf not found after install attempt" >&2; exit 127; }
-          paranoid_path=/proc/sys/kernel/perf_event_paranoid
-          if [[ -r "${paranoid_path}" ]]; then
-            echo "perf_event_paranoid before: $(cat "${paranoid_path}")"
-          fi
-          # Allow all perf events (least restrictive) before the sanity check.
-          echo -1 > "${paranoid_path}" 2>/dev/null \
-            || echo "WARNING: could not set perf_event_paranoid (non-fatal)"
-          if [[ -r "${paranoid_path}" ]]; then
-            echo "perf_event_paranoid after: $(cat "${paranoid_path}")"
-          fi
-          if ! perf stat -e cycles:u,instructions:u -- true >/dev/null 2>&1; then
-            echo "ERROR: perf stat check failed; HCTS capture requires perf_event access" >&2
-            perf stat -e cycles:u,instructions:u -- true 2>&1 | head -10 || true
-            exit 1
-          fi
           perf_dir="${GITHUB_WORKSPACE}/ci-perf-launcher/.github/perf"
+          test -x "${perf_dir}/install_perf_tools.sh"
+          bash "${perf_dir}/install_perf_tools.sh"
           perf_launcher_bin="$(pwd)/${BUILD_DIR}/bin/perf_launcher.sh"
           test -x "${perf_dir}/setup_perf_launcher.sh"
           test -x "${perf_dir}/perf_launcher.sh"
