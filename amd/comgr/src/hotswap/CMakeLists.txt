@@ -197,11 +197,6 @@ add_library(hotswap-transpiler OBJECT
   pipeline.cpp
   translation-cache.cpp
   ${HOTSWAP_TDM_RUNTIME_GENERATED_CPP}
-  wave-size-obstruction.cpp
-  rewrite-cross-lane-divergent.cpp
-  c5-predicate-chain-classifier.cpp
-  pipeline.cpp
-  translation-cache.cpp
 )
 
 if(NOT TARGET hotswap::transpiler)
