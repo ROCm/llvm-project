@@ -103,9 +103,12 @@ download_linux_tools_debs() {
 
       # apt -d skips packages already present in ubuntu:22.04 (notably libc6/ld-linux).
       # perf is dynamically linked and needs the interpreter inside the chroot rootfs.
+      # Pre-seed common linux-tools / perf runtime deps (batch; ld-list pass fills gaps).
       apt-get install -y -d --reinstall libc6 libgcc-s1 libstdc++6 \
-        liblzma5 libzstd1 libcap2 libssl3 zlib1g \
+        liblzma5 libzstd1 libcap2 libssl3 zlib1g libbz2-1.0 \
+        libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 \
         || apt-get download libc6 libgcc-s1 libstdc++6 liblzma5 libzstd1 libcap2 libssl3 zlib1g \
+          libbz2-1.0 libelf1 libdw1 libnuma1 libslang2 libunwind8 libpci3 \
         || true
 
       shopt -s nullglob
@@ -121,37 +124,69 @@ download_linux_tools_debs() {
       # Use ld-linux --library-path so we only see libs inside /out/root, not the sidecar host.
       run_rootfs_perf() {
         /out/root/lib64/ld-linux-x86-64.so.2 \
-          --library-path /out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu \
+          --library-path /out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu:/out/root/usr/lib:/out/root/lib \
           \"\$@\"
+      }
+
+      run_ld_list() {
+        /out/root/lib64/ld-linux-x86-64.so.2 \
+          --library-path /out/root/usr/lib/x86_64-linux-gnu:/out/root/lib/x86_64-linux-gnu:/out/root/usr/lib:/out/root/lib \
+          --list \"\$1\" 2>/dev/null || true
       }
 
       PERF_BIN=\$(find /out/root/usr/lib -path '*/linux-azure-tools*/perf' -type f 2>/dev/null | head -1)
       if [[ -n \"\${PERF_BIN}\" ]]; then
-        # set -x pollutes stderr with ++ lines and breaks missing-lib parsing.
         set +x
-        for round in 1 2 3 4 5 6 7 8; do
-          # --version does not load all libs (e.g. libcrypto.so.3); use perf stat.
+        # Batch-resolve all ELF deps: ld.so --list shows transitive \"=> not found\" lines.
+        for pass in 1 2 3 4 5 6; do
+          mapfile -t missing_sonames < <(run_ld_list \"\${PERF_BIN}\" | awk '/=> not found/ { print \$1 }' | sort -u)
+          if (( \${#missing_sonames[@]} == 0 )); then
+            echo \"perf linker deps satisfied after \${pass} ld-list pass(es)\"
+            break
+          fi
+          echo \"perf missing \${#missing_sonames[@]} libs (ld-list pass \${pass}): \${missing_sonames[*]}\"
+          declare -A pkg_map=()
+          for so in \"\${missing_sonames[@]}\"; do
+            while IFS= read -r pkg; do
+              [[ -n \"\${pkg}\" ]] && pkg_map[\${pkg}]=1
+            done < <(dpkg -S \"\${so}\" 2>/dev/null | cut -d: -f1 | sort -u)
+          done
+          pkgs=(\"\${!pkg_map[@]}\")
+          if (( \${#pkgs[@]} == 0 )); then
+            echo \"ERROR: could not map sonames to packages: \${missing_sonames[*]}\" >&2
+            break
+          fi
+          echo \"apt batch: \${#pkgs[@]} packages for ld-list pass \${pass}\"
+          apt-get install -y -d --reinstall \"\${pkgs[@]}\" || apt-get download \"\${pkgs[@]}\" || true
+          for deb in /var/cache/apt/archives/*.deb; do
+            cp -f \"\${deb}\" /out/debs/ 2>/dev/null || true
+            dpkg-deb -x \"\${deb}\" /out/root
+          done
+        done
+        # dlopen-only deps are invisible to --list; batch-parse perf stat errors (few rounds).
+        for round in 1 2 3 4 5; do
           if run_rootfs_perf \"\${PERF_BIN}\" stat -e task-clock -- true >/dev/null 2>&1; then
-            echo \"perf deps resolved after \${round} round(s)\"
+            echo \"perf stat probe OK (after \${round} dlopen round(s))\"
             break
           fi
           err=\$(run_rootfs_perf \"\${PERF_BIN}\" stat -e task-clock -- true 2>&1 || true)
-          lib=\$(sed -n 's/.*libraries: \\([^:]*\\): cannot open shared object file.*/\\1/p' <<<\"\${err}\")
-          if [[ -z \"\${lib}\" ]]; then
-            echo \"perf dep resolution stopped: \${err}\" >&2
+          mapfile -t libs < <(grep -oE 'lib[^[:space:]]+: cannot open shared object file' <<<\"\${err}\" | sed 's/: cannot open.*//' | sort -u)
+          if (( \${#libs[@]} == 0 )); then
+            echo \"perf dlopen probe stopped: \${err}\" >&2
             break
           fi
-          echo \"Fetching package for missing \${lib} (round \${round})\"
-          mapfile -t pkgs < <(dpkg -S \"\${lib}\" 2>/dev/null | cut -d: -f1 | sort -u)
-          if (( \${#pkgs[@]} == 0 )); then
-            echo \"No package owns \${lib}\" >&2
-            break
-          fi
-          apt-get install -y -d --reinstall \"\${pkgs[@]}\" \
-            || apt-get download \"\${pkgs[@]}\" \
-            || true
+          echo \"perf dlopen missing \${#libs[@]} libs (round \${round}): \${libs[*]}\"
+          declare -A dm=()
+          for lib in \"\${libs[@]}\"; do
+            while IFS= read -r pkg; do
+              [[ -n \"\${pkg}\" ]] && dm[\${pkg}]=1
+            done < <(dpkg -S \"\${lib}\" 2>/dev/null | cut -d: -f1 | sort -u)
+          done
+          dpkgs=(\"\${!dm[@]}\")
+          (( \${#dpkgs[@]} == 0 )) && { echo \"No package owns: \${libs[*]}\" >&2; break; }
+          apt-get install -y -d --reinstall \"\${dpkgs[@]}\" || apt-get download \"\${dpkgs[@]}\" || true
           for deb in /var/cache/apt/archives/*.deb; do
-            cp -f \"\${deb}\" /out/debs/
+            cp -f \"\${deb}\" /out/debs/ 2>/dev/null || true
             dpkg-deb -x \"\${deb}\" /out/root
           done
         done
@@ -256,7 +291,7 @@ install_perf_wrapper() {
 #!/usr/bin/env bash
 set -euo pipefail
 exec chroot "${chroot_root}" /lib64/ld-linux-x86-64.so.2 \\
-  --library-path /usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu \\
+  --library-path /usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib:/lib \\
   "${relpath}" "\$@"
 EOF
   chmod 755 "${perf_wrapper}"
