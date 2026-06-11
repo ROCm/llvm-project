@@ -28,6 +28,7 @@
 #endif
 
 HOTSWAP_PATCH(InPlace)
+HOTSWAP_PATCH(Scratch)
 HOTSWAP_PATCH(Trampoline)
 HOTSWAP_PATCH(Vop3px2Src2)
 HOTSWAP_PATCH(WmmaHazard)

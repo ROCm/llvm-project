@@ -212,6 +212,11 @@ public:
   std::optional<uint32_t>
   getKernelStaticLdsSize(llvm::StringRef KernelName) const;
 
+  /// Read the SGPR count from the kernel descriptor for \p KernelName.
+  /// Returns std::nullopt if the descriptor is not found.
+  std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName,
+                                             unsigned SgprGranuleSize) const;
+
   /// Update the RSRC1 VGPR/SGPR granule counts in the kernel descriptor for
   /// \p KernelName by adding \p ExtraVgprs / \p ExtraSgprs, using
   /// \p VgprGranuleSize / \p SgprGranuleSize so the call is ISA-agnostic.
@@ -277,6 +282,7 @@ struct RewriteConfig {
   std::string TargetIsa;
   std::string TargetCpu;
   unsigned MaxVgprs = 0;
+  unsigned MaxSgprs = 0;
   unsigned VgprGranuleSize = 0;
   unsigned SgprGranuleSize = 0;
 };
@@ -455,14 +461,14 @@ struct LivenessInfo {
 /// the kernel descriptor's reported VGPR count. Constructed per patch site
 /// with the live-set at that site and the kernel's current / maximum VGPR
 /// counts.
-struct ScratchAllocator {
+struct VgprAllocator {
   llvm::BitVector LiveAtPoint;
   unsigned KdAllocatedVgprs = 0;
   unsigned NextAboveKd = 0;
   unsigned MaxVgprs = 0;
   unsigned ExtraAllocated = 0;
 
-  ScratchAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
+  VgprAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
       : LiveAtPoint(Live), KdAllocatedVgprs(KdVgprs), NextAboveKd(KdVgprs),
         MaxVgprs(Max) {}
 
@@ -487,6 +493,29 @@ struct ScratchAllocator {
   unsigned extraVgprsNeeded() const { return ExtraAllocated; }
 };
 
+/// Allocates scratch SGPRs for a patch point. Unlike VGPRs (which have full
+/// dataflow liveness), SGPRs have no liveness analysis — we always allocate
+/// above the kernel descriptor's reported SGPR count. This is conservative
+/// but safe: no SGPR currently in use by the kernel can be clobbered.
+struct SgprAllocator {
+  unsigned KdAllocatedSgprs = 0;
+  unsigned NextAboveKd = 0;
+  unsigned MaxSgprs = 0;
+
+  SgprAllocator(unsigned KdSgprs, unsigned Max)
+      : KdAllocatedSgprs(KdSgprs), NextAboveKd(KdSgprs), MaxSgprs(Max) {}
+
+  /// Allocate one SGPR above the kernel's current count. Returns
+  /// std::nullopt if no headroom remains below MaxSgprs.
+  std::optional<unsigned> alloc() {
+    if (NextAboveKd >= MaxSgprs)
+      return std::nullopt;
+    return NextAboveKd++;
+  }
+
+  unsigned extraSgprsNeeded() const { return NextAboveKd - KdAllocatedSgprs; }
+};
+
 /// Bookkeeping for a single patch site's scratch allocation. \c Offset is
 /// the .text byte offset of the patch; \c ScratchRegs is the bitvector of
 /// VGPRs the patch claimed at that site. Consumed by the post-patch
@@ -504,6 +533,7 @@ struct ScratchPatchInfo {
 /// amd_comgr_hotswap_result_t once that result struct is wired up.
 struct KernelPatchStats {
   unsigned ExtraVgprs = 0;
+  unsigned ExtraSgprs = 0;
   unsigned ScratchReused = 0;
   unsigned ScratchAboveKd = 0;
 };

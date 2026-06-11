@@ -45,10 +45,12 @@ namespace hotswap {
 // target-specific opcode bits should land here.
 
 static constexpr unsigned Gfx1250MaxVgprs = 256;
-// GFX12 wave32 VGPR granularity; SGPR granularity is a fixed 16 across all
-// AMDGPU generations Comgr's hotswap currently supports.
+// GFX12 wave32: 106 user-addressable SGPRs (s0–s105); s106–s107 are VCC.
+static constexpr unsigned Gfx1250MaxSgprs = 106;
+// GFX12 wave32 VGPR granularity is 8. SGPR encoding granularity is 8 across
+// all AMDGPU generations (getSGPREncodingGranule in AMDGPUBaseInfo.cpp).
 static constexpr unsigned Gfx1250VgprGranuleSize = 8;
-static constexpr unsigned Gfx1250SgprGranuleSize = 16;
+static constexpr unsigned Gfx1250SgprGranuleSize = 8;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
 /// fills in the identity source / target ISA (both gfx1250) and the
@@ -65,6 +67,7 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.TargetIsa = "amdgcn-amd-amdhsa--gfx1250";
   Config.TargetCpu = "gfx1250";
   Config.MaxVgprs = Gfx1250MaxVgprs;
+  Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
   Config.SgprGranuleSize = Gfx1250SgprGranuleSize;
   return Config;
@@ -134,7 +137,7 @@ HotswapPatchVTable &getHotswapPatchVTable() {
 
 // -- Weak-symbol liveness stubs -----------------------------------------------
 //
-// Conservative defaults: all VGPRs reported live. ScratchAllocator will
+// Conservative defaults: all VGPRs reported live. VgprAllocator will
 // allocate above KD count (correct but suboptimal until the real liveness
 // layer lands).
 
@@ -404,8 +407,8 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       continue;
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
-    if (Stats.ExtraVgprs > 0)
-      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs, 0,
+    if (Stats.ExtraVgprs > 0 || Stats.ExtraSgprs > 0)
+      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs, Stats.ExtraSgprs,
                                  Config.VgprGranuleSize,
                                  Config.SgprGranuleSize);
     std::optional<unsigned> VgprsAfter =
