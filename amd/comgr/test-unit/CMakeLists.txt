@@ -58,6 +58,29 @@ function(comgr_configure_test_target target)
   endif()
 endfunction()
 
+# Apply LLVM header paths to the hotswap unit-test binaries.
+#
+# Some superproject / wrapper flows finish assigning LLVM_INCLUDE_DIRS only
+# after this directory's CMakeLists.txt is parsed (or print it from a
+# different phase than the expansion of ${LLVM_INCLUDE_DIRS} in
+# target_include_directories). That yields builds where compile lines miss
+# -I.../llvm/include and fail on llvm/ADT/StringRef.h.
+#
+# CMake 3.19+: defer to the end of processing amd/comgr/CMakeLists.txt so
+# LLVM_INCLUDE_DIRS is read when the deferred call runs, not when this file
+# is first parsed.
+function(_comgr_test_unit_apply_llvm_include_dirs)
+  if(NOT LLVM_INCLUDE_DIRS)
+    message(FATAL_ERROR
+      "Comgr test-unit: LLVM_INCLUDE_DIRS is empty when applying include "
+      "directories to Hotswap* tests. Fix the parent amd/comgr/CMakeLists.txt "
+      "so find_package(LLVM ...) (or equivalent) runs before add_subdirectory"
+      "(test-unit), or ensure the LLVM package exports LLVM_INCLUDE_DIRS.")
+  endif()
+  target_include_directories(HotswapElfTests PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_include_directories(HotswapMCTests PRIVATE ${LLVM_INCLUDE_DIRS})
+endfunction()
+
 # -- HotswapElfTests ----------------------------------------------------------
 #
 # Lightweight tests for the ELF layer in comgr-hotswap-elf.cpp. Needs only
@@ -80,7 +103,6 @@ target_link_libraries(HotswapElfTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapElfTests PRIVATE
-  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
@@ -121,12 +143,24 @@ target_link_libraries(HotswapMCTests PRIVATE
   ${LLVM_PTHREAD_LIB})
 
 target_include_directories(HotswapMCTests PRIVATE
-  ${LLVM_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
   ${COMGR_GTEST_INCLUDE_DIRS}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 
 comgr_configure_test_target(HotswapMCTests)
+
+# LLVM includes: deferred when possible (see _comgr_test_unit_apply_llvm_include_dirs).
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+  cmake_language(DEFER DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    CALL _comgr_test_unit_apply_llvm_include_dirs)
+else()
+  if(NOT LLVM_INCLUDE_DIRS)
+    message(FATAL_ERROR
+      "Comgr test-unit requires LLVM_INCLUDE_DIRS (CMake >= 3.19 supports "
+      "deferring this; upgrade CMake or fix parent configure order).")
+  endif()
+  _comgr_test_unit_apply_llvm_include_dirs()
+endif()
 
 # Register both test binaries with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
@@ -134,3 +168,4 @@ add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapMCTests>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests)
 add_dependencies(check-comgr test-unit)
+
