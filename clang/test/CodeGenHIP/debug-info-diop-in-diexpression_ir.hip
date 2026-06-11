@@ -90,11 +90,11 @@ struct pair { int first, second; };
 // DIEXPRESSION-IR-LABEL: @_Z5func14pair(
 // DIEXPRESSION-IR-NEXT:  entry:
 // DIEXPRESSION-IR-NEXT:    [[P:%.*]] = alloca [[STRUCT_PAIR:%.*]], align 4, addrspace(5)
-// DIEXPRESSION-IR-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr addrspace(5) [[P]], i32 0, i32 0
-// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE0:%.*]], ptr addrspace(5) [[TMP0]], align 4
-// DIEXPRESSION-IR-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr addrspace(5) [[P]], i32 0, i32 1
-// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE1:%.*]], ptr addrspace(5) [[TMP1]], align 4
-// DIEXPRESSION-IR-NEXT:    [[P_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
+// DIEXPRESSION-IR-NEXT:    [[P1:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
+// DIEXPRESSION-IR-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr [[P1]], i32 0, i32 0
+// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE0:%.*]], ptr [[TMP0]], align 4
+// DIEXPRESSION-IR-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr [[P1]], i32 0, i32 1
+// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE1:%.*]], ptr [[TMP1]], align 4
 // DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[P]], [[META66:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_PAIR]])), [[META67:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    ret void, !dbg [[DBG68:![0-9]+]]
 //
