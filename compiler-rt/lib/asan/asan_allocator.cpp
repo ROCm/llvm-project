@@ -1714,7 +1714,8 @@ hsa_status_t asan_hsa_init() {
     // amdgpu_event_registered on every refcount bump and re-registering).
     if (__sanitizer::AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown())
       __sanitizer::AmdgpuMemFuncs::ClearAmdgpuRuntimeShutdownState();
-    __sanitizer::AmdgpuMemFuncs::RegisterSystemEventHandlers();
+    if (__sanitizer::AmdgpuMemFuncs::Init())
+      __sanitizer::AmdgpuMemFuncs::RegisterSystemEventHandlers();
   }
   return status;
 }
