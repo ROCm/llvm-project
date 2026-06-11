@@ -1,0 +1,141 @@
+name: LLVM submodule & PR-parameter setup
+description: >
+  On pull_request updates amd-llvm submodule pointer to PR head.
+  On workflow_dispatch downloads PR params artifact, sources env, merges upstream PRs, updates submodule pointers.
+
+inputs:
+  params_artifact_name:
+    description: Artifact name for multiple-pr-build-params
+    required: false
+    default: multiple-pr-build-params
+	
+runs:
+  using: composite
+  steps:
+    - name: Update Submodule Pointer to the PR
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$PWD"
+		#Fetch the latest commit SHA from the PR branch
+        PR_SHA=${{ github.event.pull_request.head.sha }}
+        # Update the submodule pointer using cacheinfo
+        git update-index --cacheinfo 160000,$PR_SHA,compiler/amd-llvm
+        git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+        git commit -m "Update submodule reference for compiler/amd-llvm"
+        git submodule update --init --recursive compiler/amd-llvm
+        # Verify the pointer update
+        git submodule status
+        git submodule
+
+    - name: Download LLVM, SPIRV and HIPIFY PR's stored in file
+      if: github.event_name == 'workflow_dispatch'
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.params_artifact_name }}
+        path: .
+
+    - name: Check for parameterised PR trigger
+      id: check_parameterised_trigger
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        ENV_FILE="./${{ github.run_id }}_PR_params.env"
+        if [ -f "$ENV_FILE" ]; then
+          echo "parameterised_trigger=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "parameterised_trigger=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Source the multiple PR's of params
+      if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
+      run: |
+        set -a
+        source "./${{ github.run_id }}_PR_params.env"
+        set +a
+        echo "LLVM_PR_URL=$LLVM_PR_URL" >> "$GITHUB_ENV"
+        echo "LLVM_ROCm_PR_URL=$LLVM_ROCm_PR_URL" >> "$GITHUB_ENV"
+        echo "SPIRV_PR_URL=$SPIRV_PR_URL" >> "$GITHUB_ENV"
+        echo "HIPIFY_PR_URL=$HIPIFY_PR_URL" >> "$GITHUB_ENV"
+
+    - name: Update submodule pointers from provided parameter PR values
+      if: github.event_name == 'workflow_dispatch' && steps.check_parameterised_trigger.outputs.parameterised_trigger == 'true'
+      run: |
+        git config --global --add safe.directory "$PWD"
+		git config --global user.email "z1-cciauto@amd.com"
+        git config --global user.name "Z1 cciauto"
+
+        trim_sha() {
+          printf '%s' "$1" | tr -d '[:space:]'
+        }
+
+        get_pr_sha() {
+          local pr_url="$1"
+          local base_repo_url pr_num sha
+          base_repo_url="$(echo "$pr_url" | sed 's|/pull/.*||')"
+          pr_num="$(echo "$pr_url" | sed 's|.*/pull/||')"
+          sha="$(git ls-remote "${base_repo_url}.git" "refs/pull/${pr_num}/head" | awk '{print $1}')"
+          trim_sha "$sha"
+        }
+
+        merge_upstream_prs() {
+           local pr_urls="$1"
+           local url repo num ref
+           git submodule update --init --jobs 1 compiler/amd-llvm
+           IFS=',' read -ra PR_URLS <<< "$pr_urls"
+           for url in "${PR_URLS[@]}"; do
+             url="$(echo "$url" | xargs)"
+             [[ -z "$url" ]] && continue
+             repo="$(echo "$url" | sed 's|/pull/.*||')"
+             num="$(echo "$url" | sed 's|.*/pull/||')"
+             ref="upstream-pr-${num}"
+             echo "Merging upstream PR #${num} from ${url} into ROCm/llvm-project" >&2
+             git -C compiler/amd-llvm fetch "${repo}.git" "refs/pull/${num}/head:${ref}"
+             git -C compiler/amd-llvm merge --no-edit -q "$ref" || {
+               echo "::error::Failed to merge upstream PR #${num}. Rebase onto ROCm/llvm-project amd-staging first." >&2
+               exit 1
+             }
+           done
+           MERGED_LLVM_SHA="$(trim_sha "$(git -C compiler/amd-llvm rev-parse HEAD)")"
+        }
+
+        LLVM_SHA=""
+
+        if [[ -n "${LLVM_ROCm_PR_URL:-}" ]]; then
+          LLVM_SHA="$(get_pr_sha "$LLVM_ROCm_PR_URL")"
+          echo "ROCm LLVM head SHA: $LLVM_SHA"
+        elif [[ -n "${LLVM_PR_URL:-}" ]]; then
+          merge_upstream_prs "$LLVM_PR_URL"
+          LLVM_SHA="$MERGED_LLVM_SHA"
+          echo "Final upstream LLVM SHA: $LLVM_SHA" >&2
+        fi
+
+        if [[ -n "$LLVM_SHA" ]]; then
+		  git update-index --cacheinfo 160000,"$LLVM_SHA","compiler/amd-llvm"
+        fi
+
+        if [[ -n "${SPIRV_PR_URL:-}" ]]; then
+          SPIRV_SHA="$(get_pr_sha "$SPIRV_PR_URL")"
+          echo "SPIRV head SHA: $SPIRV_SHA"
+		  git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+        else
+		  SPIRV_SHA="$(git ls-remote https://github.com/ROCm/SPIRV-LLVM-Translator.git refs/heads/amd-staging | awk '{print $1}')"
+          echo "SPIRV PR NOT Passed, defaulting to the amd-staging tip : $SPIRV_SHA"
+		  git update-index --cacheinfo 160000,"$SPIRV_SHA","compiler/spirv-llvm-translator"
+        fi
+
+        if [[ -n "${HIPIFY_PR_URL:-}" ]]; then
+          HIPIFY_SHA="$(get_pr_sha "$HIPIFY_PR_URL")"
+          echo "HIPIFY head SHA: $HIPIFY_SHA"
+		  git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+        else
+		  HIPIFY_SHA="$(git ls-remote https://github.com/ROCm/HIPIFY.git refs/heads/amd-staging | awk '{print $1}')"
+          echo "HIPIFY PR NOT Passed, defaulting to the amd-staging tip : $HIPIFY_SHA"
+          git update-index --cacheinfo 160000,"$HIPIFY_SHA","compiler/hipify"
+        fi
+
+        git commit -m "Update submodule references from PR URLs"
+		git submodule update --init --recursive compiler/amd-llvm
+        git submodule status
+        git submodule

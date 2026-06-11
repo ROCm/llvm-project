@@ -29,6 +29,12 @@ on:
         description: 'Release type: "" for CI, or "dev", "nightly", "prerelease".'
         type: string
         default: ""
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
   workflow_call:
     inputs:
       artifact_run_id:
@@ -46,6 +52,12 @@ on:
       release_type:
         type: string
         default: ""
+      repository:
+        description: "Repository to checkout. Defaults to github.repository."
+        type: string
+      ref:
+        description: "Branch, tag, or SHA to checkout. Defaults to the triggering ref."
+        type: string
 
 permissions:
   contents: read
