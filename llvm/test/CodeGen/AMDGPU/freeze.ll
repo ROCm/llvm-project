@@ -5,9 +5,9 @@
 ; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx700 < %s | FileCheck -check-prefixes=GFX7,GFX7-SDAG  %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -new-reg-bank-select -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx700 < %s | FileCheck -check-prefixes=GFX7,GFX7-GISEL %s
 
-; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx803 < %s | FileCheck -check-prefixes=GFX8,GFX8-SDAG  %s
+; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx803 < %s | FileCheck -check-prefixes=GFX8,GFX8-SDAG,GFX8-GFX803-SDAG  %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -new-reg-bank-select -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx803 < %s | FileCheck -check-prefixes=GFX8,GFX8-GISEL %s
-; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX9,GFX8-SDAG  %s
+; RUN: llc -global-isel=0 -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX9,GFX8-SDAG,GFX8-GFX900-SDAG  %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel=1 -new-reg-bank-select -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 < %s | FileCheck -check-prefixes=GFX9,GFX9-GISEL %s
 
 
