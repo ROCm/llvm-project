@@ -1,0 +1,36 @@
+# REQUIRES: asserts
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx908 -run-pass=postmisched -verify-misched -debug-only=machine-scheduler -o /dev/null %s 2>&1 | FileCheck --check-prefix=DEBUG %s
+
+# DEBUG: Preserving postRA schedule order in preserve_memory_bound:
+# DEBUG-NOT: Preserving postRA schedule order in dont_preserve_not_memory_bound:
+
+---
+name: preserve_memory_bound
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  memoryBound: true
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $agpr0_agpr1_agpr2_agpr3, $agpr4_agpr5_agpr6_agpr7
+
+    $vgpr4_vgpr5_vgpr6_vgpr7 = DS_READ_B128_gfx9 $vgpr0, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    $agpr0_agpr1_agpr2_agpr3 = V_MFMA_F32_4X4X1F32_e64 killed $vgpr4, killed $vgpr5, killed $agpr0_agpr1_agpr2_agpr3, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr8_vgpr9_vgpr10_vgpr11 = DS_READ_B128_gfx9 $vgpr1, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    $agpr4_agpr5_agpr6_agpr7 = V_MFMA_F32_4X4X1F32_e64 killed $vgpr8, killed $vgpr9, killed $agpr4_agpr5_agpr6_agpr7, 0, 0, 0, implicit $mode, implicit $exec
+...
+---
+name: dont_preserve_not_memory_bound
+tracksRegLiveness: true
+machineFunctionInfo:
+  isEntryFunction: true
+  memoryBound: false
+body: |
+  bb.0:
+    liveins: $vgpr0, $vgpr1, $agpr0_agpr1_agpr2_agpr3, $agpr4_agpr5_agpr6_agpr7
+
+    $vgpr4_vgpr5_vgpr6_vgpr7 = DS_READ_B128_gfx9 $vgpr0, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    $agpr0_agpr1_agpr2_agpr3 = V_MFMA_F32_4X4X1F32_e64 killed $vgpr4, killed $vgpr5, killed $agpr0_agpr1_agpr2_agpr3, 0, 0, 0, implicit $mode, implicit $exec
+    $vgpr8_vgpr9_vgpr10_vgpr11 = DS_READ_B128_gfx9 $vgpr1, 0, 0, implicit $exec :: (load (s128), addrspace 3)
+    $agpr4_agpr5_agpr6_agpr7 = V_MFMA_F32_4X4X1F32_e64 killed $vgpr8, killed $vgpr9, killed $agpr4_agpr5_agpr6_agpr7, 0, 0, 0, implicit $mode, implicit $exec
+...

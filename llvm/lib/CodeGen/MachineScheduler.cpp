@@ -1957,6 +1957,41 @@ void ScheduleDAGMILive::scheduleMI(SUnit *SU, bool IsTopNode) {
 }
 
 //===----------------------------------------------------------------------===//
+// PostRASchedOrderMutation - Preserve target-selected postRA order.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class PostRASchedOrderMutation : public ScheduleDAGMutation {
+public:
+  void apply(ScheduleDAGInstrs *DAG) override {
+    const TargetSubtargetInfo &ST = DAG->MF.getSubtarget();
+    SUnit *PrevSU = nullptr;
+
+    for (SUnit &SU : DAG->SUnits) {
+      if (!ST.shouldPreservePostRASchedOrder(SU))
+        continue;
+
+      if (PrevSU) {
+        if (DAG->addEdge(&SU, SDep(PrevSU, SDep::Artificial)))
+          LLVM_DEBUG(dbgs() << "Preserving postRA schedule order in "
+                            << DAG->MF.getName() << ": SU(" << PrevSU->NodeNum
+                            << ") -> SU(" << SU.NodeNum << ")\n");
+      }
+
+      PrevSU = &SU;
+    }
+  }
+};
+
+} // end anonymous namespace
+
+std::unique_ptr<ScheduleDAGMutation>
+llvm::createPostRASchedOrderDAGMutation() {
+  return std::make_unique<PostRASchedOrderMutation>();
+}
+
+//===----------------------------------------------------------------------===//
 // BaseMemOpClusterMutation - DAG post-processing to cluster loads or stores.
 //===----------------------------------------------------------------------===//
 
