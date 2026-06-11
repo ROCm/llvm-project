@@ -1580,7 +1580,7 @@ void SIRegisterInfo::buildSpillLoadStore(
     unsigned LoadStoreOp, int Index, Register ValueReg, bool IsKill,
     MCRegister ScratchOffsetReg, int64_t InstOffset, MachineMemOperand *MMO,
     RegScavenger *RS, LiveRegUnits *LiveUnits, bool NeedsCFI) const {
-  assert((!RS || !LiveUnits) && "Only RS or LiveRegs can be set but not both");
+  assert((!RS || !LiveUnits) && "Only RS or LiveUnits can be set but not both");
 
   MachineFunction *MF = MBB.getParent();
   const SIInstrInfo *TII = ST.getInstrInfo();
@@ -2487,7 +2487,7 @@ bool SIRegisterInfo::eliminateSGPRToVGPRSpillFrameIndex(
   case AMDGPU::SI_SPILL_S64_CFI_SAVE:
   case AMDGPU::SI_SPILL_S32_CFI_SAVE:
     NeedsCFI = true;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   case AMDGPU::SI_SPILL_S1024_SAVE:
   case AMDGPU::SI_SPILL_S512_SAVE:
   case AMDGPU::SI_SPILL_S384_SAVE:
@@ -2561,7 +2561,7 @@ bool SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
   case AMDGPU::SI_SPILL_S64_CFI_SAVE:
   case AMDGPU::SI_SPILL_S32_CFI_SAVE: {
     NeedsCFI = true;
-    LLVM_FALLTHROUGH;
+    [[fallthrough]];
   }
     case AMDGPU::SI_SPILL_S1024_SAVE:
     case AMDGPU::SI_SPILL_S512_SAVE:

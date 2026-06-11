@@ -470,7 +470,7 @@ define void @callee_func_sgpr_spill_no_calls(i32 %in) #0 {
 
 ; Has no spilled CSR VGPRs used for SGPR spilling, so no need to
 ; enable all lanes and restore.
-define void @spill_only_csr_sgpr() {
+define void @spill_only_csr_sgpr() #0 {
 ; GCN-LABEL: spill_only_csr_sgpr:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)

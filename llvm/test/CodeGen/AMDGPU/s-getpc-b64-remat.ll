@@ -3,7 +3,7 @@
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -stress-regalloc=2 < %s | FileCheck %s -check-prefix=GFX11
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -stress-regalloc=2 < %s | FileCheck %s -check-prefix=GFX12
 
-define void @test_remat_s_getpc_b64() {
+define void @test_remat_s_getpc_b64() #0 {
 ; GFX9-LABEL: test_remat_s_getpc_b64:
 ; GFX9:       ; %bb.0: ; %entry
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -96,3 +96,5 @@ entry:
 }
 
 declare i64 @llvm.amdgcn.s.getpc()
+
+attributes #0 = { nounwind }

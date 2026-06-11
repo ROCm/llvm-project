@@ -41,11 +41,11 @@ define i32 @callee_returns_arg0(
     i32 inreg %a16, i32 inreg %a17, i32 inreg %a18, i32 inreg %a19,
     i32 inreg %a20, i32 inreg %a21, i32 inreg %a22, i32 inreg %a23,
     i32 inreg %a24, i32 inreg %a25, i32 inreg %a26, i32 inreg %a27,
-    i32 inreg %a28, i32 inreg %a29, i32 inreg %a30, i32 inreg %a31) {
+    i32 inreg %a28, i32 inreg %a29, i32 inreg %a30, i32 inreg %a31) #0 {
   ret i32 %a0
 }
 
-define i32 @caller_passes_42() {
+define i32 @caller_passes_42() #0 {
 ; CHECK-LABEL: caller_passes_42:
 ; CHECK:       ; %bb.0:
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -232,3 +232,5 @@ define i32 @caller_passes_42() {
     i32 inreg 28, i32 inreg 29, i32 inreg 30, i32 inreg 31)
   ret i32 %r
 }
+
+attributes #0 = { nounwind }

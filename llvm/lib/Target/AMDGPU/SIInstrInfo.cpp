@@ -1649,11 +1649,14 @@ static unsigned getVGPRSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
 static unsigned getAVSpillSaveOpcode(unsigned Size, bool NeedsCFI) {
   switch (Size) {
   case 4:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV32_CFI_SAVE : AMDGPU::SI_SPILL_AV32_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV32_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV32_SAVE;
   case 8:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV64_CFI_SAVE : AMDGPU::SI_SPILL_AV64_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV64_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV64_SAVE;
   case 12:
-    return NeedsCFI ? AMDGPU::SI_SPILL_AV96_CFI_SAVE : AMDGPU::SI_SPILL_AV96_SAVE;
+    return NeedsCFI ? AMDGPU::SI_SPILL_AV96_CFI_SAVE
+                    : AMDGPU::SI_SPILL_AV96_SAVE;
   case 16:
     return NeedsCFI ? AMDGPU::SI_SPILL_AV128_CFI_SAVE
                     : AMDGPU::SI_SPILL_AV128_SAVE;
@@ -1777,18 +1780,17 @@ void SIInstrInfo::storeRegToStackSlot(
     MachineBasicBlock &MBB, MachineBasicBlock::iterator MI, Register SrcReg,
     bool isKill, int FrameIndex, const TargetRegisterClass *RC, Register VReg,
     MachineInstr::MIFlag Flags) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, VReg,
-                         Flags, false);
+  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, VReg, Flags,
+                          false);
 }
 
 void SIInstrInfo::storeRegToStackSlotCFI(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MI,
                                          Register SrcReg, bool isKill,
                                          int FrameIndex,
-                                         const TargetRegisterClass *RC,
-                                         const TargetRegisterInfo *TRI) const {
-  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC,
-                          Register(), MachineInstr::NoFlags, true);
+                                         const TargetRegisterClass *RC) const {
+  storeRegToStackSlotImpl(MBB, MI, SrcReg, isKill, FrameIndex, RC, Register(),
+                          MachineInstr::NoFlags, true);
 }
 
 static unsigned getSGPRSpillRestoreOpcode(unsigned Size) {
