@@ -7,8 +7,6 @@
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1100 -mattr=-real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX11-PACKED,GFX11-PACKED-FAKE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-SDAG,GFX12-PACKED-SDAG-TRUE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-SDAG,GFX12-PACKED-SDAG-FAKE16 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-SDAG,GFX12-PACKED-SDAG-TRUE16 %s
-; RUN: llc -amdgpu-late-wave-transform=1 -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-SDAG,GFX12-PACKED-SDAG-FAKE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=+real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-GISEL,GFX12-PACKED-GISEL-TRUE16 %s
 ; RUN: llc -amdgpu-late-wave-transform=0 -global-isel -new-reg-bank-select -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1200 -mattr=-real-true16 -amdgpu-enable-vopd=0 < %s | FileCheck -check-prefixes=GFX12-PACKED,GFX12-PACKED-GISEL,GFX12-PACKED-GISEL-FAKE16 %s
 
