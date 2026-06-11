@@ -103,7 +103,7 @@ jobs:
     env:
       BASE_REF: '0efc7532e43c16b532fdd2887e00aec8eb69e10f'
     outputs:
-      enable_build_jobs: 'true'
+      enable_build_jobs: true
       # Temporary fix on gfx94x due to non availability of MI325 machines
       linux_build_config: >-
         {
