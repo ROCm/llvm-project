@@ -111,8 +111,7 @@ jobs:
             {"amdgpu_family": "gfx94X-dcgpu", "amdgpu_targets": "gfx942", "test-runs-on": "linux-gfx942-1gpu-core42-ossci-rocm", "sanity_check_only_for_family": false},
             {"amdgpu_family": "gfx110X-all", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true,
 "bypass_tests_for_releases": true},
-            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypa
-ss_tests_for_releases": true}
+            {"amdgpu_family": "gfx90a", "amdgpu_targets": "", "test-runs-on": "", "sanity_check_only_for_family": true, "bypass_tests_for_releases": true}
           ],
           "dist_amdgpu_families": "gfx94X-dcgpu;gfx110X-all;gfx90a",
           "artifact_group": "multi-arch-release",
