@@ -227,18 +227,18 @@ jobs:
            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
            ${{ inputs.build_variant_cmake_preset && format('--preset={0}', inputs.build_variant_cmake_preset) }} \
-           ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \ 
+           ${{ inputs.external_repo_config != '' && format('-DTHEROCK_{0}_SOURCE_DIR={1}', fromJSON(inputs.external_repo_config).source_package, fromJSON(inputs.external_repo_config).checkout_path) || '' }} \
            ${{ steps.stage_config.outputs.cmake_args }} \
            ${{ env.extra_cmake_options }}
 
-     - name: Configure All Projects
-       if: ${{ github.event_name != 'pull_request' && inputs.release_type == 'nightly' }}
-       env:
-         cmake_preset: ${{ inputs.build_variant_cmake_preset }}
-         amdgpu_families: ${{ inputs.amdgpu_families }}
-         package_version: ${{ inputs.package_version }}
-         extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON"
-           BUILD_DIR: build
+      - name: Configure All Projects
+        if: ${{ github.event_name != 'pull_request' && inputs.release_type == 'nightly' }}
+        env:
+          cmake_preset: ${{ inputs.build_variant_cmake_preset }}
+          amdgpu_families: ${{ inputs.amdgpu_families }}
+          package_version: ${{ inputs.package_version }}
+          extra_cmake_options: "${{ inputs.extra_cmake_options }} -DTHEROCK_BUILD_LLVM_TESTS=ON -DTHEROCK_BUILD_COMGR_TESTS=ON -DTHEROCK_BUILD_TESTING=ON"
+          BUILD_DIR: build
         run: |
          cmake -B "${BUILD_DIR}" -S . -GNinja \
            -DTHEROCK_PACKAGE_VERSION=${{ inputs.rocm_package_version }} \
@@ -251,47 +251,42 @@ jobs:
 
       - name: Build stage
         run: |
-          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
-
-      - name: Build stage
-        run: |
-          python build_tools/memory_monitor.py --phase Build -- \
-            cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
+         cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
       - name: LLVM Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
+         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
 
       - name: Clang Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
+         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
 
       - name: Flang Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-flang
+         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-flang
 
       - name: MLIR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-mlir
+         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-mlir
 
       - name: LLD Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
         run: |
-          ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
+         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
       - name: COMGR Lit Tests
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
-         run: |
-          "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit \
-            "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
+        run: |
+         "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit \
+           "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
 
       - name: COMGR CTest
         if: ${{ inputs.stage_name == 'compiler-runtime' }}
-         run: |
-          ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
+        run: |
+         ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
 
       - name: Run build tests
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}
@@ -299,19 +294,19 @@ jobs:
         env:
           TEATIME_FORCE_INTERACTIVE: 1
         run: |
-          cmake --build "${BUILD_DIR}" --target therock-build-tests -- -k 0
+         cmake --build "${BUILD_DIR}" --target therock-build-tests -- -k 0
 
       - name: Report
         if: ${{ !cancelled() }}
         run: |
-          echo "CCache Stats:"
-          ccache -s -v
-          echo "Artifacts:"
-          ls -lh "${BUILD_DIR}"/artifacts/*.tar.xz 2>/dev/null || echo "No artifacts found"
+         echo "CCache Stats:"
+         ccache -s -v
+         echo "Artifacts:"
+         ls -lh "${BUILD_DIR}"/artifacts/*.tar.xz 2>/dev/null || echo "No artifacts found"
 
       - name: Test Packaging
         run: |
-          ctest --test-dir ${BUILD_DIR} --output-on-failure
+         ctest --test-dir ${BUILD_DIR} --output-on-failure
 
       - name: Configure AWS credentials for artifact uploads
         if: ${{ github.repository == 'ROCm/TheRock' }}
@@ -326,16 +321,16 @@ jobs:
       #     if the workflow failed or was cancelled before the build even started though.
       - name: Push stage artifacts
         run: |
-          python build_tools/artifact_manager.py push \
-            --run-id ${{ github.run_id }} \
-            --stage="${STAGE_NAME}" \
-            --build-dir="${BUILD_DIR}"
+         python build_tools/artifact_manager.py push \
+           --run-id ${{ github.run_id }} \
+           --stage="${STAGE_NAME}" \
+           --build-dir="${BUILD_DIR}"
 
       - name: Upload stage logs
         if: ${{ always() }}
         run: |
-          python build_tools/github_actions/post_stage_upload.py \
-            --run-id=${{ github.run_id }} \
-            --stage="${STAGE_NAME}" \
-            --build-dir="${BUILD_DIR}" \
-            --amdgpu-family="${AMDGPU_FAMILIES}"
+         python build_tools/github_actions/post_stage_upload.py \
+           --run-id=${{ github.run_id }} \
+           --stage="${STAGE_NAME}" \
+           --build-dir="${BUILD_DIR}" \
+           --amdgpu-family="${AMDGPU_FAMILIES}"

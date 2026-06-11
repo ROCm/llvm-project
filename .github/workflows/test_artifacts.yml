@@ -142,13 +142,13 @@ jobs:
           RUN_FUNCTIONAL_TESTS: ${{ inputs.run_functional_tests }}
           RUN_EXTENDED_TESTS: ${{ inputs.run_extended_tests }}
           WINDOWS_HIP_ROCR_TESTS: ${{ inputs.windows_hip_rocr_tests }}
-          run: |
-            if [[ "${TEST_TYPE:-}" == "quick" ]]; then
-                 PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
-                 export PROJECTS_TO_TEST
-                 echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
-            fi
-            python ./build_tools/github_actions/fetch_test_configurations.py
+        run: |
+          if [[ "${TEST_TYPE:-}" == "quick" ]]; then
+               PROJECTS_TO_TEST='rocroller,hipblas,hipblaslt,hipsolver,rocsolver,rocprim,hipcub,hipsparse,rocsparse,rocrand,hiprand,rocfft,hipfft,rocwmma'
+               export PROJECTS_TO_TEST
+               echo "PROJECTS_TO_TEST=$PROJECTS_TO_TEST" >> "$GITHUB_ENV"
+          fi
+          python ./build_tools/github_actions/fetch_test_configurations.py
 
   test_sanity_check:
     name: 'Test Sanity Check'
