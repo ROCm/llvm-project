@@ -106,8 +106,8 @@ jobs:
           ref: ${{ fromJSON(inputs.external_repo_config).ref }}
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
-      - name: Submodule PR update (composite)  
-        uses: ${{ github.repository }}/.github/actions/submodule-pr-update@${{ github.sha }}
+      - name: Submodule PR update (composite)
+        uses: ROCm/llvm-project/.github/actions/submodule-pr-update@amd/dev/kirthana14m/rockci-convergence-abstract
 
       - name: Install python deps
         run: pip install -r requirements.txt
