@@ -783,17 +783,25 @@ const Value *Value::stripAndAccumulateConstantOffsets(
         }
       }
       V = GEP->getPointerOperand();
-    } else if (Operator::getOpcode(V) == Instruction::BitCast ||
-               Operator::getOpcode(V) == Instruction::AddrSpaceCast) {
+    } else if (Operator::getOpcode(V) == Instruction::BitCast) {
+      // Match stripPointerCastsAndOffsets: only look through ptr->ptr (or
+      // ptr-vector) bitcasts. Do not follow bitcast from byte/int/etc. to ptr
+      // (e.g. lossless bN -> ptr reconstitution) — the operand is not a
+      // pointer and pointer offset stripping cannot continue.
+      const Value *Src = cast<Operator>(V)->getOperand(0);
+      if (!Src->getType()->isPtrOrPtrVectorTy())
+        return V;
+      V = Src;
+    } else if (Operator::getOpcode(V) == Instruction::AddrSpaceCast) {
       V = cast<Operator>(V)->getOperand(0);
     } else if (auto *GA = dyn_cast<GlobalAlias>(V)) {
       if (!GA->isInterposable())
         V = GA->getAliasee();
     } else if (const auto *Call = dyn_cast<CallBase>(V)) {
-        if (const Value *RV = Call->getReturnedArgOperand())
-          V = RV;
-        if (AllowInvariantGroup && Call->isLaunderOrStripInvariantGroup())
-          V = Call->getArgOperand(0);
+      if (const Value *RV = Call->getReturnedArgOperand())
+        V = RV;
+      if (AllowInvariantGroup && Call->isLaunderOrStripInvariantGroup())
+        V = Call->getArgOperand(0);
     } else if (auto *Int2Ptr = dyn_cast<Operator>(V)) {
       // Try to accumulate across (inttoptr (add (ptrtoint p), off)).
       if (!AllowNonInbounds || !LookThroughIntToPtr || !Int2Ptr ||
