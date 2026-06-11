@@ -13,6 +13,7 @@
 #include "SIDefines.h" // AMDGPU::Hwreg::Id
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdint>
@@ -418,7 +419,31 @@ HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
                     "immediate at op 0) -- refusing to lower.\n";
           return Hr;
         }
-        ValArg = ConstantInt::get(Ctx.I32Ty, Di.getImm(0));
+        int64_t ImmVal = Di.getImm(0);
+        ValArg = ConstantInt::get(Ctx.I32Ty, ImmVal);
+
+        // On gfx1250 (1024-addressable-VGPRs targets), any
+        // S_SETREG_IMM32_B32 targeting HW_REG_MODE writes the VGPR
+        // most-significant-bit (MSB) selectors from imm32 bits [12:19],
+        // regardless of the field offset/size. LLVM's
+        // AMDGPULowerVGPREncoding pass folds the current MSB state into the
+        // prologue MODE setreg the kernel already emits (e.g. imm 0x1001,
+        // where bit 0 is the named field and the high byte carries the MSB
+        // selectors). We must mirror that here, otherwise later VGPR operand
+        // encodings that depend on a non-zero MSB resolve to the wrong
+        // physical register. On older targets bits [12:19] are ordinary
+        // FP-mode fields and must not be treated as VGPR_MSB.
+        if (Ctx.Isa.Has1024AddressableVGPRs && HwregId == amdgpu::HwregIdMode) {
+          // The MODE byte is (dst, src0, src1, src2); VgprMsBs tracks the
+          // S_SET_VGPR_MSB layout (src0, src1, src2, dst). Right-rotate by
+          // VgprMsbModeToSetregRotate to convert (inverse of the pass's
+          // convertModeToSetregFormat, which rotates left).
+          constexpr unsigned Rot = amdgpu::ModeReg::VgprMsbModeToSetregRotate;
+          uint8_t ModeFmt = static_cast<uint8_t>(
+              (ImmVal >> amdgpu::ModeReg::VgprMsbLowBit) &
+              amdgpu::ModeReg::VgprMsbByteMask);
+          Ctx.VgprMsBs = llvm::rotr<uint8_t>(ModeFmt, Rot);
+        }
       } else {
         // S_SETREG_B32: value is an SGPR at MCInst op 0.  Reading
         // through op.src(0) returns the SSA i32 for that SGPR's
@@ -426,6 +451,24 @@ HandlerResult handleSOPK(RaiseContext &Ctx, const DecodedInst &Di,
         ValArg = Op.src(0);
         if (ValArg->getType() != Ctx.I32Ty)
           ValArg = Ctx.B.CreateBitOrPointerCast(ValArg, Ctx.I32Ty);
+        // On gfx1250, any MODE setreg captures VGPR_MSB from the operand's
+        // bits [12:19] unconditionally. For S_SETREG_B32 the value is a
+        // dynamic SGPR, so we cannot statically update Ctx.VgprMsBs. Refuse
+        // writes whose field overlaps bits [12:19] to prevent silently
+        // decoding subsequent VGPR operands with stale bank-selector state.
+        if (Ctx.Isa.Has1024AddressableVGPRs && HwregId == amdgpu::HwregIdMode) {
+          const amdgpu::SetregField Field = amdgpu::decodeSetregSimm16(Simm16);
+          constexpr unsigned VgprMsbLo = amdgpu::ModeReg::VgprMsbLowBit;
+          constexpr unsigned VgprMsbHi = VgprMsbLo + 8u - 1u;
+          if (Field.Offset <= VgprMsbHi &&
+              Field.Offset + Field.SizeBits - 1u >= VgprMsbLo) {
+            errs() << "transpiler: " << Di.Mnemonic
+                   << " writes MODE with field overlapping VGPR_MSB bits"
+                      " [12:19] -- refusing; cannot statically track"
+                      " SGPR-sourced VGPR_MSB change on gfx1250.\n";
+            return Hr;
+          }
+        }
       }
       Function *SetregFn = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_s_setreg);

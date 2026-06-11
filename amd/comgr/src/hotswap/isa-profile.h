@@ -75,6 +75,11 @@ struct ISAProfile {
   // GFX6-GFX120 field to a 6-bit field. Keep this as an ABI property rather
   // than deriving it from a string at each use site.
   bool HasGfx125UserSgprCountField = false;
+  // True iff the source ISA exposes 1024 addressable VGPRs
+  // (FeatureGFX1250Insts / AMDGPU.td `1024-addressable-vgprs`). On these
+  // targets s_setreg targeting HW_REG_MODE captures VGPR_MSB from the operand
+  // bits [12:19]; on older targets those bits are ordinary FP-mode fields.
+  bool Has1024AddressableVGPRs = false;
   // True iff the target supports the gfx11+ s_sendmsg(MSG_DEALLOC_VGPRS)
   // encoding; gfx942 and earlier reserve ID=3.
   bool SupportsDeallocVgprs = false;
@@ -105,6 +110,8 @@ struct ISAProfile {
         STI.hasFeature(llvm::AMDGPU::FeatureFP8ConversionInsts);
     P.HasPrngInst = STI.hasFeature(llvm::AMDGPU::FeaturePrngInst);
     P.HasGfx125UserSgprCountField = llvm::AMDGPU::isGFX1250Plus(STI);
+    P.Has1024AddressableVGPRs =
+        STI.hasFeature(llvm::AMDGPU::Feature1024AddressableVGPRs);
     P.LdsByteCapacity =
         llvm::AMDGPU::IsaInfo::getAddressableLocalMemorySize(&STI);
     P.SupportsDeallocVgprs = llvm::AMDGPU::isGFX11Plus(STI);

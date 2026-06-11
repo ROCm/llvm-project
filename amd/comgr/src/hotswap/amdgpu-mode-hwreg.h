@@ -38,6 +38,17 @@ struct ModeReg {
   static constexpr unsigned ReplayModeBit = 25;
   static constexpr unsigned ReplayModeFieldSizeBits = 1;
   static constexpr unsigned ReplayModeMultiGroup = 1;
+
+  /// VGPR_MSB (gfx1250+ / 1024-addressable-VGPRs targets only) -- four 2-bit
+  /// high-bit (most-significant-bit) bank selectors for VGPR operands, packed
+  /// as (dst, src0, src1, src2) into a MODE setreg's imm bits [12:19].
+  /// Captured by any MODE setreg on these targets regardless of the field
+  /// selector; on older targets bits [12:19] are ordinary FP-mode fields.
+  /// \ref VgprMsbModeToSetregRotate converts this byte to the S_SET_VGPR_MSB
+  /// layout (src0, src1, src2, dst).
+  static constexpr unsigned VgprMsbLowBit = 12;
+  static constexpr uint8_t VgprMsbByteMask = 0xffu;
+  static constexpr unsigned VgprMsbModeToSetregRotate = 2;
 };
 
 /// Decoded s_setreg / s_getreg field selector from the simm16 immediate.
