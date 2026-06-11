@@ -41,17 +41,6 @@ namespace hotswap {
 
 static std::string vgprName(unsigned N) { return ("v" + Twine(N)).str(); }
 
-static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
-                            uint32_t InstSize, ArrayRef<uint8_t> Replacement) {
-  Trampoline T;
-  T.OriginalOffset = InstOffset;
-  T.OriginalSize = InstSize;
-  T.Bytes.insert(T.Bytes.end(), Replacement.begin(), Replacement.end());
-  T.Bytes.insert(T.Bytes.end(), MinInstSize, uint8_t{0});
-  Ctx.OutTrampolines.emplace_back(std::move(T));
-  return true;
-}
-
 // ---------------------------------------------------------------------------
 // VOP3PX3 encoding field accessors
 // ---------------------------------------------------------------------------
@@ -65,6 +54,9 @@ static bool queueTrampoline(PatchContext &Ctx, uint64_t InstOffset,
 // Field positions within the LD_SCALE uop (first 8 bytes):
 //   SCALE_SRC0: bits [40:32] = byte[4] bits [7:0] + byte[5] bit[0]
 //   SCALE_SRC1: bits [49:41] = byte[5] bits [7:1] + byte[6] bits [1:0]
+//
+// Keep these as explicit byte masks rather than C++ bitfields: the fields
+// cross byte boundaries, and bitfield layout is implementation-defined.
 
 static unsigned extractScaleSrc0(const uint8_t *Raw) {
   return Raw[4] | ((Raw[5] & 0x01) << 8);
@@ -93,6 +85,12 @@ static void writeScaleSrc1(uint8_t *Raw, unsigned Enc) {
 static constexpr unsigned VgprEncBase = 256;
 
 static bool isVgprEncoding(unsigned Enc) { return Enc >= VgprEncBase; }
+
+static std::optional<unsigned> decodeVgprEncoding(unsigned Enc) {
+  if (!isVgprEncoding(Enc))
+    return std::nullopt;
+  return Enc - VgprEncBase;
+}
 
 // ---------------------------------------------------------------------------
 // Block-16 → block-32 scale reduction via VALU preamble
@@ -226,18 +224,21 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
   unsigned ScaleSrc0Enc = extractScaleSrc0(Raw);
   unsigned ScaleSrc1Enc = extractScaleSrc1(Raw);
 
-  bool NeedReductionA = isVgprEncoding(ScaleSrc0Enc);
-  bool NeedReductionB = isVgprEncoding(ScaleSrc1Enc);
+  std::optional<unsigned> Src0Base = decodeVgprEncoding(ScaleSrc0Enc);
+  std::optional<unsigned> Src1Base = decodeVgprEncoding(ScaleSrc1Enc);
+  if (!Src0Base || !Src1Base) {
+    log() << "hotswap: error: wmma_scale16: unsupported non-VGPR scale "
+          << "encoding at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
 
-  unsigned Src0Lo = 0, Src0Hi = 0, Src1Lo = 0, Src1Hi = 0;
-  if (NeedReductionA) {
-    Src0Lo = ScaleSrc0Enc - VgprEncBase;
-    Src0Hi = Src0Lo + 1;
-  }
-  if (NeedReductionB) {
-    Src1Lo = ScaleSrc1Enc - VgprEncBase;
-    Src1Hi = Src1Lo + 1;
-  }
+  bool NeedReductionA = true;
+  bool NeedReductionB = true;
+
+  unsigned Src0Lo = *Src0Base;
+  unsigned Src0Hi = Src0Lo + 1;
+  unsigned Src1Lo = *Src1Base;
+  unsigned Src1Hi = Src1Lo + 1;
 
   std::string KernelName =
       Ctx.Elf.findKernelAtOffset(DI.Offset + Ctx.Elf.textAddr());
@@ -312,7 +313,7 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
                      PreambleBytes.end());
   Replacement.insert(Replacement.end(), WmmaBytes.begin(), WmmaBytes.end());
 
-  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
     return 0;
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];
@@ -437,7 +438,7 @@ static std::string formatScaleOp(unsigned Enc,
 // share the standard AMDGPU encoding numbering -- the assembler accepts
 // either the decoded literal (e.g. "0", "1.0") or the raw encoding
 // printed as decimal.
-static std::string formatSrc2(unsigned Enc, unsigned DstBase, unsigned Half) {
+static std::string formatSrc2(unsigned Enc, unsigned Half) {
   if (Enc >= VgprEncBase) {
     unsigned Base = (Enc - VgprEncBase) + Half * 8;
     return ("v[" + Twine(Base) + ":" + Twine(Base + 7) + "]").str();
@@ -528,18 +529,21 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
   unsigned ScaleSrc0Enc = extractScaleSrc0(Raw);
   unsigned ScaleSrc1Enc = extractScaleSrc1(Raw);
 
-  bool NeedReductionA = isVgprEncoding(ScaleSrc0Enc);
-  bool NeedReductionB = isVgprEncoding(ScaleSrc1Enc);
+  std::optional<unsigned> ScaleSrc0Base = decodeVgprEncoding(ScaleSrc0Enc);
+  std::optional<unsigned> ScaleSrc1Base = decodeVgprEncoding(ScaleSrc1Enc);
+  if (!ScaleSrc0Base || !ScaleSrc1Base) {
+    log() << "hotswap: error: wmma_scale16: 32x16 unsupported non-VGPR "
+          << "scale encoding at offset 0x" << utohexstr(DI.Offset) << "\n";
+    return 0;
+  }
 
-  unsigned Src0Lo = 0, Src0Hi = 0, Src1Lo = 0, Src1Hi = 0;
-  if (NeedReductionA) {
-    Src0Lo = ScaleSrc0Enc - VgprEncBase;
-    Src0Hi = Src0Lo + 1;
-  }
-  if (NeedReductionB) {
-    Src1Lo = ScaleSrc1Enc - VgprEncBase;
-    Src1Hi = Src1Lo + 1;
-  }
+  bool NeedReductionA = true;
+  bool NeedReductionB = true;
+
+  unsigned Src0Lo = *ScaleSrc0Base;
+  unsigned Src0Hi = Src0Lo + 1;
+  unsigned Src1Lo = *ScaleSrc1Base;
+  unsigned Src1Hi = Src1Lo + 1;
 
   bool OrigBScaleRow1 = extractBScaleRow1(Raw);
   unsigned AScaleFmt = extractAScaleFmt(Raw);
@@ -625,7 +629,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     // as D. Always sourcing C from HalfD is wrong when the kernel
     // accumulator is folded to inline-imm 0 -- the WMMA would then read
     // arbitrary stale bytes from D's range as the accumulator input.
-    std::string CStr = formatSrc2(Src2Enc, DBase, Half);
+    std::string CStr = formatSrc2(Src2Enc, Half);
     if (CStr.empty()) {
       log() << "hotswap: error: wmma_scale16: 32x16 unsupported src2 "
             << "encoding 0x" << utohexstr(Src2Enc) << " at offset 0x"
@@ -693,7 +697,7 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
     Replacement.insert(Replacement.end(), HalfBytes.begin(), HalfBytes.end());
   }
 
-  if (!queueTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
+  if (!emitToTrampoline(Ctx, DI.Offset, DI.Size, Replacement))
     return 0;
 
   KernelPatchStats &Stats = Ctx.KernelStats[KernelName];

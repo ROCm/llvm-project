@@ -68,7 +68,7 @@
 // SCALE16-NEXT:  v_max_u32
 // SCALE16-NEXT:  v_lshl_or_b32
 // COM: --- rewritten WMMA (VOP3PX2): regular scale with scratch VGPRs ---
-// SCALE16-NEXT:  v_wmma_scale_f32_16x16x128_f8f6f4
+// SCALE16-NEXT:  v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:31], v[32:47], v[0:7], v64, v65
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: Scale16 32x16 instruction is decomposed into two 16x16 WMMAs.
@@ -94,9 +94,9 @@
 // SPLIT32:       v_lshl_or_b32
 // SPLIT32:       v_lshl_or_b32
 // COM: --- rewritten WMMA half 0 (rows 0-15) ---
-// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4
+// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], v[32:39], v[0:7], v48, v49
 // COM: --- rewritten WMMA half 1 (rows 16-31) ---
-// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4
+// SPLIT32:       v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[24:31], v[32:39], v[8:15], v48, v49{{.*}}matrix_a_scale:MATRIX_SCALE_ROW1
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: 32x16 split preserves float inline-immediate src2.
@@ -105,8 +105,8 @@
 
 // SRC2FLOAT-LABEL: <test_wmma_scale16_32x16_src2_neg_half>:
 // SRC2FLOAT:       s_branch
-// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4{{.*}}, -0.5,
-// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4{{.*}}, -0.5,
+// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4 v[0:7], v[16:23], v[32:39], -0.5, v48, v49
+// SRC2FLOAT:       v_wmma_scale_f32_16x16x128_f8f6f4 v[8:15], v[24:31], v[32:39], -0.5, v48, v49{{.*}}matrix_a_scale:MATRIX_SCALE_ROW1
 
 // COM: -----------------------------------------------------------------------
 // COM: Verify: regular Scale instruction is NOT patched.
