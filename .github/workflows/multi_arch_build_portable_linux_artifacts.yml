@@ -73,7 +73,7 @@ on:
 jobs:
   build_stage:
     name: ${{ inputs.stage_display_name }}
-    runs-on: ${{ inputs.build_runs_on }}
+    runs-on: azure-linux-scale-rocm
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
       id-token: write
@@ -106,7 +106,7 @@ jobs:
           ref: ${{ fromJSON(inputs.external_repo_config).ref }}
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
-      #- uses: ./.github/actions/submodule-pr-update
+      - uses: ./.github/actions/submodule-pr-update
 
       - name: Install python deps
         run: pip install -r requirements.txt
