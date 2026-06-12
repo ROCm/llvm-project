@@ -91,10 +91,7 @@ struct pair { int first, second; };
 // DIEXPRESSION-IR-NEXT:  entry:
 // DIEXPRESSION-IR-NEXT:    [[P:%.*]] = alloca [[STRUCT_PAIR:%.*]], align 4, addrspace(5)
 // DIEXPRESSION-IR-NEXT:    [[P1:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
-// DIEXPRESSION-IR-NEXT:    [[TMP0:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr [[P1]], i32 0, i32 0
-// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE0:%.*]], ptr [[TMP0]], align 4
-// DIEXPRESSION-IR-NEXT:    [[TMP1:%.*]] = getelementptr inbounds nuw [[STRUCT_PAIR]], ptr [[P1]], i32 0, i32 1
-// DIEXPRESSION-IR-NEXT:    store i32 [[P_COERCE1:%.*]], ptr [[TMP1]], align 4
+// DIEXPRESSION-IR-NEXT:    store [2 x i32] [[P_COERCE:%.*]], ptr [[P1]], align 4
 // DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[P]], [[META66:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_PAIR]])), [[META67:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    ret void, !dbg [[DBG68:![0-9]+]]
 //
@@ -155,7 +152,7 @@ __device__ void func1(pair p) {}
 // DIEXPRESSION-IR: [[META55]] = !DILocation(line: 85, column: 9, scope: [[META45]])
 // DIEXPRESSION-IR: [[META56]] = !DILocation(line: 86, column: 9, scope: [[META45]])
 // DIEXPRESSION-IR: [[DBG57]] = !DILocation(line: 87, column: 1, scope: [[META45]])
-// DIEXPRESSION-IR: [[META58:![0-9]+]] = distinct !DISubprogram(name: "func1", linkageName: "_Z5func14pair", scope: [[META7]], file: [[META7]], line: 101, type: [[META59:![0-9]+]], scopeLine: 101, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META2]], retainedNodes: [[META65:![0-9]+]])
+// DIEXPRESSION-IR: [[META58:![0-9]+]] = distinct !DISubprogram(name: "func1", linkageName: "_Z5func14pair", scope: [[META7]], file: [[META7]], line: 98, type: [[META59:![0-9]+]], scopeLine: 98, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: [[META2]], retainedNodes: [[META65:![0-9]+]])
 // DIEXPRESSION-IR: [[META59]] = !DISubroutineType(types: [[META60:![0-9]+]])
 // DIEXPRESSION-IR: [[META60]] = !{null, [[META61:![0-9]+]]}
 // DIEXPRESSION-IR: [[META61]] = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "pair", file: [[META7]], line: 89, size: 64, flags: DIFlagTypePassByValue, elements: [[META62:![0-9]+]], identifier: "_ZTS4pair")
@@ -163,7 +160,7 @@ __device__ void func1(pair p) {}
 // DIEXPRESSION-IR: [[META63]] = !DIDerivedType(tag: DW_TAG_member, name: "first", scope: [[META61]], file: [[META7]], line: 89, baseType: [[META8]], size: 32)
 // DIEXPRESSION-IR: [[META64]] = !DIDerivedType(tag: DW_TAG_member, name: "second", scope: [[META61]], file: [[META7]], line: 89, baseType: [[META8]], size: 32, offset: 32)
 // DIEXPRESSION-IR: [[META65]] = !{[[META66]]}
-// DIEXPRESSION-IR: [[META66]] = !DILocalVariable(name: "p", arg: 1, scope: [[META58]], file: [[META7]], line: 101, type: [[META61]])
-// DIEXPRESSION-IR: [[META67]] = !DILocation(line: 101, column: 28, scope: [[META58]])
-// DIEXPRESSION-IR: [[DBG68]] = !DILocation(line: 101, column: 32, scope: [[META58]])
+// DIEXPRESSION-IR: [[META66]] = !DILocalVariable(name: "p", arg: 1, scope: [[META58]], file: [[META7]], line: 98, type: [[META61]])
+// DIEXPRESSION-IR: [[META67]] = !DILocation(line: 98, column: 28, scope: [[META58]])
+// DIEXPRESSION-IR: [[DBG68]] = !DILocation(line: 98, column: 32, scope: [[META58]])
 //.
