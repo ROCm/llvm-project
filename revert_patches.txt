@@ -11,3 +11,9 @@ breaks rocgdb UT
 breaks windows build
 [cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
+breaks aomp/test/smoke-fort/milestone-3-babel-copy
+[Flang][OpenMP][Sema] Add OpenMP warning when mapping local descriptors to device on enter without a corresponding exit (#201060)
+---
+breaks aomp/test/smoke/unique-kernel-name   
+[OpenMP] Use ext linkage for kernels handles and globals handles keep… (#202827)
+---

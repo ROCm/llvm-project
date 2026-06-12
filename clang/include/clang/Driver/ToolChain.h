@@ -775,9 +775,9 @@ public:
                                    const InputInfoList &Inputs) const;
 
   /// Add options that need to be passed to cc1 for this target.
-  virtual void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                     llvm::opt::ArgStringList &CC1Args,
-                                     Action::OffloadKind DeviceOffloadKind) const;
+  virtual void addClangTargetOptions(
+      const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
+      llvm::StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const;
 
   /// Add options that need to be passed to cc1as for this target.
   virtual void
@@ -889,7 +889,7 @@ public:
 
   /// Get paths for device libraries.
   virtual llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
                 const Action::OffloadKind DeviceOffloadingKind) const;
 
   /// Add the system specific libraries for the active offload kinds.

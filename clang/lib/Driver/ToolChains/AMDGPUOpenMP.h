@@ -83,6 +83,7 @@ public:
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args,
+                        llvm::StringRef BoundArch,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
   bool useIntegratedAs() const override { return true; }
@@ -118,7 +119,7 @@ public:
 
   unsigned GetDefaultDwarfVersion() const override { return 5; }
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
                 const Action::OffloadKind DeviceOffloadKind) const override;
 
   /// OpenMP uses LTO by default to link device bitcode.

@@ -161,7 +161,6 @@ static SmallVector<MCInst, 2> parseAsmToMCInsts(StringRef AsmStr,
 
   InstCapturingStreamer Streamer(*S.Ctx);
 
-  MCTargetOptions McOpts;
   std::unique_ptr<MCAsmParser> Parser(
       createMCAsmParser(*SrcMgr, *S.Ctx, Streamer, *S.MAI));
   std::unique_ptr<MCTargetAsmParser> TAP(
