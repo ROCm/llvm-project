@@ -106,7 +106,7 @@ jobs:
           ref: ${{ fromJSON(inputs.external_repo_config).ref }}
           path: ${{ fromJSON(inputs.external_repo_config).checkout_path }}
 
-      - name: Submodule PR update (composite)
+      - name: Submodule PR update (covers parameterised and PR creation)
         uses: ROCm/llvm-project/.github/actions/submodule-pr-update@amd/dev/kirthana14m/rockci-convergence-abstract
 
       - name: Install python deps
@@ -127,10 +127,6 @@ jobs:
       - name: Runner health status
         run: |
           ./build_tools/health_status.py
-
-      - name: Remove ununsed existing patchces
-        run: |
-          rm -fv patches/amd-mainline/llvm-project/0001-Ensure-to-use-libamdhip64-with-major-version.patch
 
       # Note: no AWS credentials should be needed here since our CI buckets
       # all currently have public read access.
@@ -160,29 +156,12 @@ jobs:
           overwrite: true
           retention-days: 1
 
-      - name: Temp fix for hiprtc/hipcc test (Nightly)
-        if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'compiler-runtime') }}
-        run: |
-             git config --global user.email "z1-cciauto@amd.com"
-             git config --global user.name "Z1 cciauto"
-             cd compiler/amd-llvm
-             git fetch origin pull/2719/head:pr-2719
-             git cherry-pick pr-2719
-             cd ../..
-             git add compiler/amd-llvm
-             git commit -m "Update amd-llvm submodule with PR 2719"
-
-      - name: TheRock and llvm SHA
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
-        run: |
-             git config --global --add safe.directory $PWD
-             git log --oneline -1
-             ls -l compiler/amd-llvm
-             cd compiler/amd-llvm/llvm
-             ls -l
-             git log --oneline -3
-             cd -
-
+      - name: build prep (patches & hotfixes for CK, hipcc and hiprtc, tests)
+        uses: ROCm/llvm-project/.github/actions/temp-build-fix@amd/dev/kirthana14m/rockci-convergence-abstract
+        with:
+          release_type: ${{ inputs.release_type }}
+          stage_name: ${{ inputs.stage_name }}
+            
       - name: Get stage configuration
         id: stage_config
         run: |
@@ -196,23 +175,6 @@ jobs:
       - name: Install stage python deps
         if: ${{ steps.stage_config.outputs.pip_install_cmd }}
         run: pip install ${{ steps.stage_config.outputs.pip_install_cmd }}
-
-      - name: Use Wno-error for CK (nightly)
-        if: ${{ github.event_name != 'pull_request' && (inputs.release_type == 'nightly' && inputs.stage_name == 'math-libs') }}
-        run: |
-          sed -i 's/-Werror\b/-Wno-error/g' rocm-libraries/projects/composablekernel/CMakeLists.txt
-
-      - name: Fix LLVM test variable mismatch
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i 's/THEROCK_ENABLE_LLVM_TESTS/THEROCK_BUILD_LLVM_TESTS/g' \
-            cmake/therock_subproject.cmake compiler/CMakeLists.txt
-
-      - name: Enable COMGR tests via THEROCK_BUILD_TESTING fallback
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-          sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
-            compiler/pre_hook_amd-comgr.cmake
 
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.release_type != 'nightly') }}
@@ -254,40 +216,12 @@ jobs:
         run: |
          cmake --build "${BUILD_DIR}" --target stage-${STAGE_NAME} therock-artifacts -- -k 0
 
-      - name: LLVM Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-llvm
-
-      - name: Clang Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-clang
-
-      - name: Flang Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-flang
-
-      - name: MLIR Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-mlir
-
-      - name: LLD Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ninja -C "${BUILD_DIR}"/compiler/amd-llvm/build check-lld
-      - name: COMGR Lit Tests
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         "${BUILD_DIR}"/compiler/amd-llvm/build/bin/llvm-lit \
-           "${BUILD_DIR}"/compiler/amd-comgr/build/test-lit -v
-
-      - name: COMGR CTest
-        if: ${{ inputs.stage_name == 'compiler-runtime' }}
-        run: |
-         ctest --test-dir "${BUILD_DIR}"/compiler/amd-comgr/build --output-on-failure
+      - name: LIT (llvm, clang, flang, mlir, lld) / COMGR Lit & CTest
+        uses: ROCm/llvm-project/.github/actions/lit-comgr-tests@amd/dev/kirthana14m/rockci-convergence-abstract
+        env:
+          BUILD_DIR: ${{ env.BUILD_DIR }}
+        with:
+          stage_name: ${{ inputs.stage_name }}
 
       - name: Run build tests
         if: ${{ !cancelled() && inputs.stage_name == 'compiler-runtime' }}

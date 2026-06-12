@@ -1,0 +1,53 @@
+name: LLVM toolchain Lit and COMGR tests
+description: >
+  Runs check-llvm/clang/flang/mlir/lld, COMGR llvm-lit suite, and COMGR ctest
+  when stage is compiler-runtime.
+
+inputs:
+  stage_name:
+    description: "Job stage name; tests run only when this is compiler-runtime."
+    required: true
+  build_dir:
+    description: "Top-level build directory (same as BUILD_DIR in the job)."
+    required: false
+    default: "build"
+
+runs:
+  using: composite
+  steps:
+    - name: LLVM Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-llvm
+
+    - name: Clang Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-clang
+
+    - name: Flang Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-flang
+
+    - name: MLIR Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-mlir
+
+    - name: LLD Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ninja -C "${{ inputs.build_dir }}/compiler/amd-llvm/build" check-lld
+
+    - name: COMGR Lit Tests
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        "${{ inputs.build_dir }}/compiler/amd-llvm/build/bin/llvm-lit" \
+          "${{ inputs.build_dir }}/compiler/amd-comgr/build/test-lit" -v
+
+    - name: COMGR CTest
+      if: ${{ inputs.stage_name == 'compiler-runtime' }}
+      run: |
+        ctest --test-dir "${{ inputs.build_dir }}/compiler/amd-comgr/build" --output-on-failure
+
