@@ -1079,7 +1079,8 @@ if(LLVM_INCLUDE_TESTS)
   set(LLVM_MINIMUM_PYTHON_VERSION 3.8)
 else()
   # FIXME: it is unknown if this is the actual minimum bound
-  set(LLVM_MINIMUM_PYTHON_VERSION 3.0)
+  # Use of Path in multiple sphinx configs implies at least 3.4
+  set(LLVM_MINIMUM_PYTHON_VERSION 3.4)
 endif()
 
 # Find python before including config-ix, since it needs to be able to search
