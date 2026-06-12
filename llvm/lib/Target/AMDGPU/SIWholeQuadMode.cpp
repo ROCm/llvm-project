@@ -244,6 +244,8 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<LiveIntervalsWrapperPass>();
+    AU.addRequired<MachineDominatorTreeWrapperPass>();
+    AU.addRequired<MachinePostDominatorTreeWrapperPass>();
     AU.addPreserved<SlotIndexesWrapperPass>();
     AU.addPreserved<LiveIntervalsWrapperPass>();
     AU.addPreserved<MachineDominatorTreeWrapperPass>();
@@ -1350,7 +1352,8 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
       FirstStrict = II;
 
     // Adjust needs if this is first instruction of WQM requiring shader.
-    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM))
+    if (IsEntry && Idx == 0 && II->getOpcode() == AMDGPU::COPY &&
+        (BI.InNeeds & StateWQM))
       Needs = StateWQM;
 
     // First, figure out the allowed states (Needs) based on the propagated
@@ -1562,8 +1565,14 @@ bool SIWholeQuadMode::lowerCopyInstrs() {
       assert(MI->getNumExplicitOperands() == 6);
 
       LiveInterval *RecomputeLI = nullptr;
-      if (MI->getOperand(4).isReg())
-        RecomputeLI = &LIS->getInterval(MI->getOperand(4).getReg());
+      Register RecomputePhysReg;
+      if (MI->getOperand(4).isReg()) {
+        Register Reg = MI->getOperand(4).getReg();
+        if (Reg.isVirtual())
+          RecomputeLI = &LIS->getInterval(Reg);
+        else
+          RecomputePhysReg = Reg;
+      }
 
       MI->removeOperand(5);
       MI->removeOperand(4);
@@ -1572,6 +1581,8 @@ bool SIWholeQuadMode::lowerCopyInstrs() {
 
       if (RecomputeLI)
         LIS->shrinkToUses(RecomputeLI);
+      else if (RecomputePhysReg)
+        LIS->removeAllRegUnitsForPhysReg(RecomputePhysReg);
     } else {
       assert(MI->getNumExplicitOperands() == 2);
     }
@@ -1826,12 +1837,10 @@ bool SIWholeQuadMode::run(MachineFunction &MF) {
 
 bool SIWholeQuadModeLegacy::runOnMachineFunction(MachineFunction &MF) {
   LiveIntervals *LIS = &getAnalysis<LiveIntervalsWrapperPass>().getLIS();
-  auto *MDTWrapper = getAnalysisIfAvailable<MachineDominatorTreeWrapperPass>();
-  MachineDominatorTree *MDT = MDTWrapper ? &MDTWrapper->getDomTree() : nullptr;
-  auto *PDTWrapper =
-      getAnalysisIfAvailable<MachinePostDominatorTreeWrapperPass>();
+  MachineDominatorTree *MDT =
+      &getAnalysis<MachineDominatorTreeWrapperPass>().getDomTree();
   MachinePostDominatorTree *PDT =
-      PDTWrapper ? &PDTWrapper->getPostDomTree() : nullptr;
+      &getAnalysis<MachinePostDominatorTreeWrapperPass>().getPostDomTree();
   SIWholeQuadMode Impl(MF, LIS, MDT, PDT);
   return Impl.run(MF);
 }

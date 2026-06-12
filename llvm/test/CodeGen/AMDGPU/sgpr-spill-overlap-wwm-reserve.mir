@@ -229,7 +229,7 @@ body:             |
   ; GCN-NEXT:   $vgpr2 = IMPLICIT_DEF
   ; GCN-NEXT:   $vgpr2 = SI_SPILL_S32_TO_VGPR $sgpr22, 0, killed $vgpr2
   ; GCN-NEXT:   $sgpr0 = ENTER_STRICT_WWM -1, implicit-def $exec, implicit-def $scc, implicit $exec
-  ; GCN-NEXT:   dead $vgpr1 = V_SET_INACTIVE_B32 0, $vgpr0, 0, 0, $sgpr_null, implicit $exec, implicit-def $scc
+  ; GCN-NEXT:   dead $vgpr1 = COPY $vgpr0, implicit $exec, implicit-def $scc
   ; GCN-NEXT:   $exec_lo = EXIT_STRICT_WWM $sgpr0
   ; GCN-NEXT:   S_BRANCH %bb.1
   ; GCN-NEXT: {{  $}}
