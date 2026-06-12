@@ -25,17 +25,18 @@ define amdgpu_kernel void @d16_load_and_valu(ptr %in1, ptr %in2) {
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    s_load_b128 s[0:3], s[4:5], 0x24
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_dual_mov_b32 v2, s1 :: v_dual_mov_b32 v1, s0
-; GFX12-NEXT:    v_dual_mov_b32 v4, s3 :: v_dual_mov_b32 v3, s2
-; GFX12-NEXT:    flat_load_d16_b16 v0, v[1:2]
-; GFX12-NEXT:    flat_load_d16_hi_b16 v0, v[3:4]
+; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
+; GFX12-NEXT:    v_dual_mov_b32 v2, s2 :: v_dual_mov_b32 v3, s3
+; GFX12-NEXT:    flat_load_u16 v4, v[0:1]
+; GFX12-NEXT:    flat_load_u16 v5, v[2:3]
+; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x101
+; GFX12-NEXT:    v_or_b32_e32 v4, 1, v4
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-NEXT:    v_or_b16 v0.l, v0.l, 1
-; GFX12-NEXT:    v_or_b16 v0.h, v0.h, 1
+; GFX12-NEXT:    v_or_b32_e32 v5, 1, v5
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2)
-; GFX12-NEXT:    v_add_nc_u16 v0.l, v0.l, 10
-; GFX12-NEXT:    flat_store_b16 v[1:2], v0
-; GFX12-NEXT:    flat_store_d16_hi_b16 v[3:4], v0
+; GFX12-NEXT:    v_add_nc_u16 v4, v4, 10
+; GFX12-NEXT:    flat_store_b16 v[0:1], v4
+; GFX12-NEXT:    flat_store_b16 v[2:3], v5
 ; GFX12-NEXT:    s_endpgm
   %i16a = load i16, ptr %in1, align 2
   %or1 = or i16 %i16a, 1
@@ -81,13 +82,13 @@ define amdgpu_kernel void @d16_load_same_order_group(ptr %in1, ptr %in2) {
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
 ; GFX12-NEXT:    v_lshlrev_b64_e32 v[0:1], 1, v[0:1]
-; GFX12-NEXT:    v_add_co_u32 v4, vcc_lo, s2, v0
+; GFX12-NEXT:    v_add_co_u32 v0, vcc_lo, s2, v0
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-NEXT:    v_add_co_ci_u32_e64 v5, null, s3, v1, vcc_lo
-; GFX12-NEXT:    flat_load_d16_b16 v0, v[2:3]
-; GFX12-NEXT:    flat_load_d16_hi_b16 v0, v[4:5]
+; GFX12-NEXT:    v_add_co_ci_u32_e64 v1, null, s3, v1, vcc_lo
+; GFX12-NEXT:    flat_load_u16 v4, v[2:3]
+; GFX12-NEXT:    flat_load_u16 v0, v[0:1]
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-NEXT:    v_or_b16 v0.l, v0.l, v0.h
+; GFX12-NEXT:    v_or_b32_e32 v0, v4, v0
 ; GFX12-NEXT:    flat_store_b16 v[2:3], v0
 ; GFX12-NEXT:    s_endpgm
   %i32 = load i32, ptr inttoptr (i64 16 to ptr), align 4
@@ -121,15 +122,15 @@ define amdgpu_kernel void @d16_two_order_group(ptr addrspace(3) %in1, ptr %in2) 
 ; GFX12:       ; %bb.0:
 ; GFX12-NEXT:    s_load_b64 s[0:1], s[4:5], 0x2c
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_dual_mov_b32 v2, s1 :: v_dual_mov_b32 v1, s0
+; GFX12-NEXT:    v_dual_mov_b32 v0, s0 :: v_dual_mov_b32 v1, s1
 ; GFX12-NEXT:    s_load_b32 s0, s[4:5], 0x24
-; GFX12-NEXT:    flat_load_d16_b16 v0, v[1:2]
+; GFX12-NEXT:    flat_load_u16 v2, v[0:1]
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-NEXT:    v_mov_b32_e32 v3, s0
-; GFX12-NEXT:    ds_load_u16_d16_hi v0, v3
+; GFX12-NEXT:    ds_load_u16 v3, v3
 ; GFX12-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-NEXT:    v_or_b16 v0.l, v0.h, v0.l
-; GFX12-NEXT:    flat_store_b16 v[1:2], v0
+; GFX12-NEXT:    v_or_b32_e32 v2, v3, v2
+; GFX12-NEXT:    flat_store_b16 v[0:1], v2
 ; GFX12-NEXT:    s_endpgm
   %i16a = load i16, ptr addrspace(3) %in1, align 2
   %i16b = load i16, ptr %in2, align 2

@@ -133,7 +133,7 @@ define half @v_exp2_f16(half %src)  {
 ; GFX12-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_exp_f16_e32 v0.l, v0.l
+; GFX12-NEXT:    v_exp_f16_e32 v0, v0
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
   %exp2 = call half @llvm.amdgcn.exp2.f16(half %src)
   ret half %exp2
@@ -188,7 +188,7 @@ define half @v_fabs_exp2_f16(half %src)  {
 ; GFX12-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_exp_f16_e64 v0.l, |v0.l|
+; GFX12-NEXT:    v_exp_f16_e64 v0, |v0|
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
   %fabs.src = call half @llvm.fabs.f16(half %src)
   %exp2 = call half @llvm.amdgcn.exp2.f16(half %fabs.src)
@@ -215,7 +215,7 @@ define half @v_fneg_fabs_exp2_f16(half %src)  {
 ; GFX12-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-NEXT:    s_wait_kmcnt 0x0
-; GFX12-NEXT:    v_exp_f16_e64 v0.l, -|v0.l|
+; GFX12-NEXT:    v_exp_f16_e64 v0, -|v0|
 ; GFX12-NEXT:    s_setpc_b64 s[30:31]
   %fabs.src = call half @llvm.fabs.f16(half %src)
   %neg.fabs.src = fneg half %fabs.src
