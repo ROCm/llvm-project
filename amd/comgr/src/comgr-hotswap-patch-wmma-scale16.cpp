@@ -246,8 +246,8 @@ static uint32_t patchWmmaScale16_16x16(PatchContext &Ctx, size_t Idx) {
       Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
   unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
 
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
-                         Ctx.Config.MaxVgprs);
+  VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+                      Ctx.Config.MaxVgprs);
 
   // Scratch allocation: 1 reduced-scale VGPR per operand needing reduction,
   // plus 2 shared temporaries for byte extraction/max.
@@ -556,8 +556,8 @@ static uint32_t patchWmmaScale16_32x16(PatchContext &Ctx, size_t Idx) {
       Ctx.Elf.getKernelVgprCount(KernelName, Ctx.Config.VgprGranuleSize);
   unsigned KdCount = KdVgprs.value_or(Ctx.Config.MaxVgprs);
 
-  ScratchAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
-                         Ctx.Config.MaxVgprs);
+  VgprAllocator Alloc(Ctx.Liveness.LiveBefore[Idx], KdCount,
+                      Ctx.Config.MaxVgprs);
 
   std::optional<unsigned> ScratchA, ScratchB, T1, T2;
   unsigned ScratchCount = 0;
