@@ -387,6 +387,10 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       Patched += P;
       continue;
     }
+    if (uint32_t P = runPerInstPass(VT.applyWmmaScale16Patches, Ctx, Idx)) {
+      Patched += P;
+      continue;
+    }
   }
 
   // Whole-kernel passes below run after per-instruction patches. Earlier

@@ -737,14 +737,13 @@ static uint32_t patchWmmaScale16(PatchContext &Ctx, size_t Idx) {
 }
 
 // ---------------------------------------------------------------------------
-// applyScratchPatches — strong symbol override
+// applyWmmaScale16Patches
 // ---------------------------------------------------------------------------
 //
-// Overrides the weak stub in comgr-hotswap-b0a0.cpp.  Called once per decoded
-// instruction during the rewrite loop.  Returns the number of patches applied
-// (0 or 1).
+// Called once per decoded instruction during the rewrite loop. Returns the
+// number of patches applied (0 or 1).
 
-static uint32_t applyScratchPatchesImpl(PatchContext &Ctx, size_t Idx) {
+static uint32_t applyWmmaScale16PatchesImpl(PatchContext &Ctx, size_t Idx) {
   StringRef Mnem(Ctx.Decoded[Idx].Mnemonic);
   if (Mnem.starts_with("v_wmma_scale16_f32_"))
     return patchWmmaScale16(Ctx, Idx);
@@ -752,7 +751,7 @@ static uint32_t applyScratchPatchesImpl(PatchContext &Ctx, size_t Idx) {
 }
 
 void registerWmmaScale16Patch(HotswapPatchVTable &VT) {
-  VT.applyScratchPatches = &applyScratchPatchesImpl;
+  VT.applyWmmaScale16Patches = &applyWmmaScale16PatchesImpl;
 }
 
 } // namespace hotswap
