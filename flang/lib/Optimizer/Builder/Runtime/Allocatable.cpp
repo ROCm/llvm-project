@@ -96,21 +96,19 @@ void fir::runtime::genAllocatableAllocate(fir::FirOpBuilder &builder,
 
 void fir::runtime::genOmpAllocatorStamp(fir::FirOpBuilder &builder,
                                         mlir::Location loc, mlir::Value desc,
-                                        mlir::Value handle,
-                                        mlir::Value align) {
+                                        mlir::Value handle, mlir::Value align) {
   mlir::func::FuncOp func{
       fir::runtime::getRuntimeFunc<mkRTKey(OmpAllocatorStamp)>(loc, builder)};
   mlir::FunctionType fTy{func.getFunctionType()};
   // Convert the caller-supplied handle (any integer width) to the uintptr_t
   // type expected by the runtime entry point.
-  mlir::Value handleCast =
-      builder.createConvert(loc, fTy.getInput(1), handle);
+  mlir::Value handleCast = builder.createConvert(loc, fTy.getInput(1), handle);
   // The alignment argument (size_t) defaults to 0 when the caller passes no
   // alignment, which selects __kmpc_alloc over __kmpc_aligned_alloc.
   mlir::Type alignTy = fTy.getInput(2);
-  mlir::Value alignCast =
-      align ? builder.createConvert(loc, alignTy, align)
-            : builder.createIntegerConstant(loc, alignTy, 0);
+  mlir::Value alignCast = align
+                              ? builder.createConvert(loc, alignTy, align)
+                              : builder.createIntegerConstant(loc, alignTy, 0);
   llvm::SmallVector<mlir::Value> args{fir::runtime::createArguments(
       builder, loc, fTy, desc, handleCast, alignCast)};
   fir::CallOp::create(builder, loc, func, args);

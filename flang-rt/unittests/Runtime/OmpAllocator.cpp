@@ -22,11 +22,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "gtest/gtest.h"
 #include "flang-rt/runtime/descriptor.h"
 #include "flang/Common/ISO_Fortran_binding_wrapper.h"
 #include "flang/Runtime/OpenMP/omp_kmpc_alloc.h"
 #include "flang/Runtime/allocator-registry-consts.h"
-#include "gtest/gtest.h"
 #include <cstdint>
 #include <cstdlib>
 
@@ -81,8 +81,7 @@ extern "C" void *__kmpc_aligned_alloc(int /*gtid*/, std::size_t align,
   return std::aligned_alloc(align, padded);
 }
 
-extern "C" void __kmpc_free(
-    int /*gtid*/, void *ptr, std::uintptr_t allocator) {
+extern "C" void __kmpc_free(int /*gtid*/, void *ptr, std::uintptr_t allocator) {
   ++gFreeCount;
   gLastFreeHandle = allocator;
   std::free(ptr);
@@ -162,8 +161,8 @@ TEST(OmpAllocatorTest, RuntimeStampRoutesToOmp) {
   // _FortranAOmpAllocatorStamp that the Flang `!$omp allocators` lowering
   // uses.  align=0 => unaligned __kmpc_alloc path.
   auto desc{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
-      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
-      CFI_attribute_allocatable, /*addendum=*/true)};
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr, CFI_attribute_allocatable,
+      /*addendum=*/true)};
   ASSERT_TRUE(desc);
   desc->GetDimension(0).SetBounds(1, 4);
 
@@ -190,8 +189,8 @@ TEST(OmpAllocatorTest, RuntimeStampAlignRoutesToAlignedAlloc) {
   // Stamp with a non-zero alignment; allocate should go through
   // __kmpc_aligned_alloc carrying the alignment value.
   auto desc{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
-      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
-      CFI_attribute_allocatable, /*addendum=*/true)};
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr, CFI_attribute_allocatable,
+      /*addendum=*/true)};
   ASSERT_TRUE(desc);
   desc->GetDimension(0).SetBounds(1, 8);
 
@@ -221,8 +220,8 @@ TEST(OmpAllocatorTest, RuntimeStampWorksWithoutAddendum) {
   // travels through the thread-local pending-stamp slot, so allocate still
   // dispatches through the OpenMP runtime even though addendum()==nullptr.
   auto desc{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
-      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
-      CFI_attribute_allocatable, /*addendum=*/false)};
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr, CFI_attribute_allocatable,
+      /*addendum=*/false)};
   ASSERT_TRUE(desc);
   desc->GetDimension(0).SetBounds(1, 4);
   ASSERT_EQ(desc->Addendum(), nullptr);
@@ -261,11 +260,11 @@ TEST(OmpAllocatorTest, OrphanedStampDoesNotLeakIntoNextAllocate) {
   // diagnostic-only and intentionally not asserted on here so the test
   // works in both debug and release builds.
   auto descA{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
-      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
-      CFI_attribute_allocatable, /*addendum=*/false)};
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr, CFI_attribute_allocatable,
+      /*addendum=*/false)};
   auto descB{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
-      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
-      CFI_attribute_allocatable, /*addendum=*/false)};
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr, CFI_attribute_allocatable,
+      /*addendum=*/false)};
   ASSERT_TRUE(descA);
   ASSERT_TRUE(descB);
   descA->GetDimension(0).SetBounds(1, 4);

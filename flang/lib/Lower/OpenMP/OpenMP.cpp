@@ -153,9 +153,8 @@ emitNestedParallelGuardForCondLp(lower::AbstractConverter &converter,
 //===----------------------------------------------------------------------===//
 
 namespace {
-using OmpAllocatorSymbolMap =
-    llvm::DenseMap<const Fortran::semantics::Symbol *,
-                   Fortran::lower::OmpAllocatorInfo>;
+using OmpAllocatorSymbolMap = llvm::DenseMap<const Fortran::semantics::Symbol *,
+                                             Fortran::lower::OmpAllocatorInfo>;
 using OmpAllocatorTouchedSet =
     llvm::DenseSet<const Fortran::semantics::Symbol *>;
 
