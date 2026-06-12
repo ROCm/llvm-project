@@ -82,9 +82,6 @@ public:
                         llvm::StringRef BoundArch,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
-  bool isPICDefault() const override { return false; }
-  bool isPICDefaultForced() const override { return false; }
-
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &Args,
