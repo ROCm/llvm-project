@@ -286,8 +286,8 @@ define amdgpu_gfx void @amdgpu_gfx() #0 {
 ; CHECK-TRUE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-TRUE16-NEXT:    s_mov_b32 exec_lo, s1
 ; CHECK-TRUE16-NEXT:    v_writelane_b32 v40, s0, 2
-; CHECK-TRUE16-NEXT:    v_writelane_b32 v40, s30, 0
 ; CHECK-TRUE16-NEXT:    s_add_co_i32 s32, s32, 16
+; CHECK-TRUE16-NEXT:    v_writelane_b32 v40, s30, 0
 ; CHECK-TRUE16-NEXT:    v_writelane_b32 v40, s31, 1
 ; CHECK-TRUE16-NEXT:    v_mov_b16_e32 v0.l, 15
 ; CHECK-TRUE16-NEXT:    s_mov_b32 s1, callee@abs32@hi
@@ -325,8 +325,8 @@ define amdgpu_gfx void @amdgpu_gfx() #0 {
 ; CHECK-FAKE16-NEXT:    s_wait_alu depctr_sa_sdst(0)
 ; CHECK-FAKE16-NEXT:    s_mov_b32 exec_lo, s1
 ; CHECK-FAKE16-NEXT:    v_writelane_b32 v40, s0, 2
-; CHECK-FAKE16-NEXT:    v_writelane_b32 v40, s30, 0
 ; CHECK-FAKE16-NEXT:    s_add_co_i32 s32, s32, 16
+; CHECK-FAKE16-NEXT:    v_writelane_b32 v40, s30, 0
 ; CHECK-FAKE16-NEXT:    v_writelane_b32 v40, s31, 1
 ; CHECK-FAKE16-NEXT:    v_mov_b32_e32 v0, 15
 ; CHECK-FAKE16-NEXT:    s_mov_b32 s1, callee@abs32@hi

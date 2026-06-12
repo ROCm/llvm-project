@@ -70,6 +70,7 @@ Using Clang as a Compiler
    AMDGPUSupport
    RISCVSupport
    CXXTypeAwareAllocators
+   CIR/index
    CommandGuide/index
    FAQ
 
@@ -130,9 +131,6 @@ Design Documents
    HardwareAssistedAddressSanitizerDesign.rst
    ConstantInterpreter
    LLVMExceptionHandlingCodeGen
-   ClangIRCodeDuplication
-   ClangIRABILowering
-   ClangIRCleanupAndEHDesign
 
 Indices and tables
 ==================

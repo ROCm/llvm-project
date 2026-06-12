@@ -100,6 +100,11 @@ static llvm::cl::alias
                           llvm::cl::desc("intrinsic module directory"),
                           llvm::cl::aliasopt(intrinsicIncludeDirs));
 
+static llvm::cl::alias
+    intrinsicModulePath("fintrinsic-modules-path",
+                        llvm::cl::desc("intrinsic module search paths"),
+                        llvm::cl::aliasopt(intrinsicIncludeDirs));
+
 static llvm::cl::opt<std::string>
     moduleDir("module", llvm::cl::desc("module output directory (default .)"),
               llvm::cl::init("."));
@@ -242,7 +247,8 @@ static llvm::cl::opt<bool>
                             llvm::cl::init(false));
 
 static llvm::cl::opt<std::string>
-    enableGPUMode("gpu", llvm::cl::desc("Enable GPU Mode managed|unified"),
+    enableGPUMode("gpu",
+                  llvm::cl::desc("Enable GPU Mode managed|unified|pinned"),
                   llvm::cl::init(""));
 
 static llvm::cl::opt<std::string>
@@ -581,6 +587,8 @@ static llvm::LogicalResult convertFortranSourceToMLIR(
     config.SkipConvertComplexPow = targetMachine.getTargetTriple().isAMDGCN();
     if (enableOpenMP)
       config.EnableOpenMP = true;
+    if (enableOpenMPDevice)
+      config.EnableOpenMPIsTargetDevice = true;
     config.NSWOnLoopVarInc = !integerWrapAround;
     fir::registerDefaultInlinerPass(config);
     fir::createDefaultFIROptimizerPassPipeline(pm, config);
@@ -678,6 +686,8 @@ int main(int argc, char **argv) {
     options.features.Enable(Fortran::common::LanguageFeature::CudaManaged);
   else if (enableGPUMode == "unified")
     options.features.Enable(Fortran::common::LanguageFeature::CudaUnified);
+  else if (enableGPUMode == "pinned")
+    options.features.Enable(Fortran::common::LanguageFeature::CudaPinned);
 
   if (fixedForm) {
     options.isFixedForm = fixedForm;

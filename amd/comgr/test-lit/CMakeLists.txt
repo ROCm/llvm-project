@@ -25,7 +25,6 @@ message("-- LLVM_LIT_PATH: ${LLVM_LIT_PATH}")
 
 add_custom_target(test-lit COMMAND "${LLVM_LIT_PATH}"
                   "${CMAKE_CURRENT_BINARY_DIR}" -v)
-add_dependencies(test-lit amd_comgr)
 
 macro(add_comgr_lit_binary name lang)
   add_executable("${name}" "comgr-sources/${name}.${lang}")
@@ -36,7 +35,7 @@ macro(add_comgr_lit_binary name lang)
       C_EXTENSIONS No)
   endif()
   target_link_libraries("${name}" amd_comgr)
-  add_dependencies(check-comgr "${name}")
+  add_dependencies(test-lit "${name}")
 endmacro()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
@@ -54,5 +53,6 @@ add_comgr_lit_binary(status-string c)
 add_comgr_lit_binary(data-action c)
 add_comgr_lit_binary(lookup-code-object c)
 add_comgr_lit_binary(hotswap-rewrite c)
+add_comgr_lit_binary(parse-isa-name c)
 
 add_dependencies(check-comgr test-lit)

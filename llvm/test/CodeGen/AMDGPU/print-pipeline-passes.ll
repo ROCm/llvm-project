@@ -12,12 +12,9 @@
 ; RUN: opt -mtriple=amdgcn--amdhsa -S -passes="lto-pre-link<O2>" -print-pipeline-passes -amdgpu-internalize-symbols %s -o - | FileCheck --check-prefix=PRE %s
 ; RUN: opt -mtriple=amdgcn--amdhsa -S -passes="lto-pre-link<O3>" -print-pipeline-passes -amdgpu-internalize-symbols %s -o - | FileCheck --check-prefix=PRE %s
 
-; CHECK: amdgpu-expand-feature-predicates
 ; CHECK: amdgpu-attributor
-; O0: amdgpu-expand-feature-predicates
 ; O0-NOT: amdgpu-attributor
 
-; PRE: amdgpu-expand-feature-predicates
 ; PRE-NOT: internalize
 ; PRE-NOT: amdgpu-attributor
 ; PRE-NOT: printfToRuntime

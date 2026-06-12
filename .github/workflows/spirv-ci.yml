@@ -1,0 +1,28 @@
+# Top-level dispatcher for the SPIRV-focused CI on amd-staging.
+# Dispatches to per-platform reusable workflows.
+
+name: SPIRV Compiler CI - amd-staging
+
+on:
+  pull_request:
+    branches: [amd-staging]
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  linux_release:
+    name: Linux::release
+    uses: ./.github/workflows/spirv-ci-linux-amd-staging.yml
+    secrets: inherit
+
+  windows_release:
+    name: Windows::release
+    uses: ./.github/workflows/spirv-ci-windows-amd-staging.yml
+    secrets: inherit

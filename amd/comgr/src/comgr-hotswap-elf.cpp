@@ -225,10 +225,64 @@ ElfView::getKernelVgprCount(StringRef KernelName,
     return std::nullopt;
   }
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   uint32_t Granulated = AMDHSA_BITS_GET(
       Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
   return (Granulated + 1) * VgprGranuleSize;
+}
+
+// Reads the static (compile-time-fixed) LDS allocation from the kernel
+// descriptor's group_segment_fixed_size field. Dynamic LDS is added by the
+// host at dispatch time and is not visible here -- see the declaration's
+// doc comment for the full lower-bound caveat.
+
+std::optional<uint32_t>
+ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
+  namespace hsa = amdhsa;
+  // findKernelDescriptor never writes through the returned pointer in this
+  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // const_cast on `this` keeps the read-only accessor const-correct without
+  // duplicating the lookup helper.
+  const uint8_t *Kd =
+      const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelStaticLdsSize: kernel descriptor "
+          << "symbol '" << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t LdsSize;
+  std::memcpy(&LdsSize,
+              Kd + offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
+              sizeof(LdsSize));
+  return LdsSize;
+}
+
+// -- ElfView::getKernelSgprCount ----------------------------------------------
+
+std::optional<unsigned>
+ElfView::getKernelSgprCount(StringRef KernelName,
+                            unsigned SgprGranuleSize) const {
+  if (SgprGranuleSize == 0) {
+    log() << "hotswap: error: getKernelSgprCount: SgprGranuleSize is 0 for "
+          << "kernel '" << KernelName << "'.\n";
+    return std::nullopt;
+  }
+  namespace hsa = amdhsa;
+  uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelSgprCount: kernel descriptor symbol '"
+          << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t Rsrc1;
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
+  uint32_t Granulated = AMDHSA_BITS_GET(
+      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
+  return (Granulated + 1) * SgprGranuleSize;
 }
 
 // -- ElfView::updateKernelDescriptor ------------------------------------------
@@ -241,14 +295,16 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
   uint8_t *Kd = findKernelDescriptor(KernelName);
   if (!Kd) {
     log() << "hotswap: error: updateKernelDescriptor: kernel descriptor "
-          << "symbol '" << KernelName << ".kd' not found; requested "
-          << "+" << ExtraVgprs << " VGPRs / +" << ExtraSgprs
+          << "symbol '" << KernelName << ".kd' not found; requested " << "+"
+          << ExtraVgprs << " VGPRs / +" << ExtraSgprs
           << " SGPRs silently dropped.\n";
     return;
   }
 
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   if (ExtraVgprs != 0 && VgprGranuleSize != 0) {
     uint32_t Current = AMDHSA_BITS_GET(
         Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
@@ -271,7 +327,8 @@ void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
                     hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT,
                     std::min<uint32_t>(Current + Extra, MaxGran));
   }
-  std::memcpy(Kd + KdRsrc1Offset, &Rsrc1, sizeof(Rsrc1));
+  std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              &Rsrc1, sizeof(Rsrc1));
 }
 
 // -- Section/program header adjustment for trampoline growth ------------------

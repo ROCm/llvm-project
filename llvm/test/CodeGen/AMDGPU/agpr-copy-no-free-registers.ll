@@ -521,7 +521,7 @@ define amdgpu_kernel void @introduced_copy_to_sgpr(i64 %arg, i32 %arg1, i32 %arg
 ; GFX908-NEXT:    s_sub_i32 s1, 0, s7
 ; GFX908-NEXT:    v_cvt_f32_f16_e32 v18, s0
 ; GFX908-NEXT:    v_mov_b32_e32 v17, 0
-; GFX908-NEXT:    v_rcp_iflag_f32_e32 v0, v0
+; GFX908-NEXT:    v_rcp_f32_e32 v0, v0
 ; GFX908-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX908-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; GFX908-NEXT:    v_cvt_u32_f32_e32 v0, v0
@@ -684,7 +684,7 @@ define amdgpu_kernel void @introduced_copy_to_sgpr(i64 %arg, i32 %arg1, i32 %arg
 ; GFX90A-NEXT:    s_sub_i32 s1, 0, s7
 ; GFX90A-NEXT:    v_mov_b32_e32 v19, 0
 ; GFX90A-NEXT:    v_pk_mov_b32 v[2:3], 0, 0
-; GFX90A-NEXT:    v_rcp_iflag_f32_e32 v0, v0
+; GFX90A-NEXT:    v_rcp_f32_e32 v0, v0
 ; GFX90A-NEXT:    v_mul_f32_e32 v0, 0x4f7ffffe, v0
 ; GFX90A-NEXT:    v_cvt_u32_f32_e32 v1, v0
 ; GFX90A-NEXT:    v_cvt_f32_f16_e32 v0, s0
@@ -1140,9 +1140,9 @@ define void @no_free_vgprs_at_sgpr_to_agpr_copy(float %v0, float %v1) #0 {
 declare <16 x float> @llvm.amdgcn.mfma.f32.16x16x1f32(float, float, <16 x float>, i32 immarg, i32 immarg, i32 immarg) #1
 declare i32 @llvm.amdgcn.workitem.id.x() #2
 
-attributes #0 = { "amdgpu-waves-per-eu"="6,6" }
+attributes #0 = { "amdgpu-waves-per-eu"="6,6" nounwind }
 attributes #1 = { convergent nounwind readnone willreturn }
 attributes #2 = { nounwind readnone willreturn }
-attributes #3 = { "amdgpu-waves-per-eu"="7,7" "amdgpu-agpr-alloc"="0" }
-attributes #4 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-flat-work-group-size"="1024,1024" }
-attributes #5 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-agpr-alloc"="0" }
+attributes #3 = { "amdgpu-waves-per-eu"="7,7" "amdgpu-agpr-alloc"="0" nounwind }
+attributes #4 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-flat-work-group-size"="1024,1024" nounwind }
+attributes #5 = { "amdgpu-waves-per-eu"="6,6" "amdgpu-agpr-alloc"="0" nounwind }

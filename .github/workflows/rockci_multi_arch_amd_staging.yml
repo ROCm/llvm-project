@@ -48,6 +48,7 @@ on:
       - labeled
       - opened
       - synchronize
+      - reopened
 permissions:
   contents: read
 

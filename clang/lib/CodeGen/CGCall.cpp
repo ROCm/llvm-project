@@ -2888,11 +2888,13 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
   }
 
   bool hasUsedSRet = false;
-  SmallVector<llvm::AttributeSet, 4> ArgAttrs(IRFunctionArgs.totalIRArgs());
+  SmallVector<llvm::AttrBuilder, 4> ArgAttrs;
+  for (unsigned I = 0; I < IRFunctionArgs.totalIRArgs(); ++I)
+    ArgAttrs.emplace_back(getLLVMContext());
 
   // Attach attributes to sret.
   if (IRFunctionArgs.hasSRetArg()) {
-    llvm::AttrBuilder SRETAttrs(getLLVMContext());
+    llvm::AttrBuilder &SRETAttrs = ArgAttrs[IRFunctionArgs.getSRetArgNo()];
     SRETAttrs.addStructRetAttr(getTypes().ConvertTypeForMem(RetTy));
     SRETAttrs.addAttribute(llvm::Attribute::Writable);
     SRETAttrs.addAttribute(llvm::Attribute::DeadOnUnwind);
@@ -2900,16 +2902,12 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     if (RetAI.getInReg())
       SRETAttrs.addAttribute(llvm::Attribute::InReg);
     SRETAttrs.addAlignmentAttr(RetAI.getIndirectAlign().getQuantity());
-    ArgAttrs[IRFunctionArgs.getSRetArgNo()] =
-        llvm::AttributeSet::get(getLLVMContext(), SRETAttrs);
   }
 
   // Attach attributes to inalloca argument.
   if (IRFunctionArgs.hasInallocaArg()) {
-    llvm::AttrBuilder Attrs(getLLVMContext());
-    Attrs.addInAllocaAttr(FI.getArgStruct());
-    ArgAttrs[IRFunctionArgs.getInallocaArgNo()] =
-        llvm::AttributeSet::get(getLLVMContext(), Attrs);
+    ArgAttrs[IRFunctionArgs.getInallocaArgNo()].addInAllocaAttr(
+        FI.getArgStruct());
   }
 
   // Apply `nonnull`, `dereferenceable(N)` and `align N` to the `this` argument,
@@ -2922,23 +2920,21 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
 
     assert(IRArgs.second == 1 && "Expected only a single `this` pointer.");
 
-    llvm::AttrBuilder Attrs(getLLVMContext());
+    llvm::AttrBuilder &Attrs = ArgAttrs[IRArgs.first];
 
     QualType ThisTy = FI.arg_begin()->type.getTypePtr()->getPointeeType();
+    int64_t ThisSz = getMinimumObjectSize(ThisTy).getQuantity();
 
     if (!CodeGenOpts.NullPointerIsValid &&
         getTypes().getTargetAddressSpace(FI.arg_begin()->type) == 0) {
       Attrs.addAttribute(llvm::Attribute::NonNull);
-      Attrs.addDereferenceableAttr(getMinimumObjectSize(ThisTy).getQuantity());
+      Attrs.addDereferenceableAttr(ThisSz);
     } else {
       // FIXME dereferenceable should be correct here, regardless of
       // NullPointerIsValid. However, dereferenceable currently does not always
       // respect NullPointerIsValid and may imply nonnull and break the program.
       // See https://reviews.llvm.org/D66618 for discussions.
-      Attrs.addDereferenceableOrNullAttr(
-          getMinimumObjectSize(
-              FI.arg_begin()->type.castAs<PointerType>()->getPointeeType())
-              .getQuantity());
+      Attrs.addDereferenceableOrNullAttr(ThisSz);
     }
 
     llvm::Align Alignment =
@@ -2970,8 +2966,6 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
         Attrs.addDeadOnReturnAttr(llvm::DeadOnReturnInfo(
             Context.getASTRecordLayout(ClassDecl).getDataSize().getQuantity()));
     }
-
-    ArgAttrs[IRArgs.first] = llvm::AttributeSet::get(getLLVMContext(), Attrs);
   }
 
   unsigned ArgNo = 0;
@@ -2984,10 +2978,8 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     // Add attribute for padding argument, if necessary.
     if (IRFunctionArgs.hasPaddingArg(ArgNo)) {
       if (AI.getPaddingInReg()) {
-        ArgAttrs[IRFunctionArgs.getPaddingArgNo(ArgNo)] =
-            llvm::AttributeSet::get(getLLVMContext(),
-                                    llvm::AttrBuilder(getLLVMContext())
-                                        .addAttribute(llvm::Attribute::InReg));
+        ArgAttrs[IRFunctionArgs.getPaddingArgNo(ArgNo)].addAttribute(
+            llvm::Attribute::InReg);
       }
     }
 
@@ -3170,14 +3162,14 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     }
 
     if (FI.getExtParameterInfo(ArgNo).isNoEscape())
-      Attrs.addCapturesAttr(llvm::CaptureInfo::none());
+      Attrs.addCapturesAttr(
+          llvm::CaptureInfo(llvm::CaptureComponents::Address));
 
     if (Attrs.hasAttributes()) {
       unsigned FirstIRArg, NumIRArgs;
       std::tie(FirstIRArg, NumIRArgs) = IRFunctionArgs.getIRArgs(ArgNo);
       for (unsigned i = 0; i < NumIRArgs; i++)
-        ArgAttrs[FirstIRArg + i] = ArgAttrs[FirstIRArg + i].addAttributes(
-            getLLVMContext(), llvm::AttributeSet::get(getLLVMContext(), Attrs));
+        ArgAttrs[FirstIRArg + i].merge(Attrs);
     }
   }
   assert(ArgNo == FI.arg_size());
@@ -3206,17 +3198,20 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
           // in a way that can be called from here.
           if (i < FunctionType->getNumParams() &&
               FunctionType->getParamType(i)->isPointerTy()) {
-            ArgAttrs[i] =
-                ArgAttrs[i].addAttribute(getLLVMContext(), *MemAttrForPtrArgs);
+            ArgAttrs[i].addAttribute(*MemAttrForPtrArgs);
           }
         }
       }
     }
   }
 
+  SmallVector<llvm::AttributeSet, 4> ArgAttrSets;
+  for (const llvm::AttrBuilder &Attrs : ArgAttrs)
+    ArgAttrSets.push_back(llvm::AttributeSet::get(getLLVMContext(), Attrs));
+
   AttrList = llvm::AttributeList::get(
       getLLVMContext(), llvm::AttributeSet::get(getLLVMContext(), FuncAttrs),
-      llvm::AttributeSet::get(getLLVMContext(), RetAttrs), ArgAttrs);
+      llvm::AttributeSet::get(getLLVMContext(), RetAttrs), ArgAttrSets);
 }
 
 /// An argument came in as a promoted argument; demote it back to its
@@ -3380,7 +3375,7 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
         // may be aliased, copy it to ensure that the parameter variable is
         // mutable and has a unique adress, as C requires.
         if (ArgI.getIndirectRealign() || ArgI.isIndirectAliased()) {
-          RawAddress AlignedTemp = CreateMemTemp(Ty, "coerce");
+          RawAddress AlignedTemp = CreateMemTempWithoutCast(Ty, "coerce");
 
           // Copy from the incoming argument pointer to the temporary with the
           // appropriate alignment.
@@ -3510,8 +3505,8 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
             ParameterABI::SwiftErrorResult) {
           QualType pointeeTy = Ty->getPointeeType();
           assert(pointeeTy->isPointerType());
-          RawAddress temp =
-              CreateMemTemp(pointeeTy, getPointerAlign(), "swifterror.temp");
+          RawAddress temp = CreateMemTempWithoutCast(
+              pointeeTy, getPointerAlign(), "swifterror.temp");
           Address arg = makeNaturalAddressForPointer(
               V, pointeeTy, getContext().getTypeAlignInChars(pointeeTy));
           llvm::Value *incomingErrorValue = Builder.CreateLoad(arg);
@@ -3563,10 +3558,9 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
 
       llvm::StructType *STy =
           dyn_cast<llvm::StructType>(ArgI.getCoerceToType());
-
       RawAddress DebugAddr = Address::invalid();
-      Address Alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), Arg->getName(), &DebugAddr);
+      Address Alloca = CreateMemTempWithoutCast(
+          Ty, getContext().getDeclAlign(Arg), Arg->getName());
 
       // Pointer to store into.
       Address Ptr = emitAddressAtOffset(*this, Alloca, ArgI);
@@ -3656,9 +3650,9 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
     case ABIArgInfo::CoerceAndExpand: {
       // Reconstruct into a temporary.
       RawAddress DebugAddr = Address::invalid();
-      RawAddress alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), "tmp", &DebugAddr);
-      ArgVals.push_back(ParamValue::forIndirect(alloca, DebugAddr));
+      Address alloca =
+          CreateMemTempWithoutCast(Ty, getContext().getDeclAlign(Arg));
+      ArgVals.push_back(ParamValue::forIndirect(alloca));
 
       auto coercionType = ArgI.getCoerceAndExpandType();
       auto unpaddedCoercionType = ArgI.getUnpaddedCoerceAndExpandType();
@@ -3699,8 +3693,8 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       // we need to create a temporary and reconstruct it from the
       // arguments.
       RawAddress DebugAddr = Address::invalid();
-      RawAddress Alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), "tmp", &DebugAddr);
+      Address Alloca =
+          CreateMemTempWithoutCast(Ty, getContext().getDeclAlign(Arg));
       LValue LV = MakeAddrLValue(Alloca, Ty);
       ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
 
@@ -3717,8 +3711,8 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
     case ABIArgInfo::TargetSpecific: {
       auto *AI = Fn->getArg(FirstIRArg);
       AI->setName(Arg->getName() + ".target_coerce");
-      Address Alloca =
-          CreateMemTemp(Ty, getContext().getDeclAlign(Arg), Arg->getName());
+      Address Alloca = CreateMemTempWithoutCast(
+          Ty, getContext().getDeclAlign(Arg), Arg->getName());
       Address Ptr = emitAddressAtOffset(*this, Alloca, ArgI);
       CGM.getABIInfo().createCoercedStore(AI, Ptr, ArgI, false, *this);
       if (CodeGenFunction::hasScalarEvaluationKind(Ty)) {
@@ -3737,9 +3731,8 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
       assert(NumIRArgs == 0);
       // Initialize the local variable appropriately.
       if (!hasScalarEvaluationKind(Ty)) {
-        RawAddress DebugAddr = Address::invalid();
-        RawAddress Alloca = CreateMemTemp(Ty, "tmp", &DebugAddr);
-        ArgVals.push_back(ParamValue::forIndirect(Alloca, DebugAddr));
+        ArgVals.push_back(
+            ParamValue::forIndirect(CreateMemTempWithoutCast(Ty)));
       } else {
         llvm::Value *U = llvm::UndefValue::get(ConvertType(Arg->getType()));
         ArgVals.push_back(ParamValue::forDirect(U));
@@ -5046,7 +5039,7 @@ struct DestroyUnpassedArg final : EHScopeStack::Cleanup {
 RValue CallArg::getRValue(CodeGenFunction &CGF) const {
   if (!HasLV)
     return RV;
-  LValue Copy = CGF.MakeAddrLValue(CGF.CreateMemTemp(Ty), Ty);
+  LValue Copy = CGF.MakeAddrLValue(CGF.CreateMemTempWithoutCast(Ty), Ty);
   CGF.EmitAggregateCopy(Copy, LV, Ty, AggValueSlot::DoesNotOverlap,
                         LV.isVolatile());
   IsUsed = true;
@@ -5250,6 +5243,30 @@ llvm::CallInst *CodeGenFunction::EmitRuntimeCall(llvm::FunctionCallee callee,
   if (CGM.shouldEmitConvergenceTokens() && call->isConvergent())
     return cast<llvm::CallInst>(addConvergenceControlToken(call));
   return call;
+}
+
+llvm::CallInst *CodeGenFunction::EmitIntrinsicCall(llvm::Intrinsic::ID ID,
+                                                   const llvm::Twine &Name) {
+  return EmitIntrinsicCall(ID, {}, {}, Name);
+}
+
+llvm::CallInst *CodeGenFunction::EmitIntrinsicCall(llvm::Intrinsic::ID ID,
+                                                   ArrayRef<llvm::Value *> Args,
+                                                   const llvm::Twine &Name) {
+  return EmitIntrinsicCall(ID, {}, Args, Name);
+}
+
+llvm::CallInst *CodeGenFunction::EmitIntrinsicCall(llvm::Intrinsic::ID ID,
+                                                   ArrayRef<llvm::Type *> Types,
+                                                   ArrayRef<llvm::Value *> Args,
+                                                   const llvm::Twine &Name) {
+  llvm::Function *F =
+      llvm::Intrinsic::getOrInsertDeclaration(&CGM.getModule(), ID, Types);
+  llvm::CallInst *Call =
+      Builder.CreateCall(F, Args, getBundlesForFunclet(F), Name);
+  if (CGM.shouldEmitConvergenceTokens() && Call->isConvergent())
+    return cast<llvm::CallInst>(addConvergenceControlToken(Call));
+  return Call;
 }
 
 /// Emits a call or invoke to the given noreturn runtime function.
@@ -5601,7 +5618,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
           // For indirect things such as overaligned structs, replace the
           // placeholder with a regular aggregate temporary alloca. Store the
           // address of this alloca into the struct.
-          Addr = CreateMemTemp(info_it->type, "inalloca.indirect.tmp");
+          Addr =
+              CreateMemTempWithoutCast(info_it->type, "inalloca.indirect.tmp");
           Address ArgSlot = Builder.CreateStructGEP(
               ArgMemory, ArgInfo.getInAllocaFieldIndex());
           Builder.CreateStore(Addr.getPointer(), ArgSlot);
@@ -5746,8 +5764,8 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
           swiftErrorArg = makeNaturalAddressForPointer(
               V, pointeeTy, getContext().getTypeAlignInChars(pointeeTy));
 
-          swiftErrorTemp =
-              CreateMemTemp(pointeeTy, getPointerAlign(), "swifterror.temp");
+          swiftErrorTemp = CreateMemTempWithoutCast(
+              pointeeTy, getPointerAlign(), "swifterror.temp");
           V = swiftErrorTemp.getPointer();
           cast<llvm::AllocaInst>(V)->setSwiftError(true);
 
@@ -5782,7 +5800,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
       // FIXME: Avoid the conversion through memory if possible.
       Address Src = Address::invalid();
       if (!I->isAggregate()) {
-        Src = CreateMemTemp(I->Ty, "coerce");
+        Src = CreateMemTempWithoutCast(I->Ty, "coerce");
         I->copyInto(*this, Src);
       } else {
         Src = I->hasLValue() ? I->getKnownLValue().getAddress()
@@ -5939,7 +5957,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
     case ABIArgInfo::TargetSpecific: {
       Address Src = Address::invalid();
       if (!I->isAggregate()) {
-        Src = CreateMemTemp(I->Ty, "target_coerce");
+        Src = CreateMemTempWithoutCast(I->Ty, "target_coerce");
         I->copyInto(*this, Src);
       } else {
         Src = I->hasLValue() ? I->getKnownLValue().getAddress()
@@ -6475,7 +6493,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
             getContext().getTypeInfoDataSizeInChars(RetTy).Width.getQuantity();
 
         if (!DestPtr.isValid()) {
-          DestPtr = CreateMemTemp(RetTy, "coerce");
+          DestPtr = CreateMemTempWithoutCast(RetTy, "coerce");
           DestIsVolatile = false;
           DestSize = getContext().getTypeSizeInChars(RetTy).getQuantity();
         }
@@ -6500,7 +6518,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         Address StorePtr = emitAddressAtOffset(*this, DestPtr, RetAI);
         bool DestIsVolatile = ReturnValue.isVolatile();
         if (!DestPtr.isValid()) {
-          DestPtr = CreateMemTemp(RetTy, "target_coerce");
+          DestPtr = CreateMemTempWithoutCast(RetTy, "target_coerce");
           DestIsVolatile = false;
         }
         CGM.getABIInfo().createCoercedStore(CI, StorePtr, RetAI, DestIsVolatile,

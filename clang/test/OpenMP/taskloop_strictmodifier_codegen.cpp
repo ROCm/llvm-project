@@ -128,7 +128,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry.(
-// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR3:[0-9]+]] {
+// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR3:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*]]:
 // CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw i8, ptr [[TMP1]], i64 40
 // CHECK-NEXT:    [[TMP3:%.*]] = load i64, ptr [[TMP2]], align 8, !tbaa [[LONG_TBAA27:![0-9]+]]
@@ -147,7 +147,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry..2(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR4:[0-9]+]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR4:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    tail call void @llvm.experimental.noalias.scope.decl(metadata [[META29:![0-9]+]])
 // CHECK-NEXT:    [[TMP2:%.*]] = tail call i32 @__kmpc_master(ptr nonnull @[[GLOB1]], i32 [[TMP0]]), !noalias [[META29]]
@@ -177,7 +177,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry..4(
-// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR3]] {
+// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR3]] {
 // CHECK-NEXT:  [[ENTRY:.*]]:
 // CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw i8, ptr [[TMP1]], i64 40
 // CHECK-NEXT:    [[TMP3:%.*]] = load i64, ptr [[TMP2]], align 8, !tbaa [[LONG_TBAA27]]
@@ -196,7 +196,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry..6(
-// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR5:[0-9]+]] {
+// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR5:[0-9]+]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[TMP1]], align 8, !tbaa [[ANYPTR_TBAA19]]
 // CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds nuw i8, ptr [[TMP1]], i64 40
@@ -230,7 +230,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry..8(
-// CHECK-SAME: i32 noundef [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR4]] {
+// CHECK-SAME: i32 noundef [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR4]] {
 // CHECK-NEXT:  [[ENTRY:.*]]:
 // CHECK-NEXT:    [[TMP2:%.*]] = getelementptr inbounds nuw i8, ptr [[TMP1]], i64 40
 // CHECK-NEXT:    [[TMP3:%.*]] = load i64, ptr [[TMP2]], align 8, !tbaa [[LONG_TBAA27]]
@@ -294,7 +294,7 @@ struct S {
 //
 //
 // CHECK-LABEL: define internal noundef i32 @.omp_task_entry..10(
-// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR5]] {
+// CHECK-SAME: i32 [[TMP0:%.*]], ptr noalias nofree noundef readonly captures(none) [[TMP1:%.*]]) #[[ATTR5]] {
 // CHECK-NEXT:  [[ENTRY:.*:]]
 // CHECK-NEXT:    [[TMP2:%.*]] = load ptr, ptr [[TMP1]], align 8, !tbaa [[ANYPTR_TBAA19]]
 // CHECK-NEXT:    [[TMP3:%.*]] = getelementptr inbounds nuw i8, ptr [[TMP1]], i64 40

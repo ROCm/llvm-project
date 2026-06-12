@@ -121,3 +121,5 @@ define void @test_call_external_void_func_a15i32_inreg_i32_inreg([15 x i32] inre
   call void @external_void_func_a15i32_inreg_i32_inreg([15 x i32] inreg %arg0, i32 inreg %arg1)
   ret void
 }
+
+attributes #0 = { nounwind }

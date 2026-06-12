@@ -96,11 +96,11 @@ struct RewriteRule {
 
 // -- Named constants ----------------------------------------------------------
 
-// Kernel descriptor size and RSRC1 offset from upstream
-// AMDHSAKernelDescriptor.h.
+// Kernel descriptor size from upstream AMDHSAKernelDescriptor.h. Field
+// offsets are resolved via offsetof(amdhsa::kernel_descriptor_t, field)
+// at the access site so the struct definition stays the single source
+// of truth and the *_OFFSET constants do not get spelled out twice.
 static constexpr uint64_t KdSize = sizeof(llvm::amdhsa::kernel_descriptor_t);
-static constexpr uint64_t KdRsrc1Offset =
-    llvm::amdhsa::COMPUTE_PGM_RSRC1_OFFSET;
 
 // Maximum distance (bytes) between an instruction and a NOP sled for the
 // sled to be considered reachable by a single s_branch.
@@ -117,6 +117,17 @@ static constexpr uint32_t MinInstSize = 4;
 // them to MCCodeEmitter.
 static constexpr int64_t BranchOffsetMin = -32768;
 static constexpr int64_t BranchOffsetMax = 32767;
+
+// MCInst operand layout for ds_load_addtid_b32 / ds_store_addtid_b32. Shared
+// between the trampoline patch (comgr-hotswap-patch-trampoline.cpp) and the
+// unit tests that pin the layout (HotswapMCTest.cpp) so a tablegen change
+// upstream is caught in one place.
+//   operand 0: vdst (load) / data0 (store) -- VGPR register
+//   operand 1: combined offset             -- immediate
+//   operand 2: gds                         -- immediate (0 = LDS, 1 = GDS)
+static constexpr unsigned AddtidOpReg = 0;
+static constexpr unsigned AddtidOpOffset = 1;
+static constexpr unsigned AddtidOpGds = 2;
 
 // -- ElfView ------------------------------------------------------------------
 //
@@ -183,6 +194,29 @@ public:
   std::optional<unsigned> getKernelVgprCount(llvm::StringRef KernelName,
                                              unsigned VgprGranuleSize) const;
 
+  /// Read `group_segment_fixed_size` from the kernel descriptor for
+  /// \p KernelName, i.e. the **static** (compile-time-fixed) LDS allocation
+  /// per work-group in bytes. Returns std::nullopt if the descriptor symbol
+  /// is missing.
+  ///
+  /// This is the only LDS quantity visible in the ELF. Dynamic LDS is
+  /// allocated by the host at dispatch time (carried in the AQL packet's
+  /// `group_segment_size` and propagated to the device via the
+  /// `hidden_dynamic_lds_size` kernarg) and is *not* included here, so the
+  /// returned value is a lower bound on the total LDS the kernel may
+  /// touch. Callers that need to flag potential overflow of A0's 16-bit M0
+  /// limit (DEGFXMI400-12025) can use this as a "definitely exceeds"
+  /// check; "static fits, dynamic pushes over" cannot be detected
+  /// statically. See AMDGPUUsage "Code Object V3 Kernel Descriptor"
+  /// (GROUP_SEGMENT_FIXED_SIZE).
+  std::optional<uint32_t>
+  getKernelStaticLdsSize(llvm::StringRef KernelName) const;
+
+  /// Read the SGPR count from the kernel descriptor for \p KernelName.
+  /// Returns std::nullopt if the descriptor is not found.
+  std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName,
+                                             unsigned SgprGranuleSize) const;
+
   /// Update the RSRC1 VGPR/SGPR granule counts in the kernel descriptor for
   /// \p KernelName by adding \p ExtraVgprs / \p ExtraSgprs, using
   /// \p VgprGranuleSize / \p SgprGranuleSize so the call is ISA-agnostic.
@@ -248,6 +282,7 @@ struct RewriteConfig {
   std::string TargetIsa;
   std::string TargetCpu;
   unsigned MaxVgprs = 0;
+  unsigned MaxSgprs = 0;
   unsigned VgprGranuleSize = 0;
   unsigned SgprGranuleSize = 0;
 };
@@ -426,14 +461,14 @@ struct LivenessInfo {
 /// the kernel descriptor's reported VGPR count. Constructed per patch site
 /// with the live-set at that site and the kernel's current / maximum VGPR
 /// counts.
-struct ScratchAllocator {
+struct VgprAllocator {
   llvm::BitVector LiveAtPoint;
   unsigned KdAllocatedVgprs = 0;
   unsigned NextAboveKd = 0;
   unsigned MaxVgprs = 0;
   unsigned ExtraAllocated = 0;
 
-  ScratchAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
+  VgprAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
       : LiveAtPoint(Live), KdAllocatedVgprs(KdVgprs), NextAboveKd(KdVgprs),
         MaxVgprs(Max) {}
 
@@ -458,6 +493,29 @@ struct ScratchAllocator {
   unsigned extraVgprsNeeded() const { return ExtraAllocated; }
 };
 
+/// Allocates scratch SGPRs for a patch point. Unlike VGPRs (which have full
+/// dataflow liveness), SGPRs have no liveness analysis — we always allocate
+/// above the kernel descriptor's reported SGPR count. This is conservative
+/// but safe: no SGPR currently in use by the kernel can be clobbered.
+struct SgprAllocator {
+  unsigned KdAllocatedSgprs = 0;
+  unsigned NextAboveKd = 0;
+  unsigned MaxSgprs = 0;
+
+  SgprAllocator(unsigned KdSgprs, unsigned Max)
+      : KdAllocatedSgprs(KdSgprs), NextAboveKd(KdSgprs), MaxSgprs(Max) {}
+
+  /// Allocate one SGPR above the kernel's current count. Returns
+  /// std::nullopt if no headroom remains below MaxSgprs.
+  std::optional<unsigned> alloc() {
+    if (NextAboveKd >= MaxSgprs)
+      return std::nullopt;
+    return NextAboveKd++;
+  }
+
+  unsigned extraSgprsNeeded() const { return NextAboveKd - KdAllocatedSgprs; }
+};
+
 /// Bookkeeping for a single patch site's scratch allocation. \c Offset is
 /// the .text byte offset of the patch; \c ScratchRegs is the bitvector of
 /// VGPRs the patch claimed at that site. Consumed by the post-patch
@@ -475,6 +533,7 @@ struct ScratchPatchInfo {
 /// amd_comgr_hotswap_result_t once that result struct is wired up.
 struct KernelPatchStats {
   unsigned ExtraVgprs = 0;
+  unsigned ExtraSgprs = 0;
   unsigned ScratchReused = 0;
   unsigned ScratchAboveKd = 0;
 };
