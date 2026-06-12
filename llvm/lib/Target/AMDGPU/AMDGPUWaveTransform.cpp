@@ -2372,6 +2372,18 @@ void ControlFlowRewriter::rewrite() {
   Updater.insertAccumulatorResets();
   AccumulatorRegs = std::move(Updater.getAllAccumulators());
   Updater.cleanup();
+
+  // remove unused virtual registers def
+  if (RegAllOnes && MRI.use_empty(RegAllOnes)) {
+    // getVRegDef can be used since RegAllOnes has a single def
+    MRI.getVRegDef(RegAllOnes)->eraseFromParent();
+    RegAllOnes = AMDGPU::NoRegister;
+  }
+  if (RegZero && MRI.use_empty(RegZero)) {
+    // getVRegDef can be used since RegZero has a single def
+    MRI.getVRegDef(RegZero)->eraseFromParent();
+    RegZero = AMDGPU::NoRegister;
+  }
 }
 
 /// This function fixes virtual register uses that have no dominating definition
