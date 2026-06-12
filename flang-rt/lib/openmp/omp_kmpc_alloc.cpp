@@ -67,8 +67,7 @@ using KmpcAllocFn = void *(*)(int /*gtid*/, std::size_t /*size*/,
     std::uintptr_t /*allocator*/);
 using KmpcAlignedAllocFn = void *(*)(int /*gtid*/, std::size_t /*align*/,
     std::size_t /*size*/, std::uintptr_t /*allocator*/);
-using KmpcFreeFn = void (*)(int /*gtid*/, void *,
-    std::uintptr_t /*allocator*/);
+using KmpcFreeFn = void (*)(int /*gtid*/, void *, std::uintptr_t /*allocator*/);
 using KmpcGtidFn = int (*)(void * /*ident*/);
 
 struct OmpRuntime {
@@ -192,10 +191,11 @@ RT_API_ATTRS void *OmpAllocate(
 #endif
     return nullptr;
   }
-  // Per OpenMP spec, align must be a positive power of two.  __kmpc_aligned_alloc
-  // is the authority that validates this and returns nullptr on violation;
-  // we do not double-check here.  The size-must-be-a-multiple-of-align
-  // precondition of POSIX aligned_alloc is also delegated to
+  // Per OpenMP spec, align must be a positive power of two.
+  // __kmpc_aligned_alloc is the authority that validates this and returns
+  // nullptr on violation; we do not double-check here.  The
+  // size-must-be-a-multiple-of-align precondition of POSIX aligned_alloc is
+  // also delegated to
   // __kmpc_aligned_alloc, which is documented to be lenient about it
   // (libomp internally rounds the size up before calling the underlying
   // allocator).  Test fakes that wrap std::aligned_alloc directly must
@@ -347,10 +347,10 @@ void RTDEF(OmpAllocatorStamp)(
   // slot.  The OmpAllocateAdapter (registered under kOmpAllocatorPos) will
   // consume the (handle, align) pair on the immediately-following
   // allocation call.  We record the descriptor pointer too so that debug
-  // builds can catch orphaned stamps (see SetPendingOmpAllocStampForDescriptor).
-  // OmpFreeAdapter does not need the handle: it passes 0 to __kmpc_free,
-  // and libomp recovers the original allocator from the pointer's chunk
-  // header.
+  // builds can catch orphaned stamps (see
+  // SetPendingOmpAllocStampForDescriptor). OmpFreeAdapter does not need the
+  // handle: it passes 0 to __kmpc_free, and libomp recovers the original
+  // allocator from the pointer's chunk header.
   omp::SetPendingOmpAllocStampForDescriptor(&descriptor, handle, align);
 }
 

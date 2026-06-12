@@ -37,9 +37,9 @@
 #include "flang/Runtime/pointer.h"
 #include "flang/Semantics/tools.h"
 #include "flang/Semantics/type.h"
-#include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "flang/Support/Fortran-features.h"
+#include "mlir/Dialect/OpenMP/OpenMPInterfaces.h"
 #include "llvm/Support/CommandLine.h"
 
 /// By default fir memory operation fir::AllocMemOp/fir::FreeMemOp are used.
@@ -635,9 +635,8 @@ private:
     // detect at deallocate time which path to take.  Doing so requires
     // either an addendum bit on intrinsic-type descriptors (currently
     // optional) or a separate descriptor-side flag.
-    bool isOmpAllocatorTouched =
-        Fortran::lower::isOmpAllocatorTouchedSymbol(
-            converter.getSemanticsContext(), alloc.getSymbol());
+    bool isOmpAllocatorTouched = Fortran::lower::isOmpAllocatorTouchedSymbol(
+        converter.getSemanticsContext(), alloc.getSymbol());
     bool inlineAllocation = !box.isDerived() && !errorManager.hasStatSpec() &&
                             !alloc.type.IsPolymorphic() &&
                             !alloc.hasCoarraySpec() && !useAllocateRuntime &&
