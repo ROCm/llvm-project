@@ -1524,7 +1524,6 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GCN-NEXT:    v_and_b32_e32 v3, 0xffffff, v4
 ; GCN-NEXT:    s_mov_b32 s4, s6
 ; GCN-NEXT:    s_mov_b32 s5, s6
-; GCN-NEXT:    s_mov_b64 s[8:9], -1
 ; GCN-NEXT:    s_mov_b64 s[8:9], 0
 ; GCN-NEXT:  .LBB9_1: ; %bb19
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -1555,7 +1554,6 @@ define void @mad24_known_bits_destroyed(i32 %arg, <4 x i32> %arg1, <4 x i32> %ar
 ; GFX8-LABEL: mad24_known_bits_destroyed:
 ; GFX8:       ; %bb.0: ; %bb
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX8-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX8-NEXT:    v_mov_b32_e32 v5, v0
 ; GFX8-NEXT:    v_and_b32_e32 v0, 0xffffff, v13
 ; GFX8-NEXT:    v_and_b32_e32 v1, 0xffffff, v2

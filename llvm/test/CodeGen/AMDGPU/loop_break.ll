@@ -38,7 +38,6 @@ define amdgpu_kernel void @break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s0, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB0_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -114,7 +113,6 @@ define amdgpu_kernel void @undef_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s0, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB1_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -213,7 +211,6 @@ define amdgpu_kernel void @constexpr_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB2_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -309,7 +306,6 @@ define amdgpu_kernel void @true_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB3_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -404,8 +400,6 @@ define amdgpu_kernel void @false_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
-; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB4_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    s_cmp_gt_i32 s4, -1
@@ -503,7 +497,6 @@ define amdgpu_kernel void @invert_true_phi_cond_break_loop(i32 %arg) #0 {
 ; GCN-NEXT:    v_subrev_i32_e32 v0, vcc, s3, v0
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    ; implicit-def: $sgpr4
-; GCN-NEXT:    s_mov_b64 s[0:1], -1
 ; GCN-NEXT:    s_mov_b64 s[0:1], 0
 ; GCN-NEXT:  .LBB5_1: ; %bb1
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
