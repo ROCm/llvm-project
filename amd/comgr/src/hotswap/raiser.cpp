@@ -80,6 +80,26 @@ namespace COMGR::hotswap {
 
 namespace {
 
+llvm::DenseSet<uint64_t> collectInstructionOffsets(ArrayRef<DecodedInst> Insts) {
+  llvm::DenseSet<uint64_t> Offsets;
+  for (const DecodedInst &Di : Insts)
+    Offsets.insert(Di.Offset);
+  return Offsets;
+}
+
+void mergeDecodeResult(DecodeResult &Base, DecodeResult &&Extra) {
+  llvm::DenseSet<uint64_t> Seen = collectInstructionOffsets(Base.Insts);
+  for (DecodedInst &Di : Extra.Insts) {
+    if (!Seen.insert(Di.Offset).second)
+      continue;
+    Base.Insts.push_back(std::move(Di));
+  }
+  llvm::sort(Base.Insts, [](const DecodedInst &A, const DecodedInst &B) {
+    return A.Offset < B.Offset;
+  });
+  Base.BlockStarts.insert(Extra.BlockStarts.begin(), Extra.BlockStarts.end());
+}
+
 enum class ThreadLoopDecision {
   NotApplicable,
   EligibleButGateOff,
@@ -196,6 +216,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
                                  llvm::StringRef KernelName,
                                  const KernelMeta &Meta,
                                  uint64_t KernelOffset,
+                                 uint64_t KernelSize,
                                  llvm::StringRef CompilationTargetIsa,
                                  bool EnableWritelaneRewrite,
                                  bool EnableWaveNative,
@@ -417,10 +438,16 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // The decode loop (and its two LLVM-drift guards) lives in decode.cpp so
   // this function stays focused on IR emission. decodeKernel returns a
   // linearised instruction stream + the set of CFG block-start offsets.
+  if (KernelSize != 0 && KernelSize > UINT64_MAX - KernelOffset)
+    report_fatal_error("transpiler: kernel decode extent overflows");
+  const uint64_t KernelEndOffset =
+      KernelSize == 0 ? 0 : KernelOffset + KernelSize;
+  const uint64_t DecodeLimit =
+      KernelEndOffset == 0 ? TextBytes.size() : KernelEndOffset;
   DecodeResult Decoded =
       decodeKernel(Mc, OpcMap,
                    ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
-                   KernelOffset);
+                   KernelOffset, KernelEndOffset);
   auto &Insts = Decoded.Insts;
   auto &BlockStarts = Decoded.BlockStarts;
 
@@ -437,9 +464,52 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // rewrite both look up those BBs via `ctx.lookupBB`.
   // See setpc-analysis.h + canonical-op.h's `S_SET_PC_I64` doc for the
   // analysis contract.
-  SetPcAnalysis SetpcAnalysis = analyseSetPC(Insts, BlockStarts, Mc);
-  for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts)
+  SetPcAnalysis SetpcAnalysis;
+  // SetPC analysis can discover helper/subroutine regions that ordinary linear
+  // decode did not reach. Decode every newly-discovered in-kernel target to a
+  // fixpoint; crossing the selected symbol extent is a boundary violation, and
+  // an in-extent target that cannot decode is a hard CFG recovery failure.
+  while (true) {
+    SetpcAnalysis = analyseSetPC(Insts, BlockStarts, Mc);
+    llvm::DenseSet<uint64_t> InstOffsets = collectInstructionOffsets(Insts);
+    bool AddedHelperRegion = false;
+    for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts) {
+      if (Addr < KernelOffset || Addr >= DecodeLimit) {
+        Result.Failure = RaiseFailure::kernelBoundaryViolation(
+            KernelName, Addr,
+            "s_set_pc_i64 analysis discovered a target outside the selected "
+            "kernel extent");
+        return Result;
+      }
+      if (InstOffsets.count(Addr))
+        continue;
+      DecodeResult HelperDecoded =
+          decodeKernel(Mc, OpcMap,
+                       ArrayRef<uint8_t>(TextBytes.data(), TextBytes.size()),
+                       Addr, KernelEndOffset, KernelOffset);
+      if (HelperDecoded.Insts.empty()) {
+        Result.Failure = RaiseFailure::kernelBoundaryViolation(
+            KernelName, Addr,
+            "s_set_pc_i64 analysis discovered an in-extent target that could "
+            "not be decoded");
+        return Result;
+      }
+      mergeDecodeResult(Decoded, std::move(HelperDecoded));
+      AddedHelperRegion = true;
+    }
+    if (!AddedHelperRegion)
+      break;
+  }
+  for (uint64_t Addr : SetpcAnalysis.ExtraBlockStarts) {
+    if (Addr < KernelOffset || Addr >= DecodeLimit) {
+      Result.Failure = RaiseFailure::kernelBoundaryViolation(
+          KernelName, Addr,
+          "s_set_pc_i64 analysis discovered a final block start outside the "
+          "selected kernel extent");
+      return Result;
+    }
     BlockStarts.insert(Addr);
+  }
 
   Result.TotalCount = static_cast<int>(Insts.size());
 
@@ -527,6 +597,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
              << Trace;
       Result.Failure = std::move(F);
       return Result;
+
     }
   }
 
@@ -991,7 +1062,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
                    &UserSgprLayout, F,
                    nullptr,
                    I1Ty, I8Ty, I32Ty, I64Ty, F32Ty, F16Ty, F64Ty,
-                   PtrGlobalTy, OffsetToBb};
+                   PtrGlobalTy, OffsetToBb, KernelOffset, KernelEndOffset};
   Ctx.SetpcAnalysis = &SetpcAnalysis;
   Ctx.SourcePrivateSegmentFixedSize = Meta.PrivateSegmentFixedSize;
   Ctx.SourceComputePgmRsrc2 = Meta.ComputePgmRsrc2;
@@ -1411,7 +1482,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
         errs() << "transpiler: thread-loop fallback trigger: "
                << RewriteReport.SgprForcedDetail << "\n";
         return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
-                             KernelOffset, CompilationTargetIsa,
+                             KernelOffset, KernelSize, CompilationTargetIsa,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
@@ -1596,7 +1667,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
         errs() << "transpiler: thread-loop fallback trigger: "
                << PredReport.RefusalDetail << "\n";
         return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta,
-                             KernelOffset, CompilationTargetIsa,
+                             KernelOffset, KernelSize, CompilationTargetIsa,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
@@ -1657,12 +1728,26 @@ RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
                       llvm::StringRef SourceIsa,
                       llvm::StringRef KernelName,
                       const KernelMeta &Meta,
+                      llvm::StringRef CompilationTargetIsa,
+                      bool EnableWritelaneRewrite,
+                      bool EnableWaveNative) {
+  return raiseToIR(TextBytes, SourceIsa, KernelName, Meta,
+                   /*KernelOffset=*/0,
+                   /*KernelSize=*/0, CompilationTargetIsa,
+                   EnableWritelaneRewrite, EnableWaveNative);
+}
+
+RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
+                      llvm::StringRef SourceIsa,
+                      llvm::StringRef KernelName,
+                      const KernelMeta &Meta,
                       uint64_t KernelOffset,
+                      uint64_t KernelSize,
                       llvm::StringRef CompilationTargetIsa,
                       bool EnableWritelaneRewrite,
                       bool EnableWaveNative) {
   return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
-                       CompilationTargetIsa, EnableWritelaneRewrite,
+                       KernelSize, CompilationTargetIsa, EnableWritelaneRewrite,
                        EnableWaveNative,
                        /*forceThreadLoopProjection=*/false,
                        /*suppressC5ForThreadLoopRoute=*/false);

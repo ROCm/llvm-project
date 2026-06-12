@@ -117,17 +117,17 @@ InspectedError inspect(llvm::Error Err) {
 
 } // namespace
 
-TEST(CodeObjectUtils, KernelSymbolOffsetMalformedElfReturnsForwardedError) {
+TEST(CodeObjectUtils, KernelSymbolExtentMalformedElfReturnsForwardedError) {
   uint8_t Garbage[] = {0x7f, 'E', 'L', 'F', 0, 0, 0, 0};
   llvm::MemoryBufferRef Buf(
       llvm::StringRef(reinterpret_cast<const char *>(Garbage), sizeof(Garbage)),
       "garbage");
 
-  llvm::Expected<uint64_t> Offset =
-      COMGR::hotswap::findKernelSymbolOffset(Buf, "missing_kernel");
+  llvm::Expected<COMGR::hotswap::KernelSymbolExtent> Extent =
+      COMGR::hotswap::findKernelSymbolExtent(Buf, "missing_kernel");
 
-  ASSERT_FALSE(static_cast<bool>(Offset));
-  InspectedError Err = inspect(Offset.takeError());
+  ASSERT_FALSE(static_cast<bool>(Extent));
+  InspectedError Err = inspect(Extent.takeError());
   EXPECT_FALSE(Err.IsHotswapError)
       << "ELF parse failures must propagate as the upstream "
          "llvm::object::ObjectFile ErrorInfo, not as HotswapError";
@@ -187,10 +187,11 @@ TEST(CodeObjectUtils, ExtractKernelMetaNoMetadataReturnsHotswapError) {
       << Err.Message;
 }
 
-TEST(CodeObjectUtils, FindKernelSymbolOffsetMissingTextReturnsHotswapError) {
+TEST(CodeObjectUtils, FindKernelSymbolExtentMissingTextReturnsHotswapError) {
   std::vector<uint8_t> Bytes = buildMinimalAmdgpuElf();
-  llvm::Expected<uint64_t> Result = COMGR::hotswap::findKernelSymbolOffset(
-      toBuf(Bytes, "no-text.elf"), "any_kernel");
+  llvm::Expected<COMGR::hotswap::KernelSymbolExtent> Result =
+      COMGR::hotswap::findKernelSymbolExtent(toBuf(Bytes, "no-text.elf"),
+                                             "any_kernel");
 
   ASSERT_FALSE(static_cast<bool>(Result));
   InspectedError Err = inspect(Result.takeError());

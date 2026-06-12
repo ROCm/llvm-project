@@ -29,6 +29,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <climits>
@@ -648,7 +649,8 @@ void decodeVopd(DecodedInst &Di, const MCInstrInfo &MCII,
 }
 
 void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
-                          uint64_t InstSize,
+                          uint64_t InstSize, uint64_t KernelStartOffset,
+                          uint64_t DecodeLimit,
                           std::set<uint64_t> &BlockStarts) {
   const MCInst &Inst = Di.Inst;
   // s_add_pc_i64 carries a signed i64 PC-relative offset, not the SOPP form.
@@ -656,8 +658,24 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
     if (!Inst.getOperand(0).isImm())
       report_fatal_error("transpiler: s_add_pc_i64 with non-immediate source "
                          "(only the immediate-literal form is supported)");
+    if (InstSize > UINT64_MAX - Off)
+      return;
+    uint64_t Base = Off + InstSize;
     int64_t Imm = Inst.getOperand(0).getImm();
-    BlockStarts.insert(Off + InstSize + static_cast<uint64_t>(Imm));
+    uint64_t Target = 0;
+    if (Imm < 0) {
+      uint64_t Back = llvm::AbsoluteValue(Imm);
+      if (Back > Base)
+        return;
+      Target = Base - Back;
+    } else {
+      uint64_t Forward = static_cast<uint64_t>(Imm);
+      if (Forward > UINT64_MAX - Base)
+        return;
+      Target = Base + Forward;
+    }
+    if (Target >= KernelStartOffset && Target < DecodeLimit)
+      BlockStarts.insert(Target);
     return;
   }
   for (unsigned I = 0; I < Inst.getNumOperands(); ++I) {
@@ -666,10 +684,29 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
     int64_t Raw = Inst.getOperand(I).getImm();
     int64_t BrOff = static_cast<int64_t>(
         static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    BlockStarts.insert(Off + 4 + BrOff * 4);
+    if (Off > UINT64_MAX - 4)
+      continue;
+    uint64_t Base = Off + 4;
+    uint64_t Target = 0;
+    if (BrOff < 0) {
+      uint64_t Back = static_cast<uint64_t>(-BrOff) * 4;
+      if (Back > Base)
+        continue;
+      Target = Base - Back;
+    } else {
+      uint64_t Forward = static_cast<uint64_t>(BrOff) * 4;
+      if (Forward > UINT64_MAX - Base)
+        continue;
+      Target = Base + Forward;
+    }
+    if (Target >= KernelStartOffset && Target < DecodeLimit)
+      BlockStarts.insert(Target);
   }
-  if (Di.IsConditionalBranch)
-    BlockStarts.insert(Off + InstSize);
+  if (Di.IsConditionalBranch && InstSize <= UINT64_MAX - Off) {
+    uint64_t Fallthrough = Off + InstSize;
+    if (Fallthrough >= KernelStartOffset && Fallthrough < DecodeLimit)
+      BlockStarts.insert(Fallthrough);
+  }
 }
 
 } // namespace
@@ -677,22 +714,38 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
 DecodeResult decodeKernel(const MCState &Mc,
                           const OpcodeMap &OpcMap,
                           ArrayRef<uint8_t> TextBytes,
-                          uint64_t KernelOffset) {
+                          uint64_t KernelOffset,
+                          uint64_t KernelEndOffset,
+                          std::optional<uint64_t> KernelStartOffset) {
   DecodeResult Out;
   Out.BlockStarts.insert(KernelOffset);
+  uint64_t KernelStart = KernelStartOffset.value_or(KernelOffset);
 
   if (KernelOffset > 0)
     errs() << "transpiler: Starting disassembly at kernel offset 0x"
            << utohexstr(KernelOffset) << "\n";
 
-  const uint64_t TotalSize = TextBytes.size();
+  if (KernelOffset > TextBytes.size())
+    report_fatal_error(
+        "transpiler: kernel decode offset is outside .text contents");
+  if (KernelStart > KernelOffset)
+    report_fatal_error("transpiler: kernel decode start follows scan offset");
+  if (KernelEndOffset != 0 && KernelEndOffset < KernelOffset)
+    report_fatal_error("transpiler: kernel decode end precedes start");
+  if (KernelEndOffset > TextBytes.size())
+    report_fatal_error("transpiler: kernel decode end is outside .text contents");
+
+  const uint64_t TotalSize =
+      KernelEndOffset == 0 ? static_cast<uint64_t>(TextBytes.size())
+                           : KernelEndOffset;
   uint64_t Off = KernelOffset;
   while (Off < TotalSize) {
     MCInst Inst;
     uint64_t InstSize = 0;
     auto Status = Mc.Disasm->getInstruction(Inst, InstSize,
-                                            TextBytes.slice(Off), Off,
-                                            nulls());
+                                            TextBytes.slice(Off,
+                                                            TotalSize - Off),
+                                            Off, nulls());
     if (Status != MCDisassembler::Success) {
       Off += 4;
       continue;
@@ -729,7 +782,8 @@ DecodeResult decodeKernel(const MCState &Mc,
     classifyImplicitDefs(Di, Desc);
 
     if (Di.IsBranch)
-      collectBranchTargets(Di, Off, InstSize, Out.BlockStarts);
+      collectBranchTargets(Di, Off, InstSize, KernelStart, TotalSize,
+                           Out.BlockStarts);
 
     bool IsEnd = (Di.CanonOp == CanonicalOp::S_ENDPGM);
     Out.Insts.push_back(std::move(Di));

@@ -11,10 +11,73 @@
 #include "SIDefines.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/Support/MathExtras.h"
+
+#include <climits>
 
 using namespace llvm;
 
 namespace COMGR::hotswap {
+
+namespace {
+
+bool computeSoppTarget(const DecodedInst &Di, uint64_t &Target) {
+  int64_t Raw = Di.getImm(0);
+  int64_t BrOff = SignExtend64<16>(static_cast<uint64_t>(Raw));
+  if (Di.Offset > UINT64_MAX - 4)
+    return false;
+  uint64_t Base = Di.Offset + 4;
+  if (BrOff < 0) {
+    uint64_t Back = static_cast<uint64_t>(-BrOff) * 4;
+    if (Back > Base)
+      return false;
+    Target = Base - Back;
+    return true;
+  }
+  uint64_t Forward = static_cast<uint64_t>(BrOff) * 4;
+  if (Forward > UINT64_MAX - Base)
+    return false;
+  Target = Base + Forward;
+  return true;
+}
+
+BasicBlock *lookupDecodedBB(RaiseContext &Ctx, const DecodedInst &Di,
+                            uint64_t Addr, const llvm::Twine &Role,
+                            HandlerResult &Hr) {
+  auto It = Ctx.OffsetToBb.find(Addr);
+  if (It != Ctx.OffsetToBb.end())
+    return It->second;
+  // Branch targets should already have been admitted by decode/CFG recovery and
+  // materialised in OffsetToBb. Do not call RaiseContext::lookupBB here: that
+  // helper creates fallback blocks for historical recovery paths, but a missing
+  // SOPP target now means either control left the selected kernel extent or CFG
+  // recovery failed to decode an in-extent target.
+  if (Addr < Ctx.KernelStartOffset ||
+      (Ctx.KernelEndOffset != 0 && Addr >= Ctx.KernelEndOffset)) {
+    Hr.Failure = RaiseFailure::kernelBoundaryViolation(
+        Ctx.Kernel->getName(), Addr,
+        Twine(Role) + " target is outside the selected kernel extent");
+    return nullptr;
+  }
+  Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+      Di, "SOPP",
+      Twine(Role) + " target 0x" + Twine::utohexstr(Addr) +
+          " is inside the selected kernel extent but was not decoded");
+  return nullptr;
+}
+
+BasicBlock *lookupFallthroughBB(RaiseContext &Ctx, const DecodedInst &Di,
+                                llvm::StringRef Role, HandlerResult &Hr) {
+  if (Di.Size > UINT64_MAX - Di.Offset) {
+    Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+        Di, "SOPP", Twine(Role) + " fallthrough overflows source offset");
+    return nullptr;
+  }
+  return lookupDecodedBB(Ctx, Di, Di.Offset + Di.Size,
+                         Twine(Role) + " fallthrough", Hr);
+}
+
+} // namespace
 
 HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
                          OpResolver &Op) {
@@ -31,20 +94,34 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_BRANCH) {
-    int64_t Raw = Di.getImm(0);
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    Ctx.B.CreateBr(Ctx.lookupBB(Di.Offset + 4 + BrOff * 4));
+    uint64_t Target = 0;
+    if (!computeSoppTarget(Di, Target)) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SOPP", "s_branch target overflows source offset arithmetic");
+      return Hr;
+    }
+    BasicBlock *TargetBb = lookupDecodedBB(Ctx, Di, Target, "s_branch", Hr);
+    if (!TargetBb)
+      return Hr;
+    Ctx.B.CreateBr(TargetBb);
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_EXECZ || Sop == CanonicalOp::S_CBRANCH_EXECNZ) {
-    int64_t Raw = Di.getImm(0);
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    uint64_t Target = Di.Offset + 4 + BrOff * 4;
-    BasicBlock *TargetBb = Ctx.lookupBB(Target);
-    BasicBlock *FallthroughBb = Ctx.lookupBB(Di.Offset + Di.Size);
+    uint64_t Target = 0;
+    if (!computeSoppTarget(Di, Target)) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SOPP", "s_cbranch_exec target overflows source offset arithmetic");
+      return Hr;
+    }
+    BasicBlock *TargetBb = lookupDecodedBB(Ctx, Di, Target,
+                                           "s_cbranch_exec", Hr);
+    if (!TargetBb)
+      return Hr;
+    BasicBlock *FallthroughBb = lookupFallthroughBB(
+        Ctx, Di, "s_cbranch_exec", Hr);
+    if (!FallthroughBb)
+      return Hr;
     Value *ExecVal = Ctx.Regs.loadExec(Ctx.B);
     Value *IsZero = Ctx.B.CreateICmpEQ(
         ExecVal, Constant::getNullValue(Ctx.Regs.ExecTy), "exec_is_zero");
@@ -57,12 +134,20 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_SCC0 || Sop == CanonicalOp::S_CBRANCH_SCC1) {
-    int64_t Raw = Di.getImm(0);
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    uint64_t Target = Di.Offset + 4 + BrOff * 4;
-    BasicBlock *TargetBb = Ctx.lookupBB(Target);
-    BasicBlock *FallthroughBb = Ctx.lookupBB(Di.Offset + Di.Size);
+    uint64_t Target = 0;
+    if (!computeSoppTarget(Di, Target)) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SOPP", "s_cbranch_scc target overflows source offset arithmetic");
+      return Hr;
+    }
+    BasicBlock *TargetBb =
+        lookupDecodedBB(Ctx, Di, Target, "s_cbranch_scc", Hr);
+    if (!TargetBb)
+      return Hr;
+    BasicBlock *FallthroughBb = lookupFallthroughBB(
+        Ctx, Di, "s_cbranch_scc", Hr);
+    if (!FallthroughBb)
+      return Hr;
     Value *SccV = Ctx.Regs.loadSCC(Ctx.B);
     if (Sop == CanonicalOp::S_CBRANCH_SCC0)
       SccV = Ctx.B.CreateNot(SccV, "not_scc");
@@ -71,12 +156,20 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_VCCNZ || Sop == CanonicalOp::S_CBRANCH_VCCZ) {
-    int64_t Raw = Di.getImm(0);
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    uint64_t Target = Di.Offset + 4 + BrOff * 4;
-    BasicBlock *TargetBb = Ctx.lookupBB(Target);
-    BasicBlock *FallthroughBb = Ctx.lookupBB(Di.Offset + Di.Size);
+    uint64_t Target = 0;
+    if (!computeSoppTarget(Di, Target)) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "SOPP", "s_cbranch_vcc target overflows source offset arithmetic");
+      return Hr;
+    }
+    BasicBlock *TargetBb =
+        lookupDecodedBB(Ctx, Di, Target, "s_cbranch_vcc", Hr);
+    if (!TargetBb)
+      return Hr;
+    BasicBlock *FallthroughBb = lookupFallthroughBB(
+        Ctx, Di, "s_cbranch_vcc", Hr);
+    if (!FallthroughBb)
+      return Hr;
     Value *VccV = Ctx.Regs.loadVCC(Ctx.B);
     if (Sop == CanonicalOp::S_CBRANCH_VCCZ)
       VccV = Ctx.B.CreateNot(VccV, "not_vcc");

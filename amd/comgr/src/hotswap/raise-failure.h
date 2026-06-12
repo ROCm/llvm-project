@@ -62,6 +62,11 @@ enum class RaiseFailureReason : uint16_t {
   TargetMachineCreationFailed,
   // Phase 7: `verifyModule` rejected the emitted IR.
   IRVerificationFailed,
+  // Decoded control flow targets outside the selected kernel symbol extent, or
+  // the raiser could not decode an in-extent target required by static CFG
+  // recovery. The selected kernel boundary is part of the source object
+  // contract; crossing it would inspect/lift neighboring symbols.
+  KernelBoundaryViolation,
   // A helper/device-library bitcode link step failed before verification. This
   // is distinct from verifier failure: the module is intentionally incomplete
   // until the embedded helper or device-library body is linked and inlined.
@@ -181,6 +186,11 @@ struct RaiseFailure {
   // Phase 7: `verifyModule` rejected the emitted IR.
   // `err` carries the verifier's diagnostic text for the `detail` field.
   static RaiseFailure irVerificationFailed(const llvm::Twine &Err);
+
+  // Kernel-symbol boundary check failed during CFG recovery.
+  static RaiseFailure kernelBoundaryViolation(llvm::StringRef KernelName,
+                                              uint64_t TargetOffset,
+                                              const llvm::Twine &Detail);
 
   // Embedded helper/device-library linking failed before verification.
   // `kernelName` and `detail` preserve attribution for proof logs without

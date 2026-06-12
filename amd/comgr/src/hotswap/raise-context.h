@@ -63,6 +63,8 @@ struct RaiseContext {
   llvm::Type *PtrGlobalTy;
 
   llvm::DenseMap<uint64_t, llvm::BasicBlock *> &OffsetToBb;
+  uint64_t KernelStartOffset = 0;
+  uint64_t KernelEndOffset = 0;
 
   // Source KD private/scratch allocation. `handle-flat.cpp` sets
   // `usesScratchPrivateSegment` when it lowers a `scratch_*` instruction; the

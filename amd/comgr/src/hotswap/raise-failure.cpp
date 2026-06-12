@@ -34,6 +34,8 @@ const char *reasonString(RaiseFailureReason R) {
     return "TargetMachineCreationFailed";
   case RaiseFailureReason::IRVerificationFailed:
     return "IRVerificationFailed";
+  case RaiseFailureReason::KernelBoundaryViolation:
+    return "kernel-boundary-violation";
   case RaiseFailureReason::DeviceLibraryLinkFailed:
     return "device-library-link-failed";
   case RaiseFailureReason::CrossWaveLaneIdLeak:
@@ -145,6 +147,18 @@ RaiseFailure RaiseFailure::irVerificationFailed(const llvm::Twine &Err) {
   F.Reason = RaiseFailureReason::IRVerificationFailed;
   F.Format = reasonString(RaiseFailureReason::IRVerificationFailed);
   F.Detail = Err.str();
+  return F;
+}
+
+RaiseFailure RaiseFailure::kernelBoundaryViolation(
+    llvm::StringRef KernelName, uint64_t TargetOffset,
+    const llvm::Twine &Detail) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::KernelBoundaryViolation;
+  F.Mnemonic = "<kernel-boundary>";
+  F.Format = reasonString(RaiseFailureReason::KernelBoundaryViolation);
+  F.Offset = TargetOffset;
+  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
   return F;
 }
 

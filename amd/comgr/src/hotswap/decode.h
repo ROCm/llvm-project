@@ -15,6 +15,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 #include <cstdint>
+#include <optional>
 #include <set>
 
 namespace COMGR::hotswap {
@@ -55,7 +56,10 @@ struct DecodeResult {
 DecodeResult decodeKernel(const MCState &Mc,
                           const OpcodeMap &OpcMap,
                           llvm::ArrayRef<uint8_t> TextBytes,
-                          uint64_t KernelOffset);
+                          uint64_t KernelOffset,
+                          uint64_t KernelEndOffset = 0,
+                          std::optional<uint64_t> KernelStartOffset =
+                              std::nullopt);
 
 } // namespace COMGR::hotswap
 

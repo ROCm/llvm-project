@@ -270,26 +270,28 @@ static bool raiseAndCompileKernel(const TextSection &text,
                  << "', using empty metadata\n";
   }
 
-  auto kernelOffsetOrErr = findKernelSymbolOffset(codeObjectData, kernelName);
-  if (!kernelOffsetOrErr) {
-    std::string err = llvm::toString(kernelOffsetOrErr.takeError());
+  auto kernelExtentOrErr = findKernelSymbolExtent(codeObjectData, kernelName);
+  if (!kernelExtentOrErr) {
+    std::string err = llvm::toString(kernelExtentOrErr.takeError());
     llvm::errs() << "transpiler: " << err << "\n";
     result.FailKernel = kernelName;
-    result.FailMnemonic = "__kernel_offset__";
-    result.FailReason = "KernelSymbolOffsetLookupFailed";
-    result.FailFormat = "KernelSymbolOffsetLookupFailed";
+    result.FailMnemonic = "__kernel_extent__";
+    result.FailReason = "KernelSymbolExtentLookupFailed";
+    result.FailFormat = "KernelSymbolExtentLookupFailed";
     result.FailDetail = err;
     result.Timings.raiseSeconds += timingElapsed(options.CollectTimings, raiseStart);
     return false;
   }
-  uint64_t kernelOffset = *kernelOffsetOrErr;
+  uint64_t kernelOffset = kernelExtentOrErr->Offset;
+  uint64_t kernelSize = kernelExtentOrErr->Size;
   LLVM_DEBUG(if (kernelOffset > 0)
     llvm::dbgs() << "transpiler: Kernel '" << kernelName
                  << "' at .text offset 0x" << llvm::utohexstr(kernelOffset)
-                 << "\n");
+                 << " size 0x" << llvm::utohexstr(kernelSize) << "\n");
 
   auto raised = raiseToIR(text.Bytes, sourceISA, kernelName, meta, kernelOffset,
-                           targetISA, options.EnableWritelaneRewrite,
+                           kernelSize, targetISA,
+                           options.EnableWritelaneRewrite,
                            options.EnableWaveNative);
   if (!raised.Success) {
     llvm::errs() << "transpiler: Raising '" << kernelName << "' to LLVM IR failed";

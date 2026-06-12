@@ -411,16 +411,18 @@ int main(int argc, char **argv) {
       return 1;
     }
     COMGR::hotswap::KernelMeta meta = std::move(*metaOrErr);
-    auto kernelOffsetOrErr = COMGR::hotswap::findKernelSymbolOffset(coData, target);
-    if (!kernelOffsetOrErr) {
-      std::string err = llvm::toString(kernelOffsetOrErr.takeError());
+    auto kernelExtentOrErr =
+        COMGR::hotswap::findKernelSymbolExtent(coData, target);
+    if (!kernelExtentOrErr) {
+      std::string err = llvm::toString(kernelExtentOrErr.takeError());
       llvm::errs() << "raise_cli: kernel '" << target
-                   << "' offset lookup failed: " << err << "\n";
+                   << "' extent lookup failed: " << err << "\n";
       return 1;
     }
-    uint64_t kernelOffset = *kernelOffsetOrErr;
+    uint64_t kernelOffset = kernelExtentOrErr->Offset;
+    uint64_t kernelSize = kernelExtentOrErr->Size;
     auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, target, meta,
-                                        kernelOffset, targetIsa,
+                                        kernelOffset, kernelSize, targetIsa,
                                         EnableWritelaneRewrite,
                                         EnableWaveNative);
     if (!raised.Success) {
@@ -522,18 +524,20 @@ int main(int argc, char **argv) {
     });
     std::memset(shm, 0, sizeof(KernelRaiseStats));
 
-    auto kernelOffsetOrErr = COMGR::hotswap::findKernelSymbolOffset(coData, kName);
-    if (!kernelOffsetOrErr) {
-      std::string err = llvm::toString(kernelOffsetOrErr.takeError());
+    auto kernelExtentOrErr =
+        COMGR::hotswap::findKernelSymbolExtent(coData, kName);
+    if (!kernelExtentOrErr) {
+      std::string err = llvm::toString(kernelExtentOrErr.takeError());
       llvm::errs() << "raise_cli: kernel '" << kName
-                   << "' offset lookup failed: " << err << "\n";
+                   << "' extent lookup failed: " << err << "\n";
       ++failKernels;
       llvm::outs() << "FAIL " << kName
-                   << " -> __kernel_offset__ "
-                      "[KernelSymbolOffsetLookupFailed]\n";
+                   << " -> __kernel_extent__ "
+                      "[KernelSymbolExtentLookupFailed]\n";
       continue;
     }
-    uint64_t kernelOffset = *kernelOffsetOrErr;
+    uint64_t kernelOffset = kernelExtentOrErr->Offset;
+    uint64_t kernelSize = kernelExtentOrErr->Size;
 
     // Flush stdout so the child doesn't inherit pending bytes that
     // would re-emit after fork().
@@ -572,7 +576,7 @@ int main(int argc, char **argv) {
         llvm::consumeError(metaOrErr.takeError());
       }
       auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta,
-                                          kernelOffset, targetIsa,
+                                          kernelOffset, kernelSize, targetIsa,
                                           EnableWritelaneRewrite,
                                           EnableWaveNative);
       shm->done = true;

@@ -14,6 +14,7 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/BinaryFormat/MsgPackDocument.h"
+#include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/Error.h"
@@ -293,8 +294,8 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
   return Meta;
 }
 
-llvm::Expected<uint64_t>
-findKernelSymbolOffset(llvm::MemoryBufferRef ElfData,
+llvm::Expected<KernelSymbolExtent>
+findKernelSymbolExtent(llvm::MemoryBufferRef ElfData,
                        llvm::StringRef KernelName) {
   llvm::Expected<std::unique_ptr<llvm::object::ObjectFile>> ObjOrErr =
       llvm::object::ObjectFile::createELFObjectFile(ElfData);
@@ -302,29 +303,94 @@ findKernelSymbolOffset(llvm::MemoryBufferRef ElfData,
     return ObjOrErr.takeError();
 
   uint64_t TextBase = UINT64_MAX;
+  uint64_t TextEnd = 0;
+  std::optional<llvm::object::SectionRef> TextSec;
   for (const llvm::object::SectionRef &Sec : (*ObjOrErr)->sections()) {
     llvm::Expected<llvm::StringRef> NameOrErr = Sec.getName();
     if (!NameOrErr)
       return NameOrErr.takeError();
-    if (*NameOrErr == ".text") {
-      TextBase = Sec.getAddress();
-      break;
-    }
+    if (*NameOrErr != ".text")
+      continue;
+    TextSec = Sec;
+    TextBase = Sec.getAddress();
+    if (Sec.getSize() > UINT64_MAX - TextBase)
+      return makeHotswapError(
+          "findKernelSymbolExtent: .text address range overflows");
+    TextEnd = TextBase + Sec.getSize();
+    break;
   }
   if (TextBase == UINT64_MAX)
-    return makeHotswapError("findKernelSymbolOffset: no .text section in ELF");
+    return makeHotswapError("findKernelSymbolExtent: no .text section in ELF");
 
   llvm::Expected<llvm::object::SymbolRef> SymOrErr =
       COMGR::lookupSymbolByName(**ObjOrErr, KernelName);
   if (!SymOrErr)
     return SymOrErr.takeError();
+  llvm::Expected<llvm::object::section_iterator> SymSecOrErr =
+      SymOrErr->getSection();
+  if (!SymSecOrErr)
+    return SymSecOrErr.takeError();
+  if (*SymSecOrErr == (*ObjOrErr)->section_end() || **SymSecOrErr != *TextSec)
+    return makeHotswapError("findKernelSymbolExtent: symbol '" + KernelName +
+                            "' is not in .text");
   llvm::Expected<uint64_t> AddrOrErr = SymOrErr->getAddress();
   if (!AddrOrErr)
     return AddrOrErr.takeError();
-  if (*AddrOrErr < TextBase)
-    return makeHotswapError("findKernelSymbolOffset: symbol '" + KernelName +
-                            "' address < .text base");
-  return *AddrOrErr - TextBase;
+  if (*AddrOrErr < TextBase || *AddrOrErr >= TextEnd)
+    return makeHotswapError("findKernelSymbolExtent: symbol '" + KernelName +
+                            "' address is outside .text");
+
+  KernelSymbolExtent Extent;
+  Extent.Offset = *AddrOrErr - TextBase;
+
+  uint64_t SymbolSize = llvm::object::ELFSymbolRef(*SymOrErr).getSize();
+  if (SymbolSize != 0) {
+    if (SymbolSize > TextEnd - *AddrOrErr)
+      return makeHotswapError("findKernelSymbolExtent: symbol '" + KernelName +
+                              "' size extends past .text");
+    Extent.Size = SymbolSize;
+    return Extent;
+  }
+
+  llvm::Expected<llvm::SmallVector<std::string>> KernelNamesOrErr =
+      listKernelNames(ElfData);
+  if (!KernelNamesOrErr) {
+    return makeHotswapError(
+        "findKernelSymbolExtent: symbol '" + KernelName +
+        "' has zero size and metadata kernel list is unavailable: " +
+        llvm::toString(KernelNamesOrErr.takeError()));
+  }
+
+  // Some code objects leave st_size at zero. In that case, bound by the next
+  // metadata kernel symbol rather than the next STT_FUNC: device/helper
+  // functions between kernels belong to the selected kernel's reachable body.
+  uint64_t NextAddr = TextEnd;
+  for (llvm::StringRef OtherKernelName : *KernelNamesOrErr) {
+    if (OtherKernelName == KernelName)
+      continue;
+    llvm::Expected<llvm::object::SymbolRef> OtherSymOrErr =
+        COMGR::lookupSymbolByName(**ObjOrErr, OtherKernelName);
+    if (!OtherSymOrErr) {
+      return makeHotswapError(
+          "findKernelSymbolExtent: failed to resolve metadata kernel symbol '" +
+          OtherKernelName + "' while bounding zero-sized symbol '" +
+          KernelName + "': " + llvm::toString(OtherSymOrErr.takeError()));
+    }
+    llvm::Expected<llvm::object::section_iterator> SecItOrErr =
+        OtherSymOrErr->getSection();
+    if (!SecItOrErr)
+      return SecItOrErr.takeError();
+    if (*SecItOrErr == (*ObjOrErr)->section_end() || **SecItOrErr != *TextSec)
+      continue;
+    llvm::Expected<uint64_t> OtherAddrOrErr = OtherSymOrErr->getAddress();
+    if (!OtherAddrOrErr)
+      return OtherAddrOrErr.takeError();
+    uint64_t OtherAddr = *OtherAddrOrErr;
+    if (OtherAddr > *AddrOrErr && OtherAddr < NextAddr)
+      NextAddr = OtherAddr;
+  }
+  Extent.Size = NextAddr - *AddrOrErr;
+  return Extent;
 }
 
 } // namespace COMGR::hotswap

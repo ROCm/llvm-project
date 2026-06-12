@@ -55,7 +55,16 @@ RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
                       llvm::StringRef SourceIsa,
                       llvm::StringRef KernelName,
                       const KernelMeta &Meta,
-                      uint64_t KernelOffset = 0,
+                      llvm::StringRef CompilationTargetIsa = "",
+                      bool EnableWritelaneRewrite = true,
+                      bool EnableWaveNative = true);
+
+RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
+                      llvm::StringRef SourceIsa,
+                      llvm::StringRef KernelName,
+                      const KernelMeta &Meta,
+                      uint64_t KernelOffset,
+                      uint64_t KernelSize,
                       llvm::StringRef CompilationTargetIsa = "",
                       bool EnableWritelaneRewrite = true,
                       bool EnableWaveNative = true);
