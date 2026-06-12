@@ -495,12 +495,11 @@ enum class CanonicalOp : uint16_t {
   // VOP3 ternary clamp `.NUM` dual:
   //   V_MAXMIN_NUM_F32: minnum(maxnum(s0, s1), s2).
   V_MAXMIN_NUM_F32,
-  // VOP3 integer 3-way max/min/median. The .td uses
-  // AMDGPU{u,s}{max,min,med}3 SDAG nodes which the backend pattern-
-  // matches; we lift unsigned min/max as nested `llvm.{u}min/max` calls
-  // because no LLVM `*3` IR intrinsic exists. gfx11/gfx12 keep these
-  // (VOP3Instructions.td:1792-1798).
-  V_MAX3_U32, V_MIN3_U32,
+  // VOP3 integer 3-way max/min variants currently covered here. The .td uses
+  // AMDGPU{u,s}{max,min}3 SDAG nodes which the backend pattern-matches; lift as
+  // nested `llvm.{u,s}{min,max}` calls because no LLVM `*3` IR intrinsic exists.
+  // gfx11/gfx12 keep these (VOP3Instructions.td:1792-1798).
+  V_MAX3_U32, V_MIN3_U32, V_MAX3_I32, V_MIN3_I32,
   // VOP3 signed-integer median-of-three. Hardware semantic
   // (VOP3Instructions.td:1796 via AMDGPUsmed3 SDAG node):
   //   med3_i32(a, b, c) = smax(smin(a, b), smin(smax(a, b), c))

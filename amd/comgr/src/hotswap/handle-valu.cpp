@@ -1913,6 +1913,20 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // VOP3 v_max3_i32: 3-way signed max. The hardware semantics are
+  // `v_max_i32(v_max_i32(S0, S1), S2)`, and LLVM's .td pattern is
+  // `AMDGPUsmax3`; nested `llvm.smax.i32` is the canonical IR form.
+  if (Sop == CanonicalOp::V_MAX3_I32) {
+    Value *S0 = Op.src(0), *S1 = Op.src(1), *S2 = Op.src(2);
+    Function *SmaxFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::smax,
+                                          {Ctx.I32Ty});
+    Value *M01 = Ctx.B.CreateCall(SmaxFn, {S0, S1}, "vmax3_i32_lo");
+    Ctx.writeReg32(Op.dst(),
+                   Ctx.B.CreateCall(SmaxFn, {M01, S2}, "vmax3_i32"));
+    Hr.Handled = true;
+    return Hr;
+  }
   // VOP3 v_min3_u32: 3-way unsigned min, ternary. Symmetric sibling of
   // V_MAX3_U32 above; the .td pattern is `AMDGPUumin3` =
   // `umin(umin(a,b), c)`.
@@ -1923,6 +1937,20 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
                                           {Ctx.I32Ty});
     Value *M01 = Ctx.B.CreateCall(UminFn, {S0, S1}, "vmin3_lo");
     Ctx.writeReg32(Op.dst(), Ctx.B.CreateCall(UminFn, {M01, S2}, "vmin3"));
+    Hr.Handled = true;
+    return Hr;
+  }
+  // VOP3 v_min3_i32: 3-way signed min. The hardware semantics are
+  // `v_min_i32(v_min_i32(S0, S1), S2)`, and LLVM's .td pattern is
+  // `AMDGPUsmin3`; nested `llvm.smin.i32` is the canonical IR form.
+  if (Sop == CanonicalOp::V_MIN3_I32) {
+    Value *S0 = Op.src(0), *S1 = Op.src(1), *S2 = Op.src(2);
+    Function *SminFn =
+        Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::smin,
+                                          {Ctx.I32Ty});
+    Value *M01 = Ctx.B.CreateCall(SminFn, {S0, S1}, "vmin3_i32_lo");
+    Ctx.writeReg32(Op.dst(),
+                   Ctx.B.CreateCall(SminFn, {M01, S2}, "vmin3_i32"));
     Hr.Handled = true;
     return Hr;
   }

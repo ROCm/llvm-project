@@ -570,11 +570,13 @@ static const Entry kCanonTable[] = {
     // V_MINMAX_F32_e64 so a single mapping suffices.
     E(V_MINMAX_F32_e64, V_MINMAX_NUM_F32),
     E(V_MAXMIN_F32_e64, V_MAXMIN_NUM_F32),
-    // gfx11/gfx12 VOP3 integer 3-way unsigned min/max. DPP/DPP8 modifier
+    // gfx11/gfx12 VOP3 integer 3-way min/max. DPP/DPP8 modifier
     // variants canonicalize through the same opcode-map stripping path used by
     // the other VOP3+DPP entries, so a base e64 row is the semantic key.
     E(V_MAX3_U32_e64, V_MAX3_U32),
     E(V_MIN3_U32_e64, V_MIN3_U32),
+    E(V_MAX3_I32_e64, V_MAX3_I32),
+    E(V_MIN3_I32_e64, V_MIN3_I32),
     E(V_MED3_I32_e64, V_MED3_I32),
     E(V_BITOP3_B32_e64, V_BITOP3_B32),
     E(V_BITOP3_B16_e64, V_BITOP3_B16),
