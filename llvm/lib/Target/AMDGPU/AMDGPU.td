@@ -1142,6 +1142,11 @@ defm FlatSignedOffset : AMDGPUSubtargetFeature<"flat-signed-offset",
   "Immediate offset of FLAT instructions are always signed"
 >;
 
+defm RequiresInitialUnclausedVmem : AMDGPUSubtargetFeature<"requires-initial-unclause-vmem",
+  "Hardware entrypoints require first VMEM instruction to be unclaused",
+  GenPredicate=false
+>;
+
 //===------------------------------------------------------------===//
 // Subtarget Features (options and debugging)
 //===------------------------------------------------------------===//
@@ -2116,6 +2121,7 @@ def FeatureISAVersion12_50_Common : FeatureSet<
    FeatureMcastLoadInsts,
    FeatureNoF16PseudoScalarTransInlineConstants,
    FeatureRealTrue16Insts,
+   FeatureRequiresInitialUnclausedVmem,
 ]>;
 
 def FeatureISAVersion12_50 : FeatureSet<
