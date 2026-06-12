@@ -15,7 +15,10 @@
 //
 // `__kmpc_alloc` / `__kmpc_aligned_alloc` / `__kmpc_free` /
 // `__kmpc_global_thread_num` are resolved lazily via dlsym so flang_rt.openmp
-// does not take a build-time dependency on libomp.
+// does not take a build-time dependency on libomp.  Publication of the
+// resolved function pointers is performed exactly once via `std::call_once`,
+// which gives the necessary acquire/release ordering for all subsequent
+// readers without any hand-rolled atomics or busy-waits.
 //
 // The (handle, align) pair stamped on a particular allocate cannot be
 // expressed through the AllocFct signature (`void *(*)(size_t,
@@ -35,6 +38,8 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <mutex>
 
 // flang_rt.openmp is also cross-compiled for AMDGPU / NVPTX as part of the
 // flang-rt device runtime build (LLVM_RUNTIME_TARGETS).  The host OpenMP
@@ -71,33 +76,25 @@ struct OmpRuntime {
   KmpcAlignedAllocFn alignedAlloc{nullptr};
   KmpcFreeFn free{nullptr};
   KmpcGtidFn gtid{nullptr};
-  bool resolved{false};
   bool available{false};
 };
 
-// Initialised on first use; protected by the std::atomic flag.  The function
-// pointers are written before the `resolved` flag flips to true so other
-// threads see a consistent state.
+// Initialised on first use, then read-only for the rest of the process
+// lifetime.  Publication of the resolved pointers is performed exactly
+// once via std::call_once, which gives the necessary acquire/release
+// ordering for free: all reads of `rt` after Resolve() returns are
+// guaranteed to observe the resolved state without further synchronization.
 OmpRuntime &Runtime() {
   static OmpRuntime rt;
   return rt;
 }
 
-std::atomic<bool> resolveInProgress{false};
+std::once_flag &ResolveOnceFlag() {
+  static std::once_flag flag;
+  return flag;
+}
 
-void Resolve() {
-  OmpRuntime &rt{Runtime()};
-  if (rt.resolved) {
-    return;
-  }
-  bool expected{false};
-  if (!resolveInProgress.compare_exchange_strong(expected, true)) {
-    while (!rt.resolved) {
-      // Another thread is resolving; busy-wait briefly.
-    }
-    return;
-  }
-
+void DoResolve(OmpRuntime &rt) {
 #if defined(FLANG_RT_OPENMP_HAVE_DLSYM)
   // RTLD_DEFAULT searches symbols already loaded into the process; if libomp
   // is linked into the executable (or loaded as a shared lib) the symbols
@@ -121,8 +118,16 @@ void Resolve() {
   // take the outer RT_GPU_TARGET stub path further down.
   rt.available = false;
 #endif
+}
 
-  rt.resolved = true;
+void Resolve() {
+  // std::call_once provides the publication ordering for the OmpRuntime
+  // fields: every thread that returns from Resolve() is guaranteed to
+  // observe the values written by the resolver thread.  It also guarantees
+  // forward progress (no busy-wait) and -- crucially -- automatically
+  // re-arms on resolver-thread failure (an exception thrown out of
+  // DoResolve), so we never end up with permanently-stuck waiters.
+  std::call_once(ResolveOnceFlag(), [] { DoResolve(Runtime()); });
 }
 
 int CurrentGtid() {
@@ -144,7 +149,17 @@ int CurrentGtid() {
 // is emitted immediately before the matching _FortranAAllocatableAllocate.
 // A simple scalar slot is therefore sufficient and avoids pulling in
 // <thread> / <mutex>.
+//
+// We also remember the Descriptor address that owned the stamp so that
+// debug-mode sanity checks (see SetPendingOmpAllocStamp below) can detect
+// orphaned stamps -- e.g. a Stamp(D1) that was never consumed by an
+// Allocate(D1) and would otherwise silently apply its (handle, align) to a
+// later Allocate(D2) on the same thread.  The runtime AllocFct ABI does not
+// expose the descriptor pointer to OmpAllocateAdapter at consume time, so
+// we cannot verify identity on consumption; we instead flag the most likely
+// programming error -- two outstanding live stamps -- at the producer side.
 struct PendingStamp {
+  const Descriptor *descriptor{nullptr};
   std::uintptr_t handle{0};
   std::size_t align{0};
   bool set{false};
@@ -168,15 +183,43 @@ RT_API_ATTRS void *OmpAllocate(
     // Aligned-alloc requested but libomp does not expose the aligned entry
     // point.  We cannot honour the alignment request silently; return null
     // so the caller reports a proper allocation failure.
+#ifndef NDEBUG
+    std::fprintf(stderr,
+        "flang_rt.openmp: aligned ALLOCATE requested (align=%zu) but libomp "
+        "does not expose __kmpc_aligned_alloc; treating as allocation "
+        "failure\n",
+        align);
+#endif
     return nullptr;
   }
-  return rt.alignedAlloc(CurrentGtid(), align, byteSize, handle);
+  // Per OpenMP spec, align must be a positive power of two.  __kmpc_aligned_alloc
+  // is the authority that validates this and returns nullptr on violation;
+  // we do not double-check here.  The size-must-be-a-multiple-of-align
+  // precondition of POSIX aligned_alloc is also delegated to
+  // __kmpc_aligned_alloc, which is documented to be lenient about it
+  // (libomp internally rounds the size up before calling the underlying
+  // allocator).  Test fakes that wrap std::aligned_alloc directly must
+  // therefore pad the size themselves.
+  void *p{rt.alignedAlloc(CurrentGtid(), align, byteSize, handle)};
+#ifndef NDEBUG
+  if (!p) {
+    std::fprintf(stderr,
+        "flang_rt.openmp: __kmpc_aligned_alloc returned null for "
+        "size=%zu align=%zu handle=0x%lx -- likely a bad alignment (must be a "
+        "positive power of two) or out-of-memory\n",
+        byteSize, align, static_cast<unsigned long>(handle));
+  }
+#endif
+  return p;
 }
 
 RT_API_ATTRS void OmpFree(void *ptr, std::uintptr_t handle) {
+  if (!ptr) {
+    return;
+  }
   Resolve();
   OmpRuntime &rt{Runtime()};
-  if (!rt.available || !ptr) {
+  if (!rt.available) {
     return;
   }
   rt.free(CurrentGtid(), ptr, handle);
@@ -184,6 +227,33 @@ RT_API_ATTRS void OmpFree(void *ptr, std::uintptr_t handle) {
 
 RT_API_ATTRS void SetPendingOmpAllocStamp(
     std::uintptr_t handle, std::size_t align) {
+  SetPendingOmpAllocStampForDescriptor(
+      /*descriptor=*/nullptr, handle, align);
+}
+
+RT_API_ATTRS void SetPendingOmpAllocStampForDescriptor(
+    const Descriptor *descriptor, std::uintptr_t handle, std::size_t align) {
+#ifndef NDEBUG
+  // Stamping over an already-live stamp means the previous stamp was
+  // orphaned -- its (handle, align) was never consumed by a matching
+  // Descriptor::Allocate.  This is almost always a lowering bug (e.g.
+  // an optimization that reordered the stamp away from its allocate, or
+  // a runtime helper that allocates between stamp and allocate without
+  // re-stamping).  We tolerate it in release builds (the new stamp wins;
+  // the old one is silently dropped) but flag it loudly in debug builds.
+  if (tlStamp.set && tlStamp.descriptor != descriptor) {
+    std::fprintf(stderr,
+        "flang_rt.openmp: orphaned OmpAllocatorStamp detected -- previous "
+        "stamp(descriptor=%p, handle=0x%lx, align=%zu) was never consumed "
+        "before new stamp(descriptor=%p, handle=0x%lx, align=%zu); the "
+        "Flang lowering invariant is being violated\n",
+        static_cast<const void *>(tlStamp.descriptor),
+        static_cast<unsigned long>(tlStamp.handle), tlStamp.align,
+        static_cast<const void *>(descriptor),
+        static_cast<unsigned long>(handle), align);
+  }
+#endif
+  tlStamp.descriptor = descriptor;
   tlStamp.handle = handle;
   tlStamp.align = align;
   tlStamp.set = true;
@@ -197,18 +267,30 @@ RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
   handle = tlStamp.handle;
   align = tlStamp.align;
   tlStamp.set = false;
+  tlStamp.descriptor = nullptr;
   tlStamp.handle = 0;
   tlStamp.align = 0;
   return true;
 }
 
 RT_API_ATTRS void *OmpAllocateAdapter(
-    std::size_t byteSize, std::int64_t * /*asyncObject*/) {
+    std::size_t byteSize, std::int64_t *asyncObject) {
   // The matching OmpAllocatorStamp call (emitted by the Flang lowering)
   // populated the TL slot just above us.  If the slot is empty (e.g. a
   // reallocation of a descriptor that still carries kOmpAllocatorPos but
   // wasn't re-stamped), fall back on omp_null_allocator (handle 0) with
   // default alignment, which libomp resolves to the default memory space.
+  //
+  // NOTE: `asyncObject` is intentionally ignored.  The AllocFct registry
+  // ABI passes the Fortran async-allocate token through, but libomp's
+  // `__kmpc_alloc` / `__kmpc_aligned_alloc` are synchronous and have no
+  // async-stream concept; passing the token would be a no-op.  Any future
+  // GPU-stream / OpenMP `nowait` integration over `!$omp allocators` will
+  // have to extend the kmpc adapter signature.  We do not assert that
+  // asyncObject is null because Descriptor::Allocate may legitimately pass
+  // a non-null token even for synchronous allocators (the token is used
+  // only when the allocator itself is async-aware).
+  (void)asyncObject;
   std::uintptr_t handle{0};
   std::size_t align{0};
   ConsumePendingOmpAllocStamp(handle, align);
@@ -216,6 +298,12 @@ RT_API_ATTRS void *OmpAllocateAdapter(
 }
 
 RT_API_ATTRS void OmpFreeAdapter(void *ptr) {
+  // Symmetric to Descriptor::Deallocate's own null-check: fast-path the
+  // very common no-op case to avoid an unnecessary thread-local lookup
+  // and Resolve() call.
+  if (!ptr) {
+    return;
+  }
   // We pass handle 0 (omp_null_allocator) to __kmpc_free; libomp recovers
   // the original allocator from the pointer's chunk metadata.  This keeps
   // the descriptor addendum layout ABI-compatible with non-OpenMP
@@ -255,12 +343,15 @@ void RTDEF(OmpAllocatorStamp)(
   // before the user's allocate statement, and the descriptor may
   // legitimately be in the "initialized, not yet allocated" state.
   descriptor.SetAllocIdx(kOmpAllocatorPos);
-  // Stash (handle, align) in the thread-local pending-stamp slot.  The
-  // OmpAllocateAdapter (registered under kOmpAllocatorPos) will consume it
-  // on the immediately-following allocation call.  OmpFreeAdapter does not
-  // need the handle: it passes 0 to __kmpc_free, and libomp recovers the
-  // original allocator from the pointer's chunk header.
-  omp::SetPendingOmpAllocStamp(handle, align);
+  // Stash (descriptor, handle, align) in the thread-local pending-stamp
+  // slot.  The OmpAllocateAdapter (registered under kOmpAllocatorPos) will
+  // consume the (handle, align) pair on the immediately-following
+  // allocation call.  We record the descriptor pointer too so that debug
+  // builds can catch orphaned stamps (see SetPendingOmpAllocStampForDescriptor).
+  // OmpFreeAdapter does not need the handle: it passes 0 to __kmpc_free,
+  // and libomp recovers the original allocator from the pointer's chunk
+  // header.
+  omp::SetPendingOmpAllocStampForDescriptor(&descriptor, handle, align);
 }
 
 RT_EXT_API_GROUP_END
@@ -286,6 +377,10 @@ RT_API_ATTRS void OmpFree(void * /*ptr*/, std::uintptr_t /*handle*/) {}
 
 RT_API_ATTRS void SetPendingOmpAllocStamp(
     std::uintptr_t /*handle*/, std::size_t /*align*/) {}
+
+RT_API_ATTRS void SetPendingOmpAllocStampForDescriptor(
+    const Descriptor * /*descriptor*/, std::uintptr_t /*handle*/,
+    std::size_t /*align*/) {}
 
 RT_API_ATTRS bool ConsumePendingOmpAllocStamp(
     std::uintptr_t & /*handle*/, std::size_t & /*align*/) {

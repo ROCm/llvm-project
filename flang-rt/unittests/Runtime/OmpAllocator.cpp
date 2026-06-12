@@ -14,8 +14,11 @@
 //
 // We provide local definitions of __kmpc_alloc, __kmpc_aligned_alloc,
 // __kmpc_free, and __kmpc_global_thread_num so that the lazy
-// dlsym(RTLD_DEFAULT, ...) lookup in flang_rt.openmp's omp-allocator.cpp
-// finds them in the test binary.
+// dlsym(RTLD_DEFAULT, ...) lookup in flang_rt.openmp's omp_kmpc_alloc.cpp
+// finds them in the test binary.  The CMakeLists.txt for this unittest
+// uses a linker dynamic-list (OmpAllocatorKmpcSymbols.list) to ensure
+// only these four __kmpc_* symbols are exported as dynamic symbols, so
+// the dlsym lookup cannot accidentally bind to anything else.
 //
 //===----------------------------------------------------------------------===//
 
@@ -67,7 +70,13 @@ extern "C" void *__kmpc_aligned_alloc(int /*gtid*/, std::size_t align,
   gLastAllocHandle = allocator;
   gLastAllocAlign = align;
   gLastAllocSize = size;
-  // aligned_alloc requires size to be a multiple of align; pad for the test.
+  // Real libomp's __kmpc_aligned_alloc tolerates `size` not being a multiple
+  // of `align` (it rounds up internally).  POSIX's std::aligned_alloc, which
+  // we wrap here for the test, does not -- it returns nullptr if size is not
+  // a multiple of align.  Pad the size up to the next alignment boundary so
+  // the fake exhibits the libomp-compatible behaviour.  Production code in
+  // flang-rt's OmpAllocate intentionally relies on __kmpc_aligned_alloc to
+  // do this padding for it.
   std::size_t padded = ((size + align - 1) / align) * align;
   return std::aligned_alloc(align, padded);
 }
@@ -230,5 +239,52 @@ TEST(OmpAllocatorTest, RuntimeStampWorksWithoutAddendum) {
   // Without an addendum the deallocate path has no stashed handle; it falls
   // back on handle 0 (omp_null_allocator), which libomp interprets as
   // "read the allocator from the pointer's chunk metadata".
+  EXPECT_EQ(gLastFreeHandle, 0u);
+}
+
+TEST(OmpAllocatorTest, OrphanedStampDoesNotLeakIntoNextAllocate) {
+  using Fortran::common::TypeCategory;
+
+  ResetCounters();
+
+  // Regression test for the orphaned-stamp invariant described in
+  // flang-rt/lib/openmp/omp_kmpc_alloc.cpp:
+  //
+  //   * Stamping a descriptor without a matching Descriptor::Allocate
+  //     leaves the thread-local pending-stamp slot live.
+  //   * A *new* stamp on a *different* descriptor must overwrite that slot
+  //     (last writer wins), not silently propagate the old handle.
+  //
+  // We exercise the second descriptor's allocate to confirm it sees only
+  // the second stamp's handle.  In debug builds the runtime will also
+  // emit a stderr warning about the orphaned first stamp; that is
+  // diagnostic-only and intentionally not asserted on here so the test
+  // works in both debug and release builds.
+  auto descA{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
+      CFI_attribute_allocatable, /*addendum=*/false)};
+  auto descB{Descriptor::Create(TypeCode{TypeCategory::Integer, 4}, 4,
+      /*p=*/nullptr, /*rank=*/1, /*extent=*/nullptr,
+      CFI_attribute_allocatable, /*addendum=*/false)};
+  ASSERT_TRUE(descA);
+  ASSERT_TRUE(descB);
+  descA->GetDimension(0).SetBounds(1, 4);
+  descB->GetDimension(0).SetBounds(1, 4);
+
+  constexpr std::uintptr_t kOrphanHandle = 0xDEAD0001UL;
+  constexpr std::uintptr_t kWinningHandle = 0xDEAD0002UL;
+
+  // Orphan: stamp descA, then never call Allocate on it.
+  RTNAME(OmpAllocatorStamp)(*descA, kOrphanHandle, /*align=*/0);
+  // Stomp on the orphan with a new stamp targeted at descB.
+  RTNAME(OmpAllocatorStamp)(*descB, kWinningHandle, /*align=*/0);
+
+  ASSERT_EQ(descB->Allocate(/*asyncObject=*/nullptr), 0);
+  EXPECT_EQ(gAllocCount, 1);
+  EXPECT_EQ(gLastAllocHandle, kWinningHandle)
+      << "Orphan stamp's handle leaked into descB's allocate";
+
+  ASSERT_EQ(descB->Deallocate(), CFI_SUCCESS);
+  EXPECT_EQ(gFreeCount, 1);
   EXPECT_EQ(gLastFreeHandle, 0u);
 }
