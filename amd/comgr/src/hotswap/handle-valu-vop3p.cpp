@@ -1020,39 +1020,19 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
 
   // 16x16x128 scaled WMMA, f8f6f4 mantissa-format family (gfx1250-only).
   //
-  // 18 MC pseudos (`{f4,f6,f8} A × {f4,f6,f8} B × _twoaddr/_threeaddr`)
-  // collapse onto this single CanonicalOp; the per-matrix vector width is
-  // encoded by the opcode's `_fA_fB_w32_*` suffix (per
-  // `WMMA_F8F6F4_Profiles` in VOP3PInstructions.td:1908) -- f8 -> 16
-  // dwords, f6 -> 12 dwords, f4 -> 8 dwords. The in-family element
-  // distinction (BF8 vs FP8 within f8; BF6 vs FP6 within f6) lives in
-  // the `matrix_a_fmt` / `matrix_b_fmt` named-immediate operands
-  // (`enum MatrixFMT`, SIDefines.h:1052-1058).
+  // 18 MC pseudos ({f4,f6,f8} A x {f4,f6,f8} B x _twoaddr/_threeaddr) collapse
+  // onto this CanonicalOp; the `_fA_fB_w32_*` suffix encodes per-matrix width
+  // (f8 -> 16, f6 -> 12, f4 -> 8 dwords). BF8/FP8 and BF6/FP6 are distinguished
+  // by the matrix_a_fmt / matrix_b_fmt named immediates (enum MatrixFMT).
   //
-  // Cross-target lowering paths for v_wmma_scale_f32_16x16x128_f8f6f4:
-  //
-  //   * gfx1250 (hasTensorOps): emit the native
-  //     `int_amdgcn_wmma_scale_f32_16x16x128_f8f6f4` intrinsic in place
-  //     (14-arg fast path below).
-  //   * gfx950 (hasGfx950Insts): rewrite to the gfx950 scaled MFMA via
-  //     `emitWMMAScaleF8F6F4toMFMA` in `wmma-lowering.cpp`, which does
-  //     the wave32->wave64 lane redistribution and lowers to
-  //     `int_amdgcn_mfma_scale_f32_16x16x128_f8f6f4` (the gfx950 has
-  //     a near-1:1 MFMA equivalent for this WMMA, in the same K=128
-  //     F8F6F4 shape; only the wave size and per-lane fragment width
-  //     differ, both of which the redistribution helper handles).
-  //     Note `hasGfx950Insts` (NOT `hasMFMA`) -- gfx942 also has
-  //     hasMFMA == true but lacks the scaled F8F6F4 family.
-  //   * Otherwise (e.g. gfx942 -- has hasMFMA == true but not the scaled
-  //     F8F6F4 family): refuse loudly.  gfx942's MFMA family stops at
-  //     `mfma_f32_16x16x32_*` (non-scaled, K=32); a WMMA-scale
-  //     decomposition into multiple gfx942 MFMAs plus a software
-  //     scale-exponent application is *possible* but not implemented.
+  // Cross-target lowering of v_wmma_scale_f32_16x16x128_f8f6f4:
+  //   * gfx1250 (hasTensorOps): native int_amdgcn_wmma_scale intrinsic.
+  //   * gfx950 (hasGfx950Insts): scaled MFMA via emitWMMAScaleF8F6F4toScaledMFMA.
+  //   * gfx942 (hasFP8Insts): K-decomposed unscaled FP8/BF8 MFMA + software
+  //     scale via emitWMMAScaleF8F6F4toMFMA.
+  //   * Otherwise: refuse.
   case CanonicalOp::V_WMMA_SCALE_F32_16x16x128_F8F6F4: {
-    // Extract per-matrix dword count from the MC pseudo suffix
-    // (`*_fA_fB_w32_{twoaddr,threeaddr}`). MCInstrInfo names the
-    // pseudo verbatim from TableGen, so the suffix is the
-    // authoritative source of A/B widths.
+    // Per-matrix dword count from the MC pseudo's fA_fB suffix.
     auto FmtSuffixToDwords = [](StringRef Tag) -> unsigned {
       if (Tag == "f8") return 16;
       if (Tag == "f6") return 12;
@@ -1087,30 +1067,46 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
 
     ParsedReg Dest = Op.dst();
     ParsedReg SrcA = Op.srcReg(0), SrcB = Op.srcReg(1);
-    ParsedReg SrcC = Op.isSrcReg(2) ? Op.srcReg(2) : Dest;
 
     Value *A = Ctx.Regs.readRegVec(Ctx.B, SrcA, ATy);
     Value *B = Ctx.Regs.readRegVec(Ctx.B, SrcB, BTy);
-    Value *C = Ctx.Regs.readRegVec(Ctx.B, SrcC, CdTy);
+    // readWMMAAccumC materializes a zero accumulator for an inline-0 src2
+    // and refuses other inline constants.
+    Value *C = readWMMAAccumC(Ctx, Di, Op, Dest, CdTy, Hr);
+    if (!C)
+      return Hr;
 
-    // Read named-immediate / named-register operands. Using
-    // `getNamedOperandIdx` instead of positional scan means any
-    // future TableGen reshuffle of the scaled-WMMA Ins64 layout
-    // flows in for free (mirrors the MFMA-scale handler in
-    // handle-mfma.cpp:175-194).
+    // Read named operands by name so a TableGen Ins64 reshuffle flows in for
+    // free (mirrors the MFMA-scale handler).
     auto NamedImm = [&](AMDGPU::OpName Name) -> int64_t {
       int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
       if (Idx < 0 || !Di.isImm(Idx)) return 0;
       return Di.getImm(Idx);
     };
-    auto NamedReg32 = [&](AMDGPU::OpName Name) -> Value * {
+    // scale_src0 / scale_src1 carry packed scale bytes. An absent or inline-0
+    // source means scale = 1.0 per K-block, whose byte encoding depends on the
+    // matrix_*_scale_fmt: E8M0 (0) -> 0x7f (2^0), E4M3 (2) -> 0x38 (1.0). The
+    // E8M0 sentinel would decode to NaN under E4M3. Other inline constants
+    // have no documented semantics and fail.
+    auto UnitScalePacked = [&](int64_t ScaleFmt) -> Value * {
+      uint32_t Byte = ScaleFmt == 2 /*E4M3*/ ? 0x38u : 0x7fu;
+      return ConstantInt::get(Ctx.I32Ty, Byte * 0x01010101U);
+    };
+    bool ScaleSrcFailed = false;
+    auto NamedScaleSrc32 = [&](AMDGPU::OpName Name,
+                               int64_t ScaleFmt) -> Value * {
       int Idx = AMDGPU::getNamedOperandIdx(Di.Inst.getOpcode(), Name);
-      if (Idx < 0 || !Di.isReg(Idx))
-        return ConstantInt::get(Ctx.I32Ty, 0);
-      ParsedReg Pr = Ctx.parseReg(Di.getReg(Idx), Idx);
-      if (Pr.RegKind == ParsedReg::OTHER || Pr.RegKind == ParsedReg::NOREG)
-        return ConstantInt::get(Ctx.I32Ty, 0);
-      return Ctx.Regs.readReg32(Ctx.B, Pr);
+      if (Idx < 0)
+        return UnitScalePacked(ScaleFmt);
+      if (Di.isReg(Idx)) {
+        ParsedReg Pr = Ctx.parseReg(Di.getReg(Idx), Idx);
+        if (Pr.RegKind != ParsedReg::OTHER && Pr.RegKind != ParsedReg::NOREG)
+          return Ctx.Regs.readReg32(Ctx.B, Pr);
+      }
+      if (Di.isImm(Idx) && Di.getImm(Idx) == 0)
+        return UnitScalePacked(ScaleFmt);
+      ScaleSrcFailed = true;
+      return ConstantInt::get(Ctx.I32Ty, 0);
     };
 
     Value *MatrixAFmt =
@@ -1122,14 +1118,24 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
         NamedImm(AMDGPU::OpName::src2_modifiers));
     Value *MatrixAScale = ConstantInt::get(
         Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_scale));
-    Value *MatrixAScaleFmt = ConstantInt::get(
-        Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_a_scale_fmt));
-    Value *ScaleSrc0 = NamedReg32(AMDGPU::OpName::scale_src0);
+    int64_t AScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_a_scale_fmt);
+    Value *MatrixAScaleFmt = ConstantInt::get(Ctx.I32Ty, AScaleFmtImm);
+    Value *ScaleSrc0 = NamedScaleSrc32(AMDGPU::OpName::scale_src0, AScaleFmtImm);
     Value *MatrixBScale = ConstantInt::get(
         Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_scale));
-    Value *MatrixBScaleFmt = ConstantInt::get(
-        Ctx.I32Ty, NamedImm(AMDGPU::OpName::matrix_b_scale_fmt));
-    Value *ScaleSrc1 = NamedReg32(AMDGPU::OpName::scale_src1);
+    int64_t BScaleFmtImm = NamedImm(AMDGPU::OpName::matrix_b_scale_fmt);
+    Value *MatrixBScaleFmt = ConstantInt::get(Ctx.I32Ty, BScaleFmtImm);
+    Value *ScaleSrc1 = NamedScaleSrc32(AMDGPU::OpName::scale_src1, BScaleFmtImm);
+    if (ScaleSrcFailed) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3P",
+          "v_wmma_scale_f32_16x16x128_f8f6f4: scale_src0 / scale_src1 "
+          "encoding not supported. Supported: register, or inline "
+          "constant 0 (decoded as scale = 1.0 per K-block in the active "
+          "scale format, per the gfx1250 programming guide). Other inline "
+          "constants have no documented WMMA-scale semantics.");
+      return Hr;
+    }
     Value *MatrixAReuse = ConstantInt::get(
         Type::getInt1Ty(Ctx.C),
         NamedImm(AMDGPU::OpName::matrix_a_reuse));
@@ -1165,39 +1171,61 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
       // as the gfx1250 WMMA, so the lowering is a pure wave32->wave64
       // lane redistribution + intrinsic swap (no K-decomposition, no
       // software scale emulation).  Implementation in
-      // `wmma-lowering.cpp::emitWMMAScaleF8F6F4toMFMA`.
+      // `wmma-lowering.cpp::emitWMMAScaleF8F6F4toScaledMFMA`.
       //
       // matrix_a_reuse / matrix_b_reuse are perf hints (not correctness)
       // and have no MFMA equivalent; the helper drops them.
-      ResultVal = emitWMMAScaleF8F6F4toMFMA(
+      ResultVal = emitWMMAScaleF8F6F4toScaledMFMA(
           Ctx, A, B, C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
           MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt, ScaleSrc1,
           ADwords, BDwords);
-      // Reference reuse hints so -Wunused-variable doesn't flag them
-      // when this branch is taken.  (The hints are extracted up-top and
-      // the gfx1250 arm above passes them through, so they always have
-      // a use at the IR level; this is purely about the compiler's view
-      // of this scope.)
+      // reuse hints have no MFMA equivalent; silence -Wunused-variable.
       (void)MatrixAReuse;
       (void)MatrixBReuse;
       if (!ResultVal) {
         Hr.Failure = RaiseFailure::unsupportedInstructionForm(
             Di, "VOP3P",
-            "emitWMMAScaleF8F6F4toMFMA refused this fragment width "
+            "emitWMMAScaleF8F6F4toScaledMFMA refused this fragment width "
             "(ADwords/BDwords outside f8/f6/f4 set)");
+        return Hr;
+      }
+    } else if (Ctx.TargetIsa.HasFP8Insts) {
+      // Cross-target gfx1250 -> gfx942: K-decomposed unscaled FP8/BF8 MFMA
+      // chain with software scale. Gated on HasFP8Insts (not HasMfma) so
+      // gfx90a / gfx940 (MAI but no FP8 MFMA) don't take this path; gfx950
+      // is already handled by the HasGfx950Insts branch above.
+      ResultVal = emitWMMAScaleF8F6F4toMFMA(
+          Ctx, A, B, C, MatrixAFmt, MatrixBFmt, CMod, MatrixAScale,
+          MatrixAScaleFmt, ScaleSrc0, MatrixBScale, MatrixBScaleFmt,
+          ScaleSrc1, ADwords, BDwords);
+      (void)MatrixAReuse;
+      (void)MatrixBReuse;
+      if (!ResultVal) {
+        Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+            Di, "VOP3P",
+            "emitWMMAScaleF8F6F4toMFMA refused this configuration. "
+            "Supported in this draft: matrix_a_fmt / matrix_b_fmt in "
+            "{FP8, BF8, FP6, BF6, FP4} (ADwords / BDwords in {16, 12, "
+            "8}; FP6 / BF6 / FP4 widen in-line to FP8 / BF8 via bit-"
+            "arithmetic). matrix_*_scale_fmt in {E8M0 (0), E4M3 (2)}; "
+            "E5M3 (1) is not yet supported. matrix_*_scale must be "
+            "MATRIX_SCALE_ROW0; the ROW1 selector form "
+            "(SCL_OPSEL[0] / SCL_OPSEL_HI[0] = 1, selecting lanes "
+            "16..31 instead of 0..15 for scale values) is not yet "
+            "implemented. The (data, scale) combination must be legal "
+            "per the WMMA-scale spec (non-E8M0 scales require F4 data "
+            "on that side; F4 x F4 with non-E8M0 scales requires "
+            "matching scale formats).");
         return Hr;
       }
     } else {
       Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "VOP3P",
-          "v_wmma_scale_f32_16x16x128_f8f6f4 requires either hasTensorOps "
-          "(gfx1250 native scaled WMMA, "
-          "int_amdgcn_wmma_scale_f32_16x16x128_f8f6f4) or hasGfx950Insts "
-          "(gfx950 scaled-MFMA F8F6F4, "
-          "int_amdgcn_mfma_scale_f32_16x16x128_f8f6f4 via "
-          "emitWMMAScaleF8F6F4toMFMA); this target has neither.  "
-          "(gfx942 has hasMFMA == true but no scaled-F8F6F4 family; a "
-          "software decomposition is not yet implemented.)");
+          "v_wmma_scale_f32_16x16x128_f8f6f4 requires one of: hasTensorOps "
+          "(gfx1250 native scaled WMMA), hasGfx950Insts (gfx950 scaled-"
+          "MFMA F8F6F4 via emitWMMAScaleF8F6F4toScaledMFMA), or hasFP8Insts "
+          "(gfx942 K-decomposed unscaled FP8 / BF8 MFMA via "
+          "emitWMMAScaleF8F6F4toMFMA); this target has none.");
       return Hr;
     }
 

@@ -235,6 +235,21 @@ llvm::Value *emitWmmAtoMfmaF3216x16x4(RaiseContext &Ctx,
 /// \param aDwords, bDwords   per-Wave32-lane WMMA dword counts (16/12/8)
 /// \returns       `<8 x float>` in Wave32 D-layout (caller writes back via
 ///                ctx.writeRegVec); nullptr on unrecoverable shape error.
+llvm::Value *emitWMMAScaleF8F6F4toScaledMFMA(
+    RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
+    llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,
+    llvm::Value *matrixAScale, llvm::Value *matrixAScaleFmt,
+    llvm::Value *scaleSrc0, llvm::Value *matrixBScale,
+    llvm::Value *matrixBScaleFmt, llvm::Value *scaleSrc1, unsigned aDwords,
+    unsigned bDwords);
+
+/// Cross-target gfx1250 -> gfx942 lowering for
+/// `v_wmma_scale_f32_16x16x128_f8f6f4`. gfx942 has only the unscaled K=32
+/// fp8/bf8 MFMA family, so this decomposes K=128 into 4 K=32 MFMAs, widens
+/// FP6/BF6/FP4 to FP8/BF8 in-line, and applies the per-K-block scale via
+/// fmuladd. Covers {FP8,BF8,FP6,BF6,FP4}^2, scale formats E8M0 / E4M3
+/// (E5M3 deferred). Returns `<8 x float>` in wave32 D-layout, or nullptr for
+/// unsupported configurations.
 llvm::Value *emitWMMAScaleF8F6F4toMFMA(
     RaiseContext &ctx, llvm::Value *a, llvm::Value *b, llvm::Value *c,
     llvm::Value *matrixAFmt, llvm::Value *matrixBFmt, llvm::Value *cMod,
