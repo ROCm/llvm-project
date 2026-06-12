@@ -415,7 +415,6 @@ declare i32 @llvm.amdgcn.readfirstlane(i32)
 define amdgpu_cs void @self_loop(ptr addrspace(1) %out, i32 %val) {
 ; CHECK-LABEL: self_loop:
 ; CHECK:       ; %bb.0: ; %preheader
-; CHECK-NEXT:    s_mov_b64 s[0:1], -1
 ; CHECK-NEXT:    s_mov_b32 s2, -1
 ; CHECK-NEXT:    s_mov_b64 s[0:1], 0
 ; CHECK-NEXT:  .LBB6_1: ; %loop
