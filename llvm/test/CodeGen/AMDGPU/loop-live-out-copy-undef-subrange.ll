@@ -9,7 +9,6 @@ define <3 x float> @liveout_undef_subrange(<3 x float> %arg) {
 ; CHECK-LABEL: liveout_undef_subrange:
 ; CHECK:       ; %bb.0: ; %bb
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    v_add_f32_e32 v3, v2, v2
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
 ; CHECK-NEXT:    ; kill: killed $vgpr1

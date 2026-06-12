@@ -12,7 +12,6 @@ define void @needs_and(i32 %arg) {
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    s_mov_b32 s8, 1
 ; GCN-NEXT:    s_mov_b64 s[6:7], 0
-; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_branch .LBB0_2
 ; GCN-NEXT:  .LBB0_1: ; %endif
 ; GCN-NEXT:    ; in Loop: Header=BB0_2 Depth=1
@@ -73,7 +72,6 @@ define void @doesnt_need_and(i32 %arg) {
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    buffer_store_dword v0, off, s[4:7], s4
-; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    s_mov_b64 s[4:5], 0
 ; GCN-NEXT:  .LBB1_1: ; %loop
@@ -112,7 +110,6 @@ define void @break_cond_is_arg(i32 %arg, i1 %breakcond) {
 ; GCN-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GCN-NEXT:    v_and_b32_e32 v1, 1, v1
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v1
-; GCN-NEXT:    s_mov_b64 s[4:5], -1
 ; GCN-NEXT:    s_mov_b32 s8, 1
 ; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc
 ; GCN-NEXT:    s_mov_b64 s[4:5], 0

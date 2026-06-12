@@ -21,7 +21,6 @@ define void @loop_on_argument(i1 %arg) {
 ; CHECK-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; CHECK-NEXT:    v_and_b32_e32 v0, 1, v0
 ; CHECK-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; CHECK-NEXT:    s_mov_b64 s[4:5], -1
 ; CHECK-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0
 ; CHECK-NEXT:    s_mov_b64 s[4:5], 0
