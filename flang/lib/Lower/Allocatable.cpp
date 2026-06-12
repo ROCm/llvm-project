@@ -612,7 +612,8 @@ private:
     // inline fir.allocmem fast path would emit a plain host allocation and
     // bypass the OpenMP runtime entirely, losing the allocator handle.
     std::optional<Fortran::lower::OmpAllocatorInfo> ompAllocInfo =
-        Fortran::lower::lookupOmpAllocatorInfo(alloc.getSymbol());
+        Fortran::lower::lookupOmpAllocatorInfo(converter.getSemanticsContext(),
+                                               alloc.getSymbol());
     // Any symbol that has ever appeared in an `!$omp allocators` ALLOCATE
     // clause must keep using the runtime path for the rest of the lowering,
     // even for allocate statements that sit textually outside the construct.
@@ -622,8 +623,21 @@ private:
     // later inline fir.allocmem returns a plain malloc'd pointer, and
     // the matching deallocate then routes to __kmpc_free which corrupts
     // libomp's chunk metadata.
+    //
+    // TODO: This "sticky" approach forces every later ALLOCATE/DEALLOCATE
+    // of the symbol through the runtime, even ones that the user never
+    // intended to be OpenMP-allocated.  That is a known performance
+    // trade-off: a procedure-local allocatable that appears once in
+    // an `!$omp allocators` clause loses inline allocation for the rest
+    // of the procedure.  A future improvement would be to thread the
+    // OpenMP allocator stamp through the descriptor's runtime metadata
+    // so that the inline path can stay enabled and the runtime can
+    // detect at deallocate time which path to take.  Doing so requires
+    // either an addendum bit on intrinsic-type descriptors (currently
+    // optional) or a separate descriptor-side flag.
     bool isOmpAllocatorTouched =
-        Fortran::lower::isOmpAllocatorTouchedSymbol(alloc.getSymbol());
+        Fortran::lower::isOmpAllocatorTouchedSymbol(
+            converter.getSemanticsContext(), alloc.getSymbol());
     bool inlineAllocation = !box.isDerived() && !errorManager.hasStatSpec() &&
                             !alloc.type.IsPolymorphic() &&
                             !alloc.hasCoarraySpec() && !useAllocateRuntime &&
@@ -811,7 +825,8 @@ private:
     bool isOpenMPAllocatorEnabled = langFeatures.IsEnabled(
         Fortran::common::LanguageFeature::OpenMPDefaultAllocator);
     std::optional<Fortran::lower::OmpAllocatorInfo> ompAllocInfo =
-        Fortran::lower::lookupOmpAllocatorInfo(alloc.getSymbol());
+        Fortran::lower::lookupOmpAllocatorInfo(converter.getSemanticsContext(),
+                                               alloc.getSymbol());
 
     bool sourceIsDevice = false;
     if (const Fortran::semantics::Symbol *sym{GetLastSymbol(sourceExpr)})
@@ -1104,7 +1119,8 @@ genDeallocate(fir::FirOpBuilder &builder,
   // sticky (across the construct's scope) because the matching DEALLOCATE
   // statement typically sits outside the `!$omp allocators` block.
   bool isOmpAllocatorTouched =
-      symbol && Fortran::lower::isOmpAllocatorTouchedSymbol(*symbol);
+      symbol && Fortran::lower::isOmpAllocatorTouchedSymbol(
+                    converter.getSemanticsContext(), *symbol);
   bool inlineDeallocation =
       !box.isDerived() && !box.isPolymorphic() && !box.hasAssumedRank() &&
       !box.isUnlimitedPolymorphic() && !errorManager.hasStatSpec() &&

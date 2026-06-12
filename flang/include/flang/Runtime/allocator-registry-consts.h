@@ -19,9 +19,15 @@ static constexpr unsigned kDeviceAllocatorPos = 2;
 static constexpr unsigned kManagedAllocatorPos = 3;
 static constexpr unsigned kUnifiedAllocatorPos = 4;
 // Allocator used for the OpenMP `allocators` construct over Fortran
-// allocatable arrays. The OpenMP allocator handle (e.g. omp_high_bw_mem_alloc
-// or a user-defined handle from omp_init_allocator) is stashed in the
-// descriptor's addendum so that the matching __kmpc_free can use it.
+// allocatable arrays.  The OpenMP allocator handle (e.g. omp_high_bw_mem_alloc
+// or a user-defined handle from omp_init_allocator) is *not* stored on the
+// descriptor itself; instead the matching __kmpc_free is given handle 0
+// (omp_null_allocator) and libomp recovers the original allocator from the
+// pointer's chunk metadata.  This keeps the descriptor layout
+// ABI-compatible with non-OpenMP descriptors and avoids needing to allocate
+// an addendum for plain intrinsic-type allocatables.  See
+// flang/include/flang/Runtime/OpenMP/omp_kmpc_alloc.h for the detailed
+// stamp / consume / dispatch protocol.
 static constexpr unsigned kOmpAllocatorPos = 5;
 static constexpr unsigned kDefaultArrayAlignment = 64;
 RT_OFFLOAD_VAR_GROUP_END

@@ -866,6 +866,10 @@ public:
     return foldingContext;
   }
 
+  Fortran::semantics::SemanticsContext &getSemanticsContext() override final {
+    return bridge.getSemanticsContext();
+  }
+
   mlir::Type genType(const Fortran::lower::SomeExpr &expr) override final {
     return Fortran::lower::translateSomeExprToFIRType(*this, expr);
   }
@@ -6849,6 +6853,13 @@ void Fortran::lower::LoweringBridge::lower(
       Fortran::lower::createPFT(prg, semanticsContext, getLoweringOptions());
   FirConverter converter{*this};
   converter.run(*pft);
+  // The OpenMP allocators side-table in flang/lib/Lower/OpenMP/OpenMP.cpp is
+  // keyed on this bridge's SemanticsContext.  Clear it now so memory does
+  // not accumulate when a single process lowers multiple translation units
+  // (some out-of-tree drivers and Flang's `-fc1` test fixtures do exactly
+  // this).  Safe to call unconditionally: if no `!$omp allocators` clause
+  // was lowered the entry simply does not exist and the erase is a no-op.
+  Fortran::lower::clearOmpAllocatorState(getSemanticsContext());
 }
 
 void Fortran::lower::LoweringBridge::parseSourceFile(llvm::SourceMgr &srcMgr) {

@@ -1,0 +1,24 @@
+# Minimal dynamic-symbol allowlist for the RuntimeTests unittest binary.
+#
+# flang_rt.openmp's OMP allocator path resolves these four entry points
+# at runtime via dlsym(RTLD_DEFAULT, ...).  OmpAllocator.cpp provides fake
+# definitions in the test binary; for dlsym to find them they must end up
+# in the binary's dynamic symbol table.  We restrict the dynamic-symbol
+# set to exactly these four names so that:
+#
+#   1) the lookup cannot accidentally bind to some unrelated overlay,
+#   2) the test binary does not export an enormous bag of internal
+#      Flang / LLVM C++ symbols that would otherwise leak through
+#      ENABLE_EXPORTS=ON.
+#
+# This file is consumed via `LINKER:--dynamic-list=...` from
+# flang-rt/unittests/Runtime/CMakeLists.txt and only takes effect on
+# ELF-based platforms whose linker (gold / lld / bfd) supports
+# --dynamic-list.  Other platforms fall back on the legacy
+# ENABLE_EXPORTS=ON behaviour and still work, just less precisely.
+{
+  __kmpc_alloc;
+  __kmpc_aligned_alloc;
+  __kmpc_free;
+  __kmpc_global_thread_num;
+};

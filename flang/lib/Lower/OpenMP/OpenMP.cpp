@@ -134,10 +134,22 @@ emitNestedParallelGuardForCondLp(lower::AbstractConverter &converter,
 // the recorded handle and alignment) instead of taking the fir.allocmem
 // inline fast path.
 //
-// Flang lowering is single-threaded, so a plain file-static map is
-// sufficient.  Entries are added and removed with matching stack discipline
-// around genNestedEvaluations() so that nested `!$omp allocators`
-// constructs can shadow outer bindings and restore them on exit.
+// Flang lowering is single-threaded, but a single process may lower
+// multiple translation units sequentially (e.g. some out-of-tree drivers
+// and Flang's own `-fc1` test fixtures).  Each TU has its own
+// SemanticsContext + Scope::Symbol storage, so a file-static
+// `DenseMap<const Symbol*, ...>` would silently outlive its keys and let
+// stale `Symbol *` pointers from a freed TU collide with fresh `Symbol *`
+// pointers from the next TU (because DenseMap's intrinsic identity is the
+// pointer bit pattern).
+//
+// To stay safe we key the per-TU state on a stable SemanticsContext
+// pointer and reset it explicitly from LoweringBridge::lower() once each
+// TU is done (see Fortran::lower::clearOmpAllocatorState below, called
+// from Bridge.cpp).  Entries are still added and removed with matching
+// stack discipline around genNestedEvaluations() so that nested
+// `!$omp allocators` constructs can shadow outer bindings and restore
+// them on exit.
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -146,66 +158,90 @@ using OmpAllocatorSymbolMap =
                    Fortran::lower::OmpAllocatorInfo>;
 using OmpAllocatorTouchedSet =
     llvm::DenseSet<const Fortran::semantics::Symbol *>;
-OmpAllocatorSymbolMap &ompAllocatorSymbolMap() {
-  static OmpAllocatorSymbolMap instance;
+
+struct OmpAllocatorTuState {
+  OmpAllocatorSymbolMap symbolMap;
+  // Sticky set: every symbol that has ever been mentioned in an
+  // `!$omp allocators` ALLOCATE clause is recorded here for the rest of
+  // the TU's lowering.  Membership forces every ALLOCATE/DEALLOCATE for
+  // that symbol through the Fortran runtime path so the descriptor's
+  // allocator-index (kOmpAllocatorPos / kDefaultAllocator) can correctly
+  // route the call to __kmpc_alloc / __kmpc_aligned_alloc / __kmpc_free
+  // or std::malloc / std::free.
+  OmpAllocatorTouchedSet touched;
+};
+
+using OmpAllocatorStateByContext =
+    llvm::DenseMap<const Fortran::semantics::SemanticsContext *,
+                   OmpAllocatorTuState>;
+
+OmpAllocatorStateByContext &ompAllocatorStateByContext() {
+  static OmpAllocatorStateByContext instance;
   return instance;
 }
-// Sticky set: every symbol that has ever been mentioned in an
-// `!$omp allocators` ALLOCATE clause is recorded here for the rest of the
-// lowering.  Membership forces every ALLOCATE/DEALLOCATE for that symbol
-// through the Fortran runtime path so the descriptor's allocator-index
-// (kOmpAllocatorPos / kDefaultAllocator) can correctly route the call to
-// __kmpc_alloc / __kmpc_aligned_alloc / __kmpc_free or std::malloc /
-// std::free.
-OmpAllocatorTouchedSet &ompAllocatorTouchedSet() {
-  static OmpAllocatorTouchedSet instance;
-  return instance;
+
+OmpAllocatorTuState &
+ompAllocatorTuState(Fortran::semantics::SemanticsContext &semaCtx) {
+  return ompAllocatorStateByContext()[&semaCtx];
 }
 } // namespace
 
 std::optional<Fortran::lower::OmpAllocatorInfo>
 Fortran::lower::registerOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
     const Fortran::semantics::Symbol &sym,
     Fortran::lower::OmpAllocatorInfo info) {
-  OmpAllocatorSymbolMap &table = ompAllocatorSymbolMap();
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
   std::optional<Fortran::lower::OmpAllocatorInfo> previous;
-  auto it = table.find(&sym);
-  if (it != table.end())
+  auto it = state.symbolMap.find(&sym);
+  if (it != state.symbolMap.end())
     previous = it->second;
-  table[&sym] = info;
+  state.symbolMap[&sym] = info;
   // This symbol must use the runtime allocate/deallocate path for the rest of
   // the compilation, even after this construct's scope ends.
-  ompAllocatorTouchedSet().insert(&sym);
+  state.touched.insert(&sym);
   return previous;
 }
 
 void Fortran::lower::unregisterOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
     const Fortran::semantics::Symbol &sym,
     std::optional<Fortran::lower::OmpAllocatorInfo> prev) {
-  OmpAllocatorSymbolMap &table = ompAllocatorSymbolMap();
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
   if (prev)
-    table[&sym] = *prev;
+    state.symbolMap[&sym] = *prev;
   else
-    table.erase(&sym);
-  // We deliberately do NOT remove the symbol from
-  // ompAllocatorTouchedSet -- the sticky marker must outlive the
-  // construct's scope so that downstream DEALLOCATE statements (which
-  // typically appear outside the `!$omp allocators` block) still route
-  // through the runtime.
+    state.symbolMap.erase(&sym);
+  // We deliberately do NOT remove the symbol from `touched` -- the sticky
+  // marker must outlive the construct's scope so that downstream
+  // DEALLOCATE statements (which typically appear outside the
+  // `!$omp allocators` block) still route through the runtime.
 }
 
 std::optional<Fortran::lower::OmpAllocatorInfo>
-Fortran::lower::lookupOmpAllocatorInfo(const Fortran::semantics::Symbol &sym) {
-  OmpAllocatorSymbolMap &table = ompAllocatorSymbolMap();
-  auto it = table.find(&sym);
-  if (it == table.end())
+Fortran::lower::lookupOmpAllocatorInfo(
+    Fortran::semantics::SemanticsContext &semaCtx,
+    const Fortran::semantics::Symbol &sym) {
+  OmpAllocatorTuState &state = ompAllocatorTuState(semaCtx);
+  auto it = state.symbolMap.find(&sym);
+  if (it == state.symbolMap.end())
     return std::nullopt;
   return it->second;
 }
 
 bool Fortran::lower::isOmpAllocatorTouchedSymbol(
+    Fortran::semantics::SemanticsContext &semaCtx,
     const Fortran::semantics::Symbol &sym) {
-  return ompAllocatorTouchedSet().count(&sym) != 0;
+  return ompAllocatorTuState(semaCtx).touched.count(&sym) != 0;
+}
+
+void Fortran::lower::clearOmpAllocatorState(
+    Fortran::semantics::SemanticsContext &semaCtx) {
+  // Drop the entire per-TU side-table so memory does not accumulate when
+  // the same process lowers more than one TU.  Doing this from
+  // LoweringBridge::lower() means callers do not have to remember to
+  // tear the state down themselves.
+  ompAllocatorStateByContext().erase(&semaCtx);
 }
 
 static void genOMPDispatch(lower::AbstractConverter &converter,
@@ -7862,9 +7898,19 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
     const auto &objects = std::get<ObjectList>(allocClause->t);
     for (const Object &obj : objects) {
       const semantics::Symbol *sym = obj.sym();
-      assert(sym && "OMP allocate clause object has no symbol");
+      if (!sym) {
+        // An OMP allocate clause object without a resolved symbol normally
+        // indicates a malformed clause that the parser/semantic checker
+        // already complained about (e.g. a typoed name).  Lowering should
+        // not crash on it -- skip the registration so we still produce IR
+        // for whatever else is valid, and surface a soft diagnostic so
+        // the issue is not silently swallowed.
+        llvm::errs() << "warning: OMP allocate clause object has no symbol; "
+                        "skipping side-table registration for this object\n";
+        continue;
+      }
       lower::OmpAllocatorInfo info{handle, align};
-      auto prev = lower::registerOmpAllocatorInfo(*sym, info);
+      auto prev = lower::registerOmpAllocatorInfo(semaCtx, *sym, info);
       savedBindings.push_back({sym, prev});
     }
   }
@@ -7877,7 +7923,7 @@ static void genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
   // Restore (or remove) the outer bindings.  Traverse in reverse so nested
   // shadowing is unwound in LIFO order.
   for (auto it = savedBindings.rbegin(); it != savedBindings.rend(); ++it)
-    lower::unregisterOmpAllocatorInfo(*it->sym, it->previous);
+    lower::unregisterOmpAllocatorInfo(semaCtx, *it->sym, it->previous);
 }
 
 //===----------------------------------------------------------------------===//
