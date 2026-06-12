@@ -56,6 +56,8 @@ const char *reasonString(RaiseFailureReason R) {
     return "missing-kernel-descriptor";
   case RaiseFailureReason::UserSgprLayoutMismatch:
     return "user-sgpr-layout-mismatch";
+  case RaiseFailureReason::UnsupportedSourceClusterDims:
+    return "unsupported-source-cluster-dims";
   }
   llvm_unreachable("unhandled RaiseFailureReason");
 }
@@ -265,6 +267,17 @@ RaiseFailure RaiseFailure::userSgprLayoutMismatch(
   F.Reason = RaiseFailureReason::UserSgprLayoutMismatch;
   F.Mnemonic = "<user-sgpr-layout>";
   F.Format = reasonString(RaiseFailureReason::UserSgprLayoutMismatch);
+  F.Offset = 0;
+  F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
+  return F;
+}
+
+RaiseFailure RaiseFailure::unsupportedSourceClusterDims(
+    llvm::StringRef KernelName, const llvm::Twine &Detail) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::UnsupportedSourceClusterDims;
+  F.Mnemonic = "<source-cluster-dims>";
+  F.Format = reasonString(RaiseFailureReason::UnsupportedSourceClusterDims);
   F.Offset = 0;
   F.Detail = ("kernel '" + KernelName + "': " + Detail).str();
   return F;

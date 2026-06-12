@@ -23,6 +23,7 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <optional>
 
 namespace COMGR::hotswap {
 
@@ -163,6 +164,24 @@ inline int64_t nodeAsInt(const llvm::msgpack::DocNode &N) {
   return 0;
 }
 
+// Pull a non-negative 32-bit integer from a MsgPack node. Used for metadata
+// fields where narrowing or negative values would change ABI semantics.
+inline std::optional<uint32_t> nodeAsUInt32(const llvm::msgpack::DocNode &N) {
+  if (N.getKind() == llvm::msgpack::Type::Int) {
+    int64_t V = N.getInt();
+    if (V < 0 || V > UINT32_MAX)
+      return std::nullopt;
+    return static_cast<uint32_t>(V);
+  }
+  if (N.getKind() == llvm::msgpack::Type::UInt) {
+    uint64_t V = N.getUInt();
+    if (V > UINT32_MAX)
+      return std::nullopt;
+    return static_cast<uint32_t>(V);
+  }
+  return std::nullopt;
+}
+
 // Iterate the `amdhsa.kernels` array of a parsed AMDGPU MsgPack document
 // and invoke `CB` on each kernel map node. Stops on the first non-map
 // child silently (matches the existing comgr metadata walker's tolerance).
@@ -239,6 +258,7 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
 
   KernelMeta Meta;
   bool MatchedKernel = false;
+  bool MalformedClusterDims = false;
   forEachKernelNode(MetaDoc.MetaDoc->Document,
                     [&](llvm::msgpack::MapDocNode &KMap) {
     if (MatchedKernel)
@@ -259,6 +279,23 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
       Meta.PrivateSegmentFixedSize = nodeAsInt(*N);
     if (llvm::msgpack::DocNode *N = findInMap(KMap, ".max_flat_workgroup_size"))
       Meta.MaxFlatWorkgroupSize = nodeAsInt(*N);
+    if (llvm::msgpack::DocNode *ClusterDims =
+            findInMap(KMap, ".cluster_dims")) {
+      if (!ClusterDims->isArray() || ClusterDims->getArray().size() != 3) {
+        MalformedClusterDims = true;
+      } else {
+        for (llvm::msgpack::DocNode &DimNode : ClusterDims->getArray()) {
+          std::optional<uint32_t> Dim = nodeAsUInt32(DimNode);
+          if (!Dim) {
+            MalformedClusterDims = true;
+            break;
+          }
+          Meta.ClusterDims.push_back(*Dim);
+        }
+        if (!MalformedClusterDims)
+          Meta.HasClusterDims = true;
+      }
+    }
 
     if (llvm::msgpack::DocNode *Args = findInMap(KMap, ".args");
         Args && Args->isArray()) {
@@ -285,6 +322,9 @@ llvm::Expected<KernelMeta> extractKernelMeta(llvm::MemoryBufferRef ElfData,
   if (!MatchedKernel)
     return makeHotswapError("extractKernelMeta: kernel '" + KernelName +
                             "' not found in metadata");
+  if (MalformedClusterDims)
+    return makeHotswapError("extractKernelMeta: kernel '" + KernelName +
+                            "' has malformed .cluster_dims metadata");
 
   // Fill the KD-register fields from .rodata. Sets Meta.HasKernelDescriptor
   // on success and logs the underlying Error on failure; the caller

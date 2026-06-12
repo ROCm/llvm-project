@@ -21,6 +21,7 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MathExtras.h"
@@ -72,7 +73,17 @@ struct KernelMeta {
   uint32_t GroupSegmentFixedSize = 0;
   uint32_t PrivateSegmentFixedSize = 0;
   uint32_t MaxFlatWorkgroupSize = 256;
+  // Code object v6 `.cluster_dims`: [0,0,0] means clusters are disabled.
+  // Any non-zero value carries source cluster state that HotSwap does not
+  // reconstruct yet, so the raiser refuses it before seeding TTMP6.
+  bool HasClusterDims = false;
+  llvm::SmallVector<uint32_t, 3> ClusterDims;
   llvm::SmallVector<KernelArgMeta> Args;
+
+  bool hasNonDisabledClusterDims() const {
+    return HasClusterDims &&
+           llvm::any_of(ClusterDims, [](uint32_t Dim) { return Dim != 0; });
+  }
 
   // ---------------------------------------------------------------------
   // Kernel descriptor (KD) raw fields.

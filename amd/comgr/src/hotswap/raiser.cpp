@@ -825,6 +825,16 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       errs() << UserSgprFailureDetail << "\n";
     return Result;
   }
+  if (AMDGPU::isGFX12Plus(*Mc.SubtargetInfo) &&
+      Meta.hasNonDisabledClusterDims()) {
+    Result.Failure = RaiseFailure::unsupportedSourceClusterDims(
+        KernelName,
+        Twine(".cluster_dims=[") + Twine(Meta.ClusterDims[0]) + "," +
+            Twine(Meta.ClusterDims[1]) + "," + Twine(Meta.ClusterDims[2]) +
+            "] requires real TTMP6 cluster workgroup state; the current "
+            "HotSwap ABI model only supports disabled source clusters");
+    return Result;
+  }
   // ==== Phase 3: Create basic blocks ====
   // `blockStarts` is a std::set (see decode.h) so it iterates in
   // ascending source-address order, giving deterministic BB labels.
@@ -940,6 +950,10 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   // gfx11 (RDNA3) passes these via SGPRs set up by the CP instead.
   std::function<void(IRBuilder<> &)> SeedTtmp8 = [](IRBuilder<> &) {};
   if (AMDGPU::isGFX12Plus(*Mc.SubtargetInfo)) {
+    // TTMP6 carries the source workgroup-cluster fields on gfx12+. This
+    // HotSwap path models non-cluster source execution, so use the singleton
+    // cluster encoding: per-cluster workgroup IDs and max IDs are all zero.
+    B.CreateStore(B.getInt32(0), Regs.Ttmp[6]);
     B.CreateStore(B.CreateCall(FnWorkgroupIdX, {}, "ttmp9_wg_id"), Regs.Ttmp[9]);
 
     // ttmp7 = (workgroup_id_z << 16) | (workgroup_id_y & 0xFFFF).

@@ -115,6 +115,10 @@ enum class RaiseFailureReason : uint16_t {
   // disagreed with the layout implied by kernel_code_properties plus
   // kernarg_preload for the source ISA.
   UserSgprLayoutMismatch,
+  // Phase 4 init: the source code object declares non-disabled workgroup
+  // cluster dimensions. TTMP6 then carries real per-cluster workgroup state
+  // that the current HotSwap ABI model does not reconstruct.
+  UnsupportedSourceClusterDims,
 };
 
 // Human-readable name for a `RaiseFailureReason`. Stable enough for
@@ -266,6 +270,10 @@ struct RaiseFailure {
   // Phase 4 init: descriptor-derived UserSgprLayout consistency check failed.
   static RaiseFailure userSgprLayoutMismatch(llvm::StringRef KernelName,
                                              const llvm::Twine &Detail);
+
+  // Phase 4 init: source cluster dimensions are explicit and non-disabled.
+  static RaiseFailure unsupportedSourceClusterDims(
+      llvm::StringRef KernelName, const llvm::Twine &Detail);
 };
 
 // Write the canonical human-readable rendering of a structured raise failure.
