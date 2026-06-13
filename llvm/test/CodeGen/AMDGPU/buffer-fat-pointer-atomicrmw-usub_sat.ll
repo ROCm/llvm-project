@@ -39,7 +39,6 @@ define i32 @buffer_fat_ptr_agent_atomic_usub_sat_ret_u32__offset__amdgpu_no_fine
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s20
 ; GFX9-NEXT:    buffer_load_dword v0, v0, s[16:19], 0 offen offset:1024
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s20
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:  .LBB0_1: ; %atomicrmw.start
@@ -97,7 +96,6 @@ define void @buffer_fat_ptr_agent_atomic_usub_sat_noret_u32__offset__amdgpu_no_f
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_mov_b32_e32 v1, s20
 ; GFX9-NEXT:    buffer_load_dword v2, v1, s[16:19], 0 offen offset:1024
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s20
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:  .LBB1_1: ; %atomicrmw.start
@@ -156,7 +154,6 @@ define i32 @buffer_fat_ptr_agent_atomic_usub_sat_ret_u32__offset__amdgpu_no_remo
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s20
 ; GFX9-NEXT:    buffer_load_dword v0, v0, s[16:19], 0 offen offset:1024
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s20
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:  .LBB2_1: ; %atomicrmw.start
@@ -215,7 +212,6 @@ define i32 @buffer_fat_ptr_agent_atomic_usub_sat_ret_u32__offset__amdgpu_no_fine
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s20
 ; GFX9-NEXT:    buffer_load_dword v0, v0, s[16:19], 0 offen offset:1024
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s20
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:  .LBB3_1: ; %atomicrmw.start
@@ -279,7 +275,6 @@ define i32 @buffer_fat_ptr_system_atomic_usub_sat_ret_u32__offset__amdgpu_no_fin
 ; GFX9-NEXT:    v_mov_b32_e32 v2, v0
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s20
 ; GFX9-NEXT:    buffer_load_dword v0, v0, s[16:19], 0 offen offset:1024
-; GFX9-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-NEXT:    v_mov_b32_e32 v3, s20
 ; GFX9-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-NEXT:  .LBB4_1: ; %atomicrmw.start

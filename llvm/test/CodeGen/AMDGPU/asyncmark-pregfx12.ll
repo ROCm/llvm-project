@@ -370,7 +370,6 @@ define void @test_pipelined_loop(ptr addrspace(1) %foo, ptr addrspace(3) %lds, p
 ; SDAG-NEXT:    global_load_dword v[0:1], off lds
 ; SDAG-NEXT:    ; asyncmark
 ; SDAG-NEXT:    global_load_dword v[0:1], off lds
-; SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; SDAG-NEXT:    v_mov_b32_e32 v5, 0
 ; SDAG-NEXT:    s_mov_b32 s6, 2
 ; SDAG-NEXT:    s_mov_b64 s[4:5], 0
@@ -501,14 +500,13 @@ define void @test_pipelined_loop_with_global(ptr addrspace(1) %foo, ptr addrspac
 ; SDAG-NEXT:    s_mov_b32 m0, s4
 ; SDAG-NEXT:    global_load_dword v11, v[0:1], off
 ; SDAG-NEXT:    global_load_dword v15, v[3:4], off
-; SDAG-NEXT:    s_mov_b64 s[4:5], -1
+; SDAG-NEXT:    s_mov_b32 s6, 2
 ; SDAG-NEXT:    global_load_dword v[0:1], off lds
 ; SDAG-NEXT:    ; asyncmark
 ; SDAG-NEXT:    global_load_dword v8, v[0:1], off
 ; SDAG-NEXT:    global_load_dword v10, v[3:4], off
-; SDAG-NEXT:    s_mov_b32 s6, 2
-; SDAG-NEXT:    global_load_dword v[0:1], off lds
 ; SDAG-NEXT:    s_mov_b64 s[4:5], 0
+; SDAG-NEXT:    global_load_dword v[0:1], off lds
 ; SDAG-NEXT:    ; asyncmark
 ; SDAG-NEXT:    s_waitcnt vmcnt(2)
 ; SDAG-NEXT:    v_mov_b32_e32 v9, v8
