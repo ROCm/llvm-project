@@ -1,0 +1,168 @@
+name: HIP device PGO GPU tests
+
+# Runs the HIP device profile-guided-optimization / coverage tests
+# (compiler-rt/test/profile/{GPU,AMDGPU}/*.hip) on a real AMD GPU runner against
+# a built TheRock compiler artifact, using the dependency-free lit-lite runner
+# compiler-rt/test/profile/run_gpu_tests.py.
+#
+# Prerequisites (already satisfied by the amd-staging compiler build):
+#   - COMPILER_RT_BUILD_PROFILE_ROCM defaults ON, so the host drain runtime
+#     (clang_rt.profile_rocm) and the amdgcn device profile runtime ship in the
+#     artifact.
+#   - The artifact contains clang/clang++/lld/llvm-profdata/llvm-cov and a HIP
+#     runtime (libamdhip64). The run step auto-discovers their locations.
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_group:
+        type: string
+      artifact_run_id:
+        type: string
+        default: ""
+      amdgpu_families:
+        type: string
+        default: ""
+      amdgpu_targets:
+        type: string
+        default: ""
+      test_runs_on:
+        type: string
+      platform:
+        type: string
+      release_type:
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      artifact_group:
+        type: string
+      artifact_run_id:
+        type: string
+        default: ""
+      amdgpu_families:
+        type: string
+        default: ""
+      amdgpu_targets:
+        type: string
+        default: ""
+      test_runs_on:
+        type: string
+      platform:
+        type: string
+      release_type:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  profile_gpu_test:
+    name: "HIP device PGO GPU tests"
+    runs-on: ${{ inputs.test_runs_on }}
+    container:
+      image: ${{ inputs.platform == 'linux' && 'ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98' || null }}
+      options: --ipc host
+        --group-add video
+        --group-add render
+        --device /dev/kfd
+        --device /dev/dri
+        --group-add 993
+        --group-add 992
+        --group-add 110
+        --ulimit memlock=-1:-1
+        --security-opt seccomp=unconfined
+        --env-file /etc/podinfo/gha-gpu-isolation-settings
+        --user 0:0
+    defaults:
+      run:
+        shell: bash
+    env:
+      VENV_DIR: ${{ github.workspace }}/.venv
+      ARTIFACT_RUN_ID: "${{ inputs.artifact_run_id != '' && inputs.artifact_run_id || github.run_id }}"
+      OUTPUT_ARTIFACTS_DIR: ${{ github.workspace }}/build
+      THEROCK_BIN_DIR: ${{ github.workspace }}/build/bin
+      AMDGPU_FAMILIES: ${{ inputs.amdgpu_families }}
+      AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
+      ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+    steps:
+      - name: Fix Python shared library
+        run: |
+          echo "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+          python3 --version
+
+      # Check out the llvm-project sources (the .hip tests + lit-lite runner)
+      # into a subdirectory so they survive the TheRock checkout below.
+      - name: Checkout llvm-project tests
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          path: llvm-src
+          fetch-depth: 1
+
+      - name: Checkout TheRock (for setup_test_environment)
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: "ROCm/TheRock"
+          ref: 'compiler/amd-staging'
+          fetch-depth: 1
+
+      - name: Pre-job cleanup Docker containers on Linux
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          docker container prune -f || true
+          docker network prune -f || true
+          sudo apt-get update
+          sudo apt install -y build-essential pciutils libquadmath0
+
+      - name: Run setup test environment workflow
+        uses: './.github/actions/setup_test_environment'
+        with:
+          ARTIFACT_GROUP: ${{ inputs.artifact_group }}
+          AMDGPU_TARGETS: ${{ inputs.amdgpu_targets }}
+          ARTIFACT_RUN_ID: ${{ env.ARTIFACT_RUN_ID }}
+          OUTPUT_ARTIFACTS_DIR: ${{ env.OUTPUT_ARTIFACTS_DIR }}
+          VENV_DIR: ${{ env.VENV_DIR }}
+          IS_PR_FROM_FORK: ${{ github.event.pull_request.head.repo.fork }}
+
+      - name: Install FileCheck shim dependency
+        run: |
+          python3 -m pip install --quiet filecheck || true
+
+      - name: Run HIP device PGO GPU tests
+        timeout-minutes: 50
+        env:
+          AMD_LOG_LEVEL: 2
+        run: |
+          set -euo pipefail
+          ART="${OUTPUT_ARTIFACTS_DIR}"
+
+          # Locate the toolchain bin dir (the dir containing clang). TheRock lays
+          # the compiler under build/llvm or build; fall back to a search.
+          CLANG_BIN=""
+          for c in "${ART}/llvm/bin/clang" "${ART}/bin/clang"; do
+            if [[ -x "$c" ]]; then CLANG_BIN="$(dirname "$c")"; break; fi
+          done
+          if [[ -z "$CLANG_BIN" ]]; then
+            found="$(find "${ART}" -type f -name clang -path '*/bin/*' 2>/dev/null | head -1)"
+            [[ -n "$found" ]] && CLANG_BIN="$(dirname "$found")"
+          fi
+          if [[ -z "$CLANG_BIN" ]]; then echo "::error::could not find clang under ${ART}"; exit 1; fi
+
+          # Locate libamdhip64 (the HIP runtime) for -L / LD_LIBRARY_PATH.
+          HIP_LIB=""
+          hipso="$(find "${ART}" -name 'libamdhip64.so*' 2>/dev/null | head -1)"
+          [[ -n "$hipso" ]] && HIP_LIB="$(dirname "$hipso")"
+          if [[ -z "$HIP_LIB" ]]; then echo "::error::could not find libamdhip64 under ${ART}"; exit 1; fi
+
+          echo "toolchain bin : $CLANG_BIN"
+          echo "hip lib path  : $HIP_LIB"
+          "$CLANG_BIN/clang" --version | head -1
+
+          python3 llvm-src/compiler-rt/test/profile/run_gpu_tests.py \
+            --toolchain-bin "$CLANG_BIN" \
+            --hip-lib-path "$HIP_LIB" \
+            llvm-src/compiler-rt/test/profile/GPU \
+            llvm-src/compiler-rt/test/profile/AMDGPU
