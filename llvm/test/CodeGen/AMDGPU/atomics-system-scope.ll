@@ -344,7 +344,6 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -389,7 +388,6 @@ define i16 @global_one_as_atomic_min_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -437,7 +435,6 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -482,7 +479,6 @@ define i16 @global_one_as_atomic_umin_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -530,7 +526,6 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -575,7 +570,6 @@ define i16 @global_one_as_atomic_max_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -623,7 +617,6 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -668,7 +661,6 @@ define i16 @global_one_as_atomic_umax_i16(ptr addrspace(1) %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1514,7 +1506,6 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1559,7 +1550,6 @@ define i16 @flat_one_as_atomic_min_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1607,7 +1597,6 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1652,7 +1641,6 @@ define i16 @flat_one_as_atomic_umin_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1700,7 +1688,6 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1745,7 +1732,6 @@ define i16 @flat_one_as_atomic_max_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1793,7 +1779,6 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; FAKE16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; FAKE16-NEXT:    s_wait_kmcnt 0x0
 ; FAKE16-NEXT:    v_mov_b32_e32 v3, v0
-; FAKE16-NEXT:    s_mov_b32 s0, -1
 ; FAKE16-NEXT:    s_mov_b32 s0, 0
 ; FAKE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; FAKE16-NEXT:    v_and_b32_e32 v0, -4, v3
@@ -1838,7 +1823,6 @@ define i16 @flat_one_as_atomic_umax_i16(ptr %ptr, i16 %val) {
 ; REAL16-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; REAL16-NEXT:    s_wait_kmcnt 0x0
 ; REAL16-NEXT:    v_mov_b32_e32 v3, v0
-; REAL16-NEXT:    s_mov_b32 s0, -1
 ; REAL16-NEXT:    s_mov_b32 s0, 0
 ; REAL16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_3) | instid1(VALU_DEP_1)
 ; REAL16-NEXT:    v_and_b32_e32 v0, -4, v3
