@@ -11,7 +11,6 @@ define amdgpu_kernel void @break_inserted_outside_of_loop(ptr addrspace(1) %out,
 ; SI-NEXT:    v_and_b32_e32 v0, s0, v0
 ; SI-NEXT:    v_and_b32_e32 v0, 1, v0
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; SI-NEXT:    s_mov_b64 s[0:1], -1
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; SI-NEXT:    s_mov_b64 s[0:1], 0
 ; SI-NEXT:  .LBB0_1: ; %ENDIF
@@ -41,7 +40,6 @@ define amdgpu_kernel void @break_inserted_outside_of_loop(ptr addrspace(1) %out,
 ; FLAT-NEXT:    v_and_b32_e32 v0, s0, v0
 ; FLAT-NEXT:    v_and_b32_e32 v0, 1, v0
 ; FLAT-NEXT:    v_cmp_eq_u32_e32 vcc, 1, v0
-; FLAT-NEXT:    s_mov_b64 s[0:1], -1
 ; FLAT-NEXT:    v_cndmask_b32_e64 v0, 0, -1, vcc
 ; FLAT-NEXT:    s_mov_b64 s[0:1], 0
 ; FLAT-NEXT:  .LBB0_1: ; %ENDIF
