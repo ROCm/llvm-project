@@ -2749,8 +2749,9 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
       UseIndirectDebugAddress = !ArgInfo.getIndirectByVal();
     if (UseIndirectDebugAddress) {
       auto PtrTy = getContext().getPointerType(Ty);
-      AllocaPtr = CreateMemTemp(PtrTy, getContext().getTypeAlignInChars(PtrTy),
-                                D.getName() + ".indirect_addr");
+      AllocaPtr = CreateMemTempWithoutCast(
+          PtrTy, getContext().getTypeAlignInChars(PtrTy),
+          D.getName() + ".indirect_addr");
       EmitStoreOfScalar(V, AllocaPtr, /* Volatile */ false, PtrTy);
     }
 
@@ -2786,7 +2787,7 @@ void CodeGenFunction::EmitParmDecl(const VarDecl &D, ParamValue Arg,
     if (getLangOpts().OpenMP && OpenMPLocalAddr.isValid()) {
       DeclPtr = DebugPtr = OpenMPLocalAddr;
     } else {
-      // Otherwise, create a temporary to hold the value.
+      // Otherwise, create a casted temporary to hold the value.
       DeclPtr = CreateMemTemp(Ty, getContext().getDeclAlign(&D),
                               D.getName() + ".addr", &DebugPtr);
     }

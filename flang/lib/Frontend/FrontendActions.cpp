@@ -637,6 +637,8 @@ void CodeGenAction::lowerHLFIRToFIR() {
   MLIRToLLVMPassPipelineConfig config(level);
   config.fpMaxminBehavior =
       ci.getInvocation().getLoweringOpts().getFPMaxminBehavior();
+  if (ci.getInvocation().getLangOpts().OpenMPIsTargetDevice)
+    config.EnableOpenMPIsTargetDevice = true;
   // Create the pass pipeline
   fir::createHLFIRToFIRPassPipeline(pm, enableOpenMP, config);
   (void)mlir::applyPassManagerCLOptions(pm);
@@ -766,6 +768,9 @@ void CodeGenAction::generateLLVMIR() {
   if (ci.getInvocation().getFrontendOpts().features.IsEnabled(
           Fortran::common::LanguageFeature::OpenMP))
     config.EnableOpenMP = true;
+
+  if (ci.getInvocation().getLangOpts().OpenMPIsTargetDevice)
+    config.EnableOpenMPIsTargetDevice = true;
 
   if (ci.getInvocation().getLangOpts().OpenMPSimd)
     config.EnableOpenMPSimd = true;

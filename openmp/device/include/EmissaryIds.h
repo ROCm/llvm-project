@@ -16,7 +16,6 @@
 /// The sets of emissary APIs under development
 typedef enum {
   EMIS_ID_INVALID,
-  EMIS_ID_FORTRT,
   EMIS_ID_PRINT,
   EMIS_ID_MPI,
   EMIS_ID_HDF5,
@@ -35,26 +34,6 @@ unsigned long long _emissary_exec(unsigned long long, ...);
 
 #define _PACK_EMIS_IDS(x, y)                                                   \
   ((unsigned long long)x << 32) | ((unsigned long long)y)
-
-typedef enum {
-  _FortranAio_INVALID,
-  _FortranAioBeginExternalListOutput_idx,
-  _FortranAioOutputAscii_idx,
-  _FortranAioOutputInteger32_idx,
-  _FortranAioEndIoStatement_idx,
-  _FortranAioOutputInteger8_idx,
-  _FortranAioOutputInteger16_idx,
-  _FortranAioOutputInteger64_idx,
-  _FortranAioOutputReal32_idx,
-  _FortranAioOutputReal64_idx,
-  _FortranAioOutputComplex32_idx,
-  _FortranAioOutputComplex64_idx,
-  _FortranAioOutputLogical_idx,
-  _FortranAAbort_idx,
-  _FortranAStopStatementText_idx,
-  _FortranAioBeginExternalFormattedOutput_idx,
-  _FortranAStopStatement_idx,
-} offload_emis_fortrt_idx;
 
 /// This structure is created by emisExtractArgBuf to make it easier
 /// to get values from the data buffer passed by rpc.

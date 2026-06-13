@@ -21,9 +21,6 @@ extern "C" {
 /// Called by rpc after receiving emissary argument buffer
 emis_return_t Emissary(char *data);
 
-/// Called by Emissary for all Fortrt emissary functions
-emis_return_t EmissaryFortrt(char *data, emisArgBuf_t *ab);
-
 /// Called by Emissary for all misc print functions
 emis_return_t EmissaryPrint(char *data, emisArgBuf_t *ab);
 

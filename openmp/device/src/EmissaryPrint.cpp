@@ -23,6 +23,13 @@
 
 extern "C" {
 
+uint32_t __strlen_max(char *instr, uint32_t maxstrlen) {
+  for (uint32_t i = 0; i < maxstrlen; i++)
+    if (instr[i] == (char)0)
+      return (uint32_t)(i + 1);
+  return maxstrlen;
+}
+
 __attribute__((flatten, always_inline)) void f90print_(char *s) {
   _emissary_exec(_PACK_EMIS_IDS(EMIS_ID_PRINT, _printf_idx),
 		  "%s\n", s);

@@ -446,9 +446,8 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
 
-  if (D.isUsingLTO())
-    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs,
-                  D.getLTOMode() == LTOK_Thin);
+  if (auto LTO = ToolChain.getLTOMode(Args); LTO != LTOK_None)
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs, LTO == LTOK_Thin);
 
   if (Args.hasArg(options::OPT_Z_Xlinker__no_demangle))
     CmdArgs.push_back("--no-demangle");
@@ -598,7 +597,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // release to mask potential bitcode incompatibilities from different LLVM
   // versions or releases. This fixes things like differences in number of
   // integer attributes or anything where bitcodes may not match.
-  if (D.isUsingLTO()) {
+  if (ToolChain.isUsingLTO(Args)) {
     StringRef execSR(Exec);
     std::string as_fn =
         execSR.substr(0, execSR.find_last_of("/") + 1).str() + "llvm-as";
@@ -3504,8 +3503,8 @@ llvm::opt::DerivedArgList *
 Generic_GCC::TranslateArgs(const llvm::opt::DerivedArgList &Args,
                            StringRef BoundArch,
                            Action::OffloadKind DeviceOffloadKind) const {
-  if (DeviceOffloadKind != Action::OFK_SYCL &&
-      DeviceOffloadKind != Action::OFK_OpenMP)
+  if (DeviceOffloadKind == Action::OFK_None ||
+      DeviceOffloadKind == Action::OFK_Host)
     return nullptr;
 
   DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
@@ -3531,13 +3530,14 @@ Generic_GCC::TranslateArgs(const llvm::opt::DerivedArgList &Args,
 
   // Add the bound architecture to the arguments list if present.
   if (!BoundArch.empty()) {
-    options::ID Opt =
-        getTriple().isARM() || getTriple().isPPC() || getTriple().isAArch64()
-            ? options::OPT_mcpu_EQ
-            : options::OPT_march_EQ;
+    options::ID Opt = getTriple().isARM() || getTriple().isPPC() ||
+                              getTriple().isAArch64() || getTriple().isAMDGPU()
+                          ? options::OPT_mcpu_EQ
+                          : options::OPT_march_EQ;
     DAL->eraseArg(Opt);
     DAL->AddJoinedArg(nullptr, Opts.getOption(Opt), BoundArch);
   }
+
   return DAL;
 }
 
@@ -3545,6 +3545,7 @@ void Generic_ELF::anchor() {}
 
 void Generic_ELF::addClangTargetOptions(const ArgList &DriverArgs,
                                         ArgStringList &CC1Args,
+                                        StringRef BoundArch,
                                         Action::OffloadKind) const {
   if (!DriverArgs.hasFlag(options::OPT_fuse_init_array,
                           options::OPT_fno_use_init_array, true))

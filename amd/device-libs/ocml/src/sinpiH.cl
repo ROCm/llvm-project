@@ -24,6 +24,6 @@ MATH_MANGLE(sinpi)(half x)
 
     s = AS_HALF((short)(AS_SHORT(s) ^ (flip ^ (AS_SHORT(x) & (short)SIGNBIT_HP16))));
 
-    return s;
+    return s == 0.0h ? BUILTIN_COPYSIGN_F16(0.0h, x) : s;
 }
 

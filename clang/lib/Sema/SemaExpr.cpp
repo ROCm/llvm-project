@@ -13874,20 +13874,6 @@ inline QualType Sema::CheckBitwiseOperands(ExprResult &LHS, ExprResult &RHS,
   return ResultTy;
 }
 
-static inline bool IsAMDGPUPredicateBI(Expr *E) {
-  if (!E->getType()->isVoidType())
-    return false;
-
-  if (auto *CE = dyn_cast<CallExpr>(E)) {
-    if (auto *BI = CE->getDirectCallee())
-      if (BI->getName() == "__builtin_amdgcn_processor_is" ||
-          BI->getName() == "__builtin_amdgcn_is_invocable")
-        return true;
-  }
-
-  return false;
-}
-
 // C99 6.5.[13,14]
 inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
                                            SourceLocation Loc,
@@ -13991,9 +13977,6 @@ inline QualType Sema::CheckLogicalOperands(ExprResult &LHS, ExprResult &RHS,
 
   // The following is safe because we only use this method for
   // non-overloadable operands.
-
-  if (IsAMDGPUPredicateBI(LHS.get()) && IsAMDGPUPredicateBI(RHS.get()))
-    return Context.VoidTy;
 
   // C++ [expr.log.and]p1
   // C++ [expr.log.or]p1

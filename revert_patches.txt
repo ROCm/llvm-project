@@ -11,12 +11,3 @@ breaks rocgdb UT
 breaks windows build
 [cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-breaks comgr test
-clang: Refactor handling of offload sanitizer arguments (#196737)
----
-breaks hipcub build
-[InstCombine] Fold zext into de-interleaving (factor=2) instructions (#195330)
----
-nees more integration
-[offload][OpenMP] Add strict flag for blocks and 
----

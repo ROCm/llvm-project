@@ -53,5 +53,6 @@ add_comgr_lit_binary(status-string c)
 add_comgr_lit_binary(data-action c)
 add_comgr_lit_binary(lookup-code-object c)
 add_comgr_lit_binary(hotswap-rewrite c)
+add_comgr_lit_binary(parse-isa-name c)
 
 add_dependencies(check-comgr test-lit)

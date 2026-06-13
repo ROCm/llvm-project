@@ -69,11 +69,12 @@ public:
                                         const JobAction &JA,
                                         Compilation &C,
                                         const InputInfoList &Inputs) const override;
+
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args,
+                        llvm::StringRef BoundArch,
                         Action::OffloadKind DeviceOffloadKind) const override;
-  void addClangWarningOptions(llvm::opt::ArgStringList &CC1Args) const override;
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void
   AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
@@ -86,18 +87,17 @@ public:
   void AddHIPIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                          llvm::opt::ArgStringList &CC1Args) const override;
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
-
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
 
   VersionTuple
   computeMSVCVersion(const Driver *D,
                      const llvm::opt::ArgList &Args) const override;
 
   unsigned GetDefaultDwarfVersion() const override { return 5; }
+
+  /// HIP uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
 
   const ToolChain &HostTC;
   void checkTargetID(const llvm::opt::ArgList &DriverArgs) const override;
@@ -110,6 +110,9 @@ class LLVM_LIBRARY_VISIBILITY SPIRVAMDToolChain final : public ROCMToolChain {
 public:
   SPIRVAMDToolChain(const Driver &D, const llvm::Triple &Triple,
                     const llvm::opt::ArgList &Args);
+
+  /// SPIR-V uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
 
 protected:
   Tool *buildLinker() const override;

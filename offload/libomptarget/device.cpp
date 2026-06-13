@@ -313,7 +313,7 @@ int32_t DeviceTy::submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
           RegionInterface
               .getTraceGenerators<ompt_target_data_transfer_to_device>(),
           AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
-          /*EventType=*/ompt_callback_target_data_op, omp_get_initial_device(),
+          /*EventType=*/ompt_callback_target_data_op, omp_initial_device,
           HstPtrBegin, DeviceID, TgtPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
@@ -344,7 +344,7 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
               .getTraceGenerators<ompt_target_data_transfer_from_device>(),
           AsyncInfo, RTL->getProfiler(), /*TracedDeviceId=*/DeviceID,
           /*EventType=*/ompt_callback_target_data_op, DeviceID, TgtPtrBegin,
-          omp_get_initial_device(), HstPtrBegin, Size,
+          omp_initial_device, HstPtrBegin, Size,
           /*CodePtr=*/OMPT_GET_RETURN_ADDRESS);)
 
   setAsyncInfoSynchronous(AsyncInfo, ForceSynchronousTargetRegions);

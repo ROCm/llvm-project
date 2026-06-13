@@ -2590,11 +2590,11 @@ public:
   }
 
   /// Returns the scope of subprogram's retainedNodes.
-  static const DILocalScope *getRetainedNodeScope(const MDNode *N);
-  static DILocalScope *getRetainedNodeScope(MDNode *N);
+  LLVM_ABI static const DILocalScope *getRetainedNodeScope(const MDNode *N);
+  LLVM_ABI static DILocalScope *getRetainedNodeScope(MDNode *N);
   // For use in Verifier.
-  static const DIScope *getRawRetainedNodeScope(const MDNode *N);
-  static DIScope *getRawRetainedNodeScope(MDNode *N);
+  LLVM_ABI static const DIScope *getRawRetainedNodeScope(const MDNode *N);
+  LLVM_ABI static DIScope *getRawRetainedNodeScope(MDNode *N);
 
   /// For each retained node, applies one of the given functions depending
   /// on the type of a node.
@@ -2634,7 +2634,7 @@ public:
   /// when a subprogram refers to types that are local to another subprogram,
   /// it is more complicated for debugger to properly discover local types
   /// of a current scope for expression evaluation.
-  void cleanupRetainedNodes();
+  LLVM_ABI void cleanupRetainedNodes();
 
   /// Calls SP->cleanupRetainedNodes() for a range of DISubprograms.
   template <typename RangeT>
@@ -4518,10 +4518,6 @@ template <> struct DenseMapInfo<DIExpression::FragmentInfo> {
   using FragInfo = DIExpression::FragmentInfo;
   static const uint64_t MaxVal = std::numeric_limits<uint64_t>::max();
 
-  static inline FragInfo getEmptyKey() { return {MaxVal, MaxVal}; }
-
-  static inline FragInfo getTombstoneKey() { return {MaxVal - 1, MaxVal - 1}; }
-
   static unsigned getHashValue(const FragInfo &Frag) {
     return (Frag.SizeInBits & 0xffff) << 16 | (Frag.OffsetInBits & 0xffff);
   }
@@ -5530,16 +5526,6 @@ public:
 
 template <> struct DenseMapInfo<DebugVariable> {
   using FragmentInfo = DIExpression::FragmentInfo;
-
-  /// Empty key: no key should be generated that has no DILocalVariable.
-  static inline DebugVariable getEmptyKey() {
-    return DebugVariable(nullptr, std::nullopt, nullptr);
-  }
-
-  /// Difference in tombstone is that the Optional is meaningful.
-  static inline DebugVariable getTombstoneKey() {
-    return DebugVariable(nullptr, {{0, 0}}, nullptr);
-  }
 
   static unsigned getHashValue(const DebugVariable &D) {
     unsigned HV = 0;

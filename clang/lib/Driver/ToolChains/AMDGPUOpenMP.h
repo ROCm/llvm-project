@@ -76,12 +76,10 @@ public:
     return &HostTC.getTriple();
   }
 
-  llvm::opt::DerivedArgList *
-  TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
-                Action::OffloadKind DeviceOffloadKind) const override;
   void
   addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
                         llvm::opt::ArgStringList &CC1Args,
+                        llvm::StringRef BoundArch,
                         Action::OffloadKind DeviceOffloadKind) const override;
 
   bool useIntegratedAs() const override { return true; }
@@ -92,7 +90,6 @@ public:
   bool SupportsProfiling() const override { return false; }
   bool IsMathErrnoDefault() const override { return false; }
 
-  void addClangWarningOptions(llvm::opt::ArgStringList &CC1Args) const override;
   CXXStdlibType GetCXXStdlibType(const llvm::opt::ArgList &Args) const override;
   void AddClangCXXStdlibIncludeArgs(
       const llvm::opt::ArgList &Args,
@@ -106,9 +103,6 @@ public:
   AddFlangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                             llvm::opt::ArgStringList &FlangArgs) const override;
 
-  SanitizerMask
-  getSupportedSanitizers(StringRef BoundArch,
-                         Action::OffloadKind DeviceOffloadKind) const override;
 
   StringRef getAsanRTLPath() const {
     return RocmInstallation->getAsanRTLPath();
@@ -120,8 +114,11 @@ public:
 
   unsigned GetDefaultDwarfVersion() const override { return 5; }
   llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
                 const Action::OffloadKind DeviceOffloadKind) const override;
+
+  /// OpenMP uses LTO by default to link device bitcode.
+  LTOKind getDefaultLTOMode() const override { return LTOK_Full; }
 
   const ToolChain &HostTC;
 };
