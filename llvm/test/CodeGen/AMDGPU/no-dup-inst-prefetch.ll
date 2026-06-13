@@ -11,7 +11,6 @@ define amdgpu_cs void @_amdgpu_cs_main(float %0, i32 %1) {
 ; GFX10-NEXT:    s_mov_b32 s0, 0
 ; GFX10-NEXT:    s_mov_b32 s4, 0
 ; GFX10-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
-; GFX10-NEXT:    s_mov_b32 s1, -1
 ; GFX10-NEXT:    .p2align 6
 ; GFX10-NEXT:  .LBB0_1: ; %bb
 ; GFX10-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -57,7 +56,6 @@ define amdgpu_cs void @_amdgpu_cs_main(float %0, i32 %1) {
 ; GFX12-NEXT:    s_mov_b32 s0, 0
 ; GFX12-NEXT:    s_mov_b32 s4, 0
 ; GFX12-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
-; GFX12-NEXT:    s_mov_b32 s1, -1
 ; GFX12-NEXT:  .LBB0_1: ; %bb
 ; GFX12-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX12-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(SALU_CYCLE_1)
