@@ -5,7 +5,6 @@ define amdgpu_cs void @should_not_hoist_set_inactive(<4 x i32> inreg %i14, i32 i
 ; GCN-LABEL: should_not_hoist_set_inactive:
 ; GCN:       ; %bb.0: ; %.entry
 ; GCN-NEXT:    v_cmp_gt_i32_e32 vcc_lo, 3, v1
-; GCN-NEXT:    s_mov_b32 s5, -1
 ; GCN-NEXT:    s_mov_b32 s6, 0
 ; GCN-NEXT:    s_mov_b32 s5, 0
 ; GCN-NEXT:    v_cndmask_b32_e64 v1, 0, -1, vcc_lo
