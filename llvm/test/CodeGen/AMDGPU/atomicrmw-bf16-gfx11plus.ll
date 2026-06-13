@@ -12,7 +12,6 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-TRUE16-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24
 ; GFX11-TRUE16-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v2.h, 0
-; GFX11-TRUE16-NEXT:    s_mov_b32 s4, -1
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s4, 0
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v4, 0
 ; GFX11-TRUE16-NEXT:    s_waitcnt lgkmcnt(0)
@@ -71,7 +70,6 @@ define amdgpu_kernel void @v_atomicrmw_fadd_bf16(ptr addrspace(1) %out, i1 %in, 
 ; GFX11-FAKE16-NEXT:    s_load_b64 s[0:1], s[4:5], 0x34
 ; GFX11-FAKE16-NEXT:    s_load_b64 s[2:3], s[4:5], 0x24
 ; GFX11-FAKE16-NEXT:    v_and_b32_e32 v0, 0x3ff, v0
-; GFX11-FAKE16-NEXT:    s_mov_b32 s4, -1
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s4, 0
 ; GFX11-FAKE16-NEXT:    v_mov_b32_e32 v3, 0
 ; GFX11-FAKE16-NEXT:    s_waitcnt lgkmcnt(0)

@@ -15,7 +15,6 @@ define amdgpu_kernel void @flat_atomic_usub_cond_no_rtn_u32(ptr %addr, i32 %in) 
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX9-SDAG-NEXT:    flat_load_dword v3, v[0:1]
-; GFX9-SDAG-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX9-SDAG-NEXT:  .LBB0_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -112,7 +111,6 @@ define amdgpu_kernel void @flat_atomic_usub_cond_rtn_u32(ptr %addr, i32 %in, ptr
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, s2
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s3
 ; GFX9-SDAG-NEXT:    flat_load_dword v0, v[0:1]
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:  .LBB1_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -239,7 +237,6 @@ define amdgpu_kernel void @global_atomic_usub_cond_no_rtn_u32(ptr addrspace(1) %
 ; GFX9-SDAG-NEXT:    s_load_dword s2, s[2:3], 0x0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s2
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:  .LBB2_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -328,7 +325,6 @@ define amdgpu_kernel void @global_atomic_usub_cond_rtn_u32(ptr addrspace(1) %add
 ; GFX9-SDAG-NEXT:    s_load_dword s2, s[0:1], 0x10
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s2
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:  .LBB3_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -426,7 +422,6 @@ define amdgpu_kernel void @ds_usub_cond_no_rtn_u32(ptr addrspace(3) %addr, i32 %
 ; GFX9-SDAG-LABEL: ds_usub_cond_no_rtn_u32:
 ; GFX9-SDAG:       ; %bb.0: ; %entry
 ; GFX9-SDAG-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    s_add_i32 s0, s0, -16
@@ -511,7 +506,6 @@ define amdgpu_kernel void @ds_usub_cond_rtn_u32(ptr addrspace(3) %addr, i32 %in,
 ; GFX9-SDAG-LABEL: ds_usub_cond_rtn_u32:
 ; GFX9-SDAG:       ; %bb.0: ; %entry
 ; GFX9-SDAG-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x24
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, s0
@@ -603,7 +597,6 @@ define i32 @global_atomic_usub_cond(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    global_load_dword v3, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB6_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -691,7 +684,6 @@ define i32 @global_atomic_usub_cond_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, v3
 ; GFX9-SDAG-NEXT:    global_load_dword v0, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB7_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -775,7 +767,6 @@ define void @global_atomic_usub_cond_nortn(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    global_load_dword v4, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB8_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -861,7 +852,6 @@ define void @global_atomic_usub_cond_offset_nortn(ptr addrspace(1) %ptr, i32 %da
 ; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, v3
 ; GFX9-SDAG-NEXT:    global_load_dword v1, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB9_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -952,7 +942,6 @@ define amdgpu_kernel void @global_atomic_usub_cond_sgpr_base_offset(ptr addrspac
 ; GFX9-SDAG-NEXT:    s_addc_u32 s1, s1, 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s2
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:  .LBB10_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -1053,7 +1042,6 @@ define amdgpu_kernel void @global_atomic_usub_cond_sgpr_base_offset_nortn(ptr ad
 ; GFX9-SDAG-NEXT:    s_addc_u32 s1, s1, 0
 ; GFX9-SDAG-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, s2
-; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX9-SDAG-NEXT:  .LBB11_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -1130,7 +1118,6 @@ define i32 @global_atomic_usub_cond__amdgpu_no_remote_memory(ptr addrspace(1) %p
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    global_load_dword v3, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB12_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -1213,7 +1200,6 @@ define i32 @global_atomic_usub_cond__amdgpu_no_fine_grained_memory(ptr addrspace
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    global_load_dword v3, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB13_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -1296,7 +1282,6 @@ define i32 @global_atomic_usub_cond__amdgpu_no_fine_grained_memory__amdgpu_no_re
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    global_load_dword v3, v[0:1], off
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], -1
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX9-SDAG-NEXT:  .LBB14_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
