@@ -63,10 +63,9 @@ int MachineFrameInfo::CreateStackObject(uint64_t Size, Align Alignment,
   return Index;
 }
 
-int MachineFrameInfo::CreateSpillStackObject(uint64_t Size, Align Alignment,
-                                             TargetStackID::Value StackID) {
+int MachineFrameInfo::CreateSpillStackObject(uint64_t Size, Align Alignment) {
   Alignment = clampStackAlignment(!StackRealignable, Alignment, StackAlignment);
-  CreateStackObject(Size, Alignment, true, nullptr, StackID);
+  CreateStackObject(Size, Alignment, true);
   int Index = (int)Objects.size() - NumFixedObjects - 1;
   ensureMaxAlignment(Alignment);
   return Index;

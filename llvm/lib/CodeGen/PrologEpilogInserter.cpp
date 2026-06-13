@@ -523,8 +523,7 @@ static void assignCalleeSavedSpillSlots(MachineFunction &F,
         // the TargetRegisterClass if the stack alignment is smaller. Use the
         // min.
         Alignment = std::min(Alignment, TFI->getStackAlign());
-        FrameIdx = MFI.CreateStackObject(Size, Alignment, true, nullptr,
-                                         RegInfo->getSpillStackID(*RC));
+        FrameIdx = MFI.CreateStackObject(Size, Alignment, true);
         MFI.setIsCalleeSavedObjectIndex(FrameIdx, true);
       } else {
         // Spill it to the stack where we must.

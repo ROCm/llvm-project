@@ -269,8 +269,7 @@ bool SILowerSGPRSpills::spillCalleeSavedRegs(
 
         const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(Reg);
         int JunkFI = MFI.CreateStackObject(TRI->getSpillSize(*RC),
-                                           TRI->getSpillAlign(*RC), true,
-                                           nullptr, TRI->getSpillStackID(*RC));
+                                           TRI->getSpillAlign(*RC), true);
 
         CSI.emplace_back(Reg, JunkFI);
         CalleeSavedFIs.push_back(JunkFI);
@@ -282,9 +281,8 @@ bool SILowerSGPRSpills::spillCalleeSavedRegs(
     // can be emitted appropriately.
     if (SpillRetAddrReg) {
       const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(RetAddrReg);
-      int JunkFI =
-          MFI.CreateStackObject(TRI->getSpillSize(*RC), TRI->getSpillAlign(*RC),
-                                true, nullptr, TRI->getSpillStackID(*RC));
+      int JunkFI = MFI.CreateStackObject(TRI->getSpillSize(*RC),
+                                         TRI->getSpillAlign(*RC), true);
       CSI.push_back(CalleeSavedInfo(RetAddrReg, JunkFI));
       CalleeSavedFIs.push_back(JunkFI);
     }
