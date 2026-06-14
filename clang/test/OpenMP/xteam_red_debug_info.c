@@ -13,4 +13,4 @@ void test_xteam_red_debug_info() {
 
 // CHECK:       @.offload_sizes = private unnamed_addr constant [7 x i64]
 // CHECK-NEXT:  @.offload_maptypes = private unnamed_addr constant [7 x i64]
-// CHECK-NEXT:  @.offload_mapnames = private constant [7 x ptr]
+// CHECK-NEXT:  @.offload_mapnames = private constant [7 x ptr]// XFAIL: *

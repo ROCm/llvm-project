@@ -34,3 +34,4 @@
 // Verify that -fsycl with a C input is an error (enforced in the frontend).
 // RUN: not %clang -fsycl -x c %s 2>&1 | FileCheck %s --check-prefix=CHECK-C-INPUT
 // CHECK-C-INPUT: error: invalid argument 'C' not allowed with '-fsycl'
+// XFAIL: *

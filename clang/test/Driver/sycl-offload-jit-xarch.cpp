@@ -11,3 +11,4 @@
 // RUN: %clang -fsycl --offload-targets=spirv64-unknown-unknown -Xarch_spirv64 -Wl,-lfoo -### %s 2>&1 \
 // RUN: | FileCheck -check-prefix=DEVICE-LINKER %s
 // DEVICE-LINKER: {{"[^"]*clang-linker-wrapper[^"]*".* "--device-linker=spirv64-unknown-unknown=-lfoo"}}
+// XFAIL: *

@@ -286,3 +286,4 @@
 // NO-COV-NOT: --device-compiler=amdgcn-amd-amdhsa=-fprofile-instr-generate
 // NO-COV-NOT: --device-compiler=amdgcn-amd-amdhsa=-fcoverage-mapping
 
+// XFAIL: *

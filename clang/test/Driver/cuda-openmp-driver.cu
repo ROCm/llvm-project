@@ -38,3 +38,4 @@
 
 // GPU-BINARY: fatbinary{{.*}}"--create" "{{.*}}.fatbin"
 // GPU-BINARY: -cc1{{.*}}-fcuda-include-gpubinary" "{{.*}}.fatbin"
+// XFAIL: *

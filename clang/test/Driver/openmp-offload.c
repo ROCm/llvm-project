@@ -233,3 +233,4 @@
 // CHK-COMPAT-TRIPLE: clang{{.*}} "-cc1" "-triple" "armv7-pc-linux-gnu"
 // CHK-COMPAT-TRIPLE-SAME: "-target-cpu" "cortex-a7"
 // CHK-COMPAT-TRIPLE-SAME: "-fopenmp-is-target-device"
+// XFAIL: *

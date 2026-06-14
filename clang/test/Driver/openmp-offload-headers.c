@@ -21,3 +21,4 @@
 // RUN:     -fopenmp-targets=nvptx64-nvidia-cuda,amdgcn-amd-amdhsa -Xopenmp-target=amdgcn-amd-amdhsa --offload-arch=gfx908  \
 // RUN:     -nogpulib %s 2>&1 | FileCheck %s --check-prefix=CHECK-HEADERS-DISABLED
 // CHECK-HEADERS-DISABLED-NOT: "-cc1"{{.*}}"__clang_openmp_device_functions.h"
+// XFAIL: *

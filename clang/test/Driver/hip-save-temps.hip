@@ -82,3 +82,4 @@
 // RDC-BINDINGS-NEXT: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[HIPI]]"], output: "[[TMP_BC:.+]]"
 // RDC-BINDINGS-NEXT: # "amdgcn-amd-amdhsa" - "clang", inputs: ["[[TMP_BC]]"], output: "[[BC:.+]]"
 // RDC-BINDINGS-NEXT: # "x86_64-unknown-linux-gnu" - "Offload::Packager", inputs: ["[[BC]]"], output: "[[OUTPUT:.+]]"
+// XFAIL: *

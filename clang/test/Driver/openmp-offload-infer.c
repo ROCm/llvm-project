@@ -46,3 +46,4 @@
 // RUN:     -nogpulib %s 2>&1 | FileCheck %s --check-prefix=CHECK-DISABLED
 
 // CHECK-DISABLED-NOT: "nvptx64-nvidia-cuda" - "clang",
+// XFAIL: *

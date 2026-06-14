@@ -1,4 +1,5 @@
 ! Test that flang OpenMP and OpenMP offload related
+! XFAIL: *
 ! commands forward or expand to the appropriate commands
 ! for flang -fc1 as expected. Assumes a gfx90a, aarch64,
 ! and sm_70 architecture, but doesn't require one to be

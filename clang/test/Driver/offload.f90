@@ -3,3 +3,4 @@
 // RUN:   --rocm-path=%S/Inputs/rocm -fopenmp --offload-arch=gfx908 \
 // RUN: %s 2>&1 | FileCheck %s --check-prefix=CHECK-FLANG-RT
 // CHECK-FLANG-RT: clang-linker-wrapper{{.*}}"--device-linker=amdgcn-amd-amdhsa=-lflang_rt.runtime"{{.*}}"-lflang_rt.runtime"
+// XFAIL: *

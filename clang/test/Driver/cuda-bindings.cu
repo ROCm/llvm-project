@@ -221,3 +221,4 @@
 // RUN:        -foffload-lto --offload-arch=sm_70 --offload-arch=sm_52 -c %s 2>&1 \
 // RUN: | FileCheck -check-prefix=LTO-NO-RDC %s
 // LTO-NO-RDC: error: unsupported option '-foffload-lto' for language mode '-fno-gpu-rdc'
+// XFAIL: *

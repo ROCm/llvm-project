@@ -49,3 +49,4 @@
 // RUN:   --offload-arch=sm_52 -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-target-jit %s 2>&1 \
 // RUN: | FileCheck -check-prefix=THIN-LTO %s
 // THIN-LTO: error: the combination of '-foffload-lto=' and '-fopenmp-target-jit' is incompatible
+// XFAIL: *

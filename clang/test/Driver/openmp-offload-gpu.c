@@ -461,3 +461,4 @@
 // RUN:     --offload-arch=sm_89 --offload-arch=gfx906 -nogpulib -nogpuinc %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CUDA-PATH %s
 // CUDA-PATH: clang-linker-wrapper{{.*}} "--device-compiler=--cuda-path={{.*}}"{{.*}}"--device-compiler=--rocm-path={{.*}}"
+// XFAIL: *

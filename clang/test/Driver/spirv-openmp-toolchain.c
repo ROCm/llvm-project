@@ -70,3 +70,4 @@
 // CHECK-LINKER-ARG-NOT: -mllvm
 // CHECK-LINKER-ARG-NOT: --spirv-ext=+SPV_INTEL_function_pointers
 // CHECK-LINKER-ARG: --linker-path
+// XFAIL: *

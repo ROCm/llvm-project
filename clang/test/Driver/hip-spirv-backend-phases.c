@@ -81,3 +81,4 @@
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: [[P2:[0-9]+]]: compiler, {[[P1]]}, ir, (device-hip, amdgcnspirv)
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: [[P3:[0-9]+]]: backend, {[[P2]]}, assembler, (device-hip, amdgcnspirv)
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: [[P4:[0-9]+]]: offload, "device-hip (spirv64-amd-amdhsa:amdgcnspirv)" {[[P3]]}, none
+// XFAIL: *

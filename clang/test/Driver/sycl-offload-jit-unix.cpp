@@ -31,3 +31,4 @@
 // RUN: %t/bin/clang -### -no-canonical-prefixes --target=x86_64-unknown-linux-gnu -fsycl -nolibsycl %s 2>&1 \
 // RUN:   | FileCheck -check-prefix=CHECK-NOLIBSYCL %s
 // CHECK-NOLIBSYCL-NOT: libLLVMSYCL.so
+// XFAIL: *

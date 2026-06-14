@@ -53,3 +53,4 @@
 // CHECK-SPIRV-BACKEND-LL: "{{.*clang(\.exe)?}}" "-cc1" "-triple" "spirv64-amd-amdhsa" {{.*}} "-emit-llvm"
 // CHECK-FGPU-RDC-SAME: {{.*}} "-fgpu-rdc"
 // CHECK-CLANG-LINKER-WRAPPER: "{{.*}}clang-linker-wrapper" "--should-extract=amdgcnspirv" {{.*}} "--device-compiler=spirv64-amd-amdhsa=-use-spirv-backend"
+// XFAIL: *

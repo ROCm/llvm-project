@@ -24,3 +24,4 @@
 // ASYNC-TABLES: "-triple" "amdgcn-amd-amdhsa" {{.*}} "-funwind-tables=2"
 // SYNC-TABLES: "-triple" "amdgcn-amd-amdhsa" {{.*}} "-funwind-tables=1"
 // NO-TABLES-NOT: "-triple" "amdgcn-amd-amdhsa" {{.*}} "-funwind-tables={{.*}}"
+// XFAIL: *

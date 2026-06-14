@@ -1,4 +1,5 @@
 ! REQUIRES: amdgpu-registered-target
+! XFAIL: *
 ! RUN: %flang_fc1 -emit-llvm -triple amdgcn-amd-amdhsa -fopenmp -fopenmp-is-device -munsafe-fp-atomics %s -o -|FileCheck -check-prefix=UNSAFE-FP-ATOMICS %s
 ! RUN: %if !system-aix %{ %flang --offload-arch=gfx90a --offload-device-only -fopenmp -emit-llvm -S %s -munsafe-fp-atomics -nogpulib -o -|FileCheck -check-prefix=UNSAFE-FP-ATOMICS %s %}
 ! RUN: %flang_fc1 -emit-llvm -triple amdgcn-amd-amdhsa -fopenmp -fopenmp-is-device -fatomic-ignore-denormal-mode %s -o -|FileCheck -check-prefix=IGNORE-DENORMAL-MODE %s

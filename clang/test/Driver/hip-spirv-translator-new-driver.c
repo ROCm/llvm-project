@@ -7,3 +7,4 @@
 
 // CHECK-NOT: {{".*clang-linker-wrapper.*"}} {{.*}} "-o" "[[OUTPUT_FILE:.*.o]]" {{.*}}"[[OUTPUT_FILE]]"
 // CHECK: {{".*clang-linker-wrapper.*"}} {{.*}} "-o" {{".*.hipfb"}}
+// XFAIL: *

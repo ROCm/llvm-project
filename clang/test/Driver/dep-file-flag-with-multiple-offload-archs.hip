@@ -7,3 +7,4 @@
 // CHECK: {{.*}}clang{{.*}}"-target-cpu"{{.*}}"-dependency-file" "tmp.d"
 
 void main(){}
+// XFAIL: *

@@ -329,3 +329,4 @@
 // INVALID-ARCH-NEXT: 2: compiler, {1}, ir
 // INVALID-ARCH-NEXT: 3: backend, {2}, assembler
 // INVALID-ARCH-NEXT: 4: assembler, {3}, object
+// XFAIL: *

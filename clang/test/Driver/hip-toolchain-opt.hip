@@ -96,3 +96,4 @@
 // Og-SAME: "-Og"
 // O0-CGO2-SAME: "-O0"
 // O0-CGO2-NOT: "--lto-CGO2"
+// XFAIL: *

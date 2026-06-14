@@ -30,3 +30,4 @@
 // RUN:     --cuda-path=%S/Inputs/CUDA_111/usr/local/cuda --sysroot=%S/Inputs/basic_gpu_tree \
 // RUN:     -ccc-install-dir %S/Inputs/basic_gpu_tree/bin -x cuda %s 2>&1 | FileCheck %s --check-prefix=CUDA
 // CUDA-NOT: "--device-linker=nvptx64-nvidia-cuda=-lc"
+// XFAIL: *

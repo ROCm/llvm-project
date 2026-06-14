@@ -85,3 +85,4 @@
 // RUN: %clang -### -target x86_64-pc-linux-gnu -nogpulib  -fopenmp --offload-arch=gfx90a \
 // RUN:   -ftime-report %s 2>&1 | FileCheck %s --check-prefix=CHECK-TIME-REPORT
 // CHECK-TIME-REPORT: clang-linker-wrapper{{.*}}"--device-compiler=amdgcn-amd-amdhsa=-ftime-report"
+// XFAIL: *

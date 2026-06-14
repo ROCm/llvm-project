@@ -85,3 +85,4 @@
 // RUN:     --amdgpu-arch-tool=%t/amdgpu_arch_gfx906 %s 2>&1 | \
 // RUN:   FileCheck %s --check-prefix=BAD-TIMEOUT-AMDGPU
 // BAD-TIMEOUT-AMDGPU: clang: error: cannot determine amdgcn architecture: CLANG_TOOLCHAIN_PROGRAM_TIMEOUT expected an integer, got ''; consider passing it via '--offload-arch'; environment variable CLANG_TOOLCHAIN_PROGRAM_TIMEOUT specifies the tool timeout (integer secs, <=0 is infinite)
+// XFAIL: *

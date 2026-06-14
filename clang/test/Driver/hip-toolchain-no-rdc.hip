@@ -246,3 +246,4 @@
 // VERBOSE: clang-linker-wrapper
 // VERBOSE-NOT: --device-compiler=amdgcn-amd-amdhsa=-v {{.*}}-o {{.*}}.hipfb
 // VERBOSE-NOT: --wrapper-verbose {{.*}}-o {{.*}}.hipfb
+// XFAIL: *

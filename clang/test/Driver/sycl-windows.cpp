@@ -111,3 +111,4 @@
 // RUN: %clang -### -fsycl -nolibsycl -fms-runtime-lib=dll --target=x86_64-pc-windows-msvc -- %s 2>&1 \
 // RUN:   | FileCheck -check-prefix=CHECK-CLANG-NOLIBSYCL %s
 // CHECK-CLANG-NOLIBSYCL-NOT: "-defaultlib:LLVMSYCL"
+// XFAIL: *

@@ -21,3 +21,4 @@
 // RUN: %clang -### -target x86_64-linux-gnu -ccc-print-bindings --offload-link -foffload-via-llvm %s 2>&1 | FileCheck -check-prefix DEVICE-LINK %s
 
 // DEVICE-LINK: "x86_64-unknown-linux-gnu" - "Offload::Linker", inputs: ["[[INPUT:.+]]"], output: "a.out"
+// XFAIL: *

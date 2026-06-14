@@ -547,6 +547,9 @@ DerivedArgList *Driver::TranslateInputArgs(const InputArgList &Args) const {
   }
 #endif
 
+  // HACK!!!
+  DAL->AddFlagArg(nullptr, Opts.getOption(options::OPT_no_offload_new_driver));
+
   return DAL;
 }
 

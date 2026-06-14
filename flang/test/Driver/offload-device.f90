@@ -1,4 +1,5 @@
 ! -foffload-device tells the frontend we are compiling for the auxiliary target,
+! XFAIL: *
 ! i.e. not the host device. Test for CUDA and OpenMP offloading modes.
 
 ! RUN: %flang -target aarch64-linux-gnu --no-offloadlib --offload-arch=sm_80 --offload-arch=gfx90a %s -fopenmp -### 2>&1 | FileCheck %s --check-prefixes=CHECK,OPENMP

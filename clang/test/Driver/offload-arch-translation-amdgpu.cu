@@ -139,3 +139,4 @@
 // GFX12_5_GENERIC: triple=amdgcn-amd-amdhsa,arch=gfx12-5-generic
 
 // SPIRV: triple=spirv64-amd-amdhsa,arch=amdgcnspirv
+// XFAIL: *

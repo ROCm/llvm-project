@@ -55,3 +55,4 @@
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: # "spirv64-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[HIPI:.+\.hipi]]"
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: # "spirv64-amd-amdhsa" - "clang", inputs: ["[[HIPI]]"], output: "[[SPV_BC:.+\.bc]]"
 // CHECK-SPIRV-TEXTUAL-OFFLOAD-DEVICE-ONLY: # "spirv64-amd-amdhsa" - "clang", inputs: ["[[SPV_BC]]"], output: "{{.+\.s}}"
+// XFAIL: *

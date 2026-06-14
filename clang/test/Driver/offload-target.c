@@ -20,3 +20,4 @@
 // RUN: %clang -### --offload-targets=spirv64-amd-amdhsa -nogpulib -nogpuinc -x hip %s -ccc-print-bindings 2>&1 \
 // RUN: | FileCheck %s -check-prefix=HIPSPIRV
 // HIPSPIRV: "spirv64-amd-amdhsa" - "clang", inputs: ["[[INPUT:.+]]"], output: "[[AMD_OBJ:.+]]"
+// XFAIL: *

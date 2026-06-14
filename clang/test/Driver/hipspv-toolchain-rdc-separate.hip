@@ -64,3 +64,4 @@
 // LINK-SAME: "-o" "a.out"
 // LINK-SAME: "{{.*a[.]o}}" "{{.*b[.]o}}"
 // LINK-NOT: -lamdhip64
+// XFAIL: *

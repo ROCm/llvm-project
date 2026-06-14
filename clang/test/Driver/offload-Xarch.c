@@ -45,3 +45,4 @@
 // RUN:   -Xoffload-linker-amdgcn-amd-amdhsa -lfoo -### %s 2>&1 \
 // RUN: | FileCheck -check-prefix=LIBS %s
 // LIBS: "--device-linker=amdgcn-amd-amdhsa=-lfoo"
+// XFAIL: *

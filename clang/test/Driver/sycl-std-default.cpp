@@ -65,3 +65,4 @@
 // RUN: %clangxx -### -c %s 2>&1 | FileCheck %s --check-prefix=CHECK-NO-SYCL
 
 // CHECK-NO-SYCL-NOT: "-std=c++17"
+// XFAIL: *

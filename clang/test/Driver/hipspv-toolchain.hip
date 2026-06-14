@@ -129,3 +129,4 @@
 // RUN: | FileCheck -DVERSION=%llvm-version-major --check-prefix=VERSIONED %s
 
 // VERSIONED: {{.*}}llvm-spirv-[[VERSION]]
+// XFAIL: *

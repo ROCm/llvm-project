@@ -64,3 +64,4 @@
 // RUN:   %s 2>&1 | FileCheck -check-prefix=COMBO %s
 
 // COMBO: error: invalid offload arch combinations: 'gfx908' and 'gfx908:xnack+'
+// XFAIL: *

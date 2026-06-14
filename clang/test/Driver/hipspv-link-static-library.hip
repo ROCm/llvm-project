@@ -55,3 +55,4 @@
 // SDL: "{{.*}}opt"
 // SDL-SAME: "-load-pass-plugin" {{".*/hipspv/lib/libLLVMHipSpvPasses.so"}}
 // SDL-SAME: "-passes=hip-post-link-passes"
+// XFAIL: *

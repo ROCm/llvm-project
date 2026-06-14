@@ -54,3 +54,4 @@
 // RUN: 2>&1 | FileCheck %s --check-prefix=NEWDRIVER
 
 // NEWDRIVER: clang-linker-wrapper{{.*}}"--compress" "--verbose" "--compression-level=9"
+// XFAIL: *

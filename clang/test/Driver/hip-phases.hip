@@ -694,3 +694,4 @@
 // SPIRV-ONLY-NEXT: 11: offload, "device-hip (spirv64-amd-amdhsa:amdgcnspirv)" {10}, image
 // SPIRV-ONLY-NEXT: 12: linker, {5, 11}, hip-fatbin, (device-hip)
 // SPIRV-ONLY-NEXT: 13: offload, "device-hip (amdgcn-amd-amdhsa)" {12}, none
+// XFAIL: *

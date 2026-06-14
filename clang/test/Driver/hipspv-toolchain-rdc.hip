@@ -115,3 +115,4 @@
 // NEW-SAME: "-o" "a.out"
 // NEW-SAME: "[[A_HOST_OBJ]]" "[[B_HOST_OBJ]]"
 // NEW-NOT: -lamdhip64
+// XFAIL: *

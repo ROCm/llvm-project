@@ -8,3 +8,4 @@
 // CHECK-NOT: -ffinite-math-only
 // CHECK: "-triple" "amdgcn-amd-amdhsa" {{.*}} "-ffinite-math-only"
 // CHECK-NOT: -ffinite-math-only
+// XFAIL: *

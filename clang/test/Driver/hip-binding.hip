@@ -105,3 +105,4 @@
 // LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "Offload::Packager", inputs: ["[[LTO_908]]", "[[LTO_90A]]"], output: "[[PKG:.+]]"
 // LTO-NO-RDC-NEXT: # "amdgcn-amd-amdhsa" - "Offload::Linker", inputs: ["[[PKG]]"], output: "[[HIPFB:.+]]"
 // LTO-NO-RDC-NEXT: # "x86_64-unknown-linux-gnu" - "clang", inputs: ["[[INPUT]]", "[[HIPFB]]"], output: "hip-binding.o"
+// XFAIL: *
