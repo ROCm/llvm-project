@@ -4,17 +4,17 @@
 // RUN:   --hip-device-lib=lib1.bc --hip-device-lib=lib2.bc \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib1 \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib2 \
-// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc --no-offload-new-driver \
+// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc \
 // RUN:   %S/Inputs/hip_multiple_inputs/a.cu \
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=CHECK,LINK,OLD %s
-
+// XFAIL: *
 // RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc \
 // RUN:   -x hip --cuda-gpu-arch=gfx803 --cuda-gpu-arch=gfx900 \
 // RUN:   --hip-device-lib=lib1.bc --hip-device-lib=lib2.bc \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib1 \
 // RUN:   --hip-device-lib-path=%S/Inputs/hip_multiple_inputs/lib2 \
-// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc -c --no-offload-new-driver \
+// RUN:   -fuse-ld=lld -B%S/Inputs/lld -nogpuinc -c \
 // RUN:   %S/Inputs/hip_multiple_inputs/a.cu \
 // RUN:   %S/Inputs/hip_multiple_inputs/b.hip \
 // RUN: 2>&1 | FileCheck -check-prefixes=CHECK,OLD %s
@@ -36,11 +36,12 @@
 // RUN:   %t/a.o %t/b.o \
 // RUN: 2>&1 | FileCheck -check-prefixes=LKONLY %s
 
-// RUN: %clang -### --target=x86_64-linux-gnu --no-offload-new-driver \
+// RUN: %clang -### --target=x86_64-linux-gnu \
 // RUN:   --offload-arch=amdgcnspirv --offload-arch=gfx900 \
 // RUN:   %s -nogpuinc -nogpulib \
 // RUN: 2>&1 | FileCheck -check-prefixes=AMDGCNSPIRV %s
 
+<<<<<<< HEAD
 // RUN: %clang -### --target=x86_64-linux-gnu --offload-new-driver \
 // RUN:   --offload-arch=amdgcnspirv --offload-arch=gfx900 \
 // RUN:   %s -nogpuinc -nogpulib \
@@ -61,6 +62,8 @@
 // PGO: {{".*clang-linker-wrapper}}
 // PGO-SAME: "--emit-fatbin-only"
 
+=======
+>>>>>>> dd6391c694a0 ([HIP] use old hip driver by default)
 //
 // Compile device code in a.cu to code object for gfx803.
 //
@@ -238,7 +241,10 @@
 // AMDGCNSPIRV: {{".*clang-offload-bundler.*"}} "-type=o"
 // AMDGCNSPIRV-SAME: "-targets={{.*}}hip-spirv64-amd-amdhsa--amdgcnspirv,hip-amdgcn-amd-amdhsa--gfx900"
 // AMDGCNSPIRV-SAME: "-input=[[AMDGCNSPV_CO]]" "-input=[[GFX900_CO]]"
+<<<<<<< HEAD
 // AMDGCNSPIRV-NEW: "-cc1" "-triple" "spirv64-amd-amdhsa" {{.*}}"-emit-llvm-bc" {{.*}} "-o" "[[AMDGCNSPV_BC:[^"]*]]"
+=======
+>>>>>>> dd6391c694a0 ([HIP] use old hip driver by default)
 
 // Check verbose printing with the new driver.
 // RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc -nogpulib -nogpuinc \

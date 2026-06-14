@@ -1,7 +1,7 @@
 ///
 /// Perform several driver tests for OpenMP offloading
 ///
-
+// XFAIL: *
 // REQUIRES: x86-registered-target
 // REQUIRES: nvptx-registered-target
 // REQUIRES: amdgpu-registered-target

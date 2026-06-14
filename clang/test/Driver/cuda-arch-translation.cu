@@ -32,7 +32,7 @@
 // CUDA-SAME: -m64
 // CUDA: fatbinary
 
-// HIP: llvm-offload-binary
+// HIP: clang-offload-bundler
 
 // SM20:--image3=kind=elf,sm=20{{.*}}
 // SM21:--image3=kind=elf,sm=21{{.*}}
@@ -47,3 +47,20 @@
 // SM61:--image3=kind=elf,sm=61{{.*}}
 // SM62:--image3=kind=elf,sm=62{{.*}}
 // SM70:--image3=kind=elf,sm=70{{.*}}
+// GFX600:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx600
+// GFX601:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx601
+// GFX602:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx602
+// GFX700:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx700
+// GFX701:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx701
+// GFX702:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx702
+// GFX703:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx703
+// GFX704:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx704
+// GFX705:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx705
+// GFX801:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx801
+// GFX802:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx802
+// GFX803:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx803
+// GFX805:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx805
+// GFX810:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx810
+// GFX900:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx900
+// GFX902:-targets=host-x86_64-unknown-linux-gnu,hipv4-amdgcn-amd-amdhsa--gfx902
+// SPIRV:-targets=host-x86_64-unknown-linux-gnu,hip-spirv64-amd-amdhsa--amdgcnspirv
