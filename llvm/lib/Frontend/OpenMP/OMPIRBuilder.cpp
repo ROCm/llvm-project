@@ -11195,18 +11195,18 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCompare(
     const LocationDescription &Loc, AtomicOpValue &X, AtomicOpValue &V,
     AtomicOpValue &R, Value *E, Value *D, AtomicOrdering AO,
     omp::OMPAtomicCompareOp Op, bool IsXBinopExpr, bool IsPostfixUpdate,
-    bool IsFailOnly) {
+    bool IsFailOnly, bool IsWeak) {
 
   AtomicOrdering Failure = AtomicCmpXchgInst::getStrongestFailureOrdering(AO);
   return createAtomicCompare(Loc, X, V, R, E, D, AO, Op, IsXBinopExpr,
-                             IsPostfixUpdate, IsFailOnly, Failure);
+                             IsPostfixUpdate, IsFailOnly, Failure, IsWeak);
 }
 
 OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCompare(
     const LocationDescription &Loc, AtomicOpValue &X, AtomicOpValue &V,
     AtomicOpValue &R, Value *E, Value *D, AtomicOrdering AO,
     omp::OMPAtomicCompareOp Op, bool IsXBinopExpr, bool IsPostfixUpdate,
-    bool IsFailOnly, AtomicOrdering Failure) {
+    bool IsFailOnly, AtomicOrdering Failure, bool IsWeak) {
 
   if (!updateToLocation(Loc))
     return Loc.IP;
@@ -11311,6 +11311,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCompare(
       Builder.SetInsertPoint(ZeroBB);
       AtomicCmpXchgInst *ResZero = Builder.CreateAtomicCmpXchg(
           X.Var, XCurr, DBCast, MaybeAlign(), AO, Failure);
+      ResZero->setWeak(IsWeak);
       Value *OldZero = Builder.CreateExtractValue(ResZero, /*Idxs=*/0);
       Value *OkZero = Builder.CreateExtractValue(ResZero, /*Idxs=*/1);
       Builder.CreateBr(ExitBB);
@@ -11319,6 +11320,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCompare(
       Builder.SetInsertPoint(NormalBB);
       AtomicCmpXchgInst *ResNormal = Builder.CreateAtomicCmpXchg(
           X.Var, EBCast, DBCast, MaybeAlign(), AO, Failure);
+      ResNormal->setWeak(IsWeak);
       Value *OldNormal = Builder.CreateExtractValue(ResNormal, /*Idxs=*/0);
       Value *OkNormal = Builder.CreateExtractValue(ResNormal, /*Idxs=*/1);
       Builder.CreateBr(ExitBB);
@@ -11359,6 +11361,7 @@ OpenMPIRBuilder::InsertPointTy OpenMPIRBuilder::createAtomicCompare(
         Result =
             Builder.CreateAtomicCmpXchg(X.Var, E, D, MaybeAlign(), AO, Failure);
       }
+      Result->setWeak(IsWeak);
 
       if (V.Var) {
         OldValue = Builder.CreateExtractValue(Result, /*Idxs=*/0);
@@ -11840,13 +11843,12 @@ std::unique_ptr<CodeExtractor> DeviceSharedMemOutlineInfo::createCodeExtractor(
 
 void OpenMPIRBuilder::createOffloadEntry(Constant *ID, Constant *Addr,
                                          uint64_t Size, int32_t Flags,
-                                         GlobalValue::LinkageTypes Linkage,
+                                         GlobalValue::LinkageTypes,
                                          StringRef Name) {
   if (!Config.isGPU()) {
     llvm::offloading::emitOffloadingEntry(
         M, object::OffloadKind::OFK_OpenMP, ID,
-        Name.empty() ? Addr->getName() : Name, Size, Flags, /*Data=*/0,
-        /*AuxAddr=*/nullptr, Linkage);
+        Name.empty() ? Addr->getName() : Name, Size, Flags, /*Data=*/0);
     return;
   }
   // TODO: Add support for global variables on the device after declare target
@@ -11957,7 +11959,7 @@ void OpenMPIRBuilder::createOffloadEntriesAndInfoMetadata(
       }
       createOffloadEntry(CE->getID(), CE->getAddress(),
                          /*Size=*/0, CE->getFlags(),
-                         GlobalValue::ExternalLinkage);
+                         GlobalValue::WeakAnyLinkage);
     } else if (const auto *CE = dyn_cast<
                    OffloadEntriesInfoManager::OffloadEntryInfoDeviceGlobalVar>(
                    E.first)) {
