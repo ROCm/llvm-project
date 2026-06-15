@@ -19,7 +19,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -350,14 +349,8 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
     }
     return V;
   }
-  if (Di.isImm(OpIdx))
-    return ConstantInt::get(
-        I32Ty, static_cast<uint32_t>(Di.getImm(OpIdx) & 0xFFFFFFFF));
-  if (OpIdx < Di.numOps() && Di.Inst.getOperand(OpIdx).isExpr()) {
-    int64_t Val = 0;
-    if (Di.Inst.getOperand(OpIdx).getExpr()->evaluateAsAbsolute(Val))
-      return ConstantInt::get(I32Ty, static_cast<uint32_t>(Val & 0xFFFFFFFF));
-    return ConstantInt::get(I32Ty, 0);
+  if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
+    return ConstantInt::get(I32Ty, static_cast<uint32_t>(*Val));
   }
   errs() << "transpiler: readOp32 unresolvable operand " << OpIdx << " in "
          << Di.Mnemonic << "\n";
@@ -414,12 +407,8 @@ Value *RaiseContext::readOp64(const DecodedInst &Di, unsigned OpIdx) {
     }
     return V;
   }
-  if (Di.isImm(OpIdx))
-    return ConstantInt::getSigned(I64Ty, Di.getImm(OpIdx));
-  if (OpIdx < Di.numOps() && Di.Inst.getOperand(OpIdx).isExpr()) {
-    int64_t Val = 0;
-    Di.Inst.getOperand(OpIdx).getExpr()->evaluateAsAbsolute(Val);
-    return ConstantInt::getSigned(I64Ty, Val);
+  if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
+    return ConstantInt::getSigned(I64Ty, *Val);
   }
   errs() << "transpiler: readOp64 unresolvable operand " << OpIdx << " in "
          << Di.Mnemonic << "\n";
@@ -697,8 +686,8 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   // value"`) -- because `(int64_t)0xFFFF0000 == +4294901760` is
   // outside `[-2^31, 2^31 - 1]`.
   //
-  // Principled fix: match `readOp32`'s bit-pattern contract (see
-  // line ~333 above) -- treat the immediate as an unsigned bit
+  // Principled fix: match `readOp32`'s bit-pattern contract -- treat the
+  // immediate as an unsigned bit
   // pattern and pack it into the source-width integer via
   // `ConstantInt::get(..., IsSigned=false)`. Masking to the source
   // width before the call is a defensive invariant: on wave32
@@ -719,15 +708,8 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
   Type *SrcTy = Isa.isWave32() ? I32Ty : I64Ty;
   uint64_t SrcMask =
       Isa.isWave32() ? 0xFFFFFFFFull : 0xFFFFFFFFFFFFFFFFull;
-  if (Di.isImm(OpIdx)) {
-    uint64_t Bits = static_cast<uint64_t>(Di.getImm(OpIdx)) & SrcMask;
-    Value *Narrow = ConstantInt::get(SrcTy, Bits, /*IsSigned=*/false);
-    return WidenToExec(Narrow);
-  }
-  if (OpIdx < Di.numOps() && Di.Inst.getOperand(OpIdx).isExpr()) {
-    int64_t Val = 0;
-    Di.Inst.getOperand(OpIdx).getExpr()->evaluateAsAbsolute(Val);
-    uint64_t Bits = static_cast<uint64_t>(Val) & SrcMask;
+  if (std::optional<int64_t> Val = evalOperandAsConst(Di.Inst, OpIdx)) {
+    uint64_t Bits = static_cast<uint64_t>(*Val) & SrcMask;
     Value *Narrow = ConstantInt::get(SrcTy, Bits, /*IsSigned=*/false);
     return WidenToExec(Narrow);
   }

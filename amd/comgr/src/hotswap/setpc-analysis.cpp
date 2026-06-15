@@ -220,15 +220,11 @@ unsigned regWidth32(const MCRegisterInfo &MRI, MCRegister Reg) {
   return W ? W : 1;
 }
 
-// Convenience: extract a 32-bit unsigned immediate from an MCOperand.
-// Returns nullopt if the operand is not an integer immediate.
 std::optional<uint32_t> imm32(const MCInst &Inst, unsigned OpIdx) {
-  if (OpIdx >= Inst.getNumOperands())
+  std::optional<int64_t> Val = evalOperandAsConst(Inst, OpIdx);
+  if (!Val)
     return std::nullopt;
-  const MCOperand &Op = Inst.getOperand(OpIdx);
-  if (!Op.isImm())
-    return std::nullopt;
-  return static_cast<uint32_t>(Op.getImm() & 0xFFFFFFFFu);
+  return static_cast<uint32_t>(*Val);
 }
 
 // Per-pair PC-chain state. We track the symbolic absolute kernel

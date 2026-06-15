@@ -12,15 +12,35 @@
 #include "amdgpu-formats.h"
 #include "canonical-op.h"
 
+#include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace COMGR::hotswap {
 struct VCmpMeta;
-}
+} // namespace COMGR::hotswap
 
 namespace COMGR::hotswap {
+
+inline std::optional<int64_t> evalOperandAsConst(const llvm::MCInst &Inst,
+                                                 unsigned OpIdx) {
+  if (OpIdx >= Inst.getNumOperands()) {
+    return std::nullopt;
+  }
+  const llvm::MCOperand &Op = Inst.getOperand(OpIdx);
+  if (Op.isImm()) {
+    return Op.getImm();
+  }
+  if (Op.isExpr()) {
+    int64_t Val = 0;
+    if (Op.getExpr()->evaluateAsAbsolute(Val)) {
+      return Val;
+    }
+  }
+  return std::nullopt;
+}
 
 struct DecodedInst {
   std::string Mnemonic;
