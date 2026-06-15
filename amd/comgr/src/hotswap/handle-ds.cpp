@@ -717,6 +717,43 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
 
+  // ds_add_f64 / ds_add_rtn_f64. LDS 64-bit FP add, native on
+  // gfx90a/gfx940-family; on subtargets without it AtomicExpandPass
+  // expands `atomicrmw fadd double addrspace(3)*` into a
+  // ds_cmpst_b64-based CAS loop. The `_RTN` form publishes the
+  // pre-add memory value to a dst VGPR pair (di.NumDefs > 0); the
+  // non-RTN form discards the result.
+  if (Sop == CanonicalOp::DS_ADD_F64) {
+    assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) == (Di.NumDefs > 0) &&
+           "ds_add_f64: IsAtomicRet disagrees with numDefs");
+    Value *Addr = Ctx.B.CreateZExt(Op.src(0), Ctx.I64Ty, "ds_addr");
+    for (unsigned K = 1; K < Op.nSrcs(); K++) {
+      if (Di.isImm(Op.srcIdx(K))) {
+        int64_t Imm = Di.getImm(Op.srcIdx(K));
+        if (Imm != 0)
+          Addr = Ctx.B.CreateAdd(Addr, ConstantInt::get(Ctx.I64Ty, Imm),
+                                  "ds_off");
+        break;
+      }
+    }
+    Value *Ptr = Ctx.B.CreateIntToPtr(Addr, PointerType::get(Ctx.C, 3));
+    // vdata is a 2-VGPR pair; read as i64, bitcast to f64 for the FP
+    // atomic.
+    ParsedReg StData = Op.srcReg(1);
+    Value *Data = Ctx.B.CreateBitCast(
+        Ctx.Regs.readReg64(Ctx.B, StData), Ctx.F64Ty);
+    Ctx.emitUnderExec([&] {
+      auto *Rmw = Ctx.B.CreateAtomicRMW(
+          AtomicRMWInst::FAdd, Ptr, Data, MaybeAlign(),
+          AtomicOrdering::SequentiallyConsistent);
+      if (Di.NumDefs > 0)
+        Ctx.Regs.writeReg64(Ctx.B, Op.dst(),
+                            Ctx.B.CreateBitCast(Rmw, Ctx.I64Ty));
+    });
+    Hr.Handled = true;
+    return Hr;
+  }
+
   if (Sop == CanonicalOp::DS_BPERMUTE_B32) {
     // Backwards permute: per-lane GATHER. Each lane reads the `src1`
     // value from a *source* lane whose index is `src0 >> 2` (the

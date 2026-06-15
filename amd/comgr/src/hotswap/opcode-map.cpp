@@ -881,6 +881,17 @@ static const Entry kCanonTable[] = {
     E(FLAT_ATOMIC_SWAP, FLAT_ATOMIC_SWAP),
     E(FLAT_ATOMIC_CMPSWAP, FLAT_ATOMIC_CMPSWAP),
     E(FLAT_ATOMIC_ADD_F32, FLAT_ATOMIC_ADD_F32),
+    // FP64 FLAT atomics. `_SADDR` is a distinct pseudo (not alias-stripped),
+    // so list both; `_RTN` suffixes collapse via the strip rules below.
+    E(FLAT_ATOMIC_ADD_F64,         FLAT_ATOMIC_ADD_F64),
+    E(FLAT_ATOMIC_ADD_F64_gfx1250, FLAT_ATOMIC_ADD_F64),
+    E(FLAT_ATOMIC_ADD_F64_SADDR,   FLAT_ATOMIC_ADD_F64),
+    E(FLAT_ATOMIC_MIN_F64,         FLAT_ATOMIC_MIN_NUM_F64),
+    E(FLAT_ATOMIC_MIN_F64_gfx1250, FLAT_ATOMIC_MIN_NUM_F64),
+    E(FLAT_ATOMIC_MIN_F64_SADDR,   FLAT_ATOMIC_MIN_NUM_F64),
+    E(FLAT_ATOMIC_MAX_F64,         FLAT_ATOMIC_MAX_NUM_F64),
+    E(FLAT_ATOMIC_MAX_F64_gfx1250, FLAT_ATOMIC_MAX_NUM_F64),
+    E(FLAT_ATOMIC_MAX_F64_SADDR,   FLAT_ATOMIC_MAX_NUM_F64),
 
     // ---------------------------------------------------------------------
     // GLOBAL atomics
@@ -899,6 +910,17 @@ static const Entry kCanonTable[] = {
     E(GLOBAL_ATOMIC_ADD_F32, GLOBAL_ATOMIC_ADD_F32),
     E(GLOBAL_ATOMIC_PK_ADD_BF16, GLOBAL_ATOMIC_PK_ADD_BF16),
     E(GLOBAL_ATOMIC_PK_ADD_F16, GLOBAL_ATOMIC_PK_ADD_F16),
+    // FP64 GLOBAL atomics. Same SADDR / mnemonic-rename considerations
+    // as the FLAT block above.
+    E(GLOBAL_ATOMIC_ADD_F64,         GLOBAL_ATOMIC_ADD_F64),
+    E(GLOBAL_ATOMIC_ADD_F64_gfx1250, GLOBAL_ATOMIC_ADD_F64),
+    E(GLOBAL_ATOMIC_ADD_F64_SADDR,   GLOBAL_ATOMIC_ADD_F64),
+    E(GLOBAL_ATOMIC_MIN_F64,         GLOBAL_ATOMIC_MIN_NUM_F64),
+    E(GLOBAL_ATOMIC_MIN_F64_gfx1250, GLOBAL_ATOMIC_MIN_NUM_F64),
+    E(GLOBAL_ATOMIC_MIN_F64_SADDR,   GLOBAL_ATOMIC_MIN_NUM_F64),
+    E(GLOBAL_ATOMIC_MAX_F64,         GLOBAL_ATOMIC_MAX_NUM_F64),
+    E(GLOBAL_ATOMIC_MAX_F64_gfx1250, GLOBAL_ATOMIC_MAX_NUM_F64),
+    E(GLOBAL_ATOMIC_MAX_F64_SADDR,   GLOBAL_ATOMIC_MAX_NUM_F64),
 
     // ---------------------------------------------------------------------
     // SMEM atomics (enumerate addressing forms: IMM / SGPR / SGPR_IMM)
@@ -980,6 +1002,11 @@ static const Entry kCanonTable[] = {
     // §6) in the cross-wave case.
     E(DS_SWIZZLE_B32, DS_SWIZZLE_B32),
 
+    // DS atomics carry `_RTN` as an infix (`DS_ADD_RTN_F64`), so the
+    // trailing-suffix strip rule doesn't fire; alias it explicitly.
+    E(DS_ADD_F64,     DS_ADD_F64),
+    E(DS_ADD_RTN_F64, DS_ADD_F64),
+
     // ---------------------------------------------------------------------
     // MUBUF direct-to-LDS loads (distinct semantics from VGPR-dest loads)
     // ---------------------------------------------------------------------
@@ -1055,30 +1082,17 @@ static const Entry kCanonTable[] = {
     MUBUF4(BUFFER_ATOMIC_ADD_F32, BUFFER_ATOMIC_ADD_F32),
     MUBUF4(BUFFER_ATOMIC_PK_ADD_BF16, BUFFER_ATOMIC_PK_ADD_BF16),
     MUBUF4(BUFFER_ATOMIC_PK_ADD_F16, BUFFER_ATOMIC_PK_ADD_F16),
-    // gfx11+/gfx12 VBUFFER fork for the buffer atomics. The asm
-    // spelling on gfx11+/gfx1250 renames `BUFFER_ATOMIC_ADD` to
-    // `buffer_atomic_add_u32` (BUFInstructions.td:2789 declares
-    // `defm BUFFER_ATOMIC_ADD : MUBUF_Real_Atomic_gfx11_gfx12<0x035,
-    // "buffer_atomic_add_u32">`); LLVM MC keeps the legacy
-    // `BUFFER_ATOMIC_*` pseudo names but suffixes them with
-    // `_VBUFFER_<addressing>` to distinguish the gfx12 buffer-
-    // descriptor encoding from the legacy MUBUF one. The decoder in
-    // mubuf-addr.cpp explicitly recognises both encodings (keys on
-    // ParsedReg::Kind rather than operand position) so the existing
-    // BUFFER_ATOMIC_* CanonicalOps and raw-buffer atomic lowering in
-    // handle-mubuf.cpp's `sop >= BUFFER_ATOMIC_ADD &&
-    // sop <= BUFFER_ATOMIC_PK_ADD_F16` branch work unchanged for
-    // VBUFFER atomics. Without these entries the gfx1250 corpus
-    // (e.g. scope_discovery___sum_bitmatrix_rows refused on
-    // `buffer_atomic_add_u32 v0, v1, s[4:7], null offen`) would
-    // refuse with `unsupportedOpcode` despite the underlying CanonicalOp
-    // being present.
-    //
-    // PK_ADD_BF16 / PK_ADD_F16 are intentionally omitted -- they have
-    // no VBUFFER Real form in BUFInstructions.td (the gfx12 buffer
-    // packed-add fork uses a different mnemonic family); a stray
-    // VBUF4 entry would expand to AMDGPU enum values that don't
-    // exist and fail to compile.
+    // FP64 BUFFER atomics. The gfx942 MUBUF MIN/MAX_F64 is a raw `<`/`>`
+    // comparator; the gfx12 VBUFFER form (below) is IEEE 754-2019
+    // minimumNumber/maximumNumber. Keep them as distinct canonical ops.
+    MUBUF4(BUFFER_ATOMIC_ADD_F64, BUFFER_ATOMIC_ADD_F64),
+    MUBUF4(BUFFER_ATOMIC_MIN_F64, BUFFER_ATOMIC_MIN_F64),
+    MUBUF4(BUFFER_ATOMIC_MAX_F64, BUFFER_ATOMIC_MAX_F64),
+    // gfx11+/gfx12 VBUFFER fork. LLVM MC keeps the legacy
+    // `BUFFER_ATOMIC_*` pseudo names but suffixes them `_VBUFFER_<addr>`
+    // for the gfx12 buffer-descriptor encoding; map them to the same
+    // CanonicalOps. PK_ADD_BF16/F16 are omitted: no VBUFFER Real form
+    // exists, so a VBUF4 entry would fail to compile.
     VBUF4(BUFFER_ATOMIC_ADD, BUFFER_ATOMIC_ADD),
     VBUF4(BUFFER_ATOMIC_SUB, BUFFER_ATOMIC_SUB),
     VBUF4(BUFFER_ATOMIC_AND, BUFFER_ATOMIC_AND),
@@ -1087,6 +1101,9 @@ static const Entry kCanonTable[] = {
     VBUF4(BUFFER_ATOMIC_SWAP, BUFFER_ATOMIC_SWAP),
     VBUF4(BUFFER_ATOMIC_CMPSWAP, BUFFER_ATOMIC_CMPSWAP),
     VBUF4(BUFFER_ATOMIC_ADD_F32, BUFFER_ATOMIC_ADD_F32),
+    VBUF4(BUFFER_ATOMIC_ADD_F64, BUFFER_ATOMIC_ADD_F64),
+    VBUF4(BUFFER_ATOMIC_MIN_F64, BUFFER_ATOMIC_MIN_NUM_F64),
+    VBUF4(BUFFER_ATOMIC_MAX_F64, BUFFER_ATOMIC_MAX_NUM_F64),
 
     // ---------------------------------------------------------------------
     // AGPR moves

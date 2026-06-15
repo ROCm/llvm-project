@@ -49,6 +49,7 @@ struct ISAProfile {
   // the cross-target loud refusal: the gfx942 and earlier ISAs have
   // no equivalent hardware unit, so cross-target lifts must refuse.
   bool HasTensorOps = false;
+  bool HasIeeeNumMinMaxAtomics = false;
   // True iff the subtarget exposes gfx950's MAI extensions on top of the
   // shared gfx9-family `MAIInsts` feature.  Distinct from `HasMfma`, which
   // is set on every gfx9-family target with MAI (gfx940 / gfx942 / gfx950).
@@ -109,6 +110,7 @@ struct ISAProfile {
     P.HasWmmA12 = STI.hasFeature(llvm::AMDGPU::FeatureWMMA128bInsts) ||
                   STI.hasFeature(llvm::AMDGPU::FeatureWMMA256bInsts);
     P.HasTensorOps = STI.hasFeature(llvm::AMDGPU::FeatureGFX1250Insts);
+    P.HasIeeeNumMinMaxAtomics = llvm::AMDGPU::isGFX12Plus(STI);
     P.HasGfx950Insts = STI.hasFeature(llvm::AMDGPU::FeatureGFX950Insts);
     P.HasFP8ConversionInsts =
         STI.hasFeature(llvm::AMDGPU::FeatureFP8ConversionInsts);
@@ -146,7 +148,7 @@ struct ISAProfile {
     return P;
   }
 
- private:
+private:
   ISAProfile() = default; // constructible only via fromSubtarget() /
                           // forTesting(), per the comments above.
 };

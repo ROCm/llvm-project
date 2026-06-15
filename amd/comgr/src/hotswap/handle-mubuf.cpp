@@ -299,7 +299,7 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
   // `lit_tests/buffer_atomic_swap_b32/` (RTN) +
   // `lit_tests/buffer_atomic_swap_b32_nortn/` (non-RTN) and the
   // cmpswap twins.
-  if (Sop >= CanonicalOp::BUFFER_ATOMIC_ADD && Sop <= CanonicalOp::BUFFER_ATOMIC_PK_ADD_F16) {
+  if (Sop >= CanonicalOp::BUFFER_ATOMIC_ADD && Sop <= CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64) {
     assert(((Di.TsFlags & SIInstrFlags::IsAtomicRet) != 0) == (Di.NumDefs > 0) &&
            "buffer atomic: IsAtomicRet disagrees with numDefs");
     MubufAddr Mbuf = decodeMubufAddr(Ctx, Di, Op, /*isStore=*/true,
@@ -334,7 +334,86 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       return Hr;
     }
 
-    Value *Data = Ctx.Regs.readReg32(Ctx.B, Mbuf.StData);
+    const bool IsF64 = Sop == CanonicalOp::BUFFER_ATOMIC_ADD_F64 ||
+                       Sop == CanonicalOp::BUFFER_ATOMIC_MIN_F64 ||
+                       Sop == CanonicalOp::BUFFER_ATOMIC_MAX_F64 ||
+                       Sop == CanonicalOp::BUFFER_ATOMIC_MIN_NUM_F64 ||
+                       Sop == CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64;
+    Value *Data = IsF64 ? Ctx.Regs.readReg64(Ctx.B, Mbuf.StData)
+                        : Ctx.Regs.readReg32(Ctx.B, Mbuf.StData);
+
+    // BUFFER_ATOMIC_{MIN,MAX}{,_NUM}_F64: CAS loop. The canonical op
+    // distinguishes gfx942 raw `<`/`>` from gfx12 IEEE 754-2019
+    // minimumNumber/maximumNumber; pick the comparator accordingly.
+    if (Sop == CanonicalOp::BUFFER_ATOMIC_MIN_F64 ||
+        Sop == CanonicalOp::BUFFER_ATOMIC_MAX_F64 ||
+        Sop == CanonicalOp::BUFFER_ATOMIC_MIN_NUM_F64 ||
+        Sop == CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64) {
+      const bool IsMax = Sop == CanonicalOp::BUFFER_ATOMIC_MAX_F64 ||
+                         Sop == CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64;
+      const bool IsIeeeNum =
+          Sop == CanonicalOp::BUFFER_ATOMIC_MIN_NUM_F64 ||
+          Sop == CanonicalOp::BUFFER_ATOMIC_MAX_NUM_F64;
+      Value *SrcF64 = Ctx.B.CreateBitCast(Data, Ctx.F64Ty,
+                                          "fp64_minmax_src");
+      Function *BufLd = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_raw_buffer_load, {Ctx.I64Ty});
+      Function *CasFn = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_raw_buffer_atomic_cmpswap,
+          {Ctx.I64Ty});
+      Ctx.emitUnderExec([&] {
+        Value *InitI64 = Ctx.B.CreateCall(
+            BufLd,
+            {Mbuf.Srd, Mbuf.Voffset, Mbuf.Soffset, Mbuf.AuxFlags},
+            "fp64_minmax_init");
+        Function *F = Ctx.B.GetInsertBlock()->getParent();
+        BasicBlock *PreBb = Ctx.B.GetInsertBlock();
+        BasicBlock *LoopBb =
+            BasicBlock::Create(Ctx.C, "fp64_minmax_loop", F);
+        BasicBlock *ExitBb =
+            BasicBlock::Create(Ctx.C, "fp64_minmax_exit", F);
+        Ctx.B.CreateBr(LoopBb);
+        Ctx.B.SetInsertPoint(LoopBb);
+        PHINode *Expected =
+            Ctx.B.CreatePHI(Ctx.I64Ty, 2, "fp64_minmax_expected");
+        Expected->addIncoming(InitI64, PreBb);
+        Value *OldF64 = Ctx.B.CreateBitCast(Expected, Ctx.F64Ty,
+                                            "fp64_minmax_old");
+        Value *NewF64;
+        if (IsIeeeNum) {
+          Intrinsic::ID NumIntr =
+              IsMax ? Intrinsic::maximumnum : Intrinsic::minimumnum;
+          Function *NumFn = Intrinsic::getOrInsertDeclaration(
+              &Ctx.M, NumIntr, {Ctx.F64Ty});
+          NewF64 = Ctx.B.CreateCall(NumFn, {OldF64, SrcF64},
+                                    "fp64_minmax_new");
+        } else {
+          Value *Cmp =
+              IsMax ? Ctx.B.CreateFCmpOGT(SrcF64, OldF64,
+                                          "fp64_minmax_cmp")
+                    : Ctx.B.CreateFCmpOLT(SrcF64, OldF64,
+                                          "fp64_minmax_cmp");
+          NewF64 = Ctx.B.CreateSelect(Cmp, SrcF64, OldF64,
+                                      "fp64_minmax_new");
+        }
+        Value *NewI64 = Ctx.B.CreateBitCast(NewF64, Ctx.I64Ty,
+                                            "fp64_minmax_new_bits");
+        Value *Returned = Ctx.B.CreateCall(
+            CasFn,
+            {NewI64, Expected, Mbuf.Srd, Mbuf.Voffset, Mbuf.Soffset,
+             Mbuf.AuxFlags},
+            "fp64_minmax_cas");
+        Value *Ok = Ctx.B.CreateICmpEQ(Returned, Expected,
+                                       "fp64_minmax_ok");
+        Expected->addIncoming(Returned, Ctx.B.GetInsertBlock());
+        Ctx.B.CreateCondBr(Ok, ExitBb, LoopBb);
+        Ctx.B.SetInsertPoint(ExitBb);
+        if (Di.NumDefs > 0)
+          Ctx.Regs.writeReg64(Ctx.B, Op.dst(), Returned);
+      });
+      Hr.Handled = true;
+      return Hr;
+    }
 
     Intrinsic::ID AtomicIntrinsic = Intrinsic::not_intrinsic;
     Type *AtomicTy = Ctx.I32Ty;
@@ -381,6 +460,13 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       AtomicTy = FixedVectorType::get(Type::getHalfTy(Ctx.C), 2);
       IsFp = true;
       break;
+    case CanonicalOp::BUFFER_ATOMIC_ADD_F64:
+      AtomicIntrinsic = Intrinsic::amdgcn_raw_buffer_atomic_fadd;
+      AtomicTy = Ctx.F64Ty;
+      IsFp = true;
+      break;
+    // BUFFER_ATOMIC_{MIN,MAX}{,_NUM}_F64 handled by the CAS-loop block
+    // above the switch; they never reach this default.
     default:
       llvm::errs() << "transpiler: Unsupported buffer atomic: " << Mn << "\n";
       Hr.Failure = RaiseFailure::unsupportedInstructionForm(Di, "MUBUF",
@@ -401,8 +487,13 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       // the no-return encoding.
       if (Di.NumDefs > 0) {
         Value *RetVal = OldVal;
-        if (IsFp) RetVal = Ctx.B.CreateBitCast(RetVal, Ctx.I32Ty);
-        Ctx.Regs.writeReg32(Ctx.B, Op.dst(), RetVal);
+        if (IsF64) {
+          if (IsFp) RetVal = Ctx.B.CreateBitCast(RetVal, Ctx.I64Ty);
+          Ctx.Regs.writeReg64(Ctx.B, Op.dst(), RetVal);
+        } else {
+          if (IsFp) RetVal = Ctx.B.CreateBitCast(RetVal, Ctx.I32Ty);
+          Ctx.Regs.writeReg32(Ctx.B, Op.dst(), RetVal);
+        }
       }
     });
     Hr.Handled = true;
