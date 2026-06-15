@@ -8,9 +8,8 @@
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements the CacheCommandAdaptor interface for
-/// llvm::object::OffloadFile::extractOffloadBinaries() routines
-/// that are stored in the cache.
+/// This file implements the UnpackageCommand, which extracts offload binaries
+/// from a package via llvm::object::OffloadFile::extractOffloadBinaries().
 ///
 //===----------------------------------------------------------------------===//
 
@@ -18,78 +17,12 @@
 #include <comgr-unpackage-command.h>
 
 #include <llvm/ADT/StringMap.h>
-#include <llvm/BinaryFormat/Magic.h>
 #include <llvm/Object/OffloadBinary.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 
 namespace COMGR {
 using namespace llvm;
-using namespace clang;
-
-using SizeFieldType = uint32_t;
-
-bool UnpackageCommand::canCache() const {
-  // TODO: when llvm-offload-binary gets compression support, investigate
-  // caching compressed packages
-  return false;
-}
-
-Error UnpackageCommand::writeExecuteOutput(StringRef CachedBuffer) {
-  for (StringRef OutputFilename : OutputFileNames) {
-    SizeFieldType OutputFileSize;
-    if (CachedBuffer.size() < sizeof(OutputFileSize)) {
-      return createStringError(std::errc::invalid_argument,
-                               "Not enough bytes to read output file size");
-    }
-    memcpy(&OutputFileSize, CachedBuffer.data(), sizeof(OutputFileSize));
-    CachedBuffer = CachedBuffer.drop_front(sizeof(OutputFileSize));
-
-    if (CachedBuffer.size() < OutputFileSize) {
-      return createStringError(std::errc::invalid_argument,
-                               "Not enough bytes to read output file contents");
-    }
-
-    StringRef OutputFileContents = CachedBuffer.substr(0, OutputFileSize);
-    CachedBuffer = CachedBuffer.drop_front(OutputFileSize);
-
-    if (Error Err = CachedCommandAdaptor::writeSingleOutputFile(
-            OutputFilename, OutputFileContents)) {
-      return Err;
-    }
-  }
-
-  if (!CachedBuffer.empty()) {
-    return createStringError(std::errc::invalid_argument,
-                             "Bytes in cache entry not used for the output");
-  }
-  return Error::success();
-}
-
-Expected<StringRef> UnpackageCommand::readExecuteOutput() {
-  size_t OutputSize = 0;
-  for (StringRef OutputFilename : OutputFileNames) {
-    auto MaybeOneOutput =
-        CachedCommandAdaptor::readSingleOutputFile(OutputFilename);
-    if (!MaybeOneOutput) {
-      return MaybeOneOutput.takeError();
-    }
-
-    const MemoryBuffer &OneOutputBuffer = **MaybeOneOutput;
-    SizeFieldType OneOutputFileSize = OneOutputBuffer.getBufferSize();
-
-    OutputBuffer.resize_for_overwrite(OutputSize + sizeof(OneOutputFileSize) +
-                                      OneOutputFileSize);
-
-    memcpy(OutputBuffer.data() + OutputSize, &OneOutputFileSize,
-           sizeof(OneOutputFileSize));
-    OutputSize += sizeof(OneOutputFileSize);
-    memcpy(OutputBuffer.data() + OutputSize, OneOutputBuffer.getBufferStart(),
-           OneOutputFileSize);
-    OutputSize += OneOutputFileSize;
-  }
-  return OutputBuffer;
-}
 
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   StringMap<StringRef> Worklist;
@@ -137,22 +70,6 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
   }
 
   return AMD_COMGR_STATUS_SUCCESS;
-}
-
-CachedCommandAdaptor::ActionClass UnpackageCommand::getClass() const {
-  // TODO: look into an upstream OffloadUnpackagerJobClass?
-  return clang::driver::Action::OffloadPackagerJobClass;
-}
-
-void UnpackageCommand::addOptionsIdentifier(HashAlgorithm &H) const {
-  addUInt(H, TargetNames.size());
-  for (StringRef Target : TargetNames) {
-    CachedCommandAdaptor::addString(H, Target);
-  }
-}
-
-Error UnpackageCommand::addInputIdentifier(HashAlgorithm &H) const {
-  return Error::success();
 }
 
 } // namespace COMGR

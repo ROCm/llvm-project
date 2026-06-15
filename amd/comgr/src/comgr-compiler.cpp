@@ -1805,7 +1805,6 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     return Status;
   }
 
-  auto Cache = CommandCache::get(LogS);
   for (auto *Input : InSet->DataObjects) {
     // if supplied file isn't a package, return an error
     if (Input->DataKind != AMD_COMGR_DATA_KIND_PACKAGE)
@@ -1894,13 +1893,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     }
 
     UnpackageCommand Unpackage(Files, TargetNames, OutputFileNames);
-    if (Cache) {
-      if (auto Status = Cache->execute(Unpackage, LogS))
-        return Status;
-    } else {
-      if (auto Status = Unpackage.execute(LogS))
-        return Status;
-    }
+    if (auto Status = Unpackage.execute(LogS))
+      return Status;
 
     for (const auto &[DataKind, OutputFilePath] :
          llvm::zip_equal(DataKinds, OutputFileNames)) {
