@@ -594,6 +594,7 @@ struct HotswapPatchVTable {
   uint32_t (*applyTrampolinePatches)(PatchContext &, size_t) = nullptr;
   uint32_t (*applyWmmaSplitPatches)(PatchContext &, size_t) = nullptr;
   uint32_t (*applyScratchPatches)(PatchContext &, size_t) = nullptr;
+  uint32_t (*applyWmmaScale16Patches)(PatchContext &, size_t) = nullptr;
 
   // Whole-kernel passes: called once per kernel after the per-instruction
   // loop completes.
