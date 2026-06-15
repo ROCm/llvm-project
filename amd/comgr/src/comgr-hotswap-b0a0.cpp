@@ -44,7 +44,7 @@ namespace hotswap {
 // layer only carries ISA identifiers and register granularity -- no
 // target-specific opcode bits should land here.
 
-static constexpr unsigned Gfx1250MaxVgprs = 256;
+static constexpr unsigned Gfx1250MaxVgprs = 1024;
 // GFX1250 wave32 VGPR ENCODING granularity is 16 (per
 // AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
 // not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
