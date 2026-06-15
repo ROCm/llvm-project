@@ -45,11 +45,16 @@ namespace hotswap {
 // target-specific opcode bits should land here.
 
 static constexpr unsigned Gfx1250MaxVgprs = 256;
-// GFX12 wave32: 106 user-addressable SGPRs (s0–s105); s106–s107 are VCC.
+// GFX1250 wave32 VGPR ENCODING granularity is 16 (per
+// AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
+// not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
+// decode/encode helpers (getKernelVgprCount / updateKernelDescriptor) to
+// interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT.
+// GFX12 wave32: 106 user-addressable SGPRs (s0-s105); s106-s107 are VCC.
 static constexpr unsigned Gfx1250MaxSgprs = 106;
-// GFX12 wave32 VGPR granularity is 8. SGPR encoding granularity is 8 across
-// all AMDGPU generations (getSGPREncodingGranule in AMDGPUBaseInfo.cpp).
-static constexpr unsigned Gfx1250VgprGranuleSize = 8;
+// SGPR encoding granularity is 8 across all AMDGPU generations
+// (getSGPREncodingGranule in AMDGPUBaseInfo.cpp).
+static constexpr unsigned Gfx1250VgprGranuleSize = 16;
 static constexpr unsigned Gfx1250SgprGranuleSize = 8;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
@@ -379,6 +384,10 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       continue;
     }
     if (uint32_t P = runPerInstPass(VT.applyScratchPatches, Ctx, Idx)) {
+      Patched += P;
+      continue;
+    }
+    if (uint32_t P = runPerInstPass(VT.applyWmmaScale16Patches, Ctx, Idx)) {
       Patched += P;
       continue;
     }
