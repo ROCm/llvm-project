@@ -1894,12 +1894,13 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     }
 
     UnpackageCommand Unpackage(Files, TargetNames, OutputFileNames);
-    if (Cache)
+    if (Cache) {
       if (auto Status = Cache->execute(Unpackage, LogS))
         return Status;
-    else
+    } else {
       if (auto Status = Unpackage.execute(LogS))
         return Status;
+    }
 
     for (const auto &[DataKind, OutputFilePath] :
          llvm::zip_equal(DataKinds, OutputFileNames)) {
