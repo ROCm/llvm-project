@@ -90,8 +90,8 @@ struct pair { int first, second; };
 // DIEXPRESSION-IR-LABEL: @_Z5func14pair(
 // DIEXPRESSION-IR-NEXT:  entry:
 // DIEXPRESSION-IR-NEXT:    [[P:%.*]] = alloca [[STRUCT_PAIR:%.*]], align 4, addrspace(5)
-// DIEXPRESSION-IR-NEXT:    [[P1:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
-// DIEXPRESSION-IR-NEXT:    store [2 x i32] [[P_COERCE:%.*]], ptr [[P1]], align 4
+// DIEXPRESSION-IR-NEXT:    store [2 x i32] [[P_COERCE:%.*]], ptr addrspace(5) [[P]], align 4
+// DIEXPRESSION-IR-NEXT:    [[P_ASCAST:%.*]] = addrspacecast ptr addrspace(5) [[P]] to ptr
 // DIEXPRESSION-IR-NEXT:      #dbg_declare(ptr addrspace(5) [[P]], [[META66:![0-9]+]], !DIExpression(DIOpArg(0, ptr addrspace(5)), DIOpDeref([[STRUCT_PAIR]])), [[META67:![0-9]+]])
 // DIEXPRESSION-IR-NEXT:    ret void, !dbg [[DBG68:![0-9]+]]
 //
