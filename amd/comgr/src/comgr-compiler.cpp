@@ -1874,10 +1874,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
             DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_SPIRV);
             break;
           default:
-            // TODO:: Should this simply return an error?
-            FileExtension = "unknown";
-            DataKinds.push_back(amd_comgr_data_kind_t::AMD_COMGR_DATA_KIND_UNDEF);
-            break;
+            return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
           }
 
           SmallString<128> OutputFilePath = OutputDir;
