@@ -179,8 +179,8 @@ define <2 x half> @call_nofpclass_intrinsic_v2f16(float %x, float %y, float %z, 
 ; CHECK-NEXT:    v_cmp_lt_f16_e32 vcc, v0, v1
 ; CHECK-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; CHECK-NEXT:    v_cmp_lt_f16_e32 vcc, v3, v2
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
 ; CHECK-NEXT:    s_mov_b32 s4, 0x5040100
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
 ; CHECK-NEXT:    v_perm_b32 v0, v1, v0, s4
 ; CHECK-NEXT:    s_setpc_b64 s[30:31]
   %call0 = call nofpclass(nan) <2 x half> @llvm.amdgcn.cvt.pkrtz(float %x, float %y)

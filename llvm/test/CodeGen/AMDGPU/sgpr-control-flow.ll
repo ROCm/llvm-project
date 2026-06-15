@@ -61,10 +61,10 @@ define amdgpu_kernel void @sgpr_if_else_salu_br_opt(ptr addrspace(1) %out, [8 x 
 ; SI-NEXT:    s_cmp_lg_u32 s2, 0
 ; SI-NEXT:    s_cbranch_scc0 .LBB1_4
 ; SI-NEXT:  ; %bb.1: ; %else
-; SI-NEXT:    s_load_dword s0, s[4:5], 0x2e
-; SI-NEXT:    s_load_dword s1, s[4:5], 0x37
+; SI-NEXT:    s_load_dword s3, s[4:5], 0x2e
+; SI-NEXT:    s_load_dword s6, s[4:5], 0x37
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_add_i32 s3, s0, s1
+; SI-NEXT:    s_add_i32 s3, s3, s6
 ; SI-NEXT:    s_cbranch_execnz .LBB1_3
 ; SI-NEXT:  .LBB1_2: ; %if
 ; SI-NEXT:    s_load_dword s0, s[4:5], 0x1c

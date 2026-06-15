@@ -699,11 +699,11 @@ define amdgpu_kernel void @vec_smax_smin_sgpr(ptr addrspace(1) %out, <2 x i16> i
 ; SDAG-GFX9:       ; %bb.0:
 ; SDAG-GFX9-NEXT:    s_load_dword s2, s[4:5], 0x2c
 ; SDAG-GFX9-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; SDAG-GFX9-NEXT:    s_movk_i32 s3, 0xff
 ; SDAG-GFX9-NEXT:    v_mov_b32_e32 v0, 0
 ; SDAG-GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; SDAG-GFX9-NEXT:    v_pk_max_i16 v1, s2, 0
-; SDAG-GFX9-NEXT:    s_movk_i32 s2, 0xff
-; SDAG-GFX9-NEXT:    v_pk_min_i16 v1, v1, s2 op_sel_hi:[1,0]
+; SDAG-GFX9-NEXT:    v_pk_min_i16 v1, v1, s3 op_sel_hi:[1,0]
 ; SDAG-GFX9-NEXT:    global_store_dword v0, v1, s[0:1]
 ; SDAG-GFX9-NEXT:    s_endpgm
 ;

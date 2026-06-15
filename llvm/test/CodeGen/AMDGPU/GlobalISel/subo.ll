@@ -164,10 +164,10 @@ define <2 x i32> @v_usubo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX7-NEXT:    v_sub_i32_e32 v0, vcc, v0, v2
 ; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
-; GFX7-NEXT:    v_sub_i32_e32 v1, vcc, v1, v3
-; GFX7-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX7-NEXT:    v_sub_i32_e32 v0, vcc, v0, v2
 ; GFX7-NEXT:    v_sub_i32_e32 v1, vcc, v1, v3
+; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX7-NEXT:    v_sub_i32_e32 v1, vcc, v1, v2
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_usubo_v2i32:
@@ -175,10 +175,10 @@ define <2 x i32> @v_usubo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX8-NEXT:    v_sub_u32_e32 v0, vcc, v0, v2
 ; GFX8-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
-; GFX8-NEXT:    v_sub_u32_e32 v1, vcc, v1, v3
-; GFX8-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX8-NEXT:    v_sub_u32_e32 v0, vcc, v0, v2
 ; GFX8-NEXT:    v_sub_u32_e32 v1, vcc, v1, v3
+; GFX8-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX8-NEXT:    v_sub_u32_e32 v1, vcc, v1, v2
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: v_usubo_v2i32:
@@ -187,9 +187,9 @@ define <2 x i32> @v_usubo_v2i32(<2 x i32> %a, <2 x i32> %b) {
 ; GFX9-NEXT:    v_sub_co_u32_e32 v0, vcc, v0, v2
 ; GFX9-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
 ; GFX9-NEXT:    v_sub_co_u32_e32 v1, vcc, v1, v3
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, 0, 1, vcc
 ; GFX9-NEXT:    v_sub_u32_e32 v0, v0, v2
-; GFX9-NEXT:    v_sub_u32_e32 v1, v1, v3
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, 0, 1, vcc
+; GFX9-NEXT:    v_sub_u32_e32 v1, v1, v2
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %usubo = call {<2 x i32>, <2 x i1>} @llvm.usub.with.overflow.v2i32(<2 x i32> %a, <2 x i32> %b)
   %sub = extractvalue {<2 x i32>, <2 x i1>} %usubo, 0
@@ -244,40 +244,40 @@ define i64 @v_ssubo_i64(i64 %a, i64 %b) {
 ; GFX7-LABEL: v_ssubo_i64:
 ; GFX7:       ; %bb.0:
 ; GFX7-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX7-NEXT:    v_sub_i32_e32 v4, vcc, v0, v2
-; GFX7-NEXT:    v_subb_u32_e32 v5, vcc, v1, v3, vcc
 ; GFX7-NEXT:    v_cmp_lt_i64_e32 vcc, v[0:1], v[2:3]
-; GFX7-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[4:5]
+; GFX7-NEXT:    v_sub_i32_e64 v0, s[4:5], v0, v2
+; GFX7-NEXT:    v_subb_u32_e64 v1, s[4:5], v1, v3, s[4:5]
+; GFX7-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[0:1]
 ; GFX7-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX7-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[4:5]
-; GFX7-NEXT:    v_sub_i32_e32 v0, vcc, v4, v0
-; GFX7-NEXT:    v_subbrev_u32_e32 v1, vcc, 0, v5, vcc
+; GFX7-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
+; GFX7-NEXT:    v_sub_i32_e32 v0, vcc, v0, v2
+; GFX7-NEXT:    v_subbrev_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX7-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX8-LABEL: v_ssubo_i64:
 ; GFX8:       ; %bb.0:
 ; GFX8-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX8-NEXT:    v_sub_u32_e32 v4, vcc, v0, v2
-; GFX8-NEXT:    v_subb_u32_e32 v5, vcc, v1, v3, vcc
 ; GFX8-NEXT:    v_cmp_lt_i64_e32 vcc, v[0:1], v[2:3]
-; GFX8-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[4:5]
+; GFX8-NEXT:    v_sub_u32_e64 v0, s[4:5], v0, v2
+; GFX8-NEXT:    v_subb_u32_e64 v1, s[4:5], v1, v3, s[4:5]
+; GFX8-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[0:1]
 ; GFX8-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX8-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[4:5]
-; GFX8-NEXT:    v_sub_u32_e32 v0, vcc, v4, v0
-; GFX8-NEXT:    v_subbrev_u32_e32 v1, vcc, 0, v5, vcc
+; GFX8-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
+; GFX8-NEXT:    v_sub_u32_e32 v0, vcc, v0, v2
+; GFX8-NEXT:    v_subbrev_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX8-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX9-LABEL: v_ssubo_i64:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-NEXT:    v_sub_co_u32_e32 v4, vcc, v0, v2
-; GFX9-NEXT:    v_subb_co_u32_e32 v5, vcc, v1, v3, vcc
 ; GFX9-NEXT:    v_cmp_lt_i64_e32 vcc, v[0:1], v[2:3]
-; GFX9-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[4:5]
+; GFX9-NEXT:    v_sub_co_u32_e64 v0, s[4:5], v0, v2
+; GFX9-NEXT:    v_subb_co_u32_e64 v1, s[4:5], v1, v3, s[4:5]
+; GFX9-NEXT:    v_cmp_gt_i64_e64 s[4:5], 0, v[0:1]
 ; GFX9-NEXT:    s_xor_b64 s[4:5], vcc, s[4:5]
-; GFX9-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[4:5]
-; GFX9-NEXT:    v_sub_co_u32_e32 v0, vcc, v4, v0
-; GFX9-NEXT:    v_subbrev_co_u32_e32 v1, vcc, 0, v5, vcc
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[4:5]
+; GFX9-NEXT:    v_sub_co_u32_e32 v0, vcc, v0, v2
+; GFX9-NEXT:    v_subbrev_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %ssubo = call {i64, i1} @llvm.ssub.with.overflow.i64(i64 %a, i64 %b)
   %sub = extractvalue {i64, i1} %ssubo, 0

@@ -451,17 +451,17 @@ define protected amdgpu_kernel void @kernel_round1(ptr addrspace(1) nocapture no
 ; CHECK-NEXT:    v_or3_b32 v73, v2, v0, v1
 ; CHECK-NEXT:    s_mov_b32 s14, s33
 ; CHECK-NEXT:    ; implicit-def: $sgpr15
-; CHECK-NEXT:    v_lshrrev_b32_e32 v0, 1, v73
-; CHECK-NEXT:    v_lshlrev_b32_e32 v1, 2, v73
-; CHECK-NEXT:    v_and_b32_e32 v0, 0x7fffc, v0
-; CHECK-NEXT:    v_lshlrev_b32_e64 v44, v1, 1
-; CHECK-NEXT:    v_and_b32_e32 v74, 28, v1
-; CHECK-NEXT:    v_add_co_u32 v42, s4, s70, v0
-; CHECK-NEXT:    v_add_co_ci_u32_e64 v43, null, s71, 0, s4
-; CHECK-NEXT:    v_mov_b32_e32 v2, v44
-; CHECK-NEXT:    v_mov_b32_e32 v0, v42
+; CHECK-NEXT:    v_lshrrev_b32_e32 v1, 1, v73
+; CHECK-NEXT:    v_lshlrev_b32_e32 v0, 2, v73
+; CHECK-NEXT:    v_and_b32_e32 v1, 0x7fffc, v1
+; CHECK-NEXT:    v_lshlrev_b32_e64 v42, v0, 1
+; CHECK-NEXT:    v_and_b32_e32 v74, 28, v0
+; CHECK-NEXT:    v_add_co_u32 v43, s4, s70, v1
+; CHECK-NEXT:    v_add_co_ci_u32_e64 v44, null, s71, 0, s4
+; CHECK-NEXT:    v_mov_b32_e32 v2, v42
+; CHECK-NEXT:    v_mov_b32_e32 v0, v43
 ; CHECK-NEXT:    s_mov_b64 s[4:5], s[48:49]
-; CHECK-NEXT:    v_mov_b32_e32 v1, v43
+; CHECK-NEXT:    v_mov_b32_e32 v1, v44
 ; CHECK-NEXT:    s_swappc_b64 s[30:31], s[16:17]
 ; CHECK-NEXT:    v_bfe_u32 v0, v0, v74, 4
 ; CHECK-NEXT:    s_mov_b32 s4, exec_lo
@@ -478,9 +478,9 @@ define protected amdgpu_kernel void @kernel_round1(ptr addrspace(1) nocapture no
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v9, 6, v72
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v11, 12, v63
 ; CHECK-NEXT:    v_xor_b32_e32 v6, v61, v59
-; CHECK-NEXT:    ; implicit-def: $vgpr42
 ; CHECK-NEXT:    ; implicit-def: $vgpr43
 ; CHECK-NEXT:    ; implicit-def: $vgpr44
+; CHECK-NEXT:    ; implicit-def: $vgpr42
 ; CHECK-NEXT:    v_add_co_u32 v7, vcc_lo, v7, v0
 ; CHECK-NEXT:    v_or_b32_e32 v4, v10, v4
 ; CHECK-NEXT:    v_lshlrev_b32_e32 v10, 16, v45
@@ -497,9 +497,9 @@ define protected amdgpu_kernel void @kernel_round1(ptr addrspace(1) nocapture no
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_27
 ; CHECK-NEXT:  ; %bb.32: ; in Loop: Header=BB0_28 Depth=1
 ; CHECK-NEXT:    v_mov_b32_e32 v31, v40
-; CHECK-NEXT:    v_mov_b32_e32 v0, v42
-; CHECK-NEXT:    v_mov_b32_e32 v1, v43
-; CHECK-NEXT:    v_mov_b32_e32 v2, v44
+; CHECK-NEXT:    v_mov_b32_e32 v0, v43
+; CHECK-NEXT:    v_mov_b32_e32 v1, v44
+; CHECK-NEXT:    v_mov_b32_e32 v2, v42
 ; CHECK-NEXT:    s_add_u32 s8, s34, 40
 ; CHECK-NEXT:    s_addc_u32 s9, s35, 0
 ; CHECK-NEXT:    s_getpc_b64 s[16:17]

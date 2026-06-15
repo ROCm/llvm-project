@@ -61,15 +61,15 @@ define amdgpu_kernel void @test_udivrem(ptr addrspace(1) %out0, [8 x i32], ptr a
 ; GFX6-NEXT:    s_sub_i32 s10, s9, s8
 ; GFX6-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; GFX6-NEXT:    s_cmp_ge_u32 s9, s8
-; GFX6-NEXT:    s_cselect_b64 vcc, -1, 0
 ; GFX6-NEXT:    s_cselect_b32 s9, s10, s9
+; GFX6-NEXT:    s_cselect_b64 vcc, -1, 0
 ; GFX6-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; GFX6-NEXT:    s_sub_i32 s10, s9, s8
 ; GFX6-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; GFX6-NEXT:    s_cmp_ge_u32 s9, s8
 ; GFX6-NEXT:    s_cselect_b64 vcc, -1, 0
-; GFX6-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; GFX6-NEXT:    s_cselect_b32 s8, s10, s9
+; GFX6-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; GFX6-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GFX6-NEXT:    s_waitcnt expcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v0, s8
@@ -103,15 +103,15 @@ define amdgpu_kernel void @test_udivrem(ptr addrspace(1) %out0, [8 x i32], ptr a
 ; GFX8-NEXT:    s_sub_i32 s1, s0, s6
 ; GFX8-NEXT:    v_add_u32_e32 v5, vcc, 1, v4
 ; GFX8-NEXT:    s_cmp_ge_u32 s0, s6
-; GFX8-NEXT:    s_cselect_b64 vcc, -1, 0
 ; GFX8-NEXT:    s_cselect_b32 s0, s1, s0
+; GFX8-NEXT:    s_cselect_b64 vcc, -1, 0
 ; GFX8-NEXT:    v_cndmask_b32_e32 v4, v4, v5, vcc
 ; GFX8-NEXT:    s_sub_i32 s1, s0, s6
 ; GFX8-NEXT:    v_add_u32_e32 v5, vcc, 1, v4
 ; GFX8-NEXT:    s_cmp_ge_u32 s0, s6
 ; GFX8-NEXT:    s_cselect_b64 vcc, -1, 0
-; GFX8-NEXT:    v_cndmask_b32_e32 v4, v4, v5, vcc
 ; GFX8-NEXT:    s_cselect_b32 s0, s1, s0
+; GFX8-NEXT:    v_cndmask_b32_e32 v4, v4, v5, vcc
 ; GFX8-NEXT:    flat_store_dword v[0:1], v4
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX8-NEXT:    flat_store_dword v[2:3], v0

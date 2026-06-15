@@ -287,14 +287,13 @@ define amdgpu_kernel void @undef_v3i64(ptr addrspace(3) %ptr, i1 %cond) {
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    ds_read_b128 v[7:10], v6
 ; GCN-NEXT:    ds_read_b64 v[11:12], v6 offset:16
-; GCN-NEXT:    s_waitcnt lgkmcnt(1)
-; GCN-NEXT:    v_add_co_u32_e64 v0, s[2:3], v7, v0
-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    v_add_co_u32_e32 v4, vcc, v11, v4
-; GCN-NEXT:    v_addc_co_u32_e32 v5, vcc, v12, v5, vcc
-; GCN-NEXT:    v_add_co_u32_e32 v2, vcc, v9, v2
-; GCN-NEXT:    v_addc_co_u32_e32 v3, vcc, v10, v3, vcc
 ; GCN-NEXT:    s_and_b64 vcc, exec, s[0:1]
+; GCN-NEXT:    s_waitcnt lgkmcnt(0)
+; GCN-NEXT:    v_add_co_u32_e64 v4, s[2:3], v11, v4
+; GCN-NEXT:    v_addc_co_u32_e64 v5, s[2:3], v12, v5, s[2:3]
+; GCN-NEXT:    v_add_co_u32_e64 v2, s[2:3], v9, v2
+; GCN-NEXT:    v_addc_co_u32_e64 v3, s[2:3], v10, v3, s[2:3]
+; GCN-NEXT:    v_add_co_u32_e64 v0, s[2:3], v7, v0
 ; GCN-NEXT:    v_addc_co_u32_e64 v1, s[2:3], v8, v1, s[2:3]
 ; GCN-NEXT:    s_cbranch_vccnz .LBB9_1
 ; GCN-NEXT:  ; %bb.2: ; %ret

@@ -35,12 +35,12 @@ define amdgpu_kernel void @rsq_clamp_f32(ptr addrspace(1) %out, float %src) #0 {
 ;
 ; SI-GISEL-LABEL: rsq_clamp_f32:
 ; SI-GISEL:       ; %bb.0:
-; SI-GISEL-NEXT:    s_load_dword s3, s[4:5], 0xb
+; SI-GISEL-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; SI-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-GISEL-NEXT:    s_mov_b32 s2, -1
-; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-GISEL-NEXT:    v_rsq_clamp_f32_e32 v0, s3
 ; SI-GISEL-NEXT:    s_mov_b32 s3, 0xf000
+; SI-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
+; SI-GISEL-NEXT:    v_rsq_clamp_f32_e32 v0, s6
 ; SI-GISEL-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-GISEL-NEXT:    s_endpgm
 ;

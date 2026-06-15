@@ -201,8 +201,8 @@ define { float, float } @modf_modf(float %x) {
 ; CHECK-NEXT:    v_trunc_f32_e32 v1, v0
 ; CHECK-NEXT:    v_sub_f32_e32 v1, v0, v1
 ; CHECK-NEXT:    v_cmp_neq_f32_e64 vcc, |v0|, s4
-; CHECK-NEXT:    v_cndmask_b32_e32 v1, 0, v1, vcc
 ; CHECK-NEXT:    s_brev_b32 s5, -2
+; CHECK-NEXT:    v_cndmask_b32_e32 v1, 0, v1, vcc
 ; CHECK-NEXT:    v_bfi_b32 v0, s5, v1, v0
 ; CHECK-NEXT:    v_trunc_f32_e32 v1, v0
 ; CHECK-NEXT:    v_sub_f32_e32 v2, v0, v1
@@ -224,8 +224,8 @@ define { <2 x float>, <2 x float> } @modf_modf_vector(<2 x float> %x) {
 ; CHECK-NEXT:    v_trunc_f32_e32 v2, v1
 ; CHECK-NEXT:    v_sub_f32_e32 v2, v1, v2
 ; CHECK-NEXT:    v_cmp_neq_f32_e64 vcc, |v1|, s4
-; CHECK-NEXT:    v_cndmask_b32_e32 v2, 0, v2, vcc
 ; CHECK-NEXT:    s_brev_b32 s5, -2
+; CHECK-NEXT:    v_cndmask_b32_e32 v2, 0, v2, vcc
 ; CHECK-NEXT:    v_bfi_b32 v1, s5, v2, v1
 ; CHECK-NEXT:    v_trunc_f32_e32 v2, v0
 ; CHECK-NEXT:    v_sub_f32_e32 v2, v0, v2

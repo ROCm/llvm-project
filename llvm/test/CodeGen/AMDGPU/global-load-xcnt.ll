@@ -394,24 +394,26 @@ define i64 @test_v16i64_load_store(ptr addrspace(1) %ptr_a, ptr addrspace(1) %pt
 ; GCN-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
 ; GCN-GISEL-NEXT:    s_wait_kmcnt 0x0
 ; GCN-GISEL-NEXT:    s_clause 0x7
-; GCN-GISEL-NEXT:    global_load_b128 v[6:9], v[0:1], off offset:80
-; GCN-GISEL-NEXT:    global_load_b128 v[10:13], v[0:1], off
-; GCN-GISEL-NEXT:    global_load_b128 v[14:17], v[0:1], off offset:16
-; GCN-GISEL-NEXT:    global_load_b128 v[18:21], v[0:1], off offset:32
-; GCN-GISEL-NEXT:    global_load_b128 v[22:25], v[0:1], off offset:48
-; GCN-GISEL-NEXT:    global_load_b128 v[26:29], v[0:1], off offset:96
-; GCN-GISEL-NEXT:    global_load_b128 v[30:33], v[0:1], off offset:112
+; GCN-GISEL-NEXT:    global_load_b128 v[6:9], v[0:1], off
+; GCN-GISEL-NEXT:    global_load_b128 v[10:13], v[0:1], off offset:16
+; GCN-GISEL-NEXT:    global_load_b128 v[14:17], v[0:1], off offset:32
+; GCN-GISEL-NEXT:    global_load_b128 v[18:21], v[0:1], off offset:48
+; GCN-GISEL-NEXT:    global_load_b128 v[22:25], v[0:1], off offset:96
+; GCN-GISEL-NEXT:    global_load_b128 v[26:29], v[0:1], off offset:112
+; GCN-GISEL-NEXT:    global_load_b128 v[30:33], v[0:1], off offset:80
 ; GCN-GISEL-NEXT:    global_load_b128 v[34:37], v[0:1], off offset:64
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[38:39], 0
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[48:49], 16
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[50:51], 32
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[52:53], 48
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[66:67], 0x60
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[68:69], 0x70
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[54:55], 64
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[2:3], 0
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[38:39], 16
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[48:49], 32
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[50:51], 48
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[64:65], 0x60
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[66:67], 0x70
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[52:53], 64
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GCN-GISEL-NEXT:    v_mov_b64_e32 v[0:1], 0xc8
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[64:65], 0x50
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[54:55], 0x50
+; GCN-GISEL-NEXT:    s_wait_loadcnt 0x7
+; GCN-GISEL-NEXT:    global_store_b128 v[2:3], v[6:9], off
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x6
 ; GCN-GISEL-NEXT:    global_store_b128 v[38:39], v[10:13], off
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x5
@@ -419,49 +421,48 @@ define i64 @test_v16i64_load_store(ptr addrspace(1) %ptr_a, ptr addrspace(1) %pt
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x4
 ; GCN-GISEL-NEXT:    global_store_b128 v[50:51], v[18:21], off
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x3
-; GCN-GISEL-NEXT:    global_store_b128 v[52:53], v[22:25], off
+; GCN-GISEL-NEXT:    global_store_b128 v[64:65], v[22:25], off
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x2
 ; GCN-GISEL-NEXT:    global_store_b128 v[66:67], v[26:29], off
-; GCN-GISEL-NEXT:    s_wait_loadcnt 0x1
-; GCN-GISEL-NEXT:    global_store_b128 v[68:69], v[30:33], off
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x5
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[12:13], v[12:13], v[12:13]
-; GCN-GISEL-NEXT:    v_mov_b64_e32 v[2:3], v[8:9]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[10:11], v[10:11], v[10:11]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[8:9], v[8:9], v[8:9]
+; GCN-GISEL-NEXT:    s_wait_loadcnt 0x1
+; GCN-GISEL-NEXT:    v_mov_b64_e32 v[2:3], v[32:33]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[6:7], v[6:7], v[6:7]
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x4
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[14:15], v[14:15], v[14:15]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[16:17], v[16:17], v[16:17]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[10:11], v[10:11], v[10:11]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[12:13], v[12:13], v[12:13]
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x3
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[18:19], v[18:19], v[18:19]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[20:21], 0x64, v[20:21]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[14:15], v[14:15], v[14:15]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[16:17], 0x64, v[16:17]
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x2
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[22:23], v[22:23], v[22:23]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[24:25], v[24:25], v[24:25]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[18:19], v[18:19], v[18:19]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[20:21], v[20:21], v[20:21]
 ; GCN-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[48:49], v[34:35], v[34:35]
 ; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[50:51], v[36:37], v[36:37]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[6:7], 0xc8, v[6:7]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[8:9], v[8:9], v[8:9]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[30:31], 0xc8, v[30:31]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[32:33], v[32:33], v[32:33]
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x1
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[22:23], v[22:23], v[22:23]
+; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[24:25], v[24:25], v[24:25]
+; GCN-GISEL-NEXT:    s_wait_xcnt 0x0
 ; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[26:27], v[26:27], v[26:27]
 ; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[28:29], v[28:29], v[28:29]
-; GCN-GISEL-NEXT:    s_wait_xcnt 0x0
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[30:31], v[30:31], v[30:31]
-; GCN-GISEL-NEXT:    v_add_nc_u64_e32 v[32:33], v[32:33], v[32:33]
 ; GCN-GISEL-NEXT:    s_clause 0x1
-; GCN-GISEL-NEXT:    global_store_b128 v[54:55], v[34:37], off
-; GCN-GISEL-NEXT:    global_store_b128 v[64:65], v[0:3], off
+; GCN-GISEL-NEXT:    global_store_b128 v[52:53], v[34:37], off
+; GCN-GISEL-NEXT:    global_store_b128 v[54:55], v[0:3], off
 ; GCN-GISEL-NEXT:    s_clause 0x7
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[10:13], off
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[14:17], off offset:16
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[18:21], off offset:32
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[22:25], off offset:48
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[6:9], off
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[10:13], off offset:16
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[14:17], off offset:32
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[18:21], off offset:48
 ; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[48:51], off offset:64
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[6:9], off offset:80
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[26:29], off offset:96
-; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[30:33], off offset:112
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[30:33], off offset:80
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[22:25], off offset:96
+; GCN-GISEL-NEXT:    global_store_b128 v[4:5], v[26:29], off offset:112
 ; GCN-GISEL-NEXT:    s_wait_xcnt 0x8
-; GCN-GISEL-NEXT:    v_dual_mov_b32 v0, v12 :: v_dual_mov_b32 v1, v13
+; GCN-GISEL-NEXT:    v_dual_mov_b32 v0, v8 :: v_dual_mov_b32 v1, v9
 ; GCN-GISEL-NEXT:    s_set_pc_i64 s[30:31]
   %a = load <16 x i64>, ptr addrspace(1) %ptr_a, align 4
   %in_a = insertelement <16 x i64> %a, i64 100, i32 5

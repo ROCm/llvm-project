@@ -587,9 +587,9 @@ define amdgpu_kernel void @fmul_v4f16(
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    s_mov_b32 s6, s2
+; SI-NEXT:    s_mov_b32 s7, s3
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    s_mov_b32 s12, s10
-; SI-NEXT:    s_mov_b32 s7, s3
 ; SI-NEXT:    s_mov_b32 s13, s11
 ; SI-NEXT:    s_mov_b32 s14, s2
 ; SI-NEXT:    s_mov_b32 s15, s3

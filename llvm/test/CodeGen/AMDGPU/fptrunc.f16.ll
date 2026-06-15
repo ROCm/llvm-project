@@ -562,9 +562,9 @@ define amdgpu_kernel void @fptrunc_f64_to_f16(
 ; SI-SDAG-NEXT:    v_or_b32_e32 v0, s6, v0
 ; SI-SDAG-NEXT:    s_and_b32 s6, s7, 0xffe
 ; SI-SDAG-NEXT:    s_sub_i32 s7, 0x3f1, s8
+; SI-SDAG-NEXT:    v_med3_i32 v1, s7, 0, 13
 ; SI-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
-; SI-SDAG-NEXT:    v_med3_i32 v1, s7, 0, 13
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s7, v0
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s9, v1
 ; SI-SDAG-NEXT:    s_or_b32 s6, s6, s7
@@ -2116,9 +2116,9 @@ define amdgpu_kernel void @fptrunc_v2f64_to_v2f16(
 ; SI-SDAG-NEXT:    v_or_b32_e32 v1, s7, v2
 ; SI-SDAG-NEXT:    s_and_b32 s7, s8, 0xffe
 ; SI-SDAG-NEXT:    s_sub_i32 s8, 0x3f1, s9
+; SI-SDAG-NEXT:    v_med3_i32 v2, s8, 0, 13
 ; SI-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v1
 ; SI-SDAG-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
-; SI-SDAG-NEXT:    v_med3_i32 v2, s8, 0, 13
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s8, v1
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s10, v2
 ; SI-SDAG-NEXT:    s_or_b32 s7, s7, s8
@@ -2156,9 +2156,9 @@ define amdgpu_kernel void @fptrunc_v2f64_to_v2f16(
 ; SI-SDAG-NEXT:    s_and_b32 s8, s9, 0xffe
 ; SI-SDAG-NEXT:    s_sub_i32 s9, 0x3f1, s10
 ; SI-SDAG-NEXT:    s_or_b32 s1, s1, s7
+; SI-SDAG-NEXT:    v_med3_i32 v1, s9, 0, 13
 ; SI-SDAG-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v0
 ; SI-SDAG-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
-; SI-SDAG-NEXT:    v_med3_i32 v1, s9, 0, 13
 ; SI-SDAG-NEXT:    s_lshl_b32 s1, s1, 16
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s7, v0
 ; SI-SDAG-NEXT:    v_readfirstlane_b32 s9, v1

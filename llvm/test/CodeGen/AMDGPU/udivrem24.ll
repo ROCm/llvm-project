@@ -544,9 +544,9 @@ define amdgpu_kernel void @udiv23_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -580,8 +580,8 @@ define amdgpu_kernel void @udiv23_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -659,9 +659,9 @@ define amdgpu_kernel void @udiv24_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -695,8 +695,8 @@ define amdgpu_kernel void @udiv24_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -774,9 +774,9 @@ define amdgpu_kernel void @no_udiv24_u23_u24_i32(ptr addrspace(1) %out, ptr addr
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -810,8 +810,8 @@ define amdgpu_kernel void @no_udiv24_u23_u24_i32(ptr addrspace(1) %out, ptr addr
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -889,9 +889,9 @@ define amdgpu_kernel void @no_udiv24_u24_u23_i32(ptr addrspace(1) %out, ptr addr
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -925,8 +925,8 @@ define amdgpu_kernel void @no_udiv24_u24_u23_i32(ptr addrspace(1) %out, ptr addr
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1004,9 +1004,9 @@ define amdgpu_kernel void @udiv25_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1040,8 +1040,8 @@ define amdgpu_kernel void @udiv25_i32(ptr addrspace(1) %out, ptr addrspace(1) %i
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1122,9 +1122,9 @@ define amdgpu_kernel void @test_no_udiv24_i32_1(ptr addrspace(1) %out, ptr addrs
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1158,8 +1158,8 @@ define amdgpu_kernel void @test_no_udiv24_i32_1(ptr addrspace(1) %out, ptr addrs
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1240,9 +1240,9 @@ define amdgpu_kernel void @test_no_udiv24_i32_2(ptr addrspace(1) %out, ptr addrs
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -1276,8 +1276,8 @@ define amdgpu_kernel void @test_no_udiv24_i32_2(ptr addrspace(1) %out, ptr addrs
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -2017,9 +2017,9 @@ define amdgpu_kernel void @test_udiv24_u16_u23_i32(ptr addrspace(1) %out, ptr ad
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -2053,8 +2053,8 @@ define amdgpu_kernel void @test_udiv24_u16_u23_i32(ptr addrspace(1) %out, ptr ad
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -2132,9 +2132,9 @@ define amdgpu_kernel void @test_udiv24_u23_u16_i32(ptr addrspace(1) %out, ptr ad
 ; SI-NEXT:    s_sub_i32 s4, s4, s6
 ; SI-NEXT:    s_sub_i32 s6, s4, s5
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
+; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; SI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; SI-NEXT:    s_cselect_b32 s4, s6, s4
 ; SI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
 ; SI-NEXT:    s_cmp_ge_u32 s4, s5
 ; SI-NEXT:    s_cselect_b64 vcc, -1, 0
@@ -2168,8 +2168,8 @@ define amdgpu_kernel void @test_udiv24_u23_u16_i32(ptr addrspace(1) %out, ptr ad
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    s_cselect_b32 s5, s6, s5
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
 ; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s5, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0

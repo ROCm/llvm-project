@@ -188,12 +188,11 @@ define i32 @global_atomic_usub_sat_offset(ptr addrspace(1) %ptr, i32 %data) {
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-SDAG-NEXT:    v_add_co_u32_e32 v3, vcc, 0x1000, v0
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], vcc
-; GFX9-SDAG-NEXT:    v_addc_co_u32_e64 v4, s[4:5], 0, v1, s[4:5]
-; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, v3
-; GFX9-SDAG-NEXT:    global_load_dword v0, v[0:1], off
+; GFX9-SDAG-NEXT:    v_addc_co_u32_e64 v5, s[4:5], 0, v1, vcc
+; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
+; GFX9-SDAG-NEXT:    global_load_dword v0, v[4:5], off
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v4, vcc, 0, v1, vcc
 ; GFX9-SDAG-NEXT:  .LBB1_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
@@ -429,23 +428,22 @@ define void @global_atomic_usub_sat_offset_nortn(ptr addrspace(1) %ptr, i32 %dat
 ; GFX9-SDAG-LABEL: global_atomic_usub_sat_offset_nortn:
 ; GFX9-SDAG:       ; %bb.0:
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX9-SDAG-NEXT:    v_add_co_u32_e32 v3, vcc, 0x1000, v0
-; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], vcc
-; GFX9-SDAG-NEXT:    v_addc_co_u32_e64 v4, s[4:5], 0, v1, s[4:5]
-; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v0, v3
-; GFX9-SDAG-NEXT:    global_load_dword v1, v[0:1], off
+; GFX9-SDAG-NEXT:    v_add_co_u32_e32 v0, vcc, 0x1000, v0
+; GFX9-SDAG-NEXT:    v_addc_co_u32_e64 v4, s[4:5], 0, v1, vcc
+; GFX9-SDAG-NEXT:    v_mov_b32_e32 v3, v0
+; GFX9-SDAG-NEXT:    global_load_dword v4, v[3:4], off
 ; GFX9-SDAG-NEXT:    s_mov_b64 s[4:5], 0
+; GFX9-SDAG-NEXT:    v_addc_co_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX9-SDAG-NEXT:  .LBB3_1: ; %atomicrmw.start
 ; GFX9-SDAG-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
-; GFX9-SDAG-NEXT:    v_sub_u32_e64 v0, v1, v2 clamp
-; GFX9-SDAG-NEXT:    global_atomic_cmpswap v0, v[3:4], v[0:1], off glc
+; GFX9-SDAG-NEXT:    v_sub_u32_e64 v3, v4, v2 clamp
+; GFX9-SDAG-NEXT:    global_atomic_cmpswap v3, v[0:1], v[3:4], off glc
 ; GFX9-SDAG-NEXT:    s_waitcnt vmcnt(0)
 ; GFX9-SDAG-NEXT:    buffer_wbinvl1_vol
-; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v0, v1
+; GFX9-SDAG-NEXT:    v_cmp_eq_u32_e32 vcc, v3, v4
 ; GFX9-SDAG-NEXT:    s_or_b64 s[4:5], vcc, s[4:5]
-; GFX9-SDAG-NEXT:    v_mov_b32_e32 v1, v0
+; GFX9-SDAG-NEXT:    v_mov_b32_e32 v4, v3
 ; GFX9-SDAG-NEXT:    s_andn2_b64 exec, exec, s[4:5]
 ; GFX9-SDAG-NEXT:    s_cbranch_execnz .LBB3_1
 ; GFX9-SDAG-NEXT:  ; %bb.2: ; %atomicrmw.end
@@ -530,10 +528,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX10-GISEL-NEXT:    s_load_dword s4, s[8:9], 0x8
 ; GFX10-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[8:9], 0x0
 ; GFX10-GISEL-NEXT:    s_load_dwordx2 s[2:3], s[8:9], 0x10
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, 0x1000
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v0, 0x1000
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v0, s4
-; GFX10-GISEL-NEXT:    global_atomic_csub v0, v1, v0, s[0:1] glc
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, s4
+; GFX10-GISEL-NEXT:    global_atomic_csub v0, v0, v1, s[0:1] glc
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
@@ -548,8 +546,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX11-GISEL-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0
 ; GFX11-GISEL-NEXT:    s_load_b64 s[2:3], s[4:5], 0x10
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-GISEL-NEXT:    v_dual_mov_b32 v1, 0x1000 :: v_dual_mov_b32 v0, s6
-; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v1, v0, s[0:1] glc
+; GFX11-GISEL-NEXT:    v_dual_mov_b32 v0, 0x1000 :: v_dual_mov_b32 v1, s6
+; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v0, v1, s[0:1] glc
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv
@@ -563,11 +561,11 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset(ptr addrspace
 ; GFX12-GISEL-NEXT:    s_load_b96 s[0:2], s[4:5], 0x0
 ; GFX12-GISEL-NEXT:    s_load_b64 s[4:5], s[4:5], 0x10
 ; GFX12-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX12-GISEL-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
-; GFX12-GISEL-NEXT:    global_atomic_sub_clamp_u32 v0, v1, v0, s[0:1] offset:4096 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
+; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
+; GFX12-GISEL-NEXT:    global_atomic_sub_clamp_u32 v1, v0, v1, s[0:1] offset:4096 th:TH_ATOMIC_RETURN scope:SCOPE_DEV
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_DEV
-; GFX12-GISEL-NEXT:    global_store_b32 v1, v0, s[4:5]
+; GFX12-GISEL-NEXT:    global_store_b32 v0, v1, s[4:5]
 ; GFX12-GISEL-NEXT:    s_endpgm
 ;
 ; GFX9-SDAG-LABEL: global_atomic_usub_sat_sgpr_base_offset:
@@ -682,10 +680,10 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn(ptr add
 ; GFX10-GISEL-NEXT:    s_clause 0x1
 ; GFX10-GISEL-NEXT:    s_load_dword s2, s[8:9], 0x8
 ; GFX10-GISEL-NEXT:    s_load_dwordx2 s[0:1], s[8:9], 0x0
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, 0x1000
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v0, 0x1000
 ; GFX10-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX10-GISEL-NEXT:    v_mov_b32_e32 v0, s2
-; GFX10-GISEL-NEXT:    global_atomic_csub v0, v1, v0, s[0:1] glc
+; GFX10-GISEL-NEXT:    v_mov_b32_e32 v1, s2
+; GFX10-GISEL-NEXT:    global_atomic_csub v0, v0, v1, s[0:1] glc
 ; GFX10-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX10-GISEL-NEXT:    buffer_gl1_inv
 ; GFX10-GISEL-NEXT:    buffer_gl0_inv
@@ -697,8 +695,8 @@ define amdgpu_kernel void @global_atomic_usub_sat_sgpr_base_offset_nortn(ptr add
 ; GFX11-GISEL-NEXT:    s_load_b32 s2, s[4:5], 0x8
 ; GFX11-GISEL-NEXT:    s_load_b64 s[0:1], s[4:5], 0x0
 ; GFX11-GISEL-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX11-GISEL-NEXT:    v_dual_mov_b32 v1, 0x1000 :: v_dual_mov_b32 v0, s2
-; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v1, v0, s[0:1] glc
+; GFX11-GISEL-NEXT:    v_dual_mov_b32 v0, 0x1000 :: v_dual_mov_b32 v1, s2
+; GFX11-GISEL-NEXT:    global_atomic_csub_u32 v0, v0, v1, s[0:1] glc
 ; GFX11-GISEL-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-GISEL-NEXT:    buffer_gl1_inv
 ; GFX11-GISEL-NEXT:    buffer_gl0_inv

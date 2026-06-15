@@ -65,8 +65,8 @@ define amdgpu_kernel void @kernel(ptr addrspace(1) %arg1.global, i1 %tmp3.i.i, i
 ; GLOBALNESS1-NEXT:    s_bitcmp1_b32 s7, 0
 ; GLOBALNESS1-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; GLOBALNESS1-NEXT:    s_xor_b64 s[66:67], s[4:5], -1
-; GLOBALNESS1-NEXT:    s_mov_b32 s84, s16
 ; GLOBALNESS1-NEXT:    s_mov_b64 s[48:49], s[8:9]
+; GLOBALNESS1-NEXT:    s_mov_b32 s84, s16
 ; GLOBALNESS1-NEXT:    s_mov_b32 s85, s15
 ; GLOBALNESS1-NEXT:    s_mov_b32 s86, s14
 ; GLOBALNESS1-NEXT:    s_mov_b64 s[34:35], s[10:11]
@@ -354,8 +354,8 @@ define amdgpu_kernel void @kernel(ptr addrspace(1) %arg1.global, i1 %tmp3.i.i, i
 ; GLOBALNESS0-NEXT:    s_bitcmp1_b32 s7, 0
 ; GLOBALNESS0-NEXT:    s_cselect_b64 s[4:5], -1, 0
 ; GLOBALNESS0-NEXT:    s_xor_b64 s[66:67], s[4:5], -1
-; GLOBALNESS0-NEXT:    s_mov_b32 s82, s16
 ; GLOBALNESS0-NEXT:    s_mov_b64 s[48:49], s[8:9]
+; GLOBALNESS0-NEXT:    s_mov_b32 s82, s16
 ; GLOBALNESS0-NEXT:    s_mov_b32 s83, s15
 ; GLOBALNESS0-NEXT:    s_mov_b32 s84, s14
 ; GLOBALNESS0-NEXT:    s_mov_b64 s[34:35], s[10:11]

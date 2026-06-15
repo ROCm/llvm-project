@@ -18,9 +18,9 @@ define amdgpu_cs void @constant_false_inverse_ballot(ptr addrspace(1) %out) {
 ;
 ; SDAG_W64-LABEL: constant_false_inverse_ballot:
 ; SDAG_W64:       ; %bb.0: ; %entry
-; SDAG_W64-NEXT:    s_mov_b32 s2, 0
+; SDAG_W64-NEXT:    s_mov_b32 s0, 0
+; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s0
 ; SDAG_W64-NEXT:    s_mov_b64 s[0:1], 0
-; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s2
 ; SDAG_W64-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; SDAG_W64-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W64-NEXT:    s_endpgm
@@ -60,9 +60,9 @@ define amdgpu_cs void @constant_true_inverse_ballot(ptr addrspace(1) %out) {
 ;
 ; SDAG_W64-LABEL: constant_true_inverse_ballot:
 ; SDAG_W64:       ; %bb.0: ; %entry
-; SDAG_W64-NEXT:    s_mov_b32 s2, 0
+; SDAG_W64-NEXT:    s_mov_b32 s0, 0
+; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s0
 ; SDAG_W64-NEXT:    s_mov_b64 s[0:1], -1
-; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s2
 ; SDAG_W64-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; SDAG_W64-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W64-NEXT:    s_endpgm
@@ -78,9 +78,9 @@ define amdgpu_cs void @constant_true_inverse_ballot(ptr addrspace(1) %out) {
 ; SDAG_W32-LABEL: constant_true_inverse_ballot:
 ; SDAG_W32:       ; %bb.0: ; %entry
 ; SDAG_W32-NEXT:    s_mov_b32 s0, 0
-; SDAG_W32-NEXT:    s_mov_b32 s1, -1
 ; SDAG_W32-NEXT:    v_mov_b32_e32 v3, s0
-; SDAG_W32-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s1
+; SDAG_W32-NEXT:    s_mov_b32 s0, -1
+; SDAG_W32-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; SDAG_W32-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W32-NEXT:    s_endpgm
 entry:
@@ -104,11 +104,11 @@ define amdgpu_cs void @constant_mask_inverse_ballot(ptr addrspace(1) %out) {
 ;
 ; SDAG_W64-LABEL: constant_mask_inverse_ballot:
 ; SDAG_W64:       ; %bb.0: ; %entry
+; SDAG_W64-NEXT:    s_mov_b32 s2, 0
 ; SDAG_W64-NEXT:    s_mov_b32 s0, 0xf8010000
 ; SDAG_W64-NEXT:    s_mov_b32 s1, 64
-; SDAG_W64-NEXT:    s_mov_b32 s2, 0
-; SDAG_W64-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s2
+; SDAG_W64-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
 ; SDAG_W64-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W64-NEXT:    s_endpgm
 ;
@@ -123,9 +123,9 @@ define amdgpu_cs void @constant_mask_inverse_ballot(ptr addrspace(1) %out) {
 ; SDAG_W32-LABEL: constant_mask_inverse_ballot:
 ; SDAG_W32:       ; %bb.0: ; %entry
 ; SDAG_W32-NEXT:    s_mov_b32 s0, 0
-; SDAG_W32-NEXT:    s_mov_b32 s1, 0xf8010000
 ; SDAG_W32-NEXT:    v_mov_b32_e32 v3, s0
-; SDAG_W32-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s1
+; SDAG_W32-NEXT:    s_mov_b32 s0, 0xf8010000
+; SDAG_W32-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
 ; SDAG_W32-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W32-NEXT:    s_endpgm
 entry:
@@ -149,12 +149,12 @@ define amdgpu_cs void @vgpr_inverse_ballot(i64 %input, ptr addrspace(1) %out) {
 ;
 ; SDAG_W64-LABEL: vgpr_inverse_ballot:
 ; SDAG_W64:       ; %bb.0: ; %entry
+; SDAG_W64-NEXT:    s_mov_b32 s1, 0
 ; SDAG_W64-NEXT:    v_readfirstlane_b32 s0, v0
+; SDAG_W64-NEXT:    v_mov_b32_e32 v5, s1
 ; SDAG_W64-NEXT:    v_readfirstlane_b32 s1, v1
-; SDAG_W64-NEXT:    s_mov_b32 s2, 0
-; SDAG_W64-NEXT:    v_mov_b32_e32 v1, s2
-; SDAG_W64-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s[0:1]
-; SDAG_W64-NEXT:    global_store_b64 v[2:3], v[0:1], off
+; SDAG_W64-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[0:1]
+; SDAG_W64-NEXT:    global_store_b64 v[2:3], v[4:5], off
 ; SDAG_W64-NEXT:    s_endpgm
 ;
 ; GISEL_W32-LABEL: vgpr_inverse_ballot:
@@ -167,10 +167,10 @@ define amdgpu_cs void @vgpr_inverse_ballot(i64 %input, ptr addrspace(1) %out) {
 ;
 ; SDAG_W32-LABEL: vgpr_inverse_ballot:
 ; SDAG_W32:       ; %bb.0: ; %entry
-; SDAG_W32-NEXT:    v_readfirstlane_b32 s1, v0
 ; SDAG_W32-NEXT:    s_mov_b32 s0, 0
 ; SDAG_W32-NEXT:    v_mov_b32_e32 v1, s0
-; SDAG_W32-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s1
+; SDAG_W32-NEXT:    v_readfirstlane_b32 s0, v0
+; SDAG_W32-NEXT:    v_cndmask_b32_e64 v0, 0, 1, s0
 ; SDAG_W32-NEXT:    global_store_b64 v[2:3], v[0:1], off
 ; SDAG_W32-NEXT:    s_endpgm
 entry:
@@ -190,10 +190,9 @@ define amdgpu_cs void @sgpr_inverse_ballot(i64 inreg %input, ptr addrspace(1) %o
 ;
 ; SDAG_W64-LABEL: sgpr_inverse_ballot:
 ; SDAG_W64:       ; %bb.0: ; %entry
+; SDAG_W64-NEXT:    s_mov_b32 s2, 0
 ; SDAG_W64-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s[0:1]
-; SDAG_W64-NEXT:    s_mov_b32 s0, 0
-; SDAG_W64-NEXT:    s_waitcnt_depctr depctr_sa_sdst(0)
-; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s0
+; SDAG_W64-NEXT:    v_mov_b32_e32 v3, s2
 ; SDAG_W64-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W64-NEXT:    s_endpgm
 ;
@@ -206,9 +205,9 @@ define amdgpu_cs void @sgpr_inverse_ballot(i64 inreg %input, ptr addrspace(1) %o
 ;
 ; SDAG_W32-LABEL: sgpr_inverse_ballot:
 ; SDAG_W32:       ; %bb.0: ; %entry
+; SDAG_W32-NEXT:    s_mov_b32 s1, 0
 ; SDAG_W32-NEXT:    v_cndmask_b32_e64 v2, 0, 1, s0
-; SDAG_W32-NEXT:    s_mov_b32 s0, 0
-; SDAG_W32-NEXT:    v_mov_b32_e32 v3, s0
+; SDAG_W32-NEXT:    v_mov_b32_e32 v3, s1
 ; SDAG_W32-NEXT:    global_store_b64 v[0:1], v[2:3], off
 ; SDAG_W32-NEXT:    s_endpgm
 entry:

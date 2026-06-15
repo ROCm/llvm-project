@@ -601,18 +601,18 @@ define { float, float } @v_rsq_f32_multi_use(float %val) {
 ; SI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; SI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; SI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; SI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; SI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; SI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260
 ; SI-IEEE-SAFE-NEXT:    v_cmp_class_f32_e32 vcc, v0, v2
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    s_mov_b32 s4, 0x7f800000
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    v_frexp_mant_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 vcc, |v0|, s4
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v0, v1, vcc
@@ -632,12 +632,12 @@ define { float, float } @v_rsq_f32_multi_use(float %val) {
 ; CI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; CI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; CI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; CI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; CI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; CI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260
@@ -674,18 +674,18 @@ define float @v_rsq_f32_missing_contract0(float %val) {
 ; SI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; SI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; SI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; SI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; SI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; SI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260
 ; SI-IEEE-SAFE-NEXT:    v_cmp_class_f32_e32 vcc, v0, v2
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    s_mov_b32 s4, 0x7f800000
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    v_frexp_mant_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 vcc, |v0|, s4
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v0, v1, vcc
@@ -705,12 +705,12 @@ define float @v_rsq_f32_missing_contract0(float %val) {
 ; CI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; CI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; CI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; CI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; CI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; CI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260
@@ -745,18 +745,18 @@ define float @v_rsq_f32_missing_contract1(float %val) {
 ; SI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; SI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; SI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; SI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; SI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; SI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; SI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260
 ; SI-IEEE-SAFE-NEXT:    v_cmp_class_f32_e32 vcc, v0, v2
-; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    s_mov_b32 s4, 0x7f800000
+; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v0, v1, v0, vcc
 ; SI-IEEE-SAFE-NEXT:    v_frexp_mant_f32_e32 v1, v0
 ; SI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 vcc, |v0|, s4
 ; SI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v0, v1, vcc
@@ -776,12 +776,12 @@ define float @v_rsq_f32_missing_contract1(float %val) {
 ; CI-IEEE-SAFE-NEXT:    v_sqrt_f32_e32 v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v2, s[4:5], -1, v1
 ; CI-IEEE-SAFE-NEXT:    v_fma_f32 v3, -v2, v1, v0
+; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v4, s[4:5], 1, v1
+; CI-IEEE-SAFE-NEXT:    v_fma_f32 v5, -v4, v1, v0
 ; CI-IEEE-SAFE-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v3
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v2, v1, v2, s[4:5]
-; CI-IEEE-SAFE-NEXT:    v_add_i32_e64 v3, s[4:5], 1, v1
-; CI-IEEE-SAFE-NEXT:    v_fma_f32 v1, -v3, v1, v0
-; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v1
-; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v2, v3, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v2, s[4:5]
+; CI-IEEE-SAFE-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v5
+; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e64 v1, v1, v4, s[4:5]
 ; CI-IEEE-SAFE-NEXT:    v_mul_f32_e32 v2, 0x37800000, v1
 ; CI-IEEE-SAFE-NEXT:    v_cndmask_b32_e32 v1, v1, v2, vcc
 ; CI-IEEE-SAFE-NEXT:    v_mov_b32_e32 v2, 0x260

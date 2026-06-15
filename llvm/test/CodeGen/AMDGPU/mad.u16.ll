@@ -11,26 +11,26 @@ define amdgpu_kernel void @mad_u16(
 ; GFX8-LABEL: mad_u16:
 ; GFX8:       ; %bb.0: ; %entry
 ; GFX8-NEXT:    s_load_dwordx8 s[0:7], s[4:5], 0x24
-; GFX8-NEXT:    v_lshlrev_b32_e32 v4, 1, v0
+; GFX8-NEXT:    v_lshlrev_b32_e32 v2, 1, v0
 ; GFX8-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s3
-; GFX8-NEXT:    v_add_u32_e32 v0, vcc, s2, v4
+; GFX8-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; GFX8-NEXT:    v_mov_b32_e32 v3, s5
-; GFX8-NEXT:    v_add_u32_e32 v2, vcc, s4, v4
-; GFX8-NEXT:    v_addc_u32_e32 v3, vcc, 0, v3, vcc
-; GFX8-NEXT:    v_mov_b32_e32 v5, s7
-; GFX8-NEXT:    v_add_u32_e32 v4, vcc, s6, v4
-; GFX8-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
-; GFX8-NEXT:    flat_load_ushort v6, v[0:1] glc
+; GFX8-NEXT:    flat_load_ushort v5, v[0:1] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
-; GFX8-NEXT:    flat_load_ushort v2, v[2:3] glc
+; GFX8-NEXT:    v_add_u32_e32 v0, vcc, s4, v2
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v3, vcc
+; GFX8-NEXT:    v_mov_b32_e32 v4, s7
+; GFX8-NEXT:    flat_load_ushort v3, v[0:1] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
-; GFX8-NEXT:    flat_load_ushort v3, v[4:5] glc
+; GFX8-NEXT:    v_add_u32_e32 v0, vcc, s6, v2
+; GFX8-NEXT:    v_addc_u32_e32 v1, vcc, 0, v4, vcc
+; GFX8-NEXT:    flat_load_ushort v2, v[0:1] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s1
-; GFX8-NEXT:    v_mad_u16 v2, v6, v2, v3
+; GFX8-NEXT:    v_mad_u16 v2, v5, v3, v2
 ; GFX8-NEXT:    flat_store_short v[0:1], v2
 ; GFX8-NEXT:    s_endpgm
 ;

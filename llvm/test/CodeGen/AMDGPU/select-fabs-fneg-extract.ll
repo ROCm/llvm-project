@@ -27,9 +27,9 @@ define amdgpu_kernel void @add_select_fabs_fabs_f32(i32 %c) #0 {
 ; GCN: buffer_load_dword [[Z:v[0-9]+]]
 ; GCN: buffer_load_dword [[W:v[0-9]+]]
 
+; GCN-DAG: v_add_f32_e64 v{{[0-9]+}}, |[[X]]|, [[W]]
 ; GCN: v_cndmask_b32_e32 [[SELECT:v[0-9]+]], [[Y]], [[X]], vcc
 ; GCN-DAG: v_add_f32_e64 v{{[0-9]+}}, |[[SELECT]]|, [[Z]]
-; GCN-DAG: v_add_f32_e64 v{{[0-9]+}}, |[[X]]|, [[W]]
 define amdgpu_kernel void @add_select_multi_use_lhs_fabs_fabs_f32(i32 %c) #0 {
   %x = load volatile float, ptr addrspace(1) poison
   %y = load volatile float, ptr addrspace(1) poison
@@ -263,9 +263,9 @@ define amdgpu_kernel void @add_select_fneg_fneg_f32(i32 %c) #0 {
 ; GCN: buffer_load_dword [[Z:v[0-9]+]]
 ; GCN: buffer_load_dword [[W:v[0-9]+]]
 
+; GCN-DAG: v_sub_f32_e32 v{{[0-9]+}}, [[W]], [[X]]
 ; GCN: v_cndmask_b32_e32 [[SELECT:v[0-9]+]], [[Y]], [[X]], vcc
 ; GCN-DAG: v_sub_f32_e32 v{{[0-9]+}}, [[Z]], [[SELECT]]
-; GCN-DAG: v_sub_f32_e32 v{{[0-9]+}}, [[W]], [[X]]
 define amdgpu_kernel void @add_select_multi_use_lhs_fneg_fneg_f32(i32 %c) #0 {
   %x = load volatile float, ptr addrspace(1) poison
   %y = load volatile float, ptr addrspace(1) poison

@@ -459,8 +459,8 @@ define amdgpu_kernel void @vadd64ri(ptr addrspace(1) %out) {
 ; VI-LABEL: vadd64ri:
 ; VI:       ; %bb.0: ; %entry
 ; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; VI-NEXT:    v_add_u32_e32 v0, vcc, 0x56789876, v0
 ; VI-NEXT:    v_mov_b32_e32 v1, 0x1234
+; VI-NEXT:    v_add_u32_e32 v0, vcc, 0x56789876, v0
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    v_mov_b32_e32 v3, s1
@@ -1707,8 +1707,8 @@ define amdgpu_kernel void @vsub64ri(ptr addrspace(1) %out) {
 ; VI-LABEL: vsub64ri:
 ; VI:       ; %bb.0: ; %entry
 ; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; VI-NEXT:    v_sub_u32_e32 v0, vcc, 0x56789876, v0
 ; VI-NEXT:    v_mov_b32_e32 v1, 0x1234
+; VI-NEXT:    v_sub_u32_e32 v0, vcc, 0x56789876, v0
 ; VI-NEXT:    v_subbrev_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    v_mov_b32_e32 v3, s1
@@ -2541,15 +2541,15 @@ define amdgpu_kernel void @sudiv64(ptr addrspace(1) %out, i64 %x, i64 %y) {
 ; CISI-NEXT:    v_mul_hi_u32 v3, v0, v4
 ; CISI-NEXT:    v_mul_lo_u32 v5, v0, v2
 ; CISI-NEXT:    v_mul_hi_u32 v7, v0, v2
-; CISI-NEXT:    v_mul_lo_u32 v6, v1, v4
-; CISI-NEXT:    v_mul_hi_u32 v4, v1, v4
+; CISI-NEXT:    v_mul_hi_u32 v6, v1, v4
+; CISI-NEXT:    v_mul_lo_u32 v4, v1, v4
+; CISI-NEXT:    v_mul_hi_u32 v8, v1, v2
 ; CISI-NEXT:    v_add_i32_e32 v3, vcc, v3, v5
 ; CISI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v7, vcc
-; CISI-NEXT:    v_mul_hi_u32 v7, v1, v2
 ; CISI-NEXT:    v_mul_lo_u32 v2, v1, v2
-; CISI-NEXT:    v_add_i32_e32 v3, vcc, v3, v6
-; CISI-NEXT:    v_addc_u32_e32 v3, vcc, v5, v4, vcc
-; CISI-NEXT:    v_addc_u32_e32 v4, vcc, 0, v7, vcc
+; CISI-NEXT:    v_add_i32_e32 v3, vcc, v3, v4
+; CISI-NEXT:    v_addc_u32_e32 v3, vcc, v5, v6, vcc
+; CISI-NEXT:    v_addc_u32_e32 v4, vcc, 0, v8, vcc
 ; CISI-NEXT:    v_add_i32_e32 v2, vcc, v3, v2
 ; CISI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v4, vcc
 ; CISI-NEXT:    v_add_i32_e32 v0, vcc, v0, v2
@@ -2576,17 +2576,17 @@ define amdgpu_kernel void @sudiv64(ptr addrspace(1) %out, i64 %x, i64 %y) {
 ; CISI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v4, vcc
 ; CISI-NEXT:    v_add_i32_e32 v0, vcc, v0, v2
 ; CISI-NEXT:    v_addc_u32_e32 v1, vcc, v1, v3, vcc
-; CISI-NEXT:    v_mul_lo_u32 v2, s10, v1
-; CISI-NEXT:    v_mul_hi_u32 v3, s10, v0
-; CISI-NEXT:    v_mul_hi_u32 v4, s10, v1
+; CISI-NEXT:    v_mul_lo_u32 v3, s10, v1
+; CISI-NEXT:    v_mul_hi_u32 v4, s10, v0
+; CISI-NEXT:    v_mul_hi_u32 v2, s10, v1
+; CISI-NEXT:    v_mul_hi_u32 v6, s11, v0
+; CISI-NEXT:    v_mul_lo_u32 v0, s11, v0
 ; CISI-NEXT:    v_mul_hi_u32 v5, s11, v1
+; CISI-NEXT:    v_add_i32_e32 v3, vcc, v4, v3
+; CISI-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
 ; CISI-NEXT:    v_mul_lo_u32 v1, s11, v1
-; CISI-NEXT:    v_add_i32_e32 v2, vcc, v3, v2
-; CISI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v4, vcc
-; CISI-NEXT:    v_mul_lo_u32 v4, s11, v0
-; CISI-NEXT:    v_mul_hi_u32 v0, s11, v0
-; CISI-NEXT:    v_add_i32_e32 v2, vcc, v2, v4
-; CISI-NEXT:    v_addc_u32_e32 v0, vcc, v3, v0, vcc
+; CISI-NEXT:    v_add_i32_e32 v0, vcc, v3, v0
+; CISI-NEXT:    v_addc_u32_e32 v0, vcc, v2, v6, vcc
 ; CISI-NEXT:    v_addc_u32_e32 v2, vcc, 0, v5, vcc
 ; CISI-NEXT:    v_add_i32_e32 v0, vcc, v0, v1
 ; CISI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v2, vcc
@@ -2637,20 +2637,20 @@ define amdgpu_kernel void @sudiv64(ptr addrspace(1) %out, i64 %x, i64 %y) {
 ; CISI-NEXT:    v_mul_hi_u32 v1, v0, v1
 ; CISI-NEXT:    v_add_i32_e32 v0, vcc, v0, v1
 ; CISI-NEXT:    v_mul_hi_u32 v0, s10, v0
+; CISI-NEXT:    v_mov_b32_e32 v1, 0
 ; CISI-NEXT:    v_readfirstlane_b32 s0, v0
 ; CISI-NEXT:    s_mul_i32 s0, s0, s2
 ; CISI-NEXT:    s_sub_i32 s0, s10, s0
 ; CISI-NEXT:    s_sub_i32 s1, s0, s2
-; CISI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
+; CISI-NEXT:    v_add_i32_e32 v2, vcc, 1, v0
 ; CISI-NEXT:    s_cmp_ge_u32 s0, s2
 ; CISI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; CISI-NEXT:    s_cselect_b32 s0, s1, s0
-; CISI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CISI-NEXT:    v_add_i32_e32 v1, vcc, 1, v0
+; CISI-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
+; CISI-NEXT:    v_add_i32_e32 v2, vcc, 1, v0
 ; CISI-NEXT:    s_cmp_ge_u32 s0, s2
 ; CISI-NEXT:    s_cselect_b64 vcc, -1, 0
-; CISI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; CISI-NEXT:    v_mov_b32_e32 v1, 0
+; CISI-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
 ; CISI-NEXT:  .LBB16_3: ; %.split
 ; CISI-NEXT:    s_mov_b32 s11, 0xf000
 ; CISI-NEXT:    s_mov_b32 s10, -1
@@ -2784,20 +2784,20 @@ define amdgpu_kernel void @sudiv64(ptr addrspace(1) %out, i64 %x, i64 %y) {
 ; VI-NEXT:    v_mul_hi_u32 v1, v0, v1
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, v0, v1
 ; VI-NEXT:    v_mul_hi_u32 v0, s2, v0
+; VI-NEXT:    v_mov_b32_e32 v1, 0
 ; VI-NEXT:    v_readfirstlane_b32 s3, v0
 ; VI-NEXT:    s_mul_i32 s3, s3, s4
 ; VI-NEXT:    s_sub_i32 s2, s2, s3
 ; VI-NEXT:    s_sub_i32 s3, s2, s4
-; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
+; VI-NEXT:    v_add_u32_e32 v2, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s2, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
 ; VI-NEXT:    s_cselect_b32 s2, s3, s2
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; VI-NEXT:    v_add_u32_e32 v1, vcc, 1, v0
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
+; VI-NEXT:    v_add_u32_e32 v2, vcc, 1, v0
 ; VI-NEXT:    s_cmp_ge_u32 s2, s4
 ; VI-NEXT:    s_cselect_b64 vcc, -1, 0
-; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v1, vcc
-; VI-NEXT:    v_mov_b32_e32 v1, 0
+; VI-NEXT:    v_cndmask_b32_e32 v0, v0, v2, vcc
 ; VI-NEXT:    s_branch .LBB16_5
 ; VI-NEXT:  .LBB16_3:
 ; VI-NEXT:    ; implicit-def: $sgpr8_sgpr9

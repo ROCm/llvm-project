@@ -214,9 +214,9 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_select(fl
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX9-NEXT:    v_cmp_lt_f32_e32 vcc, 0, v0
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, 0, v0, vcc
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 31, v1
 ; GFX9-NEXT:    s_brev_b32 s4, -2
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, 0, v0, vcc
 ; GFX9-NEXT:    v_bfi_b32 v0, s4, v0, v1
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %x.ule.0 = fcmp ule float %x.arg, 0.0
@@ -239,18 +239,18 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_known_positive_nnan_nsz_
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 31, v1
 ; GFX9-NEXT:    v_add_u32_e32 v3, -1, v2
 ; GFX9-NEXT:    v_fma_f32 v4, -v3, v2, v0
+; GFX9-NEXT:    v_add_u32_e32 v5, 1, v2
+; GFX9-NEXT:    v_fma_f32 v6, -v5, v2, v0
 ; GFX9-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v4
-; GFX9-NEXT:    v_add_u32_e32 v4, 1, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, v2, v3, s[4:5]
-; GFX9-NEXT:    v_fma_f32 v2, -v4, v2, v0
-; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v2, v3, v4, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[4:5]
+; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v6
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v5, s[4:5]
 ; GFX9-NEXT:    v_mul_f32_e32 v3, 0x37800000, v2
 ; GFX9-NEXT:    v_cndmask_b32_e32 v2, v2, v3, vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v3, 0x260
 ; GFX9-NEXT:    v_cmp_class_f32_e32 vcc, v0, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    s_brev_b32 s4, -2
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    v_bfi_b32 v0, s4, v0, v1
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %x = call nnan nsz float @llvm.sqrt.f32(float %x.arg)
@@ -272,18 +272,18 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nsz_sqrt
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 31, v1
 ; GFX9-NEXT:    v_add_u32_e32 v3, -1, v2
 ; GFX9-NEXT:    v_fma_f32 v4, -v3, v2, v0
+; GFX9-NEXT:    v_add_u32_e32 v5, 1, v2
+; GFX9-NEXT:    v_fma_f32 v6, -v5, v2, v0
 ; GFX9-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v4
-; GFX9-NEXT:    v_add_u32_e32 v4, 1, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, v2, v3, s[4:5]
-; GFX9-NEXT:    v_fma_f32 v2, -v4, v2, v0
-; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v2, v3, v4, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[4:5]
+; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v6
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v5, s[4:5]
 ; GFX9-NEXT:    v_mul_f32_e32 v3, 0x37800000, v2
 ; GFX9-NEXT:    v_cndmask_b32_e32 v2, v2, v3, vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v3, 0x260
 ; GFX9-NEXT:    v_cmp_class_f32_e32 vcc, v0, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    s_brev_b32 s4, -2
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    v_bfi_b32 v0, s4, v0, v1
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %x = call nsz float @llvm.sqrt.f32(float %x.arg)
@@ -305,18 +305,18 @@ define float @copysign_f32_f32_sign_known_p0_or_n0__mag_almost_positive_nnan_sqr
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 31, v1
 ; GFX9-NEXT:    v_add_u32_e32 v3, -1, v2
 ; GFX9-NEXT:    v_fma_f32 v4, -v3, v2, v0
+; GFX9-NEXT:    v_add_u32_e32 v5, 1, v2
+; GFX9-NEXT:    v_fma_f32 v6, -v5, v2, v0
 ; GFX9-NEXT:    v_cmp_ge_f32_e64 s[4:5], 0, v4
-; GFX9-NEXT:    v_add_u32_e32 v4, 1, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v3, v2, v3, s[4:5]
-; GFX9-NEXT:    v_fma_f32 v2, -v4, v2, v0
-; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v2
-; GFX9-NEXT:    v_cndmask_b32_e64 v2, v3, v4, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v3, s[4:5]
+; GFX9-NEXT:    v_cmp_lt_f32_e64 s[4:5], 0, v6
+; GFX9-NEXT:    v_cndmask_b32_e64 v2, v2, v5, s[4:5]
 ; GFX9-NEXT:    v_mul_f32_e32 v3, 0x37800000, v2
 ; GFX9-NEXT:    v_cndmask_b32_e32 v2, v2, v3, vcc
 ; GFX9-NEXT:    v_mov_b32_e32 v3, 0x260
 ; GFX9-NEXT:    v_cmp_class_f32_e32 vcc, v0, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    s_brev_b32 s4, -2
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v2, v0, vcc
 ; GFX9-NEXT:    v_bfi_b32 v0, s4, v0, v1
 ; GFX9-NEXT:    s_setpc_b64 s[30:31]
   %x = call nnan float @llvm.sqrt.f32(float %x.arg)

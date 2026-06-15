@@ -1135,13 +1135,13 @@ define amdgpu_kernel void @test_div_fmas_f32_logical_cond_to_vcc(ptr addrspace(1
 ; GFX8-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
 ; GFX8-NEXT:    v_add_u32_e32 v3, vcc, 4, v1
 ; GFX8-NEXT:    v_addc_u32_e32 v4, vcc, 0, v2, vcc
-; GFX8-NEXT:    v_add_u32_e32 v5, vcc, 8, v1
-; GFX8-NEXT:    v_addc_u32_e32 v6, vcc, 0, v2, vcc
+; GFX8-NEXT:    flat_load_dword v5, v[1:2] glc
+; GFX8-NEXT:    s_waitcnt vmcnt(0)
+; GFX8-NEXT:    v_add_u32_e32 v1, vcc, 8, v1
+; GFX8-NEXT:    v_addc_u32_e32 v2, vcc, 0, v2, vcc
+; GFX8-NEXT:    flat_load_dword v3, v[3:4] glc
+; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    flat_load_dword v1, v[1:2] glc
-; GFX8-NEXT:    s_waitcnt vmcnt(0)
-; GFX8-NEXT:    flat_load_dword v2, v[3:4] glc
-; GFX8-NEXT:    s_waitcnt vmcnt(0)
-; GFX8-NEXT:    flat_load_dword v3, v[5:6] glc
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_add_u32 s0, s0, 8
 ; GFX8-NEXT:    s_addc_u32 s1, s1, 0
@@ -1150,7 +1150,7 @@ define amdgpu_kernel void @test_div_fmas_f32_logical_cond_to_vcc(ptr addrspace(1
 ; GFX8-NEXT:    s_cselect_b64 s[2:3], exec, 0
 ; GFX8-NEXT:    s_and_b64 vcc, vcc, s[2:3]
 ; GFX8-NEXT:    s_nop 1
-; GFX8-NEXT:    v_div_fmas_f32 v2, v1, v2, v3
+; GFX8-NEXT:    v_div_fmas_f32 v2, v5, v3, v1
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s1
 ; GFX8-NEXT:    flat_store_dword v[0:1], v2

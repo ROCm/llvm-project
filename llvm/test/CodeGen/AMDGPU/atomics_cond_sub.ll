@@ -201,13 +201,13 @@ define amdgpu_kernel void @global_atomic_usub_cond_rtn_u32(ptr addrspace(1) %add
 ; GFX12-GISEL-NEXT:    s_load_b96 s[0:2], s[4:5], 0x24
 ; GFX12-GISEL-NEXT:    s_load_b64 s[4:5], s[4:5], 0x34
 ; GFX12-GISEL-NEXT:    s_wait_kmcnt 0x0
-; GFX12-GISEL-NEXT:    v_dual_mov_b32 v1, 0 :: v_dual_mov_b32 v0, s2
+; GFX12-GISEL-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v1, s2
 ; GFX12-GISEL-NEXT:    global_wb scope:SCOPE_SYS
 ; GFX12-GISEL-NEXT:    s_wait_storecnt 0x0
-; GFX12-GISEL-NEXT:    global_atomic_cond_sub_u32 v0, v1, v0, s[0:1] offset:16 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
+; GFX12-GISEL-NEXT:    global_atomic_cond_sub_u32 v1, v0, v1, s[0:1] offset:16 th:TH_ATOMIC_RETURN scope:SCOPE_SYS
 ; GFX12-GISEL-NEXT:    s_wait_loadcnt 0x0
 ; GFX12-GISEL-NEXT:    global_inv scope:SCOPE_SYS
-; GFX12-GISEL-NEXT:    global_store_b32 v1, v0, s[4:5]
+; GFX12-GISEL-NEXT:    global_store_b32 v0, v1, s[4:5]
 ; GFX12-GISEL-NEXT:    s_endpgm
 entry:
   %gep = getelementptr i32, ptr addrspace(1) %addr, i32 4

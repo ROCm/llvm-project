@@ -186,11 +186,11 @@ define amdgpu_kernel void @workgroup_id_xyz(ptr addrspace(1) %ptrx, ptr addrspac
 ; GFX9-NEXT:    v_mov_b32_e32 v0, ttmp9
 ; GFX9-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX9-NEXT:    s_and_b32 s6, ttmp7, 0xffff
+; GFX9-NEXT:    v_mov_b32_e32 v2, s6
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    global_store_dword v1, v0, s[0:1]
-; GFX9-NEXT:    v_mov_b32_e32 v0, s6
+; GFX9-NEXT:    global_store_dword v1, v2, s[2:3]
 ; GFX9-NEXT:    s_lshr_b32 s0, ttmp7, 16
-; GFX9-NEXT:    global_store_dword v1, v0, s[2:3]
 ; GFX9-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX9-NEXT:    global_store_dword v1, v0, s[4:5]
 ; GFX9-NEXT:    s_endpgm

@@ -33,14 +33,14 @@ define amdgpu_kernel void @v_omod_div2_f32_enable_ieee_signed_zeros(ptr addrspac
 ; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-NEXT:    flat_load_dword v3, v[0:1]
+; VI-NEXT:    flat_load_dword v0, v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_waitcnt vmcnt(0)
+; VI-NEXT:    v_add_f32_e32 v0, 1.0, v0
+; VI-NEXT:    v_mul_f32_e32 v3, 0.5, v0
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_add_f32_e32 v2, 1.0, v3
-; VI-NEXT:    v_mul_f32_e32 v2, 0.5, v2
-; VI-NEXT:    flat_store_dword v[0:1], v2
+; VI-NEXT:    flat_store_dword v[0:1], v3
 ; VI-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: v_omod_div2_f32_enable_ieee_signed_zeros:
@@ -181,14 +181,14 @@ define amdgpu_kernel void @v_omod_div2_f32_enable_ieee_nsz(ptr addrspace(1) %out
 ; VI-NEXT:    v_mov_b32_e32 v1, s3
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s2, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-NEXT:    flat_load_dword v3, v[0:1]
+; VI-NEXT:    flat_load_dword v0, v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v1, s1
+; VI-NEXT:    s_waitcnt vmcnt(0)
+; VI-NEXT:    v_add_f32_e32 v0, 1.0, v0
+; VI-NEXT:    v_mul_f32_e32 v3, 0.5, v0
 ; VI-NEXT:    v_add_u32_e32 v0, vcc, s0, v2
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
-; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    v_add_f32_e32 v2, 1.0, v3
-; VI-NEXT:    v_mul_f32_e32 v2, 0.5, v2
-; VI-NEXT:    flat_store_dword v[0:1], v2
+; VI-NEXT:    flat_store_dword v[0:1], v3
 ; VI-NEXT:    s_endpgm
 ;
 ; GFX11-LABEL: v_omod_div2_f32_enable_ieee_nsz:

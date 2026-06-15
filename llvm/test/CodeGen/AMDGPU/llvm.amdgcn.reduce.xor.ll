@@ -51,15 +51,15 @@ define amdgpu_kernel void @uniform_value_i16(ptr addrspace(1) %out, i16 %in) {
 ;
 ; GFX9DAGISEL-LABEL: uniform_value_i16:
 ; GFX9DAGISEL:       ; %bb.0: ; %entry
-; GFX9DAGISEL-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GFX9DAGISEL-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GFX9DAGISEL-NEXT:    s_load_dword s6, s[4:5], 0x2c
 ; GFX9DAGISEL-NEXT:    s_mov_b64 s[2:3], exec
 ; GFX9DAGISEL-NEXT:    s_bcnt1_i32_b64 s2, s[2:3]
 ; GFX9DAGISEL-NEXT:    s_and_b32 s2, s2, 1
+; GFX9DAGISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX9DAGISEL-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9DAGISEL-NEXT:    s_and_b32 s3, s6, 0xffff
 ; GFX9DAGISEL-NEXT:    s_mul_i32 s2, s3, s2
-; GFX9DAGISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX9DAGISEL-NEXT:    v_mov_b32_e32 v1, s2
 ; GFX9DAGISEL-NEXT:    global_store_short v0, v1, s[0:1]
 ; GFX9DAGISEL-NEXT:    s_endpgm

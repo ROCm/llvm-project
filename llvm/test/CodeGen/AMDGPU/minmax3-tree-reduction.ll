@@ -74,10 +74,10 @@ define float @v_maximum3_tree4_f32(float %a, float %b, float %c, float %d) {
 ; GFX9-NEXT:    v_max_f32_e32 v4, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v5, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v6, v2, v3
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v5, v1, vcc
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v5, v6, vcc
 ; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v5, v2, vcc
@@ -105,22 +105,22 @@ define float @v_maximum3_tree8_f32(float %a, float %b, float %c, float %d,
 ; GFX9-NEXT:    v_max_f32_e32 v8, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v9, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v10, v2, v3
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v9, v8, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v9, v1, vcc
-; GFX9-NEXT:    v_max_f32_e32 v2, v4, v5
+; GFX9-NEXT:    v_max_f32_e32 v11, v4, v5
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v9, v10, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v4, v5
-; GFX9-NEXT:    v_cndmask_b32_e32 v2, v9, v2, vcc
-; GFX9-NEXT:    v_max_f32_e32 v3, v6, v7
+; GFX9-NEXT:    v_max_f32_e32 v12, v6, v7
+; GFX9-NEXT:    v_cndmask_b32_e32 v3, v9, v11, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v6, v7
-; GFX9-NEXT:    v_cndmask_b32_e32 v3, v9, v3, vcc
-; GFX9-NEXT:    v_max_f32_e32 v4, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
+; GFX9-NEXT:    v_cndmask_b32_e32 v4, v9, v12, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v9, v4, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v9, v1, vcc
+; GFX9-NEXT:    v_max_f32_e32 v5, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v9, v2, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v9, v5, vcc
 ; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v9, v2, vcc
@@ -155,10 +155,10 @@ define float @v_minimum3_tree4_f32(float %a, float %b, float %c, float %d) {
 ; GFX9-NEXT:    v_min_f32_e32 v4, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v5, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
+; GFX9-NEXT:    v_min_f32_e32 v6, v2, v3
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v5, v4, vcc
-; GFX9-NEXT:    v_min_f32_e32 v1, v2, v3
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v5, v1, vcc
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v5, v6, vcc
 ; GFX9-NEXT:    v_min_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v5, v2, vcc
@@ -211,46 +211,46 @@ define float @v_maximum3_tree16_f32(float %a, float %b, float %c, float %d,
 ; GFX9-NEXT:    v_max_f32_e32 v16, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v17, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v16, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v17, v1, vcc
-; GFX9-NEXT:    v_max_f32_e32 v2, v4, v5
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v4, v5
-; GFX9-NEXT:    v_cndmask_b32_e32 v2, v17, v2, vcc
-; GFX9-NEXT:    v_max_f32_e32 v3, v6, v7
+; GFX9-NEXT:    v_max_f32_e32 v0, v2, v3
+; GFX9-NEXT:    v_cmp_o_f32_e64 s[4:5], v2, v3
+; GFX9-NEXT:    v_max_f32_e32 v2, v6, v7
+; GFX9-NEXT:    v_cndmask_b32_e32 v16, v17, v16, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v6, v7
-; GFX9-NEXT:    v_cndmask_b32_e32 v3, v17, v3, vcc
-; GFX9-NEXT:    v_max_f32_e32 v4, v8, v9
+; GFX9-NEXT:    v_max_f32_e32 v3, v8, v9
+; GFX9-NEXT:    v_cndmask_b32_e32 v2, v17, v2, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v8, v9
-; GFX9-NEXT:    v_cndmask_b32_e32 v4, v17, v4, vcc
-; GFX9-NEXT:    v_max_f32_e32 v5, v10, v11
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v10, v11
-; GFX9-NEXT:    v_cndmask_b32_e32 v5, v17, v5, vcc
-; GFX9-NEXT:    v_max_f32_e32 v6, v12, v13
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v12, v13
-; GFX9-NEXT:    v_cndmask_b32_e32 v6, v17, v6, vcc
-; GFX9-NEXT:    v_max_f32_e32 v7, v14, v15
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v14, v15
-; GFX9-NEXT:    v_cndmask_b32_e32 v7, v17, v7, vcc
-; GFX9-NEXT:    v_max_f32_e32 v8, v0, v1
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v8, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v17, v1, vcc
-; GFX9-NEXT:    v_max_f32_e32 v2, v4, v5
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v4, v5
-; GFX9-NEXT:    v_cndmask_b32_e32 v2, v17, v2, vcc
-; GFX9-NEXT:    v_max_f32_e32 v3, v6, v7
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v6, v7
+; GFX9-NEXT:    v_max_f32_e32 v1, v4, v5
+; GFX9-NEXT:    v_cmp_o_f32_e64 s[6:7], v4, v5
+; GFX9-NEXT:    v_max_f32_e32 v4, v10, v11
 ; GFX9-NEXT:    v_cndmask_b32_e32 v3, v17, v3, vcc
-; GFX9-NEXT:    v_max_f32_e32 v4, v0, v1
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v10, v11
+; GFX9-NEXT:    v_max_f32_e32 v5, v12, v13
+; GFX9-NEXT:    v_cndmask_b32_e32 v4, v17, v4, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v12, v13
+; GFX9-NEXT:    v_max_f32_e32 v18, v14, v15
+; GFX9-NEXT:    v_cndmask_b32_e64 v0, v17, v0, s[4:5]
+; GFX9-NEXT:    v_cndmask_b32_e32 v5, v17, v5, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v14, v15
+; GFX9-NEXT:    v_max_f32_e32 v19, v16, v0
+; GFX9-NEXT:    v_cndmask_b32_e64 v1, v17, v1, s[6:7]
+; GFX9-NEXT:    v_cndmask_b32_e32 v8, v17, v18, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v16, v0
+; GFX9-NEXT:    v_max_f32_e32 v6, v1, v2
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v19, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v1, v2
+; GFX9-NEXT:    v_max_f32_e32 v7, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v17, v6, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v3, v4
+; GFX9-NEXT:    v_max_f32_e32 v9, v5, v8
+; GFX9-NEXT:    v_cndmask_b32_e32 v3, v17, v7, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v5, v8
+; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
+; GFX9-NEXT:    v_cndmask_b32_e32 v4, v17, v9, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v4, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v17, v1, vcc
+; GFX9-NEXT:    v_max_f32_e32 v5, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v2, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v17, v5, vcc
 ; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v17, v2, vcc
@@ -300,10 +300,10 @@ define float @v_maximum3_tree_unbalanced_f32(float %a, float %b, float %c, float
 ; GFX9-NEXT:    v_max_f32_e32 v5, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v6, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v7, v2, v3
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v6, v5, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v6, v1, vcc
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v6, v7, vcc
 ; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v6, v2, vcc
@@ -368,22 +368,22 @@ define float @v_maximum3_tree8_asymmetric_use(float %a, float %b, float %c, floa
 ; GFX9-NEXT:    v_max_f32_e32 v10, v0, v1
 ; GFX9-NEXT:    v_mov_b32_e32 v11, 0x7fc00000
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v12, v2, v3
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v11, v10, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v11, v1, vcc
-; GFX9-NEXT:    v_max_f32_e32 v2, v4, v5
+; GFX9-NEXT:    v_max_f32_e32 v13, v4, v5
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v11, v12, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v4, v5
-; GFX9-NEXT:    v_cndmask_b32_e32 v2, v11, v2, vcc
-; GFX9-NEXT:    v_max_f32_e32 v3, v6, v7
+; GFX9-NEXT:    v_max_f32_e32 v14, v6, v7
+; GFX9-NEXT:    v_cndmask_b32_e32 v3, v11, v13, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v6, v7
-; GFX9-NEXT:    v_cndmask_b32_e32 v3, v11, v3, vcc
-; GFX9-NEXT:    v_max_f32_e32 v4, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
+; GFX9-NEXT:    v_cndmask_b32_e32 v4, v11, v14, vcc
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v0, v11, v4, vcc
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v3
-; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v2, v3
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v11, v1, vcc
+; GFX9-NEXT:    v_max_f32_e32 v5, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v0, v11, v2, vcc
+; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v3, v4
+; GFX9-NEXT:    v_cndmask_b32_e32 v1, v11, v5, vcc
 ; GFX9-NEXT:    v_max_f32_e32 v2, v0, v1
 ; GFX9-NEXT:    v_cmp_o_f32_e32 vcc, v0, v1
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v11, v2, vcc
@@ -490,26 +490,26 @@ define bfloat @v_no_max3_maxnum_tree4_bf16(bfloat %a, bfloat %b, bfloat %c, bflo
 ; GFX9-LABEL: v_no_max3_maxnum_tree4_bf16:
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX9-NEXT:    v_lshlrev_b32_e32 v3, 16, v3
+; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 16, v1
 ; GFX9-NEXT:    v_lshlrev_b32_e32 v0, 16, v0
+; GFX9-NEXT:    v_max_f32_e32 v2, v2, v3
 ; GFX9-NEXT:    v_max_f32_e32 v0, v0, v1
-; GFX9-NEXT:    v_bfe_u32 v1, v0, 16, 1
 ; GFX9-NEXT:    s_movk_i32 s4, 0x7fff
+; GFX9-NEXT:    v_bfe_u32 v3, v2, 16, 1
+; GFX9-NEXT:    v_bfe_u32 v1, v0, 16, 1
+; GFX9-NEXT:    v_add3_u32 v3, v3, v2, s4
+; GFX9-NEXT:    v_or_b32_e32 v5, 0x400000, v2
+; GFX9-NEXT:    v_cmp_u_f32_e32 vcc, v2, v2
 ; GFX9-NEXT:    v_add3_u32 v1, v1, v0, s4
 ; GFX9-NEXT:    v_or_b32_e32 v4, 0x400000, v0
+; GFX9-NEXT:    v_cndmask_b32_e32 v2, v3, v5, vcc
 ; GFX9-NEXT:    v_cmp_u_f32_e32 vcc, v0, v0
 ; GFX9-NEXT:    v_cndmask_b32_e32 v0, v1, v4, vcc
-; GFX9-NEXT:    v_lshlrev_b32_e32 v1, 16, v3
-; GFX9-NEXT:    v_lshlrev_b32_e32 v2, 16, v2
-; GFX9-NEXT:    v_max_f32_e32 v1, v2, v1
-; GFX9-NEXT:    v_bfe_u32 v2, v1, 16, 1
-; GFX9-NEXT:    v_add3_u32 v2, v2, v1, s4
-; GFX9-NEXT:    v_or_b32_e32 v3, 0x400000, v1
-; GFX9-NEXT:    v_cmp_u_f32_e32 vcc, v1, v1
-; GFX9-NEXT:    v_cndmask_b32_e32 v1, v2, v3, vcc
-; GFX9-NEXT:    v_and_b32_e32 v1, 0xffff0000, v1
+; GFX9-NEXT:    v_and_b32_e32 v2, 0xffff0000, v2
 ; GFX9-NEXT:    v_and_b32_e32 v0, 0xffff0000, v0
-; GFX9-NEXT:    v_max_f32_e32 v0, v0, v1
+; GFX9-NEXT:    v_max_f32_e32 v0, v0, v2
 ; GFX9-NEXT:    v_bfe_u32 v1, v0, 16, 1
 ; GFX9-NEXT:    v_add3_u32 v1, v1, v0, s4
 ; GFX9-NEXT:    v_or_b32_e32 v2, 0x400000, v0

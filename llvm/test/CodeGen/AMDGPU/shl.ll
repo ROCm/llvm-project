@@ -667,16 +667,16 @@ define amdgpu_kernel void @shl_v4i16(ptr addrspace(1) %out, ptr addrspace(1) %in
 ; VI-NEXT:    v_addc_u32_e32 v1, vcc, 0, v1, vcc
 ; VI-NEXT:    flat_load_dwordx4 v[0:3], v[0:1]
 ; VI-NEXT:    v_mov_b32_e32 v5, s1
-; VI-NEXT:    v_add_u32_e32 v4, vcc, s0, v4
-; VI-NEXT:    v_addc_u32_e32 v5, vcc, 0, v5, vcc
 ; VI-NEXT:    s_waitcnt vmcnt(0)
 ; VI-NEXT:    v_lshlrev_b16_e32 v6, v3, v1
 ; VI-NEXT:    v_lshlrev_b16_sdwa v1, v3, v1 dst_sel:WORD_1 dst_unused:UNUSED_PAD src0_sel:WORD_1 src1_sel:WORD_1
 ; VI-NEXT:    v_lshlrev_b16_e32 v3, v2, v0
 ; VI-NEXT:    v_lshlrev_b16_sdwa v0, v2, v0 dst_sel:WORD_1 dst_unused:UNUSED_PAD src0_sel:WORD_1 src1_sel:WORD_1
+; VI-NEXT:    v_add_u32_e32 v2, vcc, s0, v4
 ; VI-NEXT:    v_or_b32_e32 v1, v6, v1
 ; VI-NEXT:    v_or_b32_e32 v0, v3, v0
-; VI-NEXT:    flat_store_dwordx2 v[4:5], v[0:1]
+; VI-NEXT:    v_addc_u32_e32 v3, vcc, 0, v5, vcc
+; VI-NEXT:    flat_store_dwordx2 v[2:3], v[0:1]
 ; VI-NEXT:    s_endpgm
 ;
 ; EG-LABEL: shl_v4i16:
