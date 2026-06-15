@@ -391,6 +391,10 @@ typedef enum amd_comgr_data_kind_s {
    * The data is a fat binary (clang-offload-bundler output).
    */
   AMD_COMGR_DATA_KIND_FATBIN = 0x10,
+    /**
+   * The data is an llvm-offload-binary package.
+   */
+  AMD_COMGR_DATA_KIND_PACKAGE = 0xA,
   /**
    * The data is an archive.
    */
@@ -412,13 +416,9 @@ typedef enum amd_comgr_data_kind_s {
    */
   AMD_COMGR_DATA_KIND_SPIRV = 0x15,
   /**
-   * The data is an llvm-offload-binary package.
-   */
-  AMD_COMGR_DATA_KIND_PACKAGE = 0x16,
-  /**
    * Marker for last valid data kind.
    */
-  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_PACKAGE
+  AMD_COMGR_DATA_KIND_LAST = AMD_COMGR_DATA_KIND_SPIRV
 } amd_comgr_data_kind_t;
 
 /**
@@ -2007,6 +2007,20 @@ typedef enum amd_comgr_action_kind_s {
    */
   AMD_COMGR_ACTION_COMPILE_SPIRV_TO_RELOCATABLE = 0x10,
 
+
+  /**
+   * Unpackage each source data object in @p input. For each successful
+   * unpackaging, add a bc object or archive object to @p result, depending on
+   * the corresponding input.
+   *
+   * Return @p AMD_COMGR_STATUS_ERROR if any unpackaging
+   * fails.
+   *
+   * Return @p AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT
+   * if @p is not a package.
+   */
+  AMD_COMGR_ACTION_UNPACKAGE = 0x11,
+
    /**
    * Translate each source SPIR-V object in @p input into LLVM IR Bitcode.
    * For each successful translation, add a bc object to @p result.
@@ -2037,22 +2051,9 @@ typedef enum amd_comgr_action_kind_s {
   AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV = 0x14,
 
   /**
-   * Unpackage each source data object in @p input. For each successful
-   * unpackaging, add a bc object or archive object to @p result, depending on
-   * the corresponding input.
-   *
-   * Return @p AMD_COMGR_STATUS_ERROR if any unpackaging
-   * fails.
-   *
-   * Return @p AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT
-   * if @p is not a package.
-   */
-  AMD_COMGR_ACTION_UNPACKAGE = 0x15,
-
-  /**
    * Marker for last valid action kind.
    */
-  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_UNPACKAGE
+  AMD_COMGR_ACTION_LAST = AMD_COMGR_ACTION_COMPILE_SOURCE_TO_SPIRV
 } amd_comgr_action_kind_t;
 
 /**
