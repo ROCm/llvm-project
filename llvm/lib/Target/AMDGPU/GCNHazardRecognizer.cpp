@@ -895,15 +895,21 @@ int GCNHazardRecognizer::createsVALUHazard(const MachineInstr &MI) const {
     // (like wbinvl1)
     if (VDataIdx == -1)
       return -1;
-    // For MUBUF/MTBUF instructions this hazard only exists if the
-    // instruction is not using a register in the soffset field.
-    const MachineOperand *SOffset =
-        TII->getNamedOperand(MI, AMDGPU::OpName::soffset);
-    // If we have no soffset operand, then assume this field has been
-    // hardcoded to zero.
-    if (AMDGPU::getRegBitWidth(VDataRCID) > 64 &&
-        (!SOffset || !SOffset->isReg()))
-      return VDataIdx;
+    if (AMDGPU::getRegBitWidth(VDataRCID) > 64) {
+      // On gfx940+ the BUFFER_STORE source-vgpr WAR hazard exists
+      // regardless of soffset. Empirically a buffer_store_dwordx4 followed
+      // in the next VALU cycle by a 64-bit packed write (e.g. v_pk_mul_f32)
+      // to two of its source vgprs commits the post-write bytes to memory
+      // for one of the dwords on gfx940/gfx950, so the hazard recognizer
+      // needs to insert a 2-cycle bubble in that case as well.
+      if (ST.hasGFX940Insts())
+        return VDataIdx;
+      // Pre-gfx940: this hazard only exists when SOFFSET is literal/absent.
+      const MachineOperand *SOffset =
+          TII->getNamedOperand(MI, AMDGPU::OpName::soffset);
+      if (!SOffset || !SOffset->isReg())
+        return VDataIdx;
+    }
   }
 
   // MIMG instructions create a hazard if they don't use a 256-bit T# and
