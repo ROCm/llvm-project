@@ -280,11 +280,18 @@ jobs:
              git config --global user.name "Z1 cciauto"
              cd compiler/amd-llvm
              git fetch origin pull/2719/head:pr-2719
-             git cherry-pick pr-2719
+             if ! git cherry-pick pr-2719; then
+               mapfile -t _conflicts < <(git diff --name-only --diff-filter=U)
+               for f in "${_conflicts[@]}"; do
+                 git checkout --theirs -- "$f"
+                 git add -- "$f"
+               done
+               GIT_EDITOR=true git cherry-pick --continue
+             fi
              cd ../..
              git add compiler/amd-llvm
-             git commit -m "Update amd-llvm submodule with PR 2719"
-       
+             git commit -m "Update amd-llvm submodule with PR 2719"             
+ 
       - name: TheRock and llvm SHA
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         run: |
