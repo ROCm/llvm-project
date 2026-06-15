@@ -359,7 +359,6 @@ define amdgpu_kernel void @test_loop_with_if(ptr addrspace(1) %arg) #0 {
 ; GFX1032:       ; %bb.0: ; %bb
 ; GFX1032-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1032-NEXT:    v_mov_b32_e32 v1, 0
-; GFX1032-NEXT:    s_mov_b32 s2, -1
 ; GFX1032-NEXT:    s_mov_b32 s3, 0
 ; GFX1032-NEXT:    s_mov_b32 s2, 0
 ; GFX1032-NEXT:    s_branch .LBB10_2
@@ -429,7 +428,6 @@ define amdgpu_kernel void @test_loop_with_if(ptr addrspace(1) %arg) #0 {
 ; GFX1064:       ; %bb.0: ; %bb
 ; GFX1064-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX1064-NEXT:    v_mov_b32_e32 v1, 0
-; GFX1064-NEXT:    s_mov_b64 s[2:3], -1
 ; GFX1064-NEXT:    s_mov_b64 s[4:5], 0
 ; GFX1064-NEXT:    s_mov_b64 s[2:3], 0
 ; GFX1064-NEXT:    s_branch .LBB10_2
@@ -1521,28 +1519,27 @@ define amdgpu_kernel void @test_invert_true_phi_cond_break_loop(i32 %arg) #0 {
 ; GFX1032-LABEL: test_invert_true_phi_cond_break_loop:
 ; GFX1032:       ; %bb.0: ; %bb
 ; GFX1032-NEXT:    s_load_dword s0, s[4:5], 0x24
-; GFX1032-NEXT:    s_mov_b32 s1, -1
-; GFX1032-NEXT:    s_mov_b32 s1, 0
+; GFX1032-NEXT:    ; implicit-def: $sgpr1
 ; GFX1032-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX1032-NEXT:    v_subrev_nc_u32_e32 v0, s0, v0
 ; GFX1032-NEXT:    s_mov_b32 s0, -1
 ; GFX1032-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s0
-; GFX1032-NEXT:    ; implicit-def: $sgpr0
+; GFX1032-NEXT:    s_mov_b32 s0, 0
 ; GFX1032-NEXT:    s_branch .LBB27_2
 ; GFX1032-NEXT:  .LBB27_1: ; %Flow
 ; GFX1032-NEXT:    ; in Loop: Header=BB27_2 Depth=1
 ; GFX1032-NEXT:    v_cmp_ne_u32_e32 vcc_lo, 0, v2
-; GFX1032-NEXT:    s_add_i32 s0, s0, 1
+; GFX1032-NEXT:    s_add_i32 s1, s1, 1
 ; GFX1032-NEXT:    s_xor_b32 s2, exec_lo, vcc_lo
 ; GFX1032-NEXT:    s_and_b32 s2, s2, exec_lo
-; GFX1032-NEXT:    s_or_b32 s1, s1, s2
+; GFX1032-NEXT:    s_or_b32 s0, s0, s2
 ; GFX1032-NEXT:    s_mov_b32 exec_lo, vcc_lo
 ; GFX1032-NEXT:    ; divergent control-flow edge
 ; GFX1032-NEXT:    s_cbranch_execz .LBB27_4
 ; GFX1032-NEXT:  .LBB27_2: ; %bb1
 ; GFX1032-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX1032-NEXT:    v_mov_b32_e32 v2, v1
-; GFX1032-NEXT:    s_cmp_gt_i32 s0, -1
+; GFX1032-NEXT:    s_cmp_gt_i32 s1, -1
 ; GFX1032-NEXT:    s_cbranch_scc1 .LBB27_1
 ; GFX1032-NEXT:  ; %bb.3: ; %bb4
 ; GFX1032-NEXT:    ; in Loop: Header=BB27_2 Depth=1
@@ -1552,7 +1549,7 @@ define amdgpu_kernel void @test_invert_true_phi_cond_break_loop(i32 %arg) #0 {
 ; GFX1032-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc_lo
 ; GFX1032-NEXT:    s_branch .LBB27_1
 ; GFX1032-NEXT:  .LBB27_4: ; %bb9
-; GFX1032-NEXT:    s_or_b32 exec_lo, exec_lo, s1
+; GFX1032-NEXT:    s_or_b32 exec_lo, exec_lo, s0
 ; GFX1032-NEXT:    v_mov_b32_e32 v0, 7
 ; GFX1032-NEXT:    s_waitcnt_vscnt null, 0x0
 ; GFX1032-NEXT:    ds_write_b32 v0, v0
@@ -1566,7 +1563,6 @@ define amdgpu_kernel void @test_invert_true_phi_cond_break_loop(i32 %arg) #0 {
 ; GFX1064-NEXT:    v_subrev_nc_u32_e32 v0, s0, v0
 ; GFX1064-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX1064-NEXT:    v_cndmask_b32_e64 v1, 0, -1, s[0:1]
-; GFX1064-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX1064-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX1064-NEXT:    s_branch .LBB27_2
 ; GFX1064-NEXT:  .LBB27_1: ; %Flow

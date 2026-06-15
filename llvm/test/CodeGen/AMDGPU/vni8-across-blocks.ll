@@ -690,7 +690,6 @@ define amdgpu_kernel void @v32i8_loop_carried(ptr addrspace(1) %src1, ptr addrsp
 ; GFX942-NEXT:    s_mov_b32 s2, 0x2000604
 ; GFX942-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX942-NEXT:    global_load_dword v0, v0, s[0:1]
-; GFX942-NEXT:    s_mov_b64 s[0:1], -1
 ; GFX942-NEXT:    v_cndmask_b32_e64 v2, 0, -1, vcc
 ; GFX942-NEXT:    s_mov_b64 s[0:1], 0
 ; GFX942-NEXT:    s_waitcnt vmcnt(0)

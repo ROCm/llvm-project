@@ -175,7 +175,6 @@ define amdgpu_ps < 2 x float> @while_break_two_chains_of_phi(float %v, i32 %x, i
 ; GCN-NEXT:    v_mov_b32_e32 v6, 0
 ; GCN-NEXT:    s_mov_b32 s0, 0
 ; GCN-NEXT:    s_mov_b32 s2, 0
-; GCN-NEXT:    s_mov_b32 s1, -1
 ; GCN-NEXT:  .LBB2_1: ; %header
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    v_cmp_ge_i32_e64 s3, s0, v1

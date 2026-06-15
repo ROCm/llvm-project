@@ -10,7 +10,6 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, -1
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:  .LBB0_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -32,7 +31,6 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX11-FAKE16-LABEL: swap:
 ; GFX11-FAKE16:       ; %bb.0: ; %entry
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, -1
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:  .LBB0_1: ; %loop
 ; GFX11-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -59,7 +57,6 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
-; GFX12-TRUE16-NEXT:    s_mov_b32 s0, -1
 ; GFX12-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-TRUE16-NEXT:  .LBB0_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -86,7 +83,6 @@ define half @swap(half %a, half %b, i32 %i) {
 ; GFX12-FAKE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-FAKE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-FAKE16-NEXT:    s_mov_b32 s0, -1
 ; GFX12-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-FAKE16-NEXT:  .LBB0_1: ; %loop
 ; GFX12-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -129,7 +125,6 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
 ; GFX11-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
-; GFX11-TRUE16-NEXT:    s_mov_b32 s0, -1
 ; GFX11-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -161,7 +156,6 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX11-FAKE16-LABEL: swap_B:
 ; GFX11-FAKE16:       ; %bb.0: ; %entry
 ; GFX11-FAKE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-FAKE16-NEXT:    s_mov_b32 s0, -1
 ; GFX11-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX11-FAKE16-NEXT:  .LBB1_1: ; %loop
 ; GFX11-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -198,7 +192,6 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.h, v0.l
 ; GFX12-TRUE16-NEXT:    v_mov_b16_e32 v0.l, v1.l
-; GFX12-TRUE16-NEXT:    s_mov_b32 s0, -1
 ; GFX12-TRUE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-TRUE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-TRUE16-NEXT:    ; =>This Inner Loop Header: Depth=1
@@ -235,7 +228,6 @@ define half @swap_B(half %a, half %b, half %c, i32 %i) {
 ; GFX12-FAKE16-NEXT:    s_wait_samplecnt 0x0
 ; GFX12-FAKE16-NEXT:    s_wait_bvhcnt 0x0
 ; GFX12-FAKE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-FAKE16-NEXT:    s_mov_b32 s0, -1
 ; GFX12-FAKE16-NEXT:    s_mov_b32 s0, 0
 ; GFX12-FAKE16-NEXT:  .LBB1_1: ; %loop
 ; GFX12-FAKE16-NEXT:    ; =>This Inner Loop Header: Depth=1
