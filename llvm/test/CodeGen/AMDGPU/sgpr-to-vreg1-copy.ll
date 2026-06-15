@@ -28,11 +28,8 @@ define amdgpu_kernel void @copy_to_vreg_1(i32 %0) {
 ; GCN-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GCN-NEXT:    v_cmp_ne_u32_e32 vcc, 0, v4
 ; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 0, v0
-; GCN-NEXT:    s_or_b64 s[0:1], s[0:1], vcc
-; GCN-NEXT:    s_nop 0
-; GCN-NEXT:    v_cndmask_b32_e64 v4, 0, 1, s[0:1]
-; GCN-NEXT:    v_cmp_ne_u32_e64 s[0:1], 1, v4
-; GCN-NEXT:    s_xor_b64 s[6:7], s[0:1], exec
+; GCN-NEXT:    s_or_b64 s[6:7], s[0:1], vcc
+; GCN-NEXT:    s_xor_b64 s[0:1], s[6:7], exec
 ; GCN-NEXT:    s_xor_b64 s[4:5], exec, s[6:7]
 ; GCN-NEXT:    s_and_b64 s[4:5], s[4:5], exec
 ; GCN-NEXT:    s_mov_b64 exec, s[6:7]

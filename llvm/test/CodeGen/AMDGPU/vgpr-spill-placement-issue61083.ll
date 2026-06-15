@@ -22,16 +22,13 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], v1, s4
 ; CHECK-NEXT:    v_mov_b32_e32 v1, 0
 ; CHECK-NEXT:    ds_write_b8 v0, v1
-; CHECK-NEXT:    s_mov_b64 s[6:7], -1
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
-; CHECK-NEXT:    s_and_b64 s[4:5], exec, s[4:5]
+; CHECK-NEXT:    s_xor_b64 s[6:7], exec, s[4:5]
 ; CHECK-NEXT:    ; implicit-def: $vgpr3 : SGPR spill to VGPR lane
-; CHECK-NEXT:    v_writelane_b32 v3, s4, 0
-; CHECK-NEXT:    v_writelane_b32 v3, s5, 1
+; CHECK-NEXT:    v_writelane_b32 v3, s6, 0
+; CHECK-NEXT:    v_writelane_b32 v3, s7, 1
 ; CHECK-NEXT:    s_or_saveexec_b64 s[8:9], -1
 ; CHECK-NEXT:    buffer_store_dword v3, off, s[0:3], 0 offset:4 ; 4-byte Folded Spill
 ; CHECK-NEXT:    s_mov_b64 exec, s[8:9]
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], exec
 ; CHECK-NEXT:    s_mov_b64 exec, s[4:5]
 ; CHECK-NEXT:    ; divergent control-flow edge
 ; CHECK-NEXT:    s_cbranch_execz .LBB0_2
@@ -50,11 +47,10 @@ define amdgpu_kernel void @__omp_offloading_16_dd2df_main_l9()  {
 ; CHECK-NEXT:    v_and_b32_e64 v0, s4, v0
 ; CHECK-NEXT:    s_mov_b32 s4, 0
 ; CHECK-NEXT:    v_cmp_eq_u32_e64 s[4:5], v0, s4
-; CHECK-NEXT:    s_mov_b64 s[6:7], -1
-; CHECK-NEXT:    s_xor_b64 s[4:5], s[4:5], s[6:7]
 ; CHECK-NEXT:    s_and_b64 vcc, exec, s[4:5]
-; CHECK-NEXT:    s_cbranch_vccnz .LBB0_4
-; CHECK-NEXT:  ; %bb.3: ; %bb201
+; CHECK-NEXT:    s_cbranch_vccnz .LBB0_3
+; CHECK-NEXT:    s_branch .LBB0_4
+; CHECK-NEXT:  .LBB0_3: ; %bb201
 ; CHECK-NEXT:    buffer_load_dword v1, off, s[0:3], 0 ; 4-byte Folded Reload
 ; CHECK-NEXT:    s_getpc_b64 s[4:5]
 ; CHECK-NEXT:    s_add_u32 s4, s4, V2@rel32@lo+4
