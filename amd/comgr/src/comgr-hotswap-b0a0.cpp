@@ -44,7 +44,7 @@ namespace hotswap {
 // layer only carries ISA identifiers and register granularity -- no
 // target-specific opcode bits should land here.
 
-static constexpr unsigned Gfx1250MaxVgprs = 256;
+static constexpr unsigned Gfx1250MaxVgprs = 1024;
 // GFX1250 wave32 VGPR ENCODING granularity is 16 (per
 // AMDGPUBaseInfo::getVGPREncodingGranule with Feature1024AddressableVGPRs),
 // not the 8 used by earlier GFX10/11 wave32. Used by ElfView's KD
@@ -52,10 +52,7 @@ static constexpr unsigned Gfx1250MaxVgprs = 256;
 // interpret COMPUTE_PGM_RSRC1.GRANULATED_WORKITEM_VGPR_COUNT.
 // GFX12 wave32: 106 user-addressable SGPRs (s0-s105); s106-s107 are VCC.
 static constexpr unsigned Gfx1250MaxSgprs = 106;
-// SGPR encoding granularity is 8 across all AMDGPU generations
-// (getSGPREncodingGranule in AMDGPUBaseInfo.cpp).
 static constexpr unsigned Gfx1250VgprGranuleSize = 16;
-static constexpr unsigned Gfx1250SgprGranuleSize = 8;
 
 /// Build the default RewriteConfig used for the GFX1250 B0-to-A0 rewrite:
 /// fills in the identity source / target ISA (both gfx1250) and the
@@ -74,7 +71,6 @@ static RewriteConfig makeGfx1250B0A0Config() {
   Config.MaxVgprs = Gfx1250MaxVgprs;
   Config.MaxSgprs = Gfx1250MaxSgprs;
   Config.VgprGranuleSize = Gfx1250VgprGranuleSize;
-  Config.SgprGranuleSize = Gfx1250SgprGranuleSize;
   return Config;
 }
 
@@ -416,10 +412,9 @@ applyGfx1250B0toA0Rules(std::vector<InternalDecodedInst> &Decoded,
       continue;
     std::optional<unsigned> VgprsBefore =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
-    if (Stats.ExtraVgprs > 0 || Stats.ExtraSgprs > 0)
-      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs, Stats.ExtraSgprs,
-                                 Config.VgprGranuleSize,
-                                 Config.SgprGranuleSize);
+    if (Stats.ExtraVgprs > 0)
+      Elf.updateKernelDescriptor(KName, Stats.ExtraVgprs,
+                                 Config.VgprGranuleSize);
     std::optional<unsigned> VgprsAfter =
         Elf.getKernelVgprCount(KName, Config.VgprGranuleSize);
     log() << "hotswap: liveness: kernel " << KName
