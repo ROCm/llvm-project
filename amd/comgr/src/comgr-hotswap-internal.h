@@ -212,17 +212,19 @@ public:
   std::optional<uint32_t>
   getKernelStaticLdsSize(llvm::StringRef KernelName) const;
 
-  /// Read the SGPR count from the kernel descriptor for \p KernelName.
-  /// Returns std::nullopt if the descriptor is not found.
-  std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName,
-                                             unsigned SgprGranuleSize) const;
+  /// Read the SGPR count for \p KernelName from the \c amdhsa.kernels
+  /// msgpack metadata note (\c .sgpr_count key). On GFX10+ the kernel
+  /// descriptor's \c GRANULATED_WAVEFRONT_SGPR_COUNT is architecturally
+  /// reserved, so this is the only reliable source.
+  /// Returns std::nullopt if the metadata note is missing or the kernel
+  /// is not found.
+  std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName) const;
 
-  /// Update the RSRC1 VGPR/SGPR granule counts in the kernel descriptor for
-  /// \p KernelName by adding \p ExtraVgprs / \p ExtraSgprs, using
-  /// \p VgprGranuleSize / \p SgprGranuleSize so the call is ISA-agnostic.
+  /// Update the RSRC1 VGPR granule count in the kernel descriptor for
+  /// \p KernelName by adding \p ExtraVgprs. The SGPR granule field is
+  /// not updated because it is reserved on GFX10+.
   void updateKernelDescriptor(llvm::StringRef KernelName, unsigned ExtraVgprs,
-                              unsigned ExtraSgprs, unsigned VgprGranuleSize,
-                              unsigned SgprGranuleSize);
+                              unsigned VgprGranuleSize);
 
   /// Grow the ELF by inserting trampoline bytes after `.text` and adjusting
   /// all section and program headers. Returns a null unique_ptr on failure.
@@ -284,7 +286,6 @@ struct RewriteConfig {
   unsigned MaxVgprs = 0;
   unsigned MaxSgprs = 0;
   unsigned VgprGranuleSize = 0;
-  unsigned SgprGranuleSize = 0;
 };
 
 // -- LLVM MC context ----------------------------------------------------------
