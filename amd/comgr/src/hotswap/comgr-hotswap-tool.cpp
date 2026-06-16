@@ -7,10 +7,11 @@
 // gfx1250 board treated as A0, each gfx1250 code object is rewritten in place
 // via amd_comgr_hotswap_rewrite; everything else is passed through untouched.
 //
-// A0 selection is intentionally simple and is NOT robust stepping detection
-// (separate work): rewrite when HSA_AMD_AGENT_INFO_ASIC_REVISION equals
-// HSA_HOTSWAP_A0_REVISION (default 0), or when HSA_HOTSWAP_FORCE_STEPPING_REWRITE
-// is set. Set HSA_HOTSWAP_TOOL_VERBOSE=1 for logging.
+// A0 detection reads HSA_AMD_AGENT_INFO_ASIC_REVISION from the HSA runtime
+// (revision 0 == A0); the rewrite is gated to gfx1250 A0 only, and only when the
+// revision was actually queried (a failed query is not treated as A0). No env
+// var is required to enable it. Set HSA_HOTSWAP_TOOL_VERBOSE=1 for logging.
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,9 +43,7 @@ struct HotswapTool {
   decltype(hsa_agent_get_info) *AgentGetInfo = nullptr;
   decltype(hsa_isa_get_info_alt) *IsaGetInfoAlt = nullptr;
 
-  // Configuration read from the environment in OnLoad().
-  uint32_t A0Revision = 0;
-  bool ForceSteppingRewrite = false;
+  // Verbose logging, from HSA_HOTSWAP_TOOL_VERBOSE in OnLoad().
   bool Verbose = false;
 
   // Device facts, resolved once on the first code-object load.
@@ -88,6 +87,30 @@ static hsa_status_t findGpuAgent(hsa_agent_t Agent, void *Data) {
   return HSA_STATUS_SUCCESS;
 }
 
+// Extracts the gfx target (e.g. "gfx1250") from a full HSA ISA name, dropping
+// any feature suffix (":sramecc+", ":xnack-", ...) by stopping at the first
+// non-alphanumeric character. Mirrors rocm-systems#7210's extract_gfx_target.
+static std::string extractGfxTarget(const std::string &IsaName) {
+  const size_t Start = IsaName.find("gfx");
+  if (Start == std::string::npos) {
+    return {};
+  }
+  size_t End = Start;
+  while (End < IsaName.size() &&
+         std::isalnum(static_cast<unsigned char>(IsaName[End]))) {
+    ++End;
+  }
+  return IsaName.substr(Start, End - Start);
+}
+
+// HotSwap activation policy (mirrors rocm-systems#7210's gate_allows_hotswap):
+// rewrite only on gfx1250 at ASIC revision A0 (0), and only when the revision
+// was actually queried -- a failed query must not be treated as A0.
+static bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision,
+                              bool RevisionValid) {
+  return RevisionValid && Gfx == "gfx1250" && Revision == 0;
+}
+
 void HotswapTool::detectDevice() {
   if (!IterateAgents || !AgentGetInfo || !IsaGetInfoAlt) {
     return;
@@ -103,22 +126,20 @@ void HotswapTool::detectDevice() {
   std::string Gfx;
   if (AgentGetInfo(Gpu, HSA_AGENT_INFO_ISA, &Isa) == HSA_STATUS_SUCCESS &&
       IsaGetInfoAlt(Isa, HSA_ISA_INFO_NAME, Name) == HSA_STATUS_SUCCESS) {
-    const std::string Full(Name);
-    const size_t Start = Full.find("gfx");
-    if (Start != std::string::npos) {
-      Gfx = Full.substr(Start, Full.find(':', Start) - Start);
-    }
+    Gfx = extractGfxTarget(Name);
   }
 
+  // Trust the ASIC revision only when the query succeeds, so a failed query is
+  // not mistaken for A0 (revision 0).
   uint32_t Revision = 0;
-  AgentGetInfo(Gpu,
-               static_cast<hsa_agent_info_t>(HSA_AMD_AGENT_INFO_ASIC_REVISION),
-               &Revision);
+  const bool RevisionValid =
+      AgentGetInfo(
+          Gpu, static_cast<hsa_agent_info_t>(HSA_AMD_AGENT_INFO_ASIC_REVISION),
+          &Revision) == HSA_STATUS_SUCCESS;
 
-  // gfx1250-only, so another board reporting revision 0 is not armed.
-  DeviceIsA0 =
-      Gfx == "gfx1250" && (ForceSteppingRewrite || Revision == A0Revision);
-  LOG("device=%s asic_revision=%u -> %s", Gfx.c_str(), Revision,
+  DeviceIsA0 = gateAllowsHotswap(Gfx, Revision, RevisionValid);
+  LOG("device=%s asic_revision=%u (valid=%s) -> %s",
+      Gfx.empty() ? "?" : Gfx.c_str(), Revision, RevisionValid ? "yes" : "no",
       DeviceIsA0 ? "A0 (rewrite armed)" : "B0/native");
 }
 
@@ -217,12 +238,6 @@ extern "C" bool OnLoad(void *Table, uint64_t, uint64_t, const char *const *) {
   }
 
   HotswapTool &Tool = getTool();
-  if (const char *Rev = std::getenv("HSA_HOTSWAP_A0_REVISION")) {
-    Tool.A0Revision = static_cast<uint32_t>(std::strtoul(Rev, nullptr, 0));
-  }
-  if (const char *Force = std::getenv("HSA_HOTSWAP_FORCE_STEPPING_REWRITE")) {
-    Tool.ForceSteppingRewrite = Force[0] && Force[0] != '0';
-  }
   if (const char *Verb = std::getenv("HSA_HOTSWAP_TOOL_VERBOSE")) {
     Tool.Verbose = Verb[0] && Verb[0] != '0';
   }
