@@ -1399,8 +1399,12 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
   // ---- v_cndmask_b32 (VOP2 or VOP3 -- srcMap skips modifiers) ----
   case CanonicalOp::V_CNDMASK_B32: {
     ParsedReg Dest = Op.dst();
-    Value *Src0 = Op.src(0);
-    Value *Src1 = Op.src(1);
+    Value *Src0 = Op.applyMods(0, Op.src(0));
+    Value *Src1 = Op.applyMods(1, Op.src(1));
+    if (Src0->getType() == Ctx.F32Ty)
+      Src0 = Ctx.B.CreateBitCast(Src0, Ctx.I32Ty);
+    if (Src1->getType() == Ctx.F32Ty)
+      Src1 = Ctx.B.CreateBitCast(Src1, Ctx.I32Ty);
     Value *Cond = nullptr;
     if (Op.nSrcs() >= 3 && Di.isReg(Op.srcIdx(2))) {
       ParsedReg CondReg =
