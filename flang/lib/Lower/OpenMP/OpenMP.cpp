@@ -1525,7 +1525,7 @@ static void genBodyOfTargetOp(
   auto argIface = llvm::cast<mlir::omp::BlockArgOpenMPOpInterface>(*targetOp);
   genEntryBlock(firOpBuilder, args.asEntryBlockArgs(), targetOp.getRegion());
 
-  if (!enableDelayedPrivatizationStaging)
+  if (!enableDelayedPrivatization)
     dsp.processStep2();
 
   bindEntryBlockArgs(converter, targetOp, args);
@@ -1904,14 +1904,6 @@ genTargetClauses(lower::AbstractConverter &converter,
   cp.processThreadLimit(stmtCtx, clauseOps);
   cp.processTODO<clause::Allocate, clause::InReduction, clause::UsesAllocators>(
       loc, llvm::omp::Directive::OMPD_target);
-
-  // TODO: Re-enable check after removing downstream early privatization support
-  // for `target`.
-
-  // `target private(..)` is only supported in delayed privatization mode.
-  // if (!enableDelayedPrivatizationStaging)
-  //   cp.processTODO<clause::Firstprivate, clause::Private>(
-  //       loc, llvm::omp::Directive::OMPD_target);
 }
 
 static void genTargetDataClauses(
