@@ -6,62 +6,47 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// HSA_TOOLS_LIB env var hotswap tool
-//
-// Hotswap tool for A0/B0 rewrite. Enable by pointing HSA_TOOLS_LIB at this
-// library: HSA_TOOLS_LIB=/path/libamd_comgr_hotswap_tool.so ./my_app
-//
-// libhsa-runtime then hands each code object to the tool before dispatch. On a
-// gfx1250 board treated as A0, each gfx1250 code object is rewritten in place
-// via amd_comgr_hotswap_rewrite; everything else is passed through untouched.
-//
-// A0 detection reads HSA_AMD_AGENT_INFO_ASIC_REVISION from the HSA runtime
-// (revision 0 == A0); the rewrite is gated to gfx1250 A0 only, and only when the
-// revision was actually queried (a failed query is not treated as A0). No env
-// var is required to enable it. Set HSA_HOTSWAP_TOOL_VERBOSE=1 for logging.
-#include <cctype>
+// HSA_TOOLS_LIB tool: B0->A0 rewrite for gfx1250. Load with
+// HSA_TOOLS_LIB=/path/libamd_comgr_hotswap_tool.so. Each gfx1250 A0 code object
+// is rewritten via amd_comgr_hotswap_rewrite before reader creation; everything
+// else passes through. HSA_HOTSWAP_TOOL_VERBOSE=1 for logging.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "llvm/BinaryFormat/ELF.h"
 
 #include "inc/hsa.h"
 #include "inc/hsa_api_trace.h"
 #include "inc/hsa_ext_amd.h"
 #include <amd_comgr.h>
 
+#include "comgr-hotswap-tool-detect.h"
+
 namespace COMGR::hotswap {
 
 constexpr const char *Gfx1250Isa = "amdgcn-amd-amdhsa--gfx1250";
 
-// All tool state lives in one object reached through getTool(). The
-// HSA_TOOLS_LIB ABI installs our wrapper as a bare function pointer with no
-// user-data parameter, so the wrapper cannot be handed a context and must reach
-// this state on its own. A single function-local static keeps that contained
-// and avoids static-initialization-order problems. Only the class lives in the
-// anonymous namespace; the file-local functions below are 'static'.
+// Bare HSA_TOOLS_LIB callbacks carry no user-data, so all state lives here.
 namespace {
 struct HotswapTool {
-  // Loader entry we wrap, and the agent/ISA queries we need, from the table.
   decltype(hsa_code_object_reader_create_from_memory) *RealReaderCreate =
       nullptr;
   decltype(hsa_iterate_agents) *IterateAgents = nullptr;
   decltype(hsa_agent_get_info) *AgentGetInfo = nullptr;
   decltype(hsa_isa_get_info_alt) *IsaGetInfoAlt = nullptr;
 
-  bool Verbose = false; // Override with HSA_HOTSWAP_TOOL_VERBOSE=1
-  std::once_flag DetectOnce; // Device facts - will be filled by call_once
+  bool Verbose = false;
+  std::once_flag DetectOnce;
   bool DeviceIsA0 = false;
 
-  // reader_create references the bytes for the module lifetime, so rewritten
-  // buffers must outlive the call; retain them for the process lifetime.
+  // HSA references retained bytes for the module lifetime
   std::mutex RetainMutex;
-  std::vector<std::vector<uint8_t>> Retained;
+  // Deque keeps element addresses stable
+  std::deque<std::vector<uint8_t>> Retained;
 
   void detectDevice();
   void ensureDetected() {
@@ -70,11 +55,13 @@ struct HotswapTool {
 };
 } // namespace
 
+// Leaked on purpose: HSA holds pointers into Retained for the process lifetime.
 static HotswapTool &getTool() {
-  static HotswapTool Tool;
-  return Tool;
+  static HotswapTool *Tool = new HotswapTool();
+  return *Tool;
 }
 
+// fprintf/std::vector (not raw_ostream/SmallVector) keep the tool off LLVM Support.
 #define LOG(...)                                                               \
   do {                                                                         \
     if (getTool().Verbose) {                                                   \
@@ -83,7 +70,7 @@ static HotswapTool &getTool() {
     }                                                                          \
   } while (0)
 
-// hsa_iterate_agents callback: stop at the first GPU agent.
+// First GPU agent: assume homogenous setup for Hotswap
 static hsa_status_t findGpuAgent(hsa_agent_t Agent, void *Data) {
   hsa_device_type_t Type;
   if (getTool().AgentGetInfo(Agent, HSA_AGENT_INFO_DEVICE, &Type) ==
@@ -95,53 +82,35 @@ static hsa_status_t findGpuAgent(hsa_agent_t Agent, void *Data) {
   return HSA_STATUS_SUCCESS;
 }
 
-// Extracts the gfx target (e.g. "gfx1250") from a full HSA ISA name, dropping
-// any feature suffix (":sramecc+", ":xnack-", ...) by stopping at the first
-// non-alphanumeric character. Mirrors rocm-systems#7210's extract_gfx_target.
-static std::string extractGfxTarget(const std::string &IsaName) {
-  const size_t Start = IsaName.find("gfx");
-  if (Start == std::string::npos) {
-    return {};
-  }
-  size_t End = Start;
-  while (End < IsaName.size() &&
-         std::isalnum(static_cast<unsigned char>(IsaName[End]))) {
-    ++End;
-  }
-  return IsaName.substr(Start, End - Start);
-}
-
-// HotSwap activation policy (mirrors rocm-systems#7210's gate_allows_hotswap):
-// rewrite only on gfx1250 at ASIC revision A0 (0), and only when the revision
-// was actually queried -- a failed query must not be treated as A0.
-static bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision,
-                              bool RevisionValid) {
-  return RevisionValid && Gfx == "gfx1250" && Revision == 0;
-}
-
 void HotswapTool::detectDevice() {
   if (!IterateAgents || !AgentGetInfo || !IsaGetInfoAlt) {
-    LOG("detectDevice: required HSA function pointers unavailable; "
-        "leaving rewrite disarmed");
+    LOG("detectDevice: HSA function pointers unavailable; rewrite disarmed");
     return;
   }
   hsa_agent_t Gpu = {0};
   IterateAgents(&findGpuAgent, &Gpu);
   if (Gpu.handle == 0) {
-    LOG("detectDevice: no GPU agent found; leaving rewrite disarmed");
+    LOG("detectDevice: no GPU agent found; rewrite disarmed");
     return;
   }
 
+  // Size the ISA-name buffer from the queried length
   hsa_isa_t Isa = {0};
-  char Name[128] = {0};
   std::string Gfx;
-  if (AgentGetInfo(Gpu, HSA_AGENT_INFO_ISA, &Isa) == HSA_STATUS_SUCCESS &&
-      IsaGetInfoAlt(Isa, HSA_ISA_INFO_NAME, Name) == HSA_STATUS_SUCCESS) {
-    Gfx = extractGfxTarget(Name);
+  if (AgentGetInfo(Gpu, HSA_AGENT_INFO_ISA, &Isa) == HSA_STATUS_SUCCESS) {
+    uint32_t NameLen = 0;
+    if (IsaGetInfoAlt(Isa, HSA_ISA_INFO_NAME_LENGTH, &NameLen) ==
+            HSA_STATUS_SUCCESS &&
+        NameLen > 0) {
+      std::vector<char> Name(NameLen + 1, '\0');
+      if (IsaGetInfoAlt(Isa, HSA_ISA_INFO_NAME, Name.data()) ==
+          HSA_STATUS_SUCCESS) {
+        Gfx = extractGfxTarget(Name.data());
+      }
+    }
   }
 
-  // Trust the ASIC revision only when the query succeeds, so a failed query is
-  // not mistaken for A0 (revision 0).
+  // RevisionValid keeps a failed query from reading as A0 (0).
   uint32_t Revision = 0;
   const bool RevisionValid =
       AgentGetInfo(
@@ -154,23 +123,7 @@ void HotswapTool::detectDevice() {
       DeviceIsA0 ? "A0 (rewrite armed)" : "B0/native");
 }
 
-// True for a 64-bit ELF whose AMDGPU mach selector is gfx1250. Uses the
-// header-only enums/struct from llvm/BinaryFormat/ELF.h (compile-time constants,
-// no linking, so no second in-process LLVM); only llvm::object's parsing classes
-// are avoided.
-static bool isGfx1250CodeObject(const void *Data, size_t Size) {
-  if (Size < sizeof(llvm::ELF::Elf64_Ehdr)) {
-    return false;
-  }
-  const llvm::ELF::Elf64_Ehdr *Header =
-      static_cast<const llvm::ELF::Elf64_Ehdr *>(Data);
-  return Header->checkMagic() &&
-         Header->getFileClass() == llvm::ELF::ELFCLASS64 &&
-         (Header->e_flags & llvm::ELF::EF_AMDGPU_MACH) ==
-             llvm::ELF::EF_AMDGPU_MACH_AMDGCN_GFX1250;
-}
-
-// Rewrite a gfx1250 code object for A0 via comgr (identity ISA, in place).
+// Rewrite a gfx1250 object for A0; identity ISA, the A0 fix is in the rewrite.
 static bool rewriteCodeObject(const void *Src, size_t Size,
                               std::vector<uint8_t> &Out) {
   amd_comgr_data_t Input = {0};
@@ -215,14 +168,15 @@ static bool rewriteCodeObject(const void *Src, size_t Size,
   return true;
 }
 
-// Installed into the HSA API table in place of
-// hsa_code_object_reader_create_from_memory.
+// Replaces hsa_code_object_reader_create_from_memory in the API table.
 static hsa_status_t readerCreateWrapper(const void *CodeObject, size_t Size,
                                         hsa_code_object_reader_t *Reader) {
   HotswapTool &Tool = getTool();
   Tool.ensureDetected();
 
-  if (!Tool.DeviceIsA0 || !isGfx1250CodeObject(CodeObject, Size)) {
+  // Forward invalid args and non-target objects to the real entry untouched.
+  if (!CodeObject || !Size || !Reader || !Tool.DeviceIsA0 ||
+      !isGfx1250CodeObject(CodeObject, Size)) {
     return Tool.RealReaderCreate(CodeObject, Size, Reader);
   }
 
@@ -245,30 +199,34 @@ static hsa_status_t readerCreateWrapper(const void *CodeObject, size_t Size,
 
 } // namespace COMGR::hotswap
 
-// HSA_TOOLS_LIB entry points. The OnLoad/OnUnload names and signature are fixed
-// by the HSA tool ABI (libhsa-runtime looks them up by symbol and calls them
-// with these exact types), so they cannot follow the camelBack naming rule or
-// take a const Table parameter.
-// NOLINTNEXTLINE(readability-identifier-naming,misc-const-correctness)
+// OnLoad/OnUnload names and signatures are fixed by the HSA tool ABI.
+// NOLINTNEXTLINE(readability-identifier-naming)
 extern "C" bool OnLoad(void *Table, uint64_t, uint64_t, const char *const *) {
   using namespace COMGR::hotswap;
   const HsaApiTable *Api = static_cast<const HsaApiTable *>(Table);
   if (!Api || !Api->core_) {
     return false;
   }
+  CoreApiTable *Core = Api->core_;
+  if (!Core->hsa_iterate_agents_fn || !Core->hsa_agent_get_info_fn ||
+      !Core->hsa_isa_get_info_alt_fn ||
+      !Core->hsa_code_object_reader_create_from_memory_fn) {
+    return false;
+  }
+  if (Core->hsa_code_object_reader_create_from_memory_fn ==
+      &readerCreateWrapper) {
+    return true;
+  }
 
   HotswapTool &Tool = getTool();
   if (const char *Verb = std::getenv("HSA_HOTSWAP_TOOL_VERBOSE")) {
     Tool.Verbose = Verb[0] && Verb[0] != '0';
   }
-
-  Tool.IterateAgents = Api->core_->hsa_iterate_agents_fn;
-  Tool.AgentGetInfo = Api->core_->hsa_agent_get_info_fn;
-  Tool.IsaGetInfoAlt = Api->core_->hsa_isa_get_info_alt_fn;
-  Tool.RealReaderCreate =
-      Api->core_->hsa_code_object_reader_create_from_memory_fn;
-  Api->core_->hsa_code_object_reader_create_from_memory_fn =
-      &readerCreateWrapper;
+  Tool.IterateAgents = Core->hsa_iterate_agents_fn;
+  Tool.AgentGetInfo = Core->hsa_agent_get_info_fn;
+  Tool.IsaGetInfoAlt = Core->hsa_isa_get_info_alt_fn;
+  Tool.RealReaderCreate = Core->hsa_code_object_reader_create_from_memory_fn;
+  Core->hsa_code_object_reader_create_from_memory_fn = &readerCreateWrapper;
   return true;
 }
 
