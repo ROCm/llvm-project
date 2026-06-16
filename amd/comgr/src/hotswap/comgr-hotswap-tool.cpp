@@ -1,7 +1,15 @@
-// Optional HSA_TOOLS_LIB hotswap tool: in-place B0->A0 rewrite for gfx1250.
+//===- comgr-hotswap-tool.cpp - HSA_TOOLS_LIB B0->A0 rewrite tool ---------===//
 //
-// Enable by pointing HSA_TOOLS_LIB at this library:
-//   HSA_TOOLS_LIB=/path/libamd_comgr_hotswap_tool.so ./my_app
+// Part of Comgr, under the Apache License v2.0 with LLVM Exceptions. See
+// amd/comgr/LICENSE.TXT in this repository for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// HSA_TOOLS_LIB env var hotswap tool
+//
+// Hotswap tool for A0/B0 rewrite. Enable by pointing HSA_TOOLS_LIB at this
+// library: HSA_TOOLS_LIB=/path/libamd_comgr_hotswap_tool.so ./my_app
 //
 // libhsa-runtime then hands each code object to the tool before dispatch. On a
 // gfx1250 board treated as A0, each gfx1250 code object is rewritten in place
@@ -27,27 +35,27 @@
 #include "inc/hsa_ext_amd.h"
 #include <amd_comgr.h>
 
+namespace COMGR::hotswap {
+
 constexpr const char *Gfx1250Isa = "amdgcn-amd-amdhsa--gfx1250";
 
 // All tool state lives in one object reached through getTool(). The
 // HSA_TOOLS_LIB ABI installs our wrapper as a bare function pointer with no
 // user-data parameter, so the wrapper cannot be handed a context and must reach
 // this state on its own. A single function-local static keeps that contained
-// (and free of static-initialization-order problems) instead of scattering
-// globals.
+// and avoids static-initialization-order problems. Only the class lives in the
+// anonymous namespace; the file-local functions below are 'static'.
 namespace {
 struct HotswapTool {
   // Loader entry we wrap, and the agent/ISA queries we need, from the table.
-  decltype(hsa_code_object_reader_create_from_memory) *RealReaderCreate = nullptr;
+  decltype(hsa_code_object_reader_create_from_memory) *RealReaderCreate =
+      nullptr;
   decltype(hsa_iterate_agents) *IterateAgents = nullptr;
   decltype(hsa_agent_get_info) *AgentGetInfo = nullptr;
   decltype(hsa_isa_get_info_alt) *IsaGetInfoAlt = nullptr;
 
-  // Verbose logging, from HSA_HOTSWAP_TOOL_VERBOSE in OnLoad().
-  bool Verbose = false;
-
-  // Device facts, resolved once on the first code-object load.
-  std::once_flag DetectOnce;
+  bool Verbose = false; // Override with HSA_HOTSWAP_TOOL_VERBOSE=1
+  std::once_flag DetectOnce; // Device facts - will be filled by call_once
   bool DeviceIsA0 = false;
 
   // reader_create references the bytes for the module lifetime, so rewritten
@@ -113,11 +121,14 @@ static bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision,
 
 void HotswapTool::detectDevice() {
   if (!IterateAgents || !AgentGetInfo || !IsaGetInfoAlt) {
+    LOG("detectDevice: required HSA function pointers unavailable; "
+        "leaving rewrite disarmed");
     return;
   }
   hsa_agent_t Gpu = {0};
   IterateAgents(&findGpuAgent, &Gpu);
   if (Gpu.handle == 0) {
+    LOG("detectDevice: no GPU agent found; leaving rewrite disarmed");
     return;
   }
 
@@ -165,6 +176,7 @@ static bool rewriteCodeObject(const void *Src, size_t Size,
   amd_comgr_data_t Input = {0};
   if (amd_comgr_create_data(AMD_COMGR_DATA_KIND_EXECUTABLE, &Input) !=
       AMD_COMGR_STATUS_SUCCESS) {
+    LOG("comgr create_data FAILED");
     return false;
   }
   amd_comgr_data_t Output = {0};
@@ -172,6 +184,8 @@ static bool rewriteCodeObject(const void *Src, size_t Size,
       amd_comgr_set_data(Input, Size, static_cast<const char *>(Src));
   if (Status == AMD_COMGR_STATUS_SUCCESS) {
     Status = amd_comgr_hotswap_rewrite(Input, Gfx1250Isa, Gfx1250Isa, &Output);
+  } else {
+    LOG("comgr set_data FAILED (status=%d)", static_cast<int>(Status));
   }
   amd_comgr_release_data(Input);
   if (Status != AMD_COMGR_STATUS_SUCCESS) {
@@ -188,10 +202,13 @@ static bool rewriteCodeObject(const void *Src, size_t Size,
     Status = amd_comgr_get_data(Output, &OutSize,
                                 reinterpret_cast<char *>(Out.data()));
   } else {
+    LOG("comgr get_data returned no output (status=%d, size=%zu)",
+        static_cast<int>(Status), OutSize);
     Status = AMD_COMGR_STATUS_ERROR;
   }
   amd_comgr_release_data(Output);
   if (Status != AMD_COMGR_STATUS_SUCCESS) {
+    LOG("comgr get_data FAILED (status=%d)", static_cast<int>(Status));
     return false;
   }
   LOG("comgr rewrite ok (%zu->%zu)", Size, OutSize);
@@ -226,12 +243,15 @@ static hsa_status_t readerCreateWrapper(const void *CodeObject, size_t Size,
   return Tool.RealReaderCreate(Persisted, PersistedSize, Reader);
 }
 
+} // namespace COMGR::hotswap
+
 // HSA_TOOLS_LIB entry points. The OnLoad/OnUnload names and signature are fixed
 // by the HSA tool ABI (libhsa-runtime looks them up by symbol and calls them
 // with these exact types), so they cannot follow the camelBack naming rule or
 // take a const Table parameter.
 // NOLINTNEXTLINE(readability-identifier-naming,misc-const-correctness)
 extern "C" bool OnLoad(void *Table, uint64_t, uint64_t, const char *const *) {
+  using namespace COMGR::hotswap;
   const HsaApiTable *Api = static_cast<const HsaApiTable *>(Table);
   if (!Api || !Api->core_) {
     return false;
