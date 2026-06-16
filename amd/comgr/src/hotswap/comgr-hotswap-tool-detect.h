@@ -6,15 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Header-only hotswap detection helpers (no HSA dep; ELF.h is header-only),
-// split out so they can be unit-tested.
+// Hotswap detection helpers (no HSA dep), split out so they can be unit-tested.
 
 #ifndef COMGR_HOTSWAP_TOOL_DETECT_H
 #define COMGR_HOTSWAP_TOOL_DETECT_H
 
+#include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/ELF.h"
 
-#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -22,24 +21,20 @@
 
 namespace COMGR::hotswap {
 
-// Extract the gfx target (e.g. "gfx1250") from an ISA name, dropping any suffix.
-inline std::string extractGfxTarget(const std::string &IsaName) {
-  const size_t Start = IsaName.find("gfx");
-  if (Start == std::string::npos) {
-    return {};
+// Processor of an ISA name like amdgcn-amd-amdhsa--gfx1250[:feats] (the field
+// after arch-vendor-os-environ; same model as comgr's parseTargetIdentifier).
+inline std::string extractGfxTarget(llvm::StringRef IsaName) {
+  llvm::StringRef Rest = IsaName;
+  for (int I = 0; I < 4; ++I) {
+    Rest = Rest.split('-').second;
   }
-  size_t End = Start;
-  while (End < IsaName.size() &&
-         std::isalnum(static_cast<unsigned char>(IsaName[End]))) {
-    ++End;
-  }
-  return IsaName.substr(Start, End - Start);
+  return Rest.split(':').first.str();
 }
 
-// Arm only on gfx1250 A0 (revision 0); RevisionValid rejects a failed query.
-inline bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision,
-                              bool RevisionValid) {
-  return RevisionValid && Gfx == "gfx1250" && Revision == 0;
+// Arm only on gfx1250 at ASIC revision A0 (0). Callers must confirm the revision
+// query succeeded before calling; a failed query is handled at the call site.
+inline bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision) {
+  return Gfx == "gfx1250" && Revision == 0;
 }
 
 // True for a 64-bit gfx1250 AMDGPU ELF (aligned-copy header read, e_machine checked).
