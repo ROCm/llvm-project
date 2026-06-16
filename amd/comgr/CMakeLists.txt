@@ -91,6 +91,13 @@ endif()
 option(COMGR_BUILD_SHARED_LIBS "Build the shared library"
        ${build_shared_libs_default})
 
+# Size-reduction variant: build an inspect-only Comgr that drops the Clang/LLD
+# compile stack and embedded device libraries, exposing only the
+# metadata/symbol/disassembly/symbolization APIs. Default OFF leaves the normal
+# build entirely unchanged.
+option(COMGR_DISASSEMBLY_AND_METADATA_ONLY
+  "Build inspect-only Comgr without Clang/LLD/device-libs (size reduction)" OFF)
+
 set(SOURCES
   src/comgr-cache.cpp
   src/comgr-cache-command.cpp
@@ -120,6 +127,31 @@ set(SOURCES
   src/comgr-symbolizer.cpp
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
+
+if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  list(REMOVE_ITEM SOURCES
+    src/comgr-compiler.cpp
+    src/comgr-clang-command.cpp
+    src/comgr-spirv-command.cpp
+    src/comgr-unbundle-command.cpp
+    src/comgr-cache.cpp
+    src/comgr-cache-command.cpp
+    src/comgr-device-libs.cpp
+    src/comgr-libcxx-headers.cpp
+    # Hotswap is IR-level code-object rewriting, not part of the
+    # metadata/inspect surface.
+    src/comgr-hotswap.cpp
+    src/comgr-hotswap-b0a0.cpp
+    src/comgr-hotswap-patch-trampoline.cpp
+    src/comgr-hotswap-elf.cpp
+    src/comgr-hotswap-llvm.cpp
+    src/comgr-hotswap-patch-f32-to-e5m3.cpp
+    src/comgr-hotswap-patch-inplace.cpp
+    src/comgr-hotswap-patch-vop3px2-src2.cpp
+    src/comgr-hotswap-patch-wmma-hazard.cpp
+    src/comgr-hotswap-patch-wmma-scale16.cpp
+    src/comgr-hotswap-patch-wmma-split.cpp)
+endif()
 
 # Hotswap binary transpiler, opt-in. The hotswap project lives under
 # amd/comgr/src/hotswap as a private COMGR subproject. When enabled, we
@@ -162,9 +194,16 @@ else()
 endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-  find_package(AMDDeviceLibs REQUIRED CONFIG)
-  find_package(Clang REQUIRED CONFIG)
-  find_package(LLD REQUIRED CONFIG)
+  if(NOT COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+    find_package(AMDDeviceLibs REQUIRED CONFIG)
+    find_package(Clang REQUIRED CONFIG)
+    find_package(LLD REQUIRED CONFIG)
+  else()
+    # Inspect-only tiers still compile against LLVM headers; Clang/LLD configs
+    # are only needed to locate include dirs, not to link.
+    find_package(Clang REQUIRED CONFIG)
+    find_package(LLD REQUIRED CONFIG)
+  endif()
 
   target_include_directories(amd_comgr
     PRIVATE
@@ -274,6 +313,10 @@ option(COMGR_USE_INCBIN "Use the gnu .incbin assembler directive" ${default_use_
 
 option(COMGR_DISABLE_SPIRV "To disable SPIRV in Comgr" OFF)
 
+if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  set(COMGR_DISABLE_SPIRV ON)
+endif()
+
 set(COMGR_SPIRV_TRANSLATOR_AVAILABLE OFF)
 set(COMGR_SPIRV_BACKEND_AVAILABLE OFF)
 
@@ -370,15 +413,32 @@ endif()
 # the shared header.
 list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS AMD_COMGR_EXPORT)
 
-include(bc2h)
-include(opencl_header)
-include(DeviceLibs)
+if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  list(APPEND AMD_COMGR_PRIVATE_COMPILE_DEFINITIONS COMGR_DISASSEMBLY_AND_METADATA_ONLY=1)
+  # Enable per-function/per-data dead-code elimination so the linker can drop
+  # the large amount of statically-linked LLVM code.
+  if(UNIX)
+    list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS
+      -ffunction-sections -fdata-sections)
+    list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS -Wl,--gc-sections)
+  elseif(MSVC)
+    # These are the Windows equivalent of -ffunction-sections/-fdata-sections + --gc-sections.
+    list(APPEND AMD_COMGR_PRIVATE_COMPILE_OPTIONS /Gy /Gw)
+    list(APPEND AMD_COMGR_PRIVATE_LINKER_OPTIONS /OPT:REF /OPT:ICF)
+  endif()
+endif()
 
-# Embed libc++ headers for HIPRTC std C++ support
-# Can be disabled with -DCOMGR_EMBED_LIBCXX_HEADERS=OFF to reduce library size
-option(COMGR_EMBED_LIBCXX_HEADERS "Embed libc++ headers for HIPRTC" ON)
-if(COMGR_EMBED_LIBCXX_HEADERS)
-  include(LibcxxHeaders)
+if(NOT COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  include(bc2h)
+  include(opencl_header)
+  include(DeviceLibs)
+
+  # Embed libc++ headers for HIPRTC std C++ support
+  # Can be disabled with -DCOMGR_EMBED_LIBCXX_HEADERS=OFF to reduce library size
+  option(COMGR_EMBED_LIBCXX_HEADERS "Embed libc++ headers for HIPRTC" ON)
+  if(COMGR_EMBED_LIBCXX_HEADERS)
+    include(LibcxxHeaders)
+  endif()
 endif()
 
 set_target_properties(amd_comgr PROPERTIES
@@ -538,7 +598,10 @@ install(FILES
   COMPONENT amd-comgr
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/${AMD_COMGR_PACKAGE_PREFIX}")
 
-if(NOT CLANG_LINK_CLANG_DYLIB)
+if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  set(CLANG_LIBS "")
+  set(LLD_LIBS "")
+elseif(NOT CLANG_LINK_CLANG_DYLIB)
   set(CLANG_LIBS
     clangBasic
     clangDriver
@@ -551,11 +614,13 @@ else()
     clang-cpp)
 endif()
 
-set(LLD_LIBS
-  lldELF
-  lldCommon)
+if(NOT COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  set(LLD_LIBS
+    lldELF
+    lldCommon)
+endif()
 
-if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE})
+if (${COMGR_SPIRV_TRANSLATOR_AVAILABLE} AND NOT COMGR_DISASSEMBLY_AND_METADATA_ONLY)
   set(SPIRV_DYNAMIC_LIB "LLVMSPIRVAMDLib")
   set(SPIRV_STATIC_LIB "SPIRVAMDLib")
 else()
@@ -565,6 +630,23 @@ endif()
 
 if (LLVM_LINK_LLVM_DYLIB)
   set(LLVM_LIBS LLVM ${SPIRV_DYNAMIC_LIB})
+elseif(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
+  llvm_map_components_to_libnames(LLVM_LIBS
+    AMDGPU
+    BinaryFormat
+    BitReader
+    Core
+    DebugInfoDWARF
+    Demangle
+    MC
+    MCDisassembler
+    MCParser
+    Object
+    Option
+    Support
+    Symbolize
+    TargetParser
+    )
 else()
   llvm_map_components_to_libnames(LLVM_LIBS
     ${LLVM_TARGETS_TO_BUILD}
