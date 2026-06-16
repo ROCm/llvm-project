@@ -865,11 +865,33 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   RUNTIME_CHECK(terminator, to.ElementBytes() == from.ElementBytes());
   RUNTIME_CHECK(terminator, !to.type().IsDerived());
 
-  // Handle allocation if needed (for allocatable LHS)
+  // Handle allocation/reallocation if needed (for allocatable LHS)
   if (to.IsAllocatable()) {
+    bool needsReallocation = false;
+
     if (!to.IsAllocated()) {
-      // Need to allocate - match _FortranAAssign logic
-      // Do NOT reallocate if already allocated (e.g., by OpenMP runtime for device firstprivate)
+      // Not allocated - need to allocate
+      needsReallocation = true;
+    } else if (from.rank() > 0) {
+      // Already allocated - check if shapes match
+      // Per Fortran 2018 10.2.1.3(3): must reallocate if shape differs
+      int rank{to.rank()};
+      for (int j{0}; j < rank; ++j) {
+        const auto &toDim{to.GetDimension(j)};
+        const auto &fromDim{from.GetDimension(j)};
+        if (toDim.Extent() != fromDim.Extent()) {
+          needsReallocation = true;
+          break;
+        }
+      }
+    }
+
+    if (needsReallocation) {
+      // Deallocate if currently allocated
+      if (to.IsAllocated()) {
+        to.Deallocate();
+      }
+
       // Allocate with same shape as from
       std::size_t elementBytes{to.ElementBytes()};
       to.raw().elem_len = elementBytes;
