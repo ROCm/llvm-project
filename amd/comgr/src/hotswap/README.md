@@ -43,21 +43,10 @@ succeeded (a failed query is never treated as A0). On any other device or
 revision it passes code objects through unchanged. No environment variable is
 needed to enable it.
 
-### Stepping (A0) and the log line
-
-`HSA_AMD_AGENT_INFO_ASIC_REVISION` reports the ASIC stepping as an integer:
-revision `0` is **A0**. This rewrite targets A0 only, so the tool arms exactly
-when the revision is `0` and disarms otherwise. With verbose logging the
-decision prints as:
-
+You can verify that the revision rewrites are active if the following output is in the logs (With `HSA_HOTSWAP_TOOL_VERBOSE=1`):
 ```
-hotswap_tool: device=gfx1250 asic_revision=0 (valid=yes) -> A0 (rewrite armed)
+hotswap_tool: device=gfx1250 asic_revision=0 -> A0 (rewrite armed)
 ```
-
-A non-zero revision (a later stepping, e.g. B0) or a failed query prints
-`-> B0/native` and the code object is forwarded unchanged. The tool does not
-assume the numeric revision of any later stepping; anything other than `0` is
-treated as "not A0".
 
 ## Environment variables
 

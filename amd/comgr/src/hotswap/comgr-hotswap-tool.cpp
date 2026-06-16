@@ -55,13 +55,14 @@ struct HotswapTool {
 };
 } // namespace
 
-// Leaked on purpose: HSA holds pointers into Retained for the process lifetime.
+// Function-local static singleton: one instance, thread-safe init, no globals.
+// Detection is deferred (ensureDetected) because the HSA table is wired by
+// OnLoad after construction and agents are only enumerable once HSA is up.
 static HotswapTool &getTool() {
-  static HotswapTool *Tool = new HotswapTool();
-  return *Tool;
+  static HotswapTool Tool;
+  return Tool;
 }
 
-// fprintf/std::vector (not raw_ostream/SmallVector) keep the tool off LLVM Support.
 #define LOG(...)                                                               \
   do {                                                                         \
     if (getTool().Verbose) {                                                   \
@@ -110,17 +111,18 @@ void HotswapTool::detectDevice() {
     }
   }
 
-  // RevisionValid keeps a failed query from reading as A0 (0).
+  // A failed revision query must not be mistaken for A0 (0); bail out disarmed.
   uint32_t Revision = 0;
-  const bool RevisionValid =
-      AgentGetInfo(
+  if (AgentGetInfo(
           Gpu, static_cast<hsa_agent_info_t>(HSA_AMD_AGENT_INFO_ASIC_REVISION),
-          &Revision) == HSA_STATUS_SUCCESS;
+          &Revision) != HSA_STATUS_SUCCESS) {
+    LOG("detectDevice: ASIC revision query failed; rewrite disarmed");
+    return;
+  }
 
-  DeviceIsA0 = gateAllowsHotswap(Gfx, Revision, RevisionValid);
-  LOG("device=%s asic_revision=%u (valid=%s) -> %s",
-      Gfx.empty() ? "?" : Gfx.c_str(), Revision, RevisionValid ? "yes" : "no",
-      DeviceIsA0 ? "A0 (rewrite armed)" : "B0/native");
+  DeviceIsA0 = gateAllowsHotswap(Gfx, Revision);
+  LOG("device=%s asic_revision=%u -> %s", Gfx.empty() ? "?" : Gfx.c_str(),
+      Revision, DeviceIsA0 ? "A0 (rewrite armed)" : "B0/native");
 }
 
 // Rewrite a gfx1250 object for A0; identity ISA, the A0 fix is in the rewrite.
@@ -182,6 +184,7 @@ static hsa_status_t readerCreateWrapper(const void *CodeObject, size_t Size,
 
   std::vector<uint8_t> Rewritten;
   if (!rewriteCodeObject(CodeObject, Size, Rewritten)) {
+    // Warn unconditionally (not LOG): a failed rewrite forwards the original.
     std::fprintf(stderr, "hotswap_tool: rewrite failed; forwarding original\n");
     return Tool.RealReaderCreate(CodeObject, Size, Reader);
   }
