@@ -67,7 +67,6 @@ bool isSymbolInfoValid(amd_comgr_symbol_info_t SymbolInfo) {
          SymbolInfo <= AMD_COMGR_SYMBOL_INFO_LAST;
 }
 
-
 amd_comgr_status_t dispatchCompilerAction(amd_comgr_action_kind_t ActionKind,
                                           DataAction *ActionInfo,
                                           DataSet *InputSet, DataSet *ResultSet,
@@ -246,7 +245,6 @@ amd_comgr_status_t COMGR::parseTargetIdentifier(StringRef IdentStr,
 
   Ident.Processor = Ident.Features[0];
   Ident.Features.erase(Ident.Features.begin());
-
 
   if (IdentStr == "spirv64-amd-amdhsa--amdgcnspirv" ||
       IdentStr == "spirv64-amd-amdhsa-unknown-amdgcnspirv") {
@@ -2031,8 +2029,12 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     }
     auto Sections = std::move(SectionsOrError.get());
 
-    Elf_Shdr_Impl<ELF64LE> DynsymShdr, RelaShdr, RodataShdr;
-    for (auto Shdr : Sections) {
+    // These are left unset until the matching section is found. Reading an
+    // unset (default-constructed) section header would feed garbage sh_size /
+    // sh_entsize / sh_offset values into the ELF accessors below, so every use
+    // is guarded by an explicit presence check.
+    std::optional<Elf_Shdr_Impl<ELF64LE>> DynsymShdr, RelaShdr, RodataShdr;
+    for (const Elf_Shdr_Impl<ELF64LE> &Shdr : Sections) {
 
       if (Shdr.sh_type == ELF::SHT_DYNSYM)
         DynsymShdr = Shdr;
@@ -2060,10 +2062,17 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
       }
     }
 
+    // Without a dynamic symbol table there are no name-expression stubs to
+    // resolve. Report an empty map rather than reading an unset section header.
+    if (!DynsymShdr) {
+      *Count = DataP->NameExpressionMap.size();
+      return AMD_COMGR_STATUS_SUCCESS;
+    }
+
     // .dynsym - Find name expressions with amdgcn_name_expr and store their
     // Value fields
     Expected<StringRef> StrTabOrError =
-        ELFFile.getStringTableForSymtab(DynsymShdr);
+        ELFFile.getStringTableForSymtab(*DynsymShdr);
     if (!StrTabOrError) {
       llvm::logAllUnhandledErrors(StrTabOrError.takeError(), llvm::errs(),
                                   "StrTab creation error: ");
@@ -2072,10 +2081,10 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     StringRef StrTab = std::move(StrTabOrError.get());
 
     // Check each .dynsym entry
-    for (unsigned int I = 0; I < DynsymShdr.getEntityCount(); ++I) {
+    for (unsigned int I = 0; I < DynsymShdr->getEntityCount(); ++I) {
 
       // Get symbol from entry
-      auto SymbolOrError = ELFFile.getSymbol(&DynsymShdr, I);
+      auto SymbolOrError = ELFFile.getSymbol(&*DynsymShdr, I);
       if (!SymbolOrError) {
         llvm::logAllUnhandledErrors(SymbolOrError.takeError(), llvm::errs(),
                                     "Symbol creation error: ");
@@ -2104,12 +2113,31 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
       DynsymMap[Symbol->getValue()] = SymbolName;
     } // end entry loop
 
+    // No name-expression stubs were found, so the .rela.dyn and .rodata
+    // sections are not needed. Leave the map empty and return successfully.
+    if (NameExpDataVec.empty()) {
+      *Count = DataP->NameExpressionMap.size();
+      return AMD_COMGR_STATUS_SUCCESS;
+    }
+
+    // From here on the .rela.dyn and .rodata sections are required to resolve
+    // the stubs collected above; a code object carrying name-expression stubs
+    // without them is malformed.
+    if (!RelaShdr) {
+      llvm::errs() << "populate_name_expression_map: code object contains "
+                      "__amdgcn_name_expr_ stub(s) but no .rela.dyn (SHT_RELA "
+                      "with sh_info == 0) section\n";
+      for (NameExpressionData *Ptr : NameExpDataVec)
+        delete Ptr;
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
     // .rela.dyn - Use Values collected from .dynsym
     //   Offset == Value: Store 'Symbol's Name + Addend'
     //      - needed to get unmangled name from .rodata
     //   Offset == Value + 8: Store 'Symbol's Name + Addend'
     //      - needed to get mangled name from .dynsym
-    auto RelaRangeOrError = ELFFile.relas(RelaShdr);
+    auto RelaRangeOrError = ELFFile.relas(*RelaShdr);
     if (!RelaRangeOrError) {
       llvm::logAllUnhandledErrors(RelaRangeOrError.takeError(), llvm::errs(),
                                   "RelaRange creation error: ");
@@ -2129,9 +2157,17 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
       }
     }
 
+    if (!RodataShdr) {
+      llvm::errs() << "populate_name_expression_map: code object contains "
+                      "__amdgcn_name_expr_ stub(s) but no .rodata section\n";
+      for (NameExpressionData *Ptr : NameExpDataVec)
+        delete Ptr;
+      return AMD_COMGR_STATUS_ERROR;
+    }
+
     // rodata - Use the difference between the .rela.dyn Names and .rodata
     // offset to collect unmangled strings
-    auto RodataOrError = ELFFile.getSectionContents(RodataShdr);
+    auto RodataOrError = ELFFile.getSectionContents(*RodataShdr);
     if (!RodataOrError) {
       llvm::logAllUnhandledErrors(RodataOrError.takeError(), llvm::errs(),
                                   "Rodata creation error: ");
@@ -2145,7 +2181,7 @@ amd_comgr_populate_name_expression_map(amd_comgr_data_t Data, size_t *Count) {
     for (auto *ExpData : NameExpDataVec) {
       // TODO: If/when an accessor API becomes available to get the starting
       // address for the section, switch to that
-      size_t Offset = ExpData->RodataOffset - RodataShdr.sh_offset;
+      size_t Offset = ExpData->RodataOffset - RodataShdr->sh_offset;
 
       // Store from the offset up until the first '\0'
       const char *Unmangled = reinterpret_cast<const char *>(&Rodata[Offset]);

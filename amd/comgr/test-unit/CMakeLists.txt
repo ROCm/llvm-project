@@ -195,12 +195,41 @@ if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
       $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:DemangleSymbolNameTest>)
 endif()
 
+# -- NameExpressionMapTest ----------------------------------------------------
+
+add_executable(NameExpressionMapTest
+  NameExpressionMapTest.cpp)
+
+target_link_libraries(NameExpressionMapTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${LLVM_PTHREAD_LIB})
+
+# See DemangleSymbolNameTest: avoid pulling in gtest's LLVM type printers so the
+# test binary does not need LLVM Support symbols (which amd_comgr hides).
+target_compile_definitions(NameExpressionMapTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(NameExpressionMapTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(NameExpressionMapTest)
+
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET NameExpressionMapTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:NameExpressionMapTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
-  COMMAND $<TARGET_FILE:DemangleSymbolNameTest>)
+  COMMAND $<TARGET_FILE:DemangleSymbolNameTest>
+  COMMAND $<TARGET_FILE:NameExpressionMapTest>)
 add_dependencies(test-unit HotswapElfTests HotswapMCTests
-  RaiserScaffoldingTests DemangleSymbolNameTest)
+  RaiserScaffoldingTests DemangleSymbolNameTest NameExpressionMapTest)
 add_dependencies(check-comgr test-unit)
