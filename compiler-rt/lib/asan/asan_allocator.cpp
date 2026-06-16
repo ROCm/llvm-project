@@ -1712,8 +1712,10 @@ hsa_status_t asan_hsa_init() {
   if (status == HSA_STATUS_SUCCESS) {
     // Only clear state when recovering from a prior shutdown (avoids clearing
     // amdgpu_event_registered on every refcount bump and re-registering).
-    if (__sanitizer::AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown())
+    if (__sanitizer::AmdgpuMemFuncs::IsAmdgpuRuntimeShutdown()) {
       __sanitizer::AmdgpuMemFuncs::ClearAmdgpuRuntimeShutdownState();
+      get_allocator().ResetDeviceRuntimeState();
+    }
     __sanitizer::AmdgpuMemFuncs::RegisterSystemEventHandlers();
   }
   return status;
