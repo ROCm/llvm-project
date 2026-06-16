@@ -118,9 +118,14 @@ emitPermLaneSwapEmulation(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   ParsedReg VdstReg = Op.dst();
-  ParsedReg Src0OutReg =
-      Ctx.parseReg(Di.getReg(static_cast<unsigned>(Src0OutIdx)),
-                    static_cast<unsigned>(Src0OutIdx));
+  // src0_out is the second output but is tied to src0: it must land in src0's
+  // own VGPR and VGPR_MSB bank.  Parsing it via its own MCInst operand index
+  // applies `CurrentVgprAdjust[Src0OutIdx]`, which `computeVGPRAdjust` sets to
+  // the destination MSB for every def slot.  When `vdst` and `src0` sit in
+  // different banks that misroutes the swapped result to the destination-bank
+  // alias of src0, leaving src0's real bank stale.  Reuse src0's own
+  // (correctly bank-adjusted) register for the second output instead.
+  ParsedReg Src0OutReg = Op.srcReg(0);
 
   // Snapshot BOTH inputs up-front (read-before-write: `vdst_in`
   // aliases `vdst`, so writing vdstReg first would shadow this
