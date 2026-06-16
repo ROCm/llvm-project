@@ -7,6 +7,9 @@
 # It mirrors ci.yml but uses multi_arch_build_portable_linux.yml instead of
 # ci_linux.yml. Once validated, ci.yml will be updated to use the multi-arch
 # sub-workflows directly.
+#
+# Same `ci:skip` rules as rockci-amd-staging.yml: only automated LLVM_MAIN_REVISION PRs
+# (matching title/body) skip presubmit; label alone is not enough.
 
 name: Multi-Arch CI amd-staging
 
@@ -62,6 +65,19 @@ concurrency:
 
 jobs:
   setup:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request &&
+       !(
+         contains(github.event.pull_request.labels.*.name, 'ci:skip') &&
+         (
+           contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
+           (
+             contains(github.event.pull_request.body, 'Automated update of') &&
+             contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
+           )
+         )
+       ))
     uses: ./.github/workflows/setup_multi_arch.yml
     with:
       build_variant: "release"

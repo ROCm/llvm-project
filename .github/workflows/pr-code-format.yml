@@ -10,6 +10,17 @@ on:
 
 jobs:
   code_formatter:
+    if: >-
+      !(
+        contains(github.event.pull_request.labels.*.name, 'ci:skip') &&
+        (
+          contains(github.event.pull_request.title, 'Update LLVM_MAIN_REVISION') ||
+          (
+            contains(github.event.pull_request.body, 'Automated update of') &&
+            contains(github.event.pull_request.body, 'LLVM_MAIN_REVISION')
+          )
+        )
+      )
     runs-on: ubuntu-24.04
     container:
       image: 'ghcr.io/llvm/ci-ubuntu-24.04-format'
