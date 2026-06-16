@@ -60,6 +60,11 @@ target_link_libraries(hotswap-transpiler
 # HOTSWAP_TOOL_HSA_INCLUDE_ROOT); configuration errors if they are not found.
 option(HOTSWAP_BUILD_TOOL "Build the HSA_TOOLS_LIB hotswap tool" OFF)
 if(HOTSWAP_BUILD_TOOL)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR
+      "HOTSWAP_BUILD_TOOL is only supported on Linux (it requires the HSA "
+      "runtime); set HOTSWAP_BUILD_TOOL=OFF on this platform.")
+  endif()
   find_path(HOTSWAP_TOOL_HSA_INC inc/hsa.h HINTS "${HOTSWAP_TOOL_HSA_INCLUDE_ROOT}")
   if(NOT HOTSWAP_TOOL_HSA_INC)
     message(FATAL_ERROR
