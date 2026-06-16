@@ -218,26 +218,21 @@ bool TargetLowering::findOptimalMemOpLowering(
     LLVMContext &Context, std::vector<EVT> &MemOps, unsigned Limit,
     const MemOp &Op, unsigned DstAS, unsigned SrcAS,
     const AttributeList &FuncAttributes, EVT *LargestVT) const {
+  if (Limit != ~unsigned(0) && Op.isMemcpyWithFixedDstAlign() &&
+      Op.getSrcAlign() < Op.getDstAlign())
+    return false;
+
   EVT VT = getOptimalMemOpType(Context, Op, FuncAttributes);
 
   if (VT == MVT::Other) {
     // Use the largest integer type whose alignment constraints are satisfied.
+    // We only need to check DstAlign here as SrcAlign is always greater or
+    // equal to DstAlign (or zero).
     VT = MVT::LAST_INTEGER_VALUETYPE;
-    if (Op.isFixedDstAlign()) {
-      bool LoadsFromSrc = Op.isMemcpy() && !Op.isMemcpyStrSrc();
-      while (VT != MVT::i8) {
-        unsigned VTSize = VT.getSizeInBits() / 8;
-        bool DstOk =
-            Op.getDstAlign() >= VTSize ||
-            allowsMisalignedMemoryAccesses(VT, DstAS, Op.getDstAlign());
-        bool SrcOk =
-            !LoadsFromSrc || Op.getSrcAlign() >= VTSize ||
-            allowsMisalignedMemoryAccesses(VT, SrcAS, Op.getSrcAlign());
-        if (DstOk && SrcOk)
-          break;
+    if (Op.isFixedDstAlign())
+      while (Op.getDstAlign() < (VT.getSizeInBits() / 8) &&
+             !allowsMisalignedMemoryAccesses(VT, DstAS, Op.getDstAlign()))
         VT = (MVT::SimpleValueType)(VT.getSimpleVT().SimpleTy - 1);
-      }
-    }
     assert(VT.isInteger());
 
     // Find the largest legal integer type.
@@ -247,7 +242,7 @@ bool TargetLowering::findOptimalMemOpLowering(
     assert(LVT.isInteger());
 
     // If the type we've chosen is larger than the largest legal integer type
-    // then use the largest legal type.
+    // then use that instead.
     if (VT.bitsGT(LVT))
       VT = LVT;
   }
