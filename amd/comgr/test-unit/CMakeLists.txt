@@ -163,6 +163,33 @@ target_include_directories(RaiserScaffoldingTests PRIVATE
 
 comgr_configure_test_target(RaiserScaffoldingTests)
 
+# -- HotswapToolTests ---------------------------------------------------------
+#
+# Pure device-detection helpers for the HSA_TOOLS_LIB tool
+# (hotswap/comgr-hotswap-tool-detect.h): gfx-target extraction and the A0
+# rewrite gate. Header-only, so no comgr/LLVM sources are compiled in.
+
+add_executable(HotswapToolTests
+  HotswapToolTest.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_TOOL_LIBS BinaryFormat Support)
+
+target_link_libraries(HotswapToolTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${COMGR_TEST_UNIT_TOOL_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+# Disable gtest's LLVM-type printers; the tool helpers need no LLVM type support.
+target_compile_definitions(HotswapToolTests PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(HotswapToolTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(HotswapToolTests)
+
 # -- DemangleSymbolNameTest ---------------------------------------------------
 
 add_executable(DemangleSymbolNameTest
@@ -199,8 +226,9 @@ endif()
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
+  COMMAND $<TARGET_FILE:HotswapToolTests>
   COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
   COMMAND $<TARGET_FILE:DemangleSymbolNameTest>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests
+add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapToolTests
   RaiserScaffoldingTests DemangleSymbolNameTest)
 add_dependencies(check-comgr test-unit)
