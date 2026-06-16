@@ -149,6 +149,8 @@ public:
           // Phase 2.2: Use simple path for allocatable with trivial types (scalars and arrays)
           // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
           // CRITICAL: Only use Simple path for non-volatile - volatile needs memory ordering
+          // NOTE: For allocatables, we assume contiguity - allocatable whole-array assignments
+          //       are always contiguous. Strided sections of allocatables go through different path.
           if (fir::isa_trivial(lhs.getFortranElementType()) &&
               lhs.getRank() == rhs.getRank() &&
               !fir::isa_volatile_type(lhs.getType())) {
@@ -187,13 +189,15 @@ public:
         // Phase 2.2: Use simple path for non-allocatable arrays with trivial types
         // CRITICAL: Only use Simple path when ranks match - scalar-to-array requires broadcasting
         // CRITICAL: Only use Simple path for non-volatile - volatile needs memory ordering
+        // CRITICAL: Only use Simple path for contiguous - strided slices need element-wise copy
         if (!lhs.isPolymorphic() && fir::isa_trivial(lhs.getFortranElementType()) &&
             lhs.getRank() == rhs.getRank() &&
-            !fir::isa_volatile_type(lhs.getType())) {
-          // Simple intrinsic type array with matching ranks, non-volatile
+            !fir::isa_volatile_type(lhs.getType()) &&
+            lhs.isSimplyContiguous() && rhs.isSimplyContiguous()) {
+          // Simple intrinsic type array with matching ranks, non-volatile, contiguous
           fir::runtime::genAssignSimple(builder, loc, toMutableBox, from);
         } else {
-          // Complex: polymorphic, derived type, rank mismatch (scalar-to-array), volatile
+          // Complex: polymorphic, derived type, rank mismatch (scalar-to-array), volatile, non-contiguous
           fir::runtime::genAssign(builder, loc, toMutableBox, from);
         }
       }
