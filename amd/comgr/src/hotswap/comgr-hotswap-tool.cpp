@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// HSA_TOOLS_LIB tool: B0->A0 rewrite for gfx1250. Load with
+// comgr hotswap tool (libamd_comgr_hotswap_tool.so), loaded via HSA_TOOLS_LIB.
+// B0->A0 rewrite for gfx1250. Load with
 // HSA_TOOLS_LIB=/path/libamd_comgr_hotswap_tool.so. Each gfx1250 A0 code object
 // is rewritten via amd_comgr_hotswap_rewrite before reader creation; everything
 // else passes through. HSA_HOTSWAP_TOOL_VERBOSE=1 for logging.
@@ -38,6 +39,7 @@ struct HotswapTool {
   decltype(hsa_iterate_agents) *IterateAgents = nullptr;
   decltype(hsa_agent_get_info) *AgentGetInfo = nullptr;
   decltype(hsa_isa_get_info_alt) *IsaGetInfoAlt = nullptr;
+  CoreApiTable *Core = nullptr; // table we patch; restored in OnUnload
 
   bool Verbose = false;
   std::once_flag DetectOnce;
@@ -229,9 +231,18 @@ extern "C" bool OnLoad(void *Table, uint64_t, uint64_t, const char *const *) {
   Tool.AgentGetInfo = Core->hsa_agent_get_info_fn;
   Tool.IsaGetInfoAlt = Core->hsa_isa_get_info_alt_fn;
   Tool.RealReaderCreate = Core->hsa_code_object_reader_create_from_memory_fn;
+  Tool.Core = Core;
   Core->hsa_code_object_reader_create_from_memory_fn = &readerCreateWrapper;
   return true;
 }
 
 // NOLINTNEXTLINE(readability-identifier-naming)
-extern "C" void OnUnload() {}
+extern "C" void OnUnload() {
+  using namespace COMGR::hotswap;
+  HotswapTool &Tool = getTool();
+  // Restore the original entry so the table doesn't dangle after unload.
+  if (Tool.Core && Tool.RealReaderCreate) {
+    Tool.Core->hsa_code_object_reader_create_from_memory_fn =
+        Tool.RealReaderCreate;
+  }
+}
