@@ -283,6 +283,10 @@ class DeviceAllocatorT {
     }
   }
 
+  void ResetRuntimeUnloadedFlag() {
+    dev_runtime_unloaded_ = false;
+  }
+
  private:
   bool InitMemFuncs() {
     if (!enabled_ || mem_funcs_inited_ || mem_funcs_init_count_ >= 2) {
