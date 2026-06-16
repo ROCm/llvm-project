@@ -274,7 +274,7 @@ jobs:
           retention-days: 1
 
       - name: Temp fix for hiprtc/hipcc test (Nightly)
-        #if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
+        if: ${{ github.event_name != 'pull_request' && (inputs.test_type == 'full' && inputs.stage_name == 'compiler-runtime') }}
         run: |
              git config --global user.email "z1-cciauto@amd.com"
              git config --global user.name "Z1 cciauto"
