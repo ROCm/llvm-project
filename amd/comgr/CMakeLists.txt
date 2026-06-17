@@ -99,7 +99,12 @@ set(SOURCES
 # in amd_comgr.so so hotswap files can call comgr-metadata helpers
 # without a layering inversion) and compile the
 # comgr-hotswap-transpile.cpp entry point. When disabled, the
-# amd_comgr_hotswap_transpile API is simply not provided.
+# Hotswap binary transpiler. The hotswap project lives under
+# amd/comgr/src/hotswap as a private COMGR subproject. We
+# link the hotswap OBJECT library into amd_comgr (its TUs land directly
+# in amd_comgr.so so hotswap files can call comgr-metadata helpers
+# without a layering inversion) and compile the
+# comgr-hotswap-transpile.cpp entry point.
 option(COMGR_ENABLE_HOTSWAP_TRANSPILE
   "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" ON)
 
