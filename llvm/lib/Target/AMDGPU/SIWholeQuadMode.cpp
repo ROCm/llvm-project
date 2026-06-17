@@ -1352,8 +1352,10 @@ void SIWholeQuadMode::processBlock(MachineBasicBlock &MBB, BlockInfo &BI,
       FirstStrict = II;
 
     // Adjust needs if this is first instruction of WQM requiring shader.
-    if (IsEntry && Idx == 0 && II->getOpcode() == AMDGPU::COPY &&
-        (BI.InNeeds & StateWQM))
+    // Skip for instructions that disable WQM (e.g., IMAGE_STORE) to avoid
+    // Needs being cleared to 0 by the Disabled mask later.
+    if (IsEntry && Idx == 0 && (BI.InNeeds & StateWQM) &&
+        II != IE && !TII->isDisableWQM(*II))
       Needs = StateWQM;
 
     // First, figure out the allowed states (Needs) based on the propagated
