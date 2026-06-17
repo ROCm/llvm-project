@@ -16,6 +16,7 @@
 #include "comgr-hotswap-internal.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/BinaryFormat/MsgPackDocument.h"
 
 using namespace llvm;
 
@@ -225,53 +226,149 @@ ElfView::getKernelVgprCount(StringRef KernelName,
     return std::nullopt;
   }
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
   uint32_t Granulated = AMDHSA_BITS_GET(
       Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
   return (Granulated + 1) * VgprGranuleSize;
 }
 
+// Reads the static (compile-time-fixed) LDS allocation from the kernel
+// descriptor's group_segment_fixed_size field. Dynamic LDS is added by the
+// host at dispatch time and is not visible here -- see the declaration's
+// doc comment for the full lower-bound caveat.
+
+std::optional<uint32_t>
+ElfView::getKernelStaticLdsSize(StringRef KernelName) const {
+  namespace hsa = amdhsa;
+  // findKernelDescriptor never writes through the returned pointer in this
+  // call path but is shared (non-const) with updateKernelDescriptor. The
+  // const_cast on `this` keeps the read-only accessor const-correct without
+  // duplicating the lookup helper.
+  const uint8_t *Kd =
+      const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd) {
+    log() << "hotswap: error: getKernelStaticLdsSize: kernel descriptor "
+          << "symbol '" << KernelName << ".kd' not found.\n";
+    return std::nullopt;
+  }
+  uint32_t LdsSize;
+  std::memcpy(&LdsSize,
+              Kd + offsetof(hsa::kernel_descriptor_t, group_segment_fixed_size),
+              sizeof(LdsSize));
+  return LdsSize;
+}
+
+// -- ElfView::getKernelSgprCount ----------------------------------------------
+//
+// Reads .sgpr_count from the amdhsa.kernels msgpack metadata note.
+// On GFX10+ GRANULATED_WAVEFRONT_SGPR_COUNT in the kernel descriptor is
+// architecturally reserved (must be zero), so the metadata note is the
+// preferred source. Falls back to the KD field when no metadata note is
+// present (e.g. minimal test ELFs assembled with -nostdlib).
+
+static constexpr unsigned SgprEncodingGranule = 8;
+
+std::optional<unsigned>
+ElfView::getKernelSgprCount(StringRef KernelName) const {
+  // --- Try msgpack metadata note first. ---
+  Expected<ELFT::PhdrRange> PhdrsOrErr = File.program_headers();
+  if (PhdrsOrErr) {
+    for (const ELFT::Phdr &Phdr : *PhdrsOrErr) {
+      if (Phdr.p_type != ELF::PT_NOTE)
+        continue;
+      Error Err = Error::success();
+      for (const auto &Note : File.notes(Phdr, Err)) {
+        if (Note.getName() != "AMDGPU" ||
+            Note.getType() != ELF::NT_AMDGPU_METADATA)
+          continue;
+
+        StringRef Blob = Note.getDescAsStringRef(4);
+        msgpack::Document Doc;
+        if (!Doc.readFromBlob(Blob, false))
+          continue;
+
+        msgpack::DocNode Root = Doc.getRoot();
+        if (!Root.isMap())
+          continue;
+        auto KernelsIt = Root.getMap().find("amdhsa.kernels");
+        if (KernelsIt == Root.getMap().end() || !KernelsIt->second.isArray())
+          continue;
+
+        for (auto &KNode : KernelsIt->second.getArray()) {
+          if (!KNode.isMap())
+            continue;
+          auto &KMap = KNode.getMap();
+          auto NameIt = KMap.find(".name");
+          if (NameIt == KMap.end() || !NameIt->second.isString() ||
+              NameIt->second.getString() != KernelName)
+            continue;
+
+          auto SgprIt = KMap.find(".sgpr_count");
+          if (SgprIt == KMap.end())
+            break;
+          if (SgprIt->second.getKind() == msgpack::Type::UInt)
+            return static_cast<unsigned>(SgprIt->second.getUInt());
+          if (SgprIt->second.getKind() == msgpack::Type::Int)
+            return static_cast<unsigned>(SgprIt->second.getInt());
+          break;
+        }
+      }
+      if (errorToBool(std::move(Err)))
+        break;
+    }
+  } else {
+    consumeError(PhdrsOrErr.takeError());
+  }
+
+  // --- Fallback: read the KD field. ---
+  // The LLVM assembler populates GRANULATED_WAVEFRONT_SGPR_COUNT even on
+  // GFX10+ where the hardware ignores it, so this is still usable for
+  // ROCm-compiled code objects that lack a metadata note.
+  namespace hsa = amdhsa;
+  uint8_t *Kd = const_cast<ElfView *>(this)->findKernelDescriptor(KernelName);
+  if (!Kd)
+    return std::nullopt;
+  uint32_t Rsrc1;
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
+  uint32_t Granulated = AMDHSA_BITS_GET(
+      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
+  return (Granulated + 1) * SgprEncodingGranule;
+}
+
 // -- ElfView::updateKernelDescriptor ------------------------------------------
 
 void ElfView::updateKernelDescriptor(StringRef KernelName, unsigned ExtraVgprs,
-                                     unsigned ExtraSgprs,
-                                     unsigned VgprGranuleSize,
-                                     unsigned SgprGranuleSize) {
+                                     unsigned VgprGranuleSize) {
   namespace hsa = amdhsa;
   uint8_t *Kd = findKernelDescriptor(KernelName);
   if (!Kd) {
     log() << "hotswap: error: updateKernelDescriptor: kernel descriptor "
-          << "symbol '" << KernelName << ".kd' not found; requested "
-          << "+" << ExtraVgprs << " VGPRs / +" << ExtraSgprs
-          << " SGPRs silently dropped.\n";
+          << "symbol '" << KernelName << ".kd' not found; requested +"
+          << ExtraVgprs << " VGPRs silently dropped.\n";
     return;
   }
 
+  if (ExtraVgprs == 0 || VgprGranuleSize == 0)
+    return;
+
   uint32_t Rsrc1;
-  std::memcpy(&Rsrc1, Kd + KdRsrc1Offset, sizeof(Rsrc1));
-  if (ExtraVgprs != 0 && VgprGranuleSize != 0) {
-    uint32_t Current = AMDHSA_BITS_GET(
-        Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
-    uint32_t MaxGran = static_cast<uint32_t>(
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT >>
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT_SHIFT);
-    unsigned Extra = (ExtraVgprs + VgprGranuleSize - 1) / VgprGranuleSize;
-    AMDHSA_BITS_SET(Rsrc1,
-                    hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT,
-                    std::min<uint32_t>(Current + Extra, MaxGran));
-  }
-  if (ExtraSgprs != 0 && SgprGranuleSize != 0) {
-    uint32_t Current = AMDHSA_BITS_GET(
-        Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT);
-    uint32_t MaxGran = static_cast<uint32_t>(
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT >>
-        hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT_SHIFT);
-    unsigned Extra = (ExtraSgprs + SgprGranuleSize - 1) / SgprGranuleSize;
-    AMDHSA_BITS_SET(Rsrc1,
-                    hsa::COMPUTE_PGM_RSRC1_GRANULATED_WAVEFRONT_SGPR_COUNT,
-                    std::min<uint32_t>(Current + Extra, MaxGran));
-  }
-  std::memcpy(Kd + KdRsrc1Offset, &Rsrc1, sizeof(Rsrc1));
+  std::memcpy(&Rsrc1,
+              Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              sizeof(Rsrc1));
+  uint32_t Current = AMDHSA_BITS_GET(
+      Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT);
+  uint32_t MaxGran = static_cast<uint32_t>(
+      hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT >>
+      hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT_SHIFT);
+  unsigned Extra = (ExtraVgprs + VgprGranuleSize - 1) / VgprGranuleSize;
+  AMDHSA_BITS_SET(Rsrc1, hsa::COMPUTE_PGM_RSRC1_GRANULATED_WORKITEM_VGPR_COUNT,
+                  std::min<uint32_t>(Current + Extra, MaxGran));
+  std::memcpy(Kd + offsetof(hsa::kernel_descriptor_t, compute_pgm_rsrc1),
+              &Rsrc1, sizeof(Rsrc1));
 }
 
 // -- Section/program header adjustment for trampoline growth ------------------

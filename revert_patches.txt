@@ -8,15 +8,9 @@ breaks build of hipblaslt
 breaks rocgdb UT
 [Clang][CodeGen] Restore isEmptyFieldForLayout for empty class handling
 ---
-needs SPIRV/COMGR
-18e695890306 [SPIRV][AMDGPU][clang][CodeGen][opt] Add late-resolved 
----
-breaks build of llvm
-[clang][CIR][doc] Add auto-generated ClangIR documentation (#190354)
----
 breaks windows build
 [cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-needs dbg team to merge
-[MC][Dwarf] Add custom CFI pseudo-ops for use in AMD
+breaks comgr testing
+Revert "Reapply "[lit] Deprecate execute_external=True in ShTest" (#203316) 
 ---

@@ -207,6 +207,12 @@ enum EnumKindAttribute {
   DW_APPLE_ENUM_KIND_max = 0x01
 };
 
+enum LanguageDialectAttribute {
+#define HANDLE_DW_LLVM_LANG_DIALECT(ID, NAME) DW_LLVM_LANG_DIALECT_##NAME = ID,
+#include "llvm/BinaryFormat/Dwarf.def"
+  DW_LLVM_LANG_DIALECT_max = 0x02
+};
+
 enum DefaultedMemberAttribute {
 #define HANDLE_DW_DEFAULTED(ID, NAME) DW_DEFAULTED_##NAME = ID,
 #include "llvm/BinaryFormat/Dwarf.def"
@@ -1013,6 +1019,7 @@ LLVM_ABI StringRef VirtualityString(unsigned Virtuality);
 LLVM_ABI StringRef EnumKindString(unsigned EnumKind);
 LLVM_ABI StringRef LanguageString(unsigned Language);
 LLVM_ABI StringRef SourceLanguageNameString(SourceLanguageName Lang);
+LLVM_ABI StringRef LanguageDialectString(unsigned LanguageDialect);
 LLVM_ABI StringRef CaseString(unsigned Case);
 LLVM_ABI StringRef ConventionString(unsigned Convention);
 LLVM_ABI StringRef InlineCodeString(unsigned Code);
@@ -1057,6 +1064,7 @@ LLVM_ABI unsigned getEnumKind(StringRef EnumKindString);
 LLVM_ABI unsigned getLanguage(StringRef LanguageString);
 LLVM_ABI unsigned getMemorySpace(StringRef LanguageString);
 LLVM_ABI unsigned getSourceLanguageName(StringRef SourceLanguageNameString);
+LLVM_ABI unsigned getLanguageDialect(StringRef LanguageDialectString);
 LLVM_ABI unsigned getCallingConvention(StringRef LanguageString);
 LLVM_ABI unsigned getMemorySpace(StringRef LanguageString);
 LLVM_ABI unsigned getAttributeEncoding(StringRef EncodingString);

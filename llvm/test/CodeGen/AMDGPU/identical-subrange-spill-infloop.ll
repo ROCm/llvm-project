@@ -336,7 +336,7 @@ declare <2 x float> @llvm.amdgcn.image.sample.lz.2d.v2f32.f32(i32 immarg, float,
 declare void @llvm.amdgcn.raw.buffer.store.v3i32(<3 x i32>, <4 x i32>, i32, i32, i32 immarg) #3
 declare void @llvm.amdgcn.raw.buffer.store.v4i32(<4 x i32>, <4 x i32>, i32, i32, i32 immarg) #3
 
-attributes #0 = { "amdgpu-waves-per-eu"="10,10" }
+attributes #0 = { nounwind "amdgpu-waves-per-eu"="10,10" }
 attributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
 attributes #2 = { nocallback nofree nosync nounwind willreturn memory(read) }
 attributes #3 = { nocallback nofree nosync nounwind willreturn memory(write) }

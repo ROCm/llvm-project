@@ -666,12 +666,14 @@ struct AMDGPUDeviceImageTy : public DeviceImageTy {
   findDeviceSymbol(GenericDeviceTy &Device, StringRef SymbolName) const;
 
   /// Get additional info for kernel, e.g., register spill counts
-  std::optional<offloading::amdgpu::AMDGPUKernelMetaData>
+  Expected<offloading::amdgpu::AMDGPUKernelMetaData>
   getKernelInfo(StringRef Identifier) const {
     auto It = KernelInfoMap.find(Identifier);
 
     if (It == KernelInfoMap.end())
-      return {};
+      return Plugin::error(ErrorCode::INVALID_BINARY,
+                           "could not find metadata for kernel %s",
+                           Identifier.str().c_str());
 
     return It->second;
   }
@@ -791,10 +793,10 @@ struct AMDGPUKernelTy : public GenericKernelTy {
     ODBG(OLDT_Module) << "ELFABIVersion: " << AMDImage.getELFABIVersion();
 
     // Get additional kernel info read from image
-    KernelInfo = AMDImage.getKernelInfo(getName());
-    if (!KernelInfo.has_value())
-      INFO(OMP_INFOTYPE_PLUGIN_KERNEL, Device.getDeviceId(),
-           "Could not read extra information for kernel %s.", getName());
+    auto KernelInfoOrErr = AMDImage.getKernelInfo(getName());
+    if (!KernelInfoOrErr)
+      return KernelInfoOrErr.takeError();
+    KernelInfo = std::move(*KernelInfoOrErr);
 
     HasRPC = AMDImage.hasDeviceSymbol(Device, "__llvm_rpc_client");
 
@@ -881,7 +883,7 @@ private:
   uint32_t ImplicitArgsSize;
 
   /// Additional Info for the AMD GPU Kernel
-  std::optional<offloading::amdgpu::AMDGPUKernelMetaData> KernelInfo;
+  offloading::amdgpu::AMDGPUKernelMetaData KernelInfo;  
   /// CodeGen generate WGSize
   uint16_t ConstWGSize;
 
@@ -954,11 +956,8 @@ private:
   /// Get the number of threads and blocks for the kernel based on the
   /// user-defined threads and block clauses.
   uint32_t getEffectiveNumThreads(GenericDeviceTy &GenericDevice,
-                                  uint32_t UserThreadLimit[3]) const override {
+                                  uint32_t UserThreadLimit) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
-
-    assert(UserThreadLimit[1] == 1 && UserThreadLimit[2] == 1 &&
-           "Multi dimensional launch not supported yet.");
 
     // Honor OMP_TEAMS_THREAD_LIMIT environment variable and
     // num_threads/thread_limit clause for BigJumpLoop and NoLoop kernel types.
@@ -967,8 +966,8 @@ private:
       if (TeamsThreadLimitEnvVar > 0)
         return std::min(static_cast<int32_t>(ConstWGSize),
                         TeamsThreadLimitEnvVar);
-      if ((UserThreadLimit[0] > 0) && (UserThreadLimit[0] != (uint32_t)-1))
-        return std::min(static_cast<uint32_t>(ConstWGSize), UserThreadLimit[0]);
+      if ((UserThreadLimit > 0) && (UserThreadLimit != (uint32_t)-1))
+        return std::min(static_cast<uint32_t>(ConstWGSize), UserThreadLimit);
       return ConstWGSize;
     }
 
@@ -976,9 +975,9 @@ private:
       if (TeamsThreadLimitEnvVar > 0 &&
           TeamsThreadLimitEnvVar <= static_cast<int32_t>(ConstWGSize))
         return llvm::omp::getBlockSizeAsPowerOfTwo(TeamsThreadLimitEnvVar);
-      if (UserThreadLimit[0] > 0 && UserThreadLimit[0] != (uint32_t)-1 &&
-          UserThreadLimit[0] <= static_cast<uint32_t>(ConstWGSize))
-        return llvm::omp::getBlockSizeAsPowerOfTwo(UserThreadLimit[0]);
+      if (UserThreadLimit > 0 && UserThreadLimit != (uint32_t)-1 &&
+          UserThreadLimit <= static_cast<uint32_t>(ConstWGSize))
+        return llvm::omp::getBlockSizeAsPowerOfTwo(UserThreadLimit);
       uint32_t BlockSizeOverride = GenericDevice.getOMPXXteamBlockSize();
       if (BlockSizeOverride > 0 &&
           BlockSizeOverride <= static_cast<int32_t>(ConstWGSize))
@@ -988,11 +987,11 @@ private:
       return ConstWGSize;
     }
 
-    if (UserThreadLimit[0] > 0 && isGenericMode()) {
-      if (UserThreadLimit[0] == (uint32_t)-1)
-        UserThreadLimit[0] = PreferredNumThreads;
+    if (UserThreadLimit > 0 && isGenericMode()) {
+      if (UserThreadLimit == (uint32_t)-1)
+        UserThreadLimit = PreferredNumThreads;
       else
-        UserThreadLimit[0] += GenericDevice.getWarpSize();
+        UserThreadLimit += GenericDevice.getWarpSize();
     }
 
     // Limit number of threads taking into consideration the user
@@ -1002,19 +1001,15 @@ private:
       CurrentMaxNumThreads = std::min(
           static_cast<uint32_t>(TeamsThreadLimitEnvVar), CurrentMaxNumThreads);
 
-    return std::min(CurrentMaxNumThreads, (UserThreadLimit[0] > 0)
-                                              ? UserThreadLimit[0]
+    return std::min(CurrentMaxNumThreads, (UserThreadLimit > 0)
+                                              ? UserThreadLimit
                                               : PreferredNumThreads);
   }
   uint32_t getEffectiveNumBlocks(GenericDeviceTy &GenericDevice,
-                                 uint32_t UserNumBlocks[3],
-                                 uint64_t LoopTripCount,
+                                 uint32_t UserNumBlocks, uint64_t LoopTripCount,
                                  uint32_t &EffectiveNumThreads,
                                  bool IsNumThreadsFromUser) const override {
     assert(!isBareMode() && "bare kernel should not call this function");
-
-    assert(UserNumBlocks[1] == 1 && UserNumBlocks[2] == 1 &&
-           "Multi dimensional launch not supported yet.");
 
     const auto getNumGroupsFromThreadsAndTripCount =
         [](const uint64_t TripCount, const uint32_t NumThreads) {
@@ -1045,10 +1040,9 @@ private:
                                     GenericDevice.getBlockLimit())
         NumGroups = std::min(static_cast<uint64_t>(NumTeamsEnvVar), NumGroups);
       // Honor num_teams clause but lower it if tripcount dictates.
-      else if (UserNumBlocks[0] > 0 &&
-               UserNumBlocks[0] <= GenericDevice.getBlockLimit()) {
-        NumGroups =
-            std::min(static_cast<uint64_t>(UserNumBlocks[0]), NumGroups);
+      else if (UserNumBlocks > 0 &&
+               UserNumBlocks <= GenericDevice.getBlockLimit()) {
+        NumGroups = std::min(static_cast<uint64_t>(UserNumBlocks), NumGroups);
       } else {
         // num_teams clause is not specified. Choose lower of tripcount-based
         // NumGroups and a value determined as follows:
@@ -1080,7 +1074,7 @@ private:
       // clause or OMP_NUM_TEAMS is specified, optimize the number of teams
       // based on occupancy value.
       if (OMPX_BigJumpLoopOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-          UserNumBlocks[0] == 0) {
+          UserNumBlocks == 0) {
         return std::min(NumGroups, OptimizeNumTeamsBaseOccupancy(
                                        GenericDevice, EffectiveNumThreads));
       }
@@ -1123,7 +1117,7 @@ private:
       // assumption is that anything lower is probably resource constrained
       // already and this optimization may not be beneficial.
       if (OMPX_XTeamReductionOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-          UserNumBlocks[0] == 0 &&
+          UserNumBlocks == 0 &&
           (MaxOccupancy * llvm::omp::amdgpu_arch::SIMDPerCU >=
            llvm::omp::xteam_red::DesiredWavesPerCU)) {
         uint64_t newNumTeams =
@@ -1136,10 +1130,9 @@ private:
       // may fail to extract it, instead using the alternative computation of
       // the number of teams. But the runtime here will still see the value
       // of the clause, so we need to check against the upper limit.
-      if (UserNumBlocks[0] > 0 &&
-          UserNumBlocks[0] <= GenericDevice.getBlockLimit()) {
+      if (UserNumBlocks > 0 && UserNumBlocks <= GenericDevice.getBlockLimit()) {
         NumGroups =
-            std::min(static_cast<uint64_t>(UserNumBlocks[0]), MaxNumGroups);
+            std::min(static_cast<uint64_t>(UserNumBlocks), MaxNumGroups);
       } else if (NumTeamsEnvVar > 0 && static_cast<uint32_t>(NumTeamsEnvVar) <=
                                            GenericDevice.getBlockLimit()) {
         NumGroups =
@@ -1190,11 +1183,11 @@ private:
       return NumGroups;
     }
 
-    if (UserNumBlocks[0] > 0) {
+    if (UserNumBlocks > 0) {
       // TODO: We need to honor any value and consequently allow more than the
       // block limit. For this we might need to start multiple kernels or let
       // the blocks start again until the requested number has been started.
-      return std::min(UserNumBlocks[0], GenericDevice.getBlockLimit());
+      return std::min(UserNumBlocks, GenericDevice.getBlockLimit());
     }
 
     // If envar OMPX_SPMD_OCCUPANCY_BASED_OPT is set and no OMP_NUM_TEAMS is
@@ -1228,7 +1221,7 @@ private:
     }
 
     if (isSPMDMode() && OMPX_SPMDOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-        UserNumBlocks[0] == 0) {
+        UserNumBlocks == 0) {
       return std::min(
           TripCountNumBlocks,
           OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads));
@@ -1269,7 +1262,7 @@ private:
     uint64_t PreferredNumBlocks = TripCountNumBlocks;
     // Occupancy-based setting overrides block reuse.
     if (OMPX_GenericSPMDOccupancyBasedOpt && NumTeamsEnvVar == 0 &&
-        UserNumBlocks[0] == 0) {
+        UserNumBlocks == 0) {
       PreferredNumBlocks = std::min(
           PreferredNumBlocks,
           OptimizeNumTeamsBaseOccupancy(GenericDevice, EffectiveNumThreads));
@@ -1291,7 +1284,7 @@ private:
     // required to preserve the occupancy in case the inner loop tripcounts are
     // larger than the blocksize. This change is done only when the user has not
     // specified the number of teams or threads.
-    if (isGenericSPMDMode() && !IsNumThreadsFromUser && UserNumBlocks[0] == 0 &&
+    if (isGenericSPMDMode() && !IsNumThreadsFromUser && UserNumBlocks == 0 &&
         NumTeamsEnvVar == 0 &&
         GenericDevice.getOMPXGenericSpmdUseSmallBlockSize()) {
       uint64_t TmpPreferredNumBlocks = PreferredNumBlocks << 1;
@@ -2691,12 +2684,22 @@ public:
 
   const AMDGPUQueueTy *getQueue() const { return Queue; }
 
-  /// Record an event by enqueuing a barrier marker packet on the stream.
+  /// Record an event on the stream. If \p EnableProfiling is true, a barrier
+  /// marker packet is enqueued to record timestamps.
   Error recordEvent(AMDGPUEventTy &Event,
-                    AMDGPUSignalTy *ReusedSignal = nullptr);
+                    AMDGPUSignalTy *ReusedSignal = nullptr,
+                    bool EnableProfiling = false);
 
   /// Make the stream wait on an event.
   Error waitEvent(const AMDGPUEventTy &Event);
+
+private:
+  /// Lightweight sync-only recording.
+  Error recordEventSyncOnly(AMDGPUEventTy &Event, AMDGPUSignalTy *ReusedSignal);
+
+  /// Full profiling recording.
+  Error recordEventWithProfiling(AMDGPUEventTy &Event,
+                                 AMDGPUSignalTy *ReusedSignal);
 
   friend struct AMDGPUStreamManagerTy;
 };
@@ -2723,7 +2726,7 @@ struct AMDGPUEventTy {
   }
 
   /// Record the current stream point on the event.
-  Error record(AMDGPUStreamTy &Stream) {
+  Error record(AMDGPUStreamTy &Stream, bool EnableProfiling = false) {
     std::lock_guard<std::mutex> Lock(Mutex);
 
     // Discard the previous recording and retained timing state, reusing the
@@ -2734,7 +2737,7 @@ struct AMDGPUEventTy {
 
     RecordedStream = &Stream;
 
-    if (auto Err = Stream.recordEvent(*this, Signal)) {
+    if (auto Err = Stream.recordEvent(*this, Signal, EnableProfiling)) {
       if (auto ResetErr = resetState())
         return joinErrors(std::move(Err), std::move(ResetErr));
       return Err;
@@ -2808,11 +2811,43 @@ protected:
 };
 
 Error AMDGPUStreamTy::recordEvent(AMDGPUEventTy &Event,
-                                  AMDGPUSignalTy *ReusedSignal) {
+                                  AMDGPUSignalTy *ReusedSignal,
+                                  bool EnableProfiling) {
   if (Queue == nullptr)
     return Plugin::error(ErrorCode::INVALID_NULL_POINTER,
                          "target queue was nullptr");
 
+  if (EnableProfiling)
+    return recordEventWithProfiling(Event, ReusedSignal);
+  return recordEventSyncOnly(Event, ReusedSignal);
+}
+
+Error AMDGPUStreamTy::recordEventSyncOnly(AMDGPUEventTy &Event,
+                                          AMDGPUSignalTy *ReusedSignal) {
+  std::lock_guard<std::mutex> StreamLock(Mutex);
+
+  if (size() > 0) {
+    // Record the synchronize identifier (to detect stale recordings) and
+    // the last valid stream's operation.
+    Event.RecordedSyncCycle = SyncCycle;
+    Event.RecordedSlot = last();
+
+    assert(Event.RecordedSyncCycle >= 0 && "Invalid recorded sync cycle");
+    assert(Event.RecordedSlot >= 0 && "Invalid recorded slot");
+  } else {
+    // The stream is empty, everything already completed, record nothing.
+    Event.RecordedSyncCycle = -1;
+    Event.RecordedSlot = -1;
+  }
+
+  // Return the unused reusable signal back to the manager.
+  if (ReusedSignal)
+    return SignalManager.returnResource(ReusedSignal);
+  return Plugin::success();
+}
+
+Error AMDGPUStreamTy::recordEventWithProfiling(AMDGPUEventTy &Event,
+                                               AMDGPUSignalTy *ReusedSignal) {
   // One use for the stream slot and one for the event timing signal.
   const uint32_t OutputSignalUses = 2;
 
@@ -4437,7 +4472,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   };
 
   /// Create an event.
-  Error createEventImpl(void **EventPtrStorage) override {
+  Error createEventImpl(void **EventPtrStorage, bool EnableProfiling) override {
     AMDGPUEventTy **Event = reinterpret_cast<AMDGPUEventTy **>(EventPtrStorage);
     if (auto Err = AMDGPUEventManager.getResource(*Event))
       return Err;
@@ -4445,7 +4480,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   }
 
   /// Destroy a previously created event.
-  Error destroyEventImpl(void *EventPtr) override {
+  Error destroyEventImpl(void *EventPtr, bool EnableProfiling) override {
     AMDGPUEventTy *Event = reinterpret_cast<AMDGPUEventTy *>(EventPtr);
     assert(Event && "Invalid event");
 
@@ -4456,8 +4491,8 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
   }
 
   /// Record the event.
-  Error recordEventImpl(void *EventPtr,
-                        AsyncInfoWrapperTy &AsyncInfoWrapper) override {
+  Error recordEventImpl(void *EventPtr, AsyncInfoWrapperTy &AsyncInfoWrapper,
+                        bool EnableProfiling) override {
     AMDGPUEventTy *Event = reinterpret_cast<AMDGPUEventTy *>(EventPtr);
     assert(Event && "Invalid event");
 
@@ -4465,7 +4500,7 @@ struct AMDGPUDeviceTy : public GenericDeviceTy, AMDGenericDeviceTy {
     if (auto Err = getStream(AsyncInfoWrapper, Stream))
       return Err;
 
-    return Event->record(*Stream);
+    return Event->record(*Stream, EnableProfiling);
   }
 
   /// Make the stream wait on the event.
@@ -6160,19 +6195,47 @@ Error AMDGPUKernelTy::launchImpl(GenericDeviceTy &GenericDevice,
   if (auto Err = GenericDevice.getDeviceStackSize(StackSize))
     return Err;
 
-  // Copy the explicit arguments.
-  // TODO: We should expose the args memory manager alloc to the common part as
-  // 	   alternative to copying them twice.
-  if (LaunchParams.Size)
-    std::memcpy(AllArgs, LaunchParams.Data, LaunchParams.Size);
+  // Copy explicit arguments.
+  size_t ExplicitEnd = 0;
+  if (KernelArgs.Flags.IsPtrArgs) {
+    if (KernelArgs.ArgPtrs) {
+      const auto &ArgMDs = KernelInfo.ArgMDs;
+
+      // ArgMDs might also contain hidden implicit arguments, so we can't check
+      // if user-provided NumArgs matches exactly.
+      if (KernelArgs.NumArgs > ArgMDs.size())
+        return Plugin::error(
+            ErrorCode::INVALID_ARGUMENT,
+            "number of arguments (%u) exceeds the number of arguments "
+            "expected by the kernel (%zu)",
+            KernelArgs.NumArgs, ArgMDs.size());
+
+      for (size_t I = 0; I < KernelArgs.NumArgs; I++) {
+        auto [Offset, Size] = ArgMDs[I];
+        std::memcpy(utils::advancePtr(AllArgs, Offset), KernelArgs.ArgPtrs[I],
+                    Size);
+      }
+
+      if (KernelArgs.NumArgs) {
+        auto [Offset, Size] = ArgMDs[KernelArgs.NumArgs - 1];
+        ExplicitEnd = Offset + Size;
+      }
+    }
+  } else {
+    // TODO: We should expose the args memory manager alloc to the common part
+    // as alternative to copying them twice.
+    if (LaunchParams.Size)
+      std::memcpy(AllArgs, LaunchParams.Data, LaunchParams.Size);
+    ExplicitEnd = LaunchParams.Size;
+  }
 
   AMDGPUDeviceTy &AMDGPUDevice = static_cast<AMDGPUDeviceTy &>(GenericDevice);
   AMDGPUStreamTy *Stream = nullptr;
   if (auto Err = AMDGPUDevice.getStream(AsyncInfoWrapper, Stream))
     return Err;
 
-  uint64_t ImplArgsOffset = llvm::alignTo(
-      LaunchParams.Size, alignof(hsa_utils::AMDGPUImplicitArgsTy));
+  uint64_t ImplArgsOffset =
+      llvm::alignTo(ExplicitEnd, alignof(hsa_utils::AMDGPUImplicitArgsTy));
   if (ArgsSize > ImplArgsOffset) {
     hsa_utils::AMDGPUImplicitArgsTy *ImplArgs =
         reinterpret_cast<hsa_utils::AMDGPUImplicitArgsTy *>(
@@ -6225,12 +6288,12 @@ void AMDGPUKernelTy::printAMDOneLineKernelTrace(GenericDeviceTy &GenericDevice,
                                                 uint32_t NumBlocks[3],
                                                 int64_t MultiDeviceLB,
                                                 int64_t MultiDeviceUB) const {
-  auto GroupSegmentSize = (*KernelInfo).GroupSegmentList;
-  auto SGPRCount = (*KernelInfo).SGPRCount;
-  auto VGPRCount = (*KernelInfo).VGPRCount;
-  auto AGPRCount = (*KernelInfo).AGPRCount;
-  auto SGPRSpillCount = (*KernelInfo).SGPRSpillCount;
-  auto VGPRSpillCount = (*KernelInfo).VGPRSpillCount;
+  auto GroupSegmentSize = (KernelInfo).GroupSegmentList;
+  auto SGPRCount = (KernelInfo).SGPRCount;
+  auto VGPRCount = (KernelInfo).VGPRCount;
+  auto AGPRCount = (KernelInfo).AGPRCount;
+  auto SGPRSpillCount = (KernelInfo).SGPRSpillCount;
+  auto VGPRSpillCount = (KernelInfo).VGPRSpillCount;
   // auto MaxFlatWorkgroupSize = (*KernelInfo).MaxFlatWorkgroupSize;
 
   if (GenericDevice.enableKernelDurationTracing()) {
@@ -6291,10 +6354,6 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
   if (!(getInfoLevel() & OMP_INFOTYPE_PLUGIN_KERNEL))
     return Plugin::success();
 
-  // We don't have data to print additional info, but no hard error
-  if (!KernelInfo.has_value())
-    return Plugin::success();
-
   // General Info
   auto *NumGroups = NumBlocks;
   auto *ThreadsPerGroup = NumThreads;
@@ -6305,12 +6364,12 @@ Error AMDGPUKernelTy::printLaunchInfoDetails(GenericDeviceTy &GenericDevice,
 
   // Details for AMDGPU kernels (read from image)
   // https://www.llvm.org/docs/AMDGPUUsage.html#code-object-v4-metadata
-  auto GroupSegmentSize = (*KernelInfo).GroupSegmentList;
-  auto SGPRCount = (*KernelInfo).SGPRCount;
-  auto VGPRCount = (*KernelInfo).VGPRCount;
-  auto SGPRSpillCount = (*KernelInfo).SGPRSpillCount;
-  auto VGPRSpillCount = (*KernelInfo).VGPRSpillCount;
-  auto MaxFlatWorkgroupSize = (*KernelInfo).MaxFlatWorkgroupSize;
+  auto GroupSegmentSize = KernelInfo.GroupSegmentList;
+  auto SGPRCount = KernelInfo.SGPRCount;
+  auto VGPRCount = KernelInfo.VGPRCount;
+  auto SGPRSpillCount = KernelInfo.SGPRSpillCount;
+  auto VGPRSpillCount = KernelInfo.VGPRSpillCount;
+  auto MaxFlatWorkgroupSize = KernelInfo.MaxFlatWorkgroupSize;
 
   // Prints additional launch info that contains the following.
   // Num Args: The number of kernel arguments
@@ -6530,10 +6589,10 @@ void AMDGPUQueueTy::callbackError(hsa_status_t Status, hsa_queue_t *Source,
 
 /// Compute the max kernel occupancy for AMD GPU
 unsigned AMDGPUKernelTy::computeMaxOccupancy(GenericDeviceTy &Device) const {
-  uint32_t GroupSegmentSize = (*KernelInfo).GroupSegmentList;
-  uint32_t SGPRCount = (*KernelInfo).SGPRCount;
-  uint32_t VGPRCount = (*KernelInfo).VGPRCount;
-  uint32_t MaxFlatWorkgroupSize = (*KernelInfo).MaxFlatWorkgroupSize;
+  uint32_t GroupSegmentSize = (KernelInfo).GroupSegmentList;
+  uint32_t SGPRCount = (KernelInfo).SGPRCount;
+  uint32_t VGPRCount = (KernelInfo).VGPRCount;
+  uint32_t MaxFlatWorkgroupSize = (KernelInfo).MaxFlatWorkgroupSize;
 
   // Default number of waves per EU
   unsigned MaxWavesPerEU = llvm::omp::amdgpu_arch::MaxWavesPerEU10;

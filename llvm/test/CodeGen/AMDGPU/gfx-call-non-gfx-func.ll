@@ -4,7 +4,7 @@
 
 declare void @extern_c_func()
 
-define amdgpu_gfx void @gfx_func() {
+define amdgpu_gfx void @gfx_func() #0 {
 ; SDAG-LABEL: gfx_func:
 ; SDAG:       ; %bb.0:
 ; SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
@@ -225,3 +225,5 @@ define amdgpu_gfx void @gfx_func() {
   call void @extern_c_func()
   ret void
 }
+
+attributes #0 = { nounwind }

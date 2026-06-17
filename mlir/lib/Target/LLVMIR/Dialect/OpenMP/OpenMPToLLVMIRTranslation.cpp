@@ -326,17 +326,42 @@ public:
     }
   }
 
-  // Rewrite all uses of the original variable in `BBName`
-  //  with the linear variable in-place
-  void rewriteInPlace(llvm::IRBuilderBase &builder, const std::string &BBName,
+  // Rewrite all uses of the original variable, in the basic blocks whose names
+  // start with `prefix`, with the linear variable in-place.
+  void rewriteInPlace(llvm::IRBuilderBase &builder, llvm::BasicBlock *startBB,
+                      llvm::BasicBlock *endBB, llvm::StringRef prefix,
                       size_t varIndex) {
-    llvm::SmallVector<llvm::User *> users;
-    for (llvm::User *user : linearOrigVal[varIndex]->users())
-      users.push_back(user);
+    llvm::SmallVector<llvm::BasicBlock *, 32> worklist;
+    llvm::SmallPtrSet<llvm::BasicBlock *, 32> visited;
+    llvm::SmallPtrSet<llvm::BasicBlock *, 32> matchingBBs;
+
+    assert(startBB && endBB && "Invalid startBB/endBB");
+
+    // Traverse basic blocks from startBB to endBB and save those
+    // whose names start with the specified prefix.
+    worklist.push_back(startBB);
+    visited.insert(startBB);
+
+    while (!worklist.empty()) {
+      llvm::BasicBlock *bb = worklist.pop_back_val();
+
+      if (bb->hasName() && bb->getName().starts_with(prefix))
+        matchingBBs.insert(bb);
+
+      if (bb == endBB)
+        continue;
+
+      for (llvm::BasicBlock *succ : llvm::successors(bb)) {
+        if (visited.insert(succ).second)
+          worklist.push_back(succ);
+      }
+    }
+
+    // Rewrite all uses in the matching BBs.
+    llvm::SmallVector<llvm::User *> users(linearOrigVal[varIndex]->users());
     for (auto *user : users) {
       if (auto *userInst = dyn_cast<llvm::Instruction>(user)) {
-        if (userInst->getParent()->getName().str().find(BBName) !=
-            std::string::npos)
+        if (matchingBBs.contains(userInst->getParent()))
           user->replaceUsesOfWith(linearOrigVal[varIndex],
                                   linearLoopBodyTemps[varIndex]);
       }
@@ -438,6 +463,10 @@ static LogicalResult checkImplementationStatus(Operation &op) {
     if (op.hasThreadLimitMultiDim())
       result = todo("thread_limit with multi-dimensional values");
   };
+  auto checkMap = [&todo](auto op, LogicalResult &result) {
+    if (!op.getMapIterated().empty())
+      result = todo("map/motion clause with iterator modifier");
+  };
 
   auto checkDynGroupprivate = [&todo](auto op, LogicalResult &result) {
     if (op.getDynGroupprivateSize())
@@ -500,15 +529,37 @@ static LogicalResult checkImplementationStatus(Operation &op) {
       .Case([&](omp::SimdOp op) { checkReduction(op, result); })
       .Case<omp::AtomicReadOp, omp::AtomicWriteOp, omp::AtomicUpdateOp,
             omp::AtomicCaptureOp>([&](auto op) { checkHint(op, result); })
-      .Case<omp::TargetEnterDataOp, omp::TargetExitDataOp>(
-          [&](auto op) { checkDepend(op, result); })
-      .Case([&](omp::TargetUpdateOp op) { checkDepend(op, result); })
+      .Case([&](omp::AtomicCompareOp op) {
+        checkHint(op, result);
+        Region &region = op.getRegion();
+        if (region.empty())
+          return;
+        mlir::Type argType = region.front().getArgument(0).getType();
+        auto structTy = dyn_cast<LLVM::LLVMStructType>(argType);
+        if (!structTy)
+          return;
+        DataLayout dl = DataLayout(op->getParentOfType<ModuleOp>());
+        unsigned totalBits = dl.getTypeSizeInBits(structTy);
+        if (totalBits > 128)
+          result = todo("compare for complex types wider than 128 bits");
+      })
+      .Case<omp::TargetEnterDataOp, omp::TargetExitDataOp>([&](auto op) {
+        checkDepend(op, result);
+        checkMap(op, result);
+      })
+      .Case([&](omp::TargetUpdateOp op) {
+        checkDepend(op, result);
+        checkMap(op, result);
+      })
       .Case([&](omp::TargetOp op) {
         checkAllocate(op, result);
         checkBare(op, result);
         checkInReduction(op, result);
+        checkMap(op, result);
         checkThreadLimit(op, result);
       })
+      .Case([&](omp::TargetDataOp op) { checkMap(op, result); })
+      .Case([&](omp::DeclareMapperInfoOp op) { checkMap(op, result); })
       .Default([](Operation &) {
         // Assume all clauses for an operation can be translated unless they are
         // checked above.
@@ -3840,6 +3891,7 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
       linearClauseProcessor.initLinearStep(moduleTranslation, linearStep);
   }
 
+  llvm::BasicBlock *sourceBlock = builder.GetInsertBlock();
   llvm::Expected<llvm::BasicBlock *> regionBlock = convertOmpOpRegions(
       wsloopOp.getRegion(), "omp.wsloop.region", builder, moduleTranslation);
 
@@ -3902,8 +3954,10 @@ convertOmpWsloop(Operation &opInst, llvm::IRBuilderBase &builder,
     if (failed(handleError(afterBarrierIP, *loopOp)))
       return failure();
     for (size_t index = 0; index < wsloopOp.getLinearVars().size(); index++)
-      linearClauseProcessor.rewriteInPlace(builder, "omp.loop_nest.region",
-                                           index);
+      linearClauseProcessor.rewriteInPlace(
+          builder, sourceBlock->getSingleSuccessor(), *regionBlock,
+          "omp.loop_nest.region", index);
+
     builder.restoreIP(oldIP);
   }
 
@@ -4275,15 +4329,18 @@ convertOmpSimd(Operation &opInst, llvm::IRBuilderBase &builder,
   });
 
   for (size_t index = 0; index < simdOp.getLinearVars().size(); index++) {
-    linearClauseProcessor.rewriteInPlace(builder, "omp.loop_nest.region",
-                                         index);
+    llvm::BasicBlock *startBB = sourceBlock->getSingleSuccessor();
+    llvm::BasicBlock *endBB = *regionBlock;
+    linearClauseProcessor.rewriteInPlace(builder, startBB, endBB,
+                                         "omp.loop_nest.region", index);
+
     if (hasOrderedRegions) {
       // Also rewrite uses in ordered regions so they read the current value
-      linearClauseProcessor.rewriteInPlace(builder, "omp.ordered.region",
-                                           index);
+      linearClauseProcessor.rewriteInPlace(builder, startBB, endBB,
+                                           "omp.ordered.region", index);
       // Also rewrite uses in finalize blocks (code after ordered regions)
-      linearClauseProcessor.rewriteInPlace(builder, "omp_region.finalize",
-                                           index);
+      linearClauseProcessor.rewriteInPlace(builder, startBB, endBB,
+                                           "omp_region.finalize", index);
     }
   }
 
@@ -4920,6 +4977,351 @@ convertOmpAtomicCapture(omp::AtomicCaptureOp atomicCaptureOp,
   return success();
 }
 
+/// Helper to extract the OMPAtomicCompareOp from an integer comparison
+/// predicate. Returns std::nullopt for unsupported predicates.
+static std::optional<llvm::omp::OMPAtomicCompareOp>
+convertICmpPredicateToAtomicCompareOp(LLVM::ICmpPredicate predicate) {
+  switch (predicate) {
+  case LLVM::ICmpPredicate::eq:
+    return llvm::omp::OMPAtomicCompareOp::EQ;
+  case LLVM::ICmpPredicate::slt:
+  case LLVM::ICmpPredicate::ult:
+    return llvm::omp::OMPAtomicCompareOp::MIN;
+  case LLVM::ICmpPredicate::sgt:
+  case LLVM::ICmpPredicate::ugt:
+    return llvm::omp::OMPAtomicCompareOp::MAX;
+  default:
+    return std::nullopt;
+  }
+}
+
+/// Helper to extract the OMPAtomicCompareOp from a floating-point comparison
+/// predicate. Returns std::nullopt for unsupported predicates.
+static std::optional<llvm::omp::OMPAtomicCompareOp>
+convertFCmpPredicateToAtomicCompareOp(LLVM::FCmpPredicate predicate) {
+  switch (predicate) {
+  case LLVM::FCmpPredicate::oeq:
+  case LLVM::FCmpPredicate::ueq:
+    return llvm::omp::OMPAtomicCompareOp::EQ;
+  case LLVM::FCmpPredicate::olt:
+  case LLVM::FCmpPredicate::ult:
+    return llvm::omp::OMPAtomicCompareOp::MIN;
+  case LLVM::FCmpPredicate::ogt:
+  case LLVM::FCmpPredicate::ugt:
+    return llvm::omp::OMPAtomicCompareOp::MAX;
+  default:
+    return std::nullopt;
+  }
+}
+
+/// Converts an omp.atomic.compare operation to LLVM IR.
+///
+///      if (x == e) x = d
+/// The region contains a comparison + select pattern:
+///   ^bb0(%xval: T):
+///     %cmp = llvm.icmp/fcmp <pred> %xval, %e : T
+///     %sel = llvm.select %cmp, %d, %xval : i1, T
+///     omp.yield(%sel : T)
+///
+/// From MLIR extract:
+///   1) comparison operator
+///   2) expected value (e)
+///   3) desired value (d)
+/// These are passed to OpenMPIRBuilder::createAtomicCompare which generates
+/// the actual cmpxchg / atomicrmw instruction.
+///
+static LogicalResult
+convertOmpAtomicCompare(omp::AtomicCompareOp atomicCompareOp,
+                        llvm::IRBuilderBase &builder,
+                        LLVM::ModuleTranslation &moduleTranslation) {
+  llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
+  if (failed(checkImplementationStatus(*atomicCompareOp)))
+    return failure();
+
+  Region &region = atomicCompareOp.getRegion();
+  Block &block = region.front();
+
+  // Determine element type from the region block argument
+  llvm::Type *llvmXElementType =
+      moduleTranslation.convertType(block.getArgument(0).getType());
+  if (!llvmXElementType)
+    return atomicCompareOp.emitError(
+        "unable to determine element type for atomic compare");
+
+  llvm::Value *llvmX = moduleTranslation.lookupValue(atomicCompareOp.getX());
+
+  // IsSigned is determined from the comparison predicate in the region.
+  // Signed ICmp predicates (slt/sgt) set this to true; unsigned (ult/ugt)
+  // leave it false. For EQ and float comparisons, signedness is irrelevant.
+  bool isSigned = false;
+  llvm::OpenMPIRBuilder::AtomicOpValue llvmAtomicX = {llvmX, llvmXElementType,
+                                                      isSigned,
+                                                      /*IsVolatile=*/false};
+
+  llvm::AtomicOrdering atomicOrdering =
+      convertAtomicOrdering(atomicCompareOp.getMemoryOrder());
+
+  auto isAtomicComparePatternOp = [](Operation &op) {
+    return llvm::isa<LLVM::ICmpOp, LLVM::FCmpOp, LLVM::SelectOp, LLVM::AndOp,
+                     LLVM::OrOp>(op);
+  };
+
+  // Pre-translate operations inside the region that compute e and d (e.g.,
+  // GEP, loads for dereferencing Fortran pointers) but are not part of the
+  // atomic compare-and-swap pattern (icmp/fcmp, select, and/or).
+  //
+  // 1) Validity: The OpenMP spec requires e and d to be evaluated before the
+  //    atomic operation, so emitting their computation here is correct.
+  // 2) Memory effects: These ops only depend on values defined outside the
+  //    region. They cannot observe the block argument (%xval), which is the
+  //    value loaded atomically by cmpxchg and does not exist yet.
+  // 3) Invariant enforcement: The `allOperandsMapped` check below skips any
+  //    op whose operands include the unmapped block argument, guaranteeing
+  //    only region-external-dependent ops are pre-translated.
+  for (Operation &op : block.without_terminator()) {
+    // Skip operations that form the atomic compare pattern — these are
+    // not emitted as individual instructions but are analyzed below to
+    // extract the comparison predicate, expected value (e), and desired
+    // value (d) for generating a single cmpxchg/atomicrmw.
+    if (isAtomicComparePatternOp(op))
+      continue;
+
+    // Avoid translating ops that depend on the unmapped block argument.
+    bool allOperandsMapped = llvm::all_of(op.getOperands(), [&](mlir::Value v) {
+      return moduleTranslation.lookupValue(v) != nullptr;
+    });
+    if (!allOperandsMapped)
+      continue;
+
+    if (failed(moduleTranslation.convertOperation(op, builder)))
+      return atomicCompareOp.emitError(
+          "failed to translate operation inside atomic compare region");
+  }
+
+  // Look up a value that may have been pre-translated or defined outside the
+  // region.
+  auto materializeValue = [&](mlir::Value val) -> llvm::Value * {
+    // Check if the value is already mapped (pre-translated or defined outside).
+    if (llvm::Value *existing = moduleTranslation.lookupValue(val))
+      return existing;
+    // Fallback for a single LoadOp whose address is mapped but whose result
+    // was not pre-translated.
+    if (auto loadOp = val.getDefiningOp<LLVM::LoadOp>()) {
+      if (loadOp->getParentRegion() == &region) {
+        llvm::Value *loadAddr = moduleTranslation.lookupValue(loadOp.getAddr());
+        if (!loadAddr)
+          return nullptr;
+        llvm::Type *loadType =
+            moduleTranslation.convertType(loadOp.getResult().getType());
+        return builder.CreateLoad(loadType, loadAddr);
+      }
+    }
+    return nullptr;
+  };
+
+  // Walk the region to extract comparison predicate, eVal, and dVal.
+  // if (x == eVal) x = dVal
+  llvm::omp::OMPAtomicCompareOp compareOp = llvm::omp::OMPAtomicCompareOp::EQ;
+  llvm::Value *eVal = nullptr;
+  llvm::Value *dVal = nullptr;
+  bool isXBinopExpr = false;
+
+  auto traceToAggregate = [](mlir::Value v) -> mlir::Value {
+    if (auto extractOp = v.getDefiningOp<LLVM::ExtractValueOp>())
+      return extractOp.getContainer();
+    return nullptr;
+  };
+
+  // Check for a decomposed complex comparison pattern:
+  //   %re_x = llvm.extractvalue %xval[0]
+  //   %re_e = llvm.extractvalue %eStruct[0]
+  //   %cmp_re = llvm.fcmp "oeq" %re_x, %re_e
+  //   %im_x = llvm.extractvalue %xval[1]
+  //   %im_e = llvm.extractvalue %eStruct[1]
+  //   %cmp_im = llvm.fcmp "oeq" %im_x, %im_e
+  //   %cmp = llvm.and %cmp_re, %cmp_im   (for EQ)
+  // Detect this by looking for AndOp/OrOp whose operands are both FCmpOps
+  // operating on ExtractValueOps from the block argument.
+  bool isComplexPattern = false;
+  for (Operation &op : block.getOperations()) {
+    if (!isa<LLVM::AndOp, LLVM::OrOp>(op))
+      continue;
+
+    // Using : %cmp = llvm.and %cmp_re, %cmp_im
+    auto lhsFcmp = op.getOperand(0).getDefiningOp<LLVM::FCmpOp>();
+    auto rhsFcmp = op.getOperand(1).getDefiningOp<LLVM::FCmpOp>();
+    if (!lhsFcmp || !rhsFcmp)
+      continue;
+
+    // Using : %cmp_re = llvm.fcmp "oeq" %re_x, %re_e
+    // Check presence of x (block argument) and get e.
+    mlir::Value lhsAgg0 = traceToAggregate(lhsFcmp.getOperand(0));
+    mlir::Value lhsAgg1 = traceToAggregate(lhsFcmp.getOperand(1));
+    bool lhsXIsOp0 = (lhsAgg0 == block.getArgument(0));
+    bool lhsXIsOp1 = (lhsAgg1 == block.getArgument(0));
+    if (!lhsXIsOp0 && !lhsXIsOp1)
+      continue;
+    mlir::Value eAggregate = lhsXIsOp0 ? lhsAgg1 : lhsAgg0;
+    if (!eAggregate)
+      continue;
+
+    if (isa<LLVM::AndOp>(op))
+      compareOp = llvm::omp::OMPAtomicCompareOp::EQ;
+    else
+      // OrOp corresponds to NE, which is not a valid atomic compare op.
+      return atomicCompareOp.emitError(
+          "unsupported comparison predicate (NE) for complex atomic compare");
+
+    isXBinopExpr = lhsXIsOp0;
+    eVal = materializeValue(eAggregate);
+    isComplexPattern = true;
+    break;
+  }
+
+  if (isComplexPattern) {
+    // dVal from SelectOp or YieldOp.
+    for (Operation &op : block.getOperations()) {
+      if (auto selectOp = dyn_cast<LLVM::SelectOp>(op)) {
+        dVal = materializeValue(selectOp.getTrueValue());
+        break;
+      }
+    }
+    if (!dVal) {
+      auto yieldOp = cast<omp::YieldOp>(block.getTerminator());
+      if (yieldOp.getResults().empty())
+        return atomicCompareOp.emitError(
+            "failed to extract desired value (d) from atomic compare region");
+      dVal = materializeValue(yieldOp.getResults()[0]);
+    }
+
+    const llvm::DataLayout &DL =
+        builder.GetInsertBlock()->getModule()->getDataLayout();
+    unsigned totalBits =
+        DL.getTypeStoreSizeInBits(llvmXElementType).getFixedValue();
+
+    llvm::IntegerType *intTy =
+        llvm::IntegerType::get(builder.getContext(), totalBits);
+
+    llvm::Align complexAlign = DL.getABITypeAlign(llvmXElementType);
+    llvm::Align intAlign = DL.getABITypeAlign(intTy);
+    llvm::Align maxAlign = std::max(complexAlign, intAlign);
+
+    llvm::AllocaInst *eAlloca =
+        builder.CreateAlloca(llvmXElementType, nullptr, "cmplx.e");
+    eAlloca->setAlignment(maxAlign);
+    llvm::AllocaInst *dAlloca =
+        builder.CreateAlloca(llvmXElementType, nullptr, "cmplx.d");
+    dAlloca->setAlignment(maxAlign);
+
+    builder.CreateAlignedStore(eVal, eAlloca, maxAlign);
+    llvm::Value *eInt =
+        builder.CreateAlignedLoad(intTy, eAlloca, maxAlign, "cmplx.e.int");
+    builder.CreateAlignedStore(dVal, dAlloca, maxAlign);
+    llvm::Value *dInt =
+        builder.CreateAlignedLoad(intTy, dAlloca, maxAlign, "cmplx.d.int");
+
+    llvm::AtomicOrdering failOrdering =
+        llvm::AtomicCmpXchgInst::getStrongestFailureOrdering(atomicOrdering);
+    auto *cmpXchg = builder.CreateAtomicCmpXchg(llvmX, eInt, dInt, maxAlign,
+                                                atomicOrdering, failOrdering);
+    cmpXchg->setWeak(atomicCompareOp.getWeak());
+
+    // Emit flush after atomic compare if needed (for release, acq_rel,
+    // seq_cst orderings).
+    if (atomicOrdering == llvm::AtomicOrdering::Release ||
+        atomicOrdering == llvm::AtomicOrdering::AcquireRelease ||
+        atomicOrdering == llvm::AtomicOrdering::SequentiallyConsistent) {
+      llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
+      ompBuilder->createFlush(ompLoc);
+    }
+    return success();
+  } else {
+
+    for (Operation &op : block.getOperations()) {
+      if (auto icmpOp = dyn_cast<LLVM::ICmpOp>(op)) {
+        auto maybeOp =
+            convertICmpPredicateToAtomicCompareOp(icmpOp.getPredicate());
+        if (!maybeOp)
+          return atomicCompareOp.emitError(
+              "unsupported comparison predicate in atomic compare");
+        compareOp = *maybeOp;
+
+        LLVM::ICmpPredicate pred = icmpOp.getPredicate();
+        isSigned = (pred == LLVM::ICmpPredicate::slt ||
+                    pred == LLVM::ICmpPredicate::sgt ||
+                    pred == LLVM::ICmpPredicate::sle ||
+                    pred == LLVM::ICmpPredicate::sge);
+
+        // Identify which operand is the block argument (x) and which is e.
+        isXBinopExpr = (icmpOp.getOperand(0) == block.getArgument(0));
+        mlir::Value eOperand =
+            isXBinopExpr ? icmpOp.getOperand(1) : icmpOp.getOperand(0);
+        eVal = materializeValue(eOperand);
+      } else if (auto fcmpOp = dyn_cast<LLVM::FCmpOp>(op)) {
+        auto maybeOp =
+            convertFCmpPredicateToAtomicCompareOp(fcmpOp.getPredicate());
+        if (!maybeOp)
+          return atomicCompareOp.emitError(
+              "unsupported comparison predicate in atomic compare");
+        compareOp = *maybeOp;
+
+        isXBinopExpr = (fcmpOp.getOperand(0) == block.getArgument(0));
+        mlir::Value eOperand =
+            isXBinopExpr ? fcmpOp.getOperand(1) : fcmpOp.getOperand(0);
+        eVal = materializeValue(eOperand);
+      } else if (auto selectOp = dyn_cast<LLVM::SelectOp>(op)) {
+        if (!dVal)
+          dVal = materializeValue(selectOp.getTrueValue());
+      }
+    }
+  }
+
+  // For non-complex patterns, also extract dVal from SelectOp.
+  if (!dVal) {
+    for (Operation &op : block.getOperations()) {
+      if (auto selectOp = dyn_cast<LLVM::SelectOp>(op)) {
+        dVal = materializeValue(selectOp.getTrueValue());
+        break;
+      }
+    }
+  }
+
+  if (!eVal)
+    return atomicCompareOp.emitError(
+        "failed to extract expected value (e) from atomic compare region");
+  if (!dVal) {
+    // Fall back to the yield operand.
+    auto yieldOp = cast<omp::YieldOp>(block.getTerminator());
+    if (yieldOp.getResults().empty())
+      return atomicCompareOp.emitError(
+          "failed to extract desired value (d) from atomic compare region");
+    dVal = materializeValue(yieldOp.getResults()[0]);
+  }
+
+  llvmAtomicX.IsSigned = isSigned;
+
+  llvm::OpenMPIRBuilder::AtomicOpValue vOpVal = {nullptr, nullptr, false,
+                                                 false};
+  llvm::OpenMPIRBuilder::AtomicOpValue rOpVal = {nullptr, nullptr, false,
+                                                 false};
+  llvm::OpenMPIRBuilder::LocationDescription ompLoc(builder);
+
+  bool isWeak = atomicCompareOp.getWeak();
+
+  bool savedHandleFPNegZero = ompBuilder->setHandleFPNegZero(true);
+  llvm::OpenMPIRBuilder::InsertPointOrErrorTy afterIP =
+      ompBuilder->createAtomicCompare(ompLoc, llvmAtomicX, vOpVal, rOpVal, eVal,
+                                      dVal, atomicOrdering, compareOp,
+                                      isXBinopExpr, false, false, isWeak);
+  ompBuilder->setHandleFPNegZero(savedHandleFPNegZero);
+
+  if (failed(handleError(afterIP, *atomicCompareOp)))
+    return failure();
+
+  builder.restoreIP(*afterIP);
+  return success();
+}
+
 static llvm::omp::Directive convertCancellationConstructType(
     omp::ClauseCancellationConstructType directive) {
   switch (directive) {
@@ -5139,25 +5541,20 @@ getRefPtrIfDeclareTarget(Value value,
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
   if (auto gOp =
           dyn_cast_or_null<LLVM::GlobalOp>(getGlobalOpFromValue(value))) {
-    if (auto declareTargetGlobal =
-            dyn_cast<omp::DeclareTargetInterface>(gOp.getOperation())) {
-      // In this case, we must utilise the reference pointer generated by
-      // the declare target operation, similar to Clang
-      if ((declareTargetGlobal.getDeclareTargetCaptureClause() ==
-           omp::DeclareTargetCaptureClause::link) ||
-          (declareTargetGlobal.getDeclareTargetCaptureClause() ==
-               omp::DeclareTargetCaptureClause::to &&
-           ompBuilder->Config.hasRequiresUnifiedSharedMemory())) {
-        llvm::SmallString<64> suffix = getDeclareTargetRefPtrSuffix(
-            gOp, *ompBuilder, moduleTranslation.getFileSystem());
+    // In this case, we must utilise the reference pointer generated by
+    // the declare target operation, similar to Clang
+    if (isDeclareTargetLink(value) ||
+        (isDeclareTargetTo(value) &&
+         ompBuilder->Config.hasRequiresUnifiedSharedMemory())) {
+      llvm::SmallString<64> suffix = getDeclareTargetRefPtrSuffix(
+          gOp, *ompBuilder, moduleTranslation.getFileSystem());
 
-        if (gOp.getSymName().contains(suffix))
-          return moduleTranslation.getLLVMModule()->getNamedValue(
-              gOp.getSymName());
-
+      if (gOp.getSymName().contains(suffix))
         return moduleTranslation.getLLVMModule()->getNamedValue(
-            (gOp.getSymName().str() + suffix.str()).str());
-      }
+            gOp.getSymName());
+
+      return moduleTranslation.getLLVMModule()->getNamedValue(
+          (gOp.getSymName().str() + suffix.str()).str());
     }
   }
   return nullptr;
@@ -5238,6 +5635,27 @@ static uint64_t getArrayElementSizeInBits(LLVM::LLVMArrayType arrTy,
   return dl.getTypeSizeInBits(arrTy.getElementType());
 }
 
+// The intent is to verify if the mapped data being passed is a
+// pointer -> pointee that requires special handling in certain cases,
+// e.g. applying the OMP_MAP_PTR_AND_OBJ map type.
+//
+// There may be a better way to verify this, but unfortunately with
+// opaque pointers we lose the ability to easily check if something is
+// a pointer whilst maintaining access to the underlying type.
+static bool checkIfPointerMap(omp::MapInfoOp mapOp) {
+  // If we have a varPtrPtr field assigned then the underlying type is a pointer
+  if (mapOp.getVarPtrPtr())
+    return true;
+
+  // If the map data is declare target with a link clause, then it's represented
+  // as a pointer when we lower it to LLVM-IR even if at the MLIR level it has
+  // no relation to pointers.
+  if (isDeclareTargetLink(mapOp.getVarPtr()))
+    return true;
+
+  return false;
+}
+
 // This function calculates the size to be offloaded for a specified type, given
 // its associated map clause (which can contain bounds information which affects
 // the total size), this size is calculated based on the underlying element type
@@ -5290,9 +5708,53 @@ static llvm::Value *getSizeInBytes(DataLayout &dl, const mlir::Type &type,
       // size, so we do some on the fly runtime math to get the size in
       // bytes from the extent (ub - lb) * sizeInBytes. NOTE: This may need
       // some adjustment for members with more complex types.
-      return builder.CreateMul(elementCount,
-                               builder.getInt64(underlyingTypeSzInBits / 8),
-                               "element_count");
+      llvm::Value *sizeCalc = builder.CreateMul(
+          elementCount, builder.getInt64(underlyingTypeSzInBits / 8),
+          "element_count");
+
+      // This is a part of a "complicated" bit of size calculation logic that is
+      // in place to handle a couple of scenarios, one specific to Fortran and
+      // the other a more general OpenMP issue. The other piece of the
+      // calculation can be found as the final size calculation within the
+      // processIndividualMap function. Ideally we would move it here, but due
+      // to the complexity of calculating the final base address of some
+      // constructs (required for a nullary check), it's left as the final step.
+      // So, in the below 2 cases, the nullary check is in processIndividualMap
+      // and the size equality check is here. The cases this modifications help
+      // cover are:
+      //
+      // 1) If an argument has a null base pointer, then the size must be set to
+      // 0
+      //    to avoid the runtime exploding/complaining about an illegal pointer
+      //    map. The size returning non-zero is feasible in certain cases if for
+      //    example someone has specified there own bounds/range.
+      // 2) We wish to support a very specific OpenMP Fortran edge-case where a
+      // size
+      //    zero array can be legally presence checked and found to be on device
+      //    when it has been mapped. In these rare occasions the
+      //    allocatable/pointer will have a size of 1 allocated for the
+      //    underlying data, but this wall not be represented within the size of
+      //    the descriptor, so we get a non-nullary pointer and a size of 0,
+      //    allowing us to specify a size of 1 in these cases registering it on
+      //    the device mapping table as present.
+      //
+      // The default fall through case is just returning the size calculation
+      // above, if we are not nullary and the size we calculate is non-zero,
+      // which is basically any pointer type that is allocated in someway
+      // (providing you are not running on a rare system that allows malloc's of
+      // size 0 with whatever caveats that may come with).
+      //
+      // Later in the nullary check in processIndividualMap it just devolves to
+      // selecting a size of 0 if we are nullary, if we are not, we will return
+      // either 1 or the calculated size, depending on the outcome of this
+      // select.
+      if (checkIfPointerMap(memberClause)) {
+        return builder.CreateSelect(
+            builder.CreateICmpEQ(sizeCalc, builder.getInt64(0)),
+            builder.getInt64(1), sizeCalc);
+      }
+
+      return sizeCalc;
     }
   }
 
@@ -5783,27 +6245,6 @@ static void getOverlappedMembers(llvm::SmallVector<size_t> &overlapMapDataIdxs,
       overlapMapDataIdxs.push_back(i);
 }
 
-// The intent is to verify if the mapped data being passed is a
-// pointer -> pointee that requires special handling in certain cases,
-// e.g. applying the OMP_MAP_PTR_AND_OBJ map type.
-//
-// There may be a better way to verify this, but unfortunately with
-// opaque pointers we lose the ability to easily check if something is
-// a pointer whilst maintaining access to the underlying type.
-static bool checkIfPointerMap(omp::MapInfoOp mapOp) {
-  // If we have a varPtrPtr field assigned then the underlying type is a pointer
-  if (mapOp.getVarPtrPtr())
-    return true;
-
-  // If the map data is declare target with a link clause, then it's represented
-  // as a pointer when we lower it to LLVM-IR even if at the MLIR level it has
-  // no relation to pointers.
-  if (isDeclareTargetLink(mapOp.getVarPtr()))
-    return true;
-
-  return false;
-}
-
 static bool isUseDevicePtrItem(omp::MapInfoOp mapInfoOp) {
   assert(mapInfoOp->hasOneUse() &&
          "Expected only one use of omp.map_info item");
@@ -5950,6 +6391,42 @@ static void mapParentWithMembers(
       llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]);
   auto *parentMapper = mapData.Mappers[mapDataIndex];
 
+  auto getLowAndHighAddr = [&builder, &mapData,
+                            &moduleTranslation](omp::MapInfoOp mapOp) {
+    llvm::Value *lowAddr, *highAddr;
+    int firstMemberIdx = getMapDataMemberIdx(
+        mapData, getFirstOrLastMappedMemberPtr(mapOp, true));
+    lowAddr = builder.CreatePointerCast(mapData.BasePointers[firstMemberIdx],
+                                        builder.getPtrTy());
+
+    int lastMemberIdx = getMapDataMemberIdx(
+        mapData, getFirstOrLastMappedMemberPtr(mapOp, false));
+    auto lastMemberMapInfo =
+        cast<omp::MapInfoOp>(mapData.MapClause[lastMemberIdx]);
+
+    // NOTE: Currently, for RefPtee the BaseType is set to the varPtrPtr field,
+    // which is the pointer datas type and not the member within the structure
+    // that it's part of, so we have to make sure we use the member type in this
+    // case when calculating the parents size offsets.
+    // TODO: May be good to extend MapInfoData to support tracking of both
+    // VarPtr/VarPtrPtr BaseType's to better distinguish what's being used more
+    // consistently.
+    bool isRefPteeMap = bitEnumContainsAll(lastMemberMapInfo.getMapType(),
+                                           omp::ClauseMapFlags::ref_ptee) &&
+                        !bitEnumContainsAll(lastMemberMapInfo.getMapType(),
+                                            omp::ClauseMapFlags::ref_ptr);
+    llvm::Type *castType = mapData.BaseType[lastMemberIdx];
+    if (isRefPteeMap)
+      castType =
+          moduleTranslation.convertType(lastMemberMapInfo.getVarPtrType());
+    highAddr = builder.CreatePointerCast(
+        builder.CreateGEP(castType, mapData.BasePointers[lastMemberIdx],
+                          builder.getInt64(1)),
+        builder.getPtrTy());
+    return std::make_pair(std::make_pair(lowAddr, firstMemberIdx),
+                          std::make_pair(highAddr, lastMemberIdx));
+  };
+
   // Map the first segment of the parent. If a user-defined mapper is attached,
   // include the parent's to/from-style bits (and common modifiers) in this
   // base entry so the mapper receives correct copy semantics via its 'type'
@@ -5996,7 +6473,6 @@ static void mapParentWithMembers(
   // Fortran pointers and allocatables, the mapping of the pointed to
   // data by the descriptor (which itself, is a structure containing
   // runtime information on the dynamically allocated data).
-
   llvm::Value *lowAddr, *highAddr;
   if (!parentClause.getPartialMap()) {
     lowAddr = builder.CreatePointerCast(mapData.Pointers[mapDataIndex],
@@ -6007,37 +6483,11 @@ static void mapParentWithMembers(
         builder.getPtrTy());
     combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
   } else {
-    auto mapOp = dyn_cast<omp::MapInfoOp>(mapData.MapClause[mapDataIndex]);
-    int firstMemberIdx = getMapDataMemberIdx(
-        mapData, getFirstOrLastMappedMemberPtr(mapOp, true));
-    lowAddr = builder.CreatePointerCast(mapData.BasePointers[firstMemberIdx],
-                                        builder.getPtrTy());
-
-    int lastMemberIdx = getMapDataMemberIdx(
-        mapData, getFirstOrLastMappedMemberPtr(mapOp, false));
-    auto lastMemberMapInfo =
-        cast<omp::MapInfoOp>(mapData.MapClause[lastMemberIdx]);
-
-    // NOTE: Currently, for RefPtee the BaseType is set to the varPtrPtr field,
-    // which is the pointer datas type and not the member within the structure
-    // that it's part of, so we have to make sure we use the member type in this
-    // case when calculating the parents size offsets.
-    // TODO: May be good to extend MapInfoData to support tracking of both
-    // VarPtr/VarPtrPtr BaseType's to better distinguish what's being used more
-    // consistently.
-    bool isRefPteeMap = bitEnumContainsAll(lastMemberMapInfo.getMapType(),
-                                           omp::ClauseMapFlags::ref_ptee) &&
-                        !bitEnumContainsAll(lastMemberMapInfo.getMapType(),
-                                            omp::ClauseMapFlags::ref_ptr);
-    llvm::Type *castType = mapData.BaseType[lastMemberIdx];
-    if (isRefPteeMap)
-      castType =
-          moduleTranslation.convertType(lastMemberMapInfo.getVarPtrType());
-    highAddr = builder.CreatePointerCast(
-        builder.CreateGEP(castType, mapData.BasePointers[lastMemberIdx],
-                          builder.getInt64(1)),
-        builder.getPtrTy());
-    combinedInfo.Pointers.emplace_back(mapData.BasePointers[firstMemberIdx]);
+    auto lowAndHigh = getLowAndHighAddr(parentClause);
+    highAddr = std::get<0>(std::get<1>(lowAndHigh));
+    lowAddr = std::get<0>(std::get<0>(lowAndHigh));
+    combinedInfo.Pointers.emplace_back(
+        mapData.BasePointers[std::get<1>(std::get<0>(lowAndHigh))]);
   }
 
   llvm::Value *size = builder.CreateIntCast(
@@ -6062,16 +6512,18 @@ static void mapParentWithMembers(
                        MapFlags::OMP_MAP_CLOSE;
     ompBuilder.setCorrectMemberOfFlag(mapFlag, memberOfFlag);
 
-    llvm::SmallVector<size_t> overlapIdxs;
     // Find all of the members that "overlap", i.e. occlude other members that
     // were mapped alongside the parent, e.g. member [0], occludes
+    llvm::SmallVector<size_t> overlapIdxs;
     getOverlappedMembers(overlapIdxs, parentClause);
 
     // When we only have one overlap we skip the case that tries to segment the
-    // mapping as best it can without creating holes, as the calculation is more
-    // likely to have more overhead than anything we gain from mapping a smaller
-    // chunk of data. This can be seen in cases where we are mapping Fortran
-    // descriptors which are a special case of record type mapping.
+    // mapping as best it can without creating holes. This is because in these
+    // scenarios we have a singular map, so can reduce the complexity of the
+    // map or we have a pointer/descriptor map, in which case segmenting the
+    // map based on pointee record members doesn't make sense and will cause
+    // runtime issues. TODO: For the latter case we need a clearer method of
+    // checking this, the method is a tad overkill and non-obvious.
     //
     // The cases for close and update are unique edge cases where the segmenting
     // does not play well with the runtime currently.
@@ -6088,17 +6540,6 @@ static void mapParentWithMembers(
       combinedInfo.Pointers.emplace_back(mapData.Pointers[mapDataIndex]);
       combinedInfo.Sizes.emplace_back(mapData.Sizes[mapDataIndex]);
     } else {
-      // We need to make sure the overlapped members are sorted in order of
-      // lowest address to highest address
-      sortMapIndices(overlapIdxs, parentClause);
-
-      lowAddr = builder.CreatePointerCast(mapData.Pointers[mapDataIndex],
-                                          builder.getPtrTy());
-      highAddr = builder.CreatePointerCast(
-          builder.CreateConstGEP1_32(mapData.BaseType[mapDataIndex],
-                                     mapData.Pointers[mapDataIndex], 1),
-          builder.getPtrTy());
-
       // Currently, the return parameter should be the over-riding parent in
       // cases where we have a return parameter that is echoed to all members,
       // the main case of this currently is with fortran descriptors. It may
@@ -6106,44 +6547,9 @@ static void mapParentWithMembers(
       // members of derived types.
       mapFlag &= ~llvm::omp::OpenMPOffloadMappingFlags::OMP_MAP_RETURN_PARAM;
 
-      // TODO: We may want to skip arrays/array sections in this as Clang does.
-      // It appears to be an optimisation rather than a necessity though,
-      // but this requires further investigation. However, we would have to make
-      // sure to not exclude maps with bounds that ARE pointers, as these are
-      // processed as seperate components, i.e. pointer + data.
-      for (auto v : overlapIdxs) {
-        auto mapDataOverlapIdx = getMapDataMemberIdx(
-            mapData,
-            cast<omp::MapInfoOp>(parentClause.getMembers()[v].getDefiningOp()));
-        auto isPtrMap = checkIfPointerMap(
-            llvm::cast<omp::MapInfoOp>(mapData.MapClause[mapDataOverlapIdx]));
-        combinedInfo.Types.emplace_back(mapFlag);
-        combinedInfo.DevicePointers.emplace_back(
-            llvm::OpenMPIRBuilder::DeviceInfoTy::None);
-        combinedInfo.Mappers.emplace_back(nullptr);
-        combinedInfo.Names.emplace_back(LLVM::createMappingInformation(
-            mapData.MapClause[mapDataIndex]->getLoc(), ompBuilder));
-        combinedInfo.BasePointers.emplace_back(
-            mapData.BasePointers[mapDataIndex]);
-        combinedInfo.Pointers.emplace_back(lowAddr);
-        auto sizeCalc = builder.CreateIntCast(
-            builder.CreatePtrDiff(builder.getInt8Ty(),
-                                  mapData.OriginalValue[mapDataOverlapIdx],
-                                  lowAddr),
-            builder.getInt64Ty(), /*isSigned=*/true);
-        // In certain cases, we'll generate a size of 0 if we're not careful
-        // (e.g. if lowAddr happens to be the first member), which isn't
-        // correct, even if the runtimes is sometimes fine with it so, in these
-        // scenarios we select the types size instead.
-        auto sizeSel = builder.CreateSelect(
-            builder.CreateICmpNE(builder.getInt64(0), sizeCalc), sizeCalc,
-            isPtrMap ? llvm::ConstantExpr::getSizeOf(builder.getPtrTy())
-                     : mapData.Sizes[mapDataOverlapIdx]);
-        combinedInfo.Sizes.emplace_back(sizeSel);
-        lowAddr = builder.CreateConstGEP1_32(
-            isPtrMap ? builder.getPtrTy() : mapData.BaseType[mapDataOverlapIdx],
-            mapData.BasePointers[mapDataOverlapIdx], 1);
-      }
+      auto lowAndHigh = getLowAndHighAddr(parentClause);
+      highAddr = std::get<0>(std::get<1>(lowAndHigh));
+      lowAddr = std::get<0>(std::get<0>(lowAndHigh));
 
       combinedInfo.Types.emplace_back(mapFlag);
       combinedInfo.DevicePointers.emplace_back(
@@ -6395,6 +6801,9 @@ emitUserDefinedMapper(Operation *op, llvm::IRBuilderBase &builder,
          "function only supported for host device codegen");
   auto declMapperOp = cast<omp::DeclareMapperOp>(op);
   auto declMapperInfoOp = declMapperOp.getDeclareMapperInfo();
+  if (failed(checkImplementationStatus(*declMapperInfoOp)))
+    return llvm::make_error<PreviouslyReportedError>();
+
   DataLayout dl = DataLayout(declMapperOp->getParentOfType<ModuleOp>());
   llvm::OpenMPIRBuilder *ompBuilder = moduleTranslation.getOpenMPBuilder();
   llvm::Type *varType = moduleTranslation.convertType(declMapperOp.getType());
@@ -7993,20 +8402,22 @@ convertDeclareTargetAttr(Operation *op, mlir::omp::DeclareTargetAttr attribute,
           /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr,
           gVal->getType(), gVal);
 
+      bool requiresUSM = ompBuilder->Config.hasRequiresUnifiedSharedMemory();
       if (ompBuilder->Config.isTargetDevice() &&
-          ((attribute.getCaptureClause().getValue() !=
-                mlir::omp::DeclareTargetCaptureClause::to &&
-            attribute.getCaptureClause().getValue() !=
-                mlir::omp::DeclareTargetCaptureClause::enter) ||
-           ompBuilder->Config.hasRequiresUnifiedSharedMemory())) {
+          (attribute.getCaptureClause().getValue() ==
+               mlir::omp::DeclareTargetCaptureClause::link ||
+           requiresUSM)) {
         llvm::Type *ptrTy = gVal->getType();
-        if (ompBuilder->Config.hasRequiresUnifiedSharedMemory())
+        // For USM the global type becomes a pointer handle, as opposed to the
+        // globals original type.
+        if (requiresUSM)
           ptrTy = llvm::PointerType::get(llvmModule->getContext(), 0);
         ompBuilder->getAddrOfDeclareTargetVar(
             captureClause, deviceClause, isDeclaration, isExternallyVisible,
             ompBuilder->getTargetEntryUniqueInfo(fileInfoCallBack, vfs),
             mangledName, generatedRefs, /*OpenMPSimd*/ false, targetTriple,
-            ptrTy, /*GlobalInitializer*/ nullptr, /*VariableLinkage*/ nullptr);
+            ptrTy, /*GlobalInitializer*/ nullptr,
+            /*VariableLinkage*/ nullptr);
       }
     }
   }
@@ -8623,6 +9034,9 @@ LogicalResult OpenMPDialectLLVMIRTranslationInterface::convertOperation(
           })
           .Case([&](omp::AtomicCaptureOp op) {
             return convertOmpAtomicCapture(op, builder, moduleTranslation);
+          })
+          .Case([&](omp::AtomicCompareOp op) {
+            return convertOmpAtomicCompare(op, builder, moduleTranslation);
           })
           .Case([&](omp::CancelOp op) {
             return convertOmpCancel(op, builder, moduleTranslation);

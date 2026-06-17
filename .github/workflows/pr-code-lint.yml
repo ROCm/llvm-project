@@ -6,8 +6,7 @@ permissions:
 on:
   pull_request:
     branches:
-      - main
-      - 'users/**'
+      - amd-staging
     paths:
       - 'clang-tools-extra/clang-tidy/**'
       - 'clang-tools-extra/docs/clang-tidy/**'
@@ -15,13 +14,12 @@ on:
 
 jobs:
   code_linter:
-    if: github.repository_owner == 'llvm'
     runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
     container:
-      image: 'ghcr.io/llvm/ci-ubuntu-24.04-lint'
+      image: 'ghcr.io/llvm/ci-ubuntu-24.04-lint:latest@sha256:91665a4e158d3b2a4b93da1ebdab3067196a8b48f1f84759cc83c09e9d038ee5'
     timeout-minutes: 60
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}

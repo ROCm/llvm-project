@@ -1,12 +1,17 @@
 # GTest discovery for Comgr unit tests. Three sources, in priority order:
 #
 # 1. In-tree llvm_gtest target (LLVM monorepo build with utils/unittest/).
-# 2. Vanilla GTest CMake package (find_package(GTest CONFIG)). Used by
+# 2. LLVM-installed gtest (-DLLVM_INSTALL_GTEST=ON on the LLVM build),
+#    discovered via find_library in LLVM_LIBRARY_DIRS with NO_DEFAULT_PATH.
+#    Preferred over find_package(GTest) for standalone Comgr builds against
+#    an installed ROCm/LLVM, because find_package(GTest CONFIG) searches
+#    CMake's default paths and can pick up a system gtest at /usr/local
+#    that wasn't built with -fPIC, breaking PIE link of the test binaries
+#    (https://github.com/ROCm/llvm-project/issues/2505).
+# 3. Vanilla GTest CMake package (find_package(GTest CONFIG)). Used by
 #    superproject builds (e.g. TheRock) that supply googletest via the
 #    standard GTest:: imported targets. This avoids forcing the LLVM
 #    build to enable LLVM_INSTALL_GTEST just to test Comgr.
-# 3. LLVM-installed gtest (-DLLVM_INSTALL_GTEST=ON on the LLVM build).
-#    Legacy fallback for installs that ship llvm_gtest alongside LLVM.
 #
 # If none is available, skip the test-unit suite with a warning rather
 # than failing configure.
@@ -14,29 +19,28 @@ if(TARGET llvm_gtest)
   set(COMGR_GTEST_LIBS llvm_gtest_main llvm_gtest)
   set(COMGR_GTEST_INCLUDE_DIRS "")
 else()
-  find_package(GTest CONFIG QUIET)
-  if(GTest_FOUND)
-    set(COMGR_GTEST_LIBS GTest::gtest_main GTest::gtest)
-    set(COMGR_GTEST_INCLUDE_DIRS "")
+  find_library(COMGR_LLVM_GTEST_LIB llvm_gtest
+    PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
+  find_library(COMGR_LLVM_GTEST_MAIN_LIB llvm_gtest_main
+    PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
+  find_path(COMGR_LLVM_GTEST_INCLUDE_DIR gtest/gtest.h
+    PATHS ${LLVM_INCLUDE_DIRS} PATH_SUFFIXES llvm-gtest NO_DEFAULT_PATH)
+  if(COMGR_LLVM_GTEST_LIB AND COMGR_LLVM_GTEST_MAIN_LIB
+      AND COMGR_LLVM_GTEST_INCLUDE_DIR)
+    set(COMGR_GTEST_LIBS
+      ${COMGR_LLVM_GTEST_MAIN_LIB} ${COMGR_LLVM_GTEST_LIB})
+    set(COMGR_GTEST_INCLUDE_DIRS ${COMGR_LLVM_GTEST_INCLUDE_DIR})
   else()
-    find_library(COMGR_LLVM_GTEST_LIB llvm_gtest
-      PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
-    find_library(COMGR_LLVM_GTEST_MAIN_LIB llvm_gtest_main
-      PATHS ${LLVM_LIBRARY_DIRS} NO_DEFAULT_PATH)
-    find_path(COMGR_LLVM_GTEST_INCLUDE_DIR gtest/gtest.h
-      PATHS ${LLVM_INCLUDE_DIRS} PATH_SUFFIXES llvm-gtest NO_DEFAULT_PATH)
-    if(COMGR_LLVM_GTEST_LIB AND COMGR_LLVM_GTEST_MAIN_LIB
-        AND COMGR_LLVM_GTEST_INCLUDE_DIR)
-      set(COMGR_GTEST_LIBS
-        ${COMGR_LLVM_GTEST_MAIN_LIB} ${COMGR_LLVM_GTEST_LIB})
-      set(COMGR_GTEST_INCLUDE_DIRS ${COMGR_LLVM_GTEST_INCLUDE_DIR})
+    find_package(GTest CONFIG QUIET)
+    if(GTest_FOUND)
+      set(COMGR_GTEST_LIBS GTest::gtest_main GTest::gtest)
+      set(COMGR_GTEST_INCLUDE_DIRS "")
     else()
       message(WARNING
-        "Comgr test-unit skipped: no llvm_gtest target, no GTest "
-        "CMake package, and no LLVM-installed gtest found at "
-        "${LLVM_INCLUDE_DIRS}/llvm-gtest. Provide one of: in-tree LLVM "
-        "with utils/unittest/, find_package(GTest), or "
-        "-DLLVM_INSTALL_GTEST=ON on the LLVM build.")
+        "Comgr test-unit skipped: no llvm_gtest target, no LLVM-installed "
+        "gtest at ${LLVM_INCLUDE_DIRS}/llvm-gtest, and no GTest CMake "
+        "package found. Provide one of: in-tree LLVM with utils/unittest/, "
+        "-DLLVM_INSTALL_GTEST=ON on the LLVM build, or find_package(GTest).")
       return()
     endif()
   endif()
@@ -101,10 +105,12 @@ add_executable(HotswapMCTests
   ../src/comgr-hotswap-b0a0.cpp
   ../src/comgr-hotswap-elf.cpp
   ../src/comgr-hotswap-llvm.cpp
+  ../src/comgr-hotswap-patch-f32-to-e5m3.cpp
   ../src/comgr-hotswap-patch-inplace.cpp
   ../src/comgr-hotswap-patch-trampoline.cpp
   ../src/comgr-hotswap-patch-vop3px2-src2.cpp
   ../src/comgr-hotswap-patch-wmma-hazard.cpp
+  ../src/comgr-hotswap-patch-wmma-scale16.cpp
   ../src/comgr-hotswap-patch-wmma-split.cpp
   ../src/comgr-env.cpp)
 
@@ -157,11 +163,109 @@ target_include_directories(RaiserScaffoldingTests PRIVATE
 
 comgr_configure_test_target(RaiserScaffoldingTests)
 
+# -- HotswapToolTests ---------------------------------------------------------
+#
+# Pure device-detection helpers for the HSA_TOOLS_LIB tool
+# (hotswap/comgr-hotswap-tool-detect.h): gfx-target extraction and the A0
+# rewrite gate. Header-only, so no comgr/LLVM sources are compiled in.
+
+add_executable(HotswapToolTests
+  HotswapToolTest.cpp)
+
+llvm_map_components_to_libnames(COMGR_TEST_UNIT_TOOL_LIBS BinaryFormat Support)
+
+target_link_libraries(HotswapToolTests PRIVATE
+  ${COMGR_GTEST_LIBS}
+  ${COMGR_TEST_UNIT_TOOL_LIBS}
+  ${LLVM_PTHREAD_LIB})
+
+# Disable gtest's LLVM-type printers; the tool helpers need no LLVM type support.
+target_compile_definitions(HotswapToolTests PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(HotswapToolTests PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(HotswapToolTests)
+
+# -- HotswapToolLoaderTests ---------------------------------------------------
+#
+# Drives the tool's HSA_TOOLS_LIB entry points (OnLoad/OnUnload) against a stub
+# HSA API table. Compiles the tool TU directly, so it needs the HSA headers and
+# amd_comgr; gated on HOTSWAP_BUILD_TOOL like the tool itself.
+if(HOTSWAP_BUILD_TOOL AND HOTSWAP_TOOL_HSA_INC)
+  add_executable(HotswapToolLoaderTests
+    HotswapToolLoaderTest.cpp
+    ../src/hotswap/comgr-hotswap-tool.cpp)
+
+  llvm_map_components_to_libnames(COMGR_TEST_UNIT_LOADER_LIBS
+    BinaryFormat Support)
+
+  target_link_libraries(HotswapToolLoaderTests PRIVATE
+    ${COMGR_GTEST_LIBS}
+    amd_comgr
+    ${COMGR_TEST_UNIT_LOADER_LIBS}
+    ${LLVM_PTHREAD_LIB})
+
+  target_compile_definitions(HotswapToolLoaderTests PRIVATE
+    GTEST_NO_LLVM_SUPPORT=true)
+
+  target_include_directories(HotswapToolLoaderTests PRIVATE
+    ${LLVM_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    "${HOTSWAP_TOOL_HSA_INC}"
+    ${COMGR_GTEST_INCLUDE_DIRS}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+  comgr_configure_test_target(HotswapToolLoaderTests)
+endif()
+
+# -- DemangleSymbolNameTest ---------------------------------------------------
+
+add_executable(DemangleSymbolNameTest
+  DemangleSymbolNameTest.cpp)
+
+target_link_libraries(DemangleSymbolNameTest PRIVATE
+  ${COMGR_GTEST_LIBS}
+  amd_comgr
+  ${LLVM_PTHREAD_LIB})
+
+# Gtest's LLVM support brings in some printers for LLVM types (StringRef, etc.).
+# When building in-tree, the included headers bring in some code that depend on LLVM's abi-breaking checks.
+# This adds a dependency with LLVM's Support library.
+# We could link against Support, but since we're not using these printers we can just disable them.
+target_compile_definitions(DemangleSymbolNameTest PRIVATE GTEST_NO_LLVM_SUPPORT=true)
+
+target_include_directories(DemangleSymbolNameTest PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${COMGR_GTEST_INCLUDE_DIRS}
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+
+comgr_configure_test_target(DemangleSymbolNameTest)
+
+# amd_comgr is a shared lib; the test-unit target runs the exe directly
+# without the PATH setup the lit suite uses, so place the DLL next to it.
+if(WIN32 AND COMGR_BUILD_SHARED_LIBS)
+  add_custom_command(TARGET DemangleSymbolNameTest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:amd_comgr> $<TARGET_FILE_DIR:DemangleSymbolNameTest>)
+endif()
+
 # Register every test binary with the test-unit / check-comgr plumbing.
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests
-  RaiserScaffoldingTests)
+  COMMAND $<TARGET_FILE:HotswapToolTests>
+  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>
+  COMMAND $<TARGET_FILE:DemangleSymbolNameTest>)
+add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapToolTests
+  RaiserScaffoldingTests DemangleSymbolNameTest)
+if(TARGET HotswapToolLoaderTests)
+  add_dependencies(test-unit HotswapToolLoaderTests)
+  add_custom_command(TARGET test-unit POST_BUILD
+    COMMAND $<TARGET_FILE:HotswapToolLoaderTests>)
+endif()
 add_dependencies(check-comgr test-unit)

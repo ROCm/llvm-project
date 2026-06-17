@@ -265,6 +265,22 @@ void MachineFunction::initTargetMachineFunctionInfo(
   MFInfo = Target.createMachineFunctionInfo(Allocator, F, &STI);
 }
 
+MachineFunctionInfo *MachineFunction::cloneInfoFrom(
+    const MachineFunction &OrigMF,
+    const DenseMap<MachineBasicBlock *, MachineBasicBlock *> &Src2DstMBB) {
+  assert(!MFInfo && "new function already has MachineFunctionInfo");
+  if (!OrigMF.MFInfo)
+    return nullptr;
+
+  MachineFunctionInfo *ClonedInfo =
+      OrigMF.MFInfo->clone(Allocator, *this, Src2DstMBB);
+  if (!ClonedInfo)
+    return nullptr;
+
+  RegInfo->copyPendingVirtRegMapEntriesFrom(OrigMF.getRegInfo());
+  return ClonedInfo;
+}
+
 MachineFunction::~MachineFunction() {
   clear();
 }
@@ -357,8 +373,8 @@ MachineFunction::addFrameInst(const MCCFIInstruction &Inst) {
   return FrameInstructions.size() - 1;
 }
 
-void MachineFunction::replaceFrameInstRegister(Register FromReg,
-                                               Register ToReg) {
+void MachineFunction::replaceFrameInstRegister(MCRegister FromReg,
+                                               MCRegister ToReg) {
   const MCRegisterInfo *MCRI = Ctx.getRegisterInfo();
   unsigned DwarfFromReg = MCRI->getDwarfRegNum(FromReg, false);
   unsigned DwarfToReg = MCRI->getDwarfRegNum(ToReg, false);

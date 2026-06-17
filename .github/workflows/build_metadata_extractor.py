@@ -77,10 +77,11 @@ class BuildMetadataExtractor:
         #the_rock_commit = manifest_data.get('the_rock_commit', '')
         #commit_url = f"{self.base_url}/commit/{the_rock_commit}"
         table = '| Submodule | URL |\n|-----------|-----|\n'
+        commit_base_url = f"https://github.com/{self.org_name}"
         for submodule_name,pin_sha in manifest_data.items():
             if submodule_name == 'rccl':  # Filter out specific submodules
                continue
-            submodule_url = f"{self.base_url}/{submodule_name}"
+            submodule_url = f"{commit_base_url}/{submodule_name}"
             commit_url = f"{submodule_url}/commit/{pin_sha}"
             table += f'| {submodule_name} | ({commit_url}) |\n'
 
