@@ -53,23 +53,24 @@ target_link_libraries(hotswap-transpiler
     LLVMTargetParser
 )
 
-# HSA_TOOLS_LIB hotswap tool (libamd_comgr_hotswap_tool.so): ROCR loads it via
-# HSA_TOOLS_LIB and it rewrites code objects through the comgr hotswap API.
-# It requires the HSA headers (inc/hsa.h, from
-# HOTSWAP_TOOL_HSA_INCLUDE_ROOT); configuration errors if they are not found.
-option(HOTSWAP_BUILD_TOOL "Build the HSA_TOOLS_LIB hotswap tool" ON)
-if(HOTSWAP_BUILD_TOOL)
+# Hotswap tool (libamd_comgr_hotswap_tool.so): a thin .so that rewrites code
+# objects through the comgr hotswap API. ROCR can load it via HSA_TOOLS_LIB, but
+# the hotswap API is equally usable by any other caller.
+# It requires the HSA headers (inc/hsa.h, from HOTSWAP_TOOL_HSA_INCLUDE_ROOT);
+# configuration errors if they are not found.
+option(COMGR_BUILD_HOTSWAP_TOOL "Build the hotswap tool" ON)
+if(COMGR_BUILD_HOTSWAP_TOOL)
   if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR
-      "HOTSWAP_BUILD_TOOL is only supported on Linux (it requires the HSA "
-      "runtime); set HOTSWAP_BUILD_TOOL=OFF on this platform.")
+      "COMGR_BUILD_HOTSWAP_TOOL is only supported on Linux (it requires the HSA "
+      "runtime); set COMGR_BUILD_HOTSWAP_TOOL=OFF on this platform.")
   endif()
   find_path(HOTSWAP_TOOL_HSA_INC inc/hsa.h HINTS "${HOTSWAP_TOOL_HSA_INCLUDE_ROOT}")
   if(NOT HOTSWAP_TOOL_HSA_INC)
     message(FATAL_ERROR
-      "HOTSWAP_BUILD_TOOL is ON but inc/hsa.h was not found. Set "
+      "COMGR_BUILD_HOTSWAP_TOOL is ON but inc/hsa.h was not found. Set "
       "HOTSWAP_TOOL_HSA_INCLUDE_ROOT to the rocr-runtime hsa-runtime directory, "
-      "or set HOTSWAP_BUILD_TOOL=OFF.")
+      "or set COMGR_BUILD_HOTSWAP_TOOL=OFF.")
   endif()
   # amd/comgr/src/hotswap binary dir -> amd/comgr binary dir (generated amd_comgr.h).
   get_filename_component(_comgr_bin "${CMAKE_CURRENT_BINARY_DIR}/../.." ABSOLUTE)

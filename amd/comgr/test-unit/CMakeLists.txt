@@ -194,8 +194,8 @@ comgr_configure_test_target(HotswapToolTests)
 #
 # Drives the tool's HSA_TOOLS_LIB entry points (OnLoad/OnUnload) against a stub
 # HSA API table. Compiles the tool TU directly, so it needs the HSA headers and
-# amd_comgr; gated on HOTSWAP_BUILD_TOOL like the tool itself.
-if(HOTSWAP_BUILD_TOOL AND HOTSWAP_TOOL_HSA_INC)
+# amd_comgr; gated on COMGR_BUILD_HOTSWAP_TOOL like the tool itself.
+if(COMGR_BUILD_HOTSWAP_TOOL AND HOTSWAP_TOOL_HSA_INC)
   add_executable(HotswapToolLoaderTests
     HotswapToolLoaderTest.cpp
     ../src/hotswap/comgr-hotswap-tool.cpp)
