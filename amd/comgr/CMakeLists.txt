@@ -129,7 +129,7 @@ set(SOURCES
 # comgr-hotswap-transpile.cpp entry point. When disabled, the
 # amd_comgr_hotswap_transpile API is simply not provided.
 option(COMGR_ENABLE_HOTSWAP_TRANSPILE
-  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" OFF)
+  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" ON)
 
 # Add Windows resource file for version info
 if(WIN32)
