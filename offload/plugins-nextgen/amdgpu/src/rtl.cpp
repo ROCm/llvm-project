@@ -1037,11 +1037,11 @@ private:
 
       // Honor OMP_NUM_TEAMS environment variable for BigJumpLoop kernel type.
       if (NumTeamsEnvVar > 0 && static_cast<uint32_t>(NumTeamsEnvVar) <=
-                                    GenericDevice.getBlockLimit())
+                                    GenericDevice.getBlockLimit(EffectiveNumThreads))
         NumGroups = std::min(static_cast<uint64_t>(NumTeamsEnvVar), NumGroups);
       // Honor num_teams clause but lower it if tripcount dictates.
       else if (UserNumBlocks > 0 &&
-               UserNumBlocks <= GenericDevice.getBlockLimit()) {
+               UserNumBlocks <= GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups = std::min(static_cast<uint64_t>(UserNumBlocks), NumGroups);
       } else {
         // num_teams clause is not specified. Choose lower of tripcount-based
@@ -1079,7 +1079,7 @@ private:
                                        GenericDevice, EffectiveNumThreads));
       }
       return std::min(NumGroups,
-                      static_cast<uint64_t>(GenericDevice.getBlockLimit()));
+                      static_cast<uint64_t>(GenericDevice.getBlockLimit(EffectiveNumThreads)));
     }
 
     if (isXTeamReductionsMode()) {
@@ -1130,11 +1130,11 @@ private:
       // may fail to extract it, instead using the alternative computation of
       // the number of teams. But the runtime here will still see the value
       // of the clause, so we need to check against the upper limit.
-      if (UserNumBlocks > 0 && UserNumBlocks <= GenericDevice.getBlockLimit()) {
+      if (UserNumBlocks > 0 && UserNumBlocks <= GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups =
             std::min(static_cast<uint64_t>(UserNumBlocks), MaxNumGroups);
       } else if (NumTeamsEnvVar > 0 && static_cast<uint32_t>(NumTeamsEnvVar) <=
-                                           GenericDevice.getBlockLimit()) {
+                                           GenericDevice.getBlockLimit(EffectiveNumThreads)) {
         NumGroups =
             std::min(static_cast<uint64_t>(NumTeamsEnvVar), MaxNumGroups);
       } else {
@@ -1187,7 +1187,7 @@ private:
       // TODO: We need to honor any value and consequently allow more than the
       // block limit. For this we might need to start multiple kernels or let
       // the blocks start again until the requested number has been started.
-      return std::min(UserNumBlocks, GenericDevice.getBlockLimit());
+      return std::min(UserNumBlocks, GenericDevice.getBlockLimit(EffectiveNumThreads));
     }
 
     // If envar OMPX_SPMD_OCCUPANCY_BASED_OPT is set and no OMP_NUM_TEAMS is
@@ -1296,7 +1296,7 @@ private:
       }
     }
     return std::min(PreferredNumBlocks,
-                    (uint64_t)GenericDevice.getBlockLimit());
+                    (uint64_t)GenericDevice.getBlockLimit(EffectiveNumThreads));
   }
 
   /// Compute the occupancy with the constraint on the number of SGPRs
