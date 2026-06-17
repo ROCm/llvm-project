@@ -97,7 +97,8 @@ public:
   unsigned GetDefaultDwarfVersion() const override { return 5; }
 
   const ToolChain &HostTC;
-  void checkTargetID(const llvm::opt::ArgList &DriverArgs) const override;
+  ParsedTargetIDType
+  checkTargetID(const llvm::opt::ArgList &DriverArgs) const override;
 
 protected:
   Tool *buildLinker() const override;

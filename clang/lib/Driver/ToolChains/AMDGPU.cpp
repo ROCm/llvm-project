@@ -671,32 +671,7 @@ void amdgpu::getAMDGPUTargetFeatures(const Driver &D,
                                      const llvm::Triple &Triple,
                                      const llvm::opt::ArgList &Args,
                                      std::vector<StringRef> &Features,
-                                     StringRef TcTargetID) {
-  // Add target ID features to -target-feature options. No diagnostics should
-  // be emitted here since invalid target ID is diagnosed at other places.
-  StringRef TargetID = Args.getLastArgValue(options::OPT_mcpu_EQ);
-  // Use this toolchain's TargetID if mcpu is not defined
-  if (TargetID.empty() && !TcTargetID.empty())
-    TargetID = TcTargetID;
-  if (!TargetID.empty()) {
-    llvm::StringMap<bool> FeatureMap;
-    auto OptionalGpuArch = parseTargetID(Triple, TargetID, &FeatureMap);
-    if (OptionalGpuArch) {
-      StringRef GpuArch = *OptionalGpuArch;
-      // Iterate through all possible target ID features for the given GPU.
-      // If it is mapped to true, add +feature.
-      // If it is mapped to false, add -feature.
-      // If it is not in the map (default), do not add it
-      for (auto &&Feature : getAllPossibleTargetIDFeatures(Triple, GpuArch)) {
-        auto Pos = FeatureMap.find(Feature);
-        if (Pos == FeatureMap.end())
-          continue;
-        Features.push_back(Args.MakeArgStringRef(
-            (Twine(Pos->second ? "+" : "-") + Feature).str()));
-      }
-    }
-  }
-
+                                     StringRef /*TcTargetID*/) {
   if (Args.hasFlag(options::OPT_mwavefrontsize64,
                    options::OPT_mno_wavefrontsize64, false))
     Features.push_back("+wavefrontsize64");
@@ -800,9 +775,27 @@ AMDGPUToolChain::TranslateArgs(const DerivedArgList &Args, StringRef BoundArch,
   if (!BoundArch.empty()) {
     DAL->eraseArg(options::OPT_mcpu_EQ);
     DAL->AddJoinedArg(nullptr, Opts.getOption(options::OPT_mcpu_EQ), BoundArch);
-    checkTargetID(*DAL);
-  } else if (DeviceOffloadKind == Action::OFK_None) {
-    checkTargetID(*DAL);
+  }
+
+  AMDGPUToolChain::ParsedTargetIDType PTID = checkTargetID(*DAL);
+
+  // Synthesize feature flags for target ID modifiers (xnack, sramecc).
+  if (PTID.OptionalFeatureMap) {
+    const llvm::StringMap<bool> &FeatureMap = *PTID.OptionalFeatureMap;
+
+    auto XnackIt = FeatureMap.find("xnack");
+    if (XnackIt != FeatureMap.end()) {
+      DAL->AddFlagArg(nullptr,
+                      Opts.getOption(XnackIt->second ? options::OPT_mxnack
+                                                     : options::OPT_mno_xnack));
+    }
+
+    auto SrameccIt = FeatureMap.find("sramecc");
+    if (SrameccIt != FeatureMap.end()) {
+      DAL->AddFlagArg(nullptr, Opts.getOption(SrameccIt->second
+                                                  ? options::OPT_msramecc
+                                                  : options::OPT_mno_sramecc));
+    }
   }
 
   if (Args.getLastArgValue(options::OPT_x) != "cl")
@@ -981,7 +974,11 @@ AMDGPUToolChain::getGPUArch(const llvm::opt::ArgList &DriverArgs) const {
 AMDGPUToolChain::ParsedTargetIDType
 AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   StringRef TargetID = DriverArgs.getLastArgValue(options::OPT_mcpu_EQ);
-  if (TargetID.empty())
+  // For offload toolchains (HIP, OpenMP, etc.), `getAuxTriple()` is the host;
+  // `-march=` there refers to the host CPU (e.g. haswell) and must not be
+  // parsed as an AMDGPU Target ID. Only standalone AMDGPU uses `-march=` as
+  // a legacy spelling for the GPU `-mcpu=` (see TranslateArgs when OFK_None).
+  if (TargetID.empty() && !getAuxTriple())
     TargetID = DriverArgs.getLastArgValue(options::OPT_march_EQ);
 
   if (TargetID.empty())
@@ -995,13 +992,14 @@ AMDGPUToolChain::getParsedTargetID(const llvm::opt::ArgList &DriverArgs) const {
   return {TargetID.str(), OptionalGpuArch->str(), FeatureMap};
 }
 
-void AMDGPUToolChain::checkTargetID(
-    const llvm::opt::ArgList &DriverArgs) const {
+AMDGPUToolChain::ParsedTargetIDType
+AMDGPUToolChain::checkTargetID(const llvm::opt::ArgList &DriverArgs) const {
   auto PTID = getParsedTargetID(DriverArgs);
   if (PTID.OptionalTargetID && !PTID.OptionalGPUArch) {
     getDriver().Diag(clang::diag::err_drv_bad_target_id)
         << *PTID.OptionalTargetID;
   }
+  return PTID;
 }
 
 Expected<SmallVector<std::string>>

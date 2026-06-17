@@ -110,6 +110,7 @@ add_executable(HotswapMCTests
   ../src/comgr-hotswap-patch-trampoline.cpp
   ../src/comgr-hotswap-patch-vop3px2-src2.cpp
   ../src/comgr-hotswap-patch-wmma-hazard.cpp
+  ../src/comgr-hotswap-patch-wmma-scale16.cpp
   ../src/comgr-hotswap-patch-wmma-split.cpp
   ../src/comgr-env.cpp)
 

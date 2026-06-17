@@ -150,8 +150,7 @@ ScratchAllocation allocateScratch(PatchContext &Ctx, size_t Idx) {
   VgprAllocator VgprAlloc(Ctx.Liveness.LiveBefore[Idx], VgprKdCount,
                           Ctx.Config.MaxVgprs);
 
-  std::optional<unsigned> KdSgprs =
-      Ctx.Elf.getKernelSgprCount(KernelName, Ctx.Config.SgprGranuleSize);
+  std::optional<unsigned> KdSgprs = Ctx.Elf.getKernelSgprCount(KernelName);
   unsigned SgprKdCount = KdSgprs.value_or(Ctx.Config.MaxSgprs);
   SgprAllocator SgprAlloc(SgprKdCount, Ctx.Config.MaxSgprs);
 

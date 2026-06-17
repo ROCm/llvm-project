@@ -3305,10 +3305,10 @@ define amdgpu_kernel void @global_store_saddr_uniform_ptr_in_vgprs(i32 %voffset,
 ;
 ; GFX1250-SDAG-LABEL: global_store_saddr_uniform_ptr_in_vgprs:
 ; GFX1250-SDAG:       ; %bb.0:
-; GFX1250-SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
+; GFX1250-SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-SDAG-NEXT:    s_clause 0x1
-; GFX1250-SDAG-NEXT:    s_load_b32 s6, s[4:5], 0x24
-; GFX1250-SDAG-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34
+; GFX1250-SDAG-NEXT:    s_load_b32 s6, s[4:5], 0x24 nv
+; GFX1250-SDAG-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34 nv
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-SDAG-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v6, s6
 ; GFX1250-SDAG-NEXT:    ds_load_b64 v[4:5], v0
@@ -3542,10 +3542,10 @@ define amdgpu_kernel void @global_store_saddr_uniform_ptr_in_vgprs(i32 %voffset,
 ;
 ; GFX1250-ISEL-LABEL: global_store_saddr_uniform_ptr_in_vgprs:
 ; GFX1250-ISEL:       ; %bb.0:
-; GFX1250-ISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
+; GFX1250-ISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-ISEL-NEXT:    s_clause 0x1
-; GFX1250-ISEL-NEXT:    s_load_b32 s6, s[4:5], 0x24
-; GFX1250-ISEL-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34
+; GFX1250-ISEL-NEXT:    s_load_b32 s6, s[4:5], 0x24 nv
+; GFX1250-ISEL-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34 nv
 ; GFX1250-ISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1250-ISEL-NEXT:    s_mov_b32 s7, 0
 ; GFX1250-ISEL-NEXT:    ds_load_b64 v[0:1], v0
@@ -3777,10 +3777,10 @@ define amdgpu_kernel void @global_store_saddr_uniform_ptr_in_vgprs_immoffset(i32
 ;
 ; GFX1250-SDAG-LABEL: global_store_saddr_uniform_ptr_in_vgprs_immoffset:
 ; GFX1250-SDAG:       ; %bb.0:
-; GFX1250-SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
+; GFX1250-SDAG-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-SDAG-NEXT:    s_clause 0x1
-; GFX1250-SDAG-NEXT:    s_load_b32 s6, s[4:5], 0x24
-; GFX1250-SDAG-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34
+; GFX1250-SDAG-NEXT:    s_load_b32 s6, s[4:5], 0x24 nv
+; GFX1250-SDAG-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34 nv
 ; GFX1250-SDAG-NEXT:    s_wait_kmcnt 0x0
 ; GFX1250-SDAG-NEXT:    v_dual_mov_b32 v0, 0 :: v_dual_mov_b32 v6, s6
 ; GFX1250-SDAG-NEXT:    ds_load_b64 v[4:5], v0
@@ -4014,10 +4014,10 @@ define amdgpu_kernel void @global_store_saddr_uniform_ptr_in_vgprs_immoffset(i32
 ;
 ; GFX1250-ISEL-LABEL: global_store_saddr_uniform_ptr_in_vgprs_immoffset:
 ; GFX1250-ISEL:       ; %bb.0:
-; GFX1250-ISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1
+; GFX1250-ISEL-NEXT:    s_setreg_imm32_b32 hwreg(HW_REG_WAVE_MODE, 25, 1), 1 ; msbs: dst=0 src0=0 src1=0 src2=0
 ; GFX1250-ISEL-NEXT:    s_clause 0x1
-; GFX1250-ISEL-NEXT:    s_load_b32 s6, s[4:5], 0x24
-; GFX1250-ISEL-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34
+; GFX1250-ISEL-NEXT:    s_load_b32 s6, s[4:5], 0x24 nv
+; GFX1250-ISEL-NEXT:    s_load_b128 s[0:3], s[4:5], 0x34 nv
 ; GFX1250-ISEL-NEXT:    v_mov_b32_e32 v0, 0
 ; GFX1250-ISEL-NEXT:    s_mov_b32 s7, 0
 ; GFX1250-ISEL-NEXT:    ds_load_b64 v[0:1], v0
