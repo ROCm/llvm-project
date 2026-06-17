@@ -67,7 +67,8 @@
 
 // CHECK: [[CLANG:".*clang.*"]] "-cc1" "-triple" "amdgcn-amd-amdhsa"
 // CHECK-SAME: "-aux-triple" "x86_64-unknown-linux-gnu"
-// CHECK-SAME: "-emit-llvm-bc"
+// OLD-SAME: "-emit-obj"
+// NEW-SAME: "-emit-llvm-bc"
 // CHECK-SAME: {{.*}} "-main-file-name" "a.cu"
 // CHECK-SAME: "-fcuda-is-device" "-fno-threadsafe-statics" "-mllvm" "-amdgpu-internalize-symbols"
 // CHECK-SAME: "-fvisibility=hidden"
@@ -121,7 +122,6 @@
 // NEW-SAME: "--image=file=[[OBJ_DEV_A_900]],triple=amdgcn-amd-amdhsa,arch=gfx900,kind=hip"
 
 // NEW: [[WRAPPER:".*clang-linker-wrapper]]"
-// NEW-SAME: "--device-compiler=amdgcn-amd-amdhsa=-flto=full"
 // NEW-SAME: "--no-lto"
 // NEW-SAME: "--host-triple=x86_64-unknown-linux-gnu"
 // NEW-SAME: "--emit-fatbin-only"
@@ -196,7 +196,6 @@
 // NEW-SAME: "--image=file=[[OBJ_DEV_B_900]],triple=amdgcn-amd-amdhsa,arch=gfx900,kind=hip"
 
 // NEW: [[WRAPPER:".*clang-linker-wrapper]]"
-// NEW-SAME: "--device-compiler=amdgcn-amd-amdhsa=-flto=full"
 // NEW-SAME: "--no-lto"
 // NEW-SAME: "--emit-fatbin-only"
 // NEW-SAME: "-o" "[[HIPFB_B:.*.hipfb]]" "[[PACKAGE_B]]"
@@ -238,7 +237,7 @@
 // AMDGCNSPIRV: {{".*clang-offload-bundler.*"}} "-type=o"
 // AMDGCNSPIRV-SAME: "-targets={{.*}}hip-spirv64-amd-amdhsa--amdgcnspirv,hip-amdgcn-amd-amdhsa--gfx900"
 // AMDGCNSPIRV-SAME: "-input=[[AMDGCNSPV_CO]]" "-input=[[GFX900_CO]]"
-// AMDGCNSPIRV-NEW: "-cc1" "-triple" "spirv64-amd-amdhsa" {{.*}}"-emit-llvm-bc" {{.*}} "-o" "[[AMDGCNSPV_BC:[^"]*]]"
+// AMDGCNSPIRV-NEW: "-cc1" "-triple" "spirv64-amd-amdhsa" {{.*}}"-emit-llvm-bc" {{.*}} "-o" "[[AMDGCNSPV_BC:.*bc]]"
 
 // Check verbose printing with the new driver.
 // RUN: %clang -### --target=x86_64-linux-gnu -fno-gpu-rdc -nogpulib -nogpuinc \
