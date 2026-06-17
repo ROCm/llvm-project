@@ -1958,11 +1958,13 @@ void ControlFlowRewriter::rewrite() {
 
     if (!Info.OrigExit) {
       // Remove original terminators, preserving artificial terminators
-      // (EXEC management ops) and hardware-managed branches (e.g.
-      // S_SUBVECTOR_LOOP) that pass through to assembly unchanged.
+      // (EXEC management ops), hardware-managed branches (e.g.
+      // S_SUBVECTOR_LOOP) that pass through to assembly unchanged, and
+      // kill terminators that will be lowered later by si-wqm.
       while (!Node->Block->empty() && Node->Block->back().isTerminator() &&
              !isArtificialTerminator(Node->Block->back()) &&
-             !isHardwareManagedBranch(Node->Block->back()))
+             !isHardwareManagedBranch(Node->Block->back()) &&
+             !TII.isKillTerminator(Node->Block->back().getOpcode()))
         Node->Block->back().eraseFromParent();
     }
 
