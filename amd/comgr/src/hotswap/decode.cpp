@@ -655,13 +655,14 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
   const MCInst &Inst = Di.Inst;
   // s_add_pc_i64 carries a signed i64 PC-relative offset, not the SOPP form.
   if (Di.CanonOp == CanonicalOp::S_ADD_PC_I64) {
-    if (!Inst.getOperand(0).isImm())
-      report_fatal_error("transpiler: s_add_pc_i64 with non-immediate source "
-                         "(only the immediate-literal form is supported)");
+    std::optional<int64_t> ConstOpt = evalOperandAsConst(Inst, 0);
+    if (!ConstOpt)
+      report_fatal_error("transpiler: s_add_pc_i64 with non-constant source "
+                         "(only immediate-literal and lit64 forms are supported)");
+    int64_t Imm = *ConstOpt;
     if (InstSize > UINT64_MAX - Off)
       return;
     uint64_t Base = Off + InstSize;
-    int64_t Imm = Inst.getOperand(0).getImm();
     uint64_t Target = 0;
     if (Imm < 0) {
       uint64_t Back = llvm::AbsoluteValue(Imm);

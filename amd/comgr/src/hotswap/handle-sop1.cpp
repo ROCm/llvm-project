@@ -18,6 +18,8 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCInst.h"
 using namespace llvm;
 
 namespace COMGR::hotswap {
@@ -506,15 +508,14 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_ADD_PC_I64) {
-    if (!Di.isImm(0)) {
+    std::optional<int64_t> ConstOpt = evalOperandAsConst(Di.Inst, 0);
+    if (!ConstOpt) {
       Hr.Failure = RaiseFailure::unsupportedInstructionForm(
           Di, "SOP1",
-          "s_add_pc_i64 with SGPR-pair source (codegen only emits the "
-          "immediate-literal form)");
+          "s_add_pc_i64 with non-literal source (SGPR-pair form unsupported)");
       return Hr;
     }
-    int64_t Imm = Di.getImm(0);
-    uint64_t Target = Di.Offset + Di.Size + static_cast<uint64_t>(Imm);
+    uint64_t Target = Di.Offset + Di.Size + static_cast<uint64_t>(*ConstOpt);
     Ctx.B.CreateBr(Ctx.lookupBB(Target));
     Hr.Handled = true;
     return Hr;
