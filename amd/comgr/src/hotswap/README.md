@@ -61,17 +61,17 @@ hotswap_tool: device=gfx1250 asic_revision=0 -> A0 (rewrite armed)
 
 ## Building the tool
 
-The tool is off by default, since most comgr consumers do not need it. Enable it
-and point the build at the HSA headers:
+The tool is built by default (`COMGR_BUILD_HOTSWAP_TOOL=ON`). It is Linux-only
+and needs the HSA headers; point the build at them:
 
 ```bash
 cmake -S amd/comgr -B build \
-  -DHOTSWAP_BUILD_TOOL=ON \
+  -DCOMGR_BUILD_HOTSWAP_TOOL=ON \
   -DHOTSWAP_TOOL_HSA_INCLUDE_ROOT=/path/to/rocr-runtime/runtime/hsa-runtime
 ninja -C build amd_comgr_hotswap_tool
 ```
 
-If `HOTSWAP_BUILD_TOOL` is on but `inc/hsa.h` cannot be found under
+If `COMGR_BUILD_HOTSWAP_TOOL` is on but `inc/hsa.h` cannot be found under
 `HOTSWAP_TOOL_HSA_INCLUDE_ROOT`, the build fails.
 
 ## Transpiler (cross-gen)

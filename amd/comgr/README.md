@@ -85,6 +85,19 @@ super-project, you can statically link LLVM/Clang into Comgr by passing
 `-DCOMGR_STATIC_LLVM=ON`. By default (`OFF`), Comgr respects the existing
 `LLVM_LINK_LLVM_DYLIB` and `CLANG_LINK_CLANG_DYLIB` settings.
 
+**Hotswap:** Comgr provides a hotswap binary transpiler that rewrites code
+objects at runtime. It is controlled by two CMake options, both `ON` by default:
+
+* `-DCOMGR_ENABLE_HOTSWAP_TRANSPILE`: builds the `amd_comgr_hotswap_transpile`
+  entry point into `amd_comgr`. When `OFF`, that API is not provided.
+* `-DCOMGR_BUILD_HOTSWAP_TOOL`: builds the hotswap tool
+  (`libamd_comgr_hotswap_tool.so`), a thin shared library that rewrites code
+  objects through the comgr hotswap API. ROCR can load it via `HSA_TOOLS_LIB`,
+  but the API is equally usable by any other caller. This option is Linux-only
+  and requires the HSA headers (`inc/hsa.h`); point
+  `-DHOTSWAP_TOOL_HSA_INCLUDE_ROOT` at the rocr-runtime `hsa-runtime` directory,
+  or pass `-DCOMGR_BUILD_HOTSWAP_TOOL=OFF`.
+
 **Windows DLL Name:** On Windows, the DLL is named `amd_comgr.dll` by default.
 To override this, pass `-DCOMGR_DLL_NAME=<name>.dll` during the Comgr `cmake`
 step (e.g., `-DCOMGR_DLL_NAME=amd_comgr_3.dll`).
