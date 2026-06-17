@@ -861,7 +861,7 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
   // TODO: Remove these assertions after thorough validation (check with user
   // first)
   RUNTIME_CHECK(terminator, to.rank() == from.rank());
-  RUNTIME_CHECK(terminator, from.IsContiguous());
+  // NOTE: Removed from.IsContiguous() check - now handled at runtime (Option 3)
   RUNTIME_CHECK(terminator, to.ElementBytes() == from.ElementBytes());
   RUNTIME_CHECK(terminator, !to.type().IsDerived());
 
@@ -914,11 +914,27 @@ void RTDEF(AssignSimple)(Descriptor &to, const Descriptor &from,
     }
   }
 
-  // Now both descriptors should be allocated and contiguous
-  RUNTIME_CHECK(terminator, to.IsContiguous());
+  // Choose copy method based on contiguity (Option 3: runtime handling)
+  if (to.IsContiguous() && from.IsContiguous()) {
+    // Fast path: both contiguous, use memmove
+    std::memmove(to.OffsetElement(), from.OffsetElement(),
+        to.Elements() * to.ElementBytes());
+  } else {
+    // Slow path: at least one non-contiguous, use element-wise copy
+    // This handles strided slices, transformational intrinsic results, etc.
+    SubscriptValue toAt[maxRank];
+    to.GetLowerBounds(toAt);
+    SubscriptValue fromAt[maxRank];
+    from.GetLowerBounds(fromAt);
 
-  std::memmove(to.OffsetElement(), from.OffsetElement(),
-      to.Elements() * to.ElementBytes());
+    std::size_t elementBytes{to.ElementBytes()};
+    std::size_t elements{to.Elements()};
+    for (std::size_t n{elements}; n-- > 0;
+        to.IncrementSubscripts(toAt), from.IncrementSubscripts(fromAt)) {
+      std::memmove(to.Element<char>(toAt), from.Element<const char>(fromAt),
+          elementBytes);
+    }
+  }
 }
 
 void RTDEF(AssignPolymorphic)(Descriptor &to, const Descriptor &from,
