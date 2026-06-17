@@ -16,7 +16,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include <comgr-unpackage-command.h>
 
-#include <llvm/ADT/StringMap.h>
+#include <llvm/ADT/DenseMap.h>
 #include <llvm/Object/OffloadBinary.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
@@ -25,25 +25,40 @@ namespace COMGR {
 using namespace llvm;
 
 amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
-  StringMap<StringRef> Worklist;
+  DenseMap<llvm::object::OffloadFile::TargetID, StringRef> Worklist;
   for (const auto &[Output, Target] :
-       llvm::zip_equal(OutputFileNames, TargetNames)) {
+       llvm::zip_equal(OutputFileNames, TargetIDs)) {
     Worklist[Target] = Output;
   }
 
   for (const llvm::object::OffloadFile &File : Files) {
     const llvm::object::OffloadBinary *Binary = File.getBinary();
-    StringRef Triple = Binary->getTriple();
-    StringRef Arch = Binary->getArch();
-    std::string Target = (Triple + "-" + Arch).str();
+    llvm::object::OffloadFile::TargetID Target = File;
 
-    // TODO: does this instead need to check that the triples are compatible?
-    // (rather than simply equivalent)
-    if (Worklist.contains(Target)) {
+    // Prefer an exact match, then fall back to a compatible target. Note that
+    // areTargetsCompatible() reports false for an exact match (it only flags
+    // distinct-but-compatible targets), so the explicit lookup below is
+    // required to handle equal targets. We track the matching Worklist entry by
+    // iterator so it can be erased once written.
+    DenseMap<llvm::object::OffloadFile::TargetID, StringRef>::iterator Match =
+        Worklist.find(Target);
+    if (Match == Worklist.end()) {
+      for (DenseMap<llvm::object::OffloadFile::TargetID, StringRef>::iterator
+               I = Worklist.begin(),
+               E = Worklist.end();
+           I != E; ++I) {
+        if (llvm::object::areTargetsCompatible(I->first, Target)) {
+          Match = I;
+          break;
+        }
+      }
+    }
+
+    if (Match != Worklist.end()) {
       StringRef Image = Binary->getImage();
 
       // create an output file descriptor
-      auto OutputName = Worklist[Target];
+      StringRef OutputName = Match->second;
       std::error_code EC;
       raw_fd_ostream OutputFile(OutputName, EC, sys::fs::OF_None);
       if (EC) {
@@ -56,7 +71,7 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
 
       // erase the entry from Worklist (so that we can track if all expected
       // files have been unpackaged)
-      Worklist.erase(Target);
+      Worklist.erase(Match);
     }
   }
 

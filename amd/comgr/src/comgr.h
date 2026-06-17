@@ -209,8 +209,9 @@ struct DataAction {
   amd_comgr_status_t setBundleEntryIDs(llvm::ArrayRef<const char *> EntryIDs);
   llvm::ArrayRef<std::string> getBundleEntryIDs();
 
-  amd_comgr_status_t setPackageEntryIDs(llvm::ArrayRef<const char *> EntryIDs);
-  llvm::ArrayRef<std::string> getPackageEntryIDs();
+  amd_comgr_status_t
+  setPackageEntryIDs(llvm::ArrayRef<amd_comgr_target_id_t> EntryIDs);
+  llvm::ArrayRef<std::pair<std::string, std::string>> getPackageEntryIDs();
 
   char *IsaName;
   char *Path;
@@ -220,7 +221,7 @@ struct DataAction {
   bool ShouldUseVFS = true;
 
   std::vector<std::string> BundleEntryIDs;
-  std::vector<std::string> PackageEntryIDs;
+  std::vector<std::pair<std::string, std::string>> PackageEntryIDs;
   std::vector<size_t> BlockSizes;
 
 private:

@@ -22,15 +22,15 @@ namespace COMGR {
 class UnpackageCommand {
 private:
   const llvm::SmallVector<llvm::object::OffloadFile> &Files;
-  const llvm::SmallVector<std::string> &TargetNames;
+  const llvm::SmallVector<llvm::object::OffloadFile::TargetID> &TargetIDs;
   const llvm::SmallVector<std::string> &OutputFileNames;
 
 public:
-  UnpackageCommand(const llvm::SmallVector<llvm::object::OffloadFile> &Files,
-                   const llvm::SmallVector<std::string> &TargetNames,
-                   const llvm::SmallVector<std::string> &OutputFileNames)
-      : Files(Files), TargetNames(TargetNames),
-        OutputFileNames(OutputFileNames) {}
+  UnpackageCommand(
+      const llvm::SmallVector<llvm::object::OffloadFile> &Files,
+      const llvm::SmallVector<llvm::object::OffloadFile::TargetID> &TargetIDs,
+      const llvm::SmallVector<std::string> &OutputFileNames)
+      : Files(Files), TargetIDs(TargetIDs), OutputFileNames(OutputFileNames) {}
 
   amd_comgr_status_t execute(llvm::raw_ostream &LogS);
 };

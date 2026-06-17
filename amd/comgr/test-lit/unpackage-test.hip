@@ -14,10 +14,10 @@
 // RUN: -o %t.package.bc
 //
 // COM: extract using Comgr
-// RUN: unpackage %t.package.bc amdgcn-amd-amdhsa-gfx900 %t.gfx900.output.bc
+// RUN: unpackage %t.package.bc amdgcn-amd-amdhsa gfx900 %t.gfx900.output.bc
 // RUN: llvm-dis %t.gfx900.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX9 %s
 //
-// RUN: unpackage %t.package.bc amdgcn-amd-amdhsa-gfx1030 %t.gfx1030.output.bc
+// RUN: unpackage %t.package.bc amdgcn-amd-amdhsa gfx1030 %t.gfx1030.output.bc
 // RUN: llvm-dis %t.gfx1030.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX10 %s
 //
 // BOTH: target triple = "amdgcn-amd-amdhsa"

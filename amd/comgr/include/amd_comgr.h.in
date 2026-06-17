@@ -1449,6 +1449,16 @@ amd_comgr_action_info_get_bundle_entry_id(
   char *bundle_entry_id) AMD_COMGR_VERSION_2_8;
 
 /**
+ * @brief A target identifier naming an offload target as a (triple, arch)
+ * pair, for example {"amdgcn-amd-amdhsa", "gfx900"}. Both members point to
+ * null-terminated strings owned by the caller.
+ */
+typedef struct {
+  const char *triple;
+  const char *arch;
+} amd_comgr_target_id_t;
+
+/**
  * @brief Set the package entry IDs of an action info object.
  *
  * When an action info object is created it has no package entry IDs. Some
@@ -1458,10 +1468,11 @@ amd_comgr_action_info_get_bundle_entry_id(
  * @param[in] action_info A handle to the action info object to be
  * updated.
  *
- * @param[in] package_entry_ids An array of strings containing one or more
- * package entry ID strings. If NULL then the package entry ID strings are
- * cleared. These IDs are described at
+ * @param[in] package_entry_ids An array of target identifiers, each naming a
+ * package entry as a (triple, arch) pair. If NULL then the package entry IDs
+ * are cleared.
  *
+ * @param[in] count The number of entries in @p package_entry_ids.
  *
  * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
  * been executed successfully.
@@ -1477,7 +1488,7 @@ amd_comgr_action_info_get_bundle_entry_id(
 amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_set_package_entry_ids(
   amd_comgr_action_info_t action_info,
-  const char *package_entry_ids[],
+  const amd_comgr_target_id_t package_entry_ids[],
   size_t count) AMD_COMGR_VERSION_3_1;
 
 /**
@@ -1504,26 +1515,33 @@ amd_comgr_action_info_get_package_entry_id_count(
   size_t *count) AMD_COMGR_VERSION_3_1;
 
 /**
- * @brief Fetch the Nth specific package entry ID or that ID's length.
+ * @brief Fetch the Nth package entry ID (its triple and arch) or their lengths.
  *
  * @param[in] action_info The action info object to query.
  *
  * @param[in] index The index of the package entry ID to be returned.
  *
- * @param[in, out] size For out, the size of @p package_entry_id. For in,
- * if @package_entry_id is NULL, set to the size of the Nth ID string including
- * the terminating null character.
+ * @param[in, out] triple_size For out, the number of characters to copy into
+ * @p triple. For in, if @p triple is NULL, set to the size of the Nth triple
+ * string including the terminating null character.
  *
- * @param[out] package_entry_id If not NULL, then the first @p size characters of
- * the Nth package entry ID string are copied into @p package_entry_id. If NULL,
- * no package entry ID is copied, and only @p size is updated (useful in order
- * to find the size of the buffer requried to copy the package_entry_id string).
+ * @param[out] triple If not NULL, then the first @p triple_size characters of
+ * the Nth entry's triple are copied into @p triple. If NULL, nothing is copied
+ * and only the sizes are updated (useful to size the buffers first).
+ *
+ * @param[in, out] arch_size For out, the number of characters to copy into
+ * @p arch. For in, if @p arch is NULL, set to the size of the Nth arch string
+ * including the terminating null character.
+ *
+ * @param[out] arch If not NULL, then the first @p arch_size characters of the
+ * Nth entry's arch are copied into @p arch.
  *
  * @retval ::AMD_COMGR_STATUS_SUCCESS The function has
  * been executed successfully.
  *
  * @retval ::AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT @p
- * action_info is an invalid action info object. @p size is NULL.
+ * action_info is an invalid action info object. @p triple_size or @p arch_size
+ * is NULL.
  *
  * @retval ::AMD_COMGR_STATUS_ERROR_OUT_OF_RESOURCES
  * Unable to update the data object as out of resources.
@@ -1532,8 +1550,10 @@ amd_comgr_status_t AMD_COMGR_API
 amd_comgr_action_info_get_package_entry_id(
   amd_comgr_action_info_t action_info,
   size_t index,
-  size_t *size,
-  char *package_entry_id) AMD_COMGR_VERSION_3_1;
+  size_t *triple_size,
+  char *triple,
+  size_t *arch_size,
+  char *arch) AMD_COMGR_VERSION_3_1;
 
 /**
  * @brief Set whether the specified action should use an 

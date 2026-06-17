@@ -13,14 +13,15 @@ int main(int argc, char *argv[]) {
   char *PackageData;
   size_t PackageSize;
 
-  if (argc < 4) {
-    printf("Usage: %s <bc package> <arch> <bc output>\n", argv[0]);
+  if (argc < 5) {
+    printf("Usage: %s <bc package> <triple> <arch> <bc output>\n", argv[0]);
     return -1;
   }
 
   const char *PackagePath = argv[1];
-  const char *Arch = argv[2];
-  const char *BitcodePath = argv[3];
+  const char *Triple = argv[2];
+  const char *Arch = argv[3];
+  const char *BitcodePath = argv[4];
 
   amd_comgr_data_t OnePackage;
   amd_comgr_data_set_t InputPackages;
@@ -39,8 +40,8 @@ int main(int argc, char *argv[]) {
   amd_comgr_action_info_t DataAction;
   amd_comgr_(create_action_info(&DataAction));
 
-  const char *AllArch[] = {Arch};
-  amd_comgr_(action_info_set_package_entry_ids(DataAction, AllArch, 1));
+  amd_comgr_target_id_t PackageEntryIDs[] = {{Triple, Arch}};
+  amd_comgr_(action_info_set_package_entry_ids(DataAction, PackageEntryIDs, 1));
   amd_comgr_(do_action(AMD_COMGR_ACTION_UNPACKAGE, DataAction, InputPackages,
                        OutputBitcode));
 

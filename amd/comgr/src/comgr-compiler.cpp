@@ -1842,17 +1842,24 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     }
 
     SmallVector<std::string> OutputFileNames;
-    SmallVector<std::string> TargetNames;
+    SmallVector<llvm::object::OffloadFile::TargetID> TargetIDs;
     SmallVector<amd_comgr_data_kind_t> DataKinds;
     for (const llvm::object::OffloadFile &File : Files) {
       const llvm::object::OffloadBinary *Binary = File.getBinary();
       StringRef Triple = Binary->getTriple();
       StringRef Arch = Binary->getArch();
       std::string Target = (Triple + "-" + Arch).str();
+      llvm::object::OffloadFile::TargetID FileTarget = File;
 
-      for (StringRef Entry : ActionInfo->PackageEntryIDs) {
-        // TODO: this should probably check compatability, not strict equivalence
-        if (Entry == Target) {
+      for (const std::pair<std::string, std::string> &Entry :
+           ActionInfo->PackageEntryIDs) {
+        llvm::object::OffloadFile::TargetID EntryTarget =
+            std::make_pair(StringRef(Entry.first), StringRef(Entry.second));
+        // Select files whose target matches the requested entry exactly, or is
+        // compatible with it. areTargetsCompatible() reports false for an exact
+        // match, so the equality check handles the common case.
+        if (EntryTarget == FileTarget ||
+            llvm::object::areTargetsCompatible(EntryTarget, FileTarget)) {
           const char *FileExtension;
           switch (Binary->getImageKind()) {
           case llvm::object::IMG_Object:
@@ -1880,7 +1887,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
                             OutputPrefix + "-" + Target + "." + FileExtension);
 
           OutputFileNames.emplace_back(OutputFilePath);
-          TargetNames.emplace_back(Target);
+          TargetIDs.push_back(File);
 
           if (env::shouldEmitVerboseLogs()) {
             LogS << "\tPackage Entry Target: " << Target << "\n"
@@ -1891,7 +1898,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       }
     }
 
-    UnpackageCommand Unpackage(Files, TargetNames, OutputFileNames);
+    UnpackageCommand Unpackage(Files, TargetIDs, OutputFileNames);
     if (auto Status = Unpackage.execute(LogS))
       return Status;
 

@@ -427,15 +427,19 @@ DataAction::setBundleEntryIDs(ArrayRef<const char *> EntryIDs) {
 
 ArrayRef<std::string> DataAction::getBundleEntryIDs() { return BundleEntryIDs; }
 
-amd_comgr_status_t DataAction::setPackageEntryIDs(llvm::ArrayRef<const char *> EntryIDs) {
+amd_comgr_status_t
+DataAction::setPackageEntryIDs(llvm::ArrayRef<amd_comgr_target_id_t> EntryIDs) {
   PackageEntryIDs.clear();
-  for (auto &ID : EntryIDs) {
-    PackageEntryIDs.push_back(ID);
+  for (const amd_comgr_target_id_t &ID : EntryIDs) {
+    PackageEntryIDs.emplace_back(ID.triple, ID.arch);
   }
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
-llvm::ArrayRef<std::string> DataAction::getPackageEntryIDs() { return PackageEntryIDs; }
+llvm::ArrayRef<std::pair<std::string, std::string>>
+DataAction::getPackageEntryIDs() {
+  return PackageEntryIDs;
+}
 
 amd_comgr_metadata_kind_t DataMeta::getMetadataKind() {
   if (DocNode.isScalar()) {
@@ -1152,28 +1156,33 @@ amd_comgr_status_t AMD_COMGR_API
     // NOLINTNEXTLINE(readability-identifier-naming)
     amd_comgr_action_info_get_package_entry_id
     //
-    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *Size,
-     char *PackageEntryID) {
+    (amd_comgr_action_info_t ActionInfo, size_t Index, size_t *TripleSize,
+     char *Triple, size_t *ArchSize, char *Arch) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
-  if (!ActionP || !Size) {
+  if (!ActionP || !TripleSize || !ArchSize) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  ArrayRef<std::string> ActionPackageEntryIDs = ActionP->getPackageEntryIDs();
+  ArrayRef<std::pair<std::string, std::string>> ActionPackageEntryIDs =
+      ActionP->getPackageEntryIDs();
 
   if (Index >= ActionPackageEntryIDs.size()) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  // First return the size of the PackageEntryID
-  if (PackageEntryID == NULL)
-    *Size = ActionPackageEntryIDs[Index].size() + 1;
+  const std::pair<std::string, std::string> &EntryID =
+      ActionPackageEntryIDs[Index];
 
-  // Now that the calling API has had a chance to allocate memory, copy the
-  // package entry ID at Index to PackageEntryID
-  else
-    memcpy(PackageEntryID, ActionPackageEntryIDs[Index].c_str(), *Size);
+  // First return the sizes of the triple and arch strings; once the caller has
+  // allocated memory and passed in both buffers, copy the strings.
+  if (Triple == NULL || Arch == NULL) {
+    *TripleSize = EntryID.first.size() + 1;
+    *ArchSize = EntryID.second.size() + 1;
+  } else {
+    memcpy(Triple, EntryID.first.c_str(), *TripleSize);
+    memcpy(Arch, EntryID.second.c_str(), *ArchSize);
+  }
 
   return AMD_COMGR_STATUS_SUCCESS;
 }
@@ -1182,14 +1191,16 @@ amd_comgr_status_t AMD_COMGR_API
     // NOLINTNEXTLINE(readability-identifier-naming)
     amd_comgr_action_info_set_package_entry_ids
     //
-    (amd_comgr_action_info_t ActionInfo, const char *EntryIDs[], size_t Count) {
+    (amd_comgr_action_info_t ActionInfo, const amd_comgr_target_id_t EntryIDs[],
+     size_t Count) {
   DataAction *ActionP = DataAction::convert(ActionInfo);
 
   if (!ActionP || (!EntryIDs && Count)) {
     return AMD_COMGR_STATUS_ERROR_INVALID_ARGUMENT;
   }
 
-  return ActionP->setPackageEntryIDs(ArrayRef<const char *>(EntryIDs, Count));
+  return ActionP->setPackageEntryIDs(
+      ArrayRef<amd_comgr_target_id_t>(EntryIDs, Count));
 }
 
 amd_comgr_status_t AMD_COMGR_API
