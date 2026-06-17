@@ -518,6 +518,11 @@ unsigned ThreadLoopProjection::numSourceWavesPerTarget() const {
 bool instructionWritesEXEC(const DecodedInst &Di, const MCState &Mc) {
   if (Di.DefsExec)
     return true;
+  // On a wave32 source, hardware EXEC is 32-bit (== EXEC_LO); EXEC_HI is a free
+  // scratch scalar (see ParsedReg::EXEC_HI_SCRATCH), so an explicit def of
+  // EXEC_HI alone is a scratch write, not an EXEC write.
+  const bool SourceIsWave32 =
+      Mc.SubtargetInfo->hasFeature(AMDGPU::FeatureWavefrontSize32);
   const MCInstrDesc &Desc = Mc.InstrInfo->get(Di.Inst.getOpcode());
   for (unsigned I = 0; I < Desc.getNumDefs() && I < Di.Inst.getNumOperands();
        ++I) {
@@ -525,8 +530,9 @@ bool instructionWritesEXEC(const DecodedInst &Di, const MCState &Mc) {
     if (!Mop.isReg() || !Mop.getReg())
       continue;
     MCRegister Reg = AMDGPU::mc2PseudoReg(Mop.getReg());
-    if (Reg == AMDGPU::EXEC || Reg == AMDGPU::EXEC_LO ||
-        Reg == AMDGPU::EXEC_HI)
+    if (Reg == AMDGPU::EXEC || Reg == AMDGPU::EXEC_LO)
+      return true;
+    if (Reg == AMDGPU::EXEC_HI && !SourceIsWave32)
       return true;
   }
   return false;

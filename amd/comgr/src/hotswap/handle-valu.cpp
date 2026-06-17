@@ -295,10 +295,11 @@ void writeCarryOutI1(RaiseContext &Ctx, const DecodedInst &Di,
     case ParsedReg::EXEC_HI_SCRATCH:
       // On a wave32 source vcc_hi / exec_hi are free scratch scalars, and the
       // wave32 mask/carry rules forbid them as the destination of a
-      // mask/carry/borrow operation. Such an encoding cannot be a legitimate
-      // carry-out, so refuse it rather than falling through to storeVCC and
-      // silently clobbering the real VCC.
-      Ctx.recordReadFailure(RaiseFailure::unsupportedShape(
+      // mask/carry/borrow operation. Unlike a V_CMP destination (a general
+      // wave-mask scalar), such an encoding cannot be a legitimate carry-out,
+      // so refuse it rather than falling through to storeVCC and silently
+      // clobbering the real VCC.
+      Ctx.recordReadFailure(RaiseFailure::unsupportedInstructionForm(
           Di, "VALU",
           "vcc_hi / exec_hi scratch as a carry-out destination is forbidden "
           "by the wave32 mask/carry rules"));

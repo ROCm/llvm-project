@@ -271,6 +271,19 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
         // subsequent write to baseIdx+1 clobbers the pair's high
         // half and should invalidate this entry.
         Ctx.recordSgprWaveMaskI1(D.BaseIdx, Cmp, /*isPair=*/D.Width >= 2);
+      } else if (D.RegKind == ParsedReg::VCC_HI_SCRATCH ||
+                 D.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
+        // Wave32-source vcc_hi / exec_hi are free general-purpose wave-mask
+        // scalars (see ParsedReg::VCC_HI_SCRATCH). A V_CMP naming one as its
+        // destination deposits the ballot into that scratch slot, like the SGPR
+        // arm above, so a downstream consumer reads it as a wave mask via
+        // extractLaneBitFromWaveMask. The per-lane shadow is not keyed for the
+        // scratch slots, so this restores the wave-mask value (uniform
+        // compares); per-lane compares into vcc_hi remain the obstruction
+        // classifier's domain, as on the SGPR trunc path.
+        Value *Mask = Ctx.Projection.ballotI1ToWidth(
+            Ctx.B, Cmp, Ctx.Projection.sourceWaveMaskTy(), "vcmp_vcchi_ballot");
+        Ctx.Regs.writeReg32(Ctx.B, D, Mask);
       } else {
         Ctx.Regs.storeVCC(Ctx.B, Cmp);
       }

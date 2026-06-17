@@ -2,9 +2,9 @@
 ; RUN:   && %not %raise_cli %t.hsaco --target-isa=gfx942 \
 ; RUN:     --emit-ir=vcc_hi_carryout_kernel 2>&1 | %FileCheck %s
 ;
-; The wave32 mask/carry rules forbid vcc_hi / exec_hi as the destination of a
-; carry-out. Such an encoding must be refused loudly, not folded into the real
-; VCC.
+; A V_CMP may name vcc_hi / exec_hi as a destination, but the wave32 mask/carry
+; rules forbid them as a carry-out destination. Such an encoding must be refused
+; loudly, not folded into the real VCC.
 
 ; CHECK: kernel 'vcc_hi_carryout_kernel'
 ; CHECK-SAME: vcc_hi / exec_hi scratch as a carry-out destination is forbidden
