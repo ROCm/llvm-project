@@ -93,6 +93,16 @@ set(SOURCES
   src/comgr-unbundle-command.cpp
   src/time-stat/time-stat.cpp)
 
+# Hotswap binary transpiler, opt-in. The hotswap project lives under
+# amd/comgr/src/hotswap as a private COMGR subproject. When enabled, we
+# link the hotswap OBJECT library into amd_comgr (its TUs land directly
+# in amd_comgr.so so hotswap files can call comgr-metadata helpers
+# without a layering inversion) and compile the
+# comgr-hotswap-transpile.cpp entry point. When disabled, the
+# amd_comgr_hotswap_transpile API is simply not provided.
+option(COMGR_ENABLE_HOTSWAP_TRANSPILE
+  "Build the hotswap-transpiler-backed amd_comgr_hotswap_transpile entry point" ON)
+
 # Add Windows resource file for version info
 if(WIN32)
   # Allow users to override the DLL name via -DCOMGR_DLL_NAME

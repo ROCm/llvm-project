@@ -58,7 +58,7 @@ target_link_libraries(hotswap-transpiler
 # Off by default - it is an opt-in artifact most comgr consumers do not need.
 # When enabled it requires the HSA headers (inc/hsa.h, from
 # HOTSWAP_TOOL_HSA_INCLUDE_ROOT); configuration errors if they are not found.
-option(HOTSWAP_BUILD_TOOL "Build the HSA_TOOLS_LIB hotswap tool" OFF)
+option(HOTSWAP_BUILD_TOOL "Build the HSA_TOOLS_LIB hotswap tool" ON)
 if(HOTSWAP_BUILD_TOOL)
   if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR
