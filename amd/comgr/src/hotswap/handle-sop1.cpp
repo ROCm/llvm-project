@@ -269,22 +269,28 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_ANDN2_SAVEEXEC_B32) {
+    // S_AND_NOT1_SAVEEXEC (canonical ANDN2): D = EXEC; EXEC = S0 & ~EXEC.
+    // "not1" inverts the EXEC operand, not the SGPR source: `Src & ~OldExec`.
+    // Unlike commutative AND/OR/XOR_SAVEEXEC, the swapped `OldExec & ~Src` is a
+    // different (not0) op and breaks the if/else divergence idiom.
     Value *OldExec = Ctx.Regs.loadExec(Ctx.B);
     Value *Src = Op.srcExecWidth(0);
     Ctx.Regs.writeRegExecWidth(Ctx.B, Op.dst(), OldExec);
     RecordOldExecShadowOnDst(OldExec);
-    Value *NewExec = Ctx.B.CreateAnd(OldExec, Ctx.B.CreateNot(Src), "new_exec");
+    Value *NewExec = Ctx.B.CreateAnd(Src, Ctx.B.CreateNot(OldExec), "new_exec");
     Ctx.Regs.storeExec(Ctx.B, NewExec);
     Hr.SccResult = NewExec;
     Hr.Handled = true;
     return Hr;
   }
   if (Sop == CanonicalOp::S_ORN2_SAVEEXEC_B32) {
+    // S_OR_NOT1_SAVEEXEC (canonical ORN2): D = EXEC; EXEC = S0 | ~EXEC.
+    // "not1" inverts EXEC, giving `Src | ~OldExec` (see ANDN2 above).
     Value *OldExec = Ctx.Regs.loadExec(Ctx.B);
     Value *Src = Op.srcExecWidth(0);
     Ctx.Regs.writeRegExecWidth(Ctx.B, Op.dst(), OldExec);
     RecordOldExecShadowOnDst(OldExec);
-    Value *NewExec = Ctx.B.CreateOr(OldExec, Ctx.B.CreateNot(Src), "new_exec");
+    Value *NewExec = Ctx.B.CreateOr(Src, Ctx.B.CreateNot(OldExec), "new_exec");
     Ctx.Regs.storeExec(Ctx.B, NewExec);
     Hr.SccResult = NewExec;
     Hr.Handled = true;
