@@ -1583,8 +1583,14 @@ bool SIWholeQuadMode::lowerCopyInstrs() {
 
       if (RecomputeLI)
         LIS->shrinkToUses(RecomputeLI);
-      else if (RecomputePhysReg)
-        LIS->removeAllRegUnitsForPhysReg(RecomputePhysReg);
+      else if (RecomputePhysReg) {
+        // Invalidate and immediately recompute the reg unit live ranges
+        // so that LiveIntervals remains correct at pass exit.
+        for (MCRegUnit Unit : TRI->regunits(RecomputePhysReg)) {
+          LIS->removeRegUnit(Unit);
+          LIS->getRegUnit(Unit);
+        }
+      }
     } else {
       assert(MI->getNumExplicitOperands() == 2);
     }
