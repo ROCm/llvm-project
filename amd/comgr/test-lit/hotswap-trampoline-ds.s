@@ -1,13 +1,17 @@
-// COM: Test HotSwap trampoline patch: ds_*_2addr_stride64_* expansion
-// COM: into two single-address DS instructions with s_wait_dscnt bump.
+// COM: Test HotSwap trampoline patch: ds_*_2addr_stride64_* expansion into
+// COM: two single-address DS instructions, each split followed by its own
+// COM: s_wait_dscnt 0x0 drain. A pre-existing drain after the 2-addr op is
+// COM: left in place (see the patchDs2Addr rationale).
+// COM:
 // COM: Covers b32 load, b64 load, b32 store, and b32 exchange operand
 // COM: variants via the NOP sled emission mechanism. Verifies explicit
 // COM: s_branch generation for the forward/back jumps.
 // COM:
 // COM: Companion tests:
-// COM:   hotswap-trampoline-ds-multi.s   — multi-DS stacking (bump accumulation)
-// COM:   hotswap-trampoline-ds-nosled.s  — true trampoline fallback (no NOP sled)
-// COM:   hotswap-trampoline-ds-nowait.s  — control-flow guard (no s_wait_dscnt)
+// COM:   hotswap-trampoline-ds-multi.s     -- drain insertion under stacking
+// COM:   hotswap-trampoline-ds-pipelined.s -- non-drain wait preserved + drain
+// COM:   hotswap-trampoline-ds-nosled.s    -- true trampoline fallback (no NOP sled)
+// COM:   hotswap-trampoline-ds-nowait.s    -- split drain when no downstream wait
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 

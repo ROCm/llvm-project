@@ -24,8 +24,6 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/MC/MCCodeEmitter.h"
-#include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -259,66 +257,14 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
   return {};
 }
 
-// -- bumpNextWaitDscnt ------------------------------------------------------
+// -- patchDs2Addr -----------------------------------------------------------
 //
-// After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
-// in the same straight-line block must be incremented by 1 to account for the
-// extra outstanding DS operation.
-//
-// Returns true if a wait was found and bumped, false otherwise.
-//
-// If the wait is past a branch or join point, we conservatively do nothing:
-// the compiler guarantees a straight-line s_wait_dscnt follows each DS op in
-// well-formed kernels. If absent (e.g. s_endpgm terminates first), skipping
-// the bump is safe — the hardware wait counter saturates harmlessly.
-
-static bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
-  const MCInstrInfo &MCII = *Ctx.LS.MCII;
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-
-  for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
-      continue;
-    if (DI.Mnemonic == "s_endpgm")
-      return false;
-
-    // Stop at any control-flow instruction (branches, jumps, calls) to
-    // avoid bumping a wait that belongs to a different execution path.
-    const MCInstrDesc &Desc = MCII.get(DI.Inst.getOpcode());
-    if (Desc.mayAffectControlFlow(DI.Inst, MRI))
-      return false;
-
-    if (DI.Mnemonic != "s_wait_dscnt")
-      continue;
-
-    // s_wait_dscnt has a single immediate operand (the wait count) at
-    // index 0. Increment it directly.
-    MCInst NewInst = DI.Inst;
-    MCOperand &Op = NewInst.getOperand(0);
-    if (!Op.isImm())
-      return false;
-    Op.setImm(Op.getImm() + 1);
-
-    SmallVector<char, 8> Bytes;
-    SmallVector<MCFixup, 2> Fixups;
-    Ctx.LS.MCE->encodeInstruction(NewInst, Bytes, Fixups, *Ctx.LS.STI);
-
-    uint64_t Off = Ctx.Decoded[I].Offset;
-    std::memcpy(Ctx.Text + Off, Bytes.data(), Bytes.size());
-
-    Ctx.Decoded[I].Inst = NewInst;
-    return true;
-  }
-
-  return false;
-}
-
-// -- patchDs2AddrStride64 ---------------------------------------------------
-//
-// Expand one ds_*_2addr_stride64_* instruction into two single-address DS
-// instructions. The split doubles the outstanding DS operation count, so
-// bumpNextWaitDscnt adjusts the next s_wait_dscnt accordingly.
+// Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
+// single-address DS instructions, followed by an s_wait_dscnt 0 drain so both
+// halves are guaranteed complete before any downstream DS consumer. Splitting
+// one DS instruction into two perturbs the outstanding-DS instruction count
+// that later s_wait_dscnt immediates encode; the local drain sidesteps that
+// entirely (see the rationale in the body below).
 
 static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -336,6 +282,18 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   std::string Combined;
   for (const std::string &Line : Expanded)
     Combined += Line + "\n";
+  // Drain the DS counter right after the split pair so both halves are
+  // guaranteed complete before any downstream consumer. The original code
+  // tracked completion of the single 2-addr instruction via a later
+  // s_wait_dscnt whose immediate counts outstanding DS *instructions*;
+  // splitting one instruction into two perturbs that count. Adjusting the
+  // downstream wait by +1 (the previous bumpNextWaitDscnt approach) relaxes
+  // the wait (s_wait_dscnt K stalls until outstanding <= K, so a larger K
+  // waits for FEWER ops), which lets a consumer read the second half's LDS
+  // slot before it lands -- observed as NaN in MIOpen layernormbfp16. A
+  // local drain is unconditionally correct; a precise per-wait dataflow
+  // recomputation is the eventual optimization (tracked separately).
+  Combined += "s_wait_dscnt 0\n";
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
@@ -347,7 +305,6 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return false;
 
-  bumpNextWaitDscnt(Ctx, Idx);
   DI.Mnemonic = "<replaced>";
   return true;
 }
