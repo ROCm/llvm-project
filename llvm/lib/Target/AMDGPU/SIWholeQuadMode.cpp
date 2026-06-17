@@ -1860,9 +1860,9 @@ SIWholeQuadModePass::run(MachineFunction &MF,
 
   LiveIntervals *LIS = &MFAM.getResult<LiveIntervalsAnalysis>(MF);
   MachineDominatorTree *MDT =
-      MFAM.getCachedResult<MachineDominatorTreeAnalysis>(MF);
+      &MFAM.getResult<MachineDominatorTreeAnalysis>(MF);
   MachinePostDominatorTree *PDT =
-      MFAM.getCachedResult<MachinePostDominatorTreeAnalysis>(MF);
+      &MFAM.getResult<MachinePostDominatorTreeAnalysis>(MF);
   SIWholeQuadMode Impl(MF, LIS, MDT, PDT);
   bool Changed = Impl.run(MF);
   if (!Changed)
