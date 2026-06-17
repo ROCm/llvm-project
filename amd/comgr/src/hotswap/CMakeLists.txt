@@ -55,8 +55,7 @@ target_link_libraries(hotswap-transpiler
 
 # HSA_TOOLS_LIB hotswap tool (libamd_comgr_hotswap_tool.so): ROCR loads it via
 # HSA_TOOLS_LIB and it rewrites code objects through the comgr hotswap API.
-# Off by default - it is an opt-in artifact most comgr consumers do not need.
-# When enabled it requires the HSA headers (inc/hsa.h, from
+# It requires the HSA headers (inc/hsa.h, from
 # HOTSWAP_TOOL_HSA_INCLUDE_ROOT); configuration errors if they are not found.
 option(HOTSWAP_BUILD_TOOL "Build the HSA_TOOLS_LIB hotswap tool" ON)
 if(HOTSWAP_BUILD_TOOL)
