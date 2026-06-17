@@ -152,7 +152,7 @@ bool SVEIntrinsicOpts::coalescePTrueIntrinsicCalls(
 
   auto *MostEncompassingPTrueVTy =
       cast<VectorType>(MostEncompassingPTrue->getType());
-  auto *ConvertToSVBool = Builder.CreateIntrinsicWithoutFolding(
+  auto *ConvertToSVBool = Builder.CreateIntrinsic(
       Intrinsic::aarch64_sve_convert_to_svbool, {MostEncompassingPTrueVTy},
       {MostEncompassingPTrue});
 

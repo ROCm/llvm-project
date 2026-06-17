@@ -2498,7 +2498,7 @@ instCombineSVEVectorFuseMulAddSub(InstCombiner &IC, IntrinsicInst &II,
     FMFSource = &II;
   }
 
-  Value *Res;
+  CallInst *Res;
   if (MergeIntoAddendOp)
     Res = IC.Builder.CreateIntrinsic(FuseOpc, {II.getType()},
                                      {P, AddendOp, MulOp0, MulOp1}, FMFSource);

@@ -417,8 +417,9 @@ Instruction *InstCombinerImpl::foldSelectOpOp(SelectInst &SI, Instruction *TI,
           Value *SelectVal = Builder.CreateSelect(Cond, LdexpVal0, LdexpVal1);
           Value *SelectExp = Builder.CreateSelect(Cond, LdexpExp0, LdexpExp1);
 
-          Value *NewLdexp = Builder.CreateIntrinsic(
-              TII->getType(), Intrinsic::ldexp, {SelectVal, SelectExp}, FMF);
+          CallInst *NewLdexp = Builder.CreateIntrinsic(
+              TII->getType(), Intrinsic::ldexp, {SelectVal, SelectExp});
+          NewLdexp->setFastMathFlags(FMF);
           return replaceInstUsesWith(SI, NewLdexp);
         }
       }

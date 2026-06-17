@@ -460,13 +460,14 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedGatherBase(
     return nullptr;
   Value *Mask = I->getArgOperand(1);
   if (match(Mask, m_One()))
-    return Builder.CreateIntrinsicWithoutFolding(
-        Intrinsic::arm_mve_vldr_gather_base, {Ty, Ptr->getType()},
-        {Ptr, Builder.getInt32(Increment)});
-  return Builder.CreateIntrinsicWithoutFolding(
-      Intrinsic::arm_mve_vldr_gather_base_predicated,
-      {Ty, Ptr->getType(), Mask->getType()},
-      {Ptr, Builder.getInt32(Increment), Mask});
+    return Builder.CreateIntrinsic(Intrinsic::arm_mve_vldr_gather_base,
+                                   {Ty, Ptr->getType()},
+                                   {Ptr, Builder.getInt32(Increment)});
+  else
+    return Builder.CreateIntrinsic(
+        Intrinsic::arm_mve_vldr_gather_base_predicated,
+        {Ty, Ptr->getType(), Mask->getType()},
+        {Ptr, Builder.getInt32(Increment), Mask});
 }
 
 Instruction *MVEGatherScatterLowering::tryCreateMaskedGatherBaseWB(
@@ -480,13 +481,14 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedGatherBaseWB(
     return nullptr;
   Value *Mask = I->getArgOperand(1);
   if (match(Mask, m_One()))
-    return Builder.CreateIntrinsicWithoutFolding(
-        Intrinsic::arm_mve_vldr_gather_base_wb, {Ty, Ptr->getType()},
-        {Ptr, Builder.getInt32(Increment)});
-  return Builder.CreateIntrinsicWithoutFolding(
-      Intrinsic::arm_mve_vldr_gather_base_wb_predicated,
-      {Ty, Ptr->getType(), Mask->getType()},
-      {Ptr, Builder.getInt32(Increment), Mask});
+    return Builder.CreateIntrinsic(Intrinsic::arm_mve_vldr_gather_base_wb,
+                                   {Ty, Ptr->getType()},
+                                   {Ptr, Builder.getInt32(Increment)});
+  else
+    return Builder.CreateIntrinsic(
+        Intrinsic::arm_mve_vldr_gather_base_wb_predicated,
+        {Ty, Ptr->getType(), Mask->getType()},
+        {Ptr, Builder.getInt32(Increment), Mask});
 }
 
 Instruction *MVEGatherScatterLowering::tryCreateMaskedGatherOffset(
@@ -553,13 +555,13 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedGatherOffset(
   Value *Mask = I->getArgOperand(1);
   Instruction *Load = nullptr;
   if (!match(Mask, m_One()))
-    Load = Builder.CreateIntrinsicWithoutFolding(
+    Load = Builder.CreateIntrinsic(
         Intrinsic::arm_mve_vldr_gather_offset_predicated,
         {ResultTy, BasePtr->getType(), Offsets->getType(), Mask->getType()},
         {BasePtr, Offsets, Builder.getInt32(MemoryTy->getScalarSizeInBits()),
          Builder.getInt32(Scale), Builder.getInt32(Unsigned), Mask});
   else
-    Load = Builder.CreateIntrinsicWithoutFolding(
+    Load = Builder.CreateIntrinsic(
         Intrinsic::arm_mve_vldr_gather_offset,
         {ResultTy, BasePtr->getType(), Offsets->getType()},
         {BasePtr, Offsets, Builder.getInt32(MemoryTy->getScalarSizeInBits()),
@@ -624,14 +626,14 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedScatterBase(
   //  int_arm_mve_vstr_scatter_base(_predicated) addr, offset, data(, mask)
   LLVM_DEBUG(dbgs() << "masked scatters: storing to a vector of pointers\n");
   if (match(Mask, m_One()))
-    return Builder.CreateIntrinsicWithoutFolding(
-        Intrinsic::arm_mve_vstr_scatter_base,
-        {Ptr->getType(), Input->getType()},
-        {Ptr, Builder.getInt32(Increment), Input});
-  return Builder.CreateIntrinsicWithoutFolding(
-      Intrinsic::arm_mve_vstr_scatter_base_predicated,
-      {Ptr->getType(), Input->getType(), Mask->getType()},
-      {Ptr, Builder.getInt32(Increment), Input, Mask});
+    return Builder.CreateIntrinsic(Intrinsic::arm_mve_vstr_scatter_base,
+                                   {Ptr->getType(), Input->getType()},
+                                   {Ptr, Builder.getInt32(Increment), Input});
+  else
+    return Builder.CreateIntrinsic(
+        Intrinsic::arm_mve_vstr_scatter_base_predicated,
+        {Ptr->getType(), Input->getType(), Mask->getType()},
+        {Ptr, Builder.getInt32(Increment), Input, Mask});
 }
 
 Instruction *MVEGatherScatterLowering::tryCreateMaskedScatterBaseWB(
@@ -646,14 +648,14 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedScatterBaseWB(
     return nullptr;
   Value *Mask = I->getArgOperand(2);
   if (match(Mask, m_One()))
-    return Builder.CreateIntrinsicWithoutFolding(
-        Intrinsic::arm_mve_vstr_scatter_base_wb,
-        {Ptr->getType(), Input->getType()},
-        {Ptr, Builder.getInt32(Increment), Input});
-  return Builder.CreateIntrinsicWithoutFolding(
-      Intrinsic::arm_mve_vstr_scatter_base_wb_predicated,
-      {Ptr->getType(), Input->getType(), Mask->getType()},
-      {Ptr, Builder.getInt32(Increment), Input, Mask});
+    return Builder.CreateIntrinsic(Intrinsic::arm_mve_vstr_scatter_base_wb,
+                                   {Ptr->getType(), Input->getType()},
+                                   {Ptr, Builder.getInt32(Increment), Input});
+  else
+    return Builder.CreateIntrinsic(
+        Intrinsic::arm_mve_vstr_scatter_base_wb_predicated,
+        {Ptr->getType(), Input->getType(), Mask->getType()},
+        {Ptr, Builder.getInt32(Increment), Input, Mask});
 }
 
 Instruction *MVEGatherScatterLowering::tryCreateMaskedScatterOffset(
@@ -705,19 +707,20 @@ Instruction *MVEGatherScatterLowering::tryCreateMaskedScatterOffset(
   if (ExtendInput)
     Input = Builder.CreateZExt(Input, InputTy);
   if (!match(Mask, m_One()))
-    return Builder.CreateIntrinsicWithoutFolding(
+    return Builder.CreateIntrinsic(
         Intrinsic::arm_mve_vstr_scatter_offset_predicated,
         {BasePtr->getType(), Offsets->getType(), Input->getType(),
          Mask->getType()},
         {BasePtr, Offsets, Input,
          Builder.getInt32(MemoryTy->getScalarSizeInBits()),
          Builder.getInt32(Scale), Mask});
-  return Builder.CreateIntrinsicWithoutFolding(
-      Intrinsic::arm_mve_vstr_scatter_offset,
-      {BasePtr->getType(), Offsets->getType(), Input->getType()},
-      {BasePtr, Offsets, Input,
-       Builder.getInt32(MemoryTy->getScalarSizeInBits()),
-       Builder.getInt32(Scale)});
+  else
+    return Builder.CreateIntrinsic(
+        Intrinsic::arm_mve_vstr_scatter_offset,
+        {BasePtr->getType(), Offsets->getType(), Input->getType()},
+        {BasePtr, Offsets, Input,
+         Builder.getInt32(MemoryTy->getScalarSizeInBits()),
+         Builder.getInt32(Scale)});
 }
 
 Instruction *MVEGatherScatterLowering::tryCreateIncrementingGatScat(

@@ -364,7 +364,7 @@ bool SystemZTDCPass::runOnFunction(Function &F) {
       // Call the intrinsic, compare result with 0.
       IRBuilder<> IRB(I);
       Value *MaskVal = ConstantInt::get(Type::getInt64Ty(Ctx), Mask);
-      Value *TDC =
+      Instruction *TDC =
           IRB.CreateIntrinsic(Intrinsic::s390_tdc, V->getType(), {V, MaskVal});
       Value *ICmp = IRB.CreateICmp(CmpInst::ICMP_NE, TDC, Zero32);
       I->replaceAllUsesWith(ICmp);

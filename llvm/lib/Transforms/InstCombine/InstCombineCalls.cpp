@@ -1601,7 +1601,7 @@ Value *InstCombinerImpl::foldReversedIntrinsicOperands(IntrinsicInst *II) {
 
   // intrinsic (reverse X), (reverse Y), ... --> reverse (intrinsic X, Y, ...)
   Instruction *FPI = isa<FPMathOperator>(II) ? II : nullptr;
-  Value *NewIntrinsic = Builder.CreateIntrinsic(
+  Instruction *NewIntrinsic = Builder.CreateIntrinsic(
       II->getType(), II->getIntrinsicID(), NewArgs, FPI);
   return Builder.CreateVectorReverse(NewIntrinsic);
 }
@@ -3036,7 +3036,8 @@ Instruction *InstCombinerImpl::visitCallInst(CallInst &CI) {
     if (ElementCount::isKnownGT(NegatedCount, RetCount)) {
       SmallVector<Value *, 5> NewArgs(II->args());
       NewArgs[NegatedOpArg] = OpNotNeg;
-      Value *NewMul = Builder.CreateIntrinsic(II->getType(), IID, NewArgs, II);
+      Instruction *NewMul =
+          Builder.CreateIntrinsic(II->getType(), IID, NewArgs, II);
       return replaceInstUsesWith(*II, Builder.CreateFNegFMF(NewMul, II));
     }
     break;

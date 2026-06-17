@@ -1634,7 +1634,7 @@ Instruction *InstCombinerImpl::foldLogicOfIsFPClass(BinaryOperator &BO,
       return replaceInstUsesWith(BO, II);
     }
 
-    Value *NewClass =
+    CallInst *NewClass =
         Builder.CreateIntrinsic(Intrinsic::is_fpclass, {ClassVal0->getType()},
                                 {ClassVal0, Builder.getInt32(NewClassMask)});
     return replaceInstUsesWith(BO, NewClass);

@@ -926,13 +926,13 @@ void mlir::LLVM::detail::connectPHINodes(Region &region,
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(
     llvm::IRBuilderBase &builder, llvm::Intrinsic::ID intrinsic,
     ArrayRef<llvm::Value *> args, ArrayRef<llvm::Type *> tys) {
-  return builder.CreateIntrinsicWithoutFolding(intrinsic, tys, args);
+  return builder.CreateIntrinsic(intrinsic, tys, args);
 }
 
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(
     llvm::IRBuilderBase &builder, llvm::Intrinsic::ID intrinsic,
     llvm::Type *retTy, ArrayRef<llvm::Value *> args) {
-  return builder.CreateIntrinsicWithoutFolding(retTy, intrinsic, args);
+  return builder.CreateIntrinsic(retTy, intrinsic, args);
 }
 
 llvm::CallInst *mlir::LLVM::detail::createIntrinsicCall(

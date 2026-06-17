@@ -327,8 +327,7 @@ TEST_F(IntrinsicsTest, IRBuilderCreateIntrinsicScalar) {
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 10));
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 20));
 
-  CallInst *CI =
-      Builder.CreateIntrinsicWithoutFolding(RetTy, Intrinsic::umax, Args);
+  CallInst *CI = Builder.CreateIntrinsic(RetTy, Intrinsic::umax, Args);
 
   ASSERT_NE(CI, nullptr);
   EXPECT_EQ(CI->getIntrinsicID(), Intrinsic::umax);
@@ -346,8 +345,7 @@ TEST_F(IntrinsicsTest, IRBuilderCreateIntrinsicVector) {
   Args.push_back(Constant::getNullValue(RetTy));
   Args.push_back(Constant::getNullValue(RetTy));
 
-  CallInst *CI =
-      Builder.CreateIntrinsicWithoutFolding(RetTy, Intrinsic::umax, Args);
+  CallInst *CI = Builder.CreateIntrinsic(RetTy, Intrinsic::umax, Args);
 
   ASSERT_NE(CI, nullptr);
   EXPECT_EQ(CI->getIntrinsicID(), Intrinsic::umax);
@@ -368,8 +366,7 @@ TEST_F(IntrinsicsTest, IRBuilderCreateIntrinsicAddressSpace) {
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 3)); // locality
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 1)); // cache type
 
-  CallInst *CI =
-      Builder.CreateIntrinsicWithoutFolding(RetTy, Intrinsic::prefetch, Args);
+  CallInst *CI = Builder.CreateIntrinsic(RetTy, Intrinsic::prefetch, Args);
 
   ASSERT_NE(CI, nullptr);
   EXPECT_EQ(CI->getIntrinsicID(), Intrinsic::prefetch);
@@ -397,7 +394,7 @@ TEST_F(IntrinsicsTest, IRBuilderCreateIntrinsicVarArg) {
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 0)); // NumCallArgs
   Args.push_back(ConstantInt::get(Type::getInt32Ty(Context), 0)); // Flags
 
-  CallInst *CI = Builder.CreateIntrinsicWithoutFolding(
+  CallInst *CI = Builder.CreateIntrinsic(
       RetTy, Intrinsic::experimental_gc_statepoint, Args);
 
   ASSERT_NE(CI, nullptr);
