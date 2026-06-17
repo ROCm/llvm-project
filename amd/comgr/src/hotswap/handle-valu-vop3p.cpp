@@ -1451,6 +1451,13 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
             Cond = Fallback;
           }
         }
+      } else if (CondReg.RegKind == ParsedReg::VCC_HI_SCRATCH ||
+                 CondReg.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
+        // Wave32-source vcc_hi / exec_hi are free general-purpose scalars
+        // (see ParsedReg::VCC_HI_SCRATCH). Read the scratch slot and project
+        // per-lane, not loadVCC (which would read the real VCC).
+        Value *CondVal = Ctx.Regs.readReg32(Ctx.B, CondReg);
+        Cond = Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
       } else {
         Cond = Ctx.Regs.loadVCC(Ctx.B);
       }

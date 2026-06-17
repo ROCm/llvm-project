@@ -140,8 +140,20 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     Pr.RegKind = ParsedReg::VCC;
     Pr.Width = Isa.isWave32() ? 1 : 2;
     return Pr;
-  case AMDGPU::EXEC_LO:
   case AMDGPU::EXEC_HI:
+    // On a WAVE32 source, hardware EXEC is 32 bits (== EXEC_LO); EXEC_HI is a
+    // free general-purpose scratch scalar (symmetric with VCC_HI above). Route
+    // it to its own slot so the (wave64-widened) EXEC mask does not clobber it.
+    // The full 64-bit EXEC pair resolves through EXEC_LO (sub0), so this only
+    // intercepts an explicitly-named standalone exec_hi: always scratch on
+    // wave32, never the mask.
+    if (Isa.isWave32()) {
+      Pr.RegKind = ParsedReg::EXEC_HI_SCRATCH;
+      Pr.Width = 1;
+      return Pr;
+    }
+    [[fallthrough]];
+  case AMDGPU::EXEC_LO:
     Pr.RegKind = ParsedReg::EXEC;
     // baseIdx discriminates between the two 32-bit halves of wave64 EXEC
     // (0 = EXEC_LO, 1 = EXEC_HI). The full 64-bit pair also resolves here

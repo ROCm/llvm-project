@@ -73,6 +73,11 @@ struct AllocaRegFile {
   // VCC_HI_SCRATCH). Only used when the source ISA is wave32; on wave64
   // sources VCC_HI is a real half of the VCC mask and routes through Vcc.
   llvm::AllocaInst *VccHiScratch = nullptr;
+  // Wave32-source scratch slot for the EXEC_HI register (see ParsedReg::
+  // EXEC_HI_SCRATCH). Symmetric with VccHiScratch: only used when the source
+  // ISA is wave32; on wave64 sources EXEC_HI is a real half of the EXEC mask
+  // and routes through Exec.
+  llvm::AllocaInst *ExecHiScratch = nullptr;
   llvm::AllocaInst *Scc = nullptr;
   llvm::AllocaInst *Exec = nullptr;
   llvm::AllocaInst *M0 = nullptr;

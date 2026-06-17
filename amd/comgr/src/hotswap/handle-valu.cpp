@@ -233,6 +233,13 @@ Value *readCarryInI1(RaiseContext &Ctx, const DecodedInst &Di,
         return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
       }
       break;
+    case ParsedReg::VCC_HI_SCRATCH:
+    case ParsedReg::EXEC_HI_SCRATCH: {
+      // Wave32-source vcc_hi / exec_hi scratch (see ParsedReg::VCC_HI_SCRATCH):
+      // read the scratch slot and project per-lane, not loadVCC.
+      Value *CondVal = Ctx.Regs.readReg32(Ctx.B, CarryReg);
+      return Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, CondVal);
+    }
     case ParsedReg::NOREG:
       return ConstantInt::getFalse(Ctx.B.getInt1Ty());
     default:
@@ -255,6 +262,8 @@ Value *readCarryInI1(RaiseContext &Ctx, const DecodedInst &Di,
 //     a following V_CNDMASK_B32 or V_ADD_CO_CI_U32) can look it up
 //     without the lossy extract round-trip. Mirrors the V_CMP_*_e64
 //     SGPR-write path in `handle-valu-vcmp.cpp`.
+//   * `vcc_hi` / `exec_hi` scratch -> refused: the wave32 mask/carry
+//     rules forbid these as a carry-out destination (see the switch).
 //   * NOREG (null sdst) -> discard the carry-out (hardware semantics
 //     for null scalar destination).
 //
@@ -281,6 +290,18 @@ void writeCarryOutI1(RaiseContext &Ctx, const DecodedInst &Di,
         Ctx.recordSgprWaveMaskI1(CarryDst.BaseIdx, CarryI1,
                                   /*isPair=*/CarryDst.Width >= 2);
       }
+      return;
+    case ParsedReg::VCC_HI_SCRATCH:
+    case ParsedReg::EXEC_HI_SCRATCH:
+      // On a wave32 source vcc_hi / exec_hi are free scratch scalars, and the
+      // wave32 mask/carry rules forbid them as the destination of a
+      // mask/carry/borrow operation. Such an encoding cannot be a legitimate
+      // carry-out, so refuse it rather than falling through to storeVCC and
+      // silently clobbering the real VCC.
+      Ctx.recordReadFailure(RaiseFailure::unsupportedShape(
+          Di, "VALU",
+          "vcc_hi / exec_hi scratch as a carry-out destination is forbidden "
+          "by the wave32 mask/carry rules"));
       return;
     case ParsedReg::NOREG:
       return;
