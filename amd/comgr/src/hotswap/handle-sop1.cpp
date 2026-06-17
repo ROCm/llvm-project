@@ -184,6 +184,39 @@ HandlerResult handleSOP1(RaiseContext &Ctx, const DecodedInst &Di,
   if (Sop == CanonicalOp::S_MOV_B32) {
     ParsedReg Dst = Op.dst();
     ParsedReg SrcReg = Op.isSrcReg(0) ? Op.srcReg(0) : ParsedReg{};
+    // s_mov_b32 vcc_lo, sN restores a per-lane wave mask into VCC. The carry
+    // is genuinely per-lane under wave32 -> wave64 widening (e.g. the
+    // v_div_scale_f32 flag chain), so prefer the recorded per-lane shadow over
+    // the default 32-bit path, which re-widens the truncated mask and loses the
+    // upper lanes (see hotswap/docs/sgpr-wave-mask-translation.md). Mirrors the
+    // V_CNDMASK_B32 SGPR-condition consumer in handle-valu-vop3p.cpp.
+    if (Dst.RegKind == ParsedReg::VCC && SrcReg.RegKind == ParsedReg::SGPR &&
+        SrcReg.BaseIdx >= 0) {
+      // Same-BB: the producer's exact per-lane i1.
+      if (Value *Shadow = Ctx.lookupSgprWaveMaskI1(SrcReg.BaseIdx)) {
+        Ctx.Regs.storeVCC(Ctx.B, Shadow);
+        Hr.Handled = true;
+        return Hr;
+      }
+      // Cross-BB: the same-BB cache is cleared at a block boundary, but the
+      // memory-backed shadow survives. Prefer it when valid, falling back to
+      // re-widening the SGPR only when no producer recorded a shadow.
+      if (Value *ShadowValid = Ctx.loadSgprWaveMaskValid(SrcReg.BaseIdx)) {
+        Value *ShadowExec = Ctx.loadSgprWaveMaskExec(SrcReg.BaseIdx);
+        Value *ShadowI1 =
+            Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, ShadowExec);
+        Value *SgprVal = Ctx.Isa.isWave32()
+                             ? Ctx.Regs.loadSGPR32(Ctx.B, SrcReg.BaseIdx)
+                             : Ctx.Regs.loadSGPR64(Ctx.B, SrcReg.BaseIdx);
+        Value *Fallback =
+            Ctx.Projection.extractLaneBitFromWaveMask(Ctx.B, SgprVal);
+        Value *Sel = Ctx.B.CreateSelect(ShadowValid, ShadowI1, Fallback,
+                                        "sgpr_mask_shadow_sel");
+        Ctx.Regs.storeVCC(Ctx.B, Sel);
+        Hr.Handled = true;
+        return Hr;
+      }
+    }
     Value *Src = Op.src(0);
     Ctx.Regs.writeReg32(Ctx.B, Dst, Src);
     if (Dst.RegKind == ParsedReg::SGPR && SrcReg.RegKind == ParsedReg::EXEC) {

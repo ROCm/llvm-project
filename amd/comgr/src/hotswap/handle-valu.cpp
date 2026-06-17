@@ -1614,8 +1614,24 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
       ParsedReg FlagDst = Op.dst(1);
       if (FlagDst.RegKind == ParsedReg::VCC)
         Ctx.Regs.storeVCC(Ctx.B, Flag);
-      else if (FlagDst.RegKind == ParsedReg::SGPR && FlagDst.BaseIdx >= 0)
-        Ctx.Regs.storeSGPR32(Ctx.B, FlagDst.BaseIdx, Ctx.B.CreateZExt(Flag, Ctx.I32Ty));
+      else if (FlagDst.RegKind == ParsedReg::SGPR && FlagDst.BaseIdx >= 0) {
+        // The flag is genuinely per-lane under wave32 -> wave64 widening, so
+        // store the SGPR as a wave mask (a ballot of the per-lane i1 to source
+        // width), not a zext of the current lane's bit: a `s_mov_b32 vcc_lo,
+        // sN` consumer that misses the shadow re-widens the SGPR as a mask and
+        // would otherwise see only lane 0's carry. Mirrors the V_CMP -> SGPR
+        // ballot store in handle-valu-vcmp.cpp.
+        Type *SourceWidth = Ctx.Projection.sourceWaveMaskTy();
+        Value *Mask =
+            Ctx.Projection.ballotI1ToWidth(Ctx.B, Flag, SourceWidth,
+                                           "div_scale_flag_ballot");
+        Ctx.writeRegExecWidth(FlagDst, Mask);
+        // Keep the per-lane i1 in the SGPR wave-mask shadow so the same-BB
+        // consumer bypasses the lossy extractLaneBitFromWaveMask widen, and the
+        // cross-BB consumer reads the memory-backed shadow; writeRegExecWidth
+        // above invalidated it. See hotswap/docs/sgpr-wave-mask-translation.md.
+        Ctx.recordSgprWaveMaskI1(FlagDst.BaseIdx, Flag, /*isPair=*/false);
+      }
       // NOREG (null) or unrecognized -> discard the flag
     } else {
       Ctx.Regs.storeVCC(Ctx.B, Flag);
