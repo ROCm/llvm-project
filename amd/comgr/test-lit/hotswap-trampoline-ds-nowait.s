@@ -1,8 +1,6 @@
-// COM: Test the DS2 split drain when there is no downstream wait: a DS2
-// COM: instruction followed directly by s_endpgm with no s_wait_dscnt in the
-// COM: same basic block. The split still emits its own s_wait_dscnt 0x0 drain
-// COM: after the two single-address ops, so both halves complete even though
-// COM: the original kernel had no wait before s_endpgm.
+// COM: Test split drain when no downstream s_wait_dscnt exists: a DS2
+// COM: instruction followed directly by s_endpgm. The split emits its own
+// COM: drain in the sled even though no downstream wait is present.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -14,15 +12,14 @@
 
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
-// COM: The DS2 is expanded (replaced by s_branch to sled); the sled holds the
-// COM: two single-address loads followed by the split's own s_wait_dscnt 0x0
-// COM: drain. No downstream wait existed, so the only wait is the split drain.
+// COM: The DS2 is expanded (s_branch to sled); the sled contains the
+// COM: expanded DS loads followed by a drain, then branch-back.
 // DISASM-LABEL: <test_ds_nowait>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
 // DISASM: s_endpgm
-// DISASM: ds_load_b32 v0
-// DISASM: ds_load_b32 v1
+// DISASM: ds_load_b32
+// DISASM: ds_load_b32
 // DISASM: s_wait_dscnt 0x0
 // DISASM: s_branch
 

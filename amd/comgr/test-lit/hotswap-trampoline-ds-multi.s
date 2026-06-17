@@ -1,8 +1,6 @@
-// COM: Test multi-DS stacking against a drain s_wait_dscnt: two
-// COM: ds_load_2addr_stride64_b32 sites share a single s_wait_dscnt 0x0,
-// COM: which is left in place across both splits (each split also emits its
-// COM: own s_wait_dscnt 0x0 drain). Non-drain wait preservation is covered by
-// COM: hotswap-trampoline-ds-pipelined.s.
+// COM: Test multi-DS stacking: two ds_load_2addr_stride64_b32 sites
+// COM: before a single s_wait_dscnt. Each split inserts its own drain;
+// COM: the original drain is left in place.
 
 // RUN: %clang -target amdgcn-amd-amdhsa -mcpu=gfx1250 -nostdlib %s -o %t.elf
 
@@ -15,12 +13,12 @@
 // RUN: %llvm-objdump -d %t.out.elf | %FileCheck --check-prefix=DISASM %s
 
 // COM: Both DS2 instructions are replaced by s_branch to their respective
-// COM: expansion sleds. The single s_wait_dscnt is bumped twice (0x0 -> 0x2).
+// COM: expansion sleds, each with its own drain. The original drain is preserved.
 // DISASM-LABEL: <test_multi_ds>:
 // DISASM-NOT: ds_load_2addr_stride64_b32
 // DISASM: s_branch
 // DISASM: s_branch
-// DISASM: s_wait_dscnt 0x2
+// DISASM: s_wait_dscnt 0x0
 
 // COM: Idempotency
 // RUN: hotswap-rewrite %t.out.elf \

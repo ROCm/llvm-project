@@ -257,14 +257,12 @@ static std::vector<std::string> expandDs2Addr(const MCInst &Inst,
   return {};
 }
 
-// -- patchDs2Addr -----------------------------------------------------------
+// -- patchDs2AddrStride64 ---------------------------------------------------
 //
-// Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
-// single-address DS instructions, followed by an s_wait_dscnt 0 drain so both
-// halves are guaranteed complete before any downstream DS consumer. Splitting
-// one DS instruction into two perturbs the outstanding-DS instruction count
-// that later s_wait_dscnt immediates encode; the local drain sidesteps that
-// entirely (see the rationale in the body below).
+// Expand one ds_*_2addr_stride64_* instruction into two single-address DS
+// instructions, followed by an s_wait_dscnt 0x0 drain. The drain guarantees
+// that both halves complete before any downstream consumer reads their
+// results. An existing drain after the original 2-addr op is left in place.
 
 static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -279,21 +277,11 @@ static bool patchDs2AddrStride64(PatchContext &Ctx, size_t Idx) {
     return false;
   }
 
+  Expanded.push_back("s_wait_dscnt 0x0");
+
   std::string Combined;
   for (const std::string &Line : Expanded)
     Combined += Line + "\n";
-  // Drain the DS counter right after the split pair so both halves are
-  // guaranteed complete before any downstream consumer. The original code
-  // tracked completion of the single 2-addr instruction via a later
-  // s_wait_dscnt whose immediate counts outstanding DS *instructions*;
-  // splitting one instruction into two perturbs that count. Adjusting the
-  // downstream wait by +1 (the previous bumpNextWaitDscnt approach) relaxes
-  // the wait (s_wait_dscnt K stalls until outstanding <= K, so a larger K
-  // waits for FEWER ops), which lets a consumer read the second half's LDS
-  // slot before it lands -- observed as NaN in MIOpen layernormbfp16. A
-  // local drain is unconditionally correct; a precise per-wait dataflow
-  // recomputation is the eventual optimization (tracked separately).
-  Combined += "s_wait_dscnt 0\n";
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr_stride64: assembly failed: " << Combined
