@@ -398,6 +398,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     ProjectionPtr = std::make_unique<ModuloReplicationProjection>(
         Isa, TargetIsa, I32Ty, I64Ty);
   }
+  ProjectionPtr->setMaxFlatWorkgroupSize(Meta.MaxFlatWorkgroupSize);
   WaveProjection &Projection = *ProjectionPtr;
 
   if (!UseThreadLoop && EnableWaveNative && PhantomLaneRegime && Isa.isWave32() &&

@@ -65,6 +65,32 @@ Value *WaveProjection::emitWorkitemIdX(IRBuilder<> &B) const {
   return B.CreateCall(Fn, {}, "tid");
 }
 
+Value *ModuloReplicationProjection::emitWorkitemIdX(IRBuilder<> &B) const {
+  Value *Raw = WaveProjection::emitWorkitemIdX(B);
+  // When the target wave is wider than the source workgroup, the upper target
+  // lanes [MaxFlatWG, WaveSize) carry no source workitem, so their raw workitem
+  // id is just the hardware lane index. Clamp those lanes to workitem 0 so they
+  // replicate lane 0's in-bounds addressing; real lanes are unchanged and every
+  // committed result is identical. See hotswap/docs/modrep-predicate-chain.md
+  // for why these lanes can still issue memory ops despite the modeled EXEC.
+  if (Tgt.WaveSize > Src.WaveSize && MaxFlatWG > 0 &&
+      MaxFlatWG < Tgt.WaveSize) {
+    // The "real lane" test is the flat local id, not workitem.id.x. Under
+    // modulo replication the target lane index is the flat local id (lanes are
+    // laid out in flat order), so a lane is real iff its index is below the
+    // flattened workgroup size. Comparing workitem.id.x against MaxFlatWG would
+    // only be correct for 1D workgroups, where tid.x == flat local id; for a
+    // multidimensional workgroup tid.x is just the X coordinate while MaxFlatWG
+    // is the flattened total.
+    Value *Limit = ConstantInt::get(I32Ty, MaxFlatWG);
+    Value *FlatLaneId = emitLaneIdx(B);
+    Value *IsRealLane = B.CreateICmpULT(FlatLaneId, Limit, "tid_is_real_lane");
+    Raw = B.CreateSelect(IsRealLane, Raw, ConstantInt::get(I32Ty, 0),
+                         "tid_phantom_clamp");
+  }
+  return Raw;
+}
+
 Value *WaveProjection::emitInitialExec(IRBuilder<> &B) const {
   // Default: the architectural boot state of a dispatched wave is
   // "every source lane active", i.e. all-ones in the source-width

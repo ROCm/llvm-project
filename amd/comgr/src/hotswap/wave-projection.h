@@ -54,6 +54,11 @@ public:
 
   const ISAProfile &sourceIsa() const { return Src; }
   const ISAProfile &targetIsa() const { return Tgt; }
+
+  // Source kernel's max_flat_workgroup_size (threads per workgroup), set by
+  // the raiser after construction. Used by `ModuloReplicationProjection` to
+  // clamp the workitem id of the undispatched upper lanes.
+  void setMaxFlatWorkgroupSize(unsigned N) { MaxFlatWG = N; }
   // Hardware-width wave mask (i32 on wave32 target, i64 on wave64 target).
   // Distinct from the EXEC alloca storage width returned by
   // `execStorageTy()`.
@@ -307,6 +312,8 @@ protected:
   llvm::Type *I32Ty;
   llvm::Type *I64Ty;
   llvm::Type *WaveMaskTy;
+  // Source max_flat_workgroup_size; 0 until the raiser sets it.
+  unsigned MaxFlatWG = 0;
 };
 
 // ============================================================================
@@ -336,6 +343,11 @@ public:
       const override;
   llvm::Value *extractLaneBitFromWaveMask(llvm::IRBuilder<> &B,
                                            llvm::Value *V) const override;
+
+  // Clamp the workitem id of undispatched upper target lanes so they replicate
+  // a real lane's in-bounds addressing when the target wave is wider than the
+  // source workgroup. Rationale: hotswap/docs/modrep-predicate-chain.md.
+  llvm::Value *emitWorkitemIdX(llvm::IRBuilder<> &B) const override;
 
   // MODREP in the cross-widening direction only instantiates when
   // `raiser.cpp` routes phantom-lane kernels here as the fallback,
