@@ -69,6 +69,10 @@ struct AllocaRegFile {
   llvm::SmallVector<llvm::AllocaInst *> Agpr;
   llvm::SmallVector<llvm::AllocaInst *> Ttmp;
   llvm::AllocaInst *Vcc = nullptr;
+  // Wave32-source scratch slot for the VCC_HI register (see ParsedReg::
+  // VCC_HI_SCRATCH). Only used when the source ISA is wave32; on wave64
+  // sources VCC_HI is a real half of the VCC mask and routes through Vcc.
+  llvm::AllocaInst *VccHiScratch = nullptr;
   llvm::AllocaInst *Scc = nullptr;
   llvm::AllocaInst *Exec = nullptr;
   llvm::AllocaInst *M0 = nullptr;

@@ -126,8 +126,17 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // classification as the full pair; downstream VCC/EXEC handling routes
   // through loadVCC/storeVCC (which already respects wave size), so the
   // ``width`` field is informational here rather than load-bearing.
-  case AMDGPU::VCC_LO:
   case AMDGPU::VCC_HI:
+    // On a wave32 source, hardware VCC is 32 bits (== VCC_LO); VCC_HI is a
+    // free general-purpose scratch scalar. Route it to its own slot so the
+    // (wave64-widened) VCC mask written by `v_cmp` does not clobber it.
+    if (Isa.isWave32()) {
+      Pr.RegKind = ParsedReg::VCC_HI_SCRATCH;
+      Pr.Width = 1;
+      return Pr;
+    }
+    [[fallthrough]];
+  case AMDGPU::VCC_LO:
     Pr.RegKind = ParsedReg::VCC;
     Pr.Width = Isa.isWave32() ? 1 : 2;
     return Pr;

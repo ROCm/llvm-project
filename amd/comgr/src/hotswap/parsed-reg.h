@@ -23,8 +23,14 @@ struct ParsedReg {
   // (see raise-context.cpp). Tensile gfx1250 emits them as F16 source
   // operands (e.g. `v_sub_f16 v64, src_vccz, v48`), so the dispatch
   // path must recognise them or the kernel crashes inside parseReg.
+  // VCC_HI_SCRATCH: on a wave32 source, hardware VCC is only 32 bits
+  // (== VCC_LO), so the register named VCC_HI is a free general-purpose
+  // scalar the compiler uses as scratch. It must not alias the (wave64
+  // target) VCC wave mask, or a `v_cmp` writing VCC would clobber it.
+  // Modelled as its own i32 scalar slot.
   enum Kind { SGPR, VGPR, AGPR, VCC, EXEC, SCC, MODE, M0, FLAT_SCR, TTMP,
-              LDS_DIRECT, SRC_VCCZ, SRC_EXECZ, SRC_SCC, NOREG, OTHER };
+              LDS_DIRECT, SRC_VCCZ, SRC_EXECZ, SRC_SCC, VCC_HI_SCRATCH,
+              NOREG, OTHER };
   Kind RegKind = OTHER;
   int BaseIdx = -1;
   int Width = 1;

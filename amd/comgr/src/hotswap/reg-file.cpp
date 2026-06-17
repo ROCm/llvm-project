@@ -49,6 +49,7 @@ const char *kindName(ParsedReg::Kind K) {
   case ParsedReg::SRC_VCCZ:   return "SRC_VCCZ";
   case ParsedReg::SRC_EXECZ:  return "SRC_EXECZ";
   case ParsedReg::SRC_SCC:    return "SRC_SCC";
+  case ParsedReg::VCC_HI_SCRATCH: return "VCC_HI_SCRATCH";
   case ParsedReg::NOREG:      return "NOREG";
   case ParsedReg::OTHER:      return "OTHER";
   }
@@ -110,6 +111,10 @@ void AllocaRegFile::init(IRBuilder<> &B, Type *I32Ty, Type *I1Ty,
   // subsequent `emitLaneActiveBit` call.
   Vcc = B.CreateAlloca(I1Ty, nullptr, "Vcc");
   B.CreateStore(ConstantInt::getFalse(I1Ty), Vcc);
+  // Wave32-source VCC_HI scratch scalar (see ParsedReg::VCC_HI_SCRATCH).
+  // Zero-initialised like the other condition scalars.
+  VccHiScratch = B.CreateAlloca(I32Ty, nullptr, "VccHiScratch");
+  B.CreateStore(ConstantInt::get(I32Ty, 0), VccHiScratch);
   Scc = B.CreateAlloca(I1Ty, nullptr, "Scc");
   B.CreateStore(ConstantInt::getFalse(I1Ty), Scc);
   Exec = B.CreateAlloca(ExecTy, nullptr, "exec");
@@ -312,6 +317,8 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
   if (Pr.RegKind == ParsedReg::SGPR) return loadSGPR32(B, Pr.BaseIdx);
   if (Pr.RegKind == ParsedReg::VGPR) return loadVGPR32(B, Pr.BaseIdx);
   if (Pr.RegKind == ParsedReg::AGPR) return loadAGPR32(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH)
+    return B.CreateLoad(B.getInt32Ty(), VccHiScratch, "vcc_hi_scratch");
   // VCC as a 32-bit scalar read: must go through the wave-mask ballot,
   // NOT a sign-extension of the local i1. Callers that want a per-lane
   // i1 (e.g. predicating a compute op) should call `loadVCC` directly.
@@ -363,6 +370,8 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
 Value *AllocaRegFile::readReg64(IRBuilder<> &B, ParsedReg Pr) {
   if (Pr.RegKind == ParsedReg::SGPR) return loadSGPR64(B, Pr.BaseIdx);
   if (Pr.RegKind == ParsedReg::VGPR) return loadVGPR64(B, Pr.BaseIdx);
+  if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH)
+    return B.CreateZExt(B.CreateLoad(B.getInt32Ty(), VccHiScratch), B.getInt64Ty());
   // VCC as a 64-bit scalar read: route through the wave-mask ballot.
   // Previous implementations used `SExt(i1 -> i64)`, which replicates
   // the CURRENT LANE's VCC bit across all 64 bits -- a silent lie when
@@ -416,6 +425,19 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
   if (Pr.RegKind == ParsedReg::SGPR) { storeSGPR32(B, Pr.BaseIdx, V); return; }
   if (Pr.RegKind == ParsedReg::VGPR) { storeVGPR32(B, Pr.BaseIdx, V); return; }
   if (Pr.RegKind == ParsedReg::AGPR) { storeAGPR32(B, Pr.BaseIdx, V); return; }
+  if (Pr.RegKind == ParsedReg::VCC_HI_SCRATCH) {
+    // Wave32-source VCC_HI is a plain 32-bit data scalar (like an SGPR), so
+    // it never receives a pointer -- those only arise on address/control-flow
+    // registers (EXEC, SGPR pairs). Coerce any non-i32 scalar width to i32.
+    assert(!V->getType()->isPointerTy() &&
+           "VCC_HI_SCRATCH is a data scalar; pointer writes are a raiser bug");
+    assert(V->getType()->getPrimitiveSizeInBits() == 32 &&
+           "VCC_HI_SCRATCH is a 32-bit data scalar");
+    if (!V->getType()->isIntegerTy(32))
+      V = B.CreateBitCast(V, B.getInt32Ty());
+    B.CreateStore(V, VccHiScratch);
+    return;
+  }
   if (Pr.RegKind == ParsedReg::EXEC) {
     Type *I32Ty = B.getInt32Ty();
     // Coerce incoming value to i32. storeExec handles width matching to
@@ -651,6 +673,12 @@ void AllocaRegFile::collectAllocas(SmallVectorImpl<AllocaInst *> &Out) {
   for (auto *A : Vgpr) if (A) Out.push_back(A);
   for (auto *A : Agpr) if (A) Out.push_back(A);
   if (Vcc) Out.push_back(Vcc);
+  // VccHiScratch (the wave32-source VCC_HI scratch scalar) must be promoted
+  // too. As with the ttmps below, a surviving private alloca is moved to local
+  // data share (LDS) by the AMDGPU backend's AMDGPUPromoteAllocaToLDS, where it
+  // can alias the kernel's own LDS and be clobbered. Its dominating entry store
+  // (init() above) lets PromoteMemToReg lift it cleanly.
+  if (VccHiScratch) Out.push_back(VccHiScratch);
   if (Scc) Out.push_back(Scc);
   if (Exec) Out.push_back(Exec);
   if (M0) Out.push_back(M0);
