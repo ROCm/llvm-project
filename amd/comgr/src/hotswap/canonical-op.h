@@ -359,6 +359,10 @@ enum class CanonicalOp : uint16_t {
   // Targets with native tanh support lower this through `llvm.amdgcn.tanh.*`;
   // other targets use OCML when a matching OCML entry point exists.
   V_TANH_F32,
+  // bf16 single-source transcendentals; lifted through f32 intrinsics
+  // (v_tanh_bf16 through __ocml_tanh_f32).
+  V_COS_BF16, V_EXP_BF16, V_LOG_BF16, V_RCP_BF16,
+  V_RSQ_BF16, V_SIN_BF16, V_SQRT_BF16, V_TANH_BF16,
   // gfx12+ VOP3 pseudo-scalar f32 transcendentals: scalar input and scalar
   // output variants of the corresponding VOP1 special-function instructions.
   // The default clamp=0/omod=0 forms lower through AMDGPU hardware intrinsics;

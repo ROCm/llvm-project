@@ -427,6 +427,15 @@ static const Entry kCanonTable[] = {
     // Targets with native tanh support use `llvm.amdgcn.tanh.*`; targets
     // without native support lower through matching OCML entry points.
     E(V_TANH_F32_e64, V_TANH_F32),
+    // bf16 transcendentals (t16/fake16 variants collapse onto _e64).
+    E(V_COS_BF16_e64, V_COS_BF16),
+    E(V_EXP_BF16_e64, V_EXP_BF16),
+    E(V_LOG_BF16_e64, V_LOG_BF16),
+    E(V_RCP_BF16_e64, V_RCP_BF16),
+    E(V_RSQ_BF16_e64, V_RSQ_BF16),
+    E(V_SIN_BF16_e64, V_SIN_BF16),
+    E(V_SQRT_BF16_e64, V_SQRT_BF16),
+    E(V_TANH_BF16_e64, V_TANH_BF16),
     E(V_S_EXP_F32_e64, V_S_EXP_F32),
     E(V_S_LOG_F32_e64, V_S_LOG_F32),
     E(V_S_RCP_F32_e64, V_S_RCP_F32),
