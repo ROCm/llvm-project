@@ -752,11 +752,21 @@ HandlerResult handleValuCrossLane(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   case CanonicalOp::V_MBCNT_HI_U32_B32: {
-    Function *Mbcnt = Intrinsic::getOrInsertDeclaration(
-        &Ctx.M, Intrinsic::amdgcn_mbcnt_hi, {});
-    Ctx.writeReg32(Op.dst(),
-                   Ctx.B.CreateCall(Mbcnt, {Op.src(0), Op.src(1)},
-                                    "mbcnt_hi"));
+    // For wave32 source, mbcnt_hi is always a pass-through of src1: the
+    // hi-half mask is `(1 << (lane_id - 32)) - 1`, which is 0 for every
+    // source lane (0..31). When widened to wave64, the raw target
+    // intrinsic would compute popcount(src0 & non_empty_mask) + src1 on
+    // lanes 32..63, corrupting source-wave-1 results. Emit src1 directly
+    // in the widening case.
+    Value *Result = nullptr;
+    if (Ctx.Isa.isWave32() && Ctx.TargetIsa.WaveSize > Ctx.Isa.WaveSize) {
+      Result = Op.src(1);
+    } else {
+      Function *Mbcnt = Intrinsic::getOrInsertDeclaration(
+          &Ctx.M, Intrinsic::amdgcn_mbcnt_hi, {});
+      Result = Ctx.B.CreateCall(Mbcnt, {Op.src(0), Op.src(1)}, "mbcnt_hi");
+    }
+    Ctx.writeReg32(Op.dst(), Result);
     Hr.Handled = true;
     return Hr;
   }
