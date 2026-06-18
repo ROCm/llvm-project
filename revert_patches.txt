@@ -11,9 +11,6 @@ breaks rocgdb UT
 breaks windows build
 [cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-breaks comgr testing
-Revert "Reapply "[lit] Deprecate execute_external=True in ShTest" (#203316) 
----
 breaks build of offload in rock
 [Flang] Add mock flang driver (#203481)
 ---
