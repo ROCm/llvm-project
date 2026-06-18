@@ -11,15 +11,12 @@ breaks rocgdb UT
 breaks windows build
 [cmake] Refactor DIA SDK detection into FindDIASDK module (#160354)
 ---
-breaks comgr test
-clang: Refactor handling of offload sanitizer arguments (#196737)
+breaks comgr testing
+Revert "Reapply "[lit] Deprecate execute_external=True in ShTest" (#203316) 
 ---
-breaks hipcub build
-[InstCombine] Fold zext into de-interleaving (factor=2) instructions (#195330)
+breaks build of offload in rock
+[Flang] Add mock flang driver (#203481)
 ---
-needs merge work: Kruse
-aa8e38f4f871 [OpenMP] FIx omp_lib.mod compilation for the GPU 
-9e01e0970c4c [Flang-RT] Disable tests by default without mod
-911eddeed7ba [Flang] Fix omp_lib.h location and search path
-bafde6fbb [Flang] Move builtin .mod generation into runtimes
+needs newer SPIRv
+[IRBuilder] Refactor for intrinsics const-folding (NFC) (#202738)
 ---

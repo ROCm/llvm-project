@@ -1,21 +1,4 @@
 ; RUN: llc -O0 -mcpu=gfx1030 -mtriple=amdgcn-amd-amdhsa -filetype=obj -o - < %s | llvm-dwarfdump --debug-info - | FileCheck %s
-; XFAIL: *
-@GlobMutable = protected addrspace(1) global i32 0, align 4, !dbg !39
-; CHECK-LABEL: DW_AT_name ("GlobMutable")
-; CHECK-NEXT:  DW_AT_type
-; CHECK-NEXT:  DW_AT_external
-; CHECK-NEXT:  DW_AT_decl_file
-; CHECK-NEXT:  DW_AT_decl_line
-; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_global)
-; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x0, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
-
-@GlobConst = internal addrspace(4) constant i32 0, align 4, !dbg !41
-; CHECK-LABEL: DW_AT_name ("GlobConst")
-; CHECK-NEXT:  DW_AT_type
-; CHECK-NEXT:  DW_AT_decl_file
-; CHECK-NEXT:  DW_AT_decl_line
-; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_constant)
-; CHECK-NEXT:  DW_AT_location (DW_OP_addrx 0x1, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 
 ; CHECK-LABEL: DW_AT_name ("test_loc_single")
 define void @test_loc_single(ptr addrspace(3) %ptr) #0 !dbg !9 {
@@ -118,6 +101,23 @@ define void @test_noop_convert(ptr addrspace(1) %p1) #0 !dbg !34 {
     #dbg_value(ptr addrspace(1) %p1, !36, !DIExpression(DIOpArg(0, ptr addrspace(1)), DIOpConvert(ptr addrspace(1)), DIOpReinterpret(ptr)), !37)
   ret void, !dbg !37
 }
+
+@GlobMutable = protected addrspace(1) global i32 0, align 4, !dbg !39
+; CHECK-LABEL: DW_AT_name ("GlobMutable")
+; CHECK-NEXT:  DW_AT_type
+; CHECK-NEXT:  DW_AT_external
+; CHECK-NEXT:  DW_AT_decl_file
+; CHECK-NEXT:  DW_AT_decl_line
+; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_global)
+; CHECK-NEXT:  DW_AT_location (DW_OP_addrx {{.*}}, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
+
+@GlobConst = internal addrspace(4) constant i32 0, align 4, !dbg !41
+; CHECK-LABEL: DW_AT_name ("GlobConst")
+; CHECK-NEXT:  DW_AT_type
+; CHECK-NEXT:  DW_AT_decl_file
+; CHECK-NEXT:  DW_AT_decl_line
+; CHECK-NEXT:  DW_AT_LLVM_memory_space (DW_MSPACE_LLVM_constant)
+; CHECK-NEXT:  DW_AT_location (DW_OP_addrx {{.*}}, DW_OP_lit0, DW_OP_LLVM_user DW_OP_LLVM_form_aspace_address)
 
 attributes #0 = { "frame-pointer"="all" }
 

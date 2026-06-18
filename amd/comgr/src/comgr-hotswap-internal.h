@@ -212,12 +212,19 @@ public:
   std::optional<uint32_t>
   getKernelStaticLdsSize(llvm::StringRef KernelName) const;
 
-  /// Update the RSRC1 VGPR/SGPR granule counts in the kernel descriptor for
-  /// \p KernelName by adding \p ExtraVgprs / \p ExtraSgprs, using
-  /// \p VgprGranuleSize / \p SgprGranuleSize so the call is ISA-agnostic.
+  /// Read the SGPR count for \p KernelName from the \c amdhsa.kernels
+  /// msgpack metadata note (\c .sgpr_count key). On GFX10+ the kernel
+  /// descriptor's \c GRANULATED_WAVEFRONT_SGPR_COUNT is architecturally
+  /// reserved, so this is the only reliable source.
+  /// Returns std::nullopt if the metadata note is missing or the kernel
+  /// is not found.
+  std::optional<unsigned> getKernelSgprCount(llvm::StringRef KernelName) const;
+
+  /// Update the RSRC1 VGPR granule count in the kernel descriptor for
+  /// \p KernelName by adding \p ExtraVgprs. The SGPR granule field is
+  /// not updated because it is reserved on GFX10+.
   void updateKernelDescriptor(llvm::StringRef KernelName, unsigned ExtraVgprs,
-                              unsigned ExtraSgprs, unsigned VgprGranuleSize,
-                              unsigned SgprGranuleSize);
+                              unsigned VgprGranuleSize);
 
   /// Grow the ELF by inserting trampoline bytes after `.text` and adjusting
   /// all section and program headers. Returns a null unique_ptr on failure.
@@ -277,8 +284,8 @@ struct RewriteConfig {
   std::string TargetIsa;
   std::string TargetCpu;
   unsigned MaxVgprs = 0;
+  unsigned MaxSgprs = 0;
   unsigned VgprGranuleSize = 0;
-  unsigned SgprGranuleSize = 0;
 };
 
 // -- LLVM MC context ----------------------------------------------------------
@@ -455,14 +462,14 @@ struct LivenessInfo {
 /// the kernel descriptor's reported VGPR count. Constructed per patch site
 /// with the live-set at that site and the kernel's current / maximum VGPR
 /// counts.
-struct ScratchAllocator {
+struct VgprAllocator {
   llvm::BitVector LiveAtPoint;
   unsigned KdAllocatedVgprs = 0;
   unsigned NextAboveKd = 0;
   unsigned MaxVgprs = 0;
   unsigned ExtraAllocated = 0;
 
-  ScratchAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
+  VgprAllocator(const llvm::BitVector &Live, unsigned KdVgprs, unsigned Max)
       : LiveAtPoint(Live), KdAllocatedVgprs(KdVgprs), NextAboveKd(KdVgprs),
         MaxVgprs(Max) {}
 
@@ -470,11 +477,9 @@ struct ScratchAllocator {
   /// the kernel's existing VGPR pool is saturated and there is no headroom
   /// below MaxVgprs for an additional allocation.
   std::optional<unsigned> alloc() {
-    for (unsigned V = KdAllocatedVgprs; V-- > 0;) {
-      if (!LiveAtPoint.test(V)) {
-        LiveAtPoint.set(V);
-        return V;
-      }
+    if (int V = LiveAtPoint.find_last_unset_in(0, KdAllocatedVgprs); V != -1) {
+      LiveAtPoint.set(V);
+      return V;
     }
     if (NextAboveKd >= MaxVgprs)
       return std::nullopt;
@@ -485,6 +490,29 @@ struct ScratchAllocator {
   }
 
   unsigned extraVgprsNeeded() const { return ExtraAllocated; }
+};
+
+/// Allocates scratch SGPRs for a patch point. Unlike VGPRs (which have full
+/// dataflow liveness), SGPRs have no liveness analysis — we always allocate
+/// above the kernel descriptor's reported SGPR count. This is conservative
+/// but safe: no SGPR currently in use by the kernel can be clobbered.
+struct SgprAllocator {
+  unsigned KdAllocatedSgprs = 0;
+  unsigned NextAboveKd = 0;
+  unsigned MaxSgprs = 0;
+
+  SgprAllocator(unsigned KdSgprs, unsigned Max)
+      : KdAllocatedSgprs(KdSgprs), NextAboveKd(KdSgprs), MaxSgprs(Max) {}
+
+  /// Allocate one SGPR above the kernel's current count. Returns
+  /// std::nullopt if no headroom remains below MaxSgprs.
+  std::optional<unsigned> alloc() {
+    if (NextAboveKd >= MaxSgprs)
+      return std::nullopt;
+    return NextAboveKd++;
+  }
+
+  unsigned extraSgprsNeeded() const { return NextAboveKd - KdAllocatedSgprs; }
 };
 
 /// Bookkeeping for a single patch site's scratch allocation. \c Offset is
@@ -504,6 +532,7 @@ struct ScratchPatchInfo {
 /// amd_comgr_hotswap_result_t once that result struct is wired up.
 struct KernelPatchStats {
   unsigned ExtraVgprs = 0;
+  unsigned ExtraSgprs = 0;
   unsigned ScratchReused = 0;
   unsigned ScratchAboveKd = 0;
 };
@@ -566,6 +595,7 @@ struct HotswapPatchVTable {
   uint32_t (*applyTrampolinePatches)(PatchContext &, size_t) = nullptr;
   uint32_t (*applyWmmaSplitPatches)(PatchContext &, size_t) = nullptr;
   uint32_t (*applyScratchPatches)(PatchContext &, size_t) = nullptr;
+  uint32_t (*applyWmmaScale16Patches)(PatchContext &, size_t) = nullptr;
 
   // Whole-kernel passes: called once per kernel after the per-instruction
   // loop completes.

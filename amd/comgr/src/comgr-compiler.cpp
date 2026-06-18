@@ -633,11 +633,10 @@ amd_comgr_status_t linkWithLLD(llvm::ArrayRef<const char *> Args,
 }
 
 // Execute llvm-link in-process using llvm::Linker
-// Args format: -o <output.bc> <input1.bc> <input2.bc> ...
 // TODO: refactor this implementation to use a shared infra with linkBitcodeToBitcode()
 amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
                                    raw_ostream &LogS) {
-  // Parse args: find -o <output> and collect input .bc files
+  // Parse args: find -o <output> and collect non-flag inputs.
   StringRef OutputPath;
   SmallVector<StringRef, 4> InputPaths;
 
@@ -645,7 +644,7 @@ amd_comgr_status_t executeLLVMLink(ArrayRef<const char *> Args,
     StringRef Arg(Args[I]);
     if (Arg == "-o" && I + 1 < Args.size()) {
       OutputPath = Args[++I];
-    } else if (Arg.ends_with(".bc")) {
+    } else if (!Arg.starts_with("-")) {
       InputPaths.push_back(Arg);
     }
   }
@@ -2301,7 +2300,7 @@ amd_comgr_status_t AMDGPUCompiler::linkToExecutable() {
 
 // TODO: Generalize this list to include all -cc1 flags and arguments that are
 //   still valid in a bitcode compilation context
-static inline const std::unordered_set<std::string_view> ValidSpirvFlags{
+static inline const llvm::StringSet<> ValidSpirvFlags{
     "-fapprox-func",
     "-fcolor-diagnostics",
     "-fconvergent-functions",

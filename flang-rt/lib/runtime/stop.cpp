@@ -77,7 +77,6 @@ static void CloseAllExternalUnits(const char *why) {
 #endif
 }
 
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatement)(
     int code, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -109,17 +108,17 @@ static void CloseAllExternalUnits(const char *why) {
     std::fputc('\n', stderr);
     DescribeIEEESignaledExceptions();
   }
+#if !RT_GPU_TARGET
   if (RTNAME(GetMainThreadId)() != std::this_thread::get_id())
     std::abort();
+#endif
   if (isErrorStop)
     Fortran::runtime::ErrorExit(code);
   else
     Fortran::runtime::NormalExit(code);
 #endif
 }
-#endif
 
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_API_ATTRS void RTNAME(StopStatementText)(
     const char *code, std::size_t length, bool isErrorStop, bool quiet) {
 #if defined(RT_DEVICE_COMPILATION)
@@ -143,8 +142,10 @@ static void CloseAllExternalUnits(const char *why) {
     }
     DescribeIEEESignaledExceptions();
   }
+#if !RT_GPU_TARGET
   if (RTNAME(GetMainThreadId)() != std::this_thread::get_id())
     std::abort();
+#endif
   if (isErrorStop) {
     Fortran::runtime::ErrorExit(EXIT_FAILURE);
   } else {
@@ -152,7 +153,6 @@ static void CloseAllExternalUnits(const char *why) {
   }
 #endif
 }
-#endif
 
 #if !RT_GPU_TARGET
 static bool StartPause() {
@@ -249,14 +249,12 @@ static RT_NOINLINE_ATTR void PrintBacktrace() {
 
 #endif
 }
-#if (not defined(__AMDGPU__) && not defined(__NVPTX__))
 [[noreturn]] RT_OPTNONE_ATTR void RTNAME(Abort)() {
 #ifdef HAVE_BACKTRACE
   PrintBacktrace();
 #endif
   std::abort();
 }
-#endif
 
 RT_OPTNONE_ATTR void FORTRAN_PROCEDURE_NAME(backtrace)() { PrintBacktrace(); }
 

@@ -50,6 +50,22 @@ static const VarDecl *getBaseDecl(const Expr *Ref);
 static OpenMPDirectiveKind
 getEffectiveDirectiveKind(const OMPExecutableDirective &S);
 
+/// Whether a combined `distribute parallel for` may use the fused
+/// distr_static_chunk + static_chunkone schedule (enum 93): one
+/// for_static_init, no surrounding distribute_static_init.
+static bool canEmitGPUFusedDistSchedule(const CodeGenModule &CGM,
+                                        const OMPLoopDirective &S,
+                                        OpenMPDirectiveKind DKind) {
+  // Reduction-only for now. Non-reduction cases might follow in the future, but
+  // need more analysis for maximum profit.
+  return CGM.getLangOpts().OpenMPIsTargetDevice && CGM.getTriple().isGPU() &&
+         isOpenMPLoopBoundSharingDirective(DKind) &&
+         S.hasClausesOfKind<OMPReductionClause>() &&
+         !S.getSingleClause<OMPDistScheduleClause>() &&
+         !S.getSingleClause<OMPScheduleClause>() &&
+         !S.getSingleClause<OMPOrderedClause>();
+}
+
 namespace {
 /// Lexical scope for OpenMP executable constructs, that handles correct codegen
 /// for captured expressions.
@@ -4362,6 +4378,12 @@ bool CodeGenFunction::EmitOMPWorksharingLoop(
           RT.isStaticChunked(ScheduleKind.Schedule,
                              /* Chunked */ Chunk != nullptr) &&
           HasChunkSizeOne && isOpenMPLoopBoundSharingDirective(EKind);
+      // GPU combined `distribute parallel for`: emit a single
+      // for_static_init with the fused distr_static_chunk + static_chunkone
+      // schedule (enum 93). The surrounding EmitOMPDistributeLoop must skip
+      // its distribute_static_init under the same conditions.
+      if (StaticChunkedOne && canEmitGPUFusedDistSchedule(CGM, S, EKind))
+        ScheduleKind.UseFusedDistChunkSchedule = true;
       bool IsMonotonic =
           Ordered ||
           (ScheduleKind.Schedule == OMPC_SCHEDULE_static &&
@@ -6816,199 +6838,208 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
       const unsigned IVSize = getContext().getTypeSize(IVExpr->getType());
       const bool IVSigned = IVExpr->getType()->hasSignedIntegerRepresentation();
 
-      // OpenMP [2.10.8, distribute Construct, Description]
-      // If dist_schedule is specified, kind must be static. If specified,
-      // iterations are divided into chunks of size chunk_size, chunks are
-      // assigned to the teams of the league in a round-robin fashion in the
-      // order of the team number. When no chunk_size is specified, the
-      // iteration space is divided into chunks that are approximately equal
-      // in size, and at most one chunk is distributed to each team of the
-      // league. The size of the chunks is unspecified in this case.
-      bool StaticChunked =
-          RT.isStaticChunked(ScheduleKind, /* Chunked */ Chunk != nullptr) &&
-          isOpenMPLoopBoundSharingDirective(S.getDirectiveKind());
-      bool IsMultiDeviceKernel = CGM.isMultiDeviceKernel(S);
-      if (RT.isStaticNonchunked(ScheduleKind,
-                                /* Chunked */ Chunk != nullptr) ||
-          StaticChunked) {
-        CGOpenMPRuntime::StaticRTInput StaticInit(
-            IVSize, IVSigned, /* Ordered = */ false, IL.getAddress(),
-            LB.getAddress(), UB.getAddress(), ST.getAddress(),
-            StaticChunked ? Chunk : nullptr);
-        // If the current emission is part of multi-device kernel then we need
-        // to invoke a special method.
-        if (IsMultiDeviceKernel)
-          StaticInit.setMultiDeviceLBUB(
-              GetAddrOfLocalVar(CGM.getMultiDeviceLBArg(S, CurFn)),
-              GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn)));
-        RT.emitDistributeStaticInit(*this, S.getBeginLoc(), ScheduleKind,
-                                    StaticInit, IsMultiDeviceKernel);
+      // GPU fused schedule: omit the outer distribute loop and let the inner
+      // worksharing loop schedule the flattened team/thread iteration space.
+      if (canEmitGPUFusedDistSchedule(CGM, S, S.getDirectiveKind())) {
         JumpDest LoopExit =
             getJumpDestInCurrentScope(createBasicBlock("omp.loop.exit"));
-
-        // For multi device kernels we have to compare against the MultiDeviceUB
-        // instead of the GlobalUB.
-        if (CGM.isMultiDeviceKernel(S)) {
-          // UB = min(UB, MultiDeviceUB);
-          // Step 1: load UB variable which was just passed and modified by the
-          // distribute static init runtime function.
-          llvm::Value *UBVal = Builder.CreateLoad(UB.getAddress());
-
-          // Step 2: Get the address of the Multi Device UB and load it:
-          Address MultiDeviceUBAddr =
-              GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn));
-          llvm::Value *MultiDeviceUB = Builder.CreateLoad(MultiDeviceUBAddr);
-
-          // Step 3: Make sure the compared values have the same type:
-          llvm::Value *UBValCasted =
-              Builder.CreateIntCast(UBVal, Int64Ty, /*isSigned=*/true);
-
-          // Step 4: Compare the values: if current UB is > MultiDeviceUB then
-          // ensure that we do not go beyond the MultiDeviceUB.
-          llvm::Value *CmpI = Builder.CreateICmpSGT(UBValCasted, MultiDeviceUB);
-          auto MDCheckTrue = createBasicBlock("omp.md.check.true");
-          auto MDCheckEnd = createBasicBlock("omp.md.check.end");
-
-          // Step 5: Emit the comparison:
-          Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
-
-          // Step 6: Emit the true block which will store the upper bound.
-          EmitBlock(MDCheckTrue);
-          llvm::Value *MultiDeviceUBCasted = Builder.CreateIntCast(
-              MultiDeviceUB, UBVal->getType(), /*isSigned=*/true);
-          Builder.CreateStore(MultiDeviceUBCasted, UB.getAddress());
-          EmitBranch(MDCheckEnd);
-
-          // Step 7: emit condition end block
-          EmitBlock(MDCheckEnd);
-        } else {
-          // UB = min(UB, GlobalUB);
-          EmitIgnoredExpr(
-              isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
-                  ? S.getCombinedEnsureUpperBound()
-                  : S.getEnsureUpperBound());
-        }
-
-        // IV = LB;
-        EmitIgnoredExpr(isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
-                            ? S.getCombinedInit()
-                            : S.getInit());
-
-        const Expr *Cond =
-            isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
-                ? S.getCombinedCond()
-                : S.getCond();
-
-        if (StaticChunked)
-          Cond = S.getCombinedDistCond();
-
-        // For static unchunked schedules generate:
-        //
-        //  1. For distribute alone, codegen
-        //    while (idx <= UB) {
-        //      BODY;
-        //      ++idx;
-        //    }
-        //
-        //  2. When combined with 'for' (e.g. as in 'distribute parallel for')
-        //    while (idx <= UB) {
-        //      <CodeGen rest of pragma>(LB, UB);
-        //      idx += ST;
-        //    }
-        //
-        // For static chunk one schedule generate:
-        //
-        // while (IV <= GlobalUB) {
-        //   <CodeGen rest of pragma>(LB, UB);
-        //   LB += ST;
-        //   UB += ST;
-        //   UB = min(UB, GlobalUB);
-        //   IV = LB;
-        // }
-        //
-        emitCommonSimdLoop(
-            *this, S,
-            [&S](CodeGenFunction &CGF, PrePostActionTy &) {
-              if (isOpenMPSimdDirective(S.getDirectiveKind()))
-                CGF.EmitOMPSimdInit(S);
-            },
-            [&S, &LoopScope, Cond, IncExpr, IVDecl, LoopExit, &CodeGenLoop,
-             StaticChunked, UB](CodeGenFunction &CGF, PrePostActionTy &) {
-              CGF.EmitOMPMultiDeviceInnerLoop(
-                  S, LoopScope.requiresCleanups(), Cond, IncExpr, IVDecl,
-                  [&S, LoopExit, &CodeGenLoop](CodeGenFunction &CGF) {
-                    CodeGenLoop(CGF, S, LoopExit);
-                  },
-                  [&S, StaticChunked, UB](CodeGenFunction &CGF) {
-                    if (StaticChunked) {
-                      CGF.EmitIgnoredExpr(S.getCombinedNextLowerBound());
-                      CGF.EmitIgnoredExpr(S.getCombinedNextUpperBound());
-                      // TODO: emit UB = min(UB, MutliDeviceUB)
-                      if (CGF.CGM.isMultiDeviceKernel(S)) {
-                        // UB = min(UB, MultiDeviceUB);
-                        // Step 1: load UB variable which was just passed and
-                        // modified by the distribute static init runtime
-                        // function.
-                        llvm::Value *UBVal =
-                            CGF.Builder.CreateLoad(UB.getAddress());
-
-                        // Step 2: Get the address of the Multi Device UB and
-                        // load it:
-                        Address MultiDeviceUBAddr = CGF.GetAddrOfLocalVar(
-                            CGF.CGM.getMultiDeviceUBArg(S, CGF.CurFn));
-                        llvm::Value *MultiDeviceUB =
-                            CGF.Builder.CreateLoad(MultiDeviceUBAddr);
-
-                        // Step 3: Make sure the compared values have the same
-                        // type:
-                        llvm::Value *UBValCasted = CGF.Builder.CreateIntCast(
-                            UBVal, CGF.Int64Ty, /*isSigned=*/true);
-
-                        // Step 4: Compare the values: if current UB is >
-                        // MultiDeviceUB then ensure that we do not go beyond
-                        // the MultiDeviceUB.
-                        llvm::Value *CmpI = CGF.Builder.CreateICmpSGT(
-                            UBValCasted, MultiDeviceUB);
-                        auto MDCheckTrue =
-                            CGF.createBasicBlock("omp.md.check.true");
-                        auto MDCheckEnd =
-                            CGF.createBasicBlock("omp.md.check.end");
-
-                        // Step 5: Emit the comparison:
-                        CGF.Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
-
-                        // Step 6: Emit the true block which will store the
-                        // upper bound.
-                        CGF.EmitBlock(MDCheckTrue);
-                        llvm::Value *MultiDeviceUBCasted =
-                            CGF.Builder.CreateIntCast(MultiDeviceUB,
-                                                      UBVal->getType(),
-                                                      /*isSigned=*/true);
-                        CGF.Builder.CreateStore(MultiDeviceUBCasted,
-                                                UB.getAddress());
-                        CGF.EmitBranch(MDCheckEnd);
-
-                        // Step 7: emit condition end block
-                        CGF.EmitBlock(MDCheckEnd);
-                      } else {
-                        CGF.EmitIgnoredExpr(S.getCombinedEnsureUpperBound());
-                      }
-                      CGF.EmitIgnoredExpr(S.getCombinedInit());
-                    }
-                  });
-            });
+        CodeGenLoop(*this, S, LoopExit);
         EmitBlock(LoopExit.getBlock());
-        // Tell the runtime we are done.
-        RT.emitForStaticFinish(*this, S.getEndLoc(), OMPD_distribute);
       } else {
-        // Emit the outer loop, which requests its work chunk [LB..UB] from
-        // runtime and runs the inner loop to process it.
-        // TODO: handle this case for Multi-Device Kernels.
-        const OMPLoopArguments LoopArguments = {
-            LB.getAddress(), UB.getAddress(), ST.getAddress(), IL.getAddress(),
-            Chunk};
-        EmitOMPDistributeOuterLoop(ScheduleKind, S, LoopScope, LoopArguments,
-                                   CodeGenLoop);
+        // OpenMP [2.10.8, distribute Construct, Description]
+        // If dist_schedule is specified, kind must be static. If specified,
+        // iterations are divided into chunks of size chunk_size, chunks are
+        // assigned to the teams of the league in a round-robin fashion in the
+        // order of the team number. When no chunk_size is specified, the
+        // iteration space is divided into chunks that are approximately equal
+        // in size, and at most one chunk is distributed to each team of the
+        // league. The size of the chunks is unspecified in this case.
+        bool StaticChunked =
+            RT.isStaticChunked(ScheduleKind, /* Chunked */ Chunk != nullptr) &&
+            isOpenMPLoopBoundSharingDirective(S.getDirectiveKind());
+        bool IsMultiDeviceKernel = CGM.isMultiDeviceKernel(S);
+        if (RT.isStaticNonchunked(ScheduleKind,
+                                  /* Chunked */ Chunk != nullptr) ||
+            StaticChunked) {
+          CGOpenMPRuntime::StaticRTInput StaticInit(
+              IVSize, IVSigned, /* Ordered = */ false, IL.getAddress(),
+              LB.getAddress(), UB.getAddress(), ST.getAddress(),
+              StaticChunked ? Chunk : nullptr);
+          // If the current emission is part of multi-device kernel then we need
+          // to invoke a special method.
+          if (IsMultiDeviceKernel)
+            StaticInit.setMultiDeviceLBUB(
+                GetAddrOfLocalVar(CGM.getMultiDeviceLBArg(S, CurFn)),
+                GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn)));
+          RT.emitDistributeStaticInit(*this, S.getBeginLoc(), ScheduleKind,
+                                      StaticInit, IsMultiDeviceKernel);
+          JumpDest LoopExit =
+              getJumpDestInCurrentScope(createBasicBlock("omp.loop.exit"));
+
+          // For multi device kernels we have to compare against the MultiDeviceUB
+          // instead of the GlobalUB.
+          if (CGM.isMultiDeviceKernel(S)) {
+            // UB = min(UB, MultiDeviceUB);
+            // Step 1: load UB variable which was just passed and modified by the
+            // distribute static init runtime function.
+            llvm::Value *UBVal = Builder.CreateLoad(UB.getAddress());
+
+            // Step 2: Get the address of the Multi Device UB and load it:
+            Address MultiDeviceUBAddr =
+                GetAddrOfLocalVar(CGM.getMultiDeviceUBArg(S, CurFn));
+            llvm::Value *MultiDeviceUB = Builder.CreateLoad(MultiDeviceUBAddr);
+
+            // Step 3: Make sure the compared values have the same type:
+            llvm::Value *UBValCasted =
+                Builder.CreateIntCast(UBVal, Int64Ty, /*isSigned=*/true);
+
+            // Step 4: Compare the values: if current UB is > MultiDeviceUB then
+            // ensure that we do not go beyond the MultiDeviceUB.
+            llvm::Value *CmpI = Builder.CreateICmpSGT(UBValCasted, MultiDeviceUB);
+            auto MDCheckTrue = createBasicBlock("omp.md.check.true");
+            auto MDCheckEnd = createBasicBlock("omp.md.check.end");
+
+            // Step 5: Emit the comparison:
+            Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
+
+            // Step 6: Emit the true block which will store the upper bound.
+            EmitBlock(MDCheckTrue);
+            llvm::Value *MultiDeviceUBCasted = Builder.CreateIntCast(
+                MultiDeviceUB, UBVal->getType(), /*isSigned=*/true);
+            Builder.CreateStore(MultiDeviceUBCasted, UB.getAddress());
+            EmitBranch(MDCheckEnd);
+
+            // Step 7: emit condition end block
+            EmitBlock(MDCheckEnd);
+          } else {
+            // UB = min(UB, GlobalUB);
+            EmitIgnoredExpr(
+                isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
+                    ? S.getCombinedEnsureUpperBound()
+                    : S.getEnsureUpperBound());
+          }
+
+          // IV = LB;
+          EmitIgnoredExpr(isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
+                              ? S.getCombinedInit()
+                              : S.getInit());
+
+          const Expr *Cond =
+              isOpenMPLoopBoundSharingDirective(S.getDirectiveKind())
+                  ? S.getCombinedCond()
+                  : S.getCond();
+
+          if (StaticChunked)
+            Cond = S.getCombinedDistCond();
+
+          // For static unchunked schedules generate:
+          //
+          //  1. For distribute alone, codegen
+          //    while (idx <= UB) {
+          //      BODY;
+          //      ++idx;
+          //    }
+          //
+          //  2. When combined with 'for' (e.g. as in 'distribute parallel for')
+          //    while (idx <= UB) {
+          //      <CodeGen rest of pragma>(LB, UB);
+          //      idx += ST;
+          //    }
+          //
+          // For static chunk one schedule generate:
+          //
+          // while (IV <= GlobalUB) {
+          //   <CodeGen rest of pragma>(LB, UB);
+          //   LB += ST;
+          //   UB += ST;
+          //   UB = min(UB, GlobalUB);
+          //   IV = LB;
+          // }
+          //
+          emitCommonSimdLoop(
+              *this, S,
+              [&S](CodeGenFunction &CGF, PrePostActionTy &) {
+                if (isOpenMPSimdDirective(S.getDirectiveKind()))
+                  CGF.EmitOMPSimdInit(S);
+              },
+              [&S, &LoopScope, Cond, IncExpr, IVDecl, LoopExit, &CodeGenLoop,
+               StaticChunked, UB](CodeGenFunction &CGF, PrePostActionTy &) {
+                CGF.EmitOMPMultiDeviceInnerLoop(
+                    S, LoopScope.requiresCleanups(), Cond, IncExpr, IVDecl,
+                    [&S, LoopExit, &CodeGenLoop](CodeGenFunction &CGF) {
+                      CodeGenLoop(CGF, S, LoopExit);
+                    },
+                    [&S, StaticChunked, UB](CodeGenFunction &CGF) {
+                      if (StaticChunked) {
+                        CGF.EmitIgnoredExpr(S.getCombinedNextLowerBound());
+                        CGF.EmitIgnoredExpr(S.getCombinedNextUpperBound());
+                        // TODO: emit UB = min(UB, MutliDeviceUB)
+                        if (CGF.CGM.isMultiDeviceKernel(S)) {
+                          // UB = min(UB, MultiDeviceUB);
+                          // Step 1: load UB variable which was just passed and
+                          // modified by the distribute static init runtime
+                          // function.
+                          llvm::Value *UBVal =
+                              CGF.Builder.CreateLoad(UB.getAddress());
+
+                          // Step 2: Get the address of the Multi Device UB and
+                          // load it:
+                          Address MultiDeviceUBAddr = CGF.GetAddrOfLocalVar(
+                              CGF.CGM.getMultiDeviceUBArg(S, CGF.CurFn));
+                          llvm::Value *MultiDeviceUB =
+                              CGF.Builder.CreateLoad(MultiDeviceUBAddr);
+
+                          // Step 3: Make sure the compared values have the same
+                          // type:
+                          llvm::Value *UBValCasted = CGF.Builder.CreateIntCast(
+                              UBVal, CGF.Int64Ty, /*isSigned=*/true);
+
+                          // Step 4: Compare the values: if current UB is >
+                          // MultiDeviceUB then ensure that we do not go beyond
+                          // the MultiDeviceUB.
+                          llvm::Value *CmpI = CGF.Builder.CreateICmpSGT(
+                              UBValCasted, MultiDeviceUB);
+                          auto MDCheckTrue =
+                              CGF.createBasicBlock("omp.md.check.true");
+                          auto MDCheckEnd =
+                              CGF.createBasicBlock("omp.md.check.end");
+
+                          // Step 5: Emit the comparison:
+                          CGF.Builder.CreateCondBr(CmpI, MDCheckTrue, MDCheckEnd);
+
+                          // Step 6: Emit the true block which will store the
+                          // upper bound.
+                          CGF.EmitBlock(MDCheckTrue);
+                          llvm::Value *MultiDeviceUBCasted =
+                              CGF.Builder.CreateIntCast(MultiDeviceUB,
+                                                        UBVal->getType(),
+                                                        /*isSigned=*/true);
+                          CGF.Builder.CreateStore(MultiDeviceUBCasted,
+                                                  UB.getAddress());
+                          CGF.EmitBranch(MDCheckEnd);
+
+                          // Step 7: emit condition end block
+                          CGF.EmitBlock(MDCheckEnd);
+                        } else {
+                          CGF.EmitIgnoredExpr(S.getCombinedEnsureUpperBound());
+                        }
+                        CGF.EmitIgnoredExpr(S.getCombinedInit());
+                      }
+                    });
+              });
+          EmitBlock(LoopExit.getBlock());
+          // Tell the runtime we are done.
+          RT.emitForStaticFinish(*this, S.getEndLoc(), OMPD_distribute);
+        } else {
+          // Emit the outer loop, which requests its work chunk [LB..UB] from
+          // runtime and runs the inner loop to process it.
+          // TODO: handle this case for Multi-Device Kernels.
+          const OMPLoopArguments LoopArguments = {
+              LB.getAddress(), UB.getAddress(), ST.getAddress(), IL.getAddress(),
+              Chunk};
+          EmitOMPDistributeOuterLoop(ScheduleKind, S, LoopScope, LoopArguments,
+                                     CodeGenLoop);
+        }
       }
       if (isOpenMPSimdDirective(S.getDirectiveKind())) {
         EmitOMPSimdFinal(S, [IL, &S](CodeGenFunction &CGF) {

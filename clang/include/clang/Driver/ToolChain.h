@@ -19,6 +19,7 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FloatingPointMode.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Frontend/Debug/Options.h"
@@ -188,7 +189,12 @@ private:
   Tool *getOffloadPackager() const;
   Tool *getLinkerWrapper() const;
 
+  /// Track if diagnostics have been emitted for sanitizer arguments already to
+  /// avoid duplicate diagnostics.
   mutable bool SanitizerArgsChecked = false;
+
+  /// Set of BoundArch values which have already had diagnostics emitted.
+  mutable llvm::SmallSet<StringRef, 4> BoundArchSanitizerArgsChecked;
 
   /// The effective clang triple for the current Job.
   mutable llvm::Triple EffectiveTriple;
@@ -345,7 +351,18 @@ public:
   /// -print-multi-flags-experimental argument.
   Multilib::flags_list getMultilibFlags(const llvm::opt::ArgList &) const;
 
-  SanitizerArgs getSanitizerArgs(const llvm::opt::ArgList &JobArgs) const;
+  SanitizerArgs getSanitizerArgs(
+      const llvm::opt::ArgList &JobArgs, StringRef BoundArch = "",
+      Action::OffloadKind DeviceOffloadKind = Action::OFK_None) const;
+
+  /// Returns the feature requirement for a sanitizer on a specific arch for
+  /// diagnostic purposes. Returns the required feature name (e.g., "xnack+") if
+  /// the sanitizer is generally supported but requires a specific feature for
+  /// the given BoundArch, or an empty StringRef otherwise.
+  virtual StringRef getSanitizerRequirement(SanitizerMask Kinds,
+                                            StringRef BoundArch) const {
+    return {};
+  }
 
   const XRayArgs getXRayArgs(const llvm::opt::ArgList &) const;
 
@@ -758,9 +775,9 @@ public:
                                    const InputInfoList &Inputs) const;
 
   /// Add options that need to be passed to cc1 for this target.
-  virtual void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
-                                     llvm::opt::ArgStringList &CC1Args,
-                                     Action::OffloadKind DeviceOffloadKind) const;
+  virtual void addClangTargetOptions(
+      const llvm::opt::ArgList &DriverArgs, llvm::opt::ArgStringList &CC1Args,
+      llvm::StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const;
 
   /// Add options that need to be passed to cc1as for this target.
   virtual void
@@ -872,7 +889,7 @@ public:
 
   /// Get paths for device libraries.
   virtual llvm::SmallVector<BitCodeLibraryInfo, 12>
-  getDeviceLibs(const llvm::opt::ArgList &Args,
+  getDeviceLibs(const llvm::opt::ArgList &Args, llvm::StringRef BoundArch,
                 const Action::OffloadKind DeviceOffloadingKind) const;
 
   /// Add the system specific libraries for the active offload kinds.
