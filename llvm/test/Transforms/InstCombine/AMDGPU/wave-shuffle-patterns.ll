@@ -748,7 +748,6 @@ define i32 @test_broadcast_in_rows16_bitmask(i32 %val) {
   %result = call i32 @llvm.amdgcn.wave.shuffle.i32(i32 %val, i32 %idx)
   ret i32 %result
 }
-<<<<<<< HEAD
 
 ; Rotate-left-by-1 using mbcnt.lo only (wave32 ID form); folds to ds_swizzle
 ; rotate mode (imm=0xC020) on GFX11 wave32, but not on wave64 targets (GFX11-W64,
