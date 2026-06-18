@@ -10849,10 +10849,6 @@ SIInstrInfo::getGenericValueUniformity(const MachineInstr &MI) const {
     return ValueUniformity::NeverUniform;
   }
 
-  // Result is computed from uniform SP and uniform wave-wide max size.
-  if (Opcode == TargetOpcode::G_DYN_STACKALLOC)
-    return ValueUniformity::AlwaysUniform;
-
   if (Opcode == AMDGPU::G_AMDGPU_WHOLE_WAVE_FUNC_SETUP)
     return ValueUniformity::NeverUniform;
 
