@@ -1610,33 +1610,11 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     // Write the boolean flag to the actual SDST destination (operand 1):
     // vcc_lo, sN, or null. The kernel saves flags to SGPRs and later
     // restores them to VCC via s_mov_b32 before each v_div_fmas_f32.
-    Value *Flag = Ctx.B.CreateExtractValue(R, 1);
-    if (Di.NumDefs >= 2 && Di.isReg(1)) {
-      ParsedReg FlagDst = Op.dst(1);
-      if (FlagDst.RegKind == ParsedReg::VCC)
-        Ctx.Regs.storeVCC(Ctx.B, Flag);
-      else if (FlagDst.RegKind == ParsedReg::SGPR && FlagDst.BaseIdx >= 0) {
-        // The flag is genuinely per-lane under wave32 -> wave64 widening, so
-        // store the SGPR as a wave mask (a ballot of the per-lane i1 to source
-        // width), not a zext of the current lane's bit: a `s_mov_b32 vcc_lo,
-        // sN` consumer that misses the shadow re-widens the SGPR as a mask and
-        // would otherwise see only lane 0's carry. Mirrors the V_CMP -> SGPR
-        // ballot store in handle-valu-vcmp.cpp.
-        Type *SourceWidth = Ctx.Projection.sourceWaveMaskTy();
-        Value *Mask =
-            Ctx.Projection.ballotI1ToWidth(Ctx.B, Flag, SourceWidth,
-                                           "div_scale_flag_ballot");
-        Ctx.writeRegExecWidth(FlagDst, Mask);
-        // Keep the per-lane i1 in the SGPR wave-mask shadow so the same-BB
-        // consumer bypasses the lossy extractLaneBitFromWaveMask widen, and the
-        // cross-BB consumer reads the memory-backed shadow; writeRegExecWidth
-        // above invalidated it. See hotswap/docs/sgpr-wave-mask-translation.md.
-        Ctx.recordSgprWaveMaskI1(FlagDst.BaseIdx, Flag, /*isPair=*/false);
-      }
-      // NOREG (null) or unrecognized -> discard the flag
-    } else {
-      Ctx.Regs.storeVCC(Ctx.B, Flag);
-    }
+    // Route the carry-out (i1 per lane) through the shared helper so
+    // a downstream `s_mov_b32 vcc_lo, sN` restore finds a proper
+    // source-width wave mask in the SGPR alloca, and same-BB consumers
+    // like V_DIV_FMAS_F32 can use the cached i1 directly.
+    writeCarryOutI1(Ctx, Di, Op, Ctx.B.CreateExtractValue(R, 1));
     Hr.Handled = true;
     return Hr;
   }
