@@ -98,48 +98,33 @@ option(COMGR_BUILD_SHARED_LIBS "Build the shared library"
 option(COMGR_DISASSEMBLY_AND_METADATA_ONLY
   "Build inspect-only Comgr without Clang/LLD/device-libs (size reduction)" OFF)
 
-set(SOURCES
-  src/comgr-cache.cpp
-  src/comgr-cache-command.cpp
-  src/comgr-clang-command.cpp
-  src/comgr-compiler.cpp
-  src/comgr.cpp
-  src/comgr-device-libs.cpp
-  src/comgr-diagnostic-handler.cpp
-  src/comgr-disassembly.cpp
-  src/comgr-env.cpp
-  src/comgr-hotswap.cpp
-  src/comgr-hotswap-b0a0.cpp
-  src/comgr-hotswap-patch-trampoline.cpp
-  src/comgr-hotswap-elf.cpp
-  src/comgr-hotswap-llvm.cpp
-  src/comgr-hotswap-patch-f32-to-e5m3.cpp
-  src/comgr-hotswap-patch-inplace.cpp
-  src/comgr-hotswap-patch-vop3px2-src2.cpp
-  src/comgr-hotswap-patch-wmma-hazard.cpp
-  src/comgr-hotswap-patch-wmma-scale16.cpp
-  src/comgr-hotswap-patch-wmma-split.cpp
-  src/comgr-libcxx-headers.cpp
-  src/comgr-metadata.cpp
-  src/comgr-signal.cpp
-  src/comgr-spirv-command.cpp
-  src/comgr-symbol.cpp
-  src/comgr-symbolizer.cpp
-  src/comgr-unbundle-command.cpp
-  src/time-stat/time-stat.cpp)
-
 if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
-  list(REMOVE_ITEM SOURCES
-    src/comgr-compiler.cpp
-    src/comgr-clang-command.cpp
-    src/comgr-spirv-command.cpp
-    src/comgr-unbundle-command.cpp
+  # Inspect-only build: explicitly enumerate the translation units that make up
+  # the metadata/symbol/disassembly/symbolization surface. This is an
+  # allow-list (rather than removing the compile-path files from the full set)
+  # so that newly added compile-path TUs are excluded by default and cannot
+  # silently grow the reduced library.
+  set(SOURCES
+    src/comgr.cpp
+    src/comgr-diagnostic-handler.cpp
+    src/comgr-disassembly.cpp
+    src/comgr-env.cpp
+    src/comgr-metadata.cpp
+    src/comgr-signal.cpp
+    src/comgr-symbol.cpp
+    src/comgr-symbolizer.cpp
+    src/time-stat/time-stat.cpp)
+else()
+  set(SOURCES
     src/comgr-cache.cpp
     src/comgr-cache-command.cpp
+    src/comgr-clang-command.cpp
+    src/comgr-compiler.cpp
+    src/comgr.cpp
     src/comgr-device-libs.cpp
-    src/comgr-libcxx-headers.cpp
-    # Hotswap is IR-level code-object rewriting, not part of the
-    # metadata/inspect surface.
+    src/comgr-diagnostic-handler.cpp
+    src/comgr-disassembly.cpp
+    src/comgr-env.cpp
     src/comgr-hotswap.cpp
     src/comgr-hotswap-b0a0.cpp
     src/comgr-hotswap-patch-trampoline.cpp
@@ -150,7 +135,15 @@ if(COMGR_DISASSEMBLY_AND_METADATA_ONLY)
     src/comgr-hotswap-patch-vop3px2-src2.cpp
     src/comgr-hotswap-patch-wmma-hazard.cpp
     src/comgr-hotswap-patch-wmma-scale16.cpp
-    src/comgr-hotswap-patch-wmma-split.cpp)
+    src/comgr-hotswap-patch-wmma-split.cpp
+    src/comgr-libcxx-headers.cpp
+    src/comgr-metadata.cpp
+    src/comgr-signal.cpp
+    src/comgr-spirv-command.cpp
+    src/comgr-symbol.cpp
+    src/comgr-symbolizer.cpp
+    src/comgr-unbundle-command.cpp
+    src/time-stat/time-stat.cpp)
 endif()
 
 # Hotswap binary transpiler, opt-in. The hotswap project lives under
