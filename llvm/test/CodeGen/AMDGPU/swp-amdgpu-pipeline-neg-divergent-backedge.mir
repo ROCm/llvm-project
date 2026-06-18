@@ -1,0 +1,44 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -run-pass=pipeliner -debug-only=pipeliner %s -o /dev/null 2>&1 | FileCheck %s
+# REQUIRES: asserts
+# Reject a loop with a divergent (VCC/EXEC) back-edge (non-scalar predicate).
+# analyzeLoopForPipelining returns nullptr.
+# CHECK: Unable to analyzeLoop, can NOT pipeline Loop
+
+--- |
+  define amdgpu_kernel void @swp_amdgpu_pipeline_neg_divergent_backedge() #0 {
+  bb:
+    br label %bb1
+
+  bb1:                                              ; preds = %bb1, %bb
+    br label %bb1
+  }
+
+  attributes #0 = { "target-cpu"="gfx950" }
+...
+---
+name:            swp_amdgpu_pipeline_neg_divergent_backedge
+alignment:       4
+tracksRegLiveness: true
+isSSA:           true
+registers:
+  - { id: 9, class: sreg_64 }
+machineFunctionInfo:
+  isEntryFunction: true
+  stackPtrOffsetReg: '$sgpr32'
+  occupancy:       8
+body:             |
+  bb.0.bb:
+    successors: %bb.1(0x80000000)
+
+    %9:sreg_64 = S_AND_B64 $exec, -1, implicit-def dead $scc
+
+  bb.1.bb1:
+    successors: %bb.2(0x04000000), %bb.1(0x7c000000)
+
+    $vcc = COPY %9
+    S_CBRANCH_VCCNZ %bb.1, implicit $vcc
+    S_BRANCH %bb.2
+
+  bb.2:
+    S_ENDPGM 0
+...

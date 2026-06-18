@@ -3290,6 +3290,101 @@ bool SIInstrInfo::reverseBranchCondition(
   return true;
 }
 
+namespace {
+class AMDGPUPipelinerLoopInfo : public TargetInstrInfo::PipelinerLoopInfo {
+private:
+  /// The compare instruction for loop control
+  const MachineInstr *CmpInst;
+  /// The normalized condition used by createTripCountGreaterCondition()
+  SmallVector<MachineOperand, 3> Cond;
+
+public:
+  AMDGPUPipelinerLoopInfo(MachineInstr *CmpInst,
+                          const SmallVectorImpl<MachineOperand> &Cond)
+      : CmpInst(CmpInst), Cond(Cond.begin(), Cond.end()) {}
+
+  bool shouldIgnoreForPipelining(const MachineInstr *MI) const override {
+    return CmpInst && MI == CmpInst;
+  }
+
+  std::optional<bool> createTripCountGreaterCondition(
+      int TC, MachineBasicBlock &MBB,
+      SmallVectorImpl<MachineOperand> &CondParam) override {
+    CondParam = this->Cond;
+    return {};
+  }
+
+  void adjustTripCount(int TripCountAdjust) override {}
+
+  void setPreheader(MachineBasicBlock *NewPreheader) override {}
+
+  void disposed(LiveIntervals *LIS) override {}
+};
+} // namespace
+
+std::unique_ptr<TargetInstrInfo::PipelinerLoopInfo>
+SIInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
+  MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
+  SmallVector<MachineOperand, 4> Cond;
+  // Unanalyzable terminator.
+  if (analyzeBranch(*LoopBB, TBB, FBB, Cond, /*AllowModify=*/false))
+    return nullptr;
+
+  // Infinite loop.
+  if (TBB == LoopBB && FBB == LoopBB)
+    return nullptr;
+
+  // Must be conditional branch
+  if (FBB == nullptr)
+    return nullptr;
+
+  assert((TBB == LoopBB || FBB == LoopBB) &&
+         "The Loop must be a single-basic-block loop");
+
+  // Divergent (VCC/EXEC) back-edge; only uniform scalar loops are supported.
+  BranchPredicate Pred = static_cast<BranchPredicate>(Cond[0].getImm());
+  if (Pred != SCC_TRUE && Pred != SCC_FALSE)
+    return nullptr;
+
+  // Convergent ops with an opaque EXEC context.
+  for (const MachineInstr &MI : *LoopBB)
+    if (MI.isCall() || MI.isInlineAsm())
+      return nullptr;
+
+  // Normalization for createTripCountGreaterCondition(): make Cond mean
+  // "exit the loop" so the expander emits correct prolog guard branches.
+  if (TBB == LoopBB)
+    reverseBranchCondition(Cond);
+
+  MachineBasicBlock::iterator I = LoopBB->getFirstTerminator();
+  MachineBasicBlock::const_instr_iterator E = LoopBB->instr_begin();
+  MachineInstr *CmpInst = nullptr;
+  while (--I != E) {
+    for (MachineInstr::const_mop_iterator MOI = I->operands_begin(),
+                                          MOE = I->operands_end();
+         MOI != MOE; ++MOI) {
+      if (MOI->isReg() && MOI->isDef() && MOI->getReg() == Cond[1].getReg()) {
+        CmpInst = &*I;
+        break;
+      }
+    }
+    if (CmpInst)
+      break;
+  }
+
+  // No in-loop compare defining the branch condition.
+  if (!CmpInst)
+    return nullptr;
+  // Condition defined by a PHI, not a compare.
+  if (CmpInst->isPHI())
+    return nullptr;
+
+  assert(CmpInst->modifiesRegister(AMDGPU::SCC, &RI) &&
+         "uniform (SCC) loop condition must be defined by an in-block compare");
+
+  return std::make_unique<AMDGPUPipelinerLoopInfo>(CmpInst, Cond);
+}
+
 bool SIInstrInfo::canInsertSelect(const MachineBasicBlock &MBB,
                                   ArrayRef<MachineOperand> Cond,
                                   Register DstReg, Register TrueReg,

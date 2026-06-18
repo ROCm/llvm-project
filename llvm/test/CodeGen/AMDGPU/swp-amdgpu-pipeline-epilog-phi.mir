@@ -1,0 +1,88 @@
+# RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx950 -run-pass=pipeliner -pipeliner-force-ii=12 --verify-machineinstrs %s -o - | FileCheck %s
+# Two independent recurrences (a sum and a product) must be carried across the stage
+# boundary without being swapped: each accumulator's kernel result has to flow through
+# its own epilog PHI and drain op into its own store.
+
+# CHECK: bb.4.loop:
+# CHECK: [[PROD:%[0-9]+]]:vgpr_32 = nofpexcept V_MUL_F32_e32
+# CHECK: [[SUM:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32
+
+# CHECK: bb.5:
+# CHECK: [[SUMEP:%[0-9]+]]:vgpr_32 = PHI {{.*}}, [[SUM]], %bb.4
+# CHECK: [[PRODEP:%[0-9]+]]:vgpr_32 = PHI {{.*}}, [[PROD]], %bb.4
+# CHECK: [[SUMD:%[0-9]+]]:vgpr_32 = nofpexcept V_ADD_F32_e32 {{[^,]+}}, [[SUMEP]],
+# CHECK: [[PRODD:%[0-9]+]]:vgpr_32 = nofpexcept V_MUL_F32_e32 {{[^,]+}}, [[PRODEP]],
+
+# CHECK: bb.2.exit:
+# CHECK: GLOBAL_STORE_DWORD_SADDR {{[^,]+}}, [[SUMD]],
+# CHECK: GLOBAL_STORE_DWORD_SADDR {{[^,]+}}, [[PRODD]],
+
+--- |
+  define amdgpu_kernel void @swp_amdgpu_pipeline_epilog_phi(ptr addrspace(1) %p, ptr addrspace(1) %q, i32 inreg %n) #0 {
+  entry:
+    br label %loop
+  loop:
+    br label %loop
+  exit:
+    ret void
+  }
+
+  attributes #0 = { "target-cpu"="gfx950" }
+...
+---
+name:            swp_amdgpu_pipeline_epilog_phi
+alignment:       4
+tracksRegLiveness: true
+isSSA:           true
+liveins:
+  - { reg: '$sgpr4_sgpr5', virtual-reg: '%13' }
+machineFunctionInfo:
+  isEntryFunction: true
+  argumentInfo:
+    kernargSegmentPtr: { reg: '$sgpr4_sgpr5' }
+  stackPtrOffsetReg: '$sgpr32'
+  occupancy:       8
+body:             |
+  bb.0.entry:
+    successors: %bb.1(0x80000000)
+    liveins: $sgpr4_sgpr5
+
+    %13:sgpr_64(p4) = COPY $sgpr4_sgpr5
+    %22:sgpr_128 = S_LOAD_DWORDX4_IMM %13(p4), 0, 0 :: (dereferenceable invariant load (s128), addrspace 4)
+    %23:sreg_32_xm0_xexec = S_LOAD_DWORD_IMM %13(p4), 16, 0 :: (dereferenceable invariant load (s32), align 16, addrspace 4)
+    %26:sreg_64_xexec_xnull = REG_SEQUENCE %22.sub0, %subreg.sub0, %22.sub1, %subreg.sub1
+    %29:sreg_64_xexec_xnull = REG_SEQUENCE %22.sub2, %subreg.sub0, %22.sub3, %subreg.sub1
+    %19:sreg_32 = S_MOV_B32 0
+    %49:vgpr_32 = AV_MOV_B32_IMM_PSEUDO 1065353216, implicit $exec
+    %52:vgpr_32 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+
+  bb.1.loop:
+    successors: %bb.2(0x04000000), %bb.1(0x7c000000)
+
+    %2:sreg_32 = PHI %19, %bb.0, %7, %bb.1
+    %51:vgpr_32 = PHI %52, %bb.0, %39, %bb.1
+    %48:vgpr_32 = PHI %49, %bb.0, %41, %bb.1
+    %30:sreg_32_xm0 = S_ASHR_I32 %2, 31, implicit-def dead $scc
+    %32:sreg_64 = REG_SEQUENCE %2, %subreg.sub0, %30, %subreg.sub1
+    %34:sreg_64 = S_LSHL_B64 killed %32, 2, implicit-def dead $scc
+    %53:sreg_32 = S_ADD_U32 %26.sub0, %34.sub0, implicit-def $scc
+    %54:sreg_32 = S_ADDC_U32 %26.sub1, %34.sub1, implicit-def $scc, implicit $scc
+    %35:sreg_64 = REG_SEQUENCE %53, %subreg.sub0, %54, %subreg.sub1
+    %59:sreg_32 = S_ADD_U32 %29.sub0, %34.sub0, implicit-def $scc
+    %60:sreg_32 = S_ADDC_U32 %29.sub1, %34.sub1, implicit-def $scc, implicit $scc
+    %36:sreg_64 = REG_SEQUENCE %59, %subreg.sub0, %60, %subreg.sub1
+    %37:sgpr_32 = S_LOAD_DWORD_IMM killed %35, 0, 0 :: (load (s32), addrspace 1)
+    %38:sgpr_32 = S_LOAD_DWORD_IMM killed %36, 0, 0 :: (load (s32), addrspace 1)
+    %39:vgpr_32 = nofpexcept V_ADD_F32_e32 %37, %51, implicit $mode, implicit $exec
+    %41:vgpr_32 = nofpexcept V_MUL_F32_e32 %38, %48, implicit $mode, implicit $exec
+    %7:sreg_32 = S_ADD_I32 %2, 1, implicit-def dead $scc
+    S_CMP_LT_I32 %7, %23, implicit-def $scc
+    S_CBRANCH_SCC1 %bb.1, implicit $scc
+    S_BRANCH %bb.2
+
+  bb.2.exit:
+    %44:vgpr_32 = AV_MOV_B32_IMM_PSEUDO 0, implicit $exec
+    GLOBAL_STORE_DWORD_SADDR %44, %39, %26, 0, 0, implicit $exec :: (store (s32), addrspace 1)
+    GLOBAL_STORE_DWORD_SADDR %44, %41, %29, 0, 0, implicit $exec :: (store (s32), addrspace 1)
+    S_ENDPGM 0
+...
