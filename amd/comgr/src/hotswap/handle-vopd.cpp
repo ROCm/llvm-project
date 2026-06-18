@@ -106,7 +106,7 @@ Value *readVopdSource(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
     ParsedReg Pr;
     Pr.RegKind = Kind;
     Pr.BaseIdx = Src.BaseIdx;
-    Pr.Width = Src.Width;
+    Pr.WidthInDwords = Src.Width;
     return applyVopdVGPRMsb(Ctx, Pr, SrcSlot);
   };
   switch (Src.SrcKind) {
@@ -144,7 +144,7 @@ Value *readVopdSource(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
                      ? ParsedReg::EXEC_HI_SCRATCH
                      : ParsedReg::EXEC;
     Pr.BaseIdx = Src.BaseIdx;
-    Pr.Width = Src.Width;
+    Pr.WidthInDwords = Src.Width;
     V = Ctx.Regs.readReg32(Ctx.B, Pr);
     break;
   }
@@ -166,7 +166,7 @@ Value *readVopdSource64(RaiseContext &Ctx, const DecodedInst::VopdSource &Src,
     ParsedReg Pr;
     Pr.RegKind = Kind;
     Pr.BaseIdx = Src.BaseIdx;
-    Pr.Width = Src.Width;
+    Pr.WidthInDwords = Src.Width;
     return applyVopdVGPRMsb(Ctx, Pr, SrcSlot);
   };
 

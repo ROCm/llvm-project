@@ -232,7 +232,7 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
         // obstruction classifier's responsibility to refuse
         // (wave-size-obstruction.cpp).
         Type *SourceWidth =
-            (Ctx.Projection.sourceWaveScopedLaneOps() && D.Width >= 2)
+            (Ctx.Projection.sourceWaveScopedLaneOps() && D.WidthInDwords >= 2)
                 ? Ctx.I64Ty
                 : Ctx.Projection.sourceWaveMaskTy();
         Value *Mask = Ctx.Projection.ballotI1ToWidth(
@@ -270,7 +270,8 @@ HandlerResult handleValuVcmp(RaiseContext &Ctx, const DecodedInst &Di,
         // `ctx.invalidateSgprWaveMaskI1` to decide whether a
         // subsequent write to baseIdx+1 clobbers the pair's high
         // half and should invalidate this entry.
-        Ctx.recordSgprWaveMaskI1(D.BaseIdx, Cmp, /*isPair=*/D.Width >= 2);
+        Ctx.recordSgprWaveMaskI1(D.BaseIdx, Cmp,
+                                 /*isPair=*/D.WidthInDwords >= 2);
       } else if (D.RegKind == ParsedReg::VCC_HI_SCRATCH ||
                  D.RegKind == ParsedReg::EXEC_HI_SCRATCH) {
         // Wave32-source vcc_hi / exec_hi are free general-purpose wave-mask

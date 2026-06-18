@@ -61,7 +61,8 @@ const char *kindName(ParsedReg::Kind K) {
   report_fatal_error(Twine("transpiler: ") + Fn +
                      ": unhandled ParsedReg Kind " + kindName(Pr.RegKind) +
                      " (baseIdx=" + Twine(Pr.BaseIdx) +
-                     ", width=" + Twine(Pr.Width) + "). Caller must "
+                     ", width=" + Twine(Pr.WidthInDwords) +
+                     "). Caller must "
                      "handle NOREG / OTHER / MODE before dispatching "
                      "through readReg32/readReg64.");
 }
@@ -344,7 +345,7 @@ Value *AllocaRegFile::readReg32(IRBuilder<> &B, ParsedReg Pr) {
     // wave64 EXEC is i64; pick the correct half when reading a 32-bit
     // slice. width==2 reads are handled by readReg64 / readExecWidth;
     // this path is the width==1 case where baseIdx selects LO/HI.
-    if (Pr.Width >= 2)
+    if (Pr.WidthInDwords >= 2)
       return B.CreateTrunc(V, I32Ty, "exec_lo");
     if (Pr.BaseIdx == 1)
       V = B.CreateLShr(V, 32, "exec_hi_shr");
@@ -464,7 +465,7 @@ void AllocaRegFile::writeReg32(IRBuilder<> &B, ParsedReg Pr, Value *V) {
                        : B.CreateBitCast(V, I32Ty);
       }
     }
-    if (ExecTy == I32Ty || Pr.Width >= 2) {
+    if (ExecTy == I32Ty || Pr.WidthInDwords >= 2) {
       storeExec(B, V);
       return;
     }
@@ -588,7 +589,8 @@ void AllocaRegFile::writeRegExecWidth(IRBuilder<> &B, ParsedReg Pr, Value *V) {
     // replication done when the value was first read via
     // `readOpExecWidth` or computed by the `V_CMP -> SGPR` ballot.
     Type *SourceWidthTy =
-        (Projection && Projection->sourceWaveScopedLaneOps() && Pr.Width >= 2)
+        (Projection && Projection->sourceWaveScopedLaneOps() &&
+         Pr.WidthInDwords >= 2)
             ? B.getInt64Ty()
             : (Projection ? Projection->sourceWaveMaskTy() : ExecTy);
     if (V->getType() != SourceWidthTy) {
@@ -642,7 +644,7 @@ Value *AllocaRegFile::readRegVec(IRBuilder<> &B, ParsedReg Pr, Type *VecTy) {
   for (unsigned I = 0; I < TotalDwords; I++) {
     ParsedReg Sub = Pr;
     Sub.BaseIdx = Pr.BaseIdx + I;
-    Sub.Width = 1;
+    Sub.WidthInDwords = 1;
     Dwords.push_back(readReg32(B, Sub));
   }
 
@@ -675,7 +677,7 @@ void AllocaRegFile::writeRegVec(IRBuilder<> &B, ParsedReg Pr, Value *V) {
       Dw = B.CreateTrunc(B.CreateLShr(Packed, I * 32), I32Ty);
     ParsedReg Sub = Pr;
     Sub.BaseIdx = Pr.BaseIdx + I;
-    Sub.Width = 1;
+    Sub.WidthInDwords = 1;
     writeReg32(B, Sub, Dw);
   }
 }

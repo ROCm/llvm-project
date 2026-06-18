@@ -132,13 +132,13 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     // (wave64-widened) VCC mask written by `v_cmp` does not clobber it.
     if (Isa.isWave32()) {
       Pr.RegKind = ParsedReg::VCC_HI_SCRATCH;
-      Pr.Width = 1;
+      Pr.WidthInDwords = 1;
       return Pr;
     }
     [[fallthrough]];
   case AMDGPU::VCC_LO:
     Pr.RegKind = ParsedReg::VCC;
-    Pr.Width = Isa.isWave32() ? 1 : 2;
+    Pr.WidthInDwords = Isa.isWave32() ? 1 : 2;
     return Pr;
   case AMDGPU::EXEC_HI:
     // On a WAVE32 source, hardware EXEC is 32 bits (== EXEC_LO); EXEC_HI is a
@@ -149,7 +149,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     // wave32, never the mask.
     if (Isa.isWave32()) {
       Pr.RegKind = ParsedReg::EXEC_HI_SCRATCH;
-      Pr.Width = 1;
+      Pr.WidthInDwords = 1;
       return Pr;
     }
     [[fallthrough]];
@@ -160,24 +160,24 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
     // via `sub0(EXEC) = EXEC_LO`, but `width = 2` tags it distinctly so
     // storeExec partial-write logic can route correctly.
     Pr.BaseIdx = (Lane == AMDGPU::EXEC_HI) ? 1 : 0;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     return Pr;
   case AMDGPU::SCC:
     Pr.RegKind = ParsedReg::SCC;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   case AMDGPU::MODE:
     Pr.RegKind = ParsedReg::MODE;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   case AMDGPU::M0:
     Pr.RegKind = ParsedReg::M0;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   case AMDGPU::FLAT_SCR_LO:
   case AMDGPU::FLAT_SCR_HI:
     Pr.RegKind = ParsedReg::FLAT_SCR;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     return Pr;
   // GFX11+ uses SGPR_NULL / SGPR_NULL_HI (and the 64-bit pair SGPR_NULL64)
   // as carry-discard sinks, e.g. `v_mad_co_u64_u32 ..., null, ...`. They
@@ -200,7 +200,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // byte offset held in M0. Used as a VALU source after buffer_load_*_lds.
   case AMDGPU::LDS_DIRECT:
     Pr.RegKind = ParsedReg::LDS_DIRECT;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   // Source-only "compact predicate" registers
   // (SIRegisterInfo.td:198-200). They have no backing storage; their
@@ -210,15 +210,15 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   // gfx1250 Tensile kernels (e.g. `v_sub_f16 v64, src_vccz, v48`).
   case AMDGPU::SRC_VCCZ:
     Pr.RegKind = ParsedReg::SRC_VCCZ;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   case AMDGPU::SRC_EXECZ:
     Pr.RegKind = ParsedReg::SRC_EXECZ;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   case AMDGPU::SRC_SCC:
     Pr.RegKind = ParsedReg::SRC_SCC;
-    Pr.Width = 1;
+    Pr.WidthInDwords = 1;
     return Pr;
   // Aperture / runtime-defined source registers: SRC_SHARED_BASE /
   // _LIMIT, SRC_PRIVATE_BASE / _LIMIT, SRC_FLAT_SCRATCH_BASE_LO /
@@ -237,7 +237,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_LO:
   case AMDGPU::SRC_FLAT_SCRATCH_BASE_HI:
     Pr.RegKind = ParsedReg::OTHER;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     return Pr;
   default:
     break;
@@ -254,7 +254,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   if (Enc & AMDGPU::HWEncoding::IS_AGPR) {
     Pr.RegKind = ParsedReg::AGPR;
     Pr.BaseIdx = HwIdx;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     if (MciOpIdx >= 0 && static_cast<unsigned>(MciOpIdx) < KMaxOps)
       Pr.BaseIdx += CurrentVgprAdjust[MciOpIdx];
     return Pr;
@@ -262,7 +262,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   if (Enc & AMDGPU::HWEncoding::IS_VGPR) {
     Pr.RegKind = ParsedReg::VGPR;
     Pr.BaseIdx = HwIdx;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     if (MciOpIdx >= 0 && static_cast<unsigned>(MciOpIdx) < KMaxOps)
       Pr.BaseIdx += CurrentVgprAdjust[MciOpIdx];
     return Pr;
@@ -277,7 +277,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   if (int Idx = findIndexInClass(TTMP32, Lane); Idx >= 0) {
     Pr.RegKind = ParsedReg::TTMP;
     Pr.BaseIdx = Idx;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     return Pr;
   }
 
@@ -287,7 +287,7 @@ ParsedReg RaiseContext::parseReg(MCRegister Reg, int MciOpIdx) const {
   if (MRI.getRegClass(AMDGPU::SGPR_32RegClassID).contains(Lane)) {
     Pr.RegKind = ParsedReg::SGPR;
     Pr.BaseIdx = HwIdx;
-    Pr.Width = Width;
+    Pr.WidthInDwords = Width;
     return Pr;
   }
 
@@ -322,11 +322,11 @@ Value *RaiseContext::readOp32(const DecodedInst &Di, unsigned OpIdx) {
       Value *V = Regs.loadExec(B);
       if (V->getType() == I32Ty)
         return V;
-      if (Pr.Width < 2 && Pr.BaseIdx == 1)
+      if (Pr.WidthInDwords < 2 && Pr.BaseIdx == 1)
         V = B.CreateLShr(V, 32, "exec_hi_shr");
-      return B.CreateTrunc(V, I32Ty,
-                            (Pr.Width < 2 && Pr.BaseIdx == 1) ? "exec_hi"
-                                                               : "exec_lo");
+      return B.CreateTrunc(
+          V, I32Ty,
+          (Pr.WidthInDwords < 2 && Pr.BaseIdx == 1) ? "exec_hi" : "exec_lo");
     }
     if (Pr.RegKind == ParsedReg::SCC)
       return B.CreateZExt(Regs.loadSCC(B), I32Ty);
@@ -666,7 +666,7 @@ Value *RaiseContext::readOpExecWidth(const DecodedInst &Di, unsigned OpIdx) {
       return Regs.loadExec(B);
     if (Pr.RegKind == ParsedReg::SGPR) {
       Value *Narrow =
-          (Projection.sourceWaveScopedLaneOps() && Pr.Width >= 2)
+          (Projection.sourceWaveScopedLaneOps() && Pr.WidthInDwords >= 2)
               ? Regs.loadSGPR64(B, Pr.BaseIdx)
               : (Isa.isWave32() ? Regs.loadSGPR32(B, Pr.BaseIdx)
                                 : Regs.loadSGPR64(B, Pr.BaseIdx));

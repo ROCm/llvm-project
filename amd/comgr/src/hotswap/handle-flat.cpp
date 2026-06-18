@@ -320,7 +320,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
           for (unsigned D = 0; D < Dwords; ++D) {
             ParsedReg Sub = Dest;
             Sub.BaseIdx = Dest.BaseIdx + static_cast<int>(D);
-            Sub.Width = 1;
+            Sub.WidthInDwords = 1;
             Ctx.Regs.writeReg32(
                 Ctx.B, Sub,
                 Ctx.B.CreateExtractElement(Loaded, Ctx.B.getInt32(D)));
@@ -459,7 +459,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         for (int D = 0; D < LoadDwords; D++) {
           ParsedReg Sub = Dest;
           Sub.BaseIdx = Dest.BaseIdx + D;
-          Sub.Width = 1;
+          Sub.WidthInDwords = 1;
           Ctx.Regs.writeReg32(
               Ctx.B, Sub,
               Ctx.B.CreateExtractElement(Loaded, Ctx.B.getInt32(D)));
@@ -1170,7 +1170,7 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
         for (int D = 0; D < LoadDwords; D++) {
           ParsedReg Sub = Dest;
           Sub.BaseIdx = Dest.BaseIdx + D;
-          Sub.Width = 1;
+          Sub.WidthInDwords = 1;
           Ctx.Regs.writeReg32(
               Ctx.B, Sub,
               Ctx.B.CreateExtractElement(Loaded, Ctx.B.getInt32(D)));
@@ -1350,7 +1350,9 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       // CMPSWAP's vdata is a 2-vgpr pair (cmp, new); read low half as
       // cmpVal and the adjacent baseIdx+1 as newVal.
       Value *CmpVal = Data;
-      ParsedReg NewReg = StData; NewReg.BaseIdx += 1; NewReg.Width = 1;
+      ParsedReg NewReg = StData;
+      NewReg.BaseIdx += 1;
+      NewReg.WidthInDwords = 1;
       Value *NewVal = Ctx.Regs.readReg32(Ctx.B, NewReg);
       Ctx.emitUnderExec([&] {
         auto *Cas = Ctx.B.CreateAtomicCmpXchg(
@@ -1485,7 +1487,9 @@ HandlerResult handleFLAT(RaiseContext &Ctx, const DecodedInst &Di,
       // pair (cmpVal, newVal) in that order).  `fa.stData` is the
       // base of that pair; increment baseIdx to reach newVal.
       Value *CmpVal = Data;
-      ParsedReg NewReg = Fa.StData; NewReg.BaseIdx += 1; NewReg.Width = 1;
+      ParsedReg NewReg = Fa.StData;
+      NewReg.BaseIdx += 1;
+      NewReg.WidthInDwords = 1;
       Value *NewVal = Ctx.Regs.readReg32(Ctx.B, NewReg);
       Ctx.emitUnderExec([&] {
         auto *Cas = Ctx.B.CreateAtomicCmpXchg(

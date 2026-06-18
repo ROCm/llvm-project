@@ -519,7 +519,7 @@ HandlerResult handleDS(RaiseContext &Ctx, const DecodedInst &Di,
         auto SubReg = [&Dest](int Off) {
           ParsedReg R = Dest;
           R.BaseIdx = Dest.BaseIdx + Off;
-          R.Width = 1;
+          R.WidthInDwords = 1;
           return R;
         };
         // SPE-gate the pair of DS loads so phantom lanes (their

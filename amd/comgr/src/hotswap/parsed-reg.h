@@ -9,6 +9,8 @@
 #ifndef HOTSWAP_TRANSPILER_PARSED_REG_H
 #define HOTSWAP_TRANSPILER_PARSED_REG_H
 
+#include <cstdint>
+
 namespace COMGR::hotswap {
 
 struct ISAProfile;  // forward declaration
@@ -51,7 +53,9 @@ struct ParsedReg {
   };
   Kind RegKind = OTHER;
   int BaseIdx = -1;
-  int Width = 1;
+  // The width of the register in 32-bit double words, 1 means 32 bit, 2 means
+  // 64 bit.
+  uint8_t WidthInDwords = 1;
 };
 
 } // namespace COMGR::hotswap

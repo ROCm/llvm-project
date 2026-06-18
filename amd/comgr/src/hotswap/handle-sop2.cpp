@@ -180,7 +180,8 @@ static void recordDerivedWaveMaskI1(RaiseContext &Ctx, ParsedReg DstReg,
     return;
   switch (DstReg.RegKind) {
   case ParsedReg::SGPR:
-    Ctx.recordSgprWaveMaskI1(DstReg.BaseIdx, I1, /*isPair=*/DstReg.Width >= 2);
+    Ctx.recordSgprWaveMaskI1(DstReg.BaseIdx, I1,
+                             /*isPair=*/DstReg.WidthInDwords >= 2);
     return;
   case ParsedReg::VCC:
     // Overwrite VCC's stored i1 with the wave-width-correct value.

@@ -315,7 +315,7 @@ HandlerResult handleMUBUF(RaiseContext &Ctx, const DecodedInst &Di,
       Value *CmpVal = Ctx.Regs.readReg32(Ctx.B, DataPair);
       ParsedReg NewReg = DataPair;
       NewReg.BaseIdx += 1;
-      NewReg.Width = 1;
+      NewReg.WidthInDwords = 1;
       Value *NewVal = Ctx.Regs.readReg32(Ctx.B, NewReg);
       Function *CasFn = Intrinsic::getOrInsertDeclaration(
           &Ctx.M, Intrinsic::amdgcn_raw_buffer_atomic_cmpswap, {Ctx.I32Ty});
