@@ -20,6 +20,12 @@
 // RUN: unpackage %t.package.bc amdgcn-amd-amdhsa gfx1030 %t.gfx1030.output.bc
 // RUN: llvm-dis %t.gfx1030.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX10 %s
 //
+// COM: extract a compatible (non-exact) target. the package holds a plain
+// COM: gfx900 image, so requesting gfx900:xnack+ misses the exact lookup but
+// COM: is still compatible.
+// RUN: unpackage %t.package.bc amdgcn-amd-amdhsa gfx900:xnack+ %t.compat.output.bc
+// RUN: llvm-dis %t.compat.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX9 %s
+//
 // BOTH: target triple = "amdgcn-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"

@@ -1176,7 +1176,7 @@ amd_comgr_status_t AMD_COMGR_API
 
   // First return the sizes of the triple and arch strings; once the caller has
   // allocated memory and passed in both buffers, copy the strings.
-  if (Triple == NULL || Arch == NULL) {
+  if (!Triple || !Arch) {
     *TripleSize = EntryID.first.size() + 1;
     *ArchSize = EntryID.second.size() + 1;
   } else {
