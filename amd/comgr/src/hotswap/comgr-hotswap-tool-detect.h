@@ -42,6 +42,8 @@ inline bool gateAllowsHotswap(const std::string &Gfx, uint32_t Revision) {
 // True for a 64-bit gfx1250 AMDGPU ELF (aligned-copy header read, e_machine
 // checked). Raw ELF64 fields, no LLVM dependency (see file header).
 inline bool isGfx1250CodeObject(const void *Data, size_t Size) {
+  // Field names follow the ELF spec (cf. llvm::ELF::Elf64_Ehdr).
+  // NOLINTBEGIN(readability-identifier-naming)
   struct Elf64Header {
     unsigned char e_ident[16];
     uint16_t e_type;
@@ -58,6 +60,9 @@ inline bool isGfx1250CodeObject(const void *Data, size_t Size) {
     uint16_t e_shnum;
     uint16_t e_shstrndx;
   };
+  // NOLINTEND(readability-identifier-naming)
+  static_assert(sizeof(Elf64Header) == 64,
+                "Elf64Header must match the 64-byte ELF64 file header layout");
   static const unsigned char ElfMagic[4] = {0x7f, 'E', 'L', 'F'};
   constexpr int EiClass = 4;
   constexpr unsigned char ElfClass64 = 2;
