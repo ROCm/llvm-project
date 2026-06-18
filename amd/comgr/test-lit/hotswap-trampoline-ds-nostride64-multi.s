@@ -1,14 +1,9 @@
 // COM: Test multi-DS stacking for the non-stride64 DS 2-address family:
 // COM: two ds_load_2addr_b32 sites before a single s_wait_dscnt 0x0
-// COM: (drain). Both splits target the same wait, but because it is a
-// COM: drain it must stay at 0x0 after the patch -- bumping it (to 0x1
-// COM: or 0x2) would relax the wait and let split halves escape past it.
-// COM:
-// COM: The Ctx.Decoded writeback path itself (the ROCm/llvm-project#2281
-// COM: review concern raised by @yxsamliu, that adjacent splits before the
-// COM: same wait must accumulate bumps via in-place imm update) is
-// COM: exercised by the non-drain bump test hotswap-trampoline-ds-pipelined.s,
-// COM: whose multi-split kernel walks the wait from 0x1 to 0x3.
+// COM: (drain). Each split is expanded into two single-address loads
+// COM: followed by its own s_wait_dscnt 0x0 drain, and the pre-existing
+// COM: downstream drain is left in place -- so both split halves always
+// COM: complete before any consumer.
 // COM:
 // COM: Companion test:
 // COM:   hotswap-trampoline-ds-nostride64.s -- non-stride64 base case
