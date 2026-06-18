@@ -63,7 +63,6 @@ add_comgr_lit_binary(hotswap-rewrite c)
 add_comgr_lit_binary(parse-isa-name c)
 add_comgr_lit_binary(name-expression-map c)
 add_comgr_lit_binary(isa-enumeration c)
-add_comgr_lit_binary(get-data-isa-name-linux c)
-add_comgr_lit_binary(get-data-isa-name-windows c)
+add_comgr_lit_binary(get-data-isa-name c)
 
 add_dependencies(check-comgr test-lit)

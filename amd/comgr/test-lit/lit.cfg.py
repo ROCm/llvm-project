@@ -1,5 +1,6 @@
 import os
 import platform
+import sys
 
 import lit.formats
 
@@ -55,3 +56,6 @@ config.substitutions.append(("%FileCheck", _fwd(config.llvm_tools_dir, "FileChec
 config.substitutions.append(
     ("%amd-llvm-spirv", _fwd(config.llvm_tools_dir, "amd-llvm-spirv"))
 )
+
+# Interpreter used to run Python test helpers (e.g. enumerate-isa-check.py).
+config.substitutions.append(("%python", _fwd(sys.executable)))
