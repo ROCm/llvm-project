@@ -814,15 +814,18 @@ define amdgpu_kernel void @cse_uniform_condition_different_blocks(i32 %cond, ptr
 ; SI-NEXT:    s_cmp_lt_i32 s0, 1
 ; SI-NEXT:    s_cbranch_scc1 .LBB14_2
 ; SI-NEXT:  ; %bb.1: ; %bb2
-; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0xb
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
 ; SI-NEXT:    s_mov_b32 s2, -1
+; SI-NEXT:    s_mov_b32 s10, s2
+; SI-NEXT:    s_mov_b32 s11, s3
+; SI-NEXT:    ; implicit-def: $sgpr8
+; SI-NEXT:    ; implicit-def: $sgpr9
+; SI-NEXT:    buffer_load_dword v0, off, s[8:11], 0 glc
+; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0xb
 ; SI-NEXT:    v_mov_b32_e32 v1, 0
-; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
-; SI-NEXT:    s_waitcnt vmcnt(0)
-; SI-NEXT:    buffer_store_dword v1, off, s[0:3], 0
-; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    buffer_store_dword v1, off, s[8:11], 0
+; SI-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:  .LBB14_2: ; %bb9
 ; SI-NEXT:    s_endpgm
@@ -834,15 +837,18 @@ define amdgpu_kernel void @cse_uniform_condition_different_blocks(i32 %cond, ptr
 ; VI-NEXT:    s_cmp_lt_i32 s0, 1
 ; VI-NEXT:    s_cbranch_scc1 .LBB14_2
 ; VI-NEXT:  ; %bb.1: ; %bb2
-; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x2c
 ; VI-NEXT:    s_mov_b32 s3, 0xf000
 ; VI-NEXT:    s_mov_b32 s2, -1
+; VI-NEXT:    s_mov_b32 s10, s2
+; VI-NEXT:    s_mov_b32 s11, s3
+; VI-NEXT:    ; implicit-def: $sgpr8
+; VI-NEXT:    ; implicit-def: $sgpr9
+; VI-NEXT:    buffer_load_dword v0, off, s[8:11], 0 glc
+; VI-NEXT:    s_waitcnt vmcnt(0)
+; VI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x2c
 ; VI-NEXT:    v_mov_b32_e32 v1, 0
-; VI-NEXT:    s_waitcnt lgkmcnt(0)
-; VI-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
-; VI-NEXT:    s_waitcnt vmcnt(0)
-; VI-NEXT:    buffer_store_dword v1, off, s[0:3], 0
-; VI-NEXT:    s_waitcnt vmcnt(0)
+; VI-NEXT:    buffer_store_dword v1, off, s[8:11], 0
+; VI-NEXT:    s_waitcnt vmcnt(0) lgkmcnt(0)
 ; VI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; VI-NEXT:  .LBB14_2: ; %bb9
 ; VI-NEXT:    s_endpgm

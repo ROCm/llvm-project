@@ -1773,6 +1773,8 @@ define amdgpu_kernel void @v_ctlz_zero_poison_i32_sel_eq_neg1_two_use(ptr addrsp
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
 ; SI-NEXT:    buffer_store_dword v1, off, s[4:7], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_endpgm

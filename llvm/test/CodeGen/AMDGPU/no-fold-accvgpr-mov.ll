@@ -34,8 +34,9 @@ define amdgpu_kernel void @matmul_kernel(i32 %a0, i32 %a1) {
 ; GFX942-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX942-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX942-NEXT:    s_cbranch_vccz .LBB0_1
-; GFX942-NEXT:  ; %bb.3:
+; GFX942-NEXT:  ; %bb.3: ; in Loop: Header=BB0_2 Depth=1
 ; GFX942-NEXT:    ; implicit-def: $sgpr6
+; GFX942-NEXT:    ; implicit-def: $vgpr0
 ; GFX942-NEXT:  .LBB0_4: ; %common.ret
 ; GFX942-NEXT:    s_endpgm
 ;
@@ -74,7 +75,7 @@ define amdgpu_kernel void @matmul_kernel(i32 %a0, i32 %a1) {
 ; GFX908-NEXT:    ; =>This Inner Loop Header: Depth=1
 ; GFX908-NEXT:    s_and_b64 vcc, exec, s[0:1]
 ; GFX908-NEXT:    s_cbranch_vccz .LBB0_1
-; GFX908-NEXT:  ; %bb.3:
+; GFX908-NEXT:  ; %bb.3: ; in Loop: Header=BB0_2 Depth=1
 ; GFX908-NEXT:    ; implicit-def: $sgpr3
 ; GFX908-NEXT:    ; implicit-def: $agpr2
 ; GFX908-NEXT:  .LBB0_4: ; %common.ret

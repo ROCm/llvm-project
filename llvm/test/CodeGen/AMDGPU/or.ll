@@ -281,12 +281,14 @@ define amdgpu_kernel void @scalar_or_literal_multi_use_i64(ptr addrspace(1) %out
 ; GFX6-NEXT:    v_mov_b32_e32 v0, s6
 ; GFX6-NEXT:    s_mov_b32 s2, -1
 ; GFX6-NEXT:    v_mov_b32_e32 v1, s7
+; GFX6-NEXT:    s_add_u32 s4, s4, 0x3039
 ; GFX6-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
-; GFX6-NEXT:    s_add_u32 s0, s4, 0x3039
-; GFX6-NEXT:    s_addc_u32 s1, s5, 0xf237b
+; GFX6-NEXT:    s_addc_u32 s5, s5, 0xf237b
 ; GFX6-NEXT:    s_waitcnt expcnt(0)
-; GFX6-NEXT:    v_mov_b32_e32 v0, s0
-; GFX6-NEXT:    v_mov_b32_e32 v1, s1
+; GFX6-NEXT:    v_mov_b32_e32 v0, s4
+; GFX6-NEXT:    v_mov_b32_e32 v1, s5
+; GFX6-NEXT:    ; implicit-def: $sgpr0
+; GFX6-NEXT:    ; implicit-def: $sgpr1
 ; GFX6-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; GFX6-NEXT:    s_waitcnt vmcnt(0)
 ; GFX6-NEXT:    s_endpgm
@@ -304,11 +306,13 @@ define amdgpu_kernel void @scalar_or_literal_multi_use_i64(ptr addrspace(1) %out
 ; GFX8-NEXT:    s_mov_b32 s3, 0xf000
 ; GFX8-NEXT:    s_mov_b32 s2, -1
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s7
+; GFX8-NEXT:    s_add_u32 s4, s4, 0x3039
 ; GFX8-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
-; GFX8-NEXT:    s_add_u32 s0, s4, 0x3039
-; GFX8-NEXT:    s_addc_u32 s1, s5, 0xf237b
-; GFX8-NEXT:    v_mov_b32_e32 v0, s0
-; GFX8-NEXT:    v_mov_b32_e32 v1, s1
+; GFX8-NEXT:    s_addc_u32 s5, s5, 0xf237b
+; GFX8-NEXT:    v_mov_b32_e32 v0, s4
+; GFX8-NEXT:    v_mov_b32_e32 v1, s5
+; GFX8-NEXT:    ; implicit-def: $sgpr0
+; GFX8-NEXT:    ; implicit-def: $sgpr1
 ; GFX8-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_endpgm
@@ -370,6 +374,8 @@ define amdgpu_kernel void @scalar_or_inline_imm_multi_use_i64(ptr addrspace(1) %
 ; GFX6-NEXT:    s_waitcnt expcnt(0)
 ; GFX6-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX6-NEXT:    v_mov_b32_e32 v1, s1
+; GFX6-NEXT:    ; implicit-def: $sgpr4
+; GFX6-NEXT:    ; implicit-def: $sgpr5
 ; GFX6-NEXT:    buffer_store_dwordx2 v[0:1], off, s[4:7], 0
 ; GFX6-NEXT:    s_waitcnt vmcnt(0)
 ; GFX6-NEXT:    s_endpgm
@@ -391,6 +397,8 @@ define amdgpu_kernel void @scalar_or_inline_imm_multi_use_i64(ptr addrspace(1) %
 ; GFX8-NEXT:    s_addc_u32 s1, s9, 0
 ; GFX8-NEXT:    v_mov_b32_e32 v0, s0
 ; GFX8-NEXT:    v_mov_b32_e32 v1, s1
+; GFX8-NEXT:    ; implicit-def: $sgpr4
+; GFX8-NEXT:    ; implicit-def: $sgpr5
 ; GFX8-NEXT:    buffer_store_dwordx2 v[0:1], off, s[4:7], 0
 ; GFX8-NEXT:    s_waitcnt vmcnt(0)
 ; GFX8-NEXT:    s_endpgm

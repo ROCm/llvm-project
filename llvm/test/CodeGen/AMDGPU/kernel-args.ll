@@ -4890,11 +4890,12 @@ define amdgpu_kernel void @i1_arg_sext_i32(ptr addrspace(1) %out, i1 %x) nounwin
 define amdgpu_kernel void @i1_arg_sext_i64(ptr addrspace(1) %out, i1 %x) nounwind {
 ; SI-LABEL: i1_arg_sext_i64:
 ; SI:       ; %bb.0:
-; SI-NEXT:    s_load_dword s2, s[4:5], 0xb
+; SI-NEXT:    s_load_dword s6, s[4:5], 0xb
 ; SI-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s3, 0xf000
+; SI-NEXT:    ; implicit-def: $sgpr7
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
-; SI-NEXT:    s_bfe_i64 s[4:5], s[2:3], 0x10000
+; SI-NEXT:    s_bfe_i64 s[4:5], s[6:7], 0x10000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    v_mov_b32_e32 v1, s5
@@ -4905,6 +4906,7 @@ define amdgpu_kernel void @i1_arg_sext_i64(ptr addrspace(1) %out, i1 %x) nounwin
 ; VI:       ; %bb.0:
 ; VI-NEXT:    s_load_dword s0, s[4:5], 0x2c
 ; VI-NEXT:    s_load_dwordx2 s[2:3], s[4:5], 0x24
+; VI-NEXT:    ; implicit-def: $sgpr1
 ; VI-NEXT:    s_waitcnt lgkmcnt(0)
 ; VI-NEXT:    s_bfe_i64 s[0:1], s[0:1], 0x10000
 ; VI-NEXT:    v_mov_b32_e32 v0, s2
@@ -4918,6 +4920,7 @@ define amdgpu_kernel void @i1_arg_sext_i64(ptr addrspace(1) %out, i1 %x) nounwin
 ; GFX9:       ; %bb.0:
 ; GFX9-NEXT:    s_load_dword s0, s[8:9], 0x8
 ; GFX9-NEXT:    s_load_dwordx2 s[2:3], s[8:9], 0x0
+; GFX9-NEXT:    ; implicit-def: $sgpr1
 ; GFX9-NEXT:    v_mov_b32_e32 v2, 0
 ; GFX9-NEXT:    s_waitcnt lgkmcnt(0)
 ; GFX9-NEXT:    s_bfe_i64 s[0:1], s[0:1], 0x10000
@@ -5482,6 +5485,8 @@ define amdgpu_kernel void @array_3xi32(i16 %arg0, [3 x i32] %arg1) {
 ; SI-NEXT:    s_load_dwordx4 s[0:3], s[4:5], 0x9
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    v_mov_b32_e32 v0, s0
 ; SI-NEXT:    buffer_store_short v0, off, s[4:7], 0
@@ -5599,6 +5604,8 @@ define amdgpu_kernel void @array_3xi16(i8 %arg0, [3 x i16] %arg1) {
 ; SI-NEXT:    buffer_load_ushort v0, off, s[4:7], 0 offset:42
 ; SI-NEXT:    buffer_load_ushort v1, off, s[4:7], 0 offset:40
 ; SI-NEXT:    buffer_load_ushort v2, off, s[4:7], 0 offset:38
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    s_waitcnt lgkmcnt(0)
 ; SI-NEXT:    v_mov_b32_e32 v3, s0
 ; SI-NEXT:    buffer_store_byte v3, off, s[4:7], 0
@@ -5766,6 +5773,8 @@ define amdgpu_kernel void @small_array_round_down_offset(i8, [1 x i8] %arg) {
 ; SI-NEXT:    s_mov_b32 s7, 0xf000
 ; SI-NEXT:    s_mov_b32 s6, -1
 ; SI-NEXT:    buffer_load_ubyte v0, off, s[4:7], 0 offset:37
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)

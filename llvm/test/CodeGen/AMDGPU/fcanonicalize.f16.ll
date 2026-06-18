@@ -100,6 +100,8 @@ define amdgpu_kernel void @v_test_canonicalize_var_f16(ptr addrspace(1) %out) #1
 ; CI-NEXT:    s_mov_b32 s2, -1
 ; CI-NEXT:    s_waitcnt lgkmcnt(0)
 ; CI-NEXT:    buffer_load_ushort v0, off, s[0:3], 0
+; CI-NEXT:    ; implicit-def: $sgpr0
+; CI-NEXT:    ; implicit-def: $sgpr1
 ; CI-NEXT:    s_waitcnt vmcnt(0)
 ; CI-NEXT:    v_cvt_f32_f16_e32 v0, v0
 ; CI-NEXT:    v_cvt_f16_f32_e32 v0, v0
@@ -2626,6 +2628,7 @@ define <2 x half> @v_test_canonicalize_undef_reg_v2f16(half %val) #1 {
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.h, v0.l, v0.l
+; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr0_lo16
 ; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_test_canonicalize_undef_reg_v2f16:

@@ -22,6 +22,8 @@ define amdgpu_kernel void @is_private_vgpr(ptr addrspace(1) %ptr.ptr) {
 ; SI-NEXT:    buffer_load_dwordx2 v[0:1], v[0:1], s[0:3], 0 addr64 glc
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_mov_b32 s2, -1
+; SI-NEXT:    ; implicit-def: $sgpr0
+; SI-NEXT:    ; implicit-def: $sgpr1
 ; SI-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v1
 ; SI-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
@@ -146,6 +148,8 @@ define amdgpu_kernel void @is_private_sgpr(ptr %ptr) {
 ; SI-NEXT:    s_mov_b32 s3, 0x100f000
 ; SI-NEXT:    s_mov_b32 s2, -1
 ; SI-NEXT:    v_mov_b32_e32 v0, 0
+; SI-NEXT:    ; implicit-def: $sgpr0
+; SI-NEXT:    ; implicit-def: $sgpr1
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:  .LBB1_2: ; %bb1

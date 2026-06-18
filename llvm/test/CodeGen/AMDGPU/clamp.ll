@@ -448,6 +448,8 @@ define amdgpu_kernel void @v_clamp_multi_use_max_f32(ptr addrspace(1) %out, ptr 
 ; GFX6-NEXT:    buffer_load_dword v2, v[0:1], s[4:7], 0 addr64
 ; GFX6-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; GFX6-NEXT:    s_mov_b32 s6, -1
+; GFX6-NEXT:    ; implicit-def: $sgpr4
+; GFX6-NEXT:    ; implicit-def: $sgpr5
 ; GFX6-NEXT:    s_waitcnt vmcnt(0)
 ; GFX6-NEXT:    v_mul_f32_e32 v2, 1.0, v2
 ; GFX6-NEXT:    v_max_f32_e32 v2, 0, v2

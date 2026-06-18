@@ -1806,7 +1806,7 @@ define amdgpu_ps <4 x float> @test_loop_vcc(<4 x float> %in) #0 {
 ; GFX1032-NEXT:    v_mov_b32_e32 v2, v6
 ; GFX1032-NEXT:    v_mov_b32_e32 v3, v7
 ; GFX1032-NEXT:    s_cbranch_vccz .LBB33_1
-; GFX1032-NEXT:  ; %bb.3:
+; GFX1032-NEXT:  ; %bb.3: ; in Loop: Header=BB33_2 Depth=1
 ; GFX1032-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7
 ; GFX1032-NEXT:    ; implicit-def: $vgpr8
 ; GFX1032-NEXT:  .LBB33_4: ; %break
@@ -1838,7 +1838,7 @@ define amdgpu_ps <4 x float> @test_loop_vcc(<4 x float> %in) #0 {
 ; GFX1064-NEXT:    v_mov_b32_e32 v2, v6
 ; GFX1064-NEXT:    v_mov_b32_e32 v3, v7
 ; GFX1064-NEXT:    s_cbranch_vccz .LBB33_1
-; GFX1064-NEXT:  ; %bb.3:
+; GFX1064-NEXT:  ; %bb.3: ; in Loop: Header=BB33_2 Depth=1
 ; GFX1064-NEXT:    ; implicit-def: $vgpr4_vgpr5_vgpr6_vgpr7
 ; GFX1064-NEXT:    ; implicit-def: $vgpr8
 ; GFX1064-NEXT:  .LBB33_4: ; %break
@@ -2280,11 +2280,12 @@ define amdgpu_kernel void @test_branch_true() #2 {
 ; GFX1032-NEXT:    s_cbranch_execnz .LBB45_2
 ; GFX1032-NEXT:  ; %bb.1: ; %for.body.lr.ph
 ; GFX1032-NEXT:    s_branch .LBB45_3
-; GFX1032-NEXT:  .LBB45_2: ; %Flow
+; GFX1032-NEXT:  .LBB45_2: ; %Flow1
 ; GFX1032-NEXT:    s_branch .LBB45_5
 ; GFX1032-NEXT:  .LBB45_3: ; %for.body
-; GFX1032-NEXT:    s_mov_b32 vcc_lo, 0
-; GFX1032-NEXT:  ; %bb.4: ; %for.end.loopexit
+; GFX1032-NEXT:    ; =>This Inner Loop Header: Depth=1
+; GFX1032-NEXT:    s_cbranch_scc1 .LBB45_3
+; GFX1032-NEXT:  ; %bb.4: ; %Flow
 ; GFX1032-NEXT:    s_branch .LBB45_2
 ; GFX1032-NEXT:  .LBB45_5: ; %for.end
 ; GFX1032-NEXT:    s_endpgm
@@ -2295,11 +2296,12 @@ define amdgpu_kernel void @test_branch_true() #2 {
 ; GFX1064-NEXT:    s_cbranch_execnz .LBB45_2
 ; GFX1064-NEXT:  ; %bb.1: ; %for.body.lr.ph
 ; GFX1064-NEXT:    s_branch .LBB45_3
-; GFX1064-NEXT:  .LBB45_2: ; %Flow
+; GFX1064-NEXT:  .LBB45_2: ; %Flow1
 ; GFX1064-NEXT:    s_branch .LBB45_5
 ; GFX1064-NEXT:  .LBB45_3: ; %for.body
-; GFX1064-NEXT:    s_mov_b64 vcc, 0
-; GFX1064-NEXT:  ; %bb.4: ; %for.end.loopexit
+; GFX1064-NEXT:    ; =>This Inner Loop Header: Depth=1
+; GFX1064-NEXT:    s_cbranch_scc1 .LBB45_3
+; GFX1064-NEXT:  ; %bb.4: ; %Flow
 ; GFX1064-NEXT:    s_branch .LBB45_2
 ; GFX1064-NEXT:  .LBB45_5: ; %for.end
 ; GFX1064-NEXT:    s_endpgm

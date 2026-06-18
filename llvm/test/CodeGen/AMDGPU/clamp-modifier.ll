@@ -86,6 +86,8 @@ define amdgpu_kernel void @v_clamp_multi_use_src_f32(ptr addrspace(1) %out, ptr 
 ; SI-NEXT:    buffer_load_dword v2, v[0:1], s[4:7], 0 addr64
 ; SI-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; SI-NEXT:    s_mov_b32 s6, -1
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    v_add_f32_e32 v2, 1.0, v2
 ; SI-NEXT:    v_max_f32_e64 v3, v2, v2 clamp

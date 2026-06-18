@@ -667,12 +667,14 @@ define amdgpu_kernel void @scalar_xor_literal_multi_use_i64(ptr addrspace(1) %ou
 ; SI-NEXT:    s_xor_b64 s[4:5], s[4:5], s[8:9]
 ; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    v_mov_b32_e32 v1, s5
+; SI-NEXT:    s_add_u32 s4, s6, 0x3039
 ; SI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
-; SI-NEXT:    s_add_u32 s0, s6, 0x3039
-; SI-NEXT:    s_addc_u32 s1, s7, 0xf237b
+; SI-NEXT:    s_addc_u32 s5, s7, 0xf237b
 ; SI-NEXT:    s_waitcnt expcnt(0)
-; SI-NEXT:    v_mov_b32_e32 v0, s0
-; SI-NEXT:    v_mov_b32_e32 v1, s1
+; SI-NEXT:    v_mov_b32_e32 v0, s4
+; SI-NEXT:    v_mov_b32_e32 v1, s5
+; SI-NEXT:    ; implicit-def: $sgpr0
+; SI-NEXT:    ; implicit-def: $sgpr1
 ; SI-NEXT:    buffer_store_dwordx2 v[0:1], off, s[0:3], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_endpgm

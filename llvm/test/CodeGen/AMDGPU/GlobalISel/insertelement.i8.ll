@@ -204,6 +204,7 @@ define amdgpu_ps void @insertelement_v_v2i8_s_s(ptr addrspace(1) %ptr, i8 inreg 
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    global_load_u16 v1, v[0:1], off
 ; GFX11-TRUE16-NEXT:    s_mov_b32 m0, s3
+; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr2_hi16
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b16 v2.l, 8, v1.l
 ; GFX11-TRUE16-NEXT:    v_movreld_b32_e32 v1, s2
@@ -737,6 +738,7 @@ define amdgpu_ps void @insertelement_v_v2i8_s_v(ptr addrspace(1) %ptr, i8 inreg 
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    global_load_u16 v0, v[0:1], off
 ; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v2
+; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr1_hi16
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b16 v1.l, 8, v0.l
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_3)
@@ -850,6 +852,7 @@ define amdgpu_ps void @insertelement_v_v2i8_v_s(ptr addrspace(1) %ptr, i8 %val, 
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    global_load_u16 v3, v[0:1], off
 ; GFX11-TRUE16-NEXT:    s_mov_b32 m0, s2
+; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr4_hi16
 ; GFX11-TRUE16-NEXT:    v_mov_b32_e32 v1, 0
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b16 v4.l, 8, v3.l
@@ -964,6 +967,7 @@ define amdgpu_ps void @insertelement_v_v2i8_v_v(ptr addrspace(1) %ptr, i8 %val, 
 ; GFX11-TRUE16:       ; %bb.0:
 ; GFX11-TRUE16-NEXT:    global_load_u16 v0, v[0:1], off
 ; GFX11-TRUE16-NEXT:    v_cmp_eq_u32_e32 vcc_lo, 1, v3
+; GFX11-TRUE16-NEXT:    ; implicit-def: $vgpr1_hi16
 ; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0)
 ; GFX11-TRUE16-NEXT:    v_lshrrev_b16 v1.l, 8, v0.l
 ; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)

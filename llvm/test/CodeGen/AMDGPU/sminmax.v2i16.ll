@@ -974,6 +974,8 @@ define amdgpu_kernel void @v_min_max_v2i16_user(ptr addrspace(1) %out0, ptr addr
 ; CI-NEXT:    v_cndmask_b32_e64 v1, 0, 1, vcc
 ; CI-NEXT:    v_or_b32_e32 v0, v1, v0
 ; CI-NEXT:    v_and_b32_e32 v0, 3, v0
+; CI-NEXT:    ; implicit-def: $sgpr4
+; CI-NEXT:    ; implicit-def: $sgpr5
 ; CI-NEXT:    buffer_store_byte v0, off, s[4:7], 0
 ; CI-NEXT:    s_waitcnt vmcnt(0)
 ; CI-NEXT:    s_endpgm

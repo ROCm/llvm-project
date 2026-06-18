@@ -115,6 +115,7 @@ define half @v_minimumnum_f16(half %x, half %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e32 v0.h, v1.l, v1.l
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16:
@@ -151,6 +152,7 @@ define half @v_minimumnum_f16(half %x, half %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.h, v1.l, v1.l
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16:
@@ -195,6 +197,7 @@ define half @v_minimumnum_f16(half %x, half %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.h, v1.l, v1.l
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16:
@@ -263,11 +266,18 @@ define half @v_minimumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX10-NEXT:    v_min_f16_e32 v0, v0, v1
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-TRUE16-LABEL: v_minimumnum_f16_nnan:
-; GFX11-TRUE16:       ; %bb.0:
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
-; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-SDAG-LABEL: v_minimumnum_f16_nnan:
+; GFX11-TRUE16-SDAG:       ; %bb.0:
+; GFX11-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-SDAG-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-TRUE16-GISEL-LABEL: v_minimumnum_f16_nnan:
+; GFX11-TRUE16-GISEL:       ; %bb.0:
+; GFX11-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_minimumnum_f16_nnan:
 ; GFX11-FAKE16:       ; %bb.0:
@@ -275,11 +285,18 @@ define half @v_minimumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX11-FAKE16-NEXT:    v_min_f16_e32 v0, v0, v1
 ; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1170-TRUE16-LABEL: v_minimumnum_f16_nnan:
-; GFX1170-TRUE16:       ; %bb.0:
-; GFX1170-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1170-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
-; GFX1170-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX1170-TRUE16-SDAG-LABEL: v_minimumnum_f16_nnan:
+; GFX1170-TRUE16-SDAG:       ; %bb.0:
+; GFX1170-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX1170-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX1170-TRUE16-GISEL-LABEL: v_minimumnum_f16_nnan:
+; GFX1170-TRUE16-GISEL:       ; %bb.0:
+; GFX1170-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-LABEL: v_minimumnum_f16_nnan:
 ; GFX1170-FAKE16:       ; %bb.0:
@@ -287,15 +304,26 @@ define half @v_minimumnum_f16_nnan(half %x, half %y) #1 {
 ; GFX1170-FAKE16-NEXT:    v_min_num_f16_e32 v0, v0, v1
 ; GFX1170-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX12-TRUE16-LABEL: v_minimumnum_f16_nnan:
-; GFX12-TRUE16:       ; %bb.0:
-; GFX12-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_expcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
-; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX12-TRUE16-SDAG-LABEL: v_minimumnum_f16_nnan:
+; GFX12-TRUE16-SDAG:       ; %bb.0:
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX12-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX12-TRUE16-GISEL-LABEL: v_minimumnum_f16_nnan:
+; GFX12-TRUE16-GISEL:       ; %bb.0:
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_minimumnum_f16_nnan:
 ; GFX12-FAKE16:       ; %bb.0:
@@ -340,13 +368,22 @@ define half @v_minimumnum_f16_1.0(half %x) #1 {
 ; GFX10-NEXT:    v_min_f16_e32 v0, 1.0, v0
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-TRUE16-LABEL: v_minimumnum_f16_1.0:
-; GFX11-TRUE16:       ; %bb.0:
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.l
-; GFX11-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX11-TRUE16-NEXT:    v_min_f16_e32 v0.l, 1.0, v0.l
-; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-SDAG-LABEL: v_minimumnum_f16_1.0:
+; GFX11-TRUE16-SDAG:       ; %bb.0:
+; GFX11-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-SDAG-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.l
+; GFX11-TRUE16-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-SDAG-NEXT:    v_min_f16_e32 v0.l, 1.0, v0.l
+; GFX11-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-TRUE16-GISEL-LABEL: v_minimumnum_f16_1.0:
+; GFX11-TRUE16-GISEL:       ; %bb.0:
+; GFX11-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e32 v0.l, v0.l, v0.l
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, 1.0, v0.l
+; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_minimumnum_f16_1.0:
 ; GFX11-FAKE16:       ; %bb.0:
@@ -356,13 +393,22 @@ define half @v_minimumnum_f16_1.0(half %x) #1 {
 ; GFX11-FAKE16-NEXT:    v_min_f16_e32 v0, 1.0, v0
 ; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1170-TRUE16-LABEL: v_minimumnum_f16_1.0:
-; GFX1170-TRUE16:       ; %bb.0:
-; GFX1170-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1170-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
-; GFX1170-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX1170-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
-; GFX1170-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX1170-TRUE16-SDAG-LABEL: v_minimumnum_f16_1.0:
+; GFX1170-TRUE16-SDAG:       ; %bb.0:
+; GFX1170-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-SDAG-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
+; GFX1170-TRUE16-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1170-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
+; GFX1170-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX1170-TRUE16-GISEL-LABEL: v_minimumnum_f16_1.0:
+; GFX1170-TRUE16-GISEL:       ; %bb.0:
+; GFX1170-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
+; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-LABEL: v_minimumnum_f16_1.0:
 ; GFX1170-FAKE16:       ; %bb.0:
@@ -372,17 +418,30 @@ define half @v_minimumnum_f16_1.0(half %x) #1 {
 ; GFX1170-FAKE16-NEXT:    v_min_num_f16_e32 v0, 1.0, v0
 ; GFX1170-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX12-TRUE16-LABEL: v_minimumnum_f16_1.0:
-; GFX12-TRUE16:       ; %bb.0:
-; GFX12-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_expcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
-; GFX12-TRUE16-NEXT:    s_delay_alu instid0(VALU_DEP_1)
-; GFX12-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
-; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX12-TRUE16-SDAG-LABEL: v_minimumnum_f16_1.0:
+; GFX12-TRUE16-SDAG:       ; %bb.0:
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
+; GFX12-TRUE16-SDAG-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
+; GFX12-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX12-TRUE16-GISEL-LABEL: v_minimumnum_f16_1.0:
+; GFX12-TRUE16-GISEL:       ; %bb.0:
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.l, v0.l, v0.l
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
+; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, 1.0, v0.l
+; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_minimumnum_f16_1.0:
 ; GFX12-FAKE16:       ; %bb.0:
@@ -1168,6 +1227,7 @@ define half @v_minimumnum_f16_v_s(half %x, half inreg %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, s0, s0
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_v_s:
@@ -1204,6 +1264,7 @@ define half @v_minimumnum_f16_v_s(half %x, half inreg %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, s0, s0
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_v_s:
@@ -1248,6 +1309,7 @@ define half @v_minimumnum_f16_v_s(half %x, half inreg %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, s0, s0
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_v_s:
@@ -1378,6 +1440,7 @@ define half @v_minimumnum_f16_s_s(half inreg %x, half inreg %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, s1, s1
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_s_s:
@@ -1412,6 +1475,8 @@ define half @v_minimumnum_f16_s_s(half inreg %x, half inreg %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.l, s0, s0
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v1.l, s1, s1
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr1_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_readfirstlane_b32 s0, v0
 ; GFX1170-TRUE16-GISEL-NEXT:    v_readfirstlane_b32 s1, v1
@@ -1464,6 +1529,8 @@ define half @v_minimumnum_f16_s_s(half inreg %x, half inreg %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    s_wait_kmcnt 0x0
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.l, s0, s0
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v1.l, s1, s1
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr1_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
 ; GFX12-TRUE16-GISEL-NEXT:    v_readfirstlane_b32 s0, v0
 ; GFX12-TRUE16-GISEL-NEXT:    v_readfirstlane_b32 s1, v1
@@ -2924,6 +2991,7 @@ define half @v_minimumnum_f16_fabs_rhs(half %x, half %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs_rhs:
@@ -2960,6 +3028,7 @@ define half @v_minimumnum_f16_fabs_rhs(half %x, half %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs_rhs:
@@ -3004,6 +3073,7 @@ define half @v_minimumnum_f16_fabs_rhs(half %x, half %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs_rhs:
@@ -3119,6 +3189,7 @@ define half @v_minimumnum_f16_fneg_fabs_rhs(half %x, half %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, -|v1.l|, -|v1.l|
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg_fabs_rhs:
@@ -3155,6 +3226,7 @@ define half @v_minimumnum_f16_fneg_fabs_rhs(half %x, half %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, -|v1.l|, -|v1.l|
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg_fabs_rhs:
@@ -3199,6 +3271,7 @@ define half @v_minimumnum_f16_fneg_fabs_rhs(half %x, half %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, -|v1.l|, -|v1.l|
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg_fabs_rhs:
@@ -3315,6 +3388,7 @@ define half @v_minimumnum_f16_fabs(half %x, half %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs:
@@ -3351,6 +3425,7 @@ define half @v_minimumnum_f16_fabs(half %x, half %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs:
@@ -3395,6 +3470,7 @@ define half @v_minimumnum_f16_fabs(half %x, half %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, |v1.l|, |v1.l|
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_fabs:
@@ -3511,6 +3587,7 @@ define half @v_minimumnum_f16_fneg(half %x, half %y) #1 {
 ; GFX11-TRUE16-GISEL-NEXT:    v_max_f16_e64 v0.h, -v1.l, -v1.l
 ; GFX11-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v0.h
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg:
@@ -3547,6 +3624,7 @@ define half @v_minimumnum_f16_fneg(half %x, half %y) #1 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, -v1.l, -v1.l
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg:
@@ -3591,6 +3669,7 @@ define half @v_minimumnum_f16_fneg(half %x, half %y) #1 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e64 v0.h, -v1.l, -v1.l
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_fneg:
@@ -9165,11 +9244,18 @@ define half @v_minimumnum_f16_no_ieee(half %x, half %y) #0 {
 ; GFX10-NEXT:    v_min_f16_e32 v0, v0, v1
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-TRUE16-LABEL: v_minimumnum_f16_no_ieee:
-; GFX11-TRUE16:       ; %bb.0:
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
-; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-SDAG-LABEL: v_minimumnum_f16_no_ieee:
+; GFX11-TRUE16-SDAG:       ; %bb.0:
+; GFX11-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-SDAG-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-TRUE16-GISEL-LABEL: v_minimumnum_f16_no_ieee:
+; GFX11-TRUE16-GISEL:       ; %bb.0:
+; GFX11-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_minimumnum_f16_no_ieee:
 ; GFX11-FAKE16:       ; %bb.0:
@@ -9193,6 +9279,7 @@ define half @v_minimumnum_f16_no_ieee(half %x, half %y) #0 {
 ; GFX1170-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.h, v1.l, v1.l
 ; GFX1170-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-SDAG-LABEL: v_minimumnum_f16_no_ieee:
@@ -9237,6 +9324,7 @@ define half @v_minimumnum_f16_no_ieee(half %x, half %y) #0 {
 ; GFX12-TRUE16-GISEL-NEXT:    v_max_num_f16_e32 v0.h, v1.l, v1.l
 ; GFX12-TRUE16-GISEL-NEXT:    s_delay_alu instid0(VALU_DEP_1)
 ; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v0.h
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
 ; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-SDAG-LABEL: v_minimumnum_f16_no_ieee:
@@ -9305,11 +9393,18 @@ define half @v_minimumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX10-NEXT:    v_min_f16_e32 v0, v0, v1
 ; GFX10-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX11-TRUE16-LABEL: v_minimumnum_f16_nan_no_ieee:
-; GFX11-TRUE16:       ; %bb.0:
-; GFX11-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX11-TRUE16-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
-; GFX11-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX11-TRUE16-SDAG-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX11-TRUE16-SDAG:       ; %bb.0:
+; GFX11-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-SDAG-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX11-TRUE16-GISEL-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX11-TRUE16-GISEL:       ; %bb.0:
+; GFX11-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX11-TRUE16-GISEL-NEXT:    v_min_f16_e32 v0.l, v0.l, v1.l
+; GFX11-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX11-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX11-FAKE16-LABEL: v_minimumnum_f16_nan_no_ieee:
 ; GFX11-FAKE16:       ; %bb.0:
@@ -9317,11 +9412,18 @@ define half @v_minimumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX11-FAKE16-NEXT:    v_min_f16_e32 v0, v0, v1
 ; GFX11-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX1170-TRUE16-LABEL: v_minimumnum_f16_nan_no_ieee:
-; GFX1170-TRUE16:       ; %bb.0:
-; GFX1170-TRUE16-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
-; GFX1170-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
-; GFX1170-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX1170-TRUE16-SDAG-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX1170-TRUE16-SDAG:       ; %bb.0:
+; GFX1170-TRUE16-SDAG-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX1170-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX1170-TRUE16-GISEL-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX1170-TRUE16-GISEL:       ; %bb.0:
+; GFX1170-TRUE16-GISEL-NEXT:    s_waitcnt vmcnt(0) expcnt(0) lgkmcnt(0)
+; GFX1170-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX1170-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX1170-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX1170-FAKE16-LABEL: v_minimumnum_f16_nan_no_ieee:
 ; GFX1170-FAKE16:       ; %bb.0:
@@ -9329,15 +9431,26 @@ define half @v_minimumnum_f16_nan_no_ieee(half %x, half %y) #0 {
 ; GFX1170-FAKE16-NEXT:    v_min_num_f16_e32 v0, v0, v1
 ; GFX1170-FAKE16-NEXT:    s_setpc_b64 s[30:31]
 ;
-; GFX12-TRUE16-LABEL: v_minimumnum_f16_nan_no_ieee:
-; GFX12-TRUE16:       ; %bb.0:
-; GFX12-TRUE16-NEXT:    s_wait_loadcnt_dscnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_expcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_samplecnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_bvhcnt 0x0
-; GFX12-TRUE16-NEXT:    s_wait_kmcnt 0x0
-; GFX12-TRUE16-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
-; GFX12-TRUE16-NEXT:    s_setpc_b64 s[30:31]
+; GFX12-TRUE16-SDAG-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX12-TRUE16-SDAG:       ; %bb.0:
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-SDAG-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX12-TRUE16-SDAG-NEXT:    s_setpc_b64 s[30:31]
+;
+; GFX12-TRUE16-GISEL-LABEL: v_minimumnum_f16_nan_no_ieee:
+; GFX12-TRUE16-GISEL:       ; %bb.0:
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_loadcnt_dscnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_expcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_samplecnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_bvhcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    s_wait_kmcnt 0x0
+; GFX12-TRUE16-GISEL-NEXT:    v_min_num_f16_e32 v0.l, v0.l, v1.l
+; GFX12-TRUE16-GISEL-NEXT:    ; implicit-def: $vgpr0_hi16
+; GFX12-TRUE16-GISEL-NEXT:    s_setpc_b64 s[30:31]
 ;
 ; GFX12-FAKE16-LABEL: v_minimumnum_f16_nan_no_ieee:
 ; GFX12-FAKE16:       ; %bb.0:
@@ -10045,5 +10158,8 @@ attributes #0 = { "amdgpu-ieee"="false" nounwind }
 attributes #1 = { nounwind }
 
 ;; NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
+; GFX11-TRUE16: {{.*}}
+; GFX1170-TRUE16: {{.*}}
+; GFX12-TRUE16: {{.*}}
 ; GFX900: {{.*}}
 ; GFX950: {{.*}}

@@ -1442,15 +1442,19 @@ define amdgpu_kernel void @commute_frameindex(ptr addrspace(1) nocapture %out) #
 ; GCN-NEXT:    s_mov_b32 s15, 0xe8f000
 ; GCN-NEXT:    s_add_u32 s12, s12, s11
 ; GCN-NEXT:    s_addc_u32 s13, s13, 0
-; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    s_mov_b32 s2, -1
-; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
+; GCN-NEXT:    ; implicit-def: $sgpr8
+; GCN-NEXT:    ; implicit-def: $sgpr9
+; GCN-NEXT:    s_mov_b32 s10, s2
+; GCN-NEXT:    s_mov_b32 s11, s3
+; GCN-NEXT:    buffer_load_dword v0, off, s[8:11], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
+; GCN-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x9
 ; GCN-NEXT:    s_mov_b32 s4, 0
 ; GCN-NEXT:    v_cmp_eq_u32_e32 vcc, s4, v0
 ; GCN-NEXT:    v_cndmask_b32_e64 v0, 0, 1, vcc
+; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_endpgm

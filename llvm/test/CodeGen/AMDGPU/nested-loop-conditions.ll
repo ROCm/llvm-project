@@ -93,7 +93,6 @@ define amdgpu_kernel void @reduced_nested_loop_conditions(ptr addrspace(3) captu
 ; IR:       [[BB23]]:
 ; IR-NEXT:    call void @llvm.amdgcn.end.cf.i64(i64 [[TMP6]])
 ; IR-NEXT:    ret void
-;
 bb:
   %my.tmp = tail call i32 @llvm.amdgcn.workitem.id.x() #1
   %my.tmp1 = getelementptr inbounds i64, ptr addrspace(3) %arg, i32 %my.tmp
@@ -149,6 +148,8 @@ define amdgpu_kernel void @nested_loop_conditions(ptr addrspace(1) captures(none
 ; GCN:       ; %bb.0: ; %bb
 ; GCN-NEXT:    s_mov_b32 s3, 0xf000
 ; GCN-NEXT:    s_mov_b32 s2, -1
+; GCN-NEXT:    ; implicit-def: $sgpr0
+; GCN-NEXT:    ; implicit-def: $sgpr1
 ; GCN-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, 8, v0
@@ -173,6 +174,8 @@ define amdgpu_kernel void @nested_loop_conditions(ptr addrspace(1) captures(none
 ; GCN-NEXT:  .LBB1_4: ; %bb18
 ; GCN-NEXT:    ; Parent Loop BB1_3 Depth=1
 ; GCN-NEXT:    ; => This Inner Loop Header: Depth=2
+; GCN-NEXT:    ; implicit-def: $sgpr0
+; GCN-NEXT:    ; implicit-def: $sgpr1
 ; GCN-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_lt_i32_e32 vcc, 8, v0
@@ -180,12 +183,16 @@ define amdgpu_kernel void @nested_loop_conditions(ptr addrspace(1) captures(none
 ; GCN-NEXT:  ; %bb.5: ; %bb21
 ; GCN-NEXT:    ; in Loop: Header=BB1_3 Depth=1
 ; GCN-NEXT:    s_load_dword s4, s[0:1], 0x0
+; GCN-NEXT:    ; implicit-def: $sgpr0
+; GCN-NEXT:    ; implicit-def: $sgpr1
 ; GCN-NEXT:    buffer_load_dword v0, off, s[0:3], 0 glc
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    v_cmp_lt_i32_e64 s[0:1], 8, v0
 ; GCN-NEXT:    s_branch .LBB1_2
 ; GCN-NEXT:  .LBB1_6: ; %bb31
 ; GCN-NEXT:    v_mov_b32_e32 v0, 0
+; GCN-NEXT:    ; implicit-def: $sgpr0
+; GCN-NEXT:    ; implicit-def: $sgpr1
 ; GCN-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; GCN-NEXT:    s_waitcnt vmcnt(0)
 ; GCN-NEXT:    s_endpgm
@@ -278,7 +285,6 @@ define amdgpu_kernel void @nested_loop_conditions(ptr addrspace(1) captures(none
 ; IR-NEXT:    call void @llvm.amdgcn.end.cf.i64(i64 [[TMP7]])
 ; IR-NEXT:    store volatile i32 0, ptr addrspace(1) poison, align 4
 ; IR-NEXT:    ret void
-;
 bb:
   %my.tmp1134 = load volatile i32, ptr addrspace(1) poison
   %my.tmp1235 = icmp slt i32 %my.tmp1134, 9

@@ -72,6 +72,8 @@ define amdgpu_kernel void @v_ubfe_sub_multi_use_shl_i32(ptr addrspace(1) %out, p
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; SI-NEXT:    s_mov_b32 s6, -1
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    v_sub_i32_e32 v3, vcc, 32, v3
 ; SI-NEXT:    v_lshlrev_b32_e32 v2, v3, v2
 ; SI-NEXT:    v_lshrrev_b32_e32 v3, v3, v2
@@ -172,6 +174,8 @@ define amdgpu_kernel void @s_ubfe_sub_multi_use_shl_i32(ptr addrspace(1) %out, i
 ; SI-NEXT:    v_mov_b32_e32 v2, s5
 ; SI-NEXT:    buffer_store_dword v2, v[0:1], s[0:3], 0 addr64
 ; SI-NEXT:    s_mov_b32 s2, -1
+; SI-NEXT:    ; implicit-def: $sgpr0
+; SI-NEXT:    ; implicit-def: $sgpr1
 ; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
@@ -274,6 +278,8 @@ define amdgpu_kernel void @v_sbfe_sub_multi_use_shl_i32(ptr addrspace(1) %out, p
 ; SI-NEXT:    s_waitcnt vmcnt(0)
 ; SI-NEXT:    s_mov_b64 s[2:3], s[6:7]
 ; SI-NEXT:    s_mov_b32 s6, -1
+; SI-NEXT:    ; implicit-def: $sgpr4
+; SI-NEXT:    ; implicit-def: $sgpr5
 ; SI-NEXT:    v_sub_i32_e32 v3, vcc, 32, v3
 ; SI-NEXT:    v_lshlrev_b32_e32 v2, v3, v2
 ; SI-NEXT:    v_ashrrev_i32_e32 v3, v3, v2
@@ -374,6 +380,8 @@ define amdgpu_kernel void @s_sbfe_sub_multi_use_shl_i32(ptr addrspace(1) %out, i
 ; SI-NEXT:    v_mov_b32_e32 v2, s5
 ; SI-NEXT:    buffer_store_dword v2, v[0:1], s[0:3], 0 addr64
 ; SI-NEXT:    s_mov_b32 s2, -1
+; SI-NEXT:    ; implicit-def: $sgpr0
+; SI-NEXT:    ; implicit-def: $sgpr1
 ; SI-NEXT:    v_mov_b32_e32 v0, s4
 ; SI-NEXT:    buffer_store_dword v0, off, s[0:3], 0
 ; SI-NEXT:    s_waitcnt vmcnt(0)
