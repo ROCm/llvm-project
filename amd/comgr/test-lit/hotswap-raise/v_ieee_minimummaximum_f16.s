@@ -3,12 +3,12 @@
 ; RUN: %raise_cli %t.hsaco --target-isa=gfx942 --write-hsaco=%t.out --kernel=v_ieee_minimummaximum_f16_kernel 2>&1 | %FileCheck %s --check-prefix=PIPE
 ;
 ; Canary for the f16 minimum/maximum family. IEEE forms must use
-; NaN-propagating half intrinsics, .NUM forms must use maxnum/minnum, and
-; high-half source/destination op_sel must be explicit in IR.
+; NaN-propagating half intrinsics, .NUM forms must use maximumnum/minimumnum,
+; and high-half source/destination op_sel must be explicit in IR.
 
 ; IR-LABEL: define amdgpu_kernel void @v_ieee_minimummaximum_f16_kernel(
-; IR-NOT: @llvm.maxnum
-; IR-NOT: @llvm.minnum
+; IR-NOT: @llvm.maxnum.f16
+; IR-NOT: @llvm.minnum.f16
 ; IR: call half @llvm.maximum.f16(half %{{[^,]+}}, half %{{[^)]+}})
 ; IR: call half @llvm.minimum.f16(half %{{[^,]+}}, half %{{[^)]+}})
 ; IR: [[MAX3_INNER:%[^ ]+]] = call half @llvm.maximum.f16(half %{{[^,]+}}, half %{{[^)]+}})
@@ -19,12 +19,12 @@
 ; IR: call half @llvm.minimum.f16(half [[MAXMIN_INNER]], half %{{[^)]+}})
 ; IR: [[MINMAX_INNER:%[^ ]+]] = call half @llvm.minimum.f16(half %{{[^,]+}}, half %{{[^)]+}})
 ; IR: call half @llvm.maximum.f16(half [[MINMAX_INNER]], half %{{[^)]+}})
-; IR-NOT: @llvm.maxnum
-; IR-NOT: @llvm.minnum
-; IR: [[NUM_MINMAX_INNER:%[^ ]+]] = call half @llvm.minnum.f16(half %{{[^,]+}}, half %{{[^)]+}})
-; IR: call half @llvm.maxnum.f16(half [[NUM_MINMAX_INNER]], half %{{[^)]+}})
-; IR: [[NUM_MAXMIN_INNER:%[^ ]+]] = call half @llvm.maxnum.f16(half %{{[^,]+}}, half %{{[^)]+}})
-; IR: call half @llvm.minnum.f16(half [[NUM_MAXMIN_INNER]], half %{{[^)]+}})
+; IR-NOT: @llvm.maxnum.f16
+; IR-NOT: @llvm.minnum.f16
+; IR: [[NUM_MINMAX_INNER:%[^ ]+]] = call half @llvm.minimumnum.f16(half %{{[^,]+}}, half %{{[^)]+}})
+; IR: call half @llvm.maximumnum.f16(half [[NUM_MINMAX_INNER]], half %{{[^)]+}})
+; IR: [[NUM_MAXMIN_INNER:%[^ ]+]] = call half @llvm.maximumnum.f16(half %{{[^,]+}}, half %{{[^)]+}})
+; IR: call half @llvm.minimumnum.f16(half [[NUM_MAXMIN_INNER]], half %{{[^)]+}})
 ; IR: f16_src_hi
 ; IR: f16_merge_hi
 

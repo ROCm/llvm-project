@@ -13,14 +13,14 @@
 ; IR: insertelement <2 x bfloat> {{.*}}, bfloat [[MUL_NEG_LO]], i64 0
 ; IR: insertelement <2 x bfloat> {{.*}}, bfloat [[MUL_LO]], i64 1
 ; IR: fmul <2 x bfloat>
-; IR: call <2 x bfloat> @llvm.minnum.v2bf16(
-; IR: call <2 x bfloat> @llvm.maxnum.v2bf16(
-; IR: [[MIN:%[^ ]+]] = call <2 x bfloat> @llvm.minnum.v2bf16(
-; IR: [[MIN_CLAMP_LO:%[^ ]+]] = call <2 x bfloat> @llvm.maxnum.v2bf16(<2 x bfloat> [[MIN]],
-; IR: call <2 x bfloat> @llvm.minnum.v2bf16(<2 x bfloat> [[MIN_CLAMP_LO]],
-; IR: [[MAX:%[^ ]+]] = call <2 x bfloat> @llvm.maxnum.v2bf16(
-; IR: [[MAX_CLAMP_LO:%[^ ]+]] = call <2 x bfloat> @llvm.maxnum.v2bf16(<2 x bfloat> [[MAX]],
-; IR: call <2 x bfloat> @llvm.minnum.v2bf16(<2 x bfloat> [[MAX_CLAMP_LO]],
+; IR: call <2 x bfloat> @llvm.minimumnum.v2bf16(
+; IR: call <2 x bfloat> @llvm.maximumnum.v2bf16(
+; IR: [[MIN:%[^ ]+]] = call <2 x bfloat> @llvm.minimumnum.v2bf16(
+; IR: [[MIN_CLAMP_LO:%[^ ]+]] = call <2 x bfloat> @llvm.maximumnum.v2bf16(<2 x bfloat> [[MIN]],
+; IR: call <2 x bfloat> @llvm.minimumnum.v2bf16(<2 x bfloat> [[MIN_CLAMP_LO]],
+; IR: [[MAX:%[^ ]+]] = call <2 x bfloat> @llvm.maximumnum.v2bf16(
+; IR: [[MAX_CLAMP_LO:%[^ ]+]] = call <2 x bfloat> @llvm.maximumnum.v2bf16(<2 x bfloat> [[MAX]],
+; IR: call <2 x bfloat> @llvm.minimumnum.v2bf16(<2 x bfloat> [[MAX_CLAMP_LO]],
 ; IR-NOT: unsupported instruction
 
 ; PIPE: raise_cli: wrote

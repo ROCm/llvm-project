@@ -24,16 +24,16 @@
 ; The remaining gfx1250 FP64 VOPD3 components are the two-source add and
 ; maximumNumber/minimumNumber operations.
 ; CHECK: %vopd_fadd_f64 = fadd double
-; CHECK: %vopd_fmaxnum_f64 = call double @llvm.maxnum.f64
-; CHECK: %vopd_fminnum_f64 = call double @llvm.minnum.f64
+; CHECK: %vopd_fmaxnum_f64 = call double @llvm.maximumnum.f64
+; CHECK: %vopd_fminnum_f64 = call double @llvm.minimumnum.f64
 
 ; CHECK-NOT: unhandled structural VOPD component SemOp
 ; CROSS-LABEL: define amdgpu_kernel void @vopd_f64_kernel(
 ; CROSS: call double @llvm.fma.f64
 ; CROSS: fmul double
 ; CROSS: fadd double
-; CROSS: call double @llvm.maxnum.f64
-; CROSS: call double @llvm.minnum.f64
+; CROSS: call double @llvm.maximumnum.f64
+; CROSS: call double @llvm.minimumnum.f64
 
 	.amdgcn_target "amdgcn-amd-amdhsa--gfx1250"
 	.amdhsa_code_object_version 6
