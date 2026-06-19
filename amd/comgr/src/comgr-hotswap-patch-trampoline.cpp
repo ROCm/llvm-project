@@ -29,8 +29,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/MC/MCCodeEmitter.h"
-#include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -314,86 +312,14 @@ std::vector<std::string> expandDs2Addr(const MCInst &Inst, StringRef FromMnem,
   return {};
 }
 
-// -- bumpNextWaitDscnt ------------------------------------------------------
-//
-// After splitting one DS 2-addr instruction into two, the next s_wait_dscnt
-// in the same straight-line block must be incremented by 1 to account for the
-// extra outstanding DS operation -- except when the wait is a drain
-// (s_wait_dscnt 0), which must stay a drain after any number of splits.
-// Relaxing a drain would let the split halves escape into a downstream data
-// hazard, so drains are preserved verbatim and only non-drain (K > 0) waits
-// are bumped here. A general dataflow-based bump (computed from the live
-// outstanding-DS count at the wait site) would subsume both cases; that
-// refinement is deferred and tracked outside the source tree.
-//
-// Returns true if a wait was found and bumped, false otherwise.
-//
-// If the wait is past a branch or join point, we conservatively do nothing:
-// the compiler guarantees a straight-line s_wait_dscnt follows each DS op in
-// well-formed kernels. If absent (e.g. s_endpgm terminates first), skipping
-// the bump is safe -- the hardware wait counter saturates harmlessly.
-
-bool bumpNextWaitDscnt(PatchContext &Ctx, size_t Idx) {
-  const MCInstrInfo &MCII = *Ctx.LS.MCII;
-  const MCRegisterInfo &MRI = *Ctx.LS.MRI;
-
-  for (size_t I = Idx + 1; I < Ctx.Decoded.size(); ++I) {
-    const InternalDecodedInst &DI = Ctx.Decoded[I];
-    if (DI.Mnemonic == "<unknown>" || DI.Mnemonic == "<replaced>")
-      continue;
-    if (DI.Mnemonic == "s_endpgm")
-      return false;
-
-    // Stop at any control-flow instruction (branches, jumps, calls) to
-    // avoid bumping a wait that belongs to a different execution path.
-    const MCInstrDesc &Desc = MCII.get(DI.Inst.getOpcode());
-    if (Desc.mayAffectControlFlow(DI.Inst, MRI))
-      return false;
-
-    if (DI.Mnemonic != "s_wait_dscnt")
-      continue;
-
-    // s_wait_dscnt has a single immediate operand (the wait count) at
-    // index 0; increment it directly. The drain case is handled below.
-    if (DI.Inst.getNumOperands() == 0)
-      return false;
-    MCInst NewInst = DI.Inst;
-    MCOperand &Op = NewInst.getOperand(0);
-    if (!Op.isImm())
-      return false;
-    if (Op.getImm() == 0)
-      return false;
-    // The +1 here is conservative for K > 0: it over-bumps splits of
-    // "must-complete" operations at the wait site. That is a suboptimal
-    // stall, never a correctness hazard. The drain (K == 0) over-bump
-    // WOULD be a hazard and is handled by the early return above. A
-    // precise replacement needs outstanding-DS dataflow at the wait
-    // site, which subsumes the drain special-case naturally.
-    Op.setImm(Op.getImm() + 1);
-
-    SmallVector<char, 8> Bytes;
-    SmallVector<MCFixup, 2> Fixups;
-    Ctx.LS.MCE->encodeInstruction(NewInst, Bytes, Fixups, *Ctx.LS.STI);
-
-    uint64_t Off = Ctx.Decoded[I].Offset;
-    std::memcpy(Ctx.Text + Off, Bytes.data(), Bytes.size());
-
-    Ctx.Decoded[I].Inst = NewInst;
-    return true;
-  }
-
-  return false;
-}
-
 // -- patchDs2Addr -----------------------------------------------------------
 //
 // Expand one ds_*_2addr_* instruction (stride64 or non-stride64) into two
-// single-address DS instructions. Each split adds one outstanding DS op, so
-// bumpNextWaitDscnt increments the next non-drain s_wait_dscnt by +1 per
-// split and preserves drains verbatim. Because that helper writes the bumped
-// immediate back into Ctx.Decoded[I].Inst, adjacent DS2 sites that target
-// the same non-drain wait accumulate (the second call observes the first
-// call's update, so N splits before one wait produce a K -> K+N update).
+// single-address DS instructions, followed by an s_wait_dscnt 0 drain so both
+// halves are guaranteed complete before any downstream DS consumer. Splitting
+// one DS instruction into two perturbs the outstanding-DS instruction count
+// that later s_wait_dscnt immediates encode; the local drain sidesteps that
+// entirely (see the rationale in the body below).
 
 bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   InternalDecodedInst &DI = Ctx.Decoded[Idx];
@@ -411,6 +337,18 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   std::string Combined;
   for (const std::string &Line : Expanded)
     Combined += Line + "\n";
+  // Drain the DS counter right after the split pair so both halves are
+  // guaranteed complete before any downstream consumer. The original code
+  // tracked completion of the single 2-addr instruction via a later
+  // s_wait_dscnt whose immediate counts outstanding DS *instructions*;
+  // splitting one instruction into two perturbs that count. Adjusting the
+  // downstream wait by +1 (the previous bumpNextWaitDscnt approach) relaxes
+  // the wait (s_wait_dscnt K stalls until outstanding <= K, so a larger K
+  // waits for FEWER ops), which lets a consumer read the second half's LDS
+  // slot before it lands -- observed as NaN in MIOpen layernormbfp16. A
+  // local drain is unconditionally correct; a precise per-wait dataflow
+  // recomputation is the eventual optimization (tracked separately).
+  Combined += "s_wait_dscnt 0\n";
   SmallVector<uint8_t> Bytes = assembleSingleInst(Combined, Ctx.LS);
   if (Bytes.empty()) {
     log() << "hotswap: error: ds_2addr: assembly failed: " << Combined << "\n";
@@ -421,10 +359,6 @@ bool patchDs2Addr(PatchContext &Ctx, size_t Idx) {
   if (!emitReplacementCode(Ctx, DI.Offset, DI.Size, Replacement))
     return false;
 
-  // Return value intentionally discarded: false is a normal outcome when the
-  // wait is a drain (preserved), absent before s_endpgm/branch, or carries a
-  // non-immediate operand -- none of which are errors at this site.
-  (void)bumpNextWaitDscnt(Ctx, Idx);
   DI.Mnemonic = "<replaced>";
   return true;
 }

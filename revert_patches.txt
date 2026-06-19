@@ -14,3 +14,9 @@ breaks windows build
 breaks comgr testing
 Revert "Reapply "[lit] Deprecate execute_external=True in ShTest" (#203316) 
 ---
+breaks build of offload in rock
+[Flang] Add mock flang driver (#203481)
+---
+needs newer SPIRv
+[IRBuilder] Refactor for intrinsics const-folding (NFC) (#202738)
+---

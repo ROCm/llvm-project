@@ -27,7 +27,7 @@
 /*/CMakeUserPresets.json
 
 # Nested build directory
-/build*
+/build_*
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
@@ -66,7 +66,13 @@ AGENTS.md
 .cursor
 .cursorignore
 .cursorindexingignore
-# documentation artifacts
+/.opencode/
+/.nvim/
+/.nvimlog
+/dhw-extension/
+/install*/
+/tmp/
+# Documentation artifacts
 _toc.yml
 
 #==============================================================================#
