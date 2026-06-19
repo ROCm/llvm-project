@@ -26,6 +26,11 @@
 // RUN: unpackage %t.package.bc amdgcn-amd-amdhsa gfx900:xnack+ %t.compat.output.bc
 // RUN: llvm-dis %t.compat.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX9 %s
 //
+// COM: extract from a package whose input data has an empty name. with no name
+// COM: provided, unpackage() falls back to a generated unique name.
+// RUN: unpackage --name= %t.package.bc amdgcn-amd-amdhsa gfx900 %t.noname.output.bc
+// RUN: llvm-dis %t.noname.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX9 %s
+//
 // BOTH: target triple = "amdgcn-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"

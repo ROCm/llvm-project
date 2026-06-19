@@ -1817,10 +1817,13 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       return AMD_COMGR_STATUS_ERROR;
 
     // Generate random name if none provided
-    if (!strcmp(Input->Name, "")) {
-      const size_t BufSize = sizeof(char) * 30;
-      char *Buf = (char *)malloc(BufSize);
-      snprintf(Buf, BufSize, "comgr-package-%d", std::rand() % 10000);
+    if (StringRef(Input->Name).empty()) {
+      llvm::SmallString<22> Result;
+      llvm::sys::fs::createUniquePath("comgr-package-%%%%%%%%", Result, false);
+
+      char *Buf = new char[Result.size() + 1];
+      std::memcpy(Buf, Result.data(), Result.size());
+      Buf[Result.size()] = '\0';
       Input->Name = Buf;
     }
 
@@ -1831,9 +1834,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       return Status;
 
     // Generate prefix for output files
-    StringRef OutputPrefix = Input->Name;
-    size_t Index = OutputPrefix.find_last_of(".");
-    OutputPrefix = OutputPrefix.substr(0, Index);
+    StringRef OutputPrefix = llvm::sys::path::stem(Input->Name);
 
     // TODO: Log Command (see linkBitcodeToBitcode() unbundling)
     if (env::shouldEmitVerboseLogs()) {

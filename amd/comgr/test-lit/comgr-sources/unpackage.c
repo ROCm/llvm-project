@@ -13,15 +13,31 @@ int main(int argc, char *argv[]) {
   char *PackageData;
   size_t PackageSize;
 
-  if (argc < 5) {
-    printf("Usage: %s <bc package> <triple> <arch> <bc output>\n", argv[0]);
+  const char *PackageName = "package.bc";
+
+  int ArgIdx = 1;
+  while (ArgIdx < argc && argv[ArgIdx][0] == '-') {
+    const char *Arg = argv[ArgIdx];
+    if (strncmp(Arg, "--name=", 7) == 0) {
+      PackageName = Arg + 7;
+    } else {
+      printf("Error: unknown flag '%s'\n", Arg);
+      return -1;
+    }
+    ArgIdx++;
+  }
+
+  if (argc - ArgIdx < 4) {
+    printf("Usage: %s [--name=<name>] <bc package> <triple> <arch> "
+           "<bc output>\n",
+           argv[0]);
     return -1;
   }
 
-  const char *PackagePath = argv[1];
-  const char *Triple = argv[2];
-  const char *Arch = argv[3];
-  const char *BitcodePath = argv[4];
+  const char *PackagePath = argv[ArgIdx];
+  const char *Triple = argv[ArgIdx + 1];
+  const char *Arch = argv[ArgIdx + 2];
+  const char *BitcodePath = argv[ArgIdx + 3];
 
   amd_comgr_data_t OnePackage;
   amd_comgr_data_set_t InputPackages;
@@ -31,7 +47,7 @@ int main(int argc, char *argv[]) {
   amd_comgr_(create_data_set(&InputPackages));
   amd_comgr_(create_data(AMD_COMGR_DATA_KIND_PACKAGE, &OnePackage));
   amd_comgr_(set_data(OnePackage, PackageSize, PackageData));
-  amd_comgr_(set_data_name(OnePackage, "package.bc"));
+  amd_comgr_(set_data_name(OnePackage, PackageName));
   amd_comgr_(data_set_add(InputPackages, OnePackage));
 
   amd_comgr_data_set_t OutputBitcode;
