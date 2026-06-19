@@ -1668,6 +1668,20 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  if (Sop == CanonicalOp::V_DIV_FMAS_F64) {
+    if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_div_fmas_f64"))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S0 = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Value *S1 = Op.applyMods(1, Ctx.B.CreateBitCast(Op.src64(1), F64Ty));
+    Value *S2 = Op.applyMods(2, Ctx.B.CreateBitCast(Op.src64(2), F64Ty));
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_div_fmas, {F64Ty});
+    Value *Vcc = Ctx.Regs.loadVCC(Ctx.B);
+    Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1, S2, Vcc}, "divfmas"), Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
 
   // ---- 3-source integer VOP3 ----
   if (Sop == CanonicalOp::V_ADD3_U32) {
