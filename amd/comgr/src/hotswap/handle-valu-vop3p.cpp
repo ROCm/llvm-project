@@ -552,7 +552,8 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
   }
 
   // ---- VOP3P packed-pair `<2 x i16>` int ops ----
-  // V_PK_ADD_U16 / V_PK_LSHLREV_B16 / V_PK_MUL_LO_U16. Operand profile is
+  // V_PK_ADD_U16 / V_PK_LSHLREV_B16 / V_PK_ASHRREV_I16 / V_PK_MUL_LO_U16.
+  // Operand profile is
   // VOP_V2I16_V2I16_V2I16: 32-bit dst / 32-bit src0 / 32-bit src1, each
   // bitcast to `<2 x i16>` for the lane-wise op and back to i32 for the
   // VGPR write-back. Shared handler shape; per-CanonicalOp dispatch picks the
@@ -561,12 +562,13 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
   // a packed `<2 x i16>` directly (lo i16 = bits[15:0], hi i16 = bits[31:16]);
   // there is NO broadcast analogue to the V_PK_F32 32-bit-element family
   // because the literal width matches the operand width here. Sibling
-  // V_PK_LSHRREV_B16 / V_PK_ASHRREV_I16 / V_PK_SUB_U16 share this exact
-  // shape -- one extra `case` + IR-opcode dispatch in the inner switch
-  // and they're done -- but they're held out per the "no fallback / design
-  // what the corpus exercises" discipline.
+  // V_PK_LSHRREV_B16 / V_PK_SUB_U16 share this exact shape -- one extra
+  // `case` + IR-opcode dispatch in the inner switch and they're done --
+  // but they're held out per the "no fallback / design what the corpus
+  // exercises" discipline.
   case CanonicalOp::V_PK_ADD_U16:
   case CanonicalOp::V_PK_LSHLREV_B16:
+  case CanonicalOp::V_PK_ASHRREV_I16:
   case CanonicalOp::V_PK_MUL_LO_U16: {
     auto *I16Ty = Type::getInt16Ty(Ctx.C);
 
@@ -606,6 +608,17 @@ HandlerResult handleValuVoP3P(RaiseContext &Ctx, const DecodedInst &Di,
           ConstantInt::get(I16Ty, 15));
       Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_lshlrev_amt");
       Res = Ctx.B.CreateShl(S1, Amt, "pk_lshlrev");
+      break;
+    }
+    case CanonicalOp::V_PK_ASHRREV_I16: {
+      // cashr_rev_16 SDAG: dst = src1 >>_arith (src0 & 15). Same
+      // reversed-operand convention and low-4-bit hardware shift-count
+      // clamp as V_PK_LSHLREV_B16 above.
+      Value *Mask = ConstantVector::getSplat(
+          ElementCount::getFixed(2),
+          ConstantInt::get(I16Ty, 15));
+      Value *Amt = Ctx.B.CreateAnd(S0, Mask, "pk_ashrrev_amt");
+      Res = Ctx.B.CreateAShr(S1, Amt, "pk_ashrrev");
       break;
     }
     default: llvm_unreachable("filtered by outer switch");

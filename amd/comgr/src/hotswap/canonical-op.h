@@ -717,6 +717,11 @@ enum class CanonicalOp : uint16_t {
   //                   SDAG: shift count is src0, value is src1, low 4
   //                   bits of the count select the shift amount per
   //                   AMDGPU's hardware-clamp-to-element-width).
+  // V_PK_ASHRREV_I16: dst = src1 >>_arith (src0 & 15)  (cashr_rev_16
+  //                   SDAG: shift count is src0, value is src1, low 4
+  //                   bits of the count select the shift amount per
+  //                   AMDGPU's hardware-clamp-to-element-width with
+  //                   arithmetic (sign-extending) right-shift semantics).
   // V_PK_MUL_LO_U16:  dst = (src0 * src1) & 0xFFFF     (lane-wise low
   //                   16 bits of the integer product; "lo" means the
   //                   low half of the 32-bit multiply, so signed vs
@@ -727,13 +732,7 @@ enum class CanonicalOp : uint16_t {
   // op_sel / op_sel_hi modifiers select which i16 of each source feeds
   // each output lane (defaults: op_sel=[0,0,0], op_sel_hi=[1,1,1] --
   // natural lo->lo, hi->hi packing).
-  //
-  // Sibling V_PK_LSHRREV_B16 / V_PK_ASHRREV_I16 share the same handler
-  // shape (only the IR opcode differs: lshr / ashr); they are NOT
-  // enumerated here because the kerneldex corpus has zero producers
-  // for them today and adding them speculatively would violate the
-  // "no fallback / design what the corpus exercises" discipline.
-  V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_MUL_LO_U16,
+  V_PK_ADD_U16, V_PK_LSHLREV_B16, V_PK_ASHRREV_I16, V_PK_MUL_LO_U16,
 
   V_BITOP3_B32, V_BITOP3_B16,
 
