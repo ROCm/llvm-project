@@ -46,6 +46,15 @@ llvm::StringRef getCacheDirectory();
 /// space-separated options to append to clang driver invocations.
 llvm::StringRef getDriverOptionsAppend();
 
+/// Override for embedded libc++ header injection.
+///   Auto    - detect system C++ headers and skip embedded if found (default).
+///   Force   - always inject embedded headers, ignore detection.
+///   Disable - never inject embedded headers, regardless of detection.
+enum class EmbeddedLibcxxMode { Auto, Force, Disable };
+
+/// Read AMD_COMGR_USE_EMBEDDED_LIBCXX. Defaults to Auto.
+EmbeddedLibcxxMode getEmbeddedLibcxxMode();
+
 } // namespace env
 } // namespace COMGR
 

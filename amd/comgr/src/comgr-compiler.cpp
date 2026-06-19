@@ -1031,6 +1031,113 @@ amd_comgr_status_t AMDGPUCompiler::removeTmpDirs() {
 #endif
 }
 
+// Probe a common libc++ or libstdc++ include root.
+static bool probeCxxHeadersUnder(StringRef Root, std::string *FoundPath) {
+  auto Hit = [&](const Twine &P) {
+    if (FoundPath)
+      *FoundPath = P.str();
+    return true;
+  };
+
+  SmallString<256> LibCxx(Root);
+  sys::path::append(LibCxx, "include", "c++", "v1", "__config_site");
+  if (sys::fs::exists(LibCxx))
+    return Hit(LibCxx);
+
+  SmallString<256> CxxRoot(Root);
+  sys::path::append(CxxRoot, "include", "c++");
+  std::error_code EC;
+  for (sys::fs::directory_iterator DI(CxxRoot, EC), End; DI != End && !EC;
+       DI.increment(EC)) {
+    if (DI->type() != sys::fs::file_type::directory_file)
+      continue;
+    SmallString<256> Probe(DI->path());
+    sys::path::append(Probe, "cstddef");
+    if (sys::fs::exists(Probe))
+      return Hit(Probe);
+  }
+  return false;
+}
+
+// Probe common system C++ header locations, including --sysroot and
+// --gcc-toolchain redirects. Unknown layouts keep the previous embedded
+// fallback behavior.
+static bool detectSystemCxxHeadersOnDisk(ArrayRef<const char *> Argv,
+                                         std::string *FoundPath) {
+  std::string SysRoot;
+  std::string GccToolchain;
+  for (size_t I = 0; I < Argv.size(); ++I) {
+    StringRef A(Argv[I] ? Argv[I] : "");
+    if (A == "--sysroot" && I + 1 < Argv.size() && Argv[I + 1])
+      SysRoot = Argv[I + 1];
+    else if (A.starts_with("--sysroot="))
+      SysRoot = A.drop_front(StringRef("--sysroot=").size()).str();
+    else if (A == "--gcc-toolchain" && I + 1 < Argv.size() && Argv[I + 1])
+      GccToolchain = Argv[I + 1];
+    else if (A.starts_with("--gcc-toolchain="))
+      GccToolchain = A.drop_front(StringRef("--gcc-toolchain=").size()).str();
+  }
+  if (SysRoot.empty())
+    SysRoot = "/";
+
+  // GCC toolchain wins if specified; that is what clang's driver would
+  // resolve C++ headers under.
+  if (!GccToolchain.empty() && probeCxxHeadersUnder(GccToolchain, FoundPath))
+    return true;
+
+  SmallString<256> SysUsr(SysRoot);
+  sys::path::append(SysUsr, "usr");
+  if (probeCxxHeadersUnder(SysUsr, FoundPath))
+    return true;
+
+  SmallString<256> SysUsrLocal(SysRoot);
+  sys::path::append(SysUsrLocal, "usr", "local");
+  if (probeCxxHeadersUnder(SysUsrLocal, FoundPath))
+    return true;
+
+  return false;
+}
+
+bool AMDGPUCompiler::shouldSkipEmbeddedHeaders(ArrayRef<const char *> Argv) {
+  if (SkipEmbeddedHeadersCache)
+    return *SkipEmbeddedHeadersCache;
+
+  bool Verbose = env::shouldEmitVerboseLogs();
+  auto Decide = [&](bool Skip, const Twine &Reason) {
+    SkipEmbeddedHeadersCache = Skip;
+    if (Verbose)
+      LogS << "\t Embedded libc++ headers: " << (Skip ? "skipped" : "active")
+           << " (" << Reason << ")\n";
+    return Skip;
+  };
+
+  // Env override takes precedence.
+  switch (env::getEmbeddedLibcxxMode()) {
+  case env::EmbeddedLibcxxMode::Force:
+    return Decide(false, "AMD_COMGR_USE_EMBEDDED_LIBCXX=force");
+  case env::EmbeddedLibcxxMode::Disable:
+    return Decide(true, "AMD_COMGR_USE_EMBEDDED_LIBCXX=disable");
+  case env::EmbeddedLibcxxMode::Auto:
+    break;
+  }
+
+  // User explicitly took control of C++ include search; don't second-guess.
+  for (const char *A : Argv) {
+    if (!A)
+      continue;
+    StringRef S(A);
+    if (S == "-nostdinc++" || S == "-nostdinc" || S == "-nostdlibinc")
+      return Decide(true, Twine("user passed ") + S);
+  }
+
+  // System C++ headers found: skip embedded to avoid the partial-overlay
+  // mixing bug (ROCm-issue-2445).
+  std::string FoundPath;
+  if (detectSystemCxxHeadersOnDisk(Argv, &FoundPath))
+    return Decide(true, Twine("system C++ headers found at ") + FoundPath);
+  return Decide(false, "no system C++ headers found, falling back to embedded");
+}
+
 amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
                                                const char *InputFilePath,
                                                const char *OutputFilePath) {
@@ -1049,14 +1156,10 @@ amd_comgr_status_t AMDGPUCompiler::processFile(DataObject *Input,
     Argv.push_back("-nogpulib");
   }
 
-  // Auto-inject embedded libc++ headers as a fallback include path.
-  // Using -idirafter places them AFTER all other include paths, so:
-  //   - System libstdc++ or libc++ headers take priority when available
-  //   - User-provided -I paths take priority
-  //   - Embedded headers only kick in when no other C++ headers are found
-  // This ensures backward compatibility while providing headers on systems
-  // without C++ development headers (e.g., driver-only installs).
-  if (HasEmbeddedHeaders && getLanguage() == AMD_COMGR_LANGUAGE_HIP) {
+  // Inject embedded libc++ only when system C++ headers are unavailable; the
+  // embedded set is partial and must not be mixed with host libstdc++/libc++.
+  if (HasEmbeddedHeaders && getLanguage() == AMD_COMGR_LANGUAGE_HIP &&
+      !shouldSkipEmbeddedHeaders(Argv)) {
     SmallString<256> LibcxxPath(env::getLLVMPath());
     sys::path::append(LibcxxPath, "include", "c++", "v1");
     Argv.push_back("-idirafter");
