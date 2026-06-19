@@ -200,17 +200,17 @@ define amdgpu_kernel void @dynamic_extract_vector_elt_v3i16(ptr addrspace(1) %ou
 ;
 ; GFX89-LABEL: dynamic_extract_vector_elt_v3i16:
 ; GFX89:       ; %bb.0:
-; GFX8-NEXT:    s_load_dwordx2 s[0:1], s[4:5], 0x24
-; GFX8-NEXT:    s_load_dwordx2 s[6:7], s[4:5], 0x4c
-; GFX8-NEXT:    s_load_dword s4, s[4:5], 0x54
-; GFX9-NEXT:  s_load_dwordx2 s[6:7], s[4:5], 0x4c
-; GFX9-NEXT:  s_load_dword s8, s[4:5], 0x54
-; GFX9-NEXT:  s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GFX8-NEXT:     s_load_dwordx2 s[0:1], s[4:5], 0x24
+; GFX8-NEXT:     s_load_dwordx2 s[6:7], s[4:5], 0x4c
+; GFX8-NEXT:     s_load_dword s4, s[4:5], 0x54
+; GFX9-NEXT:     s_load_dwordx2 s[6:7], s[4:5], 0x4c
+; GFX9-NEXT:     s_load_dword s8, s[4:5], 0x54
+; GFX9-NEXT:     s_load_dwordx2 s[0:1], s[4:5], 0x24
 ; GFX89-NEXT:    s_mov_b32 s3, 0xf000
 ; GFX89-NEXT:    s_mov_b32 s2, -1
 ; GFX89-NEXT:    s_waitcnt lgkmcnt(0)
-; GFX8-NEXT:    s_lshl_b32 s4, s4, 4
-; GFX9-NEXT:  s_lshl_b32 s4, s8, 4
+; GFX8-NEXT:     s_lshl_b32 s4, s4, 4
+; GFX9-NEXT:     s_lshl_b32 s4, s8, 4
 ; GFX89-NEXT:    s_lshr_b64 s[4:5], s[6:7], s4
 ; GFX89-NEXT:    v_mov_b32_e32 v0, s4
 ; GFX89-NEXT:    buffer_store_short v0, off, s[0:3], 0
