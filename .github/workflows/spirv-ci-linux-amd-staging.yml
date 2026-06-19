@@ -442,19 +442,32 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      # Merge the two header roots into one include dir and synthesize the
-      # generated hip_version.h. clr's CMake just writes this header from a
-      # string (hipamd/CMakeLists.txt) — no clr build needed for a compile-only
-      # gate. Values are illustrative; only the HIP_VERSION macro shape matters
-      # to the headers' version checks.
-      - name: Assemble HIP include tree
+      # Assemble a minimal ROCm-path ROOT (not just an include dir) so the
+      # driver's HIP detection treats it as a real install. Layout:
+      #   <root>/include/{hip,...}     merged public HIP + clr amd_detail/ headers
+      #   <root>/include/hip/hip_version.h   synthesized (clr's CMake just writes
+      #                                this header from a string; no clr build
+      #                                needed for a compile-only gate)
+      #   <root>/share/hip/version     version file the driver parses
+      #
+      # The version file is the load-bearing part: AMDGPU.cpp parses it to set
+      # VersionMajorMinor, and only when that is > 3.5 does the driver
+      # force-include __clang_hip_runtime_wrapper.h (which pulls __clang_hip_math.h
+      # providing INTEGER min/max/memset). A dummy --rocm-path dir compiles saxpy
+      # but fails any example using integer min/max/memset (cooperative_groups,
+      # bandwidth, reduction v1..v9) because the wrapper is silently skipped.
+      # Passing --rocm-path=<this root> also auto-adds <root>/include, so the
+      # compile step needs no separate -isystem. Values are illustrative; only the
+      # MAJOR.MINOR > 3.5 gate matters.
+      - name: Assemble HIP rocm-path root
         run: |
           set -eu
-          DST=$PWD/hip-include
-          mkdir -p "$DST"
-          cp -a rocm-systems/projects/hip/include/. "$DST"/
-          cp -a rocm-systems/projects/clr/hipamd/include/. "$DST"/
-          cat > "$DST/hip/hip_version.h" <<'EOF'
+          ROOT=$PWD/hip-rocm
+          INC=$ROOT/include
+          mkdir -p "$INC" "$ROOT/share/hip"
+          cp -a rocm-systems/projects/hip/include/. "$INC"/
+          cp -a rocm-systems/projects/clr/hipamd/include/. "$INC"/
+          cat > "$INC/hip/hip_version.h" <<'EOF'
           // Auto-generated stand-in for the CI compile gate (see workflow).
           #ifndef HIP_VERSION_H
           #define HIP_VERSION_H
@@ -468,9 +481,16 @@ jobs:
           #define __HIP_HAS_GET_PCH 1
           #endif
           EOF
-          test -f "$DST/hip/hip_runtime.h"
-          test -f "$DST/hip/amd_detail/amd_warp_functions.h"
-          echo "Assembled HIP include tree at $DST"
+          cat > "$ROOT/share/hip/version" <<'EOF'
+          # Auto-generated stand-in for the CI compile gate (see workflow).
+          HIP_VERSION_MAJOR=7
+          HIP_VERSION_MINOR=0
+          HIP_VERSION_PATCH=0
+          HIP_VERSION_GITHASH=0000000
+          EOF
+          test -f "$INC/hip/hip_runtime.h"
+          test -f "$INC/hip/amd_detail/amd_warp_functions.h"
+          echo "Assembled HIP rocm-path root at $ROOT"
 
       - name: Download build tree artifact
         uses: actions/download-artifact@v4
@@ -518,27 +538,22 @@ jobs:
         run: |
           set -u
           CLANGXX=$PWD/build/bin/clang++
-          HIP_INCLUDE=$PWD/hip-include
+          HIP_ROCM=$PWD/hip-rocm
           ROOT=$PWD/rocm-examples
           COMMON="-I${ROOT}/Common"
           EXTERNAL="-I${ROOT}/External"
           REDUCTION="-I${ROOT}/Tutorials/reduction/include"
 
-          # clang auto-detects the HIP runtime relative to its own binary; a
-          # standalone build/ tree is not a ROCm install, so without --rocm-path
-          # detection fails ("cannot find HIP runtime"). Point it at a dummy
-          # existing dir: that flips StrictChecking off so HasHIPRuntime=true,
-          # and we supply headers (-isystem) + device libs explicitly anyway.
-          ROCM_DUMMY=$PWD/rocm-dummy
-          mkdir -p "$ROCM_DUMMY"
-
-          # Compile to object only (-c): exercises device-side SPIR-V codegen
-          # for both backends without needing libamdhip64 to link.
+          # --rocm-path points at the assembled ROCm-path root (see the assemble
+          # step). The driver parses <root>/share/hip/version, detects a HIP
+          # install, force-includes __clang_hip_runtime_wrapper.h (integer
+          # min/max/memset), and auto-adds <root>/include — so no separate
+          # -isystem is needed. --rocm-device-lib-path supplies the bitcode the
+          # standalone root lacks.
           BASE_FLAGS="-x hip -c \
             --offload-arch=amdgcnspirv ${BACKEND_FLAG} \
             --offload-new-driver -D__HIP_PLATFORM_AMD__ \
-            --rocm-path=${ROCM_DUMMY} \
-            -isystem ${HIP_INCLUDE} \
+            --rocm-path=${HIP_ROCM} \
             --rocm-device-lib-path=${DEVICE_LIBS}"
 
           PASS=0 FAIL=0 SKIP=0
@@ -595,8 +610,11 @@ jobs:
             "${ROOT}/HIP-Basic/multi_gpu_data_transfer" c++17
 
           # ---- Applications (Common + External include) ----
+          # monte_carlo_pi is intentionally excluded: it needs hipCUB/hipRAND/
+          # rocRAND (math-libs not produced by this build job), same rationale as
+          # the library examples. fdtd was removed from rocm-examples@develop.
           echo "=== Applications ==="
-          for ex in bitonic_sort convolution fdtd floyd_warshall histogram prefix_sum; do
+          for ex in bitonic_sort convolution floyd_warshall histogram prefix_sum; do
             compile_one "$ex" "${ROOT}/Applications/${ex}" c++17 "$EXTERNAL"
           done
 
