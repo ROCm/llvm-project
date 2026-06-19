@@ -1682,6 +1682,69 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // v_div_scale_f64: F64 mirror of V_DIV_SCALE_F32. The operand-identity
+  // decode -- (numer, denom, numer) with src0 == src2 for scale-numerator,
+  // (denom, denom, numer) with src0 == src1 for scale-denominator -- the
+  // modifier-symmetry refusal on the matched pair, and the i1 carry-out
+  // routing through writeCarryOutI1 are all width-independent. See the
+  // V_DIV_SCALE_F32 handler above for the full rationale.
+  if (Sop == CanonicalOp::V_DIV_SCALE_F64) {
+    if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_div_scale_f64"))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    auto SameOperand = [&](unsigned A, unsigned B) -> bool {
+      bool AIsReg = Op.isSrcReg(A), BIsReg = Op.isSrcReg(B);
+      if (AIsReg != BIsReg) return false;
+      if (AIsReg) {
+        ParsedReg Ra = Op.srcReg(A), Rb = Op.srcReg(B);
+        return Ra.RegKind == Rb.RegKind && Ra.BaseIdx == Rb.BaseIdx;
+      }
+      unsigned Ai = Op.srcIdx(A), Bi = Op.srcIdx(B);
+      if (!Op.Di.isImm(Ai) || !Op.Di.isImm(Bi)) return false;
+      return Op.Di.getImm(Ai) == Op.Di.getImm(Bi);
+    };
+    bool Src0EqSrc2 = SameOperand(0, 2);
+    bool Src0EqSrc1 = SameOperand(0, 1);
+    bool ScaleNumerator;
+    if (Src0EqSrc2 && !Src0EqSrc1) {
+      ScaleNumerator = true;
+    } else if (Src0EqSrc1 && !Src0EqSrc2) {
+      ScaleNumerator = false;
+    } else {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3",
+          "v_div_scale_f64 operand triple does not match a known "
+          "divide-scaling shape: expected (numer, denom, numer) with "
+          "src0 == src2 for scale-numerator, or (denom, denom, numer) "
+          "with src0 == src1 for scale-denominator.");
+      return Hr;
+    }
+    unsigned Peer = ScaleNumerator ? 2u : 1u;
+    if (Op.srcMod(0) != Op.srcMod(Peer)) {
+      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
+          Di, "VOP3",
+          "v_div_scale_f64 matched-identity operand pair has asymmetric "
+          "FP modifiers; the lifted IR can only carry one modifier set. "
+          "No known codegen emitter produces this shape; refusing rather "
+          "than dropping a modifier silently.");
+      return Hr;
+    }
+    unsigned NumerIdx = ScaleNumerator ? 0u : 2u;
+    Value *Numer =
+        Op.applyMods(NumerIdx, Ctx.B.CreateBitCast(Op.src64(NumerIdx), F64Ty));
+    Value *Denom = Op.applyMods(1, Ctx.B.CreateBitCast(Op.src64(1), F64Ty));
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_div_scale, {F64Ty});
+    Value *R = Ctx.B.CreateCall(
+        Fn, {Numer, Denom, ScaleNumerator ? Ctx.B.getTrue() : Ctx.B.getFalse()},
+        "divscale");
+    Ctx.writeReg64(
+        Op.dst(0),
+        Ctx.B.CreateBitCast(Ctx.B.CreateExtractValue(R, 0), Ctx.I64Ty));
+    writeCarryOutI1(Ctx, Di, Op, Ctx.B.CreateExtractValue(R, 1));
+    Hr.Handled = true;
+    return Hr;
+  }
 
   // ---- 3-source integer VOP3 ----
   if (Sop == CanonicalOp::V_ADD3_U32) {
