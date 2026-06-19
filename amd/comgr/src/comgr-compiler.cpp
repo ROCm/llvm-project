@@ -1813,8 +1813,11 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
 
     llvm::StringRef DataBuffer(Input->Data, Input->Size);
     llvm::MemoryBufferRef DataBufferRef(DataBuffer, "package_data");
-    if (llvm::object::extractOffloadBinaries(DataBufferRef, Files))
+    if (llvm::Error E = llvm::object::extractOffloadBinaries(DataBufferRef, Files)) {
+      llvm::logAllUnhandledErrors(std::move(E), llvm::errs(),
+                                  "Failed to extract offload binaries: ");
       return AMD_COMGR_STATUS_ERROR;
+    }
 
     // Generate random name if none provided
     if (StringRef(Input->Name).empty()) {
