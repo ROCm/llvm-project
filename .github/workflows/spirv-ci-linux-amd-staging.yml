@@ -353,3 +353,290 @@ jobs:
         env:
           AMD_COMGR_REDIRECT_LOGS: stderr
         run: ctest --test-dir build-comgr --output-on-failure --rerun-failed
+
+  # =====================================================================
+  # Test - rocm-examples SPIR-V COMPILATION gate (both backend paths)
+  #
+  # Compiles the same set of rocm-examples targets that
+  # RocmCIForSPIRV/RocmExamplesScripts/spirv_therock_llvm_backend.sh builds,
+  # through BOTH SPIR-V lowering paths via a matrix:
+  #
+  #   * spirv-backend : --offload-arch=amdgcnspirv -use-spirv-backend
+  #                     (LLVM's in-tree SPIR-V backend; the driver default)
+  #   * llvm-spirv    : --offload-arch=amdgcnspirv -no-use-spirv-backend
+  #                     (the SPIRV-LLVM-Translator path)
+  #
+  # Compile-only (-c): the build pool has no GPU and no HIP runtime, so this
+  # is a fast, blocking codegen-regression gate. Device-side SPIR-V is still
+  # generated for each translation unit, which is exactly what backend /
+  # translator changes affect. GPU execution lives in the separate
+  # `test_rocm_examples_spirv_run` job below.
+  #
+  # Coverage mirrors the script: HIP-Basic (simple + external), the two
+  # special HIP-Basic examples (runtime_compilation, multi_gpu_data_transfer),
+  # Applications, and the reduction Tutorials (v1..v9). Library examples
+  # (rocPRIM/hipCUB/hipRAND) are intentionally out of scope here — they need
+  # math-libs artifacts not produced by this workflow's build job.
+  #
+  # Excluded entirely (matching the script's exclusions): assembly_to_executable
+  # / llvm_ir_to_executable (native AMD asm / LLVM IR), opengl/vulkan interop
+  # and sobel_filter (graphics libs), hello_world_cuda / hipify (non-HIP),
+  # module_api / static_*_library (multi-step custom builds). inline_assembly
+  # IS included — it compiles cleanly through both SPIR-V paths.
+  # =====================================================================
+  test_rocm_examples_spirv:
+    name: Test rocm-examples compile (${{ matrix.backend.label }})
+    needs: build
+    runs-on: azure-linux-scale-rocm
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - label: spirv-backend
+            flag: -use-spirv-backend
+          - label: llvm-spirv
+            flag: -no-use-spirv-backend
+
+    steps:
+      - name: Checkout rocm-examples
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/rocm-examples
+          ref: develop
+          path: rocm-examples
+          fetch-depth: 1
+          persist-credentials: false
+
+      # HIP headers are needed to compile HIP source files.  We only need the
+      # include/ tree — a sparse, depth-1 checkout keeps the download small.
+      - name: Checkout ROCm HIP headers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/HIP
+          ref: amd-staging
+          path: hip-src
+          fetch-depth: 1
+          sparse-checkout: |
+            include
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Download build tree artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build-tree
+
+      # touch build.ninja so it is newer than CMakeCache.txt — without it
+      # tar -m's per-file mtimes can trigger a cmake regen + cascade rebuild.
+      - name: Untar build trees
+        run: |
+          tar -xmf linux-build-tree.tar
+          touch build/build.ninja build-device-libs/build.ninja
+
+      # The device-libs cmake rule writes bitcode to
+      # build-device-libs/amdgcn/bitcode/ (INSTALL_ROOT_SUFFIX default).
+      # Locate it robustly in case the layout ever changes.
+      - name: Locate device-libs bitcode
+        id: device_libs
+        run: |
+          for try in \
+            build-device-libs/amdgcn/bitcode \
+            build-device-libs/lib/amdgcn/bitcode; do
+            if [ -d "$try" ]; then
+              echo "path=$try" >> "$GITHUB_OUTPUT"
+              echo "Device libs found at: $try"
+              exit 0
+            fi
+          done
+          echo "Searching for ocml.bc as fallback..."
+          bc=$(find build-device-libs -name "ocml.bc" 2>/dev/null | head -1)
+          if [ -n "$bc" ]; then
+            dir=$(dirname "$bc")
+            echo "path=$dir" >> "$GITHUB_OUTPUT"
+            echo "Device libs found at: $dir"
+          else
+            echo "ERROR: device-libs bitcode not found"
+            find build-device-libs -type f | head -20
+            exit 1
+          fi
+
+      - name: Compile rocm-examples (${{ matrix.backend.label }})
+        env:
+          DEVICE_LIBS: ${{ steps.device_libs.outputs.path }}
+          BACKEND_FLAG: ${{ matrix.backend.flag }}
+        run: |
+          set -u
+          CLANGXX=$PWD/build/bin/clang++
+          HIP_INCLUDE=$PWD/hip-src/include
+          ROOT=$PWD/rocm-examples
+          COMMON="-I${ROOT}/Common"
+          EXTERNAL="-I${ROOT}/External"
+          REDUCTION="-I${ROOT}/Tutorials/reduction/include"
+
+          # Compile to object only (-c): exercises device-side SPIR-V codegen
+          # for both backends without needing libamdhip64 to link.
+          BASE_FLAGS="-x hip -c \
+            --offload-arch=amdgcnspirv ${BACKEND_FLAG} \
+            --offload-new-driver -D__HIP_PLATFORM_AMD__ \
+            -I${HIP_INCLUDE} \
+            --rocm-device-lib-path=${DEVICE_LIBS}"
+
+          PASS=0 FAIL=0 SKIP=0
+          declare -a FAILED=()
+
+          # compile_one <name> <src-dir-or-file> <std> <extra-includes...>
+          # If arg2 is a directory, prefer main.hip then fall back to main.cpp
+          # (same source resolution the script uses).
+          compile_one() {
+            local name="$1"; local where="$2"; local std="$3"; shift 3
+            local extra="$*"
+            local src=""
+            if [ -f "$where" ]; then
+              src="$where"
+            elif [ -d "$where" ]; then
+              if [ -f "${where}/main.hip" ]; then src="${where}/main.hip"
+              elif [ -f "${where}/main.cpp" ]; then src="${where}/main.cpp"; fi
+            fi
+            if [ -z "$src" ]; then
+              printf "  %-28s SKIP (not found)\n" "$name"
+              SKIP=$((SKIP+1)); return
+            fi
+            printf "  %-28s " "$name"
+            if "$CLANGXX" $BASE_FLAGS -std="$std" $COMMON $extra "$src" \
+                 -o /tmp/obj_"${name}".o 2>/tmp/err_"${name}".txt; then
+              echo "PASS"; PASS=$((PASS+1))
+            else
+              echo "FAIL"; FAIL=$((FAIL+1)); FAILED+=("$name")
+              head -8 /tmp/err_"${name}".txt | sed 's/^/      /' >&2
+            fi
+          }
+
+          # ---- HIP-Basic: simple examples (Common include only) ----
+          # device_query ships main.cpp (no .hip); compile_one falls back.
+          echo "=== HIP-Basic (simple) ==="
+          for ex in bit_extract cooperative_groups device_globals device_query \
+                    dynamic_shared events gpu_arch hello_world inline_assembly \
+                    moving_average occupancy saxpy shared_memory streams \
+                    texture_management warp_shuffle; do
+            compile_one "$ex" "${ROOT}/HIP-Basic/${ex}" c++17
+          done
+
+          # ---- HIP-Basic: examples needing External include ----
+          echo "=== HIP-Basic (external) ==="
+          for ex in bandwidth matrix_multiplication; do
+            compile_one "$ex" "${ROOT}/HIP-Basic/${ex}" c++17 "$EXTERNAL"
+          done
+
+          # ---- HIP-Basic: special examples ----
+          echo "=== HIP-Basic (special) ==="
+          compile_one runtime_compilation \
+            "${ROOT}/HIP-Basic/runtime_compilation" c++17
+          compile_one multi_gpu_data_transfer \
+            "${ROOT}/HIP-Basic/multi_gpu_data_transfer" c++17
+
+          # ---- Applications (Common + External include) ----
+          echo "=== Applications ==="
+          for ex in bitonic_sort convolution fdtd floyd_warshall histogram prefix_sum; do
+            compile_one "$ex" "${ROOT}/Applications/${ex}" c++17 "$EXTERNAL"
+          done
+
+          # ---- Tutorials: reduction v1..v9 (c++20, reduction include) ----
+          echo "=== Tutorials (reduction) ==="
+          for v in v1 v2 v3 v4 v5 v6 v7 v8 v9; do
+            compile_one "reduction_${v}" \
+              "${ROOT}/Tutorials/reduction/example/${v}.hip" c++20 "$REDUCTION"
+          done
+
+          echo ""
+          echo "==================================================="
+          echo "rocm-examples compile [${{ matrix.backend.label }}]"
+          echo "  PASS=${PASS}  FAIL=${FAIL}  SKIP=${SKIP}"
+          echo "==================================================="
+          if [ "${FAIL}" -ne 0 ]; then
+            echo "::error::${FAIL} example(s) failed to compile on ${{ matrix.backend.label }}: ${FAILED[*]}"
+            exit 1
+          fi
+
+  # =====================================================================
+  # Test - rocm-examples SPIR-V EXECUTION (GPU) — both backend paths
+  #
+  # Mirrors the build+run loop of spirv_therock_llvm_backend.sh on real
+  # hardware: builds each example to an executable (linking libamdhip64) and
+  # runs it, validating output, for both the SPIR-V backend and the
+  # llvm-spirv translator path.
+  #
+  # Design follows test_aomp_smoke.yml: a GPU runner (--device /dev/kfd
+  # --device /dev/dri + group/isolation options) and the no_rocm runtime
+  # container, with a ROCm runtime staged from artifacts via
+  # setup_test_environment.
+  #
+  # DISABLED by default: this workflow's `build` job produces a stripped LLVM
+  # build tree, not an installable ROCm runtime, and spirv-ci currently has no
+  # GPU runner wired in. Enable once a runtime artifact + GPU runner label are
+  # available (see TODOs). Kept here as the execution counterpart to the
+  # compile gate so the run path is reviewable.
+  # =====================================================================
+  test_rocm_examples_spirv_run:
+    name: Run rocm-examples on GPU (${{ matrix.backend.label }})
+    needs: build
+    # TODO: enable when a GPU runner + ROCm runtime artifact are available.
+    if: false
+    # TODO: replace with the SPIRV-CI GPU runner label (e.g. a gfx94X pool).
+    runs-on: linux-mi300-gpu-rocm
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/rocm/no_rocm_image_ubuntu24_04@sha256:4150afe4759d14822f0e3f8930e1124f26e11f68b5c7b91ec9a02b20b1ebbb98
+      # GPU isolation / device options, same recipe as test_aomp_smoke.yml.
+      options: --ipc host
+        --group-add video
+        --group-add render
+        --device /dev/kfd
+        --device /dev/dri
+        --ulimit memlock=-1:-1
+        --security-opt seccomp=unconfined
+        --env-file /etc/podinfo/gha-gpu-isolation-settings
+        --user 0:0
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - label: spirv-backend
+            flag: -use-spirv-backend
+          - label: llvm-spirv
+            flag: -no-use-spirv-backend
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout rocm-examples
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ROCm/rocm-examples
+          ref: develop
+          path: rocm-examples
+          fetch-depth: 1
+          persist-credentials: false
+
+      # TODO: stage a full ROCm runtime (clang++, HIP headers, libamdhip64,
+      # device-libs) here — e.g. via .github/actions/setup_test_environment
+      # against a runtime artifact, or by installing a ROCm package. The
+      # stripped `linux-build-tree` artifact from the build job is NOT a
+      # runnable ROCm install.
+      - name: Stage ROCm runtime
+        run: |
+          echo "TODO: stage ROCm runtime (ROCM_PATH) for GPU execution"
+          exit 1
+
+      - name: Build + run rocm-examples (${{ matrix.backend.label }})
+        env:
+          BACKEND_FLAG: ${{ matrix.backend.flag }}
+        run: |
+          # Reuse the project script, which already does build/run/validate for
+          # both backends via its action argument. ROCM_PATH must point at the
+          # staged runtime from the previous step.
+          #   ROCM_PATH=... spirv_therock_llvm_backend.sh <examples> all
+          #   ROCM_PATH=... spirv_therock_llvm_backend.sh <examples> run
+          echo "TODO: invoke build+run against staged ROCM_PATH for ${BACKEND_FLAG}"
