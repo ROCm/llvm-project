@@ -371,7 +371,7 @@ enum class CanonicalOp : uint16_t {
   V_LDEXP_F32,
   V_FLOOR_F32, V_CEIL_F32, V_TRUNC_F32, V_RNDNE_F32, V_FRACT_F32,
   V_CEIL_F64, V_RNDNE_F64,
-  V_FREXP_MANT_F32,
+  V_FREXP_MANT_F32, V_FREXP_MANT_F64,
   V_READFIRSTLANE_B32,
   // VOP1 packed FP8/BF8 -> 2x F32 expansion (VOP1Instructions.td:652-
   // 653, profile VOPProfileCVT_PK_F32_F8). Reads 16 bits of the i32
