@@ -31,6 +31,17 @@
 // RUN: unpackage --name= %t.package.bc amdgcn-amd-amdhsa gfx900 %t.noname.output.bc
 // RUN: llvm-dis %t.noname.output.bc -o - | FileCheck --check-prefixes=BOTH,GFX9 %s
 //
+// COM: failure case 1: input data has a kind other than PACKAGE.
+// RUN: unpackage --data-kind=bc --expect-fail \
+// RUN: %t.package.bc amdgcn-amd-amdhsa gfx900 %t.wrongkind.output.bc
+//
+// COM: failure case 2: the package is a PACKAGE but its contents are not a
+// COM: valid offload binary.
+// COM: (unrecognized magic would instead parse to zero binaries and succeed.)
+// RUN: printf 'BC\xc0\xde\xff\xff\xff\xff not a real module' > %t.corrupt.bc
+// RUN: unpackage --expect-fail \
+// RUN: %t.corrupt.bc amdgcn-amd-amdhsa gfx900 %t.corrupt.output.bc
+//
 // BOTH: target triple = "amdgcn-amd-amdhsa"
 // GFX9: "target-cpu"="gfx900"
 // GFX10: "target-cpu"="gfx1030"
