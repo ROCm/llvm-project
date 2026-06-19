@@ -362,9 +362,16 @@ jobs:
   # through BOTH SPIR-V lowering paths via a matrix:
   #
   #   * spirv-backend : --offload-arch=amdgcnspirv -use-spirv-backend
-  #                     (LLVM's in-tree SPIR-V backend; the driver default)
-  #   * llvm-spirv    : --offload-arch=amdgcnspirv -no-use-spirv-backend
-  #                     (the SPIRV-LLVM-Translator path)
+  #                     (LLVM's in-tree SPIR-V backend; explicit opt-in)
+  #   * llvm-spirv    : --offload-arch=amdgcnspirv  (no backend flag)
+  #                     (the SPIRV-LLVM-Translator path; the driver default)
+  #
+  # NOTE on the default: upstream clang defaults amdgcnspirv to the in-tree
+  # SPIR-V backend, but TheRock currently carries a REVERT of that change, so on
+  # this CI's toolchain the driver default for amdgcnspirv is the translator.
+  # We therefore drive llvm-spirv with the bare target (ride the default) and
+  # spirv-backend with an explicit -use-spirv-backend. If TheRock re-lands the
+  # default flip, the llvm-spirv leg should switch to -no-use-spirv-backend.
   #
   # Compile-only (-c): the build pool has no GPU and no HIP runtime, so this
   # is a fast, blocking codegen-regression gate. Device-side SPIR-V is still
@@ -402,7 +409,7 @@ jobs:
           - label: spirv-backend
             flag: -use-spirv-backend
           - label: llvm-spirv
-            flag: -no-use-spirv-backend
+            flag: ""
 
     steps:
       - name: Checkout rocm-examples
@@ -681,7 +688,7 @@ jobs:
           - label: spirv-backend
             flag: -use-spirv-backend
           - label: llvm-spirv
-            flag: -no-use-spirv-backend
+            flag: ""
     defaults:
       run:
         shell: bash
