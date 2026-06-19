@@ -253,6 +253,11 @@ include:
   B0-to-B0 entry-trampoline fast path emits the debug-only `<kernel>.stub`
   symbols for each entry stub. These symbols are skipped by default on this
   load-time-critical path, so this variable restores them to aid in debugging.
+* `AMD_COMGR_USE_EMBEDDED_LIBCXX`: Controls Comgr's embedded libc++ header
+  fallback for HIP. If set to `force` or `1`, Comgr always adds the embedded
+  libc++ include path. If set to `disable` or `0`, Comgr never adds it. Any
+  other value, or leaving it unset, uses the default `auto` mode: Comgr skips
+  the embedded path when system C++ headers are found.
 
 ### VFS
 Comgr implements support for an in-memory, virtual filesystem (VFS) for storing
