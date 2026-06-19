@@ -6989,9 +6989,10 @@ void AMDGPUAsmParser::checkKernelPrologues() {
         continue;
       ArrayRef<unsigned> Prologue = ArrayRef(OpcodeStream).drop_front(Offset);
       if (Prologue.take_front(std::size(Required)) != ArrayRef(Required)) {
-        Error(Loc, "kernel '" + Sym->getName() +
-                       "' does not begin with the required prologue "
-                       "sequence");
+        Warning(Loc, "kernel '" + Sym->getName() +
+                         "' does not start with the recommended "
+                         "'global_wb scope:SCOPE_CU; v_nop' prologue sequence "
+                         "and may incur extra runtime overhead");
       }
     }
   }
