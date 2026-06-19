@@ -27,6 +27,7 @@ end:
 ; CHECK: ; %bb.0:
 ; CHECK-NEXT: s_mov_b64 [[INIT_EXEC:s\[[0-9]+:[0-9]+\]]], exec
 ; CHECK-NEXT: s_wqm_b64 exec, exec
+; CHECK: ; %end
 ; CHECK: s_and_b64 exec, exec, [[INIT_EXEC]]
 define amdgpu_ps void @else_execfix_leave_wqm(i32 %z, float %v) #0 {
 main_body:
