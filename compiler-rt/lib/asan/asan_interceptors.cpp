@@ -915,6 +915,13 @@ INTERCEPTOR(hsa_status_t, hsa_amd_memory_pool_free, void *ptr) {
   return asan_hsa_amd_memory_pool_free(ptr, &stack);
 }
 
+INTERCEPTOR(hsa_status_t, hsa_memory_free, void* ptr) {
+  AsanInitFromRtl();
+  ENSURE_HSA_INITED();
+  GET_STACK_TRACE_FREE;
+  return asan_hsa_amd_memory_pool_free(ptr, &stack);
+}
+
 INTERCEPTOR(hsa_status_t, hsa_amd_agents_allow_access, uint32_t num_agents,
   const hsa_agent_t *agents, const uint32_t *flags, const void *ptr) {
   AsanInitFromRtl();
@@ -1035,6 +1042,7 @@ void InitializeAmdgpuInterceptors() {
   ASAN_INTERCEPT_FUNC(hsa_memory_copy);
   ASAN_INTERCEPT_FUNC(hsa_amd_memory_pool_allocate);
   ASAN_INTERCEPT_FUNC(hsa_amd_memory_pool_free);
+  ASAN_INTERCEPT_FUNC(hsa_memory_free);
   ASAN_INTERCEPT_FUNC(hsa_amd_agents_allow_access);
   ASAN_INTERCEPT_FUNC(hsa_amd_memory_async_copy);
 #if HSA_AMD_INTERFACE_VERSION_MINOR>=1

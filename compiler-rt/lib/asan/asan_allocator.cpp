@@ -331,9 +331,18 @@ QuarantineCache* GetQuarantineCache(AsanThreadLocalMallocStorage* ms) {
   return reinterpret_cast<QuarantineCache*>(ms->quarantine_cache);
 }
 
+QuarantineCache* GetQuarantineCacheDevice(AsanThreadLocalMallocStorage* ms) {
+  CHECK(ms);
+  CHECK_LE(sizeof(QuarantineCache), sizeof(ms->quarantine_cache_device));
+  return reinterpret_cast<QuarantineCache*>(ms->quarantine_cache_device);
+}
+
 void AllocatorOptions::SetFrom(const Flags* f, const CommonFlags* cf) {
   quarantine_size_mb = f->quarantine_size_mb;
   thread_local_quarantine_size_kb = f->thread_local_quarantine_size_kb;
+  device_quarantine_size_mb = f->device_quarantine_size_mb;
+  device_thread_local_quarantine_size_kb =
+      f->device_thread_local_quarantine_size_kb;
   min_redzone = f->redzone;
   max_redzone = f->max_redzone;
   may_return_null = cf->allocator_may_return_null;
@@ -344,6 +353,9 @@ void AllocatorOptions::SetFrom(const Flags* f, const CommonFlags* cf) {
 void AllocatorOptions::CopyTo(Flags* f, CommonFlags* cf) {
   f->quarantine_size_mb = quarantine_size_mb;
   f->thread_local_quarantine_size_kb = thread_local_quarantine_size_kb;
+  f->device_quarantine_size_mb = device_quarantine_size_mb;
+  f->device_thread_local_quarantine_size_kb =
+      device_thread_local_quarantine_size_kb;
   f->redzone = min_redzone;
   f->max_redzone = max_redzone;
   cf->allocator_may_return_null = may_return_null;
@@ -357,9 +369,12 @@ struct Allocator {
 
   AsanAllocator allocator;
   AsanQuarantine quarantine;
+  // Dedicated quarantine for device (HSA) allocations; see QuarantineChunk.
+  AsanQuarantine quarantine_device;
   StaticSpinMutex fallback_mutex;
   AllocatorCache fallback_allocator_cache;
   QuarantineCache fallback_quarantine_cache;
+  QuarantineCache fallback_quarantine_cache_device;
 
   uptr max_user_defined_malloc_size;
 
@@ -371,7 +386,9 @@ struct Allocator {
   // ------------------- Initialization ------------------------
   explicit Allocator(LinkerInitialized)
       : quarantine(LINKER_INITIALIZED),
-        fallback_quarantine_cache(LINKER_INITIALIZED) {}
+        quarantine_device(LINKER_INITIALIZED),
+        fallback_quarantine_cache(LINKER_INITIALIZED),
+        fallback_quarantine_cache_device(LINKER_INITIALIZED) {}
 
   void CheckOptions(const AllocatorOptions& options) const {
     CHECK_GE(options.min_redzone, 16);
@@ -385,6 +402,9 @@ struct Allocator {
     CheckOptions(options);
     quarantine.Init((uptr)options.quarantine_size_mb << 20,
                     (uptr)options.thread_local_quarantine_size_kb << 10);
+    quarantine_device.Init(
+        (uptr)options.device_quarantine_size_mb << 20,
+        (uptr)options.device_thread_local_quarantine_size_kb << 10);
     atomic_store(&alloc_dealloc_mismatch, options.alloc_dealloc_mismatch,
                  memory_order_release);
     atomic_store(&min_redzone, options.min_redzone, memory_order_release);
@@ -716,28 +736,37 @@ struct Allocator {
 
   // Expects the chunk to already be marked as quarantined by using
   // AtomicallySetQuarantineFlagIfAllocated.
-  void QuarantineChunk(AsanChunk* m, void* ptr, BufferedStackTrace* stack) {
+  void QuarantineChunk(AsanChunk* m, void* ptr, BufferedStackTrace* stack,
+                       bool is_device) {
     CHECK_EQ(atomic_load(&m->chunk_state, memory_order_relaxed),
              CHUNK_QUARANTINE);
     AsanThread* t = GetCurrentThread();
     m->SetFreeContext(t ? t->tid() : 0, StackDepotPut(*stack));
 
+    // Route host and device frees to separate quarantines so that a host free
+    // can never evict a device chunk (whose recycle issues a real hsa free
+    // under ROCr's agent_memory_lock_) and vice versa.
+    AsanQuarantine& q = is_device ? quarantine_device : quarantine;
+
     // Push into quarantine.
     if (t) {
       AsanThreadLocalMallocStorage* ms = &t->malloc_storage();
       AllocatorCache* ac = GetAllocatorCache(ms);
-      quarantine.Put(GetQuarantineCache(ms), QuarantineCallback(ac, stack), m,
-                     m->UsedSize());
+      QuarantineCache* qc =
+          is_device ? GetQuarantineCacheDevice(ms) : GetQuarantineCache(ms);
+      q.Put(qc, QuarantineCallback(ac, stack), m, m->UsedSize());
     } else {
       SpinMutexLock l(&fallback_mutex);
       AllocatorCache* ac = &fallback_allocator_cache;
-      quarantine.Put(&fallback_quarantine_cache, QuarantineCallback(ac, stack),
-                     m, m->UsedSize());
+      QuarantineCache* qc = is_device ? &fallback_quarantine_cache_device
+                                      : &fallback_quarantine_cache;
+      q.Put(qc, QuarantineCallback(ac, stack), m, m->UsedSize());
     }
   }
 
   void Deallocate(void* ptr, uptr delete_size, uptr delete_alignment,
-                  BufferedStackTrace* stack, AllocType alloc_type) {
+                  BufferedStackTrace* stack, AllocType alloc_type,
+                  bool is_device = false) {
     uptr p = reinterpret_cast<uptr>(ptr);
     if (p == 0)
       return;
@@ -802,7 +831,7 @@ struct Allocator {
     thread_stats.frees++;
     thread_stats.freed += m->UsedSize();
 
-    QuarantineChunk(m, ptr, stack);
+    QuarantineChunk(m, ptr, stack, is_device);
   }
 
   void* Reallocate(void* old_ptr, uptr new_size, BufferedStackTrace* stack) {
@@ -857,6 +886,8 @@ struct Allocator {
   void CommitBack(AsanThreadLocalMallocStorage* ms, BufferedStackTrace* stack) {
     AllocatorCache* ac = GetAllocatorCache(ms);
     quarantine.Drain(GetQuarantineCache(ms), QuarantineCallback(ac, stack));
+    quarantine_device.Drain(GetQuarantineCacheDevice(ms),
+                            QuarantineCallback(ac, stack));
     allocator.SwallowCache(ac);
   }
 
@@ -954,11 +985,17 @@ struct Allocator {
       quarantine.DrainAndRecycle(
           GetQuarantineCache(ms),
           QuarantineCallback(GetAllocatorCache(ms), stack));
+      quarantine_device.DrainAndRecycle(
+          GetQuarantineCacheDevice(ms),
+          QuarantineCallback(GetAllocatorCache(ms), stack));
     }
     {
       SpinMutexLock l(&fallback_mutex);
       quarantine.DrainAndRecycle(
           &fallback_quarantine_cache,
+          QuarantineCallback(&fallback_allocator_cache, stack));
+      quarantine_device.DrainAndRecycle(
+          &fallback_quarantine_cache_device,
           QuarantineCallback(&fallback_allocator_cache, stack));
     }
 
@@ -1490,6 +1527,7 @@ DECLARE_REAL(hsa_status_t, hsa_amd_memory_pool_allocate,
   hsa_amd_memory_pool_t memory_pool, size_t size, uint32_t flags,
   void **ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_memory_pool_free, void *ptr)
+DECLARE_REAL(hsa_status_t, hsa_memory_free, void* ptr)
 DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_create, void *ptr, size_t len,
   hsa_amd_ipc_memory_t *handle)
 DECLARE_REAL(hsa_status_t, hsa_amd_ipc_memory_attach,
@@ -1529,7 +1567,7 @@ hsa_status_t asan_hsa_amd_memory_pool_free(
   BufferedStackTrace *stack) {
   void *p = get_allocator().GetBlockBegin(ptr);
   if (p) {
-    instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC);
+    instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC, /*is_device=*/true);
     return HSA_STATUS_SUCCESS;
   }
   return REAL(hsa_amd_memory_pool_free)(ptr);
@@ -1671,7 +1709,7 @@ hsa_status_t asan_hsa_amd_vmem_address_free(void* ptr, size_t size,
 
   void* p = get_allocator().GetBlockBegin(ptr);
   if (p) {
-    instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC);
+    instance.Deallocate(ptr, 0, 0, stack, FROM_MALLOC, /*is_device=*/true);
     return HSA_STATUS_SUCCESS;
   }
   return REAL(hsa_amd_vmem_address_free)(ptr, size);
