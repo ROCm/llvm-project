@@ -389,6 +389,10 @@ jobs:
     needs: build
     runs-on: azure-linux-scale-rocm
     timeout-minutes: 30
+    # Non-blocking: this is an informational SPIR-V codegen signal over real
+    # HIP programs, not a merge gate. A red here flags a regression to look at
+    # but should not block unrelated llvm-project PRs.
+    continue-on-error: true
     container:
       image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
     strategy:
@@ -410,19 +414,63 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # HIP headers are needed to compile HIP source files.  We only need the
-      # include/ tree — a sparse, depth-1 checkout keeps the download small.
-      - name: Checkout ROCm HIP headers
+      # HIP headers needed to compile HIP source files. A complete include tree
+      # requires TWO header roots from the ROCm/rocm-systems monorepo:
+      #   * projects/hip/include          — the public API (hip_runtime.h, ...)
+      #   * projects/clr/hipamd/include   — the amd_detail/ implementation that
+      #                                     hip_runtime.h pulls in
+      # plus a generated hip/hip_version.h (assembled in the next step). A sparse
+      # ROCm/HIP checkout alone is insufficient (it has no amd_detail/, no
+      # hip_version.h) and was the cause of the "cannot find HIP runtime" failure.
+      #
+      # Pinned to PR ROCm/rocm-systems#5581 (refs/pull/5581/head): it adds the
+      # __builtin_amdgcn_is_invocable guards that let the amd_detail/ headers
+      # compile for the amdgcnspirv target (without them, e.g. amd_warp_functions.h
+      # fails with "__builtin_amdgcn_mov_dpp requires 'dpp' feature"). The PR
+      # head ref persists after merge, so this keeps working; once it lands,
+      # switch ref to `develop` and drop this comment.
+      - name: Checkout ROCm HIP + clr headers
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: ROCm/HIP
-          ref: amd-staging
-          path: hip-src
+          repository: ROCm/rocm-systems
+          ref: refs/pull/5581/head
+          path: rocm-systems
           fetch-depth: 1
           sparse-checkout: |
-            include
+            projects/hip/include
+            projects/clr/hipamd/include
           sparse-checkout-cone-mode: false
           persist-credentials: false
+
+      # Merge the two header roots into one include dir and synthesize the
+      # generated hip_version.h. clr's CMake just writes this header from a
+      # string (hipamd/CMakeLists.txt) — no clr build needed for a compile-only
+      # gate. Values are illustrative; only the HIP_VERSION macro shape matters
+      # to the headers' version checks.
+      - name: Assemble HIP include tree
+        run: |
+          set -eu
+          DST=$PWD/hip-include
+          mkdir -p "$DST"
+          cp -a rocm-systems/projects/hip/include/. "$DST"/
+          cp -a rocm-systems/projects/clr/hipamd/include/. "$DST"/
+          cat > "$DST/hip/hip_version.h" <<'EOF'
+          // Auto-generated stand-in for the CI compile gate (see workflow).
+          #ifndef HIP_VERSION_H
+          #define HIP_VERSION_H
+          #define HIP_VERSION_MAJOR 7
+          #define HIP_VERSION_MINOR 0
+          #define HIP_VERSION_PATCH 0
+          #define HIP_VERSION_GITHASH "0000000"
+          #define HIP_VERSION_BUILD_ID 0
+          #define HIP_VERSION_BUILD_NAME ""
+          #define HIP_VERSION    (HIP_VERSION_MAJOR * 10000000 + HIP_VERSION_MINOR * 100000 + HIP_VERSION_PATCH)
+          #define __HIP_HAS_GET_PCH 1
+          #endif
+          EOF
+          test -f "$DST/hip/hip_runtime.h"
+          test -f "$DST/hip/amd_detail/amd_warp_functions.h"
+          echo "Assembled HIP include tree at $DST"
 
       - name: Download build tree artifact
         uses: actions/download-artifact@v4
@@ -470,18 +518,27 @@ jobs:
         run: |
           set -u
           CLANGXX=$PWD/build/bin/clang++
-          HIP_INCLUDE=$PWD/hip-src/include
+          HIP_INCLUDE=$PWD/hip-include
           ROOT=$PWD/rocm-examples
           COMMON="-I${ROOT}/Common"
           EXTERNAL="-I${ROOT}/External"
           REDUCTION="-I${ROOT}/Tutorials/reduction/include"
+
+          # clang auto-detects the HIP runtime relative to its own binary; a
+          # standalone build/ tree is not a ROCm install, so without --rocm-path
+          # detection fails ("cannot find HIP runtime"). Point it at a dummy
+          # existing dir: that flips StrictChecking off so HasHIPRuntime=true,
+          # and we supply headers (-isystem) + device libs explicitly anyway.
+          ROCM_DUMMY=$PWD/rocm-dummy
+          mkdir -p "$ROCM_DUMMY"
 
           # Compile to object only (-c): exercises device-side SPIR-V codegen
           # for both backends without needing libamdhip64 to link.
           BASE_FLAGS="-x hip -c \
             --offload-arch=amdgcnspirv ${BACKEND_FLAG} \
             --offload-new-driver -D__HIP_PLATFORM_AMD__ \
-            -I${HIP_INCLUDE} \
+            --rocm-path=${ROCM_DUMMY} \
+            -isystem ${HIP_INCLUDE} \
             --rocm-device-lib-path=${DEVICE_LIBS}"
 
           PASS=0 FAIL=0 SKIP=0
