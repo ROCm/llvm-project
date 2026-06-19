@@ -19,9 +19,9 @@ build:
 
 python:
   install:
-  - requirements: docs/sphinx/requirements.txt
+  - requirements: amd/docs/sphinx/requirements.txt
 
 sphinx:
-  configuration: docs/conf.py
+  configuration: amd/docs/conf.py
 
 formats: [htmlzip]
