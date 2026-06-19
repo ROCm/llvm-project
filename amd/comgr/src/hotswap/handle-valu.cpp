@@ -2326,14 +2326,21 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
-  // v_swap_b32 vdstA, vdstB / uses vdstA, vdstB - exchange two VGPRs.
-  // MC encoding has two defs (vdst, vdst_in) and two uses (src0, src0_in).
-  // The old values of both registers swap: src0 -> vdst and old-vdst ->
-  // vdst_in.
+  // v_swap_b32 vdst, src0 - exchange two VGPRs. The MC encoding has two defs
+  // (vdst and src0_out, the latter tied to src0) and two uses (vdst_in tied to
+  // vdst, and src0). The swap exchanges the old values: vdst gets old src0, and
+  // src0 gets old vdst (written back through the src0_out def).
   if (Sop == CanonicalOp::V_SWAP_B32) {
-    // vdst = old src0; vdst_in(== src0's slot) = old vdst.
+    // vdst <- old src0; src0 (via the src0_out def) <- old vdst.
     ParsedReg DstA = Op.dst(0);
-    ParsedReg DstB = (Di.NumDefs >= 2) ? Op.dst(1) : Op.srcReg(0);
+    // DstB writes back to src0's slot (the src0_out def, tied to src0); like
+    // permlane16_swap's src0_out it must land in src0's own VGPR_MSB bank.
+    // Op.dst(1) would parse it as a def slot, and computeVGPRAdjust assigns the
+    // destination bank to every def slot -- when vdst and src0 sit in different
+    // banks that misroutes the swap to the destination-bank alias of src0,
+    // leaving src0's real bank stale. Use src0's own (correctly bank-adjusted)
+    // register instead.
+    ParsedReg DstB = Op.srcReg(0);
     Value *VA = Ctx.Regs.readReg32(Ctx.B, DstA);
     Value *VB = Ctx.Regs.readReg32(Ctx.B, DstB);
     Ctx.writeReg32(DstA, VB);
