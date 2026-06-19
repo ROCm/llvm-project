@@ -910,6 +910,21 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  case CanonicalOp::V_FRACT_F64: {
+    // Native llvm.amdgcn.fract.f64: clamps the result to the largest
+    // value < 1.0, matching hardware for near-integer negatives where a
+    // plain x - floor(x) would round up to 1.0.
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    Value *S = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), Ctx.F64Ty));
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_fract, {Ctx.F64Ty});
+    Ctx.writeReg64(
+        Op.dst(),
+        Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S}, "fract"), Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
 
   default:
     break;
