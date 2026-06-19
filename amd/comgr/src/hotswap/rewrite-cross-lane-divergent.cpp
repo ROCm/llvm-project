@@ -133,6 +133,7 @@ bool isIntrinsicVGPRSafePropagator(Intrinsic::ID Id) {
   case Intrinsic::amdgcn_rcp:
   case Intrinsic::amdgcn_rsq:
   case Intrinsic::amdgcn_sqrt:
+  case Intrinsic::amdgcn_trig_preop:
   case Intrinsic::amdgcn_sffbh:
   case Intrinsic::amdgcn_div_fixup:
   case Intrinsic::amdgcn_div_fmas:

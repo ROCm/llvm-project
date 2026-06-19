@@ -1187,6 +1187,22 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // v_trig_preop_f64: VOP3 F64 trig pre-op. src0 is F64 (with abs/neg
+  // modifiers), src1 is the I32 segment selector (no modifiers). Lift to
+  // llvm.amdgcn.trig.preop.f64.
+  if (Sop == CanonicalOp::V_TRIG_PREOP_F64) {
+    if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_trig_preop_f64"))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S0 = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Value *S1 = Op.src(1);
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_trig_preop, {F64Ty});
+    Value *R = Ctx.B.CreateCall(Fn, {S0, S1}, "vtrig_preop_f64");
+    Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(R, Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   if (Sop == CanonicalOp::V_FMA_F64 || Sop == CanonicalOp::V_FMAC_F64) {
     auto *F64Ty = Type::getDoubleTy(Ctx.C);
     Value *S0, *S1, *S2;

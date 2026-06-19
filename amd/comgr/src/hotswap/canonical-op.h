@@ -644,6 +644,9 @@ enum class CanonicalOp : uint16_t {
   // exists -- the pseudo is VOP3-only -- so output modifiers are
   // required to be present in the MC operand table and must be default.
   V_LDEXP_F64,
+  // VOP3 FP64 trig pre-op: look up 2/pi around src0 with segment select
+  // src1[4:0]. Lifted to llvm.amdgcn.trig.preop.f64.
+  V_TRIG_PREOP_F64,
 
   V_MAX_U32, V_MIN_U32, V_MAX_I32, V_MIN_I32,
   V_PERMLANE16_B32, V_PERMLANEX16_B32, V_PERMLANE64_B32,
