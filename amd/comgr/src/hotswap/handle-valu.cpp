@@ -1628,6 +1628,19 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  if (Sop == CanonicalOp::V_DIV_FIXUP_F64) {
+    if (!requireDefaultVOP3FpValuOutputMods(Di, Hr, "v_div_fixup_f64"))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S0 = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Value *S1 = Op.applyMods(1, Ctx.B.CreateBitCast(Op.src64(1), F64Ty));
+    Value *S2 = Op.applyMods(2, Ctx.B.CreateBitCast(Op.src64(2), F64Ty));
+    Function *Fn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_div_fixup, {F64Ty});
+    Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(Ctx.B.CreateCall(Fn, {S0, S1, S2}, "divfixup"), Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   if (Sop == CanonicalOp::V_DIV_FMAS_F32) {
     Value *S0 = Ctx.B.CreateBitCast(Op.srcF(0), Ctx.F32Ty);
     Value *S1 = Ctx.B.CreateBitCast(Op.srcF(1), Ctx.F32Ty);

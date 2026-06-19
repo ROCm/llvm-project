@@ -484,6 +484,7 @@ static const Entry kCanonTable[] = {
     E(V_MAXIMUMMINIMUM_F32_e64, V_MAXIMUMMINIMUM_F32),
     E(V_MINIMUMMAXIMUM_F32_e64, V_MINIMUMMAXIMUM_F32),
     E(V_DIV_FIXUP_F32_e64, V_DIV_FIXUP_F32),
+    E(V_DIV_FIXUP_F64_e64, V_DIV_FIXUP_F64),
     E(V_DIV_FMAS_F32_e64, V_DIV_FMAS_F32),
     E(V_DIV_SCALE_F32_e64, V_DIV_SCALE_F32),
     // LLVM's no-carry 32-bit add/sub pseudos are just `V_ADD_U32` etc.; the

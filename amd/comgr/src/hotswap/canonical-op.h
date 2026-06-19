@@ -532,6 +532,7 @@ enum class CanonicalOp : uint16_t {
   // output modifiers (clamp / omod) are refused until modeled exactly.
   V_MAXIMUMMINIMUM_F32, V_MINIMUMMAXIMUM_F32,
   V_DIV_FIXUP_F32, V_DIV_FMAS_F32, V_DIV_SCALE_F32,
+  V_DIV_FIXUP_F64,
   // Mixed-precision FMA, VOP3P (VOP3PInstructions.td:109). Both
   // variants take three sources and reduce to
   //   fma(cvt_f32(src0_part), cvt_f32(src1_part), cvt_f32(src2_part))
