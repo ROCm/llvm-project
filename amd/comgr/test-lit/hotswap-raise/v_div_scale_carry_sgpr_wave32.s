@@ -31,7 +31,7 @@
 ; stores it to the SGPR as a wave-mask ballot, not a zext of the lane's bit:
 ; CHECK: %divscale = call { float, i1 } @llvm.amdgcn.div.scale.f32(float %{{[^,]+}}, float %{{[^,]+}}, i1 false)
 ; CHECK: [[CARRY:%[0-9]+]] = extractvalue { float, i1 } %divscale, 1
-; CHECK: %div_scale_flag_ballot = call i64 @llvm.amdgcn.ballot.i64
+; CHECK: %{{.+}} = call i64 @llvm.amdgcn.ballot.i64(i1 [[CARRY]])
 ; The fmas consumes the per-lane carry directly, not a re-widened SGPR mask:
 ; CHECK-NOT: wn_mask_widen
 ; CHECK-NOT: sgpr_mask_shadow_sel
