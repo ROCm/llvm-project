@@ -8433,6 +8433,14 @@ PreservedAnalyses LoopVectorizePass::run(Function &F,
   // expensive analyses.
   if (LI->empty())
     return PreservedAnalyses::all();
+
+  // Local PoC: disable loop vectorization entirely (scalar loops stay scalar;
+  // typically increases instruction count vs vectorized code). Set to false or
+  // remove this block to restore default LLVM behavior.
+  constexpr bool DisableLoopVectorizeForInstCountPoC = true;
+  if (DisableLoopVectorizeForInstCountPoC)
+    return PreservedAnalyses::all();
+
   SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
   TTI = &AM.getResult<TargetIRAnalysis>(F);
   DT = &AM.getResult<DominatorTreeAnalysis>(F);
