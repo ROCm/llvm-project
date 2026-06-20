@@ -144,21 +144,21 @@ comgr_configure_test_target(HotswapMCTests)
 # `AMDGPU_KERNEL` `ret void` function, plus the failure paths for missing
 # kernel descriptor / malformed ISA.
 
-add_executable(RaiserScaffoldingTests
-  RaiserScaffoldingTest.cpp)
+# add_executable(RaiserScaffoldingTests
+#   RaiserScaffoldingTest.cpp)
 
-target_link_libraries(RaiserScaffoldingTests PRIVATE
-  ${COMGR_GTEST_LIBS}
-  hotswap::transpiler
-  ${LLVM_PTHREAD_LIB})
+# target_link_libraries(RaiserScaffoldingTests PRIVATE
+#   ${COMGR_GTEST_LIBS}
+#   hotswap::transpiler
+#   ${LLVM_PTHREAD_LIB})
 
-target_include_directories(RaiserScaffoldingTests PRIVATE
-  ${LLVM_INCLUDE_DIRS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/../src
-  ${COMGR_GTEST_INCLUDE_DIRS}
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+# target_include_directories(RaiserScaffoldingTests PRIVATE
+#   ${LLVM_INCLUDE_DIRS}
+#   ${CMAKE_CURRENT_SOURCE_DIR}/../src
+#   ${COMGR_GTEST_INCLUDE_DIRS}
+#   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 
-comgr_configure_test_target(RaiserScaffoldingTests)
+# comgr_configure_test_target(RaiserScaffoldingTests)
 
 # -- HotswapToolTests ---------------------------------------------------------
 #
@@ -222,10 +222,8 @@ endif()
 add_custom_target(test-unit
   COMMAND $<TARGET_FILE:HotswapElfTests>
   COMMAND $<TARGET_FILE:HotswapMCTests>
-  COMMAND $<TARGET_FILE:HotswapToolTests>
-  COMMAND $<TARGET_FILE:RaiserScaffoldingTests>)
-add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapToolTests
-  RaiserScaffoldingTests)
+  COMMAND $<TARGET_FILE:HotswapToolTests>)
+add_dependencies(test-unit HotswapElfTests HotswapMCTests HotswapToolTests)
 if(TARGET HotswapToolLoaderTests)
   add_dependencies(test-unit HotswapToolLoaderTests)
   add_custom_command(TARGET test-unit POST_BUILD

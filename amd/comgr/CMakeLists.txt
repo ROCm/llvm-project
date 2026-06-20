@@ -190,7 +190,7 @@ target_include_directories(amd_comgr
 # transpiler in (its TUs land in amd_comgr.so) and exposing the
 # `amd_comgr_hotswap_transpile` entry point.
 if(COMGR_ENABLE_HOTSWAP_TRANSPILE)
-  target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)
+  # target_link_libraries(amd_comgr PRIVATE hotswap::transpiler)
   target_compile_definitions(amd_comgr PRIVATE COMGR_ENABLE_HOTSWAP_TRANSPILE=1)
 endif()
 
