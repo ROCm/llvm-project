@@ -5734,8 +5734,14 @@ static bool canNarrowLoad(VPSingleDefRecipe *WideMember0, unsigned OpIdx,
                           VPValue *OpV, unsigned Idx, bool IsScalable) {
   VPValue *Member0Op = WideMember0->getOperand(OpIdx);
   VPRecipeBase *Member0OpR = Member0Op->getDefiningRecipe();
-  if (!Member0OpR)
-    return Member0Op == OpV;
+  if (!Member0OpR) {
+    // Member0's operand is a uniform live-in, broadcast across all fields.
+    if (Member0Op == OpV)
+      return true;
+    // Otherwise distinct per-field live-ins are assembled into a BuildVector.
+    return !IsScalable && !OpV->hasDefiningRecipe() &&
+           OpV->getScalarType() == Member0Op->getScalarType();
+  }
   if (auto *W = dyn_cast<VPWidenLoadRecipe>(Member0OpR))
     // For scalable VFs, the narrowed plan processes vscale iterations at once,
     // so a shared wide load cannot be narrowed to a uniform scalar; bail out.
@@ -5834,14 +5840,28 @@ static bool isAlreadyNarrow(VPValue *VPV) {
 
 // Convert the wide recipes defining the VPValues in \p Members feeding an
 // interleave group to a single narrow variant. The first member is reused as
-// the narrowed recipe.
-static VPValue *
-narrowInterleaveGroupOp(ArrayRef<VPValue *> Members,
-                        SmallPtrSetImpl<VPValue *> &NarrowedOps) {
+// the narrowed recipe. BuildVectors for live-in operands are inserted into \p
+// Preheader.
+static VPValue *narrowInterleaveGroupOp(ArrayRef<VPValue *> Members,
+                                        SmallPtrSetImpl<VPValue *> &NarrowedOps,
+                                        VPBasicBlock *Preheader) {
   VPValue *V = Members.front();
   auto *R = V->getDefiningRecipe();
-  if (!R || NarrowedOps.contains(V))
+  if (NarrowedOps.contains(V))
     return V;
+
+  if (!R) {
+    assert(all_of(Members,
+                  [V](VPValue *M) {
+                    return !M->hasDefiningRecipe() &&
+                           M->getScalarType() == V->getScalarType();
+                  }) &&
+           "expected distinct live-ins of matching scalar type");
+    auto *BV = new VPInstruction(VPInstruction::BuildVector, Members);
+    Preheader->appendRecipe(BV);
+    NarrowedOps.insert(BV);
+    return BV;
+  }
 
   if (isAlreadyNarrow(V))
     return V;
@@ -5854,7 +5874,8 @@ narrowInterleaveGroupOp(ArrayRef<VPValue *> Members,
       SmallVector<VPValue *> OpsI;
       for (VPValue *Member : Members)
         OpsI.push_back(Member->getDefiningRecipe()->getOperand(Idx));
-      WideMember0->setOperand(Idx, narrowInterleaveGroupOp(OpsI, NarrowedOps));
+      WideMember0->setOperand(
+          Idx, narrowInterleaveGroupOp(OpsI, NarrowedOps, Preheader));
     }
     return V;
   }
@@ -6019,10 +6040,11 @@ VPlanTransforms::narrowInterleaveGroups(VPlan &Plan,
 
   // Convert InterleaveGroup \p R to a single VPWidenLoadRecipe.
   SmallPtrSet<VPValue *, 4> NarrowedOps;
+  VPBasicBlock *Preheader = Plan.getVectorPreheader();
   // Narrow operation tree rooted at store groups.
   for (auto *StoreGroup : StoreGroups) {
-    VPValue *Res =
-        narrowInterleaveGroupOp(StoreGroup->getStoredValues(), NarrowedOps);
+    VPValue *Res = narrowInterleaveGroupOp(StoreGroup->getStoredValues(),
+                                           NarrowedOps, Preheader);
     auto *SI =
         cast<StoreInst>(StoreGroup->getInterleaveGroup()->getInsertPos());
     auto *S = new VPWidenStoreRecipe(*SI, StoreGroup->getAddr(), Res, nullptr,
@@ -7101,38 +7123,79 @@ void VPlanTransforms::makeMemOpWideningDecisions(
     }
   }
 
-  VPBasicBlock *MiddleVPBB = Plan.getMiddleBlock();
-  VPBuilder FinalRedStoresBuilder(MiddleVPBB, MiddleVPBB->getFirstNonPhi());
+  // Few helpers to process different kinds of memory operations.
 
-  for (VPInstruction *VPI : MemOps) {
-    auto ReplaceWith = [&](VPRecipeBase *New) {
-      New->insertBefore(VPI);
-      if (VPI->getOpcode() == Instruction::Load)
-        VPI->replaceAllUsesWith(New->getVPSingleValue());
-      VPI->eraseFromParent();
-    };
-
-    // Note: we must do that for scalar VPlan as well.
-    if (RecipeBuilder.replaceWithFinalIfReductionStore(VPI,
-                                                       FinalRedStoresBuilder))
-      continue;
-
-    // Filter out scalar VPlan for the remaining memory operations.
-    if (LoopVectorizationPlanner::getDecisionAndClampRange(
-            [](ElementCount VF) { return VF.isScalar(); }, Range))
-      continue;
-
-    if (VPHistogramRecipe *Histogram = RecipeBuilder.widenIfHistogram(VPI)) {
-      ReplaceWith(Histogram);
-      continue;
+  // To be used as argument to `VPlanTransforms::runPass` which explicitly
+  // specified pass name, hence `VPlan &` parameter.
+  auto ProcessSubset = [&](VPlan &, auto ProcessVPInst) {
+    SmallVector<VPInstruction *> RemainingMemOps;
+    for (VPInstruction *VPI : MemOps) {
+      if (!ProcessVPInst(VPI))
+        RemainingMemOps.push_back(VPI);
     }
 
-    VPRecipeBase *Recipe = RecipeBuilder.tryToWidenMemory(VPI, Range);
-    if (!Recipe)
-      Recipe = RecipeBuilder.handleReplication(VPI, Range);
+    MemOps.clear();
+    std::swap(MemOps, RemainingMemOps);
+  };
 
-    ReplaceWith(Recipe);
-  }
+  auto ReplaceWith = [&](VPInstruction *VPI, VPRecipeBase *New) {
+    New->insertBefore(VPI);
+    if (VPI->getOpcode() == Instruction::Load)
+      VPI->replaceAllUsesWith(New->getVPSingleValue());
+    VPI->eraseFromParent();
+
+    // VPI has been processed.
+    return true;
+  };
+
+  auto Scalarize = [&](VPInstruction *VPI) {
+    return ReplaceWith(VPI, RecipeBuilder.handleReplication(VPI, Range));
+  };
+
+  VPBasicBlock *MiddleVPBB = Plan.getMiddleBlock();
+  VPBuilder FinalRedStoresBuilder(MiddleVPBB, MiddleVPBB->getFirstNonPhi());
+  VPlanTransforms::runPass(
+      "lowerMemoryIdioms", ProcessSubset, Plan, [&](VPInstruction *VPI) {
+        if (RecipeBuilder.replaceWithFinalIfReductionStore(
+                VPI, FinalRedStoresBuilder))
+          return true;
+
+        // Filter out scalar VPlan for the remaining idioms.
+        if (LoopVectorizationPlanner::getDecisionAndClampRange(
+                [](ElementCount VF) { return VF.isScalar(); }, Range))
+          return false;
+
+        if (VPHistogramRecipe *Histogram = RecipeBuilder.widenIfHistogram(VPI))
+          return ReplaceWith(VPI, Histogram);
+
+        return false;
+      });
+
+  // Filter out scalar VPlan for the remaining memory operations.
+  if (LoopVectorizationPlanner::getDecisionAndClampRange(
+          [](ElementCount VF) { return VF.isScalar(); }, Range))
+    return;
+
+  // If the instruction's allocated size doesn't equal it's type size, it
+  // requires padding and will be scalarized.
+  VPlanTransforms::runPass(
+      "scalarizeMemOpsWithIrregularTypes", ProcessSubset, Plan,
+      [&](VPInstruction *VPI) {
+        Instruction *I = VPI->getUnderlyingInstr();
+        if (hasIrregularType(getLoadStoreType(I), I->getDataLayout()))
+          return Scalarize(VPI);
+
+        return false;
+      });
+
+  VPlanTransforms::runPass("delegateMemOpWideningToLegacyCM", ProcessSubset,
+                           Plan, [&](VPInstruction *VPI) {
+                             if (VPRecipeBase *Recipe =
+                                     RecipeBuilder.tryToWidenMemory(VPI, Range))
+                               return ReplaceWith(VPI, Recipe);
+
+                             return Scalarize(VPI);
+                           });
 }
 
 void VPlanTransforms::makeScalarizationDecisions(VPlan &Plan, VFRange &Range) {
