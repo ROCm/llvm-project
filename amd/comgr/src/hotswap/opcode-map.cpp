@@ -702,6 +702,7 @@ static const Entry kCanonTable[] = {
     // single e64 entry covers both encodings.
     E(V_RCP_F64_e64, V_RCP_F64),
     E(V_RSQ_F64_e64, V_RSQ_F64),
+    E(V_SQRT_F64_e64, V_SQRT_F64),
     E(V_LDEXP_F64_e64, V_LDEXP_F64),
     E(V_TRIG_PREOP_F64_e64, V_TRIG_PREOP_F64),
 

@@ -1228,6 +1228,21 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // v_sqrt_f64: VOP1 f64 square root. Lift to llvm.amdgcn.sqrt.f64 so gfx942
+  // isels straight back to v_sqrt_f64 (the source op's exact approximation),
+  // rather than llvm.sqrt.f64 which may expand to a software sequence.
+  if (Sop == CanonicalOp::V_SQRT_F64) {
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Function *Sqrt = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_sqrt, {F64Ty});
+    Value *R = Ctx.B.CreateCall(Sqrt, {S}, "vsqrt_f64");
+    Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(R, Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   // v_ldexp_f64: VOP3-only F64 ldexp. src0 is F64 (with abs/neg
   // modifiers), src1 is the I32 exponent (no modifiers). Lift to the
   // generic `llvm.ldexp.f64.i32` intrinsic; the AMDGPU backend isels it
