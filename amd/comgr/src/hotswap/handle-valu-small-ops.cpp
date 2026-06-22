@@ -807,6 +807,18 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  case CanonicalOp::V_FLOOR_F64: {
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    Value *S = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), Ctx.F64Ty));
+    Function *FloorFn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::floor, {Ctx.F64Ty});
+    Ctx.writeReg64(Op.dst(),
+                   Ctx.B.CreateBitCast(
+                       Ctx.B.CreateCall(FloorFn, {S}, "floor"), Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   case CanonicalOp::V_CEIL_F64: {
     if (!requireDefaultOutputModsIfPresent(Di, Hr))
       return Hr;
