@@ -858,6 +858,18 @@ HandlerResult handleValuSmallOps(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  case CanonicalOp::V_TRUNC_F64: {
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    Value *S = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), Ctx.F64Ty));
+    Function *TruncFn = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::trunc, {Ctx.F64Ty});
+    Ctx.writeReg64(Op.dst(),
+                   Ctx.B.CreateBitCast(
+                       Ctx.B.CreateCall(TruncFn, {S}, "trunc"), Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   case CanonicalOp::V_RNDNE_F64: {
     if (!requireDefaultOutputModsIfPresent(Di, Hr))
       return Hr;
