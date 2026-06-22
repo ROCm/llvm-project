@@ -1823,17 +1823,8 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
       llvm::SmallString<22> Result;
       llvm::sys::fs::createUniquePath("comgr-package-%%%%%%%%", Result, false);
 
-      char *Buf = new char[Result.size() + 1];
-      std::memcpy(Buf, Result.data(), Result.size());
-      Buf[Result.size()] = '\0';
-      Input->Name = Buf;
+      Input->setName(Result);
     }
-
-    // Write input file system so that the offload-binary API can process
-    // TODO: Switch write to VFS
-    SmallString<128> InputFilePath = getFilePath(Input, InputDir);
-    if (auto Status = outputToFile(Input, InputFilePath))
-      return Status;
 
     // Generate prefix for output files
     StringRef OutputPrefix = llvm::sys::path::stem(Input->Name);
@@ -1841,7 +1832,7 @@ amd_comgr_status_t AMDGPUCompiler::unpackage() {
     // TODO: Log Command (see linkBitcodeToBitcode() unbundling)
     if (env::shouldEmitVerboseLogs()) {
       LogS << "   Extracting Package:\n"
-           << "   Input Filename: " << InputFilePath << "\n";
+           << "   Input Filename: " << Input->Name << "\n";
     }
 
     SmallVector<std::string> OutputFileNames;

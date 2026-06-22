@@ -68,15 +68,6 @@ amd_comgr_status_t UnpackageCommand::execute(raw_ostream &LogS) {
     Worklist.erase(Match);
   }
 
-  // if not all expected files were unpackaged, possibly throw an error
-  // TODO: should this have an option associated with it? unbundler doesn't
-  if (!Worklist.empty()) {
-    // the unbundler is invoked to ignore missing bundles, so, in matching that
-    // behavior, the following error shouldn't be thrown:
-
-    // return AMD_COMGR_STATUS_ERROR;
-  }
-
   return AMD_COMGR_STATUS_SUCCESS;
 }
 
