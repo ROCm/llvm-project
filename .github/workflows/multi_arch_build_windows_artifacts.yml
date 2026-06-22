@@ -316,6 +316,11 @@ jobs:
           sed -i 's/ AND NOT THEROCK_BUILD_COMGR_TESTS//' \
             compiler/pre_hook_amd-llvm.cmake
 
+      - name: Enable SPIRV
+        run: |
+          sed -i 's|set(LLVM_TARGETS_TO_BUILD "[^"]*"|set(LLVM_TARGETS_TO_BUILD "AMDGPU;SPIRV;X86"|' \
+            compiler/pre_hook_amd-llvm.cmake
+            
       #- name: Setup ccache
       #  run: |
       #    ./build_tools/setup_ccache.py \

@@ -339,6 +339,11 @@ jobs:
           sed -i 's/if(THEROCK_BUILD_COMGR_TESTS)/if(THEROCK_BUILD_COMGR_TESTS OR THEROCK_BUILD_TESTING)/' \
             compiler/pre_hook_amd-comgr.cmake
 
+      - name: Enable SPIRV
+        run: |
+          sed -i 's|set(LLVM_TARGETS_TO_BUILD "[^"]*"|set(LLVM_TARGETS_TO_BUILD "AMDGPU;SPIRV;X86"|' \
+            compiler/pre_hook_amd-llvm.cmake
+ 
       - name: Configure PR Projects
         if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.test_type != 'full') }}
         env:
