@@ -96,8 +96,19 @@ jobs:
         with:
           # We need the parent commit to do a diff
           repository: "ROCm/TheRock"
-          ref: 'users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026'
+          ref: 'compiler/amd-staging'
           fetch-depth: 2
+
+      - name: Cherry-Pick Tip of Source Branch
+        run: |
+          git config --global user.email "z1-cciauto@amd.com"
+          git config --global user.name "Z1 cciauto"
+          git fetch origin users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026
+          # Cherry-pick only the tip commit
+          TIP_COMMIT=$(git rev-parse origin/users/kzhuravl/merge-main-into-compiler-amd-staging-06-18-2026)
+          echo "Cherry-picking tip commit: $TIP_COMMIT"
+          # If tip is a merge commit, use -m 1
+          git cherry-pick -m 1 "$TIP_COMMIT" || git cherry-pick "$TIP_COMMIT"
 
       - name: SHA of TheRock
         run: |
