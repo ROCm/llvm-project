@@ -1165,6 +1165,20 @@ HandlerResult handleVALU(RaiseContext &Ctx, const DecodedInst &Di,
     Hr.Handled = true;
     return Hr;
   }
+  // v_rsq_f64: VOP1 TRANS-class rsqrt approximation, sibling of V_RCP_F64.
+  // Lift to llvm.amdgcn.rsq.f64 so gfx942 isels straight back to v_rsq_f64.
+  if (Sop == CanonicalOp::V_RSQ_F64) {
+    if (!requireDefaultOutputModsIfPresent(Di, Hr))
+      return Hr;
+    auto *F64Ty = Type::getDoubleTy(Ctx.C);
+    Value *S = Op.applyMods(0, Ctx.B.CreateBitCast(Op.src64(0), F64Ty));
+    Function *Rsq = Intrinsic::getOrInsertDeclaration(
+        &Ctx.M, Intrinsic::amdgcn_rsq, {F64Ty});
+    Value *R = Ctx.B.CreateCall(Rsq, {S}, "vrsq_f64");
+    Ctx.writeReg64(Op.dst(), Ctx.B.CreateBitCast(R, Ctx.I64Ty));
+    Hr.Handled = true;
+    return Hr;
+  }
   // v_ldexp_f64: VOP3-only F64 ldexp. src0 is F64 (with abs/neg
   // modifiers), src1 is the I32 exponent (no modifiers). Lift to the
   // generic `llvm.ldexp.f64.i32` intrinsic; the AMDGPU backend isels it

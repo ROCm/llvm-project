@@ -638,6 +638,9 @@ enum class CanonicalOp : uint16_t {
   // sequence on gfx942 unless `arcp`/fast-math flags are set, which
   // would be a silent semantics change versus the source op.
   V_RCP_F64,
+  // VOP1 FP64 TRANS-class rsqrt; lifts to llvm.amdgcn.rsq.f64, the
+  // approximation the hardware op computes (same rationale as V_RCP_F64).
+  V_RSQ_F64,
   // VOP3 FP64 ldexp: F64 src0 * 2^(I32 src1). Lifted to the generic
   // `llvm.ldexp.f64.i32` intrinsic; the AMDGPU backend lowers this back
   // to v_ldexp_f64 on targets that have the op natively. No e32 form
