@@ -432,7 +432,8 @@ target_compile_definitions(amd_comgr
 target_include_directories(amd_comgr
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-    $<INSTALL_INTERFACE:include>)
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${amd_comgr_NAME}>)
 
 configure_file(
   include/amd_comgr.h.in
