@@ -67,7 +67,8 @@ RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
                       uint64_t KernelSize,
                       llvm::StringRef CompilationTargetIsa = "",
                       bool EnableWritelaneRewrite = true,
-                      bool EnableWaveNative = true);
+                      bool EnableWaveNative = true,
+                      bool AssumeHipGlobalOffsetZero = false);
 
 } // namespace COMGR::hotswap
 

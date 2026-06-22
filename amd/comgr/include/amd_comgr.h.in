@@ -2900,6 +2900,13 @@ typedef enum amd_comgr_hotswap_transpile_option_flags_s {
    * Enable HotSwap strict mode for unsafe lowering refusals.
    */
   AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_STRICT = 1u << 2,
+  /**
+   * Assume HIP launch semantics for hidden_global_offset_{x,y,z}. HIP launch
+   * APIs do not expose a non-zero HSA grid-global offset, so those source ABI
+   * fields may be synthesized as zero. Leave unset for generic HSA/OpenCL code
+   * objects so unsupported global-offset uses refuse instead of being guessed.
+   */
+  AMD_COMGR_HOTSWAP_TRANSPILE_OPTIONS_ASSUME_HIP_GLOBAL_OFFSET_ZERO = 1u << 3,
 } amd_comgr_hotswap_transpile_option_flags_t;
 
 /**

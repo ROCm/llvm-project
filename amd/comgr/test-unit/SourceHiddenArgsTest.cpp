@@ -9,6 +9,7 @@
 #include "hotswap/source-hidden-args.h"
 
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
@@ -59,10 +60,16 @@ struct HiddenArgModule {
     return OS.str();
   }
 
-  SourceHiddenArgContext context(ArrayRef<KernelArgMeta> Args) {
-    return SourceHiddenArgContext{C, M, B, Type::getInt8Ty(C),
-                                  Type::getInt32Ty(C), Type::getInt64Ty(C),
-                                  Args};
+  SourceHiddenArgContext context(ArrayRef<KernelArgMeta> Args,
+                                 bool AssumeHipGlobalOffsetZero = false) {
+    return SourceHiddenArgContext{C,
+                                  M,
+                                  B,
+                                  Type::getInt8Ty(C),
+                                  Type::getInt32Ty(C),
+                                  Type::getInt64Ty(C),
+                                  Args,
+                                  AssumeHipGlobalOffsetZero};
   }
 };
 
@@ -109,6 +116,79 @@ TEST(SourceHiddenArgs, BlockCountXUsesGridDividedByWorkgroupSize) {
   EXPECT_NE(IR.find("i32 4"), std::string::npos);
   EXPECT_NE(IR.find("i32 12"), std::string::npos);
   EXPECT_NE(IR.find("udiv i32"), std::string::npos);
+}
+
+TEST(SourceHiddenArgs, GridDimsUsesAqlDispatchPacketSetupField) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("grid_dims", 96, 2, "hidden_grid_dims"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx = HM.context(Args);
+
+  SourceHiddenArgValue Value =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/96, /*ByteWidth=*/2,
+                              /*IsSigned=*/false);
+
+  ASSERT_TRUE(Value.Matched);
+  ASSERT_NE(Value.Value, nullptr);
+
+  std::string IR = HM.str();
+  EXPECT_NE(
+      IR.find(
+          "getelementptr inbounds i8, ptr addrspace(4) %dispatch_ptr, i32 2"),
+      std::string::npos);
+  EXPECT_NE(IR.find("and i32"), std::string::npos);
+  EXPECT_NE(IR.find("3"), std::string::npos);
+  EXPECT_EQ(IR.find("i32 16"), std::string::npos)
+      << "grid_dims must not be derived from grid_size_y extent";
+  EXPECT_EQ(IR.find("i32 20"), std::string::npos)
+      << "grid_dims must not be derived from grid_size_z extent";
+}
+
+TEST(SourceHiddenArgs, GlobalOffsetXIsConstantZero) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("global_offset_x", 72, 8, "hidden_global_offset_x"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx =
+      HM.context(Args, /*AssumeHipGlobalOffsetZero=*/true);
+
+  SourceHiddenArgValue Low =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/72, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+  SourceHiddenArgValue High =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/76, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+
+  ASSERT_TRUE(Low.Matched);
+  ConstantInt *LowCI = dyn_cast<ConstantInt>(Low.Value);
+  ASSERT_NE(LowCI, nullptr);
+  EXPECT_TRUE(LowCI->isZero());
+
+  ASSERT_TRUE(High.Matched);
+  ConstantInt *HighCI = dyn_cast<ConstantInt>(High.Value);
+  ASSERT_NE(HighCI, nullptr);
+  EXPECT_TRUE(HighCI->isZero());
+
+  std::string IR = HM.str();
+  EXPECT_EQ(IR.find("@llvm.amdgcn.dispatch.ptr"), std::string::npos);
+}
+
+TEST(SourceHiddenArgs, GlobalOffsetXRefusesWithoutHipLaunchAssumption) {
+  std::vector<KernelArgMeta> Args = {
+      makeArg("global_offset_x", 72, 8, "hidden_global_offset_x"),
+  };
+  HiddenArgModule HM;
+  SourceHiddenArgContext Ctx = HM.context(Args);
+
+  SourceHiddenArgValue Value =
+      emitSourceHiddenInteger(Ctx, /*ByteOffset=*/72, /*ByteWidth=*/4,
+                              /*IsSigned=*/false);
+
+  EXPECT_TRUE(Value.Matched);
+  EXPECT_EQ(Value.Value, nullptr);
+  EXPECT_NE(Value.FailureDetail.find("unsupported source hidden argument kind"),
+            std::string::npos);
 }
 
 TEST(SourceHiddenArgs, UnsupportedHiddenArgFailsLoudly) {

@@ -105,3 +105,28 @@
 // CACHEHIT-DAG: cache_hit=1
 // CACHEHIT-DAG: cache_lookup=hit
 // CACHEHIT-DAG: cache_write=not_attempted
+
+// COM: The HIP-global-offset assumption is a semantic lowering input. Toggling
+// COM: it at the COMGR boundary must produce a distinct cache key, or cached
+// COM: objects could be reused across incompatible launch contracts.
+// RUN: rm -rf %t.hip-cache
+// RUN: env HSA_HOTSWAP_CACHE_DIR=%t.hip-cache hotswap-transpile \
+// RUN:                   %S/vecadd_gfx950.co \
+// RUN:                   amdgcn-amd-amdhsa--gfx950 \
+// RUN:                   amdgcn-amd-amdhsa--gfx942 \
+// RUN:   > %t.nohip.out
+// RUN: %FileCheck --check-prefix=HIPKEYBASE %s < %t.nohip.out
+// RUN: sed -n 's/.*cache_key=\([0-9a-f][0-9a-f]*\).*/\1/p' %t.nohip.out > %t.nohip.key
+// RUN: env HSA_HOTSWAP_CACHE_DIR=%t.hip-cache \
+// RUN:     HSA_HOTSWAP_ASSUME_HIP_GLOBAL_OFFSET_ZERO=1 hotswap-transpile \
+// RUN:                   %S/vecadd_gfx950.co \
+// RUN:                   amdgcn-amd-amdhsa--gfx950 \
+// RUN:                   amdgcn-amd-amdhsa--gfx942 \
+// RUN:   > %t.hip.out
+// RUN: %FileCheck --check-prefix=HIPKEYBASE %s < %t.hip.out
+// RUN: sed -n 's/.*cache_key=\([0-9a-f][0-9a-f]*\).*/\1/p' %t.hip.out > %t.hip.key
+// RUN: ! cmp -s %t.nohip.key %t.hip.key
+// HIPKEYBASE-DAG: RESULT: SUCCESS bytes={{[1-9][0-9]*}}
+// HIPKEYBASE-DAG: cache_hit=0
+// HIPKEYBASE-DAG: cache_lookup=miss
+// HIPKEYBASE-DAG: cache_write=success

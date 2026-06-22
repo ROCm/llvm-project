@@ -27,6 +27,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCRegister.h"
 
+#include <cassert>
 #include <map>
 
 namespace COMGR::hotswap {
@@ -106,6 +107,7 @@ struct RaiseContext {
   // created" in `computeMode`).  So applying the same 8-bit state to both
   // halves is correct.
   uint8_t VgprMsBs = 0;
+  bool AssumeHipGlobalOffsetZero = false;
 
   // Per-instruction VGPR index adjustment, indexed by MCInst operand index.
   // Computed from vgprMSBs before each instruction dispatch.
@@ -226,6 +228,63 @@ struct RaiseContext {
   void storeVGPR64(int Idx, llvm::Value *V);
   void storeAGPR32(int Idx, llvm::Value *V);
 
+  // Entry fact for the source-ABI kernarg-segment pointer SGPR pair at a
+  // recovered source BB leader.
+  //
+  //   LiveEntry - all incoming CFG paths still carry the entry kernarg pointer.
+  //   Clobbered - all incoming CFG paths have overwritten either half.
+  //   Unknown   - paths disagree, are unreachable, or include an unclassified
+  //               write; strict hidden-arg lowering refuses in this state.
+  enum class KernargPtrProvenance {
+    LiveEntry,
+    Clobbered,
+    Unknown,
+  };
+
+  // True when `Base` names the descriptor-provided kernarg pointer SGPR pair.
+  // Kernels that do not enable that user SGPR never match.
+  bool isEntryKernargSegmentPtrSgpr(ParsedReg Base) const {
+    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
+    if (Base.RegKind != ParsedReg::SGPR)
+      return false;
+    int KernargPtrSgpr = Layout->KernargSegmentPtrSgpr;
+    return KernargPtrSgpr >= 0 && Base.BaseIdx == KernargPtrSgpr;
+  }
+
+  KernargPtrProvenance getKernargPtrProvenance() const {
+    return CurrentKernargPtrProvenance;
+  }
+
+  // Update the intra-BB cursor after an SGPR write. Only writes to either
+  // kernarg-pointer lane change this provenance fact.
+  void noteSgprWriteForKernargProvenance(int Idx) {
+    assert(Layout && "RaiseContext requires descriptor-derived SGPR layout");
+    int KernargPtrSgpr = Layout->KernargSegmentPtrSgpr;
+    if (KernargPtrSgpr < 0 ||
+        (Idx != KernargPtrSgpr && Idx != KernargPtrSgpr + 1))
+      return;
+    CurrentKernargPtrProvenance = KernargPtrProvenance::Clobbered;
+  }
+
+  // Record the prepass-computed entry fact for a recovered source BB.
+  void setKernargPtrProvenanceForBlock(llvm::BasicBlock *BB,
+                                       KernargPtrProvenance Provenance) {
+    KernargSegmentPtrProvenanceByBB[BB] = Provenance;
+  }
+
+  // Load the prepass entry fact when lowering reaches a recovered source BB.
+  void enterKernargPtrProvenanceForBlock(llvm::BasicBlock *BB) {
+    assert(BB && "cannot enter kernarg provenance for null basic block");
+    if (!HasKernargPtrProvenanceByBB) {
+      CurrentKernargPtrProvenance = KernargPtrProvenance::Unknown;
+      return;
+    }
+    auto It = KernargSegmentPtrProvenanceByBB.find(BB);
+    assert(It != KernargSegmentPtrProvenanceByBB.end() &&
+           "missing kernarg provenance for source basic block");
+    CurrentKernargPtrProvenance = It->second;
+  }
+
   // emitUnderExec(body) wraps `body()` in an `if (lane_active)` diamond:
   //
   //   %active = emitLaneActiveBit()
@@ -341,6 +400,17 @@ struct RaiseContext {
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskExecShadow;
   llvm::SmallVector<llvm::AllocaInst *> SgprWaveMaskValidShadow;
 
+  // Conservative kernarg-pointer provenance for the strict hidden-arg SMEM
+  // gate. Filled before instruction lowering by a fixed-point over the decoded
+  // CFG. Mixed incoming states become Unknown and keep strict mode loud.
+  // False means tracking is inactive and BB entry uses Unknown without lookup.
+  bool HasKernargPtrProvenanceByBB = false;
+  llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>
+      KernargSegmentPtrProvenanceByBB =
+          llvm::DenseMap<llvm::BasicBlock *, KernargPtrProvenance>();
+  KernargPtrProvenance CurrentKernargPtrProvenance =
+      KernargPtrProvenance::Unknown;
+
   // Record the per-lane compare i1 produced by a V_CMP_*_e64 write
   // to SGPR baseIdx in the current BB. Overwrites any prior entry
   // (last-writer wins -- a later V_CMP obviates the earlier value
@@ -402,6 +472,7 @@ struct RaiseContext {
   // over-invalidation: a single-SGPR wave32 entry at K-1 is
   // unrelated to a scalar write at K and must NOT be invalidated.
   void invalidateSgprWaveMaskI1(int BaseIdx) {
+    noteSgprWriteForKernargProvenance(BaseIdx);
     LastSgprWaveMaskI1.erase(BaseIdx);
     if (BaseIdx >= 0 &&
         static_cast<size_t>(BaseIdx) < SgprWaveMaskValidShadow.size())

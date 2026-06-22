@@ -297,6 +297,11 @@ std::string childCrashFormat(int Status, bool ShmDone) {
   return "wait_status_unknown";
 }
 
+cl::opt<bool> AssumeHipGlobalOffsetZeroOpt(
+    "assume-hip-global-offset-zero",
+    cl::desc("Assume HIP launch semantics for hidden_global_offset_{x,y,z}; "
+             "generic HSA/OpenCL callers should leave this disabled."));
+
 // Resolve an --enable-/--disable- toggle pair, later occurrence wins.
 bool resolveToggle(bool Default, const cl::opt<bool> &Enable,
                    const cl::opt<bool> &Disable) {
@@ -424,7 +429,8 @@ int main(int argc, char **argv) {
     auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, target, meta,
                                         kernelOffset, kernelSize, targetIsa,
                                         EnableWritelaneRewrite,
-                                        EnableWaveNative);
+                                        EnableWaveNative,
+                                        AssumeHipGlobalOffsetZeroOpt);
     if (!raised.Success) {
       // Contract: raiseToIR only populates RaiseResult::IrText on the
       // success path (the last write before setting `success = true`),
@@ -477,6 +483,7 @@ int main(int argc, char **argv) {
     COMGR::hotswap::PipelineOptions pipelineOptions;
     pipelineOptions.EnableWritelaneRewrite = EnableWritelaneRewrite;
     pipelineOptions.EnableWaveNative = EnableWaveNative;
+    pipelineOptions.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZeroOpt;
     auto pipe = COMGR::hotswap::runPipeline(coData, isa, effectiveTargetIsa,
                                             target, pipelineOptions);
     if (!pipe.Success) {
@@ -578,7 +585,8 @@ int main(int argc, char **argv) {
       auto raised = COMGR::hotswap::raiseToIR(text.Bytes, isa, kName, meta,
                                           kernelOffset, kernelSize, targetIsa,
                                           EnableWritelaneRewrite,
-                                          EnableWaveNative);
+                                          EnableWaveNative,
+                                          AssumeHipGlobalOffsetZeroOpt);
       shm->done = true;
       shm->success = raised.Success;
       shm->lifted = raised.LiftedCount;

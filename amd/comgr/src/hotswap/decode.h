@@ -61,6 +61,26 @@ DecodeResult decodeKernel(const MCState &Mc,
                           std::optional<uint64_t> KernelStartOffset =
                               std::nullopt);
 
+// Compute the decoded CFG successors for a block ending in LastInst.
+// NextBlockOffset is the linear fallthrough block start, or std::nullopt when
+// no decoded linear fallthrough block exists. The model is intentionally
+// conservative and matches the successor model used by setpc analysis and the
+// raiser's provenance prepasses.
+llvm::SmallVector<uint64_t>
+computeDecodedBlockSuccessors(const DecodedInst &LastInst,
+                              std::optional<uint64_t> NextBlockOffset);
+
+// Compute the absolute byte offset of a SOPP branch target. SOPP branch
+// immediates are signed 16-bit dword offsets from the next instruction
+// (`PC + 4`). Invalid source-offset arithmetic is reported loudly rather than
+// dropping the edge from CFG recovery.
+uint64_t computeSoppBranchTarget(uint64_t Off, int64_t RawImm);
+
+// True when LastInst terminates the recovered source block. This is separate
+// from successor count: s_swap_pc_i64 ends its block while still having a
+// modeled fallthrough return site.
+bool decodedInstEndsBlock(const DecodedInst &LastInst);
+
 } // namespace COMGR::hotswap
 
 #endif

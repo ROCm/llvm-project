@@ -29,6 +29,10 @@ struct PipelineOptions {
   bool EnableWritelaneRewrite = true;
   bool EnableWaveNative = true;
   bool CollectTimings = false;
+  // HIP launches handled by COMGR's HotSwap runtime have zero HSA grid-global
+  // offset, so hidden_global_offset_{x,y,z} can be synthesized as zero.
+  // Standalone callers keep this false and reject those source hidden args.
+  bool AssumeHipGlobalOffsetZero = false;
 };
 
 struct PipelineResult {

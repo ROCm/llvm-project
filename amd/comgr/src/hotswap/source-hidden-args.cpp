@@ -12,6 +12,8 @@
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include <optional>
+
 using namespace llvm;
 
 namespace COMGR::hotswap {
@@ -19,9 +21,11 @@ namespace {
 
 // Offsets in the HSA AQL `hsa_kernel_dispatch_packet_t` as defined by the
 // public HSA runtime header.  Do not use SI::KernelInputOffsets here: those are
-// LLVM's kernel-input/implicit-buffer offsets (`NGROUPS`, `LOCAL_SIZE`), not the
-// AQL dispatch-packet layout addressed by `llvm.amdgcn.dispatch.ptr`.
+// LLVM's kernel-input/implicit-buffer offsets (`NGROUPS`, `LOCAL_SIZE`), not
+// the AQL dispatch-packet layout addressed by `llvm.amdgcn.dispatch.ptr`.
 namespace DispatchPacket {
+constexpr unsigned SetupOffset = 2;
+constexpr unsigned SetupDimensionsMask = 0x3;
 constexpr unsigned WorkgroupSizeXOffset = 4;
 constexpr unsigned WorkgroupSizeYOffset = 6;
 constexpr unsigned WorkgroupSizeZOffset = 8;
@@ -29,6 +33,7 @@ constexpr unsigned GridSizeXOffset = 12;
 constexpr unsigned GridSizeYOffset = 16;
 constexpr unsigned GridSizeZOffset = 20;
 
+// Return the AQL dispatch-packet workgroup-size field offset for a dimension.
 unsigned dispatchWorkgroupSizeOffset(unsigned Dim) {
   switch (Dim) {
   case 0:
@@ -42,6 +47,7 @@ unsigned dispatchWorkgroupSizeOffset(unsigned Dim) {
   }
 }
 
+// Return the AQL dispatch-packet grid-size field offset for a dimension.
 unsigned dispatchGridSizeOffset(unsigned Dim) {
   switch (Dim) {
   case 0:
@@ -56,21 +62,23 @@ unsigned dispatchGridSizeOffset(unsigned Dim) {
 }
 } // namespace DispatchPacket
 
+// Emit llvm.amdgcn.dispatch.ptr for AQL packet-backed hidden args.
 Value *dispatchPtr(SourceHiddenArgContext &Ctx) {
   Function *DispatchPtrFn =
       Intrinsic::getOrInsertDeclaration(&Ctx.M, Intrinsic::amdgcn_dispatch_ptr);
   return Ctx.B.CreateCall(DispatchPtrFn, {}, "dispatch_ptr");
 }
 
+// Load a zero-extended 16-bit field from the AQL dispatch packet.
 Value *loadDispatchU16(SourceHiddenArgContext &Ctx, unsigned ByteOffset,
                        const Twine &Name) {
   Value *Ptr =
       Ctx.B.CreateConstInBoundsGEP1_32(Ctx.I8Ty, dispatchPtr(Ctx), ByteOffset);
-  return Ctx.B.CreateZExt(
-      Ctx.B.CreateLoad(Type::getInt16Ty(Ctx.C), Ptr, Name), Ctx.I32Ty,
-      Name + "_zext");
+  return Ctx.B.CreateZExt(Ctx.B.CreateLoad(Type::getInt16Ty(Ctx.C), Ptr, Name),
+                          Ctx.I32Ty, Name + "_zext");
 }
 
+// Load a 32-bit field from the AQL dispatch packet.
 Value *loadDispatchU32(SourceHiddenArgContext &Ctx, unsigned ByteOffset,
                        const Twine &Name) {
   Value *Ptr =
@@ -78,40 +86,41 @@ Value *loadDispatchU32(SourceHiddenArgContext &Ctx, unsigned ByteOffset,
   return Ctx.B.CreateLoad(Ctx.I32Ty, Ptr, Name);
 }
 
+// Emit source hidden_group_size_{x,y,z}.
 Value *emitDispatchWorkgroupSize(SourceHiddenArgContext &Ctx, unsigned Dim) {
   return loadDispatchU16(Ctx, DispatchPacket::dispatchWorkgroupSizeOffset(Dim),
                          Twine("source_hidden_wg_size_") + Twine(Dim));
 }
 
+// Emit source grid size for hidden block-count/remainder calculations.
 Value *emitDispatchGridSize(SourceHiddenArgContext &Ctx, unsigned Dim) {
   return loadDispatchU32(Ctx, DispatchPacket::dispatchGridSizeOffset(Dim),
                          Twine("source_hidden_grid_size_") + Twine(Dim));
 }
 
+// Emit source hidden_block_count_{x,y,z}.
 Value *emitHiddenBlockCount(SourceHiddenArgContext &Ctx, unsigned Dim) {
   return Ctx.B.CreateUDiv(emitDispatchGridSize(Ctx, Dim),
                           emitDispatchWorkgroupSize(Ctx, Dim),
                           Twine("source_hidden_block_count_") + Twine(Dim));
 }
 
+// Emit source hidden_remainder_{x,y,z}.
 Value *emitHiddenRemainder(SourceHiddenArgContext &Ctx, unsigned Dim) {
   return Ctx.B.CreateURem(emitDispatchGridSize(Ctx, Dim),
                           emitDispatchWorkgroupSize(Ctx, Dim),
                           Twine("source_hidden_remainder_") + Twine(Dim));
 }
 
+// Emit source hidden_grid_dims from the AQL setup field.
 Value *emitGridDims(SourceHiddenArgContext &Ctx) {
-  Value *GridY = emitDispatchGridSize(Ctx, 1);
-  Value *GridZ = emitDispatchGridSize(Ctx, 2);
-  Value *HasZ = Ctx.B.CreateICmpUGT(GridZ, Ctx.B.getInt32(1), "grid_has_z");
-  Value *HasY = Ctx.B.CreateICmpUGT(GridY, Ctx.B.getInt32(1), "grid_has_y");
-  return Ctx.B.CreateSelect(
-      HasZ, Ctx.B.getInt32(3),
-      Ctx.B.CreateSelect(HasY, Ctx.B.getInt32(2), Ctx.B.getInt32(1),
-                         "grid_dims_y_or_x"),
+  return Ctx.B.CreateAnd(
+      loadDispatchU16(Ctx, DispatchPacket::SetupOffset, "dispatch_setup"),
+      Ctx.B.getInt32(DispatchPacket::SetupDimensionsMask),
       "source_hidden_grid_dims");
 }
 
+// Return a matched failure for hidden kinds without source-ABI synthesis.
 SourceHiddenArgValue unsupportedHiddenKind(StringRef Kind) {
   SourceHiddenArgValue Result;
   Result.Matched = true;
@@ -123,6 +132,7 @@ SourceHiddenArgValue unsupportedHiddenKind(StringRef Kind) {
   return Result;
 }
 
+// Emit the full source hidden argument value for one metadata kind.
 SourceHiddenArgValue emitHiddenArgValue(SourceHiddenArgContext &Ctx,
                                         SourceHiddenArgKind Kind) {
   SourceHiddenArgValue Result;
@@ -147,21 +157,32 @@ SourceHiddenArgValue emitHiddenArgValue(SourceHiddenArgContext &Ctx,
     Result.Value = emitHiddenRemainder(Ctx, 2);
   else if (Kind == SourceHiddenArgKind::HiddenGridDims)
     Result.Value = emitGridDims(Ctx);
-  else
+  else if (Kind == SourceHiddenArgKind::HiddenGlobalOffsetX ||
+           Kind == SourceHiddenArgKind::HiddenGlobalOffsetY ||
+           Kind == SourceHiddenArgKind::HiddenGlobalOffsetZ) {
+    if (!Ctx.AssumeHipGlobalOffsetZero)
+      return unsupportedHiddenKind("hidden_global_offset_{x,y,z}");
+    // The HotSwap runtime path intercepts HIP-launched kernels. HIP's launch
+    // APIs do not expose a non-zero HSA grid-global offset, so the source ABI's
+    // hidden_global_offset fields are the all-zero 64-bit value.
+    Result.Value = Ctx.B.getInt64(0);
+  } else
     return unsupportedHiddenKind("<unknown>");
   return Result;
 }
 
+// Emit one byte from the source hidden-argument metadata view.
 SourceHiddenArgValue emitSourceHiddenByte(SourceHiddenArgContext &Ctx,
                                           int ByteOffset) {
-  SourceHiddenArgByte Byte = classifySourceHiddenArgByte(Ctx.Args, ByteOffset);
-  if (!Byte.matched())
+  std::optional<SourceHiddenArgByte> Byte =
+      classifySourceHiddenArgByte(Ctx.Args, ByteOffset);
+  if (!Byte)
     return {};
 
-  SourceHiddenArgValue Result = emitHiddenArgValue(Ctx, Byte.Kind);
-  if (!Result.Value && !Byte.ValueKind.empty())
+  SourceHiddenArgValue Result = emitHiddenArgValue(Ctx, Byte->Kind);
+  if (!Result.Value && !Byte->ValueKind.empty())
     Result.FailureDetail =
-        (Twine("unsupported source hidden argument kind '") + Byte.ValueKind +
+        (Twine("unsupported source hidden argument kind '") + Byte->ValueKind +
          "'; add explicit source-ABI synthesis instead of falling back to "
          "target implicitarg layout")
             .str();
@@ -169,7 +190,7 @@ SourceHiddenArgValue emitSourceHiddenByte(SourceHiddenArgContext &Ctx,
     return Result;
 
   Value *Wide = Ctx.B.CreateZExtOrTrunc(Result.Value, Ctx.I64Ty, "hidden_wide");
-  unsigned ByteInArg = Byte.byteIndexInArg();
+  unsigned ByteInArg = Byte->byteIndexInArg();
   if (ByteInArg != 0)
     Wide = Ctx.B.CreateLShr(Wide, Ctx.B.getInt64(ByteInArg * 8),
                             "hidden_byte_shift");

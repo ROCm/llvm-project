@@ -43,6 +43,8 @@ namespace COMGR::hotswap {
 
 namespace {
 
+constexpr unsigned KSoppBranchStrideBytes = 4;
+
 // Build the logical-source view of an MCInst. Walks `desc.operands()` and
 // classifies each operand using TableGen-generated metadata only:
 //
@@ -661,18 +663,18 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
                          "(only immediate-literal and lit64 forms are supported)");
     int64_t Imm = *ConstOpt;
     if (InstSize > UINT64_MAX - Off)
-      return;
+      report_fatal_error("transpiler: s_add_pc_i64 source offset overflow");
     uint64_t Base = Off + InstSize;
     uint64_t Target = 0;
     if (Imm < 0) {
       uint64_t Back = llvm::AbsoluteValue(Imm);
       if (Back > Base)
-        return;
+        report_fatal_error("transpiler: s_add_pc_i64 branch target underflow");
       Target = Base - Back;
     } else {
       uint64_t Forward = static_cast<uint64_t>(Imm);
       if (Forward > UINT64_MAX - Base)
-        return;
+        report_fatal_error("transpiler: s_add_pc_i64 branch target overflow");
       Target = Base + Forward;
     }
     if (Target >= KernelStartOffset && Target < DecodeLimit)
@@ -682,24 +684,7 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
   for (unsigned I = 0; I < Inst.getNumOperands(); ++I) {
     if (!Inst.getOperand(I).isImm())
       continue;
-    int64_t Raw = Inst.getOperand(I).getImm();
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    if (Off > UINT64_MAX - 4)
-      continue;
-    uint64_t Base = Off + 4;
-    uint64_t Target = 0;
-    if (BrOff < 0) {
-      uint64_t Back = static_cast<uint64_t>(-BrOff) * 4;
-      if (Back > Base)
-        continue;
-      Target = Base - Back;
-    } else {
-      uint64_t Forward = static_cast<uint64_t>(BrOff) * 4;
-      if (Forward > UINT64_MAX - Base)
-        continue;
-      Target = Base + Forward;
-    }
+    uint64_t Target = computeSoppBranchTarget(Off, Inst.getOperand(I).getImm());
     if (Target >= KernelStartOffset && Target < DecodeLimit)
       BlockStarts.insert(Target);
   }
@@ -711,6 +696,93 @@ void collectBranchTargets(const DecodedInst &Di, uint64_t Off,
 }
 
 } // namespace
+
+uint64_t computeSoppBranchTarget(uint64_t Off, int64_t RawImm) {
+  // SOPP encodes branch displacements as signed 16-bit instruction offsets
+  // relative to the next instruction.  Convert once to a byte offset from
+  // `Off + 4`, keeping underflow/overflow explicit instead of wrapping the
+  // source address and corrupting CFG recovery.
+  int64_t BrOff = SignExtend64<16>(static_cast<uint64_t>(RawImm));
+  if (Off > UINT64_MAX - KSoppBranchStrideBytes)
+    report_fatal_error("transpiler: SOPP branch base offset overflow");
+  uint64_t Base = Off + KSoppBranchStrideBytes;
+  if (BrOff < 0) {
+    uint64_t Back = static_cast<uint64_t>(-BrOff) * KSoppBranchStrideBytes;
+    if (Back > Base)
+      report_fatal_error("transpiler: SOPP branch target underflow");
+    return Base - Back;
+  }
+  uint64_t Forward = static_cast<uint64_t>(BrOff) * KSoppBranchStrideBytes;
+  if (Forward > UINT64_MAX - Base)
+    report_fatal_error("transpiler: SOPP branch target overflow");
+  return Base + Forward;
+}
+
+// Shared successor model for analyses that run over decoded block leaders.
+//
+// `decodeKernel` records all direct branch targets and conditional fallthroughs
+// as block starts, but later passes still need to know which recovered blocks
+// flow into which other blocks.  Keep that edge model here so setpc analysis
+// and the raiser's kernarg provenance prepass agree on ordinary SOPP control
+// flow.  SETPC/SWAPPC are intentionally not fully resolved here: their targets
+// are recovered by setpc-analysis after decode, so callers that need those
+// edges must consult the SetPcAnalysis table after this helper returns the
+// local decoded model.
+//
+SmallVector<uint64_t>
+computeDecodedBlockSuccessors(const DecodedInst &LastInst,
+                              std::optional<uint64_t> NextBlockOffset) {
+  SmallVector<uint64_t> Result;
+  auto BranchTargetFromImm = [&](unsigned OpIdx) -> uint64_t {
+    if (OpIdx >= LastInst.Inst.getNumOperands())
+      report_fatal_error("transpiler: branch target operand missing");
+    const MCOperand &Op = LastInst.Inst.getOperand(OpIdx);
+    if (!Op.isImm())
+      report_fatal_error("transpiler: branch target operand is not immediate");
+    return computeSoppBranchTarget(LastInst.Offset, Op.getImm());
+  };
+
+  if (LastInst.CanonOp == CanonicalOp::S_ENDPGM ||
+      LastInst.CanonOp == CanonicalOp::S_SET_PC_I64)
+    return Result;
+
+  // s_swap_pc_i64 ends the recovered block, but setpc-analysis models its
+  // return-site fallthrough separately from ordinary branch metadata.
+  if (LastInst.CanonOp == CanonicalOp::S_SWAP_PC_I64) {
+    if (NextBlockOffset)
+      Result.push_back(*NextBlockOffset);
+    return Result;
+  }
+
+  if (LastInst.IsBranch) {
+    Result.push_back(BranchTargetFromImm(0));
+    if (LastInst.IsConditionalBranch && NextBlockOffset)
+      Result.push_back(*NextBlockOffset);
+    return Result;
+  }
+
+  if (NextBlockOffset)
+    Result.push_back(*NextBlockOffset);
+  return Result;
+}
+
+bool decodedInstEndsBlock(const DecodedInst &LastInst) {
+  switch (LastInst.CanonOp) {
+  case CanonicalOp::S_BRANCH:
+  case CanonicalOp::S_CBRANCH_SCC0:
+  case CanonicalOp::S_CBRANCH_SCC1:
+  case CanonicalOp::S_CBRANCH_VCCZ:
+  case CanonicalOp::S_CBRANCH_VCCNZ:
+  case CanonicalOp::S_CBRANCH_EXECZ:
+  case CanonicalOp::S_CBRANCH_EXECNZ:
+  case CanonicalOp::S_ENDPGM:
+  case CanonicalOp::S_SET_PC_I64:
+  case CanonicalOp::S_SWAP_PC_I64:
+    return true;
+  default:
+    return false;
+  }
+}
 
 DecodeResult decodeKernel(const MCState &Mc,
                           const OpcodeMap &OpcMap,

@@ -440,6 +440,12 @@ target_include_directories(comgr-device-libs-internal
     ${LLVM_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_BINARY_DIR}/include)
+# comgr-device-libs.cpp #includes the generated device-library .inc headers, so
+# it must wait for the generators (set up in DeviceLibs.cmake). Depending on
+# libraries_sha_header is enough to pull in every per-target oclc_*.inc, since
+# its command lists them all in DEPENDS.
+add_dependencies(comgr-device-libs-internal
+  libraries_sha_header opencl-c-base.inc_target)
 target_sources(amd_comgr PRIVATE
   $<TARGET_OBJECTS:comgr-device-libs-internal>)
 target_include_directories(amd_comgr

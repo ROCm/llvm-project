@@ -136,6 +136,7 @@
 
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "SIDefines.h"
+#include "decode.h"
 #include "mc-state.h"
 
 #include "llvm/ADT/DenseMap.h"
@@ -499,76 +500,6 @@ void joinValue(PcLatticeValue &Dst, const PcLatticeValue &Src) {
     }
     Dst.Values.insert(It, V);
   }
-}
-
-// Compute the set of CFG successor block-offsets for the block whose
-// last instruction is `lastInst`. `nextBlockOffset` is the offset of
-// the next block in linear layout (used for fallthrough); pass
-// `nextBlockExists = false` if `lastInst` is the kernel's final inst.
-//
-// The successor model is intentionally conservative for analysis
-// safety:
-//   * S_BRANCH: 1 successor (decoded target).
-//   * S_CBRANCH_*: 2 successors (target + linear fallthrough).
-//   * S_ENDPGM: 0 successors.
-//   * S_SET_PC_I64: 0 successors. The classification table tells the
-//     raiser where this jumps; for dataflow purposes any survivors
-//     would have to flow through the destination's other predecessors
-//     anyway.
-//   * S_SWAP_PC_I64: 1 successor (linear fallthrough). The swap is a
-//     branch-and-link; control eventually returns into the
-//     fallthrough, which Phase 1 added to extraBlockStarts so it is a
-//     known leader. Source-pair facts survive across the swap (the
-//     swap reads but does not write the source pair); the dst pair
-//     is killed by the swap's transfer.
-//   * Anything else (block ended only because the next inst was an
-//     external BB leader): linear fallthrough.
-SmallVector<uint64_t, 2>
-computeSuccessors(const DecodedInst &LastInst, uint64_t NextBlockOffset,
-                  bool NextBlockExists) {
-  SmallVector<uint64_t, 2> Result;
-  auto BranchTargetFromImm =
-      [&](unsigned OpIdx) -> std::optional<uint64_t> {
-    if (OpIdx >= LastInst.Inst.getNumOperands())
-      return std::nullopt;
-    const MCOperand &Op = LastInst.Inst.getOperand(OpIdx);
-    if (!Op.isImm())
-      return std::nullopt;
-    int64_t Raw = Op.getImm();
-    int64_t BrOff = static_cast<int64_t>(
-        static_cast<int16_t>(static_cast<uint16_t>(Raw & 0xFFFF)));
-    return LastInst.Offset + 4 + BrOff * 4;
-  };
-  switch (LastInst.CanonOp) {
-  case CanonicalOp::S_BRANCH: {
-    auto T = BranchTargetFromImm(0);
-    if (T)
-      Result.push_back(*T);
-    break;
-  }
-  case CanonicalOp::S_CBRANCH_SCC0:
-  case CanonicalOp::S_CBRANCH_SCC1:
-  case CanonicalOp::S_CBRANCH_VCCZ:
-  case CanonicalOp::S_CBRANCH_VCCNZ:
-  case CanonicalOp::S_CBRANCH_EXECZ:
-  case CanonicalOp::S_CBRANCH_EXECNZ: {
-    auto T = BranchTargetFromImm(0);
-    if (T)
-      Result.push_back(*T);
-    if (NextBlockExists)
-      Result.push_back(NextBlockOffset);
-    break;
-  }
-  case CanonicalOp::S_ENDPGM:
-  case CanonicalOp::S_SET_PC_I64:
-    break;
-  case CanonicalOp::S_SWAP_PC_I64:
-  default:
-    if (NextBlockExists)
-      Result.push_back(NextBlockOffset);
-    break;
-  }
-  return Result;
 }
 
 } // namespace
@@ -963,9 +894,10 @@ SetPcAnalysis analyseSetPC(ArrayRef<DecodedInst> Insts,
     }
 
     // Compute CFG successors.
-    bool HasNext = (Bi + 1) < Blocks.size();
-    uint64_t NextOff = HasNext ? Blocks[Bi + 1].Offset : 0;
-    Bd.Successors = computeSuccessors(Insts[Bd.LastIdx], NextOff, HasNext);
+    std::optional<uint64_t> NextOff;
+    if ((Bi + 1) < Blocks.size())
+      NextOff = Blocks[Bi + 1].Offset;
+    Bd.Successors = computeDecodedBlockSuccessors(Insts[Bd.LastIdx], NextOff);
   }
 
   // ---------------------------------------------------------------

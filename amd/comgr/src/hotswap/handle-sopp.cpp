@@ -7,39 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "handlers.h"
+#include "decode.h"
 
 #include "SIDefines.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
-#include "llvm/Support/MathExtras.h"
 
 #include <climits>
-
 using namespace llvm;
 
 namespace COMGR::hotswap {
 
 namespace {
-
-bool computeSoppTarget(const DecodedInst &Di, uint64_t &Target) {
-  int64_t Raw = Di.getImm(0);
-  int64_t BrOff = SignExtend64<16>(static_cast<uint64_t>(Raw));
-  if (Di.Offset > UINT64_MAX - 4)
-    return false;
-  uint64_t Base = Di.Offset + 4;
-  if (BrOff < 0) {
-    uint64_t Back = static_cast<uint64_t>(-BrOff) * 4;
-    if (Back > Base)
-      return false;
-    Target = Base - Back;
-    return true;
-  }
-  uint64_t Forward = static_cast<uint64_t>(BrOff) * 4;
-  if (Forward > UINT64_MAX - Base)
-    return false;
-  Target = Base + Forward;
-  return true;
-}
 
 BasicBlock *lookupDecodedBB(RaiseContext &Ctx, const DecodedInst &Di,
                             uint64_t Addr, const llvm::Twine &Role,
@@ -94,12 +73,7 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_BRANCH) {
-    uint64_t Target = 0;
-    if (!computeSoppTarget(Di, Target)) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOPP", "s_branch target overflows source offset arithmetic");
-      return Hr;
-    }
+    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     BasicBlock *TargetBb = lookupDecodedBB(Ctx, Di, Target, "s_branch", Hr);
     if (!TargetBb)
       return Hr;
@@ -108,12 +82,7 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_EXECZ || Sop == CanonicalOp::S_CBRANCH_EXECNZ) {
-    uint64_t Target = 0;
-    if (!computeSoppTarget(Di, Target)) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOPP", "s_cbranch_exec target overflows source offset arithmetic");
-      return Hr;
-    }
+    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     BasicBlock *TargetBb = lookupDecodedBB(Ctx, Di, Target,
                                            "s_cbranch_exec", Hr);
     if (!TargetBb)
@@ -134,12 +103,7 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_SCC0 || Sop == CanonicalOp::S_CBRANCH_SCC1) {
-    uint64_t Target = 0;
-    if (!computeSoppTarget(Di, Target)) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOPP", "s_cbranch_scc target overflows source offset arithmetic");
-      return Hr;
-    }
+    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     BasicBlock *TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_cbranch_scc", Hr);
     if (!TargetBb)
@@ -156,12 +120,7 @@ HandlerResult handleSOPP(RaiseContext &Ctx, const DecodedInst &Di,
     return Hr;
   }
   if (Sop == CanonicalOp::S_CBRANCH_VCCNZ || Sop == CanonicalOp::S_CBRANCH_VCCZ) {
-    uint64_t Target = 0;
-    if (!computeSoppTarget(Di, Target)) {
-      Hr.Failure = RaiseFailure::unsupportedInstructionForm(
-          Di, "SOPP", "s_cbranch_vcc target overflows source offset arithmetic");
-      return Hr;
-    }
+    uint64_t Target = computeSoppBranchTarget(Di.Offset, Di.getImm(0));
     BasicBlock *TargetBb =
         lookupDecodedBB(Ctx, Di, Target, "s_cbranch_vcc", Hr);
     if (!TargetBb)

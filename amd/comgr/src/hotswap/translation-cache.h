@@ -56,6 +56,7 @@ struct TranslationCacheRequest {
   int OrigMach = -1;
   bool EnableWritelaneRewrite = true;
   bool EnableWaveNative = true;
+  bool AssumeHipGlobalOffsetZero = false;
   bool StrictMode = false;
   bool CacheDisabled = true;
   bool CacheReadonly = false;

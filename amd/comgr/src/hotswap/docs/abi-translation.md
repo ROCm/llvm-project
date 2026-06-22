@@ -273,7 +273,7 @@ Each hidden arg is one of:
 | `hidden_group_size_{x,y,z}` | present | present | identity |
 | `hidden_remainder_{x,y,z}` | present | present | identity |
 | `hidden_grid_dims` | present | present | identity |
-| `hidden_global_offset_{x,y,z}` | present | present | identity |
+| `hidden_global_offset_{x,y,z}` | present | present | derivable only for HIP-launched HotSwap kernels (`0`); otherwise refuse |
 | `hidden_private_base` | present (gfx12 flat-scratch base) | N/A on buffer scratch | derivable -- 0 on gfx950 |
 | `hidden_shared_base` | present (gfx12 flat-LDS base) | N/A | derivable -- 0 on gfx950 |
 | `hidden_default_queue` | present | present | identity |
@@ -282,12 +282,17 @@ Each hidden arg is one of:
 | `hidden_hostcall_buffer` | present | present | identity |
 | `hidden_heap_v1` | present | present | identity |
 
-No **refuse** entries in the current table. The two **derivable**
-entries (`hidden_private_base`, `hidden_shared_base`) exist because
-gfx1250 uses architected flat scratch / flat-LDS addressing spaces
-with non-zero base addresses; on gfx950 the per-kernel scratch goes
-through a buffer descriptor (the "flat scratch" path compiles down
-to V# ops) and private_base is effectively zero.
+`hidden_global_offset_{x,y,z}` is derivable only when the caller has opted into
+the HIP-launched HotSwap contract: HIP launch APIs do not expose a non-zero HSA
+grid-global offset, so those fields are the all-zero 64-bit value. Standalone
+pipeline users do not get that assumption and the raiser refuses the field
+instead of guessing another frontend's launch contract.
+
+The two other **derivable** entries (`hidden_private_base`,
+`hidden_shared_base`) exist because gfx1250 uses architected flat scratch /
+flat-LDS addressing spaces with non-zero base addresses; on gfx950 the
+per-kernel scratch goes through a buffer descriptor (the "flat scratch" path
+compiles down to V# ops) and private_base is effectively zero.
 
 The raiser replaces reads of these slots with a constant `i64 0`. If
 the kernel *writes* to them (it shouldn't -- they're consumed from the

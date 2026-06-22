@@ -14,6 +14,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "hotswap/pipeline.h"
 #include "hotswap/raiser.h"
 
 #include "llvm/IR/BasicBlock.h"
@@ -22,6 +23,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Support/AMDHSAKernelDescriptor.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "gtest/gtest.h"
@@ -103,4 +105,63 @@ TEST(RaiserScaffolding, MalformedTargetIsaIsRejected) {
 
   EXPECT_FALSE(Result.Success);
   EXPECT_TRUE(Result.Failure.hasFailed());
+}
+
+TEST(RaiserScaffolding,
+     PreloadedHiddenGlobalOffsetRefusesWithoutHipAssumption) {
+  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
+  Meta.Args.push_back({"global_offset_x", 72, 8, "hidden_global_offset_x", 0});
+  Meta.KernelCodeProperties =
+      1u << llvm::amdhsa::
+          KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR_SHIFT;
+  Meta.KernargPreload =
+      (1u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_LENGTH_SHIFT) |
+      (18u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_OFFSET_SHIFT);
+  Meta.ComputePgmRsrc2 =
+      3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
+
+  COMGR::hotswap::RaiseResult Result =
+      COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
+                                /*KernelOffset=*/0,
+                                /*KernelSize=*/0,
+                                /*CompilationTargetIsa=*/"gfx942",
+                                /*EnableWritelaneRewrite=*/true,
+                                /*EnableWaveNative=*/true,
+                                /*AssumeHipGlobalOffsetZero=*/false);
+
+  EXPECT_FALSE(Result.Success);
+  ASSERT_TRUE(Result.Failure.hasFailed());
+  EXPECT_EQ(Result.Failure.Reason,
+            COMGR::hotswap::RaiseFailureReason::UnsupportedSourceHiddenArg);
+  EXPECT_EQ(Result.Failure.Mnemonic, "<preloaded-hidden-kernarg>");
+}
+
+TEST(RaiserScaffolding, PreloadedUnmatchedImplicitOffsetRefusesInStrictMode) {
+  COMGR::hotswap::KernelMeta Meta = makeKernelMeta("kernel");
+  Meta.Args.push_back({"arg0", 0, 8, "global_buffer", 1});
+  Meta.KernelCodeProperties =
+      1u << llvm::amdhsa::
+          KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR_SHIFT;
+  Meta.KernargPreload =
+      (1u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_LENGTH_SHIFT) |
+      (2u << llvm::amdhsa::KERNARG_PRELOAD_SPEC_OFFSET_SHIFT);
+  Meta.ComputePgmRsrc2 =
+      3u << llvm::amdhsa::COMPUTE_PGM_RSRC2_GFX125_USER_SGPR_COUNT_SHIFT;
+
+  COMGR::hotswap::ScopedStrictMode StrictMode(/*enabled=*/true);
+  COMGR::hotswap::RaiseResult Result =
+      COMGR::hotswap::raiseToIR({}, "gfx1250", "kernel", Meta,
+                                /*KernelOffset=*/0,
+                                /*KernelSize=*/0,
+                                /*CompilationTargetIsa=*/"gfx942",
+                                /*EnableWritelaneRewrite=*/true,
+                                /*EnableWaveNative=*/true,
+                                /*AssumeHipGlobalOffsetZero=*/false);
+
+  EXPECT_FALSE(Result.Success);
+  ASSERT_TRUE(Result.Failure.hasFailed());
+  EXPECT_EQ(Result.Failure.Reason,
+            COMGR::hotswap::RaiseFailureReason::StrictUnsafeLowering);
+  EXPECT_EQ(Result.Failure.Format, "implicitarg.ptr");
+  EXPECT_EQ(Result.Failure.Mnemonic, "<preloaded-hidden-kernarg>");
 }

@@ -301,6 +301,8 @@ KeyData buildKeyData(const TranslationCacheRequest &request,
   appendKeyField(material, "enable_writelane_rewrite",
                  request.EnableWritelaneRewrite);
   appendKeyField(material, "enable_wave_native", request.EnableWaveNative);
+  appendKeyField(material, "assume_hip_global_offset_zero",
+                 request.AssumeHipGlobalOffsetZero);
   appendKeyField(material, "hotswap_build_identity", data.buildIdentity);
   appendKeyField(material, "device_libraries_identity",
                  data.deviceLibrariesIdentity);
@@ -510,6 +512,7 @@ llvm::json::Object metadataObject(const TranslationCacheRequest &request,
       {"strict_mode", request.StrictMode},
       {"enable_writelane_rewrite", request.EnableWritelaneRewrite},
       {"enable_wave_native", request.EnableWaveNative},
+      {"assume_hip_global_offset_zero", request.AssumeHipGlobalOffsetZero},
       {"hotswap_build_identity", keyData.buildIdentity},
       {"device_libraries_identity", keyData.deviceLibrariesIdentity},
       {"llc_identity", keyData.llcIdentity},
@@ -558,6 +561,8 @@ bool validateMetadata(const TranslationCacheRequest &request,
                         request.EnableWritelaneRewrite, Reason) ||
       !requireEqualBool(obj, "enable_wave_native", request.EnableWaveNative,
                         Reason) ||
+      !requireEqualBool(obj, "assume_hip_global_offset_zero",
+                        request.AssumeHipGlobalOffsetZero, Reason) ||
       !requireEqualString(obj, "hotswap_build_identity",
                           keyData.buildIdentity, Reason) ||
       !requireEqualString(obj, "device_libraries_identity",

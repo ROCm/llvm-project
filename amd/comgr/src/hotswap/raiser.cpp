@@ -40,7 +40,11 @@
 #include "c5-predicate-chain-classifier.h"
 #include "ocml-runtime.h"
 #include "tdm-runtime.h"
+#include "pipeline.h"
 
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -69,7 +73,10 @@
 #include "llvm/Support/Debug.h"
 
 #include <algorithm>
+#include <cassert>
 #include <functional>
+#include <limits>
+#include <optional>
 #include <utility>
 
 #define DEBUG_TYPE "wave-projection"
@@ -159,6 +166,383 @@ static bool isSemOpInRange(CanonicalOp Op, CanonicalOp First, CanonicalOp Last) 
          V <= static_cast<uint16_t>(Last);
 }
 
+// Kernarg-pointer provenance for source hidden-arg SMEM loads.
+//
+// Source kernels address hidden arguments with ordinary SMEM loads from the
+// entry KernargSegmentPtr SGPR pair.  The translated kernel may synthesize a
+// source hidden argument only while that physical pair is still the entry
+// kernarg pointer.  Once an instruction writes either half of the pair, later
+// loads through the same SGPR numbers may be normal explicit pointers
+// (rebased kernels, Triton pointer arithmetic, etc.), so strict mode must stop
+// treating source implicit-arg offsets as hidden-arg accesses.
+//
+// The prepass below computes one conservative state per decoded basic block:
+//   * LiveEntry  - every incoming path still has the entry kernarg pointer.
+//   * Clobbered  - every incoming path has overwritten either half.
+//   * Unknown    - paths disagree, are unreachable, or cannot be classified.
+// Only LiveEntry permits hidden-arg synthesis.
+//
+// Register identity comes from MC register classes and TableGen-declared defs;
+// mnemonic text and TSFlags are insufficient for overlap checks.
+// Effect of one instruction or block on the source kernarg pointer SGPR pair.
+enum class KernargPtrEffect {
+  Preserves,
+  Clobbers,
+  Unknown,
+};
+
+// Four-point lattice used internally by the fixed-point solver:
+//
+//            Unknown
+//           /       \
+//      LiveEntry  Clobbered
+//           \       /
+//           Unvisited
+//
+// `Unvisited` is bottom: it represents blocks not reached by the recovered CFG.
+// When exporting final BB facts, bottom is treated as top so strict mode fails
+// closed for unreachable or unrecovered paths.
+enum class KernargPtrDataflowState {
+  Unvisited,
+  LiveEntry,
+  Clobbered,
+  Unknown,
+};
+
+// Classification of one MC register definition for kernarg-pointer overlap.
+struct KernargPrepassDef {
+  enum class Kind {
+    NotTracked,
+    IndexedSgpr,
+    Unknown,
+  };
+
+  Kind DefKind = Kind::Unknown;
+  unsigned Index = 0;
+};
+
+// Recovered CFG block summary used by the kernarg provenance fixed point.
+struct KernargProvenanceBlock {
+  // Source byte offset of this recovered block leader.
+  uint64_t Start = 0;
+  // Indices into Insts. LastIdx is inclusive.
+  unsigned FirstIdx = 0;
+  unsigned LastIdx = 0;
+  // False when Start is a recovered leader but no instruction decodes there.
+  bool HasInsts = false;
+  // Sequential effect of this block's instructions on the kernarg SGPR pair.
+  KernargPtrEffect Effect = KernargPtrEffect::Preserves;
+  // Indices into the Blocks vector.
+  SmallVector<unsigned, 2> Successors;
+};
+
+// Classify a register definition as a tracked SGPR lane, irrelevant, or unknown.
+static KernargPrepassDef classifyKernargPrepassDef(const MCRegisterInfo &MRI,
+                                                   MCRegister Reg) {
+  if (!Reg)
+    return {KernargPrepassDef::Kind::Unknown, 0};
+  MCRegister Lane = MRI.getSubReg(Reg, AMDGPU::sub0);
+  if (!Lane)
+    Lane = Reg;
+  Lane = AMDGPU::mc2PseudoReg(Lane);
+  switch (Lane) {
+  case AMDGPU::SCC:
+  case AMDGPU::MODE:
+  case AMDGPU::M0:
+  case AMDGPU::FLAT_SCR_LO:
+  case AMDGPU::FLAT_SCR_HI:
+  case AMDGPU::SGPR_NULL:
+  case AMDGPU::SGPR_NULL_HI:
+  case AMDGPU::XNACK_MASK_LO:
+  case AMDGPU::XNACK_MASK_HI:
+  case AMDGPU::LDS_DIRECT:
+    return {KernargPrepassDef::Kind::NotTracked, 0};
+  default:
+    break;
+  }
+  unsigned Enc = MRI.getEncodingValue(Reg);
+  if (Enc & (AMDGPU::HWEncoding::IS_VGPR | AMDGPU::HWEncoding::IS_AGPR))
+    return {KernargPrepassDef::Kind::NotTracked, 0};
+  if (!AMDGPU::isSGPR(Lane, &MRI))
+    return {KernargPrepassDef::Kind::NotTracked, 0};
+  return {KernargPrepassDef::Kind::IndexedSgpr,
+          Enc & AMDGPU::HWEncoding::REG_IDX_MASK};
+}
+
+// Match RaiseContext::parseReg's "number of contiguous 32-bit lanes" rule
+// without materialising a full ParsedReg.  This is only for def-overlap checks
+// in the prepass, so register-class membership above remains the source of
+// truth for whether the register is scalar.
+static unsigned kernargPrepassRegWidth32(const MCRegisterInfo &MRI,
+                                         MCRegister Reg) {
+  const unsigned MaxSubIdx = MRI.getNumSubRegIndices();
+  if (!MRI.getSubReg(Reg, AMDGPU::sub0))
+    return 1;
+
+  unsigned W = 1;
+  for (unsigned SubIdx = AMDGPU::sub0 + 1; SubIdx < MaxSubIdx; ++SubIdx) {
+    if (!MRI.getSubReg(Reg, SubIdx))
+      return W;
+    ++W;
+  }
+  return W;
+}
+
+// Summarize how one decoded instruction affects the kernarg pointer SGPR pair.
+static KernargPtrEffect
+instructionKernargPtrEffect(const MCRegisterInfo &MRI, const MCInstrInfo &MII,
+                            const DecodedInst &Di, unsigned KernargPtrSgpr) {
+  const MCInstrDesc &Desc = MII.get(Di.Inst.getOpcode());
+  const unsigned NumDefs = Desc.getNumDefs();
+  for (unsigned I = 0; I < NumDefs; ++I) {
+    if (!Di.isReg(I))
+      return KernargPtrEffect::Unknown;
+    KernargPrepassDef Def = classifyKernargPrepassDef(MRI, Di.getReg(I));
+    if (Def.DefKind == KernargPrepassDef::Kind::Unknown)
+      return KernargPtrEffect::Unknown;
+    if (Def.DefKind == KernargPrepassDef::Kind::NotTracked)
+      continue;
+    unsigned DefEnd =
+        Def.Index + kernargPrepassRegWidth32(MRI, Di.getReg(I)) - 1;
+    if (Def.Index <= KernargPtrSgpr + 1 && DefEnd >= KernargPtrSgpr)
+      return KernargPtrEffect::Clobbers;
+  }
+  return KernargPtrEffect::Preserves;
+}
+
+// Apply an instruction or block effect to an incoming dataflow state.
+static KernargPtrDataflowState
+applyKernargPtrEffect(KernargPtrDataflowState State, KernargPtrEffect Effect) {
+  if (State == KernargPtrDataflowState::Unvisited)
+    return KernargPtrDataflowState::Unvisited;
+
+  switch (Effect) {
+  case KernargPtrEffect::Preserves:
+    return State;
+  case KernargPtrEffect::Clobbers:
+    return KernargPtrDataflowState::Clobbered;
+  case KernargPtrEffect::Unknown:
+    return KernargPtrDataflowState::Unknown;
+  }
+  llvm_unreachable("unknown kernarg pointer effect");
+}
+
+static KernargPtrDataflowState
+joinKernargPtrStates(KernargPtrDataflowState Lhs,
+                     KernargPtrDataflowState Rhs) {
+  if (Lhs == KernargPtrDataflowState::Unvisited)
+    return Rhs;
+  if (Rhs == KernargPtrDataflowState::Unvisited)
+    return Lhs;
+  if (Lhs == Rhs)
+    return Lhs;
+  return KernargPtrDataflowState::Unknown;
+}
+
+static RaiseContext::KernargPtrProvenance
+toFinalKernargPtrProvenance(KernargPtrDataflowState State) {
+  using Provenance = RaiseContext::KernargPtrProvenance;
+  switch (State) {
+  case KernargPtrDataflowState::Unvisited:
+  case KernargPtrDataflowState::Unknown:
+    return Provenance::Unknown;
+  case KernargPtrDataflowState::LiveEntry:
+    return Provenance::LiveEntry;
+  case KernargPtrDataflowState::Clobbered:
+    return Provenance::Clobbered;
+  }
+  llvm_unreachable("unknown kernarg pointer dataflow state");
+}
+
+// Compose instruction effects in source program order.
+static KernargPtrEffect composeKernargPtrEffect(KernargPtrEffect BlockEffect,
+                                                KernargPtrEffect InstEffect) {
+  switch (InstEffect) {
+  case KernargPtrEffect::Preserves:
+    return BlockEffect;
+  case KernargPtrEffect::Clobbers:
+    return KernargPtrEffect::Clobbers;
+  case KernargPtrEffect::Unknown:
+    return KernargPtrEffect::Unknown;
+  }
+  llvm_unreachable("unknown kernarg pointer effect");
+}
+
+// Build the strict-mode failure for an unsupported preloaded hidden kernarg.
+static RaiseFailure preloadedHiddenArgFailure(StringRef KernelName,
+                                              int ByteOffset,
+                                              const Twine &Detail) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::UnsupportedSourceHiddenArg;
+  F.Mnemonic = "<preloaded-hidden-kernarg>";
+  F.Format = "KernargPreload";
+  F.Offset = static_cast<uint64_t>(ByteOffset);
+  raw_string_ostream OS(F.Detail);
+  OS << "kernel '" << KernelName
+     << "': preloaded hidden kernarg at byte offset " << ByteOffset << ": "
+     << Detail;
+  OS.flush();
+  return F;
+}
+
+// Build the strict-mode failure for a preloaded implicit-arg byte.
+static RaiseFailure preloadedImplicitArgFailure(StringRef KernelName,
+                                                int ByteOffset) {
+  RaiseFailure F;
+  F.Reason = RaiseFailureReason::StrictUnsafeLowering;
+  F.Mnemonic = "<preloaded-hidden-kernarg>";
+  F.Format = "implicitarg.ptr";
+  F.Offset = static_cast<uint64_t>(ByteOffset);
+  raw_string_ostream OS(F.Detail);
+  OS << "kernel '" << KernelName << "': preloaded kernarg byte offset "
+     << ByteOffset
+     << " is in the source implicit-arg range but does not map to source "
+        "hidden-arg metadata; refusing target hidden-block fallback in strict "
+        "mode";
+  OS.flush();
+  return F;
+}
+
+// Compute recovered CFG successors for the kernarg provenance prepass.
+static SmallVector<uint64_t> computeKernargProvenanceSuccessors(
+    const DecodedInst &LastInst, std::optional<uint64_t> NextBlockOffset,
+    const SetPcAnalysis &SetpcAnalysis) {
+  // Ordinary SOPP successors use the shared decoded CFG model. SETPC/SWAPPC
+  // successors come from setpc-analysis.
+  if (LastInst.CanonOp != CanonicalOp::S_SET_PC_I64 &&
+      LastInst.CanonOp != CanonicalOp::S_SWAP_PC_I64)
+    return computeDecodedBlockSuccessors(LastInst, NextBlockOffset);
+
+  SmallVector<uint64_t> Result;
+  auto It = SetpcAnalysis.SetpcSites.find(LastInst.Offset);
+  if (It == SetpcAnalysis.SetpcSites.end())
+    return Result;
+
+  const SetPcSiteInfo &Info = It->second;
+  switch (Info.SiteKind) {
+  case SetPcSiteInfo::Kind::DirectA:
+    Result.push_back(Info.DirectTarget);
+    break;
+  case SetPcSiteInfo::Kind::IndirectB:
+  case SetPcSiteInfo::Kind::DispatchSet:
+    llvm::append_range(Result, Info.IndirectTargets);
+    break;
+  case SetPcSiteInfo::Kind::Unresolvable:
+    break;
+  }
+  return Result;
+}
+
+// Fill RaiseContext's per-BB kernarg provenance map by fixed-point over the
+// recovered source CFG.
+static void
+computeKernargPtrProvenance(RaiseContext &Ctx, ArrayRef<DecodedInst> Insts,
+                            const std::set<uint64_t> &BlockStarts,
+                            uint64_t KernelOffset,
+                            const DenseMap<uint64_t, BasicBlock *>
+                                &OffsetToBb) {
+  assert(Ctx.Layout && "RaiseContext requires descriptor-derived SGPR layout");
+  if (Insts.empty() || Ctx.Layout->KernargSegmentPtrSgpr < 0)
+    return;
+  Ctx.HasKernargPtrProvenanceByBB = true;
+  unsigned KernargPtrSgpr =
+      static_cast<unsigned>(Ctx.Layout->KernargSegmentPtrSgpr);
+  const MCRegisterInfo &MRI = *Ctx.Mc.RegInfo;
+  const MCInstrInfo &MII = *Ctx.Mc.InstrInfo;
+
+  SmallVector<uint64_t> Starts(BlockStarts.begin(), BlockStarts.end());
+  const unsigned NumStarts = Starts.size();
+  const unsigned NumInsts = Insts.size();
+  DenseMap<uint64_t, unsigned> BlockIndexByOffset;
+  DenseMap<uint64_t, unsigned> InstIndexByOffset;
+  for (unsigned I = 0; I < NumInsts; ++I)
+    InstIndexByOffset[Insts[I].Offset] = I;
+
+  SmallVector<KernargProvenanceBlock> Blocks;
+  Blocks.reserve(NumStarts);
+  for (unsigned I = 0; I < NumStarts; ++I) {
+    BlockIndexByOffset[Starts[I]] = I;
+    KernargProvenanceBlock Block;
+    Block.Start = Starts[I];
+    auto FirstIt = InstIndexByOffset.find(Starts[I]);
+    if (FirstIt == InstIndexByOffset.end()) {
+      Blocks.push_back(Block);
+      continue;
+    }
+
+    Block.HasInsts = true;
+    Block.FirstIdx = FirstIt->second;
+    uint64_t NextStart =
+        I + 1 < NumStarts ? Starts[I + 1] : std::numeric_limits<uint64_t>::max();
+    Block.LastIdx = Block.FirstIdx;
+    for (unsigned J = Block.FirstIdx;
+         J < NumInsts && Insts[J].Offset < NextStart; ++J) {
+      Block.LastIdx = J;
+      Block.Effect = composeKernargPtrEffect(
+          Block.Effect,
+          instructionKernargPtrEffect(MRI, MII, Insts[J], KernargPtrSgpr));
+      if (decodedInstEndsBlock(Insts[J]))
+        break;
+    }
+    Blocks.push_back(Block);
+  }
+
+  const unsigned NumBlocks = Blocks.size();
+  for (unsigned I = 0; I < NumBlocks; ++I) {
+    KernargProvenanceBlock &Block = Blocks[I];
+    if (!Block.HasInsts)
+      continue;
+    std::optional<uint64_t> NextStart;
+    if (I + 1 < NumStarts)
+      NextStart = Starts[I + 1];
+    assert(Ctx.SetpcAnalysis &&
+           "kernarg provenance requires completed SETPC analysis");
+    for (uint64_t SuccOffset : computeKernargProvenanceSuccessors(
+             Insts[Block.LastIdx], NextStart, *Ctx.SetpcAnalysis)) {
+      auto SuccIt = BlockIndexByOffset.find(SuccOffset);
+      if (SuccIt != BlockIndexByOffset.end())
+        Block.Successors.push_back(SuccIt->second);
+    }
+  }
+
+  SmallVector<KernargPtrDataflowState> State(
+      Blocks.size(), KernargPtrDataflowState::Unvisited);
+  auto MergeInto = [&](unsigned I, KernargPtrDataflowState Incoming) {
+    KernargPtrDataflowState Merged = joinKernargPtrStates(State[I], Incoming);
+    if (Merged == State[I])
+      return false;
+    State[I] = Merged;
+    return true;
+  };
+
+  auto EntryIt = BlockIndexByOffset.find(KernelOffset);
+  assert(EntryIt != BlockIndexByOffset.end() &&
+         "decoded block starts must include kernel entry");
+  MergeInto(EntryIt->second, KernargPtrDataflowState::LiveEntry);
+
+  // Finite-height diamond lattice: facts only move upward from Unvisited to a
+  // concrete path fact and then, if paths disagree or a write is unknown, to
+  // Unknown. Unknown is absorbing under join, so backedges converge.
+  bool Changed = true;
+  while (Changed) {
+    Changed = false;
+    for (unsigned I = 0; I < NumBlocks; ++I) {
+      KernargPtrDataflowState Out =
+          applyKernargPtrEffect(State[I], Blocks[I].Effect);
+      for (unsigned Succ : Blocks[I].Successors)
+        Changed |= MergeInto(Succ, Out);
+    }
+  }
+
+  for (unsigned I = 0; I < NumBlocks; ++I) {
+    auto BbIt = OffsetToBb.find(Blocks[I].Start);
+    if (BbIt == OffsetToBb.end())
+      continue;
+    Ctx.setKernargPtrProvenanceForBlock(
+        BbIt->second, toFinalKernargPtrProvenance(State[I]));
+  }
+}
+
 static bool threadLoopUnsupportedWorkgroupMemoryOrBarrier(
     ArrayRef<DecodedInst> Insts, std::string &Detail) {
   for (const DecodedInst &Di : Insts) {
@@ -221,7 +605,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
                                  bool EnableWritelaneRewrite,
                                  bool EnableWaveNative,
                                  bool ForceThreadLoopProjection,
-                                 bool SuppressC5ForThreadLoopRoute) {
+                                 bool SuppressC5ForThreadLoopRoute,
+                                 bool AssumeHipGlobalOffsetZero) {
   RaiseResult Result;
 
   // Reject obviously-bad ISA inputs before reaching the MC stack -- an
@@ -887,16 +1272,42 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     Regs.storeSGPR32(B, UserSgprLayout.WorkgroupIdYSgpr,
                      B.CreateCall(FnWorkgroupIdY, {}, "wg_id_y"));
   }
-  SourceHiddenArgContext HiddenCtx{C, M, B, I8Ty, I32Ty, I64Ty, Meta.Args};
-  auto EmitPreloadedHiddenKernargDword = [&](int ByteOffset) -> Value * {
+  auto EmitPreloadedKernargDword = [&](IRBuilder<> &SeedB,
+                                       int ByteOffset) -> Value * {
+    SourceHiddenArgContext HiddenCtx{
+        C, M, SeedB, I8Ty, I32Ty, I64Ty, Meta.Args, AssumeHipGlobalOffsetZero};
     SourceHiddenArgValue Hidden = emitSourceHiddenDword(HiddenCtx, ByteOffset);
-    if (!Hidden.Matched)
+    if (Hidden.Matched && Hidden.Value)
+      return Hidden.Value;
+    if (Hidden.Matched) {
+      Result.Failure = preloadedHiddenArgFailure(KernelName, ByteOffset,
+                                                 Hidden.FailureDetail);
       return nullptr;
-    if (!Hidden.Value)
-      report_fatal_error(Twine("transpiler: preloaded hidden kernarg at byte "
-                               "offset ") + Twine(ByteOffset) + ": " +
-                         Hidden.FailureDetail);
-    return Hidden.Value;
+    }
+
+    if (Kernargs.ImplicitArgsBase > 0 &&
+        ByteOffset >= Kernargs.ImplicitArgsBase) {
+      if (isStrictMode()) {
+        Result.Failure = preloadedImplicitArgFailure(KernelName, ByteOffset);
+        return nullptr;
+      }
+      Function *FnImplicitArgPtr = Intrinsic::getOrInsertDeclaration(
+          &M, Intrinsic::amdgcn_implicitarg_ptr);
+      Value *ImplPtr =
+          SeedB.CreateCall(FnImplicitArgPtr, {}, "preload_implicitarg_ptr");
+      int64_t ImplOffset = ByteOffset - Kernargs.ImplicitArgsBase;
+      Value *Gep = ImplOffset == 0
+                       ? ImplPtr
+                       : SeedB.CreateInBoundsGEP(I8Ty, ImplPtr,
+                                                 SeedB.getInt64(ImplOffset),
+                                                 "preload_impl_gep");
+      return SeedB.CreateAlignedLoad(I32Ty, Gep, Align(4), "preload_impl_dw");
+    }
+
+    Value *SegPtr = SeedB.CreateCall(FnKargPtr, {}, "preload_kernarg_ptr");
+    Value *Gep = SeedB.CreateInBoundsGEP(
+        I8Ty, SegPtr, SeedB.getInt64(ByteOffset), "preload_gep");
+    return SeedB.CreateAlignedLoad(I32Ty, Gep, Align(4), "preload_dw");
   };
   // Kernarg preload SGPRs carry dwords copied by hardware from the kernarg
   // segment before kernel entry. Materialize the same dwords by loading
@@ -907,19 +1318,15 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   //
   // Hidden block counts (Triton's hidden_block_count_* ABI) still need
   // dispatch-packet synthesis since their values aren't stored in the
-  // kernarg segment at all -- only `emitPreloadedHiddenKernargDword` can
-  // materialize them from `amdgcn_dispatch_ptr`.
+  // kernarg segment at all. Unmatched implicit-range preload offsets are
+  // handled by the same strict/permissive boundary as SMEM hidden-arg loads.
   for (size_t SgprIdx = 0; SgprIdx < UserSgprLayout.Entries.size(); ++SgprIdx) {
     const auto &Entry = UserSgprLayout.Entries[SgprIdx];
     if (Entry.SrcKind != UserSgprLayout::Source::PreloadedKernarg)
       continue;
-    Value *Dw = EmitPreloadedHiddenKernargDword(Entry.KernargByteOffset);
-    if (!Dw) {
-      Value *SegPtr = B.CreateCall(FnKargPtr, {}, "preload_kernarg_ptr");
-      Value *Gep = B.CreateInBoundsGEP(
-          I8Ty, SegPtr, B.getInt64(Entry.KernargByteOffset), "preload_gep");
-      Dw = B.CreateAlignedLoad(I32Ty, Gep, Align(4), "preload_dw");
-    }
+    Value *Dw = EmitPreloadedKernargDword(B, Entry.KernargByteOffset);
+    if (Result.Failure.hasFailed())
+      return Result;
     Regs.storeSGPR32(B, static_cast<int>(SgprIdx), Dw);
   }
   auto SeedWorkitemX = [&](IRBuilder<> &SeedB) {
@@ -1012,10 +1419,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     // Mirror the entry-BB user-SGPR seeding above: the kernarg pair is
     // re-seeded with `amdgcn_kernarg_segment_ptr` so kernarg SMEM loads
     // inside the thread-loop iteration body lift through the same
-    // GEP+load shape, and preloaded-kernarg SGPRs materialise their
-    // dwords via the same intrinsic + GEP + i32 load. Hidden block
-    // counts continue to flow through `emitPreloadedHiddenKernargDword`
-    // (dispatch-packet synthesis, not in kernarg memory).
+    // GEP+load shape, and preloaded-kernarg SGPRs materialise through the
+    // same hidden-arg/implicit-range policy as the entry block.
     if (UserSgprLayout.KernargSegmentPtrSgpr >= 0) {
       Regs.storeSGPR64(SeedB, UserSgprLayout.KernargSegmentPtrSgpr,
                        SeedB.CreateCall(FnKargPtr, {}, "kernarg_ptr"));
@@ -1033,15 +1438,9 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       const auto &Entry = UserSgprLayout.Entries[SgprIdx];
       if (Entry.SrcKind != UserSgprLayout::Source::PreloadedKernarg)
         continue;
-      Value *Dw = EmitPreloadedHiddenKernargDword(Entry.KernargByteOffset);
-      if (!Dw) {
-        Value *SegPtr =
-            SeedB.CreateCall(FnKargPtr, {}, "preload_kernarg_ptr");
-        Value *Gep = SeedB.CreateInBoundsGEP(
-            I8Ty, SegPtr, SeedB.getInt64(Entry.KernargByteOffset),
-            "preload_gep");
-        Dw = SeedB.CreateAlignedLoad(I32Ty, Gep, Align(4), "preload_dw");
-      }
+      Value *Dw = EmitPreloadedKernargDword(SeedB, Entry.KernargByteOffset);
+      if (Result.Failure.hasFailed())
+        return false;
       Regs.storeSGPR32(SeedB, static_cast<int>(SgprIdx), Dw);
     }
 
@@ -1065,6 +1464,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
     Regs.storeVCC(SeedB, ConstantInt::getFalse(I1Ty));
     Regs.storeSCC(SeedB, ConstantInt::getFalse(I1Ty));
     Regs.storeExec(SeedB, Projection.emitInitialExec(SeedB));
+    return true;
   };
 
   // ==== Phase 5: Raise each instruction; collect all failures in allFailures. ====
@@ -1082,6 +1482,14 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
   Ctx.SourcePrivateSegmentFixedSize = Meta.PrivateSegmentFixedSize;
   Ctx.SourceComputePgmRsrc2 = Meta.ComputePgmRsrc2;
   Ctx.SourceKernelCodeProperties = Meta.KernelCodeProperties;
+  Ctx.AssumeHipGlobalOffsetZero = AssumeHipGlobalOffsetZero;
+  computeKernargPtrProvenance(Ctx, Insts, Decoded.BlockStarts, KernelOffset,
+                              OffsetToBb);
+  auto EntryBbIt = OffsetToBb.find(KernelOffset);
+  if (EntryBbIt == OffsetToBb.end())
+    report_fatal_error("transpiler: missing entry basic block for kernarg "
+                       "provenance");
+  Ctx.enterKernargPtrProvenanceForBlock(EntryBbIt->second);
 
   // Dominance-safe SGPR wave-mask shadow storage.
   // One EXEC-width mask + one scalar-valid bit per SGPR base index.
@@ -1187,6 +1595,7 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
       if (!InsertBb->hasTerminator())
         B.CreateBr(BbIt->second);
       B.SetInsertPoint(BbIt->second);
+      Ctx.enterKernargPtrProvenanceForBlock(BbIt->second);
       // LLVM's AMDGPULowerVGPREncoding pass resets VGPR MSB mode at every
       // basic-block boundary (both before terminators and at BB fall-through
       // exits).  Mirror that behaviour so we do not inherit stale MSB state
@@ -1501,7 +1910,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
-                             /*suppressC5ForThreadLoopRoute=*/true);
+                             /*suppressC5ForThreadLoopRoute=*/true,
+                             AssumeHipGlobalOffsetZero);
       }
       if (!ForceThreadLoopProjection &&
           TlDecision.Decision == ThreadLoopDecision::EligibleButGateOff) {
@@ -1636,13 +2046,13 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
           static_cast<int>(PredReport.ObservedSites.size());
       if (Result.C5SuppressionReason.empty())
         Result.C5SuppressionReason = PredReport.SuppressionReason;
-      const char *ProjectionName =
-          PredProjection == PredicateChainProjection::ThreadLoop
-              ? "ThreadLoopProjection"
-              : (PredProjection == PredicateChainProjection::WaveNative
-                     ? "WaveNativeProjection"
-                     : "ModuloReplicationProjection");
       LLVM_DEBUG({
+        const char *ProjectionName =
+            PredProjection == PredicateChainProjection::ThreadLoop
+                ? "ThreadLoopProjection"
+                : (PredProjection == PredicateChainProjection::WaveNative
+                       ? "WaveNativeProjection"
+                       : "ModuloReplicationProjection");
         dbgs() << "c5-predicate-chain: observed "
                << PredReport.ObservedSites.size()
                << " C5-shape site(s) in '" << KernelName << "' under "
@@ -1686,7 +2096,8 @@ static RaiseResult raiseToIRImpl(llvm::ArrayRef<uint8_t> TextBytes,
                              /*enableWritelaneRewrite=*/false,
                              /*enableWaveNative=*/false,
                              /*forceThreadLoopProjection=*/true,
-                             /*suppressC5ForThreadLoopRoute=*/true);
+                             /*suppressC5ForThreadLoopRoute=*/true,
+                             AssumeHipGlobalOffsetZero);
       }
       RaiseFailure F = RaiseFailure::crossWavePredicateChain(
           KernelName, PredReport.RefusalDetail);
@@ -1760,12 +2171,14 @@ RaiseResult raiseToIR(llvm::ArrayRef<uint8_t> TextBytes,
                       uint64_t KernelSize,
                       llvm::StringRef CompilationTargetIsa,
                       bool EnableWritelaneRewrite,
-                      bool EnableWaveNative) {
+                      bool EnableWaveNative,
+                      bool AssumeHipGlobalOffsetZero) {
   return raiseToIRImpl(TextBytes, SourceIsa, KernelName, Meta, KernelOffset,
                        KernelSize, CompilationTargetIsa, EnableWritelaneRewrite,
                        EnableWaveNative,
                        /*forceThreadLoopProjection=*/false,
-                       /*suppressC5ForThreadLoopRoute=*/false);
+                       /*suppressC5ForThreadLoopRoute=*/false,
+                       AssumeHipGlobalOffsetZero);
 }
 
 } // namespace COMGR::hotswap
